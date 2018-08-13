@@ -1,0 +1,58 @@
+<!Doctype html>
+<html>
+    <head>
+        <title>Diplomacy</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <meta charset = "UTF-8">
+        <style>
+            body 
+            {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                background-color: 0;
+            }
+        </style>
+        <script src = "konva.min.js"></script>
+    </head>
+    <body>
+        <div id = "container"></div>
+        <script src = 'render/layers.js'></script>
+        <script src = 'options/gameCoords.js'></script>
+        
+        <script src = 'sprites/sprite.js'></script>
+        <script src = 'groups/spritesGroup.js'></script>
+        
+        <script src = 'sprites/text.js'></script>
+        
+        <script src = 'hexagon.js'></script>
+        <script src = 'groups/grid.js'></script>
+        <script>
+        'use strict'
+        const width = window.innerWidth
+        const height = window.innerHeight
+        
+        let stage = new Konva.Stage(
+        {
+            container: 'container',
+            width: width,
+            height: height
+        })
+        Konva.pixelRatio = 1
+        let layers = new Layers(['grid', 'coordGrid'])
+        
+        let grid = new Grid(0, 0, new SpritesGroup(0, 0))
+        
+        layers.grid.add(grid.createObject())
+        layers.coordGrid.add(grid.coordGrid.createObject())
+        
+        grid.fill(20, 10)
+            
+        //layers.grid.setX(width / 2)
+        //layers.grid.setY(100)
+        stage.setX(basis.offset.x)
+        stage.setY(basis.offset.y * 2)
+        layers.addToStage()
+        </script>
+    </body>
+</html>
