@@ -25,12 +25,22 @@
         
         <script src = 'sprites/text.js'></script>
         
-        <script src = 'hexagon.js'></script>
+        <script src = 'sprites/hexagon.js'></script>
         <script src = 'groups/grid.js'></script>
+        
+        <script src = 'sprites/entities/entity.js'></script>
+        <script src = 'sprites/entities/city.js'></script>
         <script>
         'use strict'
         const width = window.innerWidth
         const height = window.innerHeight
+        
+        let imageObj = new Image()
+        let assets =
+        {
+            size: 32,
+            city: imageObj
+        }
         
         let stage = new Konva.Stage(
         {
@@ -39,17 +49,25 @@
             height: height
         })
         Konva.pixelRatio = 1
-        let layers = new Layers(['grid', 'coordGrid'])
+        let layers = new Layers(['grid', 'coordGrid', 'entity'])
         
         let grid = new Grid(0, 0, new SpritesGroup(0, 0))
         
+        let city = new City(5, 2, 100, 1)
+        
+        imageObj.onload = function()
+        {
+            layers.entity.add(city.createObject())
+            layers.entity.draw()
+        }
+        
         layers.grid.add(grid.createObject())
         layers.coordGrid.add(grid.coordGrid.createObject())
-        
         grid.fill(20, 10)
             
         //layers.grid.setX(width / 2)
         //layers.grid.setY(100)
+        imageObj.src = "assets/city.png"
         stage.setX(basis.offset.x)
         stage.setY(basis.offset.y * 2)
         layers.addToStage()
