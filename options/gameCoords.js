@@ -1,12 +1,17 @@
-const radius = 30
+const radius = 80
 let basis = 
 {
     r: radius,
     offset:
     {
         x: radius * 1.5,
-        y: radius * Math.sqrt(3) / 2
-    }
+        y: radius * Math.sqrt(3) / 2,
+        assets:
+        {
+            x: 2,
+            y: 2
+        }
+    },
 }
 delete radius
 
@@ -28,4 +33,12 @@ function biasToTransition(x, y)
         by = 2 * y + x
     */
     return {x: x, y: 2 * y + (x & 1)}
+}
+function transitionToBias(x, y)
+{
+    return {x: x, y: (y - (x & 1)) / 2}
+}
+function getCoord(x, y)
+{
+    return transitionToBias(Math.round(x / basis.offset.x), Math.round(y / basis.offset.y))
 }

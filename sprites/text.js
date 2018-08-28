@@ -20,6 +20,7 @@ class Text extends Sprite
             fontFamily: fontFamily,
             fill: color
         })
+        
         this.object.setOffset(
         {
             x: this.object.getWidth() / 2,

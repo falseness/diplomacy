@@ -17,7 +17,9 @@
     </head>
     <body>
         <div id = "container"></div>
+        <script src = 'render/loadassets.js'></script>
         <script src = 'render/layers.js'></script>
+        <script src = 'render/rgbtohex.js'></script>
         <script src = 'options/gameCoords.js'></script>
         
         <script src = 'sprites/sprite.js'></script>
@@ -29,18 +31,17 @@
         <script src = 'groups/grid.js'></script>
         
         <script src = 'sprites/entities/entity.js'></script>
-        <script src = 'sprites/entities/city.js'></script>
+        <script src = 'sprites/entities/buildings/building.js'></script>
+        <script src = 'sprites/entities/units/unit.js'></script>
+        
+        <script src = 'sprites/entities/buildings/town.js'></script>
+        <script src = 'sprites/entities/units/noob.js'></script>
+        
+        <script src = 'player.js'></script>
         <script>
         'use strict'
         const width = window.innerWidth
         const height = window.innerHeight
-        
-        let imageObj = new Image()
-        let assets =
-        {
-            size: 32,
-            city: imageObj
-        }
         
         let stage = new Konva.Stage(
         {
@@ -48,29 +49,39 @@
             width: width,
             height: height
         })
+        
         Konva.pixelRatio = 1
+
+            
         let layers = new Layers(['grid', 'coordGrid', 'entity'])
         
         let grid = new Grid(0, 0, new SpritesGroup(0, 0))
         
-        let city = new City(5, 2, 100, 1)
-        
-        imageObj.onload = function()
-        {
-            layers.entity.add(city.createObject())
-            layers.entity.draw()
-        }
-        
+        players.push(new Player({r: 255, g: 0, b: 0}))
+            
+        loadAssets()
+            
+            
         layers.grid.add(grid.createObject())
+        layers.grid.listening(true)
         layers.coordGrid.add(grid.coordGrid.createObject())
+            
         grid.fill(20, 10)
             
-        //layers.grid.setX(width / 2)
-        //layers.grid.setY(100)
-        imageObj.src = "assets/city.png"
-        stage.setX(basis.offset.x)
-        stage.setY(basis.offset.y * 2)
+        let town = new Town(5, 2, 100, 0)
+        
+        let unit = new Noob(2, 2, 10, 0) 
+        
+        window.addEventListener('load', function() {
+            layers.entity.add(town.createObject())
+            layers.entity.add(unit.createObject())
+            layers.entity.draw()
+        })        
+        //stage.setX(basis.offset.x)
+        //stage.setY(basis.offset.y * 2)
+        
         layers.addToStage()
+        town.paintCommuterville()
         </script>
     </body>
 </html>

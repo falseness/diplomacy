@@ -5,5 +5,27 @@ class Entity extends Sprite
         super(x, y)
         this.hp = hp
         this.player = player
+        
+        this.img = 'error'
+        
+    }
+    offsetObject()
+    {
+        this.object.offsetX(assets.size / basis.offset.assets.x)
+        this.object.offsetY(assets.size / basis.offset.assets.y)
+    }
+    createObject()
+    {
+        let pos = this.getPos()
+        this.object = new Konva.Image({
+            x: pos.x,
+            y: pos.y,
+            image: assets[this.img],
+            width: assets.size,
+            height: assets.size
+        }) 
+        this.offsetObject()
+        
+        return this.object
     }
 }
