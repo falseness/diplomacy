@@ -5,7 +5,7 @@ class Town extends Building
     {
         super(x, y, hp, player)
         
-        this.img = 'town'
+        this.name = 'town'
         
         this.commuterville = this.getNeighbours()
         this.commuterville.push([this.coord.x, this.coord.y])

@@ -20,10 +20,12 @@ class Grid extends SpritesGroup
         {
             for (let j = 0; j < m; ++j)
             {
-                this.arr[i][j] = {hexagon: new Hexagon(i, j), building: new Empty, unit: new Empty, text: new Text (i, j)}
+                this.arr[i][j] = {hexagon: new Hexagon(i, j), building: new Empty, unit: new Empty}
+                let pos = this.arr[i][j].hexagon.getPos()
+                this.arr[i][j].text = new Text (pos.x, pos.y)
                 this.object.add(this.arr[i][j].hexagon.createObject())
                 //layers.grid.add(this.arr[i][j].hexagon.createObject())
-                this.coordGrid.object.add(this.arr[i][j].text.createObject())
+                this.coordGrid.object.add(this.arr[i][j].text.createObject(i + ' ' + j))
             }
         }
         /*for (let x = 0; x <= k * 2; ++x)

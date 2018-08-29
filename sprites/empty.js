@@ -4,4 +4,8 @@ class Empty
     {
         return true
     }
+    drawInterface()
+    {
+        return false
+    }
 }

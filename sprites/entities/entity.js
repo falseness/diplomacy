@@ -6,8 +6,7 @@ class Entity extends Sprite
         this.hp = hp
         this.player = player
         
-        this.img = 'error'
-        
+        this.name = 'error'
     }
     offsetObject()
     {
@@ -20,12 +19,16 @@ class Entity extends Sprite
         this.object = new Konva.Image({
             x: pos.x,
             y: pos.y,
-            image: assets[this.img],
+            image: assets[this.name],
             width: assets.size,
             height: assets.size
         }) 
         this.offsetObject()
         
         return this.object
+    }
+    drawInterface()
+    {
+        gameMenu.entityName.change(this.name)
     }
 }

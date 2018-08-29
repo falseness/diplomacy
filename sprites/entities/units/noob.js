@@ -4,6 +4,6 @@ class Noob extends Unit
     {
         super(x, y, hp, 1, 3, player)
         
-        this.img = 'unit'
+        this.name = 'unit'
     }
 }

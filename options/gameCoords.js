@@ -1,3 +1,6 @@
+const width = window.innerWidth
+const height = window.innerHeight
+
 const radius = 80
 let basis = 
 {

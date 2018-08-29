@@ -1,25 +1,29 @@
-class Text extends Sprite
+class Text
 {
     constructor(x, y)
     {
-        super (x, y)
+        this.pos = 
+        {
+            x: x, 
+            y: y
+        }
     }
-    createObject(text, fontSize, fontFamily, color)
+    createObject(text, fontSize, color, fontFamily)
     {
-        text = text || (this.coord.x + ' ' + this.coord.y)
+        text = (text === '')?'':(text || ('error'))
         fontSize = fontSize || Math.floor(basis.r * 0.5)
         fontFamily = fontFamily || 'Times New Roman'
         color = color || 'white'
         
-        let pos = this.getPos()
         this.object = new Konva.Text({
-            x: pos.x,
-            y: pos.y,
+            x: this.pos.x,
+            y: this.pos.y,
             text: text,
             fontSize: fontSize,
             fontFamily: fontFamily,
             fill: color
         })
+
         
         this.object.setOffset(
         {
@@ -27,5 +31,10 @@ class Text extends Sprite
             y: this.object.getHeight() / 2
         })
         return this.object
+    }
+    change(text)
+    {
+        this.object.text(text)
+        //this.object.draw()
     }
 }

@@ -22,6 +22,8 @@
         <script src = 'render/rgbtohex.js'></script>
         <script src = 'options/gameCoords.js'></script>
         
+        <script src = 'render/interface.js'></script>
+        
         <script src = 'sprites/sprite.js'></script>
         <script src = 'groups/spritesGroup.js'></script>
         
@@ -41,8 +43,6 @@
         <script src = 'player.js'></script>
         <script>
         'use strict'
-        const width = window.innerWidth
-        const height = window.innerHeight
         
         let stage = new Konva.Stage(
         {
@@ -54,7 +54,7 @@
         Konva.pixelRatio = 1
 
             
-        let layers = new Layers(['grid', 'coordGrid', 'entity'])
+        let layers = new Layers(['grid', 'coordGrid', 'entity', 'interface'])
         
         let grid = new Grid(0, 0, new SpritesGroup(0, 0))
         
@@ -73,13 +73,22 @@
         
         let unit = new Noob(2, 2, 10, 0) 
         
+        let gameMenu = new Interface()
+        layers.interface.add(...gameMenu.createObject())
+            
+        /* Наверно нужно interface отрисовывать на другом stage
+        или двигать layers.interface на -basis.offset 
+        */
+        
         window.addEventListener('load', function() {
             layers.entity.add(town.createObject())
             layers.entity.add(unit.createObject())
             layers.entity.draw()
         })        
-        //stage.setX(basis.offset.x)
-        //stage.setY(basis.offset.y * 2)
+        stage.setX(basis.offset.x)
+        stage.setY(basis.offset.y * 2)
+        layers.interface.setX(-basis.offset.x)
+        layers.interface.setY(-basis.offset.y * 2)
         
         layers.addToStage()
         town.paintCommuterville()

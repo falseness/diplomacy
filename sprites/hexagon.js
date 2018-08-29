@@ -45,6 +45,9 @@ class Hexagon extends Sprite
         {
             let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
             console.log(coord.x + ' ' + coord.y)
+            grid.arr[coord.x][coord.y].unit.drawInterface()
+            
+            layers.interface.draw()
         })
         return this.object
     }
