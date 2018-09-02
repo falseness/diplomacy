@@ -39,3 +39,34 @@ class Text
         //this.object.draw()
     }
 }
+class CoordText extends Sprite
+{
+    constructor(x, y, text)
+    {
+        super(x, y)
+        this.text = text
+    }
+    createObject(fontSize, color, fontFamily)
+    {
+        fontSize = fontSize || Math.floor(basis.r * 0.5)
+        fontFamily = fontFamily || 'Times New Roman'
+        color = color || 'white'
+        
+        let pos = this.getPos()
+        this.object = new Konva.Text({
+            x: pos.x,
+            y: pos.y,
+            text: this.text,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            fill: color
+        })
+
+        this.object.setOffset(
+        {
+            x: this.object.getWidth() * 0.5,
+            y: this.object.getHeight() * 0.5
+        })
+        return this.object
+    }
+}

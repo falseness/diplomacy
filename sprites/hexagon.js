@@ -1,12 +1,12 @@
 const neighborhood = 
 [
    [
-        [1, 0], [0, -1], [-1, -1],
-        [-1, 0], [1, -1], [0, 1]
+        [0, -1], [1, -1], [1, 0],
+        [0, 1], [-1, 0], [-1, -1]
    ],
    [ 
-        [1, 0], [-1, 1], [0, -1],
-        [-1, 0], [0, 1], [1, 1] 
+        [0, -1], [1, 0], [1, 1], 
+        [0, 1], [-1, 1], [-1, 0]
    ]
 ]
 /*function getNeighbours(x, y)
@@ -50,6 +50,9 @@ class Hexagon extends Sprite
             
             let hexagon = grid.arr[coord.x][coord.y]
             let entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit
+            
+            
+            entity.select()
             
             gameInterface.change(entity.getInfo())
         })
