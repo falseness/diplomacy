@@ -1,7 +1,8 @@
 class Text
 {
-    constructor(x, y)
+    constructor(x, y, offset)
     {
+        this.offset = offset || {x: 0.5, y: 0.5}
         this.pos = 
         {
             x: x, 
@@ -27,8 +28,8 @@ class Text
         
         this.object.setOffset(
         {
-            x: this.object.getWidth() / 2,
-            y: this.object.getHeight() / 2
+            x: this.object.getWidth() * this.offset.x,
+            y: this.object.getHeight() * this.offset.y
         })
         return this.object
     }

@@ -62,7 +62,7 @@
             
         loadAssets()
             
-            
+                                                                                                                                                    
         layers.grid.add(grid.createObject())
         layers.grid.listening(true)
         layers.coordGrid.add(grid.coordGrid.createObject())
@@ -73,20 +73,18 @@
         
         let unit = new Noob(2, 2, 10, 0) 
         
-        let gameMenu = new Interface()
-        layers.interface.add(...gameMenu.createObject())
+        let gameInterface = new Interface()
+        gameInterface.hide()
+        layers.interface.add(...gameInterface.createObject())
             
-        /* Наверно нужно interface отрисовывать на другом stage
-        или двигать layers.interface на -basis.offset 
-        */
         
         window.addEventListener('load', function() {
             layers.entity.add(town.createObject())
             layers.entity.add(unit.createObject())
             layers.entity.draw()
-        })        
+        })          
         stage.setX(basis.offset.x)
-        stage.setY(basis.offset.y * 2)
+        stage.setY(basis.offset.y * 2)  
         layers.interface.setX(-basis.offset.x)
         layers.interface.setY(-basis.offset.y * 2)
         

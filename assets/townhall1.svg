@@ -1,0 +1,30 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" fill="black" fill-opacity="0" transform="scale(0.5)"/>
+<rect width="156" height="488" fill="black" fill-opacity="0" transform="translate(89 5.5) scale(0.5)"/>
+<rect width="156" height="488" fill="black" fill-opacity="0" transform="translate(89 5.5) scale(0.5)"/>
+<rect width="129" height="424" fill="black" fill-opacity="0" transform="translate(96 37.5) scale(0.5)"/>
+<rect x="97.5" y="39" width="61.5" height="209" fill="#CDCABB" stroke="black" stroke-width="3" stroke-linecap="round"/>
+<rect width="100" height="100" fill="black" fill-opacity="0" transform="translate(103 47) scale(0.5)"/>
+<circle cx="128" cy="72" r="25" fill="white"/>
+<rect width="29.7255" height="80.373" fill="black" fill-opacity="0" transform="translate(123.5 52) scale(0.5)"/>
+<line x1="127.5" y1="73" x2="127.5" y2="52" stroke="black" stroke-width="8"/>
+<path d="M138.268 92.1865L127.75 73.75" stroke="black" stroke-width="8"/>
+<circle cx="127.25" cy="73.25" r="3.75" fill="black"/>
+<rect width="156" height="72" fill="black" fill-opacity="0" transform="translate(89 5.5) scale(0.5)"/>
+<path d="M166.25 40.75H89.75V22.25H109H118.5H137.75H147.25H166.25V40.75Z" fill="#CDCABB" stroke="black" stroke-width="3"/>
+<rect x="119.5" y="7" width="17.5" height="13" fill="#CDCABB" stroke="black" stroke-width="3"/>
+<path d="M147.25 6.25H166.25V20.75H147.25V6.25Z" fill="#CDCABB" stroke="black" stroke-width="3"/>
+<rect x="90.5" y="7" width="17.5" height="13" fill="#CDCABB" stroke="black" stroke-width="3"/>
+<path d="M90 6.5V40.75H166V6.5H147.25V21.75H137.75V6.5H118.5V21.75H108.25V6.5H90Z" fill="#CDCABB" stroke="black" stroke-width="3"/>
+<rect width="366" height="325" fill="black" fill-opacity="0" transform="translate(35.5 87) scale(0.5)"/>
+<rect width="366" height="325" fill="black" fill-opacity="0" transform="translate(35.5 87) scale(0.5)"/>
+<path d="M48.75 179.25H207.25V232C207.25 241.251 199.751 248.75 190.5 248.75H65.5C56.2492 248.75 48.75 241.251 48.75 232V179.25Z" fill="#957357" stroke="black" stroke-width="3"/>
+<path d="M37.2621 182.25L127.84 88.0871L216.76 182.25H37.2621Z" fill="#AC8665" stroke="black" stroke-width="3"/>
+<rect width="69" height="100" fill="black" fill-opacity="0" transform="translate(110 192) scale(0.5)"/>
+<path d="M120 192.75H134.5C139.609 192.75 143.75 196.891 143.75 202V241.25H110.75V202C110.75 196.891 114.891 192.75 120 192.75Z" fill="#CDCABB" stroke="black" stroke-width="3"/>
+<circle cx="138.25" cy="221.25" r="3.25" fill="black"/>
+<rect width="55" height="51" fill="black" fill-opacity="0" transform="translate(114 133.5) scale(0.5)"/>
+<rect x="115.5" y="135" width="24.5" height="22.5" rx="8.5" fill="#CDCABB" stroke="black" stroke-width="3"/>
+<line x1="127.75" y1="134" x2="127.75" y2="159" stroke="black" stroke-width="3"/>
+<line x1="114" y1="145.75" x2="141.5" y2="145.75" stroke="black" stroke-width="3"/>
+</svg>

@@ -8,4 +8,14 @@ class Unit extends Entity
         
         grid.arr[x][y].unit = this
     }
+    getInfo()
+    {
+        let unit = super.getInfo()
+        unit.info.push('dmg: ' + this.dmg, 'speed: ' + this.speed)
+        return unit
+    }
+    select()
+    {
+        
+    }
 }

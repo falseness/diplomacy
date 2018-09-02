@@ -22,9 +22,9 @@ const neighborhood =
 
 class Hexagon extends Sprite
 {
-    constructor(x, y, z)
+    constructor(x, y)
     {
-        super(x, y, z)
+        super(x, y)
     }
     createObject()
     {
@@ -35,7 +35,7 @@ class Hexagon extends Sprite
             y: pos.y,
             sides: 6,
             radius: basis.r,
-            fill: 'red',
+            fill: '#D0D0D0',//'#B5B8B1',
             stroke: 'black',
             strokeWidth: 3
         })
@@ -45,9 +45,13 @@ class Hexagon extends Sprite
         {
             let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
             console.log(coord.x + ' ' + coord.y)
-            grid.arr[coord.x][coord.y].unit.drawInterface()
             
-            layers.interface.draw()
+            gameInterface.draw()
+            
+            let hexagon = grid.arr[coord.x][coord.y]
+            let entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit
+            
+            gameInterface.change(entity.getInfo())
         })
         return this.object
     }

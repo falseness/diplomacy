@@ -4,8 +4,12 @@ class Empty
     {
         return true
     }
-    drawInterface()
+    getInfo()
     {
-        return false
+        gameInterface.hide()
+        return {
+            name: '',
+            info: []
+        }
     }
 }

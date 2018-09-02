@@ -27,8 +27,11 @@ class Entity extends Sprite
         
         return this.object
     }
-    drawInterface()
+    getInfo()
     {
-        gameMenu.entityName.change(this.name)
+        return {
+            name: this.name, 
+            info: ['hp: ' + this.hp]
+        }
     }
 }
