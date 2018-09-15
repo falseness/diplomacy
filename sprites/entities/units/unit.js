@@ -23,68 +23,101 @@ class Unit extends Entity
         unit.info.push('dmg: ' + this.dmg, 'speed: ' + this.speed)
         return unit
     }
-    select()
+    select(arr)
     {
+        /*
+        Требуется рефакторинг BFS
+        Сделай проверку для конца карты
+        напиши класс и запихни функции addDistanceText, needToDrawLine, drawLine туда
+        */
         //let border = Math.max(grid.arr.length, grid.arr[0].length)
-        BFS([this.coord.x, this.coord.y], this.speed, grid.arr.length)
+        this.BFS([this.coord.x, this.coord.y], this.speed, arr, arr.length)
         layers.coordGrid.visible(false)
         layers.selectUnit.draw()
     }
-}
-function BFS(v0, speed, border)
-{
-    let used = []
-    let way = []
-    
-    for (let i = 0; i <= border * 2; ++i)
+    addDistanceText(x, y, distance)
     {
-        used[i] = []
-        way[i] = []
-        /*for (let j = v0[1] + border - speed; j < v0[1] + border + speed + border; ++j)
-        {
-            used[i][j] = false
-            way[i][j] = speed + 1
-        }*/
+        let distanceText = new CoordText(x, y, distance)
+        layers.selectUnit.add(distanceText.createObject())
     }
-    
-    way[v0[0] + border][v0[1] + border] = 0
-    
-    let Q = []
-    Q.push(v0)
-    
-    used[v0[0] + border][v0[1] + border] = 1
-    
-    while (Q.length > 0)
+    needToDrawLine(parent, child, max)
     {
-        let v = Q.shift()
-        if (Math.min(v[0], v[1]) < 0 || v[0] >= grid.arr.length || v[1] >= grid.arr[0].length)
-            continue
-        let neighbours = grid.arr[v[0]][v[1]].hexagon.getNeighbours()
-        for (let i = 0; i < neighbours.length; ++i)
+        return (parent == max && !(child <= max))
+    }
+    drawLine(pos, side)
+    {
+        layers.selectUnit.add(new Konva.Line({
+          points: [hexagonLine[side][0][0] + pos.x, hexagonLine[side][0][1] + pos.y, hexagonLine[side][1][0] + pos.x, hexagonLine[side][1][1] + pos.y],
+          stroke: 'red',
+          strokeWidth: 4,
+        }))
+    }
+    BFS(v0, speed, arr, border)
+    {
+        let used = []
+        let distance = []
+        let way = []
+
+        for (let i = 0; i <= border * 2; ++i)
         {
-            if (!used[neighbours[i][0] + border][neighbours[i][1] + border])
+            used.push([])
+            distance.push([])
+            way.push([])
+            /*for (let j = v0[1] + border - speed; j < v0[1] + border + speed + border; ++j)
             {
-                Q.push(neighbours[i])
-                used[neighbours[i][0] + border][neighbours[i][1] + border] = true
-                way[neighbours[i][0] + border][neighbours[i][1] + border] = way[v[0] + border][v[1] + border] + 1
-                if (way[v[0] + border][v[1] + border] == speed && way[neighbours[i][0] + border][neighbours[i][1] + border] == speed + 1)
+                used[i][j] = false
+                distance[i][j] = speed + 1
+            }*/
+        }
+
+        distance[v0[0] + border][v0[1] + border] = 0
+        used[v0[0] + border][v0[1] + border] = 1
+
+        let Q = []
+        Q.push(v0)
+
+        while (Q.length > 0)
+        {
+            let v = Q.shift() 
+            if (isArrEnd(v[0], v[1], arr.length, arr[0].length))
+            {
+                continue
+            }
+            let neighbours = arr[v[0]][v[1]].hexagon.getNeighbours()
+            
+            
+            for (let i = 0; i < neighbours.length; ++i)
+            {
+                let x = neighbours[i][0] + border
+                let y = neighbours[i][1] + border
+                if (this.needToDrawLine(distance[v[0] + border][v[1] + border], distance[x][y], speed))
+                    this.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i)
+                if (distance[v[0] + border][v[1] + border] <= speed && 
+                    isArrEnd(neighbours[i][0], neighbours[i][1], arr.length, arr[0].length))
                 {
-                    let pos = grid.arr[v[0]][v[1]].hexagon.getPos()
-                    layers.selectUnit.add(new Konva.Line({
-                      points: [hexagonLine[i][0][0] + pos.x, hexagonLine[i][0][1] + pos.y, hexagonLine[i][1][0] + pos.x, hexagonLine[i][1][1] + pos.y],
-                      stroke: 'red',
-                      strokeWidth: 4,
-                    }))
+                    this.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i)
                 }
-                if (way[neighbours[i][0] + border][neighbours[i][1] + border] > speed + 1)
+                if (!used[neighbours[i][0] + border][neighbours[i][1] + border])
                 {
-                    console.log(way)
-                    return
+                    Q.push(neighbours[i])
+                    
+                    way[neighbours[i][0] + border][neighbours[i][1] + border] = [v[0] + border, v[1] + border]
+                    
+                    used[x][y] = true
+                    distance[x][y] = distance[v[0] + border][v[1] + border] + 1
+                    
+                    
+                    if (distance[x][y] > speed + 1)
+                    {
+                        return
+                    }
+                    this.addDistanceText(neighbours[i][0], neighbours[i][1], distance[x][y])
                 }
-                let wayText = new CoordText(neighbours[i][0], neighbours[i][1], way[neighbours[i][0] + border][neighbours[i][1] + border])
-                layers.selectUnit.add(wayText.createObject())
             }
         }
     }
-    console.log(way)
+}
+function isArrEnd(x, y, lengthX, lengthY)
+{
+    return ((Math.min(x, y) < 0) || (x >= lengthX) || (y >= lengthY))
 }

@@ -15,4 +15,8 @@ class Player
     {
         return (this.color.r + ', ' + this.color.g + ', ' + this.color.b)
     }
+    getHexColor()
+    {
+        return rgbToHex(this.color.r, this.color.g, this.color.b)
+    }
 }

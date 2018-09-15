@@ -43,6 +43,7 @@ class Hexagon extends Sprite
         
         this.object.on('click', function(event)
         {
+            //Нужно вынести это в отдельную функцию или класс:
             let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
             console.log(coord.x + ' ' + coord.y)
             
@@ -52,9 +53,9 @@ class Hexagon extends Sprite
             let entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit
             
             
-            entity.select()
+            entity.select(grid.arr)
             
-            gameInterface.change(entity.getInfo())
+            gameInterface.change(entity.getInfo(), players)
         })
         return this.object
     }

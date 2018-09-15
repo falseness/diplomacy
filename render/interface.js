@@ -97,6 +97,9 @@ class Interface
     }
     change(entity)
     {
+        //Требуется рефакторинг. Слишком тесная связь с классом player
+        this.background.fill(players[entity.player].getHexColor())
+        
         this.img.image(assets[entity.name])
         this.entity.name.change(entity.name)
         this.entity.info.change(entity.info.join('\n'))
