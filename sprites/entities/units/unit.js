@@ -14,14 +14,27 @@ class Unit extends Entity
         super(x, y, hp, player)
         this.dmg = dmg
         this.speed = speed
+        this.moves = speed
         
         grid.arr[x][y].unit = this
     }
     getInfo()
     {
         let unit = super.getInfo()
-        unit.info.push('dmg: ' + this.dmg, 'speed: ' + this.speed)
+        unit.info.push('dmg: ' + this.dmg, 'moves: ' + this.moves + ' / ' + this.speed)
         return unit
+    }
+    changeCoord(x, y)
+    {
+        grid.arr[this.coord.x][this.coord.y].unit = new Empty()
+        
+        this.coord.x = x
+        this.coord.y = y
+        grid.arr[x][y].unit = this
+        
+        let pos = this.getPos()
+        this.object.x(pos.x)
+        this.object.y(pos.y)
     }
     select(arr)
     {
@@ -31,8 +44,31 @@ class Unit extends Entity
         напиши класс и запихни функции addDistanceText, needToDrawLine, drawLine туда
         */
         //let border = Math.max(grid.arr.length, grid.arr[0].length)
-        this.BFS([this.coord.x, this.coord.y], this.speed, arr, arr.length)
-        layers.coordGrid.visible(false)
+        if (this.moves > 0)
+        {
+            this.distance = this.BFS([this.coord.x, this.coord.y], this.moves, arr, arr.length)
+            layers.coordGrid.visible(false)
+            layers.selectUnit.draw()
+        }
+    }
+    move(x, y, arr)
+    {
+        //Нельзя сюда посылать arr, но без этого проблемы с border. Нужен рефакторинг
+        this.removeSelect()
+        if (this.distance[x + arr.length][y + arr.length] <= this.moves)
+        {
+            this.changeCoord(x, y)
+            this.moves -= this.distance[x + arr.length][y + arr.length]
+            layers.entity.draw()
+            return (this.moves == 0)
+        }
+        
+        return false
+    }
+    removeSelect()
+    {
+        layers.coordGrid.visible(true)
+        layers.selectUnit.destroyChildren()
         layers.selectUnit.draw()
     }
     addDistanceText(x, y, distance)
@@ -52,7 +88,7 @@ class Unit extends Entity
           strokeWidth: 4,
         }))
     }
-    BFS(v0, speed, arr, border)
+    BFS(v0, moves, arr, border)
     {
         let used = []
         let distance = []
@@ -63,10 +99,10 @@ class Unit extends Entity
             used.push([])
             distance.push([])
             way.push([])
-            /*for (let j = v0[1] + border - speed; j < v0[1] + border + speed + border; ++j)
+            /*for (let j = v0[1] + border - moves; j < v0[1] + border + moves + border; ++j)
             {
                 used[i][j] = false
-                distance[i][j] = speed + 1
+                distance[i][j] = moves + 1
             }*/
         }
 
@@ -90,9 +126,9 @@ class Unit extends Entity
             {
                 let x = neighbours[i][0] + border
                 let y = neighbours[i][1] + border
-                if (this.needToDrawLine(distance[v[0] + border][v[1] + border], distance[x][y], speed))
+                if (this.needToDrawLine(distance[v[0] + border][v[1] + border], distance[x][y], moves))
                     this.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i)
-                if (distance[v[0] + border][v[1] + border] <= speed && 
+                if (distance[v[0] + border][v[1] + border] <= moves && 
                     isArrEnd(neighbours[i][0], neighbours[i][1], arr.length, arr[0].length))
                 {
                     this.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i)
@@ -107,9 +143,9 @@ class Unit extends Entity
                     distance[x][y] = distance[v[0] + border][v[1] + border] + 1
                     
                     
-                    if (distance[x][y] > speed + 1)
+                    if (distance[x][y] > moves + 1)
                     {
-                        return
+                        return distance
                     }
                     this.addDistanceText(neighbours[i][0], neighbours[i][1], distance[x][y])
                 }

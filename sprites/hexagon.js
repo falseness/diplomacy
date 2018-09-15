@@ -43,18 +43,35 @@ class Hexagon extends Sprite
         
         this.object.on('click', function(event)
         {
-            //Нужно вынести это в отдельную функцию или класс:
             let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
             console.log(coord.x + ' ' + coord.y)
+            //Нужно вынести это в отдельную функцию или класс:
             
-            gameInterface.draw()
+            let entity
             
-            let hexagon = grid.arr[coord.x][coord.y]
-            let entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit
-            
-            
-            entity.select(grid.arr)
-            
+            if (selected)
+            {
+                entity = selected
+                if (selected.move(coord.x, coord.y, grid.arr))
+                {
+                    //selected = false Должен быть тут если что
+                    layers.interface.visible(false)
+                }
+                    
+                selected = false
+            }
+            else
+            {
+                gameInterface.draw()
+
+                let hexagon = grid.arr[coord.x][coord.y]
+                entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit
+                
+                selected = entity
+                
+                entity.select(grid.arr)
+                
+            }
             gameInterface.change(entity.getInfo(), players)
         })
         return this.object

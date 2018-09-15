@@ -61,12 +61,13 @@
         players.push(new Player({r: 255, g: 0, b: 0}))
             
         loadAssets()
-            
+        
+        let selected = false
                                                                                                                                                     
         layers.grid.add(grid.createObject())
         layers.grid.listening(true)
         layers.coordGrid.add(grid.coordGrid.createObject())
-            
+
         grid.fill(20, 10)
             
         let town = new Town(5, 2, 100, 0)
