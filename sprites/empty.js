@@ -4,12 +4,21 @@ class Empty
     {
         return true
     }
+    select()
+    {
+        selected = false
+    }
     getInfo()
     {
-        gameInterface.hide()
+        EntityInterface.hide()
         return {
             name: '',
+            player: 0,
             info: []
         }
+    }
+    getHexColor()
+    {
+        return '#D0D0D0'
     }
 }

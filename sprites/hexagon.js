@@ -22,9 +22,10 @@ const neighborhood =
 
 class Hexagon extends Sprite
 {
-    constructor(x, y)
+    constructor(x, y, player)
     {
         super(x, y)
+        this.player = player
     }
     createObject()
     {
@@ -35,14 +36,14 @@ class Hexagon extends Sprite
             y: pos.y,
             sides: 6,
             radius: basis.r,
-            fill: '#D0D0D0',//'#B5B8B1',
+            fill: players[this.player].getHexColor(), //'#D0D0D0',//'#B5B8B1',
             stroke: 'black',
             strokeWidth: 3
         })
         this.object.rotate(90)
         
-        this.object.on('click', function(event)
-        {
+        this.object.on('click', click)
+        /*{
             let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
             console.log(coord.x + ' ' + coord.y)
             //Нужно вынести это в отдельную функцию или класс:
@@ -52,13 +53,14 @@ class Hexagon extends Sprite
             if (selected)
             {
                 entity = selected
-                if (selected.move(coord.x, coord.y, grid.arr))
+                if (selected.move(coord.x, coord.y))
                 {
                     //selected = false Должен быть тут если что
                     layers.interface.visible(false)
+                    selected = false
                 }
                     
-                selected = false
+                
             }
             else
             {
@@ -73,7 +75,12 @@ class Hexagon extends Sprite
                 
             }
             gameInterface.change(entity.getInfo(), players)
-        })
+        })*/
         return this.object
+    }
+    repaint(player)
+    {
+        this.object.fill(players[player].getHexColor())   
+        this.object.draw()
     }
 }

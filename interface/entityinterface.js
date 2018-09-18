@@ -1,5 +1,5 @@
 
-class Interface
+class EntityInterface
 {
     constructor()
     {
@@ -30,6 +30,8 @@ class Interface
             name: new Text(this.elements.text.pos.name.x, this.elements.text.pos.name.y, this.elements.text.offset),
             info: new Text(this.elements.text.pos.info.x, this.elements.text.pos.info.y, this.elements.text.offset)
         }
+        
+        this.hide()
     }
     setElements()
     {
@@ -93,24 +95,31 @@ class Interface
             width: this.elements.image.width,
             height: this.elements.image.height,
         }) 
-        return [this.background, this.entity.name.createObject('', this.elements.text.size.name), this.entity.info.createObject('', this.elements.text.size.info), this.img]
+        return [this.background, 
+                this.entity.name.createObject('', this.elements.text.size.name),
+                this.entity.info.createObject('', this.elements.text.size.info),
+                this.img]
     }
-    change(entity)
+    change(entity, color)
     {
-        //Требуется рефакторинг. Слишком тесная связь с классом player
-        this.background.fill(players[entity.player].getHexColor())
+        this.background.fill(color)
         
         this.img.image(assets[entity.name])
         this.entity.name.change(entity.name)
         this.entity.info.change(entity.info.join('\n'))
-        layers.interface.draw()
+        layers.entityInterface.draw()
     }
     draw()
     {
-        layers.interface.visible(true)
+        layers.townInterface.visible(true)
     }
     hide()
     {
-        layers.interface.visible(false)
+        layers.townInterface.visible(false)
+    }
+    move(x, y)
+    {
+        layers.entityInterface.setX(x)
+        layers.entityInterface.setY(y)
     }
 }

@@ -5,4 +5,8 @@ class Building extends Entity
         super(x, y, hp, player)
         grid.arr[x][y].building = this
     }
+    select()
+    {
+        
+    }
 }
