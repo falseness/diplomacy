@@ -9,6 +9,23 @@ class Town extends Building
         
         this.commuterville = this.getNeighbours()
         this.commuterville.push([this.coord.x, this.coord.y])
+        
+        this.gold = 11//НЕ ЗАБУДЬ!
+        
+        this.production = 
+        {
+            noob: 2
+        }
+    }
+    getInfo()
+    {
+        let town = super.getInfo()
+        town.info.push('gold: ' + this.gold)
+        return town
+    }
+    select()
+    {
+        townInterface.change(this, players[this.player].getHexColor())
     }
     paintCommuterville()
     {
@@ -22,4 +39,16 @@ class Town extends Building
             hexagon.draw()
         }
     }
+    prepare(what)
+    {
+        this.preparation = 
+        {
+            what: what,
+            turns: this.production[what]
+        }
+    }
+}
+function townEvent(event)
+{
+    event.target.parameters.town.prepare(event.target.parameters.what)
 }

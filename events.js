@@ -35,7 +35,7 @@ function removeSelect(x, y)
     if (selected.move(x, y))
     {
         //selected = false Должен быть тут если что
-        layers.interface.visible(false)
+        layers.entityInterface.visible(false)
         selected = false
     }
     else

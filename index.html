@@ -30,6 +30,7 @@
         
         <script src = 'sprites/empty.js'></script>
         <script src = 'sprites/text.js'></script>
+        <script src = 'sprites/button.js'></script>
         
         <script src = 'events.js'></script>
         
@@ -57,7 +58,7 @@
         Konva.pixelRatio = 1
 
             
-        let layers = new Layers(['grid', 'coordGrid', 'entity', 'selectUnit', 'entityInterface', 'townInterface'])
+        let layers = new Layers(['grid', 'coordGrid', 'entity', 'selectUnit', 'entityInterface', 'townInterface', 'gameMenu'])
         
         let grid = new Grid(0, 0, new SpritesGroup(0, 0))
         
@@ -69,7 +70,19 @@
                                                                                                                                                     
         layers.grid.add(grid.createObject())
         layers.grid.listening(true)
+        layers.townInterface.listening(true)
+        layers.gameMenu.listening(true)
         layers.coordGrid.add(grid.coordGrid.createObject())
+        
+        let nextTurnButton = new Konva.Image({
+            x: width - height * 0.12,
+            y: height - height * 0.12,
+            image: assets['nextTurnButton'],
+            width: height * 0.1,
+            height: height * 0.1
+        }) 
+        layers.gameMenu.add(nextTurnButton)
+        nextTurnButton.on('click', click)
 
         grid.fill(20, 10)
             
@@ -77,11 +90,14 @@
         
         let unit = new Noob(2, 2, 10, 1) 
         
+        let whooseTurn = 1
+        
         let entityInterface = new EntityInterface()
-        //let townInterface = new TownInterface()
+        let townInterface = new TownInterface()
         
         layers.entityInterface.add(...entityInterface.createObject())
-        //layers.townInterface.add(...townInterface.createObject())   
+        layers.townInterface.add(...townInterface.createObject()) 
+            
         
         window.addEventListener('load', function() {
             layers.entity.add(town.createObject())
@@ -91,7 +107,10 @@
         stage.setX(basis.offset.x)
         stage.setY(basis.offset.y * 2)  
         entityInterface.move(-basis.offset.x, -basis.offset.y * 2)
-        
+        townInterface.move(-basis.offset.x, -basis.offset.y * 2)
+        layers.gameMenu.setX(-basis.offset.x)
+        layers.gameMenu.setY(-basis.offset.y * 2)
+            
         layers.addToStage()
         town.paintCommuterville()
         </script>

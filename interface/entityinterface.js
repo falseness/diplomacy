@@ -3,8 +3,10 @@ class EntityInterface
 {
     constructor()
     {
-        this.stroke = 4
-        this.cornerRadius = 50
+        /*this.stroke = 4
+        this.cornerRadius = 50*/
+        this.stroke = 0.002 * width
+        this.cornerRadius = 0.03 * width
         this.indent = this.stroke + this.cornerRadius
         this.pos = 
         {
@@ -111,11 +113,11 @@ class EntityInterface
     }
     draw()
     {
-        layers.townInterface.visible(true)
+        layers.entityInterface.visible(true)
     }
     hide()
     {
-        layers.townInterface.visible(false)
+        layers.entityInterface.visible(false)
     }
     move(x, y)
     {

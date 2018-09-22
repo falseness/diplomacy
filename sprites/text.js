@@ -11,7 +11,7 @@ class Text
     }
     createObject(text, fontSize, color, fontFamily)
     {
-        text = (text === '')?'':(text || ('error'))
+        text = (text === '')?'':((text === 0)?'0':(text || ('error')))
         fontSize = fontSize || Math.floor(basis.r * 0.5)
         fontFamily = fontFamily || 'Times New Roman'
         color = color || 'white'
@@ -26,17 +26,23 @@ class Text
         })
 
         
-        this.object.setOffset(
-        {
-            x: this.object.getWidth() * this.offset.x,
-            y: this.object.getHeight() * this.offset.y
-        })
+        this.changeOffset()
+        
         return this.object
     }
     change(text)
     {
         this.object.text(text)
+        this.changeOffset()
         //this.object.draw()
+    }
+    changeOffset()
+    {
+        this.object.setOffset(
+        {
+            x: this.object.getWidth() * this.offset.x,
+            y: this.object.getHeight() * this.offset.y
+        })
     }
 }
 class CoordText extends Sprite

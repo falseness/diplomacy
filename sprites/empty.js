@@ -1,5 +1,9 @@
 class Empty
 {
+    constructor()
+    {
+        this.player = 0
+    }
     isEmpty()
     {
         return true
@@ -10,7 +14,7 @@ class Empty
     }
     getInfo()
     {
-        EntityInterface.hide()
+        entityInterface.hide()
         return {
             name: '',
             player: 0,
