@@ -25,4 +25,8 @@ class Empty
     {
         return '#D0D0D0'
     }
+    nextTurn(whooseTurn)
+    {
+        
+    }
 }

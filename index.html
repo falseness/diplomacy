@@ -44,7 +44,10 @@
         <script src = 'sprites/entities/buildings/town.js'></script>
         <script src = 'sprites/entities/units/noob.js'></script>
         
+        
         <script src = 'player.js'></script>
+        
+        <script src = 'nextTurn.js'></script>
         <script>
         'use strict'
         
@@ -82,13 +85,13 @@
             height: height * 0.1
         }) 
         layers.gameMenu.add(nextTurnButton)
-        nextTurnButton.on('click', click)
+        nextTurnButton.on('click', nextTurn)
 
         grid.fill(20, 10)
             
         let town = new Town(5, 2, 100, 1)
         
-        let unit = new Noob(2, 2, 10, 1) 
+        let unit = new Noob(2, 2, 1) 
         
         let whooseTurn = 1
         

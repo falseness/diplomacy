@@ -1,8 +1,8 @@
 class Noob extends Unit
 {
-    constructor(x, y, hp, player)
+    constructor(x, y, player)
     {
-        super(x, y, hp, 1, 3, player)
+        super(x, y, 10, 1, 3, player)
         
         this.name = 'unit'
     }

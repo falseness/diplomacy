@@ -14,7 +14,21 @@ class Town extends Building
         
         this.production = 
         {
-            noob: 2
+            noob: 
+            {
+                turns: 2,
+                create(x, y, player)
+                {
+                    let t = new Noob(x, y, player)
+                    layers.entity.add(t.createObject())
+                    t.object.draw()
+                }
+            }
+        }
+        this.preparation = 
+        {
+            what: "nothing",
+            turns: 0
         }
     }
     getInfo()
@@ -44,7 +58,25 @@ class Town extends Building
         this.preparation = 
         {
             what: what,
-            turns: this.production[what]
+            turns: this.production[what].turns
+        }
+    }
+    nextTurn(whooseTurn)
+    {
+        if (this.player == whooseTurn)
+        {
+            this.preparation.turns--
+            if (!this.preparation.turns)
+            {
+                if (grid.arr[this.coord.x][this.coord.y].unit.isEmpty())
+                {
+                    this.production[this.preparation.what].create(this.coord.x, this.coord.y, this.player)
+                }
+                else
+                {
+                    this.preparation.turns++
+                }
+            }
         }
     }
 }

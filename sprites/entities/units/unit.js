@@ -75,14 +75,20 @@ class Unit extends Entity
             y = t[1] - this.way.border
         }
     }
-    
+    nextTurn(whooseTurn)
+    {
+        if (this.player == whooseTurn)
+        {
+            this.moves = this.speed
+        }
+    }
 }
 
 class Way
 {
     constructor(player)
     {
-        this.color = players[player].getHexColor()
+        this.color = 'white'//players[player].getHexColor()
     }
     BFS(v0, moves, arr, border)
     {

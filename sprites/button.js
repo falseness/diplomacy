@@ -30,9 +30,9 @@ class Button
         this.object.offsetY(this.height / 2)
         return this.object
     }
-    setFunction(func, parameters)//func, parameter)
+    setFunction(func, parameters)
     {
         this.object.parameters = parameters
-        this.object.on('click', func)//func, parameter)
+        this.object.on('click', func)
     }
 }
