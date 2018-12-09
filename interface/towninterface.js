@@ -7,7 +7,7 @@ class TownInterface
         this.indent = this.stroke + this.cornerRadius
         this.pos = 
         {
-            x: width * 0.8, 
+            x: width * 0.75, 
             y: height * 0.12,
         }
         
@@ -112,25 +112,43 @@ class TownInterface
             width: this.elements.noob.width,
             height: this.elements.noob.height,
         })
-        this.noobButtons = new Button(this.elements.buttons.pos.x, this.elements.noob.pos.y + this.elements.noob.height / 2, 
+        this.noobButton = new Button(this.elements.buttons.pos.x, this.elements.noob.pos.y + this.elements.noob.height / 2, 
                                       this.elements.buttons.width, this.elements.buttons.height,
                                     new Text(this.elements.buttons.pos.x + this.elements.buttons.width / 2,
                                               this.elements.noob.pos.y + this.elements.buttons.height / 2, {x: 0.5, y: -0.5}),
-                                    '#f7f7f7', 0.01 * height, 'black', 0.002 * height)
+                                    '#f7f7f7', 0.01 * height, 'black', 0.002 * height, 'noob')
         this.gold.offsetX(-this.elements.gold.width / 3)
         this.goldText = new Text(this.elements.text.pos.x, this.elements.goldText.pos.y, {x: 1, y: -0.4})
+        
+        
+        this.setButtonsList()
+        
+        
         return [this.background, this.gold, this.goldText.createObject(0, this.elements.text.size),
-                this.noob, this.noobButtons.createObject(),
-                this.noobButtons.text.createObject(this.elements.buttons.text.text, this.elements.buttons.text.size, this.elements.buttons.text.color)]
+                this.noob, this.noobButton.createObject(),
+                this.noobButton.text.createObject(this.elements.buttons.text.text, this.elements.buttons.text.size, this.elements.buttons.text.color)]
     }
     change(town, color)
     {
         this.background.fill(color)
-        this.noobButtons.setFunction(townEvent, {town: town, what: 'noob'})
-        this.goldText.change(town.gold)
+        if (town.info.turns)
+        {
+            this.noobButton.changeText(town.info.turns)
+        }
+        else
+        {
+            this.noobButton.changeText(this.elements.buttons.text.text)
+            this.noobButton.setFunction(townEvent, {town: town.link, what: this.noobButton.name})
+        }
+        this.goldText.change(town.info.gold)
         
         this.draw()
         layers.townInterface.draw()
+    }
+    setButtonsList()
+    {
+        this.buttons = {}
+        this.buttons[this.noobButton.name] = this.noobButton
     }
     draw()
     {
@@ -144,5 +162,24 @@ class TownInterface
     {
         layers.townInterface.setX(x)
         layers.townInterface.setY(y)
+    }
+}
+
+
+class TrainInterface
+{
+    constructor()
+    {
+        
+    }
+    createObject(image, fontSize, button)
+    {
+        this.image = new Konva.Image({
+            width: image.width,
+            height: image.height,
+        }) 
+        this.cost = new Text();
+        this.button = new Button(NaN, NaN,new Text(),
+                                    button.color, 0.01 * height, 'black', 0.002 * height, 'noob')
     }
 }

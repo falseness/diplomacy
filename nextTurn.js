@@ -1,5 +1,8 @@
 function nextTurn()
 {
+    townInterface.hide()
+    entityInterface.hide()
+    
     whooseTurn = (players.length % ++whooseTurn)
     if (!whooseTurn)
         whooseTurn++

@@ -32,7 +32,10 @@ class Entity extends Sprite
         return {
             name: this.name, 
             player: this.player,
-            info: ['hp: ' + this.hp]
+            info: 
+            {
+                hp: this.hp
+            }
         }
     }
 }

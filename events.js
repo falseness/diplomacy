@@ -1,5 +1,6 @@
 function click(event)
 {
+    townInterface.hide()
     let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
     console.log(coord.x + ' ' + coord.y)
     //Нужно вынести это в отдельную функцию или класс:

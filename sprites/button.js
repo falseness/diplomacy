@@ -1,6 +1,6 @@
 class Button
 {
-    constructor(x, y, width, height, text, color, cornerRadius, borderColor, stroke)
+    constructor(x, y, width, height, text, color, cornerRadius, borderColor, stroke, name)
     {
         this.pos =
         {
@@ -14,6 +14,8 @@ class Button
         this.color = color
         this.borderColor = borderColor
         this.stroke = stroke
+        
+        this.name = name
     }
     createObject()
     {
@@ -34,5 +36,15 @@ class Button
     {
         this.object.parameters = parameters
         this.object.on('click', func)
+    }
+    deleteFunction()
+    {
+        this.object.parameters = NaN
+        this.object.off('click')
+    }
+    changeText(text)
+    {
+        this.text.change(text)
+        this.text.object.draw()
     }
 }

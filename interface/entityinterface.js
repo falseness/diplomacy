@@ -11,17 +11,11 @@ class EntityInterface
         this.pos = 
         {
             x: 0, 
-            y: 0.7 * height,
+            y: 0.7 * height
         }
-        //this.width = 0.3 * width + assets.size
         this.height = 0.3 * height
         this.color = '#78a85d'
         
-        /*this.center = 
-        {
-            x: this.pos.x + this.width / 2,
-            y: this.pos.y + this.height / 2
-        }*/
         
         this.setElements()
         
@@ -108,7 +102,7 @@ class EntityInterface
         
         this.img.image(assets[entity.name])
         this.entity.name.change(entity.name)
-        this.entity.info.change(entity.info.join('\n'))
+        this.entity.info.change(join(entity.info, ': ', '\n'))//entity.info.join('\n'))
         layers.entityInterface.draw()
     }
     draw()

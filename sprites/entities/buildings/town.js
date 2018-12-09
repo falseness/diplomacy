@@ -17,6 +17,7 @@ class Town extends Building
             noob: 
             {
                 turns: 2,
+                cost: 5,
                 create(x, y, player)
                 {
                     let t = new Noob(x, y, player)
@@ -25,21 +26,31 @@ class Town extends Building
                 }
             }
         }
-        this.preparation = 
-        {
-            what: "nothing",
-            turns: 0
-        }
+        this.finishPreparing()
     }
     getInfo()
     {
         let town = super.getInfo()
-        town.info.push('gold: ' + this.gold)
+        
+        town.link = this
+        town.info.gold = this.gold
+        
+        town.production = {}
+        for (let i in this.production)
+        {
+            town.production[i] = this.production[i];
+        }
+        
+        if (this.isPreparing())
+        {
+            town.info.train = this.preparation.what
+            town.info.turns = + this.preparation.turns + ' / ' + this.production[this.preparation.what].turns
+        }
         return town
     }
     select()
     {
-        townInterface.change(this, players[this.player].getHexColor())
+        townInterface.change(this.getInfo(), players[this.player].getHexColor())
     }
     paintCommuterville()
     {
@@ -55,32 +66,60 @@ class Town extends Building
     }
     prepare(what)
     {
+        if (!this.isPreparing() && this.gold >= this.production[what].cost)
+        {
+            this.preparation = 
+            {
+                what: what,
+                turns: this.production[what].turns
+            }
+            this.gold -= this.production[what].cost
+        }
+    }
+    isPreparing()
+    {
+        return (this.preparation.turns)
+    }
+    /*getPreparingText()
+    {
+        return String(this.preparation.turns + ' / ' + this.production[this.preparation.what].turns)
+    }*/
+    finishPreparing()
+    {
         this.preparation = 
         {
-            what: what,
-            turns: this.production[what].turns
+            what: "nothing",
+            turns: 0
         }
     }
     nextTurn(whooseTurn)
     {
-        if (this.player == whooseTurn)
+        if (this.player == whooseTurn && this.isPreparing())
         {
             this.preparation.turns--
-            if (!this.preparation.turns)
+            if (!this.isPreparing())
             {
                 if (grid.arr[this.coord.x][this.coord.y].unit.isEmpty())
                 {
                     this.production[this.preparation.what].create(this.coord.x, this.coord.y, this.player)
+                    this.finishPreparing()
                 }
                 else
                 {
                     this.preparation.turns++
                 }
-            }
+                
+            }    
         }
     }
 }
 function townEvent(event)
 {
-    event.target.parameters.town.prepare(event.target.parameters.what)
+    let town = event.target.parameters.town
+    let color = players[whooseTurn].getHexColor()
+    
+    town.prepare(event.target.parameters.what)
+    town.select()
+    
+    entityInterface.change(town.getInfo(), color)
 }

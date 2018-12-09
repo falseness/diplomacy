@@ -18,7 +18,10 @@ class Empty
         return {
             name: '',
             player: 0,
-            info: []
+            info: 
+            {
+                
+            }
         }
     }
     getHexColor()

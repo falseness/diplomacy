@@ -28,12 +28,20 @@ class Text
         
         this.changeOffset()
         
+        this.object.listening(false)
+        
         return this.object
     }
     change(text)
     {
         this.object.text(text)
+        
+        /*
+        Похоже, что эта штука не нужна
+        
         this.changeOffset()
+        
+        */
         //this.object.draw()
     }
     changeOffset()

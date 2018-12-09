@@ -14,7 +14,8 @@ class Unit extends Entity
     getInfo()
     {
         let unit = super.getInfo()
-        unit.info.push('dmg: ' + this.dmg, 'moves: ' + this.moves + ' / ' + this.speed)
+        unit.info.dmg = this.dmg
+        unit.info.moves = this.moves + ' / ' + this.speed
         return unit
     }
     changeCoord(x, y)
