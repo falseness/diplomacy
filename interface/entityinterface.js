@@ -30,17 +30,15 @@ class EntityInterface
         
         this.entity.name = new Text({
             x: this.img.x() + this.img.getWidth(),
-            y: this.pos.y + this.height * 0.2,
-            fontSize: this.height * 0.2,
-            offset: {x: 0, y: 0.5}
+            y: this.pos.y + this.height * 0.075,
+            fontSize: this.height * 0.2
         })
         
         this.entity.info = new Text(
         {
             x: this.entity.name.x(),
             y: this.entity.name.y() + this.entity.name.getHeight(),
-            fontSize: this.height * 0.1,
-            offset: {x: 0, y: 0.5}
+            fontSize: this.height * 0.1
         })
         
         

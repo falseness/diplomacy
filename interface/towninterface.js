@@ -43,7 +43,8 @@ class TownInterface
         {
             x: this.gold.x() + this.height * 0.8, 
             y: this.gold.y() + 0.01 * height, 
-            fontSize: 0.05 * height
+            fontSize: 0.05 * height,
+            offset: {x: 0.5, y: 0}
         })
         
         
@@ -52,7 +53,7 @@ class TownInterface
         
         let trainInterfaces = 
         {
-            name: ['noob'], 
+            name: ['noob', 'farm'], 
             margin:
             {
                 image: 
@@ -62,12 +63,12 @@ class TownInterface
                 },
                 cost:
                 {
-                    x: this.height * 0.25,
+                    x: this.height * 0.225,
                     y: 0
                 },
                 button:
                 {
-                    x: this.height * 0.6,
+                    x: this.height * 0.575,
                     y: 0
                 }
             },
@@ -102,18 +103,21 @@ class TownInterface
                         borderColor: 'black',
                         stroke: 0.002 * height,
                         offset: {x: 0, y: 0.5},
-                        width: 0.15 * height,
-                        height: 0.035 * height
+                        width: 0.175 * height,
+                        height: 0.04 * height,
+                        listening: true
                     }
                 }
             }
         }
+        let trainInterfacesMarginInterval = this.height * 0.25;
         for (let i = 0; i < trainInterfaces.name.length; ++i)
         {
             this.trainInterfaces[trainInterfaces.name[i]] = 
-                new TrainInterface(trainInterfaces.margin.image, trainInterfaces.margin.cost, trainInterfaces.margin.button,
-                                  trainInterfaces.model.imageModel, trainInterfaces.model.costModel, trainInterfaces.model.buttonModel,
-                                  this.gold.x() - this.height * 0.05, this.gold.y() + this.height * 0.3)
+                new TrainInterface(
+                trainInterfaces.margin.image, trainInterfaces.margin.cost, trainInterfaces.margin.button,
+                trainInterfaces.model.imageModel, trainInterfaces.model.costModel, trainInterfaces.model.buttonModel,
+                this.gold.x() - this.height * 0.05, this.gold.y() + this.height * 0.3 + trainInterfacesMarginInterval * i, trainInterfaces.name[i])
         }
         
         
@@ -123,11 +127,36 @@ class TownInterface
     {
         
         return [this.background, this.gold, this.goldText.getObject(), 
-                ...this.trainInterfaces.noob.getObject()]
+                ...this.trainInterfaces.noob.getObject(),
+                ...this.trainInterfaces.farm.getObject()]
     }
     change(town, color)
     {
-        /*this.background.fill(color)
+        this.background.fill(color)
+        
+        for (let i in town.production)
+        {
+            this.trainInterfaces[i].changeImage(i)
+            this.trainInterfaces[i].changeCost('cost: ' + town.production[i].cost)
+            
+            if (!town.info.train)
+            {
+                this.trainInterfaces[i].button.setFunction(townEvent, {town: town.link, what: this.trainInterfaces[i].name})
+                this.trainInterfaces[i].changeButton('train (' + town.production[i].turns + ')')
+                
+                this.trainInterfaces[i].button.draw()
+            }
+            else if (town.info.train != i)
+            {
+                this.trainInterfaces[i].button.hide()
+            }
+        }
+        if (town.info.turns)
+        {
+            this.trainInterfaces[town.info.train].changeButton(town.info.turns + ' / ' + town.production[town.info.train].turns)
+        }
+        /*
+        
         if (town.info.turns)
         {
             this.noobButton.changeText(town.info.turns)
@@ -142,11 +171,11 @@ class TownInterface
         this.draw()
         layers.townInterface.draw()
     }
-    setButtonsList()
+   /* setButtonsList()
     {
         this.buttons = {}
         this.buttons[this.noobButton.name] = this.noobButton
-    }
+    }*/
     draw()
     {
         layers.townInterface.visible(true)
@@ -166,8 +195,10 @@ class TownInterface
 class TrainInterface
 {
     constructor(imageMargin, costMargin, buttonMargin,
-                imageModel, costModel, buttonModel, x, y)
+                imageModel, costModel, buttonModel, x, y, name)
     {
+        this.name = name
+        
         this.imageMargin = imageMargin
         this.costMargin = costMargin
         this.buttonMargin = buttonMargin
@@ -176,7 +207,7 @@ class TrainInterface
         this.setPos(costModel, this.costMargin, x, y)
         this.setPos(buttonModel.rect, this.buttonMargin, x, y)
   
-        this.button = new Button(buttonModel.rect, new Text(buttonModel.text), 'trainInterfaceButton')
+        this.button = new Button(buttonModel.rect, new Text(buttonModel.text), name)
         this.cost = new Text(costModel)
         
         this.image = createImageByModel(imageModel)
@@ -184,6 +215,11 @@ class TrainInterface
     getObject()
     {
         return [...this.button.getObject(), this.cost.getObject(), this.image]
+    }
+    changeName(name)
+    {
+        this.name = name
+        this.button.name = name
     }
     setPos(model, margin, x, y)
     {
@@ -204,13 +240,15 @@ class TrainInterface
     changeCost(text)
     {
         this.cost.change(text)
+        //this.cost.changeOffset()
     }
     changeImage(image)
     {
-        this.image.image(image)
+        this.image.image(assets[image])
     }   
     changeButton(text)
     {
         this.button.changeText(text)
+        //this.changeOffset()
     }
 }

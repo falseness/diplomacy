@@ -42,4 +42,16 @@ class Button
             this.text.changePos(NaN, y)
         }
     }
+    hide()
+    {
+        this.object.visible(false)
+        this.text.object.visible(false)
+        
+        this.deleteFunction()
+    }
+    draw()
+    {
+        this.object.visible(true)
+        this.text.object.visible(true)
+    }
 }

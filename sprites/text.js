@@ -3,14 +3,11 @@ class Text
     constructor(model)
     {
         this.object = createTextByModel(model)
+        this.offset = model.offset
     }
     getObject()
     {
         return this.object
-    }
-    change(text)
-    {
-        this.object.text(text)
     }
     changeOffset()
     {
@@ -19,6 +16,11 @@ class Text
             x: this.object.getWidth() * this.offset.x,
             y: this.object.getHeight() * this.offset.y
         })
+    }
+    change(text)
+    {
+        this.object.text(text)
+        this.changeOffset()
     }
     changePos(x, y)
     {

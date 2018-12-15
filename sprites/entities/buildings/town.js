@@ -1,26 +1,49 @@
 const commutervilleColor = 0.4
 class Town extends Building
 {
-    constructor(x, y, hp, player)
+    constructor(x, y, player)
     {
+        let hp = 50
         super(x, y, 'town', hp, player)
         
         this.commuterville = this.getNeighbours()
         this.commuterville.push([this.coord.x, this.coord.y])
         
-        this.gold = 11//НЕ ЗАБУДЬ!
+        this.farms = []
+        
+        this.gold = 25//НЕ ЗАБУДЬ!
         
         this.production = 
         {
             noob: 
             {
                 turns: 2,
-                cost: 5,
-                create(x, y, player)
+                cost: 14,
+                create(x, y, town, player)
                 {
-                    let t = new Noob(x, y, player)
-                    layers.entity.add(t.createObject())
-                    t.object.draw()
+                    if (grid.arr[x][y].unit.isEmpty())
+                    {
+                        let t = new Noob(x, y, player)
+                        layers.entity.add(t.getObject())
+                        t.object.draw()
+                        
+                        return true
+                    }
+                    return false
+                }
+            },
+            farm:
+            {
+                turns: 0,
+                cost: 25,
+                create(x, y, town, player)
+                {
+                    if (grid.arr[x][y].building.isEmpty())
+                    {
+                        let t = new Farm(x, y, town, player)
+                        layers.entity.add(t.getObject())
+                        t.object.draw()
+                    }
                 }
             }
         }
@@ -31,7 +54,9 @@ class Town extends Building
         let town = super.getInfo()
         
         town.link = this
-        town.info.gold = this.gold
+        
+        let income = this.getIncome()
+        town.info.gold = this.gold + ' (' + ((income > 0)?'+':'') + income + ')'
         
         town.production = {}
         for (let i in this.production)
@@ -42,13 +67,17 @@ class Town extends Building
         if (this.isPreparing())
         {
             town.info.train = this.preparation.what
-            town.info.turns = + this.preparation.turns + ' / ' + this.production[this.preparation.what].turns
+            town.info.turns = this.preparation.turns
         }
         return town
     }
     select()
     {
         townInterface.change(this.getInfo(), players[this.player].getHexColor())
+    }
+    getIncome()
+    {
+        return this.commuterville.length
     }
     paintCommuterville()
     {
@@ -72,7 +101,13 @@ class Town extends Building
                 turns: this.production[what].turns
             }
             this.gold -= this.production[what].cost
+            
+            if (!this.preparation.turns)
+                this.production[this.preparation.what].create(this.coord.x, this.coord.y, this.player)
+            
+            return true
         }
+        return false
     }
     isPreparing()
     {
@@ -97,9 +132,9 @@ class Town extends Building
             this.preparation.turns--
             if (!this.isPreparing())
             {
-                if (grid.arr[this.coord.x][this.coord.y].unit.isEmpty())
+                if (this.production[this.preparation.what].create(this.coord.x, this.coord.y, this, this.player))
                 {
-                    this.production[this.preparation.what].create(this.coord.x, this.coord.y, this.player)
+                    
                     this.finishPreparing()
                 }
                 else
@@ -114,10 +149,33 @@ class Town extends Building
 function townEvent(event)
 {
     let town = event.target.parameters.town
-    let color = players[whooseTurn].getHexColor()
+    if (town.prepare(event.target.parameters.what))
+    {
+        let color = players[whooseTurn].getHexColor()
+        town.select()
+
+        entityInterface.change(town.getInfo(), color)
+    }
+}
+function chooseHexagonToBuildHouse()
+{
+    /*
+    Требуется рефакторинг 
+    Нужно вынести в отдельные класс production и townEvent наверно
     
-    town.prepare(event.target.parameters.what)
-    town.select()
     
-    entityInterface.change(town.getInfo(), color)
+
+    и сделать что-то с этой функцией
+    эта функция должна отрисовывать границы пригорода
+    с помощью f drawLine() из drawLineBetweenHexagons.js
+    и давать выбор игроку куда поставить домик
+    
+    
+    
+    Не забудь переписать в unit многие функции, в том числе
+    и BFS 
+    
+    
+    и нужно переписать events
+    */
 }

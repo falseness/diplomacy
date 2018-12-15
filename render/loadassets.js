@@ -4,7 +4,8 @@ let assets =
     gold: new Image(),
     nextTurnButton: new Image,
     town: new Image(),
-    noob: new Image(),
+    farm: new Image(),
+    noob: new Image()
 }
 
 function loadAssets()
@@ -12,5 +13,6 @@ function loadAssets()
     assets.gold.src = "assets/gold.svg"
     assets.nextTurnButton.src = "assets/nextTurn.svg"
     assets.town.src = "assets/townhall.svg"
+    assets.farm.src = "assets/farm.svg"
     assets.noob.src = "assets/noob.svg"
 }

@@ -132,14 +132,17 @@ class Way
             
             for (let i = 0; i < neighbours.length; ++i)
             {
+                /*
+                Draw line создает слишком много новых линий и не очищает!!
+                */
                 let x = neighbours[i][0] + border
                 let y = neighbours[i][1] + border
                 if (this.needToDrawLine(distance[v[0] + border][v[1] + border], distance[x][y], moves))
-                    this.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i)
+                    drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
                 if (distance[v[0] + border][v[1] + border] <= moves && 
                     isArrEnd(neighbours[i][0], neighbours[i][1], arr.length, arr[0].length))
                 {
-                    this.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i)
+                    drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
                 }
                 if (!used[neighbours[i][0] + border][neighbours[i][1] + border])
                 {
@@ -166,29 +169,14 @@ class Way
     {
         return (parent == max && !(child <= max))
     }
-    drawLine(pos, side)
-    {
-        const hexagonLine = 
-        [
-            [[-basis.r / 2, -basis.r / 2 * Math.sqrt(3)], [basis.r / 2, -basis.r / 2 * Math.sqrt(3)]],
-            [[basis.r / 2, -basis.r / 2 * Math.sqrt(3)], [basis.r, 0]],
-            [[basis.r, 0], [basis.r / 2, basis.r / 2 * Math.sqrt(3)]],
-            [[basis.r / 2, basis.r / 2 * Math.sqrt(3)], [-basis.r / 2, basis.r / 2 * Math.sqrt(3)]],
-            [[-basis.r / 2, basis.r / 2 * Math.sqrt(3)], [-basis.r, 0]],
-            [[-basis.r, 0], [-basis.r / 2, -basis.r / 2 * Math.sqrt(3)]]
-        ]
-        layers.selectUnit.add(new Konva.Line({
-          points: [hexagonLine[side][0][0] + pos.x, hexagonLine[side][0][1] + pos.y, hexagonLine[side][1][0] + pos.x, hexagonLine[side][1][1] + pos.y],
-          stroke: this.color,
-          strokeWidth: 4,
-        }))
-    }
     addDistanceText(x, y, distance)
     {
         
         /*
         
         Займись этим позже!
+        
+        и drawLine тоже!
         
         Нельзя создавать миллион coordText
         let distanceText = new CoordText(x, y, distance)

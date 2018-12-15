@@ -48,7 +48,12 @@ class Hexagon extends Sprite
     }
     repaint(player)
     {
-        this.object.fill(players[player].getHexColor())   
-        this.object.draw()
+        if (this.player != player)
+        {
+            this.player = player
+
+            this.object.fill(players[player].getHexColor())   
+            this.object.draw()
+        }
     }
 }

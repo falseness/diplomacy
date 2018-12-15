@@ -25,11 +25,14 @@
         <script src = "objectModels/textModel.js"></script>
         <script src = "objectModels/rectModel.js"></script>
         
+        <script src = "objectModels/drawLineBetweenHexagons.js"></script>
+        
         <script src = 'render/loadassets.js'></script>
         <script src = 'render/layers.js'></script>
         <script src = 'render/rgbtohex.js'></script>
         <script src = 'options/gameCoords.js'></script>
         <script src = 'options/dictionaryEnumeration.js'></script>
+        <script src = 'options/dictionaryToList.js'></script>
         
         <script src = 'interface/entityinterface.js'></script>
         <script src = 'interface/towninterface.js'></script>
@@ -50,6 +53,7 @@
         <script src = 'sprites/entities/buildings/building.js'></script>
         <script src = 'sprites/entities/units/unit.js'></script>
         
+        <script src = 'sprites/entities/buildings/farm.js'></script>
         <script src = 'sprites/entities/buildings/town.js'></script>
         <script src = 'sprites/entities/units/noob.js'></script>
         
@@ -97,9 +101,7 @@
 
         grid.fill(20, 10)
             
-        let town = new Town(5, 2, 100, 1)
         
-        let unit = new Noob(2, 2, 1) 
         
         let whooseTurn = 1
         
@@ -110,12 +112,6 @@
         layers.townInterface.add(...townInterface.getObject()) 
             
         
-        window.addEventListener('load', function() {
-            layers.entity.add(town.getObject())
-            layers.entity.add(unit.getObject())
-            layers.entity.draw()
-            layers.gameMenu.draw()
-        })          
         stage.setX(basis.offset.x)
         stage.setY(basis.offset.y * 2)  
         entityInterface.move(-basis.offset.x, -basis.offset.y * 2)
@@ -124,7 +120,32 @@
         layers.gameMenu.setY(-basis.offset.y * 2)
             
         layers.addToStage()
+        
+            
+            
+            
+        let town = new Town(5, 2, 1)
+        
+        let unit = new Noob(4, 3, 1) 
+        
+        grid.arr[5][2].hexagon.repaint(1)
+        grid.arr[5][1].hexagon.repaint(1)
+        grid.arr[6][2].hexagon.repaint(1)
+        grid.arr[6][3].hexagon.repaint(1)
+        grid.arr[5][3].hexagon.repaint(1)
+        grid.arr[4][3].hexagon.repaint(1)
+        grid.arr[4][2].hexagon.repaint(1)
+            
+            
         town.paintCommuterville()
+            
+        window.addEventListener('load', function() {
+            layers.entity.add(town.getObject())
+            layers.entity.add(unit.getObject())
+            layers.entity.draw()
+            layers.gameMenu.draw()
+        })          
+
         </script>
     </body>
 </html>
