@@ -3,9 +3,7 @@ class Town extends Building
 {
     constructor(x, y, hp, player)
     {
-        super(x, y, hp, player)
-        
-        this.name = 'town'
+        super(x, y, 'town', hp, player)
         
         this.commuterville = this.getNeighbours()
         this.commuterville.push([this.coord.x, this.coord.y])

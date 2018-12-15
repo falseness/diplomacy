@@ -26,7 +26,7 @@ class Sprite
         }
         return neighbours
     }
-    createObject()
+    getObject()
     {
         console.log("try create sprite object, error")
         return null

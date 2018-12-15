@@ -3,97 +3,70 @@ class EntityInterface
 {
     constructor()
     {
-        /*this.stroke = 4
-        this.cornerRadius = 50*/
         this.stroke = 0.002 * width
         this.cornerRadius = 0.03 * width
         this.indent = this.stroke + this.cornerRadius
+        
         this.pos = 
         {
             x: 0, 
             y: 0.7 * height
         }
-        this.height = 0.3 * height
-        this.color = '#78a85d'
+        this.height = height - this.pos.y
         
-        
-        this.setElements()
-        
-        this.width = this.elements.right
     
-        this.entity = 
-        {
-            name: new Text(this.elements.text.pos.name.x, this.elements.text.pos.name.y, this.elements.text.offset),
-            info: new Text(this.elements.text.pos.info.x, this.elements.text.pos.info.y, this.elements.text.offset)
-        }
         
-        this.hide()
-    }
-    setElements()
-    {
-        this.elements =
+        this.img = createImageByModel(
         {
-            image:
-            {
-                pos:
-                {
-                    x: this.pos.x + this.height * 0.1,
-                    y: this.pos.y + this.height * 0.1
-                },
-                width: this.height * 0.7,
-                height: this.height * 0.7,
-            }
-        }
-        this.elements.image.right = this.elements.image.pos.x + this.elements.image.width
-        this.elements.text = 
+            x: this.pos.x + this.height * 0.1,
+            y: this.pos.y + this.height * 0.1,
+            image: undefined,
+            width: this.height * 0.7,
+            height: this.height * 0.7,
+        }) 
+
+        
+        this.entity = {}
+        
+        this.entity.name = new Text({
+            x: this.img.x() + this.img.getWidth(),
+            y: this.pos.y + this.height * 0.2,
+            fontSize: this.height * 0.2,
+            offset: {x: 0, y: 0.5}
+        })
+        
+        this.entity.info = new Text(
         {
-            offset:
-            {
-                x: 0, 
-                y: 0.5
-            },
-            size:
-            {
-                name: this.height * 0.2, 
-                info: this.height * 0.1
-            }
-        }
-        this.elements.text.pos =
+            x: this.entity.name.x(),
+            y: this.entity.name.y() + this.entity.name.getHeight(),
+            fontSize: this.height * 0.1,
+            offset: {x: 0, y: 0.5}
+        })
+        
+        
+        let maxCharsNumber = 6
+        this.width = this.entity.info.x() + this.entity.info.fontSize() * maxCharsNumber
+            
+        this.background = createRectByModel(
         {
-            name:
-            {   x: this.elements.image.right,
-                y: this.pos.y + this.height * 0.2
-            }
-        }
-        this.elements.text.pos.info = 
-        {
-            x: this.elements.image.right, 
-            y: this.elements.text.pos.name.y + this.elements.text.size.name
-        }
-        this.elements.right = this.elements.text.pos.name.x + this.elements.text.size.info * 6
-    }
-    createObject()
-    {
-        this.background = new Konva.Rect({
-            x: this.pos.x  - this.indent,
+            x: this.pos.x - this.indent,
             y: this.pos.y,
             width: this.width + this.indent,
             height: this.height + this.indent,
-            fill: this.color,
+            fill: '#78a85d',
             stroke: 'black',
             strokeWidth: this.stroke,
             cornerRadius: this.cornerRadius
         })
-        this.img = new Konva.Image({
-            x: this.elements.image.pos.x,
-            y: this.elements.image.pos.y,
-            image: undefined,
-            width: this.elements.image.width,
-            height: this.elements.image.height,
-        }) 
+        
+        
+        this.hide()
+    }
+    getObject()
+    {
         return [this.background, 
-                this.entity.name.createObject('', this.elements.text.size.name),
-                this.entity.info.createObject('', this.elements.text.size.info),
+                this.entity.name.getObject(),
+                this.entity.info.getObject(),
                 this.img]
     }
     change(entity, color)
@@ -102,7 +75,8 @@ class EntityInterface
         
         this.img.image(assets[entity.name])
         this.entity.name.change(entity.name)
-        this.entity.info.change(join(entity.info, ': ', '\n'))//entity.info.join('\n'))
+        this.entity.info.change(join(entity.info, ': ', '\n'))
+        
         layers.entityInterface.draw()
     }
     draw()

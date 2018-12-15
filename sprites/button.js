@@ -1,36 +1,16 @@
 class Button
 {
-    constructor(x, y, width, height, text, color, cornerRadius, borderColor, stroke, name)
+    constructor(model, text, name)
     {
-        this.pos =
-        {
-            x: x,
-            y: y
-        }
-        this.width = width
-        this.height = height
         this.text = text
-        this.cornerRadius = cornerRadius
-        this.color = color
-        this.borderColor = borderColor
-        this.stroke = stroke
-        
         this.name = name
+        
+        this.object = createRectByModel(model)                            
+        this.text.changePos(model.x + this.object.getWidth() / 2, model.y)
     }
-    createObject()
+    getObject()
     {
-        this.object = new Konva.Rect({
-            x: this.pos.x,
-            y: this.pos.y,
-            width: this.width,
-            height: this.height,
-            fill: this.color,
-            stroke: this.borderColor,
-            strokeWidth: this.stroke,
-            cornerRadius: this.cornerRadius
-        })
-        this.object.offsetY(this.height / 2)
-        return this.object
+        return [this.object, this.text.getObject()]
     }
     setFunction(func, parameters)
     {
@@ -46,5 +26,20 @@ class Button
     {
         this.text.change(text)
         this.text.object.draw()
+    }
+    changePos(x, y)
+    {
+        if (x)
+        {
+            this.pos.x = x
+            this.object.x(x)
+            this.text.changePos(x)
+        }
+        if (y)
+        {
+            this.pos.y = y
+            this.object.y(y)
+            this.text.changePos(NaN, y)
+        }
     }
 }

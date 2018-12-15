@@ -1,8 +1,8 @@
 class Unit extends Entity
 {
-    constructor(x, y, hp, dmg, speed, player)
+    constructor(x, y, name, hp, dmg, speed, player)
     {
-        super(x, y, hp, player)
+        super(x, y, name, hp, player)
         this.dmg = dmg
         this.speed = speed
         this.moves = speed
@@ -185,8 +185,15 @@ class Way
     }
     addDistanceText(x, y, distance)
     {
+        
+        /*
+        
+        Займись этим позже!
+        
+        Нельзя создавать миллион coordText
         let distanceText = new CoordText(x, y, distance)
         layers.selectUnit.add(distanceText.createObject())
+        */
     }
 }
 function isArrEnd(x, y, lengthX, lengthY)

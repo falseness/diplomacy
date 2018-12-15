@@ -2,135 +2,132 @@ class TownInterface
 {
     constructor()
     {
-        this.stroke = 0.002 * width
-        this.cornerRadius = 0.03 * width
-        this.indent = this.stroke + this.cornerRadius
         this.pos = 
         {
             x: width * 0.75, 
             y: height * 0.12,
         }
-        
         this.height = 0.4 * height
         this.width = width - this.pos.x
-        this.color = '#78a85d'
-        this.setElements()
         
-        this.hide()
-    }
-    setElements()
-    {
-        this.elements = 
+        
+        
+        let stroke = 0.002 * width
+        let cornerRadius = 0.03 * width
+        let indent = stroke + cornerRadius
+        
+        this.background = createRectByModel(
         {
-            text:
-            {
-                size: this.height * 0.1
-            },
+            x: this.pos.x,
+            y: this.pos.y,
+            width: this.width + indent,
+            height: this.height + indent,
+            color: '#78a85d',
+            stroke: 'black',
+            strokeWidth: stroke,
+            cornerRadius: cornerRadius
+        })
+         
+        
+        
+        this.gold = createImageByModel(
+        {
+            x: this.pos.x + this.height * 0.1,
+            y: this.pos.y + this.height * 0.05,
+            image: assets.gold,
+            width: this.height * 0.15,
+            height: this.height * 0.15,
+            color: 'red'
+        }) 
+        this.goldText = new Text(
+        {
+            x: this.gold.x() + this.height * 0.8, 
+            y: this.gold.y() + 0.01 * height, 
+            fontSize: 0.05 * height
+        })
+        
+        
+        
+        this.trainInterfaces = {}
+        
+        let trainInterfaces = 
+        {
+            name: ['noob'], 
             margin:
             {
-                y: this.height * 0.05
-            },
-            image:
-            {
-                width: 0.1 * height, 
-                height: 0.1 * height
-            },
-            gold:
-            {
-                image: assets.gold,
-                pos: 
+                image: 
                 {
-                    x: this.pos.x + this.height * 0.05,
-                    y: this.pos.y + this.height * 0.05
+                    x: 0,
+                    y: 0
                 },
-                width: this.height * 0.15,
-                height: this.height * 0.15
-            },
-            goldText:
-            {
-                pos: 
+                cost:
                 {
-                    x: this.pos.x + this.height * 0.05 + this.height * 0.15,
-                    y: this.pos.y + this.height * 0.05
+                    x: this.height * 0.25,
+                    y: 0
+                },
+                button:
+                {
+                    x: this.height * 0.6,
+                    y: 0
+                }
+            },
+            model:
+            {
+                imageModel:
+                {
+                    width: 0.1 * height,
+                    height: 0.1 * height,
+                    offset: {x: 0, y: 0.5},
+                    image: assets.noob
+                }, 
+                costModel:
+                {
+                    fontSize: 0.04 * height,
+                    text: 'cost',
+                    offset: {x: 0, y: 0.5}
+                },
+                buttonModel:
+                {
+                    text:
+                    {
+                        text: 'train',
+                        color: '#747474',
+                        offset: {x: 0.5, y: 0.5},
+                        fontSize: 0.03 * height
+                    },
+                    rect:
+                    {
+                        color: '#f7f7f7',
+                        cornerRadius: 0.01 * height,
+                        borderColor: 'black',
+                        stroke: 0.002 * height,
+                        offset: {x: 0, y: 0.5},
+                        width: 0.15 * height,
+                        height: 0.035 * height
+                    }
                 }
             }
         }
-        this.elements.noob = 
+        for (let i = 0; i < trainInterfaces.name.length; ++i)
         {
-            image: assets.unit,
-            pos:
-            {
-                x: this.elements.gold.pos.x,
-                y: this.elements.gold.pos.y + this.elements.gold.height + this.elements.margin.y
-            },
-            width: this.elements.image.width,
-            height: this.elements.image.height
+            this.trainInterfaces[trainInterfaces.name[i]] = 
+                new TrainInterface(trainInterfaces.margin.image, trainInterfaces.margin.cost, trainInterfaces.margin.button,
+                                  trainInterfaces.model.imageModel, trainInterfaces.model.costModel, trainInterfaces.model.buttonModel,
+                                  this.gold.x() - this.height * 0.05, this.gold.y() + this.height * 0.3)
         }
-        this.elements.buttons = 
-        {
-            width: this.height * 0.4,
-            height: this.height * 0.1,
-            text: 
-            {
-                text: 'train',
-                size: this.height * 0.07,
-                color: '#666666'
-            }
-        }
-        this.elements.buttons.pos = 
-        {
-            x: this.pos.x + this.width - this.elements.buttons.width * 1 - this.indent
-        }
-        this.elements.text.pos = 
-        {
-            x: this.elements.buttons.pos.x + this.elements.buttons.width
-        }
+        
+        
+        this.hide()
     }
-    createObject()
+    getObject()
     {
-        this.background = new Konva.Rect({
-            x: this.pos.x,
-            y: this.pos.y,
-            width: this.width + this.indent,
-            height: this.height + this.indent,
-            fill: this.color,
-            stroke: 'black',
-            strokeWidth: this.stroke,
-            cornerRadius: this.cornerRadius
-        })
-        this.gold = new Konva.Image({
-            x: this.elements.gold.pos.x,
-            y: this.elements.gold.pos.y,
-            image: this.elements.gold.image,
-            width: this.elements.gold.width,
-            height: this.elements.gold.height,
-        }) 
-        this.noob = new Konva.Image({
-            x: this.elements.noob.pos.x,
-            y: this.elements.noob.pos.y,
-            image: this.elements.noob.image,
-            width: this.elements.noob.width,
-            height: this.elements.noob.height,
-        })
-        this.noobButton = new Button(this.elements.buttons.pos.x, this.elements.noob.pos.y + this.elements.noob.height / 2, 
-                                      this.elements.buttons.width, this.elements.buttons.height,
-                                    new Text(this.elements.buttons.pos.x + this.elements.buttons.width / 2,
-                                              this.elements.noob.pos.y + this.elements.buttons.height / 2, {x: 0.5, y: -0.5}),
-                                    '#f7f7f7', 0.01 * height, 'black', 0.002 * height, 'noob')
-        this.gold.offsetX(-this.elements.gold.width / 3)
-        this.goldText = new Text(this.elements.text.pos.x, this.elements.goldText.pos.y, {x: 1, y: -0.4})
         
-        
-        this.setButtonsList()
-        
-        
-        return [this.background, this.gold, this.goldText.createObject(0, this.elements.text.size),
-                this.noob, this.noobButton.createObject(),
-                this.noobButton.text.createObject(this.elements.buttons.text.text, this.elements.buttons.text.size, this.elements.buttons.text.color)]
+        return [this.background, this.gold, this.goldText.getObject(), 
+                ...this.trainInterfaces.noob.getObject()]
     }
     change(town, color)
     {
-        this.background.fill(color)
+        /*this.background.fill(color)
         if (town.info.turns)
         {
             this.noobButton.changeText(town.info.turns)
@@ -139,7 +136,7 @@ class TownInterface
         {
             this.noobButton.changeText(this.elements.buttons.text.text)
             this.noobButton.setFunction(townEvent, {town: town.link, what: this.noobButton.name})
-        }
+        }*/
         this.goldText.change(town.info.gold)
         
         this.draw()
@@ -168,18 +165,52 @@ class TownInterface
 
 class TrainInterface
 {
-    constructor()
+    constructor(imageMargin, costMargin, buttonMargin,
+                imageModel, costModel, buttonModel, x, y)
     {
+        this.imageMargin = imageMargin
+        this.costMargin = costMargin
+        this.buttonMargin = buttonMargin
         
+        this.setPos(imageModel, this.imageMargin, x, y)
+        this.setPos(costModel, this.costMargin, x, y)
+        this.setPos(buttonModel.rect, this.buttonMargin, x, y)
+  
+        this.button = new Button(buttonModel.rect, new Text(buttonModel.text), 'trainInterfaceButton')
+        this.cost = new Text(costModel)
+        
+        this.image = createImageByModel(imageModel)
     }
-    createObject(image, fontSize, button)
+    getObject()
     {
-        this.image = new Konva.Image({
-            width: image.width,
-            height: image.height,
-        }) 
-        this.cost = new Text();
-        this.button = new Button(NaN, NaN,new Text(),
-                                    button.color, 0.01 * height, 'black', 0.002 * height, 'noob')
+        return [...this.button.getObject(), this.cost.getObject(), this.image]
+    }
+    setPos(model, margin, x, y)
+    {
+        model.x = margin.x + x
+        model.y = margin.y + y
+    }
+    changePos(x, y)
+    {
+        this.cost.changePos(x + this.costMargin.x, y + this.costMargin.y)
+        
+        if (x)
+            this.image.x(x + this.imageMargin.x)
+        if (y)
+            this.image.y(y + this.imageMargin.y)
+        
+        this.button.changePos(x + this.buttonMargin.x, y + this.buttonMargin.y)
+    }
+    changeCost(text)
+    {
+        this.cost.change(text)
+    }
+    changeImage(image)
+    {
+        this.image.image(image)
+    }   
+    changeButton(text)
+    {
+        this.button.changeText(text)
     }
 }

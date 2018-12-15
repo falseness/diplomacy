@@ -26,9 +26,7 @@ class Hexagon extends Sprite
     {
         super(x, y)
         this.player = player
-    }
-    createObject()
-    {
+        
         let pos = this.getPos()
         this.object = new Konva.RegularPolygon(
         {
@@ -43,39 +41,9 @@ class Hexagon extends Sprite
         this.object.rotate(90)
         
         this.object.on('click', click)
-        /*{
-            let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
-            console.log(coord.x + ' ' + coord.y)
-            //Нужно вынести это в отдельную функцию или класс:
-            
-            let entity
-            
-            if (selected)
-            {
-                entity = selected
-                if (selected.move(coord.x, coord.y))
-                {
-                    //selected = false Должен быть тут если что
-                    layers.interface.visible(false)
-                    selected = false
-                }
-                    
-                
-            }
-            else
-            {
-                gameInterface.draw()
-
-                let hexagon = grid.arr[coord.x][coord.y]
-                entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit
-                
-                selected = entity
-                
-                entity.select(grid.arr)
-                
-            }
-            gameInterface.change(entity.getInfo(), players)
-        })*/
+    }
+    getObject()
+    {
         return this.object
     }
     repaint(player)

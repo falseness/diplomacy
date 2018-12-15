@@ -17,6 +17,14 @@
     </head>
     <body>
         <div id = "container"></div>
+        
+        <script src = "objectModels/setDefaultModel.js"></script>
+        <script src = "objectModels/setObjectOffset.js"></script>
+        <script src = "objectModels/setObjectListening.js"></script>
+        <script src = "objectModels/imageModel.js"></script>
+        <script src = "objectModels/textModel.js"></script>
+        <script src = "objectModels/rectModel.js"></script>
+        
         <script src = 'render/loadassets.js'></script>
         <script src = 'render/layers.js'></script>
         <script src = 'render/rgbtohex.js'></script>
@@ -63,7 +71,6 @@
 
             
         let layers = new Layers(['grid', 'coordGrid', 'entity', 'selectUnit', 'entityInterface', 'townInterface', 'gameMenu'])
-        
         let grid = new Grid(0, 0, new SpritesGroup(0, 0))
         
         players.push(new Empty, new Player({r: 255, g: 0, b: 0}))
@@ -99,13 +106,13 @@
         let entityInterface = new EntityInterface()
         let townInterface = new TownInterface()
         
-        layers.entityInterface.add(...entityInterface.createObject())
-        layers.townInterface.add(...townInterface.createObject()) 
+        layers.entityInterface.add(...entityInterface.getObject())
+        layers.townInterface.add(...townInterface.getObject()) 
             
         
         window.addEventListener('load', function() {
-            layers.entity.add(town.createObject())
-            layers.entity.add(unit.createObject())
+            layers.entity.add(town.getObject())
+            layers.entity.add(unit.getObject())
             layers.entity.draw()
             layers.gameMenu.draw()
         })          
