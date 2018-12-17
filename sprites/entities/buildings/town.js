@@ -6,20 +6,28 @@ class Town extends Building
         let hp = 50
         super(x, y, 'town', hp, player)
         
-        this.commuterville = this.getNeighbours()
-        this.commuterville.push([this.coord.x, this.coord.y])
+        this.commuterville = []
+        let neighboursCoord = this.getNeighbours()
+        for (let i = 0; i < neighboursCoord.length; ++i)
+        {
+            this.commuterville.push(grid.arr[neighboursCoord[i][0]][neighboursCoord[i][1]])
+        }
+        this.commuterville.push(grid.arr[this.coord.x][this.coord.y])
         
         this.farms = []
+        this.units = []
+        
         
         this.gold = 25//НЕ ЗАБУДЬ!
         
+        this.newProduction = new Production()
         this.production = 
         {
-            noob: 
-            {
+            noob: new UnitProduction(2, 14, Noob)
+            /*{
                 turns: 2,
                 cost: 14,
-                create(x, y, town, player)
+                tryToCreate(x, y, town, player)
                 {
                     if (grid.arr[x][y].unit.isEmpty())
                     {
@@ -31,9 +39,9 @@ class Town extends Building
                     }
                     return false
                 }
-            },
-            farm:
-            {
+            }*/,
+            farm: new FarmProduction(0, 25, 5)
+            /*{
                 turns: 0,
                 cost: 25,
                 create(x, y, town, player)
@@ -45,7 +53,7 @@ class Town extends Building
                         t.object.draw()
                     }
                 }
-            }
+            }*/
         }
         this.finishPreparing()
     }
@@ -74,6 +82,12 @@ class Town extends Building
     select()
     {
         townInterface.change(this.getInfo(), players[this.player].getHexColor())
+        
+        return true
+    }
+    removeSelect(x, y)
+    {
+        return this.newProduction.removeSelect(x, y, this, this.player)
     }
     getIncome()
     {
@@ -85,7 +99,7 @@ class Town extends Building
         {
             //'rgba(' + players[this.player].getColor() + ', ' + commutervilleColor + ')'
             
-            let hexagon = grid.arr[this.commuterville[i][0]][this.commuterville[i][1]].hexagon.object
+            let hexagon = this.commuterville[i].hexagon.object
             
             hexagon.fill(`rgba(255, 255, 255, ${commutervilleColor})`)
             hexagon.draw()
@@ -100,10 +114,10 @@ class Town extends Building
                 what: what,
                 turns: this.production[what].turns
             }
-            this.gold -= this.production[what].cost
-            
-            if (!this.preparation.turns)
-                this.production[this.preparation.what].create(this.coord.x, this.coord.y, this.player)
+            if (!this.production[this.preparation.what].startCreateRightAway())
+                this.production[this.preparation.what].tryToCreate(this.coord.x, this.coord.y, this, this.player)
+            else
+                this.gold -= this.production[what].cost
             
             return true
         }
@@ -111,12 +125,8 @@ class Town extends Building
     }
     isPreparing()
     {
-        return (this.preparation.turns)
+        return (this.preparation.turns || this.newProduction.isWaitingForInstructionsToCreate())
     }
-    /*getPreparingText()
-    {
-        return String(this.preparation.turns + ' / ' + this.production[this.preparation.what].turns)
-    }*/
     finishPreparing()
     {
         this.preparation = 
@@ -132,7 +142,7 @@ class Town extends Building
             this.preparation.turns--
             if (!this.isPreparing())
             {
-                if (this.production[this.preparation.what].create(this.coord.x, this.coord.y, this, this.player))
+                if (this.production[this.preparation.what].tryToCreate(this.coord.x, this.coord.y, this, this.player))
                 {
                     
                     this.finishPreparing()
@@ -155,6 +165,95 @@ function townEvent(event)
         town.select()
 
         entityInterface.change(town.getInfo(), color)
+    }
+}
+
+
+class Production
+{
+    constructor(turns, cost)
+    {
+        this.turns = turns
+        this.cost = cost
+    }
+    removeSelect()
+    {
+        return true
+    }
+    startCreateRightAway()
+    {
+        return this.turns
+    }
+    isWaitingForInstructionsToCreate()
+    {
+        return false
+    }
+}
+class UnitProduction extends Production
+{
+    constructor(turns, cost, _class)
+    {
+        super(turns, cost)
+        this.class = _class
+    }
+    create(x, y, town, player)
+    {
+        let t = new this.class(x, y, player)
+        layers.entity.add(t.getObject())
+        t.object.draw()
+        
+        town.units.push(t)
+    }
+    tryToCreate(x, y, town, player)
+    {
+        if (grid.arr[x][y].unit.isEmpty())
+        {
+            this.create(x, y, town, player)
+
+            return true
+        }
+        return false
+    }
+}
+class FarmProduction extends Production
+{
+    constructor(turns, cost, income)
+    {
+        super(turns, cost)
+        this.income = income
+    }
+    tryToCreate(x, y, town, player)
+    {
+        town.newProduction = this
+    }
+    create(x, y, town, player)
+    {
+        town.gold -= this.cost
+        town.newProduction = new Production()
+
+        let t = new Farm(x, y, this.income, town, player)
+        layers.entity.add(t.getObject())
+        t.object.draw()
+        
+        town.farms.push(t)
+    }
+    paintTownBorders(arr)
+    {
+        //for (let i = 0;)Доделай!
+    }
+    removeSelect(x, y, town, player)
+    {
+        if (grid.arr[x][y].building.isEmpty())
+        {
+            this.create(x, y, town, player)
+            return true
+        }
+        
+        return false
+    }
+    isWaitingForInstructionsToCreate()
+    {
+        return true
     }
 }
 function chooseHexagonToBuildHouse()

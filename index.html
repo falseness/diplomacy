@@ -99,9 +99,6 @@
         layers.gameMenu.add(nextTurnButton)
         nextTurnButton.on('click', nextTurn)
 
-        grid.fill(20, 10)
-            
-        
         
         let whooseTurn = 1
         
@@ -110,6 +107,10 @@
         
         layers.entityInterface.add(...entityInterface.getObject())
         layers.townInterface.add(...townInterface.getObject()) 
+            
+        let events = new Events(townInterface, entityInterface)
+        
+        grid.fill(20, 10)
             
         
         stage.setX(basis.offset.x)

@@ -141,6 +141,10 @@ class TownInterface
             
             if (!town.info.train)
             {
+                /*
+                Некруто постоянно создавать функции для button и вообще все менять каждый раз,
+                нужно сделать все один раз сделать и редко менять
+                */
                 this.trainInterfaces[i].button.setFunction(townEvent, {town: town.link, what: this.trainInterfaces[i].name})
                 this.trainInterfaces[i].changeButton('train (' + town.production[i].turns + ')')
                 

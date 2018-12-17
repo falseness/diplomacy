@@ -20,6 +20,8 @@ class Unit extends Entity
     }
     changeCoord(x, y)
     {
+        this.paintHexagons(x, y, grid.arr)
+        
         grid.arr[this.coord.x][this.coord.y].unit = new Empty()
         
         this.coord.x = x
@@ -43,26 +45,37 @@ class Unit extends Entity
         }
         return false
     }
+    canReachHexagon(x, y)
+    {
+        return (this.way.distance[x + this.way.border][y + this.way.border] &&
+                this.way.distance[x + this.way.border][y + this.way.border] <= this.moves)
+    }
+    turnsIsOver()
+    {
+        return (!this.moves)
+    }
     move(x, y)
     {
-        this.removeSelect()
-        if (this.way.distance[x + this.way.border][y + this.way.border] &&
-            this.way.distance[x + this.way.border][y + this.way.border] <= this.moves)
+        if (this.canReachHexagon(x, y))
         {
-            this.paintHexagons(x, y, grid.arr)
             this.changeCoord(x, y)
             this.moves -= this.way.distance[x + this.way.border][y + this.way.border]
+            
+            
             layers.entity.draw()
-            return (this.moves == 0)
+            
+            return this.turnsIsOver()
         }
         
         return true
     }
-    removeSelect()
+    removeSelect(x, y)
     {
         layers.coordGrid.visible(true)
         layers.selectUnit.destroyChildren()
         layers.selectUnit.draw()
+        
+        return this.move(x, y)
     }
     paintHexagons(x, y, arr)
     {

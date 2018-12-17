@@ -1,46 +1,58 @@
 function click(event)
 {
-    townInterface.hide()
-    let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
-    console.log(coord.x + ' ' + coord.y)
-    //Нужно вынести это в отдельную функцию или класс:
-
-    let entity
-
-    if (selected)
+    events.click(event)
+}
+class Events
+{
+    constructor(town, entity)
     {
-        entity = selected
-        removeSelect(coord.x, coord.y)
-
-
+        this.selected = false
+        this.interface = 
+        {
+            town: townInterface,
+            entity: entityInterface
+        }
     }
-    else
+    click(event)
     {
-        entityInterface.draw()
+        this.interface.town.hide()
         
-        entity = select(coord.x, coord.y)
-    }
-    entityInterface.change(entity.getInfo(), players[entity.player].getHexColor())
-}
-function select(x, y)
-{
-    let hexagon = grid.arr[x][y]
-    entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit
+        let coord = getCoord(event.target.attrs.x, event.target.attrs.y)
+        
+        console.log(coord.x + ' ' + coord.y)
+        
+        let entity
 
-    selected = entity.select(grid.arr)?entity:false
-
-    return entity
-}
-function removeSelect(x, y)
-{
-    if (selected.move(x, y))
-    {
-        //selected = false Должен быть тут если что
-        layers.entityInterface.visible(false)
-        selected = false
+        if (this.selected)
+        {
+            entity = this.selected
+            this.removeSelect(coord.x, coord.y)
+        }
+        else
+        {
+            this.interface.entity.draw()
+            entity = this.select(coord.x, coord.y)
+        }
+        
+        this.interface.entity.change(entity.getInfo(), players[entity.player].getHexColor())
     }
-    else
+    select(x, y)
     {
-        select(selected.coord.x, selected.coord.y)
+        let hexagon = grid.arr[x][y]
+        let entity = hexagon.unit.isEmpty()?hexagon.building:hexagon.unit //Эту строчку нужно переделать
+        
+        this.selected = entity.select(grid.arr)?entity:false
+
+        return entity
+    }
+    removeSelect(x, y)
+    {
+        if (this.selected.removeSelect(x, y))
+        {
+            layers.entityInterface.visible(false)
+            this.selected = false
+        }
+        else
+            this.select(this.selected.coord.x, this.selected.coord.y)
     }
 }

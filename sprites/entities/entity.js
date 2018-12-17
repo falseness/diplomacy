@@ -39,4 +39,12 @@ class Entity extends Sprite
             }
         }
     }
+    select()
+    {
+        return true
+    }
+    removeSelect()
+    {
+        return true
+    }
 }
