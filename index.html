@@ -25,8 +25,6 @@
         <script src = "objectModels/textModel.js"></script>
         <script src = "objectModels/rectModel.js"></script>
         
-        <script src = "objectModels/drawLineBetweenHexagons.js"></script>
-        
         <script src = 'render/loadassets.js'></script>
         <script src = 'render/layers.js'></script>
         <script src = 'render/rgbtohex.js'></script>
@@ -43,6 +41,7 @@
         <script src = 'sprites/empty.js'></script>
         <script src = 'sprites/text.js'></script>
         <script src = 'sprites/button.js'></script>
+        <script src = 'sprites/border.js'></script>
         
         <script src = 'events.js'></script>
         
@@ -74,8 +73,13 @@
         Konva.pixelRatio = 1
 
             
-        let layers = new Layers(['grid', 'coordGrid', 'entity', 'selectUnit', 'entityInterface', 'townInterface', 'gameMenu'])
+        let layers = new Layers(['grid', 'coordGrid', 'entity', 'border', 'entityInterface', 'townInterface', 'gameMenu'])
         let grid = new Grid(0, 0, new SpritesGroup(0, 0))
+        
+        
+        let border = new Border(layers.border)
+        
+        
         
         players.push(new Empty, new Player({r: 255, g: 0, b: 0}))
             
@@ -128,6 +132,7 @@
         let town = new Town(5, 2, 1)
         
         let unit = new Noob(4, 3, 1) 
+        town.units.push(unit)
         
         grid.arr[5][2].hexagon.repaint(1)
         grid.arr[5][1].hexagon.repaint(1)

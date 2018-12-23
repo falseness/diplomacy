@@ -1,11 +1,12 @@
 class Unit extends Entity
 {
-    constructor(x, y, name, hp, dmg, speed, player)
+    constructor(x, y, name, hp, dmg, speed, salary, player)
     {
         super(x, y, name, hp, player)
         this.dmg = dmg
         this.speed = speed
         this.moves = speed
+        this.salary = salary
         
         grid.arr[x][y].unit = this
         
@@ -39,7 +40,7 @@ class Unit extends Entity
         {
             this.way.BFS([this.coord.x, this.coord.y], this.moves, arr, arr.length)
             layers.coordGrid.visible(false)
-            layers.selectUnit.draw()
+            border.draw()
             
             return true
         }
@@ -47,8 +48,8 @@ class Unit extends Entity
     }
     canReachHexagon(x, y)
     {
-        return (this.way.distance[x + this.way.border][y + this.way.border] &&
-                this.way.distance[x + this.way.border][y + this.way.border] <= this.moves)
+        return (this.way.distance[x + this.way.indent][y + this.way.indent] &&
+                this.way.distance[x + this.way.indent][y + this.way.indent] <= this.moves)
     }
     turnsIsOver()
     {
@@ -59,7 +60,7 @@ class Unit extends Entity
         if (this.canReachHexagon(x, y))
         {
             this.changeCoord(x, y)
-            this.moves -= this.way.distance[x + this.way.border][y + this.way.border]
+            this.moves -= this.way.distance[x + this.way.indent][y + this.way.indent]
             
             
             layers.entity.draw()
@@ -72,8 +73,7 @@ class Unit extends Entity
     removeSelect(x, y)
     {
         layers.coordGrid.visible(true)
-        layers.selectUnit.destroyChildren()
-        layers.selectUnit.draw()
+        border.remove()
         
         return this.move(x, y)
     }
@@ -83,11 +83,18 @@ class Unit extends Entity
         {
             arr[x][y].hexagon.repaint(this.player)
             
-            let t = this.way.arr[x + this.way.border][y + this.way.border]
+            let t = this.way.arr[x + this.way.indent][y + this.way.indent]
             
-            x = t[0] - this.way.border
-            y = t[1] - this.way.border
+            x = t[0] - this.way.indent
+            y = t[1] - this.way.indent 
         }
+    }
+    kill()
+    {
+        grid.arr[this.coord.x][this.coord.y].unit = new Empty()
+        
+        this.object.destroy()
+        layers.entity.draw()
     }
     nextTurn(whooseTurn)
     {
@@ -104,19 +111,19 @@ class Way
     {
         this.color = 'white'//players[player].getHexColor()
     }
-    BFS(v0, moves, arr, border)
+    BFS(v0, moves, arr, indent)
     {
         /*
         Требуется рефакторинг BFS
         Сделай проверку для конца карты
         */
-        this.border = border
+        this.indent = indent
         
         let used = []
         let distance = []
         let way = []
 
-        for (let i = 0; i <= border * 2; ++i)
+        for (let i = 0; i <= indent * 2; ++i)
         {
             used.push([])
             distance.push([])
@@ -128,8 +135,8 @@ class Way
             }*/
         }
 
-        distance[v0[0] + border][v0[1] + border] = 0
-        used[v0[0] + border][v0[1] + border] = 1
+        distance[v0[0] + indent][v0[1] + indent] = 0
+        used[v0[0] + indent][v0[1] + indent] = 1
 
         let Q = []
         Q.push(v0)
@@ -148,23 +155,23 @@ class Way
                 /*
                 Draw line создает слишком много новых линий и не очищает!!
                 */
-                let x = neighbours[i][0] + border
-                let y = neighbours[i][1] + border
-                if (this.needToDrawLine(distance[v[0] + border][v[1] + border], distance[x][y], moves))
-                    drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
-                if (distance[v[0] + border][v[1] + border] <= moves && 
+                let x = neighbours[i][0] + indent
+                let y = neighbours[i][1] + indent
+                if (this.needToDrawLine(distance[v[0] + indent][v[1] + indent], distance[x][y], moves))
+                    border.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
+                if (distance[v[0] + indent][v[1] + indent] <= moves && 
                     isArrEnd(neighbours[i][0], neighbours[i][1], arr.length, arr[0].length))
                 {
-                    drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
+                    border.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
                 }
-                if (!used[neighbours[i][0] + border][neighbours[i][1] + border])
+                if (!used[neighbours[i][0] + indent][neighbours[i][1] + indent])
                 {
                     Q.push(neighbours[i])
                     
-                    way[neighbours[i][0] + border][neighbours[i][1] + border] = [v[0] + border, v[1] + border]
+                    way[neighbours[i][0] + indent][neighbours[i][1] + indent] = [v[0] + indent, v[1] + indent]
                     
                     used[x][y] = true
-                    distance[x][y] = distance[v[0] + border][v[1] + border] + 1
+                    distance[x][y] = distance[v[0] + indent][v[1] + indent] + 1
                     
                     
                     if (distance[x][y] > moves + 1)
@@ -193,7 +200,7 @@ class Way
         
         Нельзя создавать миллион coordText
         let distanceText = new CoordText(x, y, distance)
-        layers.selectUnit.add(distanceText.createObject())
+        layers.border.add(distanceText.createObject())
         */
     }
 }

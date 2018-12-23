@@ -3,6 +3,8 @@ function nextTurn()
     townInterface.hide()
     entityInterface.hide()
     
+    events.nextTurn()
+    
     whooseTurn = (players.length % ++whooseTurn)
     if (!whooseTurn)
         whooseTurn++

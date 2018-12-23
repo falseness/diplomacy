@@ -16,4 +16,8 @@ class Farm extends Building
         
         return farm
     }
+    nextTurn()
+    {
+        
+    }
 }

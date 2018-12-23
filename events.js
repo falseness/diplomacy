@@ -55,4 +55,8 @@ class Events
         else
             this.select(this.selected.coord.x, this.selected.coord.y)
     }
+    nextTurn()
+    {
+        this.selected = false
+    }
 }

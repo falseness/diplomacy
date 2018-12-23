@@ -1,4 +1,3 @@
-const commutervilleColor = 0.4
 class Town extends Building
 {
     constructor(x, y, player)
@@ -23,37 +22,8 @@ class Town extends Building
         this.newProduction = new Production()
         this.production = 
         {
-            noob: new UnitProduction(2, 14, Noob)
-            /*{
-                turns: 2,
-                cost: 14,
-                tryToCreate(x, y, town, player)
-                {
-                    if (grid.arr[x][y].unit.isEmpty())
-                    {
-                        let t = new Noob(x, y, player)
-                        layers.entity.add(t.getObject())
-                        t.object.draw()
-                        
-                        return true
-                    }
-                    return false
-                }
-            }*/,
-            farm: new FarmProduction(0, 25, 5)
-            /*{
-                turns: 0,
-                cost: 25,
-                create(x, y, town, player)
-                {
-                    if (grid.arr[x][y].building.isEmpty())
-                    {
-                        let t = new Farm(x, y, town, player)
-                        layers.entity.add(t.getObject())
-                        t.object.draw()
-                    }
-                }
-            }*/
+            noob: new UnitProduction(2, 14, Noob),
+            farm: new FarmProduction(0, 25, Farm, 5)
         }
         this.finishPreparing()
     }
@@ -91,15 +61,30 @@ class Town extends Building
     }
     getIncome()
     {
-        return this.commuterville.length
+        const commutervilleIncome = 1
+        
+        let income = 0
+        income += this.commuterville.length * commutervilleIncome
+        
+        for (let i = 0; i < this.farms.length; ++i)
+        {
+            income += this.farms[i].income
+        }
+        for (let i = 0; i < this.units.length; ++i)
+        {
+            income -= this.units[i].salary
+        }
+        return income
     }
     paintCommuterville()
     {
+        const commutervilleColor = 0.4
+        
         for (let i = 0; i < this.commuterville.length; ++i)
         {
             //'rgba(' + players[this.player].getColor() + ', ' + commutervilleColor + ')'
             
-            let hexagon = this.commuterville[i].hexagon.object
+            let hexagon = this. commuterville[i].hexagon.object
             
             hexagon.fill(`rgba(255, 255, 255, ${commutervilleColor})`)
             hexagon.draw()
@@ -135,24 +120,41 @@ class Town extends Building
             turns: 0
         }
     }
+    crisisPenalty()
+    {
+        for (let i = 0; i < this.units.length; ++i)
+        {
+            this.units[i].kill()   
+        }
+        this.units = []
+        
+        this.gold = 0
+    }
     nextTurn(whooseTurn)
     {
-        if (this.player == whooseTurn && this.isPreparing())
+        if (this.player == whooseTurn)
         {
-            this.preparation.turns--
-            if (!this.isPreparing())
+            this.gold += this.getIncome()
+            if (this.gold < 0)
+                this.crisisPenalty()
+            
+            if (this.isPreparing())
             {
-                if (this.production[this.preparation.what].tryToCreate(this.coord.x, this.coord.y, this, this.player))
+                this.preparation.turns--
+                if (!this.isPreparing())
                 {
-                    
-                    this.finishPreparing()
+                    if (this.production[this.preparation.what].tryToCreate(this.coord.x, this.coord.y, this, this.player))
+                    {
+
+                        this.finishPreparing()
+                    }
+                    else
+                    {
+                        this.preparation.turns++
+                    }
+
                 }
-                else
-                {
-                    this.preparation.turns++
-                }
-                
-            }    
+            }
         }
     }
 }
@@ -167,14 +169,26 @@ function townEvent(event)
         entityInterface.change(town.getInfo(), color)
     }
 }
+/*
+Town слишком огромный класс
+есть смысл вынести prepare из него
+и так же уменьшить классы Production
 
+
+
+Добавь новую продукцию - пригородная клетка
+Чуть-чуть добалансь цены
+
+займись grapnel ninja (сделай нормальный крюк + визуальные эффекты)
+*/
 
 class Production
 {
-    constructor(turns, cost)
+    constructor(turns, cost, _class)
     {
         this.turns = turns
         this.cost = cost
+        this.class = _class
     }
     removeSelect()
     {
@@ -193,8 +207,7 @@ class UnitProduction extends Production
 {
     constructor(turns, cost, _class)
     {
-        super(turns, cost)
-        this.class = _class
+        super(turns, cost, _class)
     }
     create(x, y, town, player)
     {
@@ -217,35 +230,65 @@ class UnitProduction extends Production
 }
 class FarmProduction extends Production
 {
-    constructor(turns, cost, income)
+    constructor(turns, cost, _class, income)
     {
-        super(turns, cost)
+        super(turns, cost, _class)
         this.income = income
     }
     tryToCreate(x, y, town, player)
     {
         town.newProduction = this
+        
+        this.paintTownBorders(town.commuterville)
     }
     create(x, y, town, player)
     {
         town.gold -= this.cost
         town.newProduction = new Production()
 
-        let t = new Farm(x, y, this.income, town, player)
+        let t = new this.class(x, y, this.income, town, player)
         layers.entity.add(t.getObject())
         t.object.draw()
         
         town.farms.push(t)
     }
+    isCommuterville(coordX, coordY, arr)
+    {
+        for (let i = 0; i < arr.length; ++i)
+        {
+            if (arr[i].hexagon.coord.x == coordX && arr[i].hexagon.coord.y == coordY)
+                return true
+        }
+        return false
+    }
     paintTownBorders(arr)
     {
-        //for (let i = 0;)Доделай!
+           
+        for (let i = 0; i < arr.length; ++i)
+        {
+            let neighbours = arr[i].hexagon.getNeighbours()
+            for (let j = 0; j < neighbours.length; ++j)
+            {
+                if (!this.isCommuterville(neighbours[j][0], neighbours[j][1], arr))
+                {
+                    border.drawLine(arr[i].hexagon.getPos(), j, 'white')
+                    
+                }
+            }
+        }
+        border.draw()
+    }
+    hexagonBelongToTown(x, y, arr)
+    {
+        return this.isCommuterville(x, y, arr)
     }
     removeSelect(x, y, town, player)
     {
-        if (grid.arr[x][y].building.isEmpty())
+        if (grid.arr[x][y].building.isEmpty() && this.hexagonBelongToTown(x, y, town.commuterville))
         {
             this.create(x, y, town, player)
+            
+            border.remove()
             return true
         }
         
@@ -255,26 +298,4 @@ class FarmProduction extends Production
     {
         return true
     }
-}
-function chooseHexagonToBuildHouse()
-{
-    /*
-    Требуется рефакторинг 
-    Нужно вынести в отдельные класс production и townEvent наверно
-    
-    
-
-    и сделать что-то с этой функцией
-    эта функция должна отрисовывать границы пригорода
-    с помощью f drawLine() из drawLineBetweenHexagons.js
-    и давать выбор игроку куда поставить домик
-    
-    
-    
-    Не забудь переписать в unit многие функции, в том числе
-    и BFS 
-    
-    
-    и нужно переписать events
-    */
 }
