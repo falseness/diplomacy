@@ -53,7 +53,7 @@ class TownInterface
         
         let trainInterfaces = 
         {
-            name: ['noob', 'farm'], 
+            name: ['noob', 'farm', 'suburb'], 
             margin:
             {
                 image: 
@@ -128,7 +128,8 @@ class TownInterface
         
         return [this.background, this.gold, this.goldText.getObject(), 
                 ...this.trainInterfaces.noob.getObject(),
-                ...this.trainInterfaces.farm.getObject()]
+                ...this.trainInterfaces.farm.getObject(),
+                ...this.trainInterfaces.suburb.getObject()]
     }
     change(town, color)
     {
@@ -136,7 +137,7 @@ class TownInterface
         
         for (let i in town.production)
         {
-            this.trainInterfaces[i].changeImage(i)
+            this.trainInterfaces[i].changeImage(i, color)
             this.trainInterfaces[i].changeCost('cost: ' + town.production[i].cost)
             
             if (!town.info.train)
@@ -246,10 +247,52 @@ class TrainInterface
         this.cost.change(text)
         //this.cost.changeOffset()
     }
-    changeImage(image)
+    changeImage(image, color)
     {
-        this.image.image(assets[image])
+        if (assets[image])
+            this.image.image(assets[image])
+        else
+        {
+            this.createAsset(image, color)
+            //this.image = this.createAsset(image, color)
+            return
+        }
+        
+        ///Нужно что-то менять:
+        this.image.draw()
     }   
+    createAsset(image, color)
+    {
+        if (image == 'suburb')
+        {
+            let obj = new Konva.RegularPolygon(
+            {
+                x: this.image.x(),
+                y: this.image.y(),
+                sides: 6,
+                radius: basis.r,
+                fill: color, //'#D0D0D0',//'#B5B8B1',
+                stroke: 'black',
+                strokeWidth: 3,
+                rotate: 90
+            })
+            obj.draw()
+        }
+        /*const assets = 
+        {
+            suburb: new Konva.RegularPolygon(
+            {
+            x: pos.x,
+            y: pos.y,
+            sides: 6,
+            radius: basis.r,
+            fill: players[this.player].getHexColor(), //'#D0D0D0',//'#B5B8B1',
+            stroke: 'black',
+            strokeWidth: 3,
+            rotate: 90
+            })
+        }*/
+    }
     changeButton(text)
     {
         this.button.changeText(text)

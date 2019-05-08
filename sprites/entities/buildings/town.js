@@ -5,13 +5,13 @@ class Town extends Building
         let hp = 50
         super(x, y, 'town', hp, player)
         
-        this.commuterville = []
+        this.suburbs = []
         let neighboursCoord = this.getNeighbours()
         for (let i = 0; i < neighboursCoord.length; ++i)
         {
-            this.commuterville.push(grid.arr[neighboursCoord[i][0]][neighboursCoord[i][1]])
+            this.suburbs.push(grid.arr[neighboursCoord[i][0]][neighboursCoord[i][1]])
         }
-        this.commuterville.push(grid.arr[this.coord.x][this.coord.y])
+        this.suburbs.push(grid.arr[this.coord.x][this.coord.y])
         
         this.farms = []
         this.units = []
@@ -23,7 +23,8 @@ class Town extends Building
         this.production = 
         {
             noob: new UnitProduction(2, 14, Noob),
-            farm: new FarmProduction(0, 25, Farm, 5)
+            farm: new FarmProduction(0, 25, Farm, 5),
+            suburb: new SuburbProduction(0, 1)
         }
         this.finishPreparing()
     }
@@ -61,10 +62,10 @@ class Town extends Building
     }
     getIncome()
     {
-        const commutervilleIncome = 1
+        const suburbIncome = 1
         
         let income = 0
-        income += this.commuterville.length * commutervilleIncome
+        income += this.suburbs.length * suburbIncome
         
         for (let i = 0; i < this.farms.length; ++i)
         {
@@ -76,17 +77,17 @@ class Town extends Building
         }
         return income
     }
-    paintCommuterville()
+    paintSuburbs()
     {
-        const commutervilleColor = 0.4
+        const suburbsColor = 0.4
         
-        for (let i = 0; i < this.commuterville.length; ++i)
+        for (let i = 0; i < this.suburbs.length; ++i)
         {
             //'rgba(' + players[this.player].getColor() + ', ' + commutervilleColor + ')'
             
-            let hexagon = this. commuterville[i].hexagon.object
+            let hexagon = this.suburbs[i].hexagon.object
             
-            hexagon.fill(`rgba(255, 255, 255, ${commutervilleColor})`)
+            hexagon.fill(`rgba(255, 255, 255, ${suburbsColor})`)
             hexagon.draw()
         }
     }
@@ -239,7 +240,7 @@ class FarmProduction extends Production
     {
         town.newProduction = this
         
-        this.paintTownBorders(town.commuterville)
+        this.paintTownBorders(town.suburbs)
     }
     create(x, y, town, player)
     {
@@ -252,7 +253,7 @@ class FarmProduction extends Production
         
         town.farms.push(t)
     }
-    isCommuterville(coordX, coordY, arr)
+    isSuburb(coordX, coordY, arr)
     {
         for (let i = 0; i < arr.length; ++i)
         {
@@ -263,13 +264,18 @@ class FarmProduction extends Production
     }
     paintTownBorders(arr)
     {
-           
+        
+        let Q = arr.slice()
+        while (Q.length > 0)
+        {
+            
+        }
         for (let i = 0; i < arr.length; ++i)
         {
             let neighbours = arr[i].hexagon.getNeighbours()
             for (let j = 0; j < neighbours.length; ++j)
             {
-                if (!this.isCommuterville(neighbours[j][0], neighbours[j][1], arr))
+                if (!this.isSuburb(neighbours[j][0], neighbours[j][1], arr))
                 {
                     border.drawLine(arr[i].hexagon.getPos(), j, 'white')
                     
@@ -280,11 +286,11 @@ class FarmProduction extends Production
     }
     hexagonBelongToTown(x, y, arr)
     {
-        return this.isCommuterville(x, y, arr)
+        return this.isSuburb(x, y, arr)
     }
     removeSelect(x, y, town, player)
     {
-        if (grid.arr[x][y].building.isEmpty() && this.hexagonBelongToTown(x, y, town.commuterville))
+        if (grid.arr[x][y].building.isEmpty() && this.hexagonBelongToTown(x, y, town.suburbs))
         {
             this.create(x, y, town, player)
             
@@ -297,5 +303,112 @@ class FarmProduction extends Production
     isWaitingForInstructionsToCreate()
     {
         return true
+    }
+}
+class SuburbProduction extends Production
+{
+    constructor(turns, cost, _class)
+    {
+        super(turns, cost, _class)
+    }
+    tryToCreate(x, y, town, player)
+    {
+        town.newProduction = this
+        
+        this.paintTownBorders(town.suburbs, grid.arr)
+    }
+    isSuburb(coordX, coordY, arr)
+    {
+        for (let i = 0; i < arr.length; ++i)
+        {
+            if (arr[i].hexagon.coord.x == coordX && arr[i].hexagon.coord.y == coordY)
+                return true
+        }
+        return false
+    }
+    isEqually(hexagon1, hexagon2)
+    {
+        if (hexagon1 && hexagon2)
+            return (hexagon1.coord.x == hexagon2.coord.x && hexagon1.coord.y == hexagon2.coord.y)
+        return false
+    }
+    paintTownBorders(suburbs, arr)
+    {
+        let indent = suburbs.length + 1
+        
+        let used = []
+        let distance = []
+        let canReachThisHexagons = []
+
+        for (let i = 0; i <= indent * 2; ++i)
+        {
+            used.push([])
+            distance.push([])
+        }
+        
+        distance[indent][indent] = 0
+        used[indent][indent] = 1
+
+        let marginX = town.coord.x
+        let marginY = town.coord.y
+        
+        let Q = []
+        Q.push([0, 0])
+
+        while (Q.length > 0)
+        {
+            let v = Q.shift()
+            
+            
+            let vRealX = v[0] + marginX
+            let vRealY = v[1] + marginY
+            let neighbours = arr[vRealX][vRealY].hexagon.getNeighbours()
+            let isVSuburb = this.isSuburb(vRealX, vRealY, suburbs)
+            
+            if (!isVSuburb)
+            {
+                canReachThisHexagons.push({hexagon: arr[vRealX][vRealY], cantReach: [false, false, false, false, false, false]})
+            }
+            for (let i = 0; i < neighbours.length; ++i)
+            {
+                let x = neighbours[i][0] - marginX
+                let y = neighbours[i][1] - marginY
+                
+                for (let j = 0; j < canReachThisHexagons.length; ++j)
+                {
+                    for (let k = 0; k < canReachThisHexagons[j].cantReach.length; ++k)
+                    {
+                        if (isEqually(arr[neighbours[i][0]][neighbours[i][1]].hexagon, canReachThisHexagons[j].cantReach[k]))
+                            canReachThisHexagons[j].cantReach[k] = false
+                    }
+                }
+                
+                if (!isVSuburb && !this.isSuburb(neighbours[i][0], neighbours[i][1], suburbs))
+                {
+                    canReachThisHexagons[canReachThisHexagons.length - 1].cantReach[i] = arr[neighbours[i][0]][neighbours[i][1]].hexagon
+                    
+                    continue
+                }
+                if (!used[x][y])
+                {
+                    used[x][y] = 1
+                    Q.push(neighbours[i])
+                    
+                    distance[x][y] = distance[v[0]][v[1]] + 1
+                }
+            }
+        }
+        
+        
+        for (let i = 0; i < canReachThisHexagons.length; ++i)
+        {
+            for (let j = 0; j < canReachThisHexagons[i].cantReach.length; ++j)
+            {
+                if (canReachThisHexagons[i].cantReach[j])
+                {
+                    border.drawLine(canReachThisHexagons.hexagon.getPos(), j)
+                }
+            }
+        }
     }
 }
