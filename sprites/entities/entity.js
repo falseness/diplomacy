@@ -7,26 +7,6 @@ class Entity extends Sprite
         this.player = player
         
         this.name = name
-        
-        let pos = this.getPos()
-        this.object = new Konva.Image({
-            x: pos.x,
-            y: pos.y,
-            image: assets[this.name],
-            width: assets.size,
-            height: assets.size
-        }) 
-        this.offsetObject()
-    }
-    offsetObject()
-    {
-        this.object.offsetX(assets.size / basis.offset.assets.x)
-        this.object.offsetY(assets.size / basis.offset.assets.y)
-    }
-    getObject()
-    {
-        
-        return this.object
     }
     getInfo()
     {
@@ -39,6 +19,10 @@ class Entity extends Sprite
             }
         }
     }
+    getPlayer()
+    {
+        return this.player
+    }
     select()
     {
         return true
@@ -46,5 +30,9 @@ class Entity extends Sprite
     removeSelect()
     {
         return true
+    }
+    draw()
+    {
+        drawImage(this.name, this.getPos())
     }
 }

@@ -3,15 +3,20 @@ class SpritesGroup extends Sprite
     constructor(x, y)
     {
         super(x, y)
+        this.arr = []
     }
-    createObject()
+    createArr(n, arr)
     {
-        let pos = this.getPos()
-        this.object = new Konva.Group(
+        for (let i = 0; i < n; ++i)
         {
-            x: pos.x,
-            y: pos.y            
-        })
-        return this.object
+            this.arr.push([])
+        }
+    }
+    draw()
+    {   
+        for (let i = 0; i < this.arr.length; ++i)
+        {
+            this.arr[i].draw()
+        }
     }
 }

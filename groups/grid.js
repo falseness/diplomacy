@@ -1,30 +1,39 @@
 class Grid extends SpritesGroup
 {
-    constructor(x, y, coordGrid)
+    constructor(x, y, size)
     {
         super(x, y)
-        this.coordGrid = coordGrid
+        
+        this.drawLogicText = false
+        
+        if (size)
+            this.fill(size.x, size.y)
     }
-    createArr(n)
+    setDrawLogicText(boolean)
     {
-        this.arr = []
-        for (let i = 0; i < n; ++i)
+        this.drawLogicText = boolean
+    }
+    cleanLogicText()
+    {
+        for (let i = 0; i < this.arr.length; ++i)
         {
-            this.arr.push([])
+            for (let j = 0; j < this.arr[i].length; ++j)
+            {
+                this.arr[i][j].logicText.setText('')
+            }
         }
     }
     fill(n, m)
     {
-        this.createArr(n)
+        this.createArr(n, this.arr)
         for (let i = 0; i < n; ++i)
         {
             for (let j = 0; j < m; ++j)
             {
                 this.arr[i][j] = {hexagon: new Hexagon(i, j, 0), building: new Empty, unit: new Empty}
                 let pos = this.arr[i][j].hexagon.getPos()
-                this.arr[i][j].text = new CoordText (i, j, i + ' ' + j)
-                this.object.add(this.arr[i][j].hexagon.getObject())
-                this.coordGrid.object.add(this.arr[i][j].text.createObject({}))
+                this.arr[i][j].coordText = new CoordText(i, j, i + ' ' + j)
+                this.arr[i][j].logicText = new CoordText(i, j, '')
             }
         }
         /*for (let x = 0; x <= k * 2; ++x)
@@ -39,5 +48,24 @@ class Grid extends SpritesGroup
                 this.coordGrid.object.add(this.arr[x][y][z].text.createObject(x + ' ' + y + ' ' + z))
             }
         }*/
+    }
+    draw()
+    {
+        for (let i = 0; i < this.arr.length; ++i)
+        {
+            for (let j = 0; j < this.arr[i].length; ++j)    
+            {
+                let cell = this.arr[i][j]
+                cell.hexagon.draw()
+                
+                if (this.drawLogicText)
+                    cell.logicText.draw()
+                else
+                    cell.coordText.draw()
+                
+                cell.building.draw()
+                cell.unit.draw()
+            }
+        }
     }
 }

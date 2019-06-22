@@ -26,8 +26,9 @@ class Hexagon extends Sprite
     {
         super(x, y)
         this.player = player
+        this.suburb = new Empty()
         
-        let pos = this.getPos()
+       /* let pos = this.getPos()
         this.object = new Konva.RegularPolygon(
         {
             x: pos.x,
@@ -40,20 +41,48 @@ class Hexagon extends Sprite
         })
         this.object.rotate(90)
         
-        this.object.on('click', click)
+        this.object.on('click', click)*/
     }
-    getObject()
+    setIsSuburb(boolean)
     {
-        return this.object
+        if (boolean)
+            this.suburb = new SuburbImage({x: this.coord.x, y: this.coord.y}, basis.r)
+        else
+            this.suburb = new Empty()
+    }
+    isSuburb()
+    {
+        return this.suburb.notEmpty()
+    }
+    getPlayer()
+    {
+        return this.player
     }
     repaint(player)
     {
         if (this.player != player)
         {
             this.player = player
-
-            this.object.fill(players[player].getHexColor())   
-            this.object.draw()
         }
+    }
+    draw()
+    {
+        ctx.beginPath()
+        
+        ctx.fillStyle   = players[this.player].getHexColor()
+        ctx.strokeStyle = 'black'
+        ctx.lineWidth = 3
+        
+        let pos = this.getPos()
+        ctx.moveTo(pos.x + basis.r * Math.cos(0), pos.y + basis.r * Math.sin(0))
+        for (let i = 0; i < 7; ++i)
+            ctx.lineTo(pos.x + basis.r * Math.cos(i * 2 * Math.PI / 6), pos.y + basis.r * Math.sin(i * 2 * Math.PI / 6))
+        
+        ctx.fill()
+        ctx.stroke()
+        ctx.closePath()
+        
+        this.suburb.setPos(pos)
+        this.suburb.draw()
     }
 }

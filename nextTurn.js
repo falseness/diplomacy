@@ -1,13 +1,17 @@
+function neutralPlayerTurn()
+{
+    ++whooseTurn
+}
 function nextTurn()
 {
-    townInterface.hide()
-    entityInterface.hide()
+    townInterface.setVisible(false)
+    //entityInterface.setVisible(false)
     
-    events.nextTurn()
+    gameEvent.nextTurn()
     
     whooseTurn = (players.length % ++whooseTurn)
     if (!whooseTurn)
-        whooseTurn++
+        neutralPlayerTurn()
     
     for (let i = 0; i < grid.arr.length; ++i)
     {

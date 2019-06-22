@@ -7,7 +7,6 @@ class Sprite
             x: x,
             y: y
         }
-        
     }
     getPos()
     {
@@ -21,18 +20,21 @@ class Sprite
         let neighbours = []
         let parity = this.coord.x & 1
         for (let i = 0; i < neighborhood[parity].length; ++i)
-        {
-            neighbours.push([this.coord.x + neighborhood[parity][i][0], this.coord.y + neighborhood[parity][i][1]])
+        {//массив чисел изменен на массив объектов
+            neighbours.push({x: this.coord.x + neighborhood[parity][i][0], y: this.coord.y + neighborhood[parity][i][1]})
         }
         return neighbours
-    }
-    getObject()
-    {
-        console.log("try create sprite object, error")
-        return null
     }
     isEmpty()
     {
         return false
+    }
+    notEmpty()
+    {
+        return !this.isEmpty()
+    }
+    draw()
+    {
+        console.log("error, try to draw sprite")
     }
 }

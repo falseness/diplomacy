@@ -8,6 +8,10 @@ class Empty
     {
         return true
     }
+    notEmpty()
+    {
+        return !this.isEmpty()
+    }
     select()
     {
         selected = false
@@ -29,6 +33,18 @@ class Empty
         return '#D0D0D0'
     }
     nextTurn(whooseTurn)
+    {
+        
+    }
+    setPos(pos)
+    {
+        
+    }
+    setTextAlign()
+    {
+        
+    }
+    draw()
     {
         
     }

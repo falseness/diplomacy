@@ -33,9 +33,10 @@ class Unit extends Entity
         this.object.x(pos.x)
         this.object.y(pos.y)
     }
-    select(arr)
+    select()
     {
         //let border = Math.max(grid.arr.length, grid.arr[0].length)
+        let arr = grid.arr
         if (this.moves > 0)
         {
             this.way.BFS([this.coord.x, this.coord.y], this.moves, arr, arr.length)
