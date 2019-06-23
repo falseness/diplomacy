@@ -13,11 +13,8 @@ class Border
     {
         return !this.lines.length
     }
-    createLine(pos, side, color, strokeWidth)
+    createLine(pos, side, color = 'white', strokeWidth = 4)
     {
-        strokeWidth = strokeWidth   || 4
-        color       = color         || 'white' 
-        
         const hexagonLine = 
         [
             [[-basis.r / 2, -basis.r / 2 * Math.sqrt(3)], [basis.r / 2, -basis.r / 2 * Math.sqrt(3)]],
@@ -43,6 +40,11 @@ class Border
             strokeWidth: strokeWidth
         }
         this.lines.push(line)
+    }
+    newBrokenLine()
+    {
+        this.clean()
+        this.setVisible(true)
     }
     setVisible(boolean)
     {

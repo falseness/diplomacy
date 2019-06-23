@@ -1,9 +1,9 @@
 class Farm extends Building
 {
-    constructor(x, y, income, town, player)
+    constructor(x, y, income, town)
     {
         let hp = 12
-        super(x, y, 'farm', hp, player)
+        super(x, y, 'farm', hp)
         
         this.income = income
         this.town = town

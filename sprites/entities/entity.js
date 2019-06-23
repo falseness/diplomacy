@@ -1,10 +1,9 @@
 class Entity extends Sprite
 {
-    constructor(x, y, name, hp, player)
+    constructor(x, y, name, hp)
     {
         super(x, y)
         this.hp = hp
-        this.player = player
         
         this.name = name
     }

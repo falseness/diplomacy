@@ -1,16 +1,16 @@
 class Town extends Building
 {
-    constructor(x, y, player)
+    constructor(x, y)
     {
         let hp = 50
-        super(x, y, 'town', hp, player)
+        super(x, y, 'town', hp)
         
         this.suburbs = []
         let neighboursCoord = this.getNeighbours()
         for (let i = 0; i < neighboursCoord.length; ++i)
         {
             let cell = grid.arr[neighboursCoord[i].x][neighboursCoord[i].y]
-            if (cell.hexagon.getPlayer() == this.player)
+            if (cell.hexagon.getPlayer() == this.getPlayer())
             {
                 this.suburbs.push(cell)
                 cell.hexagon.setIsSuburb(true)
@@ -33,6 +33,10 @@ class Town extends Building
             suburb: new SuburbProduction(0, 1)
         }
         this.finishPreparing()
+    }
+    getPlayer()
+    {
+        return grid.arr[this.coord.x][this.coord.y].hexagon.getPlayer()
     }
     getInfo()
     {
@@ -60,35 +64,36 @@ class Town extends Building
     {
         return this.newProduction.isWaitingForInstructionsToCreate()
     }
+    select()
+    {
+        townInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
+        
+        return true
+    }
+    removeSelect()
+    {
+        border.setVisible(false)
+        grid.setDrawLogicText(false)
+        townInterface.setVisible(false)
+        
+        if (this.newProduction.canCreateImmediately())
+            this.newProduction = new Production()
+    }
     sendInstructions(cell)
     {
         if (this.newProduction.canBecomeSuburb(cell, this))
         {
             this.newProduction.create(cell, this)
-            this.newProduction.tryToCreate(this.coord.x, this.coord.y, this, this.player)
+            this.newProduction.tryToCreate(this.coord.x, this.coord.y, this, this.getPlayer())
             
             return false
         }
         else
         {
-            border.setVisible(false)
-            grid.setDrawLogicText(false)
-            townInterface.setVisible(false)
-            
-            this.newProduction = new Production()
+            this.removeSelect()    
             
             return true
         }
-    }
-    select()
-    {
-        townInterface.change(this.getInfo(), players[this.player].getFullColor())
-        
-        return true
-    }
-    removeSelect(x, y)
-    {
-        return this.newProduction.removeSelect(x, y, this, this.player)
     }
     getIncome()
     {
@@ -120,7 +125,7 @@ class Town extends Building
             let preparingProduction = this.production[this.preparation.what]
             
             if (preparingProduction.canCreateImmediately())
-                preparingProduction.tryToCreate(this.coord.x, this.coord.y, this, this.player)
+                preparingProduction.tryToCreate(this.coord.x, this.coord.y, this, this.getPlayer())
             else
                 this.gold -= preparingProduction.cost
             
@@ -142,49 +147,59 @@ class Town extends Building
     }
     crisisPenalty()
     {
-        for (let i = 0; i < this.units.length; ++i)
-        {
-            this.units[i].kill()   
-        }
+        while (this.units.length)
+            this.units[0].kill()
+        
         this.units = []
         
         this.gold = 0
     }
-    nextTurn(whooseTurn)
+    tryToEndPreparing()
     {
-        if (this.player == whooseTurn)
+        if (this.production[this.preparation.what].tryToCreate(this.coord.x, this.coord.y, this, this.getPlayer()))
         {
-            this.gold += this.getIncome()
-            if (this.gold < 0)
-                this.crisisPenalty()
-            
-            if (this.isPreparing())
-            {
-                this.preparation.turns--
-                if (!this.isPreparing())
-                {
-                    if (this.production[this.preparation.what].tryToCreate(this.coord.x, this.coord.y, this, this.player))
-                    {
 
-                        this.finishPreparing()
-                    }
-                    else
-                    {
-                        this.preparation.turns++
-                    }
-
-                }
-            }
+            this.finishPreparing()
+        }
+        else
+        {
+            this.preparation.turns++
         }
     }
-    drawSuburbs()
+    preparingLogic()
     {
+        if (!this.isPreparing())
+            return
+            
+        --this.preparation.turns
         
+        if (!this.isPreparing())
+            this.tryToEndPreparing()
+    }
+    UpdateUnitsArray()
+    {
+        for (let i = 0; i < this.units.length; ++i)
+        {
+            if (this.units[i].isKilled())
+                this.units.splice(i--, 1)
+        }
+    }
+    nextTurn(whooseTurn)
+    {
+        if (this.getPlayer() != whooseTurn)
+            return
+        
+        this.UpdateUnitsArray()
+        
+        this.gold += this.getIncome()
+        if (this.gold < 0)
+            this.crisisPenalty()
+
+        this.preparingLogic()
     }
     draw()
     {
         super.draw()
-        this.drawSuburbs()
     }
 }
 function townEvent(production)
@@ -244,11 +259,9 @@ class UnitProduction extends Production
     {
         super(turns, cost, _class)
     }
-    create(x, y, town, player)
+    create(x, y, town)
     {
-        let t = new this.class(x, y, player)
-        layers.entity.add(t.getObject())
-        t.object.draw()
+        let t = new this.class(x, y, town)
         
         town.units.push(t)
     }
@@ -256,7 +269,7 @@ class UnitProduction extends Production
     {
         if (grid.arr[x][y].unit.isEmpty())
         {
-            this.create(x, y, town, player)
+            this.create(x, y, town)
 
             return true
         }
@@ -364,7 +377,7 @@ class SuburbProduction extends Production
         
         town.gold -= this.suburbsCostformula(this.distance[cell.hexagon.coord.x][cell.hexagon.coord.y])
         
-        townInterface.change(town.getInfo(), players[town.player].getFullColor())
+        townInterface.change(town.getInfo(), players[town.getPlayer()].getFullColor())
     }
     isWaitingForInstructionsToCreate()
     {
@@ -389,10 +402,6 @@ class SuburbProduction extends Production
         if (hexagon1 && hexagon2)
             return (hexagon1.coord.x == hexagon2.coord.x && hexagon1.coord.y == hexagon2.coord.y)
         return false
-    }
-    isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray)
-    {
-        return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray
     }
     suburbsCostformula(distance)
     {
@@ -432,7 +441,7 @@ class SuburbProduction extends Production
             let neighbours = v.getNeighbours()
             for (let i = 0; i < neighbours.length; ++i)
             {
-                if (this.isCoordNotOnMap(neighbours[i], arr.length, arr[0].length))
+                if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length))
                     continue
                     
                 if (!used[neighbours[i].x][neighbours[i].y])
@@ -449,9 +458,7 @@ class SuburbProduction extends Production
     paintTownBorders(town, suburbs, arr, player)
     {
         // init
-        border.clean()
-        border.setVisible(true)
-        
+        border.newBrokenLine()
         grid.setDrawLogicText(true)
         
         this.distance = []
@@ -477,7 +484,7 @@ class SuburbProduction extends Production
             {
                 let neighbourCoord = neighbours[j]
                 
-                if (this.isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
+                if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
                     arr[neighbourCoord.x][neighbourCoord.y].hexagon.player != player)
                 {
                     border.createLine(hexagon.getPos(), j)
@@ -511,7 +518,7 @@ class SuburbProduction extends Production
             
             for (let j = 0; j < neighbours.length; ++j)
             {
-                if (this.isCoordNotOnMap(neighbours[j]) ||
+                if (isCoordNotOnMap(neighbours[j]) ||
                     !used[neighbours[j].x][neighbours[j].y])
                     border.createLine(posI, j)
             }

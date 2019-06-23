@@ -1,16 +1,26 @@
 class Unit extends Entity
 {
-    constructor(x, y, name, hp, dmg, speed, salary, player)
+    constructor(x, y, name, hp, dmg, speed, salary, town)
     {
-        super(x, y, name, hp, player)
+        super(x, y, name, hp)
         this.dmg = dmg
         this.speed = speed
         this.moves = speed
         this.salary = salary
+        this.killed = false
+        this.town = town
         
         grid.arr[x][y].unit = this
         
-        this.way = new Way(player)
+        this.way = new Way()
+    }
+    getPlayer()
+    {
+        return this.town.getPlayer()
+    }
+    isKilled()
+    {
+        return this.killed
     }
     getInfo()
     {
@@ -19,193 +29,199 @@ class Unit extends Entity
         unit.info.moves = this.moves + ' / ' + this.speed
         return unit
     }
-    changeCoord(x, y)
-    {
-        this.paintHexagons(x, y, grid.arr)
-        
-        grid.arr[this.coord.x][this.coord.y].unit = new Empty()
-        
-        this.coord.x = x
-        this.coord.y = y
-        grid.arr[x][y].unit = this
-        
-        let pos = this.getPos()
-        this.object.x(pos.x)
-        this.object.y(pos.y)
-    }
+    
     select()
     {
         //let border = Math.max(grid.arr.length, grid.arr[0].length)
-        let arr = grid.arr
         if (this.moves > 0)
         {
-            this.way.BFS([this.coord.x, this.coord.y], this.moves, arr, arr.length)
-            layers.coordGrid.visible(false)
-            border.draw()
-            
+            let arr = grid.arr
+            this.way.BFS(this.coord, this.moves, arr, this.getPlayer())
+        }
+    }
+    removeSelect()
+    {
+        border.setVisible(false)
+        grid.setDrawLogicText(false)
+        //entityInterface.setVisible(false)
+    }
+    sendInstructions(cell)
+    {
+        let coord = cell.hexagon.coord
+        
+        if (this.way.getDistance(coord) > this.moves ||
+           coordsEqually(this.coord, coord))
+        {
+            this.removeSelect()
             return true
         }
+        
+        this.move(coord, grid.arr)
+        if (!this.moves)
+        {
+            this.removeSelect()
+            return true
+        }
+        
+        this.select()
         return false
     }
-    canReachHexagon(x, y)
+    paintHexagons(original_coord, arr)
     {
-        return (this.way.distance[x + this.way.indent][y + this.way.indent] &&
-                this.way.distance[x + this.way.indent][y + this.way.indent] <= this.moves)
-    }
-    turnsIsOver()
-    {
-        return (!this.moves)
-    }
-    move(x, y)
-    {
-        if (this.canReachHexagon(x, y))
-        {
-            this.changeCoord(x, y)
-            this.moves -= this.way.distance[x + this.way.indent][y + this.way.indent]
-            
-            
-            layers.entity.draw()
-            
-            return this.turnsIsOver()
-        }
+        let coord = Object.assign({}, original_coord)
         
-        return true
-    }
-    removeSelect(x, y)
-    {
-        layers.coordGrid.visible(true)
-        border.remove()
-        
-        return this.move(x, y)
-    }
-    paintHexagons(x, y, arr)
-    {
-        while (!(x == this.coord.x && y == this.coord.y))
+        while (!(coord.x == this.coord.x && coord.y == this.coord.y))
         {
-            arr[x][y].hexagon.repaint(this.player)
+            arr[coord.x][coord.y].hexagon.repaint(this.getPlayer())
             
-            let t = this.way.arr[x + this.way.indent][y + this.way.indent]
-            
-            x = t[0] - this.way.indent
-            y = t[1] - this.way.indent 
+            coord = this.way.getParent(coord)
         }
+    }
+    changeCoord(coord)
+    {
+        grid.arr[this.coord.x][this.coord.y].unit = new Empty()
+        
+        this.coord = coord
+        grid.arr[this.coord.x][this.coord.y].unit = this
+    }
+    move(coord, arr)
+    {
+        this.moves -= this.way.getDistance(coord)
+        
+        this.paintHexagons(coord, grid.arr)
+        
+        this.changeCoord(coord)
     }
     kill()
     {
         grid.arr[this.coord.x][this.coord.y].unit = new Empty()
         
-        this.object.destroy()
-        layers.entity.draw()
+        this.killed = true
+        
+        this.town.UpdateUnitsArray()
     }
     nextTurn(whooseTurn)
     {
-        if (this.player == whooseTurn)
+        if (this.getPlayer() == whooseTurn)
         {
             this.moves = this.speed
         }
     }
 }
-
 class Way
 {
-    constructor(player)
+    constructor()
     {
-        this.color = 'white'//players[player].getHexColor()
+        this.color = 'white'
+        this.distance = []
+        this.parent = []
     }
-    BFS(v0, moves, arr, indent)
+    needToCreateLine(parent, child, moves)
     {
-        /*
-        Требуется рефакторинг BFS
-        Сделай проверку для конца карты
-        */
-        this.indent = indent
+        return this.distance[parent.x][parent.y] == moves && this.distance[child.x][child.y] > moves
+    }
+    getDistance(coord)
+    {
+        return this.distance[coord.x][coord.y]
+    }
+    getParent(coord)
+    {
+        return Object.assign({}, this.parent[coord.x][coord.y])
+    }
+    BFS(v0, moves, arr, player)
+    {
+        // init
+        border.newBrokenLine()
+        grid.newLogicText(true)
         
-        let used = []
-        let distance = []
-        let way = []
-
-        for (let i = 0; i <= indent * 2; ++i)
+        let used = new Array(arr.length)
+        this.distance = new Array(arr.length)
+        this.parent = new Array(arr.length)
+        
+        for (let i = 0; i < arr.length; ++i)
         {
-            used.push([])
-            distance.push([])
-            way.push([])
-            /*for (let j = v0[1] + border - moves; j < v0[1] + border + moves + border; ++j)
+            used[i] = new Array(arr[i].length)
+            this.distance[i] = new Array(arr[i].length)
+            this.parent[i] = new Array(arr[i].length)
+            
+            for (let j = 0; j < used[i].length; ++j)
             {
                 used[i][j] = false
-                distance[i][j] = moves + 1
-            }*/
+                this.distance[i][j] = moves + 1
+                this.parent[i][j] = {x: i, y: j}
+            }
         }
-
-        distance[v0[0] + indent][v0[1] + indent] = 0
-        used[v0[0] + indent][v0[1] + indent] = 1
-
+        
         let Q = []
         Q.push(v0)
-
+        
+        used[v0.x][v0.y] = true
+        this.distance[v0.x][v0.y] = 0
+        this.parent[v0.x][v0.y] = v0
+        // BFS
         while (Q.length > 0)
         {
-            let v = Q.shift() 
-            if (isArrEnd(v[0], v[1], arr.length, arr[0].length))
-            {
-                continue
-            }
-            let neighbours = arr[v[0]][v[1]].hexagon.getNeighbours()
+            let v = Q.shift()
             
+            arr[v.x][v.y].logicText.setText(this.distance[v.x][v.y])
+            if (this.distance[v.x][v.y] > moves)
+                continue
+            
+            let neighbours = arr[v.x][v.y].hexagon.getNeighbours()
+            
+            // if hexagon has the same color, he will be processed later
+            
+            let sortedHexagonNeighbours = []
             for (let i = 0; i < neighbours.length; ++i)
             {
-                /*
-                Draw line создает слишком много новых линий и не очищает!!
-                */
-                let x = neighbours[i][0] + indent
-                let y = neighbours[i][1] + indent
-                if (this.needToDrawLine(distance[v[0] + indent][v[1] + indent], distance[x][y], moves))
-                    border.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
-                if (distance[v[0] + indent][v[1] + indent] <= moves && 
-                    isArrEnd(neighbours[i][0], neighbours[i][1], arr.length, arr[0].length))
+                if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
+                    (arr[neighbours[i].x][neighbours[i].y].unit.notEmpty() && !coordsEqually(neighbours[i], v0)))
                 {
-                    border.drawLine(arr[v[0]][v[1]].hexagon.getPos(), i, this.color)
+                    border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                    continue
                 }
-                if (!used[neighbours[i][0] + indent][neighbours[i][1] + indent])
+                
+                let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
+                
+                if (hexagon.player != player)
+                    sortedHexagonNeighbours.push({hexagon: hexagon, side: i})
+            }
+            for (let i = 0; i < neighbours.length; ++i)
+            {
+                if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
+                    (arr[neighbours[i].x][neighbours[i].y].unit.notEmpty() && !coordsEqually(neighbours[i], v0)))
                 {
-                    Q.push(neighbours[i])
+                    border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                    continue
+                }
+                
+                let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
+                
+                if (hexagon.player == player)
+                    sortedHexagonNeighbours.push({hexagon: hexagon, side: i})
+            }
+            
+            
+            
+            for (let i = 0; i < sortedHexagonNeighbours.length; ++i)
+            {
+                let coord = sortedHexagonNeighbours[i].hexagon.coord
+                
+                if(this.needToCreateLine(v, coord, moves))
+                {
+                    border.createLine(arr[v.x][v.y].hexagon.getPos(), sortedHexagonNeighbours[i].side)
+                }
+                
+                if (!used[coord.x][coord.y])
+                {
+                    Q.push(coord)
                     
-                    way[neighbours[i][0] + indent][neighbours[i][1] + indent] = [v[0] + indent, v[1] + indent]
+                    this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
                     
-                    used[x][y] = true
-                    distance[x][y] = distance[v[0] + indent][v[1] + indent] + 1
-                    
-                    
-                    if (distance[x][y] > moves + 1)
-                    {
-                        this.distance = distance
-                        this.arr = way
-                        return 
-                    }
-                    this.addDistanceText(neighbours[i][0], neighbours[i][1], distance[x][y])
+                    this.parent[coord.x][coord.y] = v
+                    used[coord.x][coord.y] = true
                 }
             }
         }
     }
-    needToDrawLine(parent, child, max)
-    {
-        return (parent == max && !(child <= max))
-    }
-    addDistanceText(x, y, distance)
-    {
-        
-        /*
-        
-        Займись этим позже!
-        
-        и drawLine тоже!
-        
-        Нельзя создавать миллион coordText
-        let distanceText = new CoordText(x, y, distance)
-        layers.border.add(distanceText.createObject())
-        */
-    }
-}
-function isArrEnd(x, y, lengthX, lengthY)
-{
-    return ((Math.min(x, y) < 0) || (x >= lengthX) || (y >= lengthY))
 }

@@ -23,6 +23,11 @@ class Grid extends SpritesGroup
             }
         }
     }
+    newLogicText()
+    {
+        this.cleanLogicText()
+        this.setDrawLogicText(true)
+    }
     fill(n, m)
     {
         this.createArr(n, this.arr)
@@ -68,4 +73,13 @@ class Grid extends SpritesGroup
             }
         }
     }
+}
+
+function isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray)
+{
+        return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray
+}
+function coordsEqually(coordOne, coordTwo)
+{
+    return coordOne.x == coordTwo.x && coordOne.y == coordTwo.y
 }

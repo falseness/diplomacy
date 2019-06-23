@@ -54,8 +54,11 @@ class Events
     }
     nextTurn()
     {
-        this.selected = false
-        
+        if (this.selected)
+        {
+            this.selected.entity.removeSelect()
+            this.selected = false
+        }
         this.hideAll()
     }
     click(pos)
@@ -67,7 +70,7 @@ class Events
             return
             
         let coord = getCoord(pos.x, pos.y)
-        if (coord.x < 0 || coord.y < 0 || coord.x >= grid.arr.length || coord.y >= grid.arr[0].length)
+        if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length))
         {
             this.hideAll()
             this.selected = false
