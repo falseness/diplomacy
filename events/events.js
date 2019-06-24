@@ -1,91 +1,79 @@
-function createEvents()
-{
+function createEvents() {
     document.addEventListener('click', click)
 }
-function click(event)
-{
+
+function click(event) {
     let pos = getRealEventPos(event)
-    //let coord = getCoord(pos.x, pos.y)
-    
+        //let coord = getCoord(pos.x, pos.y)
+
     //console.log(coord.x, coord.y)
-    
+
     gameEvent.click(pos)
 }
-class Events
-{
-    constructor(_townInterface, _entityInterface)
-    {
-        this.selected = false
-        this.interface = 
-        {
+class Events {
+    constructor(_townInterface, _entityInterface) {
+        this.selected = new Empty()
+        this.interface = {
             town: _townInterface,
-            entity: _entityInterface
+                entity: _entityInterface
         }
     }
-    getSelected()
-    {
-        return this.selected.entity
+    getSelected() {
+        return this.selected
     }
-    selectSomethingOnCell(cell)
-    {
-        if (cell.unit.notEmpty())
-        {
+    selectSomethingOnCell(cell) {
+        if (cell.unit.notEmpty()) {
             cell.unit.select()
-            this.selected = {entity:cell.unit, type: 'unit'}
-        }
-        else if (cell.building.notEmpty())
-        {
+            this.selected = cell.unit
+        } else if (cell.building.notEmpty()) {
             cell.building.select()
-            this.selected = {entity:cell.building, type: 'building'}
+            this.selected = cell.building
         }
     }
-    clickOnCell(coord)
-    {
+    clickOnCell(coord) {
         console.log(coord.x, coord.y)
         let cell = grid.arr[coord.x][coord.y]
         this.selectSomethingOnCell(cell)
     }
-    hideAll()
-    {
+    hideAll() {
         border.clean()
         grid.setDrawLogicText(false)
-        
+
         this.interface.town.setVisible(false)
     }
-    nextTurn()
-    {
-        if (this.selected)
-        {
-            this.selected.entity.removeSelect()
-            this.selected = false
-        }
+    nextTurn() {
+
+        this.selected.removeSelect()
+        this.selected = new Empty()
         this.hideAll()
     }
-    click(pos)
-    {
-        if(nextTurnButton.click(pos))
+    sendInstructions(coord) {
+        let instructionsAreNotLongerNeeded = this.selected.sendInstructions(grid.arr[coord.x][coord.y])
+        if (instructionsAreNotLongerNeeded)
+            this.selected = new Empty()
+    }
+    click(pos) {
+        if (nextTurnButton.click(pos))
             return
-        
+
         if (this.interface.town.click(pos))
             return
-            
+
         let coord = getCoord(pos.x, pos.y)
-        if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length))
-        {
+        if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length)) {
             this.hideAll()
-            this.selected = false
-  
+            this.selected.removeSelect()
+            this.selected = new Empty()
+
             return
         }
-        
-        if (this.selected)
-        {
-            let instructionsAreNotLongerNeeded = this.selected.entity.sendInstructions(grid.arr[coord.x][coord.y])
-            if (instructionsAreNotLongerNeeded)
-                this.selected = false
-        }
-        else
+
+        if (this.selected.needInstructions()) {
+            this.sendInstructions(coord)
+        } else {
+            this.selected.removeSelect()
             this.clickOnCell(coord)
+        }
     }
 }
 /*class Events
@@ -130,7 +118,7 @@ class Events
         }
         
         this.interface.entity.change(entity.getInfo(), players[entity.player].getHexColor())*/
-        /*
+/*
     }
     selectSomethingOnCell(cell)
     {

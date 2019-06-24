@@ -1,51 +1,45 @@
-class Empty
-{
-    constructor()
-    {
+class Empty {
+    constructor() {
         this.player = 0
     }
-    isEmpty()
-    {
+    isEmpty() {
         return true
     }
-    notEmpty()
-    {
+    notEmpty() {
         return !this.isEmpty()
     }
-    select()
-    {
-        selected = false
+    select() {
+
     }
-    getInfo()
-    {
+    removeSelect() {
+
+    }
+    needInstructions() {
+        return false
+    }
+    getInfo() {
         entityInterface.hide()
         return {
             name: '',
             player: 0,
-            info: 
-            {
-                
+            info: {
+
             }
         }
     }
-    getHexColor()
-    {
+    getHexColor() {
         return '#D0D0D0'
     }
-    nextTurn(whooseTurn)
-    {
-        
+    nextTurn(whooseTurn) {
+
     }
-    setPos(pos)
-    {
-        
+    setPos(pos) {
+
     }
-    setTextAlign()
-    {
-        
+    setTextAlign() {
+
     }
-    draw()
-    {
-        
+    draw() {
+
     }
 }
