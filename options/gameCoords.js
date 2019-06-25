@@ -1,15 +1,12 @@
 const width = window.innerWidth
 const height = window.innerHeight
 const radius = 80
-let basis = 
-{
+let basis = {
     r: radius,
-    offset:
-    {
+    offset: {
         x: radius * 1.5,
         y: radius * Math.sqrt(3) / 2,
-        assets:
-        {
+        assets: {
             x: 2,
             y: 2
         }
@@ -17,79 +14,72 @@ let basis =
 }
 delete radius
 
-const canvasOffset = 
-{
-    x: basis.offset.x,
-    y: basis.offset.y * 2
-}
-/*function toCube(x, by)
-{
-    
-    //by = 2 * y + x
-    //y = (by - x) / 2
-    //x + y + z = 0
-    //z = -x - y
-    
-    return ({x: x, y: (by - x) / 2, z: -this.y - this.x})
-}*/
-function getFractionalPartOfNumber(n)
-{
+let canvasOffset = {
+        x: basis.offset.x,
+        y: basis.offset.y * 2
+    }
+    /*function toCube(x, by)
+    {
+        
+        //by = 2 * y + x
+        //y = (by - x) / 2
+        //x + y + z = 0
+        //z = -x - y
+        
+        return ({x: x, y: (by - x) / 2, z: -this.y - this.x})
+    }*/
+function getFractionalPartOfNumber(n) {
     return n % 1
 }
-function pythagoreanSquared(x, y)
-{
+
+function pythagoreanSquared(x, y) {
     return x * x + y * y
 }
-function pythagorean(x, y)
-{
+
+function pythagorean(x, y) {
     return sqrt(pythagoreanSquared(x, y))
 }
-function numbersHaveEqualParity(a, b)
-{
+
+function numbersHaveEqualParity(a, b) {
     return !((a & 1) ^ (b & 1))
 }
-function biasToTransition(x, y)
-{
+
+function biasToTransition(x, y) {
     /*
         even basis
         y = y - (x - (x & 1)) / 2 (to axial)
         by = 2 * y + x
     */
-    return {x: x, y: 2 * y + (x & 1)}
+    return { x: x, y: 2 * y + (x & 1) }
 }
-function transitionToBias(x, y)
-{
-    return {x: x, y: (y - (x & 1)) / 2}
+
+function transitionToBias(x, y) {
+    return { x: x, y: (y - (x & 1)) / 2 }
 }
-function getCoord(x, y)
-{
-    let transition = 
-    {
-        x: Math.round(x / basis.offset.x),
-        y: Math.round(y / basis.offset.y)
-    }
-    //console.log('transition: ' + transition.x + ' ' + transition.y)
-    
+
+function getCoord(x, y) {
+    let transition = {
+            x: Math.round(x / basis.offset.x),
+            y: Math.round(y / basis.offset.y)
+        }
+        //console.log('transition: ' + transition.x + ' ' + transition.y)
+
     if (numbersHaveEqualParity(transition.x, transition.y))
         return transitionToBias(transition.x, transition.y)
-    
-    let hex1 = 
-    {
+
+    let hex1 = {
         x: transition.x + 1,
         y: transition.y
     }
-    let hex2 = 
-    {
+    let hex2 = {
         x: transition.x,
         y: transition.y + 1
     }
-    let hex3 = 
-    {
+    let hex3 = {
         x: transition.x - 1,
         y: transition.y
     }
-    let hex4 = 
-    {
+    let hex4 = {
         x: transition.x,
         y: transition.y - 1
     }
@@ -97,7 +87,7 @@ function getCoord(x, y)
     hex2.distanceSquared = pythagoreanSquared(hex2.x * basis.offset.x - x, hex2.y * basis.offset.y - y)
     hex3.distanceSquared = pythagoreanSquared(hex3.x * basis.offset.x - x, hex3.y * basis.offset.y - y)
     hex4.distanceSquared = pythagoreanSquared(hex4.x * basis.offset.x - x, hex4.y * basis.offset.y - y)
-    
+
     let selectedHex = hex1
     if (hex2.distanceSquared < selectedHex.distanceSquared)
         selectedHex = hex2

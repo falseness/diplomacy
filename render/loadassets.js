@@ -33,15 +33,28 @@ class JustImage {
         this.h = h
     }
     setPos(pos) {
-        this.pos = pos
+        this.pos.x = pos.x
+        this.pos.y = pos.y
+    }
+    setImage(image) {
+        this.img = image
+    }
+    getWidth() {
+        return this.w
+    }
+    getHeight() {
+        return this.h
     }
     draw() {
+        if (!this.img)
+            return
+
         drawImage(this.img, this.pos, this.w, this.h)
     }
-    x() {
+    getX() {
         return this.pos.x
     }
-    y() {
+    getY() {
         return this.pos.y
     }
 }

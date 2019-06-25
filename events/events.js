@@ -1,5 +1,6 @@
 function createEvents() {
     document.addEventListener('click', click)
+    document.addEventListener('mousemove', mousemove)
 }
 
 function click(event) {
@@ -10,6 +11,12 @@ function click(event) {
 
     gameEvent.click(pos)
 }
+
+function mousemove(event) {
+    let pos = getEventPos(event)
+    let realPos = getRealEventPos(event)
+    gameEvent.mousemove(pos, realPos)
+}
 class Events {
     constructor(_townInterface, _entityInterface) {
         this.selected = new Empty()
@@ -17,6 +24,28 @@ class Events {
             town: _townInterface,
                 entity: _entityInterface
         }
+
+        this.screen = new Screen(0.1 * height, 0.01 * height)
+        this.extremeScreen = new Screen(0.005 * height, 0.015 * height)
+    }
+    mousemove(pos, realPos) {
+        if (this.interface.town.visible && this.interface.town.isInside(realPos)) {
+            this.screen.stop()
+            this.extremeScreen.stop()
+
+            return
+        }
+
+        this.screen.changeSpeed(pos)
+        this.extremeScreen.changeSpeed(pos)
+    }
+    moveScreen() {
+        this.screen.move()
+        this.extremeScreen.move()
+    }
+    draw() {
+        this.screen.draw()
+        this.extremeScreen.draw()
     }
     getSelected() {
         return this.selected
@@ -25,9 +54,13 @@ class Events {
         if (cell.unit.notEmpty()) {
             cell.unit.select()
             this.selected = cell.unit
+
+            this.interface.entity.change(this.selected.getInfo(), players[this.selected.getPlayer()].getFullColor())
         } else if (cell.building.notEmpty()) {
             cell.building.select()
             this.selected = cell.building
+
+            this.interface.entity.change(this.selected.getInfo(), players[this.selected.getPlayer()].getFullColor())
         }
     }
     clickOnCell(coord) {
@@ -39,6 +72,7 @@ class Events {
         border.clean()
         grid.setDrawLogicText(false)
 
+        this.interface.entity.setVisible(false)
         this.interface.town.setVisible(false)
     }
     nextTurn() {
@@ -56,6 +90,8 @@ class Events {
         if (nextTurnButton.click(pos))
             return
 
+        if (this.interface.entity.click(pos))
+            return
         if (this.interface.town.click(pos))
             return
 

@@ -6,4 +6,7 @@ class Building extends Entity {
     needInstructions() {
         return false
     }
+    removeSelect() {
+        entityInterface.setVisible(false)
+    }
 }

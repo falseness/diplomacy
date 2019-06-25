@@ -47,6 +47,7 @@
     <script src='sprites/border.js'></script>
 
     <script src='events/geteventpos.js'></script>
+    <script src='events/screen.js'></script>
     <script src='events/events.js'></script>
 
     <script src='sprites/hexagon.js'></script>
@@ -70,8 +71,9 @@
         let canvas = document.getElementById('canvas')
         let ctx = canvas.getContext('2d')
 
+        let debug = true
         let townInterface = new TownInterface()
-        let entityInterface
+        let entityInterface = new EntityInterface()
         let gameEvent = new Events(townInterface, entityInterface)
         let border = new Border()
 
@@ -86,11 +88,12 @@
             y: 10
         })
 
-        let nextTurnButton = new ImageButton(
-            'nextTurnButton',
-            new Rect(width - assets.size * 2, height - assets.size * 2, assets.size / 1.3, assets.size / 1.3),
-            nextTurn
-        )
+        /*let mapBorder = {
+            left: -canvasOffset.x,
+            right: grid.getRight() + canvasOffset.x,
+            top: -canvas.canvasOffset.y,
+            bottom: grid.getLeft() + canvasOffset.y
+        }*/
 
         let whooseTurn = 1
 
@@ -126,6 +129,7 @@
         }
 
         function gameLoop() {
+            gameEvent.moveScreen()
             drawAll()
             requestAnimationFrame(gameLoop)
         }
@@ -211,4 +215,4 @@
     </script>
 </body>
 
-</html>
+</html

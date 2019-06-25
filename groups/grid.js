@@ -7,6 +7,12 @@ class Grid extends SpritesGroup {
         if (size)
             this.fill(size.x, size.y)
     }
+    getRight() {
+        return this.arr[0][this.arr[0].length - 1].hexagon.getPos().x + basis.r
+    }
+    getBottom() {
+        return this.arr[this.arr[0].length][0].hexagon.getPos().y + basis.r * Math.sin(Math.PI / 3)
+    }
     setDrawLogicText(boolean) {
         this.drawLogicText = boolean
     }

@@ -1,37 +1,25 @@
-class Entity extends Sprite
-{
-    constructor(x, y, name, hp)
-    {
+class Entity extends Sprite {
+    constructor(x, y, name, hp) {
         super(x, y)
         this.hp = hp
-        
+
         this.name = name
     }
-    getInfo()
-    {
+    getInfo() {
         return {
-            name: this.name, 
-            player: this.player,
-            info: 
-            {
+            name: this.name,
+            info: {
                 hp: this.hp
             }
         }
     }
-    getPlayer()
-    {
-        return this.player
-    }
-    select()
-    {
+    select() {
         return true
     }
-    removeSelect()
-    {
+    removeSelect() {
         return true
     }
-    draw()
-    {
+    draw() {
         drawImage(this.name, this.getPos())
     }
 }

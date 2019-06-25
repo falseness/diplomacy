@@ -5,8 +5,11 @@ function drawAll() {
 
     border.draw()
 
+    entityInterface.draw()
     townInterface.draw()
 
     nextTurnButton.draw()
+
+    gameEvent.draw()
         //hexag.draw()
 }

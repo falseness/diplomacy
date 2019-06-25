@@ -9,6 +9,9 @@ class Farm extends Building {
     getIncome() {
         return this.income
     }
+    getPlayer() {
+        return this.town.getPlayer()
+    }
     getInfo() {
         let farm = super.getInfo()
 

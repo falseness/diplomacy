@@ -38,7 +38,7 @@ class Unit extends Entity {
     removeSelect() {
         border.setVisible(false)
         grid.setDrawLogicText(false)
-            //entityInterface.setVisible(false)
+        entityInterface.setVisible(false)
     }
     needInstructions() {
         return this.moves > 0

@@ -1,71 +1,58 @@
-class Rect
-{
-    constructor(x, y, width, height, cornerRadius = [0, 0, 0, 0], strokeWidth = 0.002 * width, color = '#78a85d', strokeColor = 'black')
-    {
+class Rect {
+    constructor(x, y, width, height, cornerRadius = [0, 0, 0, 0], strokeWidth = 0.002 * width, color = '#78a85d', strokeColor = 'black') {
         this.x = x
         this.y = y
-        
+
         this.width = width
         this.height = height
-        
-        this.cornerRadius = cornerRadius 
-        /*  
-        12
-        43
-        */
+
+        this.cornerRadius = cornerRadius
+            /*  
+            12
+            43
+            */
         this.strokeWidth = strokeWidth
         this.color = color
         this.strokeColor = strokeColor
     }
-    setPos(pos)
-    {
+    setPos(pos) {
         this.x = pos.x
         this.y = pos.y
     }
-    setWidth(width)
-    {
+    setWidth(width) {
         this.width = width
     }
-    setHeight(height)
-    {
+    setHeight(height) {
         this.height = height
     }
-    getWidth()
-    {
+    getWidth() {
         return this.width
     }
-    getHeight()
-    {
+    getHeight() {
         return this.height
     }
-    setColor(color)
-    {
+    setColor(color) {
         this.color = color
     }
-    getCenter()
-    {
-        let center = 
-        {
-            x: this.x + this.width / 2, 
+    getCenter() {
+        let center = {
+            x: this.x + this.width / 2,
             y: this.y + this.height / 2
         }
         return center
     }
-    getRectPoints()
-    {
-        let points =
-        [
-            {x: this.x, y: this.y},
-            {x: this.x + this.width, y: this.y},
-            {x: this.x + this.width, y: this.y + this.height},
-            {x: this.x, y: this.y + this.height}
+    getRectPoints() {
+        let points = [
+            { x: this.x, y: this.y },
+            { x: this.x + this.width, y: this.y },
+            { x: this.x + this.width, y: this.y + this.height },
+            { x: this.x, y: this.y + this.height }
         ]
         return points
     }
-    drawShape()
-    {
+    drawShape() {
         let p = this.getRectPoints()
-        
+
         ctx.moveTo(p[0].x + this.cornerRadius[0], p[0].y)
         ctx.lineTo(p[1].x - this.cornerRadius[1], p[1].y)
         ctx.arcTo(p[1].x, p[1].y, p[1].x, p[1].y + this.cornerRadius[1], this.cornerRadius[1])
@@ -76,23 +63,21 @@ class Rect
         ctx.lineTo(p[0].x, p[0].y + this.cornerRadius[0])
         ctx.arcTo(p[0].x, p[0].y, p[0].x + this.cornerRadius[0], p[0].y, this.cornerRadius[0])
     }
-    isInside(point)
-    {
+    isInside(point) {
         return (this.x <= point.x && point.x <= this.x + this.width &&
-                this.y <= point.y && point.y <= this.y + this.height)
+            this.y <= point.y && point.y <= this.y + this.height)
     }
-    draw()
-    {  
-        ctx.beginPath() 
-        
-        ctx.fillStyle   = this.color
+    draw() {
+        ctx.beginPath()
+
+        ctx.fillStyle = this.color
         ctx.strokeStyle = this.strokeColor
-        ctx.lineWidth   = this.strokeWidth
-        
+        ctx.lineWidth = this.strokeWidth
+
         this.drawShape()
         ctx.stroke()
         ctx.fill()
-        
+
         ctx.closePath()
     }
 }

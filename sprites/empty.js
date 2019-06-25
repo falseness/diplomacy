@@ -18,7 +18,6 @@ class Empty {
         return false
     }
     getInfo() {
-        entityInterface.hide()
         return {
             name: '',
             player: 0,

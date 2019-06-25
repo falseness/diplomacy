@@ -55,6 +55,7 @@ class Town extends Building {
         return this.newProduction.isWaitingForInstructionsToCreate()
     }
     select() {
+        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
         townInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
 
         return true
@@ -62,6 +63,7 @@ class Town extends Building {
     removeSelect() {
         border.setVisible(false)
         grid.setDrawLogicText(false)
+        entityInterface.setVisible(false)
         townInterface.setVisible(false)
 
         if (this.newProduction.isWaitingForInstructionsToCreate())
@@ -361,6 +363,7 @@ class SuburbProduction extends Production {
 
         town.gold -= this.suburbsCostformula(this.distance[cell.hexagon.coord.x][cell.hexagon.coord.y])
 
+        entityInterface.change(town.getInfo(), players[town.getPlayer()].getFullColor())
         townInterface.change(town.getInfo(), players[town.getPlayer()].getFullColor())
 
         this.tryToCreate(town, town.getPlayer())

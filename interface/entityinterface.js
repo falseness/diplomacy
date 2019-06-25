@@ -1,93 +1,99 @@
+class EntityInterface {
+    constructor() {
 
-class EntityInterface
-{
-    constructor()
-    {
-        this.stroke = 0.002 * width
-        this.cornerRadius = 0.03 * width
-        this.indent = this.stroke + this.cornerRadius
-        
-        this.pos = 
-        {
-            x: 0, 
-            y: 0.7 * height
+        this.visible = false
+
+        let stroke = 0.002 * width
+        let cornerRadius = 0.03 * width
+        let indent = this.stroke + this.cornerRadius
+
+        this.pos = {
+            x: -canvasOffset.x,
+            y: 0.65 * height - canvasOffset.y
         }
-        this.height = height - this.pos.y
-        
-    
-        
-        this.img = createImageByModel(
-        {
-            x: this.pos.x + this.height * 0.1,
-            y: this.pos.y + this.height * 0.1,
-            image: undefined,
-            width: this.height * 0.7,
-            height: this.height * 0.7,
-        }) 
+        this.height = height - this.pos.y - canvasOffset.y
+        this.width = this.height * 1.5
 
-        
+        this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [0, cornerRadius, 0, 0], stroke)
+
+        this.img = new JustImage('', { x: this.pos.x + this.height * 0.33, y: this.pos.y + this.height * 0.5 },
+            this.height * 0.775, this.height * 0.775)
+
+
         this.entity = {}
-        
-        this.entity.name = new Text({
-            x: this.img.x() + this.img.getWidth(),
-            y: this.pos.y + this.height * 0.075,
-            fontSize: this.height * 0.2
-        })
-        
+
+        this.entity.name = new Text(
+            this.img.getX() + this.img.getWidth() / 2,
+            this.pos.y + this.height * 0.075,
+            this.height * 0.2
+        )
+
+        this.entity.name.setTextBaseline('top')
+        this.entity.name.setTextAlign('left')
+
         this.entity.info = new Text(
-        {
-            x: this.entity.name.x(),
-            y: this.entity.name.y() + this.entity.name.getHeight(),
-            fontSize: this.height * 0.1
+            this.entity.name.getX(),
+            this.entity.name.getY() + this.entity.name.getHeight(),
+            this.height * 0.1
+        )
+
+        this.entity.info.setTextBaseline('top')
+        this.entity.info.setTextAlign('left')
+
+        this.updateSizes()
+    }
+    updateSizes() {
+        this.width = Math.max(this.entity.info.getX() + this.entity.info.getWidth(),
+                this.entity.name.getX() + this.entity.name.getWidth()) +
+            canvasOffset.x + 0.04 * this.height
+
+        this.background.setWidth(this.width)
+    }
+    updatePos() {
+        this.pos = {
+            x: -canvasOffset.x,
+            y: 0.65 * height - canvasOffset.y
+        }
+        this.background.setPos(this.pos)
+        this.img.setPos({ x: this.pos.x + this.height * 0.33, y: this.pos.y + this.height * 0.5 })
+
+        this.entity.name.setPos({
+            x: this.img.getX() + this.img.getWidth() / 2,
+            y: this.pos.y + this.height * 0.075
         })
-        
-        
-        let maxCharsNumber = 6
-        this.width = this.entity.info.x() + this.entity.info.fontSize() * maxCharsNumber
-            
-        this.background = createRectByModel(
-        {
-            x: this.pos.x - this.indent,
-            y: this.pos.y,
-            width: this.width + this.indent,
-            height: this.height + this.indent,
-            fill: '#78a85d',
-            stroke: 'black',
-            strokeWidth: this.stroke,
-            cornerRadius: this.cornerRadius
+
+        this.entity.info.setPos({
+            x: this.entity.name.getX(),
+            y: this.entity.name.getY() + this.entity.name.getHeight()
         })
-        
-        
-        this.hide()
     }
-    getObject()
-    {
-        return [this.background, 
-                this.entity.name.getObject(),
-                this.entity.info.getObject(),
-                this.img]
+    change(entity, color) {
+        this.background.setColor(color.hex)
+
+        this.img.setImage(entity.name)
+        this.entity.name.setText(entity.name)
+        this.entity.info.setText(join(entity.info, ': ', '\n'))
+
+        this.updateSizes()
+
+        this.setVisible(true)
     }
-    change(entity, color)
-    {
-        this.background.fill(color)
-        
-        this.img.image(assets[entity.name])
-        this.entity.name.change(entity.name)
-        this.entity.info.change(join(entity.info, ': ', '\n'))
-        
-        layers.entityInterface.draw()
+    setVisible(boolean) {
+        this.visible = boolean
     }
-    draw()
-    {
-        layers.entityInterface.visible(true)
+    isInside(pos) {
+        return this.background.isInside(pos)
     }
-    hide()
-    {
-        layers.entityInterface.visible(false)
+    click(pos) {
+        return this.visible && this.isInside(pos)
     }
-    move(x, y)
-    {
-        layers.entityInterface.setX(x)
-        layers.entityInterface.setY(y)
+    draw() {
+        if (!this.visible)
+            return
+        this.background.draw()
+        this.img.draw()
+
+        this.entity.name.draw()
+        this.entity.info.draw()
     }
 }
