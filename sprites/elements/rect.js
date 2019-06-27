@@ -50,7 +50,7 @@ class Rect {
         ]
         return points
     }
-    drawShape() {
+    drawShape(ctx) {
         let p = this.getRectPoints()
 
         ctx.moveTo(p[0].x + this.cornerRadius[0], p[0].y)
@@ -67,14 +67,14 @@ class Rect {
         return (this.x <= point.x && point.x <= this.x + this.width &&
             this.y <= point.y && point.y <= this.y + this.height)
     }
-    draw() {
+    draw(ctx) {
         ctx.beginPath()
 
         ctx.fillStyle = this.color
         ctx.strokeStyle = this.strokeColor
         ctx.lineWidth = this.strokeWidth
 
-        this.drawShape()
+        this.drawShape(ctx)
         ctx.stroke()
         ctx.fill()
 

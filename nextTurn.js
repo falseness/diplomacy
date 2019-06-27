@@ -19,8 +19,8 @@ function nextTurn() {
         }
     }
 }
-let nextTurnButton = new StaticImageButton(
+let nextTurnButton = new ImageButton(
     'nextTurnButton',
-    width - assets.size * 2.35 + canvasOffset.x, height - assets.size * 2.5 + canvasOffset.y, assets.size / 1.3, assets.size / 1.3,
+    new Rect(width - assets.size * 1.5, height - assets.size * 1.5, assets.size / 1.3, assets.size / 1.3),
     nextTurn
 )

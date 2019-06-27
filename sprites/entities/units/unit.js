@@ -25,11 +25,13 @@ class Unit extends Entity {
         let unit = super.getInfo()
         unit.info.dmg = this.dmg
         unit.info.moves = this.moves + ' / ' + this.speed
+        unit.info.salary = this.salary
         return unit
     }
 
     select() {
         //let border = Math.max(grid.arr.length, grid.arr[0].length)
+        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
         if (this.moves > 0) {
             let arr = grid.arr
             this.way.BFS(this.coord, this.moves, arr, this.getPlayer())

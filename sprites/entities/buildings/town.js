@@ -167,10 +167,10 @@ class Town extends Building {
             this.crisisPenalty()
 
     }
-    draw() {
-        super.draw()
+    draw(ctx) {
+        super.draw(ctx)
 
-        this.newProduction.draw()
+        this.newProduction.draw(ctx)
 
     }
 }
@@ -337,11 +337,11 @@ class FarmProduction extends Production {
             }
         }
     }
-    draw() {
+    draw(ctx) {
         if (!this.preparingStarted)
             return
 
-        drawImageWithOpacity('farm', grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)
+        drawImageWithOpacity(ctx, 'farm', grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)
     }
 }
 class SuburbProduction extends Production {

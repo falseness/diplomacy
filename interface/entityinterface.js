@@ -8,10 +8,10 @@ class EntityInterface {
         let indent = this.stroke + this.cornerRadius
 
         this.pos = {
-            x: -canvasOffset.x,
-            y: 0.65 * height - canvasOffset.y
+            x: 0,
+            y: 0.65 * height
         }
-        this.height = height - this.pos.y - canvasOffset.y
+        this.height = height - this.pos.y
         this.width = this.height * 1.5
 
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [0, cornerRadius, 0, 0], stroke)
@@ -44,28 +44,9 @@ class EntityInterface {
     }
     updateSizes() {
         this.width = Math.max(this.entity.info.getX() + this.entity.info.getWidth(),
-                this.entity.name.getX() + this.entity.name.getWidth()) +
-            canvasOffset.x + 0.04 * this.height
+            this.entity.name.getX() + this.entity.name.getWidth()) + 0.04 * this.height
 
         this.background.setWidth(this.width)
-    }
-    updatePos() {
-        this.pos = {
-            x: -canvasOffset.x,
-            y: 0.65 * height - canvasOffset.y
-        }
-        this.background.setPos(this.pos)
-        this.img.setPos({ x: this.pos.x + this.height * 0.33, y: this.pos.y + this.height * 0.5 })
-
-        this.entity.name.setPos({
-            x: this.img.getX() + this.img.getWidth() / 2,
-            y: this.pos.y + this.height * 0.075
-        })
-
-        this.entity.info.setPos({
-            x: this.entity.name.getX(),
-            y: this.entity.name.getY() + this.entity.name.getHeight()
-        })
     }
     change(entity, color) {
         this.background.setColor(color.hex)
@@ -87,13 +68,13 @@ class EntityInterface {
     click(pos) {
         return this.visible && this.isInside(pos)
     }
-    draw() {
+    draw(ctx) {
         if (!this.visible)
             return
-        this.background.draw()
-        this.img.draw()
+        this.background.draw(ctx)
+        this.img.draw(ctx)
 
-        this.entity.name.draw()
-        this.entity.info.draw()
+        this.entity.name.draw(ctx)
+        this.entity.info.draw(ctx)
     }
 }

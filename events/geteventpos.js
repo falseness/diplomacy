@@ -15,9 +15,12 @@ function getEventPos(event) {
 }
 
 function getRealEventPos(event) {
-    let rect = canvas.getBoundingClientRect()
+    let rect = mainCanvas.getBoundingClientRect()
 
     let pos = getEventPos(event)
 
-    return { x: pos.x - rect.left - canvasOffset.x, y: pos.y - rect.top - canvasOffset.y }
+    return {
+        x: pos.x / canvas.scale + canvas.offset.x - rect.left,
+        y: pos.y / canvas.scale + canvas.offset.y - rect.top
+    }
 }

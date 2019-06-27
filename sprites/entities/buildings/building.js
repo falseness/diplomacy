@@ -6,6 +6,9 @@ class Building extends Entity {
     needInstructions() {
         return false
     }
+    select() {
+        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
+    }
     removeSelect() {
         entityInterface.setVisible(false)
     }

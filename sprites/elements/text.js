@@ -29,16 +29,16 @@ class Text {
         let max = -1
         let lines = this.text.split('\n')
 
-        ctx.font = this.fontSize + 'px Times New Roman'
+        mainCtx.font = this.fontSize + 'px Times New Roman'
         for (let i = 0; i < lines.length; ++i) {
-            if (ctx.measureText(lines[i]).width > max)
-                max = ctx.measureText(lines[i]).width
+            if (mainCtx.measureText(lines[i]).width > max)
+                max = mainCtx.measureText(lines[i]).width
         }
         return max
     }
     getHeight() {
-        ctx.font = this.fontSize + 'px Times New Roman'
-        return parseInt(ctx.font.match(/\d+/), 10)
+        mainCtx.font = this.fontSize + 'px Times New Roman'
+        return parseInt(mainCtx.font.match(/\d+/), 10)
     }
     getX() {
         return this.pos.x
@@ -46,64 +46,16 @@ class Text {
     getY() {
         return this.pos.y
     }
-    draw() {
-            ctx.font = this.fontSize + 'px Times New Roman'
-            ctx.fillStyle = this.color
-            ctx.textAlign = this.textAlign
-            ctx.textBaseline = this.textBaseline
+    draw(ctx) {
+        ctx.font = this.fontSize + 'px Times New Roman'
+        ctx.fillStyle = this.color
+        ctx.textAlign = this.textAlign
+        ctx.textBaseline = this.textBaseline
 
-            let lines = this.text.split('\n')
-            for (let i = 0; i < lines.length; ++i)
-                ctx.fillText(lines[i], this.pos.x, this.pos.y + (i * this.getHeight()))
-        }
-        /*getObject()
-        {
-            return this.object
-        }
-        changeOffset()
-        {
-            this.object.setOffset(
-            {
-                x: this.object.getWidth() * this.offset.x,
-                y: this.object.getHeight() * this.offset.y
-            })
-        }
-        change(text)
-        {
-            this.object.text(text)
-            this.changeOffset()
-        }
-        changePos(x, y)
-        {
-            if (x)
-            {
-                this.object.x(x)
-            }
-            if (y)
-            {
-                this.object.y(y)
-            }
-        }
-        x()
-        {
-            return this.object.x()
-        }
-        y()
-        {
-            return this.object.y()
-        }
-        getWidth()
-        {
-            return this.object.getWidth()
-        }
-        getHeight()
-        {
-            return this.object.getHeight()
-        }
-        fontSize()
-        {
-            return this.object.textHeight
-        }*/
+        let lines = this.text.split('\n')
+        for (let i = 0; i < lines.length; ++i)
+            ctx.fillText(lines[i], this.pos.x, this.pos.y + (i * this.getHeight()))
+    }
 }
 class CoordText extends Sprite {
     constructor(x, y, text, color = 'white', fontSize = Math.round(basis.r * 9.8625 * 0.05)) {
@@ -118,7 +70,7 @@ class CoordText extends Sprite {
     setText(text) {
         this.text = text
     }
-    draw() {
+    draw(ctx) {
             let pos = this.getPos()
             ctx.font = this.fontSize + 'px Times New Roman'
             ctx.fillStyle = this.color

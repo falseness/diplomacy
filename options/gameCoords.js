@@ -1,5 +1,7 @@
-const width = window.innerWidth
-const height = window.innerHeight
+const WIDTH = window.innerWidth
+const HEIGHT = window.innerHeight
+let width = WIDTH
+let height = HEIGHT
 const radius = 80
 let basis = {
     r: radius,
@@ -14,10 +16,19 @@ let basis = {
 }
 delete radius
 
-let canvasOffset = {
-        x: basis.offset.x,
-        y: basis.offset.y * 2
-    }
+const offsetToOrigin = {
+    x: basis.r,
+    y: basis.r * Math.sin(Math.PI / 3)
+}
+
+let canvas = {
+    offset: {
+        x: 0,
+        y: 0
+    },
+    scale: 1
+}
+const mapBorderMargin = 0.5 * HEIGHT //0.5 * HEIGHT
     /*function toCube(x, by)
     {
         

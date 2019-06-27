@@ -7,11 +7,11 @@ class Grid extends SpritesGroup {
         if (size)
             this.fill(size.x, size.y)
     }
-    getRight() {
-        return this.arr[0][this.arr[0].length - 1].hexagon.getPos().x + basis.r
-    }
     getBottom() {
-        return this.arr[this.arr[0].length][0].hexagon.getPos().y + basis.r * Math.sin(Math.PI / 3)
+        return this.arr[0][this.arr[0].length - 1].hexagon.getPos().y //+ basis.r * Math.sin(Math.PI / 3) * 2
+    }
+    getRight() {
+        return this.arr[this.arr.length - 1][0].hexagon.getPos().x //+ basis.r * 2
     }
     setDrawLogicText(boolean) {
         this.drawLogicText = boolean
@@ -50,39 +50,39 @@ class Grid extends SpritesGroup {
             }
         }*/
     }
-    drawHexagons() {
+    drawHexagons(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
-                cell.hexagon.draw()
+                cell.hexagon.draw(ctx)
             }
         }
     }
-    drawText() {
+    drawText(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
                 if (this.drawLogicText)
-                    cell.logicText.draw()
+                    cell.logicText.draw(ctx)
                 else
-                    cell.coordText.draw()
+                    cell.coordText.draw(ctx)
             }
         }
     }
-    drawOther() {
+    drawOther(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
 
-                cell.building.draw()
-                cell.unit.draw()
+                cell.building.draw(ctx)
+                cell.unit.draw(ctx)
             }
         }
     }
-    draw() {
-        this.drawHexagons()
-        this.drawText()
-        this.drawOther()
+    draw(ctx) {
+        this.drawHexagons(ctx)
+        this.drawText(ctx)
+        this.drawOther(ctx)
     }
 }
 

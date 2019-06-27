@@ -7,8 +7,8 @@ class TownInterface {
         }*/
         this.visible = false
         this.pos = {
-            x: width * 0.75 - canvasOffset.x,
-            y: height * 0.12 - canvasOffset.y,
+            x: width * 0.75,
+            y: height * 0.12,
         }
         this.height = 0.4 * height
         this.width = width - this.pos.x
@@ -132,28 +132,6 @@ class TownInterface {
                     this.gold.getX(), this.gold.getY() + this.height * 0.3 + this.trainInterfacesMarginInterval * i, trainInterfaces.name[i])
         }
     }
-    updatePos() {
-        this.pos = {
-            x: width * 0.75 - canvasOffset.x,
-            y: height * 0.12 - canvasOffset.y,
-        }
-
-        this.background.setPos(this.pos)
-        this.gold.setPos({
-            x: this.pos.x + 0.22 * width * 0.1 + 0.22 * width * 0.07,
-            y: this.pos.y + this.height * 0.05 + this.height * 0.08
-        })
-
-        this.goldText.setPos({ x: this.gold.getX() + 0.22 * width * 0.9, y: this.gold.getY() })
-
-        let index = 0
-        for (i in this.trainInterfaces) {
-            this.trainInterfaces[i].setPos({
-                x: this.gold.getX(),
-                y: this.gold.getY() + this.height * 0.3 + this.trainInterfacesMarginInterval * index++
-            })
-        }
-    }
     change(town, color) {
             this.background.setColor(color.hex)
 
@@ -187,6 +165,9 @@ class TownInterface {
     setVisible(boolean) {
         this.visible = boolean
     }
+    getVisible() {
+        return this.visible
+    }
     click(point) {
         if (this.visible && this.isInside(point)) {
             for (let i in this.trainInterfaces) {
@@ -200,15 +181,15 @@ class TownInterface {
     isInside(point) {
         return this.background.isInside(point)
     }
-    draw() {
+    draw(ctx) {
         if (!this.visible)
             return
 
-        this.background.draw()
-        this.gold.draw()
-        this.goldText.draw()
+        this.background.draw(ctx)
+        this.gold.draw(ctx)
+        this.goldText.draw(ctx)
         for (let i in this.trainInterfaces) {
-            this.trainInterfaces[i].draw()
+            this.trainInterfaces[i].draw(ctx)
         }
     }
 }
@@ -261,10 +242,10 @@ class TrainInterface {
         this.canTrain = boolean
         this.button.setCanClick(boolean)
     }
-    draw() {
-        this.image.draw()
-        this.costText.draw()
+    draw(ctx) {
+        this.image.draw(ctx)
+        this.costText.draw(ctx)
         if (this.canTrain)
-            this.button.draw()
+            this.button.draw(ctx)
     }
 }

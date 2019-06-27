@@ -12,11 +12,26 @@
             overflow: hidden;
             background-color: #808080;
         }
+        
+        #canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-index: 0;
+        }
+        
+        #interface {
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-index: 1;
+        }
     </style>
 </head>
 
 <body>
     <canvas id="canvas"></canvas>
+    <canvas id="interface"></canvas>
 
     <!--<script src = "objectModels/setDefaultModel.js"></script>
         <script src = "objectModels/setObjectOffset.js"></script>
@@ -26,6 +41,7 @@
         <script src = "objectModels/rectModel.js"></script>-->
 
     <script src='render/loadassets.js'></script>
+    <script src='render/image.js'></script>
     <script src='render/rgbtohex.js'></script>
     <script src='render/draw.js'></script>
 
@@ -40,10 +56,10 @@
     <script src='groups/spritesGroup.js'></script>
 
     <script src='sprites/empty.js'></script>
-    <script src='sprites/text.js'></script>
-    <script src='sprites/rect.js'></script>
-    <script src='sprites/button.js'></script>
-    <script src='sprites/imageButton.js'></script>
+    <script src='sprites/elements/text.js'></script>
+    <script src='sprites/elements/rect.js'></script>
+    <script src='sprites/elements/button.js'></script>
+    <script src='sprites/elements/imageButton.js'></script>
     <script src='sprites/border.js'></script>
 
     <script src='events/geteventpos.js'></script>
@@ -68,10 +84,13 @@
     <script>
         'use strict'
 
-        let canvas = document.getElementById('canvas')
-        let ctx = canvas.getContext('2d')
+        let mainCanvas = document.getElementById('canvas')
+        let mainCtx = mainCanvas.getContext('2d')
 
-        let debug = true
+        let interfaceCanvas = document.getElementById('interface')
+        let interfaceCtx = interfaceCanvas.getContext('2d')
+
+        let debug = false
         let townInterface = new TownInterface()
         let entityInterface = new EntityInterface()
         let gameEvent = new Events(townInterface, entityInterface)
@@ -89,20 +108,43 @@
         })
 
         /*let mapBorder = {
-            left: -canvasOffset.x,
-            right: grid.getRight() + canvasOffset.x,
-            top: -canvas.canvasOffset.y,
-            bottom: grid.getLeft() + canvasOffset.y
+            left: -(grid.getRight() - width),
+            right: mapBorderMargin,
+            top: -(grid.getBottom() - height),
+            bottom: mapBorderMargin
         }*/
+        /*let mapBorder = {
+            left: -mapBorderMargin,
+            right: grid.getRight() + mapBorderMargin,
+            top: -mapBorderMargin,
+            bottom: grid.getBottom() + mapBorderMargin,
+            scale: {
+                min: 0.4,
+                max: 1
+            }
+        }*/
+        let mapBorder = {
+            left: 0,
+            right: grid.getRight(),
+            top: 0,
+            bottom: grid.getBottom(),
+            scale: {
+                min: 0.4,
+                max: 1
+            }
+        }
+
 
         let whooseTurn = 1
 
         let TOWN = new Town(1, 1)
 
         function start() {
-            canvas.width = width
-            canvas.height = height
-            ctx.translate(canvasOffset.x, canvasOffset.y)
+            mainCanvas.width = interfaceCanvas.width = WIDTH
+            mainCanvas.height = interfaceCanvas.height = HEIGHT
+                //mainCtx.translate(offsetToOrigin.x, offsetToOrigin.y)
+
+            //ctx.translate(canvasOffset.x, canvasOffset.y)
 
             createEvents()
             loadAssets()

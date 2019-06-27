@@ -19,7 +19,7 @@ class Entity extends Sprite {
     removeSelect() {
         return true
     }
-    draw() {
-        drawImage(this.name, this.getPos())
+    draw(ctx) {
+        drawImage(ctx, this.name, this.getPos())
     }
 }

@@ -1,21 +1,24 @@
 function createEvents() {
     document.addEventListener('click', click)
     document.addEventListener('mousemove', mousemove)
+    document.addEventListener('mousewheel', mousewheel)
 }
 
 function click(event) {
-    let pos = getRealEventPos(event)
-        //let coord = getCoord(pos.x, pos.y)
-
-    //console.log(coord.x, coord.y)
-
-    gameEvent.click(pos)
+    let pos = getEventPos(event)
+    let realPos = getRealEventPos(event)
+    gameEvent.click(pos, realPos)
 }
 
 function mousemove(event) {
     let pos = getEventPos(event)
     let realPos = getRealEventPos(event)
     gameEvent.mousemove(pos, realPos)
+}
+
+function mousewheel(event) {
+    let pos = getEventPos(event)
+    gameEvent.mousewheel(pos, event.wheelDelta)
 }
 class Events {
     constructor(_townInterface, _entityInterface) {
@@ -25,27 +28,25 @@ class Events {
                 entity: _entityInterface
         }
 
-        this.screen = new Screen(0.1 * height, 0.01 * height)
-        this.extremeScreen = new Screen(0.005 * height, 0.015 * height)
+        this.screen = new Screen(0.1 * height, 0.015 * height)
+        this.extremeScreen = new Screen(0.005 * height, 0.02 * height)
+    }
+    mousewheel(pos, scale) {
+        this.screen.scale(pos, scale)
     }
     mousemove(pos, realPos) {
-        if (this.interface.town.visible && this.interface.town.isInside(realPos)) {
-            this.screen.stop()
-            this.extremeScreen.stop()
+        if (!this.interface.town.getVisible())
+            this.screen.changeSpeed(pos)
 
-            return
-        }
-
-        this.screen.changeSpeed(pos)
         this.extremeScreen.changeSpeed(pos)
     }
     moveScreen() {
         this.screen.move()
         this.extremeScreen.move()
     }
-    draw() {
-        this.screen.draw()
-        this.extremeScreen.draw()
+    draw(ctx) {
+        this.screen.draw(ctx)
+        this.extremeScreen.draw(ctx)
     }
     getSelected() {
         return this.selected
@@ -54,13 +55,9 @@ class Events {
         if (cell.unit.notEmpty()) {
             cell.unit.select()
             this.selected = cell.unit
-
-            this.interface.entity.change(this.selected.getInfo(), players[this.selected.getPlayer()].getFullColor())
         } else if (cell.building.notEmpty()) {
             cell.building.select()
             this.selected = cell.building
-
-            this.interface.entity.change(this.selected.getInfo(), players[this.selected.getPlayer()].getFullColor())
         }
     }
     clickOnCell(coord) {
@@ -86,7 +83,7 @@ class Events {
         if (instructionsAreNotLongerNeeded)
             this.selected = new Empty()
     }
-    click(pos) {
+    click(pos, realPos) {
         if (nextTurnButton.click(pos))
             return
 
@@ -95,7 +92,7 @@ class Events {
         if (this.interface.town.click(pos))
             return
 
-        let coord = getCoord(pos.x, pos.y)
+        let coord = getCoord(realPos.x, realPos.y)
         if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length)) {
             this.hideAll()
             this.selected.removeSelect()
