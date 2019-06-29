@@ -3,14 +3,16 @@ function neutralPlayerTurn() {
 }
 
 function nextTurn() {
-    townInterface.setVisible(false)
-        //entityInterface.setVisible(false)
+    //townInterface.setVisible(false)
+    //entityInterface.setVisible(false)
 
     gameEvent.nextTurn()
 
-    whooseTurn = (players.length % ++whooseTurn)
+    whooseTurn = (whooseTurn + 1) % players.length
     if (!whooseTurn)
         neutralPlayerTurn()
+
+    nextTurnButton.setColor(players[whooseTurn].getHexColor())
 
     for (let i = 0; i < grid.arr.length; ++i) {
         for (let j = 0; j < grid.arr[i].length; ++j) {
@@ -20,7 +22,7 @@ function nextTurn() {
     }
 }
 let nextTurnButton = new ImageButton(
-    'nextTurnButton',
-    new Rect(width - assets.size * 1.5, height - assets.size * 1.5, assets.size / 1.3, assets.size / 1.3),
+    new TriangleImage({ x: NaN, y: NaN }, 'white', assets.size * 85 / 100, 'black', 0.005 * HEIGHT),
+    new Rect(width - assets.size * 1.55, height - assets.size * 1.5, assets.size / 1.3, assets.size / 1.3),
     nextTurn
 )

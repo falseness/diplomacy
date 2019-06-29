@@ -2,6 +2,12 @@ function createEvents() {
     document.addEventListener('click', click)
     document.addEventListener('mousemove', mousemove)
     document.addEventListener('mousewheel', mousewheel)
+
+    document.addEventListener('keydown', keyboard)
+}
+
+function keyboard(event) {
+    gameEvent.keyboard(event.keyCode)
 }
 
 function click(event) {
@@ -23,6 +29,10 @@ function mousewheel(event) {
 class Events {
     constructor(_townInterface, _entityInterface) {
         this.selected = new Empty()
+
+        this.lastKeyboardPressTime = 0
+        this.keyboardPressInterval = 250
+
         this.interface = {
             town: _townInterface,
                 entity: _entityInterface
@@ -30,6 +40,14 @@ class Events {
 
         this.screen = new Screen(0.1 * height, 0.015 * height)
         this.extremeScreen = new Screen(0.005 * height, 0.02 * height)
+    }
+    keyboard(keycode) {
+        if (Date.now() - this.lastKeyboardPressTime < this.keyboardPressInterval)
+            return
+
+        this.lastKeyboardPressTime = Date.now()
+        if (keycode == 13)
+            nextTurn()
     }
     mousewheel(pos, scale) {
         this.screen.scale(pos, scale)

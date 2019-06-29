@@ -73,11 +73,10 @@ class ShapeImage {
 
         this.drawShape(ctx)
 
+        ctx.closePath()
         if (this.strokeWidth)
             ctx.stroke()
         ctx.fill()
-
-        ctx.closePath()
     }
 }
 class SuburbImage extends ShapeImage {
@@ -93,5 +92,38 @@ class SuburbImage extends ShapeImage {
         ctx.moveTo(this.pos.x + this.r * Math.cos(0), this.pos.y + this.r * Math.sin(0))
         for (let i = 0; i < 7; ++i)
             ctx.lineTo(this.pos.x + this.r * Math.cos(i * 2 * Math.PI / 6), this.pos.y + this.r * Math.sin(i * 2 * Math.PI / 6))
+    }
+}
+class TriangleImage extends ShapeImage {
+    constructor(pos, color, side, strokeColor, strokeWidth) {
+        super(pos, color, strokeColor, strokeWidth)
+            // pos is center of triangle
+        this.side = side
+    }
+    drawShape(ctx) {
+        ctx.lineJoin = 'round'
+
+        let pos = { x: this.pos.x, y: this.pos.y }
+        let side = this.side
+        ctx.moveTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y - side / 2)
+        ctx.lineTo(pos.x + side * Math.sin(Math.PI / 3) * (2 / 3), pos.y)
+        ctx.lineTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y + side / 2)
+        ctx.lineTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y - side / 2)
+    }
+    draw(ctx) {
+        super.draw(ctx)
+
+        let oldColor = this.color
+        let oldStrokeWidth = this.strokeWidth
+
+        const suburbAlpha = 0.4
+        const maxRGBInt = 255
+        this.color = `rgba(${maxRGBInt}, ${maxRGBInt}, ${maxRGBInt}, ${suburbAlpha})`
+        this.strokeWidth = 0
+
+        super.draw(ctx)
+
+        this.color = oldColor
+        this.strokeWidth = oldStrokeWidth
     }
 }

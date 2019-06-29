@@ -12,6 +12,11 @@ class Farm extends Building {
     getPlayer() {
         return this.town.getPlayer()
     }
+    kill() {
+        super.kill()
+
+        this.town.updateBuildingsArray()
+    }
     getInfo() {
         let farm = super.getInfo()
 

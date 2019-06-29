@@ -4,7 +4,8 @@ let assets = {
     nextTurnButton: new Image,
     town: new Image(),
     farm: new Image(),
-    noob: new Image()
+    noob: new Image(),
+    normchel: new Image()
 }
 
 function loadAssets() {
@@ -13,4 +14,5 @@ function loadAssets() {
     assets.town.src = "assets/townhall.svg"
     assets.farm.src = "assets/farm.svg"
     assets.noob.src = "assets/noob.svg"
+    assets.normchel.src = "assets/normchel.svg"
 }

@@ -76,7 +76,7 @@
     <script src='sprites/entities/buildings/farm.js'></script>
     <script src='sprites/entities/buildings/town.js'></script>
     <script src='sprites/entities/units/noob.js'></script>
-
+    <script src='sprites/entities/units/normchel.js'></script>
 
     <script src='player.js'></script>
 
@@ -100,73 +100,48 @@
         let players = [new Empty, new Player({
                 r: 255,
                 g: 0,
-                b: 0
-            })] //98, 168, 222
+                b: 0 //98, 168, 222
+            }),
+            new Player({
+                r: 98,
+                g: 168,
+                b: 222
+            })
+        ]
         let grid = new Grid(0, 0, {
             x: 20,
             y: 10
         })
-
-        /*let mapBorder = {
-            left: -(grid.getRight() - width),
-            right: mapBorderMargin,
-            top: -(grid.getBottom() - height),
-            bottom: mapBorderMargin
-        }*/
-        /*let mapBorder = {
-            left: -mapBorderMargin,
-            right: grid.getRight() + mapBorderMargin,
-            top: -mapBorderMargin,
-            bottom: grid.getBottom() + mapBorderMargin,
-            scale: {
-                min: 0.4,
-                max: 1
-            }
-        }*/
         let mapBorder = {
             left: 0,
             right: grid.getRight(),
             top: 0,
             bottom: grid.getBottom(),
             scale: {
-                min: 0.4,
+                min: 0.3,
                 max: 1
             }
         }
 
 
         let whooseTurn = 1
-
-        let TOWN = new Town(1, 1)
+        nextTurnButton.setColor(players[whooseTurn].getHexColor())
 
         function start() {
             mainCanvas.width = interfaceCanvas.width = WIDTH
             mainCanvas.height = interfaceCanvas.height = HEIGHT
-                //mainCtx.translate(offsetToOrigin.x, offsetToOrigin.y)
-
-            //ctx.translate(canvasOffset.x, canvasOffset.y)
 
             createEvents()
             loadAssets()
-                //generatePrimaryElements()
-                //menu.draw()
 
-            //createEvents()
-            grid.arr[0][1].hexagon.repaint(1)
-            grid.arr[1][0].hexagon.repaint(1)
-            grid.arr[2][1].hexagon.repaint(1)
-            grid.arr[2][2].hexagon.repaint(1)
-            grid.arr[1][2].hexagon.repaint(1)
-            grid.arr[0][2].hexagon.repaint(1)
-            grid.arr[1][1].hexagon.repaint(1)
+            grid.arr[5][3].hexagon.repaint(1)
 
-            grid.arr[3][1].hexagon.repaint(1)
-            grid.arr[4][1].hexagon.repaint(1)
-            grid.arr[4][2].hexagon.repaint(1)
-            grid.arr[5][2].hexagon.repaint(1)
-            grid.arr[0][0].hexagon.repaint(1)
-            let town = new Town(1, 1)
-                //let noob = new Noob(3, 1, town)
+            let TOWN1 = new Town(5, 3, 10, true)
+
+            grid.arr[14][6].hexagon.repaint(2)
+
+            let TOWN2 = new Town(14, 6, 3, true)
+
             requestAnimationFrame(gameLoop)
         }
 
@@ -176,84 +151,6 @@
             requestAnimationFrame(gameLoop)
         }
         window.addEventListener('load', start)
-            /*let layers = new Layers(['grid', 'coordGrid', 'entity', 'border', 'entityInterface', 'townInterface', 'gameMenu'])
-            let grid = new Grid(0, 0, new SpritesGroup(0, 0))
-        
-        
-            let border = new Border(layers.border)
-        
-        
-        
-            players.push(new Empty, new Player({r: 255, g: 0, b: 0}))
-                
-            loadAssets()
-        
-            let selected = false
-                                                                                                                                                        
-            layers.grid.add(grid.createObject())
-            layers.grid.listening(true)
-            layers.townInterface.listening(true)
-            layers.gameMenu.listening(true)
-            layers.coordGrid.add(grid.coordGrid.createObject())
-            //layers.coordGrid.visible(false)
-            let nextTurnButton = new Konva.Image({
-                x: width - height * 0.12,
-                y: height - height * 0.12,
-                image: assets['nextTurnButton'],
-                width: height * 0.1,
-                height: height * 0.1
-            }) 
-            layers.gameMenu.add(nextTurnButton)
-            nextTurnButton.on('click', nextTurn)
-
-        
-            let whooseTurn = 1
-        
-            let entityInterface = new EntityInterface()
-            let townInterface = new TownInterface()
-        
-            layers.entityInterface.add(...entityInterface.getObject())
-            layers.townInterface.add(...townInterface.getObject()) 
-                
-            let events = new Events(townInterface, entityInterface)
-        
-            grid.fill(20, 10)
-                
-        
-            stage.setX(basis.offset.x)
-            stage.setY(basis.offset.y * 2)  
-            entityInterface.move(-basis.offset.x, -basis.offset.y * 2)
-            townInterface.move(-basis.offset.x, -basis.offset.y * 2)
-            layers.gameMenu.setX(-basis.offset.x)
-            layers.gameMenu.setY(-basis.offset.y * 2)
-                
-            layers.addToStage()
-        
-                
-                
-                
-            let town = new Town(5, 2, 1)
-        
-            let unit = new Noob(4, 3, 1) 
-            town.units.push(unit)
-        
-            grid.arr[5][2].hexagon.repaint(1)
-            grid.arr[5][1].hexagon.repaint(1)
-            grid.arr[6][2].hexagon.repaint(1)
-            grid.arr[6][3].hexagon.repaint(1)
-            grid.arr[5][3].hexagon.repaint(1)
-            grid.arr[4][3].hexagon.repaint(1)
-            grid.arr[4][2].hexagon.repaint(1)
-                
-                
-            town.paintSuburbs()
-                
-            window.addEventListener('load', function() {
-                layers.entity.add(town.getObject())
-                layers.entity.add(unit.getObject())
-                layers.entity.draw()
-                layers.gameMenu.draw()
-            })              */
     </script>
 </body>
 

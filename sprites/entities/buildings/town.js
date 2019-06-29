@@ -1,33 +1,42 @@
 class Town extends Building {
-    constructor(x, y) {
-        let hp = 50
+    constructor(x, y, gold = 10, firstTown = false) {
+        let hp = 1 //20
         super(x, y, 'town', hp)
 
         this.suburbs = []
+        this.buildings = []
+        this.units = []
+
+        this.createFirstSuburbs(firstTown)
+
+        this.gold = gold
+
+        this.newProduction = new Production()
+        this.production = {
+            noob: new UnitProduction(2, 10, Noob),
+            farm: new FarmProduction(3, 10, Farm, 5),
+            suburb: new SuburbProduction(0, 1),
+            normchel: new UnitProduction(5, 30, Normchel)
+        }
+        this.finishPreparing()
+    }
+    createFirstSuburbs(firstTown) {
+        this.suburbs.push(grid.arr[this.coord.x][this.coord.y])
+        grid.arr[this.coord.x][this.coord.y].hexagon.setIsSuburb(true)
+
         let neighboursCoord = this.getNeighbours()
+
         for (let i = 0; i < neighboursCoord.length; ++i) {
             let cell = grid.arr[neighboursCoord[i].x][neighboursCoord[i].y]
+
+            if (firstTown)
+                cell.hexagon.repaint(this.getPlayer())
+
             if (cell.hexagon.getPlayer() == this.getPlayer()) {
                 this.suburbs.push(cell)
                 cell.hexagon.setIsSuburb(true)
             }
         }
-        this.suburbs.push(grid.arr[this.coord.x][this.coord.y])
-        grid.arr[this.coord.x][this.coord.y].hexagon.setIsSuburb(true)
-
-        this.farms = []
-        this.units = []
-
-
-        this.gold = 25 //НЕ ЗАБУДЬ!
-
-        this.newProduction = new Production()
-        this.production = {
-            noob: new UnitProduction(2, 10, Noob),
-            farm: new FarmProduction(1, 25, Farm, 5),
-            suburb: new SuburbProduction(0, 1)
-        }
-        this.finishPreparing()
     }
     getPlayer() {
         return grid.arr[this.coord.x][this.coord.y].hexagon.getPlayer()
@@ -55,8 +64,11 @@ class Town extends Building {
         return this.newProduction.isWaitingForInstructionsToCreate()
     }
     select() {
+        this.updateSuburbsArray()
+
         entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
-        townInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
+        if (this.isMyTurn())
+            townInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
 
         return true
     }
@@ -85,8 +97,8 @@ class Town extends Building {
         let income = 0
         income += this.suburbs.length * suburbIncome
 
-        for (let i = 0; i < this.farms.length; ++i) {
-            income += this.farms[i].getIncome()
+        for (let i = 0; i < this.buildings.length; ++i) {
+            income += this.buildings[i].getIncome()
         }
         for (let i = 0; i < this.units.length; ++i) {
             income -= this.units[i].getSalary()
@@ -146,17 +158,29 @@ class Town extends Building {
         if (!this.isPreparing())
             this.tryToEndPreparing()
     }
-    UpdateUnitsArray() {
+    updateBuildingsArray() {
+        for (let i = 0; i < this.buildings.length; ++i) {
+            if (this.buildings[i].isKilled())
+                this.buildings.splice(i--, 1)
+        }
+    }
+    updateUnitsArray() {
         for (let i = 0; i < this.units.length; ++i) {
             if (this.units[i].isKilled())
                 this.units.splice(i--, 1)
         }
     }
+    updateSuburbsArray() {
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            if (this.suburbs[i].hexagon.getPlayer() != this.getPlayer())
+                this.suburbs.splice(i--, 1)
+        }
+    }
     nextTurn(whooseTurn) {
-        if (this.getPlayer() != whooseTurn)
+        this.updateUnitsArray()
+        this.updateSuburbsArray()
+        if (!this.isMyTurn())
             return
-
-        this.UpdateUnitsArray()
 
         this.newProduction.nextTurn(this)
 
@@ -270,11 +294,18 @@ class FarmProduction extends Production {
             town.finishPreparing()
         }
     }
+    isCellFit(cell, player) {
+        return (this.isSuburb(cell.hexagon.coord, grid.arr, player) &&
+            cell.building.isEmpty())
+    }
     tryToCreate(town, player) {
         if (this.preparingStarted) {
+            if (!this.isCellFit(grid.arr[this.coord.x][this.coord.y], this.player))
+                return true
+
             let t = new this.class(this.coord.x, this.coord.y, this.income, town)
 
-            town.farms.push(t)
+            town.buildings.push(t)
 
             this.preparingStarted = false
             return true
@@ -288,10 +319,11 @@ class FarmProduction extends Production {
         if (this.preparingStarted)
             return false
 
-        return this.isSuburb(cell.hexagon.coord, grid.arr, town.getPlayer()) && cell.building.isEmpty()
+        return this.isCellFit(cell, town.getPlayer())
     }
     create(cell, town) {
         this.coord = Object.assign({}, cell.hexagon.coord)
+        this.player = town.getPlayer()
         this.preparingStarted = true
 
         town.gold -= this.cost
@@ -338,7 +370,7 @@ class FarmProduction extends Production {
         }
     }
     draw(ctx) {
-        if (!this.preparingStarted)
+        if (!this.preparingStarted || !this.isCellFit(grid.arr[this.coord.x][this.coord.y], this.player))
             return
 
         drawImageWithOpacity(ctx, 'farm', grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)

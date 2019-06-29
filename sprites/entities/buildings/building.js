@@ -6,6 +6,11 @@ class Building extends Entity {
     needInstructions() {
         return false
     }
+    kill() {
+        grid.arr[this.coord.x][this.coord.y].building = new Empty()
+
+        this.killed = true
+    }
     select() {
         entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
     }

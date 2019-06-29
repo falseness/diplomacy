@@ -65,7 +65,7 @@ class TownInterface {
         console.log(height / width)
         const heightWidthBestRatio = 0.55
         let trainInterfaces = {
-            name: ['noob', 'farm', 'suburb'],
+            name: ['noob', 'farm', 'suburb', 'normchel'],
             margin: {
                 image: {
                     x: 0,
@@ -137,15 +137,11 @@ class TownInterface {
 
             for (let i in this.trainInterfaces) //town.production
             {
-                //this.trainInterfaces[i].changeImage(i, color)
+                this.trainInterfaces[i].setCanTrain(true)
+                    //this.trainInterfaces[i].changeImage(i, color)
                 this.trainInterfaces[i].setCostText('cost: ' + town.production[i].cost)
 
                 if (!town.info.train) {
-                    this.trainInterfaces[i].setCanTrain(true)
-                        /*
-                        Некруто постоянно создавать функции для button и вообще все менять каждый раз,
-                        нужно сделать все один раз сделать и редко менять
-                        */
                     this.trainInterfaces[i].setButtonText('train (' + town.production[i].turns + ')')
                 } else if (town.info.train != i) {
                     this.trainInterfaces[i].setCanTrain(false)
