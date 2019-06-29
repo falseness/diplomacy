@@ -3,20 +3,20 @@ class EntityInterface {
 
         this.visible = false
 
-        let stroke = 0.002 * width
-        let cornerRadius = 0.03 * width
+        let stroke = 0.002 * WIDTH
+        let cornerRadius = 0.03 * WIDTH
         let indent = this.stroke + this.cornerRadius
 
         this.pos = {
             x: 0,
             y: 0.65 * height
         }
-        this.height = height - this.pos.y
+        this.height = HEIGHT - this.pos.y
         this.width = this.height * 1.5
 
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [0, cornerRadius, 0, 0], stroke)
 
-        this.img = new JustImage('', { x: this.pos.x + this.height * 0.33, y: this.pos.y + this.height * 0.5 },
+        this.img = new JustImage('', { x: this.pos.x + this.height * 0.38, y: this.pos.y + this.height * 0.5 },
             this.height * 0.775, this.height * 0.775)
 
 

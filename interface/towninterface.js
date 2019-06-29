@@ -8,7 +8,7 @@ class TownInterface {
         this.visible = false
         this.pos = {
             x: width * 0.75,
-            y: height * 0.12,
+            y: height * 0.03, // 0.12
         }
         this.height = 0.4 * height
         this.width = width - this.pos.x
@@ -65,7 +65,7 @@ class TownInterface {
         console.log(height / width)
         const heightWidthBestRatio = 0.55
         let trainInterfaces = {
-            name: ['noob', 'farm', 'suburb', 'normchel'],
+            name: ['noob', 'farm', 'suburb', 'archer', 'KOHb', 'normchel'],
             margin: {
                 image: {
                     x: 0,

@@ -5,6 +5,9 @@ let assets = {
     town: new Image(),
     farm: new Image(),
     noob: new Image(),
+    archer: new Image(),
+    KOHb: new Image(),
+    KOHbLeft: new Image(),
     normchel: new Image()
 }
 
@@ -14,5 +17,8 @@ function loadAssets() {
     assets.town.src = "assets/townhall.svg"
     assets.farm.src = "assets/farm.svg"
     assets.noob.src = "assets/noob.svg"
+    assets.archer.src = "assets/archer.svg"
+    assets.KOHb.src = "assets/KOHb.svg"
+    assets.KOHbLeft.src = "assets/KOHbLeft.svg"
     assets.normchel.src = "assets/normchel.svg"
 }

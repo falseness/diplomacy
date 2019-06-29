@@ -37,12 +37,12 @@ class Unit extends Entity {
         let arr = grid.arr
         if (!this.isMyTurn()) {
 
-            this.way.BFS(this.coord, 0, arr, this.getPlayer())
+            this.way.create(this.coord, 0, arr, this.getPlayer())
 
             grid.setDrawLogicText(false)
             return
         }
-        this.way.BFS(this.coord, this.moves, arr, this.getPlayer())
+        this.way.create(this.coord, this.moves, arr, this.getPlayer())
     }
     removeSelect() {
         border.setVisible(false)
@@ -128,7 +128,6 @@ class Unit extends Entity {
 }
 class Way {
     constructor() {
-        this.color = 'white'
         this.distance = []
         this.parent = []
     }
@@ -141,9 +140,9 @@ class Way {
     getParent(coord) {
         return Object.assign({}, this.parent[coord.x][coord.y])
     }
-    BFS(v0, moves, arr, player) {
-        // init
-        border.newBrokenLine()
+    initialization(v0, moves, arr, newBorder) {
+        if (newBorder)
+            border.newBrokenLine()
         grid.newLogicText()
 
         let used = new Array(arr.length)
@@ -161,15 +160,74 @@ class Way {
                 this.parent[i][j] = { x: i, y: j }
             }
         }
-
-        let Q = []
-        let enemyEntityQ = []
-        Q.push(v0)
-
         used[v0.x][v0.y] = true
         this.distance[v0.x][v0.y] = 0
         this.parent[v0.x][v0.y] = v0
-            // BFS
+
+        return used
+    }
+    isCellImpassable(neighbour, v0, arr, player) {
+        let cell = arr[neighbour.x][neighbour.y]
+
+        return (cell.unit.notEmpty() && cell.unit.getPlayer() == player &&
+            !coordsEqually(neighbour, v0))
+    }
+    sortNeighbours(v0, v, neighbours, arr, player) {
+        // if hexagon has the same color, he will be processed later
+
+        let sortedHexagonNeighbours = []
+        for (let i = 0; i < neighbours.length; ++i) {
+            if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
+                this.isCellImpassable(neighbours[i], v0, arr, player)) {
+                border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                continue
+            }
+
+            let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
+
+            if (hexagon.player != player)
+                sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
+        }
+        for (let i = 0; i < neighbours.length; ++i) {
+            if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
+                this.isCellImpassable(neighbours[i], v0, arr, player)) {
+                border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                continue
+            }
+
+            let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
+
+            if (hexagon.player == player)
+                sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
+        }
+        return sortedHexagonNeighbours
+    }
+    cellHasEnemyEntity(cell, player) {
+        return (cell.building.notEmpty() && cell.building.getPlayer() != player) ||
+            (cell.unit.notEmpty() && cell.unit.getPlayer() != player)
+    }
+    notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
+        let cell = grid.arr[coord.x][coord.y]
+
+        if (this.cellHasEnemyEntity(cell, player)) {
+            enemyEntityQ.push(coord)
+            this.distance[coord.x][coord.y] = Math.max(moves, this.distance[v.x][v.y] + 1)
+        } else {
+            Q.push(coord)
+            this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
+        }
+        this.parent[coord.x][coord.y] = v
+        used[coord.x][coord.y] = true
+    }
+    create(v0, moves, arr, player, changeLogicText = true, newBorder = true) {
+        // init
+        let used = this.initialization(v0, moves, arr, newBorder)
+
+        let Q = []
+        Q.push(v0)
+        let enemyEntityQ = [] //for pass mode only
+
+        // BFS
         while (Q.length > 0 || enemyEntityQ.length > 0) {
             let v
             if (Q.length)
@@ -177,44 +235,15 @@ class Way {
             else
                 v = enemyEntityQ.shift()
 
-            arr[v.x][v.y].logicText.setText(this.distance[v.x][v.y])
+            if (changeLogicText)
+                arr[v.x][v.y].logicText.setText(this.distance[v.x][v.y])
+
             if (this.distance[v.x][v.y] > moves)
                 continue
 
             let neighbours = arr[v.x][v.y].hexagon.getNeighbours()
 
-            // if hexagon has the same color, he will be processed later
-
-            let sortedHexagonNeighbours = []
-            for (let i = 0; i < neighbours.length; ++i) {
-                let cell = arr[neighbours[i].x][neighbours[i].y]
-                if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
-                    (cell.unit.notEmpty() && !coordsEqually(neighbours[i], v0) &&
-                        cell.unit.getPlayer() == player)) {
-                    border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
-                    continue
-                }
-
-                let hexagon = cell.hexagon
-
-                if (hexagon.player != player)
-                    sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
-            }
-            for (let i = 0; i < neighbours.length; ++i) {
-                let cell = arr[neighbours[i].x][neighbours[i].y]
-                if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
-                    (cell.unit.notEmpty() && !coordsEqually(neighbours[i], v0) &&
-                        cell.unit.getPlayer() == player)) {
-                    border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
-                    continue
-                }
-
-                let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
-
-                if (hexagon.player == player)
-                    sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
-            }
-
+            let sortedHexagonNeighbours = this.sortNeighbours(v0, v, neighbours, arr, player)
 
 
             for (let i = 0; i < sortedHexagonNeighbours.length; ++i) {
@@ -225,20 +254,7 @@ class Way {
                 }
 
                 if (!used[coord.x][coord.y]) {
-                    let cell = grid.arr[coord.x][coord.y]
-                    if ((cell.building.notEmpty() && cell.building.getPlayer() != player) ||
-                        cell.unit.notEmpty()) {
-                        // enemy enity
-                        enemyEntityQ.push(coord)
-                        this.distance[coord.x][coord.y] = Math.max(moves, this.distance[v.x][v.y] + 1)
-                    } else {
-                        Q.push(coord)
-                        this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
-                    }
-
-
-                    this.parent[coord.x][coord.y] = v
-                    used[coord.x][coord.y] = true
+                    this.notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ)
                 }
             }
         }

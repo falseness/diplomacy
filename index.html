@@ -76,7 +76,11 @@
     <script src='sprites/entities/buildings/farm.js'></script>
     <script src='sprites/entities/buildings/town.js'></script>
     <script src='sprites/entities/units/noob.js'></script>
+    <script src='sprites/entities/units/KOHb.js'></script>
     <script src='sprites/entities/units/normchel.js'></script>
+
+    <script src='sprites/entities/units/range/rangeUnit.js'></script>
+    <script src='sprites/entities/units/range/archer.js'></script>
 
     <script src='player.js'></script>
 
@@ -118,7 +122,7 @@
             top: 0,
             bottom: grid.getBottom(),
             scale: {
-                min: 0.3,
+                min: 0.4,
                 max: 1
             }
         }
@@ -136,11 +140,11 @@
 
             grid.arr[5][3].hexagon.repaint(1)
 
-            let TOWN1 = new Town(5, 3, 10, true)
+            let TOWN1 = new Town(5, 3, 12, true)
 
             grid.arr[14][6].hexagon.repaint(2)
 
-            let TOWN2 = new Town(14, 6, 3, true)
+            let TOWN2 = new Town(14, 6, 5, true)
 
             requestAnimationFrame(gameLoop)
         }

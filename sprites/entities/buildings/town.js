@@ -1,6 +1,6 @@
 class Town extends Building {
-    constructor(x, y, gold = 10, firstTown = false) {
-        let hp = 1 //20
+    constructor(x, y, gold = 12, firstTown = false) {
+        let hp = 20
         super(x, y, 'town', hp)
 
         this.suburbs = []
@@ -13,9 +13,11 @@ class Town extends Building {
 
         this.newProduction = new Production()
         this.production = {
-            noob: new UnitProduction(2, 10, Noob),
-            farm: new FarmProduction(3, 10, Farm, 5),
+            noob: new UnitProduction(1, 10, Noob), //1 10
+            farm: new FarmProduction(4, 12, Farm, 3),
             suburb: new SuburbProduction(0, 1),
+            archer: new UnitProduction(3, 20, Archer), //2 20
+            KOHb: new UnitProduction(4, 25, KOHb),
             normchel: new UnitProduction(5, 30, Normchel)
         }
         this.finishPreparing()
@@ -106,6 +108,7 @@ class Town extends Building {
         return income
     }
     prepare(what) {
+        // bug: unit production with prepare time == 0 cant be prepared
         if (this.isPreparing() || this.gold < this.production[what].cost)
             return false
 
@@ -433,12 +436,13 @@ class SuburbProduction extends Production {
         Q.push(arr[town.coord.x][town.coord.y].hexagon)
 
         used[town.coord.x][town.coord.y] = true
+        let suburbsUsedCount = 0
 
         while (Q.length > 0) {
             let v = Q.shift()
 
-            if (arr[v.coord.x][v.coord.y].hexagon.player != player)
-                continue
+            /*if (arr[v.coord.x][v.coord.y].hexagon.player != player)
+                continue*/
 
             let neighbours = v.getNeighbours()
             for (let i = 0; i < neighbours.length; ++i) {
@@ -452,6 +456,11 @@ class SuburbProduction extends Production {
                     used[neighbours[i].x][neighbours[i].y] = true
                 }
             }
+            if (this.isSuburb(v.coord, arr, player))
+                ++suburbsUsedCount
+
+            if (suburbsUsedCount == town.suburbs.length)
+                break
         }
         return distance
     }

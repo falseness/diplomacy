@@ -31,7 +31,7 @@ class Events {
         this.selected = new Empty()
 
         this.lastKeyboardPressTime = 0
-        this.keyboardPressInterval = 250
+        this.keyboardPressInterval = 100
 
         this.interface = {
             town: _townInterface,

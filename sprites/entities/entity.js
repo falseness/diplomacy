@@ -2,7 +2,7 @@ class Entity extends Sprite {
     constructor(x, y, name, hp) {
         super(x, y)
         this.hp = hp
-        this.killed = this.hp > 0
+        this.killed = this.hp < -0
 
         this.name = name
     }
