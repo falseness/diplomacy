@@ -112,7 +112,7 @@ class MobileScreen extends Screen {
     scale(points, oldDist, oldPos) {
         const scaleRatio = 1.0
         let scale = pointPythagorean(points[0], points[1]) / oldDist * scaleRatio;
-        super.scale(scale, oldPos)
+        super.scale(oldPos, scale)
     }
 }
 class ComputerScreen extends Screen {
