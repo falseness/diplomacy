@@ -13,7 +13,15 @@ function getEventPos(event) {
     }
     return pos
 }
-
+function getTouchesPos(event) {
+    let pos = []
+    for (let i = 0; i < event.targetTouches.length; ++i) {
+        pos.push({x: event.targetTouches[i].clientX, y: event.targetTouches[i].clientY})
+    }
+    if (pos.length == 1)
+        return pos[0]
+    return pos
+}
 function getRealEventPos(event) {
     let rect = mainCanvas.getBoundingClientRect()
 

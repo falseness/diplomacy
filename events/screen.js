@@ -1,27 +1,5 @@
-class MobileScreen {
-    constructor() {
-        this.speedX = 0
-        this.speedY = 0
-    }
-    setSpeedX(speedX) {
-        this.speedX = speedX
-    }
-    setSpeedY(speedY) {
-        this.speedY = speedY
-    }
-    move() {
-        mainCtx.translate(this.speedX, this.speedY)
-        this.speedX = this.speedY = 0
-    }
-}
 class Screen {
-    constructor(margin = 0.15 * height, speed = 0.01 * height) {
-        this.topBorder = margin
-        this.leftBorder = margin
-        this.rightBorder = width - margin
-        this.bottomBorder = height - margin
-        this.speed = speed
-
+    constructor() {
         this.speedX = 0
         this.speedY = 0
     }
@@ -34,6 +12,90 @@ class Screen {
     stop() {
         this.setSpeedX(0)
         this.setSpeedY(0)
+    }
+    getScreenRight() {
+        let res = mapBorder.right - width + mapBorderMargin / canvas.scale
+        return res
+    }
+    getScreenLeft() {
+        let res = mapBorder.left - mapBorderMargin / canvas.scale
+        return res
+    }
+    getScreenBottom() {
+        let res = mapBorder.bottom - height + mapBorderMargin / canvas.scale
+        return res
+    }
+    getScreenTop() {
+        let res = mapBorder.top - mapBorderMargin / canvas.scale
+        return res
+    }
+    outOfBounds(x, y) {
+        let out = { x: 0, y: 0 }
+
+        if (x > this.getScreenRight()) {
+            out.x = 1
+        }
+        if (x < this.getScreenLeft()) {
+            out.x = -1
+        }
+
+        if (y > this.getScreenBottom()) {
+            out.y = 1
+        }
+        if (y < this.getScreenTop()) {
+            out.y = -1
+        }
+        return out
+    }
+    correctSpeed() {
+        let out = this.outOfBounds(canvas.offset.x - this.speedX, canvas.offset.y - this.speedY)
+            // canvas.offset - speed = border <=> speed = canvas.offset - border
+        if (out.x == 1)
+            this.speedX = -(this.getScreenRight() - canvas.offset.x)
+        if (out.x == -1)
+            this.speedX = -(this.getScreenLeft() - canvas.offset.x)
+
+
+        if (out.y == 1)
+            this.speedY = -(this.getScreenBottom() - canvas.offset.y)
+        if (out.y == -1)
+            this.speedY = -(this.getScreenTop() - canvas.offset.y)
+    }
+    move() {
+        this.correctSpeed()
+
+        canvas.offset.x -= this.speedX
+        canvas.offset.y -= this.speedY
+
+        mainCtx.translate(this.speedX, this.speedY)
+    }
+    setMoveMain() {}
+    draw() {}
+}
+class MobileScreen extends Screen {
+    constructor() {
+        super()
+    }
+    setSpeedX(speedX) {
+        this.speedX = speedX
+    }
+    setSpeedY(speedY) {
+        this.speedY = speedY
+    }
+    move() {
+        super.move()
+        
+        this.stop()
+    }
+}
+class ComputerScreen extends Screen {
+    constructor(margin = 0.15 * height, speed = 0.01 * height) {
+        super()
+        this.topBorder = margin
+        this.leftBorder = margin
+        this.rightBorder = width - margin
+        this.bottomBorder = height - margin
+        this.speed = speed
     }
     changeSpeed(pos) {
         this.stop()
@@ -90,73 +152,31 @@ class Screen {
 
         ctx.closePath()
     }
-    getScreenRight() {
-        let res = mapBorder.right - width + mapBorderMargin / canvas.scale
-        return res
+}
+class ComputerScreenGroup {
+    constructor(mainScreen, extremeScreen) {
+        this.main = mainScreen
+        this.extreme = extremeScreen
+        
+        this.moveMain = true
     }
-    getScreenLeft() {
-        let res = mapBorder.left - mapBorderMargin / canvas.scale
-        return res
+    setMoveMain(boolean) {
+        this.moveMain = boolean
     }
-    getScreenBottom() {
-        let res = mapBorder.bottom - height + mapBorderMargin / canvas.scale
-        return res
+    changeSpeed(pos) {
+        if (this.moveMain)
+            this.main.changeSpeed(pos)
+        this.extreme.changeSpeed(pos)
     }
-    getScreenTop() {
-        let res = mapBorder.top - mapBorderMargin / canvas.scale
-        return res
-    }
-    outOfBounds(x, y) {
-        let out = { x: 0, y: 0 }
-
-        if (x > this.getScreenRight()) {
-            out.x = 1
-        }
-        if (x < this.getScreenLeft()) {
-            out.x = -1
-        }
-
-        if (y > this.getScreenBottom()) {
-            out.y = 1
-        }
-        if (y < this.getScreenTop()) {
-            out.y = -1
-        }
-        return out
-    }
-    correctSpeed() {
-        let out = this.outOfBounds(canvas.offset.x - this.speedX, canvas.offset.y - this.speedY)
-            // canvas.offset - speed = border <=> speed = canvas.offset - border
-        if (out.x == 1)
-            this.speedX = -(this.getScreenRight() - canvas.offset.x)
-        if (out.x == -1)
-            this.speedX = -(this.getScreenLeft() - canvas.offset.x)
-
-
-        if (out.y == 1)
-            this.speedY = -(this.getScreenBottom() - canvas.offset.y)
-        if (out.y == -1)
-            this.speedY = -(this.getScreenTop() - canvas.offset.y)
+    scale(pos, scale) {
+        this.main.scale(pos, scale)
     }
     move() {
-
-        this.correctSpeed()
-
-        canvas.offset.x -= this.speedX
-        canvas.offset.y -= this.speedY
-
-        mainCtx.translate(this.speedX, this.speedY)
-            //
-            //mainCtx.translate(this.speedX, this.speedY)
-
-        // mainCtx.setTransform(1, 0, 0, 1, 0, 0)
-        //mainCtx.scale(canvas.scale, canvas.scale)
-        //mainCtx.translate(canvas.offset.x, canvas.offset.y)
-        /*if (this.outOfBounds()) {
-            
-            mainCtx.scale(canvas.scale, canvas.scale)
-        }*/
-        //entityInterface.updatePos()
-        //townInterface.updatePos()
+        this.main.move()
+        this.extreme.move()
+    }
+    draw(ctx) {
+        this.main.draw(ctx)
+        this.extreme.draw(ctx)
     }
 }

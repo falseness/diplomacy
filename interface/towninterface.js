@@ -32,7 +32,7 @@ class TownInterface {
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
             this.height * 0.15, this.height * 0.15)
-        this.goldText = new Text(this.gold.getX() + 0.22 * width * 0.9, this.gold.getY(), 0.03 * this.bestWIDTH, 'error', 'white', 'right')
+        this.goldText = new Text(this.gold.getX() + 0.22 * width, this.gold.getY(), 0.03 * this.bestWIDTH, 'error', 'white', 'right')
             // 
             /*this.gold = createImageByModel(
             {
@@ -168,6 +168,7 @@ class TownInterface {
     setVisible(boolean) {
         this.visible = boolean
         nextTurnButton.setCanClick(!boolean)
+        gameEvent.screen.setMoveMain(!boolean)
     }
     getVisible() {
         return this.visible

@@ -26,24 +26,21 @@ event.stopPropagation();
     
 }, false);*/
 function touchstart(event) {
-    event.preventDefault()
     event.stopPropagation()
     
-    let pos = getEventPos(event)
-    gameEvent.touchstart(pos)
+    let pos = getTouchesPos(event)
+    gameEvent.touchstart(pos, event.targetTouches.length)
 }
 function touchmove(event) {
-    event.preventDefault()
     event.stopPropagation()
     
-    let pos = getEventPos(event)
+    let pos = getTouchesPos(event)
     gameEvent.touchmove(pos)
 }
 function touchend(event) {
-    event.preventDefault()
     event.stopPropagation()
     
-    let pos = getEventPos(event)
+    let pos = getTouchesPos(event)
     //gameEvent.touchend(pos)
 }
 function keyboard(event) {
@@ -78,14 +75,17 @@ class Events {
                 entity: _entityInterface
         }
         if (!mobilePhone) {
-            this.screen = new Screen(nextTurnButtonSize, 0.015 * HEIGHT)
-            this.extremeScreen = new Screen(0.005 * HEIGHT, 0.02 * HEIGHT)
+            this.screen = new ComputerScreenGroup(
+                new ComputerScreen(nextTurnButtonSize, 0.015 * HEIGHT),
+                new ComputerScreen(0.002 * HEIGHT, 0.02 * HEIGHT)
+            )
         }
         else {
-            this.mobileSreen = new MobileScreen()
+            this.screen = new MobileScreen()
+            this.pitchStartDist = 0
             this.touchStartPoint = {}
             this.touchStartTime = 0
-            this.minTouchOffset = 0.005 * HEIGHT
+            this.minTouchOffset = 0//0.005 * HEIGHT
             this.minTouchInterval = 200
         }
     }
@@ -99,13 +99,23 @@ class Events {
         }
         
         if(Math.abs(touchOffset.x) > this.minTouchOffset){
-            this.mobileScreen.setSpeedX(-touchOffset.x);
+            this.screen.setSpeedX(touchOffset.x);
             this.touchStartPoint.x = pos.x
         }
+        if(Math.abs(touchOffset.y) > this.minTouchOffset){
+            this.screen.setSpeedY(touchOffset.y);
+            this.touchStartPoint.y = pos.y
+        }
     }
-    touchstart(pos) {
+    touchstart(pos, touchesCount) {
+        if (touchesCount > 2)
+            return
+        if (touchesCount == 2) {
+            this.pitchStartDist = pointPythagorean()
+            return
+        }
         this.touchStartPoint.x = pos.x
-        this.touchstartPoint.y = pos.y
+        this.touchStartPoint.y = pos.y
         this.touchStartTime = new Date()
         
         return
@@ -154,22 +164,13 @@ class Events {
         this.screen.scale(pos, scale)
     }
     mousemove(pos, realPos) {
-        if (!this.interface.town.getVisible())
-            this.screen.changeSpeed(pos)
-
-        this.extremeScreen.changeSpeed(pos)
+        this.screen.changeSpeed(pos)
     }
     moveScreen() {
-        if (!mobilePhone) {
-            this.screen.move()
-            this.extremeScreen.move()
-        }
-        else
-            this.mobileSreen.move()
+        this.screen.move()
     }
     draw(ctx) {
         this.screen.draw(ctx)
-        this.extremeScreen.draw(ctx)
     }
     getSelected() {
         return this.selected

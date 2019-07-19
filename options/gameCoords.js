@@ -52,7 +52,9 @@ function pythagoreanSquared(x, y) {
 function pythagorean(x, y) {
     return sqrt(pythagoreanSquared(x, y))
 }
-
+function pointPythagorean(pOne, pTwo) {
+    return pythagorean(pOne.x - pTwo.x, pOne.y - pTwo.y)
+}
 function numbersHaveEqualParity(a, b) {
     return !((a & 1) ^ (b & 1))
 }
