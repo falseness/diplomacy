@@ -21,7 +21,7 @@ function nextTurn() {
         }
     }
 }
-const nextTurnButtonSize = WIDTH * 0.07
+const nextTurnButtonSize = WIDTH * 0.1
 let nextTurnButton = new ImageButton(
     new TriangleImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize, 'black', 0.005 * HEIGHT),
     new Rect(WIDTH - nextTurnButtonSize * 2, HEIGHT - nextTurnButtonSize * 2,

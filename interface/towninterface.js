@@ -168,6 +168,7 @@ class TownInterface {
          }*/
     setVisible(boolean) {
         this.visible = boolean
+        nextTurnButton.setCanClick(!boolean)
     }
     getVisible() {
         return this.visible
