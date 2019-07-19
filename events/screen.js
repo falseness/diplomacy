@@ -1,4 +1,4 @@
-class MobileScreen() {
+class MobileScreen {
     constructor() {
         this.speedX = 0
         this.speedY = 0

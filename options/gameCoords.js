@@ -1,5 +1,4 @@
-const mobilePhone = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|
-                     BB|PlayBook|IEMobile|Windows Phone|Kindle|Silk|Opera Mini/i).test(navigator.userAgent)
+const mobilePhone = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|BB|PlayBook|IEMobile|Windows Phone|Kindle|Silk|Opera Mini/i).test(navigator.userAgent)
 
 const WIDTH = window.innerWidth
 const HEIGHT = window.innerHeight
