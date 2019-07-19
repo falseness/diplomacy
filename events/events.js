@@ -35,13 +35,13 @@ function touchmove(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    gameEvent.touchmove(pos)
+    gameEvent.touchmove(pos, event.targetTouches.length)
 }
 function touchend(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    //gameEvent.touchend(pos)
+    gameEvent.touchend(pos, event.targetTouches.length)
 }
 function keyboard(event) {
     gameEvent.keyboard(event.keyCode)
@@ -83,17 +83,32 @@ class Events {
         else {
             this.screen = new MobileScreen()
             this.pitchStartDist = 0
+            this.scaling = false
+            this.pitchStartPos = {}
+            
             this.touchStartPoint = {}
             this.touchStartTime = 0
             this.minTouchOffset = 0//0.005 * HEIGHT
             this.minTouchInterval = 200
         }
     }
-    touchend(pos) {
-        
+    touchend(pos, touchesCount) {
+        this.scaling = false
     }
-    touchmove(pos) {
-        let touchOffset = {
+    touchmove(pos, touchesCount) {
+        if (touchesCount > 2) {
+            this.scaling = false
+            return
+        }
+        if (touchesCount == 2) {
+            if (this.scaling) {
+                this.screen.scale(pos, this.pitchStartDist, this.pitchStartPos)
+            }
+            return
+        }
+        this.scaling = false
+        
+        let touchOffset = {  
             x: pos.x - this.touchStartPoint.x,
             y: pos.y - this.touchStartPoint.y
         }
@@ -108,10 +123,13 @@ class Events {
         }
     }
     touchstart(pos, touchesCount) {
+        this.scaling = false
         if (touchesCount > 2)
             return
         if (touchesCount == 2) {
-            this.pitchStartDist = pointPythagorean()
+            this.pitchStartPos = getAveragePoint(pos)
+            this.pitchStartDist = pointPythagorean(pos[0], pos[1])
+            this.scaling = true
             return
         }
         this.touchStartPoint.x = pos.x

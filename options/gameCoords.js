@@ -55,6 +55,19 @@ function pythagorean(x, y) {
 function pointPythagorean(pOne, pTwo) {
     return pythagorean(pOne.x - pTwo.x, pOne.y - pTwo.y)
 }
+function getAveragePoint(points) {
+    let res = {
+        x: 0,
+        y: 0
+    }
+    for (let i = 0; i < points.length; ++i) {
+        res.x += points[i].x
+        res.y += points[i].y
+    }
+    res.x /= points.length
+    res.y /= points.length
+    return res
+}
 function numbersHaveEqualParity(a, b) {
     return !((a & 1) ^ (b & 1))
 }

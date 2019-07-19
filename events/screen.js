@@ -69,6 +69,28 @@ class Screen {
 
         mainCtx.translate(this.speedX, this.speedY)
     }
+    scale(pos, scale) {
+        const ratio = 0.001
+
+        let zoom = Math.exp(scale * ratio);
+
+        if (canvas.scale * zoom > mapBorder.scale.max)
+            zoom = mapBorder.scale.max / canvas.scale
+        if (canvas.scale * zoom < mapBorder.scale.min)
+            zoom = mapBorder.scale.min / canvas.scale
+
+        mainCtx.translate(canvas.offset.x, canvas.offset.y)
+
+        canvas.offset.x -= pos.x / (canvas.scale * zoom) - pos.x / canvas.scale;
+        canvas.offset.y -= pos.y / (canvas.scale * zoom) - pos.y / canvas.scale;
+
+        mainCtx.scale(zoom, zoom);
+        mainCtx.translate(-canvas.offset.x, -canvas.offset.y);
+
+        canvas.scale *= zoom;
+        width = WIDTH / canvas.scale;
+        height = HEIGHT / canvas.scale;
+    }
     setMoveMain() {}
     draw() {}
 }
@@ -86,6 +108,11 @@ class MobileScreen extends Screen {
         super.move()
         
         this.stop()
+    }
+    scale(points, oldDist, oldPos) {
+        const scaleRatio = 1.0
+        let scale = pointPythagorean(points[0], points[1]) / oldDist * scaleRatio;
+        super.scale(scale, oldPos)
     }
 }
 class ComputerScreen extends Screen {
@@ -108,28 +135,6 @@ class ComputerScreen extends Screen {
             this.setSpeedY(-this.speed)
         if (pos.y < this.topBorder)
             this.setSpeedY(this.speed)
-    }
-    scale(pos, scale) {
-        const ratio = 0.001
-
-        let zoom = Math.exp(scale * ratio);
-
-        if (canvas.scale * zoom > mapBorder.scale.max)
-            zoom = mapBorder.scale.max / canvas.scale
-        if (canvas.scale * zoom < mapBorder.scale.min)
-            zoom = mapBorder.scale.min / canvas.scale
-
-        mainCtx.translate(canvas.offset.x, canvas.offset.y)
-
-        canvas.offset.x -= pos.x / (canvas.scale * zoom) - pos.x / canvas.scale;
-        canvas.offset.y -= pos.y / (canvas.scale * zoom) - pos.y / canvas.scale;
-
-        mainCtx.scale(zoom, zoom);
-        mainCtx.translate(-canvas.offset.x, -canvas.offset.y);
-
-        canvas.scale *= zoom;
-        width = WIDTH / canvas.scale;
-        height = HEIGHT / canvas.scale;
     }
     draw(ctx) {
         if (!debug)
