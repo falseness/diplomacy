@@ -235,7 +235,7 @@ class Way {
             else
                 v = enemyEntityQ.shift()
 
-            if (changeLogicText)
+            if (changeLogicText && this.distance[v.x][v.y])
                 arr[v.x][v.y].logicText.setText(this.distance[v.x][v.y])
 
             if (this.distance[v.x][v.y] > moves)

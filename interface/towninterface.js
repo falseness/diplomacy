@@ -6,20 +6,29 @@ class TownInterface {
             y: height * 0.0,
         }*/
         this.visible = false
-        this.pos = {
-            x: width * 0.75,
-            y: height * 0.03, // 0.12
+        let bestWIDTH = 1400
+        if (bestWIDTH > WIDTH) {
+            bestWIDTH -= 200
         }
-        this.height = 0.4 * height
+        while (bestWIDTH > WIDTH)
+            bestWIDTH *= 0.9
+        this.pos = {
+            x: bestWIDTH * 0.75,
+            y: HEIGHT * 0.03, // 0.12
+        }
+        this.height = 0.4 * HEIGHT
         this.width = width - this.pos.x
 
-        let stroke = 0.002 * width
-        let cornerRadius = 0.03 * width
+        const bestThisWidthWIDTHRatio = 4
+        this.bestWIDTH = this.width * bestThisWidthWIDTHRatio
+
+        let stroke = 0.002 * this.bestWIDTH
+        let cornerRadius = 0.03 * this.bestWIDTH
             //let indent = stroke + cornerRadius
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [cornerRadius, 0, 0, cornerRadius], stroke)
 
         this.gold = new JustImage('gold', {
-                x: this.pos.x + 0.22 * width * 0.1 + 0.22 * width * 0.07,
+                x: this.pos.x + 0.22 * 0.17 * this.bestWIDTH,
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
             this.height * 0.15, this.height * 0.15)
@@ -62,7 +71,6 @@ class TownInterface {
     makeTrainInterfaces() {
         this.trainInterfaces = {}
 
-        console.log(height / width)
         const heightWidthBestRatio = 0.55
         let trainInterfaces = {
             name: ['noob', 'farm', 'suburb', 'archer', 'KOHb', 'normchel'],
@@ -72,12 +80,12 @@ class TownInterface {
                     y: 0
                 },
                 costText: {
-                    x: 0.22 * width * 0.26,
+                    x: 0.22 * this.bestWIDTH * 0.26,
                     y: 0
                 },
                 button: {
-                    x: 0.23 * width * 0.9 - 0.175 * height,
-                    y: -0.04 * height / 2
+                    x: 0.11 * this.bestWIDTH * 0.9,
+                    y: -0.07 * HEIGHT / 2
                 }
             },
             model: {
@@ -86,22 +94,22 @@ class TownInterface {
                     height: 0.1 * height
                 },
                 costText: {
-                    fontSize: 0.04 * width * heightWidthBestRatio,
+                    fontSize: 0.04 * this.bestWIDTH * heightWidthBestRatio,
                     text: 'cost'
                 },
                 button: {
                     text: {
                         text: 'train',
                         color: '#747474',
-                        fontSize: 0.03 * width * heightWidthBestRatio
+                        fontSize: 0.04 * this.bestWIDTH * heightWidthBestRatio
                     },
                     rect: {
                         color: '#f7f7f7',
-                        cornerRadius: 0.01 * height,
+                        cornerRadius: 0.03 * HEIGHT,
                         borderColor: 'black',
-                        stroke: 0.002 * height,
-                        width: 0.175 * width * heightWidthBestRatio,
-                        height: 0.04 * height
+                        stroke: 0.003 * HEIGHT,
+                        width: 0.18 * this.bestWIDTH * heightWidthBestRatio,
+                        height: 0.07 * HEIGHT
                     }
                 }
             }
@@ -114,7 +122,7 @@ class TownInterface {
 
             let image
             if (trainInterfaces.name[i] == 'suburb') {
-                image = new SuburbImage({}, 0.22 * width * 0.1, 0.002 * width)
+                image = new SuburbImage({}, 0.22 * WIDTH * 0.1, 0.002 * WIDTH)
             } else
                 image = new JustImage(trainInterfaces.name[i], {}, models.image.width, models.image.height)
 

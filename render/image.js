@@ -105,10 +105,14 @@ class TriangleImage extends ShapeImage {
 
         let pos = { x: this.pos.x, y: this.pos.y }
         let side = this.side
-        ctx.moveTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y - side / 2)
-        ctx.lineTo(pos.x + side * Math.sin(Math.PI / 3) * (2 / 3), pos.y)
-        ctx.lineTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y + side / 2)
-        ctx.lineTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y - side / 2)
+            /*ctx.moveTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y - side / 2)
+            ctx.lineTo(pos.x + side * Math.sin(Math.PI / 3) * (2 / 3), pos.y)
+            ctx.lineTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y + side / 2)
+            ctx.lineTo(pos.x - side * Math.sin(Math.PI / 3) * (1 / 3), pos.y - side / 2)*/
+        ctx.moveTo(pos.x - side / 2, pos.y - side / 2)
+        ctx.lineTo(pos.x + side / 2, pos.y)
+        ctx.lineTo(pos.x - side / 2, pos.y + side / 2)
+        ctx.lineTo(pos.x - side / 2, pos.y - side / 2)
     }
     draw(ctx) {
         super.draw(ctx)

@@ -58,14 +58,19 @@ class Grid extends SpritesGroup {
             }
         }
     }
-    drawText(ctx) {
+    drawTextCoord(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
-                if (this.drawLogicText)
-                    cell.logicText.draw(ctx)
-                else
-                    cell.coordText.draw(ctx)
+                cell.coordText.draw(ctx)
+            }
+        }
+    }
+    drawTextLogic(ctx) {
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                let cell = this.arr[i][j]
+                cell.logicText.draw(ctx)
             }
         }
     }
@@ -81,8 +86,14 @@ class Grid extends SpritesGroup {
     }
     draw(ctx) {
         this.drawHexagons(ctx)
-        this.drawText(ctx)
+        
+        if (!this.drawLogicText)
+            this.drawTextCoord(ctx)
+        
         this.drawOther(ctx)
+        
+        if (this.drawLogicText)
+            this.drawTextLogic(ctx)
     }
 }
 

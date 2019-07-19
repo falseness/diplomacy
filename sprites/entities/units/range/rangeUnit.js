@@ -27,12 +27,10 @@ class RangeUnit extends Unit {
                 // attack range > speed by default
         }
 
-        if (cell.building.notEmpty()) {
-            if (cell.building.getPlayer() != this.getPlayer()) {
-                cell.building.hit(this.getDMG())
+        if (cell.building.notEmpty() && cell.building.getPlayer() != this.getPlayer()) {
+            cell.building.hit(this.getDMG())
 
-                this.moves = 0
-            }
+            this.moves = 0
             this.removeSelect()
             return true
         }
@@ -74,7 +72,7 @@ class RangeWay extends Way {
         this.parent[coord.x][coord.y] = v
         used[coord.x][coord.y] = true
     }
-    create(v0, moves, arr, player, changeLogicText = false, newBorder = false) {
+    create(v0, moves, arr, player, changeLogicText = true, newBorder = false) {
         // dont chage logic text and create border by default
         super.create(v0, moves, arr, player, changeLogicText, newBorder)
     }

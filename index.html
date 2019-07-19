@@ -29,7 +29,7 @@
     </style>
 </head>
 
-<body>
+<body id="container">
     <canvas id="canvas"></canvas>
     <canvas id="interface"></canvas>
 
@@ -40,14 +40,16 @@
         <script src = "objectModels/textModel.js"></script>
         <script src = "objectModels/rectModel.js"></script>-->
 
+    <script src='options/gameCoords.js'></script>
+    <script src='options/dictionaryEnumeration.js'></script>
+    <script src='options/dictionaryToList.js'></script>
+
     <script src='render/loadassets.js'></script>
     <script src='render/image.js'></script>
     <script src='render/rgbtohex.js'></script>
     <script src='render/draw.js'></script>
 
-    <script src='options/gameCoords.js'></script>
-    <script src='options/dictionaryEnumeration.js'></script>
-    <script src='options/dictionaryToList.js'></script>
+
 
     <script src='interface/entityinterface.js'></script>
     <script src='interface/towninterface.js'></script>
@@ -87,7 +89,10 @@
     <script src='nextTurn.js'></script>
     <script>
         'use strict'
-
+        /*if (document.querySelector("#container").requestFullscreen)
+            document.querySelector("#container").requestFullscreen();
+        else if (document.querySelector("#container").webkitRequestFullScreen)
+            document.querySelector("#container").webkitRequestFullScreen()*/
         let mainCanvas = document.getElementById('canvas')
         let mainCtx = mainCanvas.getContext('2d')
 
@@ -158,4 +163,4 @@
     </script>
 </body>
 
-</html
+</html>
