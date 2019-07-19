@@ -1,5 +1,5 @@
 let assets = {
-    size: 128,
+    size: 1.6 * basis.r,
     gold: new Image(),
     nextTurnButton: new Image,
     town: new Image(),

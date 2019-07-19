@@ -4,8 +4,7 @@ const WIDTH = window.innerWidth
 const HEIGHT = window.innerHeight
 let width = WIDTH
 let height = HEIGHT
-const radius = 0.14084 * WIDTH
-
+const radius = 0.05555555555555555 * WIDTH
 let basis = {
     r: radius,
     offset: {

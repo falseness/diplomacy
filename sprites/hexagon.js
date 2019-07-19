@@ -66,11 +66,12 @@ class Hexagon extends Sprite {
         }
     }
     draw(ctx) {
+        const strokeWidth = 0.02 * basis.r 
         ctx.beginPath()
 
         ctx.fillStyle = players[this.player].getHexColor()
         ctx.strokeStyle = 'black'
-        ctx.lineWidth = 3
+        ctx.lineWidth = strokeWidth
 
         let pos = this.getPos()
         ctx.moveTo(pos.x + basis.r * Math.cos(0), pos.y + basis.r * Math.sin(0))

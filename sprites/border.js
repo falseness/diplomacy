@@ -9,7 +9,7 @@ class Border {
     isCleaned() {
         return !this.lines.length
     }
-    createLine(pos, side, color = 'white', strokeWidth = 4) {
+    createLine(pos, side, color = 'white', strokeWidth = 0.04 * basis.r ) {
         const hexagonLine = [
             [
                 [-basis.r / 2, -basis.r / 2 * Math.sqrt(3)],
