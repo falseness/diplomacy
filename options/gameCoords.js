@@ -50,7 +50,7 @@ function pythagoreanSquared(x, y) {
 }
 
 function pythagorean(x, y) {
-    return sqrt(pythagoreanSquared(x, y))
+    return Math.sqrt(pythagoreanSquared(x, y))
 }
 function pointPythagorean(pOne, pTwo) {
     return pythagorean(pOne.x - pTwo.x, pOne.y - pTwo.y)
