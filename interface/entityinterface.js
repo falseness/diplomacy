@@ -9,10 +9,10 @@ class EntityInterface {
 
         this.pos = {
             x: 0,
-            y: 0.65 * height
+            y: 0.6 * HEIGHT
         }
         this.height = HEIGHT - this.pos.y
-        this.width = this.height * 1.5
+        this.width = this.height * 1.7
 
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [0, cornerRadius, 0, 0], stroke)
 
