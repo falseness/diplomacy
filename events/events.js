@@ -29,19 +29,19 @@ function touchstart(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    gameEvent.touchstart(pos, event.targetTouches.length)
+    gameEvent.touchstart(pos, event.changedTouches.length)
 }
 function touchmove(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    gameEvent.touchmove(pos, event.targetTouches.length)
+    gameEvent.touchmove(pos, event.changedTouches.length)
 }
 function touchend(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    gameEvent.touchend(pos, event.targetTouches.length)
+    gameEvent.touchend(pos, event.changedTouches.length)
 }
 function keyboard(event) {
     gameEvent.keyboard(event.keyCode)
