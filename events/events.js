@@ -11,6 +11,7 @@ function createEvents() {
         document.addEventListener('touchstart', touchstart)
         document.addEventListener('touchmove', touchmove)
         document.addEventListener('touchend', touchend)
+        document.addEventListener('touchcancel', touchend)
     }
 }
 
@@ -29,19 +30,19 @@ function touchstart(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    gameEvent.touchstart(pos, event.targetTouches.length)
+    gameEvent.touchstart(pos, event.touches.length)
 }
 function touchmove(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    gameEvent.touchmove(pos, event.targetTouches.length)
+    gameEvent.touchmove(pos, event.touches.length)
 }
 function touchend(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
-    gameEvent.touchend(pos, event.targetTouches.length)
+    gameEvent.touchend(pos, event.touches.length)
 }
 function keyboard(event) {
     gameEvent.keyboard(event.keyCode)
@@ -90,10 +91,12 @@ class Events {
             this.touchStartTime = 0
             this.minTouchOffset = 0//0.005 * HEIGHT
             this.minTouchInterval = 200
+            this.scalingStopped = true
         }
     }
     touchend(pos, touchesCount) {
         this.scaling = false
+        this.scalingStopped = !touchesCount
     }
     touchmove(pos, touchesCount) {
         if (touchesCount > 2) {
@@ -107,6 +110,8 @@ class Events {
             return
         }
         this.scaling = false
+        if (!this.scalingStopped)
+            return
         
         let touchOffset = {  
             x: pos.x - this.touchStartPoint.x,

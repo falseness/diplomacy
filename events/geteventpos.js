@@ -16,7 +16,7 @@ function getEventPos(event) {
 function getTouchesPos(event) {
     let pos = []
     for (let i = 0; i < event.targetTouches.length; ++i) {
-        pos.push({x: event.targetTouches[i].clientX, y: event.targetTouches[i].clientY})
+        pos.push({x: event.touches[i].clientX, y: event.touches[i].clientY})
     }
     if (pos.length == 1)
         return pos[0]
