@@ -97,21 +97,22 @@ class Screen {
 class MobileScreen extends Screen {
     constructor() {
         super()
+        this.ACCELERATION = 0.001 * HEIGHT
+        this.speedRatio = 2
     }
     setSpeedX(speedX) {
-        this.speedX = speedX
+        this.speedX = speedX * this.speedRatio / canvas.scale
     }
     setSpeedY(speedY) {
-        this.speedY = speedY
+        this.speedY = speedY * this.speedRatio / canvas.scale
     }
     move() {
         super.move()
-        
         this.stop()
     }
     scale(points, oldDist, oldPos) {
         const scaleRatio = 1.0
-        let scale = pointPythagorean(points[0], points[1]) / oldDist * scaleRatio;
+        let scale = oldDist - pointPythagorean(points[0], points[1])
         super.scale(oldPos, scale)
     }
 }

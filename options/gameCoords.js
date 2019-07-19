@@ -55,6 +55,13 @@ function pythagorean(x, y) {
 function pointPythagorean(pOne, pTwo) {
     return pythagorean(pOne.x - pTwo.x, pOne.y - pTwo.y)
 }
+function getNumberSign(num) {
+    if (num > 0)
+        return 1
+    if (num < 0)
+        return -1
+    return 0
+}
 function getAveragePoint(points) {
     let res = {
         x: 0,
