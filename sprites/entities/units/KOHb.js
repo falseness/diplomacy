@@ -1,6 +1,6 @@
 class KOHb extends Unit {
     constructor(x, y, town) {
-        super(x, y, 'KOHb', 5, 3, 4, 8, town)
+        super(x, y, 'KOHb', 5, 3, 3, 8, town)
         this.mirrorX = false
     }
     move(coord, arr) {

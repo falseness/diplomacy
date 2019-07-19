@@ -1,3 +1,19 @@
+class MobileScreen() {
+    constructor() {
+        this.speedX = 0
+        this.speedY = 0
+    }
+    setSpeedX(speedX) {
+        this.speedX = speedX
+    }
+    setSpeedY(speedY) {
+        this.speedY = speedY
+    }
+    move() {
+        mainCtx.translate(this.speedX, this.speedY)
+        this.speedX = this.speedY = 0
+    }
+}
 class Screen {
     constructor(margin = 0.15 * height, speed = 0.01 * height) {
         this.topBorder = margin

@@ -1,11 +1,51 @@
 function createEvents() {
     document.addEventListener('click', click)
-    document.addEventListener('mousemove', mousemove)
-    document.addEventListener('mousewheel', mousewheel)
+    
+    if (!mobilePhone) {
+        document.addEventListener('mousemove', mousemove)
+        document.addEventListener('mousewheel', mousewheel)
 
-    document.addEventListener('keydown', keyboard)
+        document.addEventListener('keydown', keyboard)
+    }
+    else {
+        document.addEventListener('touchstart', touchstart)
+        document.addEventListener('touchmove', touchmove)
+        document.addEventListener('touchend', touchend)
+    }
 }
 
+/*document.addEventListener('touchmove', function(event) {
+event.preventDefault();
+event.stopPropagation();
+
+}, false);
+
+document.addEventListener('touchend', function(event) {
+event.preventDefault();
+event.stopPropagation();
+    
+}, false);*/
+function touchstart(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    
+    let pos = getEventPos(event)
+    gameEvent.touchstart(pos)
+}
+function touchmove(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    
+    let pos = getEventPos(event)
+    gameEvent.touchmove(pos)
+}
+function touchend(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    
+    let pos = getEventPos(event)
+    //gameEvent.touchend(pos)
+}
 function keyboard(event) {
     gameEvent.keyboard(event.keyCode)
 }
@@ -37,9 +77,68 @@ class Events {
             town: _townInterface,
                 entity: _entityInterface
         }
-
-        this.screen = new Screen(0.1 * height, 0.015 * height)
-        this.extremeScreen = new Screen(0.005 * height, 0.02 * height)
+        if (!mobilePhone) {
+            this.screen = new Screen(nextTurnButtonSize, 0.015 * HEIGHT)
+            this.extremeScreen = new Screen(0.005 * HEIGHT, 0.02 * HEIGHT)
+        }
+        else {
+            this.mobileSreen = new MobileScreen()
+            this.touchStartPoint = {}
+            this.touchStartTime = 0
+            this.minTouchOffset = 0.005 * HEIGHT
+            this.minTouchInterval = 200
+        }
+    }
+    touchend(pos) {
+        
+    }
+    touchmove(pos) {
+        let touchOffset = {
+            x: pos.x - this.touchStartPoint.x,
+            y: pos.y - this.touchStartPoint.y
+        }
+        
+        if(Math.abs(touchOffset.x) > this.minTouchOffset){
+            this.mobileScreen.setSpeedX(-touchOffset.x);
+            this.touchStartPoint.x = pos.x
+        }
+    }
+    touchstart(pos) {
+        this.touchStartPoint.x = pos.x
+        this.touchstartPoint.y = pos.y
+        this.touchStartTime = new Date()
+        
+        return
+        /*
+        document.addEventListener('touchmove', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var otk={};
+        nowPoint=event.changedTouches[0];
+        otk.x=nowPoint.pageX-startPoint.x;
+        if(Math.abs(otk.x)>200){
+        if(otk.x<0){}
+        if(otk.x>0){}
+        startPoint={x:nowPoint.pageX,y:nowPoint.pageY};
+        }
+        }, false);
+        document.addEventListener('touchend', function(event) {
+        var pdelay=new Date(); 
+        nowPoint=event.changedTouches[0];
+        var xAbs = Math.abs(startPoint.x - nowPoint.pageX);
+        var yAbs = Math.abs(startPoint.y - nowPoint.pageY);
+        if ((xAbs > 20 || yAbs > 20) && (pdelay.getTime()-ldelay.getTime())<200) {
+        if (xAbs > yAbs) {
+        if (nowPoint.pageX < startPoint.x){/*СВАЙП ВЛЕВО}
+        else{/*СВАЙП ВПРАВО}
+        }
+        else {
+        if (nowPoint.pageY < startPoint.y){/*СВАЙП ВВЕРХ}
+        else{/*СВАЙП ВНИЗ}
+        }
+        }
+        }, false);
+        */
     }
     keyboard(keycode) {
         if (Date.now() - this.lastKeyboardPressTime < this.keyboardPressInterval)
@@ -48,6 +147,8 @@ class Events {
         this.lastKeyboardPressTime = Date.now()
         if (keycode == 13)
             nextTurn()
+        if (keycode == 27)
+            debug = !debug
     }
     mousewheel(pos, scale) {
         this.screen.scale(pos, scale)
@@ -59,8 +160,12 @@ class Events {
         this.extremeScreen.changeSpeed(pos)
     }
     moveScreen() {
-        this.screen.move()
-        this.extremeScreen.move()
+        if (!mobilePhone) {
+            this.screen.move()
+            this.extremeScreen.move()
+        }
+        else
+            this.mobileSreen.move()
     }
     draw(ctx) {
         this.screen.draw(ctx)
