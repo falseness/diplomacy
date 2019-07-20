@@ -3,7 +3,7 @@
 
 <head>
     <title>Diplomacy</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
     <meta charset="UTF-8">
     <style>
         body {
@@ -95,20 +95,10 @@
             document.querySelector("#container").webkitRequestFullScreen()*/
         let mainCanvas = document.getElementById('canvas')
         
-        mainCanvas.width = WIDTH * window.devicePixelRatio
-        mainCanvas.height = HEIGHT * window.devicePixelRatio
-        mainCanvas.style.width = WIDTH + 'px'
-        mainCanvas.style.height = HEIGHT + 'px'
-        
         let mainCtx = mainCanvas.getContext('2d')
         
 
         let interfaceCanvas = document.getElementById('interface')
-        
-        interfaceCanvas.width = WIDTH * window.devicePixelRatio
-        interfaceCanvas.height = HEIGHT * window.devicePixelRatio
-        interfaceCanvas.style.width = WIDTH + 'px'
-        interfaceCanvas.style.height = HEIGHT + 'px'
         
         let interfaceCtx = interfaceCanvas.getContext('2d')
 
@@ -118,6 +108,7 @@
         let gameEvent = new Events(townInterface, entityInterface)
         let border = new Border()
 
+        let KONB
         let players = [new Empty, new Player({
                 r: 255,
                 g: 0,
@@ -149,9 +140,18 @@
         nextTurnButton.setColor(players[whooseTurn].getHexColor())
 
         function start() {
-            mainCanvas.width = interfaceCanvas.width = WIDTH
-            mainCanvas.height = interfaceCanvas.height = HEIGHT
-
+           
+            interfaceCanvas.width = WIDTH * window.devicePixelRatio
+            interfaceCanvas.height = HEIGHT * window.devicePixelRatio
+            interfaceCanvas.style.width = WIDTH + 'px'
+            interfaceCanvas.style.height = HEIGHT + 'px'
+            
+            mainCanvas.width = WIDTH * window.devicePixelRatio
+            mainCanvas.height = HEIGHT * window.devicePixelRatio
+            mainCanvas.style.width = WIDTH + 'px'
+            mainCanvas.style.height = HEIGHT + 'px'
+        
+            
             createEvents()
             loadAssets()
 
