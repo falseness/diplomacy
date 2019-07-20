@@ -4,7 +4,7 @@ class Noob extends Unit {
         const healSpeed = 1
         const dmg = 1
         const speed = 2
-        const salary = 2
+        const salary = 1
         super(x, y, 'noob', hp, healSpeed, dmg, speed, salary, town)
     }
 }
