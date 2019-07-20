@@ -107,8 +107,7 @@
         let entityInterface = new EntityInterface()
         let gameEvent = new Events(townInterface, entityInterface)
         let border = new Border()
-
-        let KONB
+        
         let players = [new Empty, new Player({
                 r: 255,
                 g: 0,
@@ -138,19 +137,18 @@
 
         let whooseTurn = 1
         nextTurnButton.setColor(players[whooseTurn].getHexColor())
-
+        
         function start() {
            
-            interfaceCanvas.width = WIDTH * window.devicePixelRatio
-            interfaceCanvas.height = HEIGHT * window.devicePixelRatio
-            interfaceCanvas.style.width = WIDTH + 'px'
-            interfaceCanvas.style.height = HEIGHT + 'px'
+            interfaceCanvas.width = WIDTH
+            interfaceCanvas.height = HEIGHT
+            interfaceCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
+            interfaceCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
             
-            mainCanvas.width = WIDTH * window.devicePixelRatio
-            mainCanvas.height = HEIGHT * window.devicePixelRatio
-            mainCanvas.style.width = WIDTH + 'px'
-            mainCanvas.style.height = HEIGHT + 'px'
-        
+            mainCanvas.width = WIDTH
+            mainCanvas.height = HEIGHT
+            mainCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
+            mainCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
             
             createEvents()
             loadAssets()

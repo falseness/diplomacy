@@ -2,13 +2,13 @@ function getEventPos(event) {
     let pos
     if (typeof event.changedTouches != 'undefined') {
         pos = {
-            x: event.changedTouches[0].clientX,
-            y: event.changedTouches[0].clientY
+            x: event.changedTouches[0].clientX * window.devicePixelRatio,
+            y: event.changedTouches[0].clientY * window.devicePixelRatio
         }
     } else {
         pos = {
-            x: event.clientX,
-            y: event.clientY
+            x: event.clientX * window.devicePixelRatio,
+            y: event.clientY * window.devicePixelRatio
         }
     }
     return pos
@@ -16,7 +16,8 @@ function getEventPos(event) {
 function getTouchesPos(event) {
     let pos = []
     for (let i = 0; i < event.targetTouches.length; ++i) {
-        pos.push({x: event.touches[i].clientX, y: event.touches[i].clientY})
+        pos.push({x: event.touches[i].clientX * window.devicePixelRatio, 
+                  y: event.touches[i].clientY * window.devicePixelRatio})
     }
     if (pos.length == 1)
         return pos[0]

@@ -17,7 +17,7 @@ class TownInterface {
             y: HEIGHT * 0.03, // 0.12
         }
         this.height = 0.4 * HEIGHT
-        this.width = width - this.pos.x
+        this.width = WIDTH - this.pos.x
 
         const bestThisWidthWIDTHRatio = 4
         this.bestWIDTH = this.width * bestThisWidthWIDTHRatio
@@ -32,7 +32,7 @@ class TownInterface {
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
             this.height * 0.15, this.height * 0.15)
-        this.goldText = new Text(this.gold.getX() + 0.22 * width, this.gold.getY(), 0.03 * this.bestWIDTH, 'error', 'white', 'right')
+        this.goldText = new Text(this.gold.getX() + 0.22 * WIDTH, this.gold.getY(), 0.03 * this.bestWIDTH, 'error', 'white', 'right')
             // 
             /*this.gold = createImageByModel(
             {

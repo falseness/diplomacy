@@ -1,6 +1,7 @@
 function drawMain() {
     mainCtx.clearRect(canvas.offset.x, canvas.offset.y,
         width, height)
+
     grid.draw(mainCtx)
     mainCtx.beginPath()
 

@@ -1,10 +1,10 @@
 const mobilePhone = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|BB|PlayBook|IEMobile|Windows Phone|Kindle|Silk|Opera Mini/i).test(navigator.userAgent)
 
-const WIDTH = window.innerWidth
-const HEIGHT = window.innerHeight
+const WIDTH = window.innerWidth * window.devicePixelRatio
+const HEIGHT = window.innerHeight * window.devicePixelRatio
 let width = WIDTH
 let height = HEIGHT
-const radius = 0.05555555555555555 * WIDTH
+const radius = 0.05555555555555555 * WIDTH// * window.devicePixelRatio
 let basis = {
     r: radius,
     offset: {
