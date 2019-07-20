@@ -32,7 +32,8 @@ class TownInterface {
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
             this.height * 0.15, this.height * 0.15)
-        this.goldText = new Text(this.gold.getX() + 0.22 * WIDTH, this.gold.getY(), 0.03 * this.bestWIDTH, 'error', 'white', 'right')
+        this.goldText = new Text(this.gold.getX() + 0.22 * this.bestWIDTH * 0.92, this.gold.getY(), 
+                                 0.03 * this.bestWIDTH / window.devicePixelRatio, 'error', 'white', 'right')
             // 
             /*this.gold = createImageByModel(
             {
@@ -93,14 +94,16 @@ class TownInterface {
                     height: 0.1 * height
                 },
                 costText: {
-                    fontSize: 0.04 * this.bestWIDTH * heightWidthBestRatio,
+                    fontSize: 0.04 * this.bestWIDTH * 
+                        heightWidthBestRatio / window.devicePixelRatio,
                     text: 'cost'
                 },
                 button: {
                     text: {
                         text: 'train',
                         color: '#747474',
-                        fontSize: 0.04 * this.bestWIDTH * heightWidthBestRatio
+                        fontSize: 0.04 * this.bestWIDTH * 
+                            heightWidthBestRatio / window.devicePixelRatio
                     },
                     rect: {
                         color: '#f7f7f7',
