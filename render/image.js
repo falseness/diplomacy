@@ -76,15 +76,16 @@ class ShapeImage {
         ctx.closePath()
         if (this.strokeWidth)
             ctx.stroke()
-        ctx.fill()
+        if (this.color)
+            ctx.fill()
     }
 }
 class SuburbImage extends ShapeImage {
     constructor(pos, r, strokeWidth = 0, strokeColor = 'black') {
-        const suburbAlpha = 0.4
+        //const suburbAlpha = 0.4
         const maxRGBInt = 255
-        let color = `rgba(${maxRGBInt}, ${maxRGBInt}, ${maxRGBInt}, ${suburbAlpha})`
-
+        //let color = `rgba(${maxRGBInt}, ${maxRGBInt}, ${maxRGBInt}, ${suburbAlpha})`
+        let color = false
         super(pos, color, strokeColor, strokeWidth)
         this.r = r
     }
