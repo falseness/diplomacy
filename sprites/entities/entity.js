@@ -1,24 +1,42 @@
 class Entity extends Sprite {
-    constructor(x, y, name, hp) {
+    constructor(x, y, name, hp, healSpeed) {
         super(x, y)
         this.hp = hp
-        this.killed = this.hp < -0
-
+        this.maxHP = hp
+        
+        this.killed = this.hp <= 0
+        
+        this.healSpeed = healSpeed
+        this.wasHitted = false
+        
         this.name = name
     }
     isKilled() {
         return this.killed
     }
+    isHealing() {
+        return this.hp != this.maxHP && !this.wasHitted
+    }
+    getHPIncrease() {
+        if (this.wasHitted)
+            return 0
+        return Math.min(this.maxHP - this.hp, this.healSpeed)
+    }
     getInfo() {
+        let hp = this.hp
+        if (this.isHealing())
+            hp += ' (+' + this.getHPIncrease() + ')'
+        hp += ' / ' + this.maxHP
         return {
             name: this.name,
             info: {
-                hp: this.hp
+                hp: hp
             }
         }
     }
     hit(dmg) {
         this.hp -= dmg
+        this.wasHitted = true
         if (this.hp <= 0)
             this.kill()
     }
@@ -39,5 +57,8 @@ class Entity extends Sprite {
     }
     draw(ctx) {
         drawImage(ctx, this.name, this.getPos())
+    }
+    nextTurn() {
+        console.log("ERROR entity next turn")
     }
 }

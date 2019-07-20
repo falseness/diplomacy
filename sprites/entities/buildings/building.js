@@ -1,6 +1,6 @@
 class Building extends Entity {
-    constructor(x, y, name, hp) {
-        super(x, y, name, hp)
+    constructor(x, y, name, hp, healSpeed) {
+        super(x, y, name, hp, healSpeed)
         grid.arr[x][y].building = this
     }
     needInstructions() {
@@ -19,5 +19,12 @@ class Building extends Entity {
     }
     isBuilding() {
         return true
+    }
+    nextTurn(whooseTurn) {
+        if (this.getPlayer() == whooseTurn) {
+            this.hp += this.getHPIncrease()
+            
+            this.wasHitted = false
+        }
     }
 }

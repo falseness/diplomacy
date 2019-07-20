@@ -1,6 +1,6 @@
 class RangeUnit extends Unit {
-    constructor(x, y, name, hp, dmg, range, speed, salary, town) {
-        super(x, y, name, hp, dmg, speed, salary, town)
+    constructor(x, y, name, hp, healSpeed, dmg, range, speed, salary, town) {
+        super(x, y, name, hp, healSpeed, dmg, speed, salary, town)
         this.range = range
 
         this.rangeWay = new RangeWay()

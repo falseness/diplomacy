@@ -1,5 +1,10 @@
 class Noob extends Unit {
     constructor(x, y, town) {
-        super(x, y, 'noob', 3, 1, 2, 2, town)
+        const hp = 2
+        const healSpeed = 1
+        const dmg = 1
+        const speed = 2
+        const salary = 2
+        super(x, y, 'noob', hp, healSpeed, dmg, speed, salary, town)
     }
 }

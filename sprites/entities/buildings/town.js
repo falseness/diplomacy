@@ -1,7 +1,8 @@
 class Town extends Building {
     constructor(x, y, gold = 12, firstTown = false) {
-        let hp = 20
-        super(x, y, 'town', hp)
+        const hp = 20
+        const healSpeed = 4
+        super(x, y, 'town', hp, healSpeed)
 
         this.suburbs = []
         this.buildings = []
@@ -184,6 +185,7 @@ class Town extends Building {
         this.updateSuburbsArray()
         if (!this.isMyTurn())
             return
+        super.nextTurn(whooseTurn)
 
         this.newProduction.nextTurn(this)
 

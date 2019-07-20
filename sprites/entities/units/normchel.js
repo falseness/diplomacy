@@ -1,5 +1,10 @@
 class Normchel extends Unit {
     constructor(x, y, town) {
-        super(x, y, 'normchel', 6, 4, 2, 6, town)
+        const hp = 5
+        const healSpeed = 2
+        const dmg = 3
+        const speed = 2
+        const salary = 4
+        super(x, y, 'normchel', hp, healSpeed, dmg, speed, salary, town)
     }
 }

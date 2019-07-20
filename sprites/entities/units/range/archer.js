@@ -1,5 +1,11 @@
 class Archer extends RangeUnit {
     constructor(x, y, town) {
-        super(x, y, 'archer', 1, 2, 2, 2, 4, town)
+        const hp = 2
+        const healSpeed = 1
+        const dmg = 1
+        const speed = 2
+        const salary = 2
+        const range = 3
+        super(x, y, 'archer', hp, healSpeed, dmg, range, speed, salary, town)
     }
 }

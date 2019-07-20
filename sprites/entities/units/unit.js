@@ -1,6 +1,6 @@
 class Unit extends Entity {
-    constructor(x, y, name, hp, dmg, speed, salary, town) {
-        super(x, y, name, hp)
+    constructor(x, y, name, hp, healSpeed, dmg, speed, salary, town) {
+        super(x, y, name, hp, healSpeed)
         this.dmg = dmg
         this.speed = speed
         this.moves = speed
@@ -123,9 +123,26 @@ class Unit extends Entity {
     isUnit() {
         return true
     }
+    onSuburbHexagon() {
+        return grid.arr[this.coord.x][this.coord.y].hexagon.isSuburb()
+    }
+    isHealing() {
+        if (!this.onSuburbHexagon())
+            return false
+        return super.isHealing()
+    }
+    getHPIncrease() {
+        if (!this.onSuburbHexagon())
+            return 0
+        return super.getHPIncrease()
+    }
     nextTurn(whooseTurn) {
         if (this.getPlayer() == whooseTurn) {
             this.moves = this.speed
+            
+            this.hp += this.getHPIncrease()
+            
+            this.wasHitted = false
         }
     }
 }

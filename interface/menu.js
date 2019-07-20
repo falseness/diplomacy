@@ -10,8 +10,8 @@ function startGame() {
 class Menu {
     constructor() {
         this.setVisible(true)
-    
-        this.logo = new JustImage('logo', {x: WIDTH / 2, y: HEIGHT * 0.2}, WIDTH * 0.5, HEIGHT * 0.2)
+        
+        this.logo = new JustImage('logo', {x: WIDTH / 2, y: HEIGHT * 0.2}, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
         this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, undefined, '#d0d0d0')
         this.alphaText = new Text(WIDTH * 0.73, HEIGHT * 0.33, 0.02 * WIDTH, 'alpha', '#747474')//#747474
         this.playButton = new Button(
