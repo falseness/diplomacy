@@ -19,7 +19,7 @@ class Town extends Building {
             suburb: new SuburbProduction(0, 1),
             archer: new UnitProduction(2, 20, Archer), //2 20
             KOHb: new UnitProduction(3, 25, KOHb),
-            normchel: new UnitProduction(4, 30, Normchel)
+            normchel: new UnitProduction(3, 30, Normchel)
         }
         this.finishPreparing()
     }
