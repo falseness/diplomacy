@@ -6,35 +6,28 @@ class TownInterface {
             y: height * 0.0,
         }*/
         this.visible = false
-        let bestWIDTH = 1400
-        if (bestWIDTH > WIDTH) {
-            bestWIDTH -= 200
-        }
-        while (bestWIDTH > WIDTH)
-            bestWIDTH *= 0.9
+
         this.pos = {
-            x: bestWIDTH * 0.75,
+            x: WIDTH * 0.72,
             y: HEIGHT * 0.03, // 0.12
         }
         this.height = 0.4 * HEIGHT
         this.width = WIDTH - this.pos.x
 
         const bestThisWidthWIDTHRatio = 4
-        this.bestWIDTH = this.width * bestThisWidthWIDTHRatio
 
-        let stroke = 0.002 * this.bestWIDTH
-        let cornerRadius = 0.03 * this.bestWIDTH
+        let stroke = 0.002 * WIDTH * 1.15
+        let cornerRadius = 0.03 * WIDTH * 1.15
             //let indent = stroke + cornerRadius
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [cornerRadius, 0, 0, cornerRadius], stroke)
-
         this.gold = new JustImage('gold', {
-                x: this.pos.x + 0.22 * 0.17 * this.bestWIDTH,
+                x: this.pos.x + 0.22 * 0.17 * WIDTH * 1.15,
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
             this.height * 0.15, this.height * 0.15)
-        this.goldText = new Text(this.gold.getX() + 0.22 * this.bestWIDTH * 0.92, this.gold.getY(), 
-                                 0.03 * this.bestWIDTH / window.devicePixelRatio, 'error', 'white', 'right')
-            // 
+        this.goldText = new Text(this.gold.getX() + 0.22 * WIDTH * 1.15 * 0.92, this.gold.getY(), 
+                                 0.03 * WIDTH * 1.15, 'error', 'white', 'right')
+        
             /*this.gold = createImageByModel(
             {
                 x: this.pos.x + this.height * 0.1,
@@ -80,37 +73,37 @@ class TownInterface {
                     y: 0
                 },
                 costText: {
-                    x: 0.22 * this.bestWIDTH * 0.26,
+                    x: 0.22 * WIDTH * 1.15 * 0.26,
                     y: 0
                 },
                 button: {
-                    x: 0.11 * this.bestWIDTH * 0.9,
+                    x: 0.11 * WIDTH * 1.15 * 0.9,
                     y: -0.07 * HEIGHT / 2
                 }
             },
             model: {
                 image: {
-                    width: 0.1 * height,
-                    height: 0.1 * height
+                    width: 0.1 * HEIGHT,
+                    height: 0.1 * HEIGHT
                 },
                 costText: {
-                    fontSize: 0.04 * this.bestWIDTH * 
-                        heightWidthBestRatio / window.devicePixelRatio,
+                    fontSize: 0.04 * WIDTH * 1.15 * 
+                        heightWidthBestRatio,
                     text: 'cost'
                 },
                 button: {
                     text: {
                         text: 'train',
                         color: '#747474',
-                        fontSize: 0.04 * this.bestWIDTH * 
-                            heightWidthBestRatio / window.devicePixelRatio
+                        fontSize: 0.04 * WIDTH * 1.15 * 
+                            heightWidthBestRatio
                     },
                     rect: {
                         color: '#f7f7f7',
                         cornerRadius: 0.03 * HEIGHT,
                         borderColor: 'black',
                         stroke: 0.003 * HEIGHT,
-                        width: 0.18 * this.bestWIDTH * heightWidthBestRatio,
+                        width: 0.18 * WIDTH * 1.15 * heightWidthBestRatio,
                         height: 0.07 * HEIGHT
                     }
                 }
