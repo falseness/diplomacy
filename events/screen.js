@@ -98,7 +98,7 @@ class MobileScreen extends Screen {
     constructor() {
         super()
         this.ACCELERATION = 0.001 * HEIGHT
-        this.speedRatio = 2
+        this.speedRatio = 1
     }
     setSpeedX(speedX) {
         this.speedX = speedX * this.speedRatio / canvas.scale

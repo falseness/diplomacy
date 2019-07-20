@@ -9,7 +9,7 @@ class Border {
     isCleaned() {
         return !this.lines.length
     }
-    createLine(pos, side, color = 'white', strokeWidth = 0.04 * basis.r ) {
+    createLine(pos, side, color = 'white', strokeWidth = 0.05 * basis.r ) {
         const hexagonLine = [
             [
                 [-basis.r / 2, -basis.r / 2 * Math.sqrt(3)],
@@ -60,8 +60,9 @@ class Border {
     draw(ctx) {
         if (!this.visible)
             return
+        ctx.beginPath()
         for (let i = 0; i < this.lines.length; ++i) {
-            ctx.beginPath()
+            
 
             ctx.strokeStyle = this.lines[i].strokeColor
             ctx.lineWidth = this.lines[i].strokeWidth
@@ -72,7 +73,7 @@ class Border {
 
             ctx.stroke()
 
-            ctx.closePath()
         }
+        ctx.closePath()
     }
 }

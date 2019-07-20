@@ -31,6 +31,12 @@ class Entity extends Sprite {
     removeSelect() {
         return true
     }
+    isBuilding() {
+        return false
+    }
+    isUnit() {
+        return false
+    }
     draw(ctx) {
         drawImage(ctx, this.name, this.getPos())
     }

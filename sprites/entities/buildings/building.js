@@ -17,4 +17,7 @@ class Building extends Entity {
     removeSelect() {
         entityInterface.setVisible(false)
     }
+    isBuilding() {
+        return true
+    }
 }

@@ -202,7 +202,8 @@ class Events {
         if (cell.unit.notEmpty()) {
             cell.unit.select()
             this.selected = cell.unit
-        } else if (cell.building.notEmpty()) {
+        } 
+        else if (cell.building.notEmpty()) {
             cell.building.select()
             this.selected = cell.building
         }
@@ -247,7 +248,22 @@ class Events {
 
             return
         }
-
+        
+        if (coordsEqually(this.selected.coord, coord)) {
+            this.selected.removeSelect()
+            if (this.selected.isUnit()) {
+                this.selected = grid.arr[this.selected.coord.x][this.selected.coord.y].building
+            }
+            else if (this.selected.isBuilding()) {
+                this.selected = new Empty()
+            }
+            else {
+                console.log("not unit and not building???")
+            }
+            this.selected.select()
+            return
+        }
+        
         if (this.selected.needInstructions()) {
             this.sendInstructions(coord)
         } else {

@@ -39,17 +39,15 @@
         <script src = "objectModels/imageModel.js"></script>
         <script src = "objectModels/textModel.js"></script>
         <script src = "objectModels/rectModel.js"></script>-->
-
     <script src='options/gameCoords.js'></script>
     <script src='options/dictionaryEnumeration.js'></script>
     <script src='options/dictionaryToList.js'></script>
+    <script src='options/gamestart.js'></script>
 
     <script src='render/loadassets.js'></script>
     <script src='render/image.js'></script>
     <script src='render/rgbtohex.js'></script>
     <script src='render/draw.js'></script>
-
-
 
     <script src='interface/entityinterface.js'></script>
     <script src='interface/towninterface.js'></script>
@@ -68,6 +66,8 @@
     <script src='events/screen.js'></script>
     <script src='events/events.js'></script>
 
+    <script src='interface/menu.js'></script>
+    
     <script src='sprites/hexagon.js'></script>
     <script src='groups/grid.js'></script>
 
@@ -150,7 +150,7 @@
             mainCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
             mainCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
             
-            createEvents()
+            //createEvents()
             loadAssets()
 
             grid.arr[5][3].hexagon.repaint(1)
@@ -160,14 +160,8 @@
             grid.arr[14][6].hexagon.repaint(2)
 
             let TOWN2 = new Town(14, 6, 5, true)
-
-            requestAnimationFrame(gameLoop)
-        }
-
-        function gameLoop() {
-            gameEvent.moveScreen()
-            drawAll()
-            requestAnimationFrame(gameLoop)
+            menu.start()
+            //requestAnimationFrame(gameLoop)
         }
         window.addEventListener('load', start)
     </script>

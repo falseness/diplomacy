@@ -1,6 +1,10 @@
 class Empty {
     constructor() {
         this.player = 0
+        this.coord = {
+            x: -1,
+            y: -1
+        }
     }
     isEmpty() {
         return true

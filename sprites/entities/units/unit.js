@@ -120,6 +120,9 @@ class Unit extends Entity {
 
         this.town.updateUnitsArray()
     }
+    isUnit() {
+        return true
+    }
     nextTurn(whooseTurn) {
         if (this.getPlayer() == whooseTurn) {
             this.moves = this.speed

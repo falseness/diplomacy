@@ -23,6 +23,10 @@ const offsetToOrigin = {
     y: basis.r * Math.sin(Math.PI / 3)
 }
 
+function coordsEqually(coordOne, coordTwo) {
+    return coordOne.x == coordTwo.x && coordOne.y == coordTwo.y
+}
+
 let canvas = {
     offset: {
         x: 0,
@@ -30,7 +34,7 @@ let canvas = {
     },
     scale: 1
 }
-const mapBorderMargin = 0.5 * HEIGHT //0.5 * HEIGHT
+const mapBorderMargin = 0.3 * WIDTH //0.5 * HEIGHT
     /*function toCube(x, by)
     {
         
