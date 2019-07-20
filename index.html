@@ -94,9 +94,22 @@
         else if (document.querySelector("#container").webkitRequestFullScreen)
             document.querySelector("#container").webkitRequestFullScreen()*/
         let mainCanvas = document.getElementById('canvas')
+        
+        mainCanvas.width = WIDTH * window.devicePixelRatio
+        mainCanvas.height = HEIGHT * window.devicePixelRatio
+        mainCanvas.style.width = WIDTH + 'px';
+        mainCanvas.style.height = HEIGHT + 'px';
+        
         let mainCtx = mainCanvas.getContext('2d')
+        
 
         let interfaceCanvas = document.getElementById('interface')
+        
+        interfaceCanvas.width = WIDTH * window.devicePixelRatio
+        interfaceCanvas.height = HEIGHT * window.devicePixelRatio
+        interfaceCanvas.style.width = WIDTH + 'px';
+        interfaceCanvas.style.height = HEIGHT + 'px';
+        
         let interfaceCtx = interfaceCanvas.getContext('2d')
 
         let debug = false
