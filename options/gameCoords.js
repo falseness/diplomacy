@@ -5,6 +5,8 @@ const HEIGHT = window.innerHeight * window.devicePixelRatio
 let width = WIDTH
 let height = HEIGHT
 const radius = 0.05555555555555555 * WIDTH// * window.devicePixelRatio
+const strokeWidth = 0.02 * radius
+
 let basis = {
     r: radius,
     offset: {
@@ -15,8 +17,18 @@ let basis = {
             y: 2
         }
     },
+    strokeWidth: strokeWidth,
+    hexHalfRect: {
+        width: radius,
+        height: radius * Math.sqrt(3) / 2
+    },
+    hexHalfRectWithStrokeOffset: {
+        width: radius + strokeWidth,
+        height: radius * Math.sqrt(3) / 2 + strokeWidth
+    }
 }
 delete radius
+delete strokeWidth
 
 const offsetToOrigin = {
     x: basis.r,

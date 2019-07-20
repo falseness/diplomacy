@@ -108,7 +108,12 @@
         let gameEvent = new Events(townInterface, entityInterface)
         let border = new Border()
         
-        let players = [new Empty, new Player({
+        let players = [new Player({
+                r: 208, 
+                g: 208,
+                b: 208
+            }, true), 
+            new Player({
                 r: 255,
                 g: 0,
                 b: 0 //98, 168, 222
@@ -130,7 +135,7 @@
             bottom: grid.getBottom(),
             scale: {
                 min: 0.4,
-                max: 1
+                max: 3
             }
         }
 

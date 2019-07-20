@@ -30,6 +30,10 @@ const neighborhood = [
 class Hexagon extends Sprite {
     constructor(x, y, player) {
         super(x, y)
+        
+        this.pos.x -= basis.hexHalfRectWithStrokeOffset.width
+        this.pos.y -= basis.hexHalfRectWithStrokeOffset.height
+        
         this.player = player
         this.suburb = new Empty()
 
@@ -66,23 +70,15 @@ class Hexagon extends Sprite {
         }
     }
     draw(ctx) {
-        const strokeWidth = 0.02 * basis.r 
-        ctx.beginPath()
-
-        ctx.fillStyle = players[this.player].getHexColor()
-        ctx.strokeStyle = 'black'
-        ctx.lineWidth = strokeWidth
-
-        let pos = this.getPos()
-        ctx.moveTo(pos.x + basis.r * Math.cos(0), pos.y + basis.r * Math.sin(0))
-        for (let i = 0; i < 7; ++i)
-            ctx.lineTo(pos.x + basis.r * Math.cos(i * 2 * Math.PI / 6), pos.y + basis.r * Math.sin(i * 2 * Math.PI / 6))
-
-        ctx.fill()
-        ctx.stroke()
-        ctx.closePath()
-
-        this.suburb.setPos(pos)
-        this.suburb.draw(ctx)
+        let pos = this.pos
+        
+        if (this.isSuburb()) {
+            ctx.drawImage(players[this.player].suburbHexagon,
+                      pos.x, pos.y)
+        }
+        else {
+            ctx.drawImage(players[this.player].hexagon,
+                      pos.x, pos.y)
+        }
     }
 }

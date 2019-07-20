@@ -56,7 +56,7 @@ class Entity extends Sprite {
         return false
     }
     draw(ctx) {
-        drawImage(ctx, this.name, this.getPos())
+        drawImage(ctx, this.name, this.pos)
     }
     nextTurn() {
         console.log("ERROR entity next turn")

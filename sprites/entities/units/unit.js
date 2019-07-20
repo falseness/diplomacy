@@ -94,6 +94,8 @@ class Unit extends Entity {
 
         this.coord = coord
         grid.arr[this.coord.x][this.coord.y].unit = this
+        
+        this.pos = this.getPos()
     }
     move(coord, arr) {
         this.moves -= this.way.getDistance(coord)

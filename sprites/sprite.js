@@ -7,6 +7,7 @@ class Sprite
             x: x,
             y: y
         }
+        this.pos = this.getPos()
     }
     getPos()
     {
