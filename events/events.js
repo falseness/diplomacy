@@ -207,6 +207,9 @@ class Events {
             cell.building.select()
             this.selected = cell.building
         }
+        else {
+            this.selected = new Empty()
+        }
     }
     clickOnCell(coord) {
         console.log(coord.x, coord.y)
