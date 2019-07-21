@@ -1,7 +1,7 @@
 class KOHb extends Unit {
     constructor(x, y, town) {
         const hp = 3
-        const healSpeed = 2
+        const healSpeed = 1
         const dmg = 1
         const speed = 3
         const salary = 6
