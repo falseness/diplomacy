@@ -11,7 +11,13 @@ class RangeUnit extends Unit {
         if (!this.moves && whooseTurn == this.getPlayer())
             return
 
-        this.rangeWay.create(this.coord, this.range, grid.arr, this.getPlayer())
+            
+        attackBorder.newBrokenLine(players[this.getPlayer()].getHexColor())
+        this.rangeWay.create(this.coord, this.range, grid.arr, this.getPlayer(), attackBorder)
+    }
+    removeSelect() {
+        attackBorder.setVisible(false)
+        super.removeSelect()
     }
     sendInstructions(cell) {
         if (!this.isMyTurn())
@@ -72,8 +78,8 @@ class RangeWay extends Way {
         this.parent[coord.x][coord.y] = v
         used[coord.x][coord.y] = true
     }
-    create(v0, moves, arr, player, changeLogicText = true, newBorder = false) {
+    create(v0, moves, arr, player, bord, changeLogicText = true, newBorder = false) {
         // dont chage logic text and create border by default
-        super.create(v0, moves, arr, player, changeLogicText, newBorder)
+        super.create(v0, moves, arr, player, bord, changeLogicText, newBorder)
     }
 }

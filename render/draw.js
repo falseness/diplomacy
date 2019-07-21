@@ -11,6 +11,7 @@ function drawMain() {
     mainCtx.closePath()
 
     border.draw(mainCtx)
+    attackBorder.draw(mainCtx)
 }
 
 function drawInterface() {

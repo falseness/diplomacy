@@ -9,7 +9,7 @@ class Border {
     isCleaned() {
         return !this.lines.length
     }
-    createLine(pos, side, color = 'white', strokeWidth = 0.05 * basis.r ) {
+    createLine(pos, side) {
         const hexagonLine = [
             [
                 [-basis.r / 2, -basis.r / 2 * Math.sqrt(3)],
@@ -44,15 +44,15 @@ class Border {
             end: {
                 x: hexagonLine[side][1][0] + pos.x,
                 y: hexagonLine[side][1][1] + pos.y
-            },
-            strokeColor: color,
-            strokeWidth: strokeWidth
+            }
         }
         this.lines.push(line)
     }
-    newBrokenLine() {
+    newBrokenLine(color = 'white', strokeWidth = 0.05 * basis.r) {
         this.clean()
         this.setVisible(true)
+        this.color = color
+        this.strokeWidth = strokeWidth
     }
     setVisible(boolean) {
         this.visible = boolean
@@ -61,19 +61,15 @@ class Border {
         if (!this.visible)
             return
         ctx.beginPath()
+        
+        ctx.strokeStyle = this.color
+        ctx.lineWidth = this.strokeWidth
+        
         for (let i = 0; i < this.lines.length; ++i) {
-            
-
-            ctx.strokeStyle = this.lines[i].strokeColor
-            ctx.lineWidth = this.lines[i].strokeWidth
-
-
             ctx.moveTo(this.lines[i].begin.x, this.lines[i].begin.y)
             ctx.lineTo(this.lines[i].end.x, this.lines[i].end.y)
-
-            ctx.stroke()
-
         }
+        ctx.stroke()
         ctx.closePath()
     }
 }

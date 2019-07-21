@@ -37,12 +37,13 @@ class Unit extends Entity {
         let arr = grid.arr
         if (!this.isMyTurn()) {
 
-            this.way.create(this.coord, 0, arr, this.getPlayer())
+            this.way.create(this.coord, 0, arr, this.getPlayer(), border)
 
             grid.setDrawLogicText(false)
             return
         }
-        this.way.create(this.coord, this.moves, arr, this.getPlayer())
+        border.newBrokenLine()
+        this.way.create(this.coord, this.moves, arr, this.getPlayer(), border)
     }
     removeSelect() {
         border.setVisible(false)
@@ -162,9 +163,7 @@ class Way {
     getParent(coord) {
         return Object.assign({}, this.parent[coord.x][coord.y])
     }
-    initialization(v0, moves, arr, newBorder) {
-        if (newBorder)
-            border.newBrokenLine()
+    initialization(v0, moves, arr, bord, newBorder) {
         grid.newLogicText()
 
         let used = new Array(arr.length)
@@ -194,14 +193,14 @@ class Way {
         return (cell.unit.notEmpty() && cell.unit.getPlayer() == player &&
             !coordsEqually(neighbour, v0))
     }
-    sortNeighbours(v0, v, neighbours, arr, player) {
+    sortNeighbours(v0, v, neighbours, arr, player, bord) {
         // if hexagon has the same color, he will be processed later
 
         let sortedHexagonNeighbours = []
         for (let i = 0; i < neighbours.length; ++i) {
             if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
                 this.isCellImpassable(neighbours[i], v0, arr, player)) {
-                border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                bord.createLine(arr[v.x][v.y].hexagon.getPos(), i)
                 continue
             }
 
@@ -213,7 +212,7 @@ class Way {
         for (let i = 0; i < neighbours.length; ++i) {
             if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
                 this.isCellImpassable(neighbours[i], v0, arr, player)) {
-                border.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                bord.createLine(arr[v.x][v.y].hexagon.getPos(), i)
                 continue
             }
 
@@ -241,7 +240,7 @@ class Way {
         this.parent[coord.x][coord.y] = v
         used[coord.x][coord.y] = true
     }
-    create(v0, moves, arr, player, changeLogicText = true, newBorder = true) {
+    create(v0, moves, arr, player, bord, changeLogicText = true, newBorder = true) {
         // init
         let used = this.initialization(v0, moves, arr, newBorder)
 
@@ -265,14 +264,14 @@ class Way {
 
             let neighbours = arr[v.x][v.y].hexagon.getNeighbours()
 
-            let sortedHexagonNeighbours = this.sortNeighbours(v0, v, neighbours, arr, player)
+            let sortedHexagonNeighbours = this.sortNeighbours(v0, v, neighbours, arr, player, bord)
 
 
             for (let i = 0; i < sortedHexagonNeighbours.length; ++i) {
                 let coord = sortedHexagonNeighbours[i].hexagon.coord
 
                 if (this.needToCreateLine(v, coord, moves)) {
-                    border.createLine(arr[v.x][v.y].hexagon.getPos(), sortedHexagonNeighbours[i].side)
+                    bord.createLine(arr[v.x][v.y].hexagon.getPos(), sortedHexagonNeighbours[i].side)
                 }
 
                 if (!used[coord.x][coord.y]) {
