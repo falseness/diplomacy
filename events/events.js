@@ -198,6 +198,10 @@ class Events {
     getSelected() {
         return this.selected
     }
+    removeSelection() {
+        this.selected.removeSelect()
+        this.selected = new Empty()
+    }
     selectSomethingOnCell(cell) {
         if (cell.unit.notEmpty()) {
             cell.unit.select()

@@ -1,7 +1,45 @@
+let townProduction = { 
+    noob: { 
+        production: UnitProduction,
+        turns: 1,
+        cost: 10,
+        class: Noob
+    }, 
+    farm: {
+        production: FarmProduction,
+        turns: 4,
+        cost: 12,
+        class: Farm,
+    },
+    suburb: {
+        production: SuburbProduction,
+        turns: 0,
+        cost: 1,
+        class: Empty
+    },
+    archer: {
+        production: UnitProduction,
+        turns: 2,
+        cost: 20,
+        class: Archer
+    },
+    KOHb: {
+        production: UnitProduction,
+        turns: 3,
+        cost: 25,
+        class: KOHb
+    },
+    normchel: {
+        production: UnitProduction,
+        turns: 3,
+        cost: 30,
+        class: Normchel
+    }
+}
 class Town extends Building {
     constructor(x, y, gold = 12, firstTown = false) {
-        const hp = 20
-        const healSpeed = 4
+        const hp = 12
+        const healSpeed = 3
         super(x, y, 'town', hp, healSpeed)
 
         this.suburbs = []
@@ -12,16 +50,14 @@ class Town extends Building {
 
         this.gold = gold
 
-        this.newProduction = new Production()
-        this.production = {
-            noob: new UnitProduction(1, 10, Noob), //1 10
-            farm: new FarmProduction(4, 12, Farm, 3),
-            suburb: new SuburbProduction(0, 1),
-            archer: new UnitProduction(2, 20, Archer), //2 20
-            KOHb: new UnitProduction(3, 25, KOHb),
-            normchel: new UnitProduction(3, 30, Normchel)
-        }
-        this.finishPreparing()
+        // unit production can training only one
+        // building production can train several
+        // active production waiting for instructions
+        
+        this.buildingProduction = []
+        this.unitProduction = new Empty()
+        this.activeProduction = new Empty()
+        //this.newProduction = new Production()
     }
     createFirstSuburbs(firstTown) {
         this.suburbs.push(grid.arr[this.coord.x][this.coord.y])
@@ -51,20 +87,18 @@ class Town extends Building {
 
         let income = this.getIncome()
         town.info.gold = this.gold + ' (' + ((income > 0) ? '+' : '') + income + ')'
+        
+        if (this.activeProduction.notEmpty())
+            town.activeProduction = this.activeProduction.getName() 
 
-        town.production = {}
-        for (let i in this.production) {
-            town.production[i] = this.production[i];
-        }
-
-        if (this.isPreparing()) {
-            town.info.train = this.preparation.what
-            town.info.turns = this.preparation.turns
+        if (this.isPreparingUnit()) {
+            town.info.train = this.unitProduction.getName()
+            town.info.turns = this.unitProduction.turns
         }
         return town
     }
     needInstructions() {
-        return this.newProduction.isWaitingForInstructionsToCreate()
+        return this.activeProduction.notEmpty()
     }
     select() {
         this.updateSuburbsArray()
@@ -81,17 +115,25 @@ class Town extends Building {
         entityInterface.setVisible(false)
         townInterface.setVisible(false)
 
-        if (this.newProduction.isWaitingForInstructionsToCreate())
-            this.finishPreparing()
+        this.activeProduction = new Empty()
     }
     sendInstructions(cell) {
-        if (this.newProduction.canCreateSomething(cell, this)) {
-            if (!this.newProduction.create(cell, this))
-                return false
+        if (!this.activeProduction.canCreateOnCell(cell, this)) {
+            
+            this.removeSelect()
+            this.activeProduction = new Empty()
+            
+            return true
         }
-
+            
+        let stillNeedInstructions = this.activeProduction.sendInstructions(cell.hexagon.coord, this)
+        if (stillNeedInstructions) {
+            this.select()
+            return false
+        }
+        this.buildingProduction.push(this.activeProduction)
         this.removeSelect()
-
+        this.activeProduction = new Empty()
         return true
     }
     getIncome() {
@@ -110,32 +152,31 @@ class Town extends Building {
     }
     prepare(what) {
         // bug: unit production with prepare time == 0 cant be prepared
-        if (this.isPreparing() || this.gold < this.production[what].cost)
+        if (this.gold < townProduction[what].cost)
+            return false
+        if (this.unitProduction.notEmpty() && (new townProduction[what].production).isUnitProduction())
             return false
 
-        this.preparation = {
-            what: what,
-            turns: this.production[what].turns
+        this.activeProduction = new townProduction[what].production(
+            townProduction[what].turns, townProduction[what].cost, 
+            townProduction[what].class, what)
+
+        if (this.activeProduction.isUnitProduction()) {
+            this.gold -= this.activeProduction.cost
+            
+            this.unitProduction = this.activeProduction
+            this.activeProduction = new Empty()
         }
-
-        this.newProduction = this.production[this.preparation.what]
-
-        if (this.newProduction.isWaitingForInstructionsToCreate())
-            this.newProduction.tryToCreate(this, this.getPlayer())
-        else
-            this.gold -= this.newProduction.cost
-
+        else if (this.activeProduction.isBuildingProduction()) {
+            this.activeProduction.select(this)
+        }
+        else {
+            console.log("ERROR not UnitProduction and not BuildingProduction")
+        }
         return true
     }
-    isPreparing() {
-        return (this.preparation.turns || this.newProduction.isWaitingForInstructionsToCreate())
-    }
-    finishPreparing() {
-        this.preparation = {
-            what: "nothing",
-            turns: 0
-        }
-        this.newProduction = new Production()
+    isPreparingUnit() {
+        return this.unitProduction.notEmpty()
     }
     crisisPenalty() {
         while (this.units.length)
@@ -145,22 +186,40 @@ class Town extends Building {
 
         this.gold = 0
     }
-    tryToEndPreparing() {
-        if (this.production[this.preparation.what].tryToCreate(this, this.getPlayer())) {
-
-            this.finishPreparing()
-        } else {
-            this.preparation.turns++
+    unitPreparingLogic() {
+        if (this.unitProduction.isEmpty())
+            return
+        
+        let preparingFinished = this.unitProduction.nextTurn()
+        if (!preparingFinished)
+            return
+            
+        if (grid.arr[this.coord.x][this.coord.y].unit.notEmpty()) {
+            this.unitProduction.cantCreateNow()
+            return
+        }
+        let newUnit = this.unitProduction.create(this.coord.x, this.coord.y, this)
+        this.units.push(newUnit)
+        
+        this.unitProduction = new Empty()
+    }
+    buildingPreparingLogic() {
+        for (let i = 0; i < this.buildingProduction.length; ++i) {
+            if (this.buildingProduction[i].isPreparingStopped()) {
+                this.buildingProduction.splice(i--, 1)
+                continue
+            }
+            let preparingFinished = this.buildingProduction[i].nextTurn()
+            if (preparingFinished) {
+                let building = this.buildingProduction[i].create()
+                this.buildings.push(building)
+                this.buildingProduction.splice(i--, 1)
+            }
         }
     }
     preparingLogic() {
-        if (!this.isPreparing())
-            return
-
-        --this.preparation.turns
-
-        if (!this.isPreparing())
-            this.tryToEndPreparing()
+        this.unitPreparingLogic()
+        this.buildingPreparingLogic()
     }
     updateBuildingsArray() {
         for (let i = 0; i < this.buildings.length; ++i) {
@@ -187,20 +246,17 @@ class Town extends Building {
             return
         super.nextTurn(whooseTurn)
 
-        this.newProduction.nextTurn(this)
-
-        this.preparingLogic()
-
         this.gold += this.getIncome()
         if (this.gold < 0)
             this.crisisPenalty()
-
+        
+        this.preparingLogic()
     }
     draw(ctx) {
         super.draw(ctx)
-
-        this.newProduction.draw(ctx)
-
+        for (let i = 0; i < this.buildingProduction.length; ++i) {
+            this.buildingProduction[i].draw(ctx)
+        }
     }
 }
 
@@ -208,26 +264,16 @@ function townEvent(production) {
 
     let town = gameEvent.getSelected()
     if (town.prepare(production)) {
-
         town.select()
-        let color = players[town.getPlayer()].getHexColor()
-            //entityInterface.change(town.getInfo(), color)
+        return
     }
-
+    gameEvent.removeSelection()
 }
+
+
+// Я НЕ ХОЧУ РЕФАКТОРИТЬ ЭТО ГОВНО
+
 /*
-Town слишком огромный класс
-есть смысл вынести prepare из него
-и так же уменьшить классы Production
-
-
-
-Добавь новую продукцию - пригородная клетка
-Чуть-чуть добалансь цены
-
-займись grapnel ninja (сделай нормальный крюк + визуальные эффекты)
-*/
-
 class Production {
     constructor(turns = 1, cost = 1, _class = new Empty()) {
         this.turns = turns
@@ -257,6 +303,18 @@ class Production {
     draw() {
 
     }
+    isBuildingProduction() {
+        return false
+    }
+    isUnitProduction() {
+        return true
+    }
+    notEmpty() {
+        return true
+    }
+    isEmpty() {
+        return false
+    }
 }
 class UnitProduction extends Production {
     constructor(turns, cost, _class) {
@@ -282,6 +340,9 @@ class UnitProduction extends Production {
     }
     isWaitingForInstructionsToCreate() {
         return false
+    }
+    isUnitProduction() {
+        return true
     }
 }
 class FarmProduction extends Production {
@@ -374,6 +435,9 @@ class FarmProduction extends Production {
             }
         }
     }
+    isBuildingProduction() {
+        return true
+    }
     draw(ctx) {
         if (!this.preparingStarted || !this.isCellFit(grid.arr[this.coord.x][this.coord.y], this.player))
             return
@@ -443,8 +507,6 @@ class SuburbProduction extends Production {
         while (Q.length > 0) {
             let v = Q.shift()
 
-            /*if (arr[v.coord.x][v.coord.y].hexagon.player != player)
-                continue*/
 
             let neighbours = v.getNeighbours()
             for (let i = 0; i < neighbours.length; ++i) {
@@ -531,82 +593,4 @@ class SuburbProduction extends Production {
             // BFS for find out distance
 
         }
-        /*paintTownBorders(town, suburbs, arr, player)
-        {
-            let indent = arr.length + 1
-            
-            let used = []
-            let distance = []
-            let canReachThisHexagons = []
-
-            for (let i = 0; i <= indent * 2; ++i)
-            {
-                used.push([])
-                distance.push([])
-            }
-            
-            distance[indent][indent] = 0
-            used[indent][indent] = 1
-
-            let marginX = town.coord.x
-            let marginY = town.coord.y
-            
-            let Q = []
-            Q.push([0, 0])
-
-            while (Q.length > 0)
-            {
-                let v = Q.shift()
-                
-                
-                let vRealX = v[0] + marginX
-                let vRealY = v[1] + marginY
-                let neighbours = arr[vRealX][vRealY].hexagon.getNeighbours()
-                let isVSuburb = this.isSuburb(vRealX, vRealY, arr, player)
-                
-                if (!isVSuburb)
-                {
-                    canReachThisHexagons.push({cell: arr[vRealX][vRealY], cantReach: [false, false, false, false, false, false]})
-                }
-                for (let i = 0; i < neighbours.length; ++i)
-                {
-                    let x = neighbours[i][0] - marginX
-                    let y = neighbours[i][1] - marginY
-                    for (let j = 0; j < canReachThisHexagons.length; ++j)
-                    {
-                        for (let k = 0; k < canReachThisHexagons[j].cantReach.length; ++k)
-                        {
-                            if (this.isEqually(arr[neighbours[i][0]][neighbours[i][1]].hexagon, canReachThisHexagons[j].cantReach[k]))
-                                canReachThisHexagons[j].cantReach[k] = false
-                        }
-                    }
-                    
-                    if (!isVSuburb && !this.isSuburb(neighbours[i][0], neighbours[i][1], arr, player))
-                    {
-                        canReachThisHexagons[canReachThisHexagons.length - 1].cantReach[i] = arr[neighbours[i][0]][neighbours[i][1]].hexagon
-                        
-                        continue
-                    }
-                    if (!used[x + indent][y + indent])
-                    {
-                        used[x + indent][y + indent] = 1
-                        Q.push(neighbours[i])
-                        
-                        distance[x + indent][y + indent] = distance[v[0]][v[1]] + 1
-                    }
-                }
-            }
-            
-            
-            for (let i = 0; i < canReachThisHexagons.length; ++i)
-            {
-                for (let j = 0; j < canReachThisHexagons[i].cantReach.length; ++j)
-                {
-                    if (canReachThisHexagons[i].cantReach[j])
-                    {
-                        border.drawLine(canReachThisHexagons[i].cell.hexagon.getPos(), j)
-                    }
-                }
-            }
-        }*/
-}
+}*/

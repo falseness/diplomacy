@@ -66,7 +66,6 @@ class TownInterface {
 
         const heightWidthBestRatio = 0.55
         let trainInterfaces = {
-            name: ['noob', 'farm', 'suburb', 'archer', 'KOHb', 'normchel'],
             margin: {
                 image: {
                     x: 0,
@@ -110,52 +109,69 @@ class TownInterface {
             }
         }
 
-        this.trainInterfacesMarginInterval = this.height * 0.25;
-        for (let i = 0; i < trainInterfaces.name.length; ++i) {
+        this.trainInterfacesMarginInterval = this.height * 0.25
+        
+        let index = 0
+        
+        for (let i in townProduction) {
+            let name = i
+            
             let models = trainInterfaces.model
             let margins = trainInterfaces.margin
 
             let image
-            if (trainInterfaces.name[i] == 'suburb') {
+            if (name == 'suburb') {
                 image = new SuburbImage({}, 0.22 * WIDTH * 0.1, 0.002 * WIDTH)
             } else
-                image = new JustImage(trainInterfaces.name[i], {}, models.image.width, models.image.height)
+                image = new JustImage(name, {}, models.image.width, models.image.height)
 
             let costText = new Text(NaN, NaN, models.costText.fontSize, models.costText.text)
             let button = new Button(
                 new Rect(NaN, NaN, models.button.rect.width, models.button.rect.height, [models.button.rect.cornerRadius, models.button.rect.cornerRadius, models.button.rect.cornerRadius, models.button.rect.cornerRadius],
                     models.button.rect.stroke, models.button.rect.color),
                 new Text(0, 0, models.button.text.fontSize, models.button.text.text, models.button.text.color),
-                townEvent, trainInterfaces.name[i]
+                townEvent, name
             )
-            this.trainInterfaces[trainInterfaces.name[i]] =
+            this.trainInterfaces[name] =
                 new TrainInterface(
                     margins.image, margins.costText, margins.button,
                     image, costText, button,
-                    this.gold.getX(), this.gold.getY() + this.height * 0.3 + this.trainInterfacesMarginInterval * i, trainInterfaces.name[i])
+                    this.gold.getX(), this.gold.getY() + this.height * 0.3 + this.trainInterfacesMarginInterval * index, name)
+            this.trainInterfaces[name].setCostText('cost: ' + townProduction[i].cost)
+            ++index
         }
     }
     change(town, color) {
-            this.background.setColor(color.hex)
+        this.background.setColor(color.hex)
 
-            for (let i in this.trainInterfaces) //town.production
-            {
-                this.trainInterfaces[i].setCanTrain(true)
-                    //this.trainInterfaces[i].changeImage(i, color)
-                this.trainInterfaces[i].setCostText('cost: ' + town.production[i].cost)
-
-                if (!town.info.train) {
-                    this.trainInterfaces[i].setButtonText('train (' + town.production[i].turns + ')')
-                } else if (town.info.train != i) {
+        for (let i in this.trainInterfaces) {
+            if (town.info.train && (new townProduction[i].production).isUnitProduction()) {
+                if (i == town.info.train) {
+                    this.trainInterfaces[i].setCanTrain(true)
+                     this.trainInterfaces[town.info.train].setButtonText(
+                         town.info.turns + ' / ' + townProduction[town.info.train].turns)
+                }
+                else {
                     this.trainInterfaces[i].setCanTrain(false)
                 }
+                continue
             }
-            if (town.info.turns) {
-                this.trainInterfaces[town.info.train].setButtonText(town.info.turns + ' / ' + town.production[town.info.train].turns)
+            if (town.activeProduction) {
+                if (i == town.activeProduction) {
+                    this.trainInterfaces[i].setCanTrain(true)
+                    this.trainInterfaces[i].setButtonText('choose')
+                }
+                else {
+                    this.trainInterfaces[i].setCanTrain(false)
+                }
+                continue
             }
-            this.goldText.setText(town.info.gold)
-            this.setVisible(true)
+            this.trainInterfaces[i].setCanTrain(true)
+            this.trainInterfaces[i].setButtonText('train (' + townProduction[i].turns + ')')
         }
+        this.goldText.setText(town.info.gold)
+        this.setVisible(true)
+    }
         /* setButtonsList()
          {
              this.buttons = {}

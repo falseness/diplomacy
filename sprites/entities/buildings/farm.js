@@ -1,7 +1,7 @@
 class Farm extends Building {
     constructor(x, y, income, town) {
-        const hp = 6
-        const healSpeed = 2
+        const hp = 4
+        const healSpeed = 1
         super(x, y, 'farm', hp, healSpeed)
 
         this.income = income

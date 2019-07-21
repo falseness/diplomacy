@@ -1,8 +1,8 @@
 class KOHb extends Unit {
     constructor(x, y, town) {
-        const hp = 4
+        const hp = 3
         const healSpeed = 2
-        const dmg = 2
+        const dmg = 1
         const speed = 3
         const salary = 6
         super(x, y, 'KOHb', hp, healSpeed, dmg, speed, salary, town)
