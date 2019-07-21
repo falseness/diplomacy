@@ -12,7 +12,7 @@ class RangeUnit extends Unit {
             return
 
             
-        attackBorder.newBrokenLine(players[this.getPlayer()].getHexColor())
+        attackBorder.newBrokenLine(players[this.getPlayer()].getHexColor(), 0.1 * basis.r)
         this.rangeWay.create(this.coord, this.range, grid.arr, this.getPlayer(), attackBorder)
     }
     removeSelect() {

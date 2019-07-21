@@ -10,8 +10,8 @@ function drawMain() {
 
     mainCtx.closePath()
 
-    border.draw(mainCtx)
     attackBorder.draw(mainCtx)
+    border.draw(mainCtx)
 }
 
 function drawInterface() {

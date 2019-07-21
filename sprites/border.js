@@ -61,6 +61,8 @@ class Border {
         if (!this.visible)
             return
         ctx.beginPath()
+        ctx.lineJoin = 'round'
+        ctx.lineCap = 'round'
         
         ctx.strokeStyle = this.color
         ctx.lineWidth = this.strokeWidth
