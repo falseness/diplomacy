@@ -5,17 +5,17 @@ let townProduction = {
         cost: 10,
         class: Noob
     }, 
-    farm: {
-        production: FarmProduction,
-        turns: 4,
-        cost: 12,
-        class: Farm,
-    },
     suburb: {
         production: SuburbProduction,
         turns: 0,
         cost: 1,
         class: Empty
+    },
+    farm: {
+        production: FarmProduction,
+        turns: 4,
+        cost: 12,
+        class: Farm,
     },
     archer: {
         production: UnitProduction,
@@ -40,7 +40,13 @@ let townProduction = {
         turns: 4,
         cost: 40,
         class: Catapult
-    }
+    },
+    barrack: {
+        production: BarrackProduction,
+        turns: 4, //4 20
+        cost: 20,
+        class: Barrack,
+    },
 }
 class Town extends Building {
     constructor(x, y, gold = 12, firstTown = false) {
@@ -83,13 +89,19 @@ class Town extends Building {
             }
         }
     }
+    getGold() {
+        return this.gold
+    }
+    minusGold(count) {
+        this.gold -= count
+    }
     getPlayer() {
         return grid.arr[this.coord.x][this.coord.y].hexagon.getPlayer()
     }
     getInfo() {
         let town = super.getInfo()
 
-        town.link = this
+        //town.link = this
 
         let income = this.getIncome()
         town.info.gold = this.gold + ' (' + ((income > 0) ? '+' : '') + income + ')'
@@ -109,7 +121,7 @@ class Town extends Building {
     select() {
         this.updateSuburbsArray()
 
-        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
+        super.select()
         if (this.isMyTurn())
             townInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
 
@@ -118,7 +130,7 @@ class Town extends Building {
     removeSelect() {
         border.setVisible(false)
         grid.setDrawLogicText(false)
-        entityInterface.setVisible(false)
+        super.removeSelect()
         townInterface.setVisible(false)
 
         this.activeProduction = new Empty()
@@ -278,11 +290,11 @@ class Town extends Building {
     }
 }
 
-function townEvent(production) {
+function prepareEvent(production) {
 
-    let town = gameEvent.getSelected()
-    if (town.prepare(production)) {
-        town.select()
+    let building = gameEvent.getSelected()
+    if (building.prepare(production)) {
+        building.select()
         return
     }
     gameEvent.removeSelection()

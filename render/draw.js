@@ -18,6 +18,7 @@ function drawInterface() {
     interfaceCtx.clearRect(0, 0, width, height)
 
     entityInterface.draw(interfaceCtx)
+    barrackInterface.draw(interfaceCtx)
     townInterface.draw(interfaceCtx)
 
     nextTurnButton.draw(interfaceCtx)

@@ -77,7 +77,7 @@ class BuildingProduction extends Production {
         return false
     }
 }
-class FarmProduction extends BuildingProduction {
+class ManufactureProduction extends BuildingProduction {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
     }
@@ -107,8 +107,7 @@ class FarmProduction extends BuildingProduction {
         return true
     }
     create() {
-        const income = 3
-        let t = new this.class(this.coord.x, this.coord.y, income, this.town)
+        let t = new this.class(this.coord.x, this.coord.y, this.income, this.town)
         
         return t
     }
@@ -178,9 +177,21 @@ class FarmProduction extends BuildingProduction {
         if (this.isPreparingStopped())
             return
         
-        drawImageWithOpacity(ctx, 'farm', grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)
+        drawImageWithOpacity(ctx, this.name, grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)
         if (!grid.drawLogicText)
             this.text.draw(ctx)
+    }
+}
+class FarmProduction extends ManufactureProduction {
+    constructor(turns = 1, cost = 1, _class = new Empty(), name) {
+        super(turns, cost, _class, name)
+        this.income = 3
+    }
+}
+class BarrackProduction extends ManufactureProduction {
+    constructor(turns = 1, cost = 1, _class = new Empty(), name) {
+        super(turns, cost, _class, name)
+        this.income = -3
     }
 }
 class SuburbProduction extends BuildingProduction {

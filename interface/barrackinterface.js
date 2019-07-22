@@ -126,7 +126,7 @@ class BarrackInterface {
         for (let i in townProduction) {
             let name = i
             let type = (new townProduction[name].production).isUnitProduction()?'unit':'building'
-            if (!this.isTypeValid())
+            if (!this.isTypeValid(type))
                 continue
             
             let models = trainInterfaces.model
@@ -143,7 +143,7 @@ class BarrackInterface {
                 new Rect(NaN, NaN, models.button.rect.width, models.button.rect.height, [models.button.rect.cornerRadius, models.button.rect.cornerRadius, models.button.rect.cornerRadius, models.button.rect.cornerRadius],
                     models.button.rect.stroke, models.button.rect.color),
                 new Text(0, 0, models.button.text.fontSize, models.button.text.text, models.button.text.color),
-                townEvent, name
+                prepareEvent, name
             )
             
             
@@ -171,29 +171,29 @@ class BarrackInterface {
         
         this.trainInterfacesCreationLoop(trainInterfaces, index)
     }
-    changeUnitTab(town) {
+    changeUnitTab(barrack) {
         const type = 'unit'
         
-        let canTrainNew = !town.info.train
+        let canTrainNew = !barrack.info.train
         for (let i in this.trainInterfaces[type]) {
             this.trainInterfaces[type][i].setCanTrain(canTrainNew)
             this.trainInterfaces[type][i].setButtonText('train (' + townProduction[i].turns + ')')
         }
         if (!canTrainNew) {
-            this.trainInterfaces[type][town.info.train].setButtonText(
-                         town.info.turns + ' / ' + townProduction[town.info.train].turns)
-            this.trainInterfaces[type][town.info.train].setCanTrain(true)
+            this.trainInterfaces[type][barrack.info.train].setButtonText(
+                         barrack.info.turns + ' / ' + townProduction[barrack.info.train].turns)
+            this.trainInterfaces[type][barrack.info.train].setCanTrain(true)
         }
     }
-    change(town, color) {
+    change(barrack, color) {
         this.background.setColor(color.hex)
-        this.changeUnitTab(town)
+        this.changeUnitTab(barrack)
         /*
         for (let i in this.trainInterfaces) {
             if (town.info.train && (new townProduction[i].production).isUnitProduction()) {
-                if (i == town.info.train) {
+                if (i == barrack.info.train) {
                     this.trainInterfaces[i].setCanTrain(true)
-                     this.trainInterfaces[town.info.train].setButtonText(
+                     this.trainInterfaces[barrack.info.train].setButtonText(
                          town.info.turns + ' / ' + townProduction[town.info.train].turns)
                 }
                 else {
@@ -201,8 +201,8 @@ class BarrackInterface {
                 }
                 continue
             }
-            if (town.activeProduction) {
-                if (i == town.activeProduction) {
+            if (barrack.activeProduction) {
+                if (i == barrack.activeProduction) {
                     this.trainInterfaces[i].setCanTrain(true)
                     this.trainInterfaces[i].setButtonText('choose')
                 }
@@ -214,7 +214,7 @@ class BarrackInterface {
             this.trainInterfaces[i].setCanTrain(true)
             this.trainInterfaces[i].setButtonText('train (' + townProduction[i].turns + ')')
         }*/
-        this.goldText.setText(town.info.gold)
+        this.goldText.setText(barrack.town.gold)
         this.setVisible(true)
     }
         /* setButtonsList()

@@ -79,6 +79,7 @@
 
     
     <script src='sprites/entities/buildings/farm.js'></script>
+    <script src='sprites/entities/buildings/barrack.js'></script>
     <script src='sprites/entities/units/noob.js'></script>
     <script src='sprites/entities/units/KOHb.js'></script>
     <script src='sprites/entities/units/normchel.js'></script>
@@ -109,9 +110,10 @@
         let interfaceCtx = interfaceCanvas.getContext('2d')
 
         let debug = false
+        let barrackInterface = new BarrackInterface()
         let townInterface = new TownInterface()
         let entityInterface = new EntityInterface()
-        let gameEvent = new Events(townInterface, entityInterface)
+        let gameEvent = new Events(barrackInterface, townInterface, entityInterface)
         let border = new Border()
         let attackBorder = new Border()
         

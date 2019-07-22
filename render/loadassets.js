@@ -10,7 +10,8 @@ let assets = {
     KOHbLeft: new Image(),
     normchel: new Image(),
     catapult: new Image(),
-    catapultLeft: new Image()
+    catapultLeft: new Image(),
+    barrack: new Image()
 }
 
 function loadAssets() {
@@ -28,4 +29,6 @@ function loadAssets() {
     
     assets.catapult.src = "assets/catapult.svg"
     assets.catapultLeft.src = "assets/catapultLeft.svg"
+    
+    assets.barrack.src = "assets/barrack.svg"
 }

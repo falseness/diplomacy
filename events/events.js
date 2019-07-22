@@ -65,15 +65,16 @@ function mousewheel(event) {
     gameEvent.mousewheel(pos, event.wheelDelta)
 }
 class Events {
-    constructor(_townInterface, _entityInterface) {
+    constructor(_barrackInterface, _townInterface, _entityInterface) {
         this.selected = new Empty()
 
         this.lastKeyboardPressTime = 0
         this.keyboardPressInterval = 100
 
         this.interface = {
+            barrack: _barrackInterface,
             town: _townInterface,
-                entity: _entityInterface
+            entity: _entityInterface
         }
         if (!mobilePhone) {
             this.screen = new ComputerScreenGroup(
@@ -225,6 +226,7 @@ class Events {
         grid.setDrawLogicText(false)
 
         this.interface.entity.setVisible(false)
+        this.interface.barrack.setVisible(false)
         this.interface.town.setVisible(false)
     }
     nextTurn() {
@@ -244,9 +246,11 @@ class Events {
 
         if (this.interface.entity.click(pos))
             return
+        if (this.interface.barrack.click(pos))
+            return
         if (this.interface.town.click(pos))
             return
-
+            
         let coord = getCoord(realPos.x, realPos.y)
         if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length)) {
             this.hideAll()
