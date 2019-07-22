@@ -17,8 +17,17 @@ class Button {
         this.rect.setPos(pos)
         this.trimText()
     }
+    getText() {
+        return this.text.getText()
+    }
+    getHeight() {
+        return this.rect.getHeight()
+    }
     setText(text) {
         this.text.setText(text)
+    }
+    setTextColor(color) {
+        this.text.setColor(color)
     }
     setCanClick(boolean) {
         this.canClick = boolean

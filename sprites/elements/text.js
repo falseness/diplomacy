@@ -46,6 +46,15 @@ class Text {
     getY() {
         return this.pos.y
     }
+    setColor(color) {
+        this.color = color
+    }
+    getColor() {
+        return this.color
+    }
+    getText() {
+        return this.text
+    }
     draw(ctx) {
         ctx.font = this.fontSize + 'px Times New Roman'
         ctx.fillStyle = this.color

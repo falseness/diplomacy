@@ -38,7 +38,6 @@ class Catapult extends RangeUnit {
         // catapult cant attack close
         if (this.way.getDistance(coord) <= this.moves && this.cellHasEnemy(cell)) {
             this.removeSelect()
-            
             return true
         }
             
