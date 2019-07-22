@@ -8,7 +8,9 @@ let assets = {
     archer: new Image(),
     KOHb: new Image(),
     KOHbLeft: new Image(),
-    normchel: new Image()
+    normchel: new Image(),
+    catapult: new Image(),
+    catapultLeft: new Image()
 }
 
 function loadAssets() {
@@ -18,7 +20,12 @@ function loadAssets() {
     assets.farm.src = "assets/farm.svg"
     assets.noob.src = "assets/noob.svg"
     assets.archer.src = "assets/archer.svg"
+    
     assets.KOHb.src = "assets/KOHb.svg"
     assets.KOHbLeft.src = "assets/KOHbLeft.svg"
+    
     assets.normchel.src = "assets/normchel.svg"
+    
+    assets.catapult.src = "assets/catapult.svg"
+    assets.catapultLeft.src = "assets/catapultLeft.svg"
 }

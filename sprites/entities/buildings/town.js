@@ -34,6 +34,12 @@ let townProduction = {
         turns: 3,
         cost: 30,
         class: Normchel
+    },
+    catapult: {
+        production: UnitProduction,
+        turns: 4,
+        cost: 40,
+        class: Catapult
     }
 }
 class Town extends Building {
@@ -127,11 +133,23 @@ class Town extends Building {
         }
             
         let stillNeedInstructions = this.activeProduction.sendInstructions(cell.hexagon.coord, this)
+        
+        if (!this.activeProduction.isSuburbProduction())
+            this.buildingProduction.push(this.activeProduction)
+        
         if (stillNeedInstructions) {
             this.select()
+            
+            if (!this.activeProduction.isSuburbProduction()) {
+                let what = this.activeProduction.getName()
+                
+                this.activeProduction = new townProduction[what].production(
+                    townProduction[what].turns, townProduction[what].cost, 
+                    townProduction[what].class, what)
+                this.activeProduction.select(this)
+            }
             return false
         }
-        this.buildingProduction.push(this.activeProduction)
         this.removeSelect()
         this.activeProduction = new Empty()
         return true

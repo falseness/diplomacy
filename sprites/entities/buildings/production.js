@@ -20,6 +20,9 @@ class Production {
     isBuildingProduction() {
         return false
     }
+    isSuburbProduction() {
+        return false
+    }
     nextTurn() {
         --this.turns
         
@@ -77,7 +80,6 @@ class BuildingProduction extends Production {
 class FarmProduction extends BuildingProduction {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
-        this.preparingStopped = false
     }
     canCreateOnCell(cell, town) {
         for (let i = 0; i < town.buildingProduction.length; ++i) {
@@ -88,8 +90,21 @@ class FarmProduction extends BuildingProduction {
             this.isSuburb(cell.hexagon.coord, grid.arr, town.getPlayer())
     }
     isPreparingStopped() {
-        this.preparingStopped |= this.canCreateOnCell(grid.arr[this.coord.x][this.coord.y], this.town)
-        return this.preparingStopped
+        let cell = grid.arr[this.coord.x][this.coord.y]
+        let isPreparing = cell.building.isEmpty() && 
+            this.isSuburb(this.coord, grid.arr, this.town.getPlayer())
+             
+        if (isPreparing)
+            return false
+        
+        for (let i = 0; i < this.town.buildingProduction.length; ++i) {
+            if (coordsEqually(this.town.buildingProduction[i].coord, this.coord)) {
+                this.town.buildingProduction.splice(i, 1)
+                break
+            }
+                
+        }
+        return true
     }
     create() {
         const income = 3
@@ -103,7 +118,11 @@ class FarmProduction extends BuildingProduction {
         this.coord = coord
         this.town = town
         this.text = new CoordText(coord.x, coord.y, this.turns)
-        return false
+        
+        let needInstructions = town.gold >= this.cost
+        /*if (needInstructions)
+            this.select(town)*/
+        return needInstructions
     }
     select(town) {
         this.paintTownBorders(town, town.suburbs, grid.arr, town.getPlayer())
@@ -155,11 +174,12 @@ class FarmProduction extends BuildingProduction {
     draw(ctx) {
         if (!this.town)
             return
-        if (this.preparingStopped || this.isPreparingStopped())
+            
+        if (this.isPreparingStopped())
             return
         
         drawImageWithOpacity(ctx, 'farm', grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)
-        if (!grid.arr.drawLogicText)
+        if (!grid.drawLogicText)
             this.text.draw(ctx)
     }
 }
@@ -187,7 +207,7 @@ class SuburbProduction extends BuildingProduction {
         
         this.create(coord, town)
         this.select(town)
-        return true
+        return this.availableHexagons.length && town.gold >= this.cost
     }
     create(coord, town) {
         grid.arr[coord.x][coord.y].hexagon.setIsSuburb(true)
