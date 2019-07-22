@@ -29,6 +29,7 @@ class TownInterface extends BarrackInterface {
         this.trainInterfacesTab = this.switch.getSelectedText()
         
         let selected = gameEvent.getSelected()
+        selected.removeSelect()
         selected.select()
     }
     isTypeValid(type) {
@@ -45,7 +46,7 @@ class TownInterface extends BarrackInterface {
     }
     makeTrainInterfaces() {
         this.switch = new Switch(this.gold.getX(), this.gold.getY() + HEIGHT * 0.05,
-            WIDTH * 0.115 * 2, WIDTH * 0.05, 0.03 * HEIGHT, 0.003 * HEIGHT, '#f7f7f7',
+            WIDTH * 0.115 * 2, WIDTH * 0.05, 0.04 * HEIGHT, 0.003 * HEIGHT, '#f7f7f7',
                 new Text(0, 0, WIDTH * 0.025, 'unit', '#747474'),
                 new Text(0, 0, WIDTH * 0.025, 'building', '#747474'),
             toggleTownTrainInterfaceTab)
