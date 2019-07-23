@@ -117,41 +117,81 @@
         let border = new Border()
         let attackBorder = new Border()
         
-        let players = [new Player({
-                r: 208, 
-                g: 208,
-                b: 208
-            }, true), 
-            new Player({
-                r: 255,
-                g: 0,
-                b: 0 //98, 168, 222
-            }),
-            new Player({
-                r: 98,
-                g: 168,
-                b: 222
-            })
-        ]
-        let grid = new Grid(0, 0, {
-            x: 20,
-            y: 10
-        })
-        let mapBorder = {
-            left: 0,
-            right: grid.getRight(),
-            top: 0,
-            bottom: grid.getBottom(),
-            scale: {
-                min: 0.4,
-                max: 1
-            }
-        }
+        let players 
+        let grid
+        let mapBorder
 
 
         let whooseTurn = 1
-        nextTurnButton.setColor(players[whooseTurn].getHexColor())
-        
+        function start1() {
+            players = [new Player({
+                r: 208, 
+                g: 208,
+                b: 208
+                }, true), 
+                new Player({
+                    r: 255,
+                    g: 0,
+                    b: 0 //98, 168, 222
+                }),
+                new Player({
+                    r: 98,
+                    g: 168,
+                    b: 222
+                })
+            ]
+            nextTurnButton.setColor(players[whooseTurn].getHexColor())
+            grid = new Grid(0, 0, {
+                x: 20,
+                y: 10
+            })
+            grid.arr[5][3].hexagon.repaint(1)
+
+            let TOWN1 = new Town(5, 3, 12, true)
+
+            grid.arr[14][6].hexagon.repaint(2)
+
+            let TOWN2 = new Town(14, 6, 6, true)
+        }
+        function start2() {
+            players = [new Player({
+                r: 208, 
+                g: 208,
+                b: 208
+                }, true), 
+                new Player({
+                    r: 255,
+                    g: 0,
+                    b: 0 //98, 168, 222
+                }),
+                new Player({
+                    r: 98,
+                    g: 168,
+                    b: 222
+                }),
+                new Player({
+                    r: 0,
+                    g: 179,
+                    b: 0
+                })
+            ]
+            nextTurnButton.setColor(players[whooseTurn].getHexColor())
+            grid = new Grid(0, 0, {
+                x: 30,
+                y: 20
+            })
+            grid.arr[9][6].hexagon.repaint(1)
+
+            let TOWN1 = new Town(9, 6, 13, true)
+
+            grid.arr[20][9].hexagon.repaint(2)
+
+            let TOWN2 = new Town(20, 9, 6, true)
+            
+            grid.arr[12][14].hexagon.repaint(3)
+
+            let TOWN3 = new Town(12, 14, 6, true)
+        }
         function start() {
            
             interfaceCanvas.width = WIDTH
@@ -167,13 +207,7 @@
             //createEvents()
             loadAssets()
 
-            grid.arr[5][3].hexagon.repaint(1)
-
-            let TOWN1 = new Town(5, 3, 12, true)
-
-            grid.arr[14][6].hexagon.repaint(2)
-
-            let TOWN2 = new Town(14, 6, 6, true)
+            
             menu.start()
             //requestAnimationFrame(gameLoop)
         }

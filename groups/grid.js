@@ -33,7 +33,7 @@ class Grid extends SpritesGroup {
             for (let j = 0; j < m; ++j) {
                 this.arr[i][j] = { hexagon: new Hexagon(i, j, 0), building: new Empty, unit: new Empty }
                 let pos = this.arr[i][j].hexagon.getPos()
-                //this.arr[i][j].coordText = new CoordText(i, j, i + ' ' + j)
+                this.arr[i][j].coordText = new CoordText(i, j, i + ' ' + j)
                 this.arr[i][j].logicText = new CoordText(i, j, '')
             }
         }
@@ -87,8 +87,8 @@ class Grid extends SpritesGroup {
     draw(ctx) {
         this.drawHexagons(ctx)
         
-        /*if (!this.drawLogicText)
-            this.drawTextCoord(ctx)*/
+        if (!this.drawLogicText)
+            this.drawTextCoord(ctx)
         
         this.drawOther(ctx)
         
