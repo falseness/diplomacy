@@ -123,6 +123,7 @@
         let players 
         let grid
         let mapBorder
+        let gameExit = false
 
         let backToMenuButton = new ImageButton(
             new MenuIconImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize * 0.75, 'black', 0.01 * HEIGHT, 0.005 * HEIGHT),
@@ -133,6 +134,7 @@
 
         let whooseTurn = 1
         function start1() {
+            whooseTurn = 1
             players = [new Player({
                 r: 208, 
                 g: 208,
@@ -163,6 +165,7 @@
             let TOWN2 = new Town(14, 6, 6, true)
         }
         function start2() {
+            whooseTurn = 1
             players = [new Player({
                 r: 208, 
                 g: 208,

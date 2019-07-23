@@ -5,14 +5,32 @@ function menuClick(event) {
     menu.loadButton.click(pos)
 }
 function menuBack() {
+    gameExit = true
     saveManager.save()
-    cancelAnimationFrame(gameLoop)
     menu.setVisible(true)
     menu.start()
+    canvas = {
+        offset: {
+            x: 0,
+            y: 0
+        },
+        scale: 1
+    }
+    mainCtx.setTransform(1, 0, 0, 1, 0, 0)
+    gameEvent.screen.stop()
 }
 function load() {
+    canvas = {
+        offset: {
+            x: 0,
+            y: 0
+        },
+        scale: 1
+    }
+    mainCtx.setTransform(1, 0, 0, 1, 0, 0)
+    if (!saveManager.load())
+        return
     menu.setVisible(false)
-    saveManager.load()
     createEvents()
     mapBorder = {
         left: 0,

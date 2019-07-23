@@ -18,7 +18,7 @@ class SaveManager {
     }
     load() {
         if (!this.hasSave())
-            return
+            return false
         let _grid = localStorage.getItem('grid')
         let _players = localStorage.getItem('players')
         let _whooseTurn = localStorage.getItem('whooseTurn')
@@ -27,6 +27,7 @@ class SaveManager {
         
         gameEvent.hideAll()
         console.log("loaded")
+        return true
     }
 }
 

@@ -169,6 +169,10 @@ class ComputerScreenGroup {
     setMoveMain(boolean) {
         this.moveMain = boolean
     }
+    stop() {
+        this.main.stop()
+        this.extreme.stop()
+    }
     changeSpeed(pos) {
         if (this.moveMain)
             this.main.changeSpeed(pos)
