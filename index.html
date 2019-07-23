@@ -43,6 +43,7 @@
     <script src='options/dictionaryEnumeration.js'></script>
     <script src='options/dictionaryToList.js'></script>
     <script src='options/gamestart.js'></script>
+    <script src='options/save.js'></script>
 
     <script src='render/loadassets.js'></script>
     <script src='render/image.js'></script>
@@ -117,10 +118,18 @@
         let border = new Border()
         let attackBorder = new Border()
         
+        let saveManager = new SaveManager()
+        
         let players 
         let grid
         let mapBorder
 
+        let backToMenuButton = new ImageButton(
+            new MenuIconImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize * 0.75, 'black', 0.01 * HEIGHT, 0.005 * HEIGHT),
+            new Rect(nextTurnButtonSize * 0.25, nextTurnButtonSize * 0.25,
+                nextTurnButtonSize, nextTurnButtonSize),
+            menuBack
+        )
 
         let whooseTurn = 1
         function start1() {

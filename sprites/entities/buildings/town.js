@@ -12,9 +12,9 @@ let townProduction = {
         class: Empty
     },
     farm: {
-        production: FarmProduction,
+        production: ManufactureProduction,
         turns: 4,
-        cost: 12,
+        cost: 8,
         class: Farm,
     },
     archer: {
@@ -42,7 +42,7 @@ let townProduction = {
         class: Catapult
     },
     barrack: {
-        production: BarrackProduction,
+        production: ManufactureProduction,
         turns: 4, //4 20
         cost: 20,
         class: Barrack,
@@ -53,7 +53,8 @@ class Town extends Building {
         const hp = 12
         const healSpeed = 3
         super(x, y, 'town', hp, healSpeed)
-
+        players[this.getPlayer()].addTown(this)
+        
         this.suburbs = []
         this.buildings = []
         this.units = []
@@ -72,22 +73,25 @@ class Town extends Building {
         //this.newProduction = new Production()
     }
     createFirstSuburbs(firstTown) {
-        this.suburbs.push(grid.arr[this.coord.x][this.coord.y])
+        this.suburbs.push(grid.arr[this.coord.x][this.coord.y].hexagon)
         grid.arr[this.coord.x][this.coord.y].hexagon.setIsSuburb(true)
 
         let neighboursCoord = this.getNeighbours()
 
         for (let i = 0; i < neighboursCoord.length; ++i) {
-            let cell = grid.arr[neighboursCoord[i].x][neighboursCoord[i].y]
+            let hexagon = grid.arr[neighboursCoord[i].x][neighboursCoord[i].y].hexagon
 
             if (firstTown)
-                cell.hexagon.repaint(this.getPlayer())
+                hexagon.repaint(this.getPlayer())
 
-            if (cell.hexagon.getPlayer() == this.getPlayer()) {
-                this.suburbs.push(cell)
-                cell.hexagon.setIsSuburb(true)
+            if (hexagon.getPlayer() == this.getPlayer()) {
+                this.suburbs.push(hexagon)
+                hexagon.setIsSuburb(true)
             }
         }
+    }
+    addSuburb(hexagon) {
+        this.suburbs.push(hexagon)
     }
     getGold() {
         return this.gold
@@ -146,8 +150,10 @@ class Town extends Building {
             
         let stillNeedInstructions = this.activeProduction.sendInstructions(cell.hexagon.coord, this)
         
-        if (!this.activeProduction.isSuburbProduction())
+        if (!this.activeProduction.isSuburbProduction()) {
             this.buildingProduction.push(this.activeProduction)
+            grid.arr[cell.hexagon.coord.x][cell.hexagon.coord.y].building = this.activeProduction
+        }
         
         if (stillNeedInstructions) {
             this.select()
@@ -158,7 +164,7 @@ class Town extends Building {
                 this.activeProduction = new townProduction[what].production(
                     townProduction[what].turns, townProduction[what].cost, 
                     townProduction[what].class, what)
-                this.activeProduction.select(this)
+                this.activeProduction.choose(this)
             }
             return false
         }
@@ -198,7 +204,7 @@ class Town extends Building {
             this.activeProduction = new Empty()
         }
         else if (this.activeProduction.isBuildingProduction()) {
-            this.activeProduction.select(this)
+            this.activeProduction.choose(this)
         }
         else {
             console.log("ERROR not UnitProduction and not BuildingProduction")
@@ -235,14 +241,17 @@ class Town extends Building {
     }
     buildingPreparingLogic() {
         for (let i = 0; i < this.buildingProduction.length; ++i) {
-            if (this.buildingProduction[i].isPreparingStopped()) {
-                this.buildingProduction.splice(i--, 1)
-                continue
-            }
-            let preparingFinished = this.buildingProduction[i].nextTurn()
+            let preparingFinished = this.buildingProduction[i].isPreparingFinished()
             if (preparingFinished) {
                 let building = this.buildingProduction[i].create()
                 this.buildings.push(building)
+                this.buildingProduction.splice(i--, 1)
+            }
+        }
+    }
+    updateBuildingsProductionArray() {
+        for (let i = 0; i < this.buildingProduction.length; ++i) {
+            if (this.buildingProduction[i].isKilled()) {
                 this.buildingProduction.splice(i--, 1)
             }
         }
@@ -265,15 +274,11 @@ class Town extends Building {
     }
     updateSuburbsArray() {
         for (let i = 0; i < this.suburbs.length; ++i) {
-            if (this.suburbs[i].hexagon.getPlayer() != this.getPlayer())
+            if (this.suburbs[i].getPlayer() != this.getPlayer())
                 this.suburbs.splice(i--, 1)
         }
     }
-    nextTurn(whooseTurn) {
-        this.updateUnitsArray()
-        this.updateSuburbsArray()
-        if (!this.isMyTurn())
-            return
+    startTurn() {
         super.nextTurn(whooseTurn)
 
         this.gold += this.getIncome()
@@ -282,11 +287,15 @@ class Town extends Building {
         
         this.preparingLogic()
     }
+    nextTurn(whooseTurn) {
+        this.updateUnitsArray()
+        this.updateSuburbsArray()
+    }
     draw(ctx) {
         super.draw(ctx)
-        for (let i = 0; i < this.buildingProduction.length; ++i) {
+        /*for (let i = 0; i < this.buildingProduction.length; ++i) {
             this.buildingProduction[i].draw(ctx)
-        }
+        }*/
     }
 }
 

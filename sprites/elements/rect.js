@@ -34,12 +34,21 @@ class Rect {
     setColor(color) {
         this.color = color
     }
+    getColor(color) {
+        return this.color
+    }
     getCenter() {
         let center = {
             x: this.x + this.width / 2,
             y: this.y + this.height / 2
         }
         return center
+    }
+    setStrokeWidth(strokeWidth) {
+        this.strokeWidth = strokeWidth
+    }
+    getStrokeWidth() {
+        return this.strokeWidth
     }
     getRectPoints() {
         let points = [
@@ -75,7 +84,8 @@ class Rect {
         ctx.lineWidth = this.strokeWidth
 
         this.drawShape(ctx)
-        ctx.stroke()
+        if (this.strokeWidth)
+            ctx.stroke()
         ctx.fill()
 
         ctx.closePath()

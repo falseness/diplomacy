@@ -40,6 +40,14 @@ class UnitProduction extends Production {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
     }
+    toJSON() {
+        let res = {}
+        res.turns = this.turns
+        res.cost = this.cost
+        res.name = this.name
+        
+        return res
+    }
     create(x, y, town) {
         let t = new this.class(x, y, town)
         
@@ -61,13 +69,22 @@ class BuildingProduction extends Production {
             y: -1
         }
     }
+    isPassable() {
+        return true
+    }
     isWaitingForInstructions() {
         return this.isSelect
     }
-    select() {
+    isUnit() {
+        return false
+    }
+    isBuilding() {
+        return true
+    }
+    choose() {
         this.isSelected = true
     }
-    removeSelect() {
+    removeChoose() {
         this.isSelected = false
     }
     isBuildingProduction() {
@@ -80,6 +97,31 @@ class BuildingProduction extends Production {
 class ManufactureProduction extends BuildingProduction {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
+        this.killed = false
+    }
+    toJSON() {
+        let res = {}
+        res.turns = this.turns
+        res.cost = this.cost
+        res.name = this.name
+        
+        res.coord = {}
+        res.coord.x = this.coord.x
+        res.coord.y = this.coord.y
+        
+        res.town = {}
+        if (this.town)
+            res.town.coord = this.town.getCoord()
+        
+        return res
+    }
+    isKilled() {
+        return this.killed
+    }
+    kill() {
+        this.killed = true
+        this.town.updateBuildingsProductionArray()
+        grid.arr[this.coord.x][this.coord.y].building = new Empty()
     }
     canCreateOnCell(cell, town) {
         for (let i = 0; i < town.buildingProduction.length; ++i) {
@@ -90,26 +132,33 @@ class ManufactureProduction extends BuildingProduction {
             this.isSuburb(cell.hexagon.coord, grid.arr, town.getPlayer())
     }
     isPreparingStopped() {
-        let cell = grid.arr[this.coord.x][this.coord.y]
-        let isPreparing = cell.building.isEmpty() && 
-            this.isSuburb(this.coord, grid.arr, this.town.getPlayer())
-             
-        if (isPreparing)
-            return false
-        
-        for (let i = 0; i < this.town.buildingProduction.length; ++i) {
-            if (coordsEqually(this.town.buildingProduction[i].coord, this.coord)) {
-                this.town.buildingProduction.splice(i, 1)
-                break
-            }
-                
-        }
-        return true
+        console.log("error")
     }
     create() {
-        let t = new this.class(this.coord.x, this.coord.y, this.income, this.town)
+        let t = new this.class(this.coord.x, this.coord.y, this.town)
         
         return t
+    }
+    getPlayer() {
+        return this.town.getPlayer()
+    }
+    getInfo() {
+        let manufacture = {}
+        manufacture.name = this.name
+        manufacture.info = {
+            turns: this.turns//,    
+            //cost: this.cost
+        }
+        return manufacture
+    }
+    needInstructions() {
+        return false
+    }
+    select() {
+        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
+    }
+    removeSelect() {
+        entityInterface.setVisible(false)
     }
     sendInstructions(coord, town) {
         town.gold -= this.cost
@@ -123,9 +172,9 @@ class ManufactureProduction extends BuildingProduction {
             this.select(town)*/
         return needInstructions
     }
-    select(town) {
+    choose(town) {
         this.paintTownBorders(town, town.suburbs, grid.arr, town.getPlayer())
-        super.select()
+        super.choose()
     }
     paintTownBorders(town, suburbs, arr, player) {
         border.newBrokenLine()
@@ -141,7 +190,7 @@ class ManufactureProduction extends BuildingProduction {
 
         // search available for purchase cells
         for (let i = 0; i < suburbs.length; ++i) {
-            let hexagon = suburbs[i].hexagon
+            let hexagon = suburbs[i]
             used[hexagon.coord.x][hexagon.coord.y] = true
 
             let neighbours = hexagon.getNeighbours()
@@ -163,35 +212,26 @@ class ManufactureProduction extends BuildingProduction {
             }
         }
     }
+    isPreparingFinished() {
+        return !this.turns
+    }
     nextTurn() {
-        let preparingFinished = super.nextTurn()
+        if (whooseTurn != this.town.getPlayer())
+            return
+        super.nextTurn()
         
-        if (!preparingFinished)
-            this.text.setText(this.turns)
-        return preparingFinished
+        this.text.setText(this.turns)
     }
     draw(ctx) {
         if (!this.town)
             return
             
-        if (this.isPreparingStopped())
-            return
+        /*if (this.isPreparingStopped())
+            return*/
         
         drawImageWithOpacity(ctx, this.name, grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)
         if (!grid.drawLogicText)
             this.text.draw(ctx)
-    }
-}
-class FarmProduction extends ManufactureProduction {
-    constructor(turns = 1, cost = 1, _class = new Empty(), name) {
-        super(turns, cost, _class, name)
-        this.income = 3
-    }
-}
-class BarrackProduction extends ManufactureProduction {
-    constructor(turns = 1, cost = 1, _class = new Empty(), name) {
-        super(turns, cost, _class, name)
-        this.income = -3
     }
 }
 class SuburbProduction extends BuildingProduction {
@@ -217,19 +257,19 @@ class SuburbProduction extends BuildingProduction {
         town.gold -= this.suburbsCostformula(this.distance[coord.x][coord.y])
         
         this.create(coord, town)
-        this.select(town)
+        this.choose(town)
         return this.availableHexagons.length && town.gold >= this.cost
     }
     create(coord, town) {
         grid.arr[coord.x][coord.y].hexagon.setIsSuburb(true)
-        town.suburbs.push(grid.arr[coord.x][coord.y])
+        town.addSuburb(grid.arr[coord.x][coord.y].hexagon)
     }
-    select(town) {
+    choose(town) {
         grid.cleanLogicText()
 
         this.paintTownBorders(town, town.suburbs, grid.arr, town.getPlayer())
         
-        super.select()
+        super.choose()
     }
     isSuburbProduction() {
         return true
@@ -295,7 +335,7 @@ class SuburbProduction extends BuildingProduction {
 
             // search available for purchase cells
             for (let i = 0; i < suburbs.length; ++i) {
-                let hexagon = suburbs[i].hexagon
+                let hexagon = suburbs[i]
                 used[hexagon.coord.x][hexagon.coord.y] = true
 
                 let neighbours = hexagon.getNeighbours()

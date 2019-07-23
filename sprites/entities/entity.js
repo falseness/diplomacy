@@ -11,6 +11,9 @@ class Entity extends Sprite {
         
         this.name = name
     }
+    isPassable() {
+        return false
+    }
     isKilled() {
         return this.killed
     }

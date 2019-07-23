@@ -11,6 +11,21 @@ class Unit extends Entity {
 
         this.way = new Way()
     }
+    toJSON() {
+        let res = {}
+        
+        res.name = this.name
+        res.coord = {}
+        res.coord.x = this.coord.x
+        res.coord.y = this.coord.y
+        res.hp = this.hp
+        res.wasHitted = this.wasHitted
+        res.moves = this.moves
+        
+        res.town = {coord: this.town.getCoord()}
+        
+        return res
+    }
     getDMG() {
         return this.dmg
     }
@@ -30,19 +45,24 @@ class Unit extends Entity {
         unit.info.salary = this.salary
         return unit
     }
+    cellHasEnemyBuilding(cell) {
+        return (cell.building.notEmpty() && 
+                cell.building.getPlayer() != this.getPlayer() && 
+                !cell.building.isPassable())
+    }
     select() {
         //let border = Math.max(grid.arr.length, grid.arr[0].length)
         entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
 
+        grid.setDrawLogicText(false)
+        border.newBrokenLine()
         let arr = grid.arr
         if (!this.isMyTurn()) {
 
-            this.way.create(this.coord, 0, arr, this.getPlayer(), border)
+            this.way.create(this.coord, this.speed, arr, this.getPlayer(), border)
 
-            grid.setDrawLogicText(false)
             return
         }
-        border.newBrokenLine()
         this.way.create(this.coord, this.moves, arr, this.getPlayer(), border)
     }
     removeSelect() {
@@ -83,7 +103,6 @@ class Unit extends Entity {
         while (!(coord.x == this.coord.x && coord.y == this.coord.y)) {
             let hexagon = arr[coord.x][coord.y].hexagon
             if (hexagon.getPlayer() != this.getPlayer()) {
-                hexagon.setIsSuburb(false)
                 hexagon.repaint(this.getPlayer())
             }
 
@@ -102,13 +121,13 @@ class Unit extends Entity {
         this.moves -= this.way.getDistance(coord)
         let cell = arr[coord.x][coord.y]
             // the building is always priority target
-        if ((cell.building.notEmpty() && cell.building.getPlayer() != this.getPlayer())) {
+        if (this.cellHasEnemyBuilding(cell)) {
             cell.building.hit(this.getDMG())
         } else if (cell.unit.notEmpty()) {
             cell.unit.hit(this.getDMG())
         }
         // if enemy entity is not dead we cant stand on his cell
-        if ((cell.building.notEmpty() && cell.building.getPlayer() != this.getPlayer()) ||
+        if (this.cellHasEnemyBuilding(cell) ||
             cell.unit.notEmpty())
             coord = this.way.getParent(coord)
 
@@ -224,7 +243,7 @@ class Way {
         return sortedHexagonNeighbours
     }
     cellHasEnemyEntity(cell, player) {
-        return (cell.building.notEmpty() && cell.building.getPlayer() != player) ||
+        return (!cell.building.isPassable() && cell.building.getPlayer() != player) ||
             (cell.unit.notEmpty() && cell.unit.getPlayer() != player)
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {

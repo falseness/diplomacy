@@ -1,13 +1,26 @@
 class Barrack extends Building {
-    constructor(x, y, income, town) {
+    constructor(x, y, town) {
         const hp = 6
         const healSpeed = 1
         super(x, y, 'barrack', hp, healSpeed)
 
-        this.income = income
+        this.income = -3
         this.town = town
         
         this.unitProduction = new Empty()
+    }
+    toJSON() {
+        let res = {}
+        
+        res.name = name
+        res = {}
+        res.coord.x = this.coord.x
+        res.coord.y = this.coord.y
+        res.hp = this.hp
+        res.income = this.income
+        res.town = {coord: this.town.getCoord()}
+        res.wasHitted = this.wasHitted
+        return res
     }
     getIncome() {
         return this.income

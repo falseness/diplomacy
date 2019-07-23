@@ -8,6 +8,7 @@ class Player
             g: color.g,
             b: color.b
         }
+        this.towns = []
         if (neutral) {
             this.hexagon = this.calcSuburbHexagon()
         }
@@ -15,6 +16,14 @@ class Player
             this.hexagon = this.calcHexagon()
         }
         this.suburbHexagon = this.calcSuburbHexagon()
+    }
+    addTown(town) {
+        this.towns.push(town)
+    }
+    startTurn() {
+        for (let i = 0; i < this.towns.length; ++i) {
+            this.towns[i].startTurn()
+        }
     }
     calcSuburbHexagon() {
         let tmpCanvas = document.createElement('canvas')

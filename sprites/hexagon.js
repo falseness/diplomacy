@@ -28,14 +28,14 @@ const neighborhood = [
     }*/
 
 class Hexagon extends Sprite {
-    constructor(x, y, player) {
+    constructor(x, y, player, _isSuburb = false) {
         super(x, y)
         
         this.pos.x -= basis.hexHalfRectWithStrokeOffset.width
         this.pos.y -= basis.hexHalfRectWithStrokeOffset.height
         
         this.player = player
-        this.suburb = new Empty()
+        this.suburb = _isSuburb
 
         /* let pos = this.getPos()
          this.object = new Konva.RegularPolygon(
@@ -53,13 +53,10 @@ class Hexagon extends Sprite {
          this.object.on('click', click)*/
     }
     setIsSuburb(boolean) {
-        if (boolean)
-            this.suburb = new SuburbImage({ x: this.coord.x, y: this.coord.y }, basis.r)
-        else
-            this.suburb = new Empty()
+        this.suburb = boolean
     }
     isSuburb() {
-        return this.suburb.notEmpty()
+        return this.suburb
     }
     getPlayer() {
         return this.player
@@ -67,6 +64,14 @@ class Hexagon extends Sprite {
     repaint(player) {
         if (this.player != player) {
             this.player = player
+            if (!this.isSuburb()) 
+                return
+                
+            this.setIsSuburb(false)
+            
+            if (grid.arr[this.coord.x][this.coord.y].building.isBuildingProduction()) {
+                grid.arr[this.coord.x][this.coord.y].building.kill()
+            }
         }
     }
     draw(ctx) {

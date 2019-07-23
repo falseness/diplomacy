@@ -6,6 +6,15 @@ class Empty {
             y: -1
         }
     }
+    toJSON() {
+        return {name: 'Empty'}
+    }
+    isPassable() {
+        return true
+    }
+    isBuildingProduction() {
+        return false
+    }
     isEmpty() {
         return true
     }

@@ -10,7 +10,8 @@ class ImageButton extends Button {
     }
     draw(ctx) {
         if (this.canClick) {
-            //this.rect.draw(ctx)
+            if (debug)
+                this.rect.draw(ctx)
             //drawImage(ctx, this.img, this.rect.getCenter(), this.rect.getWidth(), this.rect.getHeight())
             this.img.draw(ctx)
             this.text.draw(ctx)

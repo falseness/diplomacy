@@ -19,8 +19,8 @@ class Catapult extends RangeUnit {
         return this.buildingDMG
     }
     cellHasEnemy(cell) {
-        return (cell.building.notEmpty() && cell.building.getPlayer() != this.getPlayer()) ||
-                (cell.unit.notEmpty() && cell.unit.getPlayer() != this.getPlayer)
+        return (this.cellHasEnemyBuilding(cell) ||
+                (cell.unit.notEmpty() && cell.unit.getPlayer() != this.getPlayer))
     }
     sendInstructions(cell) {
         if (!this.isMyTurn())
@@ -42,7 +42,7 @@ class Catapult extends RangeUnit {
         }
             
         
-        if (cell.building.notEmpty() && cell.building.getPlayer() != this.getPlayer()) {
+        if (this.cellHasEnemyBuilding(cell)) {
             cell.building.hit(this.getBuildingDMG())
 
             this.moves = 0

@@ -183,6 +183,12 @@ class Events {
             nextTurn()
         if (keycode == 27)
             debug = !debug
+        if (keycode == 81) {
+            saveManager.save()
+        }
+        if (keycode == 87) {
+            saveManager.load()
+        }
     }
     mousewheel(pos, scale) {
         this.screen.scale(pos, scale)
@@ -241,6 +247,8 @@ class Events {
             this.selected = new Empty()
     }
     click(pos, realPos) {
+        if (backToMenuButton.click(pos))
+            return
         if (nextTurnButton.click(pos))
             return
 

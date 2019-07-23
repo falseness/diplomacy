@@ -3,12 +3,6 @@ function drawMain() {
         width, height)
 
     grid.draw(mainCtx)
-    mainCtx.beginPath()
-
-    mainCtx.strokeStyle = 'white'
-    mainCtx.lineWidth = 0.001 * height
-
-    mainCtx.closePath()
 
     attackBorder.draw(mainCtx)
     border.draw(mainCtx)
@@ -22,6 +16,7 @@ function drawInterface() {
     townInterface.draw(interfaceCtx)
 
     nextTurnButton.draw(interfaceCtx)
+    backToMenuButton.draw(interfaceCtx)
     gameEvent.draw(interfaceCtx)
 }
 

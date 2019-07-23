@@ -33,7 +33,7 @@ class RangeUnit extends Unit {
                 // attack range > speed by default
         }
 
-        if (cell.building.notEmpty() && cell.building.getPlayer() != this.getPlayer()) {
+        if (this.cellHasEnemyBuilding(cell)) {
             cell.building.hit(this.getDMG())
 
             this.moves = 0

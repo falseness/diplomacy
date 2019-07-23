@@ -132,3 +132,60 @@ class TriangleImage extends ShapeImage {
         this.strokeWidth = oldStrokeWidth
     }
 }
+class MenuIconImage {
+    constructor(pos, color, side, strokeColor, cornerRadius, strokeWidth) {
+        let corner = [cornerRadius, cornerRadius, cornerRadius, cornerRadius]
+        let w = side
+        let h = side * 0.2
+        this.rectOne = new Rect(pos.x, pos.y, w, h, corner, strokeWidth, color, strokeColor)
+        this.rectTwo = new Rect(pos.x, pos.y + 2 * h, w, h, corner, strokeWidth, color, strokeColor)
+        this.rectThree = new Rect(pos.x, pos.y + 4 * h, w, h, corner, strokeWidth, color, strokeColor)
+        this.side = side
+    }
+    setPos(oldPos) {
+        let w = this.side
+        let h = this.side * 0.2
+        let pos = {
+            x: oldPos.x - 0.5 * w,
+            y: oldPos.y - 2.5 * h
+        }
+        
+        this.rectOne.setPos(pos)
+        pos.y += 2 * h
+        this.rectTwo.setPos(pos)
+        pos.y += 2 * h
+        this.rectThree.setPos(pos)
+    }
+    setColor(color) {
+        this.rectOne.setColor(color)
+        this.rectTwo.setColor(color)
+        this.rectThree.setColor(color)
+    }
+    setStrokeWidth(strokeWidth) {
+        this.rectOne.setStrokeWidth(strokeWidth)
+        this.rectTwo.setStrokeWidth(strokeWidth)
+        this.rectThree.setStrokeWidth(strokeWidth)
+    }
+    draw(ctx) {
+        this.rectOne.draw(ctx)
+        this.rectTwo.draw(ctx)
+        this.rectThree.draw(ctx)
+        
+        
+        let oldColor = this.rectOne.getColor()
+        let oldStrokeWidth = this.rectOne.getStrokeWidth()
+
+        const suburbAlpha = 0.4
+        const maxRGBInt = 255
+        let color = `rgba(${maxRGBInt}, ${maxRGBInt}, ${maxRGBInt}, ${suburbAlpha})`
+        this.setColor(color)
+        this.setStrokeWidth(0)
+
+        this.rectOne.draw(ctx)
+        this.rectTwo.draw(ctx)
+        this.rectThree.draw(ctx)
+
+        this.setColor(oldColor)
+        this.setStrokeWidth(oldStrokeWidth)
+    }
+}

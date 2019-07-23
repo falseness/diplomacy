@@ -9,6 +9,9 @@ class Sprite
         }
         this.pos = this.getPos()
     }
+    getCoord() {
+        return {x: this.coord.x, y: this.coord.y}
+    }
     getPos()
     {
         let pos = biasToTransition(this.coord.x, this.coord.y)

@@ -4,7 +4,7 @@ class KOHb extends Unit {
         const healSpeed = 1
         const dmg = 1
         const speed = 3
-        const salary = 6
+        const salary = 4
         super(x, y, 'KOHb', hp, healSpeed, dmg, speed, salary, town)
         this.mirrorX = false
     }
