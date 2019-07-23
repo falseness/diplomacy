@@ -38,7 +38,7 @@ let townProduction = {
     catapult: {
         production: UnitProduction,
         turns: 4,
-        cost: 40,
+        cost: 35,
         class: Catapult
     },
     barrack: {
