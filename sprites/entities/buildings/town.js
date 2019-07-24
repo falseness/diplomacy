@@ -214,6 +214,14 @@ class Town extends Building {
     isPreparingUnit() {
         return this.unitProduction.notEmpty()
     }
+    kill() {
+        for (let i = 0; i < this.units.length; ++i) {
+            this.units[i].kill()
+            this.units.splice(i--, 1)
+        }
+        
+        super.kill()
+    }
     crisisPenalty() {
         while (this.units.length)
             this.units[0].kill()

@@ -6,16 +6,6 @@ class Building extends Entity {
     needInstructions() {
         return false
     }
-    toJson() {
-        let res = {}
-        
-        res.name = name
-        res.x = this.coord.x
-        res.y = this.coord.y
-        res.income = this.income
-        res.town = this.town.getCoord()
-        return res
-    }
     kill() {
         grid.arr[this.coord.x][this.coord.y].building = new Empty()
 

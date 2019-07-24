@@ -13,7 +13,7 @@ class Farm extends Building {
     toJSON() {
         let res = {}
         
-        res.name = name
+        res.name = this.name
         res.coord = {}
         res.coord.x = this.coord.x
         res.coord.y = this.coord.y
