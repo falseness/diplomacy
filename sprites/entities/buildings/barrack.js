@@ -13,7 +13,7 @@ class Barrack extends Building {
         let res = {}
         
         res.name = this.name
-        res = {}
+        res.coord = {}
         res.coord.x = this.coord.x
         res.coord.y = this.coord.y
         res.hp = this.hp
