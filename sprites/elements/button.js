@@ -1,5 +1,5 @@
 class Button {
-    constructor(rect, text, clickFunc, parameters, canClick = true) {
+    constructor(rect, text, clickFunc, parameters, canClick = true, callThis) {
         this.rect = rect
         this.text = text
 
@@ -7,30 +7,32 @@ class Button {
         this.clickFunc = clickFunc
 
         this.parameters = parameters
-
-        this.text.setTextAlign('center')
+        
+        this.callThis = callThis
+        
+        this.text.textAlign = 'center'
     }
     trimText() {
-        this.text.setPos(this.rect.getCenter())
+        this.text.pos = this.rect.center
     }
-    setPos(pos) {
-        this.rect.setPos(pos)
+    set pos(pos) {
+        this.rect.pos = pos
         this.trimText()
     }
-    getText() {
-        return this.text.getText()
+    get textString() {
+        return this.text.text
     }
-    getHeight() {
-        return this.rect.getHeight()
+    get height() {
+        return this.rect.height
     }
-    setText(text) {
-        this.text.setText(text)
+    set textString(text) {
+        this.text.text = text
     }
-    setTextColor(color) {
-        this.text.setColor(color)
+    set textColor(color) {
+        this.text.color = color
     }
-    setCanClick(boolean) {
-        this.canClick = boolean
+    get textColor() {
+        return this.text.color
     }
     enableClick() {
         this.canClick = true
@@ -46,7 +48,12 @@ class Button {
     }
     click(pos) {
         if (this.canClick && this.isInside(pos)) {
-            this.clickFunc(this.parameters)
+            if (this.callThis) {
+                this.clickFunc.call(this.callThis, this.parameters)
+            }
+            else {
+                this.clickFunc(this.parameters)
+            }
             return true
         }
         return false

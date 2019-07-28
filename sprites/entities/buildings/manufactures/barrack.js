@@ -1,11 +1,12 @@
+//preparingManufacture
 class Barrack extends Building {
-    constructor(x, y, town) {
+    constructor(x, y) {
         const hp = 6
         const healSpeed = 1
         super(x, y, 'barrack', hp, healSpeed)
 
-        this.income = -3
-        this.town = town
+        const income = -3
+        this.income = income
         
         this.unitProduction = new Empty()
     }
@@ -21,17 +22,6 @@ class Barrack extends Building {
         res.town = {coord: this.town.getCoord()}
         res.wasHitted = this.wasHitted
         return res
-    }
-    getIncome() {
-        return this.income
-    }
-    getPlayer() {
-        return this.town.getPlayer()
-    }
-    kill() {
-        super.kill()
-
-        this.town.updateBuildingsArray()
     }
     prepare(what) {
         if (this.town.getGold() < townProduction[what].cost)

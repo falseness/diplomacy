@@ -4,99 +4,42 @@ function menuClick(event) {
     menu.playButton2.click(pos)
     menu.loadButton.click(pos)
 }
+
 function menuBack() {
-    gameExit = true
-    saveManager.save()
-    menu.setVisible(true)
-    menu.start()
-    canvas = {
-        offset: {
-            x: 0,
-            y: 0
-        },
-        scale: 1
-    }
-    mainCtx.setTransform(1, 0, 0, 1, 0, 0)
-    gameEvent.screen.stop()
+    menu.back()
 }
+
 function load() {
-    canvas = {
-        offset: {
-            x: 0,
-            y: 0
-        },
-        scale: 1
-    }
-    mainCtx.setTransform(1, 0, 0, 1, 0, 0)
     if (!saveManager.load())
         return
-    menu.setVisible(false)
-    createEvents()
-    mapBorder = {
-        left: 0,
-        right: grid.getRight(),
-        top: 0,
-        bottom: grid.getBottom(),
-        scale: {
-            min: 0.4,
-            max: 1
-        }
-    }
-    requestAnimationFrame(gameLoop)
+    GameManager.load()
 }
+
 function startGame1() {
-    menu.setVisible(false)
-    start1()
-    createEvents()
-    mapBorder = {
-        left: 0,
-        right: grid.getRight(),
-        top: 0,
-        bottom: grid.getBottom(),
-        scale: {
-            min: 0.4,
-            max: 1
-        }
-    }
-    requestAnimationFrame(gameLoop)
+    GameManager.start1()
 }
+
 function startGame2() {
-    menu.setVisible(false)
-    start2()
-    createEvents()
-    mapBorder = {
-        left: 0,
-        right: grid.getRight(),
-        top: 0,
-        bottom: grid.getBottom(),
-        scale: {
-            min: 0.4,
-            max: 1
-        }
-    }
-    requestAnimationFrame(gameLoop)
+    GameManager.start2()
 }
 class Menu {
     constructor() {
         this.setVisible(true)
-        
-        this.logo = new JustImage('logo', {x: WIDTH / 2, y: HEIGHT * 0.2}, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
+
+        this.logo = new JustImage('logo', { x: WIDTH / 2, y: HEIGHT * 0.2 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
         this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, undefined, '#d0d0d0')
-        this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33, 0.02 * WIDTH, 'alpha', '#747474')//#747474
+        this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33, 0.02 * WIDTH, 'alpha', '#747474') //#747474
         this.playButton1 = new Button(
-            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35, WIDTH * 0.25, HEIGHT * 0.1, 
-                     [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
+            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
             new Text(undefined, undefined, 0.04 * WIDTH, 'play', 'black'), startGame1)
         this.playButton1.trimText()
-        
+
         this.playButton2 = new Button(
-            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35 + HEIGHT * 0.2, WIDTH * 0.25, HEIGHT * 0.1, 
-                     [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
+            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35 + HEIGHT * 0.2, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
             new Text(undefined, undefined, 0.04 * WIDTH, 'play3', 'black'), startGame2)
         this.playButton2.trimText()
         this.loadButton = new Button(
-            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35 + HEIGHT * 0.4, WIDTH * 0.25, HEIGHT * 0.1, 
-                     [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
+            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35 + HEIGHT * 0.4, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
             new Text(undefined, undefined, 0.04 * WIDTH, 'load save', 'black'), load)
         this.loadButton.trimText()
     }
@@ -106,14 +49,20 @@ class Menu {
     setEvents(boolean) {
         if (boolean) {
             document.addEventListener('click', menuClick)
-        }
-        else {
+        } else {
             document.removeEventListener('click', menuClick)
         }
     }
     setVisible(boolean) {
         this.visible = boolean
         this.setEvents(boolean)
+    }
+    back() {
+        gameExit = true
+            //saveManager.save() some bugs
+
+        menu.setVisible(true)
+        menu.start()
     }
     draw(ctx) {
         ctx.clearRect(0, 0, WIDTH, HEIGHT)

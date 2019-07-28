@@ -1,12 +1,6 @@
 class BarrackInterface {
+    #visible = false
     constructor() {
-        /*this.pos = 
-        {
-            x: width * 0.67, 
-            y: height * 0.0,
-        }*/
-        this.visible = false
-
         this.pos = {
             x: WIDTH * 0.72,
             y: HEIGHT * 0.03, // 0.12
@@ -19,38 +13,18 @@ class BarrackInterface {
         let stroke = 0.002 * WIDTH * 1.15
         let cornerRadius = 0.03 * WIDTH * 1.15
             //let indent = stroke + cornerRadius
-        this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [cornerRadius, 0, 0, cornerRadius], stroke)
+        this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
+            [cornerRadius, 0, 0, cornerRadius], stroke)
         this.gold = new JustImage('gold', {
                 x: this.pos.x + 0.22 * 0.17 * WIDTH * 1.15,
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
             this.height * 0.15, this.height * 0.15)
-        this.goldText = new Text(this.gold.getX() + 0.22 * WIDTH * 1.15 * 0.92, this.gold.getY(), 
+        this.goldText = new Text(this.gold.x + 0.22 * WIDTH * 1.15 * 0.92, this.gold.y, 
                                  0.03 * WIDTH * 1.15, 'error', 'white', 'right')
         
-            /*this.gold = createImageByModel(
-            {
-                x: this.pos.x + this.height * 0.1,
-                y: this.pos.y + this.height * 0.05,
-                image: assets.gold,
-                width: this.height * 0.15,
-                height: this.height * 0.15,
-                color: 'red'
-            }) 
-            this.goldText = new Text(
-            {
-                x: this.gold.x() + this.height * 0.8, 
-                y: this.gold.y() + 0.01 * height, 
-                fontSize: 0.05 * height,
-                offset: {x: 0.5, y: 0}
-            })
-            */
         this.makeTrainInterfaces()
-
-
-
         this.updateSizes()
-            //this.hide()
     }
     updateSizes() {
         let maximumTrainInterfacesCount = 0
@@ -60,12 +34,11 @@ class BarrackInterface {
                 maximumTrainInterfacesCount = thisLength
         }
         let interfaceSize = this.getTrainInterfaceY(maximumTrainInterfacesCount - 1)
-            /*this.gold.getY() + this.height * 0.3 +
-            this.trainInterfacesMarginInterval * (maximumTrainInterfacesCount - 1)*/
+
         const requiredMargin = height * 0.1
         if (interfaceSize - this.pos.y > this.height - requiredMargin) {
             this.height = interfaceSize - this.pos.y + requiredMargin
-            this.background.setHeight(this.height)
+            this.background.height = this.height
         }
     }
     getTrainInterfaceInfo() {
@@ -120,12 +93,12 @@ class BarrackInterface {
         return type == 'unit'
     }
     getTrainInterfaceY(index) {
-        return this.gold.getY() + this.height * 0.3 + this.trainInterfacesMarginInterval * index
+        return this.gold.y + this.height * 0.3 + this.trainInterfacesMarginInterval * index
     }
     trainInterfacesCreationLoop(trainInterfaces, index) {
-        for (let i in townProduction) {
+        for (let i in production) {
             let name = i
-            let type = (new townProduction[name].production).isUnitProduction()?'unit':'building'
+            let type = production[name].production.isUnitProduction()?'unit':'building'
             if (!this.isTypeValid(type))
                 continue
             
@@ -151,8 +124,8 @@ class BarrackInterface {
                 new TrainInterface(
                     margins.image, margins.costText, margins.button,
                     image, costText, button,
-                    this.gold.getX(), this.getTrainInterfaceY(index[type]), name)
-            this.trainInterfaces[type][name].setCostText('cost: ' + townProduction[i].cost)
+                    this.gold.x, this.getTrainInterfaceY(index[type]), name)
+            this.trainInterfaces[type][name].setCostText('cost: ' + production[i].cost)
             ++index[type]
         }
     }
@@ -177,58 +150,27 @@ class BarrackInterface {
         let canTrainNew = !barrack.info.train
         for (let i in this.trainInterfaces[type]) {
             this.trainInterfaces[type][i].setCanTrain(canTrainNew)
-            this.trainInterfaces[type][i].setButtonText('train (' + townProduction[i].turns + ')')
+            this.trainInterfaces[type][i].setButtonText('train (' + production[i].turns + ')')
         }
         if (!canTrainNew) {
             this.trainInterfaces[type][barrack.info.train].setButtonText(
-                         barrack.info.turns + ' / ' + townProduction[barrack.info.train].turns)
+                         barrack.info.turns + ' / ' + production[barrack.info.train].turns)
             this.trainInterfaces[type][barrack.info.train].setCanTrain(true)
         }
     }
     change(barrack, color) {
-        this.background.setColor(color.hex)
+        this.background.color = color.hex
+
         this.changeUnitTab(barrack)
-        /*
-        for (let i in this.trainInterfaces) {
-            if (town.info.train && (new townProduction[i].production).isUnitProduction()) {
-                if (i == barrack.info.train) {
-                    this.trainInterfaces[i].setCanTrain(true)
-                     this.trainInterfaces[barrack.info.train].setButtonText(
-                         town.info.turns + ' / ' + townProduction[town.info.train].turns)
-                }
-                else {
-                    this.trainInterfaces[i].setCanTrain(false)
-                }
-                continue
-            }
-            if (barrack.activeProduction) {
-                if (i == barrack.activeProduction) {
-                    this.trainInterfaces[i].setCanTrain(true)
-                    this.trainInterfaces[i].setButtonText('choose')
-                }
-                else {
-                    this.trainInterfaces[i].setCanTrain(false)
-                }
-                continue
-            }
-            this.trainInterfaces[i].setCanTrain(true)
-            this.trainInterfaces[i].setButtonText('train (' + townProduction[i].turns + ')')
-        }*/
-        this.goldText.setText(barrack.town.gold)
-        this.setVisible(true)
+        this.goldText.text = barrack.info.gold
+        this.visible = true
     }
-        /* setButtonsList()
-         {
-             this.buttons = {}
-             this.buttons[this.noobButton.name] = this.noobButton
-         }*/
-    setVisible(boolean) {
-        this.visible = boolean
-        nextTurnButton.setCanClick(!boolean)
-        gameEvent.screen.setMoveMain(!boolean)
+    set visible(boolean) {
+        this.#visible = boolean
+        nextTurnButton.canClick = !boolean
     }
-    getVisible() {
-        return this.visible
+    get visible() {
+        return this.#visible
     }
     click(point) {
         if (this.visible && this.isInside(point)) {
@@ -279,9 +221,9 @@ class TrainInterface {
         let x = this.x
         let y = this.y
 
-        this.image.setPos({ x: x + this.imageMargin.x, y: y + this.imageMargin.y })
-        this.costText.setPos({ x: x + this.costTextMargin.x, y: y + this.costTextMargin.y })
-        this.button.setPos({ x: x + this.buttonMargin.x, y: y + this.buttonMargin.y })
+        this.image.pos = { x: x + this.imageMargin.x, y: y + this.imageMargin.y }
+        this.costText.pos = { x: x + this.costTextMargin.x, y: y + this.costTextMargin.y }
+        this.button.pos = { x: x + this.buttonMargin.x, y: y + this.buttonMargin.y }
     }
     setPos(pos) {
         this.x = pos.x
@@ -292,17 +234,17 @@ class TrainInterface {
         return this.button.click(point)
     }
     setCostText(text) {
-        this.costText.setText(text)
+        this.costText.text = text
     }
     setFunction(func) {
         this.button.setFunction(func)
     }
     setButtonText(text) {
-        this.button.setText(text)
+        this.button.textString = text
     }
     setCanTrain(boolean) {
         this.canTrain = boolean
-        this.button.setCanClick(boolean)
+        this.button.canClick = boolean
     }
     draw(ctx) {
         this.image.draw(ctx)

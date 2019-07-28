@@ -12,20 +12,7 @@ class Text {
         this.textAlign = textAlign
         this.textBaseline = textBaseline
     }
-    setText(text) {
-        this.text = text
-    }
-    setPos(pos) {
-        this.pos.x = pos.x
-        this.pos.y = pos.y
-    }
-    setTextAlign(textAlign) {
-        this.textAlign = textAlign
-    }
-    setTextBaseline(textBaseline) {
-        this.textBaseline = textBaseline
-    }
-    getWidth() {
+    get width() {
         let max = -1
         let lines = this.text.split('\n')
 
@@ -36,24 +23,15 @@ class Text {
         }
         return max
     }
-    getHeight() {
+    get height() {
         mainCtx.font = this.fontSize + 'px Times New Roman'
         return parseInt(mainCtx.font.match(/\d+/), 10)
     }
-    getX() {
+    get x() {
         return this.pos.x
     }
-    getY() {
+    get y() {
         return this.pos.y
-    }
-    setColor(color) {
-        this.color = color
-    }
-    getColor() {
-        return this.color
-    }
-    getText() {
-        return this.text
     }
     draw(ctx) {
         ctx.font = this.fontSize + 'px Times New Roman'
@@ -63,7 +41,7 @@ class Text {
 
         let lines = this.text.split('\n')
         for (let i = 0; i < lines.length; ++i)
-            ctx.fillText(lines[i], this.pos.x, this.pos.y + (i * this.getHeight()))
+            ctx.fillText(lines[i], this.pos.x, this.pos.y + (i * this.height))
     }
 }
 class CoordText extends Sprite {
@@ -73,14 +51,8 @@ class CoordText extends Sprite {
         this.fontSize = fontSize
         this.text = text
     }
-    setColor(color) {
-        this.color = color
-    }
-    setText(text) {
-        this.text = text
-    }
     draw(ctx) {
-            let pos = this.getPos()
+            let pos = this.pos
             ctx.font = this.fontSize + 'px Times New Roman'
             ctx.fillStyle = this.color
             ctx.textAlign = "center"

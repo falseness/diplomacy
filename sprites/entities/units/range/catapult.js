@@ -10,7 +10,7 @@ class Catapult extends RangeUnit {
         this.buildingDMG = 3
         this.mirrorX = false
     }
-    getInfo() {
+    get info() {
         let unit = super.getInfo()
         unit.info.dmg += '\nbuilding dmg: ' + this.getBuildingDMG()
         return unit
@@ -43,6 +43,8 @@ class Catapult extends RangeUnit {
             
         
         if (this.cellHasEnemyBuilding(cell)) {
+            this.addUndo()
+            
             cell.building.hit(this.getBuildingDMG())
 
             this.moves = 0
@@ -51,10 +53,14 @@ class Catapult extends RangeUnit {
         }
         if (cell.unit.notEmpty()) {
             if (cell.unit.getPlayer() != this.getPlayer()) {
+                this.addUndo()
+                
                 cell.unit.hit(this.getDMG())
 
                 this.moves = 0
             }
+            this.removeSelect()
+            return true
         }
 
         if (this.way.getDistance(coord) > this.moves) {

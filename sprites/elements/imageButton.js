@@ -1,12 +1,12 @@
 class ImageButton extends Button {
-    constructor(image, rect, clickFunc, parameters, text = new Empty(), canClick = true) {
-        super(rect, text, clickFunc, parameters, canClick)
+    constructor(image, rect, clickFunc, parameters, text = new Empty(), canClick = true, callThis) {
+        super(rect, text, clickFunc, parameters, canClick, callThis)
         this.img = image
 
-        this.img.setPos(this.rect.getCenter())
+        this.img.pos = this.rect.center
     }
     setColor(color) {
-        this.img.setColor(color)
+        this.img.color = color
     }
     draw(ctx) {
         if (this.canClick) {

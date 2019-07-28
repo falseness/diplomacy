@@ -1,6 +1,7 @@
 let assets = {
     size: 1.6 * basis.r,
     logo: new Image(),
+    undo: new Image(),
     gold: new Image(),
     town: new Image(),
     farm: new Image(),
@@ -16,6 +17,8 @@ let assets = {
 
 function loadAssets() {
     assets.logo.src = "assets/logo.svg"
+    assets.undo.src = "assets/undo.svg"
+    
     assets.gold.src = "assets/gold.svg"
     assets.town.src = "assets/townhall.svg"
     assets.farm.src = "assets/farm.svg"

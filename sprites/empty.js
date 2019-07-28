@@ -9,6 +9,10 @@ class Empty {
     toJSON() {
         return {name: 'Empty'}
     }
+    getCell() {
+        console.log("ERROR")
+    }
+    kill() {}
     isPassable() {
         return true
     }
@@ -30,7 +34,7 @@ class Empty {
     needInstructions() {
         return false
     }
-    getInfo() {
+    get info() {
         return {
             name: '',
             player: 0,
@@ -39,13 +43,10 @@ class Empty {
             }
         }
     }
-    getHexColor() {
+    get hexColor() {
         return '#D0D0D0'
     }
     nextTurn(whooseTurn) {
-
-    }
-    setPos(pos) {
 
     }
     setTextAlign() {

@@ -125,17 +125,29 @@ class ComputerScreen extends Screen {
         this.bottomBorder = height - margin
         this.speed = speed
     }
+    goLeft() {
+        this.setSpeedX(this.speed)
+    }
+    goRight() {
+        this.setSpeedX(-this.speed)
+    }
+    goUp() {
+        this.setSpeedY(this.speed)
+    }
+    goDown() {
+        this.setSpeedY(-this.speed)
+    }
     changeSpeed(pos) {
         this.stop()
         if (pos.x > this.rightBorder)
-            this.setSpeedX(-this.speed)
+            this.goRight()
         if (pos.x < this.leftBorder)
-            this.setSpeedX(this.speed)
+            this.goLeft()
 
         if (pos.y > this.bottomBorder)
-            this.setSpeedY(-this.speed)
+            this.goDown()
         if (pos.y < this.topBorder)
-            this.setSpeedY(this.speed)
+            this.goUp()
     }
     draw(ctx) {
         if (!debug)
@@ -160,33 +172,40 @@ class ComputerScreen extends Screen {
     }
 }
 class ComputerScreenGroup {
-    constructor(mainScreen, extremeScreen) {
+    constructor(mainScreen) {
         this.main = mainScreen
-        this.extreme = extremeScreen
-        
-        this.moveMain = true
     }
-    setMoveMain(boolean) {
-        this.moveMain = boolean
+    stopX() {
+        this.main.setSpeedX(0)
+    }
+    stopY() {
+        this.main.setSpeedY(0)
+    }
+    goLeft() {
+        this.main.goLeft()
+    }
+    goRight() {
+        this.main.goRight()
+    }
+    goUp() {
+        this.main.goUp()
+    }
+    goDown() {
+        this.main.goDown()
     }
     stop() {
         this.main.stop()
-        this.extreme.stop()
     }
     changeSpeed(pos) {
-        if (this.moveMain)
-            this.main.changeSpeed(pos)
-        this.extreme.changeSpeed(pos)
+        this.main.changeSpeed(pos)
     }
     scale(pos, scale) {
         this.main.scale(pos, scale)
     }
     move() {
         this.main.move()
-        this.extreme.move()
     }
     draw(ctx) {
         this.main.draw(ctx)
-        this.extreme.draw(ctx)
     }
 }

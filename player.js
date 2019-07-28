@@ -1,14 +1,17 @@
 class Player
 {
-    constructor(color, neutral)
+    constructor(color, gold = 0, neutral)
     {
+        this.gold = gold
+        this.towns = []
+        this.units = []
+
         this.color =
         {
             r: color.r,
             g: color.g,
             b: color.b
         }
-        this.towns = []
         if (neutral) {
             this.hexagon = this.calcSuburbHexagon()
         }
@@ -17,12 +20,46 @@ class Player
         }
         this.suburbHexagon = this.calcSuburbHexagon()
     }
-    addTown(town) {
-        this.towns.push(town)
+    toJSON() {
+        let res = {}
+        res.gold = this.gold
+        res.towns = this.towns
+        res.units = this.units
+        res.color = this.color
+
+        return res
     }
-    startTurn() {
+    get income() {
+        let income = 0
         for (let i = 0; i < this.towns.length; ++i) {
-            this.towns[i].startTurn()
+            income += this.towns[i].income
+        }
+        for (let i = 0; i < this.units.length; ++i) {
+            if (this.units[i].killed) {
+                this.units.splice(i--, 1)
+                continue
+            }
+            income -= this.units[i].salary
+        }
+        return income
+    }
+    crisisPenalty() {
+        for (let i = 0; i < this.units.length; ++i) {
+            this.units[i].kill()
+        }
+        this.units = []
+    }
+    nextTurn() {
+        this.gold += this.income
+
+        if (this.gold < 0) {
+            this.crisisPenalty()
+        }
+        for (let i = 0; i < this.units.length; ++i) {
+            this.units[i].nextTurn()
+        }
+        for (let i = 0; i < this.towns.length; ++i) {
+            this.towns[i].nextTurn()
         }
     }
     calcSuburbHexagon() {
@@ -40,7 +77,7 @@ class Player
         
         tmpCtx.beginPath()
 
-        tmpCtx.fillStyle = this.getHexColor()
+        tmpCtx.fillStyle = this.hexColor
         tmpCtx.strokeStyle = 'black'
         tmpCtx.lineWidth = strokeWidth
 
@@ -69,7 +106,7 @@ class Player
         
         tmpCtx.beginPath()
 
-        tmpCtx.fillStyle = this.getHexColor()
+        tmpCtx.fillStyle = this.hexColor
         tmpCtx.strokeStyle = 'black'
         tmpCtx.lineWidth = strokeWidth
 
@@ -97,24 +134,24 @@ class Player
         tmpCtx.closePath()
         return tmpCanvas
     }
-    getColor()
+    get textColor()
     {
         return (this.color.r + ', ' + this.color.g + ', ' + this.color.b)
     }
-    getRGB()
+    get RGB()
     {
         return this.color
     }
-    getHexColor()
+    get hexColor()
     {
         return rgbToHex(this.color.r, this.color.g, this.color.b)
     }
-    getFullColor()
+    get fullColor()
     {
         let color = 
         {
-            hex: this.getHexColor(),
-            text: this.getColor(),
+            hex: this.hexColor,
+            text: this.textColor,
             rgb: this.color
         }
         return color

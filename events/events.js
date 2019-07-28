@@ -5,7 +5,8 @@ function createEvents() {
         document.addEventListener('mousemove', mousemove)
         document.addEventListener('mousewheel', mousewheel)
 
-        document.addEventListener('keydown', keyboard)
+        document.addEventListener('keydown', keydown)
+        document.addEventListener('keyup', keyup)
     }
     else {
         document.addEventListener('touchstart', touchstart)
@@ -44,10 +45,12 @@ function touchend(event) {
     let pos = getTouchesPos(event)
     gameEvent.touchend(pos, event.touches.length)
 }
-function keyboard(event) {
+function keydown(event) {
     gameEvent.keyboard(event.keyCode)
 }
-
+function keyup(event) {
+    gameEvent.keyup(event.keyCode)
+}
 function click(event) {
     let pos = getEventPos(event)
     let realPos = getRealEventPos(event)
@@ -78,7 +81,7 @@ class Events {
         }
         if (!mobilePhone) {
             this.screen = new ComputerScreenGroup(
-                new ComputerScreen(nextTurnButtonSize, 0.015 * HEIGHT),
+                //new ComputerScreen(nextTurnButtonSize, 0.015 * HEIGHT),
                 new ComputerScreen(0.002 * HEIGHT, 0.02 * HEIGHT)
             )
         }
@@ -143,36 +146,6 @@ class Events {
         this.touchStartTime = new Date()
         
         return
-        /*
-        document.addEventListener('touchmove', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        var otk={};
-        nowPoint=event.changedTouches[0];
-        otk.x=nowPoint.pageX-startPoint.x;
-        if(Math.abs(otk.x)>200){
-        if(otk.x<0){}
-        if(otk.x>0){}
-        startPoint={x:nowPoint.pageX,y:nowPoint.pageY};
-        }
-        }, false);
-        document.addEventListener('touchend', function(event) {
-        var pdelay=new Date(); 
-        nowPoint=event.changedTouches[0];
-        var xAbs = Math.abs(startPoint.x - nowPoint.pageX);
-        var yAbs = Math.abs(startPoint.y - nowPoint.pageY);
-        if ((xAbs > 20 || yAbs > 20) && (pdelay.getTime()-ldelay.getTime())<200) {
-        if (xAbs > yAbs) {
-        if (nowPoint.pageX < startPoint.x){/*СВАЙП ВЛЕВО}
-        else{/*СВАЙП ВПРАВО}
-        }
-        else {
-        if (nowPoint.pageY < startPoint.y){/*СВАЙП ВВЕРХ}
-        else{/*СВАЙП ВНИЗ}
-        }
-        }
-        }, false);
-        */
     }
     keyboard(keycode) {
         if (Date.now() - this.lastKeyboardPressTime < this.keyboardPressInterval)
@@ -183,12 +156,36 @@ class Events {
             nextTurn()
         if (keycode == 27)
             debug = !debug
-        if (keycode == 81) {
+        if (keycode == 90) //z
+            undoManager.undo()
+        
+        if (keycode == 65 || keycode == 37) 
+            this.screen.goLeft()
+        if (keycode == 68 || keycode == 39) 
+            this.screen.goRight()
+        if (keycode == 87 || keycode == 38)
+            this.screen.goUp()
+        if (keycode == 83 || keycode == 40)
+            this.screen.goDown()
+        /*if (keycode == 81) {
             saveManager.save()
         }
         if (keycode == 87) {
             saveManager.load()
-        }
+        }*/
+    }
+    keyup(keycode) {
+        // a 65 
+        // w 87
+        // d 68
+        // s 83
+        // он останавливается даже если мышка за пределами экрана, пофиксь
+        if (keycode == 68 || keycode == 65 ||
+            keycode == 37 || keycode == 39)
+            this.screen.stopX()
+        if (keycode == 87 || keycode == 83 ||
+            keycode == 38 || keycode == 40)
+            this.screen.stopY()
     }
     mousewheel(pos, scale) {
         this.screen.scale(pos, scale)
@@ -201,9 +198,6 @@ class Events {
     }
     draw(ctx) {
         this.screen.draw(ctx)
-    }
-    getSelected() {
-        return this.selected
     }
     removeSelection() {
         this.selected.removeSelect()
@@ -223,17 +217,17 @@ class Events {
         }
     }
     clickOnCell(coord) {
-        console.log(coord.x, coord.y)
+        //console.log(coord.x, coord.y)
         let cell = grid.arr[coord.x][coord.y]
         this.selectSomethingOnCell(cell)
     }
     hideAll() {
         border.clean()
-        grid.setDrawLogicText(false)
+        grid.drawLogicText = false
 
-        this.interface.entity.setVisible(false)
-        this.interface.barrack.setVisible(false)
-        this.interface.town.setVisible(false)
+        this.interface.entity.visible = false
+        this.interface.barrack.visible = false
+        this.interface.town.visible = false
     }
     nextTurn() {
 
@@ -247,6 +241,9 @@ class Events {
             this.selected = new Empty()
     }
     click(pos, realPos) {
+        if (undoButton.click(pos)) {
+            return
+        }
         if (backToMenuButton.click(pos))
             return
         if (nextTurnButton.click(pos))
@@ -270,10 +267,10 @@ class Events {
         
         if (coordsEqually(this.selected.coord, coord)) {
             this.selected.removeSelect()
-            if (this.selected.isUnit()) {
+            if (this.selected.isUnit) {
                 this.selected = grid.arr[this.selected.coord.x][this.selected.coord.y].building
             }
-            else if (this.selected.isBuilding()) {
+            else if (this.selected.isBuilding) {
                 this.selected = new Empty()
             }
             else {

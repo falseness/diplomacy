@@ -19,38 +19,38 @@ class Switch {
         )
         this.buttonTwo.trimText()
         
-        this.color = this.buttonOne.text.getColor()
+        this.color = this.buttonOne.text.color
         this.selected = 1
     }
-    getHeight() {
-        return this.buttonOne.getHeight()
+    get height() {
+        return this.buttonOne.height
     }
     setSelectedColor(selectColor) {
         if (this.selected == 2) {
-            this.buttonTwo.setTextColor(selectColor)
+            this.buttonTwo.textColor = selectColor
         }
         else if (this.selected == 1) {
-            this.buttonOne.setTextColor(selectColor)
+            this.buttonOne.textColor = selectColor
         }
     }
     toggleSelect() {
         if (this.selected == 1) {
             this.selected = 2
             
-            this.buttonOne.setTextColor(this.color)
+            this.buttonOne.textColor = this.color
         }
         else if (this.selected == 2) {
             this.selected = 1
             
-            this.buttonTwo.setTextColor(this.color)
+            this.buttonTwo.textColor = this.color
         }
     }
     getSelectedText() {
         if (this.selected == 1) {
-            return this.buttonOne.getText()
+            return this.buttonOne.textString
         }
         if (this.selected == 2) {
-            return this.buttonTwo.getText()
+            return this.buttonTwo.textString
         }
     }
     click(pos) {

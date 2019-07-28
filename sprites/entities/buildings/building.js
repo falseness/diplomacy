@@ -1,30 +1,28 @@
 class Building extends Entity {
     constructor(x, y, name, hp, healSpeed) {
         super(x, y, name, hp, healSpeed)
-        grid.arr[x][y].building = this
+
+        grid.setBuilding(this, this.coord)
     }
     needInstructions() {
         return false
     }
     kill() {
-        grid.arr[this.coord.x][this.coord.y].building = new Empty()
+        grid.setBuilding(new Empty(), this.coord)
 
         this.killed = true
     }
     select() {
-        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
+        entityInterface.change(this.info, this.player.fullColor)
     }
     removeSelect() {
-        entityInterface.setVisible(false)
+        entityInterface.visible = false
     }
     isBuilding() {
         return true
     }
-    nextTurn(whooseTurn) {
-        if (this.getPlayer() == whooseTurn) {
-            this.hp += this.getHPIncrease()
-            
-            this.wasHitted = false
-        }
+    nextTurn() {
+        this.hp += this.hpIncrease
+        this.wasHitted = false
     }
 }

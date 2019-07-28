@@ -1,0 +1,242 @@
+let production = { 
+    noob: { 
+        production: UnitProduction,
+        turns: 1,
+        cost: 10,
+        class: Noob
+    }, 
+    suburb: {
+        production: SuburbProduction,
+        turns: 0,
+        cost: 1,
+        class: Empty
+    },
+    farm: {
+        production: ManufactureProduction,
+        turns: 4,
+        cost: 8,
+        class: Farm,
+    },
+    archer: {
+        production: UnitProduction,
+        turns: 2,
+        cost: 20,
+        class: Archer
+    },
+    KOHb: {
+        production: UnitProduction,
+        turns: 3,
+        cost: 25,
+        class: KOHb
+    },
+    normchel: {
+        production: UnitProduction,
+        turns: 3,
+        cost: 30,
+        class: Normchel
+    },
+    catapult: {
+        production: UnitProduction,
+        turns: 4,
+        cost: 35,
+        class: Catapult
+    },
+    barrack: {
+        production: ManufactureProduction,
+        turns: 4, //4 20
+        cost: 20,
+        class: Barrack,
+    },
+}
+class Town extends PreparingManufacture {
+    constructor(x, y, justCopy = false, firstTown = false) {
+        const hp = 12
+        const healSpeed = 3
+        const income = 4
+        super(x, y, 'town', hp, healSpeed, income)
+        this.player.towns.push(this)
+
+        this.suburbs = []
+        if (!justCopy)
+            this.createFirstSuburbs(firstTown)
+        if (firstTown) {
+            new Noob(x, y)
+        }
+
+        // unit production can training only one
+        // building production can train several
+        // active production waiting for instructions
+        this.buildings = []
+        this.buildingProduction = []
+        this.activeProduction = new Empty()
+    }
+    createFirstSuburbs(firstTown) {
+        // костыль:
+        //this.addUndo()
+        grid.getHexagon(this.coord).isSuburb = true
+
+        this.suburbs.push(grid.getHexagon(this.coord))
+
+        let neighboursCoord = this.neighbours
+
+        for (let i = 0; i < neighboursCoord.length; ++i) {
+            let hexagon = grid.getHexagon(neighboursCoord[i])
+
+            if (firstTown)
+                hexagon.firstpaint(this.playerColor)
+
+            if (hexagon.playerColor == this.playerColor) {
+                hexagon.isSuburb = true
+                this.suburbs.push(hexagon)
+            }
+        }
+    }
+    toJSON() {
+        let res = super.toJSON()
+        res.buildings = this.buildings
+        res.buildingProduction = this.buildingProduction
+        let suburbs = []
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            suburbs.push(this.suburbs[i].coord)
+        }
+        res.suburbs = suburbs
+
+        return res
+    }
+    get info() {
+        let town = super.info
+        
+        if (this.activeProduction.notEmpty())
+            town.activeProduction = this.activeProduction.name
+
+        return town
+    }
+    get income() {
+        let income = super.income
+        for (let i = 0; i < this.buildings.length; ++i) {
+            if (this.buildings[i].killed) {
+                this.buildings.splice(i--, 1)
+                continue
+            }
+            income += this.buildings[i].income
+        }
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            if (this.suburbs[i].playerColor != this.playerColor ||
+                !this.suburbs[i].isSuburb) {
+                this.suburbs.splice(i--, 1)
+            }
+        }
+        const suburbsIncome = 1
+        income += this.suburbs.length * suburbsIncome
+        return income
+    }
+    needInstructions() {
+        return this.activeProduction.notEmpty()
+    }
+    select() {
+        super.select()
+        if (this.isMyTurn)
+            townInterface.change(this.info, this.player.fullColor)
+    }
+    removeSelect() {
+        border.visible = false
+        grid.drawLogicText = false
+        super.removeSelect()
+        townInterface.visible = false
+
+        this.activeProduction = new Empty()
+    }
+    sendInstructions(cell) {
+        if (!this.activeProduction.canCreateOnCell(cell, this)) {
+            this.removeSelect()
+            
+            return true
+        }
+            
+        let stillNeedInstructions = this.activeProduction.sendInstructions(cell.coord, this)
+        
+        if (!this.activeProduction.isSuburbProduction()) {
+            this.buildingProduction.push(this.activeProduction)
+            grid.setBuilding(this.activeProduction, cell.coord)
+        }
+        
+        if (stillNeedInstructions) {
+            this.select()
+            
+            if (!this.activeProduction.isSuburbProduction()) {
+                let what = this.activeProduction.name
+                
+                this.activeProduction = new production[what].production(
+                    production[what].turns, production[what].cost, 
+                    production[what].class, what)
+                this.activeProduction.choose(this)
+            }
+            return false
+        }
+        this.removeSelect()
+        this.select()
+        return false
+    }
+    startBuildingPreparing(what) {
+        //this.minusGold(production[what].cost)
+        // production will minus gold town
+        this.activeProduction = new production[what].production(
+            production[what].turns, production[what].cost, 
+            production[what].class, what)
+
+        this.activeProduction.choose(this)
+    }
+    prepare(what) {
+        // bug: unit production with prepare time == 0 cant be prepared
+        if (production[what].production.isUnitProduction())
+            return super.prepare(what)
+
+        if (this.gold < production[what].cost)
+            return false
+
+        this.startBuildingPreparing(what)
+        
+        return true
+    }
+    buildingPreparingLogic() {
+        for (let i = 0; i < this.buildingProduction.length; ++i) {
+            if (this.buildingProduction[i].killed) {
+                this.buildingProduction.splice(i--, 1)
+                continue
+            }
+
+            this.buildingProduction[i].nextTurn()
+
+            let preparingFinished = this.buildingProduction[i].isPreparingFinished()
+            if (preparingFinished) {
+                let building = this.buildingProduction[i].create()
+                this.buildings.push(building)
+                this.buildingProduction.splice(i--, 1)
+            }
+        }
+    }
+    buildingsNextTurn() {
+        for (let i = 0; i < this.buildings.length; ++i) {
+            if (this.buildings[i].killed) {
+                this.buildings.splice(i--, 1)
+                continue
+            }
+            this.buildings[i].nextTurn()
+        }
+    }
+    nextTurn() {
+        super.nextTurn()
+        this.buildingPreparingLogic()
+        this.buildingsNextTurn()
+    }
+}
+
+function prepareEvent(product) {
+    let building = gameEvent.selected
+    if (building.prepare(product)) {
+        building.select()
+        return
+    }
+    gameEvent.removeSelection()
+}
+

@@ -44,6 +44,7 @@
     <script src='options/dictionaryToList.js'></script>
     <script src='options/gamestart.js'></script>
     <script src='options/save.js'></script>
+    <script src='options/undo.js'></script>
 
     <script src='render/loadassets.js'></script>
     <script src='render/image.js'></script>
@@ -61,6 +62,7 @@
     <script src='sprites/elements/text.js'></script>
     <script src='sprites/elements/rect.js'></script>
     <script src='sprites/elements/button.js'></script>
+    <script src='sprites/elements/image.js'></script>
     <script src='sprites/elements/imageButton.js'></script>
     <script src='sprites/elements/switch.js'></script>
     <script src='sprites/border.js'></script>
@@ -75,22 +77,35 @@
     <script src='groups/grid.js'></script>
 
     <script src='sprites/entities/entity.js'></script>
-    <script src='sprites/entities/buildings/building.js'></script>
-    <script src='sprites/entities/units/unit.js'></script>
 
-    
-    <script src='sprites/entities/buildings/farm.js'></script>
-    <script src='sprites/entities/buildings/barrack.js'></script>
+    <script src='sprites/entities/units/unit/interactionWithUnit.js'></script>
+    <script src='sprites/entities/units/unit/unit.js'></script>
+
     <script src='sprites/entities/units/noob.js'></script>
-    <script src='sprites/entities/units/KOHb.js'></script>
+
     <script src='sprites/entities/units/normchel.js'></script>
 
-    <script src='sprites/entities/units/range/rangeUnit.js'></script>
+    <script src='sprites/entities/units/KOHb/mirroringInteraction.js'></script>
+    <script src='sprites/entities/units/KOHb/KOHb.js'></script>
+
+    <script src='sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js'></script>
+    <script src='sprites/entities/units/range/rangeUnit/rangeUnit.js'></script>
+
     <script src='sprites/entities/units/range/archer.js'></script>
-    <script src='sprites/entities/units/range/catapult.js'></script>
-    
-    <script src='sprites/entities/buildings/production.js'></script>
-    <script src='sprites/entities/buildings/town.js'></script>
+
+    <script src='sprites/entities/units/range/catapult/interactionWithCatapult.js'></script>
+    <script src='sprites/entities/units/range/catapult/catapult.js'></script>
+
+    <script src='sprites/entities/buildings/building.js'></script>
+
+    <script src='sprites/entities/buildings/manufactures/manufacture.js'></script>
+    <script src='sprites/entities/buildings/manufactures/farm.js'></script>
+
+    <script src='sprites/entities/buildings/manufactures/preparingManufacture/production.js'></script>
+
+    <script src='sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js'></script>
+    <script src='sprites/entities/buildings/manufactures/preparingManufacture/barrack.js'></script>
+    <script src='sprites/entities/buildings/manufactures/preparingManufacture/town.js'></script>
 
     <script src='player.js'></script>
 
@@ -110,6 +125,9 @@
         
         let interfaceCtx = interfaceCanvas.getContext('2d')
 
+        let undoManager = new UndoManager()
+        let unpacker = new JsonUnpackManager()
+        
         let debug = false
         let barrackInterface = new BarrackInterface()
         let townInterface = new TownInterface()
@@ -120,89 +138,30 @@
         
         let saveManager = new SaveManager()
         
-        let players 
+        let players = []
         let grid
         let mapBorder
         let gameExit = false
 
-        let backToMenuButton = new ImageButton(
-            new MenuIconImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize * 0.75, 'black', 0.01 * HEIGHT, 0.005 * HEIGHT),
-            new Rect(nextTurnButtonSize * 0.25, nextTurnButtonSize * 0.25,
-                nextTurnButtonSize, nextTurnButtonSize),
-            menuBack
+        let undoButton = new ImageButton(
+            new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
+            new Rect(0.25 * nextTurnButtonSize, HEIGHT - 1.25 * nextTurnButtonSize, 
+                     nextTurnButtonSize, nextTurnButtonSize),
+            undoManager.undo, undefined, undefined, undefined, undoManager
         )
-
-        let whooseTurn = 1
+        let backToMenuButtonSize = nextTurnButtonSize * 2 / 3
+        let backToMenuButton = new ImageButton(
+            new MenuIconImage({ x: NaN, y: NaN }, 'white', backToMenuButtonSize, 'black', 0.01 * HEIGHT, 0.005 * HEIGHT),
+            new Rect(backToMenuButtonSize * 0.25, backToMenuButtonSize * 0.25,
+                backToMenuButtonSize, backToMenuButtonSize),
+            menuBack
+        )                
+        let whooseTurn
         function start1() {
-            whooseTurn = 1
-            players = [new Player({
-                r: 208, 
-                g: 208,
-                b: 208
-                }, true), 
-                new Player({
-                    r: 255,
-                    g: 0,
-                    b: 0 //98, 168, 222
-                }),
-                new Player({
-                    r: 98,
-                    g: 168,
-                    b: 222
-                })
-            ]
-            nextTurnButton.setColor(players[whooseTurn].getHexColor())
-            grid = new Grid(0, 0, {
-                x: 20,
-                y: 10
-            })
-            grid.arr[5][3].hexagon.repaint(1)
-
-            let TOWN1 = new Town(5, 3, 12, true)
-
-            grid.arr[14][6].hexagon.repaint(2)
-
-            let TOWN2 = new Town(14, 6, 6, true)
+            
         }
         function start2() {
-            whooseTurn = 1
-            players = [new Player({
-                r: 208, 
-                g: 208,
-                b: 208
-                }, true), 
-                new Player({
-                    r: 255,
-                    g: 0,
-                    b: 0 //98, 168, 222
-                }),
-                new Player({
-                    r: 98,
-                    g: 168,
-                    b: 222
-                }),
-                new Player({
-                    r: 0,
-                    g: 179,
-                    b: 0
-                })
-            ]
-            nextTurnButton.setColor(players[whooseTurn].getHexColor())
-            grid = new Grid(0, 0, {
-                x: 30,
-                y: 20
-            })
-            grid.arr[9][6].hexagon.repaint(1)
-
-            let TOWN1 = new Town(9, 6, 13, true)
-
-            grid.arr[20][9].hexagon.repaint(2)
-
-            let TOWN2 = new Town(20, 9, 6, true)
             
-            grid.arr[12][14].hexagon.repaint(3)
-
-            let TOWN3 = new Town(12, 14, 6, true)
         }
         function start() {
            
@@ -216,7 +175,6 @@
             mainCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
             mainCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
             
-            //createEvents()
             loadAssets()
 
             

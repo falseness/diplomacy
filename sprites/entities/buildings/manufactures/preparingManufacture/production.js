@@ -1,4 +1,3 @@
-
 class Production {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         this.turns = turns
@@ -6,13 +5,16 @@ class Production {
         this.class = _class
         this.name = name
     }
-    getName() {
-        return this.name
-    }
     isSuburb(coord, arr, player) {
         let hexagon = arr[coord.x][coord.y].hexagon
 
-        return player == hexagon.player && hexagon.isSuburb()
+        return player == hexagon.playerColor && hexagon.isSuburb
+    }
+    static isUnitProduction() {
+        return false
+    }
+    static isBuildingProduction() {
+        return false
     }
     isUnitProduction() {
         return false
@@ -41,17 +43,20 @@ class UnitProduction extends Production {
         super(turns, cost, _class, name)
     }
     toJSON() {
-        let res = {}
-        res.turns = this.turns
-        res.cost = this.cost
-        res.name = this.name
-        
+         let res = {
+            turns: this.turns,
+            cost: this.cost,
+            name: this.name
+        }
         return res
     }
-    create(x, y, town) {
-        let t = new this.class(x, y, town)
+    create(x, y) {
+        let t = new this.class(x, y)
         
         return t
+    }
+    static isUnitProduction() {
+        return true
     }
     isUnitProduction() {
         return true
@@ -64,16 +69,9 @@ class BuildingProduction extends Production {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
         this.isSelected = false
-        this.coord = {
-            x: -1, 
-            y: -1
-        }
     }
     isPassable() {
         return true
-    }
-    isWaitingForInstructions() {
-        return this.isSelect
     }
     isUnit() {
         return false
@@ -87,6 +85,9 @@ class BuildingProduction extends Production {
     removeChoose() {
         this.isSelected = false
     }
+    static isBuildingProduction() {
+        return true
+    }
     isBuildingProduction() {
         return true
     }
@@ -95,24 +96,21 @@ class BuildingProduction extends Production {
     }
 }
 class ManufactureProduction extends BuildingProduction {
+    #coord = {}
+    #town
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
         this.killed = false
     }
     toJSON() {
-        let res = {}
-        res.turns = this.turns
-        res.cost = this.cost
-        res.name = this.name
-        
-        res.coord = {}
-        res.coord.x = this.coord.x
-        res.coord.y = this.coord.y
-        
-        res.town = {}
-        if (this.town)
-            res.town.coord = this.town.getCoord()
-        
+        let res = {
+            name: this.name,
+            turns: this.turns, 
+            coord: {
+                x: this.coord.x,
+                y: this.coord.y
+            }
+        }
         return res
     }
     isKilled() {
@@ -120,16 +118,11 @@ class ManufactureProduction extends BuildingProduction {
     }
     kill() {
         this.killed = true
-        this.town.updateBuildingsProductionArray()
-        grid.arr[this.coord.x][this.coord.y].building = new Empty()
+        grid.setBuilding(new Empty(), this.coord)
     }
     canCreateOnCell(cell, town) {
-        for (let i = 0; i < town.buildingProduction.length; ++i) {
-            if (coordsEqually(town.buildingProduction[i].coord, cell.hexagon.coord))
-                return false
-        }
         return cell.building.isEmpty() && 
-            this.isSuburb(cell.hexagon.coord, grid.arr, town.getPlayer())
+            this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor)
     }
     isPreparingStopped() {
         console.log("error")
@@ -139,10 +132,13 @@ class ManufactureProduction extends BuildingProduction {
         
         return t
     }
-    getPlayer() {
-        return this.town.getPlayer()
+    get playerColor() {
+        return this.town.playerColor
     }
-    getInfo() {
+    get player() {
+        return players[this.playerColor]
+    }
+    get info() {
         let manufacture = {}
         manufacture.name = this.name
         manufacture.info = {
@@ -155,17 +151,31 @@ class ManufactureProduction extends BuildingProduction {
         return false
     }
     select() {
-        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
+        entityInterface.change(this.info, this.player.fullColor)
     }
     removeSelect() {
-        entityInterface.setVisible(false)
+        entityInterface.visible = false
+    }
+    set coord(coord) {
+        this.#coord = coord
+        this.pos = grid.getCell(coord).pos
+    }
+    get coord() {
+        return this.#coord
+    }
+    get town() {
+        return this.#town
+    }
+    set town(town) {
+        this.#town = town
+        this.text = new CoordText(this.coord.x, this.coord.y, this.turns)
     }
     sendInstructions(coord, town) {
-        town.gold -= this.cost
+        town.minusGold(this.cost)
         
         this.coord = coord
+        //this.pos = grid.getCell(this.coord).pos
         this.town = town
-        this.text = new CoordText(coord.x, coord.y, this.turns)
         
         let needInstructions = town.gold >= this.cost
         /*if (needInstructions)
@@ -173,7 +183,7 @@ class ManufactureProduction extends BuildingProduction {
         return needInstructions
     }
     choose(town) {
-        this.paintTownBorders(town, town.suburbs, grid.arr, town.getPlayer())
+        this.paintTownBorders(town, town.suburbs, grid.arr, town.playerColor)
         super.choose()
     }
     paintTownBorders(town, suburbs, arr, player) {
@@ -193,13 +203,13 @@ class ManufactureProduction extends BuildingProduction {
             let hexagon = suburbs[i]
             used[hexagon.coord.x][hexagon.coord.y] = true
 
-            let neighbours = hexagon.getNeighbours()
+            let neighbours = hexagon.neighbours
             for (let j = 0; j < neighbours.length; ++j) {
                 let neighbourCoord = neighbours[j]
 
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
                     !this.isSuburb(neighbourCoord, arr, player)) {
-                    border.createLine(hexagon.getPos(), j)
+                    border.createLine(hexagon.calcPos(), j)
                     continue
                 }
 
@@ -215,12 +225,13 @@ class ManufactureProduction extends BuildingProduction {
     isPreparingFinished() {
         return !this.turns
     }
+    get isMyTurn() {
+        return whooseTurn == this.town.playerColor
+    }
     nextTurn() {
-        if (whooseTurn != this.town.getPlayer())
-            return
         super.nextTurn()
         
-        this.text.setText(this.turns)
+        this.text.text = this.turns
     }
     draw(ctx) {
         if (!this.town)
@@ -229,7 +240,7 @@ class ManufactureProduction extends BuildingProduction {
         /*if (this.isPreparingStopped())
             return*/
         
-        drawImageWithOpacity(ctx, this.name, grid.arr[this.coord.x][this.coord.y].hexagon.getPos(), 0.5)
+        drawImageWithOpacity(ctx, this.name, this.pos, 0.5)
         if (!grid.drawLogicText)
             this.text.draw(ctx)
     }
@@ -248,26 +259,27 @@ class SuburbProduction extends BuildingProduction {
     canCreateOnCell(cell, town) {
         for (let i = 0; i < this.availableHexagons.length; ++i) {
             if (hexagonsEqually(this.availableHexagons[i], cell.hexagon)) {
-                return town.gold >= this.suburbsCostformula(this.distance[cell.hexagon.coord.x][cell.hexagon.coord.y])
+                return town.gold >= this.suburbsCostformula(
+                    this.distance[cell.coord.x][cell.coord.y])
             }
         }
         return false
     }
     sendInstructions(coord, town) {
-        town.gold -= this.suburbsCostformula(this.distance[coord.x][coord.y])
+        town.minusGold(this.suburbsCostformula(this.distance[coord.x][coord.y]))
         
         this.create(coord, town)
         this.choose(town)
         return this.availableHexagons.length && town.gold >= this.cost
     }
     create(coord, town) {
-        grid.arr[coord.x][coord.y].hexagon.setIsSuburb(true)
-        town.addSuburb(grid.arr[coord.x][coord.y].hexagon)
+        grid.getHexagon(coord).isSuburb = true
+        town.suburbs.push(grid.arr[coord.x][coord.y].hexagon)
     }
     choose(town) {
         grid.cleanLogicText()
 
-        this.paintTownBorders(town, town.suburbs, grid.arr, town.getPlayer())
+        this.paintTownBorders(town, town.suburbs, grid.arr, town.playerColor)
         
         super.choose()
     }
@@ -297,7 +309,7 @@ class SuburbProduction extends BuildingProduction {
             let v = Q.shift()
 
 
-            let neighbours = v.getNeighbours()
+            let neighbours = v.neighbours
             for (let i = 0; i < neighbours.length; ++i) {
                 if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length))
                     continue
@@ -320,7 +332,7 @@ class SuburbProduction extends BuildingProduction {
     paintTownBorders(town, suburbs, arr, player) {
             // init
             border.newBrokenLine()
-            grid.setDrawLogicText(true)
+            grid.drawLogicText = true
 
             this.distance = []
             this.availableHexagons = []
@@ -338,13 +350,13 @@ class SuburbProduction extends BuildingProduction {
                 let hexagon = suburbs[i]
                 used[hexagon.coord.x][hexagon.coord.y] = true
 
-                let neighbours = hexagon.getNeighbours()
+                let neighbours = hexagon.neighbours
                 for (let j = 0; j < neighbours.length; ++j) {
                     let neighbourCoord = neighbours[j]
 
                     if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
-                        arr[neighbourCoord.x][neighbourCoord.y].hexagon.player != player) {
-                        border.createLine(hexagon.getPos(), j)
+                        arr[neighbourCoord.x][neighbourCoord.y].hexagon.playerColor != player) {
+                        border.createLine(hexagon.calcPos(), j)
                         continue
                     }
 
@@ -365,11 +377,11 @@ class SuburbProduction extends BuildingProduction {
 
                 let cell = arr[coord.x][coord.y]
                 let cost = this.suburbsCostformula(this.distance[coord.x][coord.y])
-                cell.logicText.setText(cost)
+                cell.logicText.text = cost
 
-                let posI = this.availableHexagons[i].getPos()
+                let posI = this.availableHexagons[i].calcPos()
 
-                let neighbours = this.availableHexagons[i].getNeighbours()
+                let neighbours = this.availableHexagons[i].neighbours
 
                 for (let j = 0; j < neighbours.length; ++j) {
                     if (isCoordNotOnMap(neighbours[j]) ||

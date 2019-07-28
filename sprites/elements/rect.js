@@ -15,42 +15,22 @@ class Rect {
         this.color = color
         this.strokeColor = strokeColor
     }
-    setPos(pos) {
+    set pos(pos) {
         this.x = pos.x
         this.y = pos.y
     }
-    setWidth(width) {
-        this.width = width
-    }
-    setHeight(height) {
-        this.height = height
-    }
-    getWidth() {
-        return this.width
-    }
-    getHeight() {
-        return this.height
-    }
-    setColor(color) {
-        this.color = color
-    }
-    getColor(color) {
-        return this.color
-    }
-    getCenter() {
+    get center() {
         let center = {
             x: this.x + this.width / 2,
             y: this.y + this.height / 2
         }
         return center
     }
-    setStrokeWidth(strokeWidth) {
-        this.strokeWidth = strokeWidth
+    set center(pos) {
+        this.x = pos.x - this.width / 2
+        this.y = pos.y - this.height / 2
     }
-    getStrokeWidth() {
-        return this.strokeWidth
-    }
-    getRectPoints() {
+    get rectPoints() {
         let points = [
             { x: this.x, y: this.y },
             { x: this.x + this.width, y: this.y },
@@ -60,7 +40,7 @@ class Rect {
         return points
     }
     drawShape(ctx) {
-        let p = this.getRectPoints()
+        let p = this.rectPoints
 
         ctx.moveTo(p[0].x + this.cornerRadius[0], p[0].y)
         ctx.lineTo(p[1].x - this.cornerRadius[1], p[1].y)
@@ -86,7 +66,8 @@ class Rect {
         this.drawShape(ctx)
         if (this.strokeWidth)
             ctx.stroke()
-        ctx.fill()
+        if (this.color)
+            ctx.fill()
 
         ctx.closePath()
     }

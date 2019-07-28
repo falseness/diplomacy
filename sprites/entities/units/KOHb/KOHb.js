@@ -7,15 +7,9 @@ class KOHb extends Unit {
         const salary = 4
         super(x, y, 'KOHb', hp, healSpeed, dmg, speed, salary, town)
         this.mirrorX = false
-    }
-    move(coord, arr) {
-        let oldX = this.coord.x
-        super.move(coord, arr)
-        let newX = this.coord.x
-
-        this.mirrorX = newX < oldX
+        this.interaction = new MirroringInteraction(speed)
     }
     draw(ctx) {
-        drawImage(ctx, this.mirrorX ? 'KOHbLeft' : this.name, this.getPos())
+        drawImage(ctx, this.mirrorX ? 'KOHbLeft' : this.name, this.pos)
     }
 }

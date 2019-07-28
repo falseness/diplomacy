@@ -1,42 +1,80 @@
+class Cell {
+    constructor(hexagon, unit, building, coordText, logicText) {
+        this.hexagon = hexagon
+        this.unit = unit
+        this.building = building
+        this.coordText = coordText
+        this.logicText = logicText
+    }
+    get coord() {
+        return this.hexagon.coord
+    }
+    get pos() {
+        return this.hexagon.calcPos()
+    }
+}
 class Grid extends SpritesGroup {
+    drawLogicText = false
     constructor(x, y, size) {
         super(x, y)
-
-        this.drawLogicText = false
 
         if (size)
             this.fill(size.x, size.y)
     }
-    getBottom() {
-        return this.arr[0][this.arr[0].length - 1].hexagon.getPos().y //+ basis.r * Math.sin(Math.PI / 3) * 2
+    toJSON() {
+        let _grid = []
+        for (let i = 0; i < this.arr.length; ++i) {
+            _grid.push([])
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                _grid[i].push(this.arr[i][j].hexagon.playerColor)
+            }
+        }
+        return _grid
     }
-    getRight() {
-        return this.arr[this.arr.length - 1][0].hexagon.getPos().x //+ basis.r * 2
+    get bottom() {
+        return this.arr[0][this.arr[0].length - 1].hexagon.pos.y //+ basis.r * Math.sin(Math.PI / 3) * 2
     }
-    setDrawLogicText(boolean) {
-        this.drawLogicText = boolean
+    get right() {
+        return this.arr[this.arr.length - 1][0].hexagon.pos.x //+ basis.r * 2
+    }
+    getCell(coord) {
+        return this.arr[coord.x][coord.y]
+    }
+    getBuilding(coord) {
+        return this.arr[coord.x][coord.y].building
+    }
+    getUnit(coord) {
+        return this.arr[coord.x][coord.y].unit
+    }
+    getHexagon(coord) {
+        return this.arr[coord.x][coord.y].hexagon
+    }
+    setBuilding(building, coord) {
+        this.arr[coord.x][coord.y].building = building
+    }
+    setUnit(unit, coord) {
+        this.arr[coord.x][coord.y].unit = unit
     }
     cleanLogicText() {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
-                this.arr[i][j].logicText.setText('')
+                this.arr[i][j].logicText.text = ''
             }
         }
     }
     newLogicText() {
         this.cleanLogicText()
-        this.setDrawLogicText(true)
+        this.drawLogicText = true
     }
     fill(n, m) {
         this.createArr(n, this.arr)
         for (let i = 0; i < n; ++i) {
             for (let j = 0; j < m; ++j) {
-                this.arr[i][j] = { hexagon: new Hexagon(i, j, 0), building: new Empty, unit: new Empty }
-                let pos = this.arr[i][j].hexagon.getPos()
-                //this.arr[i][j].coordText = new CoordText(i, j, i + ' ' + j)
-                this.arr[i][j].logicText = new CoordText(i, j, '')
+                this.arr[i][j] = new Cell(new Hexagon(i, j, 0), new Empty(), new Empty(),
+                    new CoordText(i, j, i + ' ' + j), new CoordText(i, j, ''))
             }
         }
+        //undoManager.clear()
         /*for (let x = 0; x <= k * 2; ++x)
         {
             for (let y = Math.max(-k, -x - k) + k; y <= Math.min(k, -x + k) + k; ++y)
@@ -87,9 +125,9 @@ class Grid extends SpritesGroup {
     draw(ctx) {
         this.drawHexagons(ctx)
         
-        /*if (!this.drawLogicText)
-            this.drawTextCoord(ctx)*/
-        
+        if (!this.drawLogicText && debug)
+            this.drawTextCoord(ctx)
+
         this.drawOther(ctx)
         
         if (this.drawLogicText)

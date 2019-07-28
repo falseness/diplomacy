@@ -17,6 +17,7 @@ function drawInterface() {
 
     nextTurnButton.draw(interfaceCtx)
     backToMenuButton.draw(interfaceCtx)
+    undoButton.draw(interfaceCtx)
     gameEvent.draw(interfaceCtx)
 }
 

@@ -1,171 +1,123 @@
-class Unit extends Entity {
-    constructor(x, y, name, hp, healSpeed, dmg, speed, salary, town) {
-        super(x, y, name, hp, healSpeed)
-        this.dmg = dmg
-        this.speed = speed
-        this.moves = speed
-        this.salary = salary
-        this.town = town
+/*
+pos вычисляется при каждом клике на юнита
+это плохо
+*/
 
-        grid.arr[x][y].unit = this
-
+class InterationWithUnit {
+    #moves
+    constructor(speed) {
         this.way = new Way()
+        this.speed = speed
+        this.#moves = speed
     }
-    toJSON() {
-        let res = {}
-        
-        res.name = this.name
-        res.coord = {}
-        res.coord.x = this.coord.x
-        res.coord.y = this.coord.y
-        res.hp = this.hp
-        res.wasHitted = this.wasHitted
-        res.moves = this.moves
-        
-        res.town = {coord: this.town.getCoord()}
-        
-        return res
+    set moves(num) {
+        this.#moves = num
     }
-    getDMG() {
-        return this.dmg
+    get moves() {
+        return this.#moves
     }
-    getSalary() {
-        return this.salary
-    }
-    getPlayer() {
-        return this.town.getPlayer()
-    }
-    getInfo() {
-        let unit = super.getInfo()
-        unit.info.dmg = this.dmg
-
-        if (this.isMyTurn())
-            unit.info.moves = this.moves + ' / ' + this.speed
-
-        unit.info.salary = this.salary
-        return unit
-    }
-    cellHasEnemyBuilding(cell) {
-        return (cell.building.notEmpty() && 
-                cell.building.getPlayer() != this.getPlayer() && 
-                !cell.building.isPassable())
-    }
-    select() {
-        //let border = Math.max(grid.arr.length, grid.arr[0].length)
-        entityInterface.change(this.getInfo(), players[this.getPlayer()].getFullColor())
-
-        grid.setDrawLogicText(false)
-        border.newBrokenLine()
-        let arr = grid.arr
-        if (!this.isMyTurn()) {
-
-            this.way.create(this.coord, this.speed, arr, this.getPlayer(), border)
-
-            return
-        }
-        this.way.create(this.coord, this.moves, arr, this.getPlayer(), border)
-    }
-    removeSelect() {
-        border.setVisible(false)
-        grid.setDrawLogicText(false)
-        entityInterface.setVisible(false)
+    nextTurn() {
+        this.moves = this.speed
     }
     needInstructions() {
-        if (!this.isMyTurn())
-            return false
-
         return this.moves > 0
     }
-    sendInstructions(cell) {
-        if (!this.isMyTurn())
-            return true
+    cantInteract(coord, unit) {
+        return (this.way.getDistance(coord) > this.moves ||
+            coordsEqually(unit.coord, coord))
+    }
+    get isMovesOver() {
+        return !this.moves
+    }
+    removeSelect() {
+        border.visible = false
+        grid.drawLogicText = false
+        entityInterface.visible = false
+    }
+    select(unit) {
+        entityInterface.change(unit.info, unit.player.fullColor)
 
-        let coord = cell.hexagon.coord
+        grid.drawLogicText = false
+        border.newBrokenLine()
+        
+        let borderRadius = this.moves
+        if (!unit.isMyTurn) {
+            borderRadius = this.speed
+        }
+        this.way.create(unit.coord, borderRadius, grid.arr, unit.playerColor, border)
+    }
+    hitUnit(cell, unit) {
+        cell.unit.hit(unit.dmg)
+    }
+    hitBuilding(cell, unit) {
+        cell.building.hit(unit.dmg)
+    }
+    sendInstructions(cell, unit) {
+        let coord = cell.coord
 
-        if (this.way.getDistance(coord) > this.moves ||
-            coordsEqually(this.coord, coord)) {
+        if (this.cantInteract(coord, unit)) {
             this.removeSelect()
             return true
         }
 
-        this.move(coord, grid.arr)
-        if (!this.moves) {
+        this.move(coord, cell, grid.arr, unit)
+        
+        if (this.isMovesOver) {
             this.removeSelect()
             return true
         }
 
-        this.select()
+        this.select(unit)
         return false
     }
-    paintHexagons(original_coord, arr) {
+    move(coord, cell, arr, unit) {
+        //this.addUndo()
+        
+        this.moves -= this.way.getDistance(coord)
+            
+        this.hitIfCellHasEnemy(cell, unit)
+    
+        if (this.cantStandOnCell(cell, unit))
+            coord = this.way.getParent(coord)
+        
+        this.paintHexagons(coord, arr, unit)
+        this.changeCoord(coord, unit)
+    }
+    paintHexagons(original_coord, arr, unit) {
         let coord = Object.assign({}, original_coord)
 
-        while (!(coord.x == this.coord.x && coord.y == this.coord.y)) {
+        while (!(coord.x == unit.coord.x && coord.y == unit.coord.y)) {
             let hexagon = arr[coord.x][coord.y].hexagon
-            if (hexagon.getPlayer() != this.getPlayer()) {
-                hexagon.repaint(this.getPlayer())
-            }
-
+            
+            hexagon.repaint(unit.playerColor)
+            
             coord = this.way.getParent(coord)
         }
     }
-    changeCoord(coord) {
-        grid.arr[this.coord.x][this.coord.y].unit = new Empty()
+    changeCoord(coord, unit) {
+        grid.setUnit(new Empty(), unit.coord)
 
-        this.coord = coord
-        grid.arr[this.coord.x][this.coord.y].unit = this
+        unit.coord = coord
+        grid.setUnit(unit, unit.coord)
         
-        this.pos = this.getPos()
+        unit.pos = unit.calcPos()
     }
-    move(coord, arr) {
-        this.moves -= this.way.getDistance(coord)
-        let cell = arr[coord.x][coord.y]
-            // the building is always priority target
-        if (this.cellHasEnemyBuilding(cell)) {
-            cell.building.hit(this.getDMG())
+    cellHasEnemyBuilding(cell, unit) {
+        return (cell.building.notEmpty() && 
+                cell.building.playerColor != unit.playerColor && 
+                !cell.building.isPassable)
+    }
+    hitIfCellHasEnemy(cell, unit) {
+        // the building is always priority target
+        if (this.cellHasEnemyBuilding(cell, unit)) {
+            this.hitBuilding(cell, unit)
         } else if (cell.unit.notEmpty()) {
-            cell.unit.hit(this.getDMG())
+            this.hitUnit(cell, unit)
         }
-        // if enemy entity is not dead we cant stand on his cell
-        if (this.cellHasEnemyBuilding(cell) ||
-            cell.unit.notEmpty())
-            coord = this.way.getParent(coord)
-
-        this.paintHexagons(coord, grid.arr)
-
-        this.changeCoord(coord)
     }
-    kill() {
-        grid.arr[this.coord.x][this.coord.y].unit = new Empty()
-
-        this.killed = true
-
-        this.town.updateUnitsArray()
-    }
-    isUnit() {
-        return true
-    }
-    onSuburbHexagon() {
-        return grid.arr[this.coord.x][this.coord.y].hexagon.isSuburb()
-    }
-    isHealing() {
-        if (!this.onSuburbHexagon())
-            return false
-        return super.isHealing()
-    }
-    getHPIncrease() {
-        if (!this.onSuburbHexagon())
-            return 0
-        return super.getHPIncrease()
-    }
-    nextTurn(whooseTurn) {
-        if (this.getPlayer() == whooseTurn) {
-            this.moves = this.speed
-            
-            this.hp += this.getHPIncrease()
-            
-            this.wasHitted = false
-        }
+    cantStandOnCell(cell, unit) {
+        return this.cellHasEnemyBuilding(cell, unit) ||
+            cell.unit.notEmpty()
     }
 }
 class Way {
@@ -209,7 +161,7 @@ class Way {
     isCellImpassable(neighbour, v0, arr, player) {
         let cell = arr[neighbour.x][neighbour.y]
 
-        return (cell.unit.notEmpty() && cell.unit.getPlayer() == player &&
+        return (cell.unit.notEmpty() && cell.unit.playerColor == player &&
             !coordsEqually(neighbour, v0))
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {
@@ -219,7 +171,7 @@ class Way {
         for (let i = 0; i < neighbours.length; ++i) {
             if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
                 this.isCellImpassable(neighbours[i], v0, arr, player)) {
-                bord.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                bord.createLine(arr[v.x][v.y].hexagon.calcPos(), i)
                 continue
             }
 
@@ -231,7 +183,7 @@ class Way {
         for (let i = 0; i < neighbours.length; ++i) {
             if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
                 this.isCellImpassable(neighbours[i], v0, arr, player)) {
-                bord.createLine(arr[v.x][v.y].hexagon.getPos(), i)
+                bord.createLine(arr[v.x][v.y].hexagon.calcPos(), i)
                 continue
             }
 
@@ -243,8 +195,9 @@ class Way {
         return sortedHexagonNeighbours
     }
     cellHasEnemyEntity(cell, player) {
-        return (!cell.building.isPassable() && cell.building.getPlayer() != player) ||
-            (cell.unit.notEmpty() && cell.unit.getPlayer() != player)
+        return (!cell.building.isPassable && cell.building.playerColor != player) ||
+            (cell.unit.notEmpty() && cell.unit.playerColor != player)
+
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         let cell = grid.arr[coord.x][coord.y]
@@ -276,12 +229,12 @@ class Way {
                 v = enemyEntityQ.shift()
 
             if (changeLogicText && this.distance[v.x][v.y])
-                arr[v.x][v.y].logicText.setText(this.distance[v.x][v.y])
+                arr[v.x][v.y].logicText.text = this.distance[v.x][v.y]
 
             if (this.distance[v.x][v.y] > moves)
                 continue
 
-            let neighbours = arr[v.x][v.y].hexagon.getNeighbours()
+            let neighbours = arr[v.x][v.y].hexagon.neighbours
 
             let sortedHexagonNeighbours = this.sortNeighbours(v0, v, neighbours, arr, player, bord)
 
@@ -290,7 +243,7 @@ class Way {
                 let coord = sortedHexagonNeighbours[i].hexagon.coord
 
                 if (this.needToCreateLine(v, coord, moves)) {
-                    bord.createLine(arr[v.x][v.y].hexagon.getPos(), sortedHexagonNeighbours[i].side)
+                    bord.createLine(arr[v.x][v.y].hexagon.calcPos(), sortedHexagonNeighbours[i].side)
                 }
 
                 if (!used[coord.x][coord.y]) {

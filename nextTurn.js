@@ -12,30 +12,24 @@ function nextTurn() {
     if (!whooseTurn)
         neutralPlayerTurn()
 
-    nextTurnButton.setColor(players[whooseTurn].getHexColor())
+    nextTurnButton.setColor(players[whooseTurn].hexColor)
 
-    for (let i = 0; i < grid.arr.length; ++i) {
-        for (let j = 0; j < grid.arr[i].length; ++j) {
-            grid.arr[i][j].unit.nextTurn(whooseTurn)
-            grid.arr[i][j].building.nextTurn(whooseTurn)
-        }
-    }
-    players[whooseTurn].startTurn()
+    players[whooseTurn].nextTurn()
+    undoManager.clear()
     saveManager.save()
 }
 class gameLogicButtons extends ImageButton {
     constructor(image, rect, clickFunc, parameters, text = new Empty(), canClick = true) {
         super(image, rect, clickFunc, parameters, text, canClick)
     }
-    setColor(color) {
-        this.img.setColor(color)
-        backToMenuButton.setColor(color)
+    set color(color) {
+        this.img.color = color
     }
 }
 const nextTurnButtonSize = WIDTH * 0.1
 let nextTurnButton = new gameLogicButtons(
     new TriangleImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize, 'black', 0.005 * HEIGHT),
-    new Rect(WIDTH - nextTurnButtonSize * 2, HEIGHT - nextTurnButtonSize * 2,
+    new Rect(WIDTH - nextTurnButtonSize * 1.25, HEIGHT - nextTurnButtonSize * 1.25,
         nextTurnButtonSize, nextTurnButtonSize),
     nextTurn
 )

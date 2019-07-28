@@ -1,7 +1,6 @@
 class EntityInterface {
+    #visible = false
     constructor() {
-
-        this.visible = false
 
         let stroke = 0.002 * WIDTH
         let cornerRadius = 0.03 * WIDTH
@@ -23,44 +22,48 @@ class EntityInterface {
         this.entity = {}
 
         this.entity.name = new Text(
-            this.img.getX() + this.img.getWidth() / 2,
+            this.img.x + this.img.width / 2,
             this.pos.y + this.height * 0.075,
             this.height * 0.2
         )
 
-        this.entity.name.setTextBaseline('top')
-        this.entity.name.setTextAlign('left')
+        this.entity.name.textBaseline = 'top'
+        this.entity.name.textAlign = 'left'
 
         this.entity.info = new Text(
-            this.entity.name.getX(),
-            this.entity.name.getY() + this.entity.name.getHeight(),
+            this.entity.name.x,
+            this.entity.name.y + this.entity.name.height,
             this.height * 0.1
         )
 
-        this.entity.info.setTextBaseline('top')
-        this.entity.info.setTextAlign('left')
+        this.entity.info.textBaseline = 'top'
+        this.entity.info.textAlign = 'left'
 
         this.updateSizes()
     }
     updateSizes() {
-        this.width = Math.max(this.entity.info.getX() + this.entity.info.getWidth(),
-            this.entity.name.getX() + this.entity.name.getWidth()) + 0.04 * this.height
+        this.width = Math.max(this.entity.info.x + this.entity.info.width,
+            this.entity.name.x + this.entity.name.width) + 0.04 * this.height
 
-        this.background.setWidth(this.width)
+        this.background.width = this.width
     }
     change(entity, color) {
-        this.background.setColor(color.hex)
+        this.background.color = color.hex
 
-        this.img.setImage(entity.name)
-        this.entity.name.setText(entity.name)
-        this.entity.info.setText(join(entity.info, ': ', '\n'))
+        this.img.image = entity.name
+        this.entity.name.text = entity.name
+        this.entity.info.text = join(entity.info, ': ', '\n')
 
         this.updateSizes()
 
-        this.setVisible(true)
+        this.visible = true
     }
-    setVisible(boolean) {
-        this.visible = boolean
+    set visible(boolean) {
+        this.#visible = boolean
+        undoButton.canClick = !boolean
+    }
+    get visible() {
+        return this.#visible
     }
     isInside(pos) {
         return this.background.isInside(pos)

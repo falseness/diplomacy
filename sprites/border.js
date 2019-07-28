@@ -50,12 +50,9 @@ class Border {
     }
     newBrokenLine(color = 'white', strokeWidth = 0.05 * basis.r) {
         this.clean()
-        this.setVisible(true)
+        this.visible = true
         this.color = color
         this.strokeWidth = strokeWidth
-    }
-    setVisible(boolean) {
-        this.visible = boolean
     }
     draw(ctx) {
         if (!this.visible)

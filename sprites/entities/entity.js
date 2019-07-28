@@ -11,24 +11,39 @@ class Entity extends Sprite {
         
         this.name = name
     }
-    isPassable() {
+    toJSON() {
+        let res = {
+            name: this.name,
+            coord: {
+                x: this.coord.x,
+                y: this.coord.y
+            },
+            hp: this.hp,
+            wasHitted: this.wasHitted
+        }
+        return res
+    }
+    get playerColor() {
+        return grid.getHexagon(this.coord).playerColor
+    }
+    get player() {
+        return players[this.playerColor]
+    }
+    get isPassable() {
         return false
     }
-    isKilled() {
-        return this.killed
-    }
-    isHealing() {
+    get isHealing() {
         return this.hp != this.maxHP && !this.wasHitted
     }
-    getHPIncrease() {
+    get hpIncrease() {
         if (this.wasHitted)
             return 0
         return Math.min(this.maxHP - this.hp, this.healSpeed)
     }
-    getInfo() {
+    get info() {
         let hp = this.hp
-        if (this.isHealing())
-            hp += ' (+' + this.getHPIncrease() + ')'
+        if (this.isHealing)
+            hp += ' (+' + this.hpIncrease + ')'
         hp += ' / ' + this.maxHP
         return {
             name: this.name,
@@ -43,8 +58,8 @@ class Entity extends Sprite {
         if (this.hp <= 0)
             this.kill()
     }
-    isMyTurn() {
-        return this.getPlayer() == whooseTurn
+    get isMyTurn() {
+        return this.playerColor == whooseTurn
     }
     select() {
         return true
@@ -52,10 +67,13 @@ class Entity extends Sprite {
     removeSelect() {
         return true
     }
-    isBuilding() {
+    isBuildingProduction() {
         return false
     }
-    isUnit() {
+    get isBuilding() {
+        return false
+    }
+    get isUnit() {
         return false
     }
     draw(ctx) {
