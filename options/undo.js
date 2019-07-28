@@ -53,6 +53,7 @@ class UndoManager {
         let building = undo.building
         let buildingProduction = undo.buildingProduction
         if (building) {
+            building = JSON.parse(JSON.stringify(building))
             // cant be empty
             let res = unpacker.fullUnpackBuilding(building)
             let town = grid.getBuilding(building.town.coord)
@@ -73,6 +74,7 @@ class UndoManager {
             town = JSON.parse(JSON.stringify(town))
             unpacker.unpackTown(town)
         }
+        /*
         players[1].updateUnits()
         players[2].updateUnits()
         if (players[1].units.length > 1) {
@@ -81,5 +83,6 @@ class UndoManager {
         if (players[2].units.length > 1) {
             console.log("UNTIS > 1")
         }
+        */
     }
 }
