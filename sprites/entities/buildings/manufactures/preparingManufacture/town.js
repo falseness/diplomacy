@@ -1,10 +1,10 @@
-let production = { 
-    noob: { 
+let production = {
+    noob: {
         production: UnitProduction,
         turns: 1,
         cost: 10,
         class: Noob
-    }, 
+    },
     suburb: {
         production: SuburbProduction,
         turns: 0,
@@ -93,6 +93,11 @@ class Town extends PreparingManufacture {
     }
     toJSON() {
         let res = super.toJSON()
+
+        this.updateSuburbs()
+        this.updateBuildings()
+        this.updateBuildingProduction()
+
         res.buildings = this.buildings
         res.buildingProduction = this.buildingProduction
         let suburbs = []
@@ -105,11 +110,33 @@ class Town extends PreparingManufacture {
     }
     get info() {
         let town = super.info
-        
+
         if (this.activeProduction.notEmpty())
             town.activeProduction = this.activeProduction.name
 
         return town
+    }
+    updateBuildings() {
+        for (let i = 0; i < this.buildings.length; ++i) {
+            if (this.buildings[i].killed) {
+                this.buildings.splice(i--, 1)
+            }
+        }
+    }
+    updateBuildingProduction() {
+        for (let i = 0; i < this.buildingProduction.length; ++i) {
+            if (this.buildingProduction[i].killed) {
+                this.buildingProduction.splice(i--, 1)
+            }
+        }
+    }
+    updateSuburbs() {
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            if (this.suburbs[i].playerColor != this.playerColor ||
+                !this.suburbs[i].isSuburb) {
+                this.suburbs.splice(i--, 1)
+            }
+        }
     }
     get income() {
         let income = super.income
@@ -120,12 +147,7 @@ class Town extends PreparingManufacture {
             }
             income += this.buildings[i].income
         }
-        for (let i = 0; i < this.suburbs.length; ++i) {
-            if (this.suburbs[i].playerColor != this.playerColor ||
-                !this.suburbs[i].isSuburb) {
-                this.suburbs.splice(i--, 1)
-            }
-        }
+        this.updateSuburbs()
         const suburbsIncome = 1
         income += this.suburbs.length * suburbsIncome
         return income
@@ -149,25 +171,25 @@ class Town extends PreparingManufacture {
     sendInstructions(cell) {
         if (!this.activeProduction.canCreateOnCell(cell, this)) {
             this.removeSelect()
-            
+
             return true
         }
-            
+
         let stillNeedInstructions = this.activeProduction.sendInstructions(cell.coord, this)
-        
+
         if (!this.activeProduction.isSuburbProduction()) {
             this.buildingProduction.push(this.activeProduction)
             grid.setBuilding(this.activeProduction, cell.coord)
         }
-        
+
         if (stillNeedInstructions) {
             this.select()
-            
+
             if (!this.activeProduction.isSuburbProduction()) {
                 let what = this.activeProduction.name
-                
+
                 this.activeProduction = new production[what].production(
-                    production[what].turns, production[what].cost, 
+                    production[what].turns, production[what].cost,
                     production[what].class, what)
                 this.activeProduction.choose(this)
             }
@@ -181,7 +203,7 @@ class Town extends PreparingManufacture {
         //this.minusGold(production[what].cost)
         // production will minus gold town
         this.activeProduction = new production[what].production(
-            production[what].turns, production[what].cost, 
+            production[what].turns, production[what].cost,
             production[what].class, what)
 
         this.activeProduction.choose(this)
@@ -195,7 +217,7 @@ class Town extends PreparingManufacture {
             return false
 
         this.startBuildingPreparing(what)
-        
+
         return true
     }
     buildingPreparingLogic() {
@@ -239,4 +261,3 @@ function prepareEvent(product) {
     }
     gameEvent.removeSelection()
 }
-

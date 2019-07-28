@@ -10,7 +10,7 @@ class SaveManager {
         localStorage.setItem('grid', _grid)
         localStorage.setItem('players', _players)
         localStorage.setItem('whooseTurn', _whooseTurn)
-        
+
         //console.log("saved")
     }
     load() {
@@ -19,11 +19,11 @@ class SaveManager {
         let _grid = localStorage.getItem('grid')
         let _players = localStorage.getItem('players')
         let _whooseTurn = localStorage.getItem('whooseTurn')
-        
+
         unpacker.unpackAll(_grid, _players, _whooseTurn)
-        
+
         gameEvent.hideAll()
-        //console.log("loaded")
+            //console.log("loaded")
         return true
     }
 }
@@ -32,8 +32,8 @@ class JsonUnpackManager {
     constructor() {
         this.unitClass = {
             noob: Noob,
-            archer: Archer, 
-            KOHb: KOHb, 
+            archer: Archer,
+            KOHb: KOHb,
             normchel: Normchel,
             catapult: Catapult
         }
@@ -57,12 +57,12 @@ class JsonUnpackManager {
     fullUnpackUnit(packedUnit) {
         this.unpackUnit(packedUnit, this.unitClass[packedUnit.name])
     }
-    unpackBuilding(packedBuilding, _building) { 
+    unpackBuilding(packedBuilding, _building) {
         if (packedBuilding.name == 'Empty') {
             let empty = new Empty()
             return empty
         }
-        
+
         let building = new _building(packedBuilding.coord.x, packedBuilding.coord.y)
 
         building.hp = packedBuilding.hp
@@ -70,10 +70,10 @@ class JsonUnpackManager {
 
         if (packedBuilding.name == 'barrack' &&
             packedBuilding.unitProduction.name != 'Empty') {
-            buildings.unitProduction = new UnitProduction(
-                packedBuilding.unitProduction.turns, 
+            building.unitProduction = new UnitProduction(
+                packedBuilding.unitProduction.turns,
                 production[packedBuilding.unitProduction.name].cost,
-                this.unitClass[packedBuilding.unitProduction.name], 
+                this.unitClass[packedBuilding.unitProduction.name],
                 packedBuilding.unitProduction.name)
         }
 
@@ -87,15 +87,15 @@ class JsonUnpackManager {
             let empty = new Empty()
             return empty
         }
-        
+
         let manufacture = new ManufactureProduction(
             packedManufacture.turns, production[packedManufacture.name].cost,
-                    _manufacture, packedManufacture.name)
+            _manufacture, packedManufacture.name)
         manufacture.coord = packedManufacture.coord
-        
+
         grid.arr[packedManufacture.coord.x][packedManufacture.coord.y].building = manufacture
         return manufacture
-        //res.manufacture
+            //res.manufacture
     }
     unpackHexagon(packedHexagon) {
         let x = packedHexagon.coord.x
@@ -115,22 +115,22 @@ class JsonUnpackManager {
                 grid.arr[packedTown.suburbs[q].x][packedTown.suburbs[q].y].hexagon)
         }
         for (let q = 0; q < packedTown.buildings.length; ++q) {
-            let packedBuilding = packedTown.buildings[q]        
+            let packedBuilding = packedTown.buildings[q]
             town.buildings.push(
                 this.unpackBuilding(packedBuilding, this.buildingClass[packedBuilding.name]))
         }
         for (let q = 0; q < packedTown.buildingProduction.length; ++q) {
             let packedManufacture = packedTown.buildingProduction[q]
             town.buildingProduction.push(
-                this.unpackManufacture(packedManufacture, 
-                this.buildingClass[packedManufacture.name]))
+                this.unpackManufacture(packedManufacture,
+                    this.buildingClass[packedManufacture.name]))
             town.buildingProduction[q].town = town
         }
         if (packedTown.unitProduction.name != 'Empty') {
             town.unitProduction = new UnitProduction(
-                packedTown.unitProduction.turns, 
+                packedTown.unitProduction.turns,
                 production[packedTown.unitProduction.name].cost,
-                this.unitClass[packedTown.unitProduction.name], 
+                this.unitClass[packedTown.unitProduction.name],
                 packedTown.unitProduction.name)
         }
     }
@@ -138,20 +138,20 @@ class JsonUnpackManager {
         let packedGrid = JSON.parse(jsonGrid)
         let packedPlayers = JSON.parse(jsonPlayers)
         whooseTurn = JSON.parse(jsonWhooseTurn)
-        
+
         let gridSize = {
             x: packedGrid.length,
             y: packedGrid[0].length
         }
         grid = new Grid(0, 0, gridSize)
-        
-        
+
+
         for (let i = 0; i < packedGrid.length; ++i) {
             for (let j = 0; j < packedGrid[i].length; ++j) {
                 grid.arr[i][j].hexagon.firstpaint(packedGrid[i][j])
             }
         }
-        
+
         players = []
         for (let i = 0; i < packedPlayers.length; ++i) {
             players.push(new Player(packedPlayers[i].color, packedPlayers[i].gold, !i))

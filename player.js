@@ -1,26 +1,31 @@
-class Player
-{
-    constructor(color, gold = 0, neutral)
-    {
+class Player {
+    constructor(color, gold = 0, neutral) {
         this.gold = gold
         this.towns = []
         this.units = []
 
-        this.color =
-        {
+        this.color = {
             r: color.r,
             g: color.g,
             b: color.b
         }
         if (neutral) {
             this.hexagon = this.calcSuburbHexagon()
-        }
-        else {
+        } else {
             this.hexagon = this.calcHexagon()
         }
         this.suburbHexagon = this.calcSuburbHexagon()
     }
+    updateUnits() {
+        for (let i = 0; i < this.units.length; ++i) {
+            if (this.units[i].killed) {
+                this.units.splice(i--, 1)
+            }
+        }
+    }
     toJSON() {
+        this.updateUnits()
+
         let res = {}
         res.gold = this.gold
         res.towns = this.towns
@@ -64,17 +69,17 @@ class Player
     }
     calcSuburbHexagon() {
         let tmpCanvas = document.createElement('canvas')
-        
+
         const strokeWidth = basis.strokeWidth
         let pos = {
-            x: basis.hexHalfRectWithStrokeOffset.width, 
+            x: basis.hexHalfRectWithStrokeOffset.width,
             y: basis.hexHalfRectWithStrokeOffset.height
-        } 
+        }
         tmpCanvas.width = pos.x * 2
         tmpCanvas.height = pos.y * 2
-        
+
         let tmpCtx = tmpCanvas.getContext('2d');
-        
+
         tmpCtx.beginPath()
 
         tmpCtx.fillStyle = this.hexColor
@@ -88,22 +93,22 @@ class Player
         tmpCtx.fill()
         tmpCtx.stroke()
         tmpCtx.closePath()
-        
+
         return tmpCanvas
     }
     calcHexagon() {
         let tmpCanvas = document.createElement('canvas')
-        
+
         const strokeWidth = basis.strokeWidth
         let pos = {
-            x: basis.hexHalfRectWithStrokeOffset.width, 
+            x: basis.hexHalfRectWithStrokeOffset.width,
             y: basis.hexHalfRectWithStrokeOffset.height
-        } 
+        }
         tmpCanvas.width = pos.x * 2
         tmpCanvas.height = pos.y * 2
-        
+
         let tmpCtx = tmpCanvas.getContext('2d');
-        
+
         tmpCtx.beginPath()
 
         tmpCtx.fillStyle = this.hexColor
@@ -117,11 +122,11 @@ class Player
         tmpCtx.fill()
         tmpCtx.stroke()
         tmpCtx.closePath()
-        
+
         const suburbAlpha = 0.4
         const maxRGBInt = 255
         let color = `rgba(${maxRGBInt}, ${maxRGBInt}, ${maxRGBInt}, ${suburbAlpha})`
-        
+
         tmpCtx.beginPath()
 
         tmpCtx.fillStyle = color
@@ -134,22 +139,17 @@ class Player
         tmpCtx.closePath()
         return tmpCanvas
     }
-    get textColor()
-    {
+    get textColor() {
         return (this.color.r + ', ' + this.color.g + ', ' + this.color.b)
     }
-    get RGB()
-    {
+    get RGB() {
         return this.color
     }
-    get hexColor()
-    {
+    get hexColor() {
         return rgbToHex(this.color.r, this.color.g, this.color.b)
     }
-    get fullColor()
-    {
-        let color = 
-        {
+    get fullColor() {
+        let color = {
             hex: this.hexColor,
             text: this.textColor,
             rgb: this.color

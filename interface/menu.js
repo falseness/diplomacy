@@ -59,7 +59,7 @@ class Menu {
     }
     back() {
         gameExit = true
-            //saveManager.save() some bugs
+        saveManager.save() //some bugs or not
 
         menu.setVisible(true)
         menu.start()
