@@ -57,6 +57,8 @@ class Entity extends Sprite {
         this.wasHitted = true
         if (this.hp <= 0)
             this.kill()
+
+        return this.killed
     }
     get isMyTurn() {
         return this.playerColor == whooseTurn

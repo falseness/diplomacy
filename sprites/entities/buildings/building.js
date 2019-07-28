@@ -21,6 +21,9 @@ class Building extends Entity {
     isBuilding() {
         return true
     }
+    isTown() {
+        return false
+    }
     nextTurn() {
         this.hp += this.hpIncrease
         this.wasHitted = false

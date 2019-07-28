@@ -6,47 +6,80 @@ class UndoManager {
     clear() {
         this.arr = []
     }
-    addUndo() {
+    startUndo() {
         if (this.arr.length == this.maximumSize)
             this.arr.shift()
         else if (this.arr.length > this.maximumSize)
             console.log("ERROR")
-        
-        this.arr.push([])
+
+        this.arr.push({
+            hexagons: [],
+            units: [],
+            killUnit: []
+        })
     }
-    addToLastUndo(additive) {
-        this.arr[this.arr.length - 1].push(additive)
+    get lastUndo() {
+        return this.arr[this.arr.length - 1]
     }
     undo() {
-        return
         if (!this.arr.length)
             return
-            
-        //console.log(players[1].towns[0])
-        //console.log(players[2].towns[0])
-        
+
         gameEvent.hideAll()
         gameEvent.removeSelection()
-        /*
-        let elements = this.arr.pop()
-        for (let i = elements.length - 1; i >= 0; --i) {
-            let el = JSON.parse(elements[i])
-            
-            let x = el.hexagon.coord.x
-            let y = el.hexagon.coord.y
-            grid.arr[x][y].unit = new Empty()
-            grid.arr[x][y].building = new Empty()
-            
-            unpacker.unpackHexagon(el.hexagon)
-            if (el.building.name == 'town') {
-                players[el.hexagon.player].deleteTownFromArray(el.building.coord)
-                unpacker.unpackTown(el.building)
-            }
-            else {
-                unpacker.fullUnpackBuilding(el.building)
-            }
-            
-            unpacker.fullUnpackUnit(el.unit)
-        }*/
+
+        let undo = this.arr.pop() //JSON.parse(this.arr.pop())
+        
+        for (let i = 0; i < undo.killUnit.length; ++i) {
+            let unit = undo.killUnit[i]
+            grid.getUnit(unit.coord).kill()
+        }
+        if (undo.killBuilding)
+            grid.getBuilding(undo.killBuilding.coord).kill()
+
+
+        for (let i = 0; i < undo.hexagons.length; ++i) {
+            let hexagon = undo.hexagons[i]
+            let res = grid.getHexagon(hexagon.coord)
+            res.firstpaint(hexagon.player)
+            res.isSuburb = hexagon.isSuburb
+        }
+
+        for (let i = undo.units.length - 1; i >= 0; --i) {
+            let unit = undo.units[i]
+            unpacker.fullUnpackUnit(unit)
+        }
+
+        let building = undo.building
+        let buildingProduction = undo.buildingProduction
+        if (building) {
+            // cant be empty
+            let res = unpacker.fullUnpackBuilding(building)
+            let town = grid.getBuilding(building.town.coord)
+            res.town = town
+
+            town.buildings.push(res)
+        }
+        if (buildingProduction) {
+            let res = unpacker.fullUnpackManufacture(buildingProduction)
+            let town = grid.getBuilding(buildingProduction.town.coord)
+
+            res.town = town
+
+            town.buildingProduction.push(res)
+        }
+        let town = undo.town
+        if (town) {
+            town = JSON.parse(JSON.stringify(town))
+            unpacker.unpackTown(town)
+        }
+        players[1].updateUnits()
+        players[2].updateUnits()
+        if (players[1].units.length > 1) {
+            console.log("UNTIS > 1")
+        }
+        if (players[2].units.length > 1) {
+            console.log("UNTIS > 1")
+        }
     }
 }

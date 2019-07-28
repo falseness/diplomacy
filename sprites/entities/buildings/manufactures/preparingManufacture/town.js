@@ -20,7 +20,7 @@ let production = {
     archer: {
         production: UnitProduction,
         turns: 2,
-        cost: 20,
+        cost: 15,
         class: Archer
     },
     KOHb: {
@@ -37,7 +37,7 @@ let production = {
     },
     catapult: {
         production: UnitProduction,
-        turns: 4,
+        turns: 3,
         cost: 35,
         class: Catapult
     },
@@ -69,6 +69,9 @@ class Town extends PreparingManufacture {
         this.buildings = []
         this.buildingProduction = []
         this.activeProduction = new Empty()
+    }
+    isTown() {
+        return true
     }
     createFirstSuburbs(firstTown) {
         // костыль:
@@ -147,9 +150,16 @@ class Town extends PreparingManufacture {
             }
             income += this.buildings[i].income
         }
-        this.updateSuburbs()
+        let countSuburbs = 0
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            if (this.suburbs[i].playerColor != this.playerColor ||
+                !this.suburbs[i].isSuburb) {
+                continue
+            }
+            ++countSuburbs
+        }
         const suburbsIncome = 1
-        income += this.suburbs.length * suburbsIncome
+        income += countSuburbs * suburbsIncome
         return income
     }
     needInstructions() {
@@ -248,6 +258,7 @@ class Town extends PreparingManufacture {
     }
     nextTurn() {
         super.nextTurn()
+        this.updateSuburbs()
         this.buildingPreparingLogic()
         this.buildingsNextTurn()
     }

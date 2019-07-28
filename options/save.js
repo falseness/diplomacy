@@ -45,6 +45,7 @@ class JsonUnpackManager {
     unpackUnit(packedUnit, _unit) {
         if (packedUnit.name == 'Empty') {
             let empty = new Empty()
+            grid.setUnit(empty, packedUnit.coord)
             return empty
         }
         let unit = new _unit(packedUnit.coord.x, packedUnit.coord.y)
@@ -60,6 +61,7 @@ class JsonUnpackManager {
     unpackBuilding(packedBuilding, _building) {
         if (packedBuilding.name == 'Empty') {
             let empty = new Empty()
+            grid.setBuilding(empty, packedBuilding.coord)
             return empty
         }
 
@@ -80,7 +82,7 @@ class JsonUnpackManager {
         return building
     }
     fullUnpackBuilding(packedBuilding) {
-        this.unpackBuilding(packedBuilding, this.buildingClass[packedBuilding.name])
+        return this.unpackBuilding(packedBuilding, this.buildingClass[packedBuilding.name])
     }
     unpackManufacture(packedManufacture, _manufacture) {
         if (packedManufacture.name == 'Empty') {
@@ -96,6 +98,10 @@ class JsonUnpackManager {
         grid.arr[packedManufacture.coord.x][packedManufacture.coord.y].building = manufacture
         return manufacture
             //res.manufacture
+    }
+    fullUnpackManufacture(packedManufacture) {
+        return this.unpackManufacture(packedManufacture,
+            this.buildingClass[packedManufacture.name])
     }
     unpackHexagon(packedHexagon) {
         let x = packedHexagon.coord.x
@@ -118,6 +124,7 @@ class JsonUnpackManager {
             let packedBuilding = packedTown.buildings[q]
             town.buildings.push(
                 this.unpackBuilding(packedBuilding, this.buildingClass[packedBuilding.name]))
+            town.buildings[q].town = town
         }
         for (let q = 0; q < packedTown.buildingProduction.length; ++q) {
             let packedManufacture = packedTown.buildingProduction[q]

@@ -21,10 +21,20 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
     	return this.way.getDistance(coord) <= this.moves
     }
     hitUnit(cell, catapult) {
-        cell.unit.hit(catapult.dmg)
+        this.addHittedUnitUndo(cell)
+
+        let cellUnit = cell.unit
+        let killed = cell.unit.hit(catapult.dmg)
+        if (!killed) 
+            this.addKillUnitUndo(cellUnit)
     }
     hitBuilding(cell, catapult) {
-        cell.building.hit(catapult.buildingDMG)
+        this.addHittedBuildingUndo(cell)
+
+        let cellBuilding = cell.building
+        let killed = cell.building.hit(catapult.buildingDMG)
+        if (!killed)
+            this.addKillBuildingUndo(cellBuilding)
     }
     sendInstructions(cell, catapult) {
     	let coord = cell.coord

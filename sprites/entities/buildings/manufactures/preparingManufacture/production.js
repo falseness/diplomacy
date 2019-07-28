@@ -27,7 +27,7 @@ class Production {
     }
     nextTurn() {
         --this.turns
-        
+
         return !this.turns
     }
     notEmpty() {
@@ -43,7 +43,7 @@ class UnitProduction extends Production {
         super(turns, cost, _class, name)
     }
     toJSON() {
-         let res = {
+        let res = {
             turns: this.turns,
             cost: this.cost,
             name: this.name
@@ -52,7 +52,7 @@ class UnitProduction extends Production {
     }
     create(x, y) {
         let t = new this.class(x, y)
-        
+
         return t
     }
     static isUnitProduction() {
@@ -105,10 +105,20 @@ class ManufactureProduction extends BuildingProduction {
     toJSON() {
         let res = {
             name: this.name,
-            turns: this.turns, 
+            turns: this.turns,
             coord: {
                 x: this.coord.x,
                 y: this.coord.y
+            }
+        }
+        return res
+    }
+    toUndoJSON() {
+        let res = this.toJSON()
+        res.town = {
+            coord: {
+                x: this.town.coord.x,
+                y: this.town.coord.y
             }
         }
         return res
@@ -121,7 +131,7 @@ class ManufactureProduction extends BuildingProduction {
         grid.setBuilding(new Empty(), this.coord)
     }
     canCreateOnCell(cell, town) {
-        return cell.building.isEmpty() && 
+        return cell.building.isEmpty() &&
             this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor)
     }
     isPreparingStopped() {
@@ -129,7 +139,7 @@ class ManufactureProduction extends BuildingProduction {
     }
     create() {
         let t = new this.class(this.coord.x, this.coord.y, this.town)
-        
+
         return t
     }
     get playerColor() {
@@ -142,8 +152,8 @@ class ManufactureProduction extends BuildingProduction {
         let manufacture = {}
         manufacture.name = this.name
         manufacture.info = {
-            turns: this.turns//,    
-            //cost: this.cost
+            turns: this.turns //,    
+                //cost: this.cost
         }
         return manufacture
     }
@@ -172,14 +182,14 @@ class ManufactureProduction extends BuildingProduction {
     }
     sendInstructions(coord, town) {
         town.minusGold(this.cost)
-        
+
         this.coord = coord
-        //this.pos = grid.getCell(this.coord).pos
+            //this.pos = grid.getCell(this.coord).pos
         this.town = town
-        
+
         let needInstructions = town.gold >= this.cost
-        /*if (needInstructions)
-            this.select(town)*/
+            /*if (needInstructions)
+                this.select(town)*/
         return needInstructions
     }
     choose(town) {
@@ -230,16 +240,16 @@ class ManufactureProduction extends BuildingProduction {
     }
     nextTurn() {
         super.nextTurn()
-        
+
         this.text.text = this.turns
     }
     draw(ctx) {
         if (!this.town)
             return
-            
+
         /*if (this.isPreparingStopped())
             return*/
-        
+
         drawImageWithOpacity(ctx, this.name, this.pos, 0.5)
         if (!grid.drawLogicText)
             this.text.draw(ctx)
@@ -267,7 +277,7 @@ class SuburbProduction extends BuildingProduction {
     }
     sendInstructions(coord, town) {
         town.minusGold(this.suburbsCostformula(this.distance[coord.x][coord.y]))
-        
+
         this.create(coord, town)
         this.choose(town)
         return this.availableHexagons.length && town.gold >= this.cost
@@ -280,7 +290,7 @@ class SuburbProduction extends BuildingProduction {
         grid.cleanLogicText()
 
         this.paintTownBorders(town, town.suburbs, grid.arr, town.playerColor)
-        
+
         super.choose()
     }
     isSuburbProduction() {
@@ -330,68 +340,68 @@ class SuburbProduction extends BuildingProduction {
         return distance
     }
     paintTownBorders(town, suburbs, arr, player) {
-            // init
-            border.newBrokenLine()
-            grid.drawLogicText = true
+        // init
+        border.newBrokenLine()
+        grid.drawLogicText = true
 
-            this.distance = []
-            this.availableHexagons = []
-                //let suburbsNeighbours = []
-            let used = new Array(arr.length)
+        this.distance = []
+        this.availableHexagons = []
+            //let suburbsNeighbours = []
+        let used = new Array(arr.length)
 
-            for (let i = 0; i < arr.length; ++i) {
-                used[i] = new Array(arr[i].length)
-                for (let j = 0; j < used[i].length; ++j)
-                    used[i][j] = false
-            }
-
-            // search available for purchase cells
-            for (let i = 0; i < suburbs.length; ++i) {
-                let hexagon = suburbs[i]
-                used[hexagon.coord.x][hexagon.coord.y] = true
-
-                let neighbours = hexagon.neighbours
-                for (let j = 0; j < neighbours.length; ++j) {
-                    let neighbourCoord = neighbours[j]
-
-                    if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
-                        arr[neighbourCoord.x][neighbourCoord.y].hexagon.playerColor != player) {
-                        border.createLine(hexagon.calcPos(), j)
-                        continue
-                    }
-
-                    if (!this.isSuburb(neighbourCoord, arr, player) &&
-                        !used[neighbourCoord.x][neighbourCoord.y]) {
-                        this.availableHexagons.push(arr[neighbourCoord.x][neighbourCoord.y].hexagon)
-
-                        used[neighbourCoord.x][neighbourCoord.y] = true
-                    }
-                }
-            }
-
-            // create border lines
-            this.distance = this.getDistances(town, arr, player)
-
-            for (let i = 0; i < this.availableHexagons.length; ++i) {
-                let coord = { x: this.availableHexagons[i].coord.x, y: this.availableHexagons[i].coord.y }
-
-                let cell = arr[coord.x][coord.y]
-                let cost = this.suburbsCostformula(this.distance[coord.x][coord.y])
-                cell.logicText.text = cost
-
-                let posI = this.availableHexagons[i].calcPos()
-
-                let neighbours = this.availableHexagons[i].neighbours
-
-                for (let j = 0; j < neighbours.length; ++j) {
-                    if (isCoordNotOnMap(neighbours[j]) ||
-                        !used[neighbours[j].x][neighbours[j].y])
-                        border.createLine(posI, j)
-                }
-            }
-
-
-            // BFS for find out distance
-
+        for (let i = 0; i < arr.length; ++i) {
+            used[i] = new Array(arr[i].length)
+            for (let j = 0; j < used[i].length; ++j)
+                used[i][j] = false
         }
+
+        // search available for purchase cells
+        for (let i = 0; i < suburbs.length; ++i) {
+            let hexagon = suburbs[i]
+            used[hexagon.coord.x][hexagon.coord.y] = true
+
+            let neighbours = hexagon.neighbours
+            for (let j = 0; j < neighbours.length; ++j) {
+                let neighbourCoord = neighbours[j]
+
+                if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
+                    arr[neighbourCoord.x][neighbourCoord.y].hexagon.playerColor != player) {
+                    border.createLine(hexagon.calcPos(), j)
+                    continue
+                }
+
+                if (!this.isSuburb(neighbourCoord, arr, player) &&
+                    !used[neighbourCoord.x][neighbourCoord.y]) {
+                    this.availableHexagons.push(arr[neighbourCoord.x][neighbourCoord.y].hexagon)
+
+                    used[neighbourCoord.x][neighbourCoord.y] = true
+                }
+            }
+        }
+
+        // create border lines
+        this.distance = this.getDistances(town, arr, player)
+
+        for (let i = 0; i < this.availableHexagons.length; ++i) {
+            let coord = { x: this.availableHexagons[i].coord.x, y: this.availableHexagons[i].coord.y }
+
+            let cell = arr[coord.x][coord.y]
+            let cost = this.suburbsCostformula(this.distance[coord.x][coord.y])
+            cell.logicText.text = cost
+
+            let posI = this.availableHexagons[i].calcPos()
+
+            let neighbours = this.availableHexagons[i].neighbours
+
+            for (let j = 0; j < neighbours.length; ++j) {
+                if (isCoordNotOnMap(neighbours[j]) ||
+                    !used[neighbours[j].x][neighbours[j].y])
+                    border.createLine(posI, j)
+            }
+        }
+
+
+        // BFS for find out distance
+
+    }
 }

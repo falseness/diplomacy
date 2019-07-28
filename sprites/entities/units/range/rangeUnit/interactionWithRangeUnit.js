@@ -42,7 +42,11 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         }
 
         if (this.cellHasEnemyBuilding(cell, rangeUnit)) {
+            this.addThisUndo(rangeUnit)
+
             this.hitBuilding(cell, rangeUnit)
+
+            this.addKillUnitUndo(rangeUnit)
 
             this.moves = 0
             this.removeSelect()
@@ -50,7 +54,12 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         }
 
         if (this.cellHasEnemyUnit(cell, rangeUnit)) {
+            this.addThisUndo(rangeUnit)
+
             this.hitUnit(cell, rangeUnit)
+
+            this.addKillUnitUndo(rangeUnit)
+
             this.moves = 0
 
             this.removeSelect()

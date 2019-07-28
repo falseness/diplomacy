@@ -7,7 +7,7 @@ class Empty {
         }
     }
     toJSON() {
-        return {name: 'Empty'}
+        return { name: 'Empty' }
     }
     getCell() {
         console.log("ERROR")

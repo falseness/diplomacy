@@ -32,7 +32,8 @@ class GameManager {
     	requestAnimationFrame(gameLoop)
 	}
 	static initValues() {
-		whooseTurn = 1
+        whooseTurn = 1
+        undoManager.clear()
 	}
 	static start1() {
       	players = [
