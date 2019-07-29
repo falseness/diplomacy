@@ -37,8 +37,17 @@ class Player {
     get income() {
         let income = 0
         for (let i = 0; i < this.towns.length; ++i) {
+            if (this.towns[i].killed) {
+                this.towns.splice(i--, 1)
+                continue
+            }
             income += this.towns[i].income
         }
+
+        if (!this.towns.length) {
+            console.log("LOOSE")
+        }
+
         for (let i = 0; i < this.units.length; ++i) {
             if (this.units[i].killed) {
                 this.units.splice(i--, 1)

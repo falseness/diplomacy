@@ -111,6 +111,9 @@ class Town extends PreparingManufacture {
 
         return res
     }
+    toUndoJSON() {
+        return JSON.parse(JSON.stringify(this.toJSON()))
+    }
     get info() {
         let town = super.info
 
@@ -184,12 +187,24 @@ class Town extends PreparingManufacture {
 
             return true
         }
+        this.addThisUndo()
 
         let stillNeedInstructions = this.activeProduction.sendInstructions(cell.coord, this)
 
+        undoManager.lastUndo.production = {
+            coord: {
+                x: cell.coord.x,
+                y: cell.coord.y
+            }
+        }
         if (!this.activeProduction.isSuburbProduction()) {
+            undoManager.lastUndo.type = 'prepareBuilding'
+
             this.buildingProduction.push(this.activeProduction)
             grid.setBuilding(this.activeProduction, cell.coord)
+        }
+        else {
+            undoManager.lastUndo.type = 'prepareSuburb'
         }
 
         if (stillNeedInstructions) {

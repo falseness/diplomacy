@@ -1,18 +1,19 @@
 class UndoManager {
     constructor() {
         this.arr = []
-        this.maximumSize = 5
+        this.maximumSize = 10
     }
     clear() {
         this.arr = []
     }
-    startUndo() {
+    startUndo(type) {
         if (this.arr.length == this.maximumSize)
             this.arr.shift()
         else if (this.arr.length > this.maximumSize)
             console.log("ERROR")
 
         this.arr.push({
+            type: type,
             hexagons: [],
             units: [],
             killUnit: []
@@ -21,13 +22,20 @@ class UndoManager {
     get lastUndo() {
         return this.arr[this.arr.length - 1]
     }
-    undo() {
-        if (!this.arr.length)
-            return
+    undoBuilding(building) {
+        building = building
+        // cant be empty
+        let res = unpacker.fullUnpackBuilding(building)
+        let town = grid.getBuilding(building.town.coord)
+        res.town = town
 
-        gameEvent.hideAll()
-        gameEvent.removeSelection()
-
+        town.buildings.push(res)
+    }
+    undoTown(town) {
+        town = town
+        unpacker.unpackTown(town)
+    }
+    unitUndo() {
         let undo = this.arr.pop() //JSON.parse(this.arr.pop())
         
         for (let i = 0; i < undo.killUnit.length; ++i) {
@@ -53,13 +61,7 @@ class UndoManager {
         let building = undo.building
         let buildingProduction = undo.buildingProduction
         if (building) {
-            building = JSON.parse(JSON.stringify(building))
-            // cant be empty
-            let res = unpacker.fullUnpackBuilding(building)
-            let town = grid.getBuilding(building.town.coord)
-            res.town = town
-
-            town.buildings.push(res)
+            this.undoBuilding(building)
         }
         if (buildingProduction) {
             let res = unpacker.fullUnpackManufacture(buildingProduction)
@@ -71,18 +73,62 @@ class UndoManager {
         }
         let town = undo.town
         if (town) {
-            town = JSON.parse(JSON.stringify(town))
-            unpacker.unpackTown(town)
+            this.undoTown(town)
         }
-        /*
-        players[1].updateUnits()
-        players[2].updateUnits()
-        if (players[1].units.length > 1) {
-            console.log("UNTIS > 1")
+    }
+    preparingUnitUndo() {
+        let undo = this.arr.pop()
+        grid.getBuilding(undo.killBuilding.coord).kill()
+
+        if (undo.building.name == 'town') {
+            this.undoTown(undo.building)
         }
-        if (players[2].units.length > 1) {
-            console.log("UNTIS > 1")
+        else {
+            this.undoBuilding(undo.building)
         }
-        */
+        grid.getBuilding(undo.building.coord).player.gold = undo.gold
+    }
+    preparingBuildingUndo() {
+        let undo = this.arr.pop()
+
+        grid.getBuilding(undo.killBuilding.coord).kill()
+        grid.getBuilding(undo.production.coord).kill()
+
+        this.undoTown(undo.building)
+
+        grid.getBuilding(undo.building.coord).player.gold = undo.gold
+    }
+    preparingSuburbUndo() {
+        let undo = this.arr.pop()
+
+        grid.getBuilding(undo.killBuilding.coord).kill()
+        grid.getHexagon(undo.production.coord).isSuburb = false
+        
+        this.undoTown(undo.building)
+
+        grid.getBuilding(undo.building.coord).player.gold = undo.gold
+    }
+    undo() {
+        if (!this.arr.length)
+            return
+
+        gameEvent.hideAll()
+        gameEvent.removeSelection()
+
+        if (this.lastUndo.type == 'unit') {
+            this.unitUndo()
+        }
+        else if (this.lastUndo.type == 'prepareUnit') {
+            this.preparingUnitUndo()
+        }
+        else if (this.lastUndo.type == 'prepareBuilding') {
+            this.preparingBuildingUndo()
+        } 
+        else if (this.lastUndo.type == 'prepareSuburb') {
+            this.preparingSuburbUndo()
+        }
+        else {
+            console.log("ERROR")
+        }
     }
 }

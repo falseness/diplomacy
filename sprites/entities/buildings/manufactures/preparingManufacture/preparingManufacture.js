@@ -17,12 +17,27 @@ class PreparingManufacture extends Manufacture {
 	minusGold(num) {
         this.player.gold -= num
     }
+    addThisUndo() {
+        undoManager.startUndo('prepareUnit')
+        undoManager.lastUndo.building = this.toUndoJSON()
+        undoManager.lastUndo.gold = this.gold
+
+        undoManager.lastUndo.killBuilding = {
+            coord: {
+                x: this.coord.x,
+                y: this.coord.y
+            }
+        }
+    }
 	startUnitPreparing(what) {
+        this.addThisUndo()
+
         this.minusGold(production[what].cost)
 
         this.unitProduction = new production[what].production(
             production[what].turns, production[what].cost, 
             production[what].class, what)
+
     }
     prepare(what) {
         if (this.gold < production[what].cost ||

@@ -84,7 +84,7 @@ class InterationWithUnit {
         return false
     }
     addThisUndo(unit) {
-        undoManager.startUndo()
+        undoManager.startUndo('unit')
         undoManager.lastUndo.units.push(unit.toJSON())
     }
     move(coord, cell, arr, unit) {

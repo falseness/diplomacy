@@ -14,6 +14,6 @@ class Farm extends Manufacture {
                 y: this.town.coord.y
             }
         }
-        return res
+        return JSON.parse(JSON.stringify(res))
     }
 }
