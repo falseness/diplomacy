@@ -5,8 +5,12 @@ class ImageButton extends Button {
 
         this.img.pos = this.rect.center
     }
-    setColor(color) {
+    set color(color) {
         this.img.color = color
+    }
+    set pos(pos) {
+        this.rect.pos = pos
+        this.img.pos = this.rect.center
     }
     draw(ctx) {
         if (this.canClick) {
@@ -16,5 +20,31 @@ class ImageButton extends Button {
             this.img.draw(ctx)
             this.text.draw(ctx)
         }
+    }
+}
+class TwoPositionsImageButton extends ImageButton {
+    #selected
+    constructor(image, rect, secondPos, clickFunc, parameters, text = new Empty(), canClick = true, callThis) {
+        super(image, rect, clickFunc, parameters, text = new Empty(), canClick = true, callThis)
+        this.firstPos = rect.pos
+        this.secondPos = secondPos
+
+        this.#selected = 1
+    }
+    set selected(num) {
+        this.#selected = num
+
+        if (this.#selected == 1) {
+            this.pos = this.firstPos
+        }
+        else if (this.#selected == 2) {
+            this.pos = this.secondPos
+        }
+    }
+    get selected() {
+        return this.#selected
+    }
+    switch() {
+        this.selected = this.#selected % 2 + 1
     }
 }

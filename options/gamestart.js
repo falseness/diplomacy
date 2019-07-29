@@ -25,7 +25,7 @@ class GameManager {
 	        }
 	    }
 	    createEvents()
-	    nextTurnButton.setColor(players[whooseTurn].hexColor)
+	    nextTurnButton.color = players[whooseTurn].hexColor
 	}
 	static load() {
 		this.clearValues()

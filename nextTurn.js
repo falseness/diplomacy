@@ -12,7 +12,7 @@ function nextTurn() {
     if (!whooseTurn)
         neutralPlayerTurn()
 
-    nextTurnButton.setColor(players[whooseTurn].hexColor)
+    nextTurnButton.color = players[whooseTurn].hexColor
 
     players[whooseTurn].nextTurn()
     undoManager.clear()
@@ -29,7 +29,7 @@ class gameLogicButtons extends ImageButton {
 const nextTurnButtonSize = WIDTH * 0.1
 let nextTurnButton = new gameLogicButtons(
     new TriangleImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize, 'black', 0.005 * HEIGHT),
-    new Rect(WIDTH - nextTurnButtonSize * 1.25, HEIGHT - nextTurnButtonSize * 1.25,
+    new Rect(WIDTH - nextTurnButtonSize * 1.05, HEIGHT - nextTurnButtonSize * 1.05,
         nextTurnButtonSize, nextTurnButtonSize),
     nextTurn
 )

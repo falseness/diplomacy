@@ -41,6 +41,9 @@ class EntityInterface {
 
         this.updateSizes()
     }
+    get top() {
+        return this.pos.y
+    }
     updateSizes() {
         this.width = Math.max(this.entity.info.x + this.entity.info.width,
             this.entity.name.x + this.entity.name.width) + 0.04 * this.height
@@ -60,7 +63,7 @@ class EntityInterface {
     }
     set visible(boolean) {
         this.#visible = boolean
-        undoButton.canClick = !boolean
+        undoButton.selected = boolean + 1
     }
     get visible() {
         return this.#visible

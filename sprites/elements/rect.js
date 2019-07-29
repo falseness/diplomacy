@@ -19,6 +19,9 @@ class Rect {
         this.x = pos.x
         this.y = pos.y
     }
+    get pos() {
+        return {x: this.x, y: this.y}
+    }
     get center() {
         let center = {
             x: this.x + this.width / 2,
