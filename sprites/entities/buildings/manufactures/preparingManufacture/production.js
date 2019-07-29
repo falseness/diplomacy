@@ -73,10 +73,10 @@ class BuildingProduction extends Production {
     isPassable() {
         return true
     }
-    isUnit() {
+    get isUnit() {
         return false
     }
-    isBuilding() {
+    get isBuilding() {
         return true
     }
     choose() {
