@@ -17,7 +17,7 @@ let assets = {
 let imagesCountLoaded = 0
 let images = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
-        'catapult', 'catapultLeft']
+        'catapult', 'catapultLeft', 'barrack']
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         ++imagesCountLoaded
