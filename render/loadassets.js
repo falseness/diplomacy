@@ -14,6 +14,16 @@ let assets = {
     catapultLeft: new Image(),
     barrack: new Image()
 }
+let imagesCountLoaded = 0
+let images = ['town', 'farm', 'noob', 'archer',
+        'KOHb', 'KOHbLeft', 'normchel', 
+        'catapult', 'catapultLeft']
+for (let i = 0; i < images.length; ++i) {
+    assets[images[i]].onload = function() {
+        ++imagesCountLoaded
+    }
+}
+
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
     
@@ -30,43 +40,30 @@ function cacheImage(image) {
 
     return tmpCanvas
 }
+function cacheAllImages() {
+    for (let i = 0; i < images.length; ++i) {
+        cachedImages[images[i]] = cacheImage(images[i])
+    }
+}
 let cachedImages = {}
+
 
 function loadAssets() {
     assets.logo.src = "assets/logo.svg"
     assets.undo.src = "assets/undo.svg"
     
     assets.gold.src = "assets/gold.svg"
-    assets.town.src = "assets/townhall.svg"
-    assets.farm.src = "assets/farm.svg"
-    assets.noob.src = "assets/noob.svg"
-    assets.archer.src = "assets/archer.svg"
     
-    assets.KOHb.src = "assets/KOHb.svg"
-    assets.KOHbLeft.src = "assets/KOHbLeft.svg"
-    
-    assets.normchel.src = "assets/normchel.svg"
-    
-    assets.catapult.src = "assets/catapult.svg"
-    assets.catapultLeft.src = "assets/catapultLeft.svg"
-    
-    assets.barrack.src = "assets/barrack.svg"
-    setTimeout(function() {
-    cachedImages = {
-        town: cacheImage('town'),
-        farm: cacheImage('farm'),
-        noob: cacheImage('noob'),
-        archer: cacheImage('archer'),
-
-        KOHb: cacheImage('KOHb'),
-        KOHbLeft: cacheImage('KOHbLeft'),
-
-        normchel: cacheImage('normchel'),
-
-        catapult: cacheImage('catapult'),
-        catapultLeft: cacheImage('catapultLeft'),
-
-        barrack: cacheImage('barrack')
+    for (let i = 0; i < images.length; ++i) {
+        assets[images[i]].src = "assets/" + images[i] + ".svg"
     }
-    }, 20)
+}
+function waitForImagesLoad() {
+    if (imagesCountLoaded == images.length) {
+        cacheAllImages()
+        menu.start()
+        return 
+    }
+    //console.log(imagesCountLoaded)
+    requestAnimationFrame(waitForImagesLoad)
 }
