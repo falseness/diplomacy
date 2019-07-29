@@ -1,7 +1,6 @@
 class Hexagon extends Sprite {
     constructor(x, y, _player, _isSuburb = false) {
         super(x, y)
-
         this.pos.x -= basis.hexHalfRectWithStrokeOffset.width
         this.pos.y -= basis.hexHalfRectWithStrokeOffset.height
 
@@ -45,11 +44,10 @@ class Hexagon extends Sprite {
         let pos = this.pos
 
         if (this.isSuburb) {
-            ctx.drawImage(this.player.suburbHexagon,
-                pos.x, pos.y)
-        } else {
-            ctx.drawImage(this.player.hexagon,
-                pos.x, pos.y)
+            drawCachedImage(ctx, this.player.suburbHexagon, pos)
+        } 
+        else {
+            drawCachedImage(ctx, this.player.hexagon, pos)
         }
     }
 }

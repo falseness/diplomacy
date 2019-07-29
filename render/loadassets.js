@@ -14,6 +14,23 @@ let assets = {
     catapultLeft: new Image(),
     barrack: new Image()
 }
+function cacheImage(image) {
+    let tmpCanvas = document.createElement('canvas')
+    
+    tmpCanvas.width = assets.size
+    tmpCanvas.height = assets.size
+
+    let tmpCtx = tmpCanvas.getContext('2d')
+
+    let pos = {
+        x: assets.size / 2,
+        y: assets.size / 2
+    }
+    drawImage(tmpCtx, image, pos)
+
+    return tmpCanvas
+}
+let cachedImages = {}
 
 function loadAssets() {
     assets.logo.src = "assets/logo.svg"
@@ -34,4 +51,22 @@ function loadAssets() {
     assets.catapultLeft.src = "assets/catapultLeft.svg"
     
     assets.barrack.src = "assets/barrack.svg"
+    setTimeout(function() {
+    cachedImages = {
+        town: cacheImage('town'),
+        farm: cacheImage('farm'),
+        noob: cacheImage('noob'),
+        archer: cacheImage('archer'),
+
+        KOHb: cacheImage('KOHb'),
+        KOHbLeft: cacheImage('KOHbLeft'),
+
+        normchel: cacheImage('normchel'),
+
+        catapult: cacheImage('catapult'),
+        catapultLeft: cacheImage('catapultLeft'),
+
+        barrack: cacheImage('barrack')
+    }
+    }, 20)
 }

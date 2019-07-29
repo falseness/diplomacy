@@ -18,6 +18,6 @@ class Catapult extends RangeUnit {
         return unit
     }
     draw(ctx) {
-        drawImage(ctx, this.mirrorX ? 'catapultLeft' : this.name, this.pos)
+        drawCachedImage(ctx, cachedImages[this.mirrorX ? 'catapultLeft' : this.name], this.pos)
     }
 }

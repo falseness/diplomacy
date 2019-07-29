@@ -10,6 +10,6 @@ class KOHb extends Unit {
         this.interaction = new MirroringInteraction(speed)
     }
     draw(ctx) {
-        drawImage(ctx, this.mirrorX ? 'KOHbLeft' : this.name, this.pos)
+        drawCachedImage(ctx, cachedImages[this.mirrorX ? 'KOHbLeft' : this.name], this.pos)
     }
 }

@@ -11,6 +11,14 @@ class Entity extends Sprite {
         
         this.name = name
     }
+    calcPos() {
+        let pos = super.calcPos()
+
+        pos.x -= assets.size / 2
+        pos.y -= assets.size / 2
+        
+        return pos
+    }
     toJSON() {
         let res = {
             name: this.name,
@@ -79,7 +87,9 @@ class Entity extends Sprite {
         return false
     }
     draw(ctx) {
-        drawImage(ctx, this.name, this.pos)
+        
+
+        drawCachedImage(ctx, cachedImages[this.name], this.pos)
     }
     nextTurn() {
         console.log("ERROR entity next turn")

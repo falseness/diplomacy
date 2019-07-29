@@ -7,3 +7,6 @@ function drawImageWithOpacity(ctx, img, pos, opactity, w = assets.size, h = asse
     drawImage(ctx, img, pos, w, h)
     ctx.globalAlpha = 1.0
 }
+function drawCachedImage(ctx, cachedImage, pos) {
+    ctx.drawImage(cachedImage, pos.x, pos.y)
+}
