@@ -72,7 +72,7 @@ class Screen {
     scale(pos, scale) {
         const ratio = 0.001
 
-        let zoom = Math.exp(scale * ratio);
+        let zoom = Math.exp(scale * ratio)
 
         if (canvas.scale * zoom > mapBorder.scale.max)
             zoom = mapBorder.scale.max / canvas.scale
@@ -81,15 +81,15 @@ class Screen {
 
         mainCtx.translate(canvas.offset.x, canvas.offset.y)
 
-        canvas.offset.x -= pos.x / (canvas.scale * zoom) - pos.x / canvas.scale;
-        canvas.offset.y -= pos.y / (canvas.scale * zoom) - pos.y / canvas.scale;
+        canvas.offset.x -= pos.x / (canvas.scale * zoom) - pos.x / canvas.scale
+        canvas.offset.y -= pos.y / (canvas.scale * zoom) - pos.y / canvas.scale
 
-        mainCtx.scale(zoom, zoom);
-        mainCtx.translate(-canvas.offset.x, -canvas.offset.y);
+        mainCtx.scale(zoom, zoom)
+        mainCtx.translate(-canvas.offset.x, -canvas.offset.y)
 
-        canvas.scale *= zoom;
-        width = WIDTH / canvas.scale;
-        height = HEIGHT / canvas.scale;
+        canvas.scale *= zoom
+        width = WIDTH / canvas.scale
+        height = HEIGHT / canvas.scale
     }
     setMoveMain() {}
     draw() {}
