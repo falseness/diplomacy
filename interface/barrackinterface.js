@@ -167,17 +167,22 @@ class BarrackInterface {
     }
     set visible(boolean) {
         this.#visible = boolean
-        nextTurnButton.canClick = !boolean
+        //nextTurnButton.canClick = !boolean
     }
     get visible() {
         return this.#visible
     }
+    wasClickOnButton(point) {
+        for (let i in this.trainInterfaces[this.trainInterfacesTab]) {
+            if (this.trainInterfaces[this.trainInterfacesTab][i].click(point)) {
+                return true
+            }
+        }
+        return false
+    }
     click(point) {
         if (this.visible && this.isInside(point)) {
-            for (let i in this.trainInterfaces[this.trainInterfacesTab]) {
-                if (this.trainInterfaces[this.trainInterfacesTab][i].click(point))
-                    break
-            }
+            this.wasClickOnButton(point)
             return true
         }
         return false

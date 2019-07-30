@@ -20,14 +20,16 @@ class TownInterface extends BarrackInterface {
     isTypeValid(type) {
         return true
     }
-    click(point) {
-        let isClicked = super.click(point)
-        
-        if (isClicked) {
-            this.switch.click(point)
+    wasClickOnButton(point) {
+        if (this.switch.click(point)) {
+            return true
         }
-        
-        return isClicked
+        if (super.wasClickOnButton(point)) {
+            return true
+        }
+        gameEvent.selected.removeSelect()
+        gameEvent.selected.select()
+        return false
     }
     makeTrainInterfaces() {
         this.switch = new Switch(this.gold.x, this.gold.y + HEIGHT * 0.05,

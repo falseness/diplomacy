@@ -68,6 +68,7 @@ class Player {
 
         if (this.gold < 0) {
             this.crisisPenalty()
+            this.gold = 0
         }
         for (let i = 0; i < this.units.length; ++i) {
             this.units[i].nextTurn()

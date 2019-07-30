@@ -1,9 +1,19 @@
 class Production {
+    #coord = {}
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         this.turns = turns
         this.cost = cost
         this.class = _class
         this.name = name
+    }
+    set coord(coord) {
+        this.#coord = coord
+        this.pos = grid.getCell(coord).pos
+        this.pos.x -= assets.size / 2
+        this.pos.y -= assets.size / 2
+    }
+    get coord() {
+        return this.#coord
     }
     isSuburb(coord, arr, player) {
         let hexagon = arr[coord.x][coord.y].hexagon
@@ -64,6 +74,9 @@ class UnitProduction extends Production {
     cantCreateNow() {
         ++this.turns
     }
+    draw(ctx) {
+        drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos, 0.6)
+    }
 }
 class BuildingProduction extends Production {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
@@ -96,7 +109,6 @@ class BuildingProduction extends Production {
     }
 }
 class ManufactureProduction extends BuildingProduction {
-    #coord = {}
     #town
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
@@ -165,13 +177,6 @@ class ManufactureProduction extends BuildingProduction {
     }
     removeSelect() {
         entityInterface.visible = false
-    }
-    set coord(coord) {
-        this.#coord = coord
-        this.pos = grid.getCell(coord).pos
-    }
-    get coord() {
-        return this.#coord
     }
     get town() {
         return this.#town
@@ -249,8 +254,8 @@ class ManufactureProduction extends BuildingProduction {
 
         /*if (this.isPreparingStopped())
             return*/
-
-        drawImageWithOpacity(ctx, this.name, this.pos, 0.5)
+        drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos)
+        //drawImageWithOpacity(ctx, this.name, this.pos, 0.5)
         if (!grid.drawLogicText)
             this.text.draw(ctx)
     }

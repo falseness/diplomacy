@@ -1,8 +1,16 @@
 class PreparingManufacture extends Manufacture {
+    #unitProduction
 	constructor(x, y, name, hp, healSpeed, income) {
 		super(x, y, name, hp, healSpeed, income)
-		this.unitProduction = new Empty()
-	}
+		this.#unitProduction = new Empty()
+    }
+    set unitProduction(obj) {
+        this.#unitProduction = obj
+        this.#unitProduction.coord = this.coord
+    }
+    get unitProduction() {
+        return this.#unitProduction
+    }
 	toJSON() {
         let res = super.toJSON()
         res.unitProduction = this.unitProduction
@@ -37,7 +45,6 @@ class PreparingManufacture extends Manufacture {
         this.unitProduction = new production[what].production(
             production[what].turns, production[what].cost, 
             production[what].class, what)
-
     }
     prepare(what) {
         if (this.gold < production[what].cost ||
@@ -77,5 +84,9 @@ class PreparingManufacture extends Manufacture {
         super.nextTurn()
 
         this.unitPreparingLogic()
+    }
+    draw(ctx) {
+        super.draw(ctx)
+        this.unitProduction.draw(ctx)
     }
 }

@@ -75,6 +75,7 @@ class UndoManager {
         if (town) {
             this.undoTown(town)
         }
+        gameEvent.selected = grid.getUnit(undo.units[0].coord)
     }
     preparingUnitUndo() {
         let undo = this.arr.pop()
@@ -87,6 +88,7 @@ class UndoManager {
             this.undoBuilding(undo.building)
         }
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
+        gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     preparingBuildingUndo() {
         let undo = this.arr.pop()
@@ -97,6 +99,7 @@ class UndoManager {
         this.undoTown(undo.building)
 
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
+        gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     preparingSuburbUndo() {
         let undo = this.arr.pop()
@@ -107,11 +110,13 @@ class UndoManager {
         this.undoTown(undo.building)
 
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
+        gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     undo() {
         if (!this.arr.length)
             return
 
+        let wasSelection = gameEvent.selected.notEmpty()
         gameEvent.hideAll()
         gameEvent.removeSelection()
 
@@ -130,5 +135,9 @@ class UndoManager {
         else {
             console.log("ERROR")
         }
+        if (wasSelection)
+            gameEvent.selected.select()
+        else
+            gameEvent.selected = new Empty()
     }
 }

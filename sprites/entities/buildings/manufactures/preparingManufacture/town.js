@@ -50,7 +50,7 @@ let production = {
 }
 class Town extends PreparingManufacture {
     constructor(x, y, justCopy = false, firstTown = false) {
-        const hp = 12
+        const hp = 15
         const healSpeed = 3
         const income = 4
         super(x, y, 'town', hp, healSpeed, income)

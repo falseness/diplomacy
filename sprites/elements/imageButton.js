@@ -31,8 +31,8 @@ class TwoPositionsImageButton extends ImageButton {
 
         this.#selected = 1
     }
-    set selected(num) {
-        this.#selected = num
+    set selected(boolean) {
+        this.#selected = boolean + 1
 
         if (this.#selected == 1) {
             this.pos = this.firstPos

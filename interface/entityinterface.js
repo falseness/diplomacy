@@ -8,12 +8,13 @@ class EntityInterface {
 
         this.pos = {
             x: 0,
-            y: 0.55 * HEIGHT
+            y: 0.55 * HEIGHT//0.55 * HEIGHT
         }
         this.height = HEIGHT - this.pos.y
         this.width = this.height * 1.7
 
-        this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, [0, cornerRadius, 0, 0], stroke)
+        this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
+            [0, cornerRadius, 0, 0], stroke)
 
         this.img = new JustImage('', { x: this.pos.x + this.height * 0.38, y: this.pos.y + this.height * 0.5 },
             this.height * 0.775, this.height * 0.775)
@@ -63,7 +64,7 @@ class EntityInterface {
     }
     set visible(boolean) {
         this.#visible = boolean
-        undoButton.selected = boolean + 1
+        undoButton.selected = boolean
     }
     get visible() {
         return this.#visible

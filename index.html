@@ -132,6 +132,7 @@
         let debug = false
         let barrackInterface = new BarrackInterface()
         let townInterface = new TownInterface()
+        
         let entityInterface = new EntityInterface()
         let gameEvent = new Events(barrackInterface, townInterface, entityInterface)
         let border = new Border()
@@ -144,6 +145,7 @@
         let mapBorder
         let gameExit = false
 
+        
         let undoButton = new TwoPositionsImageButton(
             new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
             new Rect(0 * nextTurnButtonSize, HEIGHT - 1 * nextTurnButtonSize, 
@@ -158,7 +160,7 @@
             new Rect(backToMenuButtonSize * 0.25, backToMenuButtonSize * 0.25,
                 backToMenuButtonSize, backToMenuButtonSize),
             menuBack
-        )                
+        )       
         let whooseTurn
         function start1() {
             
