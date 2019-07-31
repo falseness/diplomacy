@@ -3,7 +3,7 @@ class BarrackInterface {
     constructor() {
         this.pos = {
             x: WIDTH * 0.72,
-            y: HEIGHT * 0.03, // 0.12
+            y: HEIGHT * 0.01, // 0.12
         }
         this.height = 0.4 * HEIGHT
         this.width = WIDTH - this.pos.x 
@@ -15,11 +15,12 @@ class BarrackInterface {
             //let indent = stroke + cornerRadius
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
             [cornerRadius, 0, 0, cornerRadius], stroke)
+        let goldImageSize = this.height * 0.25
         this.gold = new JustImage('gold', {
                 x: this.pos.x + 0.22 * 0.17 * WIDTH * 1.15,
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
-            this.height * 0.15, this.height * 0.15)
+            goldImageSize, goldImageSize)
         this.goldText = new Text(this.gold.x + 0.22 * WIDTH * 1.15 * 0.92, this.gold.y, 
                                  0.03 * WIDTH * 1.15, 'error', 'white', 'right')
         
