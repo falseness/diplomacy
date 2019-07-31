@@ -13,8 +13,8 @@ let production = {
     },
     farm: {
         production: ManufactureProduction,
-        turns: 4,
-        cost: 4,
+        turns: 3,
+        cost: 10,
         class: Farm,
     },
     archer: {
