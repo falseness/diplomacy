@@ -52,7 +52,7 @@ class JsonUnpackManager {
         unit.hp = packedUnit.hp
         unit.wasHitted = packedUnit.wasHitted
         unit.moves = packedUnit.moves
-
+        unit.updateHPBar()
         return unit
     }
     fullUnpackUnit(packedUnit) {

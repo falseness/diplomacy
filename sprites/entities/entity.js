@@ -87,8 +87,6 @@ class Entity extends Sprite {
         return false
     }
     draw(ctx) {
-        
-
         drawCachedImage(ctx, cachedImages[this.name], this.pos)
     }
     nextTurn() {

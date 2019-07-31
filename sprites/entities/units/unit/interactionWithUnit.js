@@ -143,6 +143,7 @@ class InterationWithUnit {
 
         grid.setUnit(unit, unit.coord)
         unit.pos = unit.calcPos()
+        unit.trimHpBar()
 
         this.addKillUnitUndo(unit)
     }

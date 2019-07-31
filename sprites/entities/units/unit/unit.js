@@ -8,6 +8,16 @@ class Unit extends Entity {
         this.player.units.push(this)
 
         this.interaction = new InterationWithUnit(speed)
+
+        this.hpBar = new HpBar(
+            {x: this.pos.x + assets.size / 2, 
+            y: this.pos.y + assets.size / 2}, 
+            this.maxHP)
+    }
+    trimHpBar() {
+        this.hpBar.pos = 
+            {x: this.pos.x + assets.size / 2, 
+            y: this.pos.y + assets.size / 2}
     }
     get moves() {
         return this.interaction.moves
@@ -74,11 +84,23 @@ class Unit extends Entity {
             return 0
         return super.hpIncrease
     }
+    updateHPBar() {
+        this.hpBar.repaintRects(this.hp)
+    }
     nextTurn() {
         this.interaction.nextTurn()
         
         this.hp += this.hpIncrease
+        this.updateHPBar()
         
         this.wasHitted = false
+    }
+    hit(dmg) {
+        super.hit(dmg)
+        this.updateHPBar()
+    }
+    draw(ctx) {
+        this.hpBar.draw(ctx)
+        super.draw(ctx)
     }
 }
