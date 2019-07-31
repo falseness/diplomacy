@@ -1,8 +1,8 @@
 class Farm extends Manufacture {
     constructor(x, y, town) {
-        const hp = 3
+        const hp = 2
         const healSpeed = 1
-        const income = 2
+        const income = 1
         super(x, y, 'farm', hp, healSpeed, income)
         this.town = town
     }

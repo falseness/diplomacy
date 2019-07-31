@@ -28,14 +28,14 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         return cell.unit.notEmpty() &&
             cell.unit.playerColor != rangeUnit.playerColor
     }
-    cantInteract(coord, rangeUnit) {
+    cantRangeInteract(coord, rangeUnit) {
         return this.rangeWay.getDistance(coord) > this.range ||
             coordsEqually(rangeUnit.coord, coord)
     }
     sendInstructions(cell, rangeUnit) {
         let coord = cell.coord
 
-        if (this.cantInteract(coord, rangeUnit)) {
+        if (this.cantRangeInteract(coord, rangeUnit)) {
             this.removeSelect()
             return true
                 // attack range > speed by default

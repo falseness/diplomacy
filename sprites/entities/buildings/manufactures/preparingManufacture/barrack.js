@@ -1,6 +1,6 @@
 class Barrack extends PreparingManufacture {
     constructor(x, y, town) {
-        const hp = 6
+        const hp = 4
         const healSpeed = 1
         const income = -3
         super(x, y, 'barrack', hp, healSpeed, income)
