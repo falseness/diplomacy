@@ -22,11 +22,43 @@ function startGame1() {
 function startGame2() {
     GameManager.start2()
 }
+class Tree {
+    constructor(parent, buttons) {
+        this.parent = parent
+
+        const interval = HEIGHT * 0.2
+        let posButton0 = this.buttons[0].pos
+        for (let i = 1; i < buttons.length; ++i) {
+            buttons[i].pos = {x: posButton0.x, y: posButton0.y + i * interval}
+        }
+    }
+    draw(ctx) {
+        for (let i = 0; i < this.buttons.length; ++i) {
+            this.buttons[i].draw(ctx)
+        }
+    }
+}
 class Menu {
     constructor() {
+        /*
+        play
+            1x1
+            1x1x1
+            back
+        options
+            checkbox enable HPbar
+            back
+        load
+            slots
+            copy
+            back
+        */
+
         this.setVisible(true)
 
         this.logo = new JustImage('logo', { x: WIDTH / 2, y: HEIGHT * 0.2 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
+
+        let main
         this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, undefined, '#d0d0d0')
         this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33, 0.02 * WIDTH, 'alpha', '#747474') //#747474
         this.playButton1 = new Button(

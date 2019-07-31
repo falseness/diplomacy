@@ -15,6 +15,9 @@ class Button {
     trimText() {
         this.text.pos = this.rect.center
     }
+    get pos() {
+        return this.rect.pos
+    }
     set pos(pos) {
         this.rect.pos = pos
         this.trimText()
