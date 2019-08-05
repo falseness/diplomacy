@@ -399,7 +399,7 @@ class SuburbProduction extends BuildingProduction {
             let neighbours = this.availableHexagons[i].neighbours
 
             for (let j = 0; j < neighbours.length; ++j) {
-                if (isCoordNotOnMap(neighbours[j]) ||
+                if (isCoordNotOnMap(neighbours[j], arr.length, arr[0].length) ||
                     !used[neighbours[j].x][neighbours[j].y])
                     border.createLine(posI, j)
             }

@@ -23,12 +23,6 @@ let production = {
         cost: 15,
         class: Archer
     },
-    KOHb: {
-        production: UnitProduction,
-        turns: 3,
-        cost: 25,
-        class: KOHb
-    },
     normchel: {
         production: UnitProduction,
         turns: 3,
@@ -40,6 +34,12 @@ let production = {
         turns: 3,
         cost: 35,
         class: Catapult
+    },
+    KOHb: {
+        production: UnitProduction,
+        turns: 4,
+        cost: 40,
+        class: KOHb
     },
     barrack: {
         production: ManufactureProduction,

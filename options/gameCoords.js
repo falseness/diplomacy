@@ -46,7 +46,7 @@ let canvas = {
     },
     scale: 1
 }
-const mapBorderMargin = 0.3 * WIDTH //0.5 * HEIGHT
+const mapBorderMargin = 0.35 * WIDTH //0.5 * HEIGHT
     /*function toCube(x, by)
     {
         

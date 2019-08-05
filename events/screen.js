@@ -201,6 +201,9 @@ class ComputerScreenGroup {
     }
     scale(pos, scale) {
         this.main.scale(pos, scale)
+        /*let out = this.outOfBounds(canvas.offset.x - this.speedX, 
+            canvas.offset.y - this.speedY)
+        */
     }
     move() {
         this.main.move()
