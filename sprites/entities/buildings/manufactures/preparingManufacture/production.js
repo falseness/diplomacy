@@ -379,8 +379,6 @@ class SuburbProduction extends BuildingProduction {
         grid.cleanLogicText()
 
         this.paintTownBorders(town, town.suburbs, grid.arr, town.playerColor)
-
-        super.choose()
     }
     isSuburbProduction() {
         return true
