@@ -46,6 +46,9 @@ class Production {
     isEmpty() {
         return false
     }
+    isPreparingFinished() {
+        return !this.turns
+    }
     draw() {}
 }
 class UnitProduction extends Production {
@@ -81,22 +84,26 @@ class UnitProduction extends Production {
 class BuildingProduction extends Production {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
         super(turns, cost, _class, name)
-        this.isSelected = false
+        this.killed = false
+    }
+    kill() {
+        this.killed = true
+        grid.setBuilding(new Empty(), this.coord)
+    }
+    isWall() {
+        return false
     }
     isPassable() {
         return true
+    }
+    isExternalProduction() {
+        return false
     }
     get isUnit() {
         return false
     }
     get isBuilding() {
         return true
-    }
-    choose() {
-        this.isSelected = true
-    }
-    removeChoose() {
-        this.isSelected = false
     }
     static isBuildingProduction() {
         return true
@@ -107,12 +114,16 @@ class BuildingProduction extends Production {
     isSuburbProduction() {
         return false
     }
-}
-class ManufactureProduction extends BuildingProduction {
-    #town
-    constructor(turns = 1, cost = 1, _class = new Empty(), name) {
-        super(turns, cost, _class, name)
-        this.killed = false
+    get isMyTurn() {
+        return whooseTurn == this.playerColor
+    }
+    nextTurn() {
+        super.nextTurn()
+
+        this.text.text = this.turns
+    }
+    get player() {
+        return players[this.playerColor]
     }
     toJSON() {
         let res = {
@@ -138,38 +149,28 @@ class ManufactureProduction extends BuildingProduction {
     isKilled() {
         return this.killed
     }
-    kill() {
-        this.killed = true
-        grid.setBuilding(new Empty(), this.coord)
-    }
-    canCreateOnCell(cell, town) {
-        return cell.building.isEmpty() &&
-            this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor)
-    }
-    isPreparingStopped() {
-        console.log("error")
-    }
-    create() {
-        let t = new this.class(this.coord.x, this.coord.y, this.town)
-
-        return t
-    }
-    get playerColor() {
-        return this.town.playerColor
-    }
-    get player() {
-        return players[this.playerColor]
-    }
     get info() {
-        let manufacture = {}
-        manufacture.name = this.name
-        manufacture.info = {
+        let building = {}
+        building.name = this.name
+        building.info = {
             turns: this.turns //,    
                 //cost: this.cost
         }
-        return manufacture
+        return building
     }
-    needInstructions() {
+    sendInstructions(coord, town) {
+        town.minusGold(this.cost)
+
+        this.coord = coord
+            //this.pos = grid.getCell(this.coord).pos
+        //this.town = town
+
+        let needInstructions = town.gold >= this.cost
+            /*if (needInstructions)
+                this.select(town)*/
+        return needInstructions
+    }
+    isExternalProduction() {
         return false
     }
     select() {
@@ -178,28 +179,49 @@ class ManufactureProduction extends BuildingProduction {
     removeSelect() {
         entityInterface.visible = false
     }
+    needInstructions() {
+        return false
+    }
+    newText() {
+        this.text = new CoordText(this.coord.x, this.coord.y, this.turns)
+    }
+    draw(ctx) {
+        drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos)
+        if (!grid.drawLogicText)
+            this.text.draw(ctx)
+    }
+}
+class ManufactureProduction extends BuildingProduction {
+    #town
+    constructor(turns = 1, cost = 1, _class = new Empty(), name) {
+        super(turns, cost, _class, name)
+    }
+    canCreateOnCell(cell, town) {
+        return cell.building.isEmpty() &&
+            this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor)
+    }
+    get playerColor() {
+        return this.town.playerColor
+    }
+    create() {
+        let t = new this.class(this.coord.x, this.coord.y, this.town)
+
+        return t
+    }
     get town() {
         return this.#town
     }
     set town(town) {
         this.#town = town
-        this.text = new CoordText(this.coord.x, this.coord.y, this.turns)
+        this.newText()
     }
     sendInstructions(coord, town) {
-        town.minusGold(this.cost)
-
-        this.coord = coord
-            //this.pos = grid.getCell(this.coord).pos
+        let boolean = super.sendInstructions(coord, town)
         this.town = town
-
-        let needInstructions = town.gold >= this.cost
-            /*if (needInstructions)
-                this.select(town)*/
-        return needInstructions
+        return boolean
     }
     choose(town) {
         this.paintTownBorders(town, town.suburbs, grid.arr, town.playerColor)
-        super.choose()
     }
     paintTownBorders(town, suburbs, arr, player) {
         border.newBrokenLine()
@@ -237,27 +259,89 @@ class ManufactureProduction extends BuildingProduction {
             }
         }
     }
-    isPreparingFinished() {
-        return !this.turns
-    }
-    get isMyTurn() {
-        return whooseTurn == this.town.playerColor
-    }
-    nextTurn() {
-        super.nextTurn()
-
-        this.text.text = this.turns
-    }
     draw(ctx) {
         if (!this.town)
             return
 
-        /*if (this.isPreparingStopped())
-            return*/
-        drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos)
-        //drawImageWithOpacity(ctx, this.name, this.pos, 0.5)
-        if (!grid.drawLogicText)
-            this.text.draw(ctx)
+        super.draw(ctx)
+    }
+}
+class ExternalProduction extends BuildingProduction {
+    constructor(turns = 1, cost = 1, _class = new Empty(), name) {
+        super(turns, cost, _class, name)
+    }
+    toUndoJSON() {
+        return this.toJSON()
+    }
+    isExternalProduction() {
+        return true
+    }
+    nextTurn() {
+        super.nextTurn()
+        this.text.text = this.turns
+    }
+    canCreateOnCell(cell, town) {
+        if (cell.building.notEmpty() || 
+            cell.hexagon.playerColor != town.playerColor)
+            return false
+        for (let i = 0; i < this.availableHexagons.length; ++i) {
+            if (hexagonsEqually(this.availableHexagons[i], cell.hexagon))
+                return true
+        }
+        return false
+    }
+    get playerColor() {
+        return grid.getHexagon(this.coord).playerColor
+    }
+    sendInstructions(coord, town) {
+        let boolean = super.sendInstructions(coord, town)
+        this.newText()
+        return boolean
+    }
+    create() {
+        let t = new this.class(this.coord.x, this.coord.y)
+
+        return t
+    }
+    choose(town) {
+        this.paintСapturedLand(town, grid.arr, town.playerColor)
+    }
+    isExternalProduction() {
+        return true
+    }
+    paintСapturedLand(town, arr, playerColor) {
+        border.newBrokenLine()
+
+        this.availableHexagons = []
+        let used = new Array(arr.length)
+
+        for (let i = 0; i < arr.length; ++i) {
+            used[i] = new Array(arr[i].length)
+            for (let j = 0; j < used[i].length; ++j)
+                used[i][j] = false
+        }
+
+        let v0 = town.coord
+        let Q = []
+        Q.push(v0)
+        while (Q.length) {
+            let v = Q.shift()
+            this.availableHexagons.push(grid.getHexagon(v))
+            let neighbours = arr[v.x][v.y].hexagon.neighbours
+
+            for (let i = 0; i < neighbours.length; ++i) {
+                if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
+                        grid.getHexagon(neighbours[i]).playerColor != playerColor) {
+
+                    border.createLine(grid.getHexagon(v).calcPos(), i)
+                    continue
+                }
+                if (!used[neighbours[i].x][neighbours[i].y]) {
+                    used[neighbours[i].x][neighbours[i].y] = true
+                    Q.push(neighbours[i])
+                }
+            }
+        }
     }
 }
 class SuburbProduction extends BuildingProduction {

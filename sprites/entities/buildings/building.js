@@ -4,6 +4,10 @@ class Building extends Entity {
 
         grid.setBuilding(this, this.coord)
     }
+    toUndoJSON() {
+        let res = this.toJSON()
+        return JSON.parse(JSON.stringify(res))
+    }
     needInstructions() {
         return false
     }

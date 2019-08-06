@@ -124,6 +124,9 @@ class Grid extends SpritesGroup {
     }
     draw(ctx) {
         this.drawHexagons(ctx)
+
+        attackBorder.draw(mainCtx)
+        border.draw(mainCtx)
         
         if (!this.drawLogicText && debug)
             this.drawTextCoord(ctx)

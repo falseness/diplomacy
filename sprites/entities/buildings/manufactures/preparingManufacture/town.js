@@ -31,8 +31,8 @@ let production = {
     },
     catapult: {
         production: UnitProduction,
-        turns: 3,
-        cost: 35,
+        turns: 4,
+        cost: 40,
         class: Catapult
     },
     KOHb: {
@@ -47,6 +47,12 @@ let production = {
         cost: 20,
         class: Barrack,
     },
+    wall: {
+        production: ExternalProduction,
+        turns: 5,
+        cost: 4, 
+        class: Wall
+    }
 }
 class Town extends PreparingManufacture {
     constructor(x, y, justCopy = false, firstTown = false) {
@@ -197,7 +203,13 @@ class Town extends PreparingManufacture {
                 y: cell.coord.y
             }
         }
-        if (!this.activeProduction.isSuburbProduction()) {
+        if (this.activeProduction.isExternalProduction()) {
+            undoManager.lastUndo.type = 'prepareBuilding'
+
+            externalProduction.push(this.activeProduction)
+            grid.setBuilding(this.activeProduction, cell.coord)
+        }
+        else if (!this.activeProduction.isSuburbProduction()) {
             undoManager.lastUndo.type = 'prepareBuilding'
 
             this.buildingProduction.push(this.activeProduction)

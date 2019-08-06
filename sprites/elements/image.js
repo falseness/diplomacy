@@ -12,6 +12,9 @@ class JustImage {
     get height() {
         return this.h
     }
+    get right() {
+        return this.w + this.pos.x
+    }
     draw(ctx) {
         if (!this.image)
             return

@@ -201,7 +201,9 @@ class Way {
     }
     isCellImpassable(neighbour, v0, arr, player) {
         let cell = arr[neighbour.x][neighbour.y]
-        return (cell.unit.notEmpty() && cell.unit.playerColor == player && !coordsEqually(neighbour, v0))
+        return (cell.unit.notEmpty() && cell.unit.playerColor == player && 
+            !coordsEqually(neighbour, v0)) || 
+            (cell.building.isWall() && cell.building.playerColor == player)
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {
         // if hexagon has the same color, he will be processed later
@@ -225,7 +227,8 @@ class Way {
         return sortedHexagonNeighbours
     }
     cellHasEnemyEntity(cell, player) {
-        return (!cell.building.isPassable && cell.building.playerColor != player) || (cell.unit.notEmpty() && cell.unit.playerColor != player)
+        return (!cell.building.isPassable && cell.building.playerColor != player) ||
+         (cell.unit.notEmpty() && cell.unit.playerColor != player)
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         let cell = grid.arr[coord.x][coord.y]

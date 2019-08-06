@@ -23,7 +23,6 @@ class UndoManager {
         return this.arr[this.arr.length - 1]
     }
     undoBuilding(building) {
-        building = building
         // cant be empty
         let res = unpacker.fullUnpackBuilding(building)
         let town = grid.getBuilding(building.town.coord)
@@ -60,6 +59,7 @@ class UndoManager {
 
         let building = undo.building
         let buildingProduction = undo.buildingProduction
+        let exProduction = undo.externalProduction
         if (building) {
             this.undoBuilding(building)
         }
@@ -70,6 +70,10 @@ class UndoManager {
             res.town = town
 
             town.buildingProduction.push(res)
+        }
+        if (exProduction) {
+            let res = unpacker.fullUnpackExternal(exProduction)
+            externalProduction.push(res)
         }
         let town = undo.town
         if (town) {
@@ -112,6 +116,11 @@ class UndoManager {
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
         gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
+    destroyExternalUndo() {
+        let undo = this.arr.pop()
+
+        let res = unpacker.fullUnpackBuilding(undo.building)
+    }
     undo() {
         if (!this.arr.length)
             return
@@ -131,6 +140,9 @@ class UndoManager {
         } 
         else if (this.lastUndo.type == 'prepareSuburb') {
             this.preparingSuburbUndo()
+        }
+        else if (this.lastUndo.type == 'destroyExternal') {
+            this.destroyExternalUndo()
         }
         else {
             console.log("ERROR")

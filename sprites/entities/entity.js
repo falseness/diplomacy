@@ -19,6 +19,12 @@ class Entity extends Sprite {
         
         return pos
     }
+    isWall() {
+        return false
+    }
+    isExternalProduction() {
+        return false
+    }
     toJSON() {
         let res = {
             name: this.name,

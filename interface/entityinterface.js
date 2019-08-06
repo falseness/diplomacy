@@ -1,3 +1,10 @@
+function destroySelected() {
+    undoManager.startUndo('destroyExternal')
+    undoManager.lastUndo.building = gameEvent.selected.toUndoJSON() 
+
+    gameEvent.selected.kill()
+    gameEvent.removeSelection()
+}
 class EntityInterface {
     #visible = false
     constructor() {
@@ -39,17 +46,44 @@ class EntityInterface {
 
         this.entity.info.textBaseline = 'top'
         this.entity.info.textAlign = 'left'
-
+        let button = {
+            text: {
+                text: 'destroy',
+                color: '#747474',
+                fontSize: this.height * 0.1
+            },
+            rect: {
+                color: '#f7f7f7',
+                cornerRadius: 0.02 * HEIGHT,
+                borderColor: 'black',
+                stroke: 0.003 * HEIGHT,
+                width: 0.11 * WIDTH,
+                height: 0.05 * HEIGHT
+            }
+        }
+        this.destroyButton = new Button(
+            new Rect(this.entity.name.x, HEIGHT - this.height * 0.15 - button.rect.height, 
+                button.rect.width, button.rect.height, 
+                [button.rect.cornerRadius, button.rect.cornerRadius, 
+                button.rect.cornerRadius, button.rect.cornerRadius],
+                button.rect.stroke, button.rect.color),
+            new Text(0, 0, button.text.fontSize, button.text.text, button.text.color),
+            destroySelected
+        )
+        this.destroyButton.trimText()
         this.updateSizes()
     }
     get top() {
         return this.pos.y
     }
     updateSizes() {
-        this.width = Math.max(this.entity.info.x + this.entity.info.width,
-            this.entity.name.x + this.entity.name.width) + 0.04 * this.height
+        this.width = Math.max(
+            this.entity.info.x + this.entity.info.width,
+            this.entity.name.x + this.entity.name.width,
+            this.destroyButton.rect.right) + 0.04 * this.height
 
         this.background.width = this.width
+        
     }
     change(entity, color) {
         this.background.color = color.hex
@@ -57,7 +91,7 @@ class EntityInterface {
         this.img.image = entity.name
         this.entity.name.text = entity.name
         this.entity.info.text = join(entity.info, ': ', '\n')
-
+        this.destroyButton.canClick = entity.destroyable
         this.updateSizes()
 
         this.visible = true
@@ -73,6 +107,7 @@ class EntityInterface {
         return this.background.isInside(pos)
     }
     click(pos) {
+        this.destroyButton.click(pos)
         return this.visible && this.isInside(pos)
     }
     draw(ctx) {
@@ -83,5 +118,7 @@ class EntityInterface {
 
         this.entity.name.draw(ctx)
         this.entity.info.draw(ctx)
+
+        this.destroyButton.draw(ctx)
     }
 }

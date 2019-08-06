@@ -22,9 +22,18 @@ class Rect {
     get pos() {
         return {x: this.x, y: this.y}
     }
+    get centerX() {
+        return this.x + this.width / 2
+    }
+    set centerX(x) {
+        this.x = x - this.width / 2
+    }
+    get right() {
+        return this.x + this.width
+    }
     get center() {
         let center = {
-            x: this.x + this.width / 2,
+            x: this.centerX,
             y: this.y + this.height / 2
         }
         return center

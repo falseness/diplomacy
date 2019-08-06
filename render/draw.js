@@ -3,9 +3,6 @@ function drawMain() {
         width, height)
 
     grid.draw(mainCtx)
-
-    attackBorder.draw(mainCtx)
-    border.draw(mainCtx)
 }
 
 function drawInterface() {

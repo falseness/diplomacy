@@ -1,7 +1,37 @@
 function neutralPlayerTurn() {
     ++whooseTurn
 }
+function externalNextTurn() {
+    for (let i = 0; i < external.length; ++i) {
+        if (external[i].killed) {
+            external.splice(i--, 1)
+            continue
+        }
+        if (external[i].isMyTurn)
+            external[i].nextTurn()
+    }
+    for (let i = 0; i < externalProduction.length; ++i) {
+        if (externalProduction[i].killed) {
+            externalProduction.splice(i--, 1)
+            continue
+        }
+        if (externalProduction[i].isMyTurn) {
+            externalProduction[i].nextTurn()
 
+            if (!externalProduction[i].isPreparingFinished()) {
+                continue
+            }
+            if (externalProduction[i].name == 'wall' && 
+                grid.getUnit(externalProduction[i].coord).notEmpty()) {
+                externalProduction[i].turns++
+                externalProduction[i].text.text = externalProduction[i].turns
+                continue
+            }
+            externalProduction[i].create()
+            externalProduction.splice(i--, 1)
+        }
+    }
+}
 function nextTurn() {
     //townInterface.setVisible(false)
     //entityInterface.setVisible(false)
@@ -14,7 +44,10 @@ function nextTurn() {
 
     nextTurnButton.color = players[whooseTurn].hexColor
 
+    externalNextTurn() 
     players[whooseTurn].nextTurn()
+
+    
     undoManager.clear()
     saveManager.save()
 }

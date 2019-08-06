@@ -77,8 +77,9 @@ class RangeWay extends Way {
     constructor() {
         super()
     }
-    isCellImpassable() {
-        return false
+    isCellImpassable(neighbour, v0, arr, player) {
+        let cell = arr[neighbour.x][neighbour.y]
+        return (cell.building.isWall())
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         Q.push(coord)

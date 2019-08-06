@@ -4,13 +4,18 @@ class SaveManager {
         return !!localStorage.getItem('whooseTurn')
     }
     save() {
+        updateExternal()
+
         let _grid = JSON.stringify(grid)
         let _players = JSON.stringify(players)
+        let _external = JSON.stringify(external)
+        let _externalProduction = JSON.stringify(externalProduction)
         let _whooseTurn = JSON.stringify(whooseTurn)
         localStorage.setItem('grid', _grid)
         localStorage.setItem('players', _players)
+        localStorage.setItem('external', _external)
+        localStorage.setItem('externalProduction', _externalProduction)
         localStorage.setItem('whooseTurn', _whooseTurn)
-
         //console.log("saved")
     }
     load() {
@@ -18,9 +23,11 @@ class SaveManager {
             return false
         let _grid = localStorage.getItem('grid')
         let _players = localStorage.getItem('players')
+        let _external = localStorage.getItem('external')
+        let _externalProduction = localStorage.getItem('externalProduction')
         let _whooseTurn = localStorage.getItem('whooseTurn')
 
-        unpacker.unpackAll(_grid, _players, _whooseTurn)
+        unpacker.unpackAll(_grid, _players, _external, _externalProduction, _whooseTurn)
 
         gameEvent.hideAll()
             //console.log("loaded")
@@ -39,7 +46,8 @@ class JsonUnpackManager {
         }
         this.buildingClass = {
             farm: Farm,
-            barrack: Barrack
+            barrack: Barrack,
+            wall: Wall
         }
     }
     unpackUnit(packedUnit, _unit) {
@@ -84,24 +92,54 @@ class JsonUnpackManager {
     fullUnpackBuilding(packedBuilding) {
         return this.unpackBuilding(packedBuilding, this.buildingClass[packedBuilding.name])
     }
-    unpackManufacture(packedManufacture, _manufacture) {
-        if (packedManufacture.name == 'Empty') {
+    unpackBuildingProduction(packedProduction, _production, _class) {
+        if (packedProduction.name == 'Empty') {
             let empty = new Empty()
             return empty
         }
 
-        let manufacture = new ManufactureProduction(
-            packedManufacture.turns, production[packedManufacture.name].cost,
-            _manufacture, packedManufacture.name)
-        manufacture.coord = packedManufacture.coord
+        let res = new _class(
+            packedProduction.turns, production[packedProduction.name].cost,
+            _production, packedProduction.name)
+        
+        res.coord = packedProduction.coord
 
-        grid.arr[packedManufacture.coord.x][packedManufacture.coord.y].building = manufacture
-        return manufacture
-            //res.manufacture
+        grid.arr[packedProduction.coord.x][packedProduction.coord.y].building = res
+        
+        return res
+    }
+    unpackManufacture(packedManufacture, _manufacture) {
+        return unpackBuildingProduction(
+            packedManufacture, _manufacture, ManufactureProduction)
     }
     fullUnpackManufacture(packedManufacture) {
         return this.unpackManufacture(packedManufacture,
             this.buildingClass[packedManufacture.name])
+    }
+    unpackExternal(packedExternal, _external) {
+        let res = this.unpackBuildingProduction(packedExternal, _external, ExternalProduction)
+        res.newText()
+        return res
+    }
+    fullUnpackExternal(packedExternal) {
+        return this.unpackExternal(packedExternal,
+            this.buildingClass[packedExternal.name])
+    }
+    unpackAllExternal(packedExternal, packedExternalProduction) {
+        external = []
+        externalProduction = []
+
+        for (let i = 0; i < packedExternal.length; ++i) {
+            let packedBuilding = packedExternal[i]
+            let res = this.unpackBuilding(packedBuilding, this.buildingClass[packedBuilding.name])
+            //external.push(res)
+        }
+        for (let i = 0; i < packedExternalProduction.length; ++i) {
+            let packedProduction = packedExternalProduction[i]
+            let res = this.unpackExternal(packedProduction, 
+                this.buildingClass[packedProduction.name])
+            externalProduction.push(res)
+        }
     }
     unpackHexagon(packedHexagon) {
         let x = packedHexagon.coord.x
@@ -141,9 +179,11 @@ class JsonUnpackManager {
                 packedTown.unitProduction.name)
         }
     }
-    unpackAll(jsonGrid, jsonPlayers, jsonWhooseTurn) {
+    unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, jsonWhooseTurn) {
         let packedGrid = JSON.parse(jsonGrid)
         let packedPlayers = JSON.parse(jsonPlayers)
+        let packedExternal = JSON.parse(jsonExternal)
+        let packedExternalProduction = JSON.parse(jsonExternalProduction)
         whooseTurn = JSON.parse(jsonWhooseTurn)
 
         let gridSize = {
@@ -172,5 +212,6 @@ class JsonUnpackManager {
                 this.unpackUnit(packedUnit, this.unitClass[packedUnit.name])
             }
         }
+        this.unpackAllExternal(packedExternal, packedExternalProduction)
     }
 }

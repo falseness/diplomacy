@@ -19,6 +19,9 @@ class Empty {
     isBuildingProduction() {
         return false
     }
+    isExternalProduction() {
+        return false
+    }
     isEmpty() {
         return true
     }
@@ -30,6 +33,9 @@ class Empty {
     }
     removeSelect() {
 
+    }
+    isWall() {
+        return false
     }
     needInstructions() {
         return false

@@ -98,6 +98,7 @@
     <script src='sprites/entities/units/range/catapult/catapult.js'></script>
 
     <script src='sprites/entities/buildings/building.js'></script>
+    <script src='sprites/entities/buildings/wall.js'></script>
 
     <script src='sprites/entities/buildings/manufactures/manufacture.js'></script>
     <script src='sprites/entities/buildings/manufactures/farm.js'></script>
@@ -142,6 +143,8 @@
         let saveManager = new SaveManager()
         
         let players = []
+        let external = []
+        let externalProduction = []
         let grid
         let mapBorder
         let gameExit = false
