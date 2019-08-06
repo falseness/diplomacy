@@ -109,7 +109,7 @@ class JsonUnpackManager {
         return res
     }
     unpackManufacture(packedManufacture, _manufacture) {
-        return unpackBuildingProduction(
+        return this.unpackBuildingProduction(
             packedManufacture, _manufacture, ManufactureProduction)
     }
     fullUnpackManufacture(packedManufacture) {
