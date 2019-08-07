@@ -101,6 +101,8 @@ class InterationWithUnit {
         let killUnit = hitUnit && killEnemy
         this.paintHexagons(coord, arr, unit)
         this.changeCoord(coord, unit, killUnit)
+
+        
     }
     paintHexagons(original_coord, arr, unit) {
         let coord = Object.assign({}, original_coord)
@@ -143,7 +145,7 @@ class InterationWithUnit {
 
         grid.setUnit(unit, unit.coord)
         unit.pos = unit.calcPos()
-        unit.trimHpBar()
+        unit.trimBars()
 
         this.addKillUnitUndo(unit)
     }

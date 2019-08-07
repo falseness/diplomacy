@@ -1,4 +1,4 @@
-class HpBar {
+class Bar {
     constructor(pos, hpCount, healthColor = '#00e600', dmgColor = '#b3b3b3', 
         w = basis.r * 0.15, h = basis.r * 0.15) {
         this.rects = new Array(hpCount)

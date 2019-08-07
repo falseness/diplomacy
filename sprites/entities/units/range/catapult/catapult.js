@@ -19,6 +19,7 @@ class Catapult extends RangeUnit {
     }
     draw(ctx) {
         this.hpBar.draw(ctx)
+        this.movesBar.draw(ctx)
         drawCachedImage(ctx, cachedImages[this.mirrorX ? 'catapultLeft' : this.name], this.pos)
     }
 }
