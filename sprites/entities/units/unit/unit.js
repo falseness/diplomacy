@@ -33,6 +33,7 @@ class Unit extends Entity {
     }
     set moves(moves) {
         this.interaction.moves = moves
+        this.updateMovesBar()
     }
     get speed() {
         return this.interaction.speed
@@ -117,7 +118,7 @@ class Unit extends Entity {
     }
     draw(ctx) {
         this.hpBar.draw(ctx)
-        
+
         if (this.isMyTurn)
             this.movesBar.draw(ctx)
 
