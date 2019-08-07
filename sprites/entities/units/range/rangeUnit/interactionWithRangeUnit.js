@@ -78,15 +78,17 @@ class RangeWay extends Way {
         super()
     }
     isCellImpassable(neighbour, v0, arr, player) {
-        let cell = arr[neighbour.x][neighbour.y]
-        return (cell.building.isWall())
+        return false
     }
-    notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
-        Q.push(coord)
+    markCoord(v, coord, used) {
         this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
 
         this.parent[coord.x][coord.y] = v
         used[coord.x][coord.y] = true
+    }
+    notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
+        Q.push(coord)
+        this.markCoord(v, coord, used)
     }
     create(v0, moves, arr, player, bord, changeLogicText = true, newBorder = false) {
         // dont chage logic text and create border by default

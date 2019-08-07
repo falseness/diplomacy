@@ -4,7 +4,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
 		this.mirrorInteraction = new MirroringInteraction(speed)
         this.way = this.mirrorInteraction.way
 
-        this.rangeWay = new CatapultRangeWay()
+        this.rangeWay = new RangeWay()
 	}
 	get isMoveOver() {
     	return this.mirrorInteraction.isMoveOver
@@ -52,9 +52,4 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
 	move(coord, cell, arr, unit) {
 		this.mirrorInteraction.move(coord, cell, arr, unit)
 	}
-}
-class CatapultRangeWay extends RangeWay {
-    isCellImpassable() {
-        return false
-    }
 }

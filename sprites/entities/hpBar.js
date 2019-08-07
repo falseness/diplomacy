@@ -30,6 +30,8 @@ class HpBar {
         }
     }
     repaintRects(healthCount) {
+        if (healthCount < 0)
+            return
         // guaranteed healCount < hpCount 
         for (let i = 0; i < healthCount; ++i) {
             this.rects[i].color = this.healthColor

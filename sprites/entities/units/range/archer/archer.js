@@ -7,5 +7,6 @@ class Archer extends RangeUnit {
         const salary = 2
         const range = 2
         super(x, y, 'archer', hp, healSpeed, dmg, range, speed, salary)
+        this.interaction = new InteractionWithArcher(speed, range)
     }
 }

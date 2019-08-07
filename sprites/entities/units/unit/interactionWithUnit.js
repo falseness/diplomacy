@@ -251,10 +251,14 @@ class Way {
             // BFS
         while (Q.length > 0 || enemyEntityQ.length > 0) {
             let v
-            if (Q.length) v = Q.shift()
-            else v = enemyEntityQ.shift()
-            if (changeLogicText && this.distance[v.x][v.y]) arr[v.x][v.y].logicText.text = this.distance[v.x][v.y]
-            if (this.distance[v.x][v.y] > moves) continue
+            if (Q.length) 
+                v = Q.shift()
+            else 
+                v = enemyEntityQ.shift()
+            if (changeLogicText && this.distance[v.x][v.y]) 
+                arr[v.x][v.y].logicText.text = this.distance[v.x][v.y]
+            if (this.distance[v.x][v.y] > moves) 
+                continue
             let neighbours = arr[v.x][v.y].hexagon.neighbours
             let sortedHexagonNeighbours = this.sortNeighbours(v0, v, neighbours, arr, player, bord)
             for (let i = 0; i < sortedHexagonNeighbours.length; ++i) {

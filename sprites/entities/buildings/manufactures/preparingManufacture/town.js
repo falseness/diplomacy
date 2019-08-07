@@ -13,8 +13,8 @@ let production = {
     },
     farm: {
         production: ManufactureProduction,
-        turns: 3,
-        cost: 10,
+        turns: 2,
+        cost: 12,
         class: Farm,
     },
     archer: {
@@ -26,7 +26,7 @@ let production = {
     normchel: {
         production: UnitProduction,
         turns: 3,
-        cost: 30,
+        cost: 25,
         class: Normchel
     },
     catapult: {
@@ -43,14 +43,14 @@ let production = {
     },
     barrack: {
         production: ManufactureProduction,
-        turns: 4, //4 20
+        turns: 3, //4 20
         cost: 20,
         class: Barrack,
     },
     wall: {
         production: ExternalProduction,
-        turns: 5,
-        cost: 4, 
+        turns: 4,
+        cost: 3, 
         class: Wall
     }
 }
