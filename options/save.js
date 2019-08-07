@@ -47,7 +47,8 @@ class JsonUnpackManager {
         this.buildingClass = {
             farm: Farm,
             barrack: Barrack,
-            wall: Wall
+            wall: Wall, 
+            tower: Tower
         }
     }
     unpackUnit(packedUnit, _unit) {

@@ -13,12 +13,13 @@ let assets = {
     catapult: new Image(),
     catapultLeft: new Image(),
     barrack: new Image(),
-    wall: new Image()
+    wall: new Image(),
+    tower: new Image()
 }
 let imagesCountLoaded = 0
 let images = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
-        'catapult', 'catapultLeft', 'barrack', 'wall']
+        'catapult', 'catapultLeft', 'barrack', 'wall', 'tower']
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         ++imagesCountLoaded

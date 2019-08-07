@@ -52,7 +52,13 @@ let production = {
         turns: 4,
         cost: 3, 
         class: Wall
-    }
+    },
+    tower: {
+        production: ExternalProduction,
+        turns: 4,
+        cost: 15, 
+        class: Tower
+    },
 }
 class Town extends PreparingManufacture {
     constructor(x, y, justCopy = false, firstTown = false) {
@@ -60,6 +66,7 @@ class Town extends PreparingManufacture {
         const healSpeed = 3
         const income = 4
         super(x, y, 'town', hp, healSpeed, income)
+        this.rangeIncrease = 1
         this.player.towns.push(this)
 
         this.suburbs = []
@@ -122,7 +129,7 @@ class Town extends PreparingManufacture {
     }
     get info() {
         let town = super.info
-
+        town.info['range increase'] = this.rangeIncrease
         if (this.activeProduction.notEmpty())
             town.activeProduction = this.activeProduction.name
 

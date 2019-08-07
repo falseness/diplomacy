@@ -1,7 +1,21 @@
 class InteractionWithArcher extends InteractionWithRangeUnit {
     constructor(speed, range, borderStrokeWidth = 0.1 * basis.r) {
         super(speed, range, borderStrokeWidth = 0.1 * basis.r)
-        this.rangeWay = new ArcherRangeWay()
+        this.standartRangeWay = new ArcherRangeWay()
+        this.hillRangeWay = new RangeWay()
+        this.standartRange = this.range
+        this.rangeWay = this.standartRangeWay
+    }
+    select(archer) {
+        if (archer.onHill) {
+            this.range = this.standartRange + archer.rangeIncrease
+            this.rangeWay = this.hillRangeWay
+        }
+        else {
+            this.range = this.standartRange
+            this.rangeWay = this.standartRangeWay
+        }
+        super.select(archer)
     }
 }
 class ArcherRangeWay extends RangeWay {

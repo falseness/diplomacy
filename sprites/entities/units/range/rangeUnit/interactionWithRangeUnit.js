@@ -15,7 +15,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         if (this.isTurnFinished(rangeUnit))
             return
             
-        attackBorder.newBrokenLine(rangeUnit.player.hexColor, 
+        attackBorder.newBrokenLine('white',//rangeUnit.player.hexColor, 
             this.borderStrokeWidth)
         this.rangeWay.create(rangeUnit.coord, this.range, 
             grid.arr, rangeUnit.playerColor, attackBorder)
