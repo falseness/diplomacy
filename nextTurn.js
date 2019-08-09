@@ -43,6 +43,7 @@ function nextTurn() {
         neutralPlayerTurn()
 
     nextTurnButton.color = players[whooseTurn].hexColor
+    nextTurnButton.deactivate()
 
     externalNextTurn() 
     players[whooseTurn].nextTurn()
@@ -57,6 +58,29 @@ class gameLogicButtons extends ImageButton {
     }
     set color(color) {
         this.img.color = color
+    }
+    get color() {
+        return this.img.color
+    }
+    deactivate() {
+        this.unactive = true
+        const interval = 750
+        setTimeout(function(){ 
+            nextTurnButton.unactive = false
+        }, interval)
+    }
+    click(point) {
+        if (this.unactive)
+            return false
+        return super.click(point)
+    }
+    draw(ctx) {
+        let oldColor = this.color
+        if (this.unactive) {
+            this.color = 'white'
+        }
+        super.draw(ctx)
+        this.color = oldColor
     }
 }
 const nextTurnButtonSize = WIDTH * 0.1
