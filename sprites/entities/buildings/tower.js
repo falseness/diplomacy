@@ -12,4 +12,7 @@ class Tower extends Building {
         tower.info['range increase'] = this.rangeIncrease
         return tower
     }
+    isBarrier() {
+        return true
+    }
 }

@@ -1,6 +1,7 @@
 class InteractionWithRangeUnit extends InterationWithUnit {
     constructor(speed, range, borderStrokeWidth = 0.1 * basis.r) {
         super(speed)
+        this.way = new RangeUnitMoveWay()
         this.rangeWay = new RangeWay()
 
         this.range = range
@@ -16,7 +17,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             return
             
         attackBorder.newBrokenLine('white',//rangeUnit.player.hexColor, 
-            this.borderStrokeWidth)
+            this.borderStrokeWidth, rangeUnit.player.hexColor)
         this.rangeWay.create(rangeUnit.coord, this.range, 
             grid.arr, rangeUnit.playerColor, attackBorder)
     }
@@ -36,9 +37,8 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         let coord = cell.coord
 
         if (this.cantRangeInteract(coord, rangeUnit)) {
-            this.removeSelect()
-            return true
-                // attack range > speed by default
+            //this.removeSelect()
+            return super.sendInstructions(cell, rangeUnit)
         }
 
         if (this.cellHasEnemyBuilding(cell, rangeUnit)) {
@@ -66,6 +66,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             return true
         }
         if (cell.unit.notEmpty()) {
+            // ally unit
             this.removeSelect()
             return true
         }
@@ -93,5 +94,12 @@ class RangeWay extends Way {
     create(v0, moves, arr, player, bord, changeLogicText = true, newBorder = false) {
         // dont chage logic text and create border by default
         super.create(v0, moves, arr, player, bord, changeLogicText, newBorder)
+    }
+}
+class RangeUnitMoveWay extends Way {
+    isCellImpassable(neighbour, v0, arr, player) {
+        let cell = arr[neighbour.x][neighbour.y]
+        return this.cellHasEnemyEntity(cell, player) || 
+            super.isCellImpassable(neighbour, v0, arr, player)
     }
 }

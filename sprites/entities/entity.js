@@ -25,6 +25,9 @@ class Entity extends Sprite {
     isExternalProduction() {
         return false
     }
+    isBarrier() {
+        return false
+    }
     toJSON() {
         let res = {
             name: this.name,

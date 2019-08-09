@@ -22,6 +22,9 @@ class Empty {
     isExternalProduction() {
         return false
     }
+    isBarrier() {
+        return false
+    }
     isEmpty() {
         return true
     }

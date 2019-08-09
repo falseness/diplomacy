@@ -48,11 +48,15 @@ class Border {
         }
         this.lines.push(line)
     }
-    newBrokenLine(color = 'white', strokeWidth = 0.05 * basis.r) {
+    newBrokenLine(color = 'white', strokeWidth = 0.05 * basis.r, 
+        extraColor = false, extraStrokeWidth = 0.03 * basis.r) {
         this.clean()
         this.visible = true
         this.color = color
         this.strokeWidth = strokeWidth
+
+        this.extraStrokeWidth = extraStrokeWidth
+        this.extraColor = extraColor
     }
     draw(ctx) {
         if (!this.visible)
@@ -70,5 +74,20 @@ class Border {
         }
         ctx.stroke()
         ctx.closePath()
+
+        
+        if (this.extraColor && this.extraStrokeWidth) {
+            ctx.beginPath()
+
+            ctx.strokeStyle = this.extraColor
+            ctx.lineWidth = this.extraStrokeWidth
+            for (let i = 0; i < this.lines.length; ++i) {
+                ctx.moveTo(this.lines[i].begin.x, this.lines[i].begin.y)
+                ctx.lineTo(this.lines[i].end.x, this.lines[i].end.y)
+            }
+
+            ctx.stroke()
+            ctx.closePath()
+        }
     }
 }

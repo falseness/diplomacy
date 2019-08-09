@@ -19,9 +19,14 @@ class InteractionWithArcher extends InteractionWithRangeUnit {
     }
 }
 class ArcherRangeWay extends RangeWay {
+    isCellImpassable(neighbour, v0, arr, player) {
+        let cell = arr[neighbour.x][neighbour.y]
+        return cell.building.isBarrier() && cell.building.playerColor == player
+        //return false
+    }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         this.markCoord(v, coord, used)
-        if (grid.getBuilding(coord).isWall()) {
+        if (grid.getBuilding(coord).isBarrier()) {
             this.distance[coord.x][coord.y] = Math.max(moves, this.distance[v.x][v.y] + 1)
             enemyEntityQ.push(coord)
             return

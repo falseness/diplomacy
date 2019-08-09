@@ -185,6 +185,9 @@ class BuildingProduction extends Production {
     newText() {
         this.text = new CoordText(this.coord.x, this.coord.y, this.turns)
     }
+    isBarrier() {
+        return false
+    }
     draw(ctx) {
         drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos)
         if (!grid.drawLogicText)

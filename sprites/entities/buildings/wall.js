@@ -15,6 +15,9 @@ class Wall extends Building {
     isWall() {
         return true
     }
+    isBarrier() {
+        return true
+    }
 }
 function updateExternal() {
     for (let i = 0; i < external.length; ++i) {
