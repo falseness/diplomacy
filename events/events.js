@@ -147,17 +147,22 @@ class Events {
         
         return
     }
+    isPressKeyCode(keycode) {
+        return keycode == 13 || keycode == 27 || keycode == 90
+    }
     keyboard(keycode) {
-        if (Date.now() - this.lastKeyboardPressTime < this.keyboardPressInterval)
-            return
-
-        this.lastKeyboardPressTime = Date.now()
-        if (keycode == 13)
-            nextTurn()
-        if (keycode == 27)
-            debug = !debug
-        if (keycode == 90) //z
-            undoManager.undo()
+        if (this.isPressKeyCode(keycode)) {
+            if (Date.now() - this.lastKeyboardPressTime < this.keyboardPressInterval)
+                return
+            this.lastKeyboardPressTime = Date.now()
+            if (keycode == 13) // enter
+                nextTurn()
+            if (keycode == 27) // esc
+                debug = !debug
+            if (keycode == 90) //z
+                undoManager.undo()
+            return 
+        }
         
         if (keycode == 65 || keycode == 37) 
             this.screen.goLeft()
