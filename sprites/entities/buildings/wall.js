@@ -3,7 +3,7 @@ class Wall extends Building {
     static healSpeed = 2
     constructor(x, y) {
         const name = 'wall'
-        super(x, y, name, hp, healSpeed)
+        super(x, y, name)
         this.destroyable = true
         external.push(this)
     }
