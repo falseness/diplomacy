@@ -4,7 +4,7 @@ class KOHb extends Unit {
         const healSpeed = 1
         const dmg = 2
         const speed = 4
-        const salary = 6
+        const salary = 5
         super(x, y, 'KOHb', hp, healSpeed, dmg, speed, salary)
         this.mirrorX = false
         this.interaction = new MirroringInteraction(speed)
