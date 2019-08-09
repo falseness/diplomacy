@@ -61,11 +61,11 @@ let production = {
     },
 }
 class Town extends PreparingManufacture {
+    static maxHP = 15
+    static healSpeed = 3
+    static income = 4
     constructor(x, y, justCopy = false, firstTown = false) {
-        const hp = 15
-        const healSpeed = 3
-        const income = 4
-        super(x, y, 'town', hp, healSpeed, income)
+        super(x, y, 'town')
         this.rangeIncrease = 1
         this.player.towns.push(this)
 

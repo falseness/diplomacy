@@ -1,13 +1,11 @@
 class Unit extends Entity {
-    constructor(x, y, name, hp, healSpeed, dmg, speed, salary) {
-        super(x, y, name, hp, healSpeed)
-        this.dmg = dmg
-        this.salary = salary
+    constructor(x, y, name) {
+        super(x, y, name)
         //this.moves = speed
         grid.setUnit(this, this.coord)
         this.player.units.push(this)
 
-        this.interaction = new InterationWithUnit(speed)
+        this.interaction = new InterationWithUnit(this.speed)
         this.hpBarMarginY = -basis.r * 0.1
         this.movesBarMarginY = basis.r * 0.1
         this.hpBar = new Bar(
@@ -19,6 +17,15 @@ class Unit extends Entity {
             {x: this.pos.x + assets.size / 2, 
             y: this.pos.y + assets.size / 2 + this.movesBarMarginY }, 
             this.speed, movesColor)
+    }
+    static get description() {
+        let res = super.description
+
+        res.info.dmg = this.dmg
+        res.info.speed = this.speed
+        res.info.salary = this.salary
+        
+        return res
     }
     trimBars() {
         this.hpBar.pos = 
@@ -35,8 +42,14 @@ class Unit extends Entity {
         this.interaction.moves = moves
         this.updateMovesBar()
     }
+    get dmg() {
+        return this.constructor.dmg
+    }
     get speed() {
-        return this.interaction.speed
+        return this.constructor.speed
+    }
+    get salary() {
+        return this.constructor.salary
     }
     toJSON() {
         let res = super.toJSON()

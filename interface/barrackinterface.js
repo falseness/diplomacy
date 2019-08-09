@@ -1,3 +1,6 @@
+function displayDescription(_class) {
+    entityInterface.change(_class.description, gameEvent.selected.player.fullColor)
+}
 class BarrackInterface {
     #visible = false
     constructor() {
@@ -97,6 +100,8 @@ class BarrackInterface {
         return this.gold.y + this.height * 0.3 + this.trainInterfacesMarginInterval * index
     }
     trainInterfacesCreationLoop(trainInterfaces, index) {
+    //constructor(image, rect, clickFunc, parameters, text = new Empty(), canClick = true, callThis) 
+//constructor(x, y, width, height, 
         for (let i in production) {
             let name = i
             let type = production[name].production.isUnitProduction()?'unit':'building'
@@ -107,11 +112,16 @@ class BarrackInterface {
             let margins = trainInterfaces.margin
 
             let image
-            if (name == 'suburb') {
+            if (name == 'suburb') 
                 image = new SuburbImage({}, 0.22 * WIDTH * 0.1, 0.002 * WIDTH)
-            } else
+            else
                 image = new JustImage(name, {}, models.image.width, models.image.height)
 
+            let imageButton = new ImageButton(
+                image, 
+                new Rect(NaN, NaN, models.image.width, models.image.height),
+                displayDescription, getClass(name)
+            )
             let costText = new Text(NaN, NaN, models.costText.fontSize, models.costText.text)
             let button = new Button(
                 new Rect(NaN, NaN, models.button.rect.width, models.button.rect.height, [models.button.rect.cornerRadius, models.button.rect.cornerRadius, models.button.rect.cornerRadius, models.button.rect.cornerRadius],
@@ -120,11 +130,11 @@ class BarrackInterface {
                 prepareEvent, name
             )
             
-            
+           
             this.trainInterfaces[type][name] =
                 new TrainInterface(
                     margins.image, margins.costText, margins.button,
-                    image, costText, button,
+                    imageButton, costText, button,
                     this.gold.x, this.getTrainInterfaceY(index[type]), name)
             this.trainInterfaces[type][name].setCostText('cost: ' + production[i].cost)
             ++index[type]
@@ -168,14 +178,17 @@ class BarrackInterface {
     }
     set visible(boolean) {
         this.#visible = boolean
-        //nextTurnButton.canClick = !boolean
+        if (mobilePhone)
+            nextTurnButton.canClick = !boolean
     }
     get visible() {
         return this.#visible
     }
     wasClickOnButton(point) {
         for (let i in this.trainInterfaces[this.trainInterfacesTab]) {
-            if (this.trainInterfaces[this.trainInterfacesTab][i].click(point)) {
+            let trainInterface = this.trainInterfaces[this.trainInterfacesTab][i]
+            if (trainInterface.click(point) ||
+                trainInterface.imageClick(point)) {
                 return true
             }
         }
@@ -227,7 +240,7 @@ class TrainInterface {
         let x = this.x
         let y = this.y
 
-        this.image.pos = { x: x + this.imageMargin.x, y: y + this.imageMargin.y }
+        this.image.center = { x: x + this.imageMargin.x, y: y + this.imageMargin.y }
         this.costText.pos = { x: x + this.costTextMargin.x, y: y + this.costTextMargin.y }
         this.button.pos = { x: x + this.buttonMargin.x, y: y + this.buttonMargin.y }
     }
@@ -238,6 +251,9 @@ class TrainInterface {
     }
     click(point) {
         return this.button.click(point)
+    }
+    imageClick(point) {
+        return this.image.click(point)
     }
     setCostText(text) {
         this.costText.text = text

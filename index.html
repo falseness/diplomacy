@@ -45,6 +45,7 @@
     <script src='options/gamestart.js'></script>
     <script src='options/save.js'></script>
     <script src='options/undo.js'></script>
+    <script src='options/classManager.js'></script>
 
     <script src='render/loadassets.js'></script>
     <script src='render/image.js'></script>
@@ -120,12 +121,10 @@
             document.querySelector("#container").requestFullscreen();
         else if (document.querySelector("#container").webkitRequestFullScreen)
             document.querySelector("#container").webkitRequestFullScreen()*/
-    
+        console.log(Noob.description)
         let mainCanvas = document.getElementById('canvas')
         
         let mainCtx = mainCanvas.getContext('2d')
-        
-
         let interfaceCanvas = document.getElementById('interface')
         
         let interfaceCtx = interfaceCanvas.getContext('2d')

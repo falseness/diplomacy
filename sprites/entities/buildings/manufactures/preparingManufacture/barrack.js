@@ -1,9 +1,9 @@
 class Barrack extends PreparingManufacture {
+    static maxHP = 4
+    static healSpeed = 1
+    static income = -3
     constructor(x, y, town) {
-        const hp = 4
-        const healSpeed = 1
-        const income = -3
-        super(x, y, 'barrack', hp, healSpeed, income)
+        super(x, y, 'barrack')
         this.town = town
     }
     select() {

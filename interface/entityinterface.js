@@ -25,6 +25,9 @@ class EntityInterface {
 
         this.img = new JustImage('', { x: this.pos.x + this.height * 0.38, y: this.pos.y + this.height * 0.5 },
             this.height * 0.775, this.height * 0.775)
+        this.suburbImage = new SuburbImage(
+            { x: this.pos.x + this.height * 0.38, y: this.pos.y + this.height * 0.5 },
+            this.height * 0.275, this.height * 0.02)
 
 
         this.entity = {}
@@ -114,8 +117,12 @@ class EntityInterface {
         if (!this.visible)
             return
         this.background.draw(ctx)
-        this.img.draw(ctx)
-
+        if (this.img.image == 'suburb') {
+            this.suburbImage.draw(ctx)
+        }
+        else {
+            this.img.draw(ctx)
+        }
         this.entity.name.draw(ctx)
         this.entity.info.draw(ctx)
 

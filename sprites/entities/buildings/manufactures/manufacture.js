@@ -1,14 +1,14 @@
 class Manufacture extends Building {
-	#income
-	constructor(x, y, name, hp, healSpeed, income) {
-		super(x, y, name, hp, healSpeed)
-		this.#income = income
-	}
+	constructor(x, y, name) {
+		super(x, y, name)
+    }
+    static get description() {
+        let res = super.description
+        res.info.income = this.income
+        return res
+    }
 	get income() {
-		return this.#income
-	}
-	set income(income) {
-		this.#income = income
+		return this.constructor.income
 	}
 	get info() {
         let manufacture = super.info

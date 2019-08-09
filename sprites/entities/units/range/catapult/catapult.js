@@ -1,16 +1,28 @@
 class Catapult extends RangeUnit {
+    static maxHP = 3
+    static healSpeed = 1
+    static dmg = 1
+    static speed = 1
+    static salary = 5
+    static range = 5
+    static buildingDMG = 3
     constructor(x, y) {
-        const hp = 3
-        const healSpeed = 1
-        const dmg = 1
-        const speed = 1
-        const salary = 5
-        const range = 5
-        super(x, y, 'catapult', hp, healSpeed, dmg, range, speed, salary)
-        this.buildingDMG = 3
+        super(x, y, 'catapult')
         this.mirrorX = false
 
-        this.interaction = new InteractionWithCatapult(speed, range)
+        this.interaction = new InteractionWithCatapult(this.speed, this.range)
+    }
+    static get description() {
+        let res = super.description
+
+        res.info.dmg += '\nbuilding dmg: ' + this.buildingDMG
+
+        res.info.range = '2 - ' + this.range
+        
+        return res
+    }
+    get buildingDMG() {
+        return this.constructor.buildingDMG
     }
     get info() {
         let unit = super.info

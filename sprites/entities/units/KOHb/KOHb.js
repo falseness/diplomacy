@@ -1,13 +1,18 @@
 class KOHb extends Unit {
+    static maxHP = 3
+    static healSpeed = 1
+    static dmg = 2
+    static speed = 4
+    static salary = 5
     constructor(x, y) {
-        const hp = 3
-        const healSpeed = 1
-        const dmg = 2
-        const speed = 4
-        const salary = 5
-        super(x, y, 'KOHb', hp, healSpeed, dmg, speed, salary)
+        super(x, y, 'KOHb')
         this.mirrorX = false
-        this.interaction = new MirroringInteraction(speed)
+        this.interaction = new MirroringInteraction(this.speed)
+    }
+    static get description() {
+        let res = super.description
+        res.name = this.name
+        return res
     }
     draw(ctx) {
         this.hpBar.draw(ctx)

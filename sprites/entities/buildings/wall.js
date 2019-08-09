@@ -1,11 +1,17 @@
 class Wall extends Building {
+    static maxHP = 7
+    static healSpeed = 2
     constructor(x, y) {
         const name = 'wall'
-        const hp = 7
-        const healSpeed = 2
         super(x, y, name, hp, healSpeed)
         this.destroyable = true
         external.push(this)
+    }
+    static get description() {
+        let res = super.description
+        res.info['heal speed'] += "\n\nowner can destroy it instantly" +
+            "\narchers can't shoot through it" + "\nunits can't stand on it"
+        return res
     }
     get info() {
         let res = super.info

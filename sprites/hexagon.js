@@ -58,3 +58,21 @@ class Hexagon extends Sprite {
         }
     }
 }
+class Suburb {
+    static income = 1
+    static get description() {
+        let name = this.name[0].toLowerCase()
+        for (let i = 1; i < this.name.length; ++i) {
+            name += this.name[i]
+        }
+        let res = {
+            name: name,
+            info: {
+                income: this.income + '\n'
+            }
+        }
+        res.info['cost formula'] = '\n2 * (distance from town) - 1\n'
+        res.info['cost formula'] += '\ncan only be placed on \ncaptured land'
+        return res
+    }
+}

@@ -1,10 +1,10 @@
 class Normchel extends Unit {
+    static maxHP = 5
+    static healSpeed = 2
+    static dmg = 2
+    static speed = 2
+    static salary = 3
     constructor(x, y) {
-        const hp = 5
-        const healSpeed = 1
-        const dmg = 2
-        const speed = 2
-        const salary = 3
-        super(x, y, 'normchel', hp, healSpeed, dmg, speed, salary)
+        super(x, y, 'normchel')
     }
 }

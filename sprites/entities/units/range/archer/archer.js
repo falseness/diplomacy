@@ -1,13 +1,13 @@
 class Archer extends RangeUnit {
+    static maxHP = 2
+    static healSpeed = 1
+    static dmg = 1
+    static speed = 2
+    static salary = 2
+    static range = 2
     constructor(x, y) {
-        const hp = 2
-        const healSpeed = 1
-        const dmg = 1
-        const speed = 2
-        const salary = 2
-        const range = 2
-        super(x, y, 'archer', hp, healSpeed, dmg, range, speed, salary)
-        this.interaction = new InteractionWithArcher(speed, range)
+        super(x, y, 'archer')
+        this.interaction = new InteractionWithArcher(this.speed, this.range)
     }
     get onHill() {
         return grid.getBuilding(this.coord).rangeIncrease

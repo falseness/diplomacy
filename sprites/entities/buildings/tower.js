@@ -1,11 +1,21 @@
 class Tower extends Building {
+    static maxHP = 5
+    static healSpeed = 1
+    static rangeIncrease = 1
     constructor(x, y) {
         const name = 'tower'
-        const hp = 5
-        const healSpeed = 1
-        super(x, y, name, hp, healSpeed)
-        this.rangeIncrease = 1
+        super(x, y, name)
+        
         external.push(this)
+    }
+    static get description() {
+        let res = super.description
+        res.info['archer range increase'] = this.rangeIncrease
+        res.info['archer range increase'] += "\n\narchers can't shoot through it"
+        return res
+    }
+    get rangeIncrease() {
+        return this.constructor.rangeIncrease
     }
     get info() {
         let tower = super.info

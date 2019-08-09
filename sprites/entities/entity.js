@@ -1,15 +1,33 @@
 class Entity extends Sprite {
-    constructor(x, y, name, hp, healSpeed) {
+    constructor(x, y, name) {
         super(x, y)
-        this.hp = hp
-        this.maxHP = hp
+        this.hp = this.maxHP
         
         this.killed = this.hp <= 0
         
-        this.healSpeed = healSpeed
         this.wasHitted = false
         
         this.name = name
+    }
+    get maxHP() {
+        return this.constructor.maxHP
+    }
+    get healSpeed() {
+        return this.constructor.healSpeed
+    }
+    static get description() {
+        let name = this.name[0].toLowerCase()
+        for (let i = 1; i < this.name.length; ++i) {
+            name += this.name[i]
+        }
+        let res = {
+            name: name,
+            info: {
+                hp: this.maxHP,
+            }
+        }
+        res.info['heal speed'] = this.healSpeed
+        return res
     }
     calcPos() {
         let pos = super.calcPos()

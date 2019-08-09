@@ -1,6 +1,6 @@
 class Building extends Entity {
-    constructor(x, y, name, hp, healSpeed) {
-        super(x, y, name, hp, healSpeed)
+    constructor(x, y, name) {
+        super(x, y, name)
 
         grid.setBuilding(this, this.coord)
     }

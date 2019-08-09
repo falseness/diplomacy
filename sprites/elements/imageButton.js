@@ -12,6 +12,13 @@ class ImageButton extends Button {
         this.rect.pos = pos
         this.img.pos = this.rect.center
     }
+    get center() {
+        return this.rect.center
+    }
+    set center(pos) {
+        this.rect.center = pos
+        this.img.pos = pos
+    }
     draw(ctx) {
         if (this.canClick) {
             if (debug)

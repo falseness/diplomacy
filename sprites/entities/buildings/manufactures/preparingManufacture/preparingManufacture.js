@@ -1,7 +1,7 @@
 class PreparingManufacture extends Manufacture {
     #unitProduction
-	constructor(x, y, name, hp, healSpeed, income) {
-		super(x, y, name, hp, healSpeed, income)
+	constructor(x, y, name) {
+		super(x, y, name)
 		this.#unitProduction = new Empty()
     }
     set unitProduction(obj) {

@@ -5,7 +5,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
         this.way = this.mirrorInteraction.way
 
         this.rangeWay = new RangeWay()
-	}
+    }
 	get isMoveOver() {
     	return this.mirrorInteraction.isMoveOver
     }

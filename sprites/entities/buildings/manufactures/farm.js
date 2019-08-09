@@ -1,9 +1,9 @@
 class Farm extends Manufacture {
+    static maxHP = 2
+    static healSpeed = 1
+    static income = 2
     constructor(x, y, town) {
-        const hp = 2
-        const healSpeed = 1
-        const income = 2
-        super(x, y, 'farm', hp, healSpeed, income)
+        super(x, y, 'farm')
         this.town = town
     }
     toUndoJSON() {
