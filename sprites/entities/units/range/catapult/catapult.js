@@ -4,7 +4,7 @@ class Catapult extends RangeUnit {
         const healSpeed = 1
         const dmg = 1
         const speed = 1
-        const salary = 6
+        const salary = 5
         const range = 5
         super(x, y, 'catapult', hp, healSpeed, dmg, range, speed, salary)
         this.buildingDMG = 3
