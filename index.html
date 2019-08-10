@@ -63,6 +63,7 @@
     <script src='sprites/elements/text.js'></script>
     <script src='sprites/elements/rect.js'></script>
     <script src='sprites/elements/button.js'></script>
+    <script src='sprites/elements/temporaryWindow.js'></script>
     <script src='sprites/elements/image.js'></script>
     <script src='sprites/elements/imageButton.js'></script>
     <script src='sprites/elements/switch.js'></script>
@@ -132,6 +133,16 @@
         let unpacker = new JsonUnpackManager()
         
         let debug = false
+
+        const errorWindowCornerRadius = 0.03 * HEIGHT
+
+        let errorWindow = new TemporaryWindow(new Rect(
+            WIDTH / 2, HEIGHT * 0.75, WIDTH * 0.35, WIDTH * 0.55 * 0.1, 
+            [errorWindowCornerRadius, errorWindowCornerRadius, 
+                errorWindowCornerRadius, errorWindowCornerRadius], 
+                HEIGHT * 0.005, 'red'
+        ), new Text(NaN, NaN, WIDTH * 0.55 * 0.05, 'something error')) 
+        //errorWindow.visible = true
         let barrackInterface = new BarrackInterface()
         let townInterface = new TownInterface()
         

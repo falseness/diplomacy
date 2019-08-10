@@ -6,21 +6,34 @@ class SaveManager {
     save() {
         updateExternal()
 
-        let _grid = JSON.stringify(grid)
-        let _players = JSON.stringify(players)
-        let _external = JSON.stringify(external)
-        let _externalProduction = JSON.stringify(externalProduction)
-        let _whooseTurn = JSON.stringify(whooseTurn)
-        localStorage.setItem('grid', _grid)
-        localStorage.setItem('players', _players)
-        localStorage.setItem('external', _external)
-        localStorage.setItem('externalProduction', _externalProduction)
-        localStorage.setItem('whooseTurn', _whooseTurn)
+        try {
+            let _grid = JSON.stringify(grid)
+            let _players = JSON.stringify(players)
+            let _external = JSON.stringify(external)
+            let _externalProduction = JSON.stringify(externalProduction)
+            let _whooseTurn = JSON.stringify(whooseTurn)
+            localStorage.setItem('grid', _grid)
+            localStorage.setItem('players', _players)
+            localStorage.setItem('external', _external)
+            localStorage.setItem('externalProduction', _externalProduction)
+            localStorage.setItem('whooseTurn', _whooseTurn)
+        }
+        catch {
+            errorWindow.textString = "can't save game\ntry toggle internet connection"
+            errorWindow.enableTemporary()
+        }
         //console.log("saved")
     }
     load() {
-        if (!this.hasSave())
+        try {
+            if (!this.hasSave())
+                return false
+        }
+        catch {
+            errorWindow.textString = "can't load game\ntry toggle internet connection"
+            errorWindow.enableTemporary()
             return false
+        }
         let _grid = localStorage.getItem('grid')
         let _players = localStorage.getItem('players')
         let _external = localStorage.getItem('external')

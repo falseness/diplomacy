@@ -16,6 +16,8 @@ function drawInterface() {
     backToMenuButton.draw(interfaceCtx)
     undoButton.draw(interfaceCtx)
     gameEvent.draw(interfaceCtx)
+
+    errorWindow.draw(interfaceCtx)
 }
 
 function drawAll() {

@@ -103,6 +103,8 @@ class Menu {
         this.playButton1.draw(ctx)
         this.playButton2.draw(ctx)
         this.loadButton.draw(ctx)
+
+        errorWindow.draw(ctx)
     }
 }
 
