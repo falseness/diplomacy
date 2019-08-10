@@ -90,17 +90,13 @@ class BuildingProduction extends Production {
         this.killed = true
         grid.setBuilding(new Empty(), this.coord)
     }
-    notOurHexagon(coord, suburbs, arr, player) {
+    isOurSuburb(coord, suburbs, arr, player) {
         let hexagon = arr[coord.x][coord.y].hexagon
-        if (hexagon.playerColor != player)
-            return true
-        if (!hexagon.isSuburb)
-            return false
         for (let i = 0; i < suburbs.length; ++i) {
             if (coordsEqually(coord, suburbs[i].coord))
-                return false
+                return true
         }
-        return true
+        return false
     }
     isWall() {
         return false
@@ -263,13 +259,13 @@ class ManufactureProduction extends BuildingProduction {
                 let neighbourCoord = neighbours[j]
 
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
-                        this.notOurHexagon(neighbourCoord, suburbs, arr, player)) {
+                        !this.isSuburb(neighbourCoord, arr, player) ||
+                            !this.isOurSuburb(neighbourCoord, suburbs, arr, player)) {
                     border.createLine(hexagon.calcPos(), j)
                     continue
                 }
 
-                if (this.isSuburb(neighbourCoord, arr, player) &&
-                    !used[neighbourCoord.x][neighbourCoord.y]) {
+                if (!used[neighbourCoord.x][neighbourCoord.y]) {
                     this.availableHexagons.push(arr[neighbourCoord.x][neighbourCoord.y].hexagon)
 
                     used[neighbourCoord.x][neighbourCoord.y] = true
@@ -470,7 +466,9 @@ class SuburbProduction extends BuildingProduction {
                 let neighbourCoord = neighbours[j]
 
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
-                        this.notOurHexagon(neighbourCoord, suburbs, arr, player)) {
+                        grid.getHexagon(neighbourCoord).playerColor != player ||
+                        (this.isSuburb(neighbourCoord, arr, player) &&
+                            !this.isOurSuburb(neighbourCoord, suburbs, arr, player))) {
                     border.createLine(hexagon.calcPos(), j)
                     continue
                 }
