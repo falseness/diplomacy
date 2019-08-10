@@ -113,6 +113,58 @@ class GameManager {
         this.initValues()
         this.clearValues()
         requestAnimationFrame(gameLoop)
+    }
+    static start3() {
+        players = [new Player({
+            r: 208, 
+            g: 208,
+            b: 208
+            }, 0, true), 
+            new Player({
+                r: 255,
+                g: 0,
+                b: 0 //98, 168, 222
+            }, 10),
+            new Player({
+                r: 51,
+                g: 153,
+                b: 255
+            }, 0),
+            new Player({
+                r: 0,
+                g: 179,
+                b: 0
+            }, 0),
+            new Player({
+                r: 112,
+                g: 0,
+                b: 204
+            }, 0)
+        ]
+        grid = new Grid(0, 0, {
+            x: 29,
+            y: 21
+        })
+
+        grid.arr[9][6].hexagon.firstpaint(1)
+
+        let TOWN1 = new Town(9, 6, false, true)
+
+        grid.arr[19][6].hexagon.firstpaint(2)
+
+        let TOWN2 = new Town(19, 6, false, true)
+        
+        grid.arr[9][14].hexagon.firstpaint(4)
+
+        let TOWN3 = new Town(9, 14, false, true)
+
+        grid.arr[19][14].hexagon.firstpaint(3)
+
+        let TOWN4 = new Town(19, 14, false, true)
+
+        this.initValues()
+        this.clearValues()
+        requestAnimationFrame(gameLoop)
 	}
 }
 function gameLoop() {

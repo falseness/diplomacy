@@ -1,7 +1,10 @@
 function menuClick(event) {
     let pos = getEventPos(event)
+    
     menu.playButton1.click(pos)
     menu.playButton2.click(pos)
+    menu.playButton3.click(pos)
+
     menu.loadButton.click(pos)
 }
 
@@ -15,13 +18,6 @@ function load() {
     GameManager.load()
 }
 
-function startGame1() {
-    GameManager.start1()
-}
-
-function startGame2() {
-    GameManager.start2()
-}
 class Tree {
     constructor(parent, buttons) {
         this.parent = parent
@@ -56,21 +52,33 @@ class Menu {
 
         this.setVisible(true)
 
-        this.logo = new JustImage('logo', { x: WIDTH / 2, y: HEIGHT * 0.2 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
+        this.logo = new JustImage('logo', { x: WIDTH / 2, y: HEIGHT * 0.15 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
 
         this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, undefined, '#d0d0d0')
-        this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33, 0.02 * WIDTH, 'alpha', '#747474') //#747474
+        this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33 - HEIGHT * 0.05, 
+            0.02 * WIDTH, 'alpha', '#747474') //#747474
+        let firstY = HEIGHT * 0.3
+        let interval = HEIGHT * 0.18
         this.playButton1 = new Button(
-            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
-            new Text(undefined, undefined, 0.04 * WIDTH, 'play', 'black'), startGame1)
+            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, firstY, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
+            new Text(undefined, undefined, 0.04 * WIDTH, 'play 1x1', 'black'), 
+            GameManager.start1, undefined, undefined, GameManager)
         this.playButton1.trimText()
 
         this.playButton2 = new Button(
-            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35 + HEIGHT * 0.2, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
-            new Text(undefined, undefined, 0.04 * WIDTH, 'play3', 'black'), startGame2)
-        this.playButton2.trimText()
+            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, firstY + interval, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
+            new Text(undefined, undefined, 0.04 * WIDTH, 'play 1x1x1', 'black'), 
+                GameManager.start2, undefined, undefined, GameManager)
+            this.playButton2.trimText()
+        
+        this.playButton3 = new Button(
+            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, firstY + interval * 2, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
+            new Text(undefined, undefined, 0.04 * WIDTH, 'play 1x1x1x1', 'black'), 
+                GameManager.start3, undefined, undefined, GameManager)
+        
+        this.playButton3.trimText()
         this.loadButton = new Button(
-            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, HEIGHT * 0.35 + HEIGHT * 0.4, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
+            new Rect(WIDTH / 2 - WIDTH * 0.25 / 2, firstY + interval * 3, WIDTH * 0.25, HEIGHT * 0.1, [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.007 * WIDTH, 'white'),
             new Text(undefined, undefined, 0.04 * WIDTH, 'load save', 'black'), load)
         this.loadButton.trimText()
     }
@@ -102,6 +110,7 @@ class Menu {
         this.alphaText.draw(ctx)
         this.playButton1.draw(ctx)
         this.playButton2.draw(ctx)
+        this.playButton3.draw(ctx)
         this.loadButton.draw(ctx)
 
         errorWindow.draw(ctx)
