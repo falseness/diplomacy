@@ -1,50 +1,13 @@
 class SaveManager {
     constructor() {}
-    hasSave() {
-        return !!localStorage.getItem('whooseTurn')
-    }
     save() {
         updateExternal()
 
-        try {
-            let _grid = JSON.stringify(grid)
-            let _players = JSON.stringify(players)
-            let _external = JSON.stringify(external)
-            let _externalProduction = JSON.stringify(externalProduction)
-            let _whooseTurn = JSON.stringify(whooseTurn)
-            localStorage.setItem('grid', _grid)
-            localStorage.setItem('players', _players)
-            localStorage.setItem('external', _external)
-            localStorage.setItem('externalProduction', _externalProduction)
-            localStorage.setItem('whooseTurn', _whooseTurn)
-        }
-        catch {
-            errorWindow.textString = "can't save game\ntry toggle internet connection"
-            errorWindow.enableTemporary()
-        }
+        saveGame()
         //console.log("saved")
     }
     load() {
-        try {
-            if (!this.hasSave())
-                return false
-        }
-        catch {
-            errorWindow.textString = "can't load game\ntry toggle internet connection"
-            errorWindow.enableTemporary()
-            return false
-        }
-        let _grid = localStorage.getItem('grid')
-        let _players = localStorage.getItem('players')
-        let _external = localStorage.getItem('external')
-        let _externalProduction = localStorage.getItem('externalProduction')
-        let _whooseTurn = localStorage.getItem('whooseTurn')
-
-        unpacker.unpackAll(_grid, _players, _external, _externalProduction, _whooseTurn)
-
-        gameEvent.hideAll()
-            //console.log("loaded")
-        return true
+        return loadGame()
     }
 }
 

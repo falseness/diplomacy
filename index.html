@@ -137,7 +137,7 @@
         const errorWindowCornerRadius = 0.03 * HEIGHT
 
         let errorWindow = new TemporaryWindow(new Rect(
-            WIDTH / 2, HEIGHT * 0.75, WIDTH * 0.35, WIDTH * 0.55 * 0.1, 
+            WIDTH / 2, HEIGHT * 0.75, WIDTH * 0.4, WIDTH * 0.55 * 0.1, 
             [errorWindowCornerRadius, errorWindowCornerRadius, 
                 errorWindowCornerRadius, errorWindowCornerRadius], 
                 HEIGHT * 0.005, 'red'
@@ -177,11 +177,48 @@
             menuBack
         )       
         let whooseTurn
-        function start1() {
-            
+        function saveGame() {
+            try {
+                let _grid = JSON.stringify(grid)
+                let _players = JSON.stringify(players)
+                let _external = JSON.stringify(external)
+                let _externalProduction = JSON.stringify(externalProduction)
+                let _whooseTurn = JSON.stringify(whooseTurn)
+                localStorage.setItem('grid', _grid)
+                localStorage.setItem('players', _players)
+                localStorage.setItem('external', _external)
+                localStorage.setItem('externalProduction', _externalProduction)
+                localStorage.setItem('whooseTurn', _whooseTurn)
+            }
+            catch {
+                errorWindow.textString = "can't save game\ntry toggle internet connection"
+                errorWindow.enableTemporary()
+            }
         }
-        function start2() {
-            
+        function hasSave() {
+            return !!localStorage.getItem('whooseTurn')
+        }
+        function loadGame() {
+            try {
+                if (!hasSave())
+                    return false
+            }
+            catch {
+                errorWindow.textString = "can't load game\ntry toggle internet connection"
+                errorWindow.enableTemporary()
+                return false
+            }
+            let _grid = localStorage.getItem('grid')
+            let _players = localStorage.getItem('players')
+            let _external = localStorage.getItem('external')
+            let _externalProduction = localStorage.getItem('externalProduction')
+            let _whooseTurn = localStorage.getItem('whooseTurn')
+
+            unpacker.unpackAll(_grid, _players, _external, _externalProduction, _whooseTurn)
+
+            gameEvent.hideAll()
+                //console.log("loaded")
+            return true
         }
         function start() {
            
