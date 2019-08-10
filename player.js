@@ -23,8 +23,16 @@ class Player {
             }
         }
     }
+    updateTowns() {
+        for (let i = 0; i < this.towns.length; ++i) {
+            if (this.isTownKilled(this.towns[i])) {
+                this.towns.splice(i--, 1)
+            }
+        }
+    }
     toJSON() {
         this.updateUnits()
+        this.updateTowns()
 
         let res = {}
         res.gold = this.gold
@@ -34,18 +42,18 @@ class Player {
 
         return res
     }
+    isTownKilled(town) {
+        return town.killed ||
+            town.player.hexColor != this.hexColor
+    }
     get income() {
         let income = 0
         for (let i = 0; i < this.towns.length; ++i) {
-            if (this.towns[i].killed) {
+        if (this.isTownKilled(this.towns[i])) {
                 this.towns.splice(i--, 1)
                 continue
             }
             income += this.towns[i].income
-        }
-
-        if (!this.towns.length) {
-            console.log("LOOSE")
         }
 
         for (let i = 0; i < this.units.length; ++i) {
@@ -63,8 +71,16 @@ class Player {
         }
         this.units = []
     }
+    loose() {
+        this.crisisPenalty()
+    }
     nextTurn() {
         this.gold += this.income
+
+        if (!this.towns.length) {
+            this.loose()
+            console.log("LOOSE")
+        }
 
         if (this.gold < 0) {
             this.crisisPenalty()

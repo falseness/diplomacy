@@ -58,6 +58,7 @@ class Entity extends Sprite {
         }
         return res
     }
+    updatePlayer() {}
     get playerColor() {
         return grid.getHexagon(this.coord).playerColor
     }
@@ -87,6 +88,9 @@ class Entity extends Sprite {
             }
         }
     }
+    get isHitable() {
+        return true
+    }
     hit(dmg) {
         this.hp -= dmg
         this.wasHitted = true
@@ -111,6 +115,9 @@ class Entity extends Sprite {
         return false
     }
     get isUnit() {
+        return false
+    }
+    get isStandable() {
         return false
     }
     draw(ctx) {

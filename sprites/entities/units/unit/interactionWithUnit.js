@@ -55,7 +55,7 @@ class InterationWithUnit {
     }
     addHittedBuildingUndo(cell) {
         if (cell.building.isTown()) {
-            undoManager.lastUndo.town = cell.building.toJSON()
+            undoManager.lastUndo.town = cell.building.toUndoJSON()
         } 
         else {
             undoManager.lastUndo.building = cell.building.toUndoJSON()
@@ -99,17 +99,27 @@ class InterationWithUnit {
             killEnemy = true
 
         let killUnit = hitUnit && killEnemy
-        this.paintHexagons(coord, arr, unit)
+        this.paintHexagons(coord, arr, unit, killUnit)
         this.changeCoord(coord, unit, killUnit)
-
-        
     }
-    paintHexagons(original_coord, arr, unit) {
+    paintHexagons(original_coord, arr, unit, isKillUnit) {
         let coord = Object.assign({}, original_coord)
+    
+        let capturedBuilding = grid.getBuilding(original_coord)
+        let capturedBuildingColor = -1
+        if (capturedBuilding.isStandable)
+            capturedBuildingColor = capturedBuilding.playerColor
+        
         while (!(coord.x == unit.coord.x && coord.y == unit.coord.y)) {
             let hexagon = arr[coord.x][coord.y].hexagon
             hexagon.repaint(unit.playerColor)
             coord = this.way.getParent(coord)
+        }
+
+        if (capturedBuildingColor != -1 && 
+            capturedBuildingColor != unit.playerColor) { // <=> something building captured
+            undoManager.lastUndo.isBuildingCaptured = true
+            capturedBuilding.updatePlayer()
         }
     }
     addKillUnitUndo(unit) {
@@ -125,7 +135,8 @@ class InterationWithUnit {
             coord: {
                 x: building.coord.x,
                 y: building.coord.y
-            }
+            },
+            name: building.name
         }
     }
     changeCoord(coord, unit, killUnit) {
@@ -153,18 +164,29 @@ class InterationWithUnit {
         return (cell.building.notEmpty() && 
             cell.building.playerColor != unit.playerColor && !cell.building.isPassable)
     }
+    markIgnoredBuilding(cell) {
+        this.addHittedBuildingUndo(cell)
+        cell.building.wasHitted = true
+    }
     hitIfCellHasEnemy(cell, unit) {
         // the building is always priority target
         if (this.cellHasEnemyBuilding(cell, unit)) {
-            this.hitBuilding(cell, unit)
-        } else if (cell.unit.notEmpty()) {
+            if (cell.building.isHitable) {
+                this.hitBuilding(cell, unit)
+                return false
+            }
+            this.markIgnoredBuilding(cell)
+        }
+        
+        if (cell.unit.notEmpty()) {
             this.hitUnit(cell, unit)
             return true
         }
         return false
     }
     cantStandOnCell(cell, unit) {
-        return this.cellHasEnemyBuilding(cell, unit) || cell.unit.notEmpty()
+        return (this.cellHasEnemyBuilding(cell, unit) && !cell.building.isStandable) || 
+            cell.unit.notEmpty()
     }
 }
 class Way {

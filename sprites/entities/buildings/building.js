@@ -11,6 +11,9 @@ class Building extends Entity {
     needInstructions() {
         return false
     }
+    get isManufacture() {
+        return false
+    }
     kill() {
         grid.setBuilding(new Empty(), this.coord)
 

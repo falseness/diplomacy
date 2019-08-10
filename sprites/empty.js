@@ -22,9 +22,19 @@ class Empty {
     isExternalProduction() {
         return false
     }
+    get isManufacture() {
+        
+    }
+    get isHitable() {
+        return false
+    }
     isBarrier() {
         return false
     }
+    /*get isStandable() {
+        return false
+    }
+    updatePlayer() {}*/
     isEmpty() {
         return true
     }

@@ -90,6 +90,18 @@ class BuildingProduction extends Production {
         this.killed = true
         grid.setBuilding(new Empty(), this.coord)
     }
+    notOurHexagon(coord, suburbs, arr, player) {
+        let hexagon = arr[coord.x][coord.y].hexagon
+        if (hexagon.playerColor != player)
+            return true
+        if (!hexagon.isSuburb)
+            return false
+        for (let i = 0; i < suburbs.length; ++i) {
+            if (coordsEqually(coord, suburbs[i].coord))
+                return false
+        }
+        return true
+    }
     isWall() {
         return false
     }
@@ -203,6 +215,9 @@ class ManufactureProduction extends BuildingProduction {
         return cell.building.isEmpty() &&
             this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor)
     }
+    get isManufacture() {
+        return true
+    }
     get playerColor() {
         return this.town.playerColor
     }
@@ -248,7 +263,7 @@ class ManufactureProduction extends BuildingProduction {
                 let neighbourCoord = neighbours[j]
 
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
-                    !this.isSuburb(neighbourCoord, arr, player)) {
+                        this.notOurHexagon(neighbourCoord, suburbs, arr, player)) {
                     border.createLine(hexagon.calcPos(), j)
                     continue
                 }
@@ -455,7 +470,7 @@ class SuburbProduction extends BuildingProduction {
                 let neighbourCoord = neighbours[j]
 
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
-                    arr[neighbourCoord.x][neighbourCoord.y].hexagon.playerColor != player) {
+                        this.notOurHexagon(neighbourCoord, suburbs, arr, player)) {
                     border.createLine(hexagon.calcPos(), j)
                     continue
                 }

@@ -13,6 +13,9 @@ class Hexagon extends Sprite {
     firstpaint(_player) {
         this.playerColor = _player
     }
+    sudoPaint(_player) {
+        this.firstpaint(_player)
+    }
     toUndoJSON() {
         let res = {
             coord: {

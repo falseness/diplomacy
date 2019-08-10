@@ -35,26 +35,32 @@ class InteractionWithRangeUnit extends InterationWithUnit {
     }
     sendInstructions(cell, rangeUnit) {
         let coord = cell.coord
+        this.undoAdded = false
 
         if (this.cantRangeInteract(coord, rangeUnit)) {
             //this.removeSelect()
             return super.sendInstructions(cell, rangeUnit)
         }
-
         if (this.cellHasEnemyBuilding(cell, rangeUnit)) {
             this.addThisUndo(rangeUnit)
-
-            this.hitBuilding(cell, rangeUnit)
-
-            this.addKillUnitUndo(rangeUnit)
-
+            this.undoAdded = true
+            
             this.moves = 0
-            this.removeSelect()
-            return true
+
+            if (cell.building.isHitable) {
+                this.hitBuilding(cell, rangeUnit)
+
+                this.addKillUnitUndo(rangeUnit)
+
+                this.removeSelect()
+                return true
+            }
+            this.markIgnoredBuilding(cell)
         }
 
         if (this.cellHasEnemyUnit(cell, rangeUnit)) {
-            this.addThisUndo(rangeUnit)
+            if (!this.undoAdded)
+                this.addThisUndo(rangeUnit)
 
             this.hitUnit(cell, rangeUnit)
 
@@ -62,6 +68,10 @@ class InteractionWithRangeUnit extends InterationWithUnit {
 
             this.moves = 0
 
+            this.removeSelect()
+            return true
+        }
+        if (this.undoAdded) {//attack building but not hitable
             this.removeSelect()
             return true
         }

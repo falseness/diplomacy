@@ -7,6 +7,9 @@ class Manufacture extends Building {
         res.info.income = this.income
         return res
     }
+    get isManufacture() {
+        return true
+    }
 	get income() {
 		return this.constructor.income
 	}

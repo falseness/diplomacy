@@ -61,15 +61,15 @@ let production = {
     },
 }
 class Town extends PreparingManufacture {
-    static maxHP = 15
+    static maxHP = 10//15
     static healSpeed = 3
     static income = 4
     constructor(x, y, justCopy = false, firstTown = false) {
         super(x, y, 'town')
         this.rangeIncrease = 1
-        this.player.towns.push(this)
-
         this.suburbs = []
+        this.updatePlayer()
+
         if (!justCopy)
             this.createFirstSuburbs(firstTown)
         if (firstTown) {
@@ -82,6 +82,42 @@ class Town extends PreparingManufacture {
         this.buildings = []
         this.buildingProduction = []
         this.activeProduction = new Empty()
+    }
+    updatePlayer() {
+        this.player.towns.push(this)
+        grid.getHexagon(this.coord).isSuburb = true
+
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            let cell = grid.getCell(this.suburbs[i].coord)
+            if (cell.unit.notEmpty()) {
+                if (cell.building.isManufacture)
+                    cell.building.kill()
+                cell.hexagon.isSuburb = false
+                this.suburbs.splice(i--, 1)
+                continue
+            }
+            this.suburbs[i].sudoPaint(this.playerColor)
+        }
+    }
+    /*destroy() {
+        this.killed = true
+    }*/
+    get isHitable() {
+        return this.hp
+    }
+    kill() {
+        this.killed = true
+    }
+    hit(dmg) {
+        this.hp -= dmg
+        this.wasHitted = true
+        if (this.hp < 0)
+            this.hp = 0
+
+        return this.killed
+    }
+    get isStandable() {
+        return !this.hp
     }
     isTown() {
         return true
@@ -110,7 +146,7 @@ class Town extends PreparingManufacture {
     toJSON() {
         let res = super.toJSON()
 
-        this.updateSuburbs()
+        //this.updateSuburbs()
         this.updateBuildings()
         this.updateBuildingProduction()
 

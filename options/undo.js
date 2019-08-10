@@ -30,9 +30,17 @@ class UndoManager {
 
         town.buildings.push(res)
     }
-    undoTown(town) {
-        town = town
+    undoTown(town, isBuildingCaptured = false) {
+        //town = town
         unpacker.unpackTown(town)
+        if (!isBuildingCaptured)
+            return
+        let playerColor = grid.getBuilding(town.coord).playerColor
+        for (let i = 0; i < town.suburbs.length; ++i) {
+            let hexagon = grid.getHexagon(town.suburbs[i])
+            if (hexagon.isSuburb)
+                hexagon.sudoPaint(playerColor)
+        }
     }
     unitUndo() {
         let undo = this.arr.pop() //JSON.parse(this.arr.pop())
@@ -77,7 +85,7 @@ class UndoManager {
         }
         let town = undo.town
         if (town) {
-            this.undoTown(town)
+            this.undoTown(town, undo.isBuildingCaptured)
         }
         gameEvent.selected = grid.getUnit(undo.units[0].coord)
     }
