@@ -20,7 +20,7 @@ class GameManager {
 	        top: 0,
 	        bottom: grid.bottom,
 	        scale: {
-	            min: 0.4,
+	            min: 0.32,
 	            max: 1
 	        }
 	    }
@@ -143,7 +143,7 @@ class GameManager {
         ]
         grid = new Grid(0, 0, {
             x: 29,
-            y: 21
+            y: 23
         })
 
         grid.arr[9][6].hexagon.firstpaint(1)
@@ -154,13 +154,13 @@ class GameManager {
 
         let TOWN2 = new Town(19, 6, false, true)
         
-        grid.arr[9][14].hexagon.firstpaint(4)
+        grid.arr[9][16].hexagon.firstpaint(4)
 
-        let TOWN3 = new Town(9, 14, false, true)
+        let TOWN3 = new Town(9, 16, false, true)
 
-        grid.arr[19][14].hexagon.firstpaint(3)
+        grid.arr[19][16].hexagon.firstpaint(3)
 
-        let TOWN4 = new Town(19, 14, false, true)
+        let TOWN4 = new Town(19, 16, false, true)
 
         this.initValues()
         this.clearValues()
