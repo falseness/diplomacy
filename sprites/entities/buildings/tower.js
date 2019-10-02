@@ -1,5 +1,5 @@
 class Tower extends Building {
-    static maxHP = 5
+    static maxHP = 7
     static healSpeed = 1
     static rangeIncrease = 1
     constructor(x, y) {

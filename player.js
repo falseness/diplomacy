@@ -71,9 +71,6 @@ class Player {
         }
         this.units = []
     }
-    loose() {
-        this.crisisPenalty()
-    }
     // no need update arrays, cause those functions is calling after nextTurn function
     get unitsCount() {
         return this.units.length
@@ -88,11 +85,13 @@ class Player {
         }
         return res
     }
+    get isLoosed() {
+        return !this.towns.length && !this.units.length
+    }
     nextTurn() {
         this.gold += this.income
 
-        if (!this.towns.length) {
-            this.loose()
+        if (this.isLoosed) {
             console.log("LOOSE")
         }
 

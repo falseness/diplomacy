@@ -14,7 +14,7 @@ let production = {
     farm: {
         production: ManufactureProduction,
         turns: 2,
-        cost: 12,
+        cost: 18,
         class: Farm,
     },
     archer: {
@@ -25,14 +25,14 @@ let production = {
     },
     KOHb: {
         production: UnitProduction,
-        turns: 3,
+        turns: 2,
         cost: 24,
         class: KOHb
     },
     normchel: {
         production: UnitProduction,
         turns: 3,
-        cost: 28,
+        cost: 32,
         class: Normchel
     },
     catapult: {
@@ -55,8 +55,8 @@ let production = {
     },
     tower: {
         production: ExternalProduction,
-        turns: 4,
-        cost: 20, 
+        turns: 3,
+        cost: 15, 
         class: Tower
     },
 }

@@ -47,6 +47,10 @@ function nextTurn() {
 
     externalNextTurn() 
     players[whooseTurn].nextTurn()
+    if (players[whooseTurn].isLoosed) {
+        nextTurn()
+        return
+    }
 
     timer.nextTurn()
     nextTurnPauseInterface.visible = true

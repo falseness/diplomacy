@@ -1,7 +1,7 @@
 class Farm extends Manufacture {
     static maxHP = 2
     static healSpeed = 1
-    static income = 2
+    static income = 3
     constructor(x, y, town) {
         super(x, y, 'farm')
         this.town = town
