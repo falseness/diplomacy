@@ -12,6 +12,9 @@ class Empty {
     getCell() {
         console.log("ERROR")
     }
+    get hasBar() {
+        return false
+    }
     kill() {}
     isPassable() {
         return true
@@ -24,6 +27,9 @@ class Empty {
     }
     get isManufacture() {
         
+    }
+    get isPreparingManufacture() {
+        return false
     }
     get isHitable() {
         return false
@@ -47,7 +53,7 @@ class Empty {
     removeSelect() {
 
     }
-    isWall() {
+    isObstacle() {
         return false
     }
     needInstructions() {

@@ -1,5 +1,6 @@
 class Bar {
-    constructor(pos, hpCount, healthColor = '#00e600', dmgColor = '#b3b3b3', 
+    #pos
+    constructor(pos, hpCount, healthColor = '#2bb52b', dmgColor = '#b3b3b3', 
         w = basis.r * 0.15, h = basis.r * 0.15) {
         this.rects = new Array(hpCount)
         this.width = w//#00ff00
@@ -17,7 +18,11 @@ class Bar {
         }
         this.pos = pos
     }
+    get pos() {
+        return this.#pos
+    }
     set pos(pos) {
+
         const intervalX = basis.r * 0.05
         const marginY = -basis.r * 0.9
         let hpBarWidth = this.width * this.rects.length + 

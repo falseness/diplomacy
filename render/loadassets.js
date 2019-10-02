@@ -1,6 +1,7 @@
 let assets = {
     size: 1.6 * basis.r,
     logo: new Image(),
+    clock: new Image(),
     undo: new Image(),
     gold: new Image(),
     town: new Image(),
@@ -14,12 +15,15 @@ let assets = {
     catapultLeft: new Image(),
     barrack: new Image(),
     wall: new Image(),
-    tower: new Image()
+    tower: new Image(),
+    mountain: new Image(),
+    lake: new Image()
 }
 let imagesCountLoaded = 0
 let images = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
-        'catapult', 'catapultLeft', 'barrack', 'wall', 'tower']
+        'catapult', 'catapultLeft', 'barrack', 'wall', 'tower',
+        'mountain', 'lake']
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         ++imagesCountLoaded
@@ -52,6 +56,7 @@ let cachedImages = {}
 
 function loadAssets() {
     assets.logo.src = "assets/logo.svg"
+    assets.clock.src = "assets/clock.svg"
     assets.undo.src = "assets/undo.svg"
     
     assets.gold.src = "assets/gold.svg"

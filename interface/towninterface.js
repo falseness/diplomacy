@@ -33,7 +33,7 @@ class TownInterface extends BarrackInterface {
     }
     makeTrainInterfaces() {
         this.switch = new Switch(this.gold.x, this.gold.y + HEIGHT * 0.05,
-            WIDTH * 0.115 * 2, WIDTH * 0.05, 0.04 * HEIGHT, 0.003 * HEIGHT, '#f7f7f7',
+            WIDTH * 0.115 * 2, WIDTH * 0.05, 0.04 * HEIGHT, 0.0015 * HEIGHT, '#f7f7f7',
                 new Text(0, 0, WIDTH * 0.025, 'unit', '#747474'),
                 new Text(0, 0, WIDTH * 0.025, 'building', '#747474'),
             toggleTownTrainInterfaceTab)
@@ -84,10 +84,21 @@ class TownInterface extends BarrackInterface {
         this.background.color = color.hex
         
         if (this.trainInterfacesTab == 'unit') {
-            this.changeUnitTab(town)
+            if (town.isBadlyDamaged) {
+                this.clearTab('unit')
+                this.changeTrainingUnitButton(town)
+            }
+            else {
+                this.changeUnitTab(town)
+            }
         }
         else {
-            this.changeBuildingTab(town)
+            if (town.isBadlyDamaged) {
+                this.clearTab('building')
+            }
+            else {
+                this.changeBuildingTab(town)
+            }
         }
         this.switch.setSelectedColor(color.hex)
         

@@ -33,29 +33,58 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         return this.rangeWay.getDistance(coord) > this.range ||
             coordsEqually(rangeUnit.coord, coord)
     }
+    hitBuildingProduction(building, unit) {
+        if (building.isExternalProduction()) {
+            undoManager.lastUndo.externalProduction = building.toUndoJSON()
+        }
+        else {
+            undoManager.lastUndo.buildingProduction = building.toUndoJSON()
+        }
+
+        building.hit(unit.dmg)
+    }
+    hitBuilding(cell, unit) {
+        if (cell.building.isBuildingProduction()) {
+            this.hitBuildingProduction(cell.building, unit)
+            return
+        }
+        super.hitBuilding(cell, unit)
+    }
+    buildingAttack(cell, rangeUnit) {
+        this.addThisUndo(rangeUnit)
+        this.undoAdded = true
+        
+        this.moves = 0
+
+        if (cell.building.isHitable) {
+            this.hitBuilding(cell, rangeUnit)
+
+            this.addKillUnitUndo(rangeUnit)
+
+            this.removeSelect()
+            return true
+        }
+        this.markIgnoredBuilding(cell)
+    }
     sendInstructions(cell, rangeUnit) {
         let coord = cell.coord
+
+        if (cell.building.isNature) {
+            this.removeSelect()
+            return true
+        }
+
         this.undoAdded = false
+        
 
         if (this.cantRangeInteract(coord, rangeUnit)) {
             //this.removeSelect()
             return super.sendInstructions(cell, rangeUnit)
         }
         if (this.cellHasEnemyBuilding(cell, rangeUnit)) {
-            this.addThisUndo(rangeUnit)
-            this.undoAdded = true
-            
-            this.moves = 0
-
-            if (cell.building.isHitable) {
-                this.hitBuilding(cell, rangeUnit)
-
-                this.addKillUnitUndo(rangeUnit)
-
-                this.removeSelect()
+            let result = this.buildingAttack(cell, rangeUnit)
+            if (result)
                 return true
-            }
-            this.markIgnoredBuilding(cell)
         }
 
         if (this.cellHasEnemyUnit(cell, rangeUnit)) {
@@ -74,6 +103,13 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         if (this.undoAdded) {//attack building but not hitable
             this.removeSelect()
             return true
+        }
+
+        if (cell.building.isBuildingProduction() && 
+            cell.building.playerColor != rangeUnit.playerColor) {
+            let result = this.buildingAttack(cell, rangeUnit)
+            if (result)
+                return true
         }
         if (cell.unit.notEmpty()) {
             // ally unit

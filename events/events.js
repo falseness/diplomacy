@@ -68,7 +68,7 @@ function mousewheel(event) {
     gameEvent.mousewheel(pos, event.wheelDelta)
 }
 class Events {
-    constructor(_barrackInterface, _townInterface, _entityInterface) {
+    constructor(_barrackInterface, _townInterface, _entityInterface, _nextTurnPauseInterface) {
         this.selected = new Empty()
 
         this.lastKeyboardPressTime = 0
@@ -77,7 +77,8 @@ class Events {
         this.interface = {
             barrack: _barrackInterface,
             town: _townInterface,
-            entity: _entityInterface
+            entity: _entityInterface,
+            nextTurnPause: _nextTurnPauseInterface
         }
         if (!mobilePhone) {
             this.screen = new ComputerScreenGroup(
@@ -246,12 +247,13 @@ class Events {
             this.selected = new Empty()
     }
     click(pos, realPos) {
+        if (this.interface.nextTurnPause.click(pos)) 
+            return
+
         if (undoButton.click(pos)) {
             return
         }
         if (backToMenuButton.click(pos))
-            return
-        if (nextTurnButton.click(pos))
             return
 
         if (this.interface.entity.click(pos))
@@ -259,6 +261,9 @@ class Events {
         if (this.interface.barrack.click(pos))
             return
         if (this.interface.town.click(pos))
+            return
+
+        if (nextTurnButton.click(pos))
             return
             
         let coord = getCoord(realPos.x, realPos.y)

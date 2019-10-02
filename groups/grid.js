@@ -113,13 +113,19 @@ class Grid extends SpritesGroup {
         }
     }
     drawOther(ctx) {
+        let tmpBuildings = []
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
 
                 cell.building.draw(ctx)
+                if (cell.building.hasBar)
+                    tmpBuildings.push(cell.building)
                 cell.unit.draw(ctx)
             }
+        }
+        for (let i = 0; i < tmpBuildings.length; ++i) {
+            tmpBuildings[i].drawBars(ctx)
         }
     }
     draw(ctx) {

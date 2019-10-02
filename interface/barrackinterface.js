@@ -13,7 +13,7 @@ class BarrackInterface {
 
         const bestThisWidthWIDTHRatio = 4
 
-        let stroke = 0.002 * WIDTH * 1.15
+        let stroke = 0.001 * WIDTH * 1.15
         let cornerRadius = 0.03 * WIDTH * 1.15
             //let indent = stroke + cornerRadius
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
@@ -84,7 +84,7 @@ class BarrackInterface {
                         color: '#f7f7f7',
                         cornerRadius: 0.03 * HEIGHT,
                         borderColor: 'black',
-                        stroke: 0.003 * HEIGHT,
+                        stroke: 0.0015 * HEIGHT,
                         width: 0.18 * WIDTH * 1.15 * heightWidthBestRatio,
                         height: 0.07 * HEIGHT
                     }
@@ -155,6 +155,16 @@ class BarrackInterface {
         
         this.trainInterfacesCreationLoop(trainInterfaces, index)
     }
+    changeTrainingUnitButton(barrack) {
+        if (!barrack.info.train)
+            return 
+        
+        let type = 'unit'
+
+        this.trainInterfaces[type][barrack.info.train].setButtonText(
+            barrack.info.turns + ' / ' + production[barrack.info.train].turns)
+        this.trainInterfaces[type][barrack.info.train].setCanTrain(true)    
+    }
     changeUnitTab(barrack) {
         const type = 'unit'
         
@@ -164,9 +174,7 @@ class BarrackInterface {
             this.trainInterfaces[type][i].setButtonText('train (' + production[i].turns + ')')
         }
         if (!canTrainNew) {
-            this.trainInterfaces[type][barrack.info.train].setButtonText(
-                         barrack.info.turns + ' / ' + production[barrack.info.train].turns)
-            this.trainInterfaces[type][barrack.info.train].setCanTrain(true)
+            this.changeTrainingUnitButton(barrack)
         }
     }
     change(barrack, color) {
@@ -178,8 +186,8 @@ class BarrackInterface {
     }
     set visible(boolean) {
         this.#visible = boolean
-        if (mobilePhone)
-            nextTurnButton.canClick = !boolean
+        /*if (mobilePhone)
+            nextTurnButton.canClick = !boolean*/
     }
     get visible() {
         return this.#visible

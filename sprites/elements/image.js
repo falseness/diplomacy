@@ -6,6 +6,12 @@ class JustImage {
         this.w = w
         this.h = h
     }
+    get left() {
+        return this.pos.x - this.w / 2
+    }
+    set left(num) {
+        this.pos.x = num + this.w / 2
+    }
     get width() {
         return this.w
     }

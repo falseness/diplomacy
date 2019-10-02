@@ -8,15 +8,19 @@ function drawMain() {
 function drawInterface() {
     interfaceCtx.clearRect(0, 0, width, height)
 
+    nextTurnButton.draw(interfaceCtx)
+
     entityInterface.draw(interfaceCtx)
     barrackInterface.draw(interfaceCtx)
     townInterface.draw(interfaceCtx)
 
-    nextTurnButton.draw(interfaceCtx)
     backToMenuButton.draw(interfaceCtx)
     undoButton.draw(interfaceCtx)
     gameEvent.draw(interfaceCtx)
 
+    timer.draw(interfaceCtx)
+
+    nextTurnPauseInterface.draw(interfaceCtx)
     errorWindow.draw(interfaceCtx)
 }
 

@@ -1,7 +1,7 @@
 class Barrack extends PreparingManufacture {
     static maxHP = 4
     static healSpeed = 1
-    static income = -3
+    static income = -2
     constructor(x, y, town) {
         super(x, y, 'barrack')
         this.town = town

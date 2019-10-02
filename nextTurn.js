@@ -48,6 +48,8 @@ function nextTurn() {
     externalNextTurn() 
     players[whooseTurn].nextTurn()
 
+    timer.nextTurn()
+    nextTurnPauseInterface.visible = true
     
     undoManager.clear()
     saveManager.save()

@@ -4,16 +4,38 @@ class Entity extends Sprite {
         this.hp = this.maxHP
         
         this.killed = this.hp <= 0
+
+        this.hpBarMarginY = basis.r * 1.4
+
+        if (this.hasBar) {
+            this.hpBar = new Bar(
+                {x: this.pos.x + assets.size / 2, 
+                y: this.pos.y + assets.size / 2 + this.hpBarMarginY}, 
+                this.maxHP)
+        }
         
         this.wasHitted = false
         
         this.name = name
+    }
+    get isNature() {
+        return false
+    }
+    get hasBar() {
+        return true
+    }
+    updateHPBar() {
+        if (this.hasBar)
+            this.hpBar.repaintRects(this.hp)
     }
     get maxHP() {
         return this.constructor.maxHP
     }
     get healSpeed() {
         return this.constructor.healSpeed
+    }
+    get isFullHP() {
+        return this.hp == this.maxHP
     }
     static get description() {
         let name = this.name[0].toLowerCase()
@@ -37,7 +59,7 @@ class Entity extends Sprite {
         
         return pos
     }
-    isWall() {
+    isObstacle() {
         return false
     }
     isExternalProduction() {
@@ -93,7 +115,11 @@ class Entity extends Sprite {
     }
     hit(dmg) {
         this.hp -= dmg
+
+        this.updateHPBar()
+
         this.wasHitted = true
+
         if (this.hp <= 0)
             this.kill()
 
@@ -119,6 +145,10 @@ class Entity extends Sprite {
     }
     get isStandable() {
         return false
+    }
+    drawBars(ctx) {
+        if (!this.isFullHP)
+            this.hpBar.draw(ctx)
     }
     draw(ctx) {
         drawCachedImage(ctx, cachedImages[this.name], this.pos)

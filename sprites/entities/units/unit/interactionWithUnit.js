@@ -120,6 +120,7 @@ class InterationWithUnit {
             capturedBuildingColor != unit.playerColor) { // <=> something building captured
             undoManager.lastUndo.isBuildingCaptured = true
             capturedBuilding.updatePlayer()
+            capturedBuilding.isRecentlyCaptured = true
         }
     }
     addKillUnitUndo(unit) {
@@ -227,7 +228,7 @@ class Way {
         let cell = arr[neighbour.x][neighbour.y]
         return (cell.unit.notEmpty() && cell.unit.playerColor == player && 
             !coordsEqually(neighbour, v0)) || 
-            (cell.building.isWall() && cell.building.playerColor == player)
+            cell.building.isObstacle(player)
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {
         // if hexagon has the same color, he will be processed later

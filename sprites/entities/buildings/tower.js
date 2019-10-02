@@ -25,4 +25,7 @@ class Tower extends Building {
     isBarrier() {
         return true
     }
+    get isExternal() {
+        return true
+    }
 }

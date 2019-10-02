@@ -1,21 +1,31 @@
 function destroySelected() {
-    undoManager.startUndo('destroyExternal')
+    let type = 'destroyBuilding'
+    if (gameEvent.selected.isTown()) 
+        type = 'destroyTown'
+    if (gameEvent.selected.isExternalProduction()) 
+        type = 'destroyExternalProduction'
+    else if (gameEvent.selected.isBuildingProduction())
+        type = 'destroyBuildingProduction'
+    
+    undoManager.startUndo(type)
     undoManager.lastUndo.building = gameEvent.selected.toUndoJSON() 
 
-    gameEvent.selected.kill()
+
+
+    gameEvent.selected.destroy()
     gameEvent.removeSelection()
 }
 class EntityInterface {
     #visible = false
     constructor() {
 
-        let stroke = 0.002 * WIDTH
+        let stroke = 0.001 * WIDTH
         let cornerRadius = 0.03 * WIDTH
         let indent = this.stroke + this.cornerRadius
 
         this.pos = {
             x: 0,
-            y: 0.55 * HEIGHT//0.55 * HEIGHT
+            y: 0.5 * HEIGHT//0.55 * HEIGHT
         }
         this.height = HEIGHT - this.pos.y
         this.width = this.height * 1.7
@@ -34,7 +44,7 @@ class EntityInterface {
 
         this.entity.name = new Text(
             this.img.x + this.img.width / 2,
-            this.pos.y + this.height * 0.075,
+            this.pos.y + this.height * 0.02,
             this.height * 0.2
         )
 
@@ -59,13 +69,13 @@ class EntityInterface {
                 color: '#f7f7f7',
                 cornerRadius: 0.02 * HEIGHT,
                 borderColor: 'black',
-                stroke: 0.003 * HEIGHT,
+                stroke: 0.0015 * HEIGHT,
                 width: 0.11 * WIDTH,
                 height: 0.05 * HEIGHT
             }
         }
         this.destroyButton = new Button(
-            new Rect(this.entity.name.x, HEIGHT - this.height * 0.15 - button.rect.height, 
+            new Rect(this.entity.name.x, HEIGHT - this.height * 0.075 - button.rect.height, 
                 button.rect.width, button.rect.height, 
                 [button.rect.cornerRadius, button.rect.cornerRadius, 
                 button.rect.cornerRadius, button.rect.cornerRadius],
@@ -93,8 +103,12 @@ class EntityInterface {
 
         this.img.image = entity.name
         this.entity.name.text = entity.name
-        this.entity.info.text = join(entity.info, ': ', '\n')
-        this.destroyButton.canClick = entity.destroyable
+        if (entity.isDescriptionInfo) 
+            this.entity.info.text = entity.info
+        else
+            this.entity.info.text = join(entity.info, ': ', '\n')
+        
+        this.destroyButton.canClick = entity.isDestroyable
         this.updateSizes()
 
         this.visible = true
@@ -110,8 +124,11 @@ class EntityInterface {
         return this.background.isInside(pos)
     }
     click(pos) {
+        if (!this.visible)
+            return false
+        
         this.destroyButton.click(pos)
-        return this.visible && this.isInside(pos)
+        return this.isInside(pos)
     }
     draw(ctx) {
         if (!this.visible)

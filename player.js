@@ -1,5 +1,5 @@
 class Player {
-    constructor(color, gold = 0, neutral) {
+    constructor(color, gold = 0, neutral = false) {
         this.gold = gold
         this.towns = []
         this.units = []
@@ -73,6 +73,20 @@ class Player {
     }
     loose() {
         this.crisisPenalty()
+    }
+    // no need update arrays, cause those functions is calling after nextTurn function
+    get unitsCount() {
+        return this.units.length
+    }
+    get townsCount() {
+        return this.towns.length
+    }
+    get barracksCount() {
+        let res = 0
+        for (let i = 0; i < this.towns.length; ++i) {
+            res += this.towns[i].barracksCount
+        }
+        return res
     }
     nextTurn() {
         this.gold += this.income

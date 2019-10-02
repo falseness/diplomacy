@@ -1,7 +1,7 @@
 class UndoManager {
     constructor() {
         this.arr = []
-        this.maximumSize = 10
+        this.maximumSize = 30
     }
     clear() {
         this.arr = []
@@ -16,7 +16,9 @@ class UndoManager {
             type: type,
             hexagons: [],
             units: [],
-            killUnit: []
+            killUnit: [],
+            townExternal: [],
+            townExternalProduction: []
         })
     }
     get lastUndo() {
@@ -25,10 +27,12 @@ class UndoManager {
     undoBuilding(building) {
         // cant be empty
         let res = unpacker.fullUnpackBuilding(building)
-        let town = grid.getBuilding(building.town.coord)
-        res.town = town
+        if (building.town) {
+            let town = grid.getBuilding(building.town.coord)
+            res.town = town
 
-        town.buildings.push(res)
+            town.buildings.push(res)
+        }
     }
     undoTown(town, isBuildingCaptured = false) {
         //town = town
@@ -41,6 +45,18 @@ class UndoManager {
             if (hexagon.isSuburb)
                 hexagon.sudoPaint(playerColor)
         }
+    }
+    undoExternalProduction(exProduction) {
+        let res = unpacker.fullUnpackExternal(exProduction)
+        externalProduction.push(res)
+    }
+    undoBuildingProduction(buildingProduction) {
+        let res = unpacker.fullUnpackManufacture(buildingProduction)
+        let town = grid.getBuilding(buildingProduction.town.coord)
+
+        res.town = town
+
+        town.buildingProduction.push(res)
     }
     unitUndo() {
         let undo = this.arr.pop() //JSON.parse(this.arr.pop())
@@ -68,24 +84,29 @@ class UndoManager {
         let building = undo.building
         let buildingProduction = undo.buildingProduction
         let exProduction = undo.externalProduction
+
+        let townExternalProduction = undo.townExternalProduction
+        let townExternal = undo.townExternal
+
         if (building) {
             this.undoBuilding(building)
         }
         if (buildingProduction) {
-            let res = unpacker.fullUnpackManufacture(buildingProduction)
-            let town = grid.getBuilding(buildingProduction.town.coord)
-
-            res.town = town
-
-            town.buildingProduction.push(res)
+            this.undoBuildingProduction(buildingProduction)
         }
         if (exProduction) {
-            let res = unpacker.fullUnpackExternal(exProduction)
-            externalProduction.push(res)
+            this.undoExternalProduction(exProduction)
         }
         let town = undo.town
         if (town) {
             this.undoTown(town, undo.isBuildingCaptured)
+            
+            for (let i = 0; i < townExternalProduction.length; ++i) {
+                this.undoExternalProduction(townExternalProduction[i])
+            }
+            for (let i = 0; i < townExternal.length; ++i) {
+                this.undoBuilding(townExternal[i])
+            }
         }
         gameEvent.selected = grid.getUnit(undo.units[0].coord)
     }
@@ -124,10 +145,26 @@ class UndoManager {
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
         gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
-    destroyExternalUndo() {
+    destroyBuildingUndo() {
         let undo = this.arr.pop()
 
-        let res = unpacker.fullUnpackBuilding(undo.building)
+        this.undoBuilding(undo.building)
+    }
+    destroyTownUndo() {
+        let undo = this.arr.pop()
+
+        this.undoTown(undo.building)
+    }
+
+    destroyBuildingProductionUndo() {
+        let undo = this.arr.pop()
+
+        this.undoBuildingProduction(undo.building)
+    }
+    destroyExternalProductionUndo() {
+        let undo = this.arr.pop()
+
+        this.undoExternalProduction(undo.building)
     }
     undo() {
         if (!this.arr.length)
@@ -137,24 +174,19 @@ class UndoManager {
         gameEvent.hideAll()
         gameEvent.removeSelection()
 
-        if (this.lastUndo.type == 'unit') {
-            this.unitUndo()
+        let func = {
+            unit: this.unitUndo, 
+            prepareUnit: this.preparingUnitUndo,
+            prepareBuilding: this.preparingBuildingUndo,
+            prepareSuburb: this.preparingSuburbUndo, 
+            destroyBuilding: this.destroyBuildingUndo,
+            destroyTown: this.destroyTownUndo,
+            destroyBuildingProduction: this.destroyBuildingProductionUndo,
+            destroyExternalProduction: this.destroyExternalProductionUndo
         }
-        else if (this.lastUndo.type == 'prepareUnit') {
-            this.preparingUnitUndo()
-        }
-        else if (this.lastUndo.type == 'prepareBuilding') {
-            this.preparingBuildingUndo()
-        } 
-        else if (this.lastUndo.type == 'prepareSuburb') {
-            this.preparingSuburbUndo()
-        }
-        else if (this.lastUndo.type == 'destroyExternal') {
-            this.destroyExternalUndo()
-        }
-        else {
-            console.log("ERROR")
-        }
+
+        func[this.lastUndo.type].call(this)
+        
         if (wasSelection)
             gameEvent.selected.select()
         else

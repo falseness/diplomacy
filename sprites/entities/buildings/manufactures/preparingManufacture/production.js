@@ -86,23 +86,37 @@ class BuildingProduction extends Production {
         super(turns, cost, _class, name)
         this.killed = false
     }
+    isTown() {
+        return false
+    }
+    get isHitable() {
+        return true
+    }
+    get hasBar() {
+        return false
+    }
+    get isPreparingManufacture() {
+        return false
+    }
     kill() {
         this.killed = true
         grid.setBuilding(new Empty(), this.coord)
     }
-    isOurSuburb(coord, suburbs, arr, player) {
-        let hexagon = arr[coord.x][coord.y].hexagon
+    isOurSuburb(coord, suburbs) {
         for (let i = 0; i < suburbs.length; ++i) {
             if (coordsEqually(coord, suburbs[i].coord))
                 return true
         }
         return false
     }
-    isWall() {
+    isObstacle() {
         return false
     }
     isPassable() {
         return true
+    }
+    hit() {
+
     }
     isExternalProduction() {
         return false
@@ -157,14 +171,25 @@ class BuildingProduction extends Production {
     isKilled() {
         return this.killed
     }
+    get canBeDestroyed() {
+        return true
+    }
+    get isDestroyable() {
+        return this.canBeDestroyed && this.isMyTurn
+    }
     get info() {
         let building = {}
         building.name = this.name
         building.info = {
-            turns: this.turns //,    
-                //cost: this.cost
+            turns: this.turns,
+            hp: 1 + `\nmelee units don't lose
+all moves when attacking it\n\nunit on it is priority target`,
         }
+        building.isDestroyable = this.isDestroyable
         return building
+    }
+    hit() {
+        this.kill()
     }
     sendInstructions(coord, town) {
         town.minusGold(this.cost)
@@ -432,7 +457,8 @@ class SuburbProduction extends BuildingProduction {
                     used[neighbours[i].x][neighbours[i].y] = true
                 }
             }
-            if (this.isSuburb(v.coord, arr, player))
+            if (this.isSuburb(v.coord, arr, player) && 
+                    this.isOurSuburb(v.coord, town.suburbs))
                 ++suburbsUsedCount
 
             if (suburbsUsedCount == town.suburbs.length)

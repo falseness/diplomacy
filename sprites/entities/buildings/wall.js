@@ -9,19 +9,19 @@ class Wall extends Building {
     }
     static get description() {
         let res = super.description
-        res.info['heal speed'] += "\n\nowner can destroy it instantly" +
-            "\narchers can't shoot through it" + "\nunits can't stand on it"
+        res.info['heal speed'] += "\n\narchers can't shoot through it" +
+            "\nunits can't stand on it"
         return res
     }
-    get info() {
-        let res = super.info
-        res.destroyable = this.destroyable && this.isMyTurn
-        return res
-    }
-    isWall() {
-        return true
+    // obstacle -> cant stand
+    // barrier -> cant shoot
+    isObstacle(playerColor) {
+        return this.playerColor == playerColor
     }
     isBarrier() {
+        return true
+    }
+    get isExternal() {
         return true
     }
 }

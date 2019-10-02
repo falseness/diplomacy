@@ -8,15 +8,15 @@ class Unit extends Entity {
         this.interaction = new InterationWithUnit(this.speed)
         this.hpBarMarginY = -basis.r * 0.1
         this.movesBarMarginY = basis.r * 0.1
-        this.hpBar = new Bar(
-            {x: this.pos.x + assets.size / 2, 
-            y: this.pos.y + assets.size / 2 + this.hpBarMarginY}, 
-            this.maxHP)
+        
+        this.hpBar.healthColor = '#00e600'
         const movesColor = '#ffa500'
         this.movesBar = new Bar(
             {x: this.pos.x + assets.size / 2, 
             y: this.pos.y + assets.size / 2 + this.movesBarMarginY }, 
             this.speed, movesColor)
+
+        this.trimBars()
     }
     static get description() {
         let res = super.description
@@ -110,9 +110,6 @@ class Unit extends Entity {
             return 0
         return super.hpIncrease
     }
-    updateHPBar() {
-        this.hpBar.repaintRects(this.hp)
-    }
     updateMovesBar() {
         this.movesBar.repaintRects(this.moves)
     }
@@ -125,15 +122,17 @@ class Unit extends Entity {
         
         this.wasHitted = false
     }
-    hit(dmg) {
-        super.hit(dmg)
-        this.updateHPBar()
+    get isFullMoves() {
+        return this.moves == this.speed
+    }
+    drawBars(ctx) {
+        super.drawBars(ctx)
+
+        if (this.isMyTurn && !this.isFullMoves)
+            this.movesBar.draw(ctx)
     }
     draw(ctx) {
-        this.hpBar.draw(ctx)
-
-        if (this.isMyTurn)
-            this.movesBar.draw(ctx)
+        this.drawBars(ctx)
 
         super.draw(ctx)
     }

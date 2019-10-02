@@ -7,21 +7,7 @@ function rgbToHex(r, g, b)
 {
     return '#' + decimalToHex(r) + decimalToHex(g) + decimalToHex(b)
 }
-/*function correctLightness(color, ratio = 1.2)
-{
-    for (i in color)
-    {
-        if (!color[i])
-            color[i] = 1
-    }
-    let result = 
-    {
-        r: Math.min(Math.max(Math.floor(color.r * ratio), 0), 255),
-        g: Math.min(Math.max(Math.floor(color.g * ratio), 0), 255),
-        b: Math.min(Math.max(Math.floor(color.b * ratio), 0), 255)
-    }
-    return result;
-}*/
+
 /*
 using colors:
     unit:

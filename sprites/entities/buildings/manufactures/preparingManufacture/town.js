@@ -20,43 +20,43 @@ let production = {
     archer: {
         production: UnitProduction,
         turns: 2,
-        cost: 15,
+        cost: 16,
         class: Archer
+    },
+    KOHb: {
+        production: UnitProduction,
+        turns: 3,
+        cost: 24,
+        class: KOHb
     },
     normchel: {
         production: UnitProduction,
         turns: 3,
-        cost: 30,
+        cost: 28,
         class: Normchel
     },
     catapult: {
         production: UnitProduction,
-        turns: 4,
-        cost: 40,
+        turns: 3,
+        cost: 50,
         class: Catapult
-    },
-    KOHb: {
-        production: UnitProduction,
-        turns: 4,
-        cost: 40,
-        class: KOHb
     },
     barrack: {
         production: ManufactureProduction,
         turns: 3, //4 20
-        cost: 20,
+        cost: 25,
         class: Barrack,
     },
     wall: {
         production: ExternalProduction,
-        turns: 4,
-        cost: 3, 
+        turns: 3,
+        cost: 5, 
         class: Wall
     },
     tower: {
         production: ExternalProduction,
         turns: 4,
-        cost: 15, 
+        cost: 20, 
         class: Tower
     },
 }
@@ -69,6 +69,7 @@ class Town extends PreparingManufacture {
         this.rangeIncrease = 1
         this.suburbs = []
         this.updatePlayer()
+        this.isRecentlyCaptured = false
 
         if (!justCopy)
             this.createFirstSuburbs(firstTown)
@@ -83,10 +84,7 @@ class Town extends PreparingManufacture {
         this.buildingProduction = []
         this.activeProduction = new Empty()
     }
-    updatePlayer() {
-        this.player.towns.push(this)
-        grid.getHexagon(this.coord).isSuburb = true
-
+    updateSuburbsAndBuildings() {
         for (let i = 0; i < this.suburbs.length; ++i) {
             let cell = grid.getCell(this.suburbs[i].coord)
             if (cell.unit.notEmpty()) {
@@ -96,27 +94,47 @@ class Town extends PreparingManufacture {
                 this.suburbs.splice(i--, 1)
                 continue
             }
+            else if (cell.building.canBeDestroyed) {
+                if (cell.building.isManufacture) {}
+                else if (cell.building.isExternalProduction()){ 
+                    undoManager.lastUndo.townExternalProduction.push(cell.building.toUndoJSON())
+                }
+                else if (cell.building.isExternal) {
+                    undoManager.lastUndo.townExternal.push(cell.building.toUndoJSON())
+                }
+                else {
+                    console.log('error')
+                }
+                cell.building.kill()
+            }
             this.suburbs[i].sudoPaint(this.playerColor)
         }
     }
-    /*destroy() {
-        this.killed = true
-    }*/
+    updatePlayer() {
+        this.player.towns.push(this)
+        grid.getHexagon(this.coord).isSuburb = true
+
+        // first suburb must be town suburb
+        
+        this.updateSuburbsAndBuildings()
+    }
     get isHitable() {
         return this.hp
-    }
-    kill() {
-        this.killed = true
     }
     hit(dmg) {
         this.hp -= dmg
         this.wasHitted = true
         if (this.hp < 0)
             this.hp = 0
-
+        
+        this.updateHPBar()
+        
         return this.killed
     }
     get isStandable() {
+        return !this.hp
+    }
+    get isBadlyDamaged() {
         return !this.hp
     }
     isTown() {
@@ -143,6 +161,21 @@ class Town extends PreparingManufacture {
             }
         }
     }
+    get canBeDestroyed() {
+        return this.isRecentlyCaptured
+    }
+    destroy() {
+        for (let i = 0; i < this.buildings.length; ++i) {
+            this.buildings[i].destroy()
+        }
+        for (let i = 0; i < this.buildingProduction.length; ++i) {
+            this.buildingProduction[i].destroy()
+        }
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            this.suburbs[i].isSuburb = false
+        }
+        super.destroy()
+    }
     toJSON() {
         let res = super.toJSON()
 
@@ -157,6 +190,7 @@ class Town extends PreparingManufacture {
             suburbs.push(this.suburbs[i].coord)
         }
         res.suburbs = suburbs
+        res.isRecentlyCaptured = this.isRecentlyCaptured
 
         return res
     }
@@ -169,6 +203,11 @@ class Town extends PreparingManufacture {
         if (this.activeProduction.notEmpty())
             town.activeProduction = this.activeProduction.name
 
+        if (this.isBadlyDamaged) {
+            town.isBadlyDamaged = true
+            if (town.info.turns)
+                town.info.turns = "\u221E" + ' (' + town.info.turns + ')'
+        }
         return town
     }
     updateBuildings() {
@@ -289,6 +328,8 @@ class Town extends PreparingManufacture {
         this.activeProduction.choose(this)
     }
     prepare(what) {
+        if (this.isBadlyDamaged)
+            return false
         // bug: unit production with prepare time == 0 cant be prepared
         if (production[what].production.isUnitProduction())
             return super.prepare(what)
@@ -326,11 +367,27 @@ class Town extends PreparingManufacture {
             this.buildings[i].nextTurn()
         }
     }
+    get barracksCount() {
+        let res = 0
+        for (let i = 0; i < this.buildings.length; ++i) {
+            res += this.buildings[i].isPreparingManufacture
+        }
+        return res
+    }
+    unitPreparingLogic() {
+        if (this.isBadlyDamaged)
+            return 
+        super.unitPreparingLogic()
+    }
     nextTurn() {
         super.nextTurn()
+
         this.updateSuburbs()
-        this.buildingPreparingLogic()
+        if (!this.isBadlyDamaged)
+            this.buildingPreparingLogic()
         this.buildingsNextTurn()
+
+        this.isRecentlyCaptured = false
     }
 }
 

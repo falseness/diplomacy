@@ -3,7 +3,7 @@ class Catapult extends RangeUnit {
     static healSpeed = 1
     static dmg = 1
     static speed = 1
-    static salary = 5
+    static salary = 3
     static range = 5
     static buildingDMG = 3
     constructor(x, y) {
@@ -30,8 +30,7 @@ class Catapult extends RangeUnit {
         return unit
     }
     draw(ctx) {
-        this.hpBar.draw(ctx)
-        this.movesBar.draw(ctx)
+        this.drawBars(ctx)
         drawCachedImage(ctx, cachedImages[this.mirrorX ? 'catapultLeft' : this.name], this.pos)
     }
 }

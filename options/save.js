@@ -24,7 +24,9 @@ class JsonUnpackManager {
             farm: Farm,
             barrack: Barrack,
             wall: Wall, 
-            tower: Tower
+            tower: Tower,
+            lake: Lake,
+            mountain: Mountain
         }
     }
     unpackUnit(packedUnit, _unit) {
@@ -63,7 +65,7 @@ class JsonUnpackManager {
                 this.unitClass[packedBuilding.unitProduction.name],
                 packedBuilding.unitProduction.name)
         }
-
+        building.updateHPBar()
         return building
     }
     fullUnpackBuilding(packedBuilding) {
@@ -125,8 +127,10 @@ class JsonUnpackManager {
     }
     unpackTown(packedTown) {
         let town = new Town(packedTown.coord.x, packedTown.coord.y, true)
+        town.isRecentlyCaptured = packedTown.isRecentlyCaptured
 
         town.hp = packedTown.hp
+        town.updateHPBar()
         town.wasHitted = packedTown.wasHitted
 
         town.suburbs = []
@@ -160,11 +164,21 @@ class JsonUnpackManager {
                 packedTown.unitProduction.name)
         }
     }
-    unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, jsonWhooseTurn) {
+    unpackAllNature(packedNature) {
+        nature = []
+        for (let i = 0; i < packedNature.length; ++i) {
+            let natureBuilding = new this.buildingClass[packedNature[i].name](
+                packedNature[i].coord.x, packedNature[i].coord.y)
+        }
+    }
+    unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, jsonNature, jsonTimer, jsonWhooseTurn) {
+        let packedTimer = JSON.parse(jsonTimer)
+        timer.time = packedTimer.time
         let packedGrid = JSON.parse(jsonGrid)
         let packedPlayers = JSON.parse(jsonPlayers)
         let packedExternal = JSON.parse(jsonExternal)
         let packedExternalProduction = JSON.parse(jsonExternalProduction)
+        let packedNature = JSON.parse(jsonNature)
         whooseTurn = JSON.parse(jsonWhooseTurn)
 
         let gridSize = {
@@ -194,5 +208,6 @@ class JsonUnpackManager {
             }
         }
         this.unpackAllExternal(packedExternal, packedExternalProduction)
+        this.unpackAllNature(packedNature)
     }
 }

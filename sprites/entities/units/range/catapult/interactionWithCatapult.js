@@ -37,6 +37,11 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             this.addKillUnitUndo(cellUnit)
     }
     hitBuilding(cell, catapult) {
+        if (cell.building.isBuildingProduction()) {
+            this.hitBuildingProduction(cell.building, catapult)
+            return
+        }
+
         this.addHittedBuildingUndo(cell)
 
         let cellBuilding = cell.building
@@ -45,7 +50,12 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             this.addKillBuildingUndo(cellBuilding)
     }
     sendInstructions(cell, catapult) {
-    	let coord = cell.coord
+        let coord = cell.coord
+        
+        if (cell.building.isNature) {
+            this.removeSelect()
+            return true
+        }
 
     	if (this.isBlindArea(coord) &&
     		this.cellHasEnemy(cell, catapult)) {

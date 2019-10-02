@@ -1,9 +1,9 @@
 class KOHb extends Unit {
     static maxHP = 3
-    static healSpeed = 1
+    static healSpeed = 2
     static dmg = 2
     static speed = 4
-    static salary = 5
+    static salary = 2
     constructor(x, y) {
         super(x, y, 'KOHb')
         this.mirrorX = false
@@ -15,8 +15,7 @@ class KOHb extends Unit {
         return res
     }
     draw(ctx) {
-        this.hpBar.draw(ctx)
-        this.movesBar.draw(ctx)
+        this.drawBars(ctx)
         drawCachedImage(ctx, cachedImages[this.mirrorX ? 'KOHbLeft' : this.name], this.pos)
     }
 }

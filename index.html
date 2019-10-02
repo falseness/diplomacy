@@ -46,6 +46,7 @@
     <script src='options/save.js'></script>
     <script src='options/undo.js'></script>
     <script src='options/classManager.js'></script>
+    <script src='options/timer.js'></script>
 
     <script src='render/loadassets.js'></script>
     <script src='render/image.js'></script>
@@ -55,6 +56,7 @@
     <script src='interface/entityinterface.js'></script>
     <script src='interface/barrackinterface.js'></script>
     <script src='interface/towninterface.js'></script>
+    <script src='interface/nextTurnPause.js'></script>
 
     <script src='sprites/sprite.js'></script>
     <script src='groups/spritesGroup.js'></script>
@@ -62,11 +64,15 @@
     <script src='sprites/empty.js'></script>
     <script src='sprites/elements/text.js'></script>
     <script src='sprites/elements/rect.js'></script>
+
     <script src='sprites/elements/button.js'></script>
+    <script src='sprites/elements/menuButton.js'></script>
+
     <script src='sprites/elements/temporaryWindow.js'></script>
     <script src='sprites/elements/image.js'></script>
     <script src='sprites/elements/imageButton.js'></script>
     <script src='sprites/elements/switch.js'></script>
+    <script src='sprites/elements/imageWithLabel.js'></script>
     <script src='sprites/border.js'></script>
 
     <script src='events/geteventpos.js'></script>
@@ -101,6 +107,11 @@
     <script src='sprites/entities/units/range/catapult/catapult.js'></script>
 
     <script src='sprites/entities/buildings/building.js'></script>
+
+    <script src='sprites/entities/buildings/nature/nature.js'></script>
+    <script src='sprites/entities/buildings/nature/lake.js'></script>
+    <script src='sprites/entities/buildings/nature/mountain.js'></script>
+
     <script src='sprites/entities/buildings/tower.js'></script>
     <script src='sprites/entities/buildings/wall.js'></script>
 
@@ -145,9 +156,10 @@
         //errorWindow.visible = true
         let barrackInterface = new BarrackInterface()
         let townInterface = new TownInterface()
+        let nextTurnPauseInterface = new NextTurnPauseInterface()
         
         let entityInterface = new EntityInterface()
-        let gameEvent = new Events(barrackInterface, townInterface, entityInterface)
+        let gameEvent = new Events(barrackInterface, townInterface, entityInterface, nextTurnPauseInterface)
         let border = new Border()
         let attackBorder = new Border()
         
@@ -156,11 +168,12 @@
         let players = []
         let external = []
         let externalProduction = []
+        let nature = []
         let grid
         let mapBorder
         let gameExit = false
-
-        
+        let timer = new Timer()
+    
         let undoButton = new TwoPositionsImageButton(
             new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
             new Rect(0 * nextTurnButtonSize, HEIGHT - 1 * nextTurnButtonSize, 
@@ -171,7 +184,7 @@
         let backToMenuButtonSize = nextTurnButtonSize * 2 / 3
 
         let backToMenuButton = new ImageButton(
-            new MenuIconImage({ x: NaN, y: NaN }, 'white', backToMenuButtonSize, 'black', 0.01 * HEIGHT, 0.005 * HEIGHT),
+            new MenuIconImage({ x: NaN, y: NaN }, 'white', backToMenuButtonSize, 'black', 0.01 * HEIGHT, 0.0025 * HEIGHT),
             new Rect(backToMenuButtonSize * 0.25, backToMenuButtonSize * 0.25,
                 backToMenuButtonSize, backToMenuButtonSize),
             menuBack
@@ -183,11 +196,15 @@
                 let _players = JSON.stringify(players)
                 let _external = JSON.stringify(external)
                 let _externalProduction = JSON.stringify(externalProduction)
+                let _nature = JSON.stringify(nature)
+                let _timer = JSON.stringify(timer)
                 let _whooseTurn = JSON.stringify(whooseTurn)
                 localStorage.setItem('grid', _grid)
                 localStorage.setItem('players', _players)
                 localStorage.setItem('external', _external)
                 localStorage.setItem('externalProduction', _externalProduction)
+                localStorage.setItem('nature', _nature)
+                localStorage.setItem('timer', _timer)
                 localStorage.setItem('whooseTurn', _whooseTurn)
             }
             catch {
@@ -212,9 +229,13 @@
             let _players = localStorage.getItem('players')
             let _external = localStorage.getItem('external')
             let _externalProduction = localStorage.getItem('externalProduction')
+            let _nature = localStorage.getItem('nature')
+            let _timer = localStorage.getItem('timer')
             let _whooseTurn = localStorage.getItem('whooseTurn')
 
-            unpacker.unpackAll(_grid, _players, _external, _externalProduction, _whooseTurn)
+
+            unpacker.unpackAll(_grid, _players, _external, _externalProduction, 
+                _nature, _timer, _whooseTurn)
 
             gameEvent.hideAll()
                 //console.log("loaded")
@@ -238,6 +259,11 @@
             requestAnimationFrame(waitForImagesLoad)
         }
         window.addEventListener('load', start)
+        window.onblur = function() {
+            if (!menu.visible) {
+                //menuBack()
+            }
+        }
     </script>
 </body>
 

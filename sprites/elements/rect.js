@@ -1,7 +1,10 @@
 class Rect {
-    constructor(x, y, width, height, cornerRadius = [0, 0, 0, 0], strokeWidth = 0.002 * width, color = '#78a85d', strokeColor = 'black') {
+    constructor(x, y, width, height, cornerRadius = [0, 0, 0, 0], strokeWidth = 0.001 * WIDTH,
+         color = '#78a85d', strokeColor = 'black', light = false) {
         this.x = x
         this.y = y
+
+        this.light = light
 
         this.width = width
         this.height = height
@@ -27,6 +30,12 @@ class Rect {
     }
     set centerX(x) {
         this.x = x - this.width / 2
+    }
+    get centerY() {
+        return this.y + this.height / 2
+    }
+    set centerY(y) {
+        this.y = y - this.height / 2
     }
     get right() {
         return this.x + this.width
@@ -76,11 +85,27 @@ class Rect {
         ctx.lineWidth = this.strokeWidth
 
         this.drawShape(ctx)
-        if (this.strokeWidth)
-            ctx.stroke()
+
         if (this.color)
             ctx.fill()
+        if (this.strokeWidth)
+            ctx.stroke()
 
         ctx.closePath()
+
+        if (this.light) {
+            ctx.beginPath()
+
+            ctx.fillStyle = 'white'
+            this.drawShape(ctx)
+            
+            ctx.globalAlpha = this.light
+
+            ctx.fill()
+
+            ctx.globalAlpha = 1.0
+
+            ctx.closePath()
+        }
     }
 }

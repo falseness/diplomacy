@@ -3,7 +3,7 @@ class Archer extends RangeUnit {
     static healSpeed = 1
     static dmg = 1
     static speed = 2
-    static salary = 2
+    static salary = 1
     static range = 2
     constructor(x, y) {
         super(x, y, 'archer')
