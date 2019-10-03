@@ -232,6 +232,17 @@ class Town extends PreparingManufacture {
             }
         }
     }
+    get suburbsCount() {
+        let countSuburbs = 0
+        for (let i = 0; i < this.suburbs.length; ++i) {
+            if (this.suburbs[i].playerColor != this.playerColor ||
+                !this.suburbs[i].isSuburb) {
+                continue
+            }
+            ++countSuburbs
+        }
+        return countSuburbs
+    }
     get income() {
         let income = super.income
         for (let i = 0; i < this.buildings.length; ++i) {
@@ -241,14 +252,7 @@ class Town extends PreparingManufacture {
             }
             income += this.buildings[i].income
         }
-        let countSuburbs = 0
-        for (let i = 0; i < this.suburbs.length; ++i) {
-            if (this.suburbs[i].playerColor != this.playerColor ||
-                !this.suburbs[i].isSuburb) {
-                continue
-            }
-            ++countSuburbs
-        }
+        let countSuburbs = this.suburbsCount
         const suburbsIncome = 1
         income += countSuburbs * suburbsIncome
         return income

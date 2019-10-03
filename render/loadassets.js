@@ -1,7 +1,8 @@
 let assets = {
     size: 1.6 * basis.r,
     logo: new Image(),
-    clock: new Image(),
+    clock: new Image,
+    i: new Image(),
     undo: new Image(),
     gold: new Image(),
     town: new Image(),
@@ -57,6 +58,7 @@ let cachedImages = {}
 function loadAssets() {
     assets.logo.src = "assets/logo.svg"
     assets.clock.src = "assets/clock.svg"
+    assets.i.src = "assets/i.svg"
     assets.undo.src = "assets/undo.svg"
     
     assets.gold.src = "assets/gold.svg"

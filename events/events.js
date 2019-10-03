@@ -68,7 +68,8 @@ function mousewheel(event) {
     gameEvent.mousewheel(pos, event.wheelDelta)
 }
 class Events {
-    constructor(_barrackInterface, _townInterface, _entityInterface, _nextTurnPauseInterface) {
+    constructor(_barrackInterface, _townInterface, _entityInterface, 
+            _statisticsInterface, _nextTurnPauseInterface) {
         this.selected = new Empty()
 
         this.lastKeyboardPressTime = 0
@@ -78,6 +79,7 @@ class Events {
             barrack: _barrackInterface,
             town: _townInterface,
             entity: _entityInterface,
+            statistics: _statisticsInterface,
             nextTurnPause: _nextTurnPauseInterface
         }
         if (!mobilePhone) {
@@ -234,6 +236,7 @@ class Events {
         this.interface.entity.visible = false
         this.interface.barrack.visible = false
         this.interface.town.visible = false
+        this.interface.statistics.visible = false
     }
     nextTurn() {
 
@@ -247,24 +250,14 @@ class Events {
             this.selected = new Empty()
     }
     click(pos, realPos) {
-        if (this.interface.nextTurnPause.click(pos)) 
-            return
+        let clickToButton = this.interface.nextTurnPause.click(pos) ||
+            undoButton.click(pos) || backToMenuButton.click(pos) || 
+            this.interface.statistics.click(pos) || this.interface.entity.click(pos) || 
+            this.interface.barrack.click(pos) || this.interface.town.click(pos) || 
+            nextTurnButton.click(pos) || iButton.click(pos)
 
-        if (undoButton.click(pos)) {
-            return
-        }
-        if (backToMenuButton.click(pos))
-            return
-
-        if (this.interface.entity.click(pos))
-            return
-        if (this.interface.barrack.click(pos))
-            return
-        if (this.interface.town.click(pos))
-            return
-
-        if (nextTurnButton.click(pos))
-            return
+        if (clickToButton)
+            return 
             
         let coord = getCoord(realPos.x, realPos.y)
         if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length)) {

@@ -10,9 +10,13 @@ function drawInterface() {
 
     nextTurnButton.draw(interfaceCtx)
 
+    iButton.draw(interfaceCtx)
+
     entityInterface.draw(interfaceCtx)
     barrackInterface.draw(interfaceCtx)
     townInterface.draw(interfaceCtx)
+
+    statisticsInterface.draw(interfaceCtx)
 
     backToMenuButton.draw(interfaceCtx)
     undoButton.draw(interfaceCtx)

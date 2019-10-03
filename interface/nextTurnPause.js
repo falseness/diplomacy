@@ -37,6 +37,7 @@ class NextTurnPauseInterface {
         }
         else {
             timer.updateLastPause()
+            nextTurnButton.deactivate()
         }
     }
     click() {

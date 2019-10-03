@@ -43,7 +43,6 @@ function nextTurn() {
         neutralPlayerTurn()
 
     nextTurnButton.color = players[whooseTurn].hexColor
-    nextTurnButton.deactivate()
 
     externalNextTurn() 
     players[whooseTurn].nextTurn()
@@ -70,7 +69,7 @@ class gameLogicButtons extends ImageButton {
     }
     deactivate() {
         this.unactive = true
-        const interval = 500
+        const interval = 1000
         setTimeout(function(){ 
             nextTurnButton.unactive = false
         }, interval)

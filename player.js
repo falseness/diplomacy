@@ -46,6 +46,28 @@ class Player {
         return town.killed ||
             town.player.hexColor != this.hexColor
     }
+    get armySalary() {
+        let res = 0
+        for (let i = 0; i < this.units.length; ++i) {
+            if (this.units[i].killed) {
+                this.units.splice(i--, 1)
+                continue
+            }
+            res += this.units[i].salary
+        }
+        return res
+    }
+    get armyCost() {
+        let res = 0
+        for (let i = 0; i < this.units.length; ++i) {
+            if (this.units[i].killed) {
+                this.units.splice(i--, 1)
+                continue
+            }
+            res += production[this.units[i].name].cost
+        }
+        return res
+    }
     get income() {
         let income = 0
         for (let i = 0; i < this.towns.length; ++i) {
@@ -55,14 +77,8 @@ class Player {
             }
             income += this.towns[i].income
         }
-
-        for (let i = 0; i < this.units.length; ++i) {
-            if (this.units[i].killed) {
-                this.units.splice(i--, 1)
-                continue
-            }
-            income -= this.units[i].salary
-        }
+        income -= this.armySalary
+        
         return income
     }
     crisisPenalty() {
@@ -77,6 +93,13 @@ class Player {
     }
     get townsCount() {
         return this.towns.length
+    }
+    get suburbsCount() {
+        let res = 0
+        for (let i = 0; i < this.towns.length; ++i) {
+            res += this.towns[i].suburbsCount
+        }
+        return res
     }
     get barracksCount() {
         let res = 0

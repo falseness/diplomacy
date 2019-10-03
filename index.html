@@ -56,6 +56,7 @@
     <script src='interface/entityinterface.js'></script>
     <script src='interface/barrackinterface.js'></script>
     <script src='interface/towninterface.js'></script>
+    <script src='interface/statisticsinterface.js'></script>
     <script src='interface/nextTurnPause.js'></script>
 
     <script src='sprites/sprite.js'></script>
@@ -156,10 +157,12 @@
         //errorWindow.visible = true
         let barrackInterface = new BarrackInterface()
         let townInterface = new TownInterface()
+        let statisticsInterface = new StatisticsInterface()
         let nextTurnPauseInterface = new NextTurnPauseInterface()
         
         let entityInterface = new EntityInterface()
-        let gameEvent = new Events(barrackInterface, townInterface, entityInterface, nextTurnPauseInterface)
+        let gameEvent = new Events(barrackInterface, townInterface, entityInterface, 
+            statisticsInterface, nextTurnPauseInterface)
         let border = new Border()
         let attackBorder = new Border()
         
@@ -189,6 +192,12 @@
                 backToMenuButtonSize, backToMenuButtonSize),
             menuBack
         )       
+        let iButton = new ImageButton(
+            new JustImage('i', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
+            new Rect(WIDTH - 1 * nextTurnButtonSize, 0 * nextTurnButtonSize,       
+                     nextTurnButtonSize, nextTurnButtonSize),
+            statisticsInterface.show, undefined, undefined, undefined, statisticsInterface
+        )
         let whooseTurn
         function saveGame() {
             try {
