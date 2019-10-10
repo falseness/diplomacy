@@ -73,7 +73,7 @@ class Town extends PreparingManufacture {
 
         if (!justCopy)
             this.createFirstSuburbs(firstTown)
-        if (firstTown) {
+        if (firstTown === true) {
             new Noob(x, y)
         }
 
@@ -146,6 +146,9 @@ class Town extends PreparingManufacture {
         grid.getHexagon(this.coord).isSuburb = true
 
         this.suburbs.push(grid.getHexagon(this.coord))
+
+        if (firstTown == -1) //neutral town
+            return
 
         let neighboursCoord = this.neighbours
 

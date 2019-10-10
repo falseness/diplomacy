@@ -8,6 +8,7 @@ class GameManager {
         this.clearBasisValues()
     }
     static clearBasisValues() {
+        gameExit = false
         menu.visible = false
 
 		canvas = {
@@ -326,7 +327,7 @@ class GameManager {
         new Mountain(14, 22)
         new Mountain(15, 22)
 
-        new Lake(20, 18)
+        /*new Lake(20, 18)
         new Lake(24, 16)
         new Lake(24, 12)
         new Lake(20, 10)
@@ -346,7 +347,16 @@ class GameManager {
         new Lake(9, 14)
         new Lake(9, 15)
         new Lake(10, 15)
-        new Lake(8, 15)
+        new Lake(8, 15)*/
+
+        new Town(8, 15, false, -1)
+
+        new Town(23, 5, false, -1)
+
+        new Town(28, 21, false, -1)
+
+
+        new Town(20, 14, false, -1)
 
         new Mountain(1, 1)
         new Mountain(2, 1)
