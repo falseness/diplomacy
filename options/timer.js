@@ -18,8 +18,15 @@ class Timer {
         const goldRatio = 1
         const timerRatio = 1
         const mainTime = 20
-        let result = Math.floor((player.unitsCount * unitRatio + player.gold * goldRatio + mainTime) * timerRatio)
-            //+ player.townsCount * townRatio + player.barracksCount * barrackRatio
+        let result
+        if (!player.townsCount) {
+            result = Math.floor((player.unitsCount * unitRatio + mainTime) * timerRatio)
+        }
+        else {
+            result = Math.floor((player.unitsCount * unitRatio + 
+                player.gold * goldRatio + mainTime) * timerRatio)
+        }
+        //+ player.townsCount * townRatio + player.barracksCount * barrackRatio
         result *= 1000
         // now milliseconds in result
         

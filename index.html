@@ -176,6 +176,9 @@
         let mapBorder
         let gameExit = false
         let timer = new Timer()
+
+        let gameRound
+        let suddenDeathRound = 1//15
     
         let undoButton = new TwoPositionsImageButton(
             new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
@@ -208,6 +211,7 @@
                 let _nature = JSON.stringify(nature)
                 let _timer = JSON.stringify(timer)
                 let _whooseTurn = JSON.stringify(whooseTurn)
+                let _gameRound = JSON.stringify(gameRound)
                 localStorage.setItem('grid', _grid)
                 localStorage.setItem('players', _players)
                 localStorage.setItem('external', _external)
@@ -215,6 +219,7 @@
                 localStorage.setItem('nature', _nature)
                 localStorage.setItem('timer', _timer)
                 localStorage.setItem('whooseTurn', _whooseTurn)
+                localStorage.setItem('gameRound', _gameRound)
             }
             catch {
                 errorWindow.textString = "can't save game\ntry toggle internet connection"
@@ -241,10 +246,10 @@
             let _nature = localStorage.getItem('nature')
             let _timer = localStorage.getItem('timer')
             let _whooseTurn = localStorage.getItem('whooseTurn')
-
+            let _gameRound = localStorage.getItem('gameRound')
 
             unpacker.unpackAll(_grid, _players, _external, _externalProduction, 
-                _nature, _timer, _whooseTurn)
+                _nature, _timer, _whooseTurn, _gameRound)
 
             gameEvent.hideAll()
                 //console.log("loaded")

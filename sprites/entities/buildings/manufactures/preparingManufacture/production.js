@@ -86,6 +86,9 @@ class BuildingProduction extends Production {
         super(turns, cost, _class, name)
         this.killed = false
     }
+    destroy() {
+        this.kill()
+    }
     isTown() {
         return false
     }

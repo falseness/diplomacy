@@ -12,6 +12,20 @@ class Text {
         this.textAlign = textAlign
         this.textBaseline = textBaseline
     }
+    get right() {
+        if (this.textAlign == 'left')
+            return this.pos.x + this.width
+        if (this.textAlign == 'right')
+            return this.pos.x
+        return this.pos.x + this.width / 2
+    }
+    get left() {
+        if (this.textAlign == 'left')
+            return this.pos.x
+        if (this.textAlign == 'right')
+            return this.pos.x - this.width
+        return this.pos.x - this.width / 2
+    }
     get width() {
         let max = -1
         let lines = this.text.split('\n')

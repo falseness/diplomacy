@@ -1,6 +1,3 @@
-function neutralPlayerTurn() {
-    ++whooseTurn
-}
 function externalNextTurn() {
     for (let i = 0; i < external.length; ++i) {
         if (external[i].killed) {
@@ -33,23 +30,24 @@ function externalNextTurn() {
     }
 }
 function nextTurn() {
+    if (gameExit)
+        return
     //townInterface.setVisible(false)
     //entityInterface.setVisible(false)
 
     gameEvent.nextTurn()
 
     whooseTurn = (whooseTurn + 1) % players.length
-    if (!whooseTurn)
-        neutralPlayerTurn()
-
-    nextTurnButton.color = players[whooseTurn].hexColor
 
     externalNextTurn() 
     players[whooseTurn].nextTurn()
-    if (players[whooseTurn].isLoosed) {
+
+    if (players[whooseTurn].isNeutral || players[whooseTurn].isLoosed) {
         nextTurn()
         return
     }
+
+    nextTurnButton.color = players[whooseTurn].hexColor
 
     timer.nextTurn()
     nextTurnPauseInterface.visible = true

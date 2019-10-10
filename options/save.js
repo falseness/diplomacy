@@ -171,7 +171,8 @@ class JsonUnpackManager {
                 packedNature[i].coord.x, packedNature[i].coord.y)
         }
     }
-    unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, jsonNature, jsonTimer, jsonWhooseTurn) {
+    unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, 
+            jsonNature, jsonTimer, jsonWhooseTurn, jsonGameRound) {
         let packedTimer = JSON.parse(jsonTimer)
         timer.time = packedTimer.time
         let packedGrid = JSON.parse(jsonGrid)
@@ -180,6 +181,7 @@ class JsonUnpackManager {
         let packedExternalProduction = JSON.parse(jsonExternalProduction)
         let packedNature = JSON.parse(jsonNature)
         whooseTurn = JSON.parse(jsonWhooseTurn)
+        gameRound = JSON.parse(jsonGameRound)
 
         let gridSize = {
             x: packedGrid.length,
@@ -196,7 +198,10 @@ class JsonUnpackManager {
 
         players = []
         for (let i = 0; i < packedPlayers.length; ++i) {
-            players.push(new Player(packedPlayers[i].color, packedPlayers[i].gold, !i))
+            if (!i)
+                players.push(new NeutralPlayer(packedPlayers[i].color, packedPlayers[i].gold))
+            else 
+                players.push(new Player(packedPlayers[i].color, packedPlayers[i].gold))
 
             for (let j = 0; j < packedPlayers[i].towns.length; ++j) {
                 let packedTown = packedPlayers[i].towns[j]

@@ -1,5 +1,5 @@
 class Player {
-    constructor(color, gold = 0, neutral = false) {
+    constructor(color, gold = 0) {
         this.gold = gold
         this.towns = []
         this.units = []
@@ -9,11 +9,8 @@ class Player {
             g: color.g,
             b: color.b
         }
-        if (neutral) {
-            this.hexagon = this.calcSuburbHexagon()
-        } else {
-            this.hexagon = this.calcHexagon()
-        }
+            
+        this.hexagon = this.calcHexagon()
         this.suburbHexagon = this.calcSuburbHexagon()
     }
     updateUnits() {
@@ -109,6 +106,8 @@ class Player {
         return res
     }
     get isLoosed() {
+        this.updateTowns()
+        this.updateUnits()
         return !this.towns.length && !this.units.length
     }
     nextTurn() {
@@ -217,5 +216,94 @@ class Player {
             rgb: this.color
         }
         return color
+    }
+    get isNeutral() {
+        return false
+    }
+}
+class NeutralPlayer extends Player {
+    constructor(color, gold = 0) {
+        super(color, gold)
+        this.hexagon = this.calcSuburbHexagon()
+
+    }
+    get isLoosed() {
+        return false
+    }
+    nextTurn() {
+        super.nextTurn()
+
+        ++gameRound
+
+        if (gameRound >= suddenDeathRound) {
+            this.suddenDeath()
+        }
+        if (this.isGameEnded) {
+            menuBack()
+        }
+    }
+    floodCell(i, j) {
+        let arr = grid.arr
+
+        if (arr[i][j].building.isTown) {
+            arr[i][j].building.destroy()
+        }
+        else {
+            arr[i][j].building.kill()
+        }
+        
+        arr[i][j].unit.kill()
+
+        arr[i][j].hexagon.sudoPaint(0)
+        arr[i][j].hexagon.isSuburub = false
+
+        arr[i][j].building = new Lake(i, j)
+    }
+    suddenDeath() {
+        let suddenDeathCycle = gameRound - suddenDeathRound
+
+        // only odd cycle
+        if (suddenDeathCycle % 2)
+            return 
+
+        suddenDeathCycle /= 2
+
+        let arr = grid.arr
+
+        if (suddenDeathCycle >= arr.length || 
+            suddenDeathCycle >= arr[0].length) {
+            return
+        }
+
+        for (let i = 0; i < arr[suddenDeathCycle].length; ++i) {
+            this.floodCell(suddenDeathCycle, i)
+        }
+        let right = arr.length - suddenDeathCycle - 1
+        for (let i = 0; i < arr[right].length; ++i) {
+            this.floodCell(right, i)
+        }
+
+        for (let i = 0; i < arr.length; ++i) {
+            this.floodCell(i, suddenDeathCycle)
+        }
+        let bottom = arr[0].length - suddenDeathCycle - 1
+        for (let i = 0; i < arr.length; ++i) {
+            this.floodCell(i, bottom)
+        }
+    }
+    get isGameEnded() {
+        /*let loosedCount = 0
+        for (let i = 1; i < players.length; ++i) {
+            loosedCount += players[i].isLoosed
+        }
+        return loosedCount <= 1 */
+        for (let i = 1; i < players.length; ++i) {
+            if (!players[i].isLoosed)
+                return false
+        }
+        return true
+    }
+    get isNeutral() {
+        return true
     }
 }

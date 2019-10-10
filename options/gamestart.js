@@ -3,6 +3,7 @@ class GameManager {
         external = []
         externalProduction = []
         nature = []
+        gameRound = 0
 
         this.clearBasisValues()
     }
@@ -43,6 +44,7 @@ class GameManager {
 	}
 	static initValues() {
         whooseTurn = 0
+        gameRound = 0
         nextTurn()
         //undoManager.clear()
 	}
@@ -53,11 +55,11 @@ class GameManager {
         })
         this.clearValues()
       	players = [
-            (new Player({
+            (new NeutralPlayer({
                 r: 208, 
                 g: 208,
                 b: 208
-                }, 0, true)
+                }, 0)
             ),
             (new Player({
                 r: 255,
@@ -102,11 +104,11 @@ class GameManager {
             y: 23
         })
         this.clearValues()
-        players = [new Player({
+        players = [new NeutralPlayer({
             r: 208, 
             g: 208,
             b: 208
-            }, 0, true), 
+            }, 0), 
             new Player({
                 r: 255,
                 g: 0,
@@ -144,11 +146,11 @@ class GameManager {
             y: 23
         })
         this.clearValues()
-        players = [new Player({
+        players = [new NeutralPlayer({
             r: 208, 
             g: 208,
             b: 208
-            }, 0, true), 
+            }, 0), 
             new Player({
                 r: 255,
                 g: 0,
@@ -197,11 +199,11 @@ class GameManager {
         })
         this.clearValues()
       	players = [
-            (new Player({
+            (new NeutralPlayer({
                 r: 208, 
                 g: 208,
                 b: 208
-                }, 0, true)
+                }, 0)
             ),
             (new Player({
                 r: 255,
@@ -279,11 +281,11 @@ class GameManager {
             y: 30
         })
         this.clearValues()
-        players = [new Player({
+        players = [new NeutralPlayer({
             r: 208, 
             g: 208,
             b: 208
-            }, 0, true), 
+            }, 0), 
             new Player({
                 r: 255,
                 g: 0,
