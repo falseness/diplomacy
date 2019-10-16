@@ -3,6 +3,7 @@ class Player {
         this.gold = gold
         this.towns = []
         this.units = []
+        this.goldmines = []
 
         this.color = {
             r: color.r,
@@ -43,6 +44,9 @@ class Player {
         return town.killed ||
             town.player.hexColor != this.hexColor
     }
+    isOurGoldmine(goldmine) {
+        return goldmine.player.hexColor == this.hexColor
+    }
     get armySalary() {
         let res = 0
         for (let i = 0; i < this.units.length; ++i) {
@@ -65,6 +69,15 @@ class Player {
         }
         return res
     }
+    get goldminesIncome() {
+        let income = 0
+        for (let i = 0; i < goldmines.length; ++i) {
+            if (this.isOurGoldmine(goldmines[i])) {
+                income += goldmines[i].income
+            }
+        }
+        return income
+    }
     get income() {
         let income = 0
         for (let i = 0; i < this.towns.length; ++i) {
@@ -75,8 +88,19 @@ class Player {
             income += this.towns[i].income
         }
         income -= this.armySalary
+
+        income += this.goldminesIncome
         
         return income
+    }
+    correctGoldminesIncome() {
+        for (let i = 0; i < goldmines.length; ++i) {
+            let g = goldmines[i]
+            // just opened so that should not give income
+            if (this.isOurGoldmine(g) && g.isOpened && !g.isLongOpened) {
+                this.gold -= g.income
+            }
+        }
     }
     crisisPenalty() {
         for (let i = 0; i < this.units.length; ++i) {
@@ -112,6 +136,8 @@ class Player {
     }
     nextTurn() {
         this.gold += this.income
+        this.correctGoldminesIncome()
+        
 
         if (this.isLoosed) {
             console.log("LOOSE")

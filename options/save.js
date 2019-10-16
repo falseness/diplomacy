@@ -172,7 +172,7 @@ class JsonUnpackManager {
         }
     }
     unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, 
-            jsonNature, jsonTimer, jsonWhooseTurn, jsonGameRound) {
+            jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound) {
         let packedTimer = JSON.parse(jsonTimer)
         timer.time = packedTimer.time
         let packedGrid = JSON.parse(jsonGrid)
@@ -180,8 +180,10 @@ class JsonUnpackManager {
         let packedExternal = JSON.parse(jsonExternal)
         let packedExternalProduction = JSON.parse(jsonExternalProduction)
         let packedNature = JSON.parse(jsonNature)
+        let packedGoldmines = JSON.parse(jsonGoldmines)
         whooseTurn = JSON.parse(jsonWhooseTurn)
         gameRound = JSON.parse(jsonGameRound)
+        
 
         let gridSize = {
             x: packedGrid.length,
@@ -194,6 +196,10 @@ class JsonUnpackManager {
             for (let j = 0; j < packedGrid[i].length; ++j) {
                 grid.arr[i][j].hexagon.firstpaint(packedGrid[i][j])
             }
+        }
+        goldmines = []
+        for (let i = 0; i < packedGoldmines.length; ++i) {
+            new Goldmine(packedGoldmines[i].coord.x, packedGoldmines[i].coord.y)
         }
 
         players = []

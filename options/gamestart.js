@@ -3,6 +3,7 @@ class GameManager {
         external = []
         externalProduction = []
         nature = []
+        goldmines = []
         gameRound = 0
 
         this.clearBasisValues()
@@ -278,8 +279,8 @@ class GameManager {
     }
     static start5() {
         grid = new Grid(0, 0, {
-            x: 40,
-            y: 30
+            x: 37,
+            y: 29
         })
         this.clearValues()
         players = [new NeutralPlayer({
@@ -351,22 +352,22 @@ class GameManager {
 
         new Town(8, 15, false, -1)
 
-        new Town(23, 5, false, -1)
+        new Town(24, 8, false, -1)
 
         new Town(28, 21, false, -1)
 
 
-        new Town(20, 14, false, -1)
+        new Goldmine(20, 14, false, -1)
 
         new Mountain(1, 1)
         new Mountain(2, 1)
 
-        new Mountain(38, 1)
+        new Mountain(35, 1)
 
-        new Mountain(1, 28)
+        new Mountain(1, 27)
 
-        new Mountain(37, 28)
-        new Mountain(38, 28)
+        new Mountain(34, 27)
+        new Mountain(35, 27)
 
         grid.arr[15][8].hexagon.firstpaint(1)
 
