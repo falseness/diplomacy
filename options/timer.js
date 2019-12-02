@@ -12,20 +12,10 @@ class Timer {
     calcTime() {
         // units * 10  + gold (seconds) + 20
         let player = players[whooseTurn]
-        const unitRatio = 10
-        //const townRatio = 10
-        //const barrackRatio = 10
-        const goldRatio = 1
-        const timerRatio = 1
-        const mainTime = 20
-        let result
-        if (!player.townsCount) {
-            result = Math.floor((player.unitsCount * unitRatio + mainTime) * timerRatio)
-        }
-        else {
-            result = Math.floor((player.unitsCount * unitRatio + 
-                player.gold * goldRatio + mainTime) * timerRatio)
-        }
+        const unitsRatio = 8
+        let result = player.armySalary * unitsRatio
+        if (player.townsCount)
+            result += player.gold + player.townsCount * 20
         //+ player.townsCount * townRatio + player.barracksCount * barrackRatio
         result *= 1000
         // now milliseconds in result

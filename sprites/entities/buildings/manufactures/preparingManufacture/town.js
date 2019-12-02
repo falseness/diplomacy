@@ -32,7 +32,7 @@ let production = {
     normchel: {
         production: UnitProduction,
         turns: 2,
-        cost: 25,
+        cost: 28,
         class: Normchel
     },
     catapult: {
