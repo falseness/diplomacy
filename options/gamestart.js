@@ -23,14 +23,16 @@ class GameManager {
         height = HEIGHT
         mainCtx.setTransform(1, 0, 0, 1, 0, 0)
         gameEvent.screen.stop()
-
+        
+        let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
+        console.log(grid_min_size)
         mapBorder = {
 	        left: 0,
 	        right: grid.right,
 	        top: 0,
 	        bottom: grid.bottom,
 	        scale: {
-	            min: 0.275,
+	            min: 1 / grid_min_size * 5, //0.275,
 	            max: 1
 	        }
 	    }
