@@ -1,9 +1,9 @@
 class Archer extends RangeUnit {
-    static maxHP = 2
+    static maxHP = 1
     static healSpeed = 1
-    static dmg = 1
+    static dmg = 2
     static speed = 2
-    static salary = 1
+    static salary = 2
     static range = 2
     constructor(x, y) {
         super(x, y, 'archer')

@@ -1,9 +1,9 @@
 class KOHb extends Unit {
     static maxHP = 3
     static healSpeed = 2
-    static dmg = 2
+    static dmg = 1
     static speed = 4
-    static salary = 1
+    static salary = 2
     constructor(x, y) {
         super(x, y, 'KOHb')
         this.mirrorX = false

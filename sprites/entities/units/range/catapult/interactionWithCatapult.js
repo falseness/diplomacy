@@ -56,10 +56,17 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             this.removeSelect()
             return true
         }
+        
+        let isEnemyInBlindArea = (this.isBlindArea(coord) &&
+                        this.cellHasEnemy(cell, catapult))
+        let isEnemyUnit = this.cellHasEnemyUnit(cell, catapult)
+        let isTownWith0HP = (this.cellHasEnemyBuilding(cell, catapult) && 
+                                cell.building.isStandable)
 
-    	if (this.isBlindArea(coord) &&
-    		this.cellHasEnemy(cell, catapult)) {
-    		this.removeSelect()
+    	if (isEnemyInBlindArea || (isEnemyUnit && !isTownWith0HP)) {
+            // Catapult don't attack units
+            // but catapult attack unit if he stay at town with 0 hp
+    		this.removeSelect() 
             return true
         }
 

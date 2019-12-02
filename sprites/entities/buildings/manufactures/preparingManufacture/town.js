@@ -20,25 +20,25 @@ let production = {
     archer: {
         production: UnitProduction,
         turns: 2,
-        cost: 16,
+        cost: 25,
         class: Archer
     },
     KOHb: {
         production: UnitProduction,
         turns: 2,
-        cost: 24,
+        cost: 25,
         class: KOHb
     },
     normchel: {
         production: UnitProduction,
-        turns: 3,
-        cost: 32,
+        turns: 2,
+        cost: 25,
         class: Normchel
     },
     catapult: {
         production: UnitProduction,
         turns: 3,
-        cost: 50,
+        cost: 40,
         class: Catapult
     },
     barrack: {
@@ -50,7 +50,7 @@ let production = {
     wall: {
         production: ExternalProduction,
         turns: 3,
-        cost: 5, 
+        cost: 4, 
         class: Wall
     },
     tower: {
@@ -61,7 +61,7 @@ let production = {
     },
 }
 class Town extends PreparingManufacture {
-    static maxHP = 15
+    static maxHP = 10
     static healSpeed = 3
     static income = 4
     constructor(x, y, justCopy = false, firstTown = false) {

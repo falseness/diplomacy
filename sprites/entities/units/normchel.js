@@ -1,9 +1,9 @@
 class Normchel extends Unit {
-    static maxHP = 6
-    static healSpeed = 2
-    static dmg = 2
+    static maxHP = 5
+    static healSpeed = 3
+    static dmg = 1
     static speed = 2
-    static salary = 2
+    static salary = 4
     constructor(x, y) {
         super(x, y, 'normchel')
     }

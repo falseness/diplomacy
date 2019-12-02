@@ -1,5 +1,5 @@
 class Barrack extends PreparingManufacture {
-    static maxHP = 4
+    static maxHP = 3
     static healSpeed = 1
     static income = -2
     constructor(x, y, town) {
