@@ -84,8 +84,8 @@ class StatisticsInterface {
                 this.playerInfoHeight * Math.floor((i - 1 ) / this.playersCountInRow)
 
             let text 
-            if (players[i].isLoosed) {
-                text = 'Loosed'
+            if (players[i].isLost) {
+                text = 'Lost'
             }
             else {
                 text = 'gold: ' + players[i].gold + '\n' + 

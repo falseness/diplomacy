@@ -129,7 +129,7 @@ class Player {
         }
         return res
     }
-    get isLoosed() {
+    get isLost() {
         this.updateTowns()
         this.updateUnits()
         return !this.towns.length && !this.units.length
@@ -139,7 +139,7 @@ class Player {
         this.correctGoldminesIncome()
         
 
-        if (this.isLoosed) {
+        if (this.isLost) {
             console.log("LOOSE")
         }
 
@@ -253,7 +253,7 @@ class NeutralPlayer extends Player {
         this.hexagon = this.calcSuburbHexagon()
 
     }
-    get isLoosed() {
+    get isLost() {
         return false
     }
     nextTurn() {
@@ -320,11 +320,11 @@ class NeutralPlayer extends Player {
     get isGameEnded() {
         /*let loosedCount = 0
         for (let i = 1; i < players.length; ++i) {
-            loosedCount += players[i].isLoosed
+            loosedCount += players[i].isLost
         }
         return loosedCount <= 1 */
         for (let i = 1; i < players.length; ++i) {
-            if (!players[i].isLoosed)
+            if (!players[i].isLost)
                 return false
         }
         return true

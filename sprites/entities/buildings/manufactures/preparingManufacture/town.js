@@ -61,7 +61,7 @@ let production = {
     },
 }
 class Town extends PreparingManufacture {
-    static maxHP = 10//15
+    static maxHP = 15
     static healSpeed = 3
     static income = 4
     constructor(x, y, justCopy = false, firstTown = false) {
