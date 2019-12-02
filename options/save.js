@@ -199,7 +199,7 @@ class JsonUnpackManager {
         }
         goldmines = []
         for (let i = 0; i < packedGoldmines.length; ++i) {
-            new Goldmine(packedGoldmines[i].coord.x, packedGoldmines[i].coord.y)
+            new Goldmine(packedGoldmines[i].coord.x, packedGoldmines[i].coord.y, packedGoldmines[i].income)
         }
 
         players = []

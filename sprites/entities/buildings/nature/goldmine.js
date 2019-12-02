@@ -1,8 +1,10 @@
 class Goldmine extends Building {
-    static income = 50
-    static roundsToOpen = 7
-    constructor(x, y) {
+    //static income = 50
+    static roundsToOpen = 10
+    #income = 50
+    constructor(x, y, income) {
         super(x, y, 'goldmine')
+        this.#income = income
         goldmines.push(this)
     }
     toJSON() {
@@ -11,12 +13,13 @@ class Goldmine extends Building {
             coord: {
                 x: this.coord.x,
                 y: this.coord.y
-            }
+            },
+            income: this.#income
         }
         return res
     }
     get potentialIncome() {
-        return this.constructor.income
+        return this.#income
     }
     get income() {
         if (this.isOpened) 

@@ -25,7 +25,6 @@ class GameManager {
         gameEvent.screen.stop()
         
         let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
-        console.log(grid_min_size)
         mapBorder = {
 	        left: 0,
 	        right: grid.right,
@@ -281,8 +280,8 @@ class GameManager {
     }
     static start5() {
         grid = new Grid(0, 0, {
-            x: 37,
-            y: 29
+            x: 39,
+            y: 39
         })
         this.clearValues()
         players = [new NeutralPlayer({
@@ -307,29 +306,6 @@ class GameManager {
             })
         ]
 
-        new Mountain(18, 15)
-        new Mountain(20, 16)
-
-        
-        new Mountain(22, 13)
-        new Mountain(22, 15)
-
-        
-        new Mountain(18, 13)
-        new Mountain(20, 12)
-
-        new Mountain(30, 11)
-        new Mountain(31, 11)
-        new Mountain(31, 12)
-
-        new Mountain(12, 7)
-        new Mountain(12, 8)
-        new Mountain(13, 6)
-
-        new Mountain(14, 21)
-        new Mountain(14, 22)
-        new Mountain(15, 22)
-
         /*new Lake(20, 18)
         new Lake(24, 16)
         new Lake(24, 12)
@@ -352,26 +328,55 @@ class GameManager {
         new Lake(10, 15)
         new Lake(8, 15)*/
 
-        new Town(8, 15, false, -1)
+        /*new Town(8, 15, false, -1)
 
         new Town(24, 8, false, -1)
 
-        new Town(28, 21, false, -1)
+        new Town(28, 21, false, -1)*/
 
 
-        new Goldmine(20, 14, false, -1)
+        new Goldmine(19, 19, 50)
+        new Goldmine(8, 25, 25)
+        new Goldmine(30, 25, 25)
+        new Goldmine(19, 8, 25)
 
-        new Mountain(1, 1)
-        new Mountain(2, 1)
+        let mountainCoords = [
+            [8, 23], [9, 23], [10, 24], [10, 25], [10, 26],
+            [30, 23], [29, 23], [28, 24], [28, 25], [28, 26],
+            [17, 9], [18, 10], [19, 10], [20, 10], [21, 9]
+        ]
+        for (let i = 0; i < mountainCoords.length; ++i) {
+            new Mountain(mountainCoords[i][0], mountainCoords[i][1])
+        }
+        let neutralTownCoords = [
+            [14, 17], [24, 17], [19, 24],
+            [10, 6], [28, 6],
+            [1, 19], [37, 19],
+            [8, 34], [30, 34]
+        ]
+        for (let i = 0; i < neutralTownCoords.length; ++i) {
+            new Town(neutralTownCoords[i][0], neutralTownCoords[i][1], false, -1)
+        }
+        let lakeCoords = [
+            [12, 28], [13, 28], [14, 29], [15, 29],
+            [26, 28], [25, 28], [24, 29], [23, 29],
+            [7, 20], [7, 19], [7, 18], [7, 17],
+            [31, 20], [31, 19], [31, 18], [31, 17],
+            [14, 10], [13, 10], [12, 11], [11, 11],
+            [24, 10], [25, 10], [26, 11], [27, 11]
+        ]
+        for (let i = 0; i < lakeCoords.length; ++i) {
+            new Lake(lakeCoords[i][0], lakeCoords[i][1])
+        }
 
-        new Mountain(35, 1)
-
-        new Mountain(1, 27)
-
-        new Mountain(34, 27)
-        new Mountain(35, 27)
-
-        grid.arr[15][8].hexagon.firstpaint(1)
+        let coords = [{x: 2, y: 11}, {x: 36, y: 11}, {x: 19, y: 36}]
+        for (let i = 0; i < 3; ++i) {
+            grid.arr[coords[i].x][coords[i].y].hexagon.firstpaint(i + 1)
+            new Town(coords[i].x, coords[i].y, false, true)
+            console.log(Math.abs(coords[i].x - 19) + 
+                Math.abs(coords[i].y - 17))
+        }
+        /*grid.arr[15][8].hexagon.firstpaint(1)
 
         let TOWN1 = new Town(15, 8, false, true)
 
@@ -379,9 +384,9 @@ class GameManager {
 
         let TOWN2 = new Town(28, 13, false, true)
         
-        grid.arr[17][20].hexagon.firstpaint(3)
+        grid.arr[][20].hexagon.firstpaint(3)
 
-        let TOWN3 = new Town(17, 20, false, true)
+        let TOWN3 = new Town(17, 20, false, true)*/
 
 
 
