@@ -116,6 +116,7 @@ class Menu {
                 this.setTree, this.play, true, this),
             this.constructor.getButton(startPos, 'load game', 
                 this.setTree, this.load, true, this),
+            this.constructor.getButton(startPos, 'random generation', randomGeneration)
         ], this)
         //this.main.buttons[0].select()
         this.playSmall.setParent(this.play, this)

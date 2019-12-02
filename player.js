@@ -132,6 +132,8 @@ class Player {
     get isLoosed() {
         this.updateTowns()
         this.updateUnits()
+        // TMP
+        return false
         return !this.towns.length && !this.units.length
     }
     nextTurn() {

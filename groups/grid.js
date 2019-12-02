@@ -134,11 +134,11 @@ class Grid extends SpritesGroup {
         attackBorder.draw(mainCtx)
         border.draw(mainCtx)
         
+        this.drawOther(ctx)
+
         if (!this.drawLogicText && debug)
             this.drawTextCoord(ctx)
 
-        this.drawOther(ctx)
-        
         if (this.drawLogicText)
             this.drawTextLogic(ctx)
     }
@@ -146,6 +146,9 @@ class Grid extends SpritesGroup {
 
 function isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray) {
     return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray
+}
+function isCoordNotOnGrid(coord) {
+    return isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length)
 }
 
 function coordsEqually(coordOne, coordTwo) {

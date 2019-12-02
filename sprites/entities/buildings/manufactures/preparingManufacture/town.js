@@ -153,6 +153,8 @@ class Town extends PreparingManufacture {
         let neighboursCoord = this.neighbours
 
         for (let i = 0; i < neighboursCoord.length; ++i) {
+            if (isCoordNotOnMap(neighboursCoord[i], grid.arr.length, grid.arr[0].length))
+                continue
             let hexagon = grid.getHexagon(neighboursCoord[i])
 
             if (firstTown)
