@@ -3,7 +3,7 @@ class Catapult extends RangeUnit {
     static healSpeed = 1
     static dmg = 0
     static speed = 1
-    static salary = 3
+    static salary = 2
     static range = 5
     static buildingDMG = 3
     constructor(x, y) {

@@ -32,13 +32,13 @@ let production = {
     normchel: {
         production: UnitProduction,
         turns: 2,
-        cost: 28,
+        cost: 25,
         class: Normchel
     },
     catapult: {
         production: UnitProduction,
         turns: 3,
-        cost: 40,
+        cost: 30,
         class: Catapult
     },
     barrack: {
@@ -56,7 +56,7 @@ let production = {
     tower: {
         production: ExternalProduction,
         turns: 3,
-        cost: 15, 
+        cost: 18, 
         class: Tower
     },
 }
@@ -263,8 +263,8 @@ class Town extends PreparingManufacture {
     needInstructions() {
         return this.activeProduction.notEmpty()
     }
-    select() {
-        super.select()
+    select(isNeedToChangeBorder) {
+        super.select(isNeedToChangeBorder)
         if (this.isMyTurn)
             townInterface.change(this.info, this.player.fullColor)
     }
@@ -343,7 +343,7 @@ class Town extends PreparingManufacture {
 
         if (this.gold < production[what].cost)
             return false
-
+        
         this.startBuildingPreparing(what)
 
         return true
@@ -401,7 +401,7 @@ class Town extends PreparingManufacture {
 function prepareEvent(product) {
     let building = gameEvent.selected
     if (building.prepare(product)) {
-        building.select()
+        building.select(false)
         return
     }
     gameEvent.removeSelection()

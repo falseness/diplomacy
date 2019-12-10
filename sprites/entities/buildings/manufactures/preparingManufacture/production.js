@@ -209,8 +209,17 @@ all moves when attacking it\n\nunit on it is priority target`,
     isExternalProduction() {
         return false
     }
-    select() {
+    changeBorder() {
+        border.newBrokenLine()
+        let realPos = {x: this.pos.x + assets.size / 2, y: this.pos.y + assets.size / 2}
+        for (let i = 0; i < 6; ++i) {
+            border.createLine(realPos, i)
+        }
+    }
+    select(isNeedToChangeBorder = true) {
         entityInterface.change(this.info, this.player.fullColor)
+        if (isNeedToChangeBorder)
+            this.changeBorder()
     }
     removeSelect() {
         entityInterface.visible = false

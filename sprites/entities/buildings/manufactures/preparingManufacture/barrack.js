@@ -1,13 +1,13 @@
 class Barrack extends PreparingManufacture {
-    static maxHP = 3
+    static maxHP = 1
     static healSpeed = 1
     static income = -2
     constructor(x, y, town) {
         super(x, y, 'barrack')
         this.town = town
     }
-    select() {
-        super.select()
+    select(isNeedToChangeBorder) {
+        super.select(isNeedToChangeBorder)
         if (this.isMyTurn)
             barrackInterface.change(this.info, this.player.fullColor)
     }
