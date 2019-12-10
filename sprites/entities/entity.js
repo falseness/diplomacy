@@ -6,7 +6,7 @@ class Entity extends Sprite {
         this.killed = this.hp <= 0
 
         this.hpBarMarginY = basis.r * 1.4
-
+        
         if (this.hasBar) {
             this.hpBar = new Bar(
                 {x: this.pos.x + assets.size / 2, 

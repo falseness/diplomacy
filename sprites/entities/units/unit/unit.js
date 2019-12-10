@@ -6,15 +6,19 @@ class Unit extends Entity {
         this.player.units.push(this)
 
         this.interaction = new InterationWithUnit(this.speed)
-        this.hpBarMarginY = -basis.r * 0.1
+        this.hpBarMarginY = -basis.r * 0.125
         this.movesBarMarginY = basis.r * 0.1
-        
+
+        const movesBarW = basis.r * 0.4
+        const movesBarH = basis.r * 0.225
+
         this.hpBar.healthColor = '#00e600'
         const movesColor = '#ffa500'
         this.movesBar = new Bar(
             {x: this.pos.x + assets.size / 2, 
             y: this.pos.y + assets.size / 2 + this.movesBarMarginY }, 
-            this.speed, movesColor)
+            this.speed, movesColor, undefined, 
+            movesBarW, movesBarH)
 
         this.trimBars()
     }
