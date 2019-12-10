@@ -309,7 +309,7 @@ class Town extends PreparingManufacture {
         }
 
         if (stillNeedInstructions) {
-            this.select()
+            this.select(false)
 
             if (!this.activeProduction.isSuburbProduction()) {
                 let what = this.activeProduction.name
