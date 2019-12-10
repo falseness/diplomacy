@@ -52,25 +52,27 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
     sendInstructions(cell, catapult) {
         let coord = cell.coord
         
-        if (cell.building.isNature) {
+        let isCellInBlindArea = this.isBlindArea(coord)
+        let isEnemyInBlindArea = (isCellInBlindArea &&
+                this.cellHasEnemy(cell, catapult))
+        let noObjectsToAttack = !isCellInBlindArea && 
+            !(this.cellHasEnemyBuilding(cell, catapult) || 
+            this.cellHasEnemyBuildingProduction(cell, catapult))
+
+        if (cell.building.isNature || 
+            isEnemyInBlindArea ||
+            noObjectsToAttack) {
             this.removeSelect()
             return true
         }
-        
-        let isEnemyInBlindArea = (this.isBlindArea(coord) &&
-                        this.cellHasEnemy(cell, catapult))
-        let isEnemyUnit = this.cellHasEnemyUnit(cell, catapult)
-        let isTownWith0HP = (this.cellHasEnemyBuilding(cell, catapult) && 
-                                cell.building.isStandable)
 
-    	if (isEnemyInBlindArea || (isEnemyUnit && !isTownWith0HP)) {
-            // Catapult don't attack units
-            // but catapult attack unit if he stay at town with 0 hp
-    		this.removeSelect() 
-            return true
+        if (this.cellHasEnemyBuildingProduction(cell, catapult)) {
+            let result = this.buildingAttack(cell, catapult)
+            if (result)
+                return true
         }
 
-    	return super.sendInstructions(cell, catapult)
+        return super.sendInstructions(cell, catapult)
     }
 	move(coord, cell, arr, unit) {
 		this.mirrorInteraction.move(coord, cell, arr, unit)

@@ -66,6 +66,10 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         }
         this.markIgnoredBuilding(cell)
     }
+    cellHasEnemyBuildingProduction(cell, rangeUnit) {
+        return (cell.building.isBuildingProduction() && 
+            cell.building.playerColor != rangeUnit.playerColor) 
+    }
     sendInstructions(cell, rangeUnit) {
         let coord = cell.coord
 
@@ -105,8 +109,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             return true
         }
 
-        if (cell.building.isBuildingProduction() && 
-            cell.building.playerColor != rangeUnit.playerColor) {
+        if (this.cellHasEnemyBuildingProduction(cell, rangeUnit)) {
             let result = this.buildingAttack(cell, rangeUnit)
             if (result)
                 return true
