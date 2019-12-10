@@ -335,10 +335,10 @@ class GameManager {
         new Town(28, 21, false, -1)*/
 
 
-        new Goldmine(19, 19, 50)
-        new Goldmine(8, 25, 25)
-        new Goldmine(30, 25, 25)
-        new Goldmine(19, 8, 25)
+        new Goldmine(19, 19, 60)
+        new Goldmine(8, 25, 30)
+        new Goldmine(30, 25, 30)
+        new Goldmine(19, 8, 30)
 
         let mountainCoords = [
             [8, 23], [9, 23], [10, 24], [10, 25], [10, 26],
