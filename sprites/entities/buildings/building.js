@@ -35,6 +35,7 @@ class Building extends Entity {
             this.changeBorder()
     }
     removeSelect() {
+        border.visible = false
         entityInterface.visible = false
     }
     isBuilding() {

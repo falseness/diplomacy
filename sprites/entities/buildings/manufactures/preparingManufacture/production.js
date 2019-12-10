@@ -222,6 +222,7 @@ all moves when attacking it\n\nunit on it is priority target`,
             this.changeBorder()
     }
     removeSelect() {
+        border.visible = false
         entityInterface.visible = false
     }
     needInstructions() {
