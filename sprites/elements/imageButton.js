@@ -1,4 +1,5 @@
 class ImageButton extends Button {
+    #selected = false
     constructor(image, rect, clickFunc, parameters, text = new Empty(), canClick = true, callThis) {
         super(rect, text, clickFunc, parameters, canClick, callThis)
         this.img = image
@@ -19,12 +20,38 @@ class ImageButton extends Button {
         this.rect.center = pos
         this.img.pos = pos
     }
+    set centerX(val) {
+        super.centerX = val
+        this.img.x = val
+    }
+    set centerY(val) {
+        super.centerY = val
+        this.img.y = val
+    }
+    select(pos) {
+        if (this.isInside(pos))
+            this.#selected = true
+    }
+    removeSelect() {
+        this.#selected = false
+    }
     draw(ctx) {
+        const selectedRatio = 1.2
         if (this.canClick) {
             if (debug)
                 this.rect.draw(ctx)
             //drawImage(ctx, this.img, this.rect.getCenter(), this.rect.getWidth(), this.rect.getHeight())
+            let w = this.width
+            let h = this.height
+            if (this.#selected) {
+                this.img.width *= selectedRatio
+                this.img.height *= selectedRatio
+            }
             this.img.draw(ctx)
+
+            this.img.width = w
+            this.img.height = h
+
             this.text.draw(ctx)
         }
     }

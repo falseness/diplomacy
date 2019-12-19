@@ -47,6 +47,8 @@ class Empty {
     notEmpty() {
         return !this.isEmpty()
     }
+    click() {}
+    touchmove() {}
     select() {
 
     }

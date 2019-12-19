@@ -18,6 +18,20 @@ class Rect {
         this.color = color
         this.strokeColor = strokeColor
     }
+    static getSelectedRect(rect, ratio = 1.2) {
+        const rectCornersCount = 4
+        let selectedCornerRadius = Array(rectCornersCount)
+        for (let i = 0; i < rectCornersCount; ++i) {
+            selectedCornerRadius[i] = rect.cornerRadius[i] * ratio
+        }
+        let res = new Rect(rect.x - rect.width * (ratio - 1) / 2, 
+            rect.y - rect.height * (ratio - 1) / 2, 
+            rect.width * ratio, rect.height * ratio,
+            selectedCornerRadius, rect.strokeWidth * ratio, rect.color, 
+            rect.strokeColor, rect.light)
+        
+        return res
+    }
     set pos(pos) {
         this.x = pos.x
         this.y = pos.y
@@ -39,6 +53,9 @@ class Rect {
     }
     get right() {
         return this.x + this.width
+    }
+    get bottom() {
+        return this.y + this.height
     }
     get center() {
         let center = {
@@ -88,7 +105,7 @@ class Rect {
 
         if (this.color)
             ctx.fill()
-        if (this.strokeWidth)
+        if (!this.light && this.strokeWidth)
             ctx.stroke()
 
         ctx.closePath()
@@ -106,6 +123,13 @@ class Rect {
             ctx.globalAlpha = 1.0
 
             ctx.closePath()
+
+            if (this.strokeWidth) {
+                ctx.beginPath()
+                this.drawShape(ctx)
+                ctx.stroke()
+                ctx.closePath()
+            }
         }
     }
 }

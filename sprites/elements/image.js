@@ -18,6 +18,12 @@ class JustImage {
     get height() {
         return this.h
     }
+    set width(val) {
+        this.w = val
+    }
+    set height(val) {
+        this.h = val
+    }
     get right() {
         return this.w + this.pos.x
     }
@@ -32,6 +38,12 @@ class JustImage {
     }
     get y() {
         return this.pos.y
+    }
+    set x(val) {
+        this.pos.x = val
+    }
+    set y(val) {
+        this.pos.y = val
     }
 }
 class ShapeImage {

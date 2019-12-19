@@ -1,6 +1,6 @@
 class Text {
     constructor(x, y, fontSize = Math.round(basis.r * 9.8625 * 0.05), text = 'error', color = 'white',
-        textAlign = 'center', textBaseline = 'middle') {
+        textAlign = 'center', textBaseline = 'middle', ratio = 1.2) {
         this.pos = {
             x: x,
             y: y
@@ -11,6 +11,8 @@ class Text {
         this.fontSize = fontSize
         this.textAlign = textAlign
         this.textBaseline = textBaseline
+        this.selected = false
+        this.ratio = ratio
     }
     get right() {
         if (this.textAlign == 'left')
@@ -29,11 +31,12 @@ class Text {
     get width() {
         let max = -1
         let lines = this.text.split('\n')
-
-        mainCtx.font = this.fontSize + 'px Times New Roman'
+        
+        let tmpCtx = mainCtx
+        tmpCtx.font = this.fontSize + 'px Times New Roman'
         for (let i = 0; i < lines.length; ++i) {
-            if (mainCtx.measureText(lines[i]).width > max)
-                max = mainCtx.measureText(lines[i]).width
+            if (tmpCtx.measureText(lines[i]).width > max)
+                max = tmpCtx.measureText(lines[i]).width
         }
         return max
     }
@@ -44,11 +47,26 @@ class Text {
     get x() {
         return this.pos.x
     }
+    set x(val) {
+        this.pos.x = val
+    }
     get y() {
         return this.pos.y
     }
+    set y(val) {
+        this.pos.y = val
+    }
+    select() {
+        this.selected = true
+    }
+    removeSelect() {
+        this.selected = false
+    }
     draw(ctx) {
-        ctx.font = this.fontSize + 'px Times New Roman'
+        let fontSize = this.fontSize
+        if (this.selected)
+            fontSize *= this.ratio
+        ctx.font = fontSize + 'px Times New Roman'
         ctx.fillStyle = this.color
         ctx.textAlign = this.textAlign
         ctx.textBaseline = this.textBaseline

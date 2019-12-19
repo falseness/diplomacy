@@ -1,6 +1,9 @@
 let assets = {
     size: 1.6 * basis.r,
     logo: new Image(),
+    checkMark: new Image(),
+    leftButton: new Image(),
+    rightButton: new Image(),
     clock: new Image,
     i: new Image(),
     undo: new Image(),
@@ -58,6 +61,11 @@ let cachedImages = {}
 
 function loadAssets() {
     assets.logo.src = "assets/logo.svg"
+    assets.checkMark.src = "assets/checkMark.svg"
+
+    assets.leftButton.src = "assets/leftButton.svg"
+    assets.rightButton.src = "assets/rightButton.svg"
+
     assets.clock.src = "assets/clock.svg"
     assets.i.src = "assets/i.svg"
     assets.undo.src = "assets/undo.svg"

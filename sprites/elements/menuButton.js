@@ -14,12 +14,24 @@ class MenuButton extends Button {
             this.rect.y - this.rect.height * (selectedRatio - 1) / 2, 
             this.rect.width * selectedRatio, this.rect.height * selectedRatio,
             selectedCornerRadius, this.rect.strokeWidth * selectedRatio, this.rect.color, 
-            this.rect.strokeColor)
+            this.rect.strokeColor, this.rect.light)
         this.selectedText = new Text(this.text.pos.x, this.text.pos.y, 
             this.text.fontSize * selectedRatio, this.text.text, this.text.color,
             this.text.textAlign, this.text.textBaseline)
 
         this.selected = false
+    }
+    get x() {
+        return super.x
+    }
+    set x(val) {
+        let dt = val - super.x
+        super.x = val
+        this.selectedRect.x += dt
+    }
+    set color(val) {
+        super.color = val
+        this.selectedRect.color = val
     }
     get pos() {
         return this.rect.pos

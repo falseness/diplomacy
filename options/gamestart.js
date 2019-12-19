@@ -1,3 +1,264 @@
+class Map {
+    constructor(mapSize, _players, _goldmines, lakes, mountains) {
+        this.mapSize = mapSize
+        this.players = _players
+        this.goldmines = _goldmines
+        this.lakes = lakes
+        this.mountains = mountains
+    }
+    createPlayers() {
+        players = new Array(this.players.length)
+        players[0] = new NeutralPlayer(this.players[0].rgb, 0)
+        for (let i = 1; i < this.players.length; ++i) {
+            players[i] = new Player(this.players[i].rgb)
+        }
+    }
+    createTowns() {
+        for (let i = 0; i < this.players[0].towns.length; ++i) {
+            let town_coord = this.players[0].towns[i]
+            new Town(town_coord.x, town_coord.y, false, -1)
+        }
+        for (let i = 1; i < this.players.length; ++i) {
+            let towns = this.players[i].towns
+            for (let j = 0; j < towns.length; ++j) {
+                let town_coord = towns[j]
+
+                grid.arr[town_coord.x][town_coord.y].hexagon.firstpaint(i)
+                new Town(town_coord.x, town_coord.y, false, true)
+            }
+        }
+    }
+    createGoldmines() {
+        for (let i = 0; i < this.goldmines.length; ++i) {
+            let goldmine = this.goldmines[i]
+            new Goldmine(goldmine.x, goldmine.y, goldmine.income)
+        }
+    }
+    createNature() {
+        for (let i = 0; i < this.mountains.length; ++i) {
+            let mountain = this.mountains[i]
+            new Mountain(mountain.x, mountain.y)
+        }
+        for (let i = 0; i < this.lakes.length; ++i) {
+            let lake = this.lakes[i]
+            new Lake(lake.x, lake.y)
+        }
+    }
+    start(_gameManager) {
+        grid = new Grid(0, 0, this.mapSize)
+        _gameManager.clearValues()
+
+        this.createPlayers()
+        this.createTowns()
+        this.createGoldmines()
+        this.createNature()
+
+        _gameManager.initValues()
+        requestAnimationFrame(gameLoop)
+    }
+    /*
+    эта структура нужна для удобного хранения карт
+    и для общения GameSettingsTree и GameManager
+    осталось допилить это и можно будет
+    сделать нормальное создание игры со слотами
+    */
+}
+function packMap() {
+    let res = ''
+    res += '{x: ' + grid.arr.length + ', y: ' + grid.arr[0].length + '},\n'
+    res += '[\n'
+    for (let i = 0; i < players.length; ++i) {
+        let p = players[i]
+        res += '{\n'
+        res +='rgb: {r: ' + p.color.r + ', g: ' + p.color.g + ', b: ' + p.color.b + '},\n'
+        let s = ''
+        for (let j = 0; j < p.towns.length; ++j) {
+            s += '{x: ' + p.towns[j].coord.x + ', y: ' + p.towns[j].coord.y + '}'
+            if (j != p.towns.length - 1)
+                s += ', '
+        }
+        res += 'towns: [' + s + ']\n'
+        let tmps = '}'
+        if (i != players.length - 1)
+            tmps += ','
+
+        res += tmps + '\n'
+    }
+    res += '],\n'
+    let s = ''
+    for (let i = 0; i < goldmines.length; ++i) {
+        let g = goldmines[i]
+        s += '{x: ' + g.coord.x + ', y: ' + g.coord.y + ', income: ' + g.potentialIncome + '}'
+        if (i != goldmines.length - 1)
+            s += ', '
+    }
+    res += '[' + s + '],\n'
+
+    let s_mountain = ''
+    let s_lake = ''
+    for (let i = 0; i < nature.length; ++i) {
+        let n = nature[i]
+        if (n.name == 'mountain') {
+            s_mountain += '{x: ' + n.coord.x + ', y: ' + n.coord.y + '}, '            
+        }
+        else {
+            s_lake += '{x: ' + n.coord.x + ', y: ' + n.coord.y + '}, '
+        }
+    }
+    if (s_lake.length) {
+        s_lake = s_lake.substring(0, s_lake.length - 2)
+    }
+    if (s_mountain.length) {
+        s_mountain = s_mountain.substring(0, s_mountain.length - 2)
+    }
+    res += '[' + s_lake + '],\n'
+    res += '[' + s_mountain + ']\n'
+    console.log(res)
+}
+maps = { 
+    small:
+    [
+        new Map(
+            {x: 20, y: 10},
+            [
+                {
+                    rgb: {r: 208, g: 208, b: 208},
+                    towns: []
+                },
+                {
+                    rgb: {r: 255, g: 0, b: 0},
+                    towns: [{x: 5, y: 3}]
+                },
+                {
+                    rgb: {r: 98, g: 168, b: 222},
+                    towns: [{x: 14, y: 6}]
+                }
+            ],
+            [],
+            coordDictionary([[10, 4], [9, 5]]),
+            coordDictionary([[8, 8], [11, 1], [1, 7], 
+                [1, 8], [2, 8], [17, 1], [18, 1], [18, 2]])
+        ),
+        new Map(
+            {x: 30, y: 23},
+            [
+                {
+                    rgb: {r: 208, g: 208, b: 208},
+                    towns: []
+                },
+                {
+                    rgb: {r: 255, g: 0, b: 0},
+                    towns: [{x: 9, y: 6}]
+                },
+                {
+                    rgb: {r: 98, g: 168, b: 222},
+                    towns: [{x: 20, y: 9}]
+                },
+                {
+                    rgb: {r: 0, g: 179, b: 0},
+                    towns: [{x: 12, y: 16}]
+                }
+            ],
+            [],
+            [],
+            []
+        ),
+        new Map(
+            {x: 29, y: 23},
+            [
+                {
+                    rgb: {r: 208, g: 208, b: 208},
+                    towns: []
+                },
+                {
+                    rgb: {r: 255, g: 0, b: 0},
+                    towns: [{x: 9, y: 6}]
+                },
+                {
+                    rgb: {r: 51, g: 153, b: 255},
+                    towns: [{x: 19, y: 6}]
+                },
+                {
+                    rgb: {r: 0, g: 179, b: 0},
+                    towns: [{x: 19, y: 16}]
+                },
+                {
+                    rgb: {r: 112, g: 0, b: 204},
+                    towns: [{x: 9, y: 16}]
+                }
+            ],
+            [],
+            [],
+            []
+        )
+    ],
+    big: 
+    [
+        new Map(
+            {x: 31, y: 21},
+            [
+                {
+                    rgb: {r: 208, g: 208, b: 208},
+                    towns: []
+                },
+                {
+                    rgb: {r: 255, g: 0, b: 0},
+                    towns: [{x: 8, y: 10}]
+                },
+                {
+                    rgb: {r: 98, g: 168, b: 222},
+                    towns: [{x: 22, y: 10}]
+                }
+            ],
+            [],
+            [{x: 11, y: 15}, {x: 12, y: 15}, {x: 13, y: 14}, {x: 11, y: 4}, 
+                {x: 12, y: 5}, {x: 13, y: 5}, {x: 17, y: 14}, {x: 18, y: 15}, 
+                {x: 19, y: 15}, {x: 17, y: 5}, {x: 18, y: 5}, {x: 19, y: 4}, 
+                {x: 6, y: 11}, {x: 7, y: 11}, {x: 8, y: 12}, {x: 6, y: 12}, 
+                {x: 7, y: 12}, {x: 22, y: 8}, {x: 23, y: 8}, {x: 24, y: 9}, 
+                {x: 23, y: 7}, {x: 24, y: 8}],
+            [{x: 15, y: 8}, {x: 15, y: 11}, {x: 7, y: 5}, {x: 6, y: 6}, 
+                {x: 5, y: 6}, {x: 23, y: 14}, {x: 24, y: 14}, {x: 25, y: 13}, 
+                {x: 29, y: 1}, {x: 1, y: 19}, {x: 1, y: 1}, {x: 29, y: 19}]
+        ),
+        new Map(
+            {x: 39, y: 39},
+            [
+                {
+                    rgb: {r: 208, g: 208, b: 208},
+                    towns: [{x: 14, y: 17}, {x: 24, y: 17}, {x: 19, y: 24}, 
+                        {x: 10, y: 6}, {x: 28, y: 6}, {x: 1, y: 19}, 
+                        {x: 37, y: 19}, {x: 8, y: 34}, {x: 30, y: 34}]
+                },
+                {
+                    rgb: {r: 255, g: 0, b: 0},
+                    towns: [{x: 2, y: 11}]
+                },
+                {
+                    rgb: {r: 98, g: 168, b: 222},
+                    towns: [{x: 36, y: 11}]
+                },
+                {
+                    rgb: {r: 0, g: 179, b: 0},
+                    towns: [{x: 19, y: 36}]
+                }
+            ],
+            [{x: 19, y: 19, income: 60}, {x: 8, y: 25, income: 30}, 
+                {x: 30, y: 25, income: 30}, {x: 19, y: 8, income: 30}],
+            [{x: 12, y: 28}, {x: 13, y: 28}, {x: 14, y: 29}, 
+                {x: 15, y: 29}, {x: 26, y: 28}, {x: 25, y: 28}, 
+                {x: 24, y: 29}, {x: 23, y: 29}, {x: 7, y: 20}, {x: 7, y: 19}, 
+                {x: 7, y: 18}, {x: 7, y: 17}, {x: 31, y: 20}, {x: 31, y: 19},
+                 {x: 31, y: 18}, {x: 31, y: 17}, {x: 14, y: 10}, {x: 13, y: 10}, 
+                 {x: 12, y: 11}, {x: 11, y: 11}, {x: 24, y: 10}, {x: 25, y: 10}, 
+                 {x: 26, y: 11}, {x: 27, y: 11}],
+            [{x: 8, y: 23}, {x: 9, y: 23}, {x: 10, y: 24}, {x: 10, y: 25}, 
+                {x: 10, y: 26}, {x: 30, y: 23}, {x: 29, y: 23}, {x: 28, y: 24}, 
+                {x: 28, y: 25}, {x: 28, y: 26}, {x: 17, y: 9}, {x: 18, y: 10}, 
+                {x: 19, y: 10}, {x: 20, y: 10}, {x: 21, y: 9}]
+        )
+    ]
+}
 class GameManager {
 	static clearValues() {
         external = []
@@ -50,349 +311,25 @@ class GameManager {
         gameRound = 0
         nextTurn()
         //undoManager.clear()
-	}
-	static start1() {
-        grid = new Grid(0, 0, {
-            x: 20,
-            y: 10
-        })
-        this.clearValues()
-      	players = [
-            (new NeutralPlayer({
-                r: 208, 
-                g: 208,
-                b: 208
-                }, 0)
-            ),
-            (new Player({
-                r: 255,
-                g: 0,
-                b: 0 
-                })
-            ),
-            (new Player({
-                r: 98,
-                g: 168,
-                b: 222
-                })
-            )
-        ]
-        grid.arr[5][3].hexagon.firstpaint(1)
-
-        new Lake(10, 4)
-        new Lake(9, 5)
-        new Mountain(8, 8)
-        new Mountain(11, 1)
-
-        new Mountain(1, 7)
-        new Mountain(1, 8)
-        new Mountain(2, 8)
-
-        new Mountain(17, 1)
-        new Mountain(18, 1)
-        new Mountain(18, 2)
-
-        let TOWN1 = new Town(5, 3, false, true)
-
-        grid.arr[14][6].hexagon.firstpaint(2)
-
-        let TOWN2 = new Town(14, 6, false, true)
-
-        this.initValues()
-        requestAnimationFrame(gameLoop)
+    }
+    static start(map) {
+        map.start(this)
+    }
+	/*static start1() {
+        maps.small[0].start(this)
 	}
 	static start2() {
-        grid = new Grid(0, 0, {
-            x: 30,
-            y: 23
-        })
-        this.clearValues()
-        players = [new NeutralPlayer({
-            r: 208, 
-            g: 208,
-            b: 208
-            }, 0), 
-            new Player({
-                r: 255,
-                g: 0,
-                b: 0 //98, 168, 222
-            }),
-            new Player({
-                r: 98,
-                g: 168,
-                b: 222
-            }),
-            new Player({
-                r: 0,
-                g: 179,
-                b: 0
-            })
-        ]
-        grid.arr[9][6].hexagon.firstpaint(1)
-
-        let TOWN1 = new Town(9, 6, false, true)
-
-        grid.arr[20][9].hexagon.firstpaint(2)
-
-        let TOWN2 = new Town(20, 9, false, true)
-        
-        grid.arr[12][16].hexagon.firstpaint(3)
-
-        let TOWN3 = new Town(12, 16, false, true)
-
-        this.initValues()
-        requestAnimationFrame(gameLoop)
+        maps.small[1].start(this)
     }
     static start3() {
-        grid = new Grid(0, 0, {
-            x: 29,
-            y: 23
-        })
-        this.clearValues()
-        players = [new NeutralPlayer({
-            r: 208, 
-            g: 208,
-            b: 208
-            }, 0), 
-            new Player({
-                r: 255,
-                g: 0,
-                b: 0 //98, 168, 222
-            }),
-            new Player({
-                r: 51,
-                g: 153,
-                b: 255
-            }),
-            new Player({
-                r: 0,
-                g: 179,
-                b: 0
-            }),
-            new Player({
-                r: 112,
-                g: 0,
-                b: 204
-            })
-        ]
-
-        grid.arr[9][6].hexagon.firstpaint(1)
-
-        let TOWN1 = new Town(9, 6, false, true)
-
-        grid.arr[19][6].hexagon.firstpaint(2)
-
-        let TOWN2 = new Town(19, 6, false, true)
-        
-        grid.arr[9][16].hexagon.firstpaint(4)
-
-        let TOWN3 = new Town(9, 16, false, true)
-
-        grid.arr[19][16].hexagon.firstpaint(3)
-
-        let TOWN4 = new Town(19, 16, false, true)
-
-        this.initValues()
-        requestAnimationFrame(gameLoop)
+        maps.small[2].start(this)
     }
     static start4() {
-        grid = new Grid(0, 0, {
-            x: 31,
-            y: 21
-        })
-        this.clearValues()
-      	players = [
-            (new NeutralPlayer({
-                r: 208, 
-                g: 208,
-                b: 208
-                }, 0)
-            ),
-            (new Player({
-                r: 255,
-                g: 0,
-                b: 0 
-                })
-            ),
-            (new Player({
-                r: 98,
-                g: 168,
-                b: 222
-                })
-            )
-        ]
-
-        new Lake(11, 15)
-        new Lake(12, 15)
-        new Lake(13, 14)
-
-        new Lake(11, 4)
-        new Lake(12, 5)
-        new Lake(13, 5)
-
-        new Lake(17, 14)
-        new Lake(18, 15)
-        new Lake(19, 15)
-
-        new Lake(17, 5)
-        new Lake(18, 5)
-        new Lake(19, 4)
-
-        new Lake(6, 11)
-        new Lake(7, 11)
-        new Lake(8, 12)
-        new Lake(6, 12)
-        new Lake(7, 12)
-
-        new Lake(22, 8)
-        new Lake(23, 8)
-        new Lake(24, 9)
-        new Lake(23, 7)
-        new Lake(24, 8)
-
-        new Mountain(15, 8)
-        new Mountain(15, 11)
-
-        new Mountain(7, 5)
-        new Mountain(6, 6)
-        new Mountain(5, 6)
-
-        new Mountain(23, 14)
-        new Mountain(24, 14)
-        new Mountain(25, 13)
-
-        new Mountain(29, 1)
-        new Mountain(1, 19)
-        new Mountain(1, 1)
-        new Mountain(29, 19)
-
-
-        grid.arr[8][10].hexagon.firstpaint(1)
-
-        let TOWN1 = new Town(8, 10, false, true)
-
-        grid.arr[22][10].hexagon.firstpaint(2)
-
-        let TOWN2 = new Town(22, 10, false, true)
-
-        this.initValues()
-        requestAnimationFrame(gameLoop)
+        maps.big[0].start(this)
     }
     static start5() {
-        grid = new Grid(0, 0, {
-            x: 39,
-            y: 39
-        })
-        this.clearValues()
-        players = [new NeutralPlayer({
-            r: 208, 
-            g: 208,
-            b: 208
-            }, 0), 
-            new Player({
-                r: 255,
-                g: 0,
-                b: 0 //98, 168, 222
-            }),
-            new Player({
-                r: 98,
-                g: 168,
-                b: 222
-            }),
-            new Player({
-                r: 0,
-                g: 179,
-                b: 0
-            })
-        ]
-
-        /*new Lake(20, 18)
-        new Lake(24, 16)
-        new Lake(24, 12)
-        new Lake(20, 10)
-        new Lake(16, 12)
-        new Lake(16, 16)
-
-        new Lake(28, 20)
-        new Lake(27, 20)
-        new Lake(29, 20)
-        new Lake(28, 21)
-
-        new Lake(22, 6)
-        new Lake(21, 5)
-        new Lake(23, 5)
-        new Lake(22, 5)
-
-        new Lake(9, 14)
-        new Lake(9, 15)
-        new Lake(10, 15)
-        new Lake(8, 15)*/
-
-        /*new Town(8, 15, false, -1)
-
-        new Town(24, 8, false, -1)
-
-        new Town(28, 21, false, -1)*/
-
-
-        new Goldmine(19, 19, 60)
-        new Goldmine(8, 25, 30)
-        new Goldmine(30, 25, 30)
-        new Goldmine(19, 8, 30)
-
-        let mountainCoords = [
-            [8, 23], [9, 23], [10, 24], [10, 25], [10, 26],
-            [30, 23], [29, 23], [28, 24], [28, 25], [28, 26],
-            [17, 9], [18, 10], [19, 10], [20, 10], [21, 9]
-        ]
-        for (let i = 0; i < mountainCoords.length; ++i) {
-            new Mountain(mountainCoords[i][0], mountainCoords[i][1])
-        }
-        let neutralTownCoords = [
-            [14, 17], [24, 17], [19, 24],
-            [10, 6], [28, 6],
-            [1, 19], [37, 19],
-            [8, 34], [30, 34]
-        ]
-        for (let i = 0; i < neutralTownCoords.length; ++i) {
-            new Town(neutralTownCoords[i][0], neutralTownCoords[i][1], false, -1)
-        }
-        let lakeCoords = [
-            [12, 28], [13, 28], [14, 29], [15, 29],
-            [26, 28], [25, 28], [24, 29], [23, 29],
-            [7, 20], [7, 19], [7, 18], [7, 17],
-            [31, 20], [31, 19], [31, 18], [31, 17],
-            [14, 10], [13, 10], [12, 11], [11, 11],
-            [24, 10], [25, 10], [26, 11], [27, 11]
-        ]
-        for (let i = 0; i < lakeCoords.length; ++i) {
-            new Lake(lakeCoords[i][0], lakeCoords[i][1])
-        }
-
-        let coords = [{x: 2, y: 11}, {x: 36, y: 11}, {x: 19, y: 36}]
-        for (let i = 0; i < 3; ++i) {
-            grid.arr[coords[i].x][coords[i].y].hexagon.firstpaint(i + 1)
-            new Town(coords[i].x, coords[i].y, false, true)
-            console.log(Math.abs(coords[i].x - 19) + 
-                Math.abs(coords[i].y - 17))
-        }
-        /*grid.arr[15][8].hexagon.firstpaint(1)
-
-        let TOWN1 = new Town(15, 8, false, true)
-
-        grid.arr[28][13].hexagon.firstpaint(2)
-
-        let TOWN2 = new Town(28, 13, false, true)
-        
-        grid.arr[][20].hexagon.firstpaint(3)
-
-        let TOWN3 = new Town(17, 20, false, true)*/
-
-
-
-        this.initValues()
-        requestAnimationFrame(gameLoop)
-    }
+        maps.big[1].start(this)
+    }*/
 }
 function gameLoop() {
     gameEvent.moveScreen()

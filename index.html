@@ -74,13 +74,20 @@
     <script src='sprites/elements/imageButton.js'></script>
     <script src='sprites/elements/switch.js'></script>
     <script src='sprites/elements/imageWithLabel.js'></script>
+
+    <script src='sprites/elements/movingForm.js'></script>
+    <script src='sprites/elements/checkBox.js'></script>
+    <script src='sprites/elements/slider.js'></script>
+    <script src='sprites/elements/menuSlider.js'></script>
+
     <script src='sprites/border.js'></script>
 
     <script src='events/geteventpos.js'></script>
     <script src='events/screen.js'></script>
     <script src='events/events.js'></script>
 
-    <script src='interface/menu.js'></script>
+    <script src='menu/slotManager.js'></script>
+    <script src='menu/menu.js'></script>
     
     <script src='sprites/hexagon.js'></script>
     <script src='groups/grid.js'></script>
@@ -147,6 +154,7 @@
         let unpacker = new JsonUnpackManager()
         
         let debug = false
+        let gameSlot = 0
 
         const errorWindowCornerRadius = 0.03 * HEIGHT
 
@@ -216,27 +224,27 @@
                 let _timer = JSON.stringify(timer)
                 let _whooseTurn = JSON.stringify(whooseTurn)
                 let _gameRound = JSON.stringify(gameRound)
-                localStorage.setItem('grid', _grid)
-                localStorage.setItem('players', _players)
-                localStorage.setItem('external', _external)
-                localStorage.setItem('externalProduction', _externalProduction)
-                localStorage.setItem('nature', _nature)
-                localStorage.setItem('goldmines', _goldmines)
-                localStorage.setItem('timer', _timer)
-                localStorage.setItem('whooseTurn', _whooseTurn)
-                localStorage.setItem('gameRound', _gameRound)
+                localStorage.setItem(gameSlot + 'grid', _grid)
+                localStorage.setItem(gameSlot + 'players', _players)
+                localStorage.setItem(gameSlot + 'external', _external)
+                localStorage.setItem(gameSlot + 'externalProduction', _externalProduction)
+                localStorage.setItem(gameSlot + 'nature', _nature)
+                localStorage.setItem(gameSlot + 'goldmines', _goldmines)
+                localStorage.setItem(gameSlot + 'timer', _timer)
+                localStorage.setItem(gameSlot + 'whooseTurn', _whooseTurn)
+                localStorage.setItem(gameSlot + 'gameRound', _gameRound)
             }
             catch {
                 errorWindow.textString = "can't save game\ntry toggle internet connection"
                 errorWindow.enableTemporary()
             }
         }
-        function hasSave() {
-            return !!localStorage.getItem('whooseTurn')
+        function hasSave(_slot) {
+            return !!localStorage.getItem(_slot + 'whooseTurn')
         }
         function loadGame() {
             try {
-                if (!hasSave())
+                if (!hasSave(gameSlot))
                     return false
             }
             catch {
@@ -244,15 +252,15 @@
                 errorWindow.enableTemporary()
                 return false
             }
-            let _grid = localStorage.getItem('grid')
-            let _players = localStorage.getItem('players')
-            let _external = localStorage.getItem('external')
-            let _externalProduction = localStorage.getItem('externalProduction')
-            let _nature = localStorage.getItem('nature')
-            let _goldmines = localStorage.getItem('goldmines')
-            let _timer = localStorage.getItem('timer')
-            let _whooseTurn = localStorage.getItem('whooseTurn')
-            let _gameRound = localStorage.getItem('gameRound')
+            let _grid = localStorage.getItem(gameSlot + 'grid')
+            let _players = localStorage.getItem(gameSlot + 'players')
+            let _external = localStorage.getItem(gameSlot + 'external')
+            let _externalProduction = localStorage.getItem(gameSlot + 'externalProduction')
+            let _nature = localStorage.getItem(gameSlot + 'nature')
+            let _goldmines = localStorage.getItem(gameSlot + 'goldmines')
+            let _timer = localStorage.getItem(gameSlot + 'timer')
+            let _whooseTurn = localStorage.getItem(gameSlot + 'whooseTurn')
+            let _gameRound = localStorage.getItem(gameSlot + 'gameRound')
 
             unpacker.unpackAll(_grid, _players, _external, _externalProduction, 
                 _nature, _goldmines, _timer, _whooseTurn, _gameRound)
@@ -260,6 +268,24 @@
             gameEvent.hideAll()
                 //console.log("loaded")
             return true
+        }
+        function loadSlotInfo(_slot) {
+            try {
+                if (!hasSave(_slot))
+                    return {whooseTurn: -1}
+
+                let res = {
+                    players: localStorage.getItem(_slot + 'players'),
+                    whooseTurn: localStorage.getItem(_slot + 'whooseTurn'),
+                    gameRound: localStorage.getItem(_slot + 'gameRound')
+                }
+                return res
+            }
+            catch {
+                errorWindow.textString = "can't save game\ntry toggle internet connection"
+                errorWindow.enableTemporary()
+                return {whooseTurn: -1}
+            }
         }
         function start() {
            

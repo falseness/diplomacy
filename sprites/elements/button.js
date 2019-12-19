@@ -18,6 +18,42 @@ class Button {
     get pos() {
         return this.rect.pos
     }
+    get x() {
+        return this.rect.x
+    }
+    set x(val) {
+        this.rect.x = val
+        this.trimText()
+    }
+    set color(val) {
+        this.rect.color = val
+    }
+    get y() {
+        return this.rect.y
+    }
+    get bottom() {
+        return this.rect.bottom
+    }
+    get centerX() {
+        return this.rect.centerX
+    }
+    set centerX(val) {
+        this.rect.centerX = val
+        this.trimText()
+    }
+    get centerY() {
+        return this.rect.centerY
+    }
+    set centerY(val) {
+        this.rect.centerY = val
+        this.trimText()
+    }
+    get width() {
+        return this.rect.width
+    }
+    get height() {
+        return this.rect.height
+    }
     set pos(pos) {
         this.rect.pos = pos
         this.trimText()
@@ -36,6 +72,9 @@ class Button {
     }
     get textColor() {
         return this.text.color
+    }
+    touchmove(pos) {
+
     }
     enableClick() {
         this.canClick = true
@@ -62,63 +101,9 @@ class Button {
         return false
     }
     draw(ctx) {
-            if (this.canClick) {
-                this.rect.draw(ctx)
-                this.text.draw(ctx)
-            }
+        if (this.canClick) {
+            this.rect.draw(ctx)
+            this.text.draw(ctx)
         }
-        /*constructor(model, text, name)
-        {
-            this.text = text
-            this.name = name
-            
-            this.object = createRectByModel(model)                            
-            this.text.changePos(model.x + this.object.getWidth() / 2, model.y)
-        }
-        getObject()
-        {
-            return [this.object, this.text.getObject()]
-        }
-        setFunction(func, parameters)
-        {
-            this.object.parameters = parameters
-            this.object.on('click', func)
-        }
-        deleteFunction()
-        {
-            this.object.parameters = NaN
-            this.object.off('click')
-        }
-        changeText(text)
-        {
-            this.text.change(text)
-            this.text.object.draw()
-        }
-        changePos(x, y)
-        {
-            if (x)
-            {
-                this.pos.x = x
-                this.object.x(x)
-                this.text.changePos(x)
-            }
-            if (y)
-            {
-                this.pos.y = y
-                this.object.y(y)
-                this.text.changePos(NaN, y)
-            }
-        }
-        hide()
-        {
-            this.object.visible(false)
-            this.text.object.visible(false)
-            
-            this.deleteFunction()
-        }
-        draw()
-        {
-            this.object.visible(true)
-            this.text.object.visible(true)
-        }*/
+    }
 }
