@@ -267,7 +267,7 @@ class Way {
         this.parent[coord.x][coord.y] = v
         used[coord.x][coord.y] = true
     }
-    create(v0, moves, arr, player, bord, changeLogicText = true, newBorder = true) {
+    create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = true) {
         // init
         let used = this.initialization(v0, moves, arr, newBorder)
         let Q = []

@@ -1,16 +1,15 @@
 class SpritesGroup extends Sprite
 {
-    arr = []
     constructor(x, y)
     {
         super(x, y)
-        //this.#arr = []
+        this.arr = []
     }
-    createArr(n)
+    createArr(n, arrName)
     {
         for (let i = 0; i < n; ++i)
         {
-            this.arr.push([])
+            arrName.push([])
         }
     }
     draw()

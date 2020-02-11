@@ -135,6 +135,10 @@ class Unit extends Entity {
         if (this.isMyTurn && !this.isFullMoves)
             this.movesBar.draw(ctx)
     }
+    get visionRange() {
+        const visRange = 3
+        return visRange
+    }
     draw(ctx) {
         this.drawBars(ctx)
 

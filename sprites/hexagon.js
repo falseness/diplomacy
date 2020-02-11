@@ -79,3 +79,15 @@ class Suburb {
         return res
     }
 }
+class FogOfWarHexagon extends Hexagon {
+    constructor(x, y) {
+        super(x, y)
+        this.pos.x -= basis.hexHalfRectWithStrokeOffset.width
+        this.pos.y -= basis.hexHalfRectWithStrokeOffset.height
+    }
+    draw(ctx) {
+        let pos = this.pos
+
+        drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
+    }
+}

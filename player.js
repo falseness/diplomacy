@@ -252,6 +252,12 @@ class NeutralPlayer extends Player {
         super(color, gold)
         this.hexagon = this.calcSuburbHexagon()
 
+        if (isFogOfWar) {
+            let oldColor = this.color
+            this.color = {r: 51, g: 51, b: 51}
+            this.fogOfWarHexagon = this.calcSuburbHexagon()
+            this.color = oldColor
+        }
     }
     get isLost() {
         return false

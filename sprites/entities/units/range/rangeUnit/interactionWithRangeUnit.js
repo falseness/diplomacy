@@ -140,7 +140,7 @@ class RangeWay extends Way {
         Q.push(coord)
         this.markCoord(v, coord, used)
     }
-    create(v0, moves, arr, player, bord, changeLogicText = true, newBorder = false) {
+    create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = false) {
         // dont chage logic text and create border by default
         super.create(v0, moves, arr, player, bord, changeLogicText, newBorder)
     }

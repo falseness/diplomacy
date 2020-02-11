@@ -18,7 +18,7 @@ class Grid extends SpritesGroup {
     constructor(x, y, size) {
         super(x, y)
 
-        if (size)
+        if (size) 
             this.fill(size.x, size.y)
     }
     toJSON() {
@@ -74,23 +74,20 @@ class Grid extends SpritesGroup {
                     new CoordText(i, j, i + ' ' + j), new CoordText(i, j, ''))
             }
         }
-        //undoManager.clear()
-        /*for (let x = 0; x <= k * 2; ++x)
-        {
-            for (let y = Math.max(-k, -x - k) + k; y <= Math.min(k, -x + k) + k; ++y)
-            {
-                let z = -x - y
-                
-                this.arr[x][y][z] = {hexagon: new Hexagon(x, y, z), text: new Text(x, y, z)}
-                
-                this.object.add(this.arr[x][y][z].hexagon.createObject())
-                this.coordGrid.object.add(this.arr[x][y][z].text.createObject(x + ' ' + y + ' ' + z))
+        if (isFogOfWar) {
+            this.fogOfWar = []
+            this.createArr(n, this.fogOfWar)
+            for (let i = 0; i < n; ++i) {
+                for (let j = 0; j < m; ++j) 
+                    this.fogOfWar[i][j] = 0
             }
-        }*/
+        }
     }
     drawHexagons(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
                 let cell = this.arr[i][j]
                 cell.hexagon.draw(ctx)
             }
@@ -116,6 +113,8 @@ class Grid extends SpritesGroup {
         let tmpBuildings = []
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
                 let cell = this.arr[i][j]
 
                 cell.building.draw(ctx)
@@ -128,17 +127,30 @@ class Grid extends SpritesGroup {
             tmpBuildings[i].drawBars(ctx)
         }
     }
+    drawFogOfWar(ctx) {
+        for (let i = 0; i < this.fogOfWar.length; ++i) {
+            for (let j = 0; j < this.fogOfWar[i].length; ++j) {
+                if (!this.fogOfWar[i][j]) {
+                    let hexagon = new FogOfWarHexagon(i, j)
+                    hexagon.draw(ctx)
+                }
+            }
+        }
+    }
     draw(ctx) {
         this.drawHexagons(ctx)
 
-        attackBorder.draw(mainCtx)
-        border.draw(mainCtx)
+        attackBorder.draw(ctx)
+        border.draw(ctx)
         
         if (!this.drawLogicText && debug)
             this.drawTextCoord(ctx)
 
         this.drawOther(ctx)
         
+        if (isFogOfWar)
+            this.drawFogOfWar(ctx)
+
         if (this.drawLogicText)
             this.drawTextLogic(ctx)
     }
