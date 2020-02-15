@@ -20,7 +20,7 @@ function menuTouchEnd(event) {
 }
 function start(_slot) {
     gameSlot = _slot
-    GameManager.start(menu.selectedMap, menu.isFogOfWar)
+    GameManager.start(menu.selectedMap, menu.isFogOfWar, menu.isDynamicTimer)
 }
 function load(_slot) {
     gameSlot = _slot
@@ -62,16 +62,16 @@ class GameSettingsTree {
         let rectSize = WIDTH * 0.05
         let cornerR = rectSize * 0.1
         let marginLeft = rectSize * 0.5
+        /*const firstY = HEIGHT * 0.3
+        let intervalY = HEIGHT * 0.15*/
         const firstY = HEIGHT * 0.3
-        let intervalY = HEIGHT * 0.15
+        let intervalY = HEIGHT * 0.12
 
         const posX = WIDTH * 0.5
 
         const fontSize = 0.04 * WIDTH
         this.playersText = new Text(posX - Menu.getButton().width / 2, 
             firstY, fontSize, 'players', 'black', 'left')
-
-           // minimumValue, maximumValue, startValue = 0, marginX, text, leftButton, rightButton
 
         const slidePosX = posX + WIDTH * 0.1
 
@@ -102,20 +102,25 @@ class GameSettingsTree {
             WIDTH * 0.58, firstY + intervalY * 2, rectSize, rectSize, 
             [cornerR, cornerR, cornerR, cornerR], 0.003 * WIDTH, 'white')
 
+        this.timerCheckBox = new ImageCheckBox('checkMark',
+            new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
+            WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize, 
+            [cornerR, cornerR, cornerR, cornerR], 0.003 * WIDTH, 'white')
+
         this.backButton = new Empty()
         //this.fogOfWarCheckBox.toCenterX()
 
-        intervalY -= HEIGHT * 0.02
+        intervalY -= HEIGHT * 0.01
 
         this.playButton = Menu.getButton(
-            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 3}, 'start', 
+            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start', 
                 _menu.setTree, _menu.startGame, true, _menu)
             
         this.updateButtonsList()
     }
     updateButtonsList() {
         this.buttons = [this.backButton, this.playButton, 
-            this.fogOfWarCheckBox, this.playersSlider, this.mapSlider]
+            this.fogOfWarCheckBox, this.timerCheckBox, this.playersSlider, this.mapSlider]
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         let y = HEIGHT * 0.3 + 4 * HEIGHT * 0.12
@@ -138,6 +143,10 @@ class GameSettingsTree {
     }
     get isFogOfWar() {
         let res = this.fogOfWarCheckBox.mark
+        return res
+    }
+    get isDynamicTimer() {
+        let res = this.timerCheckBox.mark
         return res
     }
     touchmove() {}
@@ -238,6 +247,9 @@ class Menu {
     }
     get isFogOfWar() {
         return this.play.isFogOfWar
+    }
+    get isDynamicTimer() {
+        return this.play.isDynamicTimer
     }
     start() {
         this.updateSlotManagers()

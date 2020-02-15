@@ -54,12 +54,16 @@ class Map {
         this.createNature()
 
         if (!isClassicTimer) {
+            timer = new LongTimer()
             timer.time = STANDARTTIME
             timer.lastPause = undefined
             for (let i = 0; i < this.players.length; ++i) {
                 whooseTurn = i
                 unpacker.savePlayerTime()
             }
+        }
+        else {
+            timer = new Timer()
         }
 
         _gameManager.initValues()
