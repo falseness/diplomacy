@@ -1,7 +1,7 @@
 class UndoManager {
     constructor() {
         this.arr = []
-        this.maximumSize = 30
+        this.maximumSize = 100
     }
     clear() {
         this.arr = []

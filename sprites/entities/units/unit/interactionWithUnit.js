@@ -40,6 +40,7 @@ class InterationWithUnit {
         if (!unit.isMyTurn) {
             borderRadius = this.speed
         }
+
         this.way.create(unit.coord, borderRadius, grid.arr, unit.playerColor, border)
     }
     addHittedUnitUndo(cell) {
@@ -89,7 +90,7 @@ class InterationWithUnit {
     }
     move(coord, cell, arr, unit) {
         this.addThisUndo(unit)
-            //this.addUndo()
+        //this.addUndo()
         this.moves -= this.way.getDistance(coord)
         let hitUnit = this.hitIfCellHasEnemy(cell, unit)
         let killEnemy = false
@@ -101,6 +102,7 @@ class InterationWithUnit {
         let killUnit = hitUnit && killEnemy
         this.paintHexagons(coord, arr, unit, killUnit)
         this.changeCoord(coord, unit, killUnit)
+        unit.changeFogOfWarByVision()
     }
     paintHexagons(original_coord, arr, unit, isKillUnit) {
         let coord = Object.assign({}, original_coord)
@@ -190,6 +192,7 @@ class InterationWithUnit {
             cell.unit.notEmpty()
     }
 }
+
 class Way {
     constructor() {
         this.distance = []
@@ -226,9 +229,12 @@ class Way {
     }
     isCellImpassable(neighbour, v0, arr, player) {
         let cell = arr[neighbour.x][neighbour.y]
-        return (cell.unit.notEmpty() && cell.unit.playerColor == player && 
-            !coordsEqually(neighbour, v0)) || 
-            cell.building.isObstacle(player)
+        let ourUnit = cell.unit.notEmpty() && cell.unit.playerColor == player && 
+                        !coordsEqually(neighbour, v0)
+        let buildingObstacle = cell.building.isObstacle(player)
+        let fogged = isFogOfWar && !grid.fogOfWar[neighbour.x][neighbour.y]
+        return (ourUnit || buildingObstacle || fogged)
+            
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {
         // if hexagon has the same color, he will be processed later
@@ -293,6 +299,43 @@ class Way {
                 }
                 if (!used[coord.x][coord.y]) {
                     this.notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ)
+                }
+            }
+        }
+    }
+}
+class VisionWay {
+    constructor() {}
+    changeFogOfWarByVision(v0, fogOfWarArr, visionRange, value = 1, isIgnoreBarriers = false) {
+        if (visionRange < 0)
+            return
+        let us = ++grid.newVisionUsedValue
+        let used = grid.visionUsed
+        let dist = grid.visionDistance
+        let Q = [v0]
+        used[v0.x][v0.y] = us
+        dist[v0.x][v0.y] = 0
+
+        while (Q.length) {
+            let v = Q.shift()
+            
+            fogOfWarArr[v.x][v.y] += value
+
+            if (dist[v.x][v.y] == visionRange || (!isIgnoreBarriers && !coordsEqually(v, v0) &&
+                grid.arr[v.x][v.y].building.isBarrier()))
+                continue
+
+            let neighbours = grid.arr[v.x][v.y].hexagon.neighbours
+            for (let i = 0; i < neighbours.length; ++i) {
+                let t = neighbours[i]
+
+                if (isCoordNotOnMap(t, grid.arr.length, grid.arr[0].length))
+                    continue
+
+                if (used[t.x][t.y] != us) {
+                    used[t.x][t.y] = us
+                    dist[t.x][t.y] = dist[v.x][v.y] + 1
+                    Q.push(t)
                 }
             }
         }

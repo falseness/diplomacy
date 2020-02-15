@@ -15,6 +15,9 @@ class Empty {
     get hasBar() {
         return false
     }
+    get isPreventsToSee() {
+        return false
+    }
     kill() {}
     isPassable() {
         return true

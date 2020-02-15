@@ -66,6 +66,12 @@ class Grid extends SpritesGroup {
         this.cleanLogicText()
         this.drawLogicText = true
     }
+    clearFogOfWarArr() {
+        let n = this.fogOfWar.length
+        let m = this.fogOfWar[0].length
+        this.fogOfWar = []
+        this.fullInitArr(n, m, this.fogOfWar, 0)
+    }
     fill(n, m) {
         this.createArr(n, this.arr)
         for (let i = 0; i < n; ++i) {
@@ -75,12 +81,17 @@ class Grid extends SpritesGroup {
             }
         }
         if (isFogOfWar) {
-            this.fogOfWar = []
-            this.createArr(n, this.fogOfWar)
-            for (let i = 0; i < n; ++i) {
-                for (let j = 0; j < m; ++j) 
-                    this.fogOfWar[i][j] = 0
-            }
+            this.fogOfWar = [] 
+            this.visionUsed = []
+            this.visionDistance = []
+            
+            this.fullInitArr(n, m, this.fogOfWar, 0)
+            this.fullInitArr(n, m, this.visionUsed, 0)
+            this.fullInitArr(n, m, this.visionDistance, 0)
+
+            this.newVisionUsedValue = 0
+
+            this.visionWay = new VisionWay()
         }
     }
     drawHexagons(ctx) {
@@ -140,19 +151,19 @@ class Grid extends SpritesGroup {
     draw(ctx) {
         this.drawHexagons(ctx)
 
-        attackBorder.draw(ctx)
-        border.draw(ctx)
-        
-        if (!this.drawLogicText && debug)
-            this.drawTextCoord(ctx)
-
         this.drawOther(ctx)
-        
-        if (isFogOfWar)
-            this.drawFogOfWar(ctx)
 
         if (this.drawLogicText)
             this.drawTextLogic(ctx)
+
+        if (isFogOfWar)
+            this.drawFogOfWar(ctx)
+
+        if (!this.drawLogicText && debug)
+            this.drawTextCoord(ctx)
+
+        attackBorder.draw(ctx)
+        border.draw(ctx)
     }
 }
 

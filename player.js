@@ -134,6 +134,19 @@ class Player {
         this.updateUnits()
         return !this.towns.length && !this.units.length
     }
+    changeFogOfWarByVision() {
+        grid.clearFogOfWarArr()
+        for (let i = 0; i < this.units.length; ++i) {
+            let unit = this.units[i]
+            unit.changeFogOfWarByVision()
+        }
+        for (let cycle = 0; cycle < this.towns.length; ++cycle) {
+            for (let i = 0; i < this.towns[cycle].suburbs.length; ++i) {
+                let coord = this.towns[cycle].suburbs[i].coord
+                grid.visionWay.changeFogOfWarByVision(coord, grid.fogOfWar, SUBURBSVISIONRANGE)
+            }
+        }
+    }
     nextTurn() {
         this.gold += this.income
         this.correctGoldminesIncome()
@@ -153,6 +166,8 @@ class Player {
         for (let i = 0; i < this.towns.length; ++i) {
             this.towns[i].nextTurn()
         }
+        if (isFogOfWar)
+            this.changeFogOfWarByVision()
     }
     calcSuburbHexagon() {
         let tmpCanvas = document.createElement('canvas')

@@ -39,6 +39,8 @@ function coordsEqually(coordOne, coordTwo) {
     return coordOne.x == coordTwo.x && coordOne.y == coordTwo.y
 }
 
+SUBURBSVISIONRANGE = 1
+
 let canvas = {
     offset: {
         x: 0,

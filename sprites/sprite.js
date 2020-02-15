@@ -52,6 +52,9 @@ class Sprite
     {
         return !this.isEmpty()
     }
+    get isPreventsToSee() {
+        return false
+    }
     draw()
     {
         console.log("error, try to draw sprite")

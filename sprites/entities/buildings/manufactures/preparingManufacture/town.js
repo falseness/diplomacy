@@ -137,6 +137,9 @@ class Town extends PreparingManufacture {
     get isBadlyDamaged() {
         return !this.hp
     }
+    isBarrier() {
+        return true
+    }
     isTown() {
         return true
     }
@@ -160,7 +163,7 @@ class Town extends PreparingManufacture {
 
             if (hexagon.playerColor == this.playerColor) {
                 hexagon.isSuburb = true
-                this.suburbs.push(hexagon)
+            this.suburbs.push(hexagon)
             }
         }
     }

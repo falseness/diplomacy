@@ -49,8 +49,28 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
         if (!killed)
             this.addKillBuildingUndo(cellBuilding)
     }
+    sendAttackInstructions(cell, catapult) {
+        if (this.cellHasEnemyBuildingProduction(cell, catapult)) {
+            let result = this.buildingAttack(cell, catapult)
+            if (result)
+                return true
+        }
+
+        return super.sendInstructions(cell, catapult)
+    }
     sendInstructions(cell, catapult) {
         let coord = cell.coord
+
+        if (isFogOfWar && !grid.fogOfWar[coord.x][coord.y]) {
+            // blind area cant be fogged
+            let result = this.sendAttackInstructions(cell, catapult)
+            if (!this.undoAdded) {
+                this.addThisUndo(catapult)
+                this.moves = 0
+                this.addKillUnitUndo(catapult)
+            }
+            return result
+        }
         
         let isCellInBlindArea = this.isBlindArea(coord)
         let isEnemyInBlindArea = (isCellInBlindArea &&
@@ -66,13 +86,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             return true
         }
 
-        if (this.cellHasEnemyBuildingProduction(cell, catapult)) {
-            let result = this.buildingAttack(cell, catapult)
-            if (result)
-                return true
-        }
-
-        return super.sendInstructions(cell, catapult)
+        return this.sendAttackInstructions(cell, catapult)
     }
 	move(coord, cell, arr, unit) {
 		this.mirrorInteraction.move(coord, cell, arr, unit)

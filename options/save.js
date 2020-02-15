@@ -220,5 +220,6 @@ class JsonUnpackManager {
         }
         this.unpackAllExternal(packedExternal, packedExternalProduction)
         this.unpackAllNature(packedNature)
+        players[whooseTurn].changeFogOfWarByVision()
     }
 }

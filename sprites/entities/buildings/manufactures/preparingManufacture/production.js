@@ -381,9 +381,16 @@ class ExternalProduction extends BuildingProduction {
             this.availableHexagons.push(grid.getHexagon(v))
             let neighbours = arr[v.x][v.y].hexagon.neighbours
 
+            
             for (let i = 0; i < neighbours.length; ++i) {
-                if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) ||
-                        grid.getHexagon(neighbours[i]).playerColor != playerColor) {
+                let endMap = isCoordNotOnMap(neighbours[i], arr.length, arr[0].length)
+                if (endMap) {
+                    border.createLine(grid.getHexagon(v).calcPos(), i)
+                    continue
+                }
+                let notCapturedLand = grid.getHexagon(neighbours[i]).playerColor != playerColor
+                let fogged = isFogOfWar && !grid.fogOfWar[neighbours[i].x][neighbours[i].y]
+                if (notCapturedLand || fogged) {
 
                     border.createLine(grid.getHexagon(v).calcPos(), i)
                     continue
@@ -421,6 +428,8 @@ class SuburbProduction extends BuildingProduction {
 
         this.create(coord, town)
         this.choose(town)
+        if (isFogOfWar)
+            grid.visionWay.changeFogOfWarByVision(coord, grid.fogOfWar, SUBURBSVISIONRANGE)
         return this.availableHexagons.length && town.gold >= this.cost
     }
     create(coord, town) {

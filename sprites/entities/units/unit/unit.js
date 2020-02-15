@@ -1,4 +1,5 @@
 class Unit extends Entity {
+    static visionRange = 3
     constructor(x, y, name) {
         super(x, y, name)
         //this.moves = speed
@@ -51,6 +52,9 @@ class Unit extends Entity {
     }
     get speed() {
         return this.constructor.speed
+    }
+    get visionRange() {
+        return this.constructor.visionRange
     }
     get salary() {
         return this.constructor.salary
@@ -129,15 +133,16 @@ class Unit extends Entity {
     get isFullMoves() {
         return this.moves == this.speed
     }
+    changeFogOfWarByVision(value = 1) {
+        let increasedVision = grid.getBuilding(this.coord).rangeIncrease
+        grid.visionWay.changeFogOfWarByVision(this.coord, grid.fogOfWar, 
+            this.visionRange, value, Boolean(increasedVision))
+    }
     drawBars(ctx) {
         super.drawBars(ctx)
 
         if (this.isMyTurn && !this.isFullMoves)
             this.movesBar.draw(ctx)
-    }
-    get visionRange() {
-        const visRange = 3
-        return visRange
     }
     draw(ctx) {
         this.drawBars(ctx)

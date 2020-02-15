@@ -286,6 +286,13 @@ class Events {
         if (this.selected.needInstructions()) {
             this.sendInstructions(coord)
         } else {
+            if (isFogOfWar && !grid.fogOfWar[coord.x][coord.y]) {
+                this.hideAll()
+                this.selected.removeSelect()
+                this.selected = new Empty()
+
+                return
+            }
             this.selected.removeSelect()
             this.clickOnCell(coord)
         }
