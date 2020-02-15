@@ -44,7 +44,7 @@ class Map {
             new Lake(lake.x, lake.y)
         }
     }
-    start(_gameManager) {
+    start(_gameManager, isClassicTimer) {
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
 
@@ -52,6 +52,15 @@ class Map {
         this.createTowns()
         this.createGoldmines()
         this.createNature()
+
+        if (!isClassicTimer) {
+            timer.time = STANDARTTIME
+            timer.lastPause = undefined
+            for (let i = 0; i < this.players.length; ++i) {
+                whooseTurn = i
+                unpacker.savePlayerTime()
+            }
+        }
 
         _gameManager.initValues()
         requestAnimationFrame(gameLoop)
@@ -322,9 +331,9 @@ class GameManager {
         nextTurn()
         //undoManager.clear()
     }
-    static start(map, _isFogOfWar) {
+    static start(map, _isFogOfWar, isClassicTimer = false) {
         isFogOfWar = _isFogOfWar
-        map.start(this)
+        map.start(this, isClassicTimer)
     }
 	/*static start1() {
         maps.small[0].start(this)

@@ -31,7 +31,7 @@ class NextTurnPauseInterface {
         this.#visible = boolean
         if (boolean) {
             this.background.color = players[whooseTurn].hexColor
-            this.timeInfo.textString = String(timer.seconds)
+            this.timeInfo.textString = timer.timerText
             this.goldInfo.textString = String(players[whooseTurn].gold)
             this.playerText.text = 'Player ' + whooseTurn
         }

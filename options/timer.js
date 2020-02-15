@@ -2,10 +2,8 @@ class Timer {
     constructor() {
         // this.time is turn time
         // initialization in nextTurn or in loader:
-        /*this.time = time
-        this.lastPause = Date.now()*/
 
-        this.text = new Text(WIDTH - WIDTH * 0.07, HEIGHT - WIDTH * 0.1 + WIDTH * 0.05, WIDTH * 0.04,
+        this.text = new Text(WIDTH - WIDTH * 0.06, HEIGHT - nextTurnButtonSize * 1.1 / 2, WIDTH * 0.03,
             'timer text', 'white')
         this.isTick = false
     }
@@ -15,7 +13,7 @@ class Timer {
         const unitsRatio = 12
         let result = player.unitsCount * unitsRatio
         if (player.townsCount)
-            result += Math.floor(player.gold * 1.5) + player.townsCount * 10
+            result += Math.floor(player.gold / 3) + player.townsCount * 10
         //+ player.townsCount * townRatio + player.barracksCount * barrackRatio
         result *= 1000
         // now milliseconds in result
@@ -30,8 +28,8 @@ class Timer {
         return Math.floor(this.time / 1000)
     }
     nextTurn() {
-        this.time = this.calcTime()
         this.pause()
+        this.time = this.calcTime()
     }
     pause() {
         this.isTick = false
@@ -49,19 +47,69 @@ class Timer {
     toJSON() {
         let res = {
             time: this.timeLeft, 
-            enable: true
+            enable: true,
+            type: 'classic'
         }
+        return res
+    }
+    get timerText() {
+        if (this.isTick)
+            this.check()
+        let millisecondsLeft = this.timeLeft
+        let secondsLeft = Math.floor(millisecondsLeft / 1000)
+
+        let m = Math.floor(secondsLeft / 60)
+        let s = secondsLeft % 60
+        if (!m)
+            return String(s)
+        let res = m + 'm'
+        if (s)
+            res += s + 's'
         return res
     }
     draw(ctx) {
         if (!this.isTick) {
             return
         }
-        this.check()
-        let millisecondsLeft = this.timeLeft
-        let secondsLeft = Math.floor(millisecondsLeft / 1000)
-        this.text.text = String(secondsLeft)
+        
+        this.text.text = this.timerText
 
         this.text.draw(ctx)
+    }
+}
+const STANDARTTIME = 2 * 1000
+class LongTimer extends Timer {
+    constructor(fullTime = STANDARTTIME, timeAdd = 5 * 1000) {
+        super()
+        this.time = fullTime
+        this.timeAdd = timeAdd
+    }
+    calcTime() {
+        let t = unpacker.getPlayerTime()
+        if (isNaN(t))
+            t = STANDARTTIME
+        return t + this.timeAdd
+    }
+    pause() {
+        this.isTick = false
+        if (!isNaN(this.lastPause))
+            this.time -= Math.floor(Date.now() - this.lastPause)
+        this.time = Math.max(this.time, 0)
+
+        unpacker.savePlayerTime()
+    }
+    nextTurn() {
+        let oldWhooseTurn = whooseTurn
+        whooseTurn = (whooseTurn - 1 + players.length) % players.length
+        if (whooseTurn == 0)
+            whooseTurn = players.length - 1
+        this.pause()
+        whooseTurn = oldWhooseTurn
+        this.time = this.calcTime()
+    }
+    toJSON() {
+        let res = super.toJSON()
+        res.type = 'long'
+        return res
     }
 }

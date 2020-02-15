@@ -29,6 +29,14 @@ class JsonUnpackManager {
             mountain: Mountain
         }
     }
+    savePlayerTime() {
+        let res = timer.time
+        localStorage.setItem(gameSlot + 'timer' + whooseTurn, res)
+    }
+    getPlayerTime() {
+        let res = localStorage.getItem(gameSlot + 'timer' + whooseTurn)
+        return Number(res)
+    }
     unpackUnit(packedUnit, _unit) {
         if (packedUnit.name == 'Empty') {
             let empty = new Empty()
@@ -174,7 +182,13 @@ class JsonUnpackManager {
     unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, 
             jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound, jsonIsFogOfWar) {
         let packedTimer = JSON.parse(jsonTimer)
-        timer.time = packedTimer.time
+        if (packedTimer.type == 'long') {
+            timer = new LongTimer(packedTimer.time)
+        }
+        else {
+            timer = new Timer()
+            timer.time = packedTimer.time
+        }
         let packedGrid = JSON.parse(jsonGrid)
         let packedPlayers = JSON.parse(jsonPlayers)
         let packedExternal = JSON.parse(jsonExternal)

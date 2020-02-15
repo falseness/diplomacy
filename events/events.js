@@ -158,8 +158,10 @@ class Events {
             if (Date.now() - this.lastKeyboardPressTime < this.keyboardPressInterval)
                 return
             this.lastKeyboardPressTime = Date.now()
-            if (keycode == 13) // enter
+            if (keycode == 13) {// enter 
+                nextTurnPauseInterface.visible = false
                 nextTurn()
+            }
             if (keycode == 27) // esc
                 debug = !debug
             if (keycode == 90) //z
