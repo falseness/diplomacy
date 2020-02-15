@@ -322,7 +322,8 @@ class GameManager {
         nextTurn()
         //undoManager.clear()
     }
-    static start(map) {
+    static start(map, _isFogOfWar) {
+        isFogOfWar = _isFogOfWar
         map.start(this)
     }
 	/*static start1() {

@@ -20,7 +20,7 @@ function menuTouchEnd(event) {
 }
 function start(_slot) {
     gameSlot = _slot
-    GameManager.start(menu.selectedMap)
+    GameManager.start(menu.selectedMap, menu.isFogOfWar)
 }
 function load(_slot) {
     gameSlot = _slot
@@ -136,6 +136,10 @@ class GameSettingsTree {
         let map = maps[this.mapSlider.realValue][this.playersSlider.value]
         return map
     }
+    get isFogOfWar() {
+        let res = this.fogOfWarCheckBox.mark
+        return res
+    }
     touchmove() {}
     click(pos) {
         let ok = false
@@ -231,6 +235,9 @@ class Menu {
     }
     get selectedMap() {
         return this.play.selectedMap
+    }
+    get isFogOfWar() {
+        return this.play.isFogOfWar
     }
     start() {
         this.updateSlotManagers()

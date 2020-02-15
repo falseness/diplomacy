@@ -234,6 +234,7 @@
                 localStorage.setItem(gameSlot + 'timer', _timer)
                 localStorage.setItem(gameSlot + 'whooseTurn', _whooseTurn)
                 localStorage.setItem(gameSlot + 'gameRound', _gameRound)
+                localStorage.setItem(gameSlot + 'isFogOfWar', isFogOfWar)
             }
             catch {
                 errorWindow.textString = "can't save game\ntry toggle internet connection"
@@ -262,9 +263,10 @@
             let _timer = localStorage.getItem(gameSlot + 'timer')
             let _whooseTurn = localStorage.getItem(gameSlot + 'whooseTurn')
             let _gameRound = localStorage.getItem(gameSlot + 'gameRound')
+            let _isFogOfWar = localStorage.getItem(gameSlot + 'isFogOfWar')
 
             unpacker.unpackAll(_grid, _players, _external, _externalProduction, 
-                _nature, _goldmines, _timer, _whooseTurn, _gameRound)
+                _nature, _goldmines, _timer, _whooseTurn, _gameRound, _isFogOfWar)
 
             gameEvent.hideAll()
                 //console.log("loaded")

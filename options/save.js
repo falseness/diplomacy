@@ -172,7 +172,7 @@ class JsonUnpackManager {
         }
     }
     unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, 
-            jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound) {
+            jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound, jsonIsFogOfWar) {
         let packedTimer = JSON.parse(jsonTimer)
         timer.time = packedTimer.time
         let packedGrid = JSON.parse(jsonGrid)
@@ -183,7 +183,7 @@ class JsonUnpackManager {
         let packedGoldmines = JSON.parse(jsonGoldmines)
         whooseTurn = JSON.parse(jsonWhooseTurn)
         gameRound = JSON.parse(jsonGameRound)
-        
+        isFogOfWar = JSON.parse(jsonIsFogOfWar)
 
         let gridSize = {
             x: packedGrid.length,
@@ -220,6 +220,8 @@ class JsonUnpackManager {
         }
         this.unpackAllExternal(packedExternal, packedExternalProduction)
         this.unpackAllNature(packedNature)
-        players[whooseTurn].changeFogOfWarByVision()
+
+        if (isFogOfWar)
+            players[whooseTurn].changeFogOfWarByVision()
     }
 }
