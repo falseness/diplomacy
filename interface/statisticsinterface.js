@@ -93,6 +93,10 @@ class StatisticsInterface {
                     'suburbs: ' + players[i].suburbsCount + '\n' +
                     'army cost: ' + players[i].armyCost + '\n' + 
                     'army salary: ' + players[i].armySalary
+                
+                if (isFogOfWar && i != whooseTurn) {
+                    text = '???'
+                }
             }
             this.playersInfo.push({
                 rect: new Rect(x, y, this.playerInfoWidth, this.playerInfoHeight),
