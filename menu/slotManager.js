@@ -15,6 +15,10 @@ class Slot {
             round: new Text(
                 this.rect.centerX, this.rect.y + this.rect.height * 0.55, 
                 this.rect.width * 0.2,
+                undefined, undefined, undefined, undefined, this.rect.selectedRatio),
+            fogOfWar: new Text(
+                this.rect.centerX, this.rect.y + this.rect.height * 0.75, 
+                this.rect.width * 0.2,
                 undefined, undefined, undefined, undefined, this.rect.selectedRatio)
         }
     }
@@ -37,6 +41,13 @@ class Slot {
     }
     set gameRound(val) {
         this.text.round.text = 'Round: ' + val
+    }
+    set fogOfWar(val) {
+        let s = ''
+        if (val) {
+            s = 'Fog of war'
+        }
+        this.text.fogOfWar.text = s
     }
     set color(val) {
         this.isEmpty = false
@@ -123,11 +134,13 @@ class SlotManager {
             let slotInfo = {
                 players: JSON.parse(slotInfoJSON.players),
                 whooseTurn: JSON.parse(slotInfoJSON.whooseTurn),
-                gameRound: JSON.parse(slotInfoJSON.gameRound)
+                gameRound: JSON.parse(slotInfoJSON.gameRound),
+                fogOfWar: JSON.parse(slotInfoJSON.fogOfWar)
             }
             
             slots[i].playersCount = slotInfo.players.length - 1
             slots[i].gameRound = slotInfo.gameRound
+            slots[i].fogOfWar = slotInfo.fogOfWar
             let rgb = slotInfo.players[slotInfo.whooseTurn].color
             slots[i].color = rgbToHex(rgb.r, rgb.g, rgb.b) 
         }
