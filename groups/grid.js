@@ -151,13 +151,13 @@ class Grid extends SpritesGroup {
     draw(ctx) {
         this.drawHexagons(ctx)
 
-        this.drawOther(ctx)
-
         if (this.drawLogicText)
             this.drawTextLogic(ctx)
 
         if (isFogOfWar)
             this.drawFogOfWar(ctx)
+
+        this.drawOther(ctx)
 
         if (!this.drawLogicText && debug)
             this.drawTextCoord(ctx)
