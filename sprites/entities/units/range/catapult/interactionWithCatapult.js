@@ -50,7 +50,8 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             this.addKillBuildingUndo(cellBuilding)
     }
     sendAttackInstructions(cell, catapult) {
-        if (this.cellHasEnemyBuildingProduction(cell, catapult)) {
+        if (!this.cantRangeInteract(cell.coord, catapult) &&
+                this.cellHasEnemyBuildingProduction(cell, catapult)) {
             let result = this.buildingAttack(cell, catapult)
             if (result)
                 return true
@@ -62,6 +63,11 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
         let coord = cell.coord
 
         if (isFogOfWar && !grid.fogOfWar[coord.x][coord.y]) {
+            if (this.cantRangeInteract(coord, catapult)) {
+                this.removeSelect()
+                return true
+            }
+
             // blind area cant be fogged
             let result = this.sendAttackInstructions(cell, catapult)
             if (!this.undoAdded) {

@@ -309,7 +309,7 @@
         }
         window.addEventListener('load', start)
         window.onblur = function() {
-            if (!menu.visible) {
+            if (!menu.visible && !debug) {
                 menuBack()
             }
         }
