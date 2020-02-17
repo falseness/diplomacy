@@ -95,7 +95,13 @@ class Town extends PreparingManufacture {
                 continue
             }
             else if (cell.building.canBeDestroyed) {
-                if (cell.building.isManufacture) {}
+                if (cell.building.isManufacture) {
+                    if (coordsEqually(cell.hexagon.coord, this.coord)) { // town cell
+                        this.suburbs[i].sudoPaint(this.playerColor)
+                        continue
+                    }
+
+                }
                 else if (cell.building.isExternalProduction()){ 
                     undoManager.lastUndo.townExternalProduction.push(cell.building.toUndoJSON())
                 }

@@ -42,7 +42,7 @@ function nextTurn() {
     externalNextTurn() 
     players[whooseTurn].nextTurn()
 
-    if (players[whooseTurn].isNeutral || players[whooseTurn].isLoosed) {
+    if (players[whooseTurn].isNeutral || players[whooseTurn].isLost) {
         nextTurn()
         return
     }
