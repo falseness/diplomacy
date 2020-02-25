@@ -56,7 +56,7 @@ let production = {
     tower: {
         production: ExternalProduction,
         turns: 3,
-        cost: 30, 
+        cost: 28, 
         class: Tower
     },
 }
