@@ -77,7 +77,7 @@ class Timer {
         this.text.draw(ctx)
     }
 }
-const STANDARTTIME = 14 * 60 * 1000
+const STANDARTTIME = 9 * 60 * 1000
 class LongTimer extends Timer {
     constructor(fullTime = STANDARTTIME, timeAdd = 1 * 60 * 1000) {
         super()
