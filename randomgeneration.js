@@ -2,7 +2,11 @@ function randomInt(max) {
     // получить случайное число от (min-0.5) до (max+0.5)
     let rand = -0.5 + Math.random() * max;
     return Math.round(rand);
-  }
+}
+function log_base(base, x) {
+    return Math.log(x) / Math.log(base)
+}
+
 function filling(old) {
     let wasUpdate = false
     let colors = []
@@ -27,40 +31,6 @@ function filling(old) {
     filling(colors)
 }
 
-function getNeedToDeleteColors(v0, g, colors, minDist, used, usedV) {
-    let wayDists = Array(colors.length)
-    let q = [v0]
-    wayDists[v0.color] = 0;
-
-    let colorsNeedToDelete = []
-    while (q.length) {
-        let v = q.shift()
-
-        colorsNeedToDelete.push(v.color)
-        
-        if (wayDists[v.color] >= minDist)
-            continue
-
-        for (let i = 0; i < g[v.color].length; ++i) {
-            let c = g[v.color][i]
-            let newv = {
-                color: c,
-                x: colors[c].x,
-                y: colors[c].y
-            }
-            if (isCoordNotOnGrid(newv) || 
-                used[newv.x][newv.y] == usedV)
-                continue
-            
-            wayDists[newv.color] = wayDists[v.color] + 1
-            used[newv.x][newv.y] = usedV
-            q.push(newv)
-        }
-    }
-
-    return colorsNeedToDelete
-}
-
 function __repaintDeletingColor(color) {
     // slow algorithm just for debug
     for (let i = 0; i < grid.arr.length; ++i) {
@@ -71,30 +41,8 @@ function __repaintDeletingColor(color) {
         }
     }
 }
-function deleteColors(colorsWithNoTown, colorsNeedToDelete, needToAddCount) {
-    for (let i = 0; i < colorsNeedToDelete.length; ++i) {
-        if (colorsWithNoTown.length == needToAddCount)
-            return
-        // binsearch cuz colorsWithNoTown is sorted
-        deletingColor = colorsNeedToDelete[i]
-
-        let l = 0
-        let r = colorsWithNoTown.length
-        while (r - l > 1) {
-            let m = Math.floor((l + r) / 2)
-            if (colorsWithNoTown[m].color <= deletingColor)
-                l = m
-            else
-                r = m
-        }
-        if (colorsWithNoTown[l].color == deletingColor) {
-            colorsWithNoTown.splice(l, 1)
-            __repaintDeletingColor(deletingColor + 1)
-        }
-    }
-}
-function isColorBoundary(color) {
-    let neighbours = grid.getHexagon(color).neighbours
+function isBoundaryHexagon(coord) {
+    let neighbours = grid.getHexagon(coord).neighbours
     for (let i = 0; i < neighbours.length; ++i) {
         if (isCoordNotOnGrid(neighbours[i])) {
             return true
@@ -102,38 +50,8 @@ function isColorBoundary(color) {
     }
     return false
 }
-function generateTowns(colors, g, used) {
-    let colorsWithNoTown = []
-    for (let i = 0; i < colors.length; ++i) {
-        if (isColorBoundary(colors[i]))
-            continue
-
-        colorsWithNoTown.push({
-            color: i, 
-            x: colors[i].x,
-            y: colors[i].y
-        })
-    }
-    let townsCount = 2
-    let minDist = Math.max(0, 
-        Math.floor((colorsWithNoTown.length - townsCount) / Math.pow(3, townsCount)))
-    
-    console.log(minDist)
-    console.log(colors.length)
-
-    for (let i = 0; i < townsCount; ++i) {
-        townSegment = colorsWithNoTown[randomInt(colorsWithNoTown.length)]
-        if (!townSegment)
-            break
-        new Town(townSegment.x, townSegment.y, true)
-        
-        let colorsNeedToDelete = getNeedToDeleteColors(
-            townSegment, g, colors, minDist, used, i + 3)
-        
-        deleteColors(colorsWithNoTown, colorsNeedToDelete, townsCount - i - 1)
-    }
-}
 function findSegmentNeighbours(color0, colors, g, used, usedColors) {
+    // вроде не нужна
     usedColors[color0] = true
     let v0 = colors[color0]
     used[v0.x][v0.y] = true
@@ -164,70 +82,210 @@ function findSegmentNeighbours(color0, colors, g, used, usedColors) {
         }
     }
 }
-function createSegmentGraph(colors) {
-    let matrix = Array(colors.length)
-    for (let i = 0; i < colors.length; ++i) {
-        matrix[i] = Array(colors.length).fill(false)
-    }
+class MapGenerator {
+    createGraph(colors) {
+        //let tmpg = Array(colors.length).fill([])
+        //let usedColors = Array(colors.length).fill(false)
 
-    for (let i = 0; i < grid.arr.length; ++i) {
-        for (let j = 0; j < grid.arr[i].length; ++j) {
-            grid.arr[i][j].logicText.text = grid.arr[i][j].hexagon.playerColor - 1
+        let used = this.__initUsedMatrix()
+        /* tmp:
+        grid.drawLogicText = true
+        */
+        let graphManager = new SegmentGraphManager(colors)
+        let graph = graphManager.createSegmentGraph()
+        return {
+            graph: graph, 
+            used: used
         }
     }
-    for (let i = 0; i < grid.arr.length; ++i) {
-        for (let j = 0; j < grid.arr[i].length; ++j) {
-            let neighbours = grid.arr[i][j].hexagon.neighbours
-            let color0 = grid.arr[i][j].hexagon.playerColor - 1
-            for (let k = 0; k < neighbours.length; ++k) {
-                if (isCoordNotOnGrid(neighbours[k]))
+    __initUsedMatrix() {
+        let used = Array(grid.arr.length)
+        for (let i = 0; i < grid.arr.length; ++i) {
+            used[i] = Array(grid.arr[i].length)
+            for (let j = 0; j < grid.arr[i].length; ++j) {
+                used[i][j] = false
+            }
+        }
+        return used
+    }
+    __displayPlayerColorText() {
+        /*
+        Для debug
+        */
+        for (let i = 0; i < grid.arr.length; ++i) {
+            for (let j = 0; j < grid.arr[i].length; ++j) {
+                grid.arr[i][j].logicText.text = grid.arr[i][j].hexagon.playerColor - 1
+            }
+        }
+    }
+}
+class TownGenerator {
+    generate(colors, graph, used) {
+        // generate towns. change used matrix
+        let colorsWithNoTown = this.__initColorsWithNoTown(colors)
+
+        let townsCount = 3
+        let minDist = Math.max(0, 
+            Math.floor(log_base(townsCount, colorsWithNoTown.length - townsCount)))
+        
+        console.log(minDist)
+        console.log(colors.length)
+        
+        for (let i = 0; i < townsCount; ++i) {
+            let townSegment = colorsWithNoTown[randomInt(colorsWithNoTown.length)]
+            if (!townSegment) { // this if is not necessary
+                console.log('error')
+                break
+            }
+            new Town(townSegment.x, townSegment.y, true)
+            
+            let colorsNeedToDelete = this.__getNeedToDeleteColors(
+                townSegment, graph, colors, minDist, used, i + 3)
+            // i + 3 - min not used int in used matrix
+            
+            this.__deleteColors(colorsWithNoTown, colorsNeedToDelete, townsCount - i - 1)
+        }
+    }
+    __getNeedToDeleteColors(v0, g, colors, minDist, used, usedV) {
+        /*
+        return colors of segments in range minDist from v0
+        */
+        let wayDists = Array(colors.length)
+        let q = [v0]
+        wayDists[v0.color] = 0;
+    
+        let colorsNeedToDelete = []
+        while (q.length) {
+            let v = q.shift()
+    
+            colorsNeedToDelete.push(v.color)
+            
+            if (wayDists[v.color] >= minDist)
+                continue
+    
+            for (let i = 0; i < g[v.color].length; ++i) {
+                let c = g[v.color][i]
+                let newv = {
+                    color: c,
+                    x: colors[c].x,
+                    y: colors[c].y
+                }
+                if (isCoordNotOnGrid(newv) || 
+                    used[newv.x][newv.y] == usedV)
                     continue
-                color = grid.getHexagon(neighbours[k]).playerColor - 1
-                if (color0 != color) {
-                    console.log(color0, color, [i, j], neighbours[k])
-                    matrix[color0][color] = true
+                
+                wayDists[newv.color] = wayDists[v.color] + 1
+                used[newv.x][newv.y] = usedV
+                q.push(newv)
+            }
+        }
+    
+        return colorsNeedToDelete
+    }
+    __deleteColors(colorsWithNoTown, colorsNeedToDelete, needToAddCount) {
+        /*
+        (delete colorsNeedToDelete from ColorsWithNoTown) 
+        
+        colorsWithNoTown.length will be >= needToAddCount
+        */
+        for (let i = 0; i < colorsNeedToDelete.length; ++i) {
+            if (colorsWithNoTown.length == needToAddCount)
+                return
+            // binsearch cuz colorsWithNoTown is sorted
+            let deletingColor = colorsNeedToDelete[i]
+    
+            let l = 0
+            let r = colorsWithNoTown.length
+            while (r - l > 1) {
+                let m = Math.floor((l + r) / 2)
+                if (colorsWithNoTown[m].color <= deletingColor)
+                    l = m
+                else
+                    r = m
+            }
+            if (colorsWithNoTown[l].color == deletingColor) {
+                colorsWithNoTown.splice(l, 1)
+                __repaintDeletingColor(deletingColor + 1)
+            }
+        }
+    }
+    __initColorsWithNoTown(colors) {
+        let colorsWithNoTown = []
+        for (let i = 0; i < colors.length; ++i) {
+            if (isBoundaryHexagon(colors[i]))
+                continue
+
+            colorsWithNoTown.push({
+                color: i, 
+                x: colors[i].x,
+                y: colors[i].y
+            })
+        }
+        return colorsWithNoTown
+    }
+}
+class SegmentGraphManager {
+    constructor(colors) {
+        this.__colors = colors
+    }
+    createSegmentGraph() {
+        let matrix = this.__initMatrix()
+        this.__fillMatrix(matrix)
+        
+        let graph = this.__initAdjacencyList()
+        this.__fillAdjacencyList(graph, matrix)
+
+        return graph
+    }
+    __initMatrix() {
+        let matrix = Array(this.__colors.length)
+        for (let i = 0; i < this.__colors.length; ++i) {
+            matrix[i] = Array(this.__colors.length).fill(false)
+        }
+        return matrix
+    }
+    __fillMatrix(matrix) {
+        for (let i = 0; i < grid.arr.length; ++i) {
+            for (let j = 0; j < grid.arr[i].length; ++j) {
+                let neighbours = grid.arr[i][j].hexagon.neighbours
+                let color0 = grid.arr[i][j].hexagon.playerColor - 1
+                for (let k = 0; k < neighbours.length; ++k) {
+                    if (isCoordNotOnGrid(neighbours[k]))
+                        continue
+                    let color = grid.getHexagon(neighbours[k]).playerColor - 1
+                    if (color0 != color) {
+                        matrix[color0][color] = true
+                    }
                 }
             }
         }
     }
-    let g = Array(colors.length)
-    for (let i = 0; i < g.length; ++i) {
-        g[i] = []
+    __initAdjacencyList() {
+        let g = Array(this.__colors.length)
+        for (let i = 0; i < g.length; ++i) {
+            g[i] = []
+        }
+        return g
     }
-    for (let i = 0; i < matrix.length; ++i) {
-        for (let j = 0; j < matrix[i].length; ++j) {
-            if (matrix[i][j]) {
-                g[i].push(j)
+    __fillAdjacencyList(g, matrix) {
+        for (let i = 0; i < matrix.length; ++i) {
+            for (let j = 0; j < matrix[i].length; ++j) {
+                if (matrix[i][j]) {
+                    g[i].push(j)
+                }
             }
         }
     }
-    return g
-}
-class MapGenerator {
-    constructor() {
-        
-    }
 }
 function generateAll(colors) {   
-    let tmpg = Array(colors.length).fill([])
-    let usedColors = Array(colors.length).fill(false)
-
-    let used = Array(grid.arr.length)
-    for (let i = 0; i < grid.arr.length; ++i) {
-        used[i] = Array(grid.arr[i].length)
-        for (let j = 0; j < grid.arr[i].length; ++j) {
-            used[i][j] = false
-        }
-    }
-
-    // tmp:
-    grid.drawLogicText = true
-    let g = createSegmentGraph(colors)
-
-    generateTowns(colors, g, used)
+    mapGenerator = new MapGenerator()
+    map = mapGenerator.createGraph(colors)
+    
+    let townGenerator = new TownGenerator()
+    townGenerator.generate(colors, map.graph, map.used)
 }
 function randomGeneration() {
-    let tn = 14, tm = 7
+    let tn = 15, tm = 15
     grid = new Grid(0, 0, {
         x: tn,
         y: tm
@@ -247,7 +305,7 @@ function randomGeneration() {
             }, 0)
         )
     ]
-
+    console.log(col.length)
     for (let i = 0; i < col.length; ++i) {
         players.push(new Player({
             r: col[i][0],
