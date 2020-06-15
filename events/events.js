@@ -72,9 +72,6 @@ class Events {
             _statisticsInterface, _nextTurnPauseInterface) {
         this.selected = new Empty()
 
-        this.lastKeyboardPressTime = 0
-        this.keyboardPressInterval = 100
-
         this.interface = {
             barrack: _barrackInterface,
             town: _townInterface,
@@ -83,7 +80,7 @@ class Events {
             nextTurnPause: _nextTurnPauseInterface
         }
         if (!mobilePhone) {
-            this.screen = new ComputerScreen(0.002 * HEIGHT, 0.02 * HEIGHT)
+            this.screen = new ComputerScreen(0.002 * HEIGHT, 0.04 * HEIGHT)
         }
         else {
             this.screen = new MobileScreen()
@@ -152,9 +149,6 @@ class Events {
     }
     keyboard(keycode) {
         if (this.isPressKeyCode(keycode)) {
-            if (Date.now() - this.lastKeyboardPressTime < this.keyboardPressInterval)
-                return
-            this.lastKeyboardPressTime = Date.now()
             if (keycode == 13) {// enter 
                 nextTurnPauseInterface.visible = false
                 nextTurn()
