@@ -108,9 +108,9 @@ class Screen {
             pos = grid.center
         }
 
-        this.__moveTo(pos)
+        this.moveTo(pos)
     }
-    __moveTo(posOnGrid) {
+    moveTo(posOnGrid) {
         let result = {
             x: canvas.offset.x - posOnGrid.x + width / 2,
             y: canvas.offset.y - posOnGrid.y + height / 2
