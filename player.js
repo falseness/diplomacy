@@ -304,7 +304,7 @@ class NeutralPlayer extends Player {
         arr[i][j].hexagon.sudoPaint(0)
         arr[i][j].hexagon.isSuburub = false
 
-        arr[i][j].building = new Lake(i, j)
+        arr[i][j].building = new Sea(i, j)
     }
     suddenDeath() {
         let suddenDeathCycle = gameRound - suddenDeathRound

@@ -26,6 +26,7 @@ class JsonUnpackManager {
             wall: Wall, 
             tower: Tower,
             lake: Lake,
+            sea: Sea, 
             mountain: Mountain
         }
     }
