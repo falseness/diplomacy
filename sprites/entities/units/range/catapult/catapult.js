@@ -5,7 +5,7 @@ class Catapult extends RangeUnit {
     static speed = 1
     static salary = 2
     static range = 5
-    static buildingDMG = 3
+    static buildingDMG = 4
     constructor(x, y) {
         super(x, y, 'catapult')
         this.mirrorX = false

@@ -49,7 +49,7 @@ let production = {
     },
     wall: {
         production: ExternalProduction,
-        turns: 3,
+        turns: 4,
         cost: 4, 
         class: Wall
     },
