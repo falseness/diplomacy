@@ -37,6 +37,12 @@ class Grid extends SpritesGroup {
     get right() {
         return this.arr[this.arr.length - 1][0].hexagon.pos.x //+ basis.r * 2
     }
+    get center() {
+        return {
+            x: this.right / 2,
+            y: this.bottom / 2
+        }
+    }
     getCell(coord) {
         return this.arr[coord.x][coord.y]
     }

@@ -29,6 +29,7 @@ function externalNextTurn() {
         }
     }
 }
+
 function nextTurn() {
     if (gameExit)
         return
@@ -46,6 +47,7 @@ function nextTurn() {
         nextTurn()
         return
     }
+    gameEvent.screen.moveToPlayer(players[whooseTurn]) // перемещение экрана к городам игрока
 
     nextTurnButton.color = players[whooseTurn].hexColor
 

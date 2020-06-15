@@ -83,10 +83,7 @@ class Events {
             nextTurnPause: _nextTurnPauseInterface
         }
         if (!mobilePhone) {
-            this.screen = new ComputerScreenGroup(
-                //new ComputerScreen(nextTurnButtonSize, 0.015 * HEIGHT),
-                new ComputerScreen(0.002 * HEIGHT, 0.02 * HEIGHT)
-            )
+            this.screen = new ComputerScreen(0.002 * HEIGHT, 0.02 * HEIGHT)
         }
         else {
             this.screen = new MobileScreen()
@@ -241,7 +238,6 @@ class Events {
         this.interface.statistics.visible = false
     }
     nextTurn() {
-
         this.selected.removeSelect()
         this.selected = new Empty()
         this.hideAll()

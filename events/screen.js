@@ -10,7 +10,13 @@ class Screen {
         this.speedY = speed
     }
     stop() {
+        this.stopX()
+        this.stopY()
+    }
+    stopX() {
         this.setSpeedX(0)
+    }
+    stopY() {
         this.setSpeedY(0)
     }
     getScreenRight() {
@@ -93,6 +99,27 @@ class Screen {
     }
     setMoveMain() {}
     draw() {}
+    moveToPlayer(player) {
+        let pos
+        if (player.towns.length) {
+            pos = player.towns[0].pos
+        }
+        else {
+            pos = grid.center
+        }
+
+        this.__moveTo(pos)
+    }
+    __moveTo(posOnGrid) {
+        let result = {
+            x: canvas.offset.x - posOnGrid.x + width / 2,
+            y: canvas.offset.y - posOnGrid.y + height / 2
+        }
+        this.setSpeedX(result.x)
+        this.setSpeedY(result.y)
+        this.move()
+        this.stop()
+    }
 }
 class MobileScreen extends Screen {
     constructor() {
@@ -169,46 +196,5 @@ class ComputerScreen extends Screen {
         ctx.stroke()
 
         ctx.closePath()
-    }
-}
-class ComputerScreenGroup {
-    constructor(mainScreen) {
-        this.main = mainScreen
-    }
-    stopX() {
-        this.main.setSpeedX(0)
-    }
-    stopY() {
-        this.main.setSpeedY(0)
-    }
-    goLeft() {
-        this.main.goLeft()
-    }
-    goRight() {
-        this.main.goRight()
-    }
-    goUp() {
-        this.main.goUp()
-    }
-    goDown() {
-        this.main.goDown()
-    }
-    stop() {
-        this.main.stop()
-    }
-    changeSpeed(pos) {
-        this.main.changeSpeed(pos)
-    }
-    scale(pos, scale) {
-        this.main.scale(pos, scale)
-        /*let out = this.outOfBounds(canvas.offset.x - this.speedX, 
-            canvas.offset.y - this.speedY)
-        */
-    }
-    move() {
-        this.main.move()
-    }
-    draw(ctx) {
-        this.main.draw(ctx)
     }
 }
