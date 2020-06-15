@@ -5,19 +5,24 @@ class NextTurnPauseInterface {
             undefined, 0.4)
 
         const imgClockSize = 0.05 * WIDTH
-        this.timeInfo = new ImageWithLabel(
-            new JustImage('clock', {x: NaN, y: NaN}, imgClockSize, imgClockSize),
-            new Text(NaN, NaN, imgClockSize, 'time'),
-            {x: WIDTH / 2, y: HEIGHT / 2})
+        const intervalY = 0.15 * HEIGHT
+        const firstY = 0.4 * HEIGHT
+
+        this.playerText = new Text(WIDTH / 2, 0.15 * HEIGHT, 
+            0.1 * WIDTH, 'Player 0')
 
         const imgGoldSize = 0.075 * WIDTH
         this.goldInfo = new ImageWithLabel(
             new JustImage('gold', {x: NaN, y: NaN}, imgGoldSize, imgGoldSize),
             new Text(NaN, NaN, imgGoldSize, 'gold'),
-            {x: WIDTH / 2, y: HEIGHT / 2 - imgClockSize / 2 - imgGoldSize})
+            {x: WIDTH / 2, y: firstY})
+
+        this.timeInfo = new ImageWithLabel(
+            new JustImage('clock', {x: NaN, y: NaN}, imgClockSize, imgClockSize),
+            new Text(NaN, NaN, imgClockSize, 'time'),
+            {x: WIDTH / 2, y: firstY + intervalY})
         
-        this.playerText = new Text(WIDTH / 2, HEIGHT / 2 - imgClockSize / 2 - imgGoldSize * 2.5, 
-            0.1 * WIDTH, 'Player 0')
+        this.roundText = new Text(WIDTH / 2, firstY + 2 * intervalY, imgClockSize, 'error')
         
     }
     get visible() {
@@ -34,6 +39,7 @@ class NextTurnPauseInterface {
             this.timeInfo.textString = timer.timerText
             this.goldInfo.textString = String(players[whooseTurn].gold)
             this.playerText.text = 'Player ' + whooseTurn
+            this.roundText.text = 'Round ' + gameRound
         }
         else {
             timer.updateLastPause()
@@ -53,7 +59,11 @@ class NextTurnPauseInterface {
 
         this.background.draw(ctx)
         this.timeInfo.draw(ctx)
-        this.goldInfo.draw(ctx)
+        
+        if (!isFogOfWar)
+            this.goldInfo.draw(ctx)
+        
+        this.roundText.draw(ctx)
         this.playerText.draw(ctx)
     }
 }
