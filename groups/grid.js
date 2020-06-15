@@ -121,6 +121,8 @@ class Grid extends SpritesGroup {
     drawTextLogic(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
                 let cell = this.arr[i][j]
                 cell.logicText.draw(ctx)
             }
@@ -157,13 +159,13 @@ class Grid extends SpritesGroup {
     draw(ctx) {
         this.drawHexagons(ctx)
 
-        if (this.drawLogicText)
-            this.drawTextLogic(ctx)
-
         if (isFogOfWar)
             this.drawFogOfWar(ctx)
 
         this.drawOther(ctx)
+
+        if (this.drawLogicText)
+            this.drawTextLogic(ctx)
 
         if (!this.drawLogicText && debug)
             this.drawTextCoord(ctx)
