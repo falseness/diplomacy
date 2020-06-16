@@ -100,6 +100,7 @@ class OtherSettingsTree {
             'back', _menu.setTree, parent, true, _menu)
         this.buttons.push(this.backButton)
     }
+    touchmove() {}
     click(pos) {
         let ok = false
         for (let i = 0; i < this.buttons.length - 1; ++i) {
