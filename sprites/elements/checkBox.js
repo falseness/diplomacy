@@ -30,6 +30,9 @@ class CheckBox extends Rect {
         this.text.x = this.x - this.marginLeft
         this.text.y = this.centerY
     }
+    touchmove(pos) {
+
+    }
     click(pos) {
         if (this.isInside(pos)) {
             this.mark = !this.mark

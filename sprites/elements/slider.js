@@ -63,6 +63,9 @@ constructor(minimumValue, maximumValue, textByValue, parameters, startValue = 0,
         this.leftButton.removeSelect()
         this.rightButton.removeSelect()
     }
+    touchmove(pos) {
+
+    }
     click(pos) {
         return this.leftButton.click(pos) || this.rightButton.click(pos)
     }

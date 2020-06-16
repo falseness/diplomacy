@@ -295,7 +295,6 @@
         function saveOtherSettings() {
             try {
                 let result = JSON.stringify(otherSettings)
-                console.log(result)
                 localStorage.setItem('otherSettings', result)
             }
             catch {
