@@ -187,7 +187,8 @@ class UndoManager {
 
         func[this.lastUndo.type].call(this)
         
-        this.__moveCameraToUndoTarget()
+        if (otherSettings.moveCameraToUndoTarget)
+            this.__moveCameraToUndoTarget()
         if (wasSelection)
             gameEvent.selected.select()
         else

@@ -141,7 +141,7 @@ class Unit extends Entity {
     drawBars(ctx) {
         super.drawBars(ctx)
 
-        if (this.isMyTurn && !this.isFullMoves)
+        if (this.isMyTurn && (otherSettings.alwaysDisplayMovesBar || !this.isFullMoves))
             this.movesBar.draw(ctx)
     }
     draw(ctx) {

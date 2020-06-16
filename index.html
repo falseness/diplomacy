@@ -47,6 +47,7 @@
     <script src='options/undo.js'></script>
     <script src='options/classManager.js'></script>
     <script src='options/timer.js'></script>
+    <script src='options/otherSettings.js'></script> 
 
     <script src='render/loadassets.js'></script>
     <script src='render/image.js'></script>
@@ -291,6 +292,26 @@
                 return {whooseTurn: -1}
             }
         }
+        function saveOtherSettings() {
+            try {
+                let result = JSON.stringify(otherSettings)
+                console.log(result)
+                localStorage.setItem('otherSettings', result)
+            }
+            catch {
+                errorWindow.textString = "can't save game\ntry toggle internet connection"
+                errorWindow.enableTemporary()
+            }
+        }
+        function loadOtherSettings() {
+            try {
+                otherSettings.fromJSON(JSON.parse(localStorage.getItem('otherSettings')))
+            }
+            catch {
+                errorWindow.textString = "can't save game\ntry toggle internet connection"
+                errorWindow.enableTemporary()
+            }
+        }
         function start() {
            
             interfaceCanvas.width = WIDTH
@@ -304,6 +325,7 @@
             mainCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
             
             loadAssets()
+            loadOtherSettings()
 
             //menu.start()
             requestAnimationFrame(waitForImagesLoad)

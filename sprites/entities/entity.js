@@ -147,7 +147,7 @@ class Entity extends Sprite {
         return false
     }
     drawBars(ctx) {
-        if (!this.isFullHP)
+        if (otherSettings.alwaysDisplayHPBar || !this.isFullHP)
             this.hpBar.draw(ctx)
     }
     draw(ctx) {

@@ -57,11 +57,83 @@ class Tree {
         }
     }
 }
+menuOptions = {
+    fontSize: 0.04 * WIDTH, 
+    rectSize: 0.05 * WIDTH,
+    checkBox: {
+        strokeWidth: 0.003 * WIDTH,
+        color: 'white'
+    }
+}
+menuOptions.marginLeft = 0.5 * menuOptions.rectSize
+menuOptions.cornerR = 0.1 * menuOptions.rectSize
+
+class OtherSettingsTree {
+    FIRST_Y = 0.35 * HEIGHT
+    INTERVAL_Y = 0.15 * HEIGHT
+    constructor() {
+        const firstY = this.FIRST_Y
+        const intervalY = this.INTERVAL_Y
+        const cornerR = menuOptions.cornerR
+
+        this.hpBarCheckBox = new ImageCheckBox('checkMark',
+            new Text(NaN, NaN, menuOptions.fontSize, 'always display hp bar', 'black'), menuOptions.marginLeft,
+            WIDTH * 0.65, firstY, menuOptions.rectSize, menuOptions.rectSize, 
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+        
+        this.movesBarCheckBox = new ImageCheckBox('checkMark',
+            new Text(NaN, NaN, menuOptions.fontSize, 'always display moves bar', 'black'), menuOptions.marginLeft,
+            WIDTH * 0.7, firstY + intervalY, menuOptions.rectSize, menuOptions.rectSize, 
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+
+        this.undoCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize, 
+            'move camera to undo target', 'black'), menuOptions.marginLeft,
+            WIDTH * 0.7, firstY + 2 * intervalY, menuOptions.rectSize, menuOptions.rectSize, 
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+        
+        this.buttons = []
+        this.buttons.push(this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox)
+    }
+    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+        let y = this.FIRST_Y + this.buttons.length * this.INTERVAL_Y
+        this.backButton = Menu.getButton({x: pos0X, y: y},
+            'back', _menu.setTree, parent, true, _menu)
+        this.buttons.push(this.backButton)
+    }
+    click(pos) {
+        let ok = false
+        for (let i = 0; i < this.buttons.length - 1; ++i) {
+            ok |= this.buttons[i].click(pos)
+        }
+        this.__updateOtherSettings()
+        
+        ok |= this.buttons[this.buttons.length - 1].click(pos)
+        return ok
+    }
+    __updateOtherSettings() {
+        otherSettings.alwaysDisplayHPBar = this.hpBarCheckBox.mark
+        otherSettings.alwaysDisplayMovesBar = this.movesBarCheckBox.mark
+        otherSettings.moveCameraToUndoTarget = this.undoCheckBox.mark
+
+        saveOtherSettings()
+    }
+    __updateButtonsByOtherSettings() {
+        this.hpBarCheckBox.mark = otherSettings.alwaysDisplayHPBar
+        this.movesBarCheckBox.mark = otherSettings.alwaysDisplayMovesBar
+        this.undoCheckBox.mark = otherSettings.moveCameraToUndoTarget
+    }
+    draw(ctx) {
+        this.__updateButtonsByOtherSettings()
+        for (let i = 0; i < this.buttons.length; ++i) {
+            this.buttons[i].draw(ctx)
+        }
+    }
+}
 class GameSettingsTree {
     constructor(_menu) {
-        let rectSize = WIDTH * 0.05
-        let cornerR = rectSize * 0.1
-        let marginLeft = rectSize * 0.5
+        const rectSize = WIDTH * 0.05
+        const cornerR = rectSize * 0.1
+        const marginLeft = rectSize * 0.5
         /*const firstY = HEIGHT * 0.3
         let intervalY = HEIGHT * 0.15*/
         const firstY = HEIGHT * 0.3
@@ -100,12 +172,12 @@ class GameSettingsTree {
         this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, fontSize, 'fog of war', 'black'), marginLeft,
             WIDTH * 0.58, firstY + intervalY * 2, rectSize, rectSize, 
-            [cornerR, cornerR, cornerR, cornerR], 0.003 * WIDTH, 'white')
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
         this.timerCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
             WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize, 
-            [cornerR, cornerR, cornerR, cornerR], 0.003 * WIDTH, 'white')
+            [cornerR, cornerR, cornerR, cornerR],menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
         this.backButton = new Empty()
         //this.fogOfWarCheckBox.toCenterX()
@@ -222,6 +294,8 @@ class Menu {
         ], this)
 
         this.play = new GameSettingsTree(this)
+        
+        this.settings = new OtherSettingsTree(this)
 
         this.load = new Tree([
             new SlotManager(slotsCount, startPos.y, load)
@@ -230,11 +304,14 @@ class Menu {
         this.main = new Tree([
             this.constructor.getButton(startPos, 'start game', 
                 this.setTree, this.play, true, this),
+            this.constructor.getButton(startPos, 'settings', 
+                this.setTree, this.settings, true, this),
             this.constructor.getButton(startPos, 'load game', 
                 this.setTree, this.load, true, this),
         ], this)
 
         this.play.setParent(this.main, this)
+        this.settings.setParent(this.main, this)
         this.startGame.setParent(this.play, this)
         this.load.setParent(this.main, this)
         this.selectedTree = this.main

@@ -3,7 +3,7 @@ class Nature extends Building {
         super(x, y, name)
         nature.push(this)
     }
-    hasBar() {
+    get hasBar() {
         return false
     }
     isObstacle() {
