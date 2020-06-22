@@ -115,8 +115,9 @@ class Screen {
             x: canvas.offset.x - posOnGrid.x + width / 2,
             y: canvas.offset.y - posOnGrid.y + height / 2
         }
-        this.setSpeedX(result.x)
-        this.setSpeedY(result.y)
+        this.speedX = result.x
+        this.speedY = result.y
+        //здесь нельзя использовать this.setSpeedX, т.к. он должен учитывать масштабирование экрана
         this.move()
         this.stop()
     }
