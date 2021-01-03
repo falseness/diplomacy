@@ -124,7 +124,7 @@ class TownGenerator {
         // generate towns. change used matrix
         let colorsWithNoTown = this.__initColorsWithNoTown(colors)
 
-        let townsCount = 3
+        let townsCount = 5
         let minDist = Math.max(0, 
             Math.floor(log_base(townsCount, colorsWithNoTown.length - townsCount)))
         
@@ -285,18 +285,39 @@ function generateAll(colors) {
     townGenerator.generate(colors, map.graph, map.used)
 }
 function randomGeneration() {
-    let tn = 15, tm = 15
+    const tn = 50, tm = 50
     grid = new Grid(0, 0, {
         x: tn,
         y: tm
     })
-
+    
+    
+    /*
     let col = [[205, 92, 92], [220, 20, 60], [139, 0, 0], [255, 182, 193], [255, 105, 180],
         [199, 21, 133], [255, 127, 80], [255, 69, 0], [255, 165, 0], [255, 215, 0], 
         [221, 160, 221], [255, 0, 255], [186, 85, 211], [138, 43, 226], 
         [139, 0, 139], [75, 0, 130], [106, 90, 205], [0, 0, 128], [0, 128, 0],
         [205, 133, 63], [189, 183, 107], [128, 128, 0], [128, 0, 128],
-        [0, 128, 128], [50, 205, 50], [25, 25, 112], [255, 0, 0], [0, 255, 255]]
+        [0, 128, 128], [50, 205, 50], [25, 25, 112], [255, 0, 0], [0, 255, 255], [110, 110, 110],
+        [120, 0, 80], [23, 100, 255], [250, 250, 0], [0, 100, 100], [23, 23, 23], [121, 0, 21],
+        [139, 255, 255], [255, 0, 180]]
+    */
+    const colsCnt = Math.floor(tn * tm / 10)
+    const maxColor = 256
+    const step = Math.floor(maxColor / Math.pow(colsCnt, 1 / 3))
+    
+    let col = []
+    for (let r = 0; r < maxColor; r += step) {
+        for (let g = 0; g < maxColor; g += step) {
+            for (let b = 0; b < maxColor; b += step) {
+                col.push([r, g, b])
+            }
+        }
+    }
+    console.log(step)
+    console.log(col.length)
+    
+    
     players = [
         (new NeutralPlayer({
             r: 208, 
