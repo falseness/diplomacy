@@ -53,27 +53,22 @@ class Screen {
         }
         return out
     }
-    correctSpeed() {
-        let out = this.outOfBounds(canvas.offset.x - this.speedX, canvas.offset.y - this.speedY)
-            // canvas.offset - speed = border <=> speed = canvas.offset - border
-        if (out.x == 1)
-            this.speedX = -(this.getScreenRight() - canvas.offset.x)
-        if (out.x == -1)
-            this.speedX = -(this.getScreenLeft() - canvas.offset.x)
-
-
-        if (out.y == 1)
-            this.speedY = -(this.getScreenBottom() - canvas.offset.y)
-        if (out.y == -1)
-            this.speedY = -(this.getScreenTop() - canvas.offset.y)
+    correctCanvas() {
+        canvas.offset.x = Math.min(canvas.offset.x, this.getScreenRight())
+        canvas.offset.x = Math.max(canvas.offset.x, this.getScreenLeft())
+        canvas.offset.y = Math.min(canvas.offset.y, this.getScreenBottom())
+        canvas.offset.y = Math.max(canvas.offset.y, this.getScreenTop())
     }
     move() {
-        this.correctSpeed()
-
+        let old_value_x = canvas.offset.x
+        let old_value_y = canvas.offset.y
+        
         canvas.offset.x -= this.speedX
         canvas.offset.y -= this.speedY
+        
+        this.correctCanvas()
 
-        mainCtx.translate(this.speedX, this.speedY)
+        mainCtx.translate(old_value_x - canvas.offset.x, old_value_y - canvas.offset.y)
     }
     scale(pos, scale) {
         const ratio = 0.001
