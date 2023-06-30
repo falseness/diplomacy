@@ -79,6 +79,13 @@ class Events {
             statistics: _statisticsInterface,
             nextTurnPause: _nextTurnPauseInterface
         }
+        this.goLeftKeys = new Set([65, 37])
+        this.goRightKeys = new Set([68, 39])
+        this.goUpKeys = new Set([87, 38])
+        this.goDownKeys = new Set([83, 40])
+        this.pressed_horizontal_keys = new Set()
+        this.pressed_vertical_keys = new Set()
+
         if (!mobilePhone) {
             this.screen = new ComputerScreen(0.002 * HEIGHT, 0.04 * HEIGHT)
         }
@@ -160,14 +167,23 @@ class Events {
             return 
         }
         
-        if (keycode == 65 || keycode == 37) 
+        if (this.goLeftKeys.has(keycode))  {
             this.screen.goLeft()
-        if (keycode == 68 || keycode == 39) 
+            this.pressed_horizontal_keys.add(keycode)
+        }
+        else if (this.goRightKeys.has(keycode)) {
             this.screen.goRight()
-        if (keycode == 87 || keycode == 38)
+            this.pressed_horizontal_keys.add(keycode);
+        }
+        else if (this.goUpKeys.has(keycode)) {
             this.screen.goUp()
-        if (keycode == 83 || keycode == 40)
+            this.pressed_vertical_keys.add(keycode)
+        }
+        else if (this.goDownKeys.has(keycode)) {
             this.screen.goDown()
+            this.pressed_vertical_keys.add(keycode)
+        }
+        
         /*if (keycode == 81) {
             saveManager.save()
         }
@@ -181,12 +197,17 @@ class Events {
         // d 68
         // s 83
         // он останавливается даже если мышка за пределами экрана, пофиксь
-        if (keycode == 68 || keycode == 65 ||
-            keycode == 37 || keycode == 39)
-            this.screen.stopX()
-        if (keycode == 87 || keycode == 83 ||
-            keycode == 38 || keycode == 40)
-            this.screen.stopY()
+        
+        if (this.goLeftKeys.has(keycode) || this.goRightKeys.has(keycode)) {
+            this.pressed_horizontal_keys.delete(keycode)
+            if (this.pressed_horizontal_keys.size == 0)
+                this.screen.stopX()
+        }
+        if (this.goUpKeys.has(keycode) || this.goDownKeys.has(keycode)) {
+            this.pressed_vertical_keys.delete(keycode)
+            if (this.pressed_vertical_keys.size == 0)
+                this.screen.stopY()
+        }
     }
     mousewheel(pos, scale) {
         this.screen.scale(pos, scale)
