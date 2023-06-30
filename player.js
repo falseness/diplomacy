@@ -1,5 +1,5 @@
 class Player {
-    constructor(color, gold = 0) {
+    constructor(color, gold = 90) {
         this.gold = gold
         this.towns = []
         this.units = []
