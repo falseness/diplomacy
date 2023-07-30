@@ -65,7 +65,12 @@ class Map {
         else {
             timer = new Timer()
         }
-
+        // refactoring is needed
+        for (let i = 1; i < players.length; ++i) {
+            localStorage.setItem(gameSlot + 'Player:' + i, 
+            JSON.stringify([]))
+        }
+        // order is important
         _gameManager.initValues()
         requestAnimationFrame(gameLoop)
     }

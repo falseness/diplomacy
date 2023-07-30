@@ -88,11 +88,7 @@ class StatisticsInterface {
                 text = 'Lost'
             }
             else {
-                text = 'gold: ' + players[i].gold + '\n' + 
-                    'income: ' + players[i].income + '\n' +
-                    'suburbs: ' + players[i].suburbsCount + '\n' +
-                    'army cost: ' + players[i].armyCost + '\n' + 
-                    'army salary: ' + players[i].armySalary
+                text = players[i].info
                 
                 if (isFogOfWar && i != whooseTurn) {
                     text = '???'

@@ -160,7 +160,7 @@ class Events {
                 nextTurnPauseInterface.visible = false
                 nextTurn()
             }
-            if (keycode == 27) // esc
+            if (keycode == 27) // esc 
                 debug = !debug
             if (keycode == 90) //z
                 undoManager.undo()

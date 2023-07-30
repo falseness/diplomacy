@@ -261,6 +261,20 @@ class Player {
     get isNeutral() {
         return false
     }
+    get info() {
+        return 'gold: ' + this.gold + '\n' + 
+                'income: ' + this.income + '\n' +
+                'suburbs: ' + this.suburbsCount + '\n' +
+                'army cost: ' + this.armyCost + '\n' + 
+                'army salary: ' + this.armySalary
+    }
+    get historyInfo() {
+        return {'gold': this.gold, 
+                    'income': this.income,
+                    'suburbs': this.suburbsCount, 
+                    'army cost': this.armyCost, 
+                    'army salary': this.armySalary}
+    }
 }
 class NeutralPlayer extends Player {
     constructor(color, gold = 0) {

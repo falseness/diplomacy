@@ -236,6 +236,55 @@
                 localStorage.setItem(gameSlot + 'whooseTurn', _whooseTurn)
                 localStorage.setItem(gameSlot + 'gameRound', _gameRound)
                 localStorage.setItem(gameSlot + 'isFogOfWar', isFogOfWar)
+                
+                let player_history = localStorage.getItem(gameSlot + 'Player:' + _whooseTurn)
+                if (player_history == null)
+                    player_history = []
+                else {
+                    player_history = JSON.parse(player_history)
+                }
+                let player_info = players[whooseTurn].historyInfo
+                if (gameRound >= player_history.length) {
+                    player_history.push(player_info)
+                }
+                else {
+                    player_history[player_history.length - 1] = player_info
+                }
+                player_history = JSON.stringify(player_history)
+                localStorage.setItem(gameSlot + 'Player:' + _whooseTurn, player_history)
+                if (whooseTurn + 1 == players.length && !isFogOfWar) {
+                    console.log('======HISTORY======')
+                    // refactoring is needed
+                    let histories = []
+                    for (let i = 1; i < players.length; ++i) {
+                        let history = localStorage.getItem(gameSlot + 
+                            'Player:' + i)
+                        histories.push(JSON.parse(history))
+                    }
+                    let min_length = histories[0].length
+                    for (let i = 1; i < histories.length; ++i) {
+                        if (histories[i].length < min_length) {
+                            min_length = histories[i]
+                        }
+                    }
+                    for (let round = 0; round < min_length; ++round) {
+                        console.log('ROUND ' + round)
+                        let comparisons_titles = ['gold', 'income', 'suburbs', 
+                            'army cost', 'army salary']
+                        let comparions = {}
+                        for (let i = 0; i < comparisons_titles.length; ++i) {
+                            comparions[comparisons_titles[i]] = ''
+                        }
+                        for (let title_index = 0; title_index < 
+                            comparisons_titles.length; ++title_index) {
+                                let title = comparisons_titles[title_index]
+                            for (let i = 0; i < histories.length; ++i) {
+                                comparions[title] += histories[i][round][title] + ' '
+                            }   
+                            console.log(title + ' ' + comparions[title])
+                        }
+                    }
+                }
             }
             catch {
                 errorWindow.textString = "can't save game\ntry toggle internet connection"
