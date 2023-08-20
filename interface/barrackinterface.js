@@ -25,7 +25,7 @@ class BarrackInterface {
                 y: this.pos.y + this.height * 0.05 + this.height * 0.08
             },
             goldImageSize, goldImageSize)
-        this.goldText = new Text(this.gold.x + 0.22 * WIDTH * 1.15 * 0.92, this.gold.y, 
+        this.goldText = new Text(this.gold.x + 0.22 * WIDTH * 1.05 * 0.92, this.gold.y, 
                                  0.03 * WIDTH * 1.15, 'error', 'white', 'right')
         
         this.makeTrainInterfaces()
