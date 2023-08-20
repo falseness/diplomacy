@@ -4,11 +4,12 @@ function displayDescription(_class) {
 class BarrackInterface {
     #visible = false
     constructor() {
+
         this.pos = {
             x: WIDTH * 0.72,
             y: HEIGHT * 0.01, // 0.12
         }
-        this.height = 0.4 * HEIGHT
+        this.height = 0.35 * HEIGHT
         this.width = WIDTH - this.pos.x 
 
         const bestThisWidthWIDTHRatio = 4

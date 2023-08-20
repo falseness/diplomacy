@@ -25,7 +25,7 @@ class EntityInterface {
 
         this.pos = {
             x: 0,
-            y: 0.5 * HEIGHT//0.55 * HEIGHT
+            y: 0.6 * HEIGHT//0.55 * HEIGHT
         }
         this.height = HEIGHT - this.pos.y
         this.width = this.height * 1.7
