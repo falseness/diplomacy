@@ -6,7 +6,7 @@ class BarrackInterface {
     constructor() {
 
         this.pos = {
-            x: WIDTH * 0.72,
+            x: WIDTH * 0.74,
             y: HEIGHT * 0.01, // 0.12
         }
         this.height = 0.35 * HEIGHT
@@ -66,8 +66,8 @@ class BarrackInterface {
             },
             model: {
                 image: {
-                    width: 0.1 * HEIGHT,
-                    height: 0.1 * HEIGHT
+                    width: 0.08 * HEIGHT,
+                    height: 0.08 * HEIGHT
                 },
                 costText: {
                     fontSize: 0.04 * WIDTH * 1.15 * 
@@ -78,7 +78,7 @@ class BarrackInterface {
                     text: {
                         text: 'train',
                         color: '#747474',
-                        fontSize: 0.04 * WIDTH * 1.15 * 
+                        fontSize: 0.04 * WIDTH * 
                             heightWidthBestRatio
                     },
                     rect: {
@@ -86,7 +86,7 @@ class BarrackInterface {
                         cornerRadius: 0.03 * HEIGHT,
                         borderColor: 'black',
                         stroke: 0.0015 * HEIGHT,
-                        width: 0.18 * WIDTH * 1.15 * heightWidthBestRatio,
+                        width: 0.18 * WIDTH * heightWidthBestRatio,
                         height: 0.07 * HEIGHT
                     }
                 }

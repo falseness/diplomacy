@@ -33,7 +33,7 @@ class TownInterface extends BarrackInterface {
     }
     makeTrainInterfaces() {
         this.switch = new Switch(this.gold.x, this.gold.y + HEIGHT * 0.05,
-            WIDTH * 0.115 * 2, WIDTH * 0.05, 0.04 * HEIGHT, 0.0015 * HEIGHT, '#f7f7f7',
+            WIDTH * 0.115 * 2 / 1.15, WIDTH * 0.05, 0.04 * HEIGHT, 0.0015 * HEIGHT, '#f7f7f7',
                 new Text(0, 0, WIDTH * 0.025, 'unit', '#747474'),
                 new Text(0, 0, WIDTH * 0.025, 'building', '#747474'),
             toggleTownTrainInterfaceTab)
