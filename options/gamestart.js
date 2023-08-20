@@ -244,7 +244,8 @@ maps = {
                 {x: 22, y: 3, income: 25}, {x: 2, y: 21, income: 25}, {x: 32, y: 1, income: 25},
                 {x: 7, y: 8, income: 25}, {x: 27, y: 14, income: 25}, {x: 8, y: 20, income: 25},
                 {x: 27, y: 14, income: 25}, {x: 26, y: 3, income: 25}, {x: 15, y: 2, income: 25}, 
-                {x: 19, y: 20, income: 25}, {x: 21, y: 17, income: 25}, {x: 13, y: 15, income: 25}],
+                {x: 19, y: 20, income: 25}, {x: 21, y: 17, income: 25}, {x: 13, y: 15, income: 25},
+                {x: 13, y: 5, income: 25}],
             [
 
                 {x: 9, y: 10}, {x: 9, y: 11}, {x: 9, y: 12}, {x: 9, y: 13},
