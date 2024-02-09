@@ -37,8 +37,8 @@ let production = {
     },
     catapult: {
         production: UnitProduction,
-        turns: 3,
-        cost: 30,
+        turns: 4,
+        cost: 50,
         class: Catapult
     },
     barrack: {
@@ -55,8 +55,8 @@ let production = {
     },
     tower: {
         production: ExternalProduction,
-        turns: 3,
-        cost: 28, 
+        turns: 4,
+        cost: 25, 
         class: Tower
     },
 }

@@ -2,7 +2,7 @@ class Catapult extends RangeUnit {
     static maxHP = 1
     static healSpeed = 1
     static dmg = 0
-    static speed = 1
+    static speed = 2
     static salary = 2
     static range = 5
     static buildingDMG = 4
