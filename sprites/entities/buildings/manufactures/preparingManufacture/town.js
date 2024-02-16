@@ -13,7 +13,7 @@ let production = {
     },
     farm: {
         production: ManufactureProduction,
-        turns: 2,
+        turns: 1,
         cost: 24,
         class: Farm,
     },
