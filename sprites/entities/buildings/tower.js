@@ -11,7 +11,8 @@ class Tower extends Building {
     static get description() {
         let res = super.description
         res.info['archer range increase'] = this.rangeIncrease
-        res.info['archer range increase'] += "\n\narchers can't shoot through it"
+        res.info['archer range increase'] += "\narchers can't shoot through it"
+        res.info['archer range increase'] += "\nhiground"
         return res
     }
     get rangeIncrease() {
