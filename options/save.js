@@ -24,6 +24,7 @@ class JsonUnpackManager {
             farm: Farm,
             barrack: Barrack,
             wall: Wall, 
+            bastion: Bastion,
             tower: Tower,
             lake: Lake,
             sea: Sea, 

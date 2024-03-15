@@ -29,3 +29,25 @@ class Tower extends Building {
         return true
     }
 }
+
+class Bastion extends Building {
+    static maxHP = 6
+    static healSpeed = 2
+    constructor(x, y) {
+        const name = 'bastion'
+        super(x, y, name)
+        
+        external.push(this)
+    }
+    static get description() {
+        let res = super.description
+        res.info['heal speed'] += "\n\narchers can't shoot through it"
+        return res
+    }
+    isBarrier() {
+        return true
+    }
+    get isExternal() {
+        return true
+    }
+}

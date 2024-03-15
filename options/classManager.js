@@ -9,6 +9,7 @@ function getClass(name) {
         farm: Farm, 
         barrack: Barrack, 
         wall: Wall, 
+        bastion: Bastion,
         tower: Tower
     }
     return classes[name]

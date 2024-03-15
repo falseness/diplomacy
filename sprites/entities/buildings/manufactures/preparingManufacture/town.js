@@ -53,6 +53,12 @@ let production = {
         cost: 4, 
         class: Wall
     },
+    bastion: {
+        production: ExternalProduction,
+        turns: 4,
+        cost: 16, 
+        class: Bastion
+    },
     tower: {
         production: ExternalProduction,
         turns: 4,

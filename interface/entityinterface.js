@@ -100,7 +100,6 @@ class EntityInterface {
     }
     change(entity, color) {
         this.background.color = color.hex
-
         this.img.image = entity.name
         this.entity.name.text = entity.name
         if (entity.isDescriptionInfo) 
