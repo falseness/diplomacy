@@ -285,9 +285,9 @@ maps = {
                     towns: [{x: 24, y: 1}, {x: 22, y: 28}, {x: 1, y: 6}]
                 }
             ],
-            [{x: 18, y: 15, income: 100, roundsToOpen: 25}, {x: 18, y: 21, income: 50, roundsToOpen: 25},
+            [{x: 18, y: 15, income: 100, roundsToOpen: 25}, {x: 18, y: 21, income: 50},
                 {x: 13, y: 27, income: 50},
-                {x: 21, y: 14, income: 100}, {x: 21, y: 8, income: 50},
+                {x: 21, y: 14, income: 100, roundsToOpen: 25}, {x: 21, y: 8, income: 50},
                 {x: 26, y: 2, income: 50},
                 {x: 4, y: 11, income: 25}, {x: 6, y: 22, income: 25}, {x: 3, y: 26, income: 25}, {x: 7, y: 24, income: 25}, {x: 2, y: 23, income: 25}, {x: 5, y: 17, income: 25}, {x: 10, y: 9, income: 25},
                 {x: 35, y: 18, income: 25}, {x: 33, y: 7, income: 25}, {x: 36, y: 3, income: 25}, {x: 32, y: 5, income: 25}, {x: 37, y: 6, income: 25}, {x: 34, y: 12, income: 25}, {x: 29, y: 20, income: 25},
