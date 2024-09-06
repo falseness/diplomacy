@@ -31,10 +31,11 @@ class Map {
     createGoldmines() {
         for (let i = 0; i < this.goldmines.length; ++i) {
             let roundsToOpen = 0
+            let goldmine = this.goldmines[i]
             if ('roundsToOpen' in goldmine) {
                 roundsToOpen = goldmine.roundsToOpen
             }
-            let goldmine = this.goldmines[i]
+            
             new Goldmine(goldmine.x, goldmine.y, goldmine.income, roundsToOpen)
         }
     }
