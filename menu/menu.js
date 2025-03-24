@@ -20,7 +20,7 @@ function menuTouchEnd(event) {
 }
 function start(_slot) {
     gameSlot = _slot
-    GameManager.start(menu.selectedMap, menu.isFogOfWar, menu.isDynamicTimer)
+    GameManager.start(menu.selectedMap, menu.isFogOfWar, menu.isDynamicTimer, menu.isOnline, menu.currentPassword)
 }
 function load(_slot) {
     gameSlot = _slot
@@ -130,6 +130,9 @@ class OtherSettingsTree {
     }
 }
 class GameSettingsTree {
+    isOnline = false
+    // needed for online game
+    currentPassword = 'error'
     constructor(_menu) {
         const rectSize = WIDTH * 0.05
         const cornerR = rectSize * 0.1
@@ -245,6 +248,163 @@ class GameSettingsTree {
         this.mapSlider.draw(ctx)*/
     }
 }
+
+class OnlineSettingsTree {
+    constructor(_menu) {
+        const rectSize = WIDTH * 0.05
+        const cornerR = rectSize * 0.1
+        const marginLeft = rectSize * 0.5
+        /*const firstY = HEIGHT * 0.3
+        let intervalY = HEIGHT * 0.15*/
+        const firstY = HEIGHT * 0.3
+        let intervalY = HEIGHT * 0.12
+
+        const posX = WIDTH * 0.5
+
+        const fontSize = 0.04 * WIDTH
+        this.playersText = new Text(posX - Menu.getButton().width / 2, 
+            firstY, fontSize, 'players', 'black', 'left')
+
+        const slidePosX = posX + WIDTH * 0.1
+
+        // let minimumValueMap = function() { return 0 }
+        // let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
+        // let getKeyMap = function(value) { return getKeyByIndexDictionary(maps, value) }
+        // this.mapSlider = new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
+        //     0, WIDTH * 0.075,
+        // new Text(slidePosX, firstY + intervalY, fontSize), 
+        //         {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+        
+        // let minimumValuePlayers = function() { return 0 }
+        // let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
+        // let getKeyPlayers = function(value) { return value + 2 }
+        // this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers, 
+        //     getKeyPlayers, this.mapSlider,
+        //     0, WIDTH * 0.04,
+        // new Text(slidePosX, firstY, fontSize), 
+        //         {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+
+
+        // this.mapText = new Text(posX - Menu.getButton().width / 2, 
+        //     firstY + intervalY, fontSize, 'map', 'black', 'left')
+            
+        
+        this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
+            new Text(NaN, NaN, fontSize, 'fog of war', 'black'), marginLeft,
+            WIDTH * 0.58, firstY, rectSize, rectSize, 
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+
+
+        this.passwordText = new Text(posX - Menu.getButton().width / 2, 
+            firstY + intervalY, fontSize, 'enter password:', 'black', 'left')
+
+        this.passwordButtons = []
+
+        this.currentPassword = ''
+
+        this.initializePasswordsButtons(firstY, intervalY)
+      
+
+
+
+        // this.timerCheckBox = new ImageCheckBox('checkMark',
+        //     new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
+        //     WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize, 
+        //     [cornerR, cornerR, cornerR, cornerR],menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+
+        this.backButton = new Empty()
+
+        intervalY -= HEIGHT * 0.01
+
+        this.playButton = Menu.getButton(
+            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start', 
+            _menu.setTree, _menu.startGame, true, _menu)
+            
+        this.updateButtonsList()
+    }
+    initializePasswordsButtons(firstY, intervalY) {
+        let updatePassword = function(value) { 
+            this.currentPassword += value; 
+            this.passwordText.text = this.currentPassword }
+
+        const digits_count = 10
+        // just draws to rows of digits
+        for (let i = 0; i < digits_count; ++i) {
+            let size = WIDTH * 0.05
+            let step = WIDTH * 0.07
+
+            let max_digits_in_row = 5
+            let digits_row_width = size * max_digits_in_row + step * (max_digits_in_row - 1)
+            let xOffset = step * (i >= max_digits_in_row ? i - max_digits_in_row : i);
+            let rect = Menu.getButtonRect({x: WIDTH / 2 + xOffset - digits_row_width / 2 + WIDTH * 0.25 / 2, 
+                y: firstY + intervalY * 2 - size / 2 + (i >= 5 ? intervalY : 0)})
+            rect.width = rect.height = size
+
+            let res = new MenuButton(
+                rect,
+                Menu.getButtonText(`${i}`), 
+                updatePassword, i, true, this)
+            this.passwordButtons.push(res)
+        }
+    }
+    updateButtonsList() {
+        this.buttons = [this.backButton, this.playButton, 
+            this.fogOfWarCheckBox/*, this.timerCheckBox, this.playersSlider, this.mapSlider*/]
+        this.buttons = this.buttons.concat(this.passwordButtons)
+    }
+    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+        let y = HEIGHT * 0.3 + 4 * HEIGHT * 0.12
+        this.backButton = Menu.getButton({x: pos0X, y: y + HEIGHT * 0.08},
+            'back', _menu.setTree, parent, true, _menu)
+        
+        this.updateButtonsList()
+    }
+    /*select(pos) {
+        this.fogOfWarCheckBox.select(pos)
+        this.backButton.select(pos)
+    }
+    removeSelect() {
+        this.fogOfWarCheckBox.removeSelect()
+        this.backButton.removeSelect()
+    }*/
+    get selectedMap() {
+        let map = maps[0][2]
+        return map
+    }
+    get isFogOfWar() {
+        let res = this.fogOfWarCheckBox.mark
+        return res
+    }
+    get isDynamicTimer() {
+        let res = false
+        return res
+    }
+    click(pos) {
+        let ok = false
+        for (let i = 0; i < this.buttons.length; ++i) {
+            ok |= this.buttons[i].click(pos)
+        }
+        // if (this.buttons[this.buttons.length - 1].click(pos)) {
+        //     // map slider click
+        //     this.playersSlider.update()
+        //     ok = true
+        // }
+        return ok
+    }
+    draw(ctx) {
+        //this.playersText.draw(ctx)
+        this.passwordText.draw(ctx)
+        this.passwordText.draw(ctx)
+        for (let i = 0; i < this.buttons.length; ++i) {
+            this.buttons[i].draw(ctx)
+        }
+        /*this.fogOfWarCheckBox.draw(ctx)
+        this.backButton.draw(ctx)
+
+        this.mapSlider.draw(ctx)*/
+    }
+}
+
 class Menu {
     #visible
     static getButtonRect(pos) {
@@ -294,6 +454,8 @@ class Menu {
 
         this.play = new GameSettingsTree(this)
         
+        this.online = new OnlineSettingsTree(this)
+
         this.settings = new OtherSettingsTree(this)
 
         this.load = new Tree([
@@ -301,8 +463,10 @@ class Menu {
         ], this)
 
         this.main = new Tree([
-            this.constructor.getButton(startPos, 'start game', 
+            this.constructor.getButton(startPos, 'hot seat', 
                 this.setTree, this.play, true, this),
+            this.constructor.getButton(startPos, 'play online', 
+                this.setTree, this.online, true, this),
             this.constructor.getButton(startPos, 'settings', 
                 this.setTree, this.settings, true, this),
             this.constructor.getButton(startPos, 'load game', 
@@ -310,6 +474,7 @@ class Menu {
         ], this)
 
         this.play.setParent(this.main, this)
+        this.online.setParent(this.main, this)
         this.settings.setParent(this.main, this)
         this.startGame.setParent(this.play, this)
         this.load.setParent(this.main, this)

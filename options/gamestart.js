@@ -405,7 +405,7 @@ class GameManager {
         nextTurn()
         //undoManager.clear()
     }
-    static start(map, _isFogOfWar, isClassicTimer = false) {
+    static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
         isFogOfWar = _isFogOfWar
         map.start(this, isClassicTimer)
     }
