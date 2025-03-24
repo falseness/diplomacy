@@ -30,12 +30,8 @@ class Map {
     }
     createGoldmines() {
         for (let i = 0; i < this.goldmines.length; ++i) {
-            roundsToOpen = 0
-            if ('roundsToOpen' in goldmine) {
-                roundsToOpen = goldmine.roundsToOpen
-            }
             let goldmine = this.goldmines[i]
-            new Goldmine(goldmine.x, goldmine.y, goldmine.income, roundsToOpen)
+            new Goldmine(goldmine.x, goldmine.y, goldmine.income)
         }
     }
     createNature() {
@@ -284,7 +280,7 @@ maps = {
                     towns: [{x: 24, y: 1}, {x: 22, y: 28}, {x: 1, y: 6}]
                 }
             ],
-            [{x: 18, y: 15, income: 100, roundsToOpen: 25}, {x: 18, y: 21, income: 50, roundsToOpen: 25},
+            [{x: 18, y: 15, income: 100}, {x: 18, y: 21, income: 50},
                 {x: 13, y: 27, income: 50},
                 {x: 21, y: 14, income: 100}, {x: 21, y: 8, income: 50},
                 {x: 26, y: 2, income: 50},

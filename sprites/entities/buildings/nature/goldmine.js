@@ -1,11 +1,10 @@
 class Goldmine extends Building {
     //static income = 50
-    // static roundsToOpen = 0
+    static roundsToOpen = 0
     #income = 50
-    constructor(x, y, income, roundsToOpen=0) {
+    constructor(x, y, income) {
         super(x, y, 'goldmine')
         this.#income = income
-        this.roundsToOpen = roundsToOpen
         goldmines.push(this)
     }
     toJSON() {
@@ -27,9 +26,9 @@ class Goldmine extends Building {
             return this.potentialIncome
         return 0
     }
-    // get roundsToOpen() {
-    //     return this.constructor.roundsToOpen
-    // }
+    get roundsToOpen() {
+        return this.constructor.roundsToOpen
+    }
     get isLongOpened() {
         //thats need cuz building must open/build up first work (then generate income)
         return gameRound > this.roundsToOpen
