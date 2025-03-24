@@ -71,6 +71,8 @@ class Events {
     constructor(_barrackInterface, _townInterface, _entityInterface, 
             _statisticsInterface, _nextTurnPauseInterface) {
         this.selected = new Empty()
+        // if we wait for server answer then we can not send instructions
+        this.waitingMode = false
 
         this.interface = {
             barrack: _barrackInterface,
@@ -293,21 +295,27 @@ class Events {
                 console.log("not unit and not building???")
             }
             this.selected.select()
+            if (this.waitingMode) {
+                this.interface.barrack.visible = this.interface.town.visible = false; 
+            }
             return
         }
         
-        if (this.selected.needInstructions()) {
+        if (!this.waitingMode && this.selected.needInstructions()) {
             this.sendInstructions(coord)
-        } else {
-            if (isFogOfWar && !grid.fogOfWar[coord.x][coord.y]) {
-                this.hideAll()
-                this.selected.removeSelect()
-                this.selected = new Empty()
-
-                return
-            }
+            return
+        }
+        if (isFogOfWar && !grid.fogOfWar[coord.x][coord.y]) {
+            this.hideAll()
             this.selected.removeSelect()
-            this.clickOnCell(coord)
+            this.selected = new Empty()
+
+            return
+        }
+        this.selected.removeSelect()
+        this.clickOnCell(coord)
+        if (this.waitingMode) {
+            this.interface.barrack.visible = this.interface.town.visible = false; 
         }
     }
 }

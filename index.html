@@ -44,6 +44,8 @@
     <script src='options/dictionaryToList.js'></script>
     <script src='options/gamestart.js'></script>
     <script src='options/save.js'></script>
+    <script src="https://cdn.socket.io/socket.io-3.0.0.js"></script>
+    <script src='options/onlineLogic.js'></script>
     <script src='options/undo.js'></script>
     <script src='options/classManager.js'></script>
     <script src='options/timer.js'></script>
@@ -192,6 +194,11 @@
 
         let gameRound
         let suddenDeathRound = 10
+        // should have used this instead of many global variables:
+        let gameSettings = {
+            'isOnline': false,
+        }
+        let unsafeVariablePassword = 'error'
     
         let undoButton = new TwoPositionsImageButton(
             new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
@@ -215,6 +222,23 @@
             statisticsInterface.show, undefined, undefined, undefined, statisticsInterface
         )
         let whooseTurn
+
+        function getGameJson() {
+            return JSON.stringify({
+                'grid': JSON.stringify(grid),
+                'players': JSON.stringify(players),
+                'external': JSON.stringify(external),
+                'externalProduction': JSON.stringify(externalProduction),
+                'nature': JSON.stringify(nature),
+                'goldmines': JSON.stringify(goldmines),
+                'timer': JSON.stringify(timer),
+                'whooseTurn': JSON.stringify(whooseTurn),
+                'gameRound': JSON.stringify(gameRound),
+                'isFogOfWar': JSON.stringify(isFogOfWar),
+                'gameSettings': JSON.stringify(gameSettings)
+            })
+        }
+
         function saveGame() {
             try {
                 let _grid = JSON.stringify(grid)
@@ -236,6 +260,7 @@
                 localStorage.setItem(gameSlot + 'whooseTurn', _whooseTurn)
                 localStorage.setItem(gameSlot + 'gameRound', _gameRound)
                 localStorage.setItem(gameSlot + 'isFogOfWar', isFogOfWar)
+                localStorage.setItem(gameSlot + 'gameSettings', JSON.stringify(gameSettings))
                 
                 let player_history = localStorage.getItem(gameSlot + 'Player:' + _whooseTurn)
                 if (player_history == null)

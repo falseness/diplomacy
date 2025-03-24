@@ -30,11 +30,12 @@ function externalNextTurn() {
     }
 }
 
-function nextTurn() {
-    if (gameExit)
+
+
+function offlineNextTurn() {
+    if (gameExit) {
         return
-    //townInterface.setVisible(false)
-    //entityInterface.setVisible(false)
+    }
 
     gameEvent.nextTurn()
 
@@ -57,6 +58,41 @@ function nextTurn() {
     undoManager.clear()
     saveManager.save()
 }
+
+function nextTurn() {
+    if (gameSettings.isOnline) {
+        onlineNextTurn();
+    }
+    else {
+        offlineNextTurn();
+    }
+}
+
+// in case of online game we use this function in the beggining of our turn
+let startTurn = offlineNextTurn;
+
+function onlineNextTurn() {
+    if (gameExit) {
+        return
+    }
+    SendNextTurn();
+    gameEvent.nextTurn()
+
+    let nextWhooseTurn = (whooseTurn + 1) % players.length
+    for (;players[nextWhooseTurn].isNeutral || players[nextWhooseTurn].isLost;
+        nextWhooseTurn = (nextWhooseTurn + 1) % players.length) {
+
+    }
+    
+    gameEvent.waitingMode = true
+    nextTurnButton.color = players[nextWhooseTurn].hexColor
+    timer.pause()
+    undoManager.clear()
+    saveManager.save()
+    undoButton.disableClick()
+
+}
+
 class gameLogicButtons extends ImageButton {
     constructor(image, rect, clickFunc, parameters, text = new Empty(), canClick = true) {
         super(image, rect, clickFunc, parameters, text, canClick)

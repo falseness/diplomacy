@@ -20,7 +20,9 @@ function menuTouchEnd(event) {
 }
 function start(_slot) {
     gameSlot = _slot
-    GameManager.start(menu.selectedMap, menu.isFogOfWar, menu.isDynamicTimer, menu.isOnline, menu.currentPassword)
+    let game_mode = menu.previousTree
+    console.log(game_mode)
+    GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer, game_mode.isOnline, game_mode.currentPassword)
 }
 function load(_slot) {
     gameSlot = _slot
@@ -250,6 +252,7 @@ class GameSettingsTree {
 }
 
 class OnlineSettingsTree {
+    isOnline = true
     constructor(_menu) {
         const rectSize = WIDTH * 0.05
         const cornerR = rectSize * 0.1
@@ -325,7 +328,10 @@ class OnlineSettingsTree {
     initializePasswordsButtons(firstY, intervalY) {
         let updatePassword = function(value) { 
             this.currentPassword += value; 
-            this.passwordText.text = this.currentPassword }
+            this.passwordText.text = this.currentPassword 
+            // temporary unsafe thing:
+            unsafeVariablePassword = this.currentPassword
+        }
 
         const digits_count = 10
         // just draws to rows of digits
@@ -368,7 +374,8 @@ class OnlineSettingsTree {
         this.backButton.removeSelect()
     }*/
     get selectedMap() {
-        let map = maps[0][2]
+        // todo: update
+        let map = maps['small'][0]
         return map
     }
     get isFogOfWar() {
@@ -423,6 +430,7 @@ class Menu {
         return res
     }
     setTree(tree) {
+        this.previousTree = this.selectedTree
         this.selectedTree = tree
     }
     constructor() {

@@ -70,9 +70,6 @@ class Map {
             localStorage.setItem(gameSlot + 'Player:' + i, 
             JSON.stringify([]))
         }
-        // order is important
-        _gameManager.initValues()
-        requestAnimationFrame(gameLoop)
     }
     /*
     эта структура нужна для удобного хранения карт
@@ -402,12 +399,18 @@ class GameManager {
 	static initValues() {
         whooseTurn = 0
         gameRound = 0
-        nextTurn()
+        startTurn()
         //undoManager.clear()
     }
     static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
         isFogOfWar = _isFogOfWar
+        gameSettings.isOnline = isOnline
+        unsafeVariablePassword = password
         map.start(this, isClassicTimer)
+        SetupServerCommunicationLogic(password)
+        this.initValues()
+
+        requestAnimationFrame(gameLoop)
     }
 	/*static start1() {
         maps.small[0].start(this)
