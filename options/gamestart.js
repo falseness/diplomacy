@@ -64,9 +64,6 @@ class Map {
         for (let i = 0; i < this.players.length; ++i) {
             unpacker.setPlayerTimerByIndex(i, timer)
         }
-        for (let i = 0; i < players.length; ++i) {
-            console.log(JSON.parse(unpacker.getPlayerTimerByIndex(i))) 
-        }
 
         // refactoring is needed
         for (let i = 1; i < players.length; ++i) {

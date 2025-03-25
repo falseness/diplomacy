@@ -13,7 +13,6 @@ function SetupServerCommunicationLogic(password) {
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
-        console.log(game)
         loadFromJson(game)
         
 
@@ -43,7 +42,6 @@ function SetupServerCommunicationLogic(password) {
         timer.pause()
     });
 
-    console.log(JSON.stringify({'password': password}))
     socket.emit('startGameOrConnect', JSON.stringify({
         'password': password,
         'game': getGameObject()
@@ -57,9 +55,3 @@ function SetupServerCommunicationLogic(password) {
     }
 }
 
-/*function SendCurrentGameState(password) {
-    socket.emit('message', Json.stringify({
-        'currentState': getGameObject(),
-        'password': password
-    }))
-}*/

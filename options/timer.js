@@ -107,11 +107,9 @@ class LongTimer extends Timer {
         }
         unpacker.setPlayerTimerByIndex(whooseTurn, this)
         
-        console.log(`pauseAndSaveTime ${whooseTurn} ${this.time}`)
     }
     setNextTurnTime() {
         this.time = this.calcTime()
-        console.log(`setNextTurnTime ${whooseTurn} ${this.time}`)
     }
     toJSON() {
         let res = super.toJSON()

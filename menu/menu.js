@@ -21,7 +21,6 @@ function menuTouchEnd(event) {
 function start(_slot) {
     gameSlot = _slot
     let game_mode = menu.previousTree
-    console.log(game_mode)
     GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer, game_mode.isOnline, game_mode.currentPassword)
 }
 function load(_slot) {

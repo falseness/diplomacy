@@ -33,7 +33,6 @@ function externalNextTurn() {
 
 
 function offlineNextTurn() {
-    console.log('offlineNextTurn')
     if (gameExit) {
         return
     }
@@ -87,7 +86,6 @@ function onlineNextTurn() {
     timer.pauseAndSaveTime()
 
     let myIndex = whooseTurn
-
 
     do {
         whooseTurn = (whooseTurn + 1) % players.length
