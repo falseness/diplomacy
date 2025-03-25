@@ -276,6 +276,8 @@ class OnlineSettingsTree {
 
         const slidePosX = posX + WIDTH * 0.1
 
+        this.mapSlider = CreateMapSlider(firstY - intervalY, intervalY, fontSize, slidePosX)
+
         // let minimumValueMap = function() { return 0 }
         // let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
         // let getKeyMap = function(value) { return getKeyByIndexDictionary(maps, value) }
@@ -300,7 +302,7 @@ class OnlineSettingsTree {
         
         this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, fontSize, 'fog of war', 'black'), marginLeft,
-            WIDTH * 0.58, firstY, rectSize, rectSize, 
+            WIDTH * 0.28, firstY, rectSize, rectSize, 
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
 
@@ -361,6 +363,7 @@ class OnlineSettingsTree {
     }
     updateButtonsList() {
         this.buttons = [this.backButton, this.playButton, 
+            this.mapSlider,
             this.fogOfWarCheckBox/*, this.timerCheckBox, this.playersSlider, this.mapSlider*/]
         this.buttons = this.buttons.concat(this.passwordButtons)
     }
@@ -381,7 +384,7 @@ class OnlineSettingsTree {
     }*/
     get selectedMap() {
         // todo: update
-        let map = maps['tiny deathmatch'][0]
+        let map = maps[this.mapSlider.realValue][0]
         return map
     }
     get isFogOfWar() {
