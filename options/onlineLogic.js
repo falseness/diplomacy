@@ -9,7 +9,7 @@ function unfreezeGame() {
 }
 
 function SetupServerCommunicationLogic(password) {
-    const socket = io('ws://89.169.157.173:8080')
+    const socket = io('wss://89.169.157.173:8080')
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
