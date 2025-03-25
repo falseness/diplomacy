@@ -46,6 +46,9 @@ class NextTurnPauseInterface {
             nextTurnButton.deactivate()
         }
     }
+    hideButDontUpdateTimer() {
+        this.#visible = false
+    }
     click() {
         if (this.visible) {
             this.visible = false

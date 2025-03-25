@@ -162,7 +162,7 @@ class Events {
                 if (this.waitingMode) {
                     return
                 }
-                //nextTurnPauseInterface.visible = false
+                nextTurnPauseInterface.hideButDontUpdateTimer()
                 nextTurn()
                 return
             }
