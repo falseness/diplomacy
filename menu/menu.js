@@ -130,6 +130,19 @@ class OtherSettingsTree {
         }
     }
 }
+
+function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
+    let minimumValueMap = function() { return 0 }
+    let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
+    let getKeyMap = function(value) { return getKeyByIndexDictionary(maps, value) }
+    let sliderMarginX = WIDTH * 0.18
+    return new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
+        0, sliderMarginX,
+    new Text(slidePosX, firstY + intervalY, fontSize), 
+            {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+
+}
+
 class GameSettingsTree {
     isOnline = false
     // needed for online game
@@ -151,13 +164,7 @@ class GameSettingsTree {
 
         const slidePosX = posX + WIDTH * 0.1
 
-        let minimumValueMap = function() { return 0 }
-        let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
-        let getKeyMap = function(value) { return getKeyByIndexDictionary(maps, value) }
-        this.mapSlider = new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
-            0, WIDTH * 0.075,
-        new Text(slidePosX, firstY + intervalY, fontSize), 
-                {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+        this.mapSlider = CreateMapSlider(firstY, intervalY, fontSize, slidePosX)
         
         let minimumValuePlayers = function() { return 0 }
         let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
@@ -169,7 +176,7 @@ class GameSettingsTree {
                 {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
 
-        this.mapText = new Text(posX - Menu.getButton().width / 2, 
+        this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2, 
             firstY + intervalY, fontSize, 'map', 'black', 'left')
             
         
@@ -374,7 +381,7 @@ class OnlineSettingsTree {
     }*/
     get selectedMap() {
         // todo: update
-        let map = maps['small'][0]
+        let map = maps['tiny deathmatch'][0]
         return map
     }
     get isFogOfWar() {
