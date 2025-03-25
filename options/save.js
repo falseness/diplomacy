@@ -31,13 +31,16 @@ class JsonUnpackManager {
             mountain: Mountain
         }
     }
-    savePlayerTime() {
-        let res = timer.time
-        localStorage.setItem(gameSlot + 'timer' + whooseTurn, res)
+    setPlayerTimerByIndex(index, _timer) {
+        localStorage.setItem(gameSlot + 'timer' + index, JSON.stringify(_timer))
     }
+    getPlayerTimerByIndex(index) {
+        return localStorage.getItem(gameSlot + 'timer' + index)
+    }
+    static timeNotFound = 9999
     getPlayerTime() {
-        let res = localStorage.getItem(gameSlot + 'timer' + whooseTurn)
-        return Number(res)
+        let _timer = this.getPlayerTimerByIndex(whooseTurn)
+        return _timer ? JSON.parse(_timer).time : timeNotFound
     }
     unpackUnit(packedUnit, _unit) {
         if (packedUnit.name == 'Empty') {

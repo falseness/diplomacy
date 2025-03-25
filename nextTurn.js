@@ -33,17 +33,20 @@ function externalNextTurn() {
 
 
 function offlineNextTurn() {
+    console.log('offlineNextTurn')
     if (gameExit) {
         return
     }
 
     gameEvent.nextTurn()
 
+    timer.pauseAndSaveTime()
+
     whooseTurn = (whooseTurn + 1) % players.length
 
     externalNextTurn() 
     players[whooseTurn].nextTurn()
-
+    
     if (players[whooseTurn].isNeutral || players[whooseTurn].isLost) {
         nextTurn()
         return
@@ -52,11 +55,14 @@ function offlineNextTurn() {
 
     nextTurnButton.color = players[whooseTurn].hexColor
 
-    timer.nextTurn()
-    nextTurnPauseInterface.visible = true
+    
     
     undoManager.clear()
+
+    timer.setNextTurnTime()
     saveManager.save()
+
+    nextTurnPauseInterface.visible = true
 }
 
 function nextTurn() {
@@ -78,9 +84,10 @@ function onlineNextTurn() {
 
     gameEvent.nextTurn()
 
+    timer.pauseAndSaveTime()
+
     let myIndex = whooseTurn
 
-    
 
     do {
         whooseTurn = (whooseTurn + 1) % players.length
@@ -89,52 +96,16 @@ function onlineNextTurn() {
     } while(players[whooseTurn].isNeutral || players[whooseTurn].isLost)
     
     undoManager.clear()
+
+    timer.setNextTurnTime()
     saveManager.save()
     SendNextTurn()
-    timer.pause()
+    
 
     whooseTurn = myIndex
 
     gameEvent.waitingMode = true
     undoButton.disableClick()
-
-
-    /*
-
-
-
-    whooseTurn = myIndex
-
-    gameEvent.screen.moveToPlayer(players[whooseTurn]) // перемещение экрана к городам игрока
-
-    nextTurnButton.color = players[whooseTurn].hexColor
-
-    timer.nextTurn()
-    nextTurnPauseInterface.visible = true
-    
-    undoManager.clear()
-    saveManager.save()*/
-}
-
-function onlineNextTurnOld() {
-    if (gameExit) {
-        return
-    }
-    gameEvent.nextTurn()
-
-    let nextWhooseTurn = (whooseTurn + 1) % players.length
-    for (;players[nextWhooseTurn].isNeutral || players[nextWhooseTurn].isLost;
-        nextWhooseTurn = (nextWhooseTurn + 1) % players.length) {
-
-    }
-    
-    gameEvent.waitingMode = true
-    nextTurnButton.color = players[nextWhooseTurn].hexColor
-    timer.pause()
-    undoManager.clear()
-    saveManager.save()
-    undoButton.disableClick()
-
 }
 
 class gameLogicButtons extends ImageButton {

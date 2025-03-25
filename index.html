@@ -224,6 +224,10 @@
         let whooseTurn
 
         function getGameObject() {
+            let timers = Array(players.length)
+            for (let i = 0; i < players.length; ++i) {
+                timers[i] = JSON.parse(unpacker.getPlayerTimerByIndex(i))
+            }
             return {
                 'grid': grid,
                 'players': players,
@@ -231,7 +235,7 @@
                 'externalProduction': externalProduction,
                 'nature': nature,
                 'goldmines': goldmines,
-                'timer': timer,
+                'timers': timers,
                 'whooseTurn': whooseTurn,
                 'gameRound': gameRound,
                 'isFogOfWar': isFogOfWar,
@@ -256,7 +260,7 @@
                 localStorage.setItem(gameSlot + 'externalProduction', _externalProduction)
                 localStorage.setItem(gameSlot + 'nature', _nature)
                 localStorage.setItem(gameSlot + 'goldmines', _goldmines)
-                localStorage.setItem(gameSlot + 'timer', _timer)
+                localStorage.setItem(gameSlot + 'timer' + whooseTurn, _timer)
                 localStorage.setItem(gameSlot + 'whooseTurn', _whooseTurn)
                 localStorage.setItem(gameSlot + 'gameRound', _gameRound)
                 localStorage.setItem(gameSlot + 'isFogOfWar', isFogOfWar)
@@ -321,10 +325,13 @@
         }
         function loadFromJson(game_string) {
             let game = JSON.parse(game_string)
-            console.log(typeof game)
+            for (let i = 0; i < game.players.length; ++i) {
+                unpacker.setPlayerTimerByIndex(i, game.timers[i])
+            }
+
             unpacker.unpackAll(JSON.stringify(game.grid), JSON.stringify(game.players), JSON.stringify(game.external), 
                 JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
-                JSON.stringify(game.timer), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
+                JSON.stringify(game.timers[game.whooseTurn]), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
                 JSON.stringify(game.isFogOfWar), 'gameSettings' in game ? JSON.stringify(game.gameSettings) : null)
         }
         function loadGame() {
@@ -343,8 +350,8 @@
             let _externalProduction = localStorage.getItem(gameSlot + 'externalProduction')
             let _nature = localStorage.getItem(gameSlot + 'nature')
             let _goldmines = localStorage.getItem(gameSlot + 'goldmines')
-            let _timer = localStorage.getItem(gameSlot + 'timer')
             let _whooseTurn = localStorage.getItem(gameSlot + 'whooseTurn')
+            let _timer = localStorage.getItem(gameSlot + 'timer' + Number(_whooseTurn))
             let _gameRound = localStorage.getItem(gameSlot + 'gameRound')
             let _isFogOfWar = localStorage.getItem(gameSlot + 'isFogOfWar')
             let _gameSettings = localStorage.getItem(gameSlot + 'gameSettings')

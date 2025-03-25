@@ -19,14 +19,16 @@ function SetupServerCommunicationLogic(password) {
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
+        gameEvent.screen.moveToPlayer(players[whooseTurn])
+        
     });
     socket.on('playYourTurn', game => {
         console.log(`playYourTurn`)
         loadFromJson(game)
 
-
         nextTurnPauseInterface.visible = true
         unfreezeGame()
+        gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
     socket.on('waitYouTurn', game => {

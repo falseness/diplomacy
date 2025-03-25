@@ -27,12 +27,17 @@ class Timer {
     get seconds() {
         return Math.floor(this.time / 1000)
     }
-    nextTurn() {
-        this.pause()
-        this.time = this.calcTime()
-    }
     pause() {
         this.isTick = false
+    }
+    pauseAndSaveTime() {
+        if (this.isTick) {
+            this.pause()
+        }
+        unpacker.setPlayerTimerByIndex(whooseTurn, this)
+    }
+    setNextTurnTime() {
+        this.time = this.calcTime()
     }
     check() {
         if (Date.now() - this.lastPause > this.time) {
@@ -79,7 +84,7 @@ class Timer {
 }
 const STANDARTTIME = 0 * 60 * 1000
 class LongTimer extends Timer {
-    constructor(fullTime = STANDARTTIME, timeAdd = Math.floor(1.5 * 60 * 1000)) {
+    constructor(fullTime = STANDARTTIME, timeAdd = Math.floor(10 * 1000)) {
         super()
         this.time = fullTime
         this.timeAdd = timeAdd
@@ -95,17 +100,18 @@ class LongTimer extends Timer {
         if (!isNaN(this.lastPause))
             this.time -= Math.floor(Date.now() - this.lastPause)
         this.time = Math.max(this.time, 0)
-
-        unpacker.savePlayerTime()
     }
-    nextTurn() {
-        let oldWhooseTurn = whooseTurn
-        whooseTurn = (whooseTurn - 1 + players.length) % players.length
-        if (whooseTurn == 0)
-            whooseTurn = players.length - 1
-        this.pause()
-        whooseTurn = oldWhooseTurn
+    pauseAndSaveTime() {
+        if (this.isTick) {
+            this.pause()
+        }
+        unpacker.setPlayerTimerByIndex(whooseTurn, this)
+        
+        console.log(`pauseAndSaveTime ${whooseTurn} ${this.time}`)
+    }
+    setNextTurnTime() {
         this.time = this.calcTime()
+        console.log(`setNextTurnTime ${whooseTurn} ${this.time}`)
     }
     toJSON() {
         let res = super.toJSON()

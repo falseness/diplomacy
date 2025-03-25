@@ -541,7 +541,7 @@ class Menu {
         
         // very important save first then pause timer 
         // so that the timer saves the current remaining time
-        timer.pause()
+        timer.pauseAndSaveTime()
 
         menu.visible = true
         menu.start()
