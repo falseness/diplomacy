@@ -73,8 +73,8 @@ class Grid extends SpritesGroup {
         this.drawLogicText = true
     }
     clearFogOfWarArr() {
-        let n = this.fogOfWar.length
-        let m = this.fogOfWar[0].length
+        let n = this.arr.length
+        let m = this.arr[0].length
         this.fogOfWar = []
         this.fullInitArr(n, m, this.fogOfWar, 0)
     }

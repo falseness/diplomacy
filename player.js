@@ -166,8 +166,6 @@ class Player {
         for (let i = 0; i < this.towns.length; ++i) {
             this.towns[i].nextTurn()
         }
-        if (isFogOfWar)
-            this.changeFogOfWarByVision()
     }
     calcSuburbHexagon() {
         let tmpCanvas = document.createElement('canvas')

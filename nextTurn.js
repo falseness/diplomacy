@@ -50,6 +50,9 @@ function offlineNextTurn() {
         nextTurn()
         return
     }
+    if (isFogOfWar) {
+        players[whooseTurn].changeFogOfWarByVision()
+    }
     gameEvent.screen.moveToPlayer(players[whooseTurn]) // перемещение экрана к городам игрока
 
     nextTurnButton.color = players[whooseTurn].hexColor
@@ -98,10 +101,12 @@ function onlineNextTurn() {
     timer.setNextTurnTime()
     saveManager.save()
     SendNextTurn()
+
+    // tmp fix later:
     
 
     whooseTurn = myIndex
-
+    
     gameEvent.waitingMode = true
     undoButton.disableClick()
 }

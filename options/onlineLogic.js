@@ -35,6 +35,12 @@ function SetupServerCommunicationLogic(password) {
 
         loadFromJson(game)
 
+        // temporary. work in 2 player maps:
+        if (isFogOfWar) {
+            let myIndex = whooseTurn == 1 ? 2 : 1
+            players[myIndex].changeFogOfWarByVision()
+        }
+
         gameEvent.waitingMode = true
         undoButton.disableClick()
         nextTurnPauseInterface.visible = false
