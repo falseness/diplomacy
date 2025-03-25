@@ -399,7 +399,7 @@ class GameManager {
 	static initValues() {
         whooseTurn = 0
         gameRound = 0
-        startTurn()
+        
         //undoManager.clear()
     }
     static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
@@ -407,8 +407,11 @@ class GameManager {
         gameSettings.isOnline = isOnline
         unsafeVariablePassword = password
         map.start(this, isClassicTimer)
-        SetupServerCommunicationLogic(password)
         this.initValues()
+        startTurn()
+        if (isOnline) {
+            SetupServerCommunicationLogic(password)
+        }
 
         requestAnimationFrame(gameLoop)
     }

@@ -159,8 +159,12 @@ class Events {
     keyboard(keycode) {
         if (this.isPressKeyCode(keycode)) {
             if (keycode == 13) {// enter 
+                if (this.waitingMode) {
+                    return
+                }
                 nextTurnPauseInterface.visible = false
                 nextTurn()
+                return
             }
             if (keycode == 27) // esc 
                 debug = !debug

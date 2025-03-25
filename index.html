@@ -223,20 +223,20 @@
         )
         let whooseTurn
 
-        function getGameJson() {
-            return JSON.stringify({
-                'grid': JSON.stringify(grid),
-                'players': JSON.stringify(players),
-                'external': JSON.stringify(external),
-                'externalProduction': JSON.stringify(externalProduction),
-                'nature': JSON.stringify(nature),
-                'goldmines': JSON.stringify(goldmines),
-                'timer': JSON.stringify(timer),
-                'whooseTurn': JSON.stringify(whooseTurn),
-                'gameRound': JSON.stringify(gameRound),
-                'isFogOfWar': JSON.stringify(isFogOfWar),
-                'gameSettings': JSON.stringify(gameSettings)
-            })
+        function getGameObject() {
+            return {
+                'grid': grid,
+                'players': players,
+                'external': external,
+                'externalProduction': externalProduction,
+                'nature': nature,
+                'goldmines': goldmines,
+                'timer': timer,
+                'whooseTurn': whooseTurn,
+                'gameRound': gameRound,
+                'isFogOfWar': isFogOfWar,
+                'gameSettings': gameSettings
+            }
         }
 
         function saveGame() {
@@ -319,6 +319,14 @@
         function hasSave(_slot) {
             return !!localStorage.getItem(_slot + 'whooseTurn')
         }
+        function loadFromJson(game_string) {
+            let game = JSON.parse(game_string)
+            console.log(typeof game)
+            unpacker.unpackAll(JSON.stringify(game.grid), JSON.stringify(game.players), JSON.stringify(game.external), 
+                JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
+                JSON.stringify(game.timer), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
+                JSON.stringify(game.isFogOfWar), 'gameSettings' in game ? JSON.stringify(game.gameSettings) : null)
+        }
         function loadGame() {
             try {
                 if (!hasSave(gameSlot))
@@ -339,9 +347,11 @@
             let _whooseTurn = localStorage.getItem(gameSlot + 'whooseTurn')
             let _gameRound = localStorage.getItem(gameSlot + 'gameRound')
             let _isFogOfWar = localStorage.getItem(gameSlot + 'isFogOfWar')
+            let _gameSettings = localStorage.getItem(gameSlot + 'gameSettings')
+
 
             unpacker.unpackAll(_grid, _players, _external, _externalProduction, 
-                _nature, _goldmines, _timer, _whooseTurn, _gameRound, _isFogOfWar)
+                _nature, _goldmines, _timer, _whooseTurn, _gameRound, _isFogOfWar, _gameSettings)
 
             gameEvent.hideAll()
                 //console.log("loaded")
@@ -405,7 +415,7 @@
         }
         window.addEventListener('load', start)
         window.onblur = function() {
-            if (!menu.visible && !debug) {
+            if (!menu.visible && !debug && !gameSettings.isOnline) {
                 menuBack()
             }
         }

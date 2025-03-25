@@ -182,7 +182,7 @@ class JsonUnpackManager {
         }
     }
     unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, 
-            jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound, jsonIsFogOfWar) {
+            jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound, jsonIsFogOfWar, jsonGameSettings) {
         let packedTimer = JSON.parse(jsonTimer)
         if (packedTimer.type == 'long') {
             timer = new LongTimer(packedTimer.time)
@@ -200,6 +200,15 @@ class JsonUnpackManager {
         whooseTurn = JSON.parse(jsonWhooseTurn)
         gameRound = JSON.parse(jsonGameRound)
         isFogOfWar = JSON.parse(jsonIsFogOfWar)
+        if (jsonGameSettings == null) {
+            // default value
+            gameSettings = {
+                'isOnline': false
+            }
+        }
+        else {
+            gameSettings = JSON.parse(jsonGameSettings)
+        }
 
         let gridSize = {
             x: packedGrid.length,

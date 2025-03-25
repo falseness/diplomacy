@@ -1,29 +1,63 @@
 let SendNextTurn
+
+
+function unfreezeGame() {
+    gameEvent.waitingMode = false
+    undoButton.enableClick()
+    nextTurnButton.enableClick()
+    nextTurnButton.color = players[whooseTurn].hexColor
+}
+
 function SetupServerCommunicationLogic(password) {
     const socket = io('ws://localhost:8080')
 
-    socket.on('message', text => {
-        console.log(`got message ${text}`)
+    socket.on('gameStarted', game => {
+        console.log('gameStarted')
+        console.log(game)
+        loadFromJson(game)
+        
 
+        nextTurnPauseInterface.visible = false
+        unfreezeGame()
+    });
+    socket.on('playYourTurn', game => {
+        console.log(`playYourTurn`)
+        loadFromJson(game)
+
+
+        nextTurnPauseInterface.visible = true
+        unfreezeGame()
+        
+    });
+    socket.on('waitYouTurn', game => {
+        console.log(`waitYouTurn`)
+
+        loadFromJson(game)
+
+        gameEvent.waitingMode = true
+        undoButton.disableClick()
+        nextTurnPauseInterface.visible = false
+        nextTurnButton.disableClick()
+        timer.pause()
     });
 
     console.log(JSON.stringify({'password': password}))
-    socket.emit('message', JSON.stringify({
-        'privet': 'hello',
+    socket.emit('startGameOrConnect', JSON.stringify({
         'password': password,
-        'startGame': getGameJson()
+        'game': getGameObject()
     }))
     SendNextTurn = () => {
-        socket.emit('message', JSON.stringify({
+        console.log('SendNextTurn')
+        socket.emit('nextTurn', JSON.stringify({
             'password': password,
-            'nextTurn': getGameJson()
+            'game': getGameObject()
         }))
     }
 }
 
 /*function SendCurrentGameState(password) {
     socket.emit('message', Json.stringify({
-        'currentState': getGameJson(),
+        'currentState': getGameObject(),
         'password': password
     }))
 }*/

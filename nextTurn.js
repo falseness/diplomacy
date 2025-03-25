@@ -75,7 +75,51 @@ function onlineNextTurn() {
     if (gameExit) {
         return
     }
-    SendNextTurn();
+
+    gameEvent.nextTurn()
+
+    let myIndex = whooseTurn
+
+    
+
+    do {
+        whooseTurn = (whooseTurn + 1) % players.length
+        externalNextTurn() 
+        players[whooseTurn].nextTurn()
+    } while(players[whooseTurn].isNeutral || players[whooseTurn].isLost)
+    
+    undoManager.clear()
+    saveManager.save()
+    SendNextTurn()
+    timer.pause()
+
+    whooseTurn = myIndex
+
+    gameEvent.waitingMode = true
+    undoButton.disableClick()
+
+
+    /*
+
+
+
+    whooseTurn = myIndex
+
+    gameEvent.screen.moveToPlayer(players[whooseTurn]) // перемещение экрана к городам игрока
+
+    nextTurnButton.color = players[whooseTurn].hexColor
+
+    timer.nextTurn()
+    nextTurnPauseInterface.visible = true
+    
+    undoManager.clear()
+    saveManager.save()*/
+}
+
+function onlineNextTurnOld() {
+    if (gameExit) {
+        return
+    }
     gameEvent.nextTurn()
 
     let nextWhooseTurn = (whooseTurn + 1) % players.length
@@ -116,6 +160,9 @@ class gameLogicButtons extends ImageButton {
         return super.click(point)
     }
     draw(ctx) {
+        if (!this.canClick) {
+            return
+        }
         let oldColor = this.color
         if (this.unactive) {
             this.color = 'white'
