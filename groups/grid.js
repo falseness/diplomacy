@@ -77,6 +77,14 @@ class Grid extends SpritesGroup {
         let m = this.arr[0].length
         this.fogOfWar = []
         this.fullInitArr(n, m, this.fogOfWar, 0)
+
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.arr[i][j].building.isNature) {
+                    this.fogOfWar[i][j] += 1
+                }
+            }
+        }
     }
     fill(n, m) {
         this.createArr(n, this.arr)
@@ -91,7 +99,8 @@ class Grid extends SpritesGroup {
             this.visionUsed = []
             this.visionDistance = []
             
-            this.fullInitArr(n, m, this.fogOfWar, 0)
+            this.clearFogOfWarArr()
+
             this.fullInitArr(n, m, this.visionUsed, 0)
             this.fullInitArr(n, m, this.visionDistance, 0)
 
