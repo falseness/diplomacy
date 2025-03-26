@@ -1,6 +1,6 @@
 class Goldmine extends Building {
     //static income = 50
-    static roundsToOpen = 0
+    static roundsToOpen = 20
     #income = 50
     constructor(x, y, income) {
         super(x, y, 'goldmine')
