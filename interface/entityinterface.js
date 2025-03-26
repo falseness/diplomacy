@@ -108,7 +108,6 @@ class EntityInterface {
             this.entity.info.text = join(entity.info, ': ', '\n')
         
         // tmp todo refactor:
-        console.log(gameEvent.waitingMode)
         this.destroyButton.canClick = entity.isDestroyable && !gameEvent.waitingMode
         this.updateSizes()
 
