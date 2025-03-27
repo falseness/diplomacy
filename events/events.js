@@ -46,7 +46,7 @@ function touchend(event) {
     gameEvent.touchend(pos, event.touches.length)
 }
 function keydown(event) {
-    gameEvent.keyboard(event.keyCode)
+    gameEvent.keyboard(event.keyCode, event.shiftKey)
 }
 function keyup(event) {
     gameEvent.keyup(event.keyCode)
@@ -162,7 +162,7 @@ class Events {
         
         return keys.has(keycode)
     }
-    keyboard(keycode) {
+    keyboard(keycode, isShiftPressed) {
         if (this.isPressKeyCode(keycode)) {
             if (keycode == Events.kEscapeKeycode) {
                 debug = !debug
@@ -173,8 +173,20 @@ class Events {
             }
             
             if (keycode == Events.kEnterKeycode) {
-                nextTurnPauseInterface.hideButDontUpdateTimer()
-                nextTurn()
+                if (isShiftPressed) {
+                    nextTurnPauseInterface.hideButDontUpdateTimer()
+                    nextTurn()
+                    return
+                }
+
+                let unit = players[whooseTurn].findIdleUnit()
+                if (!unit) {
+                    return
+                }
+                unit.select()
+                this.selected = unit
+                this.screen.moveTo(unit.pos)
+                
                 return
             }
             if (keycode == Events.kZKeycode || keycode == Events.kBackspaceKeycode) {

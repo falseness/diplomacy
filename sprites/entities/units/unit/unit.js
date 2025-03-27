@@ -47,6 +47,10 @@ class Unit extends Entity {
         this.interaction.moves = moves
         this.updateMovesBar()
     }
+    skipMoves() {
+        this.interaction.skipMoves(this)
+        this.updateMovesBar()
+    }
     get dmg() {
         return this.constructor.dmg
     }
@@ -71,9 +75,11 @@ class Unit extends Entity {
         let unit = super.info
         unit.info.dmg = this.dmg
 
-        if (this.isMyTurn)
-            unit.info.moves = this.moves + ' / ' + this.speed
+        unit.canSkipMoves = this.isMyTurn && this.moves != 0
 
+        if (this.isMyTurn) {
+            unit.info.moves = this.moves + ' / ' + this.speed    
+        }
         unit.info.salary = this.salary
         return unit
     }

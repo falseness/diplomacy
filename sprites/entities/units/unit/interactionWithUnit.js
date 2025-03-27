@@ -126,6 +126,11 @@ class InterationWithUnit {
             capturedBuilding.isRecentlyCaptured = true
         }
     }
+    skipMoves(unit) {
+        this.addThisUndo(unit)
+        this.moves = 0
+        this.addKillUnitUndo(unit)
+    }
     addKillUnitUndo(unit) {
         undoManager.lastUndo.killUnit.push({
             coord: {

@@ -1,4 +1,8 @@
 function destroySelected() {
+    if (gameEvent.selected.isUnit) {
+        console.error(`trying to destroy selected which is unit = ${gameEvent.selected.toJSON()}`)
+        retutn
+    }
     let type = 'destroyBuilding'
     if (gameEvent.selected.isTown()) 
         type = 'destroyTown'
@@ -10,13 +14,50 @@ function destroySelected() {
     undoManager.startUndo(type)
     undoManager.lastUndo.building = gameEvent.selected.toUndoJSON() 
 
-
-
     gameEvent.selected.destroy()
+    gameEvent.removeSelection()
+}
+
+function skipMovesOfSelected() {
+    if (!gameEvent.selected.isUnit) {
+        console.error(`trying to skip moves of selected which is not unit = ${gameEvent.selected.toJSON()}`)
+        return
+    }
+    gameEvent.selected.skipMoves()
     gameEvent.removeSelection()
 }
 class EntityInterface {
     #visible = false
+    
+    createButtonInTheBottom(text, functionToHandle) {
+        let button = {
+            text: {
+                text: text,
+                color: '#747474',
+                fontSize: this.height * 0.1
+            },
+            rect: {
+                color: '#f7f7f7',
+                cornerRadius: 0.02 * HEIGHT,
+                borderColor: 'black',
+                stroke: 0.0015 * HEIGHT,
+                width: 0.11 * WIDTH,
+                height: 0.05 * HEIGHT
+            }
+        }
+        let result = new Button(
+            new Rect(this.entity.name.x, HEIGHT - this.height * 0.075 - button.rect.height, 
+                button.rect.width, button.rect.height, 
+                [button.rect.cornerRadius, button.rect.cornerRadius, 
+                button.rect.cornerRadius, button.rect.cornerRadius],
+                button.rect.stroke, button.rect.color),
+            new Text(0, 0, button.text.fontSize, button.text.text, button.text.color),
+            functionToHandle
+        )
+        result.trimText()
+        return result
+    }
+
     constructor() {
 
         let stroke = 0.001 * WIDTH
@@ -59,41 +100,20 @@ class EntityInterface {
 
         this.entity.info.textBaseline = 'top'
         this.entity.info.textAlign = 'left'
-        let button = {
-            text: {
-                text: 'destroy',
-                color: '#747474',
-                fontSize: this.height * 0.1
-            },
-            rect: {
-                color: '#f7f7f7',
-                cornerRadius: 0.02 * HEIGHT,
-                borderColor: 'black',
-                stroke: 0.0015 * HEIGHT,
-                width: 0.11 * WIDTH,
-                height: 0.05 * HEIGHT
-            }
-        }
-        this.destroyButton = new Button(
-            new Rect(this.entity.name.x, HEIGHT - this.height * 0.075 - button.rect.height, 
-                button.rect.width, button.rect.height, 
-                [button.rect.cornerRadius, button.rect.cornerRadius, 
-                button.rect.cornerRadius, button.rect.cornerRadius],
-                button.rect.stroke, button.rect.color),
-            new Text(0, 0, button.text.fontSize, button.text.text, button.text.color),
-            destroySelected
-        )
-        this.destroyButton.trimText()
-        this.updateSizes()
+        
+        this.destroyButton = this.createButtonInTheBottom('destroy', destroySelected)
+        this.skipMovesButton = this.createButtonInTheBottom('skip moves', skipMovesOfSelected)
+        this.updateSizes(false)
     }
     get top() {
         return this.pos.y
     }
-    updateSizes() {
+    updateSizes(isCurrentEnityUnit) {
+        let currentButton = isCurrentEnityUnit ? this.destroyButton : this.skipMovesButton
         this.width = Math.max(
             this.entity.info.x + this.entity.info.width,
             this.entity.name.x + this.entity.name.width,
-            this.destroyButton.rect.right) + 0.04 * this.height
+            currentButton.rect.right) + 0.04 * this.height
 
         this.background.width = this.width
         
@@ -107,9 +127,9 @@ class EntityInterface {
         else
             this.entity.info.text = join(entity.info, ': ', '\n')
         
-        // tmp todo refactor:
         this.destroyButton.canClick = entity.isDestroyable && !gameEvent.waitingMode
-        this.updateSizes()
+        this.skipMovesButton.canClick = entity.canSkipMoves && !gameEvent.waitingMode
+        this.updateSizes(entity.canSkipMoves)
 
         this.visible = true
     }
@@ -127,7 +147,9 @@ class EntityInterface {
         if (!this.visible)
             return false
         
+        
         this.destroyButton.click(pos)
+        this.skipMovesButton.click(pos)
         return this.isInside(pos)
     }
     draw(ctx) {
@@ -144,5 +166,6 @@ class EntityInterface {
         this.entity.info.draw(ctx)
 
         this.destroyButton.draw(ctx)
+        this.skipMovesButton.draw(ctx)
     }
 }

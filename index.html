@@ -281,6 +281,9 @@
                 }
                 player_history = JSON.stringify(player_history)
                 localStorage.setItem(gameSlot + 'Player:' + _whooseTurn, player_history)
+                if (gameSettings.isOnline) {
+                    return
+                }
                 if (whooseTurn + 1 == players.length && !isFogOfWar) {
                     console.log('======HISTORY======')
                     // refactoring is needed

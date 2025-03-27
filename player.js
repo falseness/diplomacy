@@ -14,6 +14,14 @@ class Player {
         this.hexagon = this.calcHexagon()
         this.suburbHexagon = this.calcSuburbHexagon()
     }
+    findIdleUnit() {
+        for (let i = 0; i < this.units.length; ++i) {
+            if (!this.units[i].killed && this.units[i].moves != 0) {
+                return this.units[i]
+            }
+        }
+        return undefined
+    }
     updateUnits() {
         for (let i = 0; i < this.units.length; ++i) {
             if (this.units[i].killed) {
