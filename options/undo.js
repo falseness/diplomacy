@@ -149,22 +149,26 @@ class UndoManager {
         let undo = this.arr.pop()
 
         this.undoBuilding(undo.building)
+        gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     destroyTownUndo() {
         let undo = this.arr.pop()
 
         this.undoTown(undo.building)
+        gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
 
     destroyBuildingProductionUndo() {
         let undo = this.arr.pop()
 
         this.undoBuildingProduction(undo.building)
+        gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     destroyExternalProductionUndo() {
         let undo = this.arr.pop()
 
         this.undoExternalProduction(undo.building)
+        gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     undo() {
         if (!this.arr.length)
