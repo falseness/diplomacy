@@ -153,23 +153,33 @@ class Events {
         
         return
     }
+    static kEnterKeycode = 13
+    static kEscapeKeycode = 27
+    static kZKeycode = 90
+    static kBackspaceKeycode = 8
     isPressKeyCode(keycode) {
-        return keycode == 13 || keycode == 27 || keycode == 90
+        let keys = new Set([Events.kEnterKeycode, Events.kEscapeKeycode, Events.kZKeycode, Events.kBackspaceKeycode])
+        
+        return keys.has(keycode)
     }
     keyboard(keycode) {
         if (this.isPressKeyCode(keycode)) {
-            if (keycode == 13) {// enter 
-                if (this.waitingMode) {
-                    return
-                }
+            if (keycode == Events.kEscapeKeycode) {
+                debug = !debug
+            }
+            
+            if (this.waitingMode) {
+                return
+            }
+            
+            if (keycode == Events.kEnterKeycode) {
                 nextTurnPauseInterface.hideButDontUpdateTimer()
                 nextTurn()
                 return
             }
-            if (keycode == 27) // esc 
-                debug = !debug
-            if (keycode == 90) //z
+            if (keycode == Events.kZKeycode || keycode == Events.kBackspaceKeycode) {
                 undoManager.undo()
+            }
             return 
         }
         
