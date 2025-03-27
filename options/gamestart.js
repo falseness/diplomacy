@@ -914,7 +914,7 @@ class GameManager {
 	static load() {
         this.clearBasisValues()
         
-        nextTurnButton.color = players[whooseTurn].hexColor
+        nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
 
     	requestAnimationFrame(gameLoop)

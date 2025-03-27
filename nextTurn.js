@@ -55,9 +55,8 @@ function offlineNextTurn() {
     }
     gameEvent.screen.moveToPlayer(players[whooseTurn]) // перемещение экрана к городам игрока
 
-    nextTurnButton.color = players[whooseTurn].hexColor
+    nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
 
-    
     
     undoManager.clear()
 
@@ -112,14 +111,14 @@ function onlineNextTurn() {
 }
 
 class gameLogicButtons extends ImageButton {
+    #highlightButton = false
     constructor(image, rect, clickFunc, parameters, text = new Empty(), canClick = true) {
         super(image, rect, clickFunc, parameters, text, canClick)
+        this.highlightButton = false
     }
-    set color(color) {
+    setNextPlayerColor(color) {
         this.img.color = color
-    }
-    get color() {
-        return this.img.color
+        this.highlightButton = false
     }
     deactivate() {
         this.unactive = true
@@ -133,21 +132,36 @@ class gameLogicButtons extends ImageButton {
             return false
         return super.click(point)
     }
+    set highlightButton(boolean) {
+        this.#highlightButton = boolean
+        // opacity determines button's brightness in our case
+        if (boolean) {
+            const disableOpacity = 0.0
+            this.img.colorAlpha = disableOpacity
+        }
+        else {
+            const suburbAlpha = 0.4
+            this.img.colorAlpha = suburbAlpha
+        }
+    }
+    get highlightButton() {
+        return this.#highlightButton
+    }
     draw(ctx) {
         if (!this.canClick) {
             return
         }
-        let oldColor = this.color
+        let oldColor = this.img.color
         if (this.unactive) {
-            this.color = 'white'
+            this.img.color = 'white'
         }
         super.draw(ctx)
-        this.color = oldColor
+        this.img.color = oldColor
     }
 }
 const nextTurnButtonSize = WIDTH * 0.1
 let nextTurnButton = new gameLogicButtons(
-    new TriangleImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize, 'black', 0.005 * HEIGHT),
+    new TriangleImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize, 'black', 0.005 * HEIGHT, 1.0),
     new Rect(WIDTH - nextTurnButtonSize * 1.05, HEIGHT - nextTurnButtonSize * 1.05,
         nextTurnButtonSize, nextTurnButtonSize),
     nextTurn

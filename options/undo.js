@@ -109,6 +109,7 @@ class UndoManager {
             }
         }
         gameEvent.selected = grid.getUnit(undo.units[0].coord)
+        nextTurnButton.highlightButton = false
     }
     preparingUnitUndo() {
         let undo = this.arr.pop()

@@ -95,10 +95,11 @@ class SuburbImage extends ShapeImage {
     }
 }
 class TriangleImage extends ShapeImage {
-    constructor(pos, color, side, strokeColor, strokeWidth) {
+    constructor(pos, color, side, strokeColor, strokeWidth, colorAlpha) {
         super(pos, color, strokeColor, strokeWidth)
             // pos is center of triangle
         this.side = side
+        this.colorAlpha = colorAlpha
     }
     drawShape(ctx) {
         ctx.lineJoin = 'round'
@@ -120,9 +121,8 @@ class TriangleImage extends ShapeImage {
         let oldColor = this.color
         let oldStrokeWidth = this.strokeWidth
 
-        const suburbAlpha = 0.4
         const maxRGBInt = 255
-        this.color = `rgba(${maxRGBInt}, ${maxRGBInt}, ${maxRGBInt}, ${suburbAlpha})`
+        this.color = `rgba(${maxRGBInt}, ${maxRGBInt}, ${maxRGBInt}, ${this.colorAlpha})`
         this.strokeWidth = 0
 
         super.draw(ctx)

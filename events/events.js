@@ -173,7 +173,7 @@ class Events {
             }
             
             if (keycode == Events.kEnterKeycode) {
-                if (isShiftPressed) {
+                if (isShiftPressed || nextTurnButton.highlightButton) {
                     nextTurnPauseInterface.hideButDontUpdateTimer()
                     nextTurn()
                     return
@@ -181,6 +181,7 @@ class Events {
 
                 let unit = players[whooseTurn].findIdleUnit()
                 if (!unit) {
+                    nextTurnButton.highlightButton = true
                     return
                 }
                 unit.select()
