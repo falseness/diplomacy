@@ -109,9 +109,7 @@ class JsonUnpackManager {
             this.buildingClass[packedManufacture.name])
     }
     unpackExternal(packedExternal, _external) {
-        let res = this.unpackBuildingProduction(packedExternal, _external, ExternalProduction)
-        res.newText()
-        return res
+        return this.unpackBuildingProduction(packedExternal, _external, ExternalProduction)
     }
     fullUnpackExternal(packedExternal) {
         return this.unpackExternal(packedExternal,

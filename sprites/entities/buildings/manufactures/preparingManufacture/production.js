@@ -11,6 +11,7 @@ class Production {
         this.pos = grid.getCell(coord).pos
         this.pos.x -= assets.size / 2
         this.pos.y -= assets.size / 2
+
     }
     get coord() {
         return this.#coord
@@ -49,7 +50,18 @@ class Production {
     isPreparingFinished() {
         return !this.turns
     }
-    draw() {}
+    draw(ctx) {
+        drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos)
+        if (!this.coord) {
+            return
+        }
+        const kAllProductionStrokeWidth = CoordText.defaultFontSize / 5
+        // we set text here and after each draw of cell it sets to empty text
+        // a bit stupid, but we dont have destructors in js so...
+        let cell = grid.getCell(this.coord) 
+        cell.infoText = new CoordText(this.coord.x, this.coord.y, this.turns,
+            cell.hexColor, CoordText.defaultFontSize, 'white', kAllProductionStrokeWidth)
+    }
 }
 class UnitProduction extends Production {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
@@ -77,9 +89,9 @@ class UnitProduction extends Production {
     cantCreateNow() {
         ++this.turns
     }
-    draw(ctx) {
+    /*draw(ctx) {
         drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos, 0.6)
-    }
+    }*/
 }
 class BuildingProduction extends Production {
     constructor(turns = 1, cost = 1, _class = new Empty(), name) {
@@ -141,11 +153,6 @@ class BuildingProduction extends Production {
     }
     get isMyTurn() {
         return whooseTurn == this.playerColor
-    }
-    nextTurn() {
-        super.nextTurn()
-
-        this.text.text = this.turns
     }
     get player() {
         return players[this.playerColor]
@@ -228,16 +235,8 @@ all moves when attacking it\n\nunit on it is priority target`,
     needInstructions() {
         return false
     }
-    newText() {
-        this.text = new CoordText(this.coord.x, this.coord.y, this.turns)
-    }
     isBarrier() {
         return false
-    }
-    draw(ctx) {
-        drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos)
-        if (!grid.drawLogicText)
-            this.text.draw(ctx)
     }
 }
 class ManufactureProduction extends BuildingProduction {
@@ -265,7 +264,6 @@ class ManufactureProduction extends BuildingProduction {
     }
     set town(town) {
         this.#town = town
-        this.newText()
     }
     sendInstructions(coord, town) {
         let boolean = super.sendInstructions(coord, town)
@@ -328,10 +326,6 @@ class ExternalProduction extends BuildingProduction {
     isExternalProduction() {
         return true
     }
-    nextTurn() {
-        super.nextTurn()
-        this.text.text = this.turns
-    }
     canCreateOnCell(cell, town) {
         if (cell.building.notEmpty() || 
             cell.hexagon.playerColor != town.playerColor)
@@ -344,11 +338,6 @@ class ExternalProduction extends BuildingProduction {
     }
     get playerColor() {
         return grid.getHexagon(this.coord).playerColor
-    }
-    sendInstructions(coord, town) {
-        let boolean = super.sendInstructions(coord, town)
-        this.newText()
-        return boolean
     }
     create() {
         let t = new this.class(this.coord.x, this.coord.y)

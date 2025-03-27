@@ -77,11 +77,17 @@ class Text {
     }
 }
 class CoordText extends Sprite {
-    constructor(x, y, text, color = 'white', fontSize = Math.round(basis.r * 9.8625 * 0.05)) {
+    static get defaultFontSize() {
+        return Math.round(basis.r * 9.8625 * 0.05)
+    }
+    constructor(x, y, text, color = 'white', fontSize = CoordText.defaultFontSize,
+            strokeColor = 'black', strokeWidth = 0) {
         super(x, y)
         this.color = color
         this.fontSize = fontSize
         this.text = text
+        this.strokeWidth = strokeWidth
+        this.strokeColor = strokeColor
     }
     draw(ctx) {
             let pos = this.pos
@@ -89,7 +95,14 @@ class CoordText extends Sprite {
             ctx.fillStyle = this.color
             ctx.textAlign = "center"
             ctx.textBaseline = "middle"
+
+            if (this.strokeWidth) {
+                ctx.strokeStyle = this.strokeColor
+                ctx.lineWidth = this.strokeWidth
+                ctx.strokeText(this.text, pos.x, pos.y)
+            }
             ctx.fillText(this.text, pos.x, pos.y)
+            
         }
         /*createObject(model)
         {

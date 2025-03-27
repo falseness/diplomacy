@@ -3,14 +3,22 @@ class Cell {
         this.hexagon = hexagon
         this.unit = unit
         this.building = building
+        // for escape menu. it writes coords of cells
         this.coordText = coordText
+        // for suburbs 
         this.logicText = logicText
+        
+        // for now for texts of production 
+        this.infoText = new CoordText(hexagon.coord.x, hexagon.coord.y, '')
     }
     get coord() {
         return this.hexagon.coord
     }
     get pos() {
         return this.hexagon.calcPos()
+    }
+    get hexColor() {
+        return this.hexagon.player.hexColor
     }
 }
 class Grid extends SpritesGroup {
@@ -109,6 +117,7 @@ class Grid extends SpritesGroup {
             this.visionWay = new VisionWay()
         }
     }
+    //todo: refactor
     drawHexagons(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
@@ -134,6 +143,17 @@ class Grid extends SpritesGroup {
                     continue
                 let cell = this.arr[i][j]
                 cell.logicText.draw(ctx)
+            }
+        }
+    }
+    drawTextInfo(ctx) {
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
+                let cell = this.arr[i][j]
+                cell.infoText.draw(ctx)
+                cell.infoText.text = ''
             }
         }
     }
@@ -173,11 +193,16 @@ class Grid extends SpritesGroup {
 
         this.drawOther(ctx)
 
-        if (this.drawLogicText)
+        if (this.drawLogicText) {
             this.drawTextLogic(ctx)
-
-        if (!this.drawLogicText && debug)
+        }
+        else if (debug) {
             this.drawTextCoord(ctx)
+        }
+        else {
+            this.drawTextInfo(ctx)
+        }
+        
 
         attackBorder.draw(ctx)
         border.draw(ctx)
