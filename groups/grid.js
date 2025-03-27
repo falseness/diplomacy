@@ -134,7 +134,9 @@ class Grid extends SpritesGroup {
                 let cell = this.arr[i][j]
                 
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
-                    cell.coordText.draw(ctx)
+                    if (debug) {
+                        cell.coordText.draw(ctx)
+                    }
                     continue;
                 }
 
