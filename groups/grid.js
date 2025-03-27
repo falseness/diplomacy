@@ -128,11 +128,26 @@ class Grid extends SpritesGroup {
             }
         }
     }
-    drawTextCoord(ctx) {
+    drawCellText(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
-                cell.coordText.draw(ctx)
+                
+                if (isFogOfWar && !this.fogOfWar[i][j]) {
+                    cell.coordText.draw(ctx)
+                    continue;
+                }
+
+                if (this.drawLogicText && cell.logicText.text != '') {
+                    cell.logicText.draw(ctx)
+                }
+                else if (debug) {
+                    cell.coordText.draw(ctx)
+                }
+                else {
+                    cell.infoText.draw(ctx)
+                }
+                cell.infoText.text = ''
             }
         }
     }
@@ -193,16 +208,8 @@ class Grid extends SpritesGroup {
 
         this.drawOther(ctx)
 
-        if (this.drawLogicText) {
-            this.drawTextLogic(ctx)
-        }
-        else if (debug) {
-            this.drawTextCoord(ctx)
-        }
-        else {
-            this.drawTextInfo(ctx)
-        }
-        
+
+        this.drawCellText(ctx)
 
         attackBorder.draw(ctx)
         border.draw(ctx)
