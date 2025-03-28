@@ -184,6 +184,7 @@ class Events {
                     nextTurnButton.highlightButton = true
                     return
                 }
+                this.removeSelection()
                 unit.select()
                 this.selected = unit
                 this.screen.moveTo(unit.pos)
