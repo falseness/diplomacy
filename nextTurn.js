@@ -108,6 +108,8 @@ function onlineNextTurn() {
     
     gameEvent.waitingMode = true
     undoButton.disableClick()
+    nextTurnButton.highlightButton = false
+    nextTurnButton.disableClick()
 }
 
 class gameLogicButtons extends ImageButton {

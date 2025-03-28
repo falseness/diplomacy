@@ -3,9 +3,10 @@ let SendNextTurn
 
 function unfreezeGame() {
     gameEvent.waitingMode = false
+    nextTurnButton.highlightButton = false
     undoButton.enableClick()
     nextTurnButton.enableClick()
-    nextTurnButton.color = players[whooseTurn].hexColor
+    nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
 }
 
 function SetupServerCommunicationLogic(password) {
@@ -44,6 +45,7 @@ function SetupServerCommunicationLogic(password) {
         gameEvent.waitingMode = true
         undoButton.disableClick()
         nextTurnPauseInterface.visible = false
+        nextTurnButton.highlightButton = false
         nextTurnButton.disableClick()
         timer.pause()
     });
