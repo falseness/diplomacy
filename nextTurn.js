@@ -21,7 +21,6 @@ function externalNextTurn() {
             if (externalProduction[i].name == 'wall' && 
                 grid.getUnit(externalProduction[i].coord).notEmpty()) {
                 externalProduction[i].turns++
-                externalProduction[i].text.text = externalProduction[i].turns
                 continue
             }
             externalProduction[i].create()
