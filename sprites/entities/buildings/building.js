@@ -53,6 +53,15 @@ class Building extends Entity {
     get isDestroyable() {
         return this.canBeDestroyed && this.isMyTurn
     }
+    get isStaticNature() {
+        return false;
+    }
+    get isAlwaysVisible() {
+        return false
+    }
+    get isSlowMoves() {
+        return false
+    }
     get info() {
         let res = super.info
         res.isDestroyable = this.isDestroyable

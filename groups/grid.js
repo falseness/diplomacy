@@ -88,7 +88,7 @@ class Grid extends SpritesGroup {
 
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
-                if (this.arr[i][j].building.isNature) {
+                if (this.arr[i][j].building.isAlwaysVisible) {
                     this.fogOfWar[i][j] += 1
                 }
             }

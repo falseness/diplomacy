@@ -1,10 +1,10 @@
-class Lake extends Nature {
+class Lake extends StaticNature {
     constructor(x, y) {
         const name = 'lake'
         super(x, y, name)
     }
 }
-class Sea extends Nature {
+class Sea extends StaticNatures {
     constructor(x, y) {
         const name = 'sea'
         super(x, y, name)

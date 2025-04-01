@@ -1,10 +1,12 @@
 class Map {
-    constructor(mapSize, _players, _goldmines, lakes, mountains) {
+    constructor(mapSize, _players, _goldmines, lakes, mountains, forests=[], hills=[]) {
         this.mapSize = mapSize
         this.players = _players
         this.goldmines = _goldmines
         this.lakes = lakes
         this.mountains = mountains
+        this.forests = forests
+        this.hills = hills
     }
     createPlayers() {
         players = new Array(this.players.length)
@@ -35,13 +37,19 @@ class Map {
         }
     }
     createNature() {
-        for (let i = 0; i < this.mountains.length; ++i) {
-            let mountain = this.mountains[i]
-            new Mountain(mountain.x, mountain.y)
-        }
-        for (let i = 0; i < this.lakes.length; ++i) {
-            let lake = this.lakes[i]
-            new Lake(lake.x, lake.y)
+        let natures = [
+            [this.mountains, Mountain],
+            [this.lakes, Lake],
+            [this.forests, Forest],
+            [this.hills, Hill]
+        ]
+        for (let i = 0; i < natures.length; ++i) {
+            let nature_type = natures[i][0]
+            let nature_class = natures[i][1]
+            for (let j = 0; j < nature_type.length; ++j) {
+                let coord = nature_type[j]
+                new (nature_class)(coord.x, coord.y)
+            }
         }
     }
     start(_gameManager, isClassicTimer) {
@@ -249,7 +257,7 @@ maps = {
             [],
             coordDictionary([[10, 4], [9, 5]]),
             coordDictionary([[4, 7], [3, 7], [2, 8], [1, 8], [5, 6],
-                            [14, 3], [15, 2], [16, 2], [17, 1], [18, 1]])
+                            [14, 3], [15, 2], [16, 2], [17, 1], [18, 1]]) 
         )
     ],
     "stationary warfare": 

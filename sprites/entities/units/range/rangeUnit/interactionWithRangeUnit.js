@@ -73,7 +73,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
     sendInstructions(cell, rangeUnit) {
         let coord = cell.coord
 
-        if (cell.building.isNature) {
+        if (cell.building.isStaticNature) {
             this.removeSelect()
             return true
         }

@@ -28,7 +28,9 @@ class JsonUnpackManager {
             tower: Tower,
             lake: Lake,
             sea: Sea, 
-            mountain: Mountain
+            mountain: Mountain,
+            forest: Forest,
+            hill: Hill
         }
     }
     setPlayerTimerByIndex(index, _timer) {

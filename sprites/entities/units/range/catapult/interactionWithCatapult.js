@@ -85,7 +85,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             !(this.cellHasEnemyBuilding(cell, catapult) || 
             this.cellHasEnemyBuildingProduction(cell, catapult))
 
-        if (cell.building.isNature || 
+        if (cell.building.isStaticNature || 
             isEnemyInBlindArea ||
             noObjectsToAttack) {
             this.removeSelect()

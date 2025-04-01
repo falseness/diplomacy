@@ -1,4 +1,4 @@
-class Mountain extends Nature {
+class Mountain extends StaticNature {
     constructor(x, y) {
         const name = 'mountain'
         super(x, y, name)

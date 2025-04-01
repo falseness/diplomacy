@@ -269,7 +269,7 @@ class Way {
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         let cell = grid.arr[coord.x][coord.y]
-        if (this.cellHasEnemyEntity(cell, player)) {
+        if (this.cellHasEnemyEntity(cell, player) || grid.getBuilding(coord).isSlowMoves) {
             enemyEntityQ.push(coord)
             this.distance[coord.x][coord.y] = Math.max(moves, this.distance[v.x][v.y] + 1)
         } else {
