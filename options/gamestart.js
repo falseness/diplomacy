@@ -1,11 +1,11 @@
 class Map {
-    constructor(mapSize, _players, _goldmines, lakes, mountains, forests=[], hills=[]) {
+    constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[]) {
         this.mapSize = mapSize
         this.players = _players
         this.goldmines = _goldmines
         this.lakes = lakes
         this.mountains = mountains
-        this.forests = forests
+        this.bushes = bushes
         this.hills = hills
     }
     createPlayers() {
@@ -40,7 +40,7 @@ class Map {
         let natures = [
             [this.mountains, Mountain],
             [this.lakes, Lake],
-            [this.forests, Forest],
+            [this.bushes, Bush],
             [this.hills, Hill]
         ]
         for (let i = 0; i < natures.length; ++i) {
@@ -257,7 +257,8 @@ maps = {
             [],
             coordDictionary([[10, 4], [9, 5]]),
             coordDictionary([[4, 7], [3, 7], [2, 8], [1, 8], [5, 6],
-                            [14, 3], [15, 2], [16, 2], [17, 1], [18, 1]]) 
+                            [14, 3], [15, 2], [16, 2], [17, 1], [18, 1]]),
+            coordDictionary([[3, 3], [4, 3], [4, 4]])
         )
     ],
     "stationary warfare": 

@@ -22,9 +22,9 @@ class InteractableNature extends Nature {
     }
 }
 
-class Forest extends InteractableNature {
+class Bush extends InteractableNature {
     constructor(x, y) {
-        const name = 'forest'
+        const name = 'bush'
         super(x, y, name)
     }
 }
@@ -32,7 +32,8 @@ class Forest extends InteractableNature {
 class Hill extends InteractableNature {
     static rangeIncrease = 1
     constructor(x, y) {
-        const name = 'hill'
+        // is not done and probably won't be
+        const name = 'mountain'
         super(x, y, name)
     }
     get rangeIncrease() {
