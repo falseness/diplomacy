@@ -347,6 +347,54 @@ class Events {
         }
     }
 }
+
+// replace Events with this class for map creation
+class EventsMapCreation {
+    static bushes_coords = []
+    static vertical_line_symmery = true
+    clickOnCell(coord) {
+        this.addBush(coord)
+        if (!this.constructor.vertical_line_symmery) {
+            return
+        }
+        let new_coord = {
+            x: grid.arr.length - coord.x - 1,
+            y: coord.y
+        }
+        this.addBush(new_coord)
+    
+    }
+    pop_bushes_coords() {
+        if (this.constructor.bushes_coords.length == 0) {
+            return
+        }
+        let coord = this.constructor.bushes_coords[this.constructor.bushes_coords.length - 1]
+        let cell = grid.arr[coord.x][coord.y]
+        cell.building = new Empty()
+        this.constructor.bushes_coords.pop()
+    }
+    keyboard(keycode, isShiftPressed) { 
+        if (keycode != Events.kBackspaceKeycode) {
+            super.keyboard(keycode, isShiftPressed)
+            return
+        }
+        this.pop_bushes_coords()
+        if (this.constructor.vertical_line_symmery) {
+            this.pop_bushes_coords()
+        }
+    }
+    addBush(coord) {
+        let cell = grid.arr[coord.x][coord.y]
+        if (!cell.building.isEmpty()) {
+            console.log('trying to create on empty building')
+            return
+        }
+        cell.building = new Bush(coord.x, coord.y)
+
+        this.constructor.bushes_coords.push(coord)
+        console.log(JSON.stringify(this.constructor.bushes_coords))
+    }
+};
 /*class Events
 {
     constructor(_townInterface, _entityInterface)
