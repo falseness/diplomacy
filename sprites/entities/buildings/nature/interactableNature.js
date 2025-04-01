@@ -3,7 +3,6 @@ class InteractableNature extends Nature {
     get info() {
         let res = super.info
         res.info += "\narchers can't shoot through it"
-        res.info += "\nit takes all moves left to move to it" 
         return res
     }
     isBarrier() {
@@ -19,9 +18,6 @@ class InteractableNature extends Nature {
         return true
     }
     get isPassable() {
-        return true
-    }
-    get isSlowMoves() {
         return true
     }
 }

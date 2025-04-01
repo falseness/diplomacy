@@ -59,9 +59,6 @@ class Building extends Entity {
     get isAlwaysVisible() {
         return false
     }
-    get isSlowMoves() {
-        return false
-    }
     get info() {
         let res = super.info
         res.isDestroyable = this.isDestroyable

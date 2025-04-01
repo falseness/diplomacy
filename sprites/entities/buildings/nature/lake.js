@@ -4,7 +4,7 @@ class Lake extends StaticNature {
         super(x, y, name)
     }
 }
-class Sea extends StaticNatures {
+class Sea extends StaticNature {
     constructor(x, y) {
         const name = 'sea'
         super(x, y, name)
