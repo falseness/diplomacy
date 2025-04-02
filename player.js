@@ -376,5 +376,74 @@ class NeutralPlayer extends Player {
 }
 
 class AIPlayer extends Player {
+    getWinningChance() {
+        // tmp
+        let otherPlayerTurn = whooseTurn == 1 ? 2 : 1
+        let cells_count = 0
+        for (let i = 0; i < grid.arr.length; ++i) {
+            for (let j = 0; j < grid.arr[i].length; ++j) {
+                cells_count += grid.arr[i][j].playerColor == whooseTurn 
+                console.log(cells_count, grid.arr[i][j].playerColor, whooseTurn)
+            }
+        }
+        let result = players[otherPlayerTurn].isLost ? 1.0 : (this.isLost ? 0 : 0.5) 
+        result += cells_count / grid.arr.length / grid.arr[0].length / 10
+        
+        let otherHP = 0
+        for (let i = 0; i < players[otherPlayerTurn].units.length; ++i) {
+            otherHP += players[otherPlayerTurn].units[i].hp
+        }
 
+        let myHP = 0
+        for (let i = 0; i < this.units.length; ++i) {
+            myHP += this.units[i].hp
+        } 
+        result += (myHP - otherHP) / 5
+        
+        if (result > 1.0) {
+            result = 1.0
+        }
+        if (result < 0.0) {
+            result = 0.0
+        }
+
+        return result 
+    }
+    doActions() {
+        let bestCommand = 0.0
+        let bestChance = -1
+        for (let i = 0; i < this.units.length; ++i) {
+            if (this.units[i].killed) {
+                continue;
+            }
+            let commands = this.units[i].getAvailableCommands()
+            for (let j = 0; j < commands.length; ++j) {
+                let unit_again = grid.getCell(commands[j].whoDoCommandCoord).unit;
+                unit_again.select()
+                unit_again.sendInstructions(grid.getCell(commands[j].destinationCoord))
+                let chance = this.getWinningChance()
+                console.log(chance, bestChance)
+                if (chance > bestChance) {
+                    bestChance = chance
+                    bestCommand = commands[j]
+                }
+                actionManager.undo()
+            }
+        }
+
+        if (bestChance < -0.1) {
+            return
+        }
+        // tmp
+        console.log(`action: ${whooseTurn} ${JSON.stringify(bestCommand)}`)
+        //assert(bestChance >= 0.0)
+        let unit_again = grid.getCell(bestCommand.whoDoCommandCoord).unit;
+        unit_again.select()
+        unit_again.sendInstructions(grid.getCell(bestCommand.destinationCoord))
+    }
+    nextTurn() {
+        super.nextTurn()
+        console.log('ok')
+        this.doActions()
+    }
 }

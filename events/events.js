@@ -165,7 +165,6 @@ class Events {
         return keys.has(keycode)
     }
     keyboard(keycode, isShiftPressed) {
-        console.log(keycode)
         if (this.isPressKeyCode(keycode)) {
             if (keycode == Events.kEscapeKeycode) {
                 debug = !debug

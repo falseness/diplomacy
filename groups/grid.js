@@ -20,6 +20,9 @@ class Cell {
     get hexColor() {
         return this.hexagon.player.hexColor
     }
+    get playerColor() {
+        return this.hexagon.playerColor
+    }
 }
 class Grid extends SpritesGroup {
     drawLogicText = false
