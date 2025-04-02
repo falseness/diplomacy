@@ -445,5 +445,10 @@ class AIPlayer extends Player {
         super.nextTurn()
         console.log('ok')
         this.doActions()
+
+        trainModel(ai_model, vectoriseGrid(grid).expandDims(0), tf.tensor1d([0.5]))
+
+        let res = predict(ai_model, vectoriseGrid(grid).expandDims(0))
+        console.log(res)
     }
 }
