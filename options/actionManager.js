@@ -1,7 +1,7 @@
 class ActionManager {
     constructor() {
         this.arr = []
-        this.maximumSize = 100
+        this.maximumSize = 1000
     }
     clear() {
         this.arr = []
