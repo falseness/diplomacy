@@ -944,7 +944,7 @@ class GameManager {
         whooseTurn = 0
         gameRound = 0
         
-        //undoManager.clear()
+        //actionManager.clear()
     }
     static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
         isFogOfWar = _isFogOfWar

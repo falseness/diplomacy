@@ -26,11 +26,11 @@ class PreparingManufacture extends Manufacture {
         this.player.gold -= num
     }
     addThisUndo() {
-        undoManager.startUndo('prepareUnit')
-        undoManager.lastUndo.building = this.toUndoJSON()
-        undoManager.lastUndo.gold = this.gold
+        actionManager.startAction('prepareUnit')
+        actionManager.lastAction.building = this.toUndoJSON()
+        actionManager.lastAction.gold = this.gold
 
-        undoManager.lastUndo.killBuilding = {
+        actionManager.lastAction.killBuilding = {
             coord: {
                 x: this.coord.x,
                 y: this.coord.y

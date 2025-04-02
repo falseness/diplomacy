@@ -1,4 +1,4 @@
-class UndoManager {
+class ActionManager {
     constructor() {
         this.arr = []
         this.maximumSize = 100
@@ -6,7 +6,7 @@ class UndoManager {
     clear() {
         this.arr = []
     }
-    startUndo(type) {
+    startAction(type) {
         if (this.arr.length == this.maximumSize)
             this.arr.shift()
         else if (this.arr.length > this.maximumSize)
@@ -21,7 +21,7 @@ class UndoManager {
             townExternalProduction: []
         })
     }
-    get lastUndo() {
+    get lastAction() {
         return this.arr[this.arr.length - 1]
     }
     undoBuilding(building) {
@@ -190,7 +190,7 @@ class UndoManager {
             destroyExternalProduction: this.destroyExternalProductionUndo
         }
 
-        func[this.lastUndo.type].call(this)
+        func[this.lastAction.type].call(this)
         
         if (otherSettings.moveCameraToUndoTarget)
             this.__moveCameraToUndoTarget()

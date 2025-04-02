@@ -30,14 +30,14 @@ class Hexagon extends Sprite {
     repaint(_player) {
         if (this.playerColor == _player)
             return
-        undoManager.lastUndo.hexagons.push(this.toUndoJSON())
+        actionManager.lastAction.hexagons.push(this.toUndoJSON())
 
         this.playerColor = _player
 
         let building = grid.getBuilding(this.coord)
 
         if (building.isExternalProduction()) {
-            undoManager.lastUndo.externalProduction = building.toUndoJSON()
+            actionManager.lastAction.externalProduction = building.toUndoJSON()
             building.kill()
         }
         if (!this.isSuburb)
@@ -46,7 +46,7 @@ class Hexagon extends Sprite {
         this.isSuburb = false
         
         if (building.isBuildingProduction() && !building.isExternalProduction()) {
-            undoManager.lastUndo.buildingProduction = building.toUndoJSON()
+            actionManager.lastAction.buildingProduction = building.toUndoJSON()
             building.kill()
         }
     }

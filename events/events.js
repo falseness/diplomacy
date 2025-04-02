@@ -192,7 +192,7 @@ class Events {
                 return
             }
             if (keycode == Events.kZKeycode || keycode == Events.kBackspaceKeycode) {
-                undoManager.undo()
+                actionManager.undo()
             }
             return 
         }

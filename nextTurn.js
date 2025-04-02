@@ -57,7 +57,7 @@ function offlineNextTurn() {
     nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
 
     
-    undoManager.clear()
+    actionManager.clear()
 
     timer.setNextTurnTime()
     saveManager.save()
@@ -94,7 +94,7 @@ function onlineNextTurn() {
         players[whooseTurn].nextTurn()
     } while(players[whooseTurn].isNeutral || players[whooseTurn].isLost)
     
-    undoManager.clear()
+    actionManager.clear()
 
     timer.setNextTurnTime()
     saveManager.save()

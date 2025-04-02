@@ -46,7 +46,7 @@
     <script src='options/save.js'></script>
     <script src="https://cdn.socket.io/socket.io-3.0.0.js"></script>
     <script src='options/onlineLogic.js'></script>
-    <script src='options/undo.js'></script>
+    <script src='options/actionManager.js'></script>
     <script src='options/classManager.js'></script>
     <script src='options/timer.js'></script>
     <script src='options/otherSettings.js'></script> 
@@ -154,7 +154,7 @@
         
         let interfaceCtx = interfaceCanvas.getContext('2d')
 
-        let undoManager = new UndoManager()
+        let actionManager = new ActionManager()
         let unpacker = new JsonUnpackManager()
         
         let debug = false
@@ -206,7 +206,7 @@
             new Rect(0 * nextTurnButtonSize, HEIGHT - 1 * nextTurnButtonSize, 
                      nextTurnButtonSize, nextTurnButtonSize), 
                 {x: 0 * nextTurnButtonSize, y: entityInterface.top - 1 * nextTurnButtonSize},
-            undoManager.undo, undefined, undefined, undefined, undoManager
+            actionManager.undo, undefined, undefined, undefined, actionManager
         )
         let backToMenuButtonSize = nextTurnButtonSize * 2 / 3
 

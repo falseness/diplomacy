@@ -35,10 +35,10 @@ class InteractionWithRangeUnit extends InterationWithUnit {
     }
     hitBuildingProduction(building, unit) {
         if (building.isExternalProduction()) {
-            undoManager.lastUndo.externalProduction = building.toUndoJSON()
+            actionManager.lastAction.externalProduction = building.toUndoJSON()
         }
         else {
-            undoManager.lastUndo.buildingProduction = building.toUndoJSON()
+            actionManager.lastAction.buildingProduction = building.toUndoJSON()
         }
 
         building.hit(unit.dmg)

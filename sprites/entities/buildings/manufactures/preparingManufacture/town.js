@@ -109,10 +109,10 @@ class Town extends PreparingManufacture {
 
                 }
                 else if (cell.building.isExternalProduction()){ 
-                    undoManager.lastUndo.townExternalProduction.push(cell.building.toUndoJSON())
+                    actionManager.lastAction.townExternalProduction.push(cell.building.toUndoJSON())
                 }
                 else if (cell.building.isExternal) {
-                    undoManager.lastUndo.townExternal.push(cell.building.toUndoJSON())
+                    actionManager.lastAction.townExternal.push(cell.building.toUndoJSON())
                 }
                 else {
                     console.log('error')
@@ -301,26 +301,26 @@ class Town extends PreparingManufacture {
 
         let stillNeedInstructions = this.activeProduction.sendInstructions(cell.coord, this)
 
-        undoManager.lastUndo.production = {
+        actionManager.lastAction.production = {
             coord: {
                 x: cell.coord.x,
                 y: cell.coord.y
             }
         }
         if (this.activeProduction.isExternalProduction()) {
-            undoManager.lastUndo.type = 'prepareBuilding'
+            actionManager.lastAction.type = 'prepareBuilding'
 
             externalProduction.push(this.activeProduction)
             grid.setBuilding(this.activeProduction, cell.coord)
         }
         else if (!this.activeProduction.isSuburbProduction()) {
-            undoManager.lastUndo.type = 'prepareBuilding'
+            actionManager.lastAction.type = 'prepareBuilding'
 
             this.buildingProduction.push(this.activeProduction)
             grid.setBuilding(this.activeProduction, cell.coord)
         }
         else {
-            undoManager.lastUndo.type = 'prepareSuburb'
+            actionManager.lastAction.type = 'prepareSuburb'
         }
 
         if (stillNeedInstructions) {

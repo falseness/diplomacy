@@ -44,7 +44,7 @@ class InterationWithUnit {
         this.way.create(unit.coord, borderRadius, grid.arr, unit.playerColor, border)
     }
     addHittedUnitUndo(cell) {
-        undoManager.lastUndo.units.push(cell.unit.toJSON())
+        actionManager.lastAction.units.push(cell.unit.toJSON())
     }
     hitUnit(cell, unit) {
         this.addHittedUnitUndo(cell)
@@ -56,10 +56,10 @@ class InterationWithUnit {
     }
     addHittedBuildingUndo(cell) {
         if (cell.building.isTown()) {
-            undoManager.lastUndo.town = cell.building.toUndoJSON()
+            actionManager.lastAction.town = cell.building.toUndoJSON()
         } 
         else {
-            undoManager.lastUndo.building = cell.building.toUndoJSON()
+            actionManager.lastAction.building = cell.building.toUndoJSON()
         }
     }
     hitBuilding(cell, unit) {
@@ -85,8 +85,8 @@ class InterationWithUnit {
         return false
     }
     addThisUndo(unit) {
-        undoManager.startUndo('unit')
-        undoManager.lastUndo.units.push(unit.toJSON())
+        actionManager.startAction('unit')
+        actionManager.lastAction.units.push(unit.toJSON())
     }
     move(coord, cell, arr, unit) {
         this.addThisUndo(unit)
@@ -121,7 +121,7 @@ class InterationWithUnit {
 
         if (capturedBuildingColor != -1 && 
             capturedBuildingColor != unit.playerColor) { // <=> something building captured
-            undoManager.lastUndo.isBuildingCaptured = true
+            actionManager.lastAction.isBuildingCaptured = true
             capturedBuilding.updatePlayer()
             capturedBuilding.isRecentlyCaptured = true
         }
@@ -132,7 +132,7 @@ class InterationWithUnit {
         this.addKillUnitUndo(unit)
     }
     addKillUnitUndo(unit) {
-        undoManager.lastUndo.killUnit.push({
+        actionManager.lastAction.killUnit.push({
             coord: {
                 x: unit.coord.x,
                 y: unit.coord.y
@@ -140,7 +140,7 @@ class InterationWithUnit {
         })
     }
     addKillBuildingUndo(building) {
-        undoManager.lastUndo.killBuilding = {
+        actionManager.lastAction.killBuilding = {
             coord: {
                 x: building.coord.x,
                 y: building.coord.y
@@ -160,7 +160,7 @@ class InterationWithUnit {
                     y: coord.y
                 }
             }
-            undoManager.lastUndo.units.push(oldUnit)
+            actionManager.lastAction.units.push(oldUnit)
         }
 
         grid.setUnit(unit, unit.coord)

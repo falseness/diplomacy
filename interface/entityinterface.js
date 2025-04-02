@@ -11,8 +11,8 @@ function destroySelected() {
     else if (gameEvent.selected.isBuildingProduction())
         type = 'destroyBuildingProduction'
     
-    undoManager.startUndo(type)
-    undoManager.lastUndo.building = gameEvent.selected.toUndoJSON() 
+    actionManager.startAction(type)
+    actionManager.lastAction.building = gameEvent.selected.toUndoJSON() 
 
     gameEvent.selected.destroy()
     gameEvent.removeSelection()
