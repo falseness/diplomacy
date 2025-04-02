@@ -374,3 +374,7 @@ class NeutralPlayer extends Player {
         return true
     }
 }
+
+class AIPlayer extends Player {
+
+}

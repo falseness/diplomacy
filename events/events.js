@@ -157,15 +157,24 @@ class Events {
     static kEscapeKeycode = 27
     static kZKeycode = 90
     static kBackspaceKeycode = 8
+    static kILetterKeycode = 73
     isPressKeyCode(keycode) {
-        let keys = new Set([Events.kEnterKeycode, Events.kEscapeKeycode, Events.kZKeycode, Events.kBackspaceKeycode])
+        let keys = new Set([Events.kEnterKeycode, Events.kEscapeKeycode, Events.kZKeycode, Events.kBackspaceKeycode,
+            Events.kILetterKeycode])
         
         return keys.has(keycode)
     }
     keyboard(keycode, isShiftPressed) {
+        console.log(keycode)
         if (this.isPressKeyCode(keycode)) {
             if (keycode == Events.kEscapeKeycode) {
                 debug = !debug
+                return
+            }
+            if (keycode == Events.kILetterKeycode) {
+                gameSettings.interface.drawChanceOfWinningText = true
+                grid.fillChancesOfWinning(this.selected)
+                return
             }
             
             if (this.waitingMode) {

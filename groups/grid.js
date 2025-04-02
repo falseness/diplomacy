@@ -102,6 +102,13 @@ class Grid extends SpritesGroup {
                     new CoordText(i, j, i + ' ' + j), new CoordText(i, j, ''))
             }
         }
+        this.chanceOfWinning = []
+        this.createArr(n, this.chanceOfWinning)
+        for (let i = 0; i < n; ++i) {
+            for (let j = 0; j < m; ++j) {
+                this.chanceOfWinning[i][j] = new CoordText(i, j, '')
+            }
+        }
         if (isFogOfWar) {
             this.fogOfWar = [] 
             this.visionUsed = []
@@ -115,6 +122,23 @@ class Grid extends SpritesGroup {
             this.newVisionUsedValue = 0
 
             this.visionWay = new VisionWay()
+        }
+    }
+    fillChancesOfWinning(entity) {
+        if (!entity.isUnit) {
+            console.log(entity.toJSON())
+            return
+        }
+        for (let i = 0; i < this.chanceOfWinning.length; ++i) {
+            for (let j = 0; j < this.chanceOfWinning[i].length; ++j) {
+                this.chanceOfWinning[i][j].text = ''
+            }
+        }
+        let commands = entity.getAvailableCommands()
+        console.log(commands)
+        for (let i = 0; i < commands.length; ++i) {
+            let coord = commands[i].destinationCoord
+            this.chanceOfWinning[coord.x][coord.y].text = '1'
         }
     }
     //todo: refactor
@@ -153,24 +177,10 @@ class Grid extends SpritesGroup {
             }
         }
     }
-    drawTextLogic(ctx) {
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
-                if (isFogOfWar && !this.fogOfWar[i][j])
-                    continue
-                let cell = this.arr[i][j]
-                cell.logicText.draw(ctx)
-            }
-        }
-    }
-    drawTextInfo(ctx) {
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
-                if (isFogOfWar && !this.fogOfWar[i][j])
-                    continue
-                let cell = this.arr[i][j]
-                cell.infoText.draw(ctx)
-                cell.infoText.text = ''
+    drawChanceOfWinningText(ctx) {
+        for (let i = 0; i < this.chanceOfWinning.length; ++i) {
+            for (let j = 0; j < this.chanceOfWinning[i].length; ++j) {
+                this.chanceOfWinning[i][j].draw(ctx)
             }
         }
     }
@@ -210,6 +220,9 @@ class Grid extends SpritesGroup {
 
         this.drawOther(ctx)
 
+        if (gameSettings.interface.drawChanceOfWinningText) {
+            this.drawChanceOfWinningText(ctx)
+        }
 
         this.drawCellText(ctx)
 

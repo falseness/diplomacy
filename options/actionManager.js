@@ -1,3 +1,8 @@
+// what the difference between command and action?
+// result of command execution is sequence of actions, which are needed to do to apply changes
+// for example, for moving of unit is command, which constists actions such as capturing land,
+// changing amount of moves, changing position of unit... 
+
 class ActionManager {
     constructor() {
         this.arr = []
@@ -60,7 +65,7 @@ class ActionManager {
     }
     unitUndo() {
         let undo = this.arr.pop() //JSON.parse(this.arr.pop())
-        
+
         for (let i = 0; i < undo.killUnit.length; ++i) {
             let unit = undo.killUnit[i]
             grid.getUnit(unit.coord).kill()
@@ -100,7 +105,7 @@ class ActionManager {
         let town = undo.town
         if (town) {
             this.undoTown(town, undo.isBuildingCaptured)
-            
+
             for (let i = 0; i < townExternalProduction.length; ++i) {
                 this.undoExternalProduction(townExternalProduction[i])
             }
@@ -117,8 +122,7 @@ class ActionManager {
 
         if (undo.building.name == 'town') {
             this.undoTown(undo.building)
-        }
-        else {
+        } else {
             this.undoBuilding(undo.building)
         }
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
@@ -140,7 +144,7 @@ class ActionManager {
 
         grid.getBuilding(undo.killBuilding.coord).kill()
         grid.getHexagon(undo.production.coord).isSuburb = false
-        
+
         this.undoTown(undo.building)
 
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
@@ -180,10 +184,10 @@ class ActionManager {
         gameEvent.removeSelection()
 
         let func = {
-            unit: this.unitUndo, 
+            unit: this.unitUndo,
             prepareUnit: this.preparingUnitUndo,
             prepareBuilding: this.preparingBuildingUndo,
-            prepareSuburb: this.preparingSuburbUndo, 
+            prepareSuburb: this.preparingSuburbUndo,
             destroyBuilding: this.destroyBuildingUndo,
             destroyTown: this.destroyTownUndo,
             destroyBuildingProduction: this.destroyBuildingProductionUndo,
@@ -191,7 +195,7 @@ class ActionManager {
         }
 
         func[this.lastAction.type].call(this)
-        
+
         if (otherSettings.moveCameraToUndoTarget)
             this.__moveCameraToUndoTarget()
         if (wasSelection)

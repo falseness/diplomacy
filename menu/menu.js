@@ -23,6 +23,11 @@ function start(_slot) {
     let game_mode = menu.previousTree
     GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer, game_mode.isOnline, game_mode.currentPassword)
 }
+function startAI(_slot) {
+    gameSlot = _slot
+
+    GameManager.startAI(generateTinyMap())
+}
 function load(_slot) {
     gameSlot = _slot
     if (!saveManager.load())
@@ -484,6 +489,8 @@ class Menu {
                 this.setTree, this.play, true, this),
             this.constructor.getButton(startPos, 'play online', 
                 this.setTree, this.online, true, this),
+            this.constructor.getButton(startPos, 'play AI', 
+                startAI, 0),
             this.constructor.getButton(startPos, 'settings', 
                 this.setTree, this.settings, true, this),
             this.constructor.getButton(startPos, 'load game', 

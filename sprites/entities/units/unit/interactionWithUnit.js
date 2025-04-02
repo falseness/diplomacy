@@ -32,6 +32,7 @@ class InterationWithUnit {
         grid.drawLogicText = false
         entityInterface.visible = false
     }
+
     select(unit) {
         entityInterface.change(unit.info, unit.player.fullColor)
         grid.drawLogicText = false
@@ -42,6 +43,9 @@ class InterationWithUnit {
         }
 
         this.way.create(unit.coord, borderRadius, grid.arr, unit.playerColor, border)
+    }
+    getAvailableCommandDestinations(unit) {
+        return this.way.create(unit.coord, this.moves, grid.arr, unit.playerColor, border)
     }
     addHittedUnitUndo(cell) {
         actionManager.lastAction.units.push(cell.unit.toJSON())
@@ -57,8 +61,7 @@ class InterationWithUnit {
     addHittedBuildingUndo(cell) {
         if (cell.building.isTown()) {
             actionManager.lastAction.town = cell.building.toUndoJSON()
-        } 
-        else {
+        } else {
             actionManager.lastAction.building = cell.building.toUndoJSON()
         }
     }
@@ -90,11 +93,11 @@ class InterationWithUnit {
     }
     move(coord, cell, arr, unit) {
         this.addThisUndo(unit)
-        //this.addUndo()
+            //this.addUndo()
         this.moves -= this.way.getDistance(coord)
         let hitUnit = this.hitIfCellHasEnemy(cell, unit)
         let killEnemy = false
-        if (this.cantStandOnCell(cell, unit)) 
+        if (this.cantStandOnCell(cell, unit))
             coord = this.way.getParent(coord)
         else
             killEnemy = true
@@ -107,19 +110,19 @@ class InterationWithUnit {
     }
     paintHexagons(original_coord, arr, unit, isKillUnit) {
         let coord = Object.assign({}, original_coord)
-    
+
         let capturedBuilding = grid.getBuilding(original_coord)
         let capturedBuildingColor = -1
         if (capturedBuilding.isStandable)
             capturedBuildingColor = capturedBuilding.playerColor
-        
+
         while (!(coord.x == unit.coord.x && coord.y == unit.coord.y)) {
             let hexagon = arr[coord.x][coord.y].hexagon
             hexagon.repaint(unit.playerColor)
             coord = this.way.getParent(coord)
         }
 
-        if (capturedBuildingColor != -1 && 
+        if (capturedBuildingColor != -1 &&
             capturedBuildingColor != unit.playerColor) { // <=> something building captured
             actionManager.lastAction.isBuildingCaptured = true
             capturedBuilding.updatePlayer()
@@ -170,7 +173,7 @@ class InterationWithUnit {
         this.addKillUnitUndo(unit)
     }
     cellHasEnemyBuilding(cell, unit) {
-        return (cell.building.notEmpty() && 
+        return (cell.building.notEmpty() &&
             cell.building.playerColor != unit.playerColor && !cell.building.isPassable)
     }
     markIgnoredBuilding(cell) {
@@ -186,7 +189,7 @@ class InterationWithUnit {
             }
             this.markIgnoredBuilding(cell)
         }
-        
+
         if (cell.unit.notEmpty()) {
             this.hitUnit(cell, unit)
             return true
@@ -194,7 +197,7 @@ class InterationWithUnit {
         return false
     }
     cantStandOnCell(cell, unit) {
-        return (this.cellHasEnemyBuilding(cell, unit) && !cell.building.isStandable) || 
+        return (this.cellHasEnemyBuilding(cell, unit) && !cell.building.isStandable) ||
             cell.unit.notEmpty()
     }
 }
@@ -235,12 +238,12 @@ class Way {
     }
     isCellImpassable(neighbour, v0, arr, player) {
         let cell = arr[neighbour.x][neighbour.y]
-        let ourUnit = cell.unit.notEmpty() && cell.unit.playerColor == player && 
-                        !coordsEqually(neighbour, v0)
+        let ourUnit = cell.unit.notEmpty() && cell.unit.playerColor == player &&
+            !coordsEqually(neighbour, v0)
         let buildingObstacle = cell.building.isObstacle(player)
         let fogged = isFogOfWar && !grid.fogOfWar[neighbour.x][neighbour.y]
         return (ourUnit || buildingObstacle || fogged)
-            
+
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {
         // if hexagon has the same color, he will be processed later
@@ -265,7 +268,7 @@ class Way {
     }
     cellHasEnemyEntity(cell, player) {
         return (!cell.building.isPassable && cell.building.playerColor != player) ||
-         (cell.unit.notEmpty() && cell.unit.playerColor != player)
+            (cell.unit.notEmpty() && cell.unit.playerColor != player)
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         let cell = grid.arr[coord.x][coord.y]
@@ -279,6 +282,7 @@ class Way {
         this.parent[coord.x][coord.y] = v
         used[coord.x][coord.y] = true
     }
+    // return arr of visitedCoords except v0
     create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = true) {
         // init
         let used = this.initialization(v0, moves, arr, newBorder)
@@ -286,16 +290,18 @@ class Way {
         Q.push(v0)
         let enemyEntityQ = [] //for pass mode only
             // BFS
+        let visitedCoords = []
         while (Q.length > 0 || enemyEntityQ.length > 0) {
             let v
-            if (Q.length) 
+            if (Q.length)
                 v = Q.shift()
-            else 
+            else
                 v = enemyEntityQ.shift()
-            if (changeLogicText && this.distance[v.x][v.y]) 
+            if (changeLogicText && this.distance[v.x][v.y])
                 arr[v.x][v.y].logicText.text = this.distance[v.x][v.y]
-            if (this.distance[v.x][v.y] > moves) 
+            if (this.distance[v.x][v.y] > moves)
                 continue
+            visitedCoords.push(v)
             let neighbours = arr[v.x][v.y].hexagon.neighbours
             let sortedHexagonNeighbours = this.sortNeighbours(v0, v, neighbours, arr, player, bord)
             for (let i = 0; i < sortedHexagonNeighbours.length; ++i) {
@@ -308,6 +314,7 @@ class Way {
                 }
             }
         }
+        return visitedCoords
     }
 }
 class VisionWay {
@@ -324,11 +331,11 @@ class VisionWay {
 
         while (Q.length) {
             let v = Q.shift()
-            
+
             fogOfWarArr[v.x][v.y] += value
 
             if (dist[v.x][v.y] == visionRange || (!isIgnoreBarriers && !coordsEqually(v, v0) &&
-                grid.arr[v.x][v.y].building.isBarrier()))
+                    grid.arr[v.x][v.y].building.isBarrier()))
                 continue
 
             let neighbours = grid.arr[v.x][v.y].hexagon.neighbours

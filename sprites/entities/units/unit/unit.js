@@ -150,6 +150,23 @@ class Unit extends Entity {
         if (this.isMyTurn && (otherSettings.alwaysDisplayMovesBar || !this.isFullMoves))
             this.movesBar.draw(ctx)
     }
+    createCommandsFromDestinations(coords) {
+        let result = []
+
+        for (let i = 0; i < coords.length; ++i) {
+            result.push({
+                type: 'unit',
+                whoDoCommandCoord: {x: this.coord.x, y: this.coord.y},
+                destinationCoord: {x: coords[i].x, y: coords[i].y}
+            })
+        }
+        return result
+    }
+    getAvailableCommands() {
+        assert(this.isMyTurn)
+        let coords = this.interaction.getAvailableCommandDestinations(this)
+        return this.createCommandsFromDestinations(coords)
+    }
     draw(ctx) {
         this.drawBars(ctx)
 

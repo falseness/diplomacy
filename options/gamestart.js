@@ -12,7 +12,21 @@ class Map {
         players = new Array(this.players.length)
         players[0] = new NeutralPlayer(this.players[0].rgb, 0)
         for (let i = 1; i < this.players.length; ++i) {
-            players[i] = new Player(this.players[i].rgb)
+            let playerType = Player
+            if (this.players.ai) {
+                playerType = AIPlayer
+            }
+            players[i] = new playerType(this.players[i].rgb)
+
+            if (!('units' in this.players[i])) {
+                continue;
+            }
+            for (let j = 0; j < this.players[i].units.length; ++j) {
+                let unit = this.players[i].units[j]
+                grid.arr[unit.x][unit.y].hexagon.firstpaint(i)
+                assert(grid.arr[unit.x][unit.y].unit.isEmpty())
+                new Noob(unit.x, unit.y)       
+            }
         }
     }
     createTowns() {
@@ -957,6 +971,14 @@ class GameManager {
             SetupServerCommunicationLogic(password)
         }
 
+        requestAnimationFrame(gameLoop)
+    }
+    static startAI(map) {
+        isFogOfWar = false
+        map.start(this, false)
+        gameSettings.withAI = true
+        this.initValues()
+        startTurn()
         requestAnimationFrame(gameLoop)
     }
 	/*static start1() {
