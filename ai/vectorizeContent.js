@@ -19,12 +19,10 @@ function vectorizeCell(cell) {
         'catapult': 4
     }
     if (cell.unit.isEmpty()) {
-        
-        console.log(result)
         return result
     }
     let unit = cell.unit
-    result[mapper[unit.name]] = 1
+    result[2 + mapper[unit.name]] = 1
     result[7] = unit.moves
     result[8] = unit.speed
     result[9] = unit.dmg
@@ -33,14 +31,14 @@ function vectorizeCell(cell) {
     return result
 }
 
-function vectoriseGrid() {
+
+function vectoriseGridDebug() {
     let result = new Array(maxGridX)
 
     for (let i = 0; i < grid.arr.length; ++i) {
         result[i] = new Array(maxGridY)
         for (let j = 0; j < grid.arr[i].length; ++j) {
             result[i][j] = vectorizeCell(grid.getCell({x: i, y: j}))
-            console.log(i, j, result[i][j])
         }
     }
     for (let i = 0; i < maxGridX; ++i) {
@@ -58,6 +56,9 @@ function vectoriseGrid() {
         }
         
     }
-    console.log(result)
-    return tf.tensor3d(result)
+    return result
+}
+
+function vectoriseGrid() {
+    return tf.tensor3d(vectoriseGridDebug())
 }

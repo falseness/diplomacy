@@ -28,6 +28,16 @@ class Player {
                 this.units.splice(i--, 1)
             }
         }
+        let new_units = []
+        for (let i = 0; i < this.units.length; ++i) {
+            let unit = this.units[i]
+            for (; i < this.units.length && this.units[i] == unit; ++i) {
+
+            }
+            --i
+            new_units.push(unit)
+        }
+        this.units = new_units
     }
     updateTowns() {
         for (let i = 0; i < this.towns.length; ++i) {
@@ -375,15 +385,37 @@ class NeutralPlayer extends Player {
     }
 }
 
+function weightedRandomIndex(weights) {
+    assert(weights.length > 0)
+    const total = weights.reduce((sum, val) => sum + val, 0);
+    const threshold = Math.random() * total;
+  
+    let cumulative = 0;
+    for (let i = 0; i < weights.length; i++) {
+      cumulative += weights[i];
+      if (threshold < cumulative) {
+        return i;
+      }
+    }
+    return weights.length - 1
+  }
+  
+
 class AIPlayer extends Player {
-    getWinningChance() {
-        // tmp
+    constructor(color, gold = 90) {
+        super(color, gold)
+        this.chosenGrids = []
+        this.winningChances = []
+
+        this.chosenGridsDebug = []
+        this.commandsDebug = []
+    }
+    async getWinningChanceHeuristic() {
         let otherPlayerTurn = whooseTurn == 1 ? 2 : 1
         let cells_count = 0
         for (let i = 0; i < grid.arr.length; ++i) {
             for (let j = 0; j < grid.arr[i].length; ++j) {
                 cells_count += grid.arr[i][j].playerColor == whooseTurn 
-                console.log(cells_count, grid.arr[i][j].playerColor, whooseTurn)
             }
         }
         let result = players[otherPlayerTurn].isLost ? 1.0 : (this.isLost ? 0 : 0.5) 
@@ -409,10 +441,15 @@ class AIPlayer extends Player {
 
         return result 
     }
-    doActions() {
-        let bestCommand = 0.0
-        let bestChance = -1
-        for (let i = 0; i < this.units.length; ++i) {
+    async getWinningChance() {
+        return await predict(ai_model, tf.stack([vectoriseGrid()]))
+    }
+    async selectBestCommand() {
+        let foundCommands = []
+        let foundChances = []
+
+        let len = this.units.length
+        for (let i = 0; i < len; ++i) {
             if (this.units[i].killed) {
                 continue;
             }
@@ -421,34 +458,49 @@ class AIPlayer extends Player {
                 let unit_again = grid.getCell(commands[j].whoDoCommandCoord).unit;
                 unit_again.select()
                 unit_again.sendInstructions(grid.getCell(commands[j].destinationCoord))
-                let chance = this.getWinningChance()
-                console.log(chance, bestChance)
-                if (chance > bestChance) {
-                    bestChance = chance
-                    bestCommand = commands[j]
-                }
+                let chance = await this.getWinningChance()
+
+                foundCommands.push(commands[j])
+                foundChances.push(chance)
+
                 actionManager.undo()
             }
         }
 
-        if (bestChance < -0.1) {
-            return
+        if (foundCommands.length <= 1) {
+            return null
         }
+        return foundCommands[weightedRandomIndex(foundChances)]
+
         // tmp
-        console.log(`action: ${whooseTurn} ${JSON.stringify(bestCommand)}`)
-        //assert(bestChance >= 0.0)
-        let unit_again = grid.getCell(bestCommand.whoDoCommandCoord).unit;
-        unit_again.select()
-        unit_again.sendInstructions(grid.getCell(bestCommand.destinationCoord))
+        //console.log(`action: ${whooseTurn} ${JSON.stringify(bestCommand)}`)
+        
+    }
+    async doActions() {
+        let i = 0;
+        const hardLimit = 100
+        this.chosenGrids.push(vectoriseGrid())
+        this.chosenGridsDebug.push(vectoriseGridDebug())
+        this.commandsDebug.push(undefined)
+        for (; i < hardLimit; ++i) {
+            let bestCommand = await this.selectBestCommand()
+            if (!bestCommand) {
+                return
+            }
+            let unit_again = grid.getCell(bestCommand.whoDoCommandCoord).unit;
+            assert(unit_again.isMyTurn)
+            unit_again.select()
+            unit_again.sendInstructions(grid.getCell(bestCommand.destinationCoord))
+            this.chosenGrids.push(vectoriseGrid())
+            this.chosenGridsDebug.push(vectoriseGridDebug())
+            this.commandsDebug.push(bestCommand)
+        }
+        assert(false)
     }
     nextTurn() {
         super.nextTurn()
-        console.log('ok')
-        this.doActions()
-
-        trainModel(ai_model, vectoriseGrid(grid).expandDims(0), tf.tensor1d([0.5]))
-
-        let res = predict(ai_model, vectoriseGrid(grid).expandDims(0))
-        console.log(res)
+        // console.log('ok')
+        // this.doActions()
+        
     }
 }

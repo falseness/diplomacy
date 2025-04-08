@@ -332,6 +332,7 @@ class VisionWay {
         while (Q.length) {
             let v = Q.shift()
 
+
             fogOfWarArr[v.x][v.y] += value
 
             if (dist[v.x][v.y] == visionRange || (!isIgnoreBarriers && !coordsEqually(v, v0) &&

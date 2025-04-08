@@ -28,8 +28,9 @@ function createModel(inputShape) {
   }));
 
   // Compile the model
+  const learningRate = 0.001
   model.compile({
-    optimizer: tf.train.adam(),
+    optimizer: tf.train.adam(learningRate),
     loss: 'binaryCrossentropy',
     metrics: ['accuracy'],
   });
@@ -37,9 +38,8 @@ function createModel(inputShape) {
   return model;
 }
 
-function predict(model, inputData) {
+async function predict(model, inputData) {
   const prediction = model.predict(inputData);
-  prediction.print();
   return prediction;
 }
 
@@ -47,11 +47,16 @@ function predict(model, inputData) {
 let ai_model = createModel([maxGridX, maxGridY, 12])
 
 
-function trainModel(model, trainX, trainY) {
-  return model.fit(trainX, trainY, {
-    epochs: 100,
+async function trainModel(model, trainX, trainY, epochs=5) {
+  console.log('start train')
+  return await model.fit(trainX, trainY, {
+    epochs: epochs,
     batchSize: 32,
-    validationSplit: 0.2,
+    callbacks: {
+      onEpochEnd: (epoch, logs) => {
+        console.log('epoch ', epoch, logs)
+      }
+    },
     shuffle: true,
   });
 }

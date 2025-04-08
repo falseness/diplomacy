@@ -25,7 +25,12 @@ class Map {
                 let unit = this.players[i].units[j]
                 grid.arr[unit.x][unit.y].hexagon.firstpaint(i)
                 assert(grid.arr[unit.x][unit.y].unit.isEmpty())
-                new Noob(unit.x, unit.y)       
+                let noob = new Noob(unit.x, unit.y)       
+                if (!('hp' in unit)) {
+                    continue
+                }
+                assert(0 < unit.hp && unit.hp <= noob.hp)
+                noob.hit(noob.hp - unit.hp)
             }
         }
     }
@@ -981,6 +986,247 @@ class GameManager {
         startTurn()
         requestAnimationFrame(gameLoop)
     }
+
+    static startPredict() {
+
+        tf.loadLayersModel('localstorage://diplomacy_weights')
+        .then(async model => { console.log('Model loaded!', model); ai_model = model;
+            let map = generateTinyOnlyBlue();
+            map.start(this, false)
+            // this.initValues()
+                        
+            whooseTurn = 0
+            whooseTurn = (whooseTurn + 1) % players.length
+
+            console.log('prediction')
+            let prediction = await predict(ai_model, tf.stack([vectoriseGrid()]))
+
+            console.log('prediction', prediction)
+        })
+        .catch(err => console.error('Error loading model:', err));
+    }
+    static async generateAndPlay() {
+        let map = generateTinyMap();
+        map.start(this, false)
+
+        whooseTurn = 0
+        
+        let hardLimit = 1000
+
+        players[1].chosenGrids = []
+
+        players[2].chosenGrids = []
+
+
+        players[1].chosenGridsDebug = []
+
+        players[2].chosenGridsDebug = []
+
+        players[1].commandsDebug = []
+
+        players[2].commandsDebug = []
+
+        for (let i = 0; i < hardLimit; ++i) {
+            
+            if (players[1].isLost || players[2].isLost) {
+                if (i == 0) {
+                    return
+                }
+                let chance = 1.0
+                if (players[1].isLost && players[2].isLost) {
+                    chance = 0.5
+                }
+                else if (players[1].isLost) {
+                    chance = 0.0
+                }
+                else {
+                    chance = 1.0
+                }
+                let xTrain = []
+                let yTrain = []
+
+                
+
+                if (i == 0) {
+                    assert(whooseTurn == 0)
+                    whooseTurn = 1
+                    players[whooseTurn].nextTurn()
+                    xTrain.push(vectoriseGrid())
+                    yTrain.push(chance)
+                }
+                else {
+                    for (let i = 0;
+                            i < players[1].chosenGrids.length; ++i) {
+                        xTrain.push(players[1].chosenGrids[i])
+                        yTrain.push(chance)
+                    }
+                    for (let i = 0;
+                            i < players[2].chosenGrids.length; ++i) {
+                        xTrain.push(players[2].chosenGrids[i])
+                        yTrain.push(1.0 - chance)
+                    }
+                }
+                
+                for (let i = 0; i < xTrain.length; ++i) {
+                    if (xTrain[i]) {
+                        continue
+                    }
+                    console.log('nulls', xTrain)
+                    
+                    console.log(players[1].chosenGrids[i])
+                    console.log(players[2].chosenGrids[i])
+                    console.log(vectoriseGrid())
+                    console.log(grid)
+                    break
+                }
+                console.log('start train', i, chance)
+                // console.log(xTrain)
+                // console.log(yTrain)
+                console.log(players[1].chosenGridsDebug[players[1].chosenGridsDebug.length - 1])
+
+                console.log(players[2].chosenGridsDebug[players[2].chosenGridsDebug.length - 1])
+                
+                console.log('commands debug1')
+                console.log(players[1].commandsDebug[players[1].commandsDebug.length - 1])
+                console.log(players[1].commandsDebug[players[1].commandsDebug.length - 2])
+                console.log(players[1].commandsDebug[players[1].commandsDebug.length - 3])
+
+                console.log('commands debug2')
+                console.log(players[2].commandsDebug[players[2].commandsDebug.length - 1])
+                console.log(players[2].commandsDebug[players[2].commandsDebug.length - 2])
+                console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
+                
+                
+                let trainResult = await trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain), 5)
+                console.log('train result', trainResult)
+                return
+            }
+            
+            whooseTurn = (whooseTurn + 1) % players.length
+            if (!whooseTurn) {
+                whooseTurn = (whooseTurn + 1) % players.length
+            }
+            players[whooseTurn].nextTurn()
+            await players[whooseTurn].doActions()
+            let units_count = 0
+            for (let k = 0; k < grid.arr.length; ++k) {
+                for (let j = 0; j < grid.arr[k].length; ++j) {
+                    if (!grid.arr[k][j].unit.isEmpty()) {
+                        units_count += 1
+                    }
+                }
+            }
+            assert(units_count <= 2)
+        }
+        console.log('reached hard limit')
+    }
+    static async playAndTrain() {
+        ai_model = await tf.loadLayersModel('localstorage://diplomacy_weights2')
+        isFogOfWar = false
+        // ai_model = createModel([maxGridX, maxGridY, 12])
+        
+        const learningRate = 0.001
+        ai_model.compile({
+            optimizer: tf.train.adam(learningRate),
+            loss: 'binaryCrossentropy',
+            metrics: ['accuracy'],
+        });
+        for (let i = 0; i < 20; ++i) {
+            await this.generateAndPlay()
+        }
+        ai_model.save('localstorage://diplomacy_weights3')
+    }
+    static startTrain() {
+        // this.startTrain0().then(() => {
+        //     console.log("Done training");
+        //   });
+        this.playAndTrain().then(() => {
+            console.log("Done playing");
+          });
+        // this.startPredict()
+        
+    }
+    static async startTrain0() {
+        
+        // console.log('continue')
+        isFogOfWar = false
+        
+        gameSettings.withAI = true
+
+        let xTrain = []
+        let yTrain = []
+        // сделай, чтобы играли сами с обой
+        // генерируй маленькие мапы
+        // не забудь про this.initValues
+        // если не будет получатся, то тренируй на синтетическую функцию оценки
+        // вспомни, как там переменный размер мапы сделать из chatgpt
+        // не забудь сохранить веса
+        for (let cycle = 0; cycle < 1000; ++cycle) {
+            let map = generateTinyOnlyBlue()
+            map.start(this, false)
+            this.initValues()
+                        
+            whooseTurn = 0
+            whooseTurn = (whooseTurn + 1) % players.length
+            // externalNextTurn() 
+            // players[whooseTurn].nextTurn()
+
+            xTrain.push(vectoriseGrid())
+
+
+            // console.log('predicts')
+            // console.log(predict(ai_model, vectoriseGrid(grid).expandDims(0)))
+            // return
+
+            yTrain.push(0.0)
+        }
+        
+        for (let cycle = 0; cycle < 500; ++cycle) {
+            let map = generateTinyMapOnlyRed()
+            map.start(this, false)
+            this.initValues()
+                        
+            whooseTurn = 0
+            whooseTurn = (whooseTurn + 1) % players.length
+            // externalNextTurn() 
+            // players[whooseTurn].nextTurn()
+
+            xTrain.push(vectoriseGrid())
+
+            yTrain.push(1.0)
+        }
+        console.log('try generate')
+
+        for (let cycle = 0; cycle < 500; ++cycle) {
+            let map = generateTinyMapLessHP()
+            console.log('generated')
+            map.start(this, false)
+            this.initValues()
+                        
+            whooseTurn = 0
+            whooseTurn = (whooseTurn + 1) % players.length
+            // externalNextTurn() 
+            // players[whooseTurn].nextTurn()
+
+            xTrain.push(vectoriseGrid())
+
+            yTrain.push(1.0)
+        }
+        console.log('start train')
+        
+        let trainResult = await trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain))
+        console.log('train result', trainResult)
+        
+        // let res = predict(ai_model, vectoriseGrid(grid).expandDims(0))
+        // console.log(res)
+        ai_model.save('localstorage://diplomacy_weights').then(() => {
+            console.log('Model saved successfully!');
+          }).catch(err => {
+            console.error('Error saving model:', err);
+          });
+    }
+    
+
 	/*static start1() {
         maps.small[0].start(this)
 	}

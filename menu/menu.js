@@ -26,7 +26,7 @@ function start(_slot) {
 function startAI(_slot) {
     gameSlot = _slot
 
-    GameManager.startAI(generateTinyMap())
+    GameManager.startTrain()
 }
 function load(_slot) {
     gameSlot = _slot
