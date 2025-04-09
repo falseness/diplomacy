@@ -44,7 +44,9 @@ function offlineNextTurn() {
 
     externalNextTurn() 
     players[whooseTurn].nextTurn()
-    
+    if (players[whooseTurn].isLost) {
+        trainModelByHumanData()
+    }
     if (players[whooseTurn].isNeutral || players[whooseTurn].isLost) {
         nextTurn()
         return

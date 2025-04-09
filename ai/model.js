@@ -6,11 +6,9 @@ function createModel(inputShape) {
   const model = tf.sequential();
 
   // First Dense layer that adapts to input shape
-  model.add(tf.layers.dense({
-    units: 64,
-    activation: 'relu',
-    inputShape: inputShape, // Dynamically assigned input shape
-  }));
+  model.add(tf.layers.dense({ units: 64, inputShape: inputShape }));
+  model.add(tf.layers.batchNormalization());
+  model.add(tf.layers.activation({ activation: 'relu' }));
 
   // Flatten to make it 1D
   model.add(tf.layers.flatten());
@@ -72,3 +70,54 @@ ai_model.summary();
 function train(vectorizedGrid, result) {
     model.train(vectorizedGrid, )
 }*/
+
+
+let humanCommands = []
+
+let modelIndex = 19
+
+async function loadModel() {
+  return await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
+}
+
+async function saveModel() {
+  return await ai_model.save('indexeddb://diplomacy_weights' + (modelIndex + 1))
+}
+
+
+function trainModelByHumanData() {
+  let xTrain = [] 
+  let yTrain = []
+  
+  for (let i = 0; i < humanCommands.length; ++i) {
+    xTrain.push(humanCommands[i])
+    yTrain.push(1.0)
+  }
+  console.log(humanCommands)
+  console.log(players[2].chosenGrids)
+
+
+  for (let i = 0; i < players[2].chosenGrids.length; ++i) {
+    xTrain.push(players[2].chosenGrids[i])
+    yTrain.push(0.0)
+  }
+  
+
+  const learningRate = 0.00001
+  ai_model.compile({
+      optimizer: tf.train.adam(learningRate),
+      loss: 'meanSquaredError',
+      metrics: ['accuracy'],
+  });
+
+  trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain), 1000)
+  .then(async trainResult => { 
+    console.log("trainedModel", trainResult)
+    let save_result = await saveModel()
+    console.log('saved', (modelIndex + 1), save_result)
+    const blob = new Blob([JSON.stringify(xTrain), JSON.stringify(yTrain)],
+      { type: 'application/json' });
+    saveAs(blob, `data${modelIndex}.json`);
+  })
+  .catch(err => console.error('Error loading model:', err));
+}

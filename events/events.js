@@ -201,6 +201,7 @@ class Events {
             }
             if (keycode == Events.kZKeycode || keycode == Events.kBackspaceKeycode) {
                 actionManager.undo()
+                humanCommands.pop()
             }
             return 
         }
@@ -297,6 +298,8 @@ class Events {
     }
     sendInstructions(coord) {
         let instructionsAreNotLongerNeeded = this.selected.sendInstructions(grid.arr[coord.x][coord.y])
+        humanCommands.push(vectoriseGrid())
+        console.log('added human command')
         if (instructionsAreNotLongerNeeded)
             this.selected = new Empty()
     }

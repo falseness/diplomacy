@@ -406,6 +406,7 @@ class AIPlayer extends Player {
         super(color, gold)
         this.chosenGrids = []
         this.winningChances = []
+        this.winningChancesHeuristic = []
 
         this.chosenGridsDebug = []
         this.commandsDebug = []
@@ -442,13 +443,15 @@ class AIPlayer extends Player {
         return result 
     }
     async getWinningChance() {
-        return await predict(ai_model, tf.stack([vectoriseGrid()]))
+        //tmp
+        // return await this.getWinningChanceHeuristic()
+        return (await predict(ai_model, tf.stack([vectoriseGrid()]))).dataSync()[0]
     }
     async selectBestCommand() {
         let foundCommands = []
         let foundChances = []
-
         let len = this.units.length
+
         for (let i = 0; i < len; ++i) {
             if (this.units[i].killed) {
                 continue;
@@ -462,14 +465,16 @@ class AIPlayer extends Player {
 
                 foundCommands.push(commands[j])
                 foundChances.push(chance)
-
-                actionManager.undo()
+                if (!areCoordsEqual(commands[j].whoDoCommandCoord, commands[j].destinationCoord)) {
+                    actionManager.undo()
+                }
             }
         }
 
         if (foundCommands.length <= 1) {
             return null
         }
+
         return foundCommands[weightedRandomIndex(foundChances)]
 
         // tmp
@@ -482,9 +487,10 @@ class AIPlayer extends Player {
         this.chosenGrids.push(vectoriseGrid())
         this.chosenGridsDebug.push(vectoriseGridDebug())
         this.commandsDebug.push(undefined)
+        this.winningChancesHeuristic.push(await this.getWinningChanceHeuristic())
         for (; i < hardLimit; ++i) {
             let bestCommand = await this.selectBestCommand()
-            if (!bestCommand) {
+            if (!bestCommand || areCoordsEqual(bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
                 return
             }
             let unit_again = grid.getCell(bestCommand.whoDoCommandCoord).unit;
@@ -494,13 +500,19 @@ class AIPlayer extends Player {
             this.chosenGrids.push(vectoriseGrid())
             this.chosenGridsDebug.push(vectoriseGridDebug())
             this.commandsDebug.push(bestCommand)
+            this.winningChancesHeuristic.push(await this.getWinningChanceHeuristic())
         }
         assert(false)
     }
     nextTurn() {
         super.nextTurn()
-        // console.log('ok')
+
+        // console.log('ai doing things')
         // this.doActions()
+        // .then(async tmp => {
+        //     console.log('did action', whooseTurn) 
+        // })
+        // .catch(err => console.error('Error loading model:', err));
         
     }
 }

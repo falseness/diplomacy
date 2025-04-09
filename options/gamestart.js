@@ -978,8 +978,28 @@ class GameManager {
 
         requestAnimationFrame(gameLoop)
     }
-    static startAI(map) {
+
+    static startTrain() {
+        // this.startTrain0().then(() => {
+        //     console.log("Done training");
+        //   });
+        this.playAndTrain().then(() => {
+            console.log("Done playing");
+          });
+        // this.startPredict()
+
+        // this.startAI()
+        
+    }
+    
+    static startAI() {
+        loadModel()
+        .then(async model => { console.log('Model loaded!', model); ai_model = model;
+        })
+        .catch(err => console.error('Error loading model2:', err));
+
         isFogOfWar = false
+        let map = generateTinyMap()
         map.start(this, false)
         gameSettings.withAI = true
         this.initValues()
@@ -1055,6 +1075,9 @@ class GameManager {
                     yTrain.push(chance)
                 }
                 else {
+                    for (let i = 1; i <= 2; ++i) {
+                        assert(players[i].chosenGrids.length == players[i].winningChancesHeuristic.length)
+                    }
                     for (let i = 0;
                             i < players[1].chosenGrids.length; ++i) {
                         xTrain.push(players[1].chosenGrids[i])
@@ -1063,7 +1086,7 @@ class GameManager {
                     for (let i = 0;
                             i < players[2].chosenGrids.length; ++i) {
                         xTrain.push(players[2].chosenGrids[i])
-                        yTrain.push(1.0 - chance)
+                        yTrain.push(1 - chance)
                     }
                 }
                 
@@ -1080,24 +1103,26 @@ class GameManager {
                     break
                 }
                 console.log('start train', i, chance)
-                // console.log(xTrain)
-                // console.log(yTrain)
-                console.log(players[1].chosenGridsDebug[players[1].chosenGridsDebug.length - 1])
+                
+                console.log(xTrain)
+                console.log(yTrain)
+                
+                // console.log(players[1].chosenGridsDebug[players[1].chosenGridsDebug.length - 1])
 
-                console.log(players[2].chosenGridsDebug[players[2].chosenGridsDebug.length - 1])
+                // console.log(players[2].chosenGridsDebug[players[2].chosenGridsDebug.length - 1])
                 
-                console.log('commands debug1')
-                console.log(players[1].commandsDebug[players[1].commandsDebug.length - 1])
-                console.log(players[1].commandsDebug[players[1].commandsDebug.length - 2])
-                console.log(players[1].commandsDebug[players[1].commandsDebug.length - 3])
+                // console.log('commands debug1')
+                // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 1])
+                // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 2])
+                // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 3])
 
-                console.log('commands debug2')
-                console.log(players[2].commandsDebug[players[2].commandsDebug.length - 1])
-                console.log(players[2].commandsDebug[players[2].commandsDebug.length - 2])
-                console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
+                // console.log('commands debug2')
+                // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 1])
+                // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 2])
+                // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
                 
                 
-                let trainResult = await trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain), 5)
+                let trainResult = await trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain), 20)
                 console.log('train result', trainResult)
                 return
             }
@@ -1116,35 +1141,28 @@ class GameManager {
                     }
                 }
             }
-            assert(units_count <= 2)
         }
         console.log('reached hard limit')
     }
     static async playAndTrain() {
-        ai_model = await tf.loadLayersModel('localstorage://diplomacy_weights2')
+        ai_model = await loadModel()
         isFogOfWar = false
         // ai_model = createModel([maxGridX, maxGridY, 12])
         
-        const learningRate = 0.001
+        const learningRate = 0.00005
         ai_model.compile({
             optimizer: tf.train.adam(learningRate),
-            loss: 'binaryCrossentropy',
+            loss: 'meanSquaredError',
             metrics: ['accuracy'],
         });
-        for (let i = 0; i < 20; ++i) {
+        for (let i = 0; i < 8; ++i) {
+            console.log('generateAndPlay', i)
             await this.generateAndPlay()
         }
-        ai_model.save('localstorage://diplomacy_weights3')
-    }
-    static startTrain() {
-        // this.startTrain0().then(() => {
-        //     console.log("Done training");
-        //   });
-        this.playAndTrain().then(() => {
-            console.log("Done playing");
-          });
-        // this.startPredict()
-        
+        await saveModel()
+        // ai_model.save('indexeddb://diplomacy_weights' + (model_index + 1))
+
+        // ai_model.save('downloads://diplomacy_weights' + (model_index + 1))
     }
     static async startTrain0() {
         
