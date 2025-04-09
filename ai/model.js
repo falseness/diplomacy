@@ -36,27 +36,54 @@ function createModel(inputShape) {
   return model;
 }
 
-async function predict(model, inputData) {
-  const prediction = model.predict(inputData);
-  return prediction;
-}
-
-
 let ai_model = createModel([maxGridX, maxGridY, 12])
 
 
-async function trainModel(model, trainX, trainY, epochs=5) {
+async function trainModelUnsafe(model, trainX, trainY, epochs=5) {
   console.log('start train')
   return await model.fit(trainX, trainY, {
     epochs: epochs,
     batchSize: 32,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
-        console.log('epoch ', epoch, logs)
+        if (epoch % 10 == 0) {
+          console.log('epoch ', epoch, logs)
+        }
       }
     },
     shuffle: true,
   });
+}
+
+
+async function trainModel(model, trainXarr, trainYarr, epochs=5) {
+  console.log('start train')
+  let trainXvectorised = [] 
+  for (let i = 0; i < trainXarr.length; ++i) {
+    trainXvectorised.push(tf.tensor3d(trainXarr[i]))
+  }
+  let trainX = tf.stack(trainXvectorised)
+  let trainY = tf.tensor1d(trainYarr)
+  let result = await model.fit(trainX, trainY, {
+    epochs: epochs,
+    batchSize: 32,
+    callbacks: {
+      onEpochEnd: (epoch, logs) => {
+        if (epoch % 10 == 0) {
+          console.log('epoch ', epoch, logs)
+        }
+      }
+    },
+    shuffle: true,
+  });
+
+  console.log('train result', result)
+  for (let i = 0; i < trainXvectorised.length; ++i) {
+    trainXvectorised[i].dispose()
+  }
+  trainX.dispose()
+  trainY.dispose()
+
 }
 
 
@@ -74,14 +101,28 @@ function train(vectorizedGrid, result) {
 
 let humanCommands = []
 
-let modelIndex = 19
+let modelIndex = 32
 
 async function loadModel() {
   return await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
 }
 
 async function saveModel() {
+  console.log('saving', modelIndex)
+  await ai_model.save('downloads://diplomacy_weights' + (modelIndex + 1))
   return await ai_model.save('indexeddb://diplomacy_weights' + (modelIndex + 1))
+}
+
+function predict(model, xValidate) {
+  return tf.tidy(() => {
+    let tf_result = model.predict(tf.stack(xValidate))
+    let result = tf_result.arraySync() 
+    tf_result.dispose()
+    for (let i = 0; i < xValidate.length; ++i) {
+      xValidate[i].dispose()
+    }
+    return result
+  })
 }
 
 
@@ -94,11 +135,11 @@ function trainModelByHumanData() {
     yTrain.push(1.0)
   }
   console.log(humanCommands)
-  console.log(players[2].chosenGrids)
+  console.log(players[2].chosenGridsDebug)
 
 
-  for (let i = 0; i < players[2].chosenGrids.length; ++i) {
-    xTrain.push(players[2].chosenGrids[i])
+  for (let i = 0; i < players[2].chosenGridsDebug.length; ++i) {
+    xTrain.push(players[2].chosenGridsDebug[i])
     yTrain.push(0.0)
   }
   
@@ -109,8 +150,8 @@ function trainModelByHumanData() {
       loss: 'meanSquaredError',
       metrics: ['accuracy'],
   });
-
-  trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain), 1000)
+  
+  trainModel(ai_model, xTrain, yTrain, 500)
   .then(async trainResult => { 
     console.log("trainedModel", trainResult)
     let save_result = await saveModel()

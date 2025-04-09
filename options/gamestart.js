@@ -1031,11 +1031,7 @@ class GameManager {
 
         whooseTurn = 0
         
-        let hardLimit = 1000
-
-        players[1].chosenGrids = []
-
-        players[2].chosenGrids = []
+        let hardLimit = 100
 
 
         players[1].chosenGridsDebug = []
@@ -1047,20 +1043,24 @@ class GameManager {
         players[2].commandsDebug = []
 
         for (let i = 0; i < hardLimit; ++i) {
-            
+            if (i && i % 10 == 0) {
+                console.log('iter', i)
+            }
             if (players[1].isLost || players[2].isLost) {
+
+                let longGamePenalty = 0 
                 if (i == 0) {
                     return
                 }
                 let chance = 1.0
                 if (players[1].isLost && players[2].isLost) {
-                    chance = 0.5
+                    chance = 0.5 - longGamePenalty
                 }
                 else if (players[1].isLost) {
                     chance = 0.0
                 }
                 else {
-                    chance = 1.0
+                    chance = 1.0 - longGamePenalty
                 }
                 let xTrain = []
                 let yTrain = []
@@ -1076,17 +1076,17 @@ class GameManager {
                 }
                 else {
                     for (let i = 1; i <= 2; ++i) {
-                        assert(players[i].chosenGrids.length == players[i].winningChancesHeuristic.length)
+                        assert(players[i].chosenGridsDebug.length == players[i].winningChancesHeuristic.length)
                     }
                     for (let i = 0;
-                            i < players[1].chosenGrids.length; ++i) {
-                        xTrain.push(players[1].chosenGrids[i])
+                            i < players[1].chosenGridsDebug.length; ++i) {
+                        xTrain.push(players[1].chosenGridsDebug[i])
                         yTrain.push(chance)
                     }
                     for (let i = 0;
-                            i < players[2].chosenGrids.length; ++i) {
-                        xTrain.push(players[2].chosenGrids[i])
-                        yTrain.push(1 - chance)
+                            i < players[2].chosenGridsDebug.length; ++i) {
+                        xTrain.push(players[2].chosenGridsDebug[i])
+                        yTrain.push(1 - chance - 2 * longGamePenalty)
                     }
                 }
                 
@@ -1096,16 +1096,14 @@ class GameManager {
                     }
                     console.log('nulls', xTrain)
                     
-                    console.log(players[1].chosenGrids[i])
-                    console.log(players[2].chosenGrids[i])
+                    console.log(players[1].chosenGridsDebug[i])
+                    console.log(players[2].chosenGridsDebug[i])
                     console.log(vectoriseGrid())
                     console.log(grid)
                     break
                 }
                 console.log('start train', i, chance)
                 
-                console.log(xTrain)
-                console.log(yTrain)
                 
                 // console.log(players[1].chosenGridsDebug[players[1].chosenGridsDebug.length - 1])
 
@@ -1122,8 +1120,7 @@ class GameManager {
                 // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
                 
                 
-                let trainResult = await trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain), 20)
-                console.log('train result', trainResult)
+                let trainResult = await trainModel(ai_model, xTrain, yTrain, 11)
                 return
             }
             
@@ -1132,7 +1129,7 @@ class GameManager {
                 whooseTurn = (whooseTurn + 1) % players.length
             }
             players[whooseTurn].nextTurn()
-            await players[whooseTurn].doActions()
+            players[whooseTurn].doActions()
             let units_count = 0
             for (let k = 0; k < grid.arr.length; ++k) {
                 for (let j = 0; j < grid.arr[k].length; ++j) {
@@ -1155,11 +1152,21 @@ class GameManager {
             loss: 'meanSquaredError',
             metrics: ['accuracy'],
         });
-        for (let i = 0; i < 8; ++i) {
+        for (let i = 0; i < 2000; ++i) {
+            
             console.log('generateAndPlay', i)
             await this.generateAndPlay()
+            console.log('tf tidy', i, tf.memory())
+
+            if (i && i % 200 == 0) {
+                
+                saveModel()
+                modelIndex += 1
+                
+            }
         }
-        await saveModel()
+        let saved = await saveModel()
+        console.log('saved', saved)
         // ai_model.save('indexeddb://diplomacy_weights' + (model_index + 1))
 
         // ai_model.save('downloads://diplomacy_weights' + (model_index + 1))
@@ -1176,7 +1183,7 @@ class GameManager {
         // сделай, чтобы играли сами с обой
         // генерируй маленькие мапы
         // не забудь про this.initValues
-        // если не будет получатся, то тренируй на синтетическую функцию оценки
+        // если не будет полу-чатся, то тренируй на синтетическую функцию оценки
         // вспомни, как там переменный размер мапы сделать из chatgpt
         // не забудь сохранить веса
         for (let cycle = 0; cycle < 1000; ++cycle) {
@@ -1231,9 +1238,8 @@ class GameManager {
             yTrain.push(1.0)
         }
         console.log('start train')
-        
+        // old
         let trainResult = await trainModel(ai_model, tf.stack(xTrain), tf.tensor1d(yTrain))
-        console.log('train result', trainResult)
         
         // let res = predict(ai_model, vectoriseGrid(grid).expandDims(0))
         // console.log(res)

@@ -26,7 +26,7 @@ function generateTinyMap() {
 
     let units_arrays = [units1, units2]
     for (let k = 0; k < units_arrays.length; ++k) {
-        for (let i = 0; i < 4; ++i) {
+        for (let i = 0; i < 6; ++i) {
             let unit = {type: Noob, x: randomInt(0, mapSize.x - 1), y: randomInt(0, mapSize.y - 1)}
             if (hasSuchCoord(units1, unit) || hasSuchCoord(units2, unit)) {
                 continue

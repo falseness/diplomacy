@@ -67,11 +67,8 @@ class Player {
     }
     get armySalary() {
         let res = 0
+        this.updateUnits()
         for (let i = 0; i < this.units.length; ++i) {
-            if (this.units[i].killed) {
-                this.units.splice(i--, 1)
-                continue
-            }
             res += this.units[i].salary
         }
         return res
@@ -387,31 +384,42 @@ class NeutralPlayer extends Player {
 
 function weightedRandomIndex(weights) {
     assert(weights.length > 0)
-    const total = weights.reduce((sum, val) => sum + val, 0);
+    let total = 0.0
+    for (let i = 0; i < weights.length; ++i) {
+        total += weights[i]
+    }
     const threshold = Math.random() * total;
   
-    let cumulative = 0;
+    let cumulative = 0.0;
     for (let i = 0; i < weights.length; i++) {
       cumulative += weights[i];
       if (threshold < cumulative) {
         return i;
       }
     }
+    console.log('cum', cumulative, weights)
     return weights.length - 1
+  }
+
+  function softmaxRandomIndex(arr) {
+    // for numerical stability
+    const max = Math.max(...arr)
+    const exps = arr.map(x => Math.exp(x - max))
+    return weightedRandomIndex(exps)
   }
   
 
 class AIPlayer extends Player {
     constructor(color, gold = 90) {
         super(color, gold)
-        this.chosenGrids = []
+        //this.chosenGrids = []
         this.winningChances = []
         this.winningChancesHeuristic = []
 
         this.chosenGridsDebug = []
         this.commandsDebug = []
     }
-    async getWinningChanceHeuristic() {
+    getWinningChanceHeuristic() {
         let otherPlayerTurn = whooseTurn == 1 ? 2 : 1
         let cells_count = 0
         for (let i = 0; i < grid.arr.length; ++i) {
@@ -442,14 +450,20 @@ class AIPlayer extends Player {
 
         return result 
     }
-    async getWinningChance() {
-        //tmp
-        // return await this.getWinningChanceHeuristic()
-        return (await predict(ai_model, tf.stack([vectoriseGrid()]))).dataSync()[0]
+    getWinningChance() {
+        return this.getWinningChances([vectoriseGrid()])[0]
     }
-    async selectBestCommand() {
+    getWinningChances(vectorisedGrids) {
+        let arr = predict(ai_model, vectorisedGrids) 
+        let result = []
+        for (let i = 0; i < arr.length; ++i) {
+            result.push(arr[i][0])
+        }
+        return result
+    }
+    selectBestCommand() {
         let foundCommands = []
-        let foundChances = []
+        let xCommands = []
         let len = this.units.length
 
         for (let i = 0; i < len; ++i) {
@@ -461,10 +475,10 @@ class AIPlayer extends Player {
                 let unit_again = grid.getCell(commands[j].whoDoCommandCoord).unit;
                 unit_again.select()
                 unit_again.sendInstructions(grid.getCell(commands[j].destinationCoord))
-                let chance = await this.getWinningChance()
+                // let chance = await this.getWinningChance()
 
                 foundCommands.push(commands[j])
-                foundChances.push(chance)
+                xCommands.push(vectoriseGrid())
                 if (!areCoordsEqual(commands[j].whoDoCommandCoord, commands[j].destinationCoord)) {
                     actionManager.undo()
                 }
@@ -474,43 +488,51 @@ class AIPlayer extends Player {
         if (foundCommands.length <= 1) {
             return null
         }
-
-        return foundCommands[weightedRandomIndex(foundChances)]
+        let foundChances = this.getWinningChances(xCommands)
+        assert(foundChances.length == foundCommands.length)
+        let index = softmaxRandomIndex(foundChances)
+        // console.log(index)
+        return foundCommands[index]
 
         // tmp
         //console.log(`action: ${whooseTurn} ${JSON.stringify(bestCommand)}`)
         
     }
-    async doActions() {
+    doActions() {
         let i = 0;
-        const hardLimit = 100
-        this.chosenGrids.push(vectoriseGrid())
+        const hardLimit = 150
+        //this.chosenGrids.push(vectoriseGrid())
         this.chosenGridsDebug.push(vectoriseGridDebug())
         this.commandsDebug.push(undefined)
-        this.winningChancesHeuristic.push(await this.getWinningChanceHeuristic())
+        this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
+        // console.log('start actions')
+        let units_len = this.units.length
         for (; i < hardLimit; ++i) {
-            let bestCommand = await this.selectBestCommand()
+            let bestCommand = this.selectBestCommand()
             if (!bestCommand || areCoordsEqual(bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
                 return
             }
+            // console.log('did commands', JSON.stringify(bestCommand))
             let unit_again = grid.getCell(bestCommand.whoDoCommandCoord).unit;
             assert(unit_again.isMyTurn)
             unit_again.select()
             unit_again.sendInstructions(grid.getCell(bestCommand.destinationCoord))
-            this.chosenGrids.push(vectoriseGrid())
+            //this.chosenGrids.push(vectoriseGrid())
             this.chosenGridsDebug.push(vectoriseGridDebug())
             this.commandsDebug.push(bestCommand)
-            this.winningChancesHeuristic.push(await this.getWinningChanceHeuristic())
+            this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
+
+            this.updateUnits()
+            assert(units_len == this.units.length)
         }
-        assert(false)
+        console.log('reached hard limit')
     }
     nextTurn() {
         super.nextTurn()
 
         // console.log('ai doing things')
         // this.doActions()
-        // .then(async tmp => {
-        //     console.log('did action', whooseTurn) 
+        // console.log('did action', whooseTurn) 
         // })
         // .catch(err => console.error('Error loading model:', err));
         
