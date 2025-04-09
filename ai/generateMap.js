@@ -17,9 +17,52 @@ function hasSuchCoord(coords, coord) {
     return false
 }
 
-function generateTinyMap() {
+function generateTinyMapAllUnits() {
 
     let mapSize = {x: 9, y: 9}
+
+    let units1 = []
+    let units2 = []
+
+    let units_arrays = [units1, units2]
+    let types = [Noob, Archer, KOHb, Normchel]
+    for (let k = 0; k < units_arrays.length; ++k) {
+        for (let i = 0; i < 6; ++i) {
+            let unit = {type: types[randomInt(0, types.length - 1)], x: randomInt(0, mapSize.x - 1), y: randomInt(0, mapSize.y - 1)}
+            if (hasSuchCoord(units1, unit) || hasSuchCoord(units2, unit)) {
+                continue
+            }
+            units_arrays[k].push(unit)
+        }
+    }
+    return new Map(
+        mapSize,
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                towns: [],
+                ai: true,
+                units: units1
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                towns: [],
+                units: units2,
+                ai: true
+            }
+        ],
+        [],
+        [],
+        [])
+}
+
+function generateTinyMap() {
+
+    let mapSize = {x: 4, y: 4}
 
     let units1 = []
     let units2 = []

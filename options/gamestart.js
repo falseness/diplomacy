@@ -1042,6 +1042,12 @@ class GameManager {
 
         players[2].commandsDebug = []
 
+
+        players[1].winningChancesHeuristic = []
+
+        players[2].winningChancesHeuristic = []
+        
+
         for (let i = 0; i < hardLimit; ++i) {
             if (i && i % 10 == 0) {
                 console.log('iter', i)
@@ -1053,18 +1059,23 @@ class GameManager {
                     return
                 }
                 let chance = 1.0
+
+                let eps = 0.0
+                let learningChange = eps
                 if (players[1].isLost && players[2].isLost) {
                     chance = 0.5 - longGamePenalty
+                    return
                 }
                 else if (players[1].isLost) {
                     chance = 0.0
+                    learningChange = -eps
                 }
                 else {
                     chance = 1.0 - longGamePenalty
+                    learningChange = eps
                 }
                 let xTrain = []
                 let yTrain = []
-
                 
 
                 if (i == 0) {
@@ -1081,12 +1092,26 @@ class GameManager {
                     for (let i = 0;
                             i < players[1].chosenGridsDebug.length; ++i) {
                         xTrain.push(players[1].chosenGridsDebug[i])
-                        yTrain.push(chance)
+                        let value = players[1].winningChancesHeuristic[i] + learningChange
+                        if (value > 1.0) {
+                            value = 1.0
+                        }
+                        else if (value < 0.0) {
+                            value = 0.0
+                        }
+                        yTrain.push(value)
                     }
                     for (let i = 0;
                             i < players[2].chosenGridsDebug.length; ++i) {
                         xTrain.push(players[2].chosenGridsDebug[i])
-                        yTrain.push(1 - chance - 2 * longGamePenalty)
+                        let value = players[2].winningChancesHeuristic[i] - learningChange
+                        if (value > 1.0) {
+                            value = 1.0
+                        }
+                        else if (value < 0.0) {
+                            value = 0.0
+                        }
+                        yTrain.push(value)
                     }
                 }
                 
@@ -1120,7 +1145,7 @@ class GameManager {
                 // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
                 
                 
-                let trainResult = await trainModel(ai_model, xTrain, yTrain, 11)
+                let trainResult = await trainModel(ai_model, xTrain, yTrain, 51)
                 return
             }
             
@@ -1142,11 +1167,11 @@ class GameManager {
         console.log('reached hard limit')
     }
     static async playAndTrain() {
-        ai_model = await loadModel()
+        // ai_model = await loadModel()
         isFogOfWar = false
-        // ai_model = createModel([maxGridX, maxGridY, 12])
+        ai_model = createModel()
         
-        const learningRate = 0.00005
+        const learningRate = 0.0001
         ai_model.compile({
             optimizer: tf.train.adam(learningRate),
             loss: 'meanSquaredError',

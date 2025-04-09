@@ -2,36 +2,60 @@
 let maxGridX = 10
 let maxGridY = 10
 
-function createModel(inputShape) {
+
+// Residual Block Function
+function residualBlock(filters, kernelSize) {
+  return tf.layers.conv2d({
+    filters: filters,
+    kernelSize: kernelSize,
+    padding: 'same',
+    activation: 'relu',
+  });
+}
+
+
+function createModel() {
   const model = tf.sequential();
 
-  // First Dense layer that adapts to input shape
-  model.add(tf.layers.dense({ units: 64, inputShape: inputShape }));
-  model.add(tf.layers.batchNormalization());
-  model.add(tf.layers.activation({ activation: 'relu' }));
-
-  // Flatten to make it 1D
-  model.add(tf.layers.flatten());
-
-  // Another Dense layer
-  model.add(tf.layers.dense({
-    units: 32,
-    activation: 'relu',
+  // Input layer: Accepts any board size (n, m) with 12 channels
+  model.add(tf.layers.inputLayer({
+    inputShape: [null, null, 12], // Dynamic n x m board size
   }));
 
-  // Output layer with single value (0 to 1 score prediction)
-  model.add(tf.layers.dense({
-    units: 1,
-    activation: 'sigmoid',
-  }));
+  // First Residual Block
+  model.add(residualBlock(32, 3));  // First block with 32 filters and kernel size 3
+  model.add(residualBlock(64, 3));  // Second block with 64 filters and kernel size 3
+  model.add(residualBlock(128, 3));  // Second block with 64 filters and kernel size 3
 
-  // Compile the model
-  const learningRate = 0.001
-  model.compile({
-    optimizer: tf.train.adam(learningRate),
-    loss: 'binaryCrossentropy',
-    metrics: ['accuracy'],
-  });
+  model.add(residualBlock(256, 3));  // Second block with 64 filters and kernel size 3
+
+  // Flatten before Dense layers
+  const shapeAfterConv = model.output.shape;
+  const height = shapeAfterConv[1]; // Height after convolution
+  const width = shapeAfterConv[2];  // Width after convolution
+  const channels = shapeAfterConv[3]; // Number of filters (channels) after convolution
+
+  console.log(height, width, channels)
+  // Flatten the output before Dense layers, specifying the shape explicitly
+  // model.add(tf.layers.flatten({
+  //   inputShape: [height, width, channels],  // Explicitly pass the output shape of previous layer
+  // }));
+  // tf.layers.reshape({ targetShape: [128] })
+  model.add(tf.layers.globalMaxPooling2d({inputShape: [height, width, channels]}));
+
+  // Fully connected layers
+  
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+
+  // Output layer: Single value (0-1 score)
+  model.add(tf.layers.dense({ units: 1, activation: 'sigmoid' }));
+
 
   return model;
 }
@@ -101,14 +125,14 @@ function train(vectorizedGrid, result) {
 
 let humanCommands = []
 
-let modelIndex = 32
+let modelIndex = 34
 
 async function loadModel() {
   return await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
 }
 
 async function saveModel() {
-  console.log('saving', modelIndex)
+  console.log('saving in', modelIndex + 1)
   await ai_model.save('downloads://diplomacy_weights' + (modelIndex + 1))
   return await ai_model.save('indexeddb://diplomacy_weights' + (modelIndex + 1))
 }

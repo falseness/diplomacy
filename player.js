@@ -428,8 +428,10 @@ class AIPlayer extends Player {
             }
         }
         let result = players[otherPlayerTurn].isLost ? 1.0 : (this.isLost ? 0 : 0.5) 
-        result += cells_count / grid.arr.length / grid.arr[0].length / 10
+        result += cells_count / grid.arr.length / grid.arr[0].length / 100.0
         
+        players[otherPlayerTurn].updateUnits()
+        this.updateUnits()
         let otherHP = 0
         for (let i = 0; i < players[otherPlayerTurn].units.length; ++i) {
             otherHP += players[otherPlayerTurn].units[i].hp
@@ -451,20 +453,26 @@ class AIPlayer extends Player {
         return result 
     }
     getWinningChance() {
+        //
+        return this.getWinningChanceHeuristic()
         return this.getWinningChances([vectoriseGrid()])[0]
     }
     getWinningChances(vectorisedGrids) {
-        let arr = predict(ai_model, vectorisedGrids) 
-        let result = []
-        for (let i = 0; i < arr.length; ++i) {
-            result.push(arr[i][0])
-        }
-        return result
+        assert(false)
+
+        // let arr = predict(ai_model, vectorisedGrids) 
+        // let result = []
+        // for (let i = 0; i < arr.length; ++i) {
+        //     result.push(arr[i][0])
+        // }
+        // return result
     }
     selectBestCommand() {
         let foundCommands = []
         let xCommands = []
         let len = this.units.length
+
+        let foundChances = []
 
         for (let i = 0; i < len; ++i) {
             if (this.units[i].killed) {
@@ -479,6 +487,7 @@ class AIPlayer extends Player {
 
                 foundCommands.push(commands[j])
                 xCommands.push(vectoriseGrid())
+                foundChances.push(this.getWinningChanceHeuristic())
                 if (!areCoordsEqual(commands[j].whoDoCommandCoord, commands[j].destinationCoord)) {
                     actionManager.undo()
                 }
@@ -486,13 +495,14 @@ class AIPlayer extends Player {
         }
 
         if (foundCommands.length <= 1) {
-            return null
+            return [null, -1.0]
         }
-        let foundChances = this.getWinningChances(xCommands)
+
+        // let foundChances = this.getWinningChances(xCommands)
         assert(foundChances.length == foundCommands.length)
-        let index = softmaxRandomIndex(foundChances)
+        let index = softmaxRandomIndex([...foundChances])
         // console.log(index)
-        return foundCommands[index]
+        return [foundCommands[index], foundChances[index]]
 
         // tmp
         //console.log(`action: ${whooseTurn} ${JSON.stringify(bestCommand)}`)
@@ -504,11 +514,12 @@ class AIPlayer extends Player {
         //this.chosenGrids.push(vectoriseGrid())
         this.chosenGridsDebug.push(vectoriseGridDebug())
         this.commandsDebug.push(undefined)
+        this.winningChances.push(this.getWinningChance())
         this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
         // console.log('start actions')
         let units_len = this.units.length
         for (; i < hardLimit; ++i) {
-            let bestCommand = this.selectBestCommand()
+            let [bestCommand, chance] = this.selectBestCommand()
             if (!bestCommand || areCoordsEqual(bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
                 return
             }
@@ -520,6 +531,7 @@ class AIPlayer extends Player {
             //this.chosenGrids.push(vectoriseGrid())
             this.chosenGridsDebug.push(vectoriseGridDebug())
             this.commandsDebug.push(bestCommand)
+            this.winningChances.push(chance)
             this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
 
             this.updateUnits()

@@ -33,29 +33,15 @@ function vectorizeCell(cell) {
 
 
 function vectoriseGridDebug() {
-    let result = new Array(maxGridX)
+    let result = new Array(grid.arr.length)
 
     for (let i = 0; i < grid.arr.length; ++i) {
-        result[i] = new Array(maxGridY)
+        result[i] = new Array(grid.arr[i].length)
         for (let j = 0; j < grid.arr[i].length; ++j) {
             result[i][j] = vectorizeCell(grid.getCell({x: i, y: j}))
         }
     }
-    for (let i = 0; i < maxGridX; ++i) {
-        let start = 0
-        if (i >= grid.arr.length) {
-            result[i] = new Array(maxGridY)
-            start = 0    
-        }
-        else {
-            start = grid.arr[i].length
-        }
-        for (let j = start; j < maxGridY; ++j) {
-            let tmp = new Array(12)
-            result[i][j] = tmp.fill(0)
-        }
-        
-    }
+    
     return result
 }
 
