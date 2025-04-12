@@ -337,7 +337,7 @@ class Player {
         let ourMetric = this.calculateDistancesToGridCenter()
         
         let otherMetric = players[otherPlayerTurn].calculateDistancesToGridCenter() 
-        result -= (ourMetric - otherMetric) / 9.0
+        result -= (ourMetric - otherMetric) / 18.0
         
         if (result > 1.0) {
             result = 1.0
@@ -476,7 +476,9 @@ class AIPlayer extends Player {
         this.winningChances = []
         this.winningChancesHeuristic = []
 
-        this.commandsDebug = []
+
+        this.foundGrids = []
+        this.foundWinnigChancesHeuristic = []
     }
 
     calculateCellsCount(playerColor) {
@@ -527,6 +529,10 @@ class AIPlayer extends Player {
 
                 foundCommands.push(commands[j])
                 xCommands.push(vectoriseGrid())
+
+
+                this.foundGrids.push(xCommands[xCommands.length - 1])
+                this.foundWinnigChancesHeuristic.push(this.getWinningChanceHeuristic())
                 // foundChances.push(this.getWinningChanceHeuristic())
                 actionManager.undo()
             }
@@ -562,7 +568,6 @@ class AIPlayer extends Player {
         let i = 0;
         const hardLimit = 150
         this.chosenGrids.push(vectoriseGrid())
-        this.commandsDebug.push(undefined)
         this.winningChances.push(this.getWinningChance())
         this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
         // console.log('start actions')
@@ -584,7 +589,6 @@ class AIPlayer extends Player {
                 unit_again.sendInstructions(grid.getCell(bestCommand.destinationCoord))
             }
             this.chosenGrids.push(vectoriseGrid())
-            this.commandsDebug.push(bestCommand)
             this.winningChances.push(chance)
             this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
 

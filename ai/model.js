@@ -6,7 +6,7 @@ let maxGridY = 10
 // Residual Block Function
 function residualBlock(inputTensor) {
   const conv1 = tf.layers.conv2d({
-    filters: 256,
+    filters: 64,
     kernelSize: 3,
     padding: 'same',
     useBias: false
@@ -15,7 +15,7 @@ function residualBlock(inputTensor) {
   const relu1 = tf.layers.activation({ activation: 'relu' }).apply(bn1);
 
   const conv2 = tf.layers.conv2d({
-    filters: 256,
+    filters: 64,
     kernelSize: 3,
     padding: 'same',
     useBias: false
@@ -36,7 +36,7 @@ function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
 
   // Initial Conv Layer
   let x = tf.layers.conv2d({
-    filters: 256,
+    filters: 64,
     kernelSize: 3,
     padding: 'same',
     activation: 'relu'
@@ -50,7 +50,7 @@ function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
   }
 
   const valueConv = tf.layers.conv2d({
-    filters: 512,
+    filters: 64,
     kernelSize: 1,
     padding: 'same',
     useBias: false
@@ -71,7 +71,7 @@ function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
   let merged = tf.layers.concatenate().apply([valueFlat, globalVariablesInput])
 
   const valueDense = tf.layers.dense({
-    units: 256,
+    units: 64,
     activation: 'relu'
   }).apply(merged);
   const valueOutput = tf.layers.dense({
@@ -205,7 +205,7 @@ async function trainModel(model, trainXarr, trainYarr, epochs=5) {
 
   let result = await model.fit([trainX, globalX], trainY, {
     epochs: epochs,
-    batchSize: 32,
+    batchSize: 64,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
         if (epoch % 10 == 0) {
@@ -240,8 +240,9 @@ function train(vectorizedGrid, result) {
 
 
 let humanCommands = []
-
-let modelIndex = 24
+// 71
+// 126
+let modelIndex = 126
 
 async function loadModel() {
   return await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
@@ -290,7 +291,7 @@ function trainModelByHumanData() {
     yTrain.push(1.0)
   }
   console.log(humanCommands)
-  let aiPlayerIndex = 1
+  let aiPlayerIndex = 2
   console.log(players[aiPlayerIndex].chosenGrids)
 
 

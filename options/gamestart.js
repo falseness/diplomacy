@@ -1041,7 +1041,7 @@ class GameManager {
         this.initValues()
         suddenDeathRound = 5
 
-        console.log('units', players[1].units.length + players[2].units.length)
+        console.log('generated game', players[1].units.length + players[2].units.length, grid.arr.length, grid.arr[0].length)
 
         whooseTurn = 0
         
@@ -1089,9 +1089,9 @@ class GameManager {
                 else if (players[1].gold <= 0 || players[2].gold <= 0)  {
                     console.log('death by gold')
                     for (let i = 0;
-                        i < players[1].chosenGrids.length; ++i) {
-                        xTrain.push(players[1].chosenGrids[i])
-                        let value = players[1].winningChancesHeuristic[i] - learningChange
+                        i < players[1].foundGrids.length; ++i) {
+                        xTrain.push(players[1].foundGrids[i])
+                        let value = players[1].foundWinnigChancesHeuristic[i] - learningChange
                         if (value > 1.0) {
                             value = 1.0
                         }
@@ -1101,9 +1101,9 @@ class GameManager {
                         yTrain.push(value)
                     }
                     for (let i = 0;
-                            i < players[2].chosenGrids.length; ++i) {
-                        xTrain.push(players[2].chosenGrids[i])
-                        let value = players[2].winningChancesHeuristic[i] - learningChange
+                            i < players[2].foundGrids.length; ++i) {
+                        xTrain.push(players[2].foundGrids[i])
+                        let value = players[2].foundWinnigChancesHeuristic[i] - learningChange
                         if (value > 1.0) {
                             value = 1.0
                         }
@@ -1115,12 +1115,12 @@ class GameManager {
                 }
                 else {
                     // for (let i = 1; i <= 2; ++i) {
-                    //     assert(players[i].winningChancesHeuristic.length > 0)
+                    //     assert(players[i].foundWinnigChancesHeuristic.length > 0)
                     // }
                     for (let i = 0;
-                            i < players[1].chosenGrids.length; ++i) {
-                        xTrain.push(players[1].chosenGrids[i])
-                        let value = players[1].winningChancesHeuristic[i] + learningChange
+                            i < players[1].foundGrids.length; ++i) {
+                        xTrain.push(players[1].foundGrids[i])
+                        let value = players[1].foundWinnigChancesHeuristic[i] + learningChange
                         if (value > 1.0) {
                             value = 1.0
                         }
@@ -1130,9 +1130,9 @@ class GameManager {
                         yTrain.push(value)
                     }
                     for (let i = 0;
-                            i < players[2].chosenGrids.length; ++i) {
-                        xTrain.push(players[2].chosenGrids[i])
-                        let value = players[2].winningChancesHeuristic[i] - learningChange
+                            i < players[2].foundGrids.length; ++i) {
+                        xTrain.push(players[2].foundGrids[i])
+                        let value = players[2].foundWinnigChancesHeuristic[i] - learningChange
                         if (value > 1.0) {
                             value = 1.0
                         }
@@ -1162,8 +1162,7 @@ class GameManager {
                 // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 2])
                 // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
                 
-                
-                let trainResult = await trainModel(ai_model, xTrain, yTrain, 21)
+                let trainResult = await trainModel(ai_model, xTrain, yTrain, 31)
                 for (let i = 0; i < xTrain.length; ++i) {
                     delete xTrain[i]
                     delete yTrain[i]
@@ -1191,11 +1190,11 @@ class GameManager {
     }
     static async playAndTrain() {
         
-        // ai_model = await loadModel()
+        ai_model = await loadModel()
         isFogOfWar = false
-        ai_model = createAlphaZeroModel(null, null)
+        // ai_model = createAlphaZeroModel(null, null)
         console.log('load model')
-        const learningRate = 0.00001
+        const learningRate = 0.000001
         ai_model.compile({
             optimizer: tf.train.adam(learningRate),
             loss: 'meanSquaredError',
@@ -1208,14 +1207,20 @@ class GameManager {
             for (let i = 0; i < players.length; ++i) {
                 delete players[i].chosenGrids
                 delete players[i].winningChancesHeuristic
+                
+                delete players[i].foundWinnigChancesHeuristic
+                delete players[i].foundGrids
                 delete players[i]
             }
 
 
             console.log('tf memory', i, tf.memory())
-            if (i == 0 || i % 5 != 0) {
+            if (i == 0 || i % 10 != 0) {
                 continue
             }
+            console.log('train on found dataset')
+            // await trainModel(ai_model, this.foundXTrain, this.foundYTrain, 21)
+            
             await saveModel()
             // modelIndex += 1
             ai_model.dispose()
@@ -1226,6 +1231,9 @@ class GameManager {
                 loss: 'meanSquaredError',
                 metrics: ['accuracy'],
             });
+
+            // await trainModel(ai_model, this.foundXTrain, this.foundYTrain, 2)
+
             console.log('cleaned', tf.memory())
         }
         let saved = await saveModel()
