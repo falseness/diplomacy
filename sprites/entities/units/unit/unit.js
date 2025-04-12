@@ -165,6 +165,7 @@ class Unit extends Entity {
     getAvailableCommands() {
         assert(this.isMyTurn)
         let coords = this.interaction.getAvailableCommandDestinations(this)
+
         return this.createCommandsFromDestinations(coords)
     }
     draw(ctx) {

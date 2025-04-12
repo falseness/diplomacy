@@ -62,14 +62,15 @@ function generateTinyMapAllUnits() {
 
 function generateTinyMap() {
 
-    let mapSize = {x: 4, y: 4}
+    let mapSize = {x: randomInt(3, 3), y: randomInt(3, 3)}
 
     let units1 = []
     let units2 = []
 
     let units_arrays = [units1, units2]
+    let unitsCount = randomInt(2, 3)
     for (let k = 0; k < units_arrays.length; ++k) {
-        for (let i = 0; i < 6; ++i) {
+        for (let i = 0; i < unitsCount; ++i) {
             let unit = {type: Noob, x: randomInt(0, mapSize.x - 1), y: randomInt(0, mapSize.y - 1)}
             if (hasSuchCoord(units1, unit) || hasSuchCoord(units2, unit)) {
                 continue
@@ -87,7 +88,7 @@ function generateTinyMap() {
             {
                 rgb: {r: 255, g: 0, b: 0},
                 towns: [],
-                ai: true,
+                ai: !gameSettings.testAI,
                 units: units1
             },
             {

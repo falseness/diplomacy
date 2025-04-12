@@ -218,6 +218,7 @@
         let gameSettings = {
             isOnline: false,
             withAI: false,
+            testAI: false,
             interface: {
                 drawChanceOfWinning: false
             }
@@ -453,7 +454,7 @@
         window.addEventListener('load', start)
         window.onblur = function() {
             if (!menu.visible && !debug && !gameSettings.isOnline) {
-                menuBack()
+                // menuBack()
             }
         }
     </script>

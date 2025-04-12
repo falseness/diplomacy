@@ -8,7 +8,11 @@
 function vectorizeCell(cell) {
     result = new Array(12)
     result = result.fill(0)
-    result[0] = 1
+    result[0] = 0
+    if (!cell.building.isEmpty()) {
+        result[0] = 1
+        // todo: more complicated
+    }
     result[1] = (cell.playerColor == 0 ? 0 : (cell.unit.isMyTurn ? 1 : -1))
 
     mapper = {
@@ -23,7 +27,7 @@ function vectorizeCell(cell) {
     }
     let unit = cell.unit
     result[2 + mapper[unit.name]] = 1
-    result[7] = unit.moves
+    result[7] = cell.unit.isMyTurn ? unit.moves : unit.speed
     result[8] = unit.speed
     result[9] = unit.dmg
     result[10] = unit.name == 'archer' ? 2 : (unit.name == 'catapult' ? 5 : 1)
@@ -33,6 +37,10 @@ function vectorizeCell(cell) {
 
 
 function vectoriseGridDebug() {
+    assert(false)
+}
+
+function vectoriseGrid() {
     let result = new Array(grid.arr.length)
 
     for (let i = 0; i < grid.arr.length; ++i) {
@@ -41,10 +49,7 @@ function vectoriseGridDebug() {
             result[i][j] = vectorizeCell(grid.getCell({x: i, y: j}))
         }
     }
-    
-    return result
-}
-
-function vectoriseGrid() {
-    return tf.tensor3d(vectoriseGridDebug())
+    let suddenDeathMetric = (suddenDeathRound - gameRound - 1) * (players.length - 1) + 
+        players.length - whooseTurn
+    return [result, suddenDeathMetric / 100.0]
 }

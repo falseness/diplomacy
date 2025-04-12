@@ -983,26 +983,36 @@ class GameManager {
         // this.startTrain0().then(() => {
         //     console.log("Done training");
         //   });
-        this.playAndTrain().then(() => {
-            console.log("Done playing");
-          });
+        if (gameSettings.testAI) {
+
+            this.startAI().then(() => {
+                console.log('played')
+            })
+        
+        }
+        else {
+
+            this.playAndTrain().then(() => {
+                console.log("Done playing");
+            })
+        }
         // this.startPredict()
 
-        // this.startAI()
-        
     }
     
-    static startAI() {
-        loadModel()
-        .then(async model => { console.log('Model loaded!', model); ai_model = model;
-        })
-        .catch(err => console.error('Error loading model2:', err));
+    static async startAI() {
+        ai_model = await loadModel()
+        // loadModel()
+        // .then(async model => { console.log('Model loaded!', model); ai_model = model;
+        // })
+        // .catch(err => console.error('Error loading model2:', err));
 
         isFogOfWar = false
         let map = generateTinyMap()
         map.start(this, false)
         gameSettings.withAI = true
         this.initValues()
+        suddenDeathRound = 5
         startTurn()
         requestAnimationFrame(gameLoop)
     }
@@ -1028,24 +1038,20 @@ class GameManager {
     static async generateAndPlay() {
         let map = generateTinyMap();
         map.start(this, false)
+        this.initValues()
+        suddenDeathRound = 5
+
+        console.log('units', players[1].units.length + players[2].units.length)
 
         whooseTurn = 0
         
         let hardLimit = 100
 
 
-        players[1].chosenGridsDebug = []
-
-        players[2].chosenGridsDebug = []
-
         players[1].commandsDebug = []
 
         players[2].commandsDebug = []
 
-
-        players[1].winningChancesHeuristic = []
-
-        players[2].winningChancesHeuristic = []
         
 
         for (let i = 0; i < hardLimit; ++i) {
@@ -1053,21 +1059,16 @@ class GameManager {
                 console.log('iter', i)
             }
             if (players[1].isLost || players[2].isLost) {
-
                 let longGamePenalty = 0 
-                if (i == 0) {
-                    return
-                }
-                let chance = 1.0
+                let chance = 0.0
 
                 let eps = 0.0
                 let learningChange = eps
                 if (players[1].isLost && players[2].isLost) {
-                    chance = 0.5 - longGamePenalty
-                    return
+                    chance = 0.0 - longGamePenalty
                 }
                 else if (players[1].isLost) {
-                    chance = 0.0
+                    chance = -1.0
                     learningChange = -eps
                 }
                 else {
@@ -1085,31 +1086,58 @@ class GameManager {
                     xTrain.push(vectoriseGrid())
                     yTrain.push(chance)
                 }
-                else {
-                    for (let i = 1; i <= 2; ++i) {
-                        assert(players[i].chosenGridsDebug.length == players[i].winningChancesHeuristic.length)
-                    }
+                else if (players[1].gold <= 0 || players[2].gold <= 0)  {
+                    console.log('death by gold')
                     for (let i = 0;
-                            i < players[1].chosenGridsDebug.length; ++i) {
-                        xTrain.push(players[1].chosenGridsDebug[i])
-                        let value = players[1].winningChancesHeuristic[i] + learningChange
+                        i < players[1].chosenGrids.length; ++i) {
+                        xTrain.push(players[1].chosenGrids[i])
+                        let value = players[1].winningChancesHeuristic[i] - learningChange
                         if (value > 1.0) {
                             value = 1.0
                         }
-                        else if (value < 0.0) {
-                            value = 0.0
+                        else if (value < -1.0) {
+                            value = -1.0
                         }
                         yTrain.push(value)
                     }
                     for (let i = 0;
-                            i < players[2].chosenGridsDebug.length; ++i) {
-                        xTrain.push(players[2].chosenGridsDebug[i])
+                            i < players[2].chosenGrids.length; ++i) {
+                        xTrain.push(players[2].chosenGrids[i])
                         let value = players[2].winningChancesHeuristic[i] - learningChange
                         if (value > 1.0) {
                             value = 1.0
                         }
-                        else if (value < 0.0) {
-                            value = 0.0
+                        else if (value < -1.0) {
+                            value = -1.0
+                        }
+                        yTrain.push(value)
+                    }
+                }
+                else {
+                    // for (let i = 1; i <= 2; ++i) {
+                    //     assert(players[i].winningChancesHeuristic.length > 0)
+                    // }
+                    for (let i = 0;
+                            i < players[1].chosenGrids.length; ++i) {
+                        xTrain.push(players[1].chosenGrids[i])
+                        let value = players[1].winningChancesHeuristic[i] + learningChange
+                        if (value > 1.0) {
+                            value = 1.0
+                        }
+                        else if (value < -1.0) {
+                            value = -1.0
+                        }
+                        yTrain.push(value)
+                    }
+                    for (let i = 0;
+                            i < players[2].chosenGrids.length; ++i) {
+                        xTrain.push(players[2].chosenGrids[i])
+                        let value = players[2].winningChancesHeuristic[i] - learningChange
+                        if (value > 1.0) {
+                            value = 1.0
+                        }
+                        else if (value < -1.0) {
+                            value = -1.0
                         }
                         yTrain.push(value)
                     }
@@ -1119,21 +1147,11 @@ class GameManager {
                     if (xTrain[i]) {
                         continue
                     }
-                    console.log('nulls', xTrain)
-                    
-                    console.log(players[1].chosenGridsDebug[i])
-                    console.log(players[2].chosenGridsDebug[i])
-                    console.log(vectoriseGrid())
-                    console.log(grid)
-                    break
+                    assert(false)
                 }
                 console.log('start train', i, chance)
                 
-                
-                // console.log(players[1].chosenGridsDebug[players[1].chosenGridsDebug.length - 1])
-
-                // console.log(players[2].chosenGridsDebug[players[2].chosenGridsDebug.length - 1])
-                
+             
                 // console.log('commands debug1')
                 // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 1])
                 // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 2])
@@ -1145,12 +1163,17 @@ class GameManager {
                 // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
                 
                 
-                let trainResult = await trainModel(ai_model, xTrain, yTrain, 51)
+                let trainResult = await trainModel(ai_model, xTrain, yTrain, 21)
+                for (let i = 0; i < xTrain.length; ++i) {
+                    delete xTrain[i]
+                    delete yTrain[i]
+                }
                 return
             }
             
             whooseTurn = (whooseTurn + 1) % players.length
             if (!whooseTurn) {
+                players[whooseTurn].nextTurn()
                 whooseTurn = (whooseTurn + 1) % players.length
             }
             players[whooseTurn].nextTurn()
@@ -1167,28 +1190,43 @@ class GameManager {
         console.log('reached hard limit')
     }
     static async playAndTrain() {
+        
         // ai_model = await loadModel()
         isFogOfWar = false
-        ai_model = createModel()
-        
-        const learningRate = 0.0001
+        ai_model = createAlphaZeroModel(null, null)
+        console.log('load model')
+        const learningRate = 0.00001
         ai_model.compile({
             optimizer: tf.train.adam(learningRate),
             loss: 'meanSquaredError',
             metrics: ['accuracy'],
         });
-        for (let i = 0; i < 2000; ++i) {
+        for (let i = 0; i < 1000; ++i) {
             
             console.log('generateAndPlay', i)
             await this.generateAndPlay()
-            console.log('tf tidy', i, tf.memory())
-
-            if (i && i % 200 == 0) {
-                
-                saveModel()
-                modelIndex += 1
-                
+            for (let i = 0; i < players.length; ++i) {
+                delete players[i].chosenGrids
+                delete players[i].winningChancesHeuristic
+                delete players[i]
             }
+
+
+            console.log('tf memory', i, tf.memory())
+            if (i == 0 || i % 5 != 0) {
+                continue
+            }
+            await saveModel()
+            // modelIndex += 1
+            ai_model.dispose()
+            tf.disposeVariables()
+            ai_model = await loadModel()
+            ai_model.compile({
+                optimizer: tf.train.adam(learningRate),
+                loss: 'meanSquaredError',
+                metrics: ['accuracy'],
+            });
+            console.log('cleaned', tf.memory())
         }
         let saved = await saveModel()
         console.log('saved', saved)
