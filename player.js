@@ -333,11 +333,11 @@ class Player {
         for (let i = 0; i < this.units.length; ++i) {
             myHP += this.units[i].hp
         } 
-        result += (myHP - otherHP) / 4.0
+        result += (myHP - otherHP) / 6.0
         let ourMetric = this.calculateDistancesToGridCenter()
         
         let otherMetric = players[otherPlayerTurn].calculateDistancesToGridCenter() 
-        result -= (ourMetric - otherMetric) / 18.0
+        result -= (ourMetric - otherMetric) / 36.0
         
         if (result > 1.0) {
             result = 1.0
@@ -474,11 +474,7 @@ class AIPlayer extends Player {
         super(color, gold)
         this.chosenGrids = []
         this.winningChances = []
-        this.winningChancesHeuristic = []
-
-
-        this.foundGrids = []
-        this.foundWinnigChancesHeuristic = []
+        // this.winningChancesHeuristic = []
     }
 
     calculateCellsCount(playerColor) {
@@ -530,9 +526,6 @@ class AIPlayer extends Player {
                 foundCommands.push(commands[j])
                 xCommands.push(vectoriseGrid())
 
-
-                this.foundGrids.push(xCommands[xCommands.length - 1])
-                this.foundWinnigChancesHeuristic.push(this.getWinningChanceHeuristic())
                 // foundChances.push(this.getWinningChanceHeuristic())
                 actionManager.undo()
             }
@@ -569,14 +562,17 @@ class AIPlayer extends Player {
         const hardLimit = 150
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
-        this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
+        // this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
         // console.log('start actions')
         let units_len = this.units.length
+        let lastChance = NaN
         for (; i < hardLimit; ++i) {
             let [bestCommand, chance] = this.selectBestCommand()
             if (!bestCommand) {
+                //console.log('board assessment ', lastChance)
                 return
             }
+            lastChance = chance
             // console.log('did commands', JSON.stringify(bestCommand))
             let unit_again = grid.getCell(bestCommand.whoDoCommandCoord).unit;
             assert(unit_again.isMyTurn)
@@ -590,7 +586,7 @@ class AIPlayer extends Player {
             }
             this.chosenGrids.push(vectoriseGrid())
             this.winningChances.push(chance)
-            this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
+            // this.winningChancesHeuristic.push(this.getWinningChanceHeuristic())
 
             this.updateUnits()
             assert(units_len == this.units.length)

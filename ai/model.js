@@ -6,7 +6,7 @@ let maxGridY = 10
 // Residual Block Function
 function residualBlock(inputTensor) {
   const conv1 = tf.layers.conv2d({
-    filters: 64,
+    filters: 16,
     kernelSize: 3,
     padding: 'same',
     useBias: false
@@ -15,7 +15,7 @@ function residualBlock(inputTensor) {
   const relu1 = tf.layers.activation({ activation: 'relu' }).apply(bn1);
 
   const conv2 = tf.layers.conv2d({
-    filters: 64,
+    filters: 16,
     kernelSize: 3,
     padding: 'same',
     useBias: false
@@ -36,7 +36,7 @@ function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
 
   // Initial Conv Layer
   let x = tf.layers.conv2d({
-    filters: 64,
+    filters: 16,
     kernelSize: 3,
     padding: 'same',
     activation: 'relu'
@@ -50,7 +50,7 @@ function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
   }
 
   const valueConv = tf.layers.conv2d({
-    filters: 64,
+    filters: 32,
     kernelSize: 1,
     padding: 'same',
     useBias: false
@@ -71,7 +71,7 @@ function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
   let merged = tf.layers.concatenate().apply([valueFlat, globalVariablesInput])
 
   const valueDense = tf.layers.dense({
-    units: 64,
+    units: 32,
     activation: 'relu'
   }).apply(merged);
   const valueOutput = tf.layers.dense({
@@ -198,14 +198,14 @@ async function trainModel(model, trainXarr, trainYarr, epochs=5) {
 
   let globalX = tf.stack(xGlobalVariables)
 
-  console.log(JSON.stringify(trainXarr))
-  console.log(JSON.stringify(trainYarr))
+  // console.log(JSON.stringify(trainXarr))
+  // console.log(JSON.stringify(trainYarr))
 
   let trainY = tf.tensor1d(trainYarr)
 
   let result = await model.fit([trainX, globalX], trainY, {
     epochs: epochs,
-    batchSize: 64,
+    batchSize: 16,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
         if (epoch % 10 == 0) {
@@ -242,7 +242,8 @@ function train(vectorizedGrid, result) {
 let humanCommands = []
 // 71
 // 126
-let modelIndex = 126
+// 216 last heuristic train
+let modelIndex = 500
 
 async function loadModel() {
   return await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
