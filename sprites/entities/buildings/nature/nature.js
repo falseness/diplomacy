@@ -6,6 +6,9 @@ class Nature extends Building {
     get isNature() {
         return true
     }
+    get canBeDestroyed() {
+        return false
+    }
     toJSON() {
         let res = {
             name: this.name,
@@ -20,6 +23,7 @@ class Nature extends Building {
         let res = {
             name: this.name,
             isDescriptionInfo: true,
+            isDestroyable: this.isDestroyable,
             info: ""
         }
         return res

@@ -20,6 +20,9 @@ class InteractableNature extends Nature {
     get isPassable() {
         return true
     }
+    get canBeDestroyed() {
+        return true
+    }
 }
 
 class Bush extends InteractableNature {
