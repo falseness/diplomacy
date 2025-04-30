@@ -62,13 +62,13 @@ function generateTinyMapAllUnits() {
 
 function generateTinyMap() {
 
-    let mapSize = {x: randomInt(3, 10), y: randomInt(3, 10)}
+    let mapSize = {x: randomInt(3, 5), y: randomInt(3, 5)}
 
     let units1 = []
     let units2 = []
 
     let units_arrays = [units1, units2]
-    let unitsCount = randomInt(2, 6)
+    let unitsCount = randomInt(2, 3)
     for (let i = 0; i < unitsCount; ++i) {
         for (let k = 0; k < units_arrays.length; ++k) {
             let unit = {type: Noob, x: randomInt(0, mapSize.x - 1), y: randomInt(0, mapSize.y - 1)}
