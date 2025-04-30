@@ -53,3 +53,46 @@ function vectoriseGrid() {
         players.length - whooseTurn
     return [result, suddenDeathMetric / 100.0]
 }
+
+function rotateRight(twoDimensionalArr) {
+    assert(twoDimensionalArr.length != 0)
+    assert(twoDimensionalArr[0].length != 0)
+    let result = new Array(twoDimensionalArr[0].length)
+    for (let i = 0; i < result.length; ++i) {
+        result[i] = new Array(twoDimensionalArr.length)
+    }
+    for (let i = 0; i < twoDimensionalArr.length; ++i) {
+        for (let j = 0; j < twoDimensionalArr[i].length; ++j) {
+            result[j][twoDimensionalArr.length - i - 1] = twoDimensionalArr[i][j]
+        }
+    }
+
+    return result
+}
+
+function reflectByVerticalLine(twoDimensionalArr) {
+    assert(twoDimensionalArr.length != 0)
+    assert(twoDimensionalArr[0].length != 0)
+    let result = new Array(twoDimensionalArr.length)
+    for (let i = 0; i < twoDimensionalArr.length; ++i) {
+        result[i] = new Array(twoDimensionalArr[i].length)
+        for (let j = 0; j < twoDimensionalArr[i].length; ++j) {
+            result[i][twoDimensionalArr[i].length - j - 1] = twoDimensionalArr[i][j]
+        }
+    }
+    return result
+}
+
+// function augmentGrid(vectorizedGrid) {
+//     let result = [vectorizedGrid]
+//     const rectangleRotationsCount = 4
+//     for (let i = 1; i < rectangleRotationsCount; ++i) {
+//         result.push([rotateRight(result[result.length - 1][0]), result[result.length - 1][1]])
+//     }
+//     for (let i = 0; i < result.length; ++i) {
+//         console.log('hello', i)
+//         console.log(JSON.stringify(result))
+//     }
+//     assert(false)
+//     return result
+// }

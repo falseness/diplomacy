@@ -184,15 +184,45 @@ async function trainModelUnsafe(model, trainX, trainY, epochs=5) {
 
 
 async function trainModel(model, trainXarr, trainYarr, epochs=5) {
-  console.log('start train')
-  let trainXvectorised = [] 
+  let trainXArrHorizontal = []
+  let trainXArrVertical = []
+  let trainXArrays = [trainXArrHorizontal, trainXArrVertical]
+  let trainYArrays = [[], []]
   for (let i = 0; i < trainXarr.length; ++i) {
-    trainXvectorised.push(tf.tensor3d(trainXarr[i][0]))
+    let vectorisedGrid = trainXarr[i][0]
+    trainXArrays[0].push(trainXarr[i])
+    trainYArrays[0].push(trainYarr[i])
+    const squareRotationsCount = 4
+    for (let j = 1; j < squareRotationsCount; ++j) {
+      vectorisedGrid = rotateRight(vectorisedGrid)
+      trainXArrays[j % 2].push([vectorisedGrid, trainXarr[i][1]])
+      trainYArrays[j % 2].push(trainYarr[i])
+    }
+  }
+  
+  for (let i = 0; i < trainXArrays.length; ++i) {
+    let currentLen = trainXArrays[i].length
+    for (let j = 0; j < currentLen; ++j) {
+      trainXArrays[i].push([reflectByVerticalLine(trainXArrays[i][j][0]), trainXArrays[i][j][1]])
+      trainYArrays[i].push(trainYArrays[i][j])
+    }
+    
+    await doTrainModel(model, trainXArrays[i], trainYArrays[i], epochs)
+  }
+}
+
+
+async function doTrainModel(model, augmentedTrainXarr, trainYarr, epochs=5) {
+  console.log('start train')
+
+  let trainXvectorised = [] 
+  for (let i = 0; i < augmentedTrainXarr.length; ++i) {
+    trainXvectorised.push(tf.tensor3d(augmentedTrainXarr[i][0]))
   }
 
   let xGlobalVariables = []
-    for (let i = 0; i < trainXarr.length; ++i) {
-      xGlobalVariables.push(trainXarr[i][1])
+    for (let i = 0; i < augmentedTrainXarr.length; ++i) {
+      xGlobalVariables.push(augmentedTrainXarr[i][1])
     }
   let trainX = tf.stack(trainXvectorised)
 
@@ -205,7 +235,7 @@ async function trainModel(model, trainXarr, trainYarr, epochs=5) {
 
   let result = await model.fit([trainX, globalX], trainY, {
     epochs: epochs,
-    batchSize: 16,
+    batchSize: 256,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
         if (epoch % 10 == 0) {
@@ -243,7 +273,7 @@ let humanCommands = []
 // 71
 // 126
 // 216 last heuristic train
-let modelIndex = 500
+let modelIndex = 750
 
 async function loadModel() {
   return await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)

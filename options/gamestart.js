@@ -1062,7 +1062,7 @@ class GameManager {
                 let longGamePenalty = 0 
                 let chance = 0.0
 
-                const eps = 0.25
+                const eps = 0.15
                 let learningChange = eps
                 if (players[1].isLost && players[2].isLost) {
                     chance = 0.0 - longGamePenalty
@@ -1149,7 +1149,7 @@ class GameManager {
                 // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 2])
                 // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
                 
-                let trainResult = await trainModel(ai_model, xTrain, yTrain, 31)
+                let trainResult = await trainModel(ai_model, xTrain, yTrain, 51)
                 for (let i = 0; i < xTrain.length; ++i) {
                     delete xTrain[i]
                     delete yTrain[i]
