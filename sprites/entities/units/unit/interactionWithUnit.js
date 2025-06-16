@@ -251,7 +251,7 @@ class Way {
                 continue
             }
             let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
-            if (hexagon.player != player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
+            if (hexagon.playerColor != player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
         }
         for (let i = 0; i < neighbours.length; ++i) {
             if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) || this.isCellImpassable(neighbours[i], v0, arr, player)) {
@@ -259,7 +259,7 @@ class Way {
                 continue
             }
             let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
-            if (hexagon.player == player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
+            if (hexagon.playerColor == player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
         }
         return sortedHexagonNeighbours
     }
