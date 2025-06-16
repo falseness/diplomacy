@@ -282,6 +282,20 @@ class Player {
                     'army salary': this.armySalary}
     }
 }
+class SimpleAiPlayer extends Player {
+    nextTurn() {
+        super.nextTurn()
+
+        this.play()
+    }
+
+    play() {
+        for (let cycle = 0; cycle < this.units.length; ++cycle) {
+            
+        }
+    }
+}
+
 class NeutralPlayer extends Player {
     constructor(color, gold = 0) {
         super(color, gold)
