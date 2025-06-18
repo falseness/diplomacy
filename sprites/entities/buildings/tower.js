@@ -1,5 +1,5 @@
 class Tower extends Building {
-    static maxHP = 7
+    static maxHP = 5
     static healSpeed = 2
     static rangeIncrease = 1
     constructor(x, y) {
@@ -32,7 +32,7 @@ class Tower extends Building {
 }
 
 class Bastion extends Building {
-    static maxHP = 6
+    static maxHP = 5
     static healSpeed = 2
     constructor(x, y) {
         const name = 'bastion'

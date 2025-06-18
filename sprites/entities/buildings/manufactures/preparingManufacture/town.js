@@ -2,7 +2,7 @@ let production = {
     noob: {
         production: UnitProduction,
         turns: 1,
-        cost: 10,
+        cost: 20,
         class: Noob
     },
     suburb: {
@@ -20,25 +20,25 @@ let production = {
     archer: {
         production: UnitProduction,
         turns: 2,
-        cost: 25,
+        cost: 40,
         class: Archer
     },
     KOHb: {
         production: UnitProduction,
         turns: 2,
-        cost: 25,
+        cost: 40,
         class: KOHb
     },
     normchel: {
         production: UnitProduction,
         turns: 2,
-        cost: 25,
+        cost: 40,
         class: Normchel
     },
     catapult: {
         production: UnitProduction,
         turns: 4,
-        cost: 50,
+        cost: 60,
         class: Catapult
     },
     barrack: {
@@ -56,13 +56,13 @@ let production = {
     bastion: {
         production: ExternalProduction,
         turns: 4,
-        cost: 16, 
+        cost: 20, 
         class: Bastion
     },
     tower: {
         production: ExternalProduction,
         turns: 4,
-        cost: 25, 
+        cost: 30, 
         class: Tower
     },
 }
