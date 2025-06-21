@@ -29,6 +29,18 @@ function externalNextTurn() {
     }
 }
 
+function natureNextTurn() {
+    for (let i = 0; i < nature.length; ++i) {
+        if (nature[i].killed) {
+            nature.splice(i--, 1)
+            continue
+        }
+        if (nature[i].isMyTurn) {
+            nature[i].nextTurn()
+        }
+    }
+}
+
 
 
 function offlineNextTurn() {
@@ -43,6 +55,7 @@ function offlineNextTurn() {
     whooseTurn = (whooseTurn + 1) % players.length
 
     externalNextTurn() 
+    natureNextTurn()
     players[whooseTurn].nextTurn()
     
     if (players[whooseTurn].isNeutral || players[whooseTurn].isLost) {
@@ -90,7 +103,8 @@ function onlineNextTurn() {
 
     do {
         whooseTurn = (whooseTurn + 1) % players.length
-        externalNextTurn() 
+        externalNextTurn()
+        natureNextTurn() 
         players[whooseTurn].nextTurn()
     } while(players[whooseTurn].isNeutral || players[whooseTurn].isLost)
     

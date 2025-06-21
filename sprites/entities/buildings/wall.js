@@ -1,5 +1,5 @@
 class Wall extends Building {
-    static maxHP = 5
+    static maxHP = 5    
     static healSpeed = 2
     constructor(x, y) {
         const name = 'wall'
