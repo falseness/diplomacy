@@ -14,7 +14,7 @@ let production = {
     farm: {
         production: ManufactureProduction,
         turns: 1,
-        cost: 24,
+        cost: 32,
         class: Farm,
     },
     archer: {
@@ -50,13 +50,13 @@ let production = {
     wall: {
         production: ExternalProduction,
         turns: 4,
-        cost: 4, 
+        cost: 2, 
         class: Wall
     },
     bastion: {
         production: ExternalProduction,
         turns: 4,
-        cost: 20, 
+        cost: 15, 
         class: Bastion
     },
     tower: {
