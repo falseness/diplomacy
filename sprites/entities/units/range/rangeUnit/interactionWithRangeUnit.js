@@ -142,7 +142,7 @@ class RangeWay extends Way {
     }
     create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = false) {
         // dont chage logic text and create border by default
-        super.create(v0, moves, arr, player, bord, changeLogicText, newBorder)
+        return super.create(v0, moves, arr, player, bord, changeLogicText, newBorder)
     }
 }
 class RangeUnitMoveWay extends Way {

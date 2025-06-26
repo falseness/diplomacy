@@ -283,6 +283,11 @@ class Player {
     }
 }
 class SimpleAiPlayer extends Player {
+    constructor(color) {
+        const unspendableGold = 9999999999
+        super(color, unspendableGold)
+        this.bestEnemyTargetForAI = new BestEnemyTargetForAI() 
+    }
     nextTurn() {
         super.nextTurn()
 
@@ -291,7 +296,13 @@ class SimpleAiPlayer extends Player {
 
     play() {
         for (let cycle = 0; cycle < this.units.length; ++cycle) {
-            
+            if (this.units[cycle].killed) {
+                this.units.splice(cycle--, 1)
+                // console.
+                //blabla
+                continue
+            }
+            let unit = this.units[cycle]
         }
     }
 }
