@@ -122,6 +122,29 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         
         return super.sendInstructions(cell, rangeUnit)
     }
+    getAvailableCommandDestinations(rangeUnit) {
+        let attack_coords = this.rangeWay.create(rangeUnit.coord, this.range, 
+            grid.arr, rangeUnit.playerColor, attackBorder)
+
+        let result = super.getAvailableCommandDestinations(rangeUnit)
+        let hash_map = {}
+        for (let i = 0; i < result.length; ++i) {
+            if (result[i].x in hash_map) {
+                hash_map[result[i].x].add(result[i].y)
+            }
+            else {
+                hash_map[result[i].x] = new Set([result[i].y])
+            }
+        }
+        for (let i = 0; i < attack_coords.length; ++i) {
+            if (!(attack_coords[i].x in hash_map) || 
+                    !hash_map[attack_coords[i].x].has(attack_coords[i].y)) {
+                result.push(attack_coords[i])
+            }
+        }
+        console.log(result)
+        return result
+    }
 }
 class RangeWay extends Way {
     constructor() {
