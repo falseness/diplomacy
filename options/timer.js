@@ -84,7 +84,7 @@ class Timer {
 }
 const STANDARTTIME = 0 * 60 * 1000
 class LongTimer extends Timer {
-    constructor(fullTime = STANDARTTIME, timeAdd = Math.floor(3 * 60 * 1000)) {
+    constructor(fullTime = STANDARTTIME, timeAdd = Math.floor(4 * 60 * 1000)) {
         super()
         this.time = fullTime
         this.timeAdd = timeAdd
