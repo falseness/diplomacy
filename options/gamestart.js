@@ -11,6 +11,7 @@ class Map {
     createPlayers() {
         players = new Array(this.players.length)
         players[0] = new NeutralPlayer(this.players[0].rgb, 0)
+
         for (let i = 1; i < this.players.length; ++i) {
             players[i] = new Player(this.players[i].rgb)
         }

@@ -294,15 +294,53 @@ class SimpleAiPlayer extends Player {
         this.play()
     }
 
+    findUnitAttackCommand(unit) {
+        let commands = unit.getAvailableCommands()
+        for (let i = 0; i < commands.length; ++i) {
+            let command = commands[i]
+            let cell = grid.arr[command.destinationCoord.x][command.destinationCoord.y]
+            // prioritization
+            if (unit.canHitSomethingOnCell(cell)) {
+                return command
+            }
+        }
+        return null
+    }
+
+    unitDoMoves(unit) {
+        while (unit.moves > 0) {
+            // let commands = unit.getAvailableCommands()
+            const moves_before = unit.moves
+            
+            let attackCommand = this.findUnitAttackCommand(unit)
+            
+            if (attackCommand) {
+                let cell = grid.arr[attackCommand.destinationCoord.x][attackCommand.destinationCoord.y]
+                unit.sendInstructions(cell)
+                assert(moves_before - unit.moves > 0)
+                break
+            }
+            let command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(unit.getAvailableMoveCommands(), unit.coord, grid.arr, unit.playerColor)
+            if (!command) {
+                break
+            }
+            assert(command.whoDoCommandCoord.x == unit.coord.x && command.whoDoCommandCoord.y == unit.coord.y)
+            unit.sendInstructions(grid.arr[command.destinationCoord.x][command.destinationCoord.y])
+            assert(moves_before - unit.moves > 0)
+        }
+    }
+
     play() {
+        // doesnt work with catapult-like units, but we dont need them
         for (let cycle = 0; cycle < this.units.length; ++cycle) {
             if (this.units[cycle].killed) {
                 this.units.splice(cycle--, 1)
-                // console.
-                //blabla
+                // should be already updated, we dont kill our units
+                // so there won't be new killed units
+                assert(false)
                 continue
             }
-            let unit = this.units[cycle]
+            this.unitDoMoves(this.units[cycle])
         }
     }
 }

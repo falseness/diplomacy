@@ -55,7 +55,6 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         this.undoAdded = true
         
         this.moves = 0
-
         if (cell.building.isHitable) {
             this.hitBuilding(cell, rangeUnit)
 
@@ -69,6 +68,13 @@ class InteractionWithRangeUnit extends InterationWithUnit {
     cellHasEnemyBuildingProduction(cell, rangeUnit) {
         return (cell.building.isBuildingProduction() && 
             cell.building.playerColor != rangeUnit.playerColor) 
+    }
+    cellHasAttackableBuilding(cell, rangeUnit) {
+        return this.cellHasEnemyBuilding(cell, rangeUnit) && !cell.building.isStaticNature && cell.building.isHitable
+    }
+    canHitSomethingOnCell(cell, rangeUnit) {
+        return !this.cantRangeInteract(cell.coord, rangeUnit) && 
+            (this.cellHasAttackableBuilding(cell, rangeUnit) || this.cellHasEnemyUnit(cell, rangeUnit))
     }
     sendInstructions(cell, rangeUnit) {
         let coord = cell.coord
@@ -142,7 +148,6 @@ class InteractionWithRangeUnit extends InterationWithUnit {
                 result.push(attack_coords[i])
             }
         }
-        console.log(result)
         return result
     }
 }
