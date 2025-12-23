@@ -101,23 +101,24 @@ function onlineNextTurn() {
 
     let myIndex = whooseTurn
 
-    do {
-        whooseTurn = (whooseTurn + 1) % players.length
+    whooseTurn = (whooseTurn + 1) % players.length
+    // we call next turn for them and 
+    // we prioritize neutral player of the LAST real player GAME state
+    while (players[whooseTurn].isNeutral/* || players[whooseTurn].isLost*/) {
         externalNextTurn()
         natureNextTurn() 
         players[whooseTurn].nextTurn()
-    } while(players[whooseTurn].isNeutral || players[whooseTurn].isLost)
+        whooseTurn = (whooseTurn + 1) % players.length
+    }
     
     actionManager.clear()
 
     timer.setNextTurnTime()
     saveManager.save()
-    SendNextTurn()
-
-    // tmp fix later:
     
-
     whooseTurn = myIndex
+
+    SendNextTurn()
     
     gameEvent.waitingMode = true
     undoButton.disableClick()
