@@ -98,25 +98,10 @@ function onlineNextTurn() {
     gameEvent.nextTurn()
 
     timer.pauseAndSaveTime()
-
-    let myIndex = whooseTurn
-
-    whooseTurn = (whooseTurn + 1) % players.length
-    // we call next turn for them and 
-    // we prioritize neutral player of the LAST real player GAME state
-    while (players[whooseTurn].isNeutral/* || players[whooseTurn].isLost*/) {
-        externalNextTurn()
-        natureNextTurn() 
-        players[whooseTurn].nextTurn()
-        whooseTurn = (whooseTurn + 1) % players.length
-    }
-    
     actionManager.clear()
 
     timer.setNextTurnTime()
     saveManager.save()
-    
-    whooseTurn = myIndex
 
     SendNextTurn()
     

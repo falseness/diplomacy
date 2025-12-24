@@ -42,6 +42,7 @@
     <script src='options/gameCoords.js'></script>
     <script src='options/dictionaryEnumeration.js'></script>
     <script src='options/dictionaryToList.js'></script>
+    <script src='options/gameObjectVariables.js'></script>
     <script src='options/gamestart.js'></script>
     <script src='options/save.js'></script>
     <script src="https://cdn.socket.io/socket.io-3.0.0.js"></script>
@@ -141,6 +142,9 @@
     <script src='player.js'></script>
 
     <script src='nextTurn.js'></script>
+    <script src='managers.js'></script>
+    <script src='gameObjectSerialization.js'></script>
+    
     <script>
         'use strict'
         /*if (document.querySelector("#container").requestFullscreen)
@@ -153,13 +157,6 @@
         let interfaceCanvas = document.getElementById('interface')
         
         let interfaceCtx = interfaceCanvas.getContext('2d')
-
-        let actionManager = new ActionManager()
-        let unpacker = new JsonUnpackManager()
-        
-        let debug = false
-        let gameSlot = 0
-        let isFogOfWar = true
 
         const errorWindowCornerRadius = 0.03 * HEIGHT
 
@@ -183,23 +180,6 @@
         
         let saveManager = new SaveManager()
         
-        let players = []
-        let external = []
-        let externalProduction = []
-        let nature = []
-        let goldmines = []
-        let grid
-        let mapBorder
-        let gameExit = false
-        let timer = new LongTimer()//new Timer()
-
-        let gameRound
-        let suddenDeathRound = 30
-        // should have used this instead of many global variables:
-        let gameSettings = {
-            'isOnline': false
-        }
-        let unsafeVariablePassword = 'error'
     
         let undoButton = new TwoPositionsImageButton(
             new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
@@ -222,27 +202,6 @@
                      nextTurnButtonSize, nextTurnButtonSize),
             statisticsInterface.show, undefined, undefined, undefined, statisticsInterface
         )
-        let whooseTurn
-
-        function getGameObject() {
-            let timers = Array(players.length)
-            for (let i = 0; i < players.length; ++i) {
-                timers[i] = JSON.parse(unpacker.getPlayerTimerByIndex(i))
-            }
-            return {
-                'grid': grid,
-                'players': players,
-                'external': external,
-                'externalProduction': externalProduction,
-                'nature': nature,
-                'goldmines': goldmines,
-                'timers': timers,
-                'whooseTurn': whooseTurn,
-                'gameRound': gameRound,
-                'isFogOfWar': isFogOfWar,
-                'gameSettings': gameSettings
-            }
-        }
 
         function saveGame() {
             try {
@@ -326,17 +285,6 @@
         }
         function hasSave(_slot) {
             return !!localStorage.getItem(_slot + 'whooseTurn')
-        }
-        function loadFromJson(game_string) {
-            let game = JSON.parse(game_string)
-            for (let i = 0; i < game.players.length; ++i) {
-                unpacker.setPlayerTimerByIndex(i, game.timers[i])
-            }
-
-            unpacker.unpackAll(JSON.stringify(game.grid), JSON.stringify(game.players), JSON.stringify(game.external), 
-                JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
-                JSON.stringify(game.timers[game.whooseTurn]), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
-                JSON.stringify(game.isFogOfWar), 'gameSettings' in game ? JSON.stringify(game.gameSettings) : null)
         }
         function loadGame() {
             try {
