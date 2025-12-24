@@ -1,4 +1,4 @@
-class Map {
+class GameMap {
     constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[]) {
         this.mapSize = mapSize
         this.players = _players
@@ -141,7 +141,7 @@ function packMap() {
 maps = {
     "open field": 
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -174,7 +174,7 @@ maps = {
              [],
              [{"x":7,"y":2},{"x":13,"y":2},{"x":7,"y":3},{"x":13,"y":3},{"x":8,"y":4},{"x":12,"y":4},{"x":6,"y":4},{"x":14,"y":4},{"x":6,"y":3},{"x":14,"y":3},{"x":8,"y":9},{"x":12,"y":9},{"x":8,"y":10},{"x":12,"y":10},{"x":8,"y":11},{"x":12,"y":11},{"x":4,"y":14},{"x":16,"y":14},{"x":3,"y":14},{"x":17,"y":14},{"x":5,"y":13},{"x":15,"y":13},{"x":2,"y":15},{"x":18,"y":15},{"x":0,"y":2},{"x":20,"y":2},{"x":1,"y":2},{"x":19,"y":2},{"x":2,"y":2},{"x":18,"y":2},{"x":3,"y":2},{"x":17,"y":2}]
         ),
-        new Map(
+        new GameMap(
             {x: 30, y: 23},
             [
                 {
@@ -198,7 +198,7 @@ maps = {
             [],
             []
         ),
-        new Map(
+        new GameMap(
             {x: 25, y: 25},
             [
                 {
@@ -239,7 +239,7 @@ maps = {
     ],
     "tiny deathmatch":
     [
-        new Map(
+        new GameMap(
             {x: 20, y: 10},
             [
                 {
@@ -263,7 +263,7 @@ maps = {
     ],
     "stationary warfare": 
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -303,7 +303,7 @@ maps = {
     ],
     "two rivers": 
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -341,7 +341,7 @@ maps = {
     ],
     "mountain wall":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -406,7 +406,7 @@ maps = {
     ],
     "two in one":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -467,7 +467,7 @@ maps = {
     ],
     "tower defense":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -514,7 +514,7 @@ maps = {
         )
     ],
     "capture rush": [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -553,7 +553,7 @@ maps = {
     ],
     "strategic war":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -584,7 +584,7 @@ maps = {
     ],
     "reinforcement":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -635,7 +635,7 @@ maps = {
     ],
     "rush or defend":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -689,7 +689,7 @@ maps = {
     ],
     "sneak attack":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -724,7 +724,7 @@ maps = {
     ],
     "flank attack": 
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -761,7 +761,7 @@ maps = {
     ],
     "attack and protect": 
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -803,7 +803,7 @@ maps = {
     ],
     "fight forever": 
     [
-        new Map(
+        new GameMap(
             {x: 40, y: 30},
             [
                 {
@@ -855,7 +855,7 @@ maps = {
             {x: 27, y: 25}, {x: 28, y: 26}, {x: 28, y: 27}, 
             {x: 12, y: 4}, {x: 11, y: 3}, {x: 11, y: 2}]
         ),
-        new Map(
+        new GameMap(
             {x: 39, y: 39},
             [
                 {
