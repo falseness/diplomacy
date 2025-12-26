@@ -23,7 +23,7 @@ class OnlineLogic {
 }
 
 function SetupServerCommunicationLogic(password) {
-    const socket = io('http://localhost:8080')
+    const socket = io('wss://playdiplomacy.online:8080')
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
