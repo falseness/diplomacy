@@ -94,7 +94,6 @@ function onlineNextTurn() {
     if (gameExit) {
         return
     }
-    console.log(new Error().stack)
 
     gameEvent.nextTurn()
 

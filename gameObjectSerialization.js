@@ -16,6 +16,10 @@ function getGameObject() {
     removeFromArrayIfKilled(external)
     removeFromArrayIfKilled(externalProduction)
     removeFromArrayIfKilled(nature)
+    for (let i = 0; i < players.length; ++i) {
+        players[i].updateUnits()
+        players[i].updateTowns()
+    }
     return {
         'grid': grid,
         'players': players,
