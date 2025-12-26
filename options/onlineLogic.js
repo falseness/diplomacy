@@ -27,9 +27,13 @@ function SetupServerCommunicationLogic(password) {
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
-        loadFromJson(game)
         
-
+        game = JSON.parse(game)
+        game.timers[game.whooseTurn] = new Timer()
+        game = JSON.stringify(game)
+        loadFromJson(game)
+        timer.setNextTurnTime()
+        
         nextTurnPauseInterface.visible = false
         unfreezeGame()
         // we do not call players[whooseTurn].nextTurn() here 
@@ -37,26 +41,27 @@ function SetupServerCommunicationLogic(password) {
         gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
-    socket.on('playYourTurn', gameAndTurnIndex => {
+    socket.on('playYourTurn', game => {
 
         console.log(`playYourTurn`)
-        
-        let dict = JSON.parse(gameAndTurnIndex)
-        loadFromJson(JSON.stringify(dict.game))
-        whooseTurn = dict.yourPlayerIndex
-
+        game = JSON.parse(game)
+        game.timers[game.whooseTurn] = new Timer()
+        game = JSON.stringify(game)
+        loadFromJson(game)
+        timer.setNextTurnTime()
         nextTurnPauseInterface.visible = true
+        
         unfreezeGame()
+        
         players[whooseTurn].nextTurn()
         gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
-    socket.on('waitYouTurn', gameAndTurnIndex => {
+    socket.on('waitYouTurn', game => {
         console.log(`waitYouTurn`)
 
-        let dict = JSON.parse(gameAndTurnIndex)
-        loadFromJson(JSON.stringify(dict.game))
-        whooseTurn = dict.yourPlayerIndex
+        // let dict = JSON.parse(gameAndTurnIndex)
+        loadFromJson(game)
 
         if (isFogOfWar) {
             players[whooseTurn].changeFogOfWarByVision()

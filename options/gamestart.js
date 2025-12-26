@@ -952,9 +952,12 @@ class GameManager {
         unsafeVariablePassword = password
         map.start(this, isClassicTimer)
         this.initValues()
-        startTurn()
+        
         if (isOnline) {
             SetupServerCommunicationLogic(password)
+        }
+        else {
+            startTurn()
         }
 
         requestAnimationFrame(gameLoop)

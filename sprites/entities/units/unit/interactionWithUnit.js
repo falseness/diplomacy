@@ -347,3 +347,38 @@ class VisionWay {
         }
     }
 }
+
+class InfluenceFieldWay {
+    constructor(grid_class) {
+        this.influenceFieldVisited = []
+        this.__distance = []
+        this.__usedIndex = 0
+        let n = grid_class.arr.length
+        let m = grid_class.arr[0].length
+        grid_class.fullInitArr(n, m, this.influenceFieldVisited, 0)
+        grid_class.fullInitArr(n, m, this.__distance, 0)
+        this.__grid_class = grid_class
+    }
+    paintInfluenceField(v0, influenceRange) {
+        ++this.__usedIndex
+        let Q = [v0]
+        this.influenceFieldVisited[v0.x][v0.y] = this.__usedIndex
+        this.__distance[v0.x][v0.y] = 0
+        while (Q.length) {
+            let v = Q.shift()
+            let neighbours = this.__grid_class.arr[v.x][v.y].hexagon.neighbours
+            if (this.__distance[v.x][v.y] >= influenceRange)
+                continue
+            for (let i = 0; i < neighbours.length; ++i) {
+                let t = neighbours[i]
+                if (isCoordNotOnMap(t, this.__grid_class.arr.length, this.__grid_class.arr[0].length))
+                    continue
+                if (this.influenceFieldVisited[t.x][t.y] == this.__usedIndex)
+                    continue
+                this.influenceFieldVisited[t.x][t.y] = this.__usedIndex
+                this.__distance[t.x][t.y] = this.__distance[v.x][v.y] + 1
+                Q.push(t)
+            }
+        }
+    }
+}
