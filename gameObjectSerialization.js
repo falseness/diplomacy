@@ -1,8 +1,21 @@
+function removeFromArrayIfKilled(array) {
+    for (let i = 0; i < array.length; ++i) {
+        if (array[i].killed) {
+            console.log('removed from array if killed', array[i])
+            array.splice(i--, 1)
+            continue
+        }
+    }
+}
+
 function getGameObject() {
     let timers = Array(players.length)
     for (let i = 0; i < players.length; ++i) {
         timers[i] = JSON.parse(unpacker.getPlayerTimerByIndex(i))
     }
+    removeFromArrayIfKilled(external)
+    removeFromArrayIfKilled(externalProduction)
+    removeFromArrayIfKilled(nature)
     return {
         'grid': grid,
         'players': players,
