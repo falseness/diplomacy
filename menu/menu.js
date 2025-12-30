@@ -276,8 +276,21 @@ class OnlineSettingsTree {
 
         const slidePosX = posX + WIDTH * 0.1
 
-        this.mapSlider = CreateMapSlider(firstY - intervalY, intervalY, fontSize, slidePosX)
+        this.mapSlider = CreateMapSlider(firstY, intervalY, fontSize, slidePosX)
+        
+        let minimumValuePlayers = function() { return 0 }
+        let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
+        let getKeyPlayers = function(value) { return value + 2 }
+        this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers, 
+            getKeyPlayers, this.mapSlider,
+            0, WIDTH * 0.04,
+        new Text(slidePosX, firstY, fontSize), 
+                {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
+
+        this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2, 
+            firstY + intervalY, fontSize, 'map', 'black', 'left')
+        
         // let minimumValueMap = function() { return 0 }
         // let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
         // let getKeyMap = function(value) { return getKeyByIndexDictionary(maps, value) }
@@ -306,15 +319,15 @@ class OnlineSettingsTree {
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
 
-        this.passwordText = new Text(posX - Menu.getButton().width / 2, 
-            firstY + intervalY, fontSize, 'enter password:', 'black', 'left')
 
         this.passwordButtons = []
 
         this.currentPassword = ''
 
         this.initializePasswordsButtons(firstY, intervalY)
-      
+        
+        this.passwordText = new Text(marginLeft, 
+            firstY + intervalY * 2, fontSize, 'enter password:', 'black', 'left')
 
 
 
@@ -364,7 +377,7 @@ class OnlineSettingsTree {
     updateButtonsList() {
         this.buttons = [this.backButton, this.playButton, 
             this.mapSlider,
-            this.fogOfWarCheckBox/*, this.timerCheckBox, this.playersSlider, this.mapSlider*/]
+            this.fogOfWarCheckBox, this.playersSlider/*, this.timerCheckBox, this.playersSlider, this.mapSlider*/]
         this.buttons = this.buttons.concat(this.passwordButtons)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
@@ -383,8 +396,7 @@ class OnlineSettingsTree {
         this.backButton.removeSelect()
     }*/
     get selectedMap() {
-        // todo: update
-        let map = maps[this.mapSlider.realValue][0]
+        let map = maps[this.mapSlider.realValue][this.playersSlider.value]
         return map
     }
     get isFogOfWar() {
@@ -400,16 +412,15 @@ class OnlineSettingsTree {
         for (let i = 0; i < this.buttons.length; ++i) {
             ok |= this.buttons[i].click(pos)
         }
-        // if (this.buttons[this.buttons.length - 1].click(pos)) {
-        //     // map slider click
-        //     this.playersSlider.update()
-        //     ok = true
-        // }
+        if (this.buttons[this.buttons.length - 1].click(pos)) {
+            // map slider click
+            this.playersSlider.update()
+            ok = true
+        }
         return ok
     }
     draw(ctx) {
-        //this.playersText.draw(ctx)
-        this.passwordText.draw(ctx)
+        this.playersText.draw(ctx)
         this.passwordText.draw(ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)
