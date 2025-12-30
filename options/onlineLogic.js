@@ -48,6 +48,7 @@ function SetupServerCommunicationLogic(password) {
         game.timers[game.whooseTurn] = new Timer()
         game = JSON.stringify(game)
         loadFromJson(game)
+        GameManager.updateCameraBorders()
         timer.setNextTurnTime()
         nextTurnPauseInterface.visible = true
         

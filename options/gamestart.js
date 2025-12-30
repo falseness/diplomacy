@@ -903,6 +903,19 @@ class GameManager {
 
         this.clearBasisValues()
     }
+    static updateCameraBorders() {
+        let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
+        mapBorder = {
+	        left: 0,
+	        right: grid.right,
+	        top: 0,
+	        bottom: grid.bottom,
+	        scale: {
+	            min: 1 / grid_min_size * 5, //0.275,
+	            max: 1
+	        }
+	    }
+    }
     static clearBasisValues() {
         gameExit = false
         menu.visible = false
@@ -918,18 +931,8 @@ class GameManager {
         height = HEIGHT
         mainCtx.setTransform(1, 0, 0, 1, 0, 0)
         gameEvent.screen.stop()
+        this.updateCameraBorders()
         
-        let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
-        mapBorder = {
-	        left: 0,
-	        right: grid.right,
-	        top: 0,
-	        bottom: grid.bottom,
-	        scale: {
-	            min: 1 / grid_min_size * 5, //0.275,
-	            max: 1
-	        }
-	    }
 	    createEvents()
     }
 	static load() {
@@ -954,6 +957,7 @@ class GameManager {
         this.initValues()
         
         if (isOnline) {
+            console.log('isOnline')
             SetupServerCommunicationLogic(password)
         }
         else {

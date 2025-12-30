@@ -376,8 +376,7 @@ class OnlineSettingsTree {
     }
     updateButtonsList() {
         this.buttons = [this.backButton, this.playButton, 
-            this.mapSlider,
-            this.fogOfWarCheckBox, this.playersSlider/*, this.timerCheckBox, this.playersSlider, this.mapSlider*/]
+            this.fogOfWarCheckBox/*, this.timerCheckBox*/, this.playersSlider, this.mapSlider]
         this.buttons = this.buttons.concat(this.passwordButtons)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
