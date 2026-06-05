@@ -350,9 +350,8 @@ class Player {
     }
 }
 class SimpleAiPlayer extends Player {
-    constructor(color) {
-        const unspendableGold = 9999999999
-        super(color, unspendableGold)
+    constructor(color, gold = 90) {
+        super(color, gold)
         this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
     }
     nextTurn() {

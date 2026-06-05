@@ -93,7 +93,7 @@
     "id": "TASK-005",
     "category": "functional",
     "priority": "critical",
-    "description": "Integrate SimpleAiPlayer from demons as the combat-only baseline used by all later AI comparisons.",
+    "description": "Integrate SimpleAiPlayer from demons as the combat-only baseline used by all later AI comparisons. Implemented: Added explicit SimpleAiPlayer baseline selection via playerType, removed its unlimited-gold default, documented it as the pre-economy combat baseline, and added a deterministic Node smoke for attack-first, move fallback, separate AIPlayer instantiation, and repeat consistency.",
     "acceptance_criteria": [
       "SimpleAiPlayer can be selected in game setup or test harness without replacing the learned AIPlayer.",
       "SimpleAiPlayer keeps its simple combat behavior: attack available targets first, otherwise move toward enemy targets.",
@@ -110,7 +110,7 @@
     "dependencies": [
       "TASK-004"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-006",

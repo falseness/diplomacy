@@ -8,15 +8,24 @@ class GameMap {
         this.bushes = bushes
         this.hills = hills
     }
+    getPlayerType(playerSettings) {
+        if (playerSettings.playerType == 'simple-ai' ||
+            playerSettings.playerType == 'SimpleAiPlayer') {
+            return SimpleAiPlayer
+        }
+        if (playerSettings.playerType == 'ai' ||
+            playerSettings.playerType == 'AIPlayer' ||
+            playerSettings.ai) {
+            return AIPlayer
+        }
+        return Player
+    }
     createPlayers() {
         players = new Array(this.players.length)
         players[0] = new NeutralPlayer(this.players[0].rgb, 0)
 
         for (let i = 1; i < this.players.length; ++i) {
-            let playerType = Player
-            if (this.players[i].ai) {
-                playerType = AIPlayer
-            }
+            let playerType = this.getPlayerType(this.players[i])
             players[i] = new playerType(this.players[i].rgb)
 
             if (!('units' in this.players[i])) {

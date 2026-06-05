@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "init-model": "node ai/init-model.js",
-    "train": "node ai/train-cloud.js"
+    "train": "node ai/train-cloud.js",
+    "test-simple-ai": "node ai/test-simple-ai-baseline.js"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",
