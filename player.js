@@ -467,6 +467,15 @@ function weightedRandomIndex(weights) {
     const exps = arr.map(x => Math.exp(x - max))
     return weightedRandomIndex(exps)
   }
+
+  function sampleByTemperature(values, temperature) {
+    assert(temperature > 0.0)
+    const scaled = values.map(v => v / temperature)
+    return softmaxRandomIndex(scaled)
+  }
+
+// 0 means greedy argmax play; > 0 enables exploration during self-play data generation
+let selfPlayTemperature = 0.0
   
 
 class AIPlayer extends Player {
@@ -537,25 +546,19 @@ class AIPlayer extends Player {
 
         let foundChances = this.getWinningChances(xCommands)
         assert(foundChances.length == foundCommands.length)
-        // let index = softmaxRandomIndex([...foundChances])
-        // // console.log(index)
-        
-        // console.log(JSON.stringify(foundCommands))
-        // console.log(foundChances)
+
+        if (selfPlayTemperature > 0.0) {
+            let index = sampleByTemperature(foundChances, selfPlayTemperature)
+            return [foundCommands[index], foundChances[index]]
+        }
+
         let maxIndex = 0
         for (let i = 0; i < foundChances.length; ++i) {
             if (foundChances[i] > foundChances[maxIndex]) {
                 maxIndex = i
             }
         }
-        // console.log('chosen', maxIndex)
-        // console.log(JSON.stringify(foundCommands))
-        // console.log(foundChances)
         return [foundCommands[maxIndex], foundChances[maxIndex]]
-
-        // tmp
-        //console.log(`action: ${whooseTurn} ${JSON.stringify(bestCommand)}`)
-        
     }
     doActions() {
         let i = 0;

@@ -913,6 +913,39 @@ maps = {
     ]
 }
 class GameManager {
+    static replayBuffer = []
+
+    static pushReplay(x, y) {
+        GameManager.replayBuffer.push({x: x, y: y})
+        const maxReplaySize = 20000
+        if (GameManager.replayBuffer.length > maxReplaySize) {
+            GameManager.replayBuffer.splice(0, GameManager.replayBuffer.length - maxReplaySize)
+        }
+    }
+
+    static async trainFromBuffer(sampleSize, epochs) {
+        let buffer = GameManager.replayBuffer
+        if (buffer.length == 0) {
+            return
+        }
+        // group by board shape because tf.stack inside trainModel needs uniform dimensions
+        let groups = {}
+        for (let i = 0; i < sampleSize; ++i) {
+            let entry = buffer[randomInt(0, buffer.length - 1)]
+            let grid3d = entry.x[0]
+            let key = grid3d.length + 'x' + grid3d[0].length
+            if (!(key in groups)) {
+                groups[key] = {x: [], y: []}
+            }
+            groups[key].x.push(entry.x)
+            groups[key].y.push(entry.y)
+        }
+        let keys = Object.keys(groups)
+        for (let i = 0; i < keys.length; ++i) {
+            await trainModel(ai_model, groups[keys[i]].x, groups[keys[i]].y, epochs)
+        }
+    }
+
 	static clearValues() {
         external = []
         externalProduction = []
@@ -1059,101 +1092,28 @@ class GameManager {
                 console.log('iter', i)
             }
             if (players[1].isLost || players[2].isLost) {
-                let longGamePenalty = 0 
-                let chance = 0.0
-
-                const eps = 0.15
-                let learningChange = eps
+                let outcome = {1: 0.0, 2: 0.0}
                 if (players[1].isLost && players[2].isLost) {
-                    chance = 0.0 - longGamePenalty
                     console.log('DRAW!')
                 }
                 else if (players[1].isLost) {
-                    chance = -1.0
-                    learningChange = -eps
+                    outcome[1] = -1.0
+                    outcome[2] = 1.0
                 }
                 else {
-                    chance = 1.0 - longGamePenalty
-                    learningChange = eps
+                    outcome[1] = 1.0
+                    outcome[2] = -1.0
                 }
-                let xTrain = []
-                let yTrain = []
-                
 
-                if (i == 0) {
-                    assert(whooseTurn == 0)
-                    whooseTurn = 1
-                    players[whooseTurn].nextTurn()
-                    xTrain.push(vectoriseGrid())
-                    yTrain.push(chance)
-                }
-                else {
-                    // for (let i = 1; i <= 2; ++i) {
-                    //     assert(players[i].winningChances.length > 0)
-                    // }
-                    if (players[1].isLost) {
-                        learningChange = -eps
-                    }
-                    else {
-                        learningChange = eps
-                    }
-                    for (let i = 0;
-                            i < players[1].chosenGrids.length; ++i) {
-                        xTrain.push(players[1].chosenGrids[i])
-                        let value = players[1].winningChances[i] + learningChange
-                        if (value > 1.0) {
-                            value = 1.0
-                        }
-                        else if (value < -1.0) {
-                            value = -1.0
-                        }
-                        yTrain.push(value)
-                    }
-                    if (players[2].isLost) {
-                        learningChange = -eps
-                    }
-                    else {
-                        learningChange = eps
-                    }
-                    for (let i = 0;
-                            i < players[2].chosenGrids.length; ++i) {
-                        xTrain.push(players[2].chosenGrids[i])
-                        let value = players[2].winningChances[i] + learningChange
-                        if (value > 1.0) {
-                            value = 1.0
-                        }
-                        else if (value < -1.0) {
-                            value = -1.0
-                        }
-                        yTrain.push(value)
+                // monte-carlo value target: every recorded state is labeled with the
+                // realized game result from that player's (canonical) perspective
+                for (let p = 1; p <= 2; ++p) {
+                    let grids = players[p].chosenGrids
+                    for (let k = 0; k < grids.length; ++k) {
+                        GameManager.pushReplay(grids[k], outcome[p])
                     }
                 }
-                
-                
-                for (let i = 0; i < xTrain.length; ++i) {
-                    if (xTrain[i]) {
-                        continue
-                    }
-                    assert(false)
-                }
-                console.log('start train', i, chance)
-                
-             
-                // console.log('commands debug1')
-                // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 1])
-                // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 2])
-                // console.log(players[1].commandsDebug[players[1].commandsDebug.length - 3])
-
-                // console.log('commands debug2')
-                // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 1])
-                // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 2])
-                // console.log(players[2].commandsDebug[players[2].commandsDebug.length - 3])
-                
-                let trainResult = await trainModel(ai_model, xTrain, yTrain, 51)
-                for (let i = 0; i < xTrain.length; ++i) {
-                    delete xTrain[i]
-                    delete yTrain[i]
-                }
+                console.log('game ended', i, outcome[1], outcome[2], 'buffer', GameManager.replayBuffer.length)
                 return
             }
             
@@ -1181,35 +1141,35 @@ class GameManager {
         isFogOfWar = false
         // ai_model = createAlphaZeroModel(null, null)
         console.log('load model')
-        const learningRate = 0.00002
+        const learningRate = 0.001
         ai_model.compile({
             optimizer: tf.train.adam(learningRate),
             loss: 'meanSquaredError',
             metrics: ['accuracy'],
         });
+
+        GameManager.replayBuffer = []
+        selfPlayTemperature = 0.5
+
+        const sampleSize = 1024
+        const epochsPerStep = 4
         for (let i = 0; i < 1000; ++i) {
             
             console.log('generateAndPlay', i)
             await this.generateAndPlay()
-            for (let i = 0; i < players.length; ++i) {
-                delete players[i].chosenGrids
-                delete players[i].winningChancesHeuristic
-                
-                delete players[i].winningChances
-                delete players[i].chosenGrids
-                delete players[i]
+            for (let p = 0; p < players.length; ++p) {
+                delete players[p].chosenGrids
+                delete players[p].winningChances
             }
 
+            await this.trainFromBuffer(sampleSize, epochsPerStep)
 
-            console.log('tf memory', i, Object.keys(window).length, tf.memory())
+            console.log('tf memory', i, tf.memory())
             if (i == 0 || i % 5 != 0) {
                 continue
             }
-            // console.log('train on found dataset')
-            // await trainModel(ai_model, this.foundXTrain, this.foundYTrain, 21)
-            
+
             await saveModel()
-            // modelIndex += 1
             console.log('pre clean', tf.memory())
             ai_model.dispose()
             tf.engine().reset()
@@ -1221,15 +1181,11 @@ class GameManager {
                 metrics: ['accuracy'],
             });
 
-            // await trainModel(ai_model, this.foundXTrain, this.foundYTrain, 2)
-
             console.log('cleaned', tf.memory())
         }
+        selfPlayTemperature = 0.0
         let saved = await saveModel()
         console.log('saved', saved)
-        // ai_model.save('indexeddb://diplomacy_weights' + (model_index + 1))
-
-        // ai_model.save('downloads://diplomacy_weights' + (model_index + 1))
     }
     static async startTrain0() {
         
