@@ -1,0 +1,1 @@
+TASK-016: Added barrack vector channels/coverage for completed and pending barracks, including relative ownership, upkeep income, active production turns, and no-barrack stability. Tests passed: node ai/test-town-vectorization.js, npm run init-model, npm run train. Gotcha: worktree still contains unrelated dirty changes from other tasks; commit stages only TASK-016 hunks.

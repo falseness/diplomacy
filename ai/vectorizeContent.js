@@ -1,7 +1,7 @@
 
 
 // Cell channels 0-11 are the original building/unit representation.
-// Channels 12+ encode town-specific state for economy-aware training.
+// Channels 12+ encode economy-aware building state.
 var CELL_VECTOR_INDEX = {
     hasBuilding: 0,
     unitOwner: 1,
@@ -19,12 +19,25 @@ var CELL_VECTOR_INDEX = {
     townActiveProduction: 17,
     townActiveProductionTurns: 18,
     townPendingProductionCount: 19,
-    townPendingProductionMinTurns: 20
+    townPendingProductionMinTurns: 20,
+    isBarrack: 21,
+    barrackOwner: 22,
+    barrackHpRatio: 23,
+    barrackIncome: 24,
+    barrackActiveProduction: 25,
+    barrackActiveProductionTurns: 26,
+    isPendingBarrack: 27,
+    pendingBarrackOwner: 28,
+    pendingBarrackTurns: 29,
+    townPendingBarrackCount: 30,
+    townPendingBarrackMinTurns: 31
 }
 
-var CELL_VECTOR_SIZE = 21
+var CELL_VECTOR_SIZE = 32
 var TOWN_INCOME_VECTOR_SCALE = 20.0
+var BARRACK_INCOME_VECTOR_SCALE = 20.0
 var TOWN_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
+var BARRACK_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 
 function relativePlayerValue(playerColor) {
     if (playerColor == 0) {
@@ -36,6 +49,20 @@ function relativePlayerValue(playerColor) {
 function hasActiveProduction(town) {
     return town.activeProduction && town.activeProduction.notEmpty &&
         town.activeProduction.notEmpty()
+}
+
+function isBarrackObject(building) {
+    return building && building.name == 'barrack' &&
+        !(building.isBuildingProduction && building.isBuildingProduction())
+}
+
+function isPendingBarrackObject(building) {
+    return building && building.name == 'barrack' &&
+        building.isBuildingProduction && building.isBuildingProduction()
+}
+
+function productionName(production) {
+    return production ? production.name : undefined
 }
 
 function vectorizeTown(town, playerColor, result) {
@@ -55,12 +82,50 @@ function vectorizeTown(town, playerColor, result) {
         result[CELL_VECTOR_INDEX.townPendingProductionCount] =
             town.buildingProduction.length
         let minTurns = town.buildingProduction[0].turns
+        let barrackCount = 0
+        let barrackMinTurns = undefined
         for (let i = 1; i < town.buildingProduction.length; ++i) {
             minTurns = Math.min(minTurns, town.buildingProduction[i].turns)
         }
+        for (let i = 0; i < town.buildingProduction.length; ++i) {
+            if (productionName(town.buildingProduction[i]) == 'barrack') {
+                ++barrackCount
+                if (barrackMinTurns === undefined) {
+                    barrackMinTurns = town.buildingProduction[i].turns
+                }
+                else {
+                    barrackMinTurns = Math.min(barrackMinTurns, town.buildingProduction[i].turns)
+                }
+            }
+        }
         result[CELL_VECTOR_INDEX.townPendingProductionMinTurns] =
             minTurns / TOWN_PRODUCTION_TURNS_VECTOR_SCALE
+        result[CELL_VECTOR_INDEX.townPendingBarrackCount] = barrackCount
+        if (barrackMinTurns !== undefined) {
+            result[CELL_VECTOR_INDEX.townPendingBarrackMinTurns] =
+                barrackMinTurns / BARRACK_PRODUCTION_TURNS_VECTOR_SCALE
+        }
     }
+}
+
+function vectorizeBarrack(barrack, playerColor, result) {
+    result[CELL_VECTOR_INDEX.isBarrack] = 1
+    result[CELL_VECTOR_INDEX.barrackOwner] = relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.barrackHpRatio] = barrack.maxHP ? barrack.hp / barrack.maxHP : 0
+    result[CELL_VECTOR_INDEX.barrackIncome] = barrack.income / BARRACK_INCOME_VECTOR_SCALE
+
+    if (barrack.isPreparingUnit) {
+        result[CELL_VECTOR_INDEX.barrackActiveProduction] = 1
+        result[CELL_VECTOR_INDEX.barrackActiveProductionTurns] =
+            barrack.unitProduction.turns / BARRACK_PRODUCTION_TURNS_VECTOR_SCALE
+    }
+}
+
+function vectorizePendingBarrack(barrackProduction, playerColor, result) {
+    result[CELL_VECTOR_INDEX.isPendingBarrack] = 1
+    result[CELL_VECTOR_INDEX.pendingBarrackOwner] = relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.pendingBarrackTurns] =
+        barrackProduction.turns / BARRACK_PRODUCTION_TURNS_VECTOR_SCALE
 }
 
 function vectorizeCell(cell) {
@@ -70,6 +135,12 @@ function vectorizeCell(cell) {
         result[CELL_VECTOR_INDEX.hasBuilding] = 1
         if (cell.building.isTown()) {
             vectorizeTown(cell.building, cell.playerColor, result)
+        }
+        else if (isBarrackObject(cell.building)) {
+            vectorizeBarrack(cell.building, cell.playerColor, result)
+        }
+        else if (isPendingBarrackObject(cell.building)) {
+            vectorizePendingBarrack(cell.building, cell.playerColor, result)
         }
     }
     result[CELL_VECTOR_INDEX.unitOwner] =

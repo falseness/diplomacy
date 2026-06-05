@@ -56,6 +56,33 @@ function town(hp, playerColor, extra) {
   }
 }
 
+function barrack(hp, playerColor, extra) {
+  extra = extra || {}
+  return {
+    name: 'barrack',
+    hp: hp,
+    maxHP: 1,
+    income: extra.income === undefined ? -2 : extra.income,
+    isPreparingUnit: extra.isPreparingUnit || false,
+    unitProduction: extra.unitProduction || { turns: 0 },
+    isEmpty: function() { return false },
+    isTown: function() { return false },
+    isBuildingProduction: function() { return false },
+    playerColor: playerColor
+  }
+}
+
+function pendingBarrack(turns, playerColor) {
+  return {
+    name: 'barrack',
+    turns: turns,
+    isEmpty: function() { return false },
+    isTown: function() { return false },
+    isBuildingProduction: function() { return true },
+    playerColor: playerColor
+  }
+}
+
 function cell(building, playerColor) {
   return {
     building: building,
@@ -106,6 +133,39 @@ assertEqual(productionTownVector[CELL_VECTOR_INDEX.townActiveProduction], 1, 'ac
 assertClose(productionTownVector[CELL_VECTOR_INDEX.townActiveProductionTurns], 0.2, 'active town production turns')
 assertEqual(productionTownVector[CELL_VECTOR_INDEX.townPendingProductionCount], 2, 'pending town production count')
 assertClose(productionTownVector[CELL_VECTOR_INDEX.townPendingProductionMinTurns], 0.1, 'pending town production min turns')
+
+let friendlyBarrackVector = vectorizeCell(cell(barrack(1, 1), 1))
+let enemyBarrackVector = vectorizeCell(cell(barrack(1, 2), 2))
+let producingBarrackVector = vectorizeCell(cell(barrack(1, 1, {
+  isPreparingUnit: true,
+  unitProduction: { turns: 4 }
+}), 1))
+let pendingBarrackVector = vectorizeCell(cell(pendingBarrack(3, 1), 1))
+let townWithPendingBarrackVector = vectorizeCell(cell(town(10, 1, {
+  buildingProduction: [
+    { name: 'barrack', turns: 5 },
+    { name: 'farm', turns: 2 },
+    { name: 'barrack', turns: 3 }
+  ]
+}), 1))
+
+assertEqual(friendlyBarrackVector[CELL_VECTOR_INDEX.isBarrack], 1, 'friendly barrack channel')
+assertEqual(friendlyBarrackVector[CELL_VECTOR_INDEX.isTown], 0, 'barrack is not town')
+assertEqual(friendlyBarrackVector[CELL_VECTOR_INDEX.barrackOwner], 1, 'friendly barrack owner')
+assertEqual(enemyBarrackVector[CELL_VECTOR_INDEX.barrackOwner], -1, 'enemy barrack owner')
+assertClose(friendlyBarrackVector[CELL_VECTOR_INDEX.barrackHpRatio], 1, 'barrack hp ratio')
+assertClose(friendlyBarrackVector[CELL_VECTOR_INDEX.barrackIncome], -2 / BARRACK_INCOME_VECTOR_SCALE, 'barrack income')
+assertEqual(producingBarrackVector[CELL_VECTOR_INDEX.barrackActiveProduction], 1, 'active barrack production')
+assertClose(producingBarrackVector[CELL_VECTOR_INDEX.barrackActiveProductionTurns], 0.4, 'active barrack production turns')
+assertEqual(pendingBarrackVector[CELL_VECTOR_INDEX.isPendingBarrack], 1, 'pending barrack channel')
+assertEqual(pendingBarrackVector[CELL_VECTOR_INDEX.isBarrack], 0, 'pending barrack is not completed barrack')
+assertEqual(pendingBarrackVector[CELL_VECTOR_INDEX.pendingBarrackOwner], 1, 'pending barrack owner')
+assertClose(pendingBarrackVector[CELL_VECTOR_INDEX.pendingBarrackTurns], 0.3, 'pending barrack turns')
+assertEqual(townWithPendingBarrackVector[CELL_VECTOR_INDEX.townPendingBarrackCount], 2, 'town pending barrack count')
+assertClose(townWithPendingBarrackVector[CELL_VECTOR_INDEX.townPendingBarrackMinTurns], 0.3, 'town pending barrack min turns')
+assertEqual(emptyVector[CELL_VECTOR_INDEX.isBarrack], 0, 'empty has no barrack')
+assertEqual(otherBuildingVector[CELL_VECTOR_INDEX.isBarrack], 0, 'other building is not barrack')
+assertEqual(otherBuildingVector[CELL_VECTOR_INDEX.isPendingBarrack], 0, 'other building is not pending barrack')
 assertModelCellVectorCompatible({ inputs: [{ shape: [null, 3, 3, CELL_VECTOR_SIZE] }] })
 
 let mismatchWasDetected = false
