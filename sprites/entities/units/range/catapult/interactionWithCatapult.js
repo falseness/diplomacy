@@ -59,6 +59,10 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
 
         return super.sendInstructions(cell, catapult)
     }
+    canHitSomethingOnCell(cell, catapult) {
+        return !this.cantRangeInteract(cell.coord, catapult) && !this.isBlindArea(cell.coord) &&
+             this.cellHasAttackableBuilding(cell, catapult)
+    }
     sendInstructions(cell, catapult) {
         let coord = cell.coord
 

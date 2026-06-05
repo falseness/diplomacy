@@ -32,7 +32,12 @@ class InterationWithUnit {
         grid.drawLogicText = false
         entityInterface.visible = false
     }
-
+    getAvailableMoveCommandDestinations(unit) {
+        return this.way.create(unit.coord, this.moves, grid.arr, unit.playerColor, border)
+    }
+    getAvailableCommandDestinations(unit) {
+        return this.getAvailableMoveCommandDestinations(unit)
+    }
     select(unit) {
         entityInterface.change(unit.info, unit.player.fullColor)
         grid.drawLogicText = false
@@ -72,6 +77,10 @@ class InterationWithUnit {
         let killed = cell.building.hit(unit.dmg)
         if (!killed)
             this.addKillBuildingUndo(cellBuilding)
+    }
+    canHitSomethingOnCell(cell, unit) {
+        return !this.cantInteract(cell.coord, unit) &&
+            (this.cellHasEnemyBuilding(cell, unit) || this.cellHasEnemyUnit(cell, unit))
     }
     sendInstructions(cell, unit) {
         let coord = cell.coord
@@ -176,6 +185,11 @@ class InterationWithUnit {
         return (cell.building.notEmpty() &&
             cell.building.playerColor != unit.playerColor && !cell.building.isPassable)
     }
+    cellHasEnemyUnit(cell, unit) {
+        return cell.unit.notEmpty() &&
+            cell.unit.playerColor != unit.playerColor
+    }
+
     markIgnoredBuilding(cell) {
         this.addHittedBuildingUndo(cell)
         cell.building.wasHitted = true
@@ -189,8 +203,7 @@ class InterationWithUnit {
             }
             this.markIgnoredBuilding(cell)
         }
-
-        if (cell.unit.notEmpty()) {
+        if (this.cellHasEnemyUnit(cell, unit)) {
             this.hitUnit(cell, unit)
             return true
         }
@@ -243,7 +256,6 @@ class Way {
         let buildingObstacle = cell.building.isObstacle(player)
         let fogged = isFogOfWar && !grid.fogOfWar[neighbour.x][neighbour.y]
         return (ourUnit || buildingObstacle || fogged)
-
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {
         // if hexagon has the same color, he will be processed later
@@ -254,7 +266,7 @@ class Way {
                 continue
             }
             let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
-            if (hexagon.player != player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
+            if (hexagon.playerColor != player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
         }
         for (let i = 0; i < neighbours.length; ++i) {
             if (isCoordNotOnMap(neighbours[i], arr.length, arr[0].length) || this.isCellImpassable(neighbours[i], v0, arr, player)) {
@@ -262,7 +274,7 @@ class Way {
                 continue
             }
             let hexagon = arr[neighbours[i].x][neighbours[i].y].hexagon
-            if (hexagon.player == player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
+            if (hexagon.playerColor == player) sortedHexagonNeighbours.push({ hexagon: hexagon, side: i })
         }
         return sortedHexagonNeighbours
     }
@@ -285,12 +297,13 @@ class Way {
     // return arr of visitedCoords except v0
     create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = true) {
         // init
+        let visitedCoords = []
+
         let used = this.initialization(v0, moves, arr, newBorder)
         let Q = []
         Q.push(v0)
         let enemyEntityQ = [] //for pass mode only
             // BFS
-        let visitedCoords = []
         while (Q.length > 0 || enemyEntityQ.length > 0) {
             let v
             if (Q.length)
@@ -388,5 +401,85 @@ class InfluenceFieldWay {
                 Q.push(t)
             }
         }
+    }
+}
+
+// used in simple ai player logic
+class BestEnemyTargetForAI extends Way {
+    isCellImpassable(neighbour, v0, arr, player) {
+        let cell = arr[neighbour.x][neighbour.y]
+        return cell.building.isStaticNature && cell.building.isObstacle(player)
+    }
+    notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
+        Q.push(coord)
+        this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
+        this.parent[coord.x][coord.y] = v
+        used[coord.x][coord.y] = true
+    }
+    static unreachableDistance = 999999
+    calculateBestEnemyTarget(v0, grid_arr, myPlayerColor) {
+        // might be faster but it is not important
+        this.create(v0, this.constructor.unreachableDistance, grid_arr, myPlayerColor, border)
+        let resultCoord = { x: -1, y: -1 }
+        let minDistance = this.constructor.unreachableDistance
+        for (let i = 0; i < grid_arr.length; ++i) {
+            for (let j = 0; j < grid_arr[i].length; ++j) {
+                let cell = grid_arr[i][j]
+                let is_building_target = cell.building.notEmpty() &&
+                    cell.building.playerColor != myPlayerColor &&
+                    !cell.building.isExternal && !cell.building.isNature
+                if (is_building_target &&
+                    this.distance[i][j] < minDistance) {
+                    minDistance = this.distance[i][j]
+                    resultCoord = { x: i, y: j }
+                }
+            }
+        }
+        if (minDistance != this.constructor.unreachableDistance) {
+            return resultCoord
+        }
+        for (let i = 0; i < grid_arr.length; ++i) {
+            for (let j = 0; j < grid_arr[i].length; ++j) {
+                let cell = grid_arr[i][j]
+                let is_unit_target = cell.unit.notEmpty() &&
+                    cell.unit.playerColor != myPlayerColor
+                if (is_unit_target &&
+                    this.distance[i][j] < minDistance) {
+                    minDistance = this.distance[i][j]
+                    resultCoord = { x: i, y: j }
+                }
+            }
+        }
+        if (minDistance != this.constructor.unreachableDistance) {
+            return resultCoord
+        }
+        return null
+    }
+    // might be empty array
+    GetCommandNearestToBestTarget(availableCellsCommands, v0, grid_arr, myPlayerColor) {
+        let target_coord = this.calculateBestEnemyTarget(v0, grid_arr, myPlayerColor)
+        if (target_coord == null) {
+            return null
+        }
+        let commandsOnDistanceOne = []
+
+        for (let i = 0; i < availableCellsCommands.length; ++i) {
+            if (this.distance[availableCellsCommands[i].destinationCoord.x][availableCellsCommands[i].destinationCoord.y] == 1) {
+                commandsOnDistanceOne.push(availableCellsCommands[i])
+            }
+        }
+
+
+        this.create(target_coord, this.constructor.unreachableDistance, grid_arr, myPlayerColor, border)
+        // now distance means distance to building
+        let bestCommand = null
+        let minDistance = this.constructor.unreachableDistance
+        for (let i = 0; i < commandsOnDistanceOne.length; ++i) {
+            if (this.distance[commandsOnDistanceOne[i].destinationCoord.x][commandsOnDistanceOne[i].destinationCoord.y] < minDistance) {
+                minDistance = this.distance[commandsOnDistanceOne[i].destinationCoord.x][commandsOnDistanceOne[i].destinationCoord.y]
+                bestCommand = commandsOnDistanceOne[i]
+            }
+        }
+        return bestCommand
     }
 }

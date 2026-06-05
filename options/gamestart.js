@@ -11,6 +11,7 @@ class GameMap {
     createPlayers() {
         players = new Array(this.players.length)
         players[0] = new NeutralPlayer(this.players[0].rgb, 0)
+
         for (let i = 1; i < this.players.length; ++i) {
             let playerType = Player
             if (this.players[i].ai) {

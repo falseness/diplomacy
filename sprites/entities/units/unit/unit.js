@@ -95,6 +95,9 @@ class Unit extends Entity {
 
         return this.interaction.needInstructions()
     }
+    canHitSomethingOnCell(cell) {
+        return this.interaction.canHitSomethingOnCell(cell, this)
+    }
     sendInstructions(cell) {
         if (!this.isMyTurn)
             return true
@@ -161,6 +164,12 @@ class Unit extends Entity {
             })
         }
         return result
+    }
+    getAvailableMoveCommands() {
+        assert(this.isMyTurn)
+        let coords = this.interaction.getAvailableMoveCommandDestinations(this)
+
+        return this.createCommandsFromDestinations(coords)
     }
     getAvailableCommands() {
         assert(this.isMyTurn)

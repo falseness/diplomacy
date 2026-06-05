@@ -15,10 +15,10 @@ class InteractionWithRangeUnit extends InterationWithUnit {
 
         if (this.isTurnFinished(rangeUnit))
             return
-            
-        attackBorder.newBrokenLine('white',//rangeUnit.player.hexColor, 
+
+        attackBorder.newBrokenLine('white',//rangeUnit.player.hexColor,
             this.borderStrokeWidth, rangeUnit.player.hexColor)
-        this.rangeWay.create(rangeUnit.coord, this.range, 
+        this.rangeWay.create(rangeUnit.coord, this.range,
             grid.arr, rangeUnit.playerColor, attackBorder)
     }
     removeSelect() {
@@ -53,9 +53,8 @@ class InteractionWithRangeUnit extends InterationWithUnit {
     buildingAttack(cell, rangeUnit) {
         this.addThisUndo(rangeUnit)
         this.undoAdded = true
-        
-        this.moves = 0
 
+        this.moves = 0
         if (cell.building.isHitable) {
             this.hitBuilding(cell, rangeUnit)
 
@@ -67,8 +66,15 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         this.markIgnoredBuilding(cell)
     }
     cellHasEnemyBuildingProduction(cell, rangeUnit) {
-        return (cell.building.isBuildingProduction() && 
-            cell.building.playerColor != rangeUnit.playerColor) 
+        return (cell.building.isBuildingProduction() &&
+            cell.building.playerColor != rangeUnit.playerColor)
+    }
+    cellHasAttackableBuilding(cell, rangeUnit) {
+        return this.cellHasEnemyBuilding(cell, rangeUnit) && !cell.building.isStaticNature && cell.building.isHitable
+    }
+    canHitSomethingOnCell(cell, rangeUnit) {
+        return !this.cantRangeInteract(cell.coord, rangeUnit) &&
+            (this.cellHasAttackableBuilding(cell, rangeUnit) || this.cellHasEnemyUnit(cell, rangeUnit))
     }
     sendInstructions(cell, rangeUnit) {
         let coord = cell.coord
@@ -79,7 +85,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         }
 
         this.undoAdded = false
-        
+
 
         if (this.cantRangeInteract(coord, rangeUnit)) {
             //this.removeSelect()
@@ -119,11 +125,11 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             this.removeSelect()
             return true
         }
-        
+
         return super.sendInstructions(cell, rangeUnit)
     }
     getAvailableCommandDestinations(rangeUnit) {
-        let attack_coords = this.rangeWay.create(rangeUnit.coord, this.range, 
+        let attack_coords = this.rangeWay.create(rangeUnit.coord, this.range,
             grid.arr, rangeUnit.playerColor, attackBorder)
 
         let result = super.getAvailableCommandDestinations(rangeUnit)
@@ -137,12 +143,11 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             }
         }
         for (let i = 0; i < attack_coords.length; ++i) {
-            if (!(attack_coords[i].x in hash_map) || 
+            if (!(attack_coords[i].x in hash_map) ||
                     !hash_map[attack_coords[i].x].has(attack_coords[i].y)) {
                 result.push(attack_coords[i])
             }
         }
-        console.log(result)
         return result
     }
 }
@@ -171,7 +176,7 @@ class RangeWay extends Way {
 class RangeUnitMoveWay extends Way {
     isCellImpassable(neighbour, v0, arr, player) {
         let cell = arr[neighbour.x][neighbour.y]
-        return this.cellHasEnemyEntity(cell, player) || 
+        return this.cellHasEnemyEntity(cell, player) ||
             super.isCellImpassable(neighbour, v0, arr, player)
     }
 }

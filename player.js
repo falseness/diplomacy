@@ -10,7 +10,7 @@ class Player {
             g: color.g,
             b: color.b
         }
-            
+
         this.hexagon = this.calcHexagon()
         this.suburbHexagon = this.calcSuburbHexagon()
     }
@@ -105,7 +105,7 @@ class Player {
         income -= this.armySalary
 
         income += this.goldminesIncome
-        
+
         return income
     }
     correctGoldminesIncome() {
@@ -165,7 +165,7 @@ class Player {
     nextTurn() {
         this.gold += this.income
         this.correctGoldminesIncome()
-        
+
 
         if (this.isLost) {
             console.log("LOOSE")
@@ -275,17 +275,17 @@ class Player {
         return false
     }
     get info() {
-        return 'gold: ' + this.gold + '\n' + 
+        return 'gold: ' + this.gold + '\n' +
                 'income: ' + this.income + '\n' +
                 'suburbs: ' + this.suburbsCount + '\n' +
-                'army cost: ' + this.armyCost + '\n' + 
+                'army cost: ' + this.armyCost + '\n' +
                 'army salary: ' + this.armySalary
     }
     get historyInfo() {
-        return {'gold': this.gold, 
+        return {'gold': this.gold,
                     'income': this.income,
-                    'suburbs': this.suburbsCount, 
-                    'army cost': this.armyCost, 
+                    'suburbs': this.suburbsCount,
+                    'army cost': this.armyCost,
                     'army salary': this.armySalary}
     }
 
@@ -296,14 +296,14 @@ class Player {
         }
         let result = 0.0
         for (let i = 0; i < this.units.length; ++i) {
-             result += Math.abs(this.units[i].coord.x - Math.floor(grid.arr.length / 2)) / Number(grid.arr.length) + 
+             result += Math.abs(this.units[i].coord.x - Math.floor(grid.arr.length / 2)) / Number(grid.arr.length) +
                 Math.abs(this.units[i].coord.y - Math.floor(grid.arr[0].length / 2)) / Number(grid.arr[0].length)
         }
         return result / this.units.length
     }
     getWinningChanceHeuristic() {
         let otherPlayerTurn = whooseTurn == 1 ? 2 : 1
-        
+
         if (players[otherPlayerTurn].isLost && this.isLost) {
             return 0.0
         }
@@ -316,9 +316,9 @@ class Player {
 
         // todo: fix
         let result = 0.0
-        // result += ((this.calculateCellsCount(whooseTurn) - 
+        // result += ((this.calculateCellsCount(whooseTurn) -
         //     this.calculateCellsCount(otherPlayerTurn)) / grid.arr.length / grid.arr[0].length / 1000.0)
-        
+
         players[otherPlayerTurn].updateUnits()
         this.updateUnits()
         let otherHP = 0.0
@@ -332,13 +332,13 @@ class Player {
         let myHP = 0.0
         for (let i = 0; i < this.units.length; ++i) {
             myHP += this.units[i].hp
-        } 
+        }
         result += (myHP - otherHP) / 6.0
         let ourMetric = this.calculateDistancesToGridCenter()
-        
-        let otherMetric = players[otherPlayerTurn].calculateDistancesToGridCenter() 
+
+        let otherMetric = players[otherPlayerTurn].calculateDistancesToGridCenter()
         result -= (ourMetric - otherMetric) / 36.0
-        
+
         if (result > 1.0) {
             result = 1.0
         }
@@ -346,9 +346,72 @@ class Player {
             result = -1.0
         }
 
-        return result 
+        return result
     }
 }
+class SimpleAiPlayer extends Player {
+    constructor(color) {
+        const unspendableGold = 9999999999
+        super(color, unspendableGold)
+        this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
+    }
+    nextTurn() {
+        super.nextTurn()
+
+        this.play()
+    }
+
+    findUnitAttackCommand(unit) {
+        let commands = unit.getAvailableCommands()
+        for (let i = 0; i < commands.length; ++i) {
+            let command = commands[i]
+            let cell = grid.arr[command.destinationCoord.x][command.destinationCoord.y]
+            // prioritization
+            if (unit.canHitSomethingOnCell(cell)) {
+                return command
+            }
+        }
+        return null
+    }
+
+    unitDoMoves(unit) {
+        while (unit.moves > 0) {
+            // let commands = unit.getAvailableCommands()
+            const moves_before = unit.moves
+
+            let attackCommand = this.findUnitAttackCommand(unit)
+
+            if (attackCommand) {
+                let cell = grid.arr[attackCommand.destinationCoord.x][attackCommand.destinationCoord.y]
+                unit.sendInstructions(cell)
+                assert(moves_before - unit.moves > 0)
+                break
+            }
+            let command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(unit.getAvailableMoveCommands(), unit.coord, grid.arr, unit.playerColor)
+            if (!command) {
+                break
+            }
+            assert(command.whoDoCommandCoord.x == unit.coord.x && command.whoDoCommandCoord.y == unit.coord.y)
+            unit.sendInstructions(grid.arr[command.destinationCoord.x][command.destinationCoord.y])
+            assert(moves_before - unit.moves > 0)
+        }
+    }
+
+    play() {
+        // doesnt work with catapult-like units, but we dont need them
+        for (let cycle = 0; cycle < this.units.length; ++cycle) {
+            if (this.units[cycle].killed) {
+                this.units.splice(cycle--, 1)
+                // should be already updated, we dont kill our units
+                // so there won't be new killed units
+                assert(false)
+                continue
+            }
+            this.unitDoMoves(this.units[cycle])
+        }
+    }
+}
+
 class NeutralPlayer extends Player {
     constructor(color, gold = 0) {
         super(color, gold)
@@ -385,7 +448,7 @@ class NeutralPlayer extends Player {
         else {
             arr[i][j].building.kill()
         }
-        
+
         arr[i][j].unit.kill()
 
         arr[i][j].hexagon.sudoPaint(0)
@@ -398,13 +461,13 @@ class NeutralPlayer extends Player {
 
         // only odd cycle
         if (suddenDeathCycle % 2)
-            return 
+            return
 
         suddenDeathCycle /= 2
 
         let arr = grid.arr
 
-        if (suddenDeathCycle >= arr.length || 
+        if (suddenDeathCycle >= arr.length ||
             suddenDeathCycle >= arr[0].length) {
             return
         }
@@ -449,7 +512,7 @@ function weightedRandomIndex(weights) {
         total += weights[i]
     }
     const threshold = Math.random() * total;
-  
+
     let cumulative = 0.0;
     for (let i = 0; i < weights.length; i++) {
       cumulative += weights[i];
@@ -476,7 +539,7 @@ function weightedRandomIndex(weights) {
 
 // 0 means greedy argmax play; > 0 enables exploration during self-play data generation
 let selfPlayTemperature = 0.0
-  
+
 
 class AIPlayer extends Player {
     constructor(color, gold = 90) {
@@ -488,23 +551,23 @@ class AIPlayer extends Player {
 
     calculateCellsCount(playerColor) {
         let cells_count = 0
-       
+
         for (let i = 0; i < grid.arr.length; ++i) {
             for (let j = 0; j < grid.arr[i].length; ++j) {
-                cells_count += grid.arr[i][j].playerColor == playerColor 
+                cells_count += grid.arr[i][j].playerColor == playerColor
             }
         }
         return cells_count
     }
-    
-    
+
+
     getWinningChance() {
         //
         // return this.getWinningChanceHeuristic()
         return this.getWinningChances([vectoriseGrid()])[0]
     }
     getWinningChances(vectorisedGrids) {
-        let arr = predict(ai_model, vectorisedGrids) 
+        let arr = predict(ai_model, vectorisedGrids)
         let result = []
         for (let i = 0; i < arr.length; ++i) {
             result.push(arr[i][0])
@@ -580,7 +643,7 @@ class AIPlayer extends Player {
             let unit_again = grid.getCell(bestCommand.whoDoCommandCoord).unit;
             assert(unit_again.isMyTurn)
             unit_again.select()
-            
+
             if (areCoordsEqual(bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
                 unit_again.skipMoves()
             }
@@ -602,10 +665,10 @@ class AIPlayer extends Player {
         if (gameSettings.testAI) {
             console.log('ai doing things')
             this.doActions()
-            console.log('did action', whooseTurn) 
+            console.log('did action', whooseTurn)
         }
         // })
         // .catch(err => console.error('Error loading model:', err));
-        
+
     }
 }

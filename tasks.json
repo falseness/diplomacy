@@ -69,7 +69,7 @@
     "id": "TASK-004",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Merge demons into ai_bots after master is integrated. Preserve current AIPlayer work while importing SimpleAiPlayer and any support classes from demons.",
+    "description": "Merge demons into ai_bots after master is integrated. Preserve current AIPlayer work while importing SimpleAiPlayer and any support classes from demons. Implemented: Merged demons into ai_bots, preserved ai/ cloud-training files and AIPlayer load/train hooks, imported SimpleAiPlayer plus BestEnemyTargetForAI and command-list helpers, resolved action/game logic conflicts, and re-ran TASK-003 smoke checks successfully.",
     "acceptance_criteria": [
       "The active branch remains ai_bots for the entire merge.",
       "demons is merged without deleting existing ai/ code or cloud-training work.",
@@ -87,7 +87,7 @@
     "dependencies": [
       "TASK-003"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-005",
