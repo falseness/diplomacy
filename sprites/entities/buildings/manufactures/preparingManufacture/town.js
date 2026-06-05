@@ -2,7 +2,7 @@ let production = {
     noob: {
         production: UnitProduction,
         turns: 1,
-        cost: 10,
+        cost: 20,
         class: Noob
     },
     suburb: {
@@ -14,31 +14,31 @@ let production = {
     farm: {
         production: ManufactureProduction,
         turns: 1,
-        cost: 24,
+        cost: 32,
         class: Farm,
     },
     archer: {
         production: UnitProduction,
         turns: 2,
-        cost: 25,
+        cost: 40,
         class: Archer
     },
     KOHb: {
         production: UnitProduction,
         turns: 2,
-        cost: 25,
+        cost: 40,
         class: KOHb
     },
     normchel: {
         production: UnitProduction,
         turns: 2,
-        cost: 25,
+        cost: 40,
         class: Normchel
     },
     catapult: {
         production: UnitProduction,
         turns: 4,
-        cost: 50,
+        cost: 60,
         class: Catapult
     },
     barrack: {
@@ -50,19 +50,19 @@ let production = {
     wall: {
         production: ExternalProduction,
         turns: 4,
-        cost: 4, 
+        cost: 2,
         class: Wall
     },
     bastion: {
         production: ExternalProduction,
         turns: 4,
-        cost: 16, 
+        cost: 15,
         class: Bastion
     },
     tower: {
         production: ExternalProduction,
         turns: 4,
-        cost: 25, 
+        cost: 30,
         class: Tower
     },
 }
@@ -108,7 +108,7 @@ class Town extends PreparingManufacture {
                     }
 
                 }
-                else if (cell.building.isExternalProduction()){ 
+                else if (cell.building.isExternalProduction()){
                     actionManager.lastAction.townExternalProduction.push(cell.building.toUndoJSON())
                 }
                 else if (cell.building.isExternal) {
@@ -127,7 +127,7 @@ class Town extends PreparingManufacture {
         grid.getHexagon(this.coord).isSuburb = true
 
         // first suburb must be town suburb
-        
+
         this.updateSuburbsAndBuildings()
     }
     get isHitable() {
@@ -138,9 +138,9 @@ class Town extends PreparingManufacture {
         this.wasHitted = true
         if (this.hp < 0)
             this.hp = 0
-        
+
         this.updateHPBar()
-        
+
         return this.killed
     }
     get isStandable() {
@@ -358,7 +358,7 @@ class Town extends PreparingManufacture {
 
         if (this.gold < production[what].cost)
             return false
-        
+
         this.startBuildingPreparing(what)
 
         return true
@@ -398,7 +398,7 @@ class Town extends PreparingManufacture {
     }
     unitPreparingLogic() {
         if (this.isBadlyDamaged)
-            return 
+            return
         super.unitPreparingLogic()
     }
     nextTurn() {

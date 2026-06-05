@@ -1,4 +1,4 @@
-class Map {
+class GameMap {
     constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[]) {
         this.mapSize = mapSize
         this.players = _players
@@ -25,7 +25,7 @@ class Map {
                 let unit = this.players[i].units[j]
                 grid.arr[unit.x][unit.y].hexagon.firstpaint(i)
                 assert(grid.arr[unit.x][unit.y].unit.isEmpty())
-                let noob = new Noob(unit.x, unit.y)       
+                let noob = new Noob(unit.x, unit.y)
                 if (!('hp' in unit)) {
                     continue
                 }
@@ -94,7 +94,7 @@ class Map {
 
         // refactoring is needed
         for (let i = 1; i < players.length; ++i) {
-            localStorage.setItem(gameSlot + 'Player:' + i, 
+            localStorage.setItem(gameSlot + 'Player:' + i,
             JSON.stringify([]))
         }
     }
@@ -141,7 +141,7 @@ function packMap() {
     for (let i = 0; i < nature.length; ++i) {
         let n = nature[i]
         if (n.name == 'mountain') {
-            s_mountain += '{x: ' + n.coord.x + ', y: ' + n.coord.y + '}, '            
+            s_mountain += '{x: ' + n.coord.x + ', y: ' + n.coord.y + '}, '
         }
         else {
             s_lake += '{x: ' + n.coord.x + ', y: ' + n.coord.y + '}, '
@@ -158,9 +158,9 @@ function packMap() {
     console.log(res)
 }
 maps = {
-    "open field": 
+    "open field":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -193,7 +193,7 @@ maps = {
              [],
              [{"x":7,"y":2},{"x":13,"y":2},{"x":7,"y":3},{"x":13,"y":3},{"x":8,"y":4},{"x":12,"y":4},{"x":6,"y":4},{"x":14,"y":4},{"x":6,"y":3},{"x":14,"y":3},{"x":8,"y":9},{"x":12,"y":9},{"x":8,"y":10},{"x":12,"y":10},{"x":8,"y":11},{"x":12,"y":11},{"x":4,"y":14},{"x":16,"y":14},{"x":3,"y":14},{"x":17,"y":14},{"x":5,"y":13},{"x":15,"y":13},{"x":2,"y":15},{"x":18,"y":15},{"x":0,"y":2},{"x":20,"y":2},{"x":1,"y":2},{"x":19,"y":2},{"x":2,"y":2},{"x":18,"y":2},{"x":3,"y":2},{"x":17,"y":2}]
         ),
-        new Map(
+        new GameMap(
             {x: 30, y: 23},
             [
                 {
@@ -217,7 +217,7 @@ maps = {
             [],
             []
         ),
-        new Map(
+        new GameMap(
             {x: 25, y: 25},
             [
                 {
@@ -251,14 +251,14 @@ maps = {
                 {x: 4, y: 10}, {x: 5, y: 11}, {x: 5, y: 12}, {x: 4, y: 14}, {x: 5, y: 10}, {x: 5, y: 13},
                 {x: 20, y: 10}, {x: 19, y: 12}, {x: 19, y: 11}, {x: 20, y: 14}, {x: 19, y: 10}, {x: 19, y: 13}
             ],
-            [{x: 0, y: 0}, {x: 24, y: 0}, {x: 1, y: 11}, {x: 1, y: 12}, 
+            [{x: 0, y: 0}, {x: 24, y: 0}, {x: 1, y: 11}, {x: 1, y: 12},
                 {x: 23, y: 11}, {x: 23, y: 12}, {x: 12, y: 1}, {x: 11, y: 1}, {x: 13, y: 1},
                 {x: 12, y: 23}, {x: 11, y: 23}, {x: 13, y: 23}]
         )
     ],
     "tiny deathmatch":
     [
-        new Map(
+        new GameMap(
             {x: 20, y: 10},
             [
                 {
@@ -280,9 +280,9 @@ maps = {
                             [14, 3], [15, 2], [16, 2], [17, 1], [18, 1]])
         )
     ],
-    "stationary warfare": 
+    "stationary warfare":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -306,7 +306,7 @@ maps = {
              {x: 10, y: 12, income: 10},
              {x: 6, y: 14, income: 10}, {x: 14, y: 14, income: 10},
              {x: 10, y: 15, income: 10}, {x: 3, y: 19, income: 10},
-             {x: 17, y: 19, income: 10}, {x: 5, y: 16, income: 10}, 
+             {x: 17, y: 19, income: 10}, {x: 5, y: 16, income: 10},
              {x: 15, y: 16, income: 10}],
             [{x: 10, y: 5}, {x: 9, y: 16}, {x: 10, y: 16}, {x: 11, y: 16},
              {x: 16, y: 7}, {x: 17, y: 7}, {x: 18, y: 7}, {x: 18, y: 6},
@@ -320,9 +320,9 @@ maps = {
              [{"x":16,"y":7},{"x":7,"y":17},{"x":13,"y":17},{"x":7,"y":18},{"x":13,"y":18},{"x":7,"y":19},{"x":13,"y":19},{"x":7,"y":20},{"x":13,"y":20},{"x":5,"y":0},{"x":15,"y":0},{"x":5,"y":1},{"x":15,"y":1},{"x":5,"y":2},{"x":15,"y":2},{"x":6,"y":3},{"x":14,"y":3},{"x":7,"y":3},{"x":13,"y":3},{"x":7,"y":4},{"x":13,"y":4},{"x":8,"y":5},{"x":12,"y":5},{"x":8,"y":6},{"x":12,"y":6},{"x":8,"y":7},{"x":12,"y":7},{"x":8,"y":8},{"x":12,"y":8},{"x":8,"y":4},{"x":12,"y":4},{"x":6,"y":4},{"x":14,"y":4}]
         )
     ],
-    "two rivers": 
+    "two rivers":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -345,7 +345,7 @@ maps = {
              {x: 16, y: 2, income: 10}
              ],
             [
-             {x: 7, y: 6}, {x: 7, y: 7}, {x: 7, y: 8}, {x: 7, y: 9}, {x: 7, y: 10}, 
+             {x: 7, y: 6}, {x: 7, y: 7}, {x: 7, y: 8}, {x: 7, y: 9}, {x: 7, y: 10},
              {x: 7, y: 11}, {x: 7, y: 12}, {x: 7, y: 13}, {x: 7, y: 14}, {x: 7, y: 15},
              {x: 13, y: 6}, {x: 13, y: 7}, {x: 13, y: 8}, {x: 13, y: 9}, {x: 13, y: 10},
              {x: 13, y: 11}, {x: 13, y: 12}, {x: 13, y: 13}, {x: 13, y: 14}, {x: 13, y: 15},
@@ -360,7 +360,7 @@ maps = {
     ],
     "mountain wall":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -377,7 +377,7 @@ maps = {
                     towns: [{x: 18, y: 8}, {x: 18, y: 14}]
                 }
             ],
-            [ 
+            [
                 {x: 5, y: 20, income: 10},
                 {x: 15, y: 20, income: 10},
                 {x: 10, y: 21, income: 10},
@@ -425,7 +425,7 @@ maps = {
     ],
     "two in one":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -442,7 +442,7 @@ maps = {
                     towns: [{x: 19, y: 1}, {x: 18, y: 18}]
                 }
             ],
-            [ 
+            [
                 {x: 8, y: 2, income: 10},
                 {x: 12, y: 2, income: 10},
                 {x: 10, y: 9, income: 10},
@@ -458,7 +458,7 @@ maps = {
                 {x: 8, y: 0}, {x: 12, y: 0},
                 {x: 8, y: 5}, {x: 12, y: 5},
                 {x: 5, y: 0}, {x: 15, y: 0},
-                
+
                 {x: 6, y: 19}, {x: 7, y: 18}, {x: 8, y: 18}, {x: 9, y: 18},
                 {x: 14, y: 19}, {x: 13, y: 18}, {x: 12, y: 18}, {x: 11, y: 18},
             ],
@@ -475,7 +475,7 @@ maps = {
 
              {x: 1, y: 5}, {x: 2, y: 5}, {x: 3, y: 5},
              {x: 17, y: 5}, {x: 18, y: 5}, {x: 19, y: 5},
-             
+
              {x: 0, y: 0}, {x: 20, y: 0},
 
              {x: 5, y: 14}, {x: 5, y: 15},
@@ -486,7 +486,7 @@ maps = {
     ],
     "tower defense":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -526,14 +526,14 @@ maps = {
              {x: 16, y: 7}, {x: 17, y: 7}, {x: 18, y: 7},
              {x: 16, y: 16}, {x: 17, y: 17},
              {x: 4, y: 16}, {x: 3, y: 17},
-             
+
              {x: 9, y: 17}, {x: 9, y: 18}, {x: 11, y: 17}, {x: 11, y: 18},
              ],
              [{"x":10,"y":3},{"x":3,"y":4},{"x":17,"y":4},{"x":4,"y":4},{"x":16,"y":4},{"x":4,"y":5},{"x":16,"y":5},{"x":5,"y":4},{"x":15,"y":4},{"x":7,"y":19},{"x":13,"y":19},{"x":2,"y":8},{"x":18,"y":8},{"x":1,"y":8},{"x":19,"y":8},{"x":0,"y":9},{"x":20,"y":9},{"x":0,"y":18},{"x":20,"y":18},{"x":1,"y":18},{"x":19,"y":18},{"x":2,"y":18},{"x":18,"y":18},{"x":9,"y":19},{"x":11,"y":19},{"x":10,"y":20},{"x":9,"y":16},{"x":11,"y":16},{"x":10,"y":17},{"x":10,"y":21},{"x":9,"y":21},{"x":11,"y":21},{"x":9,"y":22},{"x":11,"y":22},{"x":8,"y":21},{"x":12,"y":21},{"x":6,"y":21},{"x":14,"y":21},{"x":7,"y":21},{"x":13,"y":21},{"x":5,"y":20},{"x":15,"y":20},{"x":4,"y":21},{"x":16,"y":21},{"x":3,"y":20},{"x":17,"y":20},{"x":2,"y":20},{"x":18,"y":20},{"x":2,"y":19},{"x":18,"y":19},{"x":7,"y":14},{"x":13,"y":14},{"x":8,"y":15},{"x":12,"y":15},{"x":7,"y":15},{"x":13,"y":15},{"x":5,"y":7},{"x":15,"y":7},{"x":5,"y":8},{"x":15,"y":8},{"x":6,"y":9},{"x":14,"y":9},{"x":8,"y":3},{"x":12,"y":3},{"x":8,"y":4},{"x":12,"y":4},{"x":7,"y":4},{"x":13,"y":4},{"x":4,"y":8},{"x":16,"y":8}]
         )
     ],
     "capture rush": [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -572,7 +572,7 @@ maps = {
     ],
     "strategic war":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -603,7 +603,7 @@ maps = {
     ],
     "reinforcement":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -619,7 +619,7 @@ maps = {
                     towns: [{x: 15, y: 11}, {x: 17, y: 4}]
                 }
             ],
-            [ 
+            [
                 {x: 10, y: 9, income: 10},
                 {x: 10, y: 15, income: 10},
                 {x: 10, y: 3, income: 10}, {x: 10, y: 5, income: 10},
@@ -647,14 +647,14 @@ maps = {
                 {x: 11, y: 7},
                 {x: 7, y: 3}, {x: 7, y: 4}, {x: 13, y: 3},
                 {x: 13, y: 4},
-                {x: 10, y: 18}, {x: 10, y: 19}     
+                {x: 10, y: 18}, {x: 10, y: 19}
             ],
             [{"x":7,"y":5},{"x":13,"y":5},{"x":12,"y":11},{"x":8,"y":11},{"x":12,"y":12},{"x":8,"y":12},{"x":12,"y":13},{"x":8,"y":13},{"x":10,"y":17},{"x":1,"y":7},{"x":19,"y":7},{"x":2,"y":8},{"x":18,"y":8},{"x":0,"y":7},{"x":20,"y":7},{"x":3,"y":8},{"x":17,"y":8},{"x":5,"y":0},{"x":15,"y":0},{"x":5,"y":1},{"x":15,"y":1},{"x":6,"y":2},{"x":14,"y":2},{"x":4,"y":1},{"x":16,"y":1},{"x":3,"y":1},{"x":17,"y":1},{"x":2,"y":1},{"x":18,"y":1},{"x":1,"y":0},{"x":19,"y":0},{"x":3,"y":0},{"x":17,"y":0},{"x":2,"y":0},{"x":18,"y":0},{"x":2,"y":19},{"x":18,"y":19},{"x":2,"y":15},{"x":18,"y":15}]
         )
     ],
     "rush or defend":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -673,15 +673,15 @@ maps = {
             [ {x: 9, y: 11, income: 10}, {x: 11, y: 11, income: 10},
               {x: 3, y: 2, income: 10}, {x: 17, y: 2, income: 10},
               {x: 8, y: 2, income: 10}, {x: 12, y: 2, income: 10}
-             
+
              ],
             [{x: 9, y: 13}, {x: 10, y: 13}, {x: 11, y: 13},
              {x: 9, y: 9}, {x: 10, y: 9}, {x: 11, y: 9},
-             
+
              {x: 7, y: 18}, {x: 7, y: 19}, {x: 8, y: 20},
              {x: 13, y: 18}, {x: 13, y: 19}, {x: 12, y: 20},
 
-             {x: 4, y: 3}, {x: 3, y: 3}, 
+             {x: 4, y: 3}, {x: 3, y: 3},
              {x: 17, y: 3}, {x: 16, y: 3},
 
              {x: 9, y: 1}, {x: 9, y: 2}, {x: 8, y: 3},
@@ -692,11 +692,11 @@ maps = {
             [{x: 7, y: 5}, {x: 13, y: 5},
              {x: 2, y: 7}, {x: 3, y: 7}, {x: 4, y: 7},
              {x: 16, y: 7}, {x: 17, y: 7}, {x: 18, y: 7},
-             
+
 
              {x: 13, y: 10}, {x: 13, y: 11}, {x: 13, y: 12},
              {x: 7, y: 10}, {x: 7, y: 11}, {x: 7, y: 12},
-             
+
              {x: 5, y: 14}, {x: 4, y: 15}, {x: 4, y: 16},
              {x: 5, y: 16},
 
@@ -704,11 +704,11 @@ maps = {
              {x: 15, y: 16},
             ],
             [{"x":8,"y":15},{"x":12,"y":15},{"x":7,"y":15},{"x":13,"y":15},{"x":9,"y":15},{"x":11,"y":15},{"x":10,"y":15},{"x":18,"y":8},{"x":2,"y":8},{"x":19,"y":8},{"x":1,"y":8},{"x":20,"y":9},{"x":0,"y":9},{"x":5,"y":4},{"x":15,"y":4},{"x":4,"y":5},{"x":16,"y":5},{"x":1,"y":7},{"x":19,"y":7},{"x":1,"y":6},{"x":19,"y":6},{"x":1,"y":5},{"x":19,"y":5},{"x":0,"y":5},{"x":20,"y":5},{"x":0,"y":6},{"x":20,"y":6},{"x":0,"y":7},{"x":20,"y":7},{"x":0,"y":8},{"x":20,"y":8},{"x":0,"y":1},{"x":20,"y":1},{"x":1,"y":0},{"x":19,"y":0},{"x":0,"y":0},{"x":20,"y":0},{"x":0,"y":16},{"x":20,"y":16},{"x":1,"y":15},{"x":19,"y":15},{"x":2,"y":16},{"x":18,"y":16},{"x":3,"y":15},{"x":17,"y":15}]
-        )  
+        )
     ],
     "sneak attack":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 23},
             [
                 {
@@ -741,9 +741,9 @@ maps = {
              [{"x":18,"y":5},{"x":2,"y":5},{"x":6,"y":16},{"x":14,"y":16},{"x":0,"y":15},{"x":20,"y":15},{"x":1,"y":15},{"x":19,"y":15},{"x":2,"y":16},{"x":18,"y":16},{"x":2,"y":17},{"x":18,"y":17},{"x":1,"y":16},{"x":19,"y":16},{"x":0,"y":16},{"x":20,"y":16},{"x":2,"y":18},{"x":18,"y":18},{"x":4,"y":21},{"x":16,"y":21},{"x":4,"y":22},{"x":16,"y":22},{"x":0,"y":5},{"x":20,"y":5},{"x":1,"y":5},{"x":19,"y":5},{"x":0,"y":6},{"x":20,"y":6},{"x":1,"y":4},{"x":19,"y":4},{"x":2,"y":1},{"x":18,"y":1},{"x":3,"y":1},{"x":17,"y":1},{"x":4,"y":1},{"x":16,"y":1},{"x":5,"y":1},{"x":15,"y":1},{"x":6,"y":2},{"x":14,"y":2},{"x":7,"y":1},{"x":13,"y":1},{"x":8,"y":1},{"x":12,"y":1},{"x":9,"y":1},{"x":11,"y":1},{"x":10,"y":2},{"x":10,"y":9},{"x":10,"y":8},{"x":10,"y":7},{"x":9,"y":7},{"x":11,"y":7},{"x":9,"y":8},{"x":11,"y":8},{"x":10,"y":14},{"x":9,"y":13},{"x":11,"y":13},{"x":8,"y":13},{"x":12,"y":13},{"x":8,"y":9},{"x":12,"y":9},{"x":7,"y":17},{"x":13,"y":17},{"x":7,"y":18},{"x":13,"y":18},{"x":6,"y":19},{"x":14,"y":19},{"x":2,"y":15},{"x":18,"y":15},{"x":3,"y":14},{"x":17,"y":14},{"x":4,"y":14},{"x":16,"y":14},{"x":1,"y":2},{"x":19,"y":2},{"x":2,"y":2},{"x":18,"y":2},{"x":1,"y":3},{"x":19,"y":3},{"x":1,"y":0},{"x":19,"y":0},{"x":0,"y":0},{"x":20,"y":0},{"x":0,"y":1},{"x":20,"y":1},{"x":1,"y":1},{"x":19,"y":1}]
         )
     ],
-    "flank attack": 
+    "flank attack":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -778,9 +778,9 @@ maps = {
              [{"x":8,"y":8},{"x":12,"y":8},{"x":7,"y":8},{"x":13,"y":8},{"x":7,"y":9},{"x":13,"y":9},{"x":8,"y":10},{"x":12,"y":10},{"x":8,"y":11},{"x":12,"y":11},{"x":7,"y":11},{"x":13,"y":11},{"x":7,"y":12},{"x":13,"y":12},{"x":0,"y":15},{"x":20,"y":15},{"x":1,"y":14},{"x":19,"y":14},{"x":2,"y":15},{"x":18,"y":15},{"x":3,"y":14},{"x":17,"y":14},{"x":4,"y":14},{"x":16,"y":14},{"x":6,"y":17},{"x":14,"y":17},{"x":5,"y":17},{"x":15,"y":17},{"x":4,"y":18},{"x":16,"y":18},{"x":3,"y":18},{"x":17,"y":18},{"x":4,"y":4},{"x":16,"y":4},{"x":4,"y":5},{"x":16,"y":5},{"x":5,"y":4},{"x":15,"y":4},{"x":3,"y":3},{"x":17,"y":3},{"x":3,"y":4},{"x":17,"y":4},{"x":3,"y":5},{"x":17,"y":5},{"x":3,"y":6},{"x":17,"y":6},{"x":2,"y":6},{"x":18,"y":6},{"x":2,"y":7},{"x":18,"y":7},{"x":1,"y":6},{"x":19,"y":6},{"x":1,"y":5},{"x":19,"y":5},{"x":9,"y":2},{"x":11,"y":2},{"x":7,"y":1},{"x":13,"y":1},{"x":8,"y":2},{"x":12,"y":2},{"x":9,"y":3},{"x":11,"y":3}]
         )
     ],
-    "attack and protect": 
+    "attack and protect":
     [
-        new Map(
+        new GameMap(
             {x: 21, y: 21},
             [
                 {
@@ -803,7 +803,7 @@ maps = {
              {x: 10, y: 19, income: 10},
              {x: 3, y: 18, income: 10}, {x: 17, y: 18, income: 10}
              ],
-            [{x: 2, y: 12}, {x: 3, y: 11}, {x: 4, y: 11}, {x: 5, y: 10}, 
+            [{x: 2, y: 12}, {x: 3, y: 11}, {x: 4, y: 11}, {x: 5, y: 10},
              {x: 6, y: 11}, {x: 7, y: 10}, {x: 8, y: 11}, {x: 9, y: 11},
              {x: 2, y: 13}, {x: 2, y: 14}, {x: 3, y: 14}, {x: 4, y: 15},
              {x: 5, y: 15}, {x: 6, y: 15}, {x: 7, y: 15}, {x: 8, y: 15},
@@ -820,9 +820,9 @@ maps = {
              [{"x":6,"y":0},{"x":14,"y":0},{"x":6,"y":1},{"x":14,"y":1},{"x":7,"y":1},{"x":13,"y":1},{"x":9,"y":2},{"x":11,"y":2},{"x":8,"y":2},{"x":12,"y":2},{"x":10,"y":3},{"x":6,"y":6},{"x":14,"y":6},{"x":7,"y":6},{"x":13,"y":6},{"x":7,"y":7},{"x":13,"y":7},{"x":7,"y":8},{"x":13,"y":8},{"x":6,"y":9},{"x":14,"y":9},{"x":8,"y":17},{"x":12,"y":17},{"x":9,"y":16},{"x":11,"y":16},{"x":10,"y":16},{"x":4,"y":0},{"x":16,"y":0},{"x":5,"y":0},{"x":15,"y":0},{"x":4,"y":1},{"x":16,"y":1},{"x":5,"y":1},{"x":15,"y":1},{"x":2,"y":5},{"x":18,"y":5},{"x":3,"y":5},{"x":17,"y":5},{"x":1,"y":4},{"x":19,"y":4},{"x":0,"y":5},{"x":20,"y":5}]
         )
     ],
-    "fight forever": 
+    "fight forever":
     [
-        new Map(
+        new GameMap(
             {x: 40, y: 30},
             [
                 {
@@ -852,7 +852,7 @@ maps = {
                 {x: 7, y: 13, income: 25}, {x: 28, y: 11, income: 25},
                 {x: 2, y: 16, income: 25}, {x: 1, y: 13, income: 25},
                 {x: 37, y: 13, income: 25}, {x: 38, y: 16, income: 25}
-                
+
             ],
             [
                 {x: 15, y: 11}, {x: 16, y: 11}, {x: 17, y: 11}, {x: 18, y: 11},
@@ -871,16 +871,16 @@ maps = {
             {x: 34, y: 9}, {x: 33, y: 9}, {x: 32, y: 9}, {x: 31, y: 8},
             {x: 30, y: 21}, {x: 31, y: 20}, {x: 32, y: 20}, {x: 33, y: 19},
             {x: 9, y: 8}, {x: 8, y: 9}, {x: 7, y: 9}, {x: 6, y: 10},
-            {x: 27, y: 25}, {x: 28, y: 26}, {x: 28, y: 27}, 
+            {x: 27, y: 25}, {x: 28, y: 26}, {x: 28, y: 27},
             {x: 12, y: 4}, {x: 11, y: 3}, {x: 11, y: 2}]
         ),
-        new Map(
+        new GameMap(
             {x: 39, y: 39},
             [
                 {
                     rgb: {r: 208, g: 208, b: 208},
-                    towns: [{x: 14, y: 17}, {x: 24, y: 17}, {x: 19, y: 24}, 
-                        {x: 10, y: 6}, {x: 28, y: 6}, {x: 1, y: 19}, 
+                    towns: [{x: 14, y: 17}, {x: 24, y: 17}, {x: 19, y: 24},
+                        {x: 10, y: 6}, {x: 28, y: 6}, {x: 1, y: 19},
                         {x: 37, y: 19}, {x: 8, y: 34}, {x: 30, y: 34}]
                 },
                 {
@@ -896,18 +896,18 @@ maps = {
                     towns: [{x: 19, y: 36}]
                 }
             ],
-            [{x: 19, y: 19, income: 60}, {x: 8, y: 25, income: 30}, 
+            [{x: 19, y: 19, income: 60}, {x: 8, y: 25, income: 30},
                 {x: 30, y: 25, income: 30}, {x: 19, y: 8, income: 30}],
-            [{x: 12, y: 28}, {x: 13, y: 28}, {x: 14, y: 29}, 
-                {x: 15, y: 29}, {x: 26, y: 28}, {x: 25, y: 28}, 
-                {x: 24, y: 29}, {x: 23, y: 29}, {x: 7, y: 20}, {x: 7, y: 19}, 
+            [{x: 12, y: 28}, {x: 13, y: 28}, {x: 14, y: 29},
+                {x: 15, y: 29}, {x: 26, y: 28}, {x: 25, y: 28},
+                {x: 24, y: 29}, {x: 23, y: 29}, {x: 7, y: 20}, {x: 7, y: 19},
                 {x: 7, y: 18}, {x: 7, y: 17}, {x: 31, y: 20}, {x: 31, y: 19},
-                 {x: 31, y: 18}, {x: 31, y: 17}, {x: 14, y: 10}, {x: 13, y: 10}, 
-                 {x: 12, y: 11}, {x: 11, y: 11}, {x: 24, y: 10}, {x: 25, y: 10}, 
+                 {x: 31, y: 18}, {x: 31, y: 17}, {x: 14, y: 10}, {x: 13, y: 10},
+                 {x: 12, y: 11}, {x: 11, y: 11}, {x: 24, y: 10}, {x: 25, y: 10},
                  {x: 26, y: 11}, {x: 27, y: 11}],
-            [{x: 8, y: 23}, {x: 9, y: 23}, {x: 10, y: 24}, {x: 10, y: 25}, 
-                {x: 10, y: 26}, {x: 30, y: 23}, {x: 29, y: 23}, {x: 28, y: 24}, 
-                {x: 28, y: 25}, {x: 28, y: 26}, {x: 17, y: 9}, {x: 18, y: 10}, 
+            [{x: 8, y: 23}, {x: 9, y: 23}, {x: 10, y: 24}, {x: 10, y: 25},
+                {x: 10, y: 26}, {x: 30, y: 23}, {x: 29, y: 23}, {x: 28, y: 24},
+                {x: 28, y: 25}, {x: 28, y: 26}, {x: 17, y: 9}, {x: 18, y: 10},
                 {x: 19, y: 10}, {x: 20, y: 10}, {x: 21, y: 9}]
         )
     ]
@@ -955,6 +955,19 @@ class GameManager {
 
         this.clearBasisValues()
     }
+    static updateCameraBorders() {
+        let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
+        mapBorder = {
+	        left: 0,
+	        right: grid.right,
+	        top: 0,
+	        bottom: grid.bottom,
+	        scale: {
+	            min: 1 / grid_min_size * 5, //0.275,
+	            max: 1
+	        }
+	    }
+    }
     static clearBasisValues() {
         gameExit = false
         menu.visible = false
@@ -970,23 +983,13 @@ class GameManager {
         height = HEIGHT
         mainCtx.setTransform(1, 0, 0, 1, 0, 0)
         gameEvent.screen.stop()
-        
-        let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
-        mapBorder = {
-	        left: 0,
-	        right: grid.right,
-	        top: 0,
-	        bottom: grid.bottom,
-	        scale: {
-	            min: 1 / grid_min_size * 5, //0.275,
-	            max: 1
-	        }
-	    }
+        this.updateCameraBorders()
+
 	    createEvents()
     }
 	static load() {
         this.clearBasisValues()
-        
+
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
 
@@ -995,7 +998,7 @@ class GameManager {
 	static initValues() {
         whooseTurn = 0
         gameRound = 0
-        
+
         //actionManager.clear()
     }
     static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
@@ -1004,9 +1007,13 @@ class GameManager {
         unsafeVariablePassword = password
         map.start(this, isClassicTimer)
         this.initValues()
-        startTurn()
+
         if (isOnline) {
+            console.log('isOnline')
             SetupServerCommunicationLogic(password)
+        }
+        else {
+            startTurn()
         }
 
         requestAnimationFrame(gameLoop)
@@ -1021,7 +1028,7 @@ class GameManager {
             this.startAI().then(() => {
                 console.log('played')
             })
-        
+
         }
         else {
 
@@ -1032,7 +1039,7 @@ class GameManager {
         // this.startPredict()
 
     }
-    
+
     static async startAI() {
         ai_model = await loadModel()
         // loadModel()
@@ -1057,7 +1064,7 @@ class GameManager {
             let map = generateTinyOnlyBlue();
             map.start(this, false)
             // this.initValues()
-                        
+
             whooseTurn = 0
             whooseTurn = (whooseTurn + 1) % players.length
 
@@ -1077,7 +1084,7 @@ class GameManager {
         console.log('generated game', players[1].units.length + players[2].units.length, grid.arr.length, grid.arr[0].length)
 
         whooseTurn = 0
-        
+
         let hardLimit = 100
 
 
@@ -1085,7 +1092,7 @@ class GameManager {
 
         players[2].commandsDebug = []
 
-        
+
 
         for (let i = 0; i < hardLimit; ++i) {
             if (i && i % 10 == 0) {
@@ -1116,7 +1123,7 @@ class GameManager {
                 console.log('game ended', i, outcome[1], outcome[2], 'buffer', GameManager.replayBuffer.length)
                 return
             }
-            
+
             whooseTurn = (whooseTurn + 1) % players.length
             if (!whooseTurn) {
                 players[whooseTurn].nextTurn()
@@ -1136,7 +1143,7 @@ class GameManager {
         console.log('reached hard limit')
     }
     static async playAndTrain() {
-        
+
         ai_model = await loadModel()
         isFogOfWar = false
         // ai_model = createAlphaZeroModel(null, null)
@@ -1154,7 +1161,7 @@ class GameManager {
         const sampleSize = 1024
         const epochsPerStep = 4
         for (let i = 0; i < 1000; ++i) {
-            
+
             console.log('generateAndPlay', i)
             await this.generateAndPlay()
             for (let p = 0; p < players.length; ++p) {
@@ -1173,7 +1180,7 @@ class GameManager {
             console.log('pre clean', tf.memory())
             ai_model.dispose()
             tf.engine().reset()
-            
+
             ai_model = await loadModel()
             ai_model.compile({
                 optimizer: tf.train.adam(learningRate),
@@ -1188,10 +1195,10 @@ class GameManager {
         console.log('saved', saved)
     }
     static async startTrain0() {
-        
+
         // console.log('continue')
         isFogOfWar = false
-        
+
         gameSettings.withAI = true
 
         let xTrain = []
@@ -1206,10 +1213,10 @@ class GameManager {
             let map = generateTinyOnlyBlue()
             map.start(this, false)
             this.initValues()
-                        
+
             whooseTurn = 0
             whooseTurn = (whooseTurn + 1) % players.length
-            // externalNextTurn() 
+            // externalNextTurn()
             // players[whooseTurn].nextTurn()
 
             xTrain.push(vectoriseGrid())
@@ -1221,15 +1228,15 @@ class GameManager {
 
             yTrain.push(0.0)
         }
-        
+
         for (let cycle = 0; cycle < 500; ++cycle) {
             let map = generateTinyMapOnlyRed()
             map.start(this, false)
             this.initValues()
-                        
+
             whooseTurn = 0
             whooseTurn = (whooseTurn + 1) % players.length
-            // externalNextTurn() 
+            // externalNextTurn()
             // players[whooseTurn].nextTurn()
 
             xTrain.push(vectoriseGrid())
@@ -1243,10 +1250,10 @@ class GameManager {
             console.log('generated')
             map.start(this, false)
             this.initValues()
-                        
+
             whooseTurn = 0
             whooseTurn = (whooseTurn + 1) % players.length
-            // externalNextTurn() 
+            // externalNextTurn()
             // players[whooseTurn].nextTurn()
 
             xTrain.push(vectoriseGrid())
@@ -1256,7 +1263,7 @@ class GameManager {
         console.log('start train')
         // old
         let trainResult = await trainModel(ai_model, xTrain, yTrain)
-        
+
         // let res = predict(ai_model, vectoriseGrid(grid).expandDims(0))
         // console.log(res)
         ai_model.save('localstorage://diplomacy_weights').then(() => {
@@ -1265,7 +1272,7 @@ class GameManager {
             console.error('Error saving model:', err);
           });
     }
-    
+
 
 	/*static start1() {
         maps.small[0].start(this)

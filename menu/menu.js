@@ -1,6 +1,6 @@
 function menuClick(event) {
     let pos = getEventPos(event)
-    menu.click(pos)    
+    menu.click(pos)
 }
 
 function menuBack() {
@@ -8,15 +8,15 @@ function menuBack() {
 }
 function menuTouchStart(event) {
     let pos = getEventPos(event)
-    menu.touchStart(pos) 
+    menu.touchStart(pos)
 }
 function menuTouchMove(event) {
     let pos = getEventPos(event)
-    menu.touchMove(pos) 
+    menu.touchMove(pos)
 }
 function menuTouchEnd(event) {
     let pos = getEventPos(event)
-    menu.touchEnd(pos) 
+    menu.touchEnd(pos)
 }
 function start(_slot) {
     gameSlot = _slot
@@ -64,7 +64,7 @@ class Tree {
     }
 }
 menuOptions = {
-    fontSize: 0.04 * WIDTH, 
+    fontSize: 0.04 * WIDTH,
     rectSize: 0.05 * WIDTH,
     checkBox: {
         strokeWidth: 0.003 * WIDTH,
@@ -84,19 +84,19 @@ class OtherSettingsTree {
 
         this.hpBarCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, menuOptions.fontSize, 'always display hp bar', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.65, firstY, menuOptions.rectSize, menuOptions.rectSize, 
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-        
-        this.movesBarCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, menuOptions.fontSize, 'always display moves bar', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.7, firstY + intervalY, menuOptions.rectSize, menuOptions.rectSize, 
+            WIDTH * 0.65, firstY, menuOptions.rectSize, menuOptions.rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
-        this.undoCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize, 
-            'move camera to undo target', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.7, firstY + 2 * intervalY, menuOptions.rectSize, menuOptions.rectSize, 
+        this.movesBarCheckBox = new ImageCheckBox('checkMark',
+            new Text(NaN, NaN, menuOptions.fontSize, 'always display moves bar', 'black'), menuOptions.marginLeft,
+            WIDTH * 0.7, firstY + intervalY, menuOptions.rectSize, menuOptions.rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-        
+
+        this.undoCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize,
+            'move camera to undo target', 'black'), menuOptions.marginLeft,
+            WIDTH * 0.7, firstY + 2 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+
         this.buttons = []
         this.buttons.push(this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox)
     }
@@ -112,7 +112,7 @@ class OtherSettingsTree {
             ok |= this.buttons[i].click(pos)
         }
         this.__updateOtherSettings()
-        
+
         ok |= this.buttons[this.buttons.length - 1].click(pos)
         return ok
     }
@@ -143,7 +143,7 @@ function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
     let sliderMarginX = WIDTH * 0.18
     return new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
         0, sliderMarginX,
-    new Text(slidePosX, firstY + intervalY, fontSize), 
+    new Text(slidePosX, firstY + intervalY, fontSize),
             {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
 }
@@ -164,35 +164,35 @@ class GameSettingsTree {
         const posX = WIDTH * 0.5
 
         const fontSize = 0.04 * WIDTH
-        this.playersText = new Text(posX - Menu.getButton().width / 2, 
+        this.playersText = new Text(posX - Menu.getButton().width / 2,
             firstY, fontSize, 'players', 'black', 'left')
 
         const slidePosX = posX + WIDTH * 0.1
 
         this.mapSlider = CreateMapSlider(firstY, intervalY, fontSize, slidePosX)
-        
+
         let minimumValuePlayers = function() { return 0 }
         let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
         let getKeyPlayers = function(value) { return value + 2 }
-        this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers, 
+        this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers,
             getKeyPlayers, this.mapSlider,
             0, WIDTH * 0.04,
-        new Text(slidePosX, firstY, fontSize), 
+        new Text(slidePosX, firstY, fontSize),
                 {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
 
-        this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2, 
+        this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2,
             firstY + intervalY, fontSize, 'map', 'black', 'left')
-            
-        
+
+
         this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, fontSize, 'fog of war', 'black'), marginLeft,
-            WIDTH * 0.58, firstY + intervalY * 2, rectSize, rectSize, 
+            WIDTH * 0.58, firstY + intervalY * 2, rectSize, rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
         this.timerCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
-            WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize, 
+            WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize,
             [cornerR, cornerR, cornerR, cornerR],menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
         this.backButton = new Empty()
@@ -201,20 +201,20 @@ class GameSettingsTree {
         intervalY -= HEIGHT * 0.01
 
         this.playButton = Menu.getButton(
-            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start', 
+            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start',
                 _menu.setTree, _menu.startGame, true, _menu)
-            
+
         this.updateButtonsList()
     }
     updateButtonsList() {
-        this.buttons = [this.backButton, this.playButton, 
+        this.buttons = [this.backButton, this.playButton,
             this.fogOfWarCheckBox, this.timerCheckBox, this.playersSlider, this.mapSlider]
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         let y = HEIGHT * 0.3 + 4 * HEIGHT * 0.12
         this.backButton = Menu.getButton({x: pos0X, y: y + HEIGHT * 0.08},
             'back', _menu.setTree, parent, true, _menu)
-        
+
         this.updateButtonsList()
     }
     /*select(pos) {
@@ -276,56 +276,69 @@ class OnlineSettingsTree {
         const posX = WIDTH * 0.5
 
         const fontSize = 0.04 * WIDTH
-        this.playersText = new Text(posX - Menu.getButton().width / 2, 
+        this.playersText = new Text(posX - Menu.getButton().width / 2,
             firstY, fontSize, 'players', 'black', 'left')
 
         const slidePosX = posX + WIDTH * 0.1
 
-        this.mapSlider = CreateMapSlider(firstY - intervalY, intervalY, fontSize, slidePosX)
+        this.mapSlider = CreateMapSlider(firstY, intervalY, fontSize, slidePosX)
+
+        let minimumValuePlayers = function() { return 0 }
+        let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
+        let getKeyPlayers = function(value) { return value + 2 }
+        this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers,
+            getKeyPlayers, this.mapSlider,
+            0, WIDTH * 0.04,
+        new Text(slidePosX, firstY, fontSize),
+                {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+
+
+        this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2,
+            firstY + intervalY, fontSize, 'map', 'black', 'left')
 
         // let minimumValueMap = function() { return 0 }
         // let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
         // let getKeyMap = function(value) { return getKeyByIndexDictionary(maps, value) }
         // this.mapSlider = new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
         //     0, WIDTH * 0.075,
-        // new Text(slidePosX, firstY + intervalY, fontSize), 
+        // new Text(slidePosX, firstY + intervalY, fontSize),
         //         {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
-        
+
         // let minimumValuePlayers = function() { return 0 }
         // let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
         // let getKeyPlayers = function(value) { return value + 2 }
-        // this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers, 
+        // this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers,
         //     getKeyPlayers, this.mapSlider,
         //     0, WIDTH * 0.04,
-        // new Text(slidePosX, firstY, fontSize), 
+        // new Text(slidePosX, firstY, fontSize),
         //         {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
 
-        // this.mapText = new Text(posX - Menu.getButton().width / 2, 
+        // this.mapText = new Text(posX - Menu.getButton().width / 2,
         //     firstY + intervalY, fontSize, 'map', 'black', 'left')
-            
-        
+
+
         this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, fontSize, 'fog of war', 'black'), marginLeft,
-            WIDTH * 0.28, firstY, rectSize, rectSize, 
+            WIDTH * 0.28, firstY, rectSize, rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
 
-        this.passwordText = new Text(posX - Menu.getButton().width / 2, 
-            firstY + intervalY, fontSize, 'enter password:', 'black', 'left')
 
         this.passwordButtons = []
 
         this.currentPassword = ''
 
         this.initializePasswordsButtons(firstY, intervalY)
-      
+
+        this.passwordText = new Text(marginLeft,
+            firstY + intervalY * 2, fontSize, 'enter password:', 'black', 'left')
 
 
 
         // this.timerCheckBox = new ImageCheckBox('checkMark',
         //     new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
-        //     WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize, 
+        //     WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize,
         //     [cornerR, cornerR, cornerR, cornerR],menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
         this.backButton = new Empty()
@@ -333,15 +346,15 @@ class OnlineSettingsTree {
         intervalY -= HEIGHT * 0.01
 
         this.playButton = Menu.getButton(
-            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start', 
+            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start',
             _menu.setTree, _menu.startGame, true, _menu)
-            
+
         this.updateButtonsList()
     }
     initializePasswordsButtons(firstY, intervalY) {
-        let updatePassword = function(value) { 
-            this.currentPassword += value; 
-            this.passwordText.text = this.currentPassword 
+        let updatePassword = function(value) {
+            this.currentPassword += value;
+            this.passwordText.text = this.currentPassword
             // temporary unsafe thing:
             unsafeVariablePassword = this.currentPassword
         }
@@ -355,28 +368,27 @@ class OnlineSettingsTree {
             let max_digits_in_row = 5
             let digits_row_width = size * max_digits_in_row + step * (max_digits_in_row - 1)
             let xOffset = step * (i >= max_digits_in_row ? i - max_digits_in_row : i);
-            let rect = Menu.getButtonRect({x: WIDTH / 2 + xOffset - digits_row_width / 2 + WIDTH * 0.25 / 2, 
+            let rect = Menu.getButtonRect({x: WIDTH / 2 + xOffset - digits_row_width / 2 + WIDTH * 0.25 / 2,
                 y: firstY + intervalY * 2 - size / 2 + (i >= 5 ? intervalY : 0)})
             rect.width = rect.height = size
 
             let res = new MenuButton(
                 rect,
-                Menu.getButtonText(`${i}`), 
+                Menu.getButtonText(`${i}`),
                 updatePassword, i, true, this)
             this.passwordButtons.push(res)
         }
     }
     updateButtonsList() {
-        this.buttons = [this.backButton, this.playButton, 
-            this.mapSlider,
-            this.fogOfWarCheckBox/*, this.timerCheckBox, this.playersSlider, this.mapSlider*/]
+        this.buttons = [this.backButton, this.playButton,
+            this.fogOfWarCheckBox/*, this.timerCheckBox*/, this.playersSlider, this.mapSlider]
         this.buttons = this.buttons.concat(this.passwordButtons)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         let y = HEIGHT * 0.3 + 4 * HEIGHT * 0.12
         this.backButton = Menu.getButton({x: pos0X, y: y + HEIGHT * 0.08},
             'back', _menu.setTree, parent, true, _menu)
-        
+
         this.updateButtonsList()
     }
     /*select(pos) {
@@ -388,8 +400,7 @@ class OnlineSettingsTree {
         this.backButton.removeSelect()
     }*/
     get selectedMap() {
-        // todo: update
-        let map = maps[this.mapSlider.realValue][0]
+        let map = maps[this.mapSlider.realValue][this.playersSlider.value]
         return map
     }
     get isFogOfWar() {
@@ -405,16 +416,15 @@ class OnlineSettingsTree {
         for (let i = 0; i < this.buttons.length; ++i) {
             ok |= this.buttons[i].click(pos)
         }
-        // if (this.buttons[this.buttons.length - 1].click(pos)) {
-        //     // map slider click
-        //     this.playersSlider.update()
-        //     ok = true
-        // }
+        if (this.buttons[this.buttons.length - 1].click(pos)) {
+            // map slider click
+            this.playersSlider.update()
+            ok = true
+        }
         return ok
     }
     draw(ctx) {
-        //this.playersText.draw(ctx)
-        this.passwordText.draw(ctx)
+        this.playersText.draw(ctx)
         this.passwordText.draw(ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)
@@ -429,8 +439,8 @@ class OnlineSettingsTree {
 class Menu {
     #visible
     static getButtonRect(pos) {
-        return new Rect(pos.x, pos.y, WIDTH * 0.25, HEIGHT * 0.1, 
-            [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 
+        return new Rect(pos.x, pos.y, WIDTH * 0.25, HEIGHT * 0.1,
+            [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH],
             0.0035 * WIDTH, 'white')//0.007
     }
     static getButtonText(text) {
@@ -439,7 +449,7 @@ class Menu {
     static getButton(pos = {x: NaN, y: NaN}, text, clickFunc, parameters, canClick = true, callThis) {
         let res = new MenuButton(
             this.getButtonRect(pos),
-            this.getButtonText(text), 
+            this.getButtonText(text),
             clickFunc, parameters, canClick, callThis)
         return res
     }
@@ -465,8 +475,8 @@ class Menu {
         */
         this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, undefined, '#d0d0d0')
         this.logo = new JustImage('logo', { x: WIDTH / 2, y: HEIGHT * 0.15 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
-        this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33 - HEIGHT * 0.05, 
-            0.02 * WIDTH, 'beta', '#747474') 
+        this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33 - HEIGHT * 0.05,
+            0.02 * WIDTH, 'beta', '#747474')
 
         let startPos = {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: HEIGHT * 0.3}
 
@@ -475,7 +485,7 @@ class Menu {
         ], this)
 
         this.play = new GameSettingsTree(this)
-        
+
         this.online = new OnlineSettingsTree(this)
 
         this.settings = new OtherSettingsTree(this)
@@ -485,15 +495,15 @@ class Menu {
         ], this)
 
         this.main = new Tree([
-            this.constructor.getButton(startPos, 'hot seat', 
+            this.constructor.getButton(startPos, 'hot seat',
                 this.setTree, this.play, true, this),
-            this.constructor.getButton(startPos, 'play online', 
+            this.constructor.getButton(startPos, 'play online',
                 this.setTree, this.online, true, this),
-            this.constructor.getButton(startPos, 'play AI', 
+            this.constructor.getButton(startPos, 'play AI',
                 startAI, 0),
-            this.constructor.getButton(startPos, 'settings', 
+            this.constructor.getButton(startPos, 'settings',
                 this.setTree, this.settings, true, this),
-            this.constructor.getButton(startPos, 'load game', 
+            this.constructor.getButton(startPos, 'load game',
                 this.setTree, this.load, true, this),
         ], this)
 
@@ -554,8 +564,8 @@ class Menu {
 
         nextTurnPauseInterface.backToMenu()
         saveManager.save() //some bugs or not
-        
-        // very important save first then pause timer 
+
+        // very important save first then pause timer
         // so that the timer saves the current remaining time
         timer.pauseAndSaveTime()
 

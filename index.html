@@ -12,14 +12,14 @@
             overflow: hidden;
             background-color: #808080;
         }
-        
+
         #canvas {
             position: absolute;
             left: 0;
             top: 0;
             z-index: 0;
         }
-        
+
         #interface {
             position: absolute;
             left: 0;
@@ -42,17 +42,18 @@
         <!-- <script type="module">
         import * as tf from "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.esm.js";
 
-      
+
         // Now you can use TensorFlow.js functions
         console.log(tf.version.tfjs);
         </script> -->
     <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0"></script>
-    
+
     <script src='options/assert.js'></script>
     <script src='options/gameCoords.js'></script>
     <script src='options/dictionaryEnumeration.js'></script>
     <script src='options/dictionaryToList.js'></script>
+    <script src='options/gameObjectVariables.js'></script>
     <script src='options/gamestart.js'></script>
     <script src='options/save.js'></script>
     <script src="https://cdn.socket.io/socket.io-3.0.0.js"></script>
@@ -60,13 +61,13 @@
     <script src='options/actionManager.js'></script>
     <script src='options/classManager.js'></script>
     <script src='options/timer.js'></script>
-    <script src='options/otherSettings.js'></script> 
+    <script src='options/otherSettings.js'></script>
 
     <script src='ai/generateMap.js'></script>
 
 
     <script src='ai/vectorizeContent.js'></script>
-    
+
     <script src='ai/model.js'></script>
 
     <script src='render/loadassets.js'></script>
@@ -109,7 +110,7 @@
 
     <script src='menu/slotManager.js'></script>
     <script src='menu/menu.js'></script>
-    
+
     <script src='sprites/hexagon.js'></script>
     <script src='groups/grid.js'></script>
 
@@ -159,6 +160,9 @@
     <script src='player.js'></script>
 
     <script src='nextTurn.js'></script>
+    <script src='managers.js'></script>
+    <script src='gameObjectSerialization.js'></script>
+
     <script>
         'use strict'
         /*if (document.querySelector("#container").requestFullscreen)
@@ -166,69 +170,38 @@
         else if (document.querySelector("#container").webkitRequestFullScreen)
             document.querySelector("#container").webkitRequestFullScreen()*/
         let mainCanvas = document.getElementById('canvas')
-        
+
         let mainCtx = mainCanvas.getContext('2d')
         let interfaceCanvas = document.getElementById('interface')
-        
-        let interfaceCtx = interfaceCanvas.getContext('2d')
 
-        let actionManager = new ActionManager()
-        let unpacker = new JsonUnpackManager()
-        
-        let debug = false
-        let gameSlot = 0
-        let isFogOfWar = true
+        let interfaceCtx = interfaceCanvas.getContext('2d')
 
         const errorWindowCornerRadius = 0.03 * HEIGHT
 
         let errorWindow = new TemporaryWindow(new Rect(
-            WIDTH / 2, HEIGHT * 0.75, WIDTH * 0.4, WIDTH * 0.55 * 0.1, 
-            [errorWindowCornerRadius, errorWindowCornerRadius, 
-                errorWindowCornerRadius, errorWindowCornerRadius], 
+            WIDTH / 2, HEIGHT * 0.75, WIDTH * 0.4, WIDTH * 0.55 * 0.1,
+            [errorWindowCornerRadius, errorWindowCornerRadius,
+                errorWindowCornerRadius, errorWindowCornerRadius],
                 HEIGHT * 0.005, 'red'
-        ), new Text(NaN, NaN, WIDTH * 0.55 * 0.05, 'something error')) 
+        ), new Text(NaN, NaN, WIDTH * 0.55 * 0.05, 'something error'))
         //errorWindow.visible = true
         let barrackInterface = new BarrackInterface()
         let townInterface = new TownInterface()
         let statisticsInterface = new StatisticsInterface()
         let nextTurnPauseInterface = new NextTurnPauseInterface()
-        
+
         let entityInterface = new EntityInterface()
-        let gameEvent = new Events(barrackInterface, townInterface, entityInterface, 
+        let gameEvent = new Events(barrackInterface, townInterface, entityInterface,
             statisticsInterface, nextTurnPauseInterface)
         let border = new Border()
         let attackBorder = new Border()
-        
+
         let saveManager = new SaveManager()
-        
-        let players = []
-        let external = []
-        let externalProduction = []
-        let nature = []
-        let goldmines = []
-        let grid
-        let mapBorder
-        let gameExit = false
-        let timer = new LongTimer()//new Timer()
 
-        let gameRound
-        let suddenDeathRound = 40
-
-        // should have used this instead of many global variables:
-        let gameSettings = {
-            isOnline: false,
-            withAI: false,
-            testAI: false,
-            interface: {
-                drawChanceOfWinning: false
-            }
-        }
-        let unsafeVariablePassword = 'error'
-    
         let undoButton = new TwoPositionsImageButton(
-            new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
-            new Rect(0 * nextTurnButtonSize, HEIGHT - 1 * nextTurnButtonSize, 
-                     nextTurnButtonSize, nextTurnButtonSize), 
+            new JustImage('undo', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize),
+            new Rect(0 * nextTurnButtonSize, HEIGHT - 1 * nextTurnButtonSize,
+                     nextTurnButtonSize, nextTurnButtonSize),
                 {x: 0 * nextTurnButtonSize, y: entityInterface.top - 1 * nextTurnButtonSize},
             actionManager.undo, undefined, undefined, undefined, actionManager
         )
@@ -239,34 +212,13 @@
             new Rect(backToMenuButtonSize * 0.25, backToMenuButtonSize * 0.25,
                 backToMenuButtonSize, backToMenuButtonSize),
             menuBack
-        )       
+        )
         let iButton = new ImageButton(
-            new JustImage('i', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize), 
-            new Rect(WIDTH - 1 * nextTurnButtonSize, 0 * nextTurnButtonSize,       
+            new JustImage('i', {x: NaN, y: NaN}, nextTurnButtonSize, nextTurnButtonSize),
+            new Rect(WIDTH - 1 * nextTurnButtonSize, 0 * nextTurnButtonSize,
                      nextTurnButtonSize, nextTurnButtonSize),
             statisticsInterface.show, undefined, undefined, undefined, statisticsInterface
         )
-        let whooseTurn
-
-        function getGameObject() {
-            let timers = Array(players.length)
-            for (let i = 0; i < players.length; ++i) {
-                timers[i] = JSON.parse(unpacker.getPlayerTimerByIndex(i))
-            }
-            return {
-                'grid': grid,
-                'players': players,
-                'external': external,
-                'externalProduction': externalProduction,
-                'nature': nature,
-                'goldmines': goldmines,
-                'timers': timers,
-                'whooseTurn': whooseTurn,
-                'gameRound': gameRound,
-                'isFogOfWar': isFogOfWar,
-                'gameSettings': gameSettings
-            }
-        }
 
         function saveGame() {
             try {
@@ -290,7 +242,7 @@
                 localStorage.setItem(gameSlot + 'gameRound', _gameRound)
                 localStorage.setItem(gameSlot + 'isFogOfWar', isFogOfWar)
                 localStorage.setItem(gameSlot + 'gameSettings', JSON.stringify(gameSettings))
-                
+
                 let player_history = localStorage.getItem(gameSlot + 'Player:' + _whooseTurn)
                 if (player_history == null)
                     player_history = []
@@ -317,7 +269,7 @@
                     // refactoring is needed
                     let histories = []
                     for (let i = 1; i < players.length; ++i) {
-                        let history = localStorage.getItem(gameSlot + 
+                        let history = localStorage.getItem(gameSlot +
                             'Player:' + i)
                         histories.push(JSON.parse(history))
                     }
@@ -329,18 +281,18 @@
                     }
                     for (let round = 0; round < min_length; ++round) {
                         console.log('ROUND ' + round)
-                        let comparisons_titles = ['gold', 'income', 'suburbs', 
+                        let comparisons_titles = ['gold', 'income', 'suburbs',
                             'army cost', 'army salary']
                         let comparions = {}
                         for (let i = 0; i < comparisons_titles.length; ++i) {
                             comparions[comparisons_titles[i]] = ''
                         }
-                        for (let title_index = 0; title_index < 
+                        for (let title_index = 0; title_index <
                             comparisons_titles.length; ++title_index) {
                                 let title = comparisons_titles[title_index]
                             for (let i = 0; i < histories.length; ++i) {
                                 comparions[title] += histories[i][round][title] + ' '
-                            }   
+                            }
                             console.log(title + ' ' + comparions[title])
                         }
                     }
@@ -353,17 +305,6 @@
         }
         function hasSave(_slot) {
             return !!localStorage.getItem(_slot + 'whooseTurn')
-        }
-        function loadFromJson(game_string) {
-            let game = JSON.parse(game_string)
-            for (let i = 0; i < game.players.length; ++i) {
-                unpacker.setPlayerTimerByIndex(i, game.timers[i])
-            }
-
-            unpacker.unpackAll(JSON.stringify(game.grid), JSON.stringify(game.players), JSON.stringify(game.external), 
-                JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
-                JSON.stringify(game.timers[game.whooseTurn]), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
-                JSON.stringify(game.isFogOfWar), 'gameSettings' in game ? JSON.stringify(game.gameSettings) : null)
         }
         function loadGame() {
             try {
@@ -388,7 +329,7 @@
             let _gameSettings = localStorage.getItem(gameSlot + 'gameSettings')
 
 
-            unpacker.unpackAll(_grid, _players, _external, _externalProduction, 
+            unpacker.unpackAll(_grid, _players, _external, _externalProduction,
                 _nature, _goldmines, _timer, _whooseTurn, _gameRound, _isFogOfWar, _gameSettings)
 
             gameEvent.hideAll()
@@ -434,17 +375,17 @@
             }
         }
         function start() {
-           
+
             interfaceCanvas.width = WIDTH
             interfaceCanvas.height = HEIGHT
             interfaceCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
             interfaceCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
-            
+
             mainCanvas.width = WIDTH
             mainCanvas.height = HEIGHT
             mainCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
             mainCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
-            
+
             loadAssets()
             loadOtherSettings()
 

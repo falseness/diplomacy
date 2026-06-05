@@ -7,6 +7,9 @@ class Hexagon extends Sprite {
         this.playerColor = _player
         this.isSuburb = _isSuburb
     }
+    get isMyTurn() {
+        return this.playerColor == whooseTurn
+    }
     get player() {
         return players[this.playerColor]
     }

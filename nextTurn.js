@@ -29,6 +29,18 @@ function externalNextTurn() {
     }
 }
 
+function natureNextTurn() {
+    for (let i = 0; i < nature.length; ++i) {
+        if (nature[i].killed) {
+            nature.splice(i--, 1)
+            continue
+        }
+        if (nature[i].isMyTurn) {
+            nature[i].nextTurn()
+        }
+    }
+}
+
 
 
 function offlineNextTurn() {
@@ -43,6 +55,7 @@ function offlineNextTurn() {
     whooseTurn = (whooseTurn + 1) % players.length
 
     externalNextTurn() 
+    natureNextTurn()
     players[whooseTurn].nextTurn()
     if (players[whooseTurn].isLost) {
         trainModelByHumanData()
@@ -87,25 +100,12 @@ function onlineNextTurn() {
     gameEvent.nextTurn()
 
     timer.pauseAndSaveTime()
-
-    let myIndex = whooseTurn
-
-    do {
-        whooseTurn = (whooseTurn + 1) % players.length
-        externalNextTurn() 
-        players[whooseTurn].nextTurn()
-    } while(players[whooseTurn].isNeutral || players[whooseTurn].isLost)
-    
     actionManager.clear()
 
     timer.setNextTurnTime()
     saveManager.save()
+
     SendNextTurn()
-
-    // tmp fix later:
-    
-
-    whooseTurn = myIndex
     
     gameEvent.waitingMode = true
     undoButton.disableClick()

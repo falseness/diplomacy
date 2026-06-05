@@ -24,7 +24,7 @@
     "id": "TASK-002",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Merge master into ai_bots carefully. Resolve conflicts by preserving current AI work and all user/untracked work discovered in TASK-001.",
+    "description": "Merge master into ai_bots carefully. Resolve conflicts by preserving current AI work and all user/untracked work discovered in TASK-001. Implemented: Merged master into ai_bots; resolved the index.html conflict by keeping master globals/managers extraction while preserving ai_bots TensorFlow/ai script loading and AI gameSettings in options/gameObjectVariables.js; required branch/status/marker checks passed, with JS smoke limited by missing node/npm/browser binaries.",
     "acceptance_criteria": [
       "The active branch remains ai_bots for the entire merge.",
       "master is merged into ai_bots without using destructive reset or checkout commands.",
@@ -41,7 +41,7 @@
     "dependencies": [
       "TASK-001"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-003",

@@ -9,37 +9,63 @@ function unfreezeGame() {
     nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
 }
 
+
+class OnlineLogic {
+    constructor() {
+        this.__playingRightNow = []
+    }
+    updatePlayingRightNow(playerIndex) {
+        this.__playingRightNow.push(playerIndex)
+    }
+    isPlayingRightNow(playerIndex) {
+        return this.__playingRightNow.includes(playerIndex)
+    }
+}
+
 function SetupServerCommunicationLogic(password) {
     const socket = io('wss://playdiplomacy.online:8080')
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
+
+        game = JSON.parse(game)
+        game.timers[game.whooseTurn] = new Timer()
+        game = JSON.stringify(game)
         loadFromJson(game)
-        
+        timer.setNextTurnTime()
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
+        // we do not call players[whooseTurn].nextTurn() here
+        // since we call startTurn in the beginning of the game
         gameEvent.screen.moveToPlayer(players[whooseTurn])
-        
+
     });
     socket.on('playYourTurn', game => {
-        console.log(`playYourTurn`)
-        loadFromJson(game)
 
+        console.log(`playYourTurn`)
+        game = JSON.parse(game)
+        game.timers[game.whooseTurn] = new Timer()
+        game = JSON.stringify(game)
+        loadFromJson(game)
+        GameManager.updateCameraBorders()
+        timer.setNextTurnTime()
         nextTurnPauseInterface.visible = true
+
         unfreezeGame()
+
+        players[whooseTurn].nextTurn()
         gameEvent.screen.moveToPlayer(players[whooseTurn])
-        
+
     });
     socket.on('waitYouTurn', game => {
         console.log(`waitYouTurn`)
 
+        // let dict = JSON.parse(gameAndTurnIndex)
         loadFromJson(game)
 
-        // temporary. work in 2 player maps:
         if (isFogOfWar) {
-            let myIndex = whooseTurn == 1 ? 2 : 1
-            players[myIndex].changeFogOfWarByVision()
+            players[whooseTurn].changeFogOfWarByVision()
         }
 
         gameEvent.waitingMode = true
@@ -58,7 +84,9 @@ function SetupServerCommunicationLogic(password) {
         console.log('SendNextTurn')
         socket.emit('nextTurn', JSON.stringify({
             'password': password,
-            'game': getGameObject()
+            'game': getGameObject(),
+            // whoseTurn currently means the only index of CURRENT player on client
+            'whooseTurn': whooseTurn
         }))
     }
 }
