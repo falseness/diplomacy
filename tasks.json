@@ -47,7 +47,7 @@
     "id": "TASK-003",
     "category": "test",
     "priority": "critical",
-    "description": "Run post-master-merge smoke checks and create follow-up tickets for any regression found before continuing to the demons merge.",
+    "description": "Run post-master-merge smoke checks and create follow-up tickets for any regression found before continuing to the demons merge. Implemented: Served index.html with python3 http.server and fetched it successfully, confirmed all 80 local script references exist, recorded npm run init-model and npm run train failures as /bin/bash: npm: command not found, and added TASK-043/TASK-044 follow-ups for the blocked AI smoke.",
     "acceptance_criteria": [
       "The game can still load through the normal browser entrypoint or existing smoke command.",
       "Existing AI bootstrap or training entrypoint still starts far enough to load game scripts.",
@@ -63,7 +63,7 @@
     "dependencies": [
       "TASK-002"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-004",
@@ -980,6 +980,50 @@
     ],
     "dependencies": [
       "TASK-041"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-043",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Install or document the Node.js/npm runtime required for repository smoke checks and AI package scripts. Created from TASK-003 failure: npm run init-model and npm run train both failed with /bin/bash: npm: command not found.",
+    "acceptance_criteria": [
+      "node and npm are available in the smoke environment or the required setup command is documented.",
+      "node --version and npm --version output are recorded in the ticket notes.",
+      "npm can execute repository package scripts far enough to reach project script resolution.",
+      "The setup does not overwrite user/untracked repository work."
+    ],
+    "test_steps": [
+      "Step 1: Run node --version and npm --version.",
+      "Step 2: Run npm run init-model and capture the next project-level result.",
+      "Step 3: Run npm run train and capture the next project-level result.",
+      "Step 4: Run git status --short and confirm no unrelated files were modified."
+    ],
+    "dependencies": [
+      "TASK-003"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-044",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Restore or replace the AI package script entrypoints referenced by package.json. Created from TASK-003 inspection: package.json references ai/init-model.js and ai/train-cloud.js, but those files are absent.",
+    "acceptance_criteria": [
+      "package.json AI scripts point to existing files or are updated to valid current entrypoints.",
+      "The init-model script starts far enough to initialize or locate the AI model bootstrap.",
+      "The train script starts far enough to initialize or locate the AI training bootstrap.",
+      "Any remaining runtime dependency failure is captured separately from missing script files."
+    ],
+    "test_steps": [
+      "Step 1: Confirm ai/init-model.js and ai/train-cloud.js exist or package.json points to replacement entrypoints.",
+      "Step 2: Run npm run init-model and capture the result.",
+      "Step 3: Run npm run train and capture the result.",
+      "Step 4: Run the browser entrypoint smoke from TASK-003 again."
+    ],
+    "dependencies": [
+      "TASK-043"
     ],
     "status": "pending"
   }
