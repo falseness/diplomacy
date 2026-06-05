@@ -1,0 +1,986 @@
+[
+  {
+    "id": "TASK-001",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Audit the current ai_bots branch before any merge work. Record current branch, dirty/untracked files, AI-related files, and likely merge conflict areas so later merge tasks do not destroy existing work. Implemented: Confirmed branch ai_bots; must-preserve untracked files are package.json and tasks.json; AI locations are ai/generateMap.js, ai/model.js, ai/vectorizeContent.js plus hooks in index.html, menu/menu.js, nextTurn.js, events/events.js, player.js, and options/gamestart.js; master..ai_bots changes are A .gitignore, A ai/generateMap.js, A ai/model.js, A ai/vectorizeContent.js, M events/events.js, D gameObjectSerialization.js, M groups/grid.js, M index.html, D managers.js, M menu/menu.js, M nextTurn.js, M options/actionManager.js, A options/assert.js, D options/gameObjectVariables.js, M options/gamestart.js, M options/onlineLogic.js, M player.js, M sprites/entities/buildings/manufactures/preparingManufacture/town.js, M sprites/entities/buildings/nature/interactableNature.js, M sprites/entities/buildings/nature/nature.js, M sprites/entities/buildings/tower.js, M sprites/entities/buildings/wall.js, M sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js, M sprites/entities/units/unit/interactionWithUnit.js, M sprites/entities/units/unit/unit.js, M sprites/hexagon.js; ai_bots..demons changes are D .gitignore, D ai/generateMap.js, D ai/model.js, D ai/vectorizeContent.js, M events/events.js, M groups/grid.js, M index.html, M menu/menu.js, M nextTurn.js, M options/actionManager.js, M options/gamestart.js, M player.js, M sprites/entities/buildings/manufactures/preparingManufacture/town.js, M sprites/entities/buildings/nature/interactableNature.js, M sprites/entities/buildings/nature/nature.js, M sprites/entities/buildings/tower.js, M sprites/entities/buildings/wall.js, M sprites/entities/units/range/catapult/interactionWithCatapult.js, M sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js, M sprites/entities/units/unit/interactionWithUnit.js, M sprites/entities/units/unit/unit.js; likely merge conflicts are AI script loading/model globals, AIPlayer/startAI/train flow, action handling, and shared grid/entity turn logic.",
+    "acceptance_criteria": [
+      "The audit confirms the active branch is ai_bots.",
+      "All dirty and untracked files are listed and explicitly marked as must-preserve unless intentionally replaced by a later ticket.",
+      "AI-related code locations are identified, including any files outside ai/ that must eventually be moved or wrapped.",
+      "Likely conflict areas between ai_bots, master, and demons are documented before merging.",
+      "No code, branch, dependency, or generated artifact changes are made by this ticket."
+    ],
+    "test_steps": [
+      "Step 1: Run git branch --show-current and confirm it prints ai_bots.",
+      "Step 2: Run git status --short and save the full output in the ticket notes.",
+      "Step 3: Run git diff --name-status master..ai_bots and git diff --name-status ai_bots..demons and save the full output in the ticket notes.",
+      "Step 4: Search for AI symbols and files, then list the files that must be preserved during merges."
+    ],
+    "dependencies": [],
+    "status": "to-verify"
+  },
+  {
+    "id": "TASK-002",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Merge master into ai_bots carefully. Resolve conflicts by preserving current AI work and all user/untracked work discovered in TASK-001.",
+    "acceptance_criteria": [
+      "The active branch remains ai_bots for the entire merge.",
+      "master is merged into ai_bots without using destructive reset or checkout commands.",
+      "Conflict resolutions preserve AI training code, map/vectorization code, and user changes recorded in TASK-001.",
+      "Resolved files compile or load at least as well as before the merge.",
+      "The merge result is documented with all conflict decisions."
+    ],
+    "test_steps": [
+      "Step 1: Confirm git branch --show-current prints ai_bots.",
+      "Step 2: Merge master into ai_bots and resolve conflicts manually.",
+      "Step 3: Run git status --short and confirm no unresolved conflict markers remain.",
+      "Step 4: Search the repository for <<<<<<<, =======, and >>>>>>> and confirm there are no merge markers."
+    ],
+    "dependencies": [
+      "TASK-001"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-003",
+    "category": "test",
+    "priority": "critical",
+    "description": "Run post-master-merge smoke checks and create follow-up tickets for any regression found before continuing to the demons merge.",
+    "acceptance_criteria": [
+      "The game can still load through the normal browser entrypoint or existing smoke command.",
+      "Existing AI bootstrap or training entrypoint still starts far enough to load game scripts.",
+      "Any failure is captured with command, output summary, suspected cause, and a new follow-up ticket.",
+      "No demons merge work starts until this smoke pass is complete."
+    ],
+    "test_steps": [
+      "Step 1: Run the existing package scripts or documented smoke commands.",
+      "Step 2: Open or load index.html if no automated smoke command exists.",
+      "Step 3: Run the AI bootstrap/training smoke command if available.",
+      "Step 4: Record pass/fail status and create follow-up tickets for failures."
+    ],
+    "dependencies": [
+      "TASK-002"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-004",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Merge demons into ai_bots after master is integrated. Preserve current AIPlayer work while importing SimpleAiPlayer and any support classes from demons.",
+    "acceptance_criteria": [
+      "The active branch remains ai_bots for the entire merge.",
+      "demons is merged without deleting existing ai/ code or cloud-training work.",
+      "SimpleAiPlayer and its dependencies are available after the merge.",
+      "AIPlayer behavior from ai_bots is preserved unless deliberately changed by a later ticket.",
+      "Conflict resolutions are documented with special attention to player.js, nextTurn.js, options/gamestart.js, and game action logic."
+    ],
+    "test_steps": [
+      "Step 1: Confirm git branch --show-current prints ai_bots.",
+      "Step 2: Merge demons into ai_bots and resolve conflicts manually.",
+      "Step 3: Search for SimpleAiPlayer and AIPlayer and confirm both are present.",
+      "Step 4: Search for merge markers and confirm none remain.",
+      "Step 5: Run the smoke checks from TASK-003 again."
+    ],
+    "dependencies": [
+      "TASK-003"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-005",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Integrate SimpleAiPlayer from demons as the combat-only baseline used by all later AI comparisons.",
+    "acceptance_criteria": [
+      "SimpleAiPlayer can be selected in game setup or test harness without replacing the learned AIPlayer.",
+      "SimpleAiPlayer keeps its simple combat behavior: attack available targets first, otherwise move toward enemy targets.",
+      "SimpleAiPlayer does not depend on unlimited gold for economy tests after economy variants are introduced.",
+      "Baseline selection is deterministic enough for repeated benchmark runs with fixed seeds.",
+      "The baseline is documented as the pre-economy combat baseline."
+    ],
+    "test_steps": [
+      "Step 1: Start a tiny AI-vs-AI game using SimpleAiPlayer.",
+      "Step 2: Confirm SimpleAiPlayer moves units and attacks enemies.",
+      "Step 3: Confirm a learned AIPlayer can still be instantiated separately.",
+      "Step 4: Run the same fixed-seed SimpleAiPlayer scenario twice and compare high-level outcome consistency."
+    ],
+    "dependencies": [
+      "TASK-004"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-006",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Move or isolate all AI-related runtime, model, vectorization, training, benchmark, and bot code under ai/ while preserving browser game behavior.",
+    "acceptance_criteria": [
+      "AI-only code lives under ai/ or is a minimal hook that imports/loads ai/ code.",
+      "Game code outside ai/ contains only small integration points needed to instantiate AI players or call AI APIs.",
+      "No deploy-only code is placed under the repository ai/ tree if it belongs in ~/ai/deploy.",
+      "Existing browser loading order and cloud bootstrap loading order are updated consistently.",
+      "A search for AI-specific symbols outside ai/ shows only approved integration hooks."
+    ],
+    "test_steps": [
+      "Step 1: Search for AIPlayer, SimpleAiPlayer, train, model, vectorize, and benchmark symbols outside ai/.",
+      "Step 2: Confirm every remaining match outside ai/ is an approved game integration point.",
+      "Step 3: Run browser/game smoke checks.",
+      "Step 4: Run AI bootstrap smoke checks."
+    ],
+    "dependencies": [
+      "TASK-004"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-007",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Place all AI deployment and cloud environment code under ~/ai/deploy, separate from gameplay and local AI runtime code.",
+    "acceptance_criteria": [
+      "~/ai/deploy exists and contains cloud/deployment-only scripts, docs, and templates.",
+      "Repository code does not contain cloud-provider-specific deployment files except minimal references or docs.",
+      "Deployment scripts can locate the repository and /mnt/storage/diplomacy via explicit configuration.",
+      "Local development remains possible without ~/ai/deploy being present.",
+      "The boundary between ai/ runtime code and ~/ai/deploy deployment code is documented."
+    ],
+    "test_steps": [
+      "Step 1: List ~/ai/deploy and confirm all deploy-only files are there.",
+      "Step 2: Search the repository for deploy-only scripts and confirm none remain in repo paths.",
+      "Step 3: Run local AI bootstrap without ~/ai/deploy-specific environment variables.",
+      "Step 4: Run a dry-run or help command from the deploy script to confirm paths are configurable."
+    ],
+    "dependencies": [
+      "TASK-004"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-008",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Research and document the cloud training flow for this project, including runtime, dependencies, storage, GPU/CPU expectations, and operational steps.",
+    "acceptance_criteria": [
+      "The target cloud runtime is documented with Node.js, TensorFlow.js, native dependency, and GPU/CPU requirements.",
+      "Required environment variables and filesystem paths are documented.",
+      "/mnt/storage/diplomacy is documented as the canonical persistent training output path.",
+      "Install, initialize, train, resume, evaluate, and artifact collection steps are written clearly.",
+      "Known risks such as tfjs-node install issues, storage permissions, and long-running process recovery are documented."
+    ],
+    "test_steps": [
+      "Step 1: Inspect package scripts and AI bootstrap requirements.",
+      "Step 2: Verify the dependency install commands on a clean or cloud-like environment if available.",
+      "Step 3: Confirm /mnt/storage/diplomacy can be created and written in the target environment.",
+      "Step 4: Review the documentation against actual command names before marking done."
+    ],
+    "dependencies": [
+      "TASK-006",
+      "TASK-007"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-009",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Create train.sh to orchestrate cloud training end to end: dependency setup checks, output directory preparation, model initialization or resume, training, logging, and final artifact summary.",
+    "acceptance_criteria": [
+      "train.sh is executable and suitable for cloud execution.",
+      "The script writes logs, checkpoints, metrics, and final model artifacts under /mnt/storage/diplomacy.",
+      "The script supports starting from scratch and resuming from the latest checkpoint.",
+      "The script fails fast with clear errors when dependencies or storage paths are unavailable.",
+      "The script does not modify tracked game code during training."
+    ],
+    "test_steps": [
+      "Step 1: Run train.sh --help or equivalent usage output.",
+      "Step 2: Run a short smoke training job with a tiny number of games/epochs.",
+      "Step 3: Confirm logs and artifacts appear under /mnt/storage/diplomacy.",
+      "Step 4: Stop and resume the smoke job from the latest checkpoint."
+    ],
+    "dependencies": [
+      "TASK-008"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-010",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Implement model checkpoint saving during training so intermediate weights are preserved under /mnt/storage/diplomacy.",
+    "acceptance_criteria": [
+      "Training saves checkpoints at a configurable interval.",
+      "Checkpoint directories include enough metadata to identify model version, training step, seed, and timestamp.",
+      "Interrupted training leaves the most recent complete checkpoint usable.",
+      "Old checkpoints are retained or pruned by a documented policy.",
+      "Checkpoint paths never point to ephemeral local-only directories by default."
+    ],
+    "test_steps": [
+      "Step 1: Run a short training job with checkpoint interval set low.",
+      "Step 2: Confirm multiple checkpoint directories/files are written under /mnt/storage/diplomacy.",
+      "Step 3: Load the latest checkpoint in an evaluation-only run.",
+      "Step 4: Kill a training run mid-way and confirm the previous complete checkpoint remains loadable."
+    ],
+    "dependencies": [
+      "TASK-009"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-011",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Save intermediate training results and metrics during cloud training under /mnt/storage/diplomacy.",
+    "acceptance_criteria": [
+      "Training writes structured metrics for loss, games played, win rates, episode lengths, and benchmark summaries.",
+      "Metrics are flushed during training, not only at process exit.",
+      "Each run writes a manifest describing configuration, code revision, model checkpoint paths, and output files.",
+      "Metric files can be consumed by benchmark/report scripts without parsing console logs.",
+      "A failed run still leaves partial metrics and logs for debugging."
+    ],
+    "test_steps": [
+      "Step 1: Run a short training job.",
+      "Step 2: Confirm structured metrics files exist under /mnt/storage/diplomacy.",
+      "Step 3: Inspect the manifest and confirm it references checkpoints and configuration.",
+      "Step 4: Simulate or force a failure and confirm partial logs/metrics remain."
+    ],
+    "dependencies": [
+      "TASK-009"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-012",
+    "category": "infrastructure",
+    "priority": "normal",
+    "description": "Add resumable training from saved checkpoints and manifests.",
+    "acceptance_criteria": [
+      "Training can discover the latest complete checkpoint under /mnt/storage/diplomacy.",
+      "Resume mode restores model weights and compatible training configuration.",
+      "Incompatible checkpoints fail with clear errors instead of silently training wrong model shapes.",
+      "Resume events are recorded in the run manifest and logs.",
+      "Resumed training continues checkpoint and metric numbering without overwriting previous data."
+    ],
+    "test_steps": [
+      "Step 1: Run a smoke training job long enough to create at least one checkpoint.",
+      "Step 2: Start a second job in resume mode.",
+      "Step 3: Confirm the second job loads the checkpoint and continues numbering.",
+      "Step 4: Try resuming from an intentionally incompatible checkpoint and confirm a clear failure."
+    ],
+    "dependencies": [
+      "TASK-010",
+      "TASK-011"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-013",
+    "category": "test",
+    "priority": "critical",
+    "description": "Build a deterministic AI benchmark harness for repeated AI-vs-AI games with fixed maps, seeds, player classes, round limits, and structured results.",
+    "acceptance_criteria": [
+      "The harness can run AI-vs-AI games without browser interaction.",
+      "The harness supports fixed seeds and repeated games per matchup.",
+      "The harness records winner, round count, timeout/sudden-death status, map name, player classes, and seed.",
+      "The harness can compare SimpleAiPlayer, SimpleAiPlayerWithEconomy, AIPlayer, and AIPlayerWithEconomy.",
+      "The harness exits nonzero when a configured win-rate threshold fails."
+    ],
+    "test_steps": [
+      "Step 1: Run a small fixed-seed SimpleAiPlayer-vs-SimpleAiPlayer benchmark.",
+      "Step 2: Confirm results are deterministic when rerun with the same seed.",
+      "Step 3: Run a threshold that intentionally fails and confirm nonzero exit.",
+      "Step 4: Confirm structured result files are written for later analysis."
+    ],
+    "dependencies": [
+      "TASK-005"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-014",
+    "category": "test",
+    "priority": "critical",
+    "description": "Benchmark trained AI models against SimpleAiPlayer on big maps and require the trained model to win more than 80 percent of completed games.",
+    "acceptance_criteria": [
+      "The benchmark uses big maps from the game map definitions or generated big-map equivalents approved for training validation.",
+      "The trained AI model plays both starting sides when applicable.",
+      "At least 100 completed games are run unless a documented compute limit requires a larger staged benchmark plan.",
+      "The trained model wins more than 80 percent of completed games against SimpleAiPlayer.",
+      "Timeouts, crashes, and sudden-death non-results are reported separately and do not hide failures."
+    ],
+    "test_steps": [
+      "Step 1: Train or load a candidate model checkpoint.",
+      "Step 2: Run the big-map benchmark against SimpleAiPlayer.",
+      "Step 3: Confirm the structured report shows win rate greater than 80 percent.",
+      "Step 4: Inspect failed seeds and create follow-up tickets for systematic losses or crashes."
+    ],
+    "dependencies": [
+      "TASK-010",
+      "TASK-013"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-015",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend map vectorization to encode towns, including ownership, health/damaged state, income relevance, and production state needed by AI.",
+    "acceptance_criteria": [
+      "Town cells are distinguishable from empty cells, neutral towns, and other buildings in the vector representation.",
+      "Town ownership is encoded relative to the acting player.",
+      "Town health or badly damaged state is encoded.",
+      "Active production or pending production state is represented if it affects legal decisions.",
+      "Existing model/input shape changes are coordinated with training and checkpoint compatibility."
+    ],
+    "test_steps": [
+      "Step 1: Create a map with friendly, enemy, and neutral towns.",
+      "Step 2: Vectorize the map and inspect town channels/values.",
+      "Step 3: Damage a town and confirm vector output changes.",
+      "Step 4: Start town production and confirm vector output includes the relevant state."
+    ],
+    "dependencies": [
+      "TASK-004"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-016",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend map vectorization to encode barracks, including ownership, production status, and economy impact.",
+    "acceptance_criteria": [
+      "Completed barracks are encoded distinctly from towns, farms, walls, towers, and empty cells.",
+      "Barrack ownership is encoded relative to the acting player.",
+      "Barrack income/upkeep impact is represented or available to the AI through global/economy features.",
+      "Barrack construction-in-progress is encoded separately from completed barracks.",
+      "Vectorization remains stable on maps without barracks."
+    ],
+    "test_steps": [
+      "Step 1: Create a map with friendly and enemy barracks.",
+      "Step 2: Vectorize the map and confirm barrack-specific channels/values.",
+      "Step 3: Start barrack construction and confirm pending state is represented.",
+      "Step 4: Run vectorization on a no-barrack map and confirm no errors."
+    ],
+    "dependencies": [
+      "TASK-015"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-017",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend map vectorization to encode farms, including ownership, income impact, and construction state.",
+    "acceptance_criteria": [
+      "Completed farms are encoded distinctly from other buildings.",
+      "Farm ownership is encoded relative to the acting player.",
+      "Farm income contribution is represented directly or through player economy features.",
+      "Farm construction-in-progress is encoded separately from completed farms.",
+      "Farm encoding works for generated maps and fixed gamestart maps."
+    ],
+    "test_steps": [
+      "Step 1: Create a map with friendly and enemy farms.",
+      "Step 2: Vectorize and inspect farm-specific features.",
+      "Step 3: Start farm construction and confirm pending state is represented.",
+      "Step 4: Compare player income before and after farm completion and confirm economy features update."
+    ],
+    "dependencies": [
+      "TASK-015"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-018",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend map vectorization to encode gold, player gold totals, goldmine ownership, and goldmine income.",
+    "acceptance_criteria": [
+      "Current player gold is available to the AI as a normalized feature.",
+      "Opponent gold or relative gold advantage is available to the AI.",
+      "Goldmines are encoded distinctly from empty/nature/building cells.",
+      "Goldmine ownership and income amount are represented.",
+      "Gold features update correctly after capture or income collection."
+    ],
+    "test_steps": [
+      "Step 1: Create a map with neutral, friendly, and enemy goldmines.",
+      "Step 2: Vectorize and inspect goldmine ownership/income features.",
+      "Step 3: Advance turns to change gold totals and confirm global features update.",
+      "Step 4: Capture or change ownership of a goldmine and confirm vector output updates."
+    ],
+    "dependencies": [
+      "TASK-015"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-019",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend map vectorization and AI logic to correctly handle all unit types: Noob, Archer, KOHb, Normchel, and Catapult.",
+    "acceptance_criteria": [
+      "Each unit type has a distinct vector representation.",
+      "Movement, speed, damage, range, hit points, and remaining moves are represented consistently.",
+      "Catapult and ranged-unit behavior is represented well enough for AI action evaluation.",
+      "Vectorization handles empty cells and stacked impossible states safely.",
+      "All unit types can appear in generated AI training maps."
+    ],
+    "test_steps": [
+      "Step 1: Generate or construct a map containing every unit type for both players.",
+      "Step 2: Vectorize and confirm every unit type maps to a distinct feature pattern.",
+      "Step 3: Run available-command generation for every unit type.",
+      "Step 4: Run one AI turn and confirm no unit-type-specific crash occurs."
+    ],
+    "dependencies": [
+      "TASK-015"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-020",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend map vectorization to encode all building types and production states: town, barrack, farm, wall, bastion, tower, and pending construction.",
+    "acceptance_criteria": [
+      "Every completed building type has a distinct representation.",
+      "External defenses wall, bastion, and tower are represented with ownership and blocking/combat relevance.",
+      "Pending construction is represented separately from completed buildings.",
+      "Building health or hitability is represented where gameplay uses it.",
+      "The model input schema is documented and used consistently by training and inference."
+    ],
+    "test_steps": [
+      "Step 1: Construct a map containing every building type.",
+      "Step 2: Vectorize and inspect each building feature.",
+      "Step 3: Start pending construction for manufacture and external building types.",
+      "Step 4: Complete construction and confirm vector output changes from pending to completed."
+    ],
+    "dependencies": [
+      "TASK-016",
+      "TASK-017"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-021",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend map vectorization to encode suburbs, suburb ownership, suburb expansion opportunities, and their income effect.",
+    "acceptance_criteria": [
+      "Suburb cells are distinguishable from ordinary owned cells.",
+      "Suburb ownership is encoded relative to the acting player.",
+      "Available suburb expansion cells can be inferred or directly represented for economy actions.",
+      "Suburb income contribution is reflected in economy/global features.",
+      "Suburb encoding remains correct after capture, damage, or town loss."
+    ],
+    "test_steps": [
+      "Step 1: Create a town with several suburbs and vectorize it.",
+      "Step 2: Add a new suburb and confirm vector output changes.",
+      "Step 3: Capture or invalidate a suburb and confirm output updates.",
+      "Step 4: Confirm player income features account for suburb count."
+    ],
+    "dependencies": [
+      "TASK-015"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-022",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend AI training map generation to create town scenarios with varied ownership, spacing, neutral towns, and starting unit support.",
+    "acceptance_criteria": [
+      "Generated maps can include friendly, enemy, and neutral towns.",
+      "Town placement avoids invalid overlaps with blocking terrain and units.",
+      "Generated towns initialize suburbs and first units consistently with game rules.",
+      "Map generation supports tiny, medium, and big training sizes.",
+      "Generated town scenarios are reproducible with fixed seeds."
+    ],
+    "test_steps": [
+      "Step 1: Generate at least 100 seeded maps with towns enabled.",
+      "Step 2: Validate no towns overlap invalid terrain, units, or other buildings.",
+      "Step 3: Start games from generated maps and advance several turns.",
+      "Step 4: Rerun generation with the same seeds and confirm identical maps."
+    ],
+    "dependencies": [
+      "TASK-015"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-023",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend AI training map generation to create barracks and barrack construction scenarios.",
+    "acceptance_criteria": [
+      "Generated maps can include completed barracks for either player.",
+      "Generated maps can include valid barrack construction-in-progress states if supported by the game.",
+      "Barracks are placed only on valid suburb/manufacture cells.",
+      "Barrack density is configurable for training variety.",
+      "Generated maps with barracks load and advance turns without crashing."
+    ],
+    "test_steps": [
+      "Step 1: Generate seeded maps with high barrack probability.",
+      "Step 2: Validate every barrack location is legal.",
+      "Step 3: Advance generated games through several production turns.",
+      "Step 4: Vectorize generated maps and confirm barracks are represented."
+    ],
+    "dependencies": [
+      "TASK-016",
+      "TASK-022"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-024",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend AI training map generation to create farms and farm construction scenarios.",
+    "acceptance_criteria": [
+      "Generated maps can include completed farms for either player.",
+      "Generated maps can include valid farm construction-in-progress states if supported by the game.",
+      "Farms are placed only on valid suburb/manufacture cells.",
+      "Farm density is configurable for economy-heavy training.",
+      "Generated farm scenarios affect income correctly during simulation."
+    ],
+    "test_steps": [
+      "Step 1: Generate seeded maps with high farm probability.",
+      "Step 2: Validate every farm location is legal.",
+      "Step 3: Advance turns and confirm player income reflects farms.",
+      "Step 4: Vectorize generated maps and confirm farms are represented."
+    ],
+    "dependencies": [
+      "TASK-017",
+      "TASK-022"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-025",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend AI training map generation to create gold and goldmine scenarios with varied income and ownership.",
+    "acceptance_criteria": [
+      "Generated maps can include neutral, friendly, and enemy goldmines.",
+      "Goldmine income values are varied within documented bounds.",
+      "Goldmine placement avoids invalid overlap with towns, units, and blocking terrain.",
+      "Starting player gold can be varied for economy training.",
+      "Generated gold scenarios update income and vectorization correctly during simulation."
+    ],
+    "test_steps": [
+      "Step 1: Generate seeded maps with goldmines enabled.",
+      "Step 2: Validate goldmine placement and income bounds.",
+      "Step 3: Advance turns and confirm gold totals change correctly.",
+      "Step 4: Vectorize generated maps and confirm gold features are represented."
+    ],
+    "dependencies": [
+      "TASK-018",
+      "TASK-022"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-026",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend AI training map generation to include all unit types with legal placements, varied compositions, and reproducible seeds.",
+    "acceptance_criteria": [
+      "Generated maps can include Noob, Archer, KOHb, Normchel, and Catapult.",
+      "Unit placement avoids illegal overlaps and invalid terrain.",
+      "Training configs can bias unit composition for combat-focused or economy-focused games.",
+      "All generated unit types can produce legal commands when their turn starts.",
+      "Fixed seeds reproduce unit placement and composition exactly."
+    ],
+    "test_steps": [
+      "Step 1: Generate maps with all unit types enabled.",
+      "Step 2: Validate no cell contains illegal duplicate units.",
+      "Step 3: Run available-command checks for each generated unit.",
+      "Step 4: Rerun generation with the same seed and compare unit layouts."
+    ],
+    "dependencies": [
+      "TASK-019"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-027",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend AI training map generation to include all building types with valid placement and configurable density.",
+    "acceptance_criteria": [
+      "Generated maps can include town, barrack, farm, wall, bastion, and tower.",
+      "Each building type respects its legal placement rules.",
+      "Generated defensive buildings affect movement/combat in simulation.",
+      "Generation can create sparse, normal, and dense building configurations.",
+      "Generated building maps vectorize without missing-feature errors."
+    ],
+    "test_steps": [
+      "Step 1: Generate maps with all building types enabled.",
+      "Step 2: Validate placement rules for every building.",
+      "Step 3: Advance games and confirm buildings participate in gameplay.",
+      "Step 4: Vectorize generated maps and confirm all building types are represented."
+    ],
+    "dependencies": [
+      "TASK-020",
+      "TASK-022"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-028",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Extend AI training map generation to include suburbs and realistic owned territory around towns.",
+    "acceptance_criteria": [
+      "Generated towns include valid suburb layouts.",
+      "Suburb ownership matches town/player ownership.",
+      "Generated suburb layouts support valid expansion choices.",
+      "Suburb density and distance from towns are configurable.",
+      "Generated suburb scenarios update income and vectorization correctly."
+    ],
+    "test_steps": [
+      "Step 1: Generate seeded maps with suburbs enabled.",
+      "Step 2: Validate every suburb belongs to a valid town/player relationship.",
+      "Step 3: Run suburb expansion commands on generated maps.",
+      "Step 4: Vectorize generated maps and confirm suburb features are represented."
+    ],
+    "dependencies": [
+      "TASK-021",
+      "TASK-022"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-029",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Create SimpleAiPlayerWithEconomy using inheritance from SimpleAiPlayer. It must keep simple combat behavior and add direct economy spending behavior.",
+    "acceptance_criteria": [
+      "SimpleAiPlayerWithEconomy extends SimpleAiPlayer or shares behavior through a clearly inherited base.",
+      "It can be selected independently from SimpleAiPlayer and AIPlayer.",
+      "It uses normal player gold and income rules, not unlimited gold.",
+      "It can inspect towns, barracks, farms, suburbs, units, and available production choices.",
+      "It preserves SimpleAiPlayer combat movement as the fallback combat behavior."
+    ],
+    "test_steps": [
+      "Step 1: Instantiate SimpleAiPlayerWithEconomy in a small game.",
+      "Step 2: Confirm it receives and spends normal gold.",
+      "Step 3: Confirm inherited combat behavior still moves and attacks with units.",
+      "Step 4: Confirm SimpleAiPlayer remains available and unchanged as a baseline."
+    ],
+    "dependencies": [
+      "TASK-022",
+      "TASK-023",
+      "TASK-024",
+      "TASK-025",
+      "TASK-026",
+      "TASK-027",
+      "TASK-028"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-030",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Implement SimpleAiPlayerWithEconomy war mode: spend resources straightforwardly on war needs such as units, barracks, and combat pressure.",
+    "acceptance_criteria": [
+      "War mode prioritizes unit production when towns or barracks can produce units.",
+      "War mode builds barracks when production capacity is too low and legal placement exists.",
+      "War mode still expands suburbs only when needed for war production placement or resource access.",
+      "War mode avoids impossible production loops and stops when no legal spending action exists.",
+      "War spending choices are simple, deterministic, and easy to inspect."
+    ],
+    "test_steps": [
+      "Step 1: Run a war-mode game with enough gold to buy units.",
+      "Step 2: Confirm units are produced before economy buildings.",
+      "Step 3: Run a war-mode game without barracks and confirm barracks are built when legal.",
+      "Step 4: Run several turns and confirm no infinite production loop occurs."
+    ],
+    "dependencies": [
+      "TASK-029"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-031",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Implement SimpleAiPlayerWithEconomy economy mode: spend most resources on farms, suburbs, income growth, and long-term production infrastructure.",
+    "acceptance_criteria": [
+      "Economy mode prioritizes farms and suburb expansion when legal and affordable.",
+      "Economy mode still buys minimal defenses or units when completely undefended.",
+      "Economy mode can build barracks when infrastructure is missing and the economy can afford it.",
+      "Economy mode transitions or coexists with war mode through a simple documented condition.",
+      "Spending behavior is deterministic enough for benchmark reproducibility."
+    ],
+    "test_steps": [
+      "Step 1: Run economy mode with available suburb expansion and confirm suburbs are purchased.",
+      "Step 2: Run economy mode with farm placement available and confirm farms are queued.",
+      "Step 3: Run economy mode while undefended and confirm minimal defense behavior.",
+      "Step 4: Run fixed-seed economy games twice and compare spending order."
+    ],
+    "dependencies": [
+      "TASK-029"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-032",
+    "category": "test",
+    "priority": "critical",
+    "description": "Run two SimpleAiPlayerWithEconomy players on a tiny map from ./options/gamestart.js with suddenDeathRound=2000. The game must end before sudden death.",
+    "acceptance_criteria": [
+      "The test uses two SimpleAiPlayerWithEconomy players.",
+      "The test uses a tiny map defined through or compatible with ./options/gamestart.js.",
+      "suddenDeathRound is set to 2000 for the scenario.",
+      "The game ends before round 2000.",
+      "If the game does not end, the failed seed and final game state are saved for TASK-033."
+    ],
+    "test_steps": [
+      "Step 1: Configure a tiny 1v1 map with two SimpleAiPlayerWithEconomy players.",
+      "Step 2: Set suddenDeathRound=2000.",
+      "Step 3: Run the game until completion or round 2000.",
+      "Step 4: Confirm a winner exists before sudden death starts."
+    ],
+    "dependencies": [
+      "TASK-030",
+      "TASK-031"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-033",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Fix SimpleAiPlayerWithEconomy bugs discovered by the tiny-map sudden-death test, especially failures to spend economy resources, produce units, or finish games.",
+    "acceptance_criteria": [
+      "Every failing seed from TASK-032 is reproduced before fixing.",
+      "Root causes are identified as production, economy, movement, combat, or game-end logic.",
+      "Fixes preserve simple and straightforward AI behavior.",
+      "The tiny-map suddenDeathRound=2000 scenario passes after fixes.",
+      "New regression tests or fixed seeds are added for each repaired failure mode."
+    ],
+    "test_steps": [
+      "Step 1: Reproduce each TASK-032 failure seed.",
+      "Step 2: Apply targeted fixes to SimpleAiPlayerWithEconomy or legal-action helpers.",
+      "Step 3: Rerun the failed seeds.",
+      "Step 4: Rerun the full TASK-032 scenario suite."
+    ],
+    "dependencies": [
+      "TASK-032"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-034",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Create AIPlayerWithEconomy using inheritance from AIPlayer. It must preserve learned combat evaluation and add economy-aware decisions.",
+    "acceptance_criteria": [
+      "AIPlayerWithEconomy extends AIPlayer or shares behavior through a clearly inherited base.",
+      "It can be selected independently from AIPlayer and SimpleAiPlayerWithEconomy.",
+      "It uses the economy-aware vector representation from earlier tasks.",
+      "It can evaluate both combat commands and economy commands.",
+      "Existing AIPlayer remains available for non-economy comparisons."
+    ],
+    "test_steps": [
+      "Step 1: Instantiate AIPlayerWithEconomy in a small game.",
+      "Step 2: Confirm it can call existing learned model evaluation.",
+      "Step 3: Confirm it can enumerate at least one economy action on a valid economy map.",
+      "Step 4: Confirm AIPlayer still works separately."
+    ],
+    "dependencies": [
+      "TASK-013",
+      "TASK-033"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-035",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Expand AIPlayerWithEconomy action search to include production, purchases, suburbs, barracks, farms, unit training, and normal unit commands.",
+    "acceptance_criteria": [
+      "The action enumerator includes legal unit movement/attack commands.",
+      "The action enumerator includes legal town and barrack production commands.",
+      "The action enumerator includes legal suburb expansion and building placement commands.",
+      "Illegal or unaffordable economy commands are excluded.",
+      "Action simulation can apply and undo each economy action without corrupting game state."
+    ],
+    "test_steps": [
+      "Step 1: Construct a map with legal unit, town, barrack, farm, and suburb actions.",
+      "Step 2: Enumerate AIPlayerWithEconomy actions and confirm all expected action categories appear.",
+      "Step 3: Apply and undo each action type and compare state snapshots.",
+      "Step 4: Run a full AIPlayerWithEconomy turn without state corruption."
+    ],
+    "dependencies": [
+      "TASK-034"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-036",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Train AIPlayerWithEconomy on economy-aware maps, saving checkpoints and results under /mnt/storage/diplomacy.",
+    "acceptance_criteria": [
+      "Training uses generated maps containing economy and combat features.",
+      "Training uses the AIPlayerWithEconomy action space and vector representation.",
+      "Checkpoints are saved during training under /mnt/storage/diplomacy.",
+      "Intermediate metrics and benchmark snapshots are saved during training.",
+      "A final candidate checkpoint is selected for baseline comparison."
+    ],
+    "test_steps": [
+      "Step 1: Run a short AIPlayerWithEconomy training smoke job.",
+      "Step 2: Confirm economy actions appear in self-play data.",
+      "Step 3: Confirm checkpoints and metrics are saved under /mnt/storage/diplomacy.",
+      "Step 4: Run a longer training job and select a candidate checkpoint."
+    ],
+    "dependencies": [
+      "TASK-012",
+      "TASK-035"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-037",
+    "category": "test",
+    "priority": "critical",
+    "description": "Benchmark AIPlayerWithEconomy against SimpleAiPlayerWithEconomy on all 1v1 maps from ./options/gamestart.js. AIPlayerWithEconomy must win 100 percent of completed games.",
+    "acceptance_criteria": [
+      "The benchmark uses every 1v1 map from ./options/gamestart.js.",
+      "AIPlayerWithEconomy plays both starting sides when map symmetry or player order matters.",
+      "The benchmark runs enough seeds/repetitions per map to catch unstable failures.",
+      "AIPlayerWithEconomy wins 100 percent of completed games against SimpleAiPlayerWithEconomy.",
+      "Every loss, draw, crash, timeout, or sudden-death non-result creates a follow-up ticket."
+    ],
+    "test_steps": [
+      "Step 1: Load the trained AIPlayerWithEconomy checkpoint.",
+      "Step 2: Run the 1v1 gamestart.js benchmark suite.",
+      "Step 3: Confirm the report shows 100 percent win rate for completed games.",
+      "Step 4: Inspect any non-win seeds and create follow-up tickets before marking done."
+    ],
+    "dependencies": [
+      "TASK-036"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-038",
+    "category": "test",
+    "priority": "normal",
+    "description": "Add benchmark reporting with win rate, game length, timeout count, sudden-death count, crash count, failed seeds, and artifact locations.",
+    "acceptance_criteria": [
+      "Benchmark reports include summary and per-game result data.",
+      "Reports include win rate, average/median game length, timeout count, sudden-death count, crash count, and failed seeds.",
+      "Reports include player class names, map names, checkpoint identifiers, and code revision.",
+      "Reports are saved in a structured format under /mnt/storage/diplomacy for training/evaluation runs.",
+      "Reports are readable enough for manual review without rerunning benchmarks."
+    ],
+    "test_steps": [
+      "Step 1: Run a small benchmark suite.",
+      "Step 2: Inspect the structured report and confirm all required fields exist.",
+      "Step 3: Force or simulate a timeout/failure and confirm it is reported.",
+      "Step 4: Confirm report paths are included in console output or run manifest."
+    ],
+    "dependencies": [
+      "TASK-013"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-039",
+    "category": "test",
+    "priority": "normal",
+    "description": "Add regression seeds for map generation, vectorization, benchmark games, and short training smoke runs.",
+    "acceptance_criteria": [
+      "A fixed seed suite covers map generation with economy features.",
+      "A fixed seed suite covers vectorization for all units, buildings, suburbs, towns, and gold features.",
+      "A fixed seed suite covers SimpleAiPlayerWithEconomy and AIPlayerWithEconomy turns.",
+      "A short training smoke run can execute deterministically enough to detect major breakage.",
+      "Regression seed failures are easy to map back to saved game state or generated map data."
+    ],
+    "test_steps": [
+      "Step 1: Run the map generation seed suite.",
+      "Step 2: Run the vectorization seed suite.",
+      "Step 3: Run the AI turn seed suite.",
+      "Step 4: Run the short training smoke seed and confirm expected artifacts are produced."
+    ],
+    "dependencies": [
+      "TASK-028",
+      "TASK-035"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-040",
+    "category": "maintenance",
+    "priority": "normal",
+    "description": "Review, refactor, and clean AI, economy, map generation, vectorization, training, and benchmark code after feature completion.",
+    "acceptance_criteria": [
+      "Duplicated AI action enumeration logic is reduced where practical.",
+      "AI code remains under ai/ except approved integration hooks.",
+      "Cloud/deploy code remains under ~/ai/deploy.",
+      "Training and benchmark paths use /mnt/storage/diplomacy consistently.",
+      "Refactors do not change benchmark thresholds or hide failures."
+    ],
+    "test_steps": [
+      "Step 1: Review changed AI, economy, generation, vectorization, training, and benchmark code.",
+      "Step 2: Search for misplaced AI/deploy code.",
+      "Step 3: Run regression seed suites.",
+      "Step 4: Run benchmark smoke checks after refactor."
+    ],
+    "dependencies": [
+      "TASK-037",
+      "TASK-039"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-041",
+    "category": "test",
+    "priority": "critical",
+    "description": "Rerun all baseline comparisons after review/refactor and confirm thresholds still pass.",
+    "acceptance_criteria": [
+      "Trained AI still beats SimpleAiPlayer more than 80 percent of completed games on big maps.",
+      "AIPlayerWithEconomy still beats SimpleAiPlayerWithEconomy 100 percent of completed games on 1v1 gamestart.js maps.",
+      "Two SimpleAiPlayerWithEconomy players still finish tiny-map games before suddenDeathRound=2000.",
+      "Reports are saved under /mnt/storage/diplomacy.",
+      "Any failure creates follow-up tickets before this ticket is closed."
+    ],
+    "test_steps": [
+      "Step 1: Run the SimpleAiPlayer big-map baseline benchmark.",
+      "Step 2: Run the SimpleAiPlayerWithEconomy 1v1 gamestart.js benchmark.",
+      "Step 3: Run the tiny-map suddenDeathRound=2000 SimpleAiPlayerWithEconomy test.",
+      "Step 4: Review reports and create follow-up tickets for failures."
+    ],
+    "dependencies": [
+      "TASK-040"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-042",
+    "category": "maintenance",
+    "priority": "normal",
+    "description": "Create and maintain follow-up tickets for every failed baseline, unresolved bug, incomplete feature, unstable seed, or benchmark weakness found during the AI roadmap.",
+    "acceptance_criteria": [
+      "Every failed required benchmark has at least one follow-up ticket with reproduction steps.",
+      "Every unresolved code review issue has a follow-up ticket or is fixed before closure.",
+      "Every unstable seed has a saved seed, map, or state reference in its ticket.",
+      "Follow-up tickets use the same tasks.json schema.",
+      "No failed baseline is ignored or hidden by changing benchmark thresholds."
+    ],
+    "test_steps": [
+      "Step 1: Review benchmark reports and regression outputs.",
+      "Step 2: Review code review notes and unresolved TODOs.",
+      "Step 3: Add follow-up tickets for every failure or unresolved issue.",
+      "Step 4: Validate tasks.json remains valid JSON after adding follow-up tickets."
+    ],
+    "dependencies": [
+      "TASK-041"
+    ],
+    "status": "pending"
+  }
+]
