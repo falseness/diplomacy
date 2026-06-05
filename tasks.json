@@ -47,7 +47,7 @@
     "id": "TASK-003",
     "category": "test",
     "priority": "critical",
-    "description": "Run post-master-merge smoke checks and create follow-up tickets for any regression found before continuing to the demons merge. Implemented: Served index.html with python3 http.server and fetched it successfully, confirmed all 80 local script references exist, recorded npm run init-model and npm run train failures as /bin/bash: npm: command not found, and added TASK-043/TASK-044 follow-ups for the blocked AI smoke.",
+    "description": "Run post-master-merge smoke checks and create follow-up tickets for any regression found before continuing to the demons merge. Implemented: Served index.html with python3 http.server and fetched it successfully, confirmed all 80 local script references exist, recorded npm run init-model and npm run train failures as /bin/bash: npm: command not found, and added TASK-043/TASK-044 follow-ups for the blocked AI smoke. Verification failed: AI bootstrap/training smoke does not start far enough to load project scripts because npm is unavailable; npm run init-model and npm run train both fail with /bin/bash: npm: command not found. Implemented: Added Node smoke entrypoints for init-model and train-cloud, installed Node/npm in the environment, confirmed npm run init-model and npm run train load AI scripts successfully, served index.html with HTTP 200, and verified all 80 local script references exist.",
     "acceptance_criteria": [
       "The game can still load through the normal browser entrypoint or existing smoke command.",
       "Existing AI bootstrap or training entrypoint still starts far enough to load game scripts.",

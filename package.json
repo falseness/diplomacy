@@ -1,0 +1,14 @@
+{
+  "name": "diplomacy",
+  "private": true,
+  "scripts": {
+    "init-model": "node ai/init-model.js",
+    "train": "node ai/train-cloud.js"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs": "4.22.0",
+    "@tensorflow/tfjs-node": "4.22.0",
+    "canvas": "^2.11.2",
+    "jsdom": "^24.1.1"
+  }
+}
