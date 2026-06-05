@@ -1,21 +1,81 @@
 
 
-// 
-/* [color \in {-1, 0, 1}, [[one hot unit type], moves, speed, dmg, range \in {1, 2, 5}, hp]]
+// Cell channels 0-11 are the original building/unit representation.
+// Channels 12+ encode town-specific state for economy-aware training.
+var CELL_VECTOR_INDEX = {
+    hasBuilding: 0,
+    unitOwner: 1,
+    unitTypeStart: 2,
+    unitMoves: 7,
+    unitSpeed: 8,
+    unitDamage: 9,
+    unitRange: 10,
+    unitHp: 11,
+    isTown: 12,
+    townOwner: 13,
+    townHpRatio: 14,
+    townBadlyDamaged: 15,
+    townIncome: 16,
+    townActiveProduction: 17,
+    townActiveProductionTurns: 18,
+    townPendingProductionCount: 19,
+    townPendingProductionMinTurns: 20
+}
 
-*/
+var CELL_VECTOR_SIZE = 21
+var TOWN_INCOME_VECTOR_SCALE = 20.0
+var TOWN_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
+
+function relativePlayerValue(playerColor) {
+    if (playerColor == 0) {
+        return 0
+    }
+    return playerColor == whooseTurn ? 1 : -1
+}
+
+function hasActiveProduction(town) {
+    return town.activeProduction && town.activeProduction.notEmpty &&
+        town.activeProduction.notEmpty()
+}
+
+function vectorizeTown(town, playerColor, result) {
+    result[CELL_VECTOR_INDEX.isTown] = 1
+    result[CELL_VECTOR_INDEX.townOwner] = relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.townHpRatio] = town.maxHP ? town.hp / town.maxHP : 0
+    result[CELL_VECTOR_INDEX.townBadlyDamaged] = town.isBadlyDamaged ? 1 : 0
+    result[CELL_VECTOR_INDEX.townIncome] = town.income / TOWN_INCOME_VECTOR_SCALE
+
+    if (hasActiveProduction(town)) {
+        result[CELL_VECTOR_INDEX.townActiveProduction] = 1
+        result[CELL_VECTOR_INDEX.townActiveProductionTurns] =
+            town.activeProduction.turns / TOWN_PRODUCTION_TURNS_VECTOR_SCALE
+    }
+
+    if (town.buildingProduction && town.buildingProduction.length) {
+        result[CELL_VECTOR_INDEX.townPendingProductionCount] =
+            town.buildingProduction.length
+        let minTurns = town.buildingProduction[0].turns
+        for (let i = 1; i < town.buildingProduction.length; ++i) {
+            minTurns = Math.min(minTurns, town.buildingProduction[i].turns)
+        }
+        result[CELL_VECTOR_INDEX.townPendingProductionMinTurns] =
+            minTurns / TOWN_PRODUCTION_TURNS_VECTOR_SCALE
+    }
+}
 
 function vectorizeCell(cell) {
-    result = new Array(12)
+    let result = new Array(CELL_VECTOR_SIZE)
     result = result.fill(0)
-    result[0] = 0
     if (!cell.building.isEmpty()) {
-        result[0] = 1
-        // todo: more complicated
+        result[CELL_VECTOR_INDEX.hasBuilding] = 1
+        if (cell.building.isTown()) {
+            vectorizeTown(cell.building, cell.playerColor, result)
+        }
     }
-    result[1] = (cell.playerColor == 0 ? 0 : (cell.unit.isMyTurn ? 1 : -1))
+    result[CELL_VECTOR_INDEX.unitOwner] =
+        (cell.playerColor == 0 ? 0 : (cell.unit.isMyTurn ? 1 : -1))
 
-    mapper = {
+    let mapper = {
         'noob': 0,
         'archer': 1,
         'KOHb': 2,
@@ -26,12 +86,12 @@ function vectorizeCell(cell) {
         return result
     }
     let unit = cell.unit
-    result[2 + mapper[unit.name]] = 1
-    result[7] = cell.unit.isMyTurn ? unit.moves : unit.speed
-    result[8] = unit.speed
-    result[9] = unit.dmg
-    result[10] = unit.name == 'archer' ? 2 : (unit.name == 'catapult' ? 5 : 1)
-    result[11] = unit.hp
+    result[CELL_VECTOR_INDEX.unitTypeStart + mapper[unit.name]] = 1
+    result[CELL_VECTOR_INDEX.unitMoves] = cell.unit.isMyTurn ? unit.moves : unit.speed
+    result[CELL_VECTOR_INDEX.unitSpeed] = unit.speed
+    result[CELL_VECTOR_INDEX.unitDamage] = unit.dmg
+    result[CELL_VECTOR_INDEX.unitRange] = unit.name == 'archer' ? 2 : (unit.name == 'catapult' ? 5 : 1)
+    result[CELL_VECTOR_INDEX.unitHp] = unit.hp
     return result
 }
 

@@ -326,7 +326,7 @@
     "id": "TASK-015",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend map vectorization to encode towns, including ownership, health/damaged state, income relevance, and production state needed by AI.",
+    "description": "Extend map vectorization to encode towns, including ownership, health/damaged state, income relevance, and production state needed by AI. Implemented: Added town vector channels for type, relative ownership, HP/damaged state, income, active/pending production, updated model channel defaults, and covered friendly/enemy/neutral/damaged/production town vectors with ai/test-town-vectorization.js.",
     "acceptance_criteria": [
       "Town cells are distinguishable from empty cells, neutral towns, and other buildings in the vector representation.",
       "Town ownership is encoded relative to the acting player.",
@@ -343,7 +343,7 @@
     "dependencies": [
       "TASK-004"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-016",

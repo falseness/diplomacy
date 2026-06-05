@@ -26,7 +26,25 @@ function residualBlock(inputTensor) {
   return tf.layers.activation({ activation: 'relu' }).apply(add);
 }
 
-function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
+function getCellVectorSize() {
+  return typeof CELL_VECTOR_SIZE == 'undefined' ? 12 : CELL_VECTOR_SIZE
+}
+
+function getModelCellVectorSize(model) {
+  return model.inputs[0].shape[3]
+}
+
+function assertModelCellVectorCompatible(model) {
+  const modelChannels = getModelCellVectorSize(model)
+  const vectorChannels = getCellVectorSize()
+  if (modelChannels != vectorChannels) {
+    throw new Error('Model cell vector channel mismatch: checkpoint expects ' +
+      modelChannels + ' channels, current vectorizer emits ' + vectorChannels +
+      '. Reinitialize or retrain the model for the current vector shape.')
+  }
+}
+
+function createAlphaZeroModel(boardHeight, boardWidth, numChannels = getCellVectorSize()) {
   
   const globalVariablesInput = tf.input({ shape: [1], name: 'global_variables' });
 
@@ -120,9 +138,9 @@ function createAlphaZeroModel(boardHeight, boardWidth, numChannels = 12) {
 function createModel() {
   const model = tf.sequential();
 
-  // Input layer: Accepts any board size (n, m) with 12 channels
+  // Input layer: Accepts any board size (n, m) with the current cell vector.
   model.add(tf.layers.inputLayer({
-    inputShape: [null, null, 12], // Dynamic n x m board size
+    inputShape: [null, null, getCellVectorSize()], // Dynamic n x m board size
   }));
 
   // First Residual Block
@@ -163,7 +181,7 @@ function createModel() {
   return model;
 }
 
-// let ai_model = createModel([maxGridX, maxGridY, 12])
+// let ai_model = createModel([maxGridX, maxGridY, getCellVectorSize()])
 let ai_model = undefined
 
 async function trainModelUnsafe(model, trainX, trainY, epochs=5) {
@@ -276,7 +294,9 @@ let humanCommands = []
 let modelIndex = 750
 
 async function loadModel() {
-  return await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
+  const model = await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
+  assertModelCellVectorCompatible(model)
+  return model
 }
 
 async function saveModel() {
