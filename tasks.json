@@ -488,7 +488,7 @@
     "id": "TASK-022",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend AI training map generation to create town scenarios with varied ownership, spacing, neutral towns, and starting unit support.",
+    "description": "Extend AI training map generation to create town scenarios with varied ownership, spacing, neutral towns, and starting unit support. Implemented: Added seeded tiny/medium/big town training map generators with friendly/enemy/neutral towns, non-overlap placement, starter-unit/suburb validation, and a 100-map reproducibility smoke.",
     "acceptance_criteria": [
       "Generated maps can include friendly, enemy, and neutral towns.",
       "Town placement avoids invalid overlaps with blocking terrain and units.",
@@ -505,7 +505,7 @@
     "dependencies": [
       "TASK-015"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-023",

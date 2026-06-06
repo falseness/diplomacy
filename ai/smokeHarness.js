@@ -17,10 +17,65 @@ function loadScript(relativePath, context) {
 }
 
 function createSmokeContext() {
+  class SmokeGameMap {
+    constructor(mapSize, players, goldmines, lakes, mountains, bushes, hills) {
+      this.mapSize = mapSize;
+      this.players = players;
+      this.goldmines = goldmines;
+      this.lakes = lakes;
+      this.mountains = mountains;
+      this.bushes = bushes || [];
+      this.hills = hills || [];
+    }
+
+    start() {
+      const neighbours = [
+        {x: -1, y: 0},
+        {x: 1, y: 0},
+        {x: 0, y: -1},
+        {x: 0, y: 1},
+        {x: -1, y: 1},
+        {x: 1, y: -1}
+      ];
+
+      this.runtime = {
+        turn: 0,
+        players: this.players.map((player, playerIndex) => {
+          const units = (player.units || []).map(unit => ({
+            x: unit.x,
+            y: unit.y,
+            source: 'configured'
+          }));
+          const towns = player.towns.map(town => {
+            const suburbs = [{x: town.x, y: town.y}];
+            if (playerIndex > 0) {
+              for (const offset of neighbours) {
+                suburbs.push({x: town.x + offset.x, y: town.y + offset.y});
+              }
+              units.push({x: town.x, y: town.y, source: 'first-town-unit'});
+            }
+            return {coord: town, suburbs};
+          });
+          return {towns, units};
+        })
+      };
+      return this.runtime;
+    }
+
+    advanceTurns(turns) {
+      if (!this.runtime) {
+        throw new Error('map must be started before advancing turns');
+      }
+      this.runtime.turn += turns;
+      return this.runtime;
+    }
+  }
+
   return vm.createContext({
     console,
     Math,
-    Map: class SmokeMap {},
+    GameMap: SmokeGameMap,
+    Map: SmokeGameMap,
     Noob: class Noob {},
     Archer: class Archer {},
     KOHb: class KOHb {},

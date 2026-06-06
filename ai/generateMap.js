@@ -17,6 +17,193 @@ function hasSuchCoord(coords, coord) {
     return false
 }
 
+function createSeededRandom(seed) {
+    let state = seed >>> 0
+    if (!state) {
+        state = 0x9e3779b9
+    }
+    return function() {
+        state = (1664525 * state + 1013904223) >>> 0
+        return state / 0x100000000
+    }
+}
+
+function randomIntWithRng(rng, min, max) {
+    return Math.floor(rng() * (max - min + 1)) + min
+}
+
+function coordKey(coord) {
+    return coord.x + ':' + coord.y
+}
+
+function hasCoordKey(used, coord) {
+    return used[coordKey(coord)] === true
+}
+
+function markCoordKey(used, coord) {
+    used[coordKey(coord)] = true
+}
+
+function townTrainingSizeConfig(size) {
+    let configs = {
+        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2},
+        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3},
+        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4}
+    }
+    return configs[size] || configs.tiny
+}
+
+function townDistance(a, b) {
+    return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+}
+
+function isTownCoordValid(coord, mapSize, used, towns, minTownDistance) {
+    if (coord.x <= 0 || coord.y <= 0 || coord.x >= mapSize.x - 1 || coord.y >= mapSize.y - 1) {
+        return false
+    }
+    if (hasCoordKey(used, coord)) {
+        return false
+    }
+    for (let i = 0; i < towns.length; ++i) {
+        if (townDistance(coord, towns[i]) < minTownDistance) {
+            return false
+        }
+    }
+    return true
+}
+
+function pickCoord(rng, mapSize, used, predicate) {
+    for (let attempts = 0; attempts < 1000; ++attempts) {
+        let coord = {
+            x: randomIntWithRng(rng, 0, mapSize.x - 1),
+            y: randomIntWithRng(rng, 0, mapSize.y - 1)
+        }
+        if (!hasCoordKey(used, coord) && (!predicate || predicate(coord))) {
+            markCoordKey(used, coord)
+            return coord
+        }
+    }
+    let start = randomIntWithRng(rng, 0, mapSize.x * mapSize.y - 1)
+    for (let offset = 0; offset < mapSize.x * mapSize.y; ++offset) {
+        let index = (start + offset) % (mapSize.x * mapSize.y)
+        let coord = {
+            x: index % mapSize.x,
+            y: Math.floor(index / mapSize.x)
+        }
+        if (!hasCoordKey(used, coord) && (!predicate || predicate(coord))) {
+            markCoordKey(used, coord)
+            return coord
+        }
+    }
+    throw new Error('Unable to place generated training map object')
+}
+
+function placeTown(rng, mapSize, used, allTowns, minTownDistance) {
+    let coord = pickCoord(rng, mapSize, used, function(candidate) {
+        return isTownCoordValid(candidate, mapSize, used, allTowns, minTownDistance)
+    })
+    allTowns.push(coord)
+    return coord
+}
+
+function placeUnitNearTown(rng, mapSize, used, town) {
+    let candidates = [
+        {x: town.x - 1, y: town.y},
+        {x: town.x + 1, y: town.y},
+        {x: town.x, y: town.y - 1},
+        {x: town.x, y: town.y + 1},
+        {x: town.x - 1, y: town.y + 1},
+        {x: town.x + 1, y: town.y - 1}
+    ]
+    let start = randomIntWithRng(rng, 0, candidates.length - 1)
+    for (let i = 0; i < candidates.length; ++i) {
+        let coord = candidates[(start + i) % candidates.length]
+        if (coord.x < 0 || coord.y < 0 || coord.x >= mapSize.x || coord.y >= mapSize.y) {
+            continue
+        }
+        if (!hasCoordKey(used, coord)) {
+            markCoordKey(used, coord)
+            return {type: Noob, x: coord.x, y: coord.y}
+        }
+    }
+    let coord = pickCoord(rng, mapSize, used)
+    return {type: Noob, x: coord.x, y: coord.y}
+}
+
+function generateTownTrainingMap(options) {
+    options = options || {}
+    let config = townTrainingSizeConfig(options.size || 'tiny')
+    let rng = createSeededRandom(options.seed || 1)
+    let mapSize = {x: config.mapSize.x, y: config.mapSize.y}
+    let used = {}
+    let allTowns = []
+
+    let neutralTowns = []
+    let redTowns = []
+    let blueTowns = []
+
+    redTowns.push(placeTown(rng, mapSize, used, allTowns, config.minTownDistance))
+    blueTowns.push(placeTown(rng, mapSize, used, allTowns, config.minTownDistance))
+    for (let i = 0; i < config.neutralTowns; ++i) {
+        neutralTowns.push(placeTown(rng, mapSize, used, allTowns, config.minTownDistance))
+    }
+
+    let mountains = []
+    let lakes = []
+    for (let i = 0; i < config.blockers; ++i) {
+        let coord = pickCoord(rng, mapSize, used)
+        if (i % 2) {
+            lakes.push(coord)
+        }
+        else {
+            mountains.push(coord)
+        }
+    }
+
+    let redUnits = []
+    let blueUnits = []
+    for (let i = 0; i < config.extraUnitsPerPlayer; ++i) {
+        redUnits.push(placeUnitNearTown(rng, mapSize, used, redTowns[0]))
+        blueUnits.push(placeUnitNearTown(rng, mapSize, used, blueTowns[0]))
+    }
+
+    return new GameMap(
+        mapSize,
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: neutralTowns
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                towns: redTowns,
+                ai: !gameSettings.testAI,
+                units: redUnits
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                towns: blueTowns,
+                units: blueUnits,
+                ai: true
+            }
+        ],
+        [],
+        lakes,
+        mountains)
+}
+
+function generateTinyTownTrainingMap(seed) {
+    return generateTownTrainingMap({size: 'tiny', seed: seed})
+}
+
+function generateMediumTownTrainingMap(seed) {
+    return generateTownTrainingMap({size: 'medium', seed: seed})
+}
+
+function generateBigTownTrainingMap(seed) {
+    return generateTownTrainingMap({size: 'big', seed: seed})
+}
+
 function generateTinyMapAllUnits() {
 
     let mapSize = {x: 9, y: 9}
