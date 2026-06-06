@@ -162,7 +162,7 @@
     "id": "TASK-008",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Research and document the cloud training flow for this project, including runtime, dependencies, storage, GPU/CPU expectations, and operational steps.",
+    "description": "Research and document the cloud training flow for this project, including runtime, dependencies, storage, GPU/CPU expectations, and operational steps. Implemented: Added ai/cloud-training.md with the verified Node/TensorFlow/native dependency requirements, canonical /mnt/storage/diplomacy layout, deployment variables, install/preflight commands, lifecycle operations, and recovery risks.",
     "acceptance_criteria": [
       "The target cloud runtime is documented with Node.js, TensorFlow.js, native dependency, and GPU/CPU requirements.",
       "Required environment variables and filesystem paths are documented.",
@@ -180,7 +180,7 @@
       "TASK-006",
       "TASK-007"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-009",
