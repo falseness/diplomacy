@@ -395,7 +395,7 @@
     "id": "TASK-018",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend map vectorization to encode gold, player gold totals, goldmine ownership, and goldmine income.",
+    "description": "Extend map vectorization to encode gold, player gold totals, goldmine ownership, and goldmine income. Implemented: Added normalized current/opponent/relative gold channels plus distinct goldmine ownership, potential-income, and active-income channels with turn, capture, and perspective-update coverage.",
     "acceptance_criteria": [
       "Current player gold is available to the AI as a normalized feature.",
       "Opponent gold or relative gold advantage is available to the AI.",
@@ -412,7 +412,7 @@
     "dependencies": [
       "TASK-015"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-019",

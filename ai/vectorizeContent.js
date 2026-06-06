@@ -30,12 +30,21 @@ var CELL_VECTOR_INDEX = {
     pendingBarrackOwner: 28,
     pendingBarrackTurns: 29,
     townPendingBarrackCount: 30,
-    townPendingBarrackMinTurns: 31
+    townPendingBarrackMinTurns: 31,
+    isGoldmine: 32,
+    goldmineOwner: 33,
+    goldminePotentialIncome: 34,
+    goldmineActiveIncome: 35,
+    currentPlayerGold: 36,
+    strongestOpponentGold: 37,
+    relativeGoldAdvantage: 38
 }
 
-var CELL_VECTOR_SIZE = 32
+var CELL_VECTOR_SIZE = 39
 var TOWN_INCOME_VECTOR_SCALE = 20.0
 var BARRACK_INCOME_VECTOR_SCALE = 20.0
+var GOLDMINE_INCOME_VECTOR_SCALE = 100.0
+var PLAYER_GOLD_VECTOR_SCALE = 1000.0
 var TOWN_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 var BARRACK_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 
@@ -61,8 +70,32 @@ function isPendingBarrackObject(building) {
         building.isBuildingProduction && building.isBuildingProduction()
 }
 
+function isGoldmineObject(building) {
+    return building && building.name == 'goldmine'
+}
+
 function productionName(production) {
     return production ? production.name : undefined
+}
+
+function playerGold(player) {
+    return player && Number.isFinite(player.gold) ? player.gold : 0
+}
+
+function vectorizePlayerGold(result) {
+    let currentGold = playerGold(players[whooseTurn])
+    let strongestOpponentGold = 0
+    for (let i = 1; i < players.length; ++i) {
+        if (i != whooseTurn) {
+            strongestOpponentGold = Math.max(strongestOpponentGold, playerGold(players[i]))
+        }
+    }
+    result[CELL_VECTOR_INDEX.currentPlayerGold] =
+        currentGold / PLAYER_GOLD_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.strongestOpponentGold] =
+        strongestOpponentGold / PLAYER_GOLD_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.relativeGoldAdvantage] =
+        (currentGold - strongestOpponentGold) / PLAYER_GOLD_VECTOR_SCALE
 }
 
 function vectorizeTown(town, playerColor, result) {
@@ -128,9 +161,19 @@ function vectorizePendingBarrack(barrackProduction, playerColor, result) {
         barrackProduction.turns / BARRACK_PRODUCTION_TURNS_VECTOR_SCALE
 }
 
+function vectorizeGoldmine(goldmine, playerColor, result) {
+    result[CELL_VECTOR_INDEX.isGoldmine] = 1
+    result[CELL_VECTOR_INDEX.goldmineOwner] = relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.goldminePotentialIncome] =
+        goldmine.potentialIncome / GOLDMINE_INCOME_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.goldmineActiveIncome] =
+        goldmine.income / GOLDMINE_INCOME_VECTOR_SCALE
+}
+
 function vectorizeCell(cell) {
     let result = new Array(CELL_VECTOR_SIZE)
     result = result.fill(0)
+    vectorizePlayerGold(result)
     if (!cell.building.isEmpty()) {
         result[CELL_VECTOR_INDEX.hasBuilding] = 1
         if (cell.building.isTown()) {
@@ -141,6 +184,9 @@ function vectorizeCell(cell) {
         }
         else if (isPendingBarrackObject(cell.building)) {
             vectorizePendingBarrack(cell.building, cell.playerColor, result)
+        }
+        else if (isGoldmineObject(cell.building)) {
+            vectorizeGoldmine(cell.building, cell.playerColor, result)
         }
     }
     result[CELL_VECTOR_INDEX.unitOwner] =
