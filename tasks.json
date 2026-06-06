@@ -139,7 +139,7 @@
     "id": "TASK-007",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Place all AI deployment and cloud environment code under ~/ai/deploy, separate from gameplay and local AI runtime code.",
+    "description": "Place all AI deployment and cloud environment code under ~/ai/deploy, separate from gameplay and local AI runtime code. Implemented: Created an external configurable deployment preflight, environment template, and boundary documentation under ~/ai/deploy while keeping repository AI bootstrap independent of deployment files.",
     "acceptance_criteria": [
       "~/ai/deploy exists and contains cloud/deployment-only scripts, docs, and templates.",
       "Repository code does not contain cloud-provider-specific deployment files except minimal references or docs.",
@@ -156,7 +156,7 @@
     "dependencies": [
       "TASK-004"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-008",

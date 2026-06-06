@@ -5,6 +5,13 @@ orchestration, smoke tests, and benchmark support belong under `ai/`.
 Cloud-provider deployment files belong outside the repository under
 `~/ai/deploy`.
 
+The external deployment workspace may validate hosts, mounted storage, and
+system dependencies before invoking repository commands. Repository code must
+not source that workspace: local browser use, `npm run init-model`, and
+`npm run train` remain functional when `~/ai/deploy` is absent. Deployment
+paths are supplied externally with `DIPLOMACY_REPO_DIR`,
+`DIPLOMACY_STORAGE_DIR`, or equivalent command-line options.
+
 The browser keeps a few small integration hooks outside `ai/`:
 
 - `index.html` loads the AI scripts in dependency order.
