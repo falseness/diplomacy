@@ -3,7 +3,7 @@
 const path = require('path');
 const {
   BENCHMARK_MAPS,
-  PLAYER_PROFILES,
+  PLAYER_CLASSES,
   runBenchmark,
   writeResult
 } = require('./benchmarkHarness');
@@ -82,7 +82,7 @@ function main() {
       return;
     }
     if (options.list) {
-      console.log('Player classes: ' + Object.keys(PLAYER_PROFILES).join(', '));
+      console.log('Player classes: ' + Object.keys(PLAYER_CLASSES).join(', '));
       console.log('Maps: ' + Object.keys(BENCHMARK_MAPS).join(', '));
       return;
     }

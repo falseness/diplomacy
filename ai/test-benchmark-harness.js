@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const {
-  PLAYER_PROFILES,
+  PLAYER_CLASSES,
   runBenchmark,
   writeResult
 } = require('./benchmarkHarness');
@@ -39,13 +39,15 @@ for (const game of first.games) {
     'mapName',
     'playerA',
     'playerB',
+    'runtimePlayerA',
+    'runtimePlayerB',
     'seed'
   ]) {
     assert(Object.prototype.hasOwnProperty.call(game, field), 'missing result field ' + field);
   }
 }
 
-for (const playerClass of Object.keys(PLAYER_PROFILES)) {
+for (const playerClass of Object.keys(PLAYER_CLASSES)) {
   const comparison = runBenchmark({
     mapName: 'tiny-duel',
     playerA: playerClass,
@@ -55,6 +57,10 @@ for (const playerClass of Object.keys(PLAYER_PROFILES)) {
     roundLimit: 30
   });
   assert(comparison.games[0].playerA === playerClass, playerClass + ' was not selectable');
+  assert(
+    comparison.games[0].runtimePlayerA === playerClass,
+    playerClass + ' runtime constructor was not instantiated'
+  );
 }
 
 const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-benchmark-'));

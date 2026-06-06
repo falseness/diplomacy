@@ -49,6 +49,31 @@ class SimpleAiPlayer extends Player {
             this.unitDoMoves(this.units[cycle])
         }
     }
+    chooseBenchmarkTarget(targets) {
+        return targets.slice().sort(function(left, right) {
+            return left.distance - right.distance ||
+                left.kind.localeCompare(right.kind) ||
+                left.key.localeCompare(right.key)
+        })[0]
+    }
+    shouldBenchmarkReinforce() {
+        return false
+    }
+}
+
+class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
+    chooseBenchmarkTarget(targets) {
+        return targets.slice().sort(function(left, right) {
+            let leftScore = left.distance - (left.kind == 'town' ? 3 : 0)
+            let rightScore = right.distance - (right.kind == 'town' ? 3 : 0)
+            return leftScore - rightScore ||
+                left.kind.localeCompare(right.kind) ||
+                left.key.localeCompare(right.key)
+        })[0]
+    }
+    shouldBenchmarkReinforce(round, unitCount) {
+        return round % 6 == 0 && unitCount < 5
+    }
 }
 
 function weightedRandomIndex(weights) {
@@ -177,5 +202,32 @@ class AIPlayer extends Player {
         if (gameSettings.testAI) {
             this.doActions()
         }
+    }
+    chooseBenchmarkTarget(targets) {
+        return targets.slice().sort(function(left, right) {
+            let leftScore = left.distance - (left.kind == 'town' ? 1 : 0)
+            let rightScore = right.distance - (right.kind == 'town' ? 1 : 0)
+            return leftScore - rightScore ||
+                left.kind.localeCompare(right.kind) ||
+                left.key.localeCompare(right.key)
+        })[0]
+    }
+    shouldBenchmarkReinforce() {
+        return false
+    }
+}
+
+class AIPlayerWithEconomy extends AIPlayer {
+    chooseBenchmarkTarget(targets) {
+        return targets.slice().sort(function(left, right) {
+            let leftScore = left.distance - (left.kind == 'town' ? 4 : 0)
+            let rightScore = right.distance - (right.kind == 'town' ? 4 : 0)
+            return leftScore - rightScore ||
+                left.kind.localeCompare(right.kind) ||
+                left.key.localeCompare(right.key)
+        })[0]
+    }
+    shouldBenchmarkReinforce(round, unitCount) {
+        return round % 6 == 0 && unitCount < 5
     }
 }

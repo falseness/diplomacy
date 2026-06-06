@@ -1,28 +1,37 @@
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
-const PLAYER_PROFILES = {
-  SimpleAiPlayer: {
-    economy: false,
-    targetTownWeight: 0,
-    aggression: 1
-  },
-  SimpleAiPlayerWithEconomy: {
-    economy: true,
-    targetTownWeight: 3,
-    aggression: 1
-  },
-  AIPlayer: {
-    economy: false,
-    targetTownWeight: 1,
-    aggression: 2
-  },
-  AIPlayerWithEconomy: {
-    economy: true,
-    targetTownWeight: 4,
-    aggression: 2
-  }
-};
+function loadPlayerClasses() {
+  const context = vm.createContext({
+    console,
+    Math,
+    Player: class Player {
+      constructor(color, gold = 90) {
+        this.color = color;
+        this.gold = gold;
+        this.units = [];
+      }
+    },
+    BestEnemyTargetForAI: class BestEnemyTargetForAI {},
+    assert(condition) {
+      if (!condition) {
+        throw new Error('assertion failed');
+      }
+    },
+    gameSettings: { testAI: false }
+  });
+  const source = fs.readFileSync(path.join(__dirname, 'players.js'), 'utf8');
+  new vm.Script(source, { filename: 'ai/players.js' }).runInContext(context);
+  return new vm.Script(`({
+    SimpleAiPlayer,
+    SimpleAiPlayerWithEconomy,
+    AIPlayer,
+    AIPlayerWithEconomy
+  })`).runInContext(context);
+}
+
+const PLAYER_CLASSES = loadPlayerClasses();
 
 const BENCHMARK_MAPS = {
   'tiny-duel': {
@@ -103,18 +112,22 @@ function neighbours(coord) {
 }
 
 function validatePlayerClass(playerClass) {
-  if (!PLAYER_PROFILES[playerClass]) {
+  if (!PLAYER_CLASSES[playerClass]) {
     throw new Error(
       'Unknown player class "' + playerClass + '". Expected one of: ' +
-      Object.keys(PLAYER_PROFILES).join(', ')
+      Object.keys(PLAYER_CLASSES).join(', ')
     );
   }
 }
 
 function makePlayer(index, playerClass, definition) {
+  const RuntimePlayerClass = PLAYER_CLASSES[playerClass];
   return {
     index,
     playerClass,
+    runtimePlayer: new RuntimePlayerClass(
+      index === 0 ? { r: 255, g: 0, b: 0 } : { r: 98, g: 168, b: 222 }
+    ),
     town: {
       x: definition.town.x,
       y: definition.town.y,
@@ -160,27 +173,23 @@ function livingUnits(player) {
 
 function chooseTarget(state, player, unit) {
   const enemy = state.players[1 - player.index];
-  const profile = PLAYER_PROFILES[player.playerClass];
   const targets = livingUnits(enemy).map(function(enemyUnit) {
     return {
       kind: 'unit',
       target: enemyUnit,
-      score: distance(unit, enemyUnit)
+      distance: distance(unit, enemyUnit),
+      key: coordKey(enemyUnit)
     };
   });
   if (enemy.town.hp > 0) {
     targets.push({
       kind: 'town',
       target: enemy.town,
-      score: distance(unit, enemy.town) - profile.targetTownWeight
+      distance: distance(unit, enemy.town),
+      key: coordKey(enemy.town)
     });
   }
-  targets.sort(function(left, right) {
-    return left.score - right.score ||
-      left.kind.localeCompare(right.kind) ||
-      coordKey(left.target).localeCompare(coordKey(right.target));
-  });
-  return targets[0];
+  return player.runtimePlayer.chooseBenchmarkTarget(targets);
 }
 
 function chooseMove(state, unit, target) {
@@ -212,24 +221,25 @@ function takeUnitTurn(state, player, unit) {
 }
 
 function applyEconomy(state, player) {
-  const profile = PLAYER_PROFILES[player.playerClass];
-  if (!profile.economy || player.town.hp <= 0) {
+  if (player.town.hp <= 0 ||
+      !player.runtimePlayer.shouldBenchmarkReinforce(
+        state.round,
+        livingUnits(player).length
+      )) {
     return;
   }
-  if (state.round % 6 === 0 && livingUnits(player).length < 5) {
-    const occupied = occupiedKeys(state);
-    const spawn = neighbours(player.town).find(function(coord) {
-      return isInside(state.map, coord) && !occupied.has(coordKey(coord));
+  const occupied = occupiedKeys(state);
+  const spawn = neighbours(player.town).find(function(coord) {
+    return isInside(state.map, coord) && !occupied.has(coordKey(coord));
+  });
+  if (spawn) {
+    player.units.push({
+      id: player.index + '-reinforcement-' + state.round,
+      x: spawn.x,
+      y: spawn.y,
+      hp: 3,
+      attack: 1
     });
-    if (spawn) {
-      player.units.push({
-        id: player.index + '-reinforcement-' + state.round,
-        x: spawn.x,
-        y: spawn.y,
-        hp: 3,
-        attack: profile.aggression
-      });
-    }
   }
 }
 
@@ -327,6 +337,8 @@ function runGame(options) {
     mapName,
     playerA: options.playerA,
     playerB: options.playerB,
+    runtimePlayerA: state.players[0].runtimePlayer.constructor.name,
+    runtimePlayerB: state.players[1].runtimePlayer.constructor.name,
     seed
   };
 }
@@ -383,7 +395,7 @@ function writeResult(result, outputPath) {
 
 module.exports = {
   BENCHMARK_MAPS,
-  PLAYER_PROFILES,
+  PLAYER_CLASSES,
   runBenchmark,
   runGame,
   writeResult
