@@ -37,16 +37,29 @@ var CELL_VECTOR_INDEX = {
     goldmineActiveIncome: 35,
     currentPlayerGold: 36,
     strongestOpponentGold: 37,
-    relativeGoldAdvantage: 38
+    relativeGoldAdvantage: 38,
+    isFarm: 39,
+    farmOwner: 40,
+    farmHpRatio: 41,
+    farmIncome: 42,
+    isPendingFarm: 43,
+    pendingFarmOwner: 44,
+    pendingFarmTurns: 45,
+    currentPlayerIncome: 46,
+    strongestOpponentIncome: 47,
+    relativeIncomeAdvantage: 48
 }
 
-var CELL_VECTOR_SIZE = 39
+var CELL_VECTOR_SIZE = 49
 var TOWN_INCOME_VECTOR_SCALE = 20.0
 var BARRACK_INCOME_VECTOR_SCALE = 20.0
+var FARM_INCOME_VECTOR_SCALE = 20.0
 var GOLDMINE_INCOME_VECTOR_SCALE = 100.0
 var PLAYER_GOLD_VECTOR_SCALE = 1000.0
+var PLAYER_INCOME_VECTOR_SCALE = 100.0
 var TOWN_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 var BARRACK_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
+var FARM_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 
 function relativePlayerValue(playerColor) {
     if (playerColor == 0) {
@@ -74,12 +87,26 @@ function isGoldmineObject(building) {
     return building && building.name == 'goldmine'
 }
 
+function isFarmObject(building) {
+    return building && building.name == 'farm' &&
+        !(building.isBuildingProduction && building.isBuildingProduction())
+}
+
+function isPendingFarmObject(building) {
+    return building && building.name == 'farm' &&
+        building.isBuildingProduction && building.isBuildingProduction()
+}
+
 function productionName(production) {
     return production ? production.name : undefined
 }
 
 function playerGold(player) {
     return player && Number.isFinite(player.gold) ? player.gold : 0
+}
+
+function playerIncome(player) {
+    return player && Number.isFinite(player.income) ? player.income : 0
 }
 
 function vectorizePlayerGold(result) {
@@ -96,6 +123,27 @@ function vectorizePlayerGold(result) {
         strongestOpponentGold / PLAYER_GOLD_VECTOR_SCALE
     result[CELL_VECTOR_INDEX.relativeGoldAdvantage] =
         (currentGold - strongestOpponentGold) / PLAYER_GOLD_VECTOR_SCALE
+}
+
+function vectorizePlayerIncome(result) {
+    let currentIncome = playerIncome(players[whooseTurn])
+    let strongestOpponentIncome = -Infinity
+    for (let i = 1; i < players.length; ++i) {
+        if (i != whooseTurn) {
+            strongestOpponentIncome = Math.max(
+                strongestOpponentIncome,
+                playerIncome(players[i]))
+        }
+    }
+    if (strongestOpponentIncome == -Infinity) {
+        strongestOpponentIncome = 0
+    }
+    result[CELL_VECTOR_INDEX.currentPlayerIncome] =
+        currentIncome / PLAYER_INCOME_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.strongestOpponentIncome] =
+        strongestOpponentIncome / PLAYER_INCOME_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.relativeIncomeAdvantage] =
+        (currentIncome - strongestOpponentIncome) / PLAYER_INCOME_VECTOR_SCALE
 }
 
 function vectorizeTown(town, playerColor, result) {
@@ -170,10 +218,27 @@ function vectorizeGoldmine(goldmine, playerColor, result) {
         goldmine.income / GOLDMINE_INCOME_VECTOR_SCALE
 }
 
+function vectorizeFarm(farm, playerColor, result) {
+    result[CELL_VECTOR_INDEX.isFarm] = 1
+    result[CELL_VECTOR_INDEX.farmOwner] = relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.farmHpRatio] =
+        farm.maxHP && Number.isFinite(farm.hp) ? farm.hp / farm.maxHP : 0
+    result[CELL_VECTOR_INDEX.farmIncome] =
+        (Number.isFinite(farm.income) ? farm.income : 0) / FARM_INCOME_VECTOR_SCALE
+}
+
+function vectorizePendingFarm(farmProduction, playerColor, result) {
+    result[CELL_VECTOR_INDEX.isPendingFarm] = 1
+    result[CELL_VECTOR_INDEX.pendingFarmOwner] = relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.pendingFarmTurns] =
+        farmProduction.turns / FARM_PRODUCTION_TURNS_VECTOR_SCALE
+}
+
 function vectorizeCell(cell) {
     let result = new Array(CELL_VECTOR_SIZE)
     result = result.fill(0)
     vectorizePlayerGold(result)
+    vectorizePlayerIncome(result)
     if (!cell.building.isEmpty()) {
         result[CELL_VECTOR_INDEX.hasBuilding] = 1
         if (cell.building.isTown()) {
@@ -187,6 +252,12 @@ function vectorizeCell(cell) {
         }
         else if (isGoldmineObject(cell.building)) {
             vectorizeGoldmine(cell.building, cell.playerColor, result)
+        }
+        else if (isFarmObject(cell.building)) {
+            vectorizeFarm(cell.building, cell.playerColor, result)
+        }
+        else if (isPendingFarmObject(cell.building)) {
+            vectorizePendingFarm(cell.building, cell.playerColor, result)
         }
     }
     result[CELL_VECTOR_INDEX.unitOwner] =

@@ -372,7 +372,7 @@
     "id": "TASK-017",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend map vectorization to encode farms, including ownership, income impact, and construction state.",
+    "description": "Extend map vectorization to encode farms, including ownership, income impact, and construction state. Implemented: Added completed and pending farm channels with relative ownership, HP, income, remaining turns, and live player/opponent income features, plus generated/fixed map coverage.",
     "acceptance_criteria": [
       "Completed farms are encoded distinctly from other buildings.",
       "Farm ownership is encoded relative to the acting player.",
@@ -389,7 +389,7 @@
     "dependencies": [
       "TASK-015"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-018",
