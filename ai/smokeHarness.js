@@ -38,8 +38,46 @@ function createSmokeContext() {
         {x: 1, y: -1}
       ];
 
+      const cells = {};
+      function emptyUnit() {
+        return { isEmpty() { return true; }, isMyTurn: false };
+      }
+      function completeBarrack(playerIndex, configured) {
+        return {
+          name: 'barrack',
+          hp: 1,
+          maxHP: 1,
+          income: -2,
+          playerColor: playerIndex,
+          isPreparingUnit: false,
+          unitProduction: { turns: 0 },
+          isEmpty() { return false; },
+          isTown() { return false; },
+          isBuildingProduction() { return false; }
+        };
+      }
+      function pendingBarrack(playerIndex, configured) {
+        return {
+          name: 'barrack',
+          turns: configured.turns,
+          playerColor: playerIndex,
+          isEmpty() { return false; },
+          isTown() { return false; },
+          isBuildingProduction() { return true; }
+        };
+      }
+      function setCell(configured, playerIndex, building) {
+        cells[configured.x + ':' + configured.y] = {
+          coord: {x: configured.x, y: configured.y},
+          playerColor: playerIndex,
+          building,
+          unit: emptyUnit()
+        };
+      }
+
       this.runtime = {
         turn: 0,
+        cells,
         players: this.players.map((player, playerIndex) => {
           const units = (player.units || []).map(unit => ({
             x: unit.x,
@@ -56,7 +94,17 @@ function createSmokeContext() {
             }
             return {coord: town, suburbs};
           });
-          return {towns, units};
+          const barracks = (player.barracks || []).map(configured => {
+            const building = completeBarrack(playerIndex, configured);
+            setCell(configured, playerIndex, building);
+            return {configured, building};
+          });
+          const pendingBarracks = (player.pendingBarracks || []).map(configured => {
+            const building = pendingBarrack(playerIndex, configured);
+            setCell(configured, playerIndex, building);
+            return {configured, building};
+          });
+          return {towns, units, barracks, pendingBarracks};
         })
       };
       return this.runtime;
@@ -66,7 +114,33 @@ function createSmokeContext() {
       if (!this.runtime) {
         throw new Error('map must be started before advancing turns');
       }
-      this.runtime.turn += turns;
+      for (let turn = 0; turn < turns; ++turn) {
+        for (const player of this.runtime.players) {
+          for (let i = 0; i < player.pendingBarracks.length; ++i) {
+            const pending = player.pendingBarracks[i];
+            pending.building.turns -= 1;
+            if (pending.building.turns > 0) {
+              continue;
+            }
+            const building = {
+              name: 'barrack',
+              hp: 1,
+              maxHP: 1,
+              income: -2,
+              playerColor: pending.building.playerColor,
+              isPreparingUnit: false,
+              unitProduction: { turns: 0 },
+              isEmpty() { return false; },
+              isTown() { return false; },
+              isBuildingProduction() { return false; }
+            };
+            player.barracks.push({configured: pending.configured, building});
+            this.runtime.cells[pending.configured.x + ':' + pending.configured.y].building = building;
+            player.pendingBarracks.splice(i--, 1);
+          }
+        }
+        this.runtime.turn += 1;
+      }
       return this.runtime;
     }
   }

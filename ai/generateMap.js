@@ -46,9 +46,9 @@ function markCoordKey(used, coord) {
 
 function townTrainingSizeConfig(size) {
     let configs = {
-        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2},
-        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3},
-        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4}
+        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2, barrackDensity: 0.15},
+        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3, barrackDensity: 0.2},
+        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4, barrackDensity: 0.25}
     }
     return configs[size] || configs.tiny
 }
@@ -130,10 +130,62 @@ function placeUnitNearTown(rng, mapSize, used, town) {
     return {type: Noob, x: coord.x, y: coord.y}
 }
 
+function clampProbability(value, fallback) {
+    if (!Number.isFinite(value)) {
+        return fallback
+    }
+    return Math.max(0, Math.min(1, value))
+}
+
+function townNeighbourCoords(town) {
+    return [
+        {x: town.x - 1, y: town.y},
+        {x: town.x + 1, y: town.y},
+        {x: town.x, y: town.y - 1},
+        {x: town.x, y: town.y + 1},
+        {x: town.x - 1, y: town.y + 1},
+        {x: town.x + 1, y: town.y - 1}
+    ]
+}
+
+function generateBarrackScenarios(rng, mapSize, used, towns, density, pendingProbability) {
+    let barracks = []
+    let pendingBarracks = []
+    for (let townIndex = 0; townIndex < towns.length; ++townIndex) {
+        let town = towns[townIndex]
+        let candidates = townNeighbourCoords(town)
+        for (let i = 0; i < candidates.length; ++i) {
+            let coord = candidates[i]
+            if (coord.x < 0 || coord.y < 0 ||
+                coord.x >= mapSize.x || coord.y >= mapSize.y ||
+                hasCoordKey(used, coord) || rng() >= density) {
+                continue
+            }
+            markCoordKey(used, coord)
+            let scenario = {
+                x: coord.x,
+                y: coord.y,
+                town: {x: town.x, y: town.y}
+            }
+            if (rng() < pendingProbability) {
+                scenario.turns = randomIntWithRng(rng, 1, 3)
+                pendingBarracks.push(scenario)
+            }
+            else {
+                barracks.push(scenario)
+            }
+        }
+    }
+    return {barracks: barracks, pendingBarracks: pendingBarracks}
+}
+
 function generateTownTrainingMap(options) {
     options = options || {}
     let config = townTrainingSizeConfig(options.size || 'tiny')
     let rng = createSeededRandom(options.seed || 1)
+    let barrackDensity = clampProbability(options.barrackDensity, config.barrackDensity)
+    let pendingBarrackProbability =
+        clampProbability(options.pendingBarrackProbability, 0.5)
     let mapSize = {x: config.mapSize.x, y: config.mapSize.y}
     let used = {}
     let allTowns = []
@@ -166,6 +218,10 @@ function generateTownTrainingMap(options) {
         redUnits.push(placeUnitNearTown(rng, mapSize, used, redTowns[0]))
         blueUnits.push(placeUnitNearTown(rng, mapSize, used, blueTowns[0]))
     }
+    let redBarrackScenarios = generateBarrackScenarios(
+        rng, mapSize, used, redTowns, barrackDensity, pendingBarrackProbability)
+    let blueBarrackScenarios = generateBarrackScenarios(
+        rng, mapSize, used, blueTowns, barrackDensity, pendingBarrackProbability)
 
     return new GameMap(
         mapSize,
@@ -178,13 +234,17 @@ function generateTownTrainingMap(options) {
                 rgb: {r: 255, g: 0, b: 0},
                 towns: redTowns,
                 ai: !gameSettings.testAI,
-                units: redUnits
+                units: redUnits,
+                barracks: redBarrackScenarios.barracks,
+                pendingBarracks: redBarrackScenarios.pendingBarracks
             },
             {
                 rgb: {r: 98, g: 168, b: 222},
                 towns: blueTowns,
                 units: blueUnits,
-                ai: true
+                ai: true,
+                barracks: blueBarrackScenarios.barracks,
+                pendingBarracks: blueBarrackScenarios.pendingBarracks
             }
         ],
         [],

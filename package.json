@@ -11,6 +11,7 @@
     "test-farm-vectorization": "node ai/test-farm-vectorization.js",
     "test-suburb-vectorization": "node ai/test-suburb-vectorization.js",
     "test-town-map-generation": "node ai/test-town-map-generation.js",
+    "test-barrack-map-generation": "node ai/test-barrack-map-generation.js",
     "test-unit-vectorization": "node ai/test-unit-vectorization.js",
     "benchmark": "node ai/benchmark.js",
     "test-benchmark": "node ai/test-benchmark-harness.js",

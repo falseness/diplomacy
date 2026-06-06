@@ -511,7 +511,7 @@
     "id": "TASK-023",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend AI training map generation to create barracks and barrack construction scenarios.",
+    "description": "Extend AI training map generation to create barracks and barrack construction scenarios. Implemented: Added configurable seeded completed and pending barrack placement on owned town suburbs, GameMap startup/production support, and focused legality, turn-advance, and vectorization coverage.",
     "acceptance_criteria": [
       "Generated maps can include completed barracks for either player.",
       "Generated maps can include valid barrack construction-in-progress states if supported by the game.",
@@ -529,7 +529,7 @@
       "TASK-016",
       "TASK-022"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-024",
