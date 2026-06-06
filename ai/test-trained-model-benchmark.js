@@ -59,6 +59,15 @@ async function main() {
   assert(Array.isArray(report.failedSeeds), 'failed seeds were not retained');
   assert(report.checkpoint.metadata.trainingStep === 100, 'checkpoint metadata was not reported');
   assert(report.checkpoint.predictionProbe.length === 1, 'checkpoint was not evaluated');
+  assert(
+    report.checkpoint.gameplayInference.decisions > 0,
+    'checkpoint did not participate in gameplay decisions'
+  );
+  assert(
+    report.checkpoint.gameplayInference.candidateEvaluations >
+      report.checkpoint.gameplayInference.decisions,
+    'checkpoint did not score competing gameplay actions'
+  );
 
   const thresholdFailure = spawnSync(process.execPath, command.concat([
     '--min-win-rate', '1',

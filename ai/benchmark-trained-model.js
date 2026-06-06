@@ -140,19 +140,143 @@ async function loadCheckpoint(checkpointArgument) {
   prediction.dispose();
   board.dispose();
   globals.dispose();
-  model.dispose();
   return {
-    path: files.checkpointDir,
-    metadata,
-    signature,
-    predictionProbe: probe
+    model,
+    report: {
+      path: files.checkpointDir,
+      metadata,
+      signature,
+      predictionProbe: probe
+    }
   };
 }
 
-function runBalancedBenchmark(options, checkpoint) {
+function scorePlayer(player) {
+  const unitScore = player.units.reduce(function(total, unit) {
+    return total + Math.max(0, unit.hp);
+  }, 0);
+  return unitScore + Math.max(0, player.town.hp) * 2;
+}
+
+function distance(left, right) {
+  return Math.max(
+    Math.abs(left.x - right.x),
+    Math.abs(left.y - right.y),
+    Math.abs((left.x + left.y) - (right.x + right.y))
+  );
+}
+
+function createModelDecisionPolicy(model) {
+  const stats = {
+    decisions: 0,
+    candidateEvaluations: 0,
+    changedFromFallback: 0
+  };
+
+  function predictAction(state, player, unit, action) {
+    const enemy = state.players[1 - player.index];
+    const values = new Array(3 * 3 * 21).fill(0);
+    const center = (1 * 3 + 1) * 21;
+    const target = action.target || action.destination;
+    values[center] = player.town.hp / 8;
+    values[center + 1] = enemy.town.hp / 8;
+    values[center + 2] = player.units.filter(candidate => candidate.hp > 0).length / 10;
+    values[center + 3] = enemy.units.filter(candidate => candidate.hp > 0).length / 10;
+    values[center + 4] = state.round / state.map.suddenDeathRound;
+    values[center + 5] = unit.hp / 3;
+    values[center + 6] = action.distance / Math.max(state.map.width, state.map.height);
+    values[center + 7] = action.kind === 'town' ? 1 : 0;
+    values[center + 8] = action.kind === 'unit' ? 1 : 0;
+    values[center + 9] = action.type === 'attack' ? 1 : 0;
+    values[center + 10] = action.type === 'move' ? 1 : 0;
+    values[center + 11] = action.resultDistance / Math.max(state.map.width, state.map.height);
+    values[center + 12] = scorePlayer(player) / 40;
+    values[center + 13] = scorePlayer(enemy) / 40;
+    values[center + 14] = player.index;
+    values[center + 15] = target && target.hp ? target.hp / 8 : 0;
+    values[center + 16] = target ? target.x / state.map.width : 0;
+    values[center + 17] = target ? target.y / state.map.height : 0;
+
+    const board = tf.tensor4d(values, [1, 3, 3, 21]);
+    const globals = tf.tensor2d([[player.index === 0 ? 1 : -1]]);
+    const prediction = model.predict([board, globals]);
+    const result = prediction.dataSync()[0];
+    prediction.dispose();
+    board.dispose();
+    globals.dispose();
+    stats.candidateEvaluations += 1;
+    return result;
+  }
+
+  function select(state, player, unit, candidates) {
+    if (candidates.length === 0) {
+      return undefined;
+    }
+    stats.decisions += 1;
+    let best = candidates[0];
+    let bestScore = predictAction(state, player, unit, best);
+    for (let index = 1; index < candidates.length; ++index) {
+      const score = predictAction(state, player, unit, candidates[index]);
+      if (score > bestScore) {
+        best = candidates[index];
+        bestScore = score;
+      }
+    }
+    if (best !== candidates[0]) {
+      stats.changedFromFallback += 1;
+    }
+    return best;
+  }
+
+  return {
+    stats,
+    chooseTarget(state, player, unit, targets) {
+      const fallbackOrder = targets.slice().sort(function(left, right) {
+        const leftRank = left.distance - (left.kind === 'town' ? 4 : 0);
+        const rightRank = right.distance - (right.kind === 'town' ? 4 : 0);
+        return leftRank - rightRank ||
+          left.kind.localeCompare(right.kind) ||
+          left.key.localeCompare(right.key);
+      });
+      const bestRank = fallbackOrder[0].distance -
+        (fallbackOrder[0].kind === 'town' ? 4 : 0);
+      const candidates = fallbackOrder.filter(function(target) {
+        return target.distance - (target.kind === 'town' ? 4 : 0) === bestRank;
+      }).map(function(target) {
+        return Object.assign({
+          type: distance(unit, target.target) <= 1 ? 'attack' : 'target',
+          resultDistance: target.distance
+        }, target);
+      });
+      return select(state, player, unit, candidates);
+    },
+    chooseMove(state, player, unit, target, choices) {
+      if (choices.length === 0) {
+        return undefined;
+      }
+      const bestDistance = distance(choices[0], target);
+      const candidates = choices.filter(function(choice) {
+        return distance(choice, target) === bestDistance;
+      }).map(function(choice) {
+        return {
+          type: 'move',
+          kind: 'destination',
+          destination: choice,
+          distance: distance(unit, target),
+          resultDistance: distance(choice, target)
+        };
+      });
+      const selected = select(state, player, unit, candidates);
+      return selected && selected.destination;
+    }
+  };
+}
+
+function runBalancedBenchmark(options, loadedCheckpoint) {
   const games = [];
   const crashes = [];
   const gamesPerSide = options.games / 2;
+  const policy = createModelDecisionPolicy(loadedCheckpoint.model);
   for (let index = 0; index < options.games; ++index) {
     const candidateSide = index < gamesPerSide ? 'A' : 'B';
     const seed = options.seed + index;
@@ -161,6 +285,7 @@ function runBalancedBenchmark(options, checkpoint) {
         mapName: options.mapName,
         playerA: candidateSide === 'A' ? options.candidate : options.baseline,
         playerB: candidateSide === 'B' ? options.candidate : options.baseline,
+        playerPolicies: candidateSide === 'A' ? { A: policy } : { B: policy },
         roundLimit: options.roundLimit,
         seed
       });
@@ -187,7 +312,9 @@ function runBalancedBenchmark(options, checkpoint) {
       roundLimit: options.roundLimit,
       minWinRate: options.minWinRate
     },
-    checkpoint,
+    checkpoint: Object.assign({}, loadedCheckpoint.report, {
+      gameplayInference: policy.stats
+    }),
     summary: {
       attemptedGames: options.games,
       completedGames: completedGames.length,
@@ -216,19 +343,23 @@ async function main() {
   }
   validateOptions(options);
   const checkpoint = await loadCheckpoint(options.checkpoint);
-  const result = runBalancedBenchmark(options, checkpoint);
-  const outputPath = writeResult(result, options.output);
-  console.log(JSON.stringify(result.summary));
-  console.log('Benchmark report: ' + outputPath);
-  if (result.summary.completedGames < 100) {
-    throw new Error('fewer than 100 games completed');
-  }
-  if (result.summary.candidateWinRate <= options.minWinRate) {
-    console.error(
-      'Candidate win rate ' + result.summary.candidateWinRate.toFixed(3) +
-      ' does not exceed required threshold ' + options.minWinRate.toFixed(3)
-    );
-    process.exitCode = 1;
+  try {
+    const result = runBalancedBenchmark(options, checkpoint);
+    const outputPath = writeResult(result, options.output);
+    console.log(JSON.stringify(result.summary));
+    console.log('Benchmark report: ' + outputPath);
+    if (result.summary.completedGames < 100) {
+      throw new Error('fewer than 100 games completed');
+    }
+    if (result.summary.candidateWinRate <= options.minWinRate) {
+      console.error(
+        'Candidate win rate ' + result.summary.candidateWinRate.toFixed(3) +
+        ' does not exceed required threshold ' + options.minWinRate.toFixed(3)
+      );
+      process.exitCode = 1;
+    }
+  } finally {
+    checkpoint.model.dispose();
   }
 }
 

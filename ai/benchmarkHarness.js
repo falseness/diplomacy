@@ -120,7 +120,7 @@ function validatePlayerClass(playerClass) {
   }
 }
 
-function makePlayer(index, playerClass, definition) {
+function makePlayer(index, playerClass, definition, decisionPolicy) {
   const RuntimePlayerClass = PLAYER_CLASSES[playerClass];
   return {
     index,
@@ -128,6 +128,7 @@ function makePlayer(index, playerClass, definition) {
     runtimePlayer: new RuntimePlayerClass(
       index === 0 ? { r: 255, g: 0, b: 0 } : { r: 98, g: 168, b: 222 }
     ),
+    decisionPolicy,
     town: {
       x: definition.town.x,
       y: definition.town.y,
@@ -189,10 +190,13 @@ function chooseTarget(state, player, unit) {
       key: coordKey(enemy.town)
     });
   }
+  if (player.decisionPolicy) {
+    return player.decisionPolicy.chooseTarget(state, player, unit, targets);
+  }
   return player.runtimePlayer.chooseBenchmarkTarget(targets);
 }
 
-function chooseMove(state, unit, target) {
+function chooseMove(state, player, unit, target) {
   const occupied = occupiedKeys(state, unit);
   const choices = neighbours(unit).filter(function(coord) {
     return isInside(state.map, coord) && !occupied.has(coordKey(coord));
@@ -201,6 +205,9 @@ function chooseMove(state, unit, target) {
     return distance(left, target) - distance(right, target) ||
       coordKey(left).localeCompare(coordKey(right));
   });
+  if (player.decisionPolicy) {
+    return player.decisionPolicy.chooseMove(state, player, unit, target, choices);
+  }
   return choices[0];
 }
 
@@ -213,7 +220,7 @@ function takeUnitTurn(state, player, unit) {
     targetChoice.target.hp -= unit.attack;
     return;
   }
-  const destination = chooseMove(state, unit, targetChoice.target);
+  const destination = chooseMove(state, player, unit, targetChoice.target);
   if (destination) {
     unit.x = destination.x;
     unit.y = destination.y;
@@ -275,8 +282,18 @@ function runGame(options) {
   const state = {
     map: clone(map),
     players: [
-      makePlayer(0, options.playerA, map.players[0]),
-      makePlayer(1, options.playerB, map.players[1])
+      makePlayer(
+        0,
+        options.playerA,
+        map.players[0],
+        options.playerPolicies && options.playerPolicies.A
+      ),
+      makePlayer(
+        1,
+        options.playerB,
+        map.players[1],
+        options.playerPolicies && options.playerPolicies.B
+      )
     ],
     round: 0
   };
