@@ -418,7 +418,7 @@
     "id": "TASK-019",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend map vectorization and AI logic to correctly handle all unit types: Noob, Archer, KOHb, Normchel, and Catapult.",
+    "description": "Extend map vectorization and AI logic to correctly handle all unit types: Noob, Archer, KOHb, Normchel, and Catapult. Implemented: Added complete per-unit combat channels, guaranteed both-player all-unit training maps including Catapult, and a headless smoke covering distinct vectors, commands, stacked-state safety, and one AI turn.",
     "acceptance_criteria": [
       "Each unit type has a distinct vector representation.",
       "Movement, speed, damage, range, hit points, and remaining moves are represented consistently.",
@@ -435,7 +435,7 @@
     "dependencies": [
       "TASK-015"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-020",

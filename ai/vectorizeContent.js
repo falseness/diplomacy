@@ -47,10 +47,15 @@ var CELL_VECTOR_INDEX = {
     pendingFarmTurns: 45,
     currentPlayerIncome: 46,
     strongestOpponentIncome: 47,
-    relativeIncomeAdvantage: 48
+    relativeIncomeAdvantage: 48,
+    unitMaxHp: 49,
+    unitHpRatio: 50,
+    unitMinRange: 51,
+    unitBuildingDamage: 52,
+    unitIsRanged: 53
 }
 
-var CELL_VECTOR_SIZE = 49
+var CELL_VECTOR_SIZE = 54
 var TOWN_INCOME_VECTOR_SCALE = 20.0
 var BARRACK_INCOME_VECTOR_SCALE = 20.0
 var FARM_INCOME_VECTOR_SCALE = 20.0
@@ -234,6 +239,17 @@ function vectorizePendingFarm(farmProduction, playerColor, result) {
         farmProduction.turns / FARM_PRODUCTION_TURNS_VECTOR_SCALE
 }
 
+function finiteUnitValue(value) {
+    return Number.isFinite(value) ? value : 0
+}
+
+function unitCombatRange(unit) {
+    if (Number.isFinite(unit.range)) {
+        return unit.range
+    }
+    return unit.name == 'archer' ? 2 : (unit.name == 'catapult' ? 5 : 1)
+}
+
 function vectorizeCell(cell) {
     let result = new Array(CELL_VECTOR_SIZE)
     result = result.fill(0)
@@ -260,9 +276,6 @@ function vectorizeCell(cell) {
             vectorizePendingFarm(cell.building, cell.playerColor, result)
         }
     }
-    result[CELL_VECTOR_INDEX.unitOwner] =
-        (cell.playerColor == 0 ? 0 : (cell.unit.isMyTurn ? 1 : -1))
-
     let mapper = {
         'noob': 0,
         'archer': 1,
@@ -274,12 +287,24 @@ function vectorizeCell(cell) {
         return result
     }
     let unit = cell.unit
-    result[CELL_VECTOR_INDEX.unitTypeStart + mapper[unit.name]] = 1
-    result[CELL_VECTOR_INDEX.unitMoves] = cell.unit.isMyTurn ? unit.moves : unit.speed
-    result[CELL_VECTOR_INDEX.unitSpeed] = unit.speed
-    result[CELL_VECTOR_INDEX.unitDamage] = unit.dmg
-    result[CELL_VECTOR_INDEX.unitRange] = unit.name == 'archer' ? 2 : (unit.name == 'catapult' ? 5 : 1)
-    result[CELL_VECTOR_INDEX.unitHp] = unit.hp
+    result[CELL_VECTOR_INDEX.unitOwner] =
+        cell.playerColor == 0 ? 0 : relativePlayerValue(cell.playerColor)
+    if (mapper[unit.name] !== undefined) {
+        result[CELL_VECTOR_INDEX.unitTypeStart + mapper[unit.name]] = 1
+    }
+    result[CELL_VECTOR_INDEX.unitMoves] = finiteUnitValue(unit.moves)
+    result[CELL_VECTOR_INDEX.unitSpeed] = finiteUnitValue(unit.speed)
+    result[CELL_VECTOR_INDEX.unitDamage] = finiteUnitValue(unit.dmg)
+    result[CELL_VECTOR_INDEX.unitRange] = unitCombatRange(unit)
+    result[CELL_VECTOR_INDEX.unitHp] = finiteUnitValue(unit.hp)
+    result[CELL_VECTOR_INDEX.unitMaxHp] = finiteUnitValue(unit.maxHP)
+    result[CELL_VECTOR_INDEX.unitHpRatio] =
+        unit.maxHP ? finiteUnitValue(unit.hp) / unit.maxHP : 0
+    result[CELL_VECTOR_INDEX.unitMinRange] = unit.name == 'catapult' ? 2 : 1
+    result[CELL_VECTOR_INDEX.unitBuildingDamage] =
+        finiteUnitValue(unit.buildingDMG)
+    result[CELL_VECTOR_INDEX.unitIsRanged] =
+        unit.name == 'archer' || unit.name == 'catapult' ? 1 : 0
     return result
 }
 

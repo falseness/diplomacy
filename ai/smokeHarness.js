@@ -25,6 +25,7 @@ function createSmokeContext() {
     Archer: class Archer {},
     KOHb: class KOHb {},
     Normchel: class Normchel {},
+    Catapult: class Catapult {},
     gameSettings: { testAI: false },
     assert(condition) {
       if (!condition) {

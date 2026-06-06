@@ -25,14 +25,14 @@ function generateTinyMapAllUnits() {
     let units2 = []
 
     let units_arrays = [units1, units2]
-    let types = [Noob, Archer, KOHb, Normchel]
+    let types = [Noob, Archer, KOHb, Normchel, Catapult]
     for (let k = 0; k < units_arrays.length; ++k) {
-        for (let i = 0; i < 6; ++i) {
-            let unit = {type: types[randomInt(0, types.length - 1)], x: randomInt(0, mapSize.x - 1), y: randomInt(0, mapSize.y - 1)}
-            if (hasSuchCoord(units1, unit) || hasSuchCoord(units2, unit)) {
-                continue
-            }
-            units_arrays[k].push(unit)
+        for (let i = 0; i < types.length; ++i) {
+            units_arrays[k].push({
+                type: types[i],
+                x: 1 + i,
+                y: k == 0 ? 1 : mapSize.y - 2
+            })
         }
     }
     return new Map(
