@@ -2,6 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const tf = require('@tensorflow/tfjs-node');
 
+const MODEL_VERSION = 1;
+const MODEL_SIGNATURE = {
+  inputs: [
+    { name: 'board', shape: [null, 3, 3, 21] },
+    { name: 'global_variables', shape: [null, 1] }
+  ],
+  outputs: [
+    { name: 'value_output', shape: [null, 1] }
+  ]
+};
+
 function fail(message) {
   throw new Error(message);
 }
@@ -144,6 +155,57 @@ function checkpointName(step) {
   return `step-${String(step).padStart(8, '0')}`;
 }
 
+function sameValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function tensorSignature(tensors) {
+  return tensors.map((tensor) => ({
+    name: tensor.name.replace(/:\d+$/, '').split('/')[0],
+    shape: tensor.shape
+  }));
+}
+
+function validateCheckpointMetadata(checkpoint, state, manifest) {
+  const metadata = checkpoint.metadata;
+  if (metadata.modelVersion !== MODEL_VERSION) {
+    fail(`incompatible checkpoint model version: expected ${MODEL_VERSION}, found ${metadata.modelVersion}`);
+  }
+  if (!sameValue(metadata.modelSignature, MODEL_SIGNATURE)) {
+    fail('incompatible checkpoint model signature: expected board [3,3,21], globals [1], and value output [1]');
+  }
+  if (!metadata.trainingConfiguration) {
+    fail('incompatible checkpoint: missing resumable training configuration');
+  }
+  const expected = metadata.trainingConfiguration;
+  for (const [name, actual] of [
+    ['games', state.totalGames],
+    ['epochs', state.epochs],
+    ['seed', state.seed]
+  ]) {
+    if (expected[name] !== actual) {
+      fail(`incompatible checkpoint ${name}: checkpoint=${expected[name]} state=${actual}`);
+    }
+  }
+  if (manifest && manifest.configuration) {
+    for (const name of ['games', 'epochs', 'seed']) {
+      if (manifest.configuration[name] !== expected[name]) {
+        fail(`incompatible checkpoint ${name}: checkpoint=${expected[name]} manifest=${manifest.configuration[name]}`);
+      }
+    }
+  }
+}
+
+function validateLoadedModel(model) {
+  const actual = {
+    inputs: tensorSignature(model.inputs),
+    outputs: tensorSignature(model.outputs)
+  };
+  if (!sameValue(actual, MODEL_SIGNATURE)) {
+    fail(`incompatible checkpoint model shapes: ${JSON.stringify(actual)}`);
+  }
+}
+
 function latestCheckpointPath(storageDir, runId) {
   return path.join(storageDir, 'checkpoints', runId, 'latest.json');
 }
@@ -186,12 +248,20 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
   await model.save(`file://${temporary}`);
   const timestamp = new Date().toISOString();
   writeJson(path.join(temporary, 'metadata.json'), {
-    modelVersion: 1,
+    modelVersion: MODEL_VERSION,
+    modelSignature: MODEL_SIGNATURE,
     runId: state.runId,
     trainingStep: state.completedGames,
     seed: state.seed,
     epochs: state.epochs,
     totalGames: state.totalGames,
+    trainingConfiguration: {
+      games: state.totalGames,
+      epochs: state.epochs,
+      seed: state.seed,
+      checkpointInterval: options.checkpointInterval,
+      checkpointRetain: options.checkpointRetain
+    },
     timestamp,
     codeRevision: gitRevision(),
     reason,
@@ -288,6 +358,10 @@ function manifestValue(options, state, paths, status, errorMessage) {
       updatedAt: state.updatedAt,
       completedAt: state.completedAt || null
     },
+    resume: {
+      count: (state.resumeEvents || []).length,
+      events: state.resumeEvents || []
+    },
     artifacts: {
       checkpoints: path.relative(options.storageDir, paths.checkpointDir),
       latestCheckpoint: fs.existsSync(checkpointPointer)
@@ -376,14 +450,40 @@ async function main() {
   if (options.resume) {
     const checkpoint = readLatestCheckpoint(options.storageDir, options.runId);
     state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    const manifest = fs.existsSync(manifestPath)
+      ? JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+      : null;
+    validateCheckpointMetadata(checkpoint, state, manifest);
+    const records = metricRecords(metricsPath);
+    const latestMetricGame = records.length ? records[records.length - 1].game : 0;
+    if (latestMetricGame !== checkpoint.metadata.trainingStep) {
+      fail(`resume numbering conflict: latest checkpoint is game ${checkpoint.metadata.trainingStep} but metrics end at game ${latestMetricGame}`);
+    }
     state.completedGames = checkpoint.metadata.state.completedGames;
     state.status = checkpoint.metadata.state.status;
     state.updatedAt = checkpoint.metadata.state.updatedAt;
     if (state.status === 'complete') {
       fail(`run ${options.runId} is already complete`);
     }
+    options.checkpointInterval = checkpoint.metadata.trainingConfiguration.checkpointInterval;
+    options.checkpointRetain = checkpoint.metadata.trainingConfiguration.checkpointRetain;
     model = await tf.loadLayersModel(`file://${path.join(checkpoint.path, 'model.json')}`);
-    console.log(`Resuming ${options.runId} after game ${state.completedGames}`);
+    validateLoadedModel(model);
+    const resumeEvent = {
+      checkpoint: path.relative(options.storageDir, checkpoint.path),
+      trainingStep: state.completedGames,
+      timestamp: new Date().toISOString()
+    };
+    state.resumeEvents = (state.resumeEvents || []).concat(resumeEvent);
+    state.status = 'running';
+    state.updatedAt = resumeEvent.timestamp;
+    appendJsonLine(metricsPath, {
+      type: 'resume',
+      runId: options.runId,
+      ...resumeEvent
+    });
+    persistRunMetadata(options, state, paths, 'running');
+    console.log(`Resuming ${options.runId} from ${resumeEvent.checkpoint} after game ${state.completedGames}`);
   } else {
     if (fs.existsSync(statePath)) {
       fail(`run already exists: ${options.runId}`);
@@ -395,6 +495,7 @@ async function main() {
       epochs: options.epochs,
       totalGames: options.games,
       completedGames: 0,
+      resumeEvents: [],
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

@@ -64,8 +64,10 @@ export DIPLOMACY_STORAGE_DIR=/mnt/storage/diplomacy
 
 `train.sh` accepts `--storage-dir`, `--games`, `--epochs`, `--seed`, `--run-id`,
 `--resume`, `--checkpoint-interval`, `--checkpoint-retain`, and
-`--evaluate-latest`. Resume restores the original games, epochs, and seed from
-the latest complete checkpoint. `--max-games-this-run` intentionally pauses
+`--evaluate-latest`. Resume discovers the newest complete, incomplete-run
+checkpoint across the storage tree and restores the original games, epochs,
+seed, checkpoint interval, and retention policy. Model signatures and manifest
+configuration are validated before weights are used. `--max-games-this-run` intentionally pauses
 after a bounded number of games for restart testing or scheduled cloud jobs.
 Do not store provider credentials in the repository or artifact directory.
 
@@ -104,6 +106,10 @@ Metrics and the run manifest are flushed after every completed game. The
 manifest records current status, configuration, code revision, checkpoint
 pointer, logs, state, metrics, summary, and final model paths. Failed runs append
 a structured `run_failure` record and retain the last completed game metrics.
+Each resume appends a structured event to the metrics stream and records the
+checkpoint, step, and timestamp in the manifest. Resume aborts if metric and
+checkpoint numbering diverge, preventing repeated game numbers or overwritten
+checkpoints.
 `--fail-after-game N` is a recovery-test option for verifying this behavior.
 
 ## Install And Preflight

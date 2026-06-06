@@ -255,7 +255,7 @@
     "id": "TASK-012",
     "category": "infrastructure",
     "priority": "normal",
-    "description": "Add resumable training from saved checkpoints and manifests.",
+    "description": "Add resumable training from saved checkpoints and manifests. Implemented: Added newest-complete-checkpoint discovery, model/config compatibility validation, restored checkpoint settings, manifest/log/metric resume events, and numbering-divergence protection.",
     "acceptance_criteria": [
       "Training can discover the latest complete checkpoint under /mnt/storage/diplomacy.",
       "Resume mode restores model weights and compatible training configuration.",
@@ -273,7 +273,7 @@
       "TASK-010",
       "TASK-011"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-013",

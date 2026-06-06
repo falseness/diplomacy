@@ -166,9 +166,13 @@ fi
 rm -f "$probe"
 
 if [[ "$resume" == true || "$evaluate_latest" == true ]]; then
-  latest_file="$storage_dir/checkpoints/latest-run"
-  [[ -s "$latest_file" ]] || die "no latest checkpoint found under $storage_dir/checkpoints"
-  run_id="$(tr -d '\r\n' <"$latest_file")"
+  checkpoint_mode=evaluate
+  if [[ "$resume" == true ]]; then
+    checkpoint_mode=resume
+  fi
+  if ! run_id="$(node "$repo_dir/ai/find-latest-checkpoint.js" "$storage_dir" "$checkpoint_mode")"; then
+    die "unable to discover a complete checkpoint under $storage_dir/checkpoints"
+  fi
 else
   if [[ -z "$run_id" ]]; then
     run_id="$(date -u +%Y%m%dT%H%M%SZ)-seed${seed}"
