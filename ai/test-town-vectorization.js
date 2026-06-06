@@ -41,6 +41,14 @@ function otherBuilding() {
   }
 }
 
+function namedBuilding(name) {
+  return {
+    name: name,
+    isEmpty: function() { return false },
+    isTown: function() { return false }
+  }
+}
+
 function town(hp, playerColor, extra) {
   extra = extra || {}
   return {
@@ -98,6 +106,10 @@ gameRound = 0
 
 let emptyVector = vectorizeCell(cell(emptyBuilding(), 0))
 let otherBuildingVector = vectorizeCell(cell(otherBuilding(), 1))
+let farmVector = vectorizeCell(cell(namedBuilding('farm'), 1))
+let wallVector = vectorizeCell(cell(namedBuilding('wall'), 1))
+let bastionVector = vectorizeCell(cell(namedBuilding('bastion'), 1))
+let towerVector = vectorizeCell(cell(namedBuilding('tower'), 1))
 let friendlyTownVector = vectorizeCell(cell(town(10, 1), 1))
 let enemyTownVector = vectorizeCell(cell(town(10, 2), 2))
 let neutralTownVector = vectorizeCell(cell(town(10, 0), 0))
@@ -166,6 +178,10 @@ assertClose(townWithPendingBarrackVector[CELL_VECTOR_INDEX.townPendingBarrackMin
 assertEqual(emptyVector[CELL_VECTOR_INDEX.isBarrack], 0, 'empty has no barrack')
 assertEqual(otherBuildingVector[CELL_VECTOR_INDEX.isBarrack], 0, 'other building is not barrack')
 assertEqual(otherBuildingVector[CELL_VECTOR_INDEX.isPendingBarrack], 0, 'other building is not pending barrack')
+assertEqual(farmVector[CELL_VECTOR_INDEX.isBarrack], 0, 'farm is not barrack')
+assertEqual(wallVector[CELL_VECTOR_INDEX.isBarrack], 0, 'wall is not barrack')
+assertEqual(bastionVector[CELL_VECTOR_INDEX.isBarrack], 0, 'bastion is not barrack')
+assertEqual(towerVector[CELL_VECTOR_INDEX.isBarrack], 0, 'tower is not barrack')
 assertModelCellVectorCompatible({ inputs: [{ shape: [null, 3, 3, CELL_VECTOR_SIZE] }] })
 
 let mismatchWasDetected = false

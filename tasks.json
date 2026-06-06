@@ -349,7 +349,7 @@
     "id": "TASK-016",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend map vectorization to encode barracks, including ownership, production status, and economy impact. Implemented: Added completed/pending barrack vector channels for relative ownership, HP, upkeep income, active unit production, pending construction turns, and town pending-barrack summaries with focused vectorization smoke coverage.",
+    "description": "Extend map vectorization to encode barracks, including ownership, production status, and economy impact. Implemented: Added completed/pending barrack vector channels for relative ownership, HP, upkeep income, active unit production, pending construction turns, and town pending-barrack summaries with focused vectorization smoke coverage. Implemented: Added explicit farm, wall, bastion, tower, town, and empty-cell distinction coverage for the barrack channels.",
     "acceptance_criteria": [
       "Completed barracks are encoded distinctly from towns, farms, walls, towers, and empty cells.",
       "Barrack ownership is encoded relative to the acting player.",
