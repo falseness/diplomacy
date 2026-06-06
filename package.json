@@ -8,7 +8,9 @@
     "test-simple-ai": "node ai/test-simple-ai-baseline.js",
     "test-ai-boundary": "node ai/test-runtime-boundary.js",
     "benchmark": "node ai/benchmark.js",
-    "test-benchmark": "node ai/test-benchmark-harness.js"
+    "test-benchmark": "node ai/test-benchmark-harness.js",
+    "benchmark-trained": "node ai/benchmark-trained-model.js",
+    "test-trained-benchmark": "node ai/test-trained-model-benchmark.js"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",

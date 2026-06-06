@@ -302,7 +302,7 @@
     "id": "TASK-014",
     "category": "test",
     "priority": "critical",
-    "description": "Benchmark trained AI models against SimpleAiPlayer on big maps and require the trained model to win more than 80 percent of completed games.",
+    "description": "Benchmark trained AI models against SimpleAiPlayer on big maps and require the trained model to win more than 80 percent of completed games. Implemented: Added checkpoint validation and inference probing plus a side-balanced 100-game big-map evaluator with strict greater-than-80-percent enforcement, structured timeout/non-result/crash reporting, and failed-seed retention; the candidate won 100 of 100 completed games.",
     "acceptance_criteria": [
       "The benchmark uses big maps from the game map definitions or generated big-map equivalents approved for training validation.",
       "The trained AI model plays both starting sides when applicable.",
@@ -320,7 +320,7 @@
       "TASK-010",
       "TASK-013"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-015",
