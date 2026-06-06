@@ -4,7 +4,8 @@
   "scripts": {
     "init-model": "node ai/init-model.js",
     "train": "node ai/train-cloud.js",
-    "test-simple-ai": "node ai/test-simple-ai-baseline.js"
+    "test-simple-ai": "node ai/test-simple-ai-baseline.js",
+    "test-ai-boundary": "node ai/test-runtime-boundary.js"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",

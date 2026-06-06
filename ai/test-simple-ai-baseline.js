@@ -122,6 +122,7 @@ function createContext() {
 function loadGameApis() {
   const context = createContext();
   new vm.Script(read('player.js'), { filename: 'player.js' }).runInContext(context);
+  new vm.Script(read('ai/players.js'), { filename: 'ai/players.js' }).runInContext(context);
   new vm.Script(read('options/gamestart.js'), { filename: 'options/gamestart.js' }).runInContext(context);
   return context;
 }

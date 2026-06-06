@@ -116,7 +116,7 @@
     "id": "TASK-006",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Move or isolate all AI-related runtime, model, vectorization, training, benchmark, and bot code under ai/ while preserving browser game behavior.",
+    "description": "Move or isolate all AI-related runtime, model, vectorization, training, benchmark, and bot code under ai/ while preserving browser game behavior. Implemented: Moved SimpleAiPlayer/AIPlayer and self-play helpers into ai/players.js, moved GameManager training orchestration into ai/gameManagerTraining.js, routed gameplay callbacks through ai/runtimeIntegration.js, documented approved integration hooks, and added browser/bootstrap/boundary smoke coverage.",
     "acceptance_criteria": [
       "AI-only code lives under ai/ or is a minimal hook that imports/loads ai/ code.",
       "Game code outside ai/ contains only small integration points needed to instantiate AI players or call AI APIs.",
@@ -133,7 +133,7 @@
     "dependencies": [
       "TASK-004"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-007",

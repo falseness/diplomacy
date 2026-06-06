@@ -58,7 +58,7 @@ function offlineNextTurn() {
     natureNextTurn()
     players[whooseTurn].nextTurn()
     if (players[whooseTurn].isLost) {
-        trainModelByHumanData()
+        AiRuntime.trainFromHumanCommands()
     }
     if (players[whooseTurn].isNeutral || players[whooseTurn].isLost) {
         nextTurn()

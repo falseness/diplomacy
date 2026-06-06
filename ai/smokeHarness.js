@@ -41,12 +41,18 @@ function loadAiScripts() {
     'ai/vectorizeContent.js',
     'ai/model.js'
   ];
+  const browserOnlyScripts = [
+    'ai/players.js',
+    'ai/gameManagerTraining.js',
+    'ai/runtimeIntegration.js'
+  ];
 
   for (const script of scripts) {
     loadScript(script, context);
   }
+  compileBrowserScripts(browserOnlyScripts);
 
-  return { context, scripts };
+  return { context, scripts: scripts.concat(browserOnlyScripts) };
 }
 
 function compileBrowserScripts(scriptPaths) {

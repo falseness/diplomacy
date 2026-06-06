@@ -299,9 +299,7 @@ class Events {
     }
     sendInstructions(coord) {
         let instructionsAreNotLongerNeeded = this.selected.sendInstructions(grid.arr[coord.x][coord.y])
-        humanCommands.push(vectoriseGrid())
-        
-        console.log('added human command', predict(ai_model, [humanCommands[humanCommands.length - 1]])[0][0])
+        AiRuntime.recordHumanCommand()
         if (instructionsAreNotLongerNeeded)
             this.selected = new Empty()
     }
