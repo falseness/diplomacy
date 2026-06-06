@@ -465,7 +465,7 @@
     "id": "TASK-021",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend map vectorization to encode suburbs, suburb ownership, suburb expansion opportunities, and their income effect.",
+    "description": "Extend map vectorization to encode suburbs, suburb ownership, suburb expansion opportunities, and their income effect. Implemented: Added live suburb, relative ownership, expansion opportunity, town suburb total, and global suburb-income channels with capture, damage, town-loss, and model compatibility coverage.",
     "acceptance_criteria": [
       "Suburb cells are distinguishable from ordinary owned cells.",
       "Suburb ownership is encoded relative to the acting player.",
@@ -482,7 +482,7 @@
     "dependencies": [
       "TASK-015"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-022",

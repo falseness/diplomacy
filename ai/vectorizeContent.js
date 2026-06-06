@@ -67,10 +67,20 @@ var CELL_VECTOR_INDEX = {
     isPendingTower: 64,
     pendingExternalOwner: 65,
     pendingExternalTurns: 66,
-    pendingExternalHitable: 67
+    pendingExternalHitable: 67,
+    isSuburb: 68,
+    suburbOwner: 69,
+    suburbIncome: 70,
+    suburbExpansionAvailable: 71,
+    suburbExpansionOwner: 72,
+    townSuburbCount: 73,
+    townSuburbIncome: 74,
+    currentPlayerSuburbIncome: 75,
+    strongestOpponentSuburbIncome: 76,
+    relativeSuburbIncomeAdvantage: 77
 }
 
-var CELL_VECTOR_SIZE = 68
+var CELL_VECTOR_SIZE = 78
 var TOWN_INCOME_VECTOR_SCALE = 20.0
 var BARRACK_INCOME_VECTOR_SCALE = 20.0
 var FARM_INCOME_VECTOR_SCALE = 20.0
@@ -81,6 +91,8 @@ var TOWN_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 var BARRACK_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 var FARM_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 var EXTERNAL_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
+var SUBURB_INCOME_VECTOR_SCALE = 20.0
+var SUBURB_COUNT_VECTOR_SCALE = 20.0
 
 function relativePlayerValue(playerColor) {
     if (playerColor == 0) {
@@ -144,6 +156,52 @@ function playerIncome(player) {
     return player && Number.isFinite(player.income) ? player.income : 0
 }
 
+function validTownSuburbCount(town) {
+    if (!town || town.killed || !town.suburbs) {
+        return 0
+    }
+    if (Number.isFinite(town.suburbsCount)) {
+        return town.suburbsCount
+    }
+    let count = 0
+    for (let i = 0; i < town.suburbs.length; ++i) {
+        let suburb = town.suburbs[i]
+        if (suburb && suburb.isSuburb && suburb.playerColor == town.playerColor) {
+            ++count
+        }
+    }
+    return count
+}
+
+function playerSuburbIncome(player) {
+    if (!player || !player.towns) {
+        return 0
+    }
+    let suburbCount = 0
+    for (let i = 0; i < player.towns.length; ++i) {
+        suburbCount += validTownSuburbCount(player.towns[i])
+    }
+    return suburbCount
+}
+
+function vectorizePlayerSuburbIncome(result) {
+    let currentIncome = playerSuburbIncome(players[whooseTurn])
+    let strongestOpponentIncome = 0
+    for (let i = 1; i < players.length; ++i) {
+        if (i != whooseTurn) {
+            strongestOpponentIncome = Math.max(
+                strongestOpponentIncome,
+                playerSuburbIncome(players[i]))
+        }
+    }
+    result[CELL_VECTOR_INDEX.currentPlayerSuburbIncome] =
+        currentIncome / SUBURB_INCOME_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.strongestOpponentSuburbIncome] =
+        strongestOpponentIncome / SUBURB_INCOME_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.relativeSuburbIncomeAdvantage] =
+        (currentIncome - strongestOpponentIncome) / SUBURB_INCOME_VECTOR_SCALE
+}
+
 function vectorizePlayerGold(result) {
     let currentGold = playerGold(players[whooseTurn])
     let strongestOpponentGold = 0
@@ -187,6 +245,11 @@ function vectorizeTown(town, playerColor, result) {
     result[CELL_VECTOR_INDEX.townHpRatio] = town.maxHP ? town.hp / town.maxHP : 0
     result[CELL_VECTOR_INDEX.townBadlyDamaged] = town.isBadlyDamaged ? 1 : 0
     result[CELL_VECTOR_INDEX.townIncome] = town.income / TOWN_INCOME_VECTOR_SCALE
+    let suburbCount = validTownSuburbCount(town)
+    result[CELL_VECTOR_INDEX.townSuburbCount] =
+        suburbCount / SUBURB_COUNT_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.townSuburbIncome] =
+        suburbCount / SUBURB_INCOME_VECTOR_SCALE
 
     if (hasActiveProduction(town)) {
         result[CELL_VECTOR_INDEX.townActiveProduction] = 1
@@ -221,6 +284,64 @@ function vectorizeTown(town, playerColor, result) {
             result[CELL_VECTOR_INDEX.townPendingBarrackMinTurns] =
                 barrackMinTurns / BARRACK_PRODUCTION_TURNS_VECTOR_SCALE
         }
+    }
+}
+
+function coordsMatch(a, b) {
+    return a && b && a.x == b.x && a.y == b.y
+}
+
+function cellIsSuburb(cell) {
+    return !!(cell && cell.hexagon && cell.hexagon.isSuburb)
+}
+
+function isLiveTownSuburb(town, suburb) {
+    return town && !town.killed && suburb && suburb.isSuburb &&
+        suburb.playerColor == town.playerColor
+}
+
+function isSuburbExpansionCell(cell) {
+    if (!cell || !cell.hexagon || cell.hexagon.isSuburb ||
+        cell.playerColor == 0 || !cell.coord) {
+        return false
+    }
+    let owner = players[cell.playerColor]
+    if (!owner || !owner.towns) {
+        return false
+    }
+    for (let i = 0; i < owner.towns.length; ++i) {
+        let town = owner.towns[i]
+        if (!town || town.killed || town.playerColor != cell.playerColor ||
+            !town.suburbs) {
+            continue
+        }
+        for (let j = 0; j < town.suburbs.length; ++j) {
+            let suburb = town.suburbs[j]
+            if (!isLiveTownSuburb(town, suburb) || !suburb.neighbours) {
+                continue
+            }
+            for (let k = 0; k < suburb.neighbours.length; ++k) {
+                if (coordsMatch(suburb.neighbours[k], cell.coord)) {
+                    return true
+                }
+            }
+        }
+    }
+    return false
+}
+
+function vectorizeSuburb(cell, result) {
+    if (cellIsSuburb(cell)) {
+        result[CELL_VECTOR_INDEX.isSuburb] = 1
+        result[CELL_VECTOR_INDEX.suburbOwner] =
+            relativePlayerValue(cell.playerColor)
+        result[CELL_VECTOR_INDEX.suburbIncome] =
+            1 / SUBURB_INCOME_VECTOR_SCALE
+    }
+    if (isSuburbExpansionCell(cell)) {
+        result[CELL_VECTOR_INDEX.suburbExpansionAvailable] = 1
+        result[CELL_VECTOR_INDEX.suburbExpansionOwner] =
+            relativePlayerValue(cell.playerColor)
     }
 }
 
@@ -318,6 +439,8 @@ function vectorizeCell(cell) {
     result = result.fill(0)
     vectorizePlayerGold(result)
     vectorizePlayerIncome(result)
+    vectorizePlayerSuburbIncome(result)
+    vectorizeSuburb(cell, result)
     if (!cell.building.isEmpty()) {
         result[CELL_VECTOR_INDEX.hasBuilding] = 1
         if (cell.building.isTown()) {
