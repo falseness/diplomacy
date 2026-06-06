@@ -1,7 +1,8 @@
 
 
 // Cell channels 0-11 are the original building/unit representation.
-// Channels 12+ encode economy-aware building state.
+// Channels 12+ encode economy-aware building, production, and combat state.
+// Keep ai/model-input-schema.md synchronized when adding channels.
 var CELL_VECTOR_INDEX = {
     hasBuilding: 0,
     unitOwner: 1,
@@ -52,10 +53,24 @@ var CELL_VECTOR_INDEX = {
     unitHpRatio: 50,
     unitMinRange: 51,
     unitBuildingDamage: 52,
-    unitIsRanged: 53
+    unitIsRanged: 53,
+    isWall: 54,
+    isBastion: 55,
+    isTower: 56,
+    externalOwner: 57,
+    externalHpRatio: 58,
+    externalBlocksMovement: 59,
+    externalBlocksRanged: 60,
+    externalRangeBonus: 61,
+    isPendingWall: 62,
+    isPendingBastion: 63,
+    isPendingTower: 64,
+    pendingExternalOwner: 65,
+    pendingExternalTurns: 66,
+    pendingExternalHitable: 67
 }
 
-var CELL_VECTOR_SIZE = 54
+var CELL_VECTOR_SIZE = 68
 var TOWN_INCOME_VECTOR_SCALE = 20.0
 var BARRACK_INCOME_VECTOR_SCALE = 20.0
 var FARM_INCOME_VECTOR_SCALE = 20.0
@@ -65,6 +80,7 @@ var PLAYER_INCOME_VECTOR_SCALE = 100.0
 var TOWN_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 var BARRACK_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 var FARM_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
+var EXTERNAL_PRODUCTION_TURNS_VECTOR_SCALE = 10.0
 
 function relativePlayerValue(playerColor) {
     if (playerColor == 0) {
@@ -99,6 +115,20 @@ function isFarmObject(building) {
 
 function isPendingFarmObject(building) {
     return building && building.name == 'farm' &&
+        building.isBuildingProduction && building.isBuildingProduction()
+}
+
+function isExternalName(name) {
+    return name == 'wall' || name == 'bastion' || name == 'tower'
+}
+
+function isExternalObject(building) {
+    return building && isExternalName(building.name) &&
+        !(building.isBuildingProduction && building.isBuildingProduction())
+}
+
+function isPendingExternalObject(building) {
+    return building && isExternalName(building.name) &&
         building.isBuildingProduction && building.isBuildingProduction()
 }
 
@@ -239,6 +269,39 @@ function vectorizePendingFarm(farmProduction, playerColor, result) {
         farmProduction.turns / FARM_PRODUCTION_TURNS_VECTOR_SCALE
 }
 
+function vectorizeExternal(building, playerColor, result) {
+    let typeIndex = {
+        wall: CELL_VECTOR_INDEX.isWall,
+        bastion: CELL_VECTOR_INDEX.isBastion,
+        tower: CELL_VECTOR_INDEX.isTower
+    }
+    result[typeIndex[building.name]] = 1
+    result[CELL_VECTOR_INDEX.externalOwner] = relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.externalHpRatio] =
+        building.maxHP && Number.isFinite(building.hp) ?
+            building.hp / building.maxHP : 0
+    result[CELL_VECTOR_INDEX.externalBlocksMovement] =
+        building.name == 'wall' ? 1 : 0
+    result[CELL_VECTOR_INDEX.externalBlocksRanged] = 1
+    result[CELL_VECTOR_INDEX.externalRangeBonus] =
+        building.name == 'tower' && Number.isFinite(building.rangeIncrease) ?
+            building.rangeIncrease : 0
+}
+
+function vectorizePendingExternal(buildingProduction, playerColor, result) {
+    let typeIndex = {
+        wall: CELL_VECTOR_INDEX.isPendingWall,
+        bastion: CELL_VECTOR_INDEX.isPendingBastion,
+        tower: CELL_VECTOR_INDEX.isPendingTower
+    }
+    result[typeIndex[buildingProduction.name]] = 1
+    result[CELL_VECTOR_INDEX.pendingExternalOwner] =
+        relativePlayerValue(playerColor)
+    result[CELL_VECTOR_INDEX.pendingExternalTurns] =
+        buildingProduction.turns / EXTERNAL_PRODUCTION_TURNS_VECTOR_SCALE
+    result[CELL_VECTOR_INDEX.pendingExternalHitable] = 1
+}
+
 function finiteUnitValue(value) {
     return Number.isFinite(value) ? value : 0
 }
@@ -274,6 +337,12 @@ function vectorizeCell(cell) {
         }
         else if (isPendingFarmObject(cell.building)) {
             vectorizePendingFarm(cell.building, cell.playerColor, result)
+        }
+        else if (isExternalObject(cell.building)) {
+            vectorizeExternal(cell.building, cell.playerColor, result)
+        }
+        else if (isPendingExternalObject(cell.building)) {
+            vectorizePendingExternal(cell.building, cell.playerColor, result)
         }
     }
     let mapper = {

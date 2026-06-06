@@ -441,7 +441,7 @@
     "id": "TASK-020",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend map vectorization to encode all building types and production states: town, barrack, farm, wall, bastion, tower, and pending construction.",
+    "description": "Extend map vectorization to encode all building types and production states: town, barrack, farm, wall, bastion, tower, and pending construction. Implemented: Added distinct completed and pending external-defense channels with relative ownership, health, movement/ranged blocking, tower range bonus, construction turns, hitability, a documented 68-channel schema, and full building-state smoke coverage.",
     "acceptance_criteria": [
       "Every completed building type has a distinct representation.",
       "External defenses wall, bastion, and tower are represented with ownership and blocking/combat relevance.",
@@ -459,7 +459,7 @@
       "TASK-016",
       "TASK-017"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-021",
