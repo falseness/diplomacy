@@ -186,7 +186,7 @@
     "id": "TASK-009",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Create train.sh to orchestrate cloud training end to end: dependency setup checks, output directory preparation, model initialization or resume, training, logging, and final artifact summary.",
+    "description": "Create train.sh to orchestrate cloud training end to end: dependency setup checks, output directory preparation, model initialization or resume, training, logging, and final artifact summary. Implemented: Added executable train.sh and a TensorFlow.js cloud runner with Node/dependency/storage preflight, deterministic short training, persistent logs/metrics/manifests, latest-model resume state, atomic model writes, final model output, and documented cloud usage.",
     "acceptance_criteria": [
       "train.sh is executable and suitable for cloud execution.",
       "The script writes logs, checkpoints, metrics, and final model artifacts under /mnt/storage/diplomacy.",
@@ -203,7 +203,7 @@
     "dependencies": [
       "TASK-008"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-010",

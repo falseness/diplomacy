@@ -1,8 +1,8 @@
 # Cloud Training Runbook
 
-## Current State
+## Entrypoints
 
-The repository currently provides AI bootstrap smokes:
+The repository provides AI bootstrap smokes:
 
 ```sh
 npm run init-model
@@ -10,9 +10,17 @@ npm run train
 ```
 
 `init-model` loads the model API and `train` loads the AI scripts and validates
-vector helpers. They do not yet run a persistent cloud training job. `TASK-009`
-adds `train.sh`, and the following checkpoint, evaluation, and benchmark tasks
-complete the lifecycle described below.
+vector helpers. Persistent cloud training is orchestrated by:
+
+```sh
+./train.sh --games 100 --epochs 4 --seed 42
+./train.sh --resume
+```
+
+Run `./train.sh --help` for all options. The script checks dependencies and
+writable storage before starting, logs stdout/stderr, records metrics after
+each game, keeps a latest resumable model, and writes the completed model under
+`final/`. Use `--install-deps` to run `npm install` before preflight checks.
 
 ## Runtime
 
@@ -52,9 +60,10 @@ export DIPLOMACY_REPO_DIR=/opt/diplomacy
 export DIPLOMACY_STORAGE_DIR=/mnt/storage/diplomacy
 ```
 
-These are the only deployment variables currently implemented. Future
-`train.sh` options for seed, game count, epoch count, checkpoint interval, and
-resume mode must be recorded here when they are added. Do not store provider
+`train.sh` accepts `--storage-dir`, `--games`, `--epochs`, `--seed`, `--run-id`,
+and `--resume`. Resume restores the original games, epochs, and seed from run
+state. `--max-games-this-run` intentionally pauses after a bounded number of
+games for restart testing or scheduled cloud jobs. Do not store provider
 credentials in the repository or artifact directory.
 
 Use this persistent layout:
@@ -69,9 +78,18 @@ Use this persistent layout:
   runs/
 ```
 
-Each run should get a unique timestamp/seed identifier under `runs/`, while
-checkpoints and reports carry enough metadata to trace the code revision,
-model shape, seed, and training step.
+Each run gets a timestamp/seed identifier under `runs/`. `train.sh` writes:
+
+- `logs/<run>.log`: combined process output.
+- `metrics/<run>.jsonl`: one structured record per completed game.
+- `runs/<run>/manifest.json`: configuration, revision, and artifact paths.
+- `runs/<run>/state.json`: resume progress.
+- `checkpoints/<run>/latest/`: latest resumable model.
+- `final/<run>/`: final TensorFlow.js model.
+
+The latest-only resume model is orchestration support. Configurable checkpoint
+intervals, versioned checkpoint metadata, and retention policy belong to
+`TASK-010`.
 
 ## Install And Preflight
 
@@ -87,6 +105,7 @@ npm install
 
 npm run init-model
 npm run train
+./train.sh --games 1 --epochs 1
 ```
 
 On a reproducible host, use `npm ci` once a lockfile exists. This repository
@@ -96,7 +115,7 @@ which can silently change the declared runtime.
 
 ## Training Lifecycle
 
-The operational lifecycle, once `train.sh` is implemented, is:
+The operational lifecycle is:
 
 1. **Initialize:** run the model bootstrap, create a run manifest, record the
    git revision and seed, and write the initial model beneath persistent
@@ -112,9 +131,8 @@ The operational lifecycle, once `train.sh` is implemented, is:
 5. **Collect:** retain the final model, run manifest, metrics, benchmark report,
    logs, failed seeds, and the exact checkpoint used for evaluation.
 
-Until `train.sh` and persistent checkpoint loading exist, only the two npm
-smokes above are valid. The browser-only model code currently saves to
-IndexedDB/downloads, which is not acceptable for unattended cloud training.
+The browser-only model code still saves to IndexedDB/downloads and is not used
+by the unattended cloud runner.
 
 ## Recovery And Risks
 
