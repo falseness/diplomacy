@@ -85,6 +85,8 @@ Each run gets a timestamp/seed identifier under `runs/`. `train.sh` writes:
 
 - `logs/<run>.log`: combined process output.
 - `metrics/<run>.jsonl`: one structured record per completed game.
+- `metrics/<run>.summary.json`: atomically refreshed loss, outcome, win-rate,
+  episode-length, and benchmark summary.
 - `runs/<run>/manifest.json`: configuration, revision, and artifact paths.
 - `runs/<run>/state.json`: resume progress.
 - `checkpoints/<run>/step-NNNNNNNN/`: atomic model plus `metadata.json`.
@@ -97,6 +99,12 @@ checkpoints only after a newer model and metadata directory is complete and its
 latest pointer is durable. Metadata records model version, training step, seed,
 timestamp, code revision, and resumable state. Temporary checkpoint siblings
 are never selected by resume or evaluation.
+
+Metrics and the run manifest are flushed after every completed game. The
+manifest records current status, configuration, code revision, checkpoint
+pointer, logs, state, metrics, summary, and final model paths. Failed runs append
+a structured `run_failure` record and retain the last completed game metrics.
+`--fail-after-game N` is a recovery-test option for verifying this behavior.
 
 ## Install And Preflight
 

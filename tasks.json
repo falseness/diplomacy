@@ -232,7 +232,7 @@
     "id": "TASK-011",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Save intermediate training results and metrics during cloud training under /mnt/storage/diplomacy.",
+    "description": "Save intermediate training results and metrics during cloud training under /mnt/storage/diplomacy. Implemented: Added per-game JSONL metrics and atomic summaries for loss, accuracy, games, outcomes, win rates, episode lengths, and benchmark totals; manifests now refresh with configuration, revision, progress, checkpoints, and output paths, while failed runs retain partial metrics, logs, state, and failure details.",
     "acceptance_criteria": [
       "Training writes structured metrics for loss, games played, win rates, episode lengths, and benchmark summaries.",
       "Metrics are flushed during training, not only at process exit.",
@@ -249,7 +249,7 @@
     "dependencies": [
       "TASK-009"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-012",

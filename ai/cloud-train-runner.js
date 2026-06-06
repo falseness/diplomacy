@@ -32,7 +32,8 @@ function parseArgs(argv) {
     'seed',
     'max-games-this-run',
     'checkpoint-interval',
-    'checkpoint-retain'
+    'checkpoint-retain',
+    'fail-after-game'
   ]) {
     if (options[key] === undefined) {
       fail(`missing runner argument --${key}`);
@@ -44,6 +45,7 @@ function parseArgs(argv) {
   options.maxGamesThisRun = Number(options['max-games-this-run']);
   options.checkpointInterval = Number(options['checkpoint-interval']);
   options.checkpointRetain = Number(options['checkpoint-retain']);
+  options.failAfterGame = Number(options['fail-after-game']);
   options.storageDir = path.resolve(options['storage-dir']);
   options.runId = options['run-id'];
   return options;
@@ -57,6 +59,16 @@ function writeJson(filePath, value) {
 
 function appendJsonLine(filePath, value) {
   fs.appendFileSync(filePath, `${JSON.stringify(value)}\n`);
+}
+
+function readJsonLines(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  return fs.readFileSync(filePath, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 function createRandom(seed) {
@@ -211,6 +223,107 @@ function gitRevision() {
   }
 }
 
+function metricRecords(metricsPath) {
+  return readJsonLines(metricsPath).filter((record) => record.type === 'game');
+}
+
+function summarizeMetrics(records) {
+  const wins = { red: 0, blue: 0, draw: 0 };
+  let lossTotal = 0;
+  let episodeLengthTotal = 0;
+  for (const record of records) {
+    wins[record.winner] += 1;
+    lossTotal += record.loss;
+    episodeLengthTotal += record.episodeLength;
+  }
+  const gamesPlayed = records.length;
+  return {
+    gamesPlayed,
+    averageLoss: gamesPlayed ? lossTotal / gamesPlayed : null,
+    averageEpisodeLength: gamesPlayed ? episodeLengthTotal / gamesPlayed : null,
+    wins,
+    winRates: {
+      red: gamesPlayed ? wins.red / gamesPlayed : 0,
+      blue: gamesPlayed ? wins.blue / gamesPlayed : 0,
+      draw: gamesPlayed ? wins.draw / gamesPlayed : 0
+    },
+    benchmarkSummary: {
+      completedGames: gamesPlayed,
+      decisiveGames: wins.red + wins.blue,
+      draws: wins.draw
+    }
+  };
+}
+
+function manifestValue(options, state, paths, status, errorMessage) {
+  const checkpointPointer = latestCheckpointPath(options.storageDir, options.runId);
+  const outputFiles = [
+    paths.statePath,
+    paths.manifestPath,
+    paths.metricsPath,
+    paths.metricsSummaryPath,
+    paths.logPath
+  ];
+  if (fs.existsSync(checkpointPointer)) {
+    outputFiles.push(checkpointPointer);
+  }
+  if (fs.existsSync(path.join(paths.finalDir, 'model.json'))) {
+    outputFiles.push(paths.finalDir);
+  }
+  const value = {
+    runId: options.runId,
+    status,
+    codeRevision: gitRevision(),
+    configuration: {
+      games: state.totalGames,
+      epochs: state.epochs,
+      seed: state.seed,
+      checkpointInterval: options.checkpointInterval,
+      checkpointRetain: options.checkpointRetain === 0 ? 'all' : options.checkpointRetain
+    },
+    progress: {
+      completedGames: state.completedGames,
+      totalGames: state.totalGames,
+      startedAt: state.startedAt,
+      updatedAt: state.updatedAt,
+      completedAt: state.completedAt || null
+    },
+    artifacts: {
+      checkpoints: path.relative(options.storageDir, paths.checkpointDir),
+      latestCheckpoint: fs.existsSync(checkpointPointer)
+        ? path.relative(options.storageDir, checkpointPointer)
+        : null,
+      metrics: path.relative(options.storageDir, paths.metricsPath),
+      metricsSummary: path.relative(options.storageDir, paths.metricsSummaryPath),
+      log: path.relative(options.storageDir, paths.logPath),
+      state: path.relative(options.storageDir, paths.statePath),
+      finalModel: path.relative(options.storageDir, paths.finalDir),
+      outputFiles: outputFiles.map((filePath) => path.relative(options.storageDir, filePath))
+    }
+  };
+  if (errorMessage) {
+    value.failure = {
+      message: errorMessage,
+      timestamp: state.updatedAt
+    };
+  }
+  return value;
+}
+
+function persistRunMetadata(options, state, paths, status, errorMessage) {
+  writeJson(paths.statePath, state);
+  writeJson(paths.metricsSummaryPath, {
+    runId: options.runId,
+    status,
+    updatedAt: state.updatedAt,
+    ...summarizeMetrics(metricRecords(paths.metricsPath))
+  });
+  writeJson(
+    paths.manifestPath,
+    manifestValue(options, state, paths, status, errorMessage)
+  );
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const runDir = path.join(options.storageDir, 'runs', options.runId);
@@ -218,10 +331,22 @@ async function main() {
   const statePath = path.join(runDir, 'state.json');
   const manifestPath = path.join(runDir, 'manifest.json');
   const metricsPath = path.join(options.storageDir, 'metrics', `${options.runId}.jsonl`);
+  const metricsSummaryPath = path.join(options.storageDir, 'metrics', `${options.runId}.summary.json`);
+  const logPath = path.join(options.storageDir, 'logs', `${options.runId}.log`);
   const finalDir = path.join(options.storageDir, 'final', options.runId);
+  const paths = {
+    checkpointDir,
+    finalDir,
+    logPath,
+    manifestPath,
+    metricsPath,
+    metricsSummaryPath,
+    statePath
+  };
 
   fs.mkdirSync(runDir, { recursive: true });
   fs.mkdirSync(checkpointDir, { recursive: true });
+  fs.mkdirSync(path.dirname(metricsPath), { recursive: true });
 
   if (options.evaluateLatest) {
     const checkpoint = readLatestCheckpoint(options.storageDir, options.runId);
@@ -274,87 +399,117 @@ async function main() {
       updatedAt: new Date().toISOString()
     };
     model = createModel();
-    writeJson(manifestPath, {
-      runId: options.runId,
-      codeRevision: gitRevision(),
-      configuration: {
-        games: options.games,
-        epochs: options.epochs,
-        seed: options.seed
-      },
-      artifacts: {
-        checkpoints: path.relative(options.storageDir, checkpointDir),
-        metrics: path.relative(options.storageDir, metricsPath),
-        finalModel: path.relative(options.storageDir, finalDir)
-      },
-      checkpointPolicy: {
-        interval: options.checkpointInterval,
-        retain: options.checkpointRetain === 0 ? 'all' : options.checkpointRetain
-      }
-    });
+    persistRunMetadata(options, state, paths, 'running');
   }
 
-  compileModel(model);
-  const invocationStart = state.completedGames;
-  while (state.completedGames < state.totalGames) {
-    if (options.maxGamesThisRun > 0 &&
-        state.completedGames - invocationStart >= options.maxGamesThisRun) {
-      break;
+  try {
+    compileModel(model);
+    const invocationStart = state.completedGames;
+    while (state.completedGames < state.totalGames) {
+      if (options.maxGamesThisRun > 0 &&
+          state.completedGames - invocationStart >= options.maxGamesThisRun) {
+        break;
+      }
+      const game = state.completedGames + 1;
+      const batch = makeBatch(state.seed, game);
+      const started = Date.now();
+      let history;
+      let labels;
+      let prediction;
+      let predictionTensor;
+      try {
+        labels = Array.from(await batch.labels.data());
+        history = await model.fit(
+          [batch.board, batch.global],
+          batch.labels,
+          { epochs: state.epochs, batchSize: 4, shuffle: false, verbose: 0 }
+        );
+        predictionTensor = model.predict([batch.board, batch.global]);
+        prediction = Array.from(await predictionTensor.data());
+      } finally {
+        if (predictionTensor) {
+          predictionTensor.dispose();
+        }
+        batch.board.dispose();
+        batch.global.dispose();
+        batch.labels.dispose();
+      }
+      const labelScore = labels.reduce((total, value) => total + value, 0);
+      const predictionScore = prediction.reduce((total, value) => total + value, 0);
+      const winner = labelScore === 0
+        ? 'draw'
+        : (predictionScore >= 0 ? 'red' : 'blue');
+      const episodeLength = labels.length * state.epochs;
+      state.completedGames = game;
+      state.updatedAt = new Date().toISOString();
+      state.status = state.completedGames === state.totalGames ? 'complete' : 'running';
+      if (game % options.checkpointInterval === 0 || game === state.totalGames) {
+        await saveCheckpoint(model, options, state, checkpointDir, 'interval');
+      }
+      const previousRecords = metricRecords(metricsPath);
+      const loss = history.history.loss[history.history.loss.length - 1];
+      const accuracyHistory = history.history.acc || history.history.accuracy || [];
+      const metric = {
+        type: 'game',
+        runId: options.runId,
+        game,
+        gamesPlayed: game,
+        epochs: state.epochs,
+        loss,
+        accuracy: accuracyHistory.length
+          ? accuracyHistory[accuracyHistory.length - 1]
+          : null,
+        episodeLength,
+        winner,
+        durationMs: Date.now() - started,
+        timestamp: state.updatedAt
+      };
+      const summary = summarizeMetrics(previousRecords.concat(metric));
+      metric.winRates = summary.winRates;
+      metric.benchmarkSummary = summary.benchmarkSummary;
+      appendJsonLine(metricsPath, metric);
+      persistRunMetadata(options, state, paths, state.status);
+      console.log(`Completed game ${game}/${state.totalGames}`);
+      if (options.failAfterGame === game) {
+        fail(`forced failure after game ${game}`);
+      }
     }
-    const game = state.completedGames + 1;
-    const batch = makeBatch(state.seed, game);
-    const started = Date.now();
-    let history;
-    try {
-      history = await model.fit(
-        [batch.board, batch.global],
-        batch.labels,
-        { epochs: state.epochs, batchSize: 4, shuffle: false, verbose: 0 }
-      );
-    } finally {
-      batch.board.dispose();
-      batch.global.dispose();
-      batch.labels.dispose();
+
+    if (state.completedGames === state.totalGames) {
+      state.status = 'complete';
+      state.completedAt = new Date().toISOString();
+      state.updatedAt = state.completedAt;
+      await saveModelAtomically(model, finalDir);
+      persistRunMetadata(options, state, paths, 'complete');
+      console.log(`Training complete. Final model: ${finalDir}`);
+    } else {
+      state.status = 'paused';
+      state.updatedAt = new Date().toISOString();
+      const pointerPath = latestCheckpointPath(options.storageDir, options.runId);
+      const latest = fs.existsSync(pointerPath)
+        ? readLatestCheckpoint(options.storageDir, options.runId)
+        : null;
+      if (!latest || latest.metadata.trainingStep !== state.completedGames) {
+        await saveCheckpoint(model, options, state, checkpointDir, 'pause');
+      }
+      persistRunMetadata(options, state, paths, 'paused');
+      console.log(`Training paused at ${state.completedGames}/${state.totalGames}; resume with ./train.sh --resume`);
     }
-    state.completedGames = game;
+  } catch (error) {
+    state.status = 'failed';
     state.updatedAt = new Date().toISOString();
-    state.status = state.completedGames === state.totalGames ? 'complete' : 'paused';
-    if (game % options.checkpointInterval === 0 || game === state.totalGames) {
-      await saveCheckpoint(model, options, state, checkpointDir, 'interval');
-    }
-    writeJson(statePath, state);
     appendJsonLine(metricsPath, {
+      type: 'run_failure',
       runId: options.runId,
-      game,
-      epochs: state.epochs,
-      loss: history.history.loss[history.history.loss.length - 1],
-      durationMs: Date.now() - started,
+      gamesPlayed: state.completedGames,
+      message: error.message,
       timestamp: state.updatedAt
     });
-    console.log(`Completed game ${game}/${state.totalGames}`);
+    persistRunMetadata(options, state, paths, 'failed', error.message);
+    throw error;
+  } finally {
+    model.dispose();
   }
-
-  if (state.completedGames === state.totalGames) {
-    state.status = 'complete';
-    state.completedAt = new Date().toISOString();
-    state.updatedAt = state.completedAt;
-    await saveModelAtomically(model, finalDir);
-    writeJson(statePath, state);
-    console.log(`Training complete. Final model: ${finalDir}`);
-  } else {
-    state.status = 'paused';
-    state.updatedAt = new Date().toISOString();
-    const pointerPath = latestCheckpointPath(options.storageDir, options.runId);
-    const latest = fs.existsSync(pointerPath)
-      ? readLatestCheckpoint(options.storageDir, options.runId)
-      : null;
-    if (!latest || latest.metadata.trainingStep !== state.completedGames) {
-      await saveCheckpoint(model, options, state, checkpointDir, 'pause');
-    }
-    writeJson(statePath, state);
-    console.log(`Training paused at ${state.completedGames}/${state.totalGames}; resume with ./train.sh --resume`);
-  }
-  model.dispose();
 }
 
 main().catch((error) => {
