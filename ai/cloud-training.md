@@ -14,7 +14,9 @@ vector helpers. Persistent cloud training is orchestrated by:
 
 ```sh
 ./train.sh --games 100 --epochs 4 --seed 42
+./train.sh --games 100 --checkpoint-interval 5 --checkpoint-retain 20
 ./train.sh --resume
+./train.sh --evaluate-latest
 ```
 
 Run `./train.sh --help` for all options. The script checks dependencies and
@@ -61,10 +63,11 @@ export DIPLOMACY_STORAGE_DIR=/mnt/storage/diplomacy
 ```
 
 `train.sh` accepts `--storage-dir`, `--games`, `--epochs`, `--seed`, `--run-id`,
-and `--resume`. Resume restores the original games, epochs, and seed from run
-state. `--max-games-this-run` intentionally pauses after a bounded number of
-games for restart testing or scheduled cloud jobs. Do not store provider
-credentials in the repository or artifact directory.
+`--resume`, `--checkpoint-interval`, `--checkpoint-retain`, and
+`--evaluate-latest`. Resume restores the original games, epochs, and seed from
+the latest complete checkpoint. `--max-games-this-run` intentionally pauses
+after a bounded number of games for restart testing or scheduled cloud jobs.
+Do not store provider credentials in the repository or artifact directory.
 
 Use this persistent layout:
 
@@ -84,12 +87,16 @@ Each run gets a timestamp/seed identifier under `runs/`. `train.sh` writes:
 - `metrics/<run>.jsonl`: one structured record per completed game.
 - `runs/<run>/manifest.json`: configuration, revision, and artifact paths.
 - `runs/<run>/state.json`: resume progress.
-- `checkpoints/<run>/latest/`: latest resumable model.
+- `checkpoints/<run>/step-NNNNNNNN/`: atomic model plus `metadata.json`.
+- `checkpoints/<run>/latest.json`: pointer to the latest complete checkpoint.
 - `final/<run>/`: final TensorFlow.js model.
 
-The latest-only resume model is orchestration support. Configurable checkpoint
-intervals, versioned checkpoint metadata, and retention policy belong to
-`TASK-010`.
+The default checkpoint interval is one completed game and the default retention
+policy keeps all checkpoints. Set `--checkpoint-retain N` to prune older
+checkpoints only after a newer model and metadata directory is complete and its
+latest pointer is durable. Metadata records model version, training step, seed,
+timestamp, code revision, and resumable state. Temporary checkpoint siblings
+are never selected by resume or evaluation.
 
 ## Install And Preflight
 

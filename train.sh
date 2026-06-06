@@ -11,6 +11,9 @@ run_id=""
 resume=false
 install_deps=false
 max_games_this_run=0
+checkpoint_interval=1
+checkpoint_retain=0
+evaluate_latest=false
 
 usage() {
   cat <<'EOF'
@@ -27,12 +30,17 @@ Options:
   --resume                   Resume the latest incomplete checkpoint
   --install-deps             Run npm install before dependency checks
   --max-games-this-run N    Pause after N games; useful for controlled restart tests
+  --checkpoint-interval N   Save every N completed games (default: 1)
+  --checkpoint-retain N     Keep newest N checkpoints; 0 keeps all (default: 0)
+  --evaluate-latest         Load and evaluate the latest complete checkpoint
   -h, --help                Show this help
 
 Examples:
   ./train.sh --games 2 --epochs 1 --seed 42
   ./train.sh --games 10 --max-games-this-run 2
+  ./train.sh --games 10 --checkpoint-interval 2 --checkpoint-retain 5
   ./train.sh --resume
+  ./train.sh --evaluate-latest
 EOF
 }
 
@@ -87,6 +95,20 @@ while (($#)); do
       max_games_this_run="$2"
       shift 2
       ;;
+    --checkpoint-interval)
+      (($# >= 2)) || die "--checkpoint-interval requires a value"
+      checkpoint_interval="$2"
+      shift 2
+      ;;
+    --checkpoint-retain)
+      (($# >= 2)) || die "--checkpoint-retain requires a value"
+      checkpoint_retain="$2"
+      shift 2
+      ;;
+    --evaluate-latest)
+      evaluate_latest=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -100,11 +122,16 @@ done
 require_positive_integer "--games" "$games"
 require_positive_integer "--epochs" "$epochs"
 require_positive_integer "--seed" "$seed"
+require_positive_integer "--checkpoint-interval" "$checkpoint_interval"
+[[ "$checkpoint_retain" =~ ^[0-9]+$ ]] || die "--checkpoint-retain must be a non-negative integer"
 if [[ "$max_games_this_run" != 0 ]]; then
   require_positive_integer "--max-games-this-run" "$max_games_this_run"
 fi
 if [[ "$resume" == true && -n "$run_id" ]]; then
   die "--resume and --run-id cannot be used together"
+fi
+if [[ "$evaluate_latest" == true && "$resume" == true ]]; then
+  die "--evaluate-latest and --resume cannot be used together"
 fi
 
 command -v node >/dev/null 2>&1 || die "node is required"
@@ -128,7 +155,7 @@ if ! printf 'ok\n' >"$probe"; then
 fi
 rm -f "$probe"
 
-if [[ "$resume" == true ]]; then
+if [[ "$resume" == true || "$evaluate_latest" == true ]]; then
   latest_file="$storage_dir/checkpoints/latest-run"
   [[ -s "$latest_file" ]] || die "no latest checkpoint found under $storage_dir/checkpoints"
   run_id="$(tr -d '\r\n' <"$latest_file")"
@@ -148,9 +175,14 @@ runner_args=(
   --epochs "$epochs"
   --seed "$seed"
   --max-games-this-run "$max_games_this_run"
+  --checkpoint-interval "$checkpoint_interval"
+  --checkpoint-retain "$checkpoint_retain"
 )
 if [[ "$resume" == true ]]; then
   runner_args+=(--resume)
+fi
+if [[ "$evaluate_latest" == true ]]; then
+  runner_args+=(--evaluate-latest)
 fi
 
 printf 'Training run %s; log: %s\n' "$run_id" "$log_file"

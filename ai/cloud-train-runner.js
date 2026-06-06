@@ -7,11 +7,15 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const options = { resume: false };
+  const options = { resume: false, evaluateLatest: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--resume') {
       options.resume = true;
+      continue;
+    }
+    if (arg === '--evaluate-latest') {
+      options.evaluateLatest = true;
       continue;
     }
     if (!arg.startsWith('--') || i + 1 >= argv.length) {
@@ -20,7 +24,16 @@ function parseArgs(argv) {
     options[arg.slice(2)] = argv[i + 1];
     i += 1;
   }
-  for (const key of ['storage-dir', 'run-id', 'games', 'epochs', 'seed', 'max-games-this-run']) {
+  for (const key of [
+    'storage-dir',
+    'run-id',
+    'games',
+    'epochs',
+    'seed',
+    'max-games-this-run',
+    'checkpoint-interval',
+    'checkpoint-retain'
+  ]) {
     if (options[key] === undefined) {
       fail(`missing runner argument --${key}`);
     }
@@ -29,6 +42,8 @@ function parseArgs(argv) {
   options.epochs = Number(options.epochs);
   options.seed = Number(options.seed);
   options.maxGamesThisRun = Number(options['max-games-this-run']);
+  options.checkpointInterval = Number(options['checkpoint-interval']);
+  options.checkpointRetain = Number(options['checkpoint-retain']);
   options.storageDir = path.resolve(options['storage-dir']);
   options.runId = options['run-id'];
   return options;
@@ -113,6 +128,79 @@ async function saveModelAtomically(model, destination) {
   replaceDirectory(temporary, destination);
 }
 
+function checkpointName(step) {
+  return `step-${String(step).padStart(8, '0')}`;
+}
+
+function latestCheckpointPath(storageDir, runId) {
+  return path.join(storageDir, 'checkpoints', runId, 'latest.json');
+}
+
+function readLatestCheckpoint(storageDir, runId) {
+  const pointerPath = latestCheckpointPath(storageDir, runId);
+  if (!fs.existsSync(pointerPath)) {
+    fail(`no complete checkpoint found for run ${runId}`);
+  }
+  const pointer = JSON.parse(fs.readFileSync(pointerPath, 'utf8'));
+  const checkpointPath = path.join(storageDir, pointer.path);
+  if (!fs.existsSync(path.join(checkpointPath, 'model.json')) ||
+      !fs.existsSync(path.join(checkpointPath, 'metadata.json'))) {
+    fail(`latest checkpoint is incomplete for run ${runId}`);
+  }
+  return {
+    path: checkpointPath,
+    metadata: JSON.parse(fs.readFileSync(path.join(checkpointPath, 'metadata.json'), 'utf8'))
+  };
+}
+
+function pruneCheckpoints(checkpointDir, retain) {
+  if (retain === 0) {
+    return;
+  }
+  const checkpoints = fs.readdirSync(checkpointDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^step-\d+$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  for (const checkpoint of checkpoints.slice(0, Math.max(0, checkpoints.length - retain))) {
+    fs.rmSync(path.join(checkpointDir, checkpoint), { recursive: true, force: true });
+  }
+}
+
+async function saveCheckpoint(model, options, state, checkpointDir, reason) {
+  const name = checkpointName(state.completedGames);
+  const destination = path.join(checkpointDir, name);
+  const temporary = `${destination}.tmp-${process.pid}`;
+  fs.rmSync(temporary, { recursive: true, force: true });
+  await model.save(`file://${temporary}`);
+  const timestamp = new Date().toISOString();
+  writeJson(path.join(temporary, 'metadata.json'), {
+    modelVersion: 1,
+    runId: state.runId,
+    trainingStep: state.completedGames,
+    seed: state.seed,
+    epochs: state.epochs,
+    totalGames: state.totalGames,
+    timestamp,
+    codeRevision: gitRevision(),
+    reason,
+    state: {
+      completedGames: state.completedGames,
+      status: state.status,
+      updatedAt: state.updatedAt
+    }
+  });
+  replaceDirectory(temporary, destination);
+  writeJson(latestCheckpointPath(options.storageDir, options.runId), {
+    runId: options.runId,
+    trainingStep: state.completedGames,
+    timestamp,
+    path: path.relative(options.storageDir, destination)
+  });
+  fs.writeFileSync(path.join(options.storageDir, 'checkpoints', 'latest-run'), `${options.runId}\n`);
+  pruneCheckpoints(checkpointDir, options.checkpointRetain);
+  return destination;
+}
+
 function gitRevision() {
   try {
     return require('child_process')
@@ -127,7 +215,6 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const runDir = path.join(options.storageDir, 'runs', options.runId);
   const checkpointDir = path.join(options.storageDir, 'checkpoints', options.runId);
-  const latestModelDir = path.join(checkpointDir, 'latest');
   const statePath = path.join(runDir, 'state.json');
   const manifestPath = path.join(runDir, 'manifest.json');
   const metricsPath = path.join(options.storageDir, 'metrics', `${options.runId}.jsonl`);
@@ -136,17 +223,41 @@ async function main() {
   fs.mkdirSync(runDir, { recursive: true });
   fs.mkdirSync(checkpointDir, { recursive: true });
 
+  if (options.evaluateLatest) {
+    const checkpoint = readLatestCheckpoint(options.storageDir, options.runId);
+    const evaluationModel = await tf.loadLayersModel(
+      `file://${path.join(checkpoint.path, 'model.json')}`
+    );
+    const batch = makeBatch(checkpoint.metadata.seed, checkpoint.metadata.trainingStep + 1);
+    const prediction = evaluationModel.predict([batch.board, batch.global]);
+    const values = await prediction.data();
+    console.log(JSON.stringify({
+      runId: options.runId,
+      checkpoint: path.relative(options.storageDir, checkpoint.path),
+      trainingStep: checkpoint.metadata.trainingStep,
+      modelVersion: checkpoint.metadata.modelVersion,
+      predictionCount: values.length
+    }));
+    prediction.dispose();
+    batch.board.dispose();
+    batch.global.dispose();
+    batch.labels.dispose();
+    evaluationModel.dispose();
+    return;
+  }
+
   let state;
   let model;
   if (options.resume) {
-    if (!fs.existsSync(statePath) || !fs.existsSync(path.join(latestModelDir, 'model.json'))) {
-      fail(`checkpoint is incomplete for run ${options.runId}`);
-    }
+    const checkpoint = readLatestCheckpoint(options.storageDir, options.runId);
     state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    state.completedGames = checkpoint.metadata.state.completedGames;
+    state.status = checkpoint.metadata.state.status;
+    state.updatedAt = checkpoint.metadata.state.updatedAt;
     if (state.status === 'complete') {
       fail(`run ${options.runId} is already complete`);
     }
-    model = await tf.loadLayersModel(`file://${path.join(latestModelDir, 'model.json')}`);
+    model = await tf.loadLayersModel(`file://${path.join(checkpoint.path, 'model.json')}`);
     console.log(`Resuming ${options.runId} after game ${state.completedGames}`);
   } else {
     if (fs.existsSync(statePath)) {
@@ -172,9 +283,13 @@ async function main() {
         seed: options.seed
       },
       artifacts: {
-        checkpoint: path.relative(options.storageDir, latestModelDir),
+        checkpoints: path.relative(options.storageDir, checkpointDir),
         metrics: path.relative(options.storageDir, metricsPath),
         finalModel: path.relative(options.storageDir, finalDir)
+      },
+      checkpointPolicy: {
+        interval: options.checkpointInterval,
+        retain: options.checkpointRetain === 0 ? 'all' : options.checkpointRetain
       }
     });
   }
@@ -204,9 +319,10 @@ async function main() {
     state.completedGames = game;
     state.updatedAt = new Date().toISOString();
     state.status = state.completedGames === state.totalGames ? 'complete' : 'paused';
-    await saveModelAtomically(model, latestModelDir);
+    if (game % options.checkpointInterval === 0 || game === state.totalGames) {
+      await saveCheckpoint(model, options, state, checkpointDir, 'interval');
+    }
     writeJson(statePath, state);
-    fs.writeFileSync(path.join(options.storageDir, 'checkpoints', 'latest-run'), `${options.runId}\n`);
     appendJsonLine(metricsPath, {
       runId: options.runId,
       game,
@@ -224,15 +340,17 @@ async function main() {
     state.updatedAt = state.completedAt;
     await saveModelAtomically(model, finalDir);
     writeJson(statePath, state);
-    const latestRunPath = path.join(options.storageDir, 'checkpoints', 'latest-run');
-    if (fs.existsSync(latestRunPath) &&
-        fs.readFileSync(latestRunPath, 'utf8').trim() === options.runId) {
-      fs.unlinkSync(latestRunPath);
-    }
     console.log(`Training complete. Final model: ${finalDir}`);
   } else {
     state.status = 'paused';
     state.updatedAt = new Date().toISOString();
+    const pointerPath = latestCheckpointPath(options.storageDir, options.runId);
+    const latest = fs.existsSync(pointerPath)
+      ? readLatestCheckpoint(options.storageDir, options.runId)
+      : null;
+    if (!latest || latest.metadata.trainingStep !== state.completedGames) {
+      await saveCheckpoint(model, options, state, checkpointDir, 'pause');
+    }
     writeJson(statePath, state);
     console.log(`Training paused at ${state.completedGames}/${state.totalGames}; resume with ./train.sh --resume`);
   }

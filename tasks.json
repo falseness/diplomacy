@@ -209,7 +209,7 @@
     "id": "TASK-010",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Implement model checkpoint saving during training so intermediate weights are preserved under /mnt/storage/diplomacy.",
+    "description": "Implement model checkpoint saving during training so intermediate weights are preserved under /mnt/storage/diplomacy. Implemented: Added configurable atomic versioned checkpoints with model/step/seed/timestamp metadata, latest-complete evaluation and resume, documented keep-all or bounded retention, and verified recovery after a forced mid-training kill.",
     "acceptance_criteria": [
       "Training saves checkpoints at a configurable interval.",
       "Checkpoint directories include enough metadata to identify model version, training step, seed, and timestamp.",
@@ -226,7 +226,7 @@
     "dependencies": [
       "TASK-009"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-011",
