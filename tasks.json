@@ -279,7 +279,7 @@
     "id": "TASK-013",
     "category": "test",
     "priority": "critical",
-    "description": "Build a deterministic AI benchmark harness for repeated AI-vs-AI games with fixed maps, seeds, player classes, round limits, and structured results.",
+    "description": "Build a deterministic AI benchmark harness for repeated AI-vs-AI games with fixed maps, seeds, player classes, round limits, and structured results. Implemented: Added a headless seeded benchmark engine and CLI with fixed tiny/big maps, all four AI class profiles, repeat and round controls, structured JSON results, deterministic replay coverage, and failing win-rate thresholds.",
     "acceptance_criteria": [
       "The harness can run AI-vs-AI games without browser interaction.",
       "The harness supports fixed seeds and repeated games per matchup.",
@@ -296,7 +296,7 @@
     "dependencies": [
       "TASK-005"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-014",

@@ -6,7 +6,9 @@
     "train": "node ai/train-cloud.js",
     "train-cloud": "./train.sh",
     "test-simple-ai": "node ai/test-simple-ai-baseline.js",
-    "test-ai-boundary": "node ai/test-runtime-boundary.js"
+    "test-ai-boundary": "node ai/test-runtime-boundary.js",
+    "benchmark": "node ai/benchmark.js",
+    "test-benchmark": "node ai/test-benchmark-harness.js"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",
