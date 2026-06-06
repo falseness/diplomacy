@@ -535,7 +535,7 @@
     "id": "TASK-024",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend AI training map generation to create farms and farm construction scenarios.",
+    "description": "Extend AI training map generation to create farms and farm construction scenarios. Implemented: Added configurable seeded completed/pending farm scenarios on legal owned town suburbs, GameMap startup support, income simulation, vectorization coverage, and focused density/legality tests.",
     "acceptance_criteria": [
       "Generated maps can include completed farms for either player.",
       "Generated maps can include valid farm construction-in-progress states if supported by the game.",
@@ -553,7 +553,7 @@
       "TASK-017",
       "TASK-022"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-025",

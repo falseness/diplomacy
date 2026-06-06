@@ -28,6 +28,19 @@ function createSmokeContext() {
       this.hills = hills || [];
     }
 
+    completeFarm(playerIndex) {
+      return {
+        name: 'farm',
+        hp: 1,
+        maxHP: 1,
+        income: 4,
+        playerColor: playerIndex,
+        isEmpty() { return false; },
+        isTown() { return false; },
+        isBuildingProduction() { return false; }
+      };
+    }
+
     start() {
       const neighbours = [
         {x: -1, y: 0},
@@ -59,6 +72,16 @@ function createSmokeContext() {
       function pendingBarrack(playerIndex, configured) {
         return {
           name: 'barrack',
+          turns: configured.turns,
+          playerColor: playerIndex,
+          isEmpty() { return false; },
+          isTown() { return false; },
+          isBuildingProduction() { return true; }
+        };
+      }
+      function pendingFarm(playerIndex, configured) {
+        return {
+          name: 'farm',
           turns: configured.turns,
           playerColor: playerIndex,
           isEmpty() { return false; },
@@ -104,7 +127,27 @@ function createSmokeContext() {
             setCell(configured, playerIndex, building);
             return {configured, building};
           });
-          return {towns, units, barracks, pendingBarracks};
+          const farms = (player.farms || []).map(configured => {
+            const building = this.completeFarm(playerIndex);
+            setCell(configured, playerIndex, building);
+            return {configured, building};
+          });
+          const pendingFarms = (player.pendingFarms || []).map(configured => {
+            const building = pendingFarm(playerIndex, configured);
+            setCell(configured, playerIndex, building);
+            return {configured, building};
+          });
+          return {
+            towns,
+            units,
+            barracks,
+            pendingBarracks,
+            farms,
+            pendingFarms,
+            get income() {
+              return 10 + this.farms.length * 4;
+            }
+          };
         })
       };
       return this.runtime;
@@ -137,6 +180,17 @@ function createSmokeContext() {
             player.barracks.push({configured: pending.configured, building});
             this.runtime.cells[pending.configured.x + ':' + pending.configured.y].building = building;
             player.pendingBarracks.splice(i--, 1);
+          }
+          for (let i = 0; i < player.pendingFarms.length; ++i) {
+            const pending = player.pendingFarms[i];
+            pending.building.turns -= 1;
+            if (pending.building.turns > 0) {
+              continue;
+            }
+            const building = this.completeFarm(pending.building.playerColor);
+            player.farms.push({configured: pending.configured, building});
+            this.runtime.cells[pending.configured.x + ':' + pending.configured.y].building = building;
+            player.pendingFarms.splice(i--, 1);
           }
         }
         this.runtime.turn += 1;

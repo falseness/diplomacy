@@ -94,6 +94,32 @@ class GameMap {
             }
         }
     }
+    createConfiguredFarms() {
+        for (let playerIndex = 1; playerIndex < this.players.length; ++playerIndex) {
+            let playerSettings = this.players[playerIndex]
+            let farms = playerSettings.farms || []
+            for (let i = 0; i < farms.length; ++i) {
+                let configured = farms[i]
+                let town = this.getConfiguredTown(playerIndex, configured.town)
+                assert(grid.getBuilding(configured).isEmpty())
+                let farm = new Farm(configured.x, configured.y, town)
+                town.buildings.push(farm)
+            }
+
+            let pendingFarms = playerSettings.pendingFarms || []
+            for (let i = 0; i < pendingFarms.length; ++i) {
+                let configured = pendingFarms[i]
+                let town = this.getConfiguredTown(playerIndex, configured.town)
+                assert(grid.getBuilding(configured).isEmpty())
+                let pending = new ManufactureProduction(
+                    configured.turns, production.farm.cost, Farm, 'farm')
+                pending.town = town
+                pending.coord = {x: configured.x, y: configured.y}
+                town.buildingProduction.push(pending)
+                grid.setBuilding(pending, pending.coord)
+            }
+        }
+    }
     createGoldmines() {
         for (let i = 0; i < this.goldmines.length; ++i) {
             let goldmine = this.goldmines[i]
@@ -123,6 +149,7 @@ class GameMap {
         this.createPlayers()
         this.createTowns()
         this.createConfiguredBarracks()
+        this.createConfiguredFarms()
         this.createGoldmines()
         this.createNature()
 
