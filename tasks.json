@@ -559,7 +559,7 @@
     "id": "TASK-025",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend AI training map generation to create gold and goldmine scenarios with varied income and ownership.",
+    "description": "Extend AI training map generation to create gold and goldmine scenarios with varied income and ownership. Implemented: Added seeded neutral/friendly/enemy goldmines with bounded varied income, configurable starting gold, overlap-safe placement, runtime ownership/income startup, and vectorized turn-simulation coverage.",
     "acceptance_criteria": [
       "Generated maps can include neutral, friendly, and enemy goldmines.",
       "Goldmine income values are varied within documented bounds.",
@@ -577,7 +577,7 @@
       "TASK-018",
       "TASK-022"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-026",

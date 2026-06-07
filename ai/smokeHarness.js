@@ -97,6 +97,18 @@ function createSmokeContext() {
           unit: emptyUnit()
         };
       }
+      function completeGoldmine(configured) {
+        return {
+          name: 'goldmine',
+          potentialIncome: configured.income,
+          get income() {
+            return this.runtimeTurn() >= 20 ? configured.income : 0;
+          },
+          runtimeTurn() { return 0; },
+          isEmpty() { return false; },
+          isTown() { return false; }
+        };
+      }
 
       this.runtime = {
         turn: 0,
@@ -138,6 +150,7 @@ function createSmokeContext() {
             return {configured, building};
           });
           return {
+            gold: player.gold === undefined ? (playerIndex === 0 ? 0 : 90) : player.gold,
             towns,
             units,
             barracks,
@@ -145,11 +158,26 @@ function createSmokeContext() {
             farms,
             pendingFarms,
             get income() {
-              return 10 + this.farms.length * 4;
+              const mineIncome = this.goldmines.reduce(
+                (total, mine) => total + mine.building.income, 0);
+              return 10 + this.farms.length * 4 + mineIncome;
             }
           };
         })
       };
+      for (const configured of this.goldmines) {
+        const owner = configured.owner === undefined ? 0 : configured.owner;
+        const building = completeGoldmine(configured);
+        building.runtimeTurn = () => this.runtime.turn;
+        const mine = {configured, building};
+        this.runtime.players[owner].goldmines =
+          this.runtime.players[owner].goldmines || [];
+        this.runtime.players[owner].goldmines.push(mine);
+        setCell(configured, owner, building);
+      }
+      for (const player of this.runtime.players) {
+        player.goldmines = player.goldmines || [];
+      }
       return this.runtime;
     }
 
@@ -159,6 +187,7 @@ function createSmokeContext() {
       }
       for (let turn = 0; turn < turns; ++turn) {
         for (const player of this.runtime.players) {
+          player.gold += player.income;
           for (let i = 0; i < player.pendingBarracks.length; ++i) {
             const pending = player.pendingBarracks[i];
             pending.building.turns -= 1;

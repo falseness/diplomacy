@@ -46,12 +46,17 @@ function markCoordKey(used, coord) {
 
 function townTrainingSizeConfig(size) {
     let configs = {
-        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2, barrackDensity: 0.15, farmDensity: 0.2},
-        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3, barrackDensity: 0.2, farmDensity: 0.3},
-        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4, barrackDensity: 0.25, farmDensity: 0.4}
+        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2, barrackDensity: 0.15, farmDensity: 0.2, goldmines: 3},
+        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3, barrackDensity: 0.2, farmDensity: 0.3, goldmines: 5},
+        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4, barrackDensity: 0.25, farmDensity: 0.4, goldmines: 8}
     }
     return configs[size] || configs.tiny
 }
+
+const GOLDMINE_TRAINING_INCOME_MIN = 20
+const GOLDMINE_TRAINING_INCOME_MAX = 100
+const GOLDMINE_TRAINING_STARTING_GOLD_MIN = 50
+const GOLDMINE_TRAINING_STARTING_GOLD_MAX = 500
 
 function townDistance(a, b) {
     return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
@@ -210,6 +215,27 @@ function generateFarmScenarios(rng, mapSize, used, towns, density, pendingProbab
     return {farms: farms, pendingFarms: pendingFarms}
 }
 
+function boundedInteger(value, fallback, min, max) {
+    if (!Number.isFinite(value)) {
+        return fallback
+    }
+    return Math.max(min, Math.min(max, Math.floor(value)))
+}
+
+function generateGoldmineScenarios(rng, mapSize, used, count, incomeMin, incomeMax) {
+    let goldmines = []
+    for (let i = 0; i < count; ++i) {
+        let coord = pickCoord(rng, mapSize, used)
+        goldmines.push({
+            x: coord.x,
+            y: coord.y,
+            income: randomIntWithRng(rng, incomeMin, incomeMax),
+            owner: i < 3 ? i : randomIntWithRng(rng, 0, 2)
+        })
+    }
+    return goldmines
+}
+
 function generateTownTrainingMap(options) {
     options = options || {}
     let config = townTrainingSizeConfig(options.size || 'tiny')
@@ -220,6 +246,27 @@ function generateTownTrainingMap(options) {
     let farmDensity = clampProbability(options.farmDensity, config.farmDensity)
     let pendingFarmProbability =
         clampProbability(options.pendingFarmProbability, 0.5)
+    let goldmineCount = boundedInteger(options.goldmineCount, config.goldmines, 0, 32)
+    let goldmineIncomeMin = boundedInteger(
+        options.goldmineIncomeMin,
+        GOLDMINE_TRAINING_INCOME_MIN,
+        1,
+        GOLDMINE_TRAINING_INCOME_MAX)
+    let goldmineIncomeMax = boundedInteger(
+        options.goldmineIncomeMax,
+        GOLDMINE_TRAINING_INCOME_MAX,
+        goldmineIncomeMin,
+        1000)
+    let startingGoldMin = boundedInteger(
+        options.startingGoldMin,
+        GOLDMINE_TRAINING_STARTING_GOLD_MIN,
+        0,
+        GOLDMINE_TRAINING_STARTING_GOLD_MAX)
+    let startingGoldMax = boundedInteger(
+        options.startingGoldMax,
+        GOLDMINE_TRAINING_STARTING_GOLD_MAX,
+        startingGoldMin,
+        100000)
     let mapSize = {x: config.mapSize.x, y: config.mapSize.y}
     let used = {}
     let allTowns = []
@@ -260,6 +307,8 @@ function generateTownTrainingMap(options) {
         rng, mapSize, used, redTowns, farmDensity, pendingFarmProbability)
     let blueFarmScenarios = generateFarmScenarios(
         rng, mapSize, used, blueTowns, farmDensity, pendingFarmProbability)
+    let generatedGoldmines = generateGoldmineScenarios(
+        rng, mapSize, used, goldmineCount, goldmineIncomeMin, goldmineIncomeMax)
 
     return new GameMap(
         mapSize,
@@ -270,6 +319,7 @@ function generateTownTrainingMap(options) {
             },
             {
                 rgb: {r: 255, g: 0, b: 0},
+                gold: randomIntWithRng(rng, startingGoldMin, startingGoldMax),
                 towns: redTowns,
                 ai: !gameSettings.testAI,
                 units: redUnits,
@@ -280,6 +330,7 @@ function generateTownTrainingMap(options) {
             },
             {
                 rgb: {r: 98, g: 168, b: 222},
+                gold: randomIntWithRng(rng, startingGoldMin, startingGoldMax),
                 towns: blueTowns,
                 units: blueUnits,
                 ai: true,
@@ -289,7 +340,7 @@ function generateTownTrainingMap(options) {
                 pendingFarms: blueFarmScenarios.pendingFarms
             }
         ],
-        [],
+        generatedGoldmines,
         lakes,
         mountains)
 }

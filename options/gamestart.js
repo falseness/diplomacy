@@ -26,7 +26,10 @@ class GameMap {
 
         for (let i = 1; i < this.players.length; ++i) {
             let playerType = this.getPlayerType(this.players[i])
-            players[i] = new playerType(this.players[i].rgb)
+            let configuredGold = this.players[i].gold
+            players[i] = configuredGold === undefined ?
+                new playerType(this.players[i].rgb) :
+                new playerType(this.players[i].rgb, configuredGold)
 
             if (!('units' in this.players[i])) {
                 continue;
@@ -123,6 +126,9 @@ class GameMap {
     createGoldmines() {
         for (let i = 0; i < this.goldmines.length; ++i) {
             let goldmine = this.goldmines[i]
+            let owner = goldmine.owner === undefined ? 0 : goldmine.owner
+            assert(owner >= 0 && owner < this.players.length)
+            grid.arr[goldmine.x][goldmine.y].hexagon.firstpaint(owner)
             new Goldmine(goldmine.x, goldmine.y, goldmine.income)
         }
     }
