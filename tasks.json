@@ -823,7 +823,7 @@
     "id": "TASK-036",
     "category": "functional",
     "priority": "critical",
-    "description": "Train AIPlayerWithEconomy on economy-aware maps, saving checkpoints and results under /mnt/storage/diplomacy.",
+    "description": "Train AIPlayerWithEconomy on economy-aware maps, saving checkpoints and results under /mnt/storage/diplomacy. Implemented: Added seeded two-sided AIPlayerWithEconomy action-data training on economy-rich generated maps with 78-channel vectors, interval checkpoints, metrics, benchmark snapshots, final model artifacts, and lowest-loss candidate selection.",
     "acceptance_criteria": [
       "Training uses generated maps containing economy and combat features.",
       "Training uses the AIPlayerWithEconomy action space and vector representation.",
@@ -841,7 +841,7 @@
       "TASK-012",
       "TASK-035"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-037",
