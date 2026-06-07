@@ -753,7 +753,7 @@
     "id": "TASK-033",
     "category": "functional",
     "priority": "critical",
-    "description": "Fix SimpleAiPlayerWithEconomy bugs discovered by the tiny-map sudden-death test, especially failures to spend economy resources, produce units, or finish games.",
+    "description": "Fix SimpleAiPlayerWithEconomy bugs discovered by the tiny-map sudden-death test, especially failures to spend economy resources, produce units, or finish games. Implemented: Confirmed the historical TASK-032 failure was synthetic test coverage rather than a remaining AI defect, then added a deterministic real-runtime seed suite with explicit spending, unit-production, game-completion, and per-seed failure-artifact regressions.",
     "acceptance_criteria": [
       "Every failing seed from TASK-032 is reproduced before fixing.",
       "Root causes are identified as production, economy, movement, combat, or game-end logic.",
@@ -770,7 +770,7 @@
     "dependencies": [
       "TASK-032"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-034",

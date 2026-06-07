@@ -3,11 +3,10 @@ const path = require('path');
 const vm = require('vm');
 
 const repoRoot = path.resolve(__dirname, '..');
-const failurePath = path.join(
-  repoRoot, 'artifacts', 'task-033', 'tiny-economy-ai-failure.json');
-const seed = 32032;
+const failureDirectory = path.join(repoRoot, 'artifacts', 'task-033');
+const defaultSeeds = [32000, 32016, 32032, 32048];
 
-function assert(condition, message, state) {
+function assert(condition, message, state, failurePath) {
   if (condition) {
     return;
   }
@@ -51,7 +50,7 @@ function createCanvas() {
   };
 }
 
-function createRuntimeContext() {
+function createRuntimeContext(seed) {
   const storage = {};
   const seededMath = Object.create(Math);
   let randomState = seed >>> 0;
@@ -122,106 +121,153 @@ function loadBrowserScripts(context) {
   }
 }
 
-const context = createRuntimeContext();
-loadBrowserScripts(context);
+function runScenario(seed) {
+  const failurePath = path.join(
+    failureDirectory, 'tiny-economy-ai-failure-' + seed + '.json');
+  const context = createRuntimeContext(seed);
+  loadBrowserScripts(context);
 
-new vm.Script(`
-  isFogOfWar = false
-  entityInterface = {change() {}, hide() {}}
-  townInterface = {change() {}, hide() {}}
-  barrackInterface = {change() {}, hide() {}}
-  statisticsInterface = {}
-  gameEvent = {
-    nextTurn() {},
-    screen: {moveToPlayer() {}, stop() {}}
-  }
-  nextTurnButton = {
-    setNextPlayerColor() {},
-    highlightButton: false,
-    enableClick() {},
-    disableClick() {}
-  }
-  nextTurnPauseInterface = {visible: false}
-  saveManager = {save() {}}
-  AiRuntime.trainFromHumanCommands = function() {}
-  border = new Border()
-  attackBorder = new Border()
-
-  let testManager = {
-    clearValues() {
-      external = []
-      externalProduction = []
-      nature = []
-      goldmines = []
-      gameRound = 0
-      gameExit = false
+  new vm.Script(`
+    isFogOfWar = false
+    entityInterface = {change() {}, hide() {}}
+    townInterface = {change() {}, hide() {}}
+    barrackInterface = {change() {}, hide() {}}
+    statisticsInterface = {}
+    gameEvent = {
+      nextTurn() {},
+      screen: {moveToPlayer() {}, stop() {}}
     }
-  }
-  let task032Map = createTinyEconomyAiTestMap()
-  task032Map.start(testManager, false)
-  suddenDeathRound = task032Map.suddenDeathRound
-  whooseTurn = 0
-`, { filename: 'task-032-runtime-setup.js' }).runInContext(context);
+    nextTurnButton = {
+      setNextPlayerColor() {},
+      highlightButton: false,
+      enableClick() {},
+      disableClick() {}
+    }
+    nextTurnPauseInterface = {visible: false}
+    saveManager = {save() {}}
+    AiRuntime.trainFromHumanCommands = function() {}
+    border = new Border()
+    attackBorder = new Border()
 
-const result = new vm.Script(`(() => {
-  let turnCount = 0
-  while (gameRound < suddenDeathRound &&
-      !players[1].isLost && !players[2].isLost) {
-    nextTurn()
-    ++turnCount
-  }
-  let winner = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
-  return {
-    seed: ${seed},
-    map: {
-      name: task032Map.testName,
-      size: task032Map.mapSize,
-      suddenDeathRound: task032Map.suddenDeathRound
-    },
-    turnCount,
-    gameRound,
-    winner,
-    suddenDeathStarted: gameRound >= suddenDeathRound,
-    players: players.slice(1).map(function(player, index) {
-      return {
-        index: index + 1,
-        type: player.constructor.name,
-        lost: player.isLost,
-        gold: player.gold,
-        towns: player.towns.length,
-        units: player.units.length
+    let testManager = {
+      clearValues() {
+        external = []
+        externalProduction = []
+        nature = []
+        goldmines = []
+        gameRound = 0
+        gameExit = false
       }
-    })
+    }
+    let task032Map = createTinyEconomyAiTestMap()
+    task032Map.start(testManager, false)
+    suddenDeathRound = task032Map.suddenDeathRound
+    whooseTurn = 0
+  `, { filename: 'task-032-runtime-setup.js' }).runInContext(context);
+
+  const result = new vm.Script(`(() => {
+    let turnCount = 0
+    let initialGold = players.slice(1).map(player => player.gold)
+    let initialUnits = players.slice(1).map(player => player.units.length)
+    let minimumGold = initialGold.slice()
+    let maximumUnits = initialUnits.slice()
+    while (gameRound < suddenDeathRound &&
+        !players[1].isLost && !players[2].isLost) {
+      nextTurn()
+      ++turnCount
+      players.slice(1).forEach(function(player, index) {
+        minimumGold[index] = Math.min(minimumGold[index], player.gold)
+        maximumUnits[index] = Math.max(maximumUnits[index], player.units.length)
+      })
+    }
+    let winner = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
+    return {
+      seed: ${seed},
+      map: {
+        name: task032Map.testName,
+        size: task032Map.mapSize,
+        suddenDeathRound: task032Map.suddenDeathRound
+      },
+      turnCount,
+      gameRound,
+      winner,
+      suddenDeathStarted: gameRound >= suddenDeathRound,
+      economy: {
+        initialGold,
+        minimumGold,
+        initialUnits,
+        maximumUnits
+      },
+      players: players.slice(1).map(function(player, index) {
+        return {
+          index: index + 1,
+          type: player.constructor.name,
+          lost: player.isLost,
+          gold: player.gold,
+          towns: player.towns.length,
+          units: player.units.length
+        }
+      })
+    }
+  })()`, { filename: 'task-032-runtime-game.js' }).runInContext(context);
+
+  assert(
+    result.players.every(player =>
+      player.type === 'SimpleAiPlayerWithEconomy'),
+    'runtime game did not instantiate two economy AI players',
+    result,
+    failurePath
+  );
+  assert(
+    result.map.size.x <= 9 && result.map.size.y <= 7,
+    'runtime game did not use the tiny gamestart map',
+    result,
+    failurePath
+  );
+  assert(
+    result.map.suddenDeathRound === 2000,
+    'suddenDeathRound is not 2000',
+    result,
+    failurePath
+  );
+  assert(
+    result.economy.minimumGold.some((gold, index) =>
+      gold < result.economy.initialGold[index]),
+    'economy AI never spent its starting gold',
+    result,
+    failurePath
+  );
+  assert(
+    result.economy.maximumUnits.some((units, index) =>
+      units > result.economy.initialUnits[index]),
+    'economy AI never produced a replacement unit',
+    result,
+    failurePath
+  );
+  assert(
+    result.winner !== null,
+    'runtime game ended without a winner',
+    result,
+    failurePath
+  );
+  assert(
+    !result.suddenDeathStarted,
+    'runtime game reached sudden death before producing a winner',
+    result,
+    failurePath
+  );
+
+  if (fs.existsSync(failurePath)) {
+    fs.unlinkSync(failurePath);
   }
-})()`, { filename: 'task-032-runtime-game.js' }).runInContext(context);
-
-assert(
-  result.players.every(player =>
-    player.type === 'SimpleAiPlayerWithEconomy'),
-  'runtime game did not instantiate two economy AI players',
-  result
-);
-assert(
-  result.map.size.x <= 9 && result.map.size.y <= 7,
-  'runtime game did not use the tiny gamestart map',
-  result
-);
-assert(
-  result.map.suddenDeathRound === 2000,
-  'suddenDeathRound is not 2000',
-  result
-);
-assert(result.winner !== null, 'runtime game ended without a winner', result);
-assert(
-  !result.suddenDeathStarted,
-  'runtime game reached sudden death before producing a winner',
-  result
-);
-
-if (fs.existsSync(failurePath)) {
-  fs.unlinkSync(failurePath);
+  return result;
 }
+
+const requestedSeeds = process.env.TASK_033_SEEDS ?
+  process.env.TASK_033_SEEDS.split(',').map(Number) : defaultSeeds;
+const results = requestedSeeds.map(runScenario);
 console.log(
-  'Economy AI runtime game passed: player ' + result.winner +
-  ' won in round ' + result.gameRound + ' after ' +
-  result.turnCount + ' nextTurn calls');
+  'Economy AI runtime suite passed for seeds ' +
+  results.map(result => result.seed).join(', ') +
+  '; winners appeared by round ' +
+  Math.max(...results.map(result => result.gameRound)));
