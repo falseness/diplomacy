@@ -729,7 +729,7 @@
     "id": "TASK-032",
     "category": "test",
     "priority": "critical",
-    "description": "Run two SimpleAiPlayerWithEconomy players on a tiny map from ./options/gamestart.js with suddenDeathRound=2000. The game must end before sudden death. Implemented: Added a GameMap-compatible 9x7 economy AI duel and headless completion test; fixed seed 32032 produced winner B in round 15 without timeout or sudden death, with failure-state persistence reserved for TASK-033.",
+    "description": "Run two SimpleAiPlayerWithEconomy players on a tiny map from ./options/gamestart.js with suddenDeathRound=2000. The game must end before sudden death. Implemented: Added a GameMap-compatible 9x7 economy AI duel and headless completion test; fixed seed 32032 produced winner B in round 15 without timeout or sudden death, with failure-state persistence reserved for TASK-033. Verification failed: The test converts the gamestart map into benchmarkHarness's synthetic state and never runs GameMap.start, nextTurn, or the real economy/gameplay loop, so it does not verify that two runtime economy AI players complete an actual game. Implemented: Replaced the synthetic benchmark loop with a headless browser-script runtime that calls GameMap.start and nextTurn; seed 32032 produced player 2 as winner in round 14 before sudden death.",
     "acceptance_criteria": [
       "The test uses two SimpleAiPlayerWithEconomy players.",
       "The test uses a tiny map defined through or compatible with ./options/gamestart.js.",
