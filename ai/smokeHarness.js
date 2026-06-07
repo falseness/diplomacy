@@ -89,6 +89,20 @@ function createSmokeContext() {
           isBuildingProduction() { return true; }
         };
       }
+      function completeExternal(name, playerIndex) {
+        return {
+          name,
+          hp: 5,
+          maxHP: 5,
+          playerColor: playerIndex,
+          rangeIncrease: name === 'tower' ? 1 : 0,
+          isEmpty() { return false; },
+          isTown() { return false; },
+          isBuildingProduction() { return false; },
+          isObstacle(color) { return name === 'wall' && color === playerIndex; },
+          isBarrier() { return true; }
+        };
+      }
       function setCell(configured, playerIndex, building) {
         cells[configured.x + ':' + configured.y] = {
           coord: {x: configured.x, y: configured.y},
@@ -160,6 +174,15 @@ function createSmokeContext() {
             setCell(configured, playerIndex, building);
             return {configured, building};
           });
+          const externalBuildings = {};
+          for (const property of ['walls', 'bastions', 'towers']) {
+            const name = property.slice(0, -1);
+            externalBuildings[property] = (player[property] || []).map(configured => {
+              const building = completeExternal(name, playerIndex);
+              setCell(configured, playerIndex, building);
+              return {configured, building};
+            });
+          }
           return {
             gold: player.gold === undefined ? (playerIndex === 0 ? 0 : 90) : player.gold,
             towns,
@@ -168,6 +191,9 @@ function createSmokeContext() {
             pendingBarracks,
             farms,
             pendingFarms,
+            walls: externalBuildings.walls,
+            bastions: externalBuildings.bastions,
+            towers: externalBuildings.towers,
             get income() {
               const mineIncome = this.goldmines.reduce(
                 (total, mine) => total + mine.building.income, 0);

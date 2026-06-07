@@ -46,9 +46,9 @@ function markCoordKey(used, coord) {
 
 function townTrainingSizeConfig(size) {
     let configs = {
-        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2, barrackDensity: 0.15, farmDensity: 0.2, goldmines: 3},
-        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3, barrackDensity: 0.2, farmDensity: 0.3, goldmines: 5},
-        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4, barrackDensity: 0.25, farmDensity: 0.4, goldmines: 8}
+        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2, barrackDensity: 0.15, farmDensity: 0.2, externalDensity: 0.15, goldmines: 3},
+        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3, barrackDensity: 0.2, farmDensity: 0.3, externalDensity: 0.25, goldmines: 5},
+        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4, barrackDensity: 0.25, farmDensity: 0.4, externalDensity: 0.35, goldmines: 8}
     }
     return configs[size] || configs.tiny
 }
@@ -215,6 +215,54 @@ function generateFarmScenarios(rng, mapSize, used, towns, density, pendingProbab
     return {farms: farms, pendingFarms: pendingFarms}
 }
 
+function buildingDensityProfile(profile, config) {
+    let profiles = {
+        sparse: {
+            barrackDensity: 0.05,
+            farmDensity: 0.1,
+            externalDensity: 0.1
+        },
+        normal: {
+            barrackDensity: config.barrackDensity,
+            farmDensity: config.farmDensity,
+            externalDensity: config.externalDensity
+        },
+        dense: {
+            barrackDensity: 0.35,
+            farmDensity: 0.35,
+            externalDensity: 1
+        }
+    }
+    return profiles[profile] || profiles.normal
+}
+
+function generateExternalScenarios(rng, mapSize, used, towns, density) {
+    let result = {walls: [], bastions: [], towers: []}
+    let types = [
+        {name: 'walls'},
+        {name: 'bastions'},
+        {name: 'towers'}
+    ]
+    for (let townIndex = 0; townIndex < towns.length; ++townIndex) {
+        let candidates = townNeighbourCoords(towns[townIndex])
+        let offset = randomIntWithRng(rng, 0, types.length - 1)
+        let placed = 0
+        for (let i = 0; i < candidates.length; ++i) {
+            let coord = candidates[i]
+            if (coord.x < 0 || coord.y < 0 ||
+                coord.x >= mapSize.x || coord.y >= mapSize.y ||
+                hasCoordKey(used, coord) || rng() >= density) {
+                continue
+            }
+            markCoordKey(used, coord)
+            let type = types[(offset + placed) % types.length]
+            result[type.name].push({x: coord.x, y: coord.y})
+            ++placed
+        }
+    }
+    return result
+}
+
 function boundedInteger(value, fallback, min, max) {
     if (!Number.isFinite(value)) {
         return fallback
@@ -307,12 +355,16 @@ function generateTownTrainingMap(options) {
     options = options || {}
     let config = townTrainingSizeConfig(options.size || 'tiny')
     let rng = createSeededRandom(options.seed || 1)
-    let barrackDensity = clampProbability(options.barrackDensity, config.barrackDensity)
+    let densityProfile = buildingDensityProfile(options.buildingDensity || 'normal', config)
+    let barrackDensity =
+        clampProbability(options.barrackDensity, densityProfile.barrackDensity)
     let pendingBarrackProbability =
         clampProbability(options.pendingBarrackProbability, 0.5)
-    let farmDensity = clampProbability(options.farmDensity, config.farmDensity)
+    let farmDensity = clampProbability(options.farmDensity, densityProfile.farmDensity)
     let pendingFarmProbability =
         clampProbability(options.pendingFarmProbability, 0.5)
+    let externalDensity =
+        clampProbability(options.externalDensity, densityProfile.externalDensity)
     let goldmineCount = boundedInteger(options.goldmineCount, config.goldmines, 0, 32)
     let goldmineIncomeMin = boundedInteger(
         options.goldmineIncomeMin,
@@ -382,6 +434,10 @@ function generateTownTrainingMap(options) {
         rng, mapSize, used, redTowns, farmDensity, pendingFarmProbability)
     let blueFarmScenarios = generateFarmScenarios(
         rng, mapSize, used, blueTowns, farmDensity, pendingFarmProbability)
+    let redExternalScenarios = generateExternalScenarios(
+        rng, mapSize, used, redTowns, externalDensity)
+    let blueExternalScenarios = generateExternalScenarios(
+        rng, mapSize, used, blueTowns, externalDensity)
     let generatedGoldmines = generateGoldmineScenarios(
         rng, mapSize, used, goldmineCount, goldmineIncomeMin, goldmineIncomeMax)
 
@@ -401,7 +457,10 @@ function generateTownTrainingMap(options) {
                 barracks: redBarrackScenarios.barracks,
                 pendingBarracks: redBarrackScenarios.pendingBarracks,
                 farms: redFarmScenarios.farms,
-                pendingFarms: redFarmScenarios.pendingFarms
+                pendingFarms: redFarmScenarios.pendingFarms,
+                walls: redExternalScenarios.walls,
+                bastions: redExternalScenarios.bastions,
+                towers: redExternalScenarios.towers
             },
             {
                 rgb: {r: 98, g: 168, b: 222},
@@ -412,7 +471,10 @@ function generateTownTrainingMap(options) {
                 barracks: blueBarrackScenarios.barracks,
                 pendingBarracks: blueBarrackScenarios.pendingBarracks,
                 farms: blueFarmScenarios.farms,
-                pendingFarms: blueFarmScenarios.pendingFarms
+                pendingFarms: blueFarmScenarios.pendingFarms,
+                walls: blueExternalScenarios.walls,
+                bastions: blueExternalScenarios.bastions,
+                towers: blueExternalScenarios.towers
             }
         ],
         generatedGoldmines,

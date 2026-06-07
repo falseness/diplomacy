@@ -606,7 +606,7 @@
     "id": "TASK-027",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend AI training map generation to include all building types with valid placement and configurable density.",
+    "description": "Extend AI training map generation to include all building types with valid placement and configurable density. Implemented: Added seeded sparse/normal/dense defensive-building generation, legal GameMap startup for walls/bastions/towers, and focused placement, gameplay-effect, vectorization, and compatibility coverage.",
     "acceptance_criteria": [
       "Generated maps can include town, barrack, farm, wall, bastion, and tower.",
       "Each building type respects its legal placement rules.",
@@ -624,7 +624,7 @@
       "TASK-020",
       "TASK-022"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-028",

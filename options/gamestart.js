@@ -124,6 +124,27 @@ class GameMap {
             }
         }
     }
+    createConfiguredExternalBuildings() {
+        let externalTypes = [
+            ['walls', Wall],
+            ['bastions', Bastion],
+            ['towers', Tower]
+        ]
+        for (let playerIndex = 1; playerIndex < this.players.length; ++playerIndex) {
+            let playerSettings = this.players[playerIndex]
+            for (let typeIndex = 0; typeIndex < externalTypes.length; ++typeIndex) {
+                let property = externalTypes[typeIndex][0]
+                let BuildingType = externalTypes[typeIndex][1]
+                let configuredBuildings = playerSettings[property] || []
+                for (let i = 0; i < configuredBuildings.length; ++i) {
+                    let configured = configuredBuildings[i]
+                    assert(grid.getBuilding(configured).isEmpty())
+                    assert(grid.getHexagon(configured).playerColor == playerIndex)
+                    new BuildingType(configured.x, configured.y)
+                }
+            }
+        }
+    }
     createGoldmines() {
         for (let i = 0; i < this.goldmines.length; ++i) {
             let goldmine = this.goldmines[i]
@@ -157,6 +178,7 @@ class GameMap {
         this.createTowns()
         this.createConfiguredBarracks()
         this.createConfiguredFarms()
+        this.createConfiguredExternalBuildings()
         this.createGoldmines()
         this.createNature()
 
