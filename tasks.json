@@ -941,7 +941,7 @@
     "id": "TASK-041",
     "category": "test",
     "priority": "critical",
-    "description": "Rerun all baseline comparisons after review/refactor and confirm thresholds still pass.",
+    "description": "Rerun all baseline comparisons after review/refactor and confirm thresholds still pass. Implemented: Re-ran the big-map trained baseline at 100/100 wins, the focused real gamestart 1v1 economy baseline at 4/4 completed wins, and the tiny SimpleAiPlayerWithEconomy sudden-death runtime suite with winners by round 14; reports are under /mnt/storage/diplomacy/benchmarks and TASK-045 remains the existing follow-up for larger gamestart non-results.",
     "acceptance_criteria": [
       "Trained AI still beats SimpleAiPlayer more than 80 percent of completed games on big maps.",
       "AIPlayerWithEconomy still beats SimpleAiPlayerWithEconomy 100 percent of completed games on 1v1 gamestart.js maps.",
@@ -958,7 +958,7 @@
     "dependencies": [
       "TASK-040"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-042",
