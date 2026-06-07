@@ -30,7 +30,12 @@
     "benchmark-trained": "node ai/benchmark-trained-model.js",
     "test-trained-benchmark": "node ai/test-trained-model-benchmark.js",
     "benchmark-gamestart-trained": "node ai/benchmark-gamestart-trained-model.js",
-    "test-gamestart-trained-benchmark": "node ai/test-gamestart-trained-benchmark.js"
+    "test-gamestart-trained-benchmark": "node ai/test-gamestart-trained-benchmark.js",
+    "test-regression-seeds": "node ai/test-regression-seeds.js",
+    "test-regression-map-seeds": "node ai/test-regression-seeds.js map-generation",
+    "test-regression-vector-seeds": "node ai/test-regression-seeds.js vectorization",
+    "test-regression-ai-turn-seeds": "node ai/test-regression-seeds.js ai-turn",
+    "test-regression-training-seed": "node ai/test-regression-seeds.js training-smoke"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",

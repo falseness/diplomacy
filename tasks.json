@@ -893,7 +893,7 @@
     "id": "TASK-039",
     "category": "test",
     "priority": "normal",
-    "description": "Add regression seeds for map generation, vectorization, benchmark games, and short training smoke runs.",
+    "description": "Add regression seeds for map generation, vectorization, benchmark games, and short training smoke runs. Implemented: Added fixed regression seed suites for economy map generation, vectorization channels, SimpleAiPlayerWithEconomy/AIPlayerWithEconomy turns, and a deterministic economy training smoke with failure artifacts.",
     "acceptance_criteria": [
       "A fixed seed suite covers map generation with economy features.",
       "A fixed seed suite covers vectorization for all units, buildings, suburbs, towns, and gold features.",
@@ -911,7 +911,7 @@
       "TASK-028",
       "TASK-035"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-040",
