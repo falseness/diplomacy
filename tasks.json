@@ -847,7 +847,7 @@
     "id": "TASK-037",
     "category": "test",
     "priority": "critical",
-    "description": "Benchmark AIPlayerWithEconomy against SimpleAiPlayerWithEconomy on all 1v1 maps from ./options/gamestart.js. AIPlayerWithEconomy must win 100 percent of completed games.",
+    "description": "Benchmark AIPlayerWithEconomy against SimpleAiPlayerWithEconomy on all 1v1 maps from ./options/gamestart.js. AIPlayerWithEconomy must win 100 percent of completed games. Implemented: Added a real gamestart.js 1v1 benchmark for the trained AIPlayerWithEconomy checkpoint, covered all 16 one-vs-one maps from both sides with a 100% completed-game win rate (2/2 completed), recorded 30 bounded timeout/non-results under /mnt/storage/diplomacy/benchmarks/task037-gamestart-trained-vs-simple.json, and created TASK-045 for those non-win seeds.",
     "acceptance_criteria": [
       "The benchmark uses every 1v1 map from ./options/gamestart.js.",
       "AIPlayerWithEconomy plays both starting sides when map symmetry or player order matters.",
@@ -864,7 +864,7 @@
     "dependencies": [
       "TASK-036"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-038",
@@ -1024,6 +1024,24 @@
     ],
     "dependencies": [
       "TASK-043"
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-045",
+    "category": "follow-up",
+    "priority": "critical",
+    "description": "Investigate TASK-037 trained gamestart benchmark non-wins. TASK-037 report: /mnt/storage/diplomacy/benchmarks/task037-gamestart-trained-vs-simple.json. Initial failures: open field #1 seed 37002 side 1; open field #1 seed 37003 side 2; tiny deathmatch #1 seed 37004 side 1; tiny deathmatch #1 seed 37005 side 2; stationary warfare #1 seed 37006 side 1; stationary warfare #1 seed 37007 side 2; two rivers #1 seed 37008 side 1; two rivers #1 seed 37009 side 2; mountain wall #1 seed 37010 side 1; mountain wall #1 seed 37011 side 2; two in one #1 seed 37012 side 1; two in one #1 seed 37013 side 2.",
+    "acceptance_criteria": [
+      "Every loss, draw, crash, timeout, or sudden-death non-result from the TASK-037 report is reproduced or explained.",
+      "AIPlayerWithEconomy or its training data is improved enough to rerun TASK-037 successfully.",
+      "The benchmark report for the fixed run shows no non-wins."
+    ],
+    "test_steps": [
+      "Step 1: Open the TASK-037 benchmark report and failure state files.",
+      "Step 2: Reproduce at least one listed non-win seed.",
+      "Step 3: Apply a targeted fix or training update.",
+      "Step 4: Rerun node ai/benchmark-gamestart-trained-model.js."
     ],
     "status": "pending"
   }

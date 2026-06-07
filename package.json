@@ -28,7 +28,9 @@
     "benchmark": "node ai/benchmark.js",
     "test-benchmark": "node ai/test-benchmark-harness.js",
     "benchmark-trained": "node ai/benchmark-trained-model.js",
-    "test-trained-benchmark": "node ai/test-trained-model-benchmark.js"
+    "test-trained-benchmark": "node ai/test-trained-model-benchmark.js",
+    "benchmark-gamestart-trained": "node ai/benchmark-gamestart-trained-model.js",
+    "test-gamestart-trained-benchmark": "node ai/test-gamestart-trained-benchmark.js"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",
