@@ -917,7 +917,7 @@
     "id": "TASK-040",
     "category": "maintenance",
     "priority": "normal",
-    "description": "Review, refactor, and clean AI, economy, map generation, vectorization, training, and benchmark code after feature completion.",
+    "description": "Review, refactor, and clean AI, economy, map generation, vectorization, training, and benchmark code after feature completion. Implemented: Consolidated shared AI unit-product classification and benchmark target ranking helpers in ai/players.js without changing benchmark priorities or thresholds.",
     "acceptance_criteria": [
       "Duplicated AI action enumeration logic is reduced where practical.",
       "AI code remains under ai/ except approved integration hooks.",
@@ -935,7 +935,7 @@
       "TASK-037",
       "TASK-039"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-041",

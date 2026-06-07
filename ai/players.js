@@ -1,3 +1,19 @@
+const AI_UNIT_PRODUCTS = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+
+function compareBenchmarkTargets(townBonus) {
+    return function(left, right) {
+        let leftScore = left.distance - (left.kind == 'town' ? townBonus : 0)
+        let rightScore = right.distance - (right.kind == 'town' ? townBonus : 0)
+        return leftScore - rightScore ||
+            left.kind.localeCompare(right.kind) ||
+            left.key.localeCompare(right.key)
+    }
+}
+
+function chooseBenchmarkTargetByPriority(targets, townBonus) {
+    return targets.slice().sort(compareBenchmarkTargets(townBonus))[0]
+}
+
 class SimpleAiPlayer extends Player {
     constructor(color, gold = 90) {
         super(color, gold)
@@ -50,11 +66,7 @@ class SimpleAiPlayer extends Player {
         }
     }
     chooseBenchmarkTarget(targets) {
-        return targets.slice().sort(function(left, right) {
-            return left.distance - right.distance ||
-                left.kind.localeCompare(right.kind) ||
-                left.key.localeCompare(right.key)
-        })[0]
+        return chooseBenchmarkTargetByPriority(targets, 0)
     }
     shouldBenchmarkReinforce() {
         return false
@@ -126,14 +138,13 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         return state
     }
     addProductionChoices(choices, producer, products) {
-        let unitProducts = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
         for (let i = 0; i < products.length; ++i) {
             let product = products[i]
             if (!production[product] || this.gold < production[product].cost) {
                 continue
             }
             if (producer.isBadlyDamaged ||
-                (producer.isPreparingUnit && unitProducts.includes(product))) {
+                (producer.isPreparingUnit && AI_UNIT_PRODUCTS.includes(product))) {
                 continue
             }
             choices.push({
@@ -144,12 +155,11 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
     }
     chooseWarProductions(state) {
-        let unitPriority = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
         let unitChoices = state.productionChoices.filter(function(choice) {
-            return unitPriority.includes(choice.product)
+            return AI_UNIT_PRODUCTS.includes(choice.product)
         }).sort(function(left, right) {
-            return unitPriority.indexOf(left.product) -
-                    unitPriority.indexOf(right.product) ||
+            return AI_UNIT_PRODUCTS.indexOf(left.product) -
+                    AI_UNIT_PRODUCTS.indexOf(right.product) ||
                 left.cost - right.cost
         })
         let choices = unitChoices.slice()
@@ -165,7 +175,6 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         return choices
     }
     chooseEconomyProductions(state) {
-        let unitProducts = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
         let byProducts = function(products) {
             return state.productionChoices.filter(function(choice) {
                 return products.includes(choice.product)
@@ -176,7 +185,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             })
         }
         if (state.units.length == 0) {
-            return byProducts(unitProducts)
+            return byProducts(AI_UNIT_PRODUCTS)
         }
 
         let farmCount = state.farms.length + state.pendingFarms.length
@@ -186,7 +195,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         if (state.barracks.length + state.pendingBarracks.length == 0) {
             choices = choices.concat(byProducts(['barrack']))
         }
-        return choices.concat(byProducts(unitProducts))
+        return choices.concat(byProducts(AI_UNIT_PRODUCTS))
     }
     startEconomyProduction(choice) {
         if (!choice || !choice.producer.prepare(choice.product)) {
@@ -235,13 +244,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         super.play()
     }
     chooseBenchmarkTarget(targets) {
-        return targets.slice().sort(function(left, right) {
-            let leftScore = left.distance - (left.kind == 'town' ? 3 : 0)
-            let rightScore = right.distance - (right.kind == 'town' ? 3 : 0)
-            return leftScore - rightScore ||
-                left.kind.localeCompare(right.kind) ||
-                left.key.localeCompare(right.key)
-        })[0]
+        return chooseBenchmarkTargetByPriority(targets, 3)
     }
     shouldBenchmarkReinforce(round, unitCount) {
         return round % 6 == 0 && unitCount < 5
@@ -376,13 +379,7 @@ class AIPlayer extends Player {
         }
     }
     chooseBenchmarkTarget(targets) {
-        return targets.slice().sort(function(left, right) {
-            let leftScore = left.distance - (left.kind == 'town' ? 1 : 0)
-            let rightScore = right.distance - (right.kind == 'town' ? 1 : 0)
-            return leftScore - rightScore ||
-                left.kind.localeCompare(right.kind) ||
-                left.key.localeCompare(right.key)
-        })[0]
+        return chooseBenchmarkTargetByPriority(targets, 1)
     }
     shouldBenchmarkReinforce() {
         return false
@@ -405,11 +402,10 @@ class AIPlayerWithEconomy extends AIPlayer {
         return commands
     }
     getProducerProducts(producer) {
-        let unitProducts = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
         if (producer.name == 'town') {
             return Object.keys(production)
         }
-        return unitProducts
+        return AI_UNIT_PRODUCTS
     }
     getEconomyDestinations(producer, product) {
         if (producer.getAvailableProductionCells) {
@@ -576,13 +572,7 @@ class AIPlayerWithEconomy extends AIPlayer {
         console.log('player reached hard limit')
     }
     chooseBenchmarkTarget(targets) {
-        return targets.slice().sort(function(left, right) {
-            let leftScore = left.distance - (left.kind == 'town' ? 4 : 0)
-            let rightScore = right.distance - (right.kind == 'town' ? 4 : 0)
-            return leftScore - rightScore ||
-                left.kind.localeCompare(right.kind) ||
-                left.key.localeCompare(right.key)
-        })[0]
+        return chooseBenchmarkTargetByPriority(targets, 4)
     }
     shouldBenchmarkReinforce(round, unitCount) {
         return round % 6 == 0 && unitCount < 5
