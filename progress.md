@@ -29,3 +29,4 @@ TASK-027: Added seeded sparse/normal/dense all-building maps, configured wall/ba
 TASK-028: Added configurable seeded suburb density/radius, non-overlapping owned layouts and clear expansion choices, runtime startup/expansion support, and focused income/vector tests; all listed steps and map/model/training regressions pass.
 TASK-029: Blocked because dependencies TASK-027 and TASK-028 are still to-verify; no implementation or tests were started in this iteration.
 TASK-029: Blocked because dependency TASK-028 is still to-verify; no implementation or tests were started in this iteration.
+TASK-029: Added selectable SimpleAiPlayerWithEconomy inheritance, economy inventory and direct production spending, plus focused income/spending/combat/baseline tests. War/economy mode policy remains for TASK-030/TASK-031.

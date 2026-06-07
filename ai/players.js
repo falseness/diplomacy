@@ -62,6 +62,102 @@ class SimpleAiPlayer extends Player {
 }
 
 class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
+    inspectEconomy() {
+        let state = {
+            gold: this.gold,
+            income: this.income,
+            towns: [],
+            barracks: [],
+            farms: [],
+            suburbs: [],
+            units: this.units.slice(),
+            productionChoices: []
+        }
+        let townProducts = ['noob', 'suburb', 'farm', 'barrack']
+        let barrackProducts = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+        for (let i = 0; i < this.towns.length; ++i) {
+            let town = this.towns[i]
+            if (town.killed) {
+                continue
+            }
+            state.towns.push(town)
+            for (let j = 0; j < town.suburbs.length; ++j) {
+                if (town.suburbs[j].isSuburb &&
+                    town.suburbs[j].playerColor == town.playerColor) {
+                    state.suburbs.push(town.suburbs[j])
+                }
+            }
+            for (let j = 0; j < town.buildings.length; ++j) {
+                let building = town.buildings[j]
+                if (building.killed) {
+                    continue
+                }
+                if (building.name == 'barrack') {
+                    state.barracks.push(building)
+                }
+                else if (building.name == 'farm') {
+                    state.farms.push(building)
+                }
+            }
+            this.addProductionChoices(state.productionChoices, town, townProducts)
+        }
+        for (let i = 0; i < state.barracks.length; ++i) {
+            this.addProductionChoices(
+                state.productionChoices, state.barracks[i], barrackProducts)
+        }
+        return state
+    }
+    addProductionChoices(choices, producer, products) {
+        for (let i = 0; i < products.length; ++i) {
+            let product = products[i]
+            if (!production[product] || this.gold < production[product].cost) {
+                continue
+            }
+            if (producer.isBadlyDamaged || producer.isPreparingUnit) {
+                continue
+            }
+            choices.push({
+                producer: producer,
+                product: product,
+                cost: production[product].cost
+            })
+        }
+    }
+    chooseEconomyProduction(state) {
+        let priority = ['noob', 'farm', 'suburb', 'barrack',
+            'archer', 'KOHb', 'normchel', 'catapult']
+        return state.productionChoices.slice().sort(function(left, right) {
+            return priority.indexOf(left.product) - priority.indexOf(right.product) ||
+                left.cost - right.cost
+        })[0]
+    }
+    startEconomyProduction(choice) {
+        if (!choice || !choice.producer.prepare(choice.product)) {
+            return false
+        }
+        let activeProduction = choice.producer.activeProduction
+        if (!activeProduction || activeProduction.isEmpty()) {
+            return true
+        }
+        let available = activeProduction.availableHexagons || []
+        for (let i = 0; i < available.length; ++i) {
+            let cell = grid.getCell(available[i].coord)
+            if (activeProduction.canCreateOnCell(cell, choice.producer)) {
+                choice.producer.sendInstructions(cell)
+                return true
+            }
+        }
+        choice.producer.removeSelect()
+        return false
+    }
+    spendEconomyGold() {
+        return this.startEconomyProduction(
+            this.chooseEconomyProduction(this.inspectEconomy()))
+    }
+    play() {
+        this.spendEconomyGold()
+        super.play()
+    }
     chooseBenchmarkTarget(targets) {
         return targets.slice().sort(function(left, right) {
             let leftScore = left.distance - (left.kind == 'town' ? 3 : 0)

@@ -654,7 +654,7 @@
     "id": "TASK-029",
     "category": "functional",
     "priority": "critical",
-    "description": "Create SimpleAiPlayerWithEconomy using inheritance from SimpleAiPlayer. It must keep simple combat behavior and add direct economy spending behavior.",
+    "description": "Create SimpleAiPlayerWithEconomy using inheritance from SimpleAiPlayer. It must keep simple combat behavior and add direct economy spending behavior. Implemented: Added a selectable SimpleAiPlayerWithEconomy runtime class that inventories economy state, chooses and starts affordable production with normal gold, and delegates unit combat unchanged to SimpleAiPlayer.",
     "acceptance_criteria": [
       "SimpleAiPlayerWithEconomy extends SimpleAiPlayer or shares behavior through a clearly inherited base.",
       "It can be selected independently from SimpleAiPlayer and AIPlayer.",
@@ -677,7 +677,7 @@
       "TASK-027",
       "TASK-028"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-030",

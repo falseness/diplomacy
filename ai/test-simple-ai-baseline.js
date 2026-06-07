@@ -92,6 +92,7 @@ function createContext() {
     NeutralPlayer: undefined,
     AIPlayer: undefined,
     SimpleAiPlayer: undefined,
+    SimpleAiPlayerWithEconomy: undefined,
     Noob: class Noob {},
     Town: class Town {},
     Goldmine: class Goldmine {},
@@ -207,7 +208,9 @@ function runScenario(seed) {
       [
         { rgb: { r: 208, g: 208, b: 208 }, towns: [] },
         { rgb: { r: 255, g: 0, b: 0 }, towns: [], playerType: 'simple-ai' },
-        { rgb: { r: 98, g: 168, b: 222 }, towns: [], ai: true }
+        { rgb: { r: 98, g: 168, b: 222 }, towns: [], ai: true },
+        { rgb: { r: 0, g: 128, b: 0 }, towns: [],
+          playerType: 'simple-ai-economy' }
       ],
       [],
       [],
@@ -217,6 +220,8 @@ function runScenario(seed) {
     ;({
       simpleIsBaseline: baselineMap.getPlayerType(baselineMap.players[1]) === SimpleAiPlayer,
       learnedStillSelectable: baselineMap.getPlayerType(baselineMap.players[2]) === AIPlayer && learned instanceof AIPlayer,
+      economyStillSelectable:
+        baselineMap.getPlayerType(baselineMap.players[3]) === SimpleAiPlayerWithEconomy,
       simpleSeparateFromLearned: simple instanceof SimpleAiPlayer && !(simple instanceof AIPlayer),
       simpleGold: simple.gold,
       attackAction: attacker.actions[0],
@@ -231,6 +236,7 @@ const second = runScenario(7);
 
 assert(first.simpleIsBaseline, 'SimpleAiPlayer is selectable by playerType');
 assert(first.learnedStillSelectable, 'AIPlayer remains separately selectable');
+assert(first.economyStillSelectable, 'SimpleAiPlayerWithEconomy is separately selectable');
 assert(first.simpleSeparateFromLearned, 'SimpleAiPlayer does not replace AIPlayer');
 assert(first.simpleGold < 9999999999, 'SimpleAiPlayer should not depend on unlimited gold');
 assert(first.attackAction === 'attack-target', 'SimpleAiPlayer should attack before moving');
