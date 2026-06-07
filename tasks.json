@@ -964,7 +964,7 @@
     "id": "TASK-042",
     "category": "maintenance",
     "priority": "normal",
-    "description": "Create and maintain follow-up tickets for every failed baseline, unresolved bug, incomplete feature, unstable seed, or benchmark weakness found during the AI roadmap. Implemented: Reviewed benchmark reports, regression notes, progress failures, and TODO/FIXME markers; confirmed TASK-043 through TASK-045 cover existing npm/package-script and TASK-037 non-result failures, and added TASK-046 for TASK-041 sudden-death benchmark weakness seeds 41046 and 41050.",
+    "description": "Create and maintain follow-up tickets for every failed baseline, unresolved bug, incomplete feature, unstable seed, or benchmark weakness found during the AI roadmap. Implemented: Reviewed benchmark reports, regression notes, progress failures, and TODO/FIXME markers; confirmed TASK-043 through TASK-045 cover existing npm/package-script and TASK-037 non-result failures, and added TASK-046 for TASK-041 sudden-death benchmark weakness seeds 41046 and 41050. Verification failed: TASK-037 diagnostic seed 37000 and bounded verification non-win seeds 37032-37063 are not explicitly covered by a follow-up ticket. Implemented: Added TASK-047 to explicitly cover the TASK-037 diagnostic loss seed 37000 and bounded verification timeout/non-result seeds 37032-37063, with report paths and reproduction steps.",
     "acceptance_criteria": [
       "Every failed required benchmark has at least one follow-up ticket with reproduction steps.",
       "Every unresolved code review issue has a follow-up ticket or is fixed before closure.",
@@ -1061,6 +1061,26 @@
       "Step 2: Reproduce both sudden-death games with the same checkpoint, map, candidate side, and seeds.",
       "Step 3: Apply a targeted benchmark, AI behavior, or training-data fix if reproduction shows a real weakness.",
       "Step 4: Rerun the TASK-041 big-map baseline and confirm sudden-death handling is explicit in the report."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-047",
+    "category": "follow-up",
+    "priority": "critical",
+    "description": "Investigate TASK-037 uncovered diagnostic and bounded-verification non-wins. Diagnostic report: /mnt/storage/diplomacy/benchmarks/task037-one-map.json recorded tiny deathmatch seed 37000 candidate side 1 losing to SimpleAiPlayerWithEconomy. Bounded verification report: /mnt/storage/diplomacy/benchmarks/task037-verification-bounded-seeds2.json recorded timeout/non-result seeds 37032-37063, including capture rush, strategic war, reinforcement, rush or defend, sneak attack, flank attack, attack and protect, and fight forever map cases.",
+    "acceptance_criteria": [
+      "The diagnostic loss seed 37000 is reproduced or explained with the same checkpoint, map, and candidate side.",
+      "Every bounded verification non-result seed from 37032 through 37063 is reproduced, explained, or grouped by a shared root cause with saved evidence.",
+      "The investigation distinguishes benchmark cap artifacts from real AIPlayerWithEconomy gameplay weaknesses.",
+      "A targeted benchmark, AI behavior, or training-data fix is applied if reproduction shows a real weakness.",
+      "A rerun of the TASK-037 gamestart benchmark records no uncovered non-wins or creates narrower follow-up tickets for any remaining seeds."
+    ],
+    "test_steps": [
+      "Step 1: Open /mnt/storage/diplomacy/benchmarks/task037-one-map.json and reproduce seed 37000 on tiny deathmatch as candidate side 1.",
+      "Step 2: Open /mnt/storage/diplomacy/benchmarks/task037-verification-bounded-seeds2.json and enumerate seeds 37032-37063 by map, side, timeout, and non-result status.",
+      "Step 3: Reproduce at least one representative seed from each affected map group with the same checkpoint and bounded limits.",
+      "Step 4: Rerun node ai/benchmark-gamestart-trained-model.js with enough coverage to confirm the uncovered seeds are resolved or explicitly reticketed."
     ],
     "status": "pending"
   }
