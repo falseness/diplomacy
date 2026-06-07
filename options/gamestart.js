@@ -290,6 +290,37 @@ function packMap() {
     res += '[' + s_mountain + ']\n'
     console.log(res)
 }
+
+function createTinyEconomyAiTestMap() {
+    let map = new GameMap(
+        {x: 9, y: 7},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                playerType: 'SimpleAiPlayerWithEconomy',
+                towns: [{x: 1, y: 3}],
+                units: [{x: 2, y: 2}, {x: 2, y: 4}]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayerWithEconomy',
+                towns: [{x: 7, y: 3}],
+                units: [{x: 6, y: 2}, {x: 6, y: 4}]
+            }
+        ],
+        [],
+        [],
+        []
+    )
+    map.suddenDeathRound = 2000
+    map.testName = 'tiny economy ai duel'
+    return map
+}
+
 maps = {
     "open field":
     [

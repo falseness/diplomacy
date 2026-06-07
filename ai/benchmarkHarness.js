@@ -88,6 +88,43 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function benchmarkMapFromGameMap(gameMap) {
+  if (!gameMap || !gameMap.mapSize || !Array.isArray(gameMap.players) ||
+      gameMap.players.length !== 3) {
+    throw new Error('GameMap benchmark requires neutral plus two players');
+  }
+  const players = gameMap.players.slice(1).map(function(player, playerIndex) {
+    if (!player.towns || player.towns.length !== 1) {
+      throw new Error('GameMap benchmark players require exactly one town');
+    }
+    const town = player.towns[0];
+    const units = (player.units || []).map(function(unit) {
+      return { x: unit.x, y: unit.y };
+    });
+    if (!units.length) {
+      units.push({
+        x: town.x + (playerIndex === 0 ? 1 : -1),
+        y: town.y
+      });
+    }
+    return {
+      town: { x: town.x, y: town.y },
+      units
+    };
+  });
+  return {
+    width: gameMap.mapSize.x,
+    height: gameMap.mapSize.y,
+    suddenDeathRound: Number(gameMap.suddenDeathRound),
+    blocked: []
+      .concat(gameMap.lakes || [])
+      .concat(gameMap.mountains || [])
+      .concat(gameMap.bushes || [])
+      .concat(gameMap.hills || []),
+    players
+  };
+}
+
 function coordKey(coord) {
   return coord.x + ':' + coord.y;
 }
@@ -268,10 +305,15 @@ function winnerIndex(state) {
 }
 
 function runGame(options) {
-  const mapName = options.mapName || 'tiny-duel';
-  const map = BENCHMARK_MAPS[mapName];
+  const mapName = options.gameMap && options.gameMap.testName ?
+    options.gameMap.testName : options.mapName || 'tiny-duel';
+  const map = options.gameMap ?
+    benchmarkMapFromGameMap(options.gameMap) : BENCHMARK_MAPS[mapName];
   if (!map) {
     throw new Error('Unknown benchmark map "' + mapName + '"');
+  }
+  if (!Number.isFinite(map.suddenDeathRound) || map.suddenDeathRound <= 0) {
+    throw new Error('Benchmark map requires a positive suddenDeathRound');
   }
   validatePlayerClass(options.playerA);
   validatePlayerClass(options.playerB);
@@ -413,6 +455,7 @@ function writeResult(result, outputPath) {
 module.exports = {
   BENCHMARK_MAPS,
   PLAYER_CLASSES,
+  benchmarkMapFromGameMap,
   runBenchmark,
   runGame,
   writeResult

@@ -729,7 +729,7 @@
     "id": "TASK-032",
     "category": "test",
     "priority": "critical",
-    "description": "Run two SimpleAiPlayerWithEconomy players on a tiny map from ./options/gamestart.js with suddenDeathRound=2000. The game must end before sudden death.",
+    "description": "Run two SimpleAiPlayerWithEconomy players on a tiny map from ./options/gamestart.js with suddenDeathRound=2000. The game must end before sudden death. Implemented: Added a GameMap-compatible 9x7 economy AI duel and headless completion test; fixed seed 32032 produced winner B in round 15 without timeout or sudden death, with failure-state persistence reserved for TASK-033.",
     "acceptance_criteria": [
       "The test uses two SimpleAiPlayerWithEconomy players.",
       "The test uses a tiny map defined through or compatible with ./options/gamestart.js.",
@@ -747,7 +747,7 @@
       "TASK-030",
       "TASK-031"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-033",
