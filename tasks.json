@@ -776,7 +776,7 @@
     "id": "TASK-034",
     "category": "functional",
     "priority": "critical",
-    "description": "Create AIPlayerWithEconomy using inheritance from AIPlayer. It must preserve learned combat evaluation and add economy-aware decisions.",
+    "description": "Create AIPlayerWithEconomy using inheritance from AIPlayer. It must preserve learned combat evaluation and add economy-aware decisions. Implemented: Added independently selectable AIPlayerWithEconomy inheritance with learned combat-versus-unit-production scoring, economy-aware 78-channel state simulation, undo-safe evaluation, and focused runtime coverage.",
     "acceptance_criteria": [
       "AIPlayerWithEconomy extends AIPlayer or shares behavior through a clearly inherited base.",
       "It can be selected independently from AIPlayer and SimpleAiPlayerWithEconomy.",
@@ -794,7 +794,7 @@
       "TASK-013",
       "TASK-033"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-035",

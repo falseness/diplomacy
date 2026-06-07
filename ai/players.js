@@ -390,6 +390,102 @@ class AIPlayer extends Player {
 }
 
 class AIPlayerWithEconomy extends AIPlayer {
+    getEconomyCommands() {
+        let commands = []
+        let producers = this.towns.slice()
+        for (let i = 0; i < this.towns.length; ++i) {
+            let buildings = this.towns[i].buildings || []
+            for (let j = 0; j < buildings.length; ++j) {
+                if (buildings[j].name == 'barrack') {
+                    producers.push(buildings[j])
+                }
+            }
+        }
+        for (let i = 0; i < producers.length; ++i) {
+            let producer = producers[i]
+            if (producer.killed || producer.isBadlyDamaged ||
+                producer.isPreparingUnit || this.gold < production.noob.cost) {
+                continue
+            }
+            commands.push({
+                type: 'economy',
+                product: 'noob',
+                producerCoord: {
+                    x: producer.coord.x,
+                    y: producer.coord.y
+                }
+            })
+        }
+        return commands
+    }
+    applyEconomyCommand(command) {
+        let producer = grid.getBuilding(command.producerCoord)
+        return producer.notEmpty() && producer.prepare(command.product)
+    }
+    getBestEconomyCommand() {
+        let commands = this.getEconomyCommands()
+        let validCommands = []
+        let vectorisedGrids = []
+        for (let i = 0; i < commands.length; ++i) {
+            if (!this.applyEconomyCommand(commands[i])) {
+                continue
+            }
+            validCommands.push(commands[i])
+            vectorisedGrids.push(vectoriseGrid())
+            actionManager.undo()
+        }
+        if (validCommands.length == 0) {
+            return [null, -1.0]
+        }
+        let chances = this.getWinningChances(vectorisedGrids)
+        let maxIndex = 0
+        for (let i = 1; i < chances.length; ++i) {
+            if (chances[i] > chances[maxIndex]) {
+                maxIndex = i
+            }
+        }
+        return [validCommands[maxIndex], chances[maxIndex]]
+    }
+    selectBestCommand() {
+        let [combatCommand, combatChance] = super.selectBestCommand()
+        let [economyCommand, economyChance] = this.getBestEconomyCommand()
+        if (economyCommand && (!combatCommand || economyChance > combatChance)) {
+            return [economyCommand, economyChance]
+        }
+        return [combatCommand, combatChance]
+    }
+    doActions() {
+        const hardLimit = 150
+        this.chosenGrids.push(vectoriseGrid())
+        this.winningChances.push(this.getWinningChance())
+        for (let i = 0; i < hardLimit; ++i) {
+            let [bestCommand, chance] = this.selectBestCommand()
+            if (!bestCommand) {
+                return
+            }
+            if (bestCommand.type == 'economy') {
+                if (!this.applyEconomyCommand(bestCommand)) {
+                    return
+                }
+            }
+            else {
+                let unit = grid.getCell(bestCommand.whoDoCommandCoord).unit
+                assert(unit.isMyTurn)
+                unit.select()
+                if (areCoordsEqual(
+                    bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
+                    unit.skipMoves()
+                }
+                else {
+                    unit.sendInstructions(grid.getCell(bestCommand.destinationCoord))
+                }
+            }
+            this.chosenGrids.push(vectoriseGrid())
+            this.winningChances.push(chance)
+            this.updateUnits()
+        }
+        console.log('player reached hard limit')
+    }
     chooseBenchmarkTarget(targets) {
         return targets.slice().sort(function(left, right) {
             let leftScore = left.distance - (left.kind == 'town' ? 4 : 0)
