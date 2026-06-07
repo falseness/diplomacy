@@ -63,6 +63,17 @@ class ActionManager {
 
         town.buildingProduction.push(res)
     }
+    removeBuildingProduction(buildingProduction) {
+        let collection = externalProduction
+        if (!buildingProduction.isExternalProduction() &&
+            buildingProduction.town) {
+            collection = buildingProduction.town.buildingProduction
+        }
+        let index = collection.indexOf(buildingProduction)
+        if (index != -1) {
+            collection.splice(index, 1)
+        }
+    }
     unitUndo() {
         let undo = this.arr.pop() //JSON.parse(this.arr.pop())
 
@@ -130,9 +141,11 @@ class ActionManager {
     }
     preparingBuildingUndo() {
         let undo = this.arr.pop()
+        let buildingProduction = grid.getBuilding(undo.production.coord)
 
         grid.getBuilding(undo.killBuilding.coord).kill()
-        grid.getBuilding(undo.production.coord).kill()
+        this.removeBuildingProduction(buildingProduction)
+        buildingProduction.kill()
 
         this.undoTown(undo.building)
 

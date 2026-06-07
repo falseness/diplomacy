@@ -10,7 +10,7 @@
     "test-simple-ai-economy-mode": "node ai/test-simple-ai-economy-mode.js",
     "test-simple-ai-economy-game": "node ai/test-simple-ai-economy-game.js",
     "test-simple-ai-war": "node ai/test-simple-ai-war-mode.js",
-    "test-ai-economy": "node ai/test-ai-player-economy.js",
+    "test-ai-economy": "node ai/test-ai-player-economy.js && node ai/test-action-manager-economy-undo.js",
     "test-ai-boundary": "node ai/test-runtime-boundary.js",
     "test-building-vectorization": "node ai/test-building-vectorization.js",
     "test-building-map-generation": "node ai/test-building-map-generation.js",

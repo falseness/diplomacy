@@ -800,7 +800,7 @@
     "id": "TASK-035",
     "category": "functional",
     "priority": "critical",
-    "description": "Expand AIPlayerWithEconomy action search to include production, purchases, suburbs, barracks, farms, unit training, and normal unit commands. Implemented: Added unified legal combat/economy action enumeration, all town and barrack products, destination-aware suburb/building placement, affordability filtering, and apply/undo-safe model evaluation.",
+    "description": "Expand AIPlayerWithEconomy action search to include production, purchases, suburbs, barracks, farms, unit training, and normal unit commands. Implemented: Added unified legal combat/economy action enumeration, all town and barrack products, destination-aware suburb/building placement, affordability filtering, and apply/undo-safe model evaluation. Verification failed: Real ActionManager apply/undo of a legal wall placement leaves a killed entry in externalProduction, so economy action simulation does not fully restore game state. Implemented: Removed pending building production from its owning collection during undo and added real-runtime wall apply/undo regression coverage.",
     "acceptance_criteria": [
       "The action enumerator includes legal unit movement/attack commands.",
       "The action enumerator includes legal town and barrack production commands.",
