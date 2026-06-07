@@ -706,7 +706,7 @@
     "id": "TASK-031",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement SimpleAiPlayerWithEconomy economy mode: spend most resources on farms, suburbs, income growth, and long-term production infrastructure. Implemented: Added deterministic growth-first farm/suburb spending, pending-farm awareness, one-unit minimum defense, missing-barracks fallback, explicit war/economy mode documentation, and focused reproducibility coverage.",
+    "description": "Implement SimpleAiPlayerWithEconomy economy mode: spend most resources on farms, suburbs, income growth, and long-term production infrastructure. Implemented: Added deterministic growth-first farm/suburb spending, pending-farm awareness, one-unit minimum defense, missing-barracks fallback, explicit war/economy mode documentation, and focused reproducibility coverage. Verification failed: Economy mode counts killed units as defenses, so a player whose only unit is killed queues growth instead of buying the required minimal defense. Implemented: Excluded killed units from economy defense inventory and added regression coverage requiring minimal unit production when all listed units are dead.",
     "acceptance_criteria": [
       "Economy mode prioritizes farms and suburb expansion when legal and affordable.",
       "Economy mode still buys minimal defenses or units when completely undefended.",

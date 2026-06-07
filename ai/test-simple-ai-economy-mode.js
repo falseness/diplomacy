@@ -141,6 +141,13 @@ const result = new vm.Script(`
       suburb: [{ x: 1, y: 0 }]
     }
   })
+  let killedDefense = run({
+    units: [{ killed: true }],
+    placements: {
+      farm: [{ x: 2, y: 0 }],
+      suburb: [{ x: 1, y: 0 }]
+    }
+  })
   let infrastructure = run({
     buildings: [{ name: 'farm', killed: false }],
     suburbs: [
@@ -171,6 +178,7 @@ const result = new vm.Script(`
     suburb: suburb,
     farm: farm,
     defense: defense,
+    killedDefense: killedDefense,
     infrastructure: infrastructure,
     repeatA: repeatA,
     repeatB: repeatB
@@ -185,6 +193,9 @@ assert(result.farm.placements[0] === 'farm@2:0',
   'economy mode did not prioritize a farm before suburb expansion');
 assert(result.defense.spent && result.defense.prepared[0] === 'noob',
   'economy mode did not buy a minimal unit while completely undefended');
+assert(result.killedDefense.spent &&
+  result.killedDefense.prepared[0] === 'noob',
+  'economy mode counted a killed unit as an active defense');
 assert(result.infrastructure.spent,
   'economy mode did not build missing affordable infrastructure');
 assert(result.infrastructure.placements[0] === 'barrack@3:0',

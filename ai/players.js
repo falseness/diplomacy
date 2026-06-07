@@ -76,7 +76,9 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             farms: [],
             pendingFarms: [],
             suburbs: [],
-            units: this.units.slice(),
+            units: this.units.filter(function(unit) {
+                return !unit.killed
+            }),
             productionChoices: []
         }
         let townProducts = ['noob', 'suburb', 'farm', 'barrack']
