@@ -20,6 +20,8 @@ function usage() {
     '  --repeat NUMBER        Number of games (default: 1)',
     '  --round-limit NUMBER   Maximum rounds per game (default: 40)',
     '  --min-win-rate NUMBER  Required player A win rate, from 0 to 1',
+    '  --checkpoint-id TEXT   Checkpoint or candidate identifier for reports',
+    '  --simulate-crash-seed NUMBER  Simulate one crashed game for report testing',
     '  --output PATH          JSON report path',
     '  --list                 List player classes and maps',
     '  --help                 Show this help'
@@ -34,7 +36,7 @@ function parseArgs(argv) {
     seed: 1,
     repeat: 1,
     roundLimit: 40,
-    output: path.join('artifacts', 'benchmarks', 'benchmark.json')
+    output: path.join('/mnt', 'storage', 'diplomacy', 'benchmarks', 'benchmark.json')
   };
   const names = {
     '--player-a': 'playerA',
@@ -44,6 +46,8 @@ function parseArgs(argv) {
     '--repeat': 'repeat',
     '--round-limit': 'roundLimit',
     '--min-win-rate': 'minWinRate',
+    '--checkpoint-id': 'checkpointIdentifier',
+    '--simulate-crash-seed': 'simulateCrashSeed',
     '--output': 'output'
   };
   for (let index = 0; index < argv.length; ++index) {
@@ -58,13 +62,16 @@ function parseArgs(argv) {
     }
     options[name] = argv[++index];
   }
-  for (const name of ['seed', 'repeat', 'roundLimit', 'minWinRate']) {
+  for (const name of ['seed', 'repeat', 'roundLimit', 'minWinRate', 'simulateCrashSeed']) {
     if (options[name] !== undefined) {
       options[name] = Number(options[name]);
       if (!Number.isFinite(options[name])) {
         throw new Error(name + ' must be numeric');
       }
     }
+  }
+  if (options.simulateCrashSeed !== undefined) {
+    options.simulateCrashSeeds = [options.simulateCrashSeed];
   }
   if (options.minWinRate !== undefined &&
       (options.minWinRate < 0 || options.minWinRate > 1)) {

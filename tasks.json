@@ -870,7 +870,7 @@
     "id": "TASK-038",
     "category": "test",
     "priority": "normal",
-    "description": "Add benchmark reporting with win rate, game length, timeout count, sudden-death count, crash count, failed seeds, and artifact locations.",
+    "description": "Add benchmark reporting with win rate, game length, timeout count, sudden-death count, crash count, failed seeds, and artifact locations. Implemented: Added persistent benchmark report fields for summary/per-game results, win rate, average/median game length, timeout/sudden-death/crash counts, failed seeds, player classes, checkpoint identifier, code revision, artifact locations, and CLI failure simulation coverage.",
     "acceptance_criteria": [
       "Benchmark reports include summary and per-game result data.",
       "Reports include win rate, average/median game length, timeout count, sudden-death count, crash count, and failed seeds.",
@@ -887,7 +887,7 @@
     "dependencies": [
       "TASK-013"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-039",

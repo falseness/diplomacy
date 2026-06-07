@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const vm = require('vm');
 
 function loadPlayerClasses() {
@@ -86,6 +87,18 @@ function createSeededRandom(seed) {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function codeRevision() {
+  try {
+    return execSync('git rev-parse HEAD', {
+      cwd: path.resolve(__dirname, '..'),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+  } catch (error) {
+    return 'unknown';
+  }
 }
 
 function benchmarkMapFromGameMap(gameMap) {
@@ -408,15 +421,51 @@ function runBenchmark(options) {
   if (!Number.isInteger(repeat) || repeat <= 0) {
     throw new Error('repeat must be a positive integer');
   }
+  const crashSeeds = new Set(
+    (options.simulateCrashSeeds || []).map(function(seed) {
+      return Number(seed);
+    })
+  );
   const games = [];
+  const crashes = [];
   for (let index = 0; index < repeat; ++index) {
-    games.push(runGame({
-      mapName: options.mapName,
-      playerA: options.playerA,
-      playerB: options.playerB,
-      roundLimit: options.roundLimit,
-      seed: baseSeed + index
-    }));
+    const seed = baseSeed + index;
+    try {
+      if (crashSeeds.has(seed)) {
+        throw new Error('simulated benchmark failure for seed ' + seed);
+      }
+      games.push(runGame({
+        mapName: options.mapName,
+        playerA: options.playerA,
+        playerB: options.playerB,
+        roundLimit: options.roundLimit,
+        seed
+      }));
+    } catch (error) {
+      const crash = {
+        seed,
+        mapName: options.mapName || 'tiny-duel',
+        playerA: options.playerA,
+        playerB: options.playerB,
+        message: error.message
+      };
+      crashes.push(crash);
+      games.push({
+        winner: null,
+        winnerSide: null,
+        roundCount: 0,
+        timeout: false,
+        suddenDeath: false,
+        crash: true,
+        failureReason: error.message,
+        mapName: crash.mapName,
+        playerA: crash.playerA,
+        playerB: crash.playerB,
+        runtimePlayerA: null,
+        runtimePlayerB: null,
+        seed
+      });
+    }
   }
   const playerAWins = games.filter(function(game) {
     return game.winnerSide === 'A';
@@ -424,23 +473,55 @@ function runBenchmark(options) {
   const completedGames = games.filter(function(game) {
     return game.winnerSide !== null;
   }).length;
+  const lengths = games
+    .filter(game => !game.crash)
+    .map(game => game.roundCount)
+    .sort(function(left, right) {
+      return left - right;
+    });
+  const averageGameLength = lengths.length ?
+    lengths.reduce((total, value) => total + value, 0) / lengths.length : 0;
+  const medianGameLength = lengths.length ?
+    lengths[Math.floor((lengths.length - 1) / 2)] : 0;
+  const timeoutCount = games.filter(game => game.timeout).length;
+  const suddenDeathCount = games.filter(game => game.suddenDeath).length;
+  const failedSeeds = games
+    .filter(game => game.winnerSide !== 'A')
+    .map(game => game.seed);
   return {
     config: {
       mapName: options.mapName || 'tiny-duel',
       playerA: options.playerA,
       playerB: options.playerB,
+      playerClasses: {
+        A: options.playerA,
+        B: options.playerB
+      },
+      checkpointIdentifier: options.checkpointIdentifier || options.checkpoint || null,
       seed: baseSeed,
       repeat,
-      roundLimit: Number(options.roundLimit || 40)
+      roundLimit: Number(options.roundLimit || 40),
+      codeRevision: codeRevision()
     },
     summary: {
       games: games.length,
+      attemptedGames: repeat,
       completedGames,
       playerAWins,
       playerAWinRate: completedGames ? playerAWins / completedGames : 0,
-      timeouts: games.filter(game => game.timeout).length,
-      suddenDeathGames: games.filter(game => game.suddenDeath).length
+      averageGameLength,
+      medianGameLength,
+      timeoutCount,
+      timeouts: timeoutCount,
+      suddenDeathCount,
+      suddenDeathGames: suddenDeathCount,
+      crashCount: crashes.length,
+      crashes: crashes.length,
+      failedSeeds
     },
+    failedSeeds,
+    crashes,
+    artifacts: {},
     games
   };
 }
@@ -448,6 +529,9 @@ function runBenchmark(options) {
 function writeResult(result, outputPath) {
   const absolutePath = path.resolve(outputPath);
   fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+  result.artifacts = Object.assign({}, result.artifacts, {
+    reportPath: absolutePath
+  });
   fs.writeFileSync(absolutePath, JSON.stringify(result, null, 2) + '\n');
   return absolutePath;
 }
