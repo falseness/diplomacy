@@ -583,7 +583,7 @@
     "id": "TASK-026",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend AI training map generation to include all unit types with legal placements, varied compositions, and reproducible seeds.",
+    "description": "Extend AI training map generation to include all unit types with legal placements, varied compositions, and reproducible seeds. Implemented: Added seeded all/balanced/combat/economy unit composition profiles, configurable unit counts, legal occupied-cell placement, configured unit-class startup, and reproducibility/command coverage.",
     "acceptance_criteria": [
       "Generated maps can include Noob, Archer, KOHb, Normchel, and Catapult.",
       "Unit placement avoids illegal overlaps and invalid terrain.",
@@ -600,7 +600,7 @@
     "dependencies": [
       "TASK-019"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-027",

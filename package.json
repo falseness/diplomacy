@@ -14,6 +14,7 @@
     "test-barrack-map-generation": "node ai/test-barrack-map-generation.js",
     "test-farm-map-generation": "node ai/test-farm-map-generation.js",
     "test-gold-map-generation": "node ai/test-gold-map-generation.js",
+    "test-unit-map-generation": "node ai/test-unit-map-generation.js",
     "test-unit-vectorization": "node ai/test-unit-vectorization.js",
     "benchmark": "node ai/benchmark.js",
     "test-benchmark": "node ai/test-benchmark-harness.js",

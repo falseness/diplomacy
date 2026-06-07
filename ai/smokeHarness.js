@@ -115,9 +115,20 @@ function createSmokeContext() {
         cells,
         players: this.players.map((player, playerIndex) => {
           const units = (player.units || []).map(unit => ({
+            type: unit.type,
+            name: unit.type.name,
             x: unit.x,
             y: unit.y,
-            source: 'configured'
+            coord: {x: unit.x, y: unit.y},
+            moves: 1,
+            source: 'configured',
+            getAvailableCommands() {
+              return [{
+                type: 'unit',
+                whoDoCommandCoord: this.coord,
+                destinationCoord: this.coord
+              }];
+            }
           }));
           const towns = player.towns.map(town => {
             const suburbs = [{x: town.x, y: town.y}];

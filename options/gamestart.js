@@ -38,12 +38,13 @@ class GameMap {
                 let unit = this.players[i].units[j]
                 grid.arr[unit.x][unit.y].hexagon.firstpaint(i)
                 assert(grid.arr[unit.x][unit.y].unit.isEmpty())
-                let noob = new Noob(unit.x, unit.y)
+                let unitType = unit.type || Noob
+                let configuredUnit = new unitType(unit.x, unit.y)
                 if (!('hp' in unit)) {
                     continue
                 }
-                assert(0 < unit.hp && unit.hp <= noob.hp)
-                noob.hit(noob.hp - unit.hp)
+                assert(0 < unit.hp && unit.hp <= configuredUnit.hp)
+                configuredUnit.hit(configuredUnit.hp - unit.hp)
             }
         }
     }

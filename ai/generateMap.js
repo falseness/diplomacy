@@ -111,7 +111,7 @@ function placeTown(rng, mapSize, used, allTowns, minTownDistance) {
     return coord
 }
 
-function placeUnitNearTown(rng, mapSize, used, town) {
+function placeUnitNearTown(rng, mapSize, used, town, unitType) {
     let candidates = [
         {x: town.x - 1, y: town.y},
         {x: town.x + 1, y: town.y},
@@ -128,11 +128,11 @@ function placeUnitNearTown(rng, mapSize, used, town) {
         }
         if (!hasCoordKey(used, coord)) {
             markCoordKey(used, coord)
-            return {type: Noob, x: coord.x, y: coord.y}
+            return {type: unitType, x: coord.x, y: coord.y}
         }
     }
     let coord = pickCoord(rng, mapSize, used)
-    return {type: Noob, x: coord.x, y: coord.y}
+    return {type: unitType, x: coord.x, y: coord.y}
 }
 
 function clampProbability(value, fallback) {
@@ -222,6 +222,73 @@ function boundedInteger(value, fallback, min, max) {
     return Math.max(min, Math.min(max, Math.floor(value)))
 }
 
+function unitCompositionWeights(composition) {
+    let profiles = {
+        noob: {Noob: 1},
+        balanced: {Noob: 1, Archer: 1, KOHb: 1, Normchel: 1, Catapult: 1},
+        all: {Noob: 1, Archer: 1, KOHb: 1, Normchel: 1, Catapult: 1},
+        combat: {Noob: 3, Archer: 3, KOHb: 2, Normchel: 1, Catapult: 2},
+        economy: {Noob: 5, Archer: 1, KOHb: 1, Normchel: 2, Catapult: 0}
+    }
+    if (typeof composition == 'string') {
+        return profiles[composition] || profiles.noob
+    }
+    if (!composition || typeof composition != 'object') {
+        return profiles.noob
+    }
+    let weights = {}
+    let names = ['Noob', 'Archer', 'KOHb', 'Normchel', 'Catapult']
+    for (let i = 0; i < names.length; ++i) {
+        let weight = Number(composition[names[i]])
+        weights[names[i]] = Number.isFinite(weight) ? Math.max(0, weight) : 0
+    }
+    return weights
+}
+
+function unitTypeByName(name) {
+    return {
+        Noob: Noob,
+        Archer: Archer,
+        KOHb: KOHb,
+        Normchel: Normchel,
+        Catapult: Catapult
+    }[name]
+}
+
+function createUnitComposition(rng, count, composition) {
+    let weights = unitCompositionWeights(composition)
+    let names = Object.keys(weights).filter(function(name) {
+        return weights[name] > 0
+    })
+    if (!names.length) {
+        names = ['Noob']
+        weights.Noob = 1
+    }
+
+    let result = []
+    if (composition == 'all' && count >= names.length) {
+        let offset = randomIntWithRng(rng, 0, names.length - 1)
+        for (let i = 0; i < names.length; ++i) {
+            result.push(unitTypeByName(names[(offset + i) % names.length]))
+        }
+    }
+
+    let totalWeight = names.reduce(function(total, name) {
+        return total + weights[name]
+    }, 0)
+    while (result.length < count) {
+        let choice = rng() * totalWeight
+        for (let i = 0; i < names.length; ++i) {
+            choice -= weights[names[i]]
+            if (choice <= 0 || i == names.length - 1) {
+                result.push(unitTypeByName(names[i]))
+                break
+            }
+        }
+    }
+    return result
+}
+
 function generateGoldmineScenarios(rng, mapSize, used, count, incomeMin, incomeMax) {
     let goldmines = []
     for (let i = 0; i < count; ++i) {
@@ -267,6 +334,12 @@ function generateTownTrainingMap(options) {
         GOLDMINE_TRAINING_STARTING_GOLD_MAX,
         startingGoldMin,
         100000)
+    let unitsPerPlayer = boundedInteger(
+        options.unitsPerPlayer,
+        config.extraUnitsPerPlayer,
+        0,
+        32)
+    let unitComposition = options.unitComposition || 'noob'
     let mapSize = {x: config.mapSize.x, y: config.mapSize.y}
     let used = {}
     let allTowns = []
@@ -295,9 +368,11 @@ function generateTownTrainingMap(options) {
 
     let redUnits = []
     let blueUnits = []
-    for (let i = 0; i < config.extraUnitsPerPlayer; ++i) {
-        redUnits.push(placeUnitNearTown(rng, mapSize, used, redTowns[0]))
-        blueUnits.push(placeUnitNearTown(rng, mapSize, used, blueTowns[0]))
+    let redUnitTypes = createUnitComposition(rng, unitsPerPlayer, unitComposition)
+    let blueUnitTypes = createUnitComposition(rng, unitsPerPlayer, unitComposition)
+    for (let i = 0; i < unitsPerPlayer; ++i) {
+        redUnits.push(placeUnitNearTown(rng, mapSize, used, redTowns[0], redUnitTypes[i]))
+        blueUnits.push(placeUnitNearTown(rng, mapSize, used, blueTowns[0], blueUnitTypes[i]))
     }
     let redBarrackScenarios = generateBarrackScenarios(
         rng, mapSize, used, redTowns, barrackDensity, pendingBarrackProbability)
