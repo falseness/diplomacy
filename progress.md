@@ -52,3 +52,4 @@ TASK-041: Re-ran baseline comparisons: big-map trained-vs-simple passed 100/100,
 TASK-042: Reviewed benchmark/regression reports, progress failure notes, and TODO/FIXME markers; existing TASK-043/TASK-044/TASK-045 cover known smoke and TASK-037 non-result failures, and TASK-046 now tracks TASK-041 sudden-death benchmark weakness seeds 41046 and 41050.
 TASK-042: Verification failed because TASK-037 diagnostic seed 37000 and bounded verification non-win seeds 37032-37063 are not explicitly covered by a follow-up ticket.
 TASK-042: Added TASK-047 for the previously uncovered TASK-037 diagnostic loss seed 37000 and bounded verification timeout/non-result seeds 37032-37063; JSON validation and report seed checks pass.
+TASK-043: Confirmed Node/npm smoke runtime is available (node v12.22.9, npm 8.5.1); npm run init-model and npm run train both reach project scripts and pass. Only tasks/progress metadata changed for this task.

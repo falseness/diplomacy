@@ -987,7 +987,7 @@
     "id": "TASK-043",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Install or document the Node.js/npm runtime required for repository smoke checks and AI package scripts. Created from TASK-003 failure: npm run init-model and npm run train both failed with /bin/bash: npm: command not found.",
+    "description": "Install or document the Node.js/npm runtime required for repository smoke checks and AI package scripts. Created from TASK-003 failure: npm run init-model and npm run train both failed with /bin/bash: npm: command not found. Implemented: Confirmed smoke runtime availability with node v12.22.9 and npm 8.5.1; npm run init-model loaded 6 AI scripts, npm run train loaded 6 AI scripts and validated vector helpers, and git status showed only existing tasks/progress metadata changes.",
     "acceptance_criteria": [
       "node and npm are available in the smoke environment or the required setup command is documented.",
       "node --version and npm --version output are recorded in the ticket notes.",
@@ -1003,7 +1003,7 @@
     "dependencies": [
       "TASK-003"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-044",
