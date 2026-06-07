@@ -11,6 +11,7 @@
     "test-building-map-generation": "node ai/test-building-map-generation.js",
     "test-farm-vectorization": "node ai/test-farm-vectorization.js",
     "test-suburb-vectorization": "node ai/test-suburb-vectorization.js",
+    "test-suburb-map-generation": "node ai/test-suburb-map-generation.js",
     "test-town-map-generation": "node ai/test-town-map-generation.js",
     "test-barrack-map-generation": "node ai/test-barrack-map-generation.js",
     "test-farm-map-generation": "node ai/test-farm-map-generation.js",

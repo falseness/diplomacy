@@ -63,6 +63,32 @@ class GameMap {
             }
         }
     }
+    createConfiguredSuburbs() {
+        for (let playerIndex = 1; playerIndex < this.players.length; ++playerIndex) {
+            let configuredLayouts = this.players[playerIndex].suburbs
+            if (!configuredLayouts) {
+                continue
+            }
+            for (let layoutIndex = 0; layoutIndex < configuredLayouts.length; ++layoutIndex) {
+                let layout = configuredLayouts[layoutIndex]
+                let town = this.getConfiguredTown(playerIndex, layout.town)
+                for (let suburbIndex = 0; suburbIndex < town.suburbs.length; ++suburbIndex) {
+                    town.suburbs[suburbIndex].isSuburb = false
+                }
+                town.suburbs = []
+                for (let cellIndex = 0; cellIndex < layout.cells.length; ++cellIndex) {
+                    let hexagon = grid.getHexagon(layout.cells[cellIndex])
+                    hexagon.firstpaint(playerIndex)
+                    hexagon.isSuburb = true
+                    town.suburbs.push(hexagon)
+                }
+                let expansionCells = layout.expansionCells || []
+                for (let cellIndex = 0; cellIndex < expansionCells.length; ++cellIndex) {
+                    grid.getHexagon(expansionCells[cellIndex]).firstpaint(playerIndex)
+                }
+            }
+        }
+    }
     getConfiguredTown(playerIndex, townCoord) {
         for (let i = 0; i < players[playerIndex].towns.length; ++i) {
             let town = players[playerIndex].towns[i]
@@ -176,6 +202,7 @@ class GameMap {
 
         this.createPlayers()
         this.createTowns()
+        this.createConfiguredSuburbs()
         this.createConfiguredBarracks()
         this.createConfiguredFarms()
         this.createConfiguredExternalBuildings()

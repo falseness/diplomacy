@@ -630,7 +630,7 @@
     "id": "TASK-028",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend AI training map generation to include suburbs and realistic owned territory around towns.",
+    "description": "Extend AI training map generation to include suburbs and realistic owned territory around towns. Implemented: Added seeded configurable connected suburb layouts, unique clear expansion territory, GameMap startup support, executable expansion/income simulation, and generated-map vectorization coverage.",
     "acceptance_criteria": [
       "Generated towns include valid suburb layouts.",
       "Suburb ownership matches town/player ownership.",
@@ -648,7 +648,7 @@
       "TASK-021",
       "TASK-022"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-029",

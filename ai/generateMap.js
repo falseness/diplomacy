@@ -46,9 +46,9 @@ function markCoordKey(used, coord) {
 
 function townTrainingSizeConfig(size) {
     let configs = {
-        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2, barrackDensity: 0.15, farmDensity: 0.2, externalDensity: 0.15, goldmines: 3},
-        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3, barrackDensity: 0.2, farmDensity: 0.3, externalDensity: 0.25, goldmines: 5},
-        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4, barrackDensity: 0.25, farmDensity: 0.4, externalDensity: 0.35, goldmines: 8}
+        tiny: {mapSize: {x: 7, y: 7}, neutralTowns: 1, extraUnitsPerPlayer: 1, blockers: 2, minTownDistance: 2, barrackDensity: 0.15, farmDensity: 0.2, externalDensity: 0.15, suburbDensity: 1, suburbDistance: 1, goldmines: 3},
+        medium: {mapSize: {x: 13, y: 13}, neutralTowns: 2, extraUnitsPerPlayer: 2, blockers: 8, minTownDistance: 3, barrackDensity: 0.2, farmDensity: 0.3, externalDensity: 0.25, suburbDensity: 1, suburbDistance: 1, goldmines: 5},
+        big: {mapSize: {x: 21, y: 21}, neutralTowns: 4, extraUnitsPerPlayer: 4, blockers: 18, minTownDistance: 4, barrackDensity: 0.25, farmDensity: 0.4, externalDensity: 0.35, suburbDensity: 1, suburbDistance: 1, goldmines: 8}
     }
     return configs[size] || configs.tiny
 }
@@ -59,7 +59,9 @@ const GOLDMINE_TRAINING_STARTING_GOLD_MIN = 50
 const GOLDMINE_TRAINING_STARTING_GOLD_MAX = 500
 
 function townDistance(a, b) {
-    return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+    let dx = a.x - b.x
+    let dy = a.y - b.y
+    return Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dx + dy))
 }
 
 function isTownCoordValid(coord, mapSize, used, towns, minTownDistance) {
@@ -153,7 +155,119 @@ function townNeighbourCoords(town) {
     ]
 }
 
-function generateBarrackScenarios(rng, mapSize, used, towns, density, pendingProbability) {
+function isCoordInsideMap(coord, mapSize) {
+    return coord.x >= 0 && coord.y >= 0 &&
+        coord.x < mapSize.x && coord.y < mapSize.y
+}
+
+function generateSuburbLayout(rng, mapSize, town, density, maxDistance, claimed) {
+    let cells = [{x: town.x, y: town.y}]
+    let selected = {}
+    selected[coordKey(town)] = true
+    claimed[coordKey(town)] = true
+    let frontier = [town]
+
+    if (density == 1 && maxDistance == 1) {
+        let neighbours = townNeighbourCoords(town)
+        for (let i = 0; i < neighbours.length; ++i) {
+            let coord = neighbours[i]
+            let key = coordKey(coord)
+            if (isCoordInsideMap(coord, mapSize) && !claimed[key]) {
+                claimed[key] = true
+                selected[key] = true
+                cells.push(coord)
+            }
+        }
+        frontier = []
+    }
+
+    while (frontier.length) {
+        let source = frontier.shift()
+        let candidates = townNeighbourCoords(source)
+        let offset = randomIntWithRng(rng, 0, candidates.length - 1)
+        for (let i = 0; i < candidates.length; ++i) {
+            let coord = candidates[(offset + i) % candidates.length]
+            let key = coordKey(coord)
+            if (!isCoordInsideMap(coord, mapSize) || selected[key] || claimed[key] ||
+                townDistance(coord, town) > maxDistance) {
+                continue
+            }
+            selected[key] = true
+            if (rng() >= density) {
+                continue
+            }
+            claimed[key] = true
+            cells.push(coord)
+            frontier.push(coord)
+        }
+    }
+
+    if (cells.length == 1) {
+        let neighbours = townNeighbourCoords(town).filter(function(coord) {
+            return isCoordInsideMap(coord, mapSize) && !claimed[coordKey(coord)]
+        })
+        if (neighbours.length) {
+            let coord = neighbours[randomIntWithRng(rng, 0, neighbours.length - 1)]
+            claimed[coordKey(coord)] = true
+            cells.push(coord)
+        }
+    }
+
+    let expansionCells = []
+    let expansionSeen = {}
+    for (let i = 0; i < cells.length; ++i) {
+        let neighbours = townNeighbourCoords(cells[i])
+        for (let j = 0; j < neighbours.length; ++j) {
+            let coord = neighbours[j]
+            let key = coordKey(coord)
+            if (!isCoordInsideMap(coord, mapSize) || claimed[key] || expansionSeen[key]) {
+                continue
+            }
+            expansionSeen[key] = true
+            expansionCells.push(coord)
+        }
+    }
+    return {
+        town: {x: town.x, y: town.y},
+        cells: cells,
+        expansionCells: expansionCells
+    }
+}
+
+function generateSuburbLayouts(rng, mapSize, towns, density, maxDistance, claimed) {
+    let layouts = []
+    for (let i = 0; i < towns.length; ++i) {
+        layouts.push(generateSuburbLayout(
+            rng, mapSize, towns[i], density, maxDistance, claimed))
+    }
+    return layouts
+}
+
+function configuredSuburbKeys(layouts) {
+    let result = {}
+    for (let i = 0; i < layouts.length; ++i) {
+        for (let j = 0; j < layouts[i].cells.length; ++j) {
+            result[coordKey(layouts[i].cells[j])] = true
+        }
+    }
+    return result
+}
+
+function reserveSuburbExpansionCells(layouts, claimed, used) {
+    for (let i = 0; i < layouts.length; ++i) {
+        layouts[i].expansionCells = layouts[i].expansionCells.filter(function(coord) {
+            let key = coordKey(coord)
+            if (claimed[key]) {
+                return false
+            }
+            claimed[key] = true
+            markCoordKey(used, coord)
+            return true
+        })
+    }
+}
+
+function generateBarrackScenarios(rng, mapSize, used, towns, density, pendingProbability, suburbs) {
     let barracks = []
     let pendingBarracks = []
     for (let townIndex = 0; townIndex < towns.length; ++townIndex) {
@@ -163,7 +277,8 @@ function generateBarrackScenarios(rng, mapSize, used, towns, density, pendingPro
             let coord = candidates[i]
             if (coord.x < 0 || coord.y < 0 ||
                 coord.x >= mapSize.x || coord.y >= mapSize.y ||
-                hasCoordKey(used, coord) || rng() >= density) {
+                hasCoordKey(used, coord) || !suburbs[coordKey(coord)] ||
+                rng() >= density) {
                 continue
             }
             markCoordKey(used, coord)
@@ -184,7 +299,7 @@ function generateBarrackScenarios(rng, mapSize, used, towns, density, pendingPro
     return {barracks: barracks, pendingBarracks: pendingBarracks}
 }
 
-function generateFarmScenarios(rng, mapSize, used, towns, density, pendingProbability) {
+function generateFarmScenarios(rng, mapSize, used, towns, density, pendingProbability, suburbs) {
     let farms = []
     let pendingFarms = []
     for (let townIndex = 0; townIndex < towns.length; ++townIndex) {
@@ -194,7 +309,8 @@ function generateFarmScenarios(rng, mapSize, used, towns, density, pendingProbab
             let coord = candidates[i]
             if (coord.x < 0 || coord.y < 0 ||
                 coord.x >= mapSize.x || coord.y >= mapSize.y ||
-                hasCoordKey(used, coord) || rng() >= density) {
+                hasCoordKey(used, coord) || !suburbs[coordKey(coord)] ||
+                rng() >= density) {
                 continue
             }
             markCoordKey(used, coord)
@@ -236,7 +352,7 @@ function buildingDensityProfile(profile, config) {
     return profiles[profile] || profiles.normal
 }
 
-function generateExternalScenarios(rng, mapSize, used, towns, density) {
+function generateExternalScenarios(rng, mapSize, used, towns, density, suburbs) {
     let result = {walls: [], bastions: [], towers: []}
     let types = [
         {name: 'walls'},
@@ -251,7 +367,8 @@ function generateExternalScenarios(rng, mapSize, used, towns, density) {
             let coord = candidates[i]
             if (coord.x < 0 || coord.y < 0 ||
                 coord.x >= mapSize.x || coord.y >= mapSize.y ||
-                hasCoordKey(used, coord) || rng() >= density) {
+                hasCoordKey(used, coord) || !suburbs[coordKey(coord)] ||
+                rng() >= density) {
                 continue
             }
             markCoordKey(used, coord)
@@ -365,6 +482,9 @@ function generateTownTrainingMap(options) {
         clampProbability(options.pendingFarmProbability, 0.5)
     let externalDensity =
         clampProbability(options.externalDensity, densityProfile.externalDensity)
+    let suburbDensity = clampProbability(options.suburbDensity, config.suburbDensity)
+    let suburbDistance = boundedInteger(
+        options.suburbDistance, config.suburbDistance, 1, 8)
     let goldmineCount = boundedInteger(options.goldmineCount, config.goldmines, 0, 32)
     let goldmineIncomeMin = boundedInteger(
         options.goldmineIncomeMin,
@@ -395,16 +515,33 @@ function generateTownTrainingMap(options) {
     let mapSize = {x: config.mapSize.x, y: config.mapSize.y}
     let used = {}
     let allTowns = []
+    let suburbTownDistance = Math.max(
+        config.minTownDistance, suburbDistance * 2 + 1)
 
     let neutralTowns = []
     let redTowns = []
     let blueTowns = []
 
-    redTowns.push(placeTown(rng, mapSize, used, allTowns, config.minTownDistance))
-    blueTowns.push(placeTown(rng, mapSize, used, allTowns, config.minTownDistance))
+    redTowns.push(placeTown(rng, mapSize, used, allTowns, suburbTownDistance))
+    blueTowns.push(placeTown(rng, mapSize, used, allTowns, suburbTownDistance))
     for (let i = 0; i < config.neutralTowns; ++i) {
-        neutralTowns.push(placeTown(rng, mapSize, used, allTowns, config.minTownDistance))
+        neutralTowns.push(placeTown(rng, mapSize, used, allTowns, suburbTownDistance))
     }
+
+    let claimedSuburbs = {}
+    for (let i = 0; i < allTowns.length; ++i) {
+        claimedSuburbs[coordKey(allTowns[i])] = true
+    }
+    delete claimedSuburbs[coordKey(redTowns[0])]
+    let redSuburbs = generateSuburbLayouts(
+        rng, mapSize, redTowns, suburbDensity, suburbDistance, claimedSuburbs)
+    delete claimedSuburbs[coordKey(blueTowns[0])]
+    let blueSuburbs = generateSuburbLayouts(
+        rng, mapSize, blueTowns, suburbDensity, suburbDistance, claimedSuburbs)
+    reserveSuburbExpansionCells(redSuburbs, claimedSuburbs, used)
+    reserveSuburbExpansionCells(blueSuburbs, claimedSuburbs, used)
+    let redSuburbKeys = configuredSuburbKeys(redSuburbs)
+    let blueSuburbKeys = configuredSuburbKeys(blueSuburbs)
 
     let mountains = []
     let lakes = []
@@ -427,17 +564,21 @@ function generateTownTrainingMap(options) {
         blueUnits.push(placeUnitNearTown(rng, mapSize, used, blueTowns[0], blueUnitTypes[i]))
     }
     let redBarrackScenarios = generateBarrackScenarios(
-        rng, mapSize, used, redTowns, barrackDensity, pendingBarrackProbability)
+        rng, mapSize, used, redTowns, barrackDensity, pendingBarrackProbability,
+        redSuburbKeys)
     let blueBarrackScenarios = generateBarrackScenarios(
-        rng, mapSize, used, blueTowns, barrackDensity, pendingBarrackProbability)
+        rng, mapSize, used, blueTowns, barrackDensity, pendingBarrackProbability,
+        blueSuburbKeys)
     let redFarmScenarios = generateFarmScenarios(
-        rng, mapSize, used, redTowns, farmDensity, pendingFarmProbability)
+        rng, mapSize, used, redTowns, farmDensity, pendingFarmProbability,
+        redSuburbKeys)
     let blueFarmScenarios = generateFarmScenarios(
-        rng, mapSize, used, blueTowns, farmDensity, pendingFarmProbability)
+        rng, mapSize, used, blueTowns, farmDensity, pendingFarmProbability,
+        blueSuburbKeys)
     let redExternalScenarios = generateExternalScenarios(
-        rng, mapSize, used, redTowns, externalDensity)
+        rng, mapSize, used, redTowns, externalDensity, redSuburbKeys)
     let blueExternalScenarios = generateExternalScenarios(
-        rng, mapSize, used, blueTowns, externalDensity)
+        rng, mapSize, used, blueTowns, externalDensity, blueSuburbKeys)
     let generatedGoldmines = generateGoldmineScenarios(
         rng, mapSize, used, goldmineCount, goldmineIncomeMin, goldmineIncomeMax)
 
@@ -452,6 +593,7 @@ function generateTownTrainingMap(options) {
                 rgb: {r: 255, g: 0, b: 0},
                 gold: randomIntWithRng(rng, startingGoldMin, startingGoldMax),
                 towns: redTowns,
+                suburbs: redSuburbs,
                 ai: !gameSettings.testAI,
                 units: redUnits,
                 barracks: redBarrackScenarios.barracks,
@@ -466,6 +608,7 @@ function generateTownTrainingMap(options) {
                 rgb: {r: 98, g: 168, b: 222},
                 gold: randomIntWithRng(rng, startingGoldMin, startingGoldMax),
                 towns: blueTowns,
+                suburbs: blueSuburbs,
                 units: blueUnits,
                 ai: true,
                 barracks: blueBarrackScenarios.barracks,

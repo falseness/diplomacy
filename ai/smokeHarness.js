@@ -145,14 +145,42 @@ function createSmokeContext() {
             }
           }));
           const towns = player.towns.map(town => {
-            const suburbs = [{x: town.x, y: town.y}];
-            if (playerIndex > 0) {
+            const configuredLayout = (player.suburbs || []).find(layout =>
+              layout.town.x === town.x && layout.town.y === town.y);
+            let suburbs = [{x: town.x, y: town.y}];
+            if (configuredLayout) {
+              suburbs = configuredLayout.cells.map(coord => ({
+                x: coord.x,
+                y: coord.y,
+                coord: {x: coord.x, y: coord.y},
+                playerColor: playerIndex,
+                isSuburb: true,
+                neighbours: neighbours.map(offset => ({
+                  x: coord.x + offset.x,
+                  y: coord.y + offset.y
+                }))
+              }));
+            } else if (playerIndex > 0) {
               for (const offset of neighbours) {
                 suburbs.push({x: town.x + offset.x, y: town.y + offset.y});
               }
+            }
+            if (playerIndex > 0) {
               units.push({x: town.x, y: town.y, source: 'first-town-unit'});
             }
-            return {coord: town, suburbs};
+            return {
+              coord: town,
+              playerColor: playerIndex,
+              hp: 10,
+              maxHP: 10,
+              killed: false,
+              suburbs,
+              activeProduction: {notEmpty() { return false; }},
+              buildingProduction: [],
+              get income() { return 4 + this.suburbs.length; },
+              isTown() { return true; },
+              isEmpty() { return false; }
+            };
           });
           const barracks = (player.barracks || []).map(configured => {
             const building = completeBarrack(playerIndex, configured);
@@ -194,6 +222,30 @@ function createSmokeContext() {
             walls: externalBuildings.walls,
             bastions: externalBuildings.bastions,
             towers: externalBuildings.towers,
+            expandSuburb(townIndex, coord) {
+              const town = this.towns[townIndex];
+              const layout = (player.suburbs || [])[townIndex];
+              if (!layout || !layout.expansionCells.some(candidate =>
+                candidate.x === coord.x && candidate.y === coord.y)) {
+                throw new Error('invalid generated suburb expansion');
+              }
+              const suburb = {
+                x: coord.x,
+                y: coord.y,
+                coord: {x: coord.x, y: coord.y},
+                playerColor: playerIndex,
+                isSuburb: true,
+                neighbours: neighbours.map(offset => ({
+                  x: coord.x + offset.x,
+                  y: coord.y + offset.y
+                }))
+              };
+              town.suburbs.push(suburb);
+              layout.cells.push({x: coord.x, y: coord.y});
+              layout.expansionCells = layout.expansionCells.filter(candidate =>
+                candidate.x !== coord.x || candidate.y !== coord.y);
+              return suburb;
+            },
             get income() {
               const mineIncome = this.goldmines.reduce(
                 (total, mine) => total + mine.building.income, 0);
