@@ -25,7 +25,7 @@ function usage() {
     '  --round-limit NUMBER    Max nextTurn calls per game (default: 600)',
     '  --action-limit NUMBER   Max candidate actions per turn (default: 30)',
     '  --command-limit NUMBER  Max scored commands per action (default: 60)',
-    '  --large-round-limit NUMBER    Override round limit for maps larger than 9x7 (default: 30)',
+    '  --large-round-limit NUMBER    Override round limit for maps larger than 9x7 (default: same as --round-limit)',
     '  --large-action-limit NUMBER   Override action limit for maps larger than 9x7',
     '  --large-command-limit NUMBER  Override command limit for maps larger than 9x7',
     '  --map-limit NUMBER      Limit covered 1v1 maps for smoke tests',
@@ -46,7 +46,7 @@ function parseArgs(argv) {
     roundLimit: 600,
     actionLimit: 30,
     commandLimit: 60,
-    largeRoundLimit: 30,
+    largeRoundLimit: undefined,
     largeActionLimit: undefined,
     largeCommandLimit: undefined,
     output: DEFAULT_OUTPUT,
@@ -494,204 +494,6 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
     AiRuntime.trainFromHumanCommands = function() {}
     border = new Border()
     attackBorder = new Border()
-    AIPlayerWithEconomy.prototype.getBenchmarkLimitedCommands = function() {
-      let productRank = {
-        noob: 0,
-        archer: 1,
-        KOHb: 2,
-        normchel: 3,
-        catapult: 4,
-        suburb: 5,
-        farm: 6,
-        barrack: 7,
-        wall: 8,
-        tower: 9,
-        bastion: 10
-      }
-      return this.getActionCommands().sort(function(left, right) {
-        let leftIsUnit = left.type != 'economy'
-        let rightIsUnit = right.type != 'economy'
-        if (leftIsUnit != rightIsUnit) {
-          return leftIsUnit ? -1 : 1
-        }
-        return (productRank[left.product] || 99) -
-            (productRank[right.product] || 99)
-      }).slice(0, __commandLimit)
-    }
-    AIPlayerWithEconomy.prototype.getBenchmarkTargets = function() {
-      let targets = []
-      for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
-        if (playerIndex == this.playerColor) {
-          continue
-        }
-        let enemy = players[playerIndex]
-        for (let i = 0; i < enemy.units.length; ++i) {
-          if (!enemy.units[i].killed) {
-            targets.push({
-              coord: enemy.units[i].coord,
-              kind: 'unit',
-              key: 'unit-' + playerIndex + '-' + i
-            })
-          }
-        }
-        for (let i = 0; i < enemy.towns.length; ++i) {
-          if (!enemy.towns[i].killed) {
-            targets.push({
-              coord: enemy.towns[i].coord,
-              kind: 'town',
-              key: 'town-' + playerIndex + '-' + i
-            })
-          }
-        }
-      }
-      return targets
-    }
-    AIPlayerWithEconomy.prototype.getBenchmarkDistance = function(left, right) {
-      return Math.max(
-        Math.abs(left.x - right.x),
-        Math.abs(left.y - right.y),
-        Math.abs(left.x + left.y - right.x - right.y)
-      )
-    }
-    AIPlayerWithEconomy.prototype.scoreBenchmarkCommand = function(command) {
-      if (command.type == 'economy') {
-        let productRank = {
-          noob: 85,
-          archer: 80,
-          KOHb: 75,
-          normchel: 70,
-          catapult: 65,
-          barrack: 55,
-          farm: 45,
-          suburb: 40,
-          tower: 25,
-          bastion: 20,
-          wall: 15
-        }
-        return productRank[command.product] || 0
-      }
-      let destination = grid.getCell(command.destinationCoord)
-      let score = 100
-      if ((destination.unit.notEmpty && destination.unit.notEmpty() &&
-              destination.unit.playerColor != this.playerColor) ||
-          (destination.building.notEmpty && destination.building.notEmpty() &&
-              destination.building.playerColor != this.playerColor)) {
-        score += 1000
-      }
-      let targets = this.getBenchmarkTargets()
-      if (targets.length) {
-        let before = Infinity
-        let after = Infinity
-        for (let i = 0; i < targets.length; ++i) {
-          before = Math.min(
-            before,
-            this.getBenchmarkDistance(command.whoDoCommandCoord, targets[i].coord))
-          after = Math.min(
-            after,
-            this.getBenchmarkDistance(command.destinationCoord, targets[i].coord) -
-              (targets[i].kind == 'town' ? 1 : 0))
-        }
-        score += (before - after) * 20 - after
-      }
-      if (areCoordsEqual(command.whoDoCommandCoord, command.destinationCoord)) {
-        score -= 500
-      }
-      return score
-    }
-    AIPlayerWithEconomy.prototype.getBestActionCommand = function() {
-      let commands = this.getBenchmarkLimitedCommands()
-      if (__largeMap) {
-        commands = commands.sort((left, right) =>
-          this.scoreBenchmarkCommand(right) - this.scoreBenchmarkCommand(left)
-        ).slice(0, Math.min(__commandLimit, 8))
-      }
-      if (!__largeMap) {
-        let validCommands = []
-        let vectorisedGrids = []
-        for (let i = 0; i < commands.length; ++i) {
-          if (!this.applyActionCommand(commands[i])) {
-            continue
-          }
-          validCommands.push(commands[i])
-          vectorisedGrids.push(vectoriseGrid())
-          actionManager.undo()
-        }
-        if (validCommands.length == 0) {
-          return [null, -1.0]
-        }
-        let chances = this.getWinningChances(vectorisedGrids)
-        let maxIndex = 0
-        for (let i = 1; i < chances.length; ++i) {
-          if (chances[i] > chances[maxIndex]) {
-            maxIndex = i
-          }
-        }
-        return [validCommands[maxIndex], chances[maxIndex]]
-      }
-      let validCommands = []
-      let vectorisedGrids = []
-      for (let i = 0; i < commands.length; ++i) {
-        if (!this.applyActionCommand(commands[i])) {
-          continue
-        }
-        validCommands.push(commands[i])
-        vectorisedGrids.push(vectoriseGrid())
-        actionManager.undo()
-      }
-      if (validCommands.length == 0) {
-        return [null, -1.0]
-      }
-      let chances = this.getWinningChances(vectorisedGrids)
-      let maxIndex = 0
-      for (let i = 1; i < chances.length; ++i) {
-        if (chances[i] > chances[maxIndex]) {
-          maxIndex = i
-        }
-      }
-      return [validCommands[maxIndex], chances[maxIndex]]
-    }
-    AIPlayerWithEconomy.prototype.doActions = function() {
-      if (__largeMap) {
-        if (!this.bestEnemyTargetForAI) {
-          this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
-        }
-        this.inspectEconomy = SimpleAiPlayerWithEconomy.prototype.inspectEconomy
-        this.addProductionChoices =
-          SimpleAiPlayerWithEconomy.prototype.addProductionChoices
-        this.chooseWarProductions =
-          SimpleAiPlayerWithEconomy.prototype.chooseWarProductions
-        this.startEconomyProduction =
-          SimpleAiPlayerWithEconomy.prototype.startEconomyProduction
-        this.spendWarGold = SimpleAiPlayerWithEconomy.prototype.spendWarGold
-        this.findUnitAttackCommand =
-          SimpleAiPlayer.prototype.findUnitAttackCommand
-        this.unitDoMoves = SimpleAiPlayer.prototype.unitDoMoves
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
-        SimpleAiPlayerWithEconomy.prototype.spendWarGold.call(this)
-        SimpleAiPlayer.prototype.play.call(this)
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
-        return
-      }
-      this.chosenGrids.push(vectoriseGrid())
-      this.winningChances.push(this.getWinningChance())
-      for (let i = 0; i < __actionLimit; ++i) {
-        let result = this.selectBestCommand()
-        let bestCommand = result[0]
-        let chance = result[1]
-        if (!bestCommand) {
-          return
-        }
-        if (!this.applyActionCommand(bestCommand)) {
-          return
-        }
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(chance)
-        this.updateUnits()
-      }
-    }
-
     let manager = {
       clearValues() {
         external = []
@@ -710,9 +512,6 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
     map.players[2].playerType =
       __candidateSide == 2 ? 'AIPlayerWithEconomy' : 'SimpleAiPlayerWithEconomy'
     map.start(manager, false)
-    if (__largeMap) {
-      players[__candidateSide].gold += 300
-    }
     suddenDeathRound = map.suddenDeathRound || 2000
     whooseTurn = 0
 
@@ -723,9 +522,7 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       nextTurn()
       ++turnCount
     }
-    let eliminatedWinner = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
-    let adjudicated = __largeMap && eliminatedWinner == null
-    let winner = adjudicated ? __candidateSide : eliminatedWinner
+    let winner = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
     return {
       mapName: __task037MapInfo.name,
       candidateSide: __candidateSide,
@@ -738,16 +535,14 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       nonResult: winner == null,
       suddenDeath: winner == null && gameRound >= suddenDeathRound,
       timeout: winner == null && turnCount >= __roundLimit,
-      adjudicated,
-      eliminatedWinner,
+      adjudicated: false,
+      eliminatedWinner: winner,
       limits: {
         roundLimit: __roundLimit,
         actionLimit: __actionLimit,
         commandLimit: __commandLimit
       },
-      benchmarkPolicy: __largeMap ?
-        'large-map reinforced combat baseline with checkpoint probe' :
-        'checkpoint-scored economy search',
+      benchmarkPolicy: 'runtime AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy',
       players: players.slice(1).map(function(player, index) {
         return {
           side: index + 1,

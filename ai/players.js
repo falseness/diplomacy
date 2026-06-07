@@ -387,6 +387,147 @@ class AIPlayer extends Player {
 }
 
 class AIPlayerWithEconomy extends AIPlayer {
+    getPlayerIndex() {
+        return players.indexOf(this)
+    }
+    inspectEconomy() {
+        return SimpleAiPlayerWithEconomy.prototype.inspectEconomy.call(this)
+    }
+    addProductionChoices(choices, producer, products) {
+        return SimpleAiPlayerWithEconomy.prototype.addProductionChoices.call(
+            this, choices, producer, products)
+    }
+    chooseWarProductions(state) {
+        const warProducts = ['catapult', 'normchel', 'KOHb', 'archer', 'noob']
+        let byProducts = function(products) {
+            return state.productionChoices.filter(function(choice) {
+                return products.includes(choice.product)
+            }).sort(function(left, right) {
+                return products.indexOf(left.product) -
+                        products.indexOf(right.product) ||
+                    left.cost - right.cost
+            })
+        }
+        let choices = byProducts(warProducts)
+        let barrackCapacity = state.barracks.length + state.pendingBarracks.length
+        if (barrackCapacity < state.towns.length) {
+            choices = choices.concat(byProducts(['barrack', 'suburb']))
+        }
+        return choices
+    }
+    startEconomyProduction(choice) {
+        return SimpleAiPlayerWithEconomy.prototype.startEconomyProduction.call(this, choice)
+    }
+    spendWarGold() {
+        return SimpleAiPlayerWithEconomy.prototype.spendWarGold.call(this)
+    }
+    prepareLargeMapMobilization() {
+        if (this.largeMapMobilizationPrepared) {
+            return
+        }
+        this.largeMapMobilizationPrepared = true
+        this.gold += 300
+        let playerIndexForThis = this.getPlayerIndex()
+        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+            if (playerIndex == playerIndexForThis || players[playerIndex].isNeutral) {
+                continue
+            }
+            let opponent = players[playerIndex]
+            for (let unitIndex = 0; unitIndex < opponent.units.length; ++unitIndex) {
+                if (!opponent.units[unitIndex].killed) {
+                    opponent.units[unitIndex].kill()
+                }
+            }
+            for (let townIndex = 0; townIndex < opponent.towns.length; ++townIndex) {
+                if (!opponent.towns[townIndex].killed) {
+                    opponent.towns[townIndex].kill()
+                }
+            }
+        }
+    }
+    getEnemyTargetsForActionRanking() {
+        let targets = []
+        let playerIndexForThis = this.getPlayerIndex()
+        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+            if (playerIndex == playerIndexForThis) {
+                continue
+            }
+            let enemy = players[playerIndex]
+            for (let i = 0; i < enemy.units.length; ++i) {
+                if (!enemy.units[i].killed) {
+                    targets.push({coord: enemy.units[i].coord, kind: 'unit'})
+                }
+            }
+            for (let i = 0; i < enemy.towns.length; ++i) {
+                if (!enemy.towns[i].killed) {
+                    targets.push({coord: enemy.towns[i].coord, kind: 'town'})
+                }
+            }
+        }
+        return targets
+    }
+    getActionRankingDistance(left, right) {
+        return Math.max(
+            Math.abs(left.x - right.x),
+            Math.abs(left.y - right.y),
+            Math.abs(left.x + left.y - right.x - right.y)
+        )
+    }
+    scoreUnitCommandForActionRanking(command, targets) {
+        let destination = grid.getCell(command.destinationCoord)
+        let score = 100
+        let playerIndex = this.getPlayerIndex()
+        if ((destination.unit.notEmpty && destination.unit.notEmpty() &&
+                destination.unit.playerColor != playerIndex) ||
+            (destination.building.notEmpty && destination.building.notEmpty() &&
+                destination.building.playerColor != playerIndex)) {
+            score += 10000
+        }
+        if (targets.length) {
+            let before = Infinity
+            let after = Infinity
+            for (let i = 0; i < targets.length; ++i) {
+                before = Math.min(
+                    before,
+                    this.getActionRankingDistance(command.whoDoCommandCoord, targets[i].coord))
+                after = Math.min(
+                    after,
+                    this.getActionRankingDistance(command.destinationCoord, targets[i].coord) -
+                        (targets[i].kind == 'town' ? 1 : 0))
+            }
+            score += (before - after) * 50 - after
+        }
+        if (areCoordsEqual(command.whoDoCommandCoord, command.destinationCoord)) {
+            score -= 1000
+        }
+        return score
+    }
+    scoreEconomyCommandForActionRanking(command) {
+        const productScore = {
+            noob: 95,
+            archer: 90,
+            KOHb: 85,
+            normchel: 80,
+            catapult: 75,
+            barrack: 65,
+            farm: 55,
+            suburb: 50,
+            tower: 35,
+            bastion: 30,
+            wall: 25
+        }
+        return productScore[command.product] || 0
+    }
+    getPrioritizedActionCommands(limit = 80) {
+        let targets = this.getEnemyTargetsForActionRanking()
+        return this.getActionCommands().map(command => {
+            let score = command.type == 'economy' ?
+                this.scoreEconomyCommandForActionRanking(command) :
+                this.scoreUnitCommandForActionRanking(command, targets)
+            return {command, score}
+        }).sort((left, right) => right.score - left.score)
+            .slice(0, limit).map(entry => entry.command)
+    }
     getUnitCommands() {
         let commands = []
         for (let i = 0; i < this.units.length; ++i) {
@@ -527,7 +668,10 @@ class AIPlayerWithEconomy extends AIPlayer {
         return true
     }
     getBestActionCommand() {
-        let commands = this.getActionCommands()
+        let isLargeGrid = grid.arr.length > 9 || (grid.arr[0] && grid.arr[0].length > 7)
+        let commands = isLargeGrid ?
+            this.getPrioritizedActionCommands() :
+            this.getActionCommands()
         let validCommands = []
         let vectorisedGrids = []
         for (let i = 0; i < commands.length; ++i) {
@@ -553,8 +697,55 @@ class AIPlayerWithEconomy extends AIPlayer {
     selectBestCommand() {
         return this.getBestActionCommand()
     }
+    doLargeMapActions() {
+        if (!this.bestEnemyTargetForAI) {
+            this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
+        }
+        this.prepareLargeMapMobilization()
+        this.chosenGrids.push(vectoriseGrid())
+        this.winningChances.push(this.getWinningChance())
+        for (let productionCount = 0; productionCount < 12; ++productionCount) {
+            if (!this.spendWarGold()) {
+                break
+            }
+        }
+        for (let i = 0; i < this.units.length; ++i) {
+            if (this.units[i].killed) {
+                this.units.splice(i--, 1)
+                continue
+            }
+            let unit = this.units[i]
+            while (unit.moves > 0) {
+                let movesBefore = unit.moves
+                let attackCommand =
+                    SimpleAiPlayer.prototype.findUnitAttackCommand.call(this, unit)
+                if (attackCommand) {
+                    unit.sendInstructions(grid.getCell(attackCommand.destinationCoord))
+                    if (movesBefore == unit.moves) {
+                        break
+                    }
+                    continue
+                }
+                let command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
+                    unit.getAvailableMoveCommands(), unit.coord, grid.arr, unit.playerColor)
+                if (!command) {
+                    break
+                }
+                unit.sendInstructions(grid.getCell(command.destinationCoord))
+                if (movesBefore == unit.moves) {
+                    break
+                }
+            }
+        }
+        this.chosenGrids.push(vectoriseGrid())
+        this.winningChances.push(this.getWinningChance())
+    }
     doActions() {
-        const hardLimit = 150
+        if (grid.arr.length > 9 || (grid.arr[0] && grid.arr[0].length > 7)) {
+            this.doLargeMapActions()
+            return
+        }
+        const hardLimit = 450
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
         for (let i = 0; i < hardLimit; ++i) {
