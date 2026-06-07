@@ -390,6 +390,58 @@ class AIPlayer extends Player {
 }
 
 class AIPlayerWithEconomy extends AIPlayer {
+    getUnitCommands() {
+        let commands = []
+        for (let i = 0; i < this.units.length; ++i) {
+            let unit = this.units[i]
+            if (unit.killed || unit.moves == 0) {
+                continue
+            }
+            let available = unit.getAvailableCommands()
+            for (let j = 0; j < available.length; ++j) {
+                commands.push(available[j])
+            }
+        }
+        return commands
+    }
+    getProducerProducts(producer) {
+        let unitProducts = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+        if (producer.name == 'town') {
+            return Object.keys(production)
+        }
+        return unitProducts
+    }
+    getEconomyDestinations(producer, product) {
+        if (producer.getAvailableProductionCells) {
+            return producer.getAvailableProductionCells(product)
+        }
+        let configured = production[product]
+        if (!configured || configured.production.isUnitProduction()) {
+            return []
+        }
+        let candidate = new configured.production(
+            configured.turns, configured.cost, configured.class, product)
+        candidate.choose(producer)
+        let destinations = []
+        let available = candidate.availableHexagons || []
+        for (let i = 0; i < available.length; ++i) {
+            let coord = available[i].coord
+            let cell = grid.getCell(coord)
+            if (candidate.canCreateOnCell(cell, producer)) {
+                destinations.push({ x: coord.x, y: coord.y })
+            }
+        }
+        return destinations
+    }
+    getEconomyCommandCategory(product) {
+        if (production[product].production.isUnitProduction()) {
+            return 'unit-training'
+        }
+        if (product == 'suburb') {
+            return 'suburb-expansion'
+        }
+        return 'building-placement'
+    }
     getEconomyCommands() {
         let commands = []
         let producers = this.towns.slice()
@@ -403,31 +455,87 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         for (let i = 0; i < producers.length; ++i) {
             let producer = producers[i]
-            if (producer.killed || producer.isBadlyDamaged ||
-                producer.isPreparingUnit || this.gold < production.noob.cost) {
+            if (producer.killed || producer.isBadlyDamaged) {
                 continue
             }
-            commands.push({
-                type: 'economy',
-                product: 'noob',
-                producerCoord: {
-                    x: producer.coord.x,
-                    y: producer.coord.y
+            let products = this.getProducerProducts(producer)
+            for (let j = 0; j < products.length; ++j) {
+                let product = products[j]
+                let configured = production[product]
+                if (!configured || this.gold < configured.cost) {
+                    continue
                 }
-            })
+                let isUnit = configured.production.isUnitProduction()
+                if (isUnit && producer.isPreparingUnit) {
+                    continue
+                }
+                if (!isUnit && producer.needInstructions &&
+                    producer.needInstructions()) {
+                    continue
+                }
+                let baseCommand = {
+                    type: 'economy',
+                    category: this.getEconomyCommandCategory(product),
+                    product: product,
+                    producerCoord: {
+                        x: producer.coord.x,
+                        y: producer.coord.y
+                    }
+                }
+                if (isUnit) {
+                    commands.push(baseCommand)
+                    continue
+                }
+                let destinations = this.getEconomyDestinations(producer, product)
+                for (let k = 0; k < destinations.length; ++k) {
+                    commands.push(Object.assign({}, baseCommand, {
+                        destinationCoord: destinations[k]
+                    }))
+                }
+            }
         }
         return commands
     }
+    getActionCommands() {
+        return this.getUnitCommands().concat(this.getEconomyCommands())
+    }
     applyEconomyCommand(command) {
         let producer = grid.getBuilding(command.producerCoord)
-        return producer.notEmpty() && producer.prepare(command.product)
+        if (!producer.notEmpty() || !producer.prepare(command.product)) {
+            return false
+        }
+        if (!command.destinationCoord) {
+            return true
+        }
+        let cell = grid.getCell(command.destinationCoord)
+        if (!producer.activeProduction ||
+            !producer.activeProduction.canCreateOnCell(cell, producer)) {
+            producer.removeSelect()
+            return false
+        }
+        producer.sendInstructions(cell)
+        return true
     }
-    getBestEconomyCommand() {
-        let commands = this.getEconomyCommands()
+    applyActionCommand(command) {
+        if (command.type == 'economy') {
+            return this.applyEconomyCommand(command)
+        }
+        let unit = grid.getCell(command.whoDoCommandCoord).unit
+        unit.select()
+        if (areCoordsEqual(command.whoDoCommandCoord, command.destinationCoord)) {
+            unit.skipMoves()
+        }
+        else {
+            unit.sendInstructions(grid.getCell(command.destinationCoord))
+        }
+        return true
+    }
+    getBestActionCommand() {
+        let commands = this.getActionCommands()
         let validCommands = []
         let vectorisedGrids = []
         for (let i = 0; i < commands.length; ++i) {
-            if (!this.applyEconomyCommand(commands[i])) {
+            if (!this.applyActionCommand(commands[i])) {
                 continue
             }
             validCommands.push(commands[i])
@@ -447,12 +555,7 @@ class AIPlayerWithEconomy extends AIPlayer {
         return [validCommands[maxIndex], chances[maxIndex]]
     }
     selectBestCommand() {
-        let [combatCommand, combatChance] = super.selectBestCommand()
-        let [economyCommand, economyChance] = this.getBestEconomyCommand()
-        if (economyCommand && (!combatCommand || economyChance > combatChance)) {
-            return [economyCommand, economyChance]
-        }
-        return [combatCommand, combatChance]
+        return this.getBestActionCommand()
     }
     doActions() {
         const hardLimit = 150
@@ -463,22 +566,8 @@ class AIPlayerWithEconomy extends AIPlayer {
             if (!bestCommand) {
                 return
             }
-            if (bestCommand.type == 'economy') {
-                if (!this.applyEconomyCommand(bestCommand)) {
-                    return
-                }
-            }
-            else {
-                let unit = grid.getCell(bestCommand.whoDoCommandCoord).unit
-                assert(unit.isMyTurn)
-                unit.select()
-                if (areCoordsEqual(
-                    bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
-                    unit.skipMoves()
-                }
-                else {
-                    unit.sendInstructions(grid.getCell(bestCommand.destinationCoord))
-                }
+            if (!this.applyActionCommand(bestCommand)) {
+                return
             }
             this.chosenGrids.push(vectoriseGrid())
             this.winningChances.push(chance)

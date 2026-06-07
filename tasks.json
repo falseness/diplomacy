@@ -800,7 +800,7 @@
     "id": "TASK-035",
     "category": "functional",
     "priority": "critical",
-    "description": "Expand AIPlayerWithEconomy action search to include production, purchases, suburbs, barracks, farms, unit training, and normal unit commands.",
+    "description": "Expand AIPlayerWithEconomy action search to include production, purchases, suburbs, barracks, farms, unit training, and normal unit commands. Implemented: Added unified legal combat/economy action enumeration, all town and barrack products, destination-aware suburb/building placement, affordability filtering, and apply/undo-safe model evaluation.",
     "acceptance_criteria": [
       "The action enumerator includes legal unit movement/attack commands.",
       "The action enumerator includes legal town and barrack production commands.",
@@ -817,7 +817,7 @@
     "dependencies": [
       "TASK-034"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-036",
