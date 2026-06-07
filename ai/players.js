@@ -74,6 +74,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             barracks: [],
             pendingBarracks: [],
             farms: [],
+            pendingFarms: [],
             suburbs: [],
             units: this.units.slice(),
             productionChoices: []
@@ -109,6 +110,9 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 let building = pendingBuildings[j]
                 if (!building.killed && building.name == 'barrack') {
                     state.pendingBarracks.push(building)
+                }
+                else if (!building.killed && building.name == 'farm') {
+                    state.pendingFarms.push(building)
                 }
             }
             this.addProductionChoices(state.productionChoices, town, townProducts)
@@ -158,13 +162,29 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         return choices
     }
-    chooseEconomyProduction(state) {
-        let priority = ['noob', 'farm', 'suburb', 'barrack',
-            'archer', 'KOHb', 'normchel', 'catapult']
-        return state.productionChoices.slice().sort(function(left, right) {
-            return priority.indexOf(left.product) - priority.indexOf(right.product) ||
-                left.cost - right.cost
-        })[0]
+    chooseEconomyProductions(state) {
+        let unitProducts = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+        let byProducts = function(products) {
+            return state.productionChoices.filter(function(choice) {
+                return products.includes(choice.product)
+            }).sort(function(left, right) {
+                return products.indexOf(left.product) -
+                        products.indexOf(right.product) ||
+                    left.cost - right.cost
+            })
+        }
+        if (state.units.length == 0) {
+            return byProducts(unitProducts)
+        }
+
+        let farmCount = state.farms.length + state.pendingFarms.length
+        let growthPriority = farmCount < state.towns.length ?
+            ['farm', 'suburb'] : ['suburb', 'farm']
+        let choices = byProducts(growthPriority)
+        if (state.barracks.length + state.pendingBarracks.length == 0) {
+            choices = choices.concat(byProducts(['barrack']))
+        }
+        return choices.concat(byProducts(unitProducts))
     }
     startEconomyProduction(choice) {
         if (!choice || !choice.producer.prepare(choice.product)) {
@@ -186,8 +206,13 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         return false
     }
     spendEconomyGold() {
-        return this.startEconomyProduction(
-            this.chooseEconomyProduction(this.inspectEconomy()))
+        let choices = this.chooseEconomyProductions(this.inspectEconomy())
+        for (let i = 0; i < choices.length; ++i) {
+            if (this.startEconomyProduction(choices[i])) {
+                return true
+            }
+        }
+        return false
     }
     spendWarGold() {
         let choices = this.chooseWarProductions(this.inspectEconomy())

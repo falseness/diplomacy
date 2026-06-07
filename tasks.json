@@ -706,7 +706,7 @@
     "id": "TASK-031",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement SimpleAiPlayerWithEconomy economy mode: spend most resources on farms, suburbs, income growth, and long-term production infrastructure.",
+    "description": "Implement SimpleAiPlayerWithEconomy economy mode: spend most resources on farms, suburbs, income growth, and long-term production infrastructure. Implemented: Added deterministic growth-first farm/suburb spending, pending-farm awareness, one-unit minimum defense, missing-barracks fallback, explicit war/economy mode documentation, and focused reproducibility coverage.",
     "acceptance_criteria": [
       "Economy mode prioritizes farms and suburb expansion when legal and affordable.",
       "Economy mode still buys minimal defenses or units when completely undefended.",
@@ -723,7 +723,7 @@
     "dependencies": [
       "TASK-029"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-032",
