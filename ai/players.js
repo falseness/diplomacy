@@ -62,12 +62,17 @@ class SimpleAiPlayer extends Player {
 }
 
 class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
+    constructor(color, gold = 90, economyMode = 'war') {
+        super(color, gold)
+        this.economyMode = economyMode
+    }
     inspectEconomy() {
         let state = {
             gold: this.gold,
             income: this.income,
             towns: [],
             barracks: [],
+            pendingBarracks: [],
             farms: [],
             suburbs: [],
             units: this.units.slice(),
@@ -99,6 +104,13 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                     state.farms.push(building)
                 }
             }
+            let pendingBuildings = town.buildingProduction || []
+            for (let j = 0; j < pendingBuildings.length; ++j) {
+                let building = pendingBuildings[j]
+                if (!building.killed && building.name == 'barrack') {
+                    state.pendingBarracks.push(building)
+                }
+            }
             this.addProductionChoices(state.productionChoices, town, townProducts)
         }
         for (let i = 0; i < state.barracks.length; ++i) {
@@ -108,12 +120,14 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         return state
     }
     addProductionChoices(choices, producer, products) {
+        let unitProducts = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
         for (let i = 0; i < products.length; ++i) {
             let product = products[i]
             if (!production[product] || this.gold < production[product].cost) {
                 continue
             }
-            if (producer.isBadlyDamaged || producer.isPreparingUnit) {
+            if (producer.isBadlyDamaged ||
+                (producer.isPreparingUnit && unitProducts.includes(product))) {
                 continue
             }
             choices.push({
@@ -122,6 +136,27 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 cost: production[product].cost
             })
         }
+    }
+    chooseWarProductions(state) {
+        let unitPriority = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+        let unitChoices = state.productionChoices.filter(function(choice) {
+            return unitPriority.includes(choice.product)
+        }).sort(function(left, right) {
+            return unitPriority.indexOf(left.product) -
+                    unitPriority.indexOf(right.product) ||
+                left.cost - right.cost
+        })
+        let choices = unitChoices.slice()
+        let barrackCapacity = state.barracks.length + state.pendingBarracks.length
+        if (barrackCapacity < state.towns.length) {
+            choices = choices.concat(state.productionChoices.filter(function(choice) {
+                return choice.product == 'barrack'
+            }))
+            choices = choices.concat(state.productionChoices.filter(function(choice) {
+                return choice.product == 'suburb'
+            }))
+        }
+        return choices
     }
     chooseEconomyProduction(state) {
         let priority = ['noob', 'farm', 'suburb', 'barrack',
@@ -154,8 +189,22 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         return this.startEconomyProduction(
             this.chooseEconomyProduction(this.inspectEconomy()))
     }
+    spendWarGold() {
+        let choices = this.chooseWarProductions(this.inspectEconomy())
+        for (let i = 0; i < choices.length; ++i) {
+            if (this.startEconomyProduction(choices[i])) {
+                return true
+            }
+        }
+        return false
+    }
     play() {
-        this.spendEconomyGold()
+        if (this.economyMode == 'war') {
+            this.spendWarGold()
+        }
+        else {
+            this.spendEconomyGold()
+        }
         super.play()
     }
     chooseBenchmarkTarget(targets) {

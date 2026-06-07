@@ -683,7 +683,7 @@
     "id": "TASK-030",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement SimpleAiPlayerWithEconomy war mode: spend resources straightforwardly on war needs such as units, barracks, and combat pressure.",
+    "description": "Implement SimpleAiPlayerWithEconomy war mode: spend resources straightforwardly on war needs such as units, barracks, and combat pressure. Implemented: Added explicit deterministic war mode with unit-first spending, barracks capacity growth, necessary suburb fallback, pending-barracks tracking, and bounded legal-action checks.",
     "acceptance_criteria": [
       "War mode prioritizes unit production when towns or barracks can produce units.",
       "War mode builds barracks when production capacity is too low and legal placement exists.",
@@ -700,7 +700,7 @@
     "dependencies": [
       "TASK-029"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-031",

@@ -7,6 +7,7 @@
     "train-cloud": "./train.sh",
     "test-simple-ai": "node ai/test-simple-ai-baseline.js",
     "test-simple-ai-economy": "node ai/test-simple-ai-economy.js",
+    "test-simple-ai-war": "node ai/test-simple-ai-war-mode.js",
     "test-ai-boundary": "node ai/test-runtime-boundary.js",
     "test-building-vectorization": "node ai/test-building-vectorization.js",
     "test-building-map-generation": "node ai/test-building-map-generation.js",
