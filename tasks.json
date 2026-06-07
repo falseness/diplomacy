@@ -823,7 +823,7 @@
     "id": "TASK-036",
     "category": "functional",
     "priority": "critical",
-    "description": "Train AIPlayerWithEconomy on economy-aware maps, saving checkpoints and results under /mnt/storage/diplomacy. Implemented: Added seeded two-sided AIPlayerWithEconomy action-data training on economy-rich generated maps with 78-channel vectors, interval checkpoints, metrics, benchmark snapshots, final model artifacts, and lowest-loss candidate selection.",
+    "description": "Train AIPlayerWithEconomy on economy-aware maps, saving checkpoints and results under /mnt/storage/diplomacy. Implemented: Added seeded two-sided AIPlayerWithEconomy action-data training on economy-rich generated maps with 78-channel vectors, interval checkpoints, metrics, benchmark snapshots, final model artifacts, and lowest-loss candidate selection. Verification failed: Step 2 is not satisfied because the trainer labels static mocked action enumeration as self-play without running turns, applying actions, or generating data from played games. Implemented: Replaced mocked enumeration with seeded real-runtime self-play that advances both AIPlayerWithEconomy players, applies legal combat/economy actions to GameMap state, vectorizes post-action states, derives labels from played outcomes, and records applied-action evidence in persistent artifacts.",
     "acceptance_criteria": [
       "Training uses generated maps containing economy and combat features.",
       "Training uses the AIPlayerWithEconomy action space and vector representation.",

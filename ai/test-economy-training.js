@@ -24,7 +24,16 @@ async function main() {
     check(result.metrics.length === 2, 'longer economy training did not complete');
     for (const metric of result.metrics) {
       check(metric.cellVectorSize === 78, 'economy training did not use 78-channel vectors');
+      check(metric.dataSource === 'real-runtime-self-play',
+        'training data did not come from real runtime self-play');
+      check(metric.players.every(name => name === 'AIPlayerWithEconomy'),
+        'self-play did not use two AIPlayerWithEconomy players');
+      check(metric.turnsPlayed > 0, 'self-play did not advance turns');
+      check(metric.actionsApplied === metric.examples && metric.actionsApplied > 0,
+        'training examples were not produced by applied actions');
       check(metric.economyActions > 0, 'self-play data did not contain economy actions');
+      check(metric.mapFeatures.units > 0 && metric.mapFeatures.goldmines > 0,
+        'training map did not contain combat and economy features');
       for (const category of [
         'unit-command',
         'unit-training',
@@ -33,6 +42,9 @@ async function main() {
       ]) {
         check(metric.actionCounts[category] > 0, `${category} missing from self-play data`);
       }
+      check(metric.appliedActions.every(action =>
+        action.playerIndex === 1 || action.playerIndex === 2),
+      'applied action records do not identify a self-play participant');
     }
     const checkpointRoot = path.join(storageDir, 'checkpoints', runId);
     check(fs.existsSync(path.join(checkpointRoot, 'step-00000001', 'model.json')),

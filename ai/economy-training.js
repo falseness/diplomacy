@@ -2,11 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const tf = require('@tensorflow/tfjs-node');
-const { loadAiScripts, readRepoFile } = require('./smokeHarness');
+const { readRepoFile } = require('./smokeHarness');
 
 const CELL_VECTOR_SIZE = 78;
-const UNIT_PRODUCTS = ['noob', 'archer', 'KOHb', 'normchel', 'catapult'];
-const BUILDING_PRODUCTS = ['suburb', 'farm', 'barrack', 'wall', 'bastion', 'tower'];
+const ACTION_CATEGORIES = [
+  'unit-command',
+  'unit-training',
+  'suburb-expansion',
+  'building-placement'
+];
 
 function parseArgs(argv) {
   const options = {
@@ -58,7 +62,7 @@ function appendJsonLine(filePath, value) {
 
 function removePath(filePath) {
   if (fs.existsSync(filePath)) {
-    fs.rmdirSync(filePath, { recursive: true });
+    fs.rmSync(filePath, { recursive: true, force: true });
   }
 }
 
@@ -84,229 +88,294 @@ function createModel(height, width) {
   return model;
 }
 
-function addFeature(board, width, height, coord, channel, value = 1) {
-  if (!coord || coord.x < 0 || coord.y < 0 || coord.x >= width || coord.y >= height) {
-    return;
-  }
-  board[(coord.y * width + coord.x) * CELL_VECTOR_SIZE + channel] = value;
-}
-
-function createBoardVector(map, playerIndex) {
-  const width = map.mapSize.x;
-  const height = map.mapSize.y;
-  const board = new Float32Array(width * height * CELL_VECTOR_SIZE);
-  const opponentIndex = playerIndex === 1 ? 2 : 1;
-  const encodePlayer = (configured, relation) => {
-    for (const town of configured.towns || []) addFeature(board, width, height, town, 7, relation);
-    for (const unit of configured.units || []) {
-      const unitName = unit.type && unit.type.name ? unit.type.name : String(unit.type);
-      addFeature(board, width, height, unit, 20 + UNIT_PRODUCTS.indexOf(unitName), relation);
+function createCanvasContext() {
+  return new Proxy({
+    canvas: { width: 800, height: 600 },
+    measureText(text) {
+      return { width: String(text).length * 8 };
     }
-    for (const layout of configured.suburbs || []) {
-      for (const suburb of layout.cells || []) addFeature(board, width, height, suburb, 50, relation);
-      for (const expansion of layout.expansionCells || []) addFeature(board, width, height, expansion, 51, relation);
+  }, {
+    get(target, property) {
+      return property in target ? target[property] : function() {};
+    },
+    set(target, property, value) {
+      target[property] = value;
+      return true;
     }
-    const collections = [
-      ['barracks', 30],
-      ['pendingBarracks', 31],
-      ['farms', 32],
-      ['pendingFarms', 33],
-      ['walls', 34],
-      ['bastions', 35],
-      ['towers', 36]
-    ];
-    for (const [name, channel] of collections) {
-      for (const item of configured[name] || []) addFeature(board, width, height, item, channel, relation);
-    }
-  };
-  encodePlayer(map.players[playerIndex], 1);
-  encodePlayer(map.players[opponentIndex], -1);
-  for (const mine of map.goldmines || []) {
-    const relation = mine.owner === playerIndex ? 1 : (mine.owner === opponentIndex ? -1 : 0.5);
-    addFeature(board, width, height, mine, 42, relation);
-    addFeature(board, width, height, mine, 43, mine.income / 100);
-  }
-  for (const coord of map.lakes || []) addFeature(board, width, height, coord, 2);
-  for (const coord of map.mountains || []) addFeature(board, width, height, coord, 3);
-  return board;
+  });
 }
 
-function actionDestination(command) {
-  return command.destinationCoord || command.producerCoord || { x: 0, y: 0 };
-}
-
-function vectorAfterAction(baseBoard, map, command) {
-  const result = new Float32Array(baseBoard);
-  const categoryChannels = {
-    'unit-command': 60,
-    'unit-training': 61,
-    'suburb-expansion': 62,
-    'building-placement': 63
-  };
-  const category = command.type === 'economy' ? command.category : 'unit-command';
-  addFeature(
-    result,
-    map.mapSize.x,
-    map.mapSize.y,
-    actionDestination(command),
-    categoryChannels[category]
-  );
-  return result;
-}
-
-function actionTarget(command) {
-  if (command.type !== 'economy') return 0.25;
-  if (command.product === 'farm' || command.product === 'suburb') return 0.9;
-  if (command.product === 'barrack') return 0.7;
-  if (UNIT_PRODUCTS.includes(command.product)) return 0.6;
-  return 0.4;
-}
-
-function makeProducer(name, coord, destinations) {
+function createCanvas() {
   return {
-    name,
-    coord: { x: coord.x, y: coord.y },
-    killed: false,
-    isBadlyDamaged: false,
-    isPreparingUnit: false,
-    buildings: [],
-    notEmpty() { return true; },
-    needInstructions() { return false; },
-    getAvailableProductionCells(product) {
-      return destinations[product] || [];
+    width: 800,
+    height: 600,
+    clientWidth: 800,
+    clientHeight: 600,
+    style: {},
+    getContext() {
+      return createCanvasContext();
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: 800, height: 600 };
     }
   };
 }
 
-function createActionContext(map, playerIndex) {
-  const configured = map.players[playerIndex];
-  const destinations = {};
-  for (const product of BUILDING_PRODUCTS) destinations[product] = [];
-  for (const layout of configured.suburbs || []) {
-    const expansion = (layout.expansionCells || [])[0];
-    if (expansion) destinations.suburb.push(expansion);
-    const owned = (layout.cells || []).filter(coord =>
-      coord.x !== layout.town.x || coord.y !== layout.town.y);
-    for (let index = 0; index < BUILDING_PRODUCTS.length; index += 1) {
-      const product = BUILDING_PRODUCTS[index];
-      if (product !== 'suburb' && owned[index % Math.max(owned.length, 1)]) {
-        destinations[product].push(owned[index % owned.length]);
-      }
-    }
-  }
-  const towns = (configured.towns || []).map(coord => makeProducer('town', coord, destinations));
-  for (let index = 0; index < (configured.barracks || []).length; index += 1) {
-    const barrack = makeProducer('barrack', configured.barracks[index], destinations);
-    towns[index % towns.length].buildings.push(barrack);
-  }
-  const units = (configured.units || []).map((unit, index) => ({
-    killed: false,
-    moves: 1,
-    coord: { x: unit.x, y: unit.y },
-    getAvailableCommands() {
-      return [{
-        type: 'unit',
-        whoDoCommandCoord: this.coord,
-        destinationCoord: {
-          x: Math.min(map.mapSize.x - 1, this.coord.x + (index % 2)),
-          y: this.coord.y
-        }
-      }];
-    }
-  }));
-  const production = {};
-  for (const product of UNIT_PRODUCTS.concat(BUILDING_PRODUCTS)) {
-    production[product] = {
-      cost: UNIT_PRODUCTS.includes(product) ? 20 : 10,
-      production: class MockProduction {
-        static isUnitProduction() {
-          return UNIT_PRODUCTS.includes(product);
-        }
-      }
-    };
-  }
-  const context = vm.createContext({
-    console,
-    Math,
-    production,
-    gameSettings: { testAI: false },
-    Player: class Player {
-      constructor(color, gold) {
-        this.color = color;
-        this.gold = gold;
-        this.towns = [];
-        this.units = [];
-      }
-      nextTurn() {}
-      updateUnits() {}
+function createRuntimeContext(seed) {
+  const storage = {};
+  const seededMath = Object.create(Math);
+  let randomState = seed >>> 0;
+  seededMath.random = function() {
+    randomState = (randomState * 1664525 + 1013904223) >>> 0;
+    return randomState / 0x100000000;
+  };
+  const context = {
+    console: Object.assign({}, console, { log() {} }),
+    Math: seededMath,
+    Date,
+    JSON,
+    Array,
+    Object,
+    Number,
+    String,
+    Boolean,
+    Error,
+    TypeError,
+    Map,
+    Set,
+    Promise,
+    parseInt,
+    parseFloat,
+    isNaN,
+    Infinity,
+    NaN,
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame() { return 0; },
+    cancelAnimationFrame() {},
+    Image: class Image {},
+    navigator: { userAgent: 'node' },
+    innerWidth: 800,
+    innerHeight: 600,
+    document: {
+      createElement() { return createCanvas(); },
+      getElementById() { return createCanvas(); },
+      querySelector() { return createCanvas(); },
+      addEventListener() {}
     },
-    BestEnemyTargetForAI: class BestEnemyTargetForAI {},
-    assert(condition) {
-      if (!condition) throw new Error('AIPlayerWithEconomy assertion failed');
+    localStorage: {
+      setItem(key, value) { storage[key] = String(value); },
+      getItem(key) { return storage[key] || null; },
+      removeItem(key) { delete storage[key]; }
     },
-    grid: {},
-    actionManager: {},
-    areCoordsEqual(left, right) {
-      return left.x === right.x && left.y === right.y;
-    }
-  });
-  new vm.Script(readRepoFile('ai/players.js'), {
-    filename: 'ai/players.js'
-  }).runInContext(context);
-  context.__towns = towns;
-  context.__units = units;
-  context.__gold = configured.gold;
-  return new vm.Script(`
-    (() => {
-      const player = new AIPlayerWithEconomy({r: 255, g: 0, b: 0}, __gold)
-      player.towns = __towns
-      player.units = __units
-      return player.getActionCommands()
-    })()
-  `).runInContext(context);
+    io() { return {}; },
+    tf: {},
+    saveAs() {}
+  };
+  context.window = context;
+  context.globalThis = context;
+  return vm.createContext(context);
 }
 
-function createTrainingBatch(generateTownTrainingMap, seed) {
-  const map = generateTownTrainingMap({
-    size: 'tiny',
-    seed,
-    buildingDensity: 'dense',
-    barrackDensity: 1,
-    farmDensity: 1,
-    externalDensity: 1,
-    suburbDensity: 1,
-    unitComposition: 'all',
-    unitsPerPlayer: 5,
-    goldmineCount: 5,
-    startingGoldMin: 500,
-    startingGoldMax: 500
-  });
-  const boards = [];
-  const globals = [];
-  const labels = [];
-  const actionCounts = {};
-  for (const playerIndex of [1, 2]) {
-    const commands = createActionContext(map, playerIndex);
-    const baseBoard = createBoardVector(map, playerIndex);
-    const opponentIndex = playerIndex === 1 ? 2 : 1;
-    const goldAdvantage = (
-      map.players[playerIndex].gold - map.players[opponentIndex].gold
-    ) / 1000;
-    for (const command of commands) {
-      const category = command.type === 'economy' ? command.category : 'unit-command';
-      actionCounts[category] = (actionCounts[category] || 0) + 1;
-      boards.push(vectorAfterAction(baseBoard, map, command));
-      globals.push(goldAdvantage);
-      labels.push(actionTarget(command));
+function loadBrowserScripts(context) {
+  const html = readRepoFile('index.html');
+  const scriptPattern = /<script[^>]+src=['"]([^'"]+)['"]/g;
+  let match;
+  while ((match = scriptPattern.exec(html))) {
+    if (/^https?:/.test(match[1])) continue;
+    new vm.Script(readRepoFile(match[1]), {
+      filename: match[1]
+    }).runInContext(context);
+  }
+}
+
+function createTrainingBatch(seed) {
+  const context = createRuntimeContext(seed);
+  loadBrowserScripts(context);
+  context.__trainingSeed = seed;
+  context.__actionCategories = ACTION_CATEGORIES;
+  const result = new vm.Script(`(() => {
+    isFogOfWar = false
+    gameSettings.testAI = false
+    entityInterface = {change() {}, hide() {}}
+    townInterface = {change() {}, hide() {}}
+    barrackInterface = {change() {}, hide() {}}
+    statisticsInterface = {}
+    gameEvent = {
+      nextTurn() {},
+      selected: new Empty(),
+      hideAll() {},
+      removeSelection() { this.selected = new Empty() },
+      screen: {moveTo() {}, moveToPlayer() {}, stop() {}}
+    }
+    nextTurnButton = {
+      setNextPlayerColor() {},
+      highlightButton: false,
+      enableClick() {},
+      disableClick() {}
+    }
+    nextTurnPauseInterface = {visible: false}
+    saveManager = {save() {}}
+    AiRuntime.trainFromHumanCommands = function() {}
+    border = new Border()
+    attackBorder = new Border()
+
+    let manager = {
+      clearValues() {
+        external = []
+        externalProduction = []
+        nature = []
+        goldmines = []
+        gameRound = 0
+        gameExit = false
+      }
+    }
+    let map = generateTownTrainingMap({
+      size: 'tiny',
+      seed: __trainingSeed,
+      buildingDensity: 'dense',
+      barrackDensity: 1,
+      pendingBarrackProbability: 0,
+      farmDensity: 1,
+      pendingFarmProbability: 0,
+      externalDensity: 1,
+      suburbDensity: 1,
+      unitComposition: 'all',
+      unitsPerPlayer: 5,
+      goldmineCount: 5,
+      startingGoldMin: 500,
+      startingGoldMax: 500
+    })
+    map.players[1].playerType = 'AIPlayerWithEconomy'
+    map.players[2].playerType = 'AIPlayerWithEconomy'
+    map.start(manager, false)
+    suddenDeathRound = 2000
+
+    let examples = []
+    let actionCounts = {}
+    let categoryCursor = 0
+    let turnsPlayed = 0
+    for (let round = 0; round < 12; ++round) {
+      for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
+        whooseTurn = playerIndex
+        let player = players[playerIndex]
+        player.nextTurn()
+        let commands = player.getActionCommands()
+        let desired = __actionCategories[
+          categoryCursor % __actionCategories.length]
+        let ordered = commands.filter(function(command) {
+          let category = command.type == 'economy' ?
+            command.category : 'unit-command'
+          return category == desired
+        }).concat(commands.filter(function(command) {
+          let category = command.type == 'economy' ?
+            command.category : 'unit-command'
+          return category != desired
+        }))
+        let applied = null
+        for (let index = 0; index < ordered.length; ++index) {
+          if (player.applyActionCommand(ordered[index])) {
+            applied = ordered[index]
+            break
+          }
+        }
+        if (applied) {
+          let vector = vectoriseGrid()
+          let category = applied.type == 'economy' ?
+            applied.category : 'unit-command'
+          examples.push({
+            playerIndex,
+            turn: turnsPlayed + 1,
+            category,
+            product: applied.product || null,
+            board: vector[0],
+            global: vector[1]
+          })
+          actionCounts[category] = (actionCounts[category] || 0) + 1
+          categoryCursor += 1
+        }
+        actionManager.clear()
+        turnsPlayed += 1
+      }
+      gameRound += 1
+    }
+
+    function liveUnits(player) {
+      return player.units.filter(function(unit) { return !unit.killed }).length
+    }
+    function score(playerIndex) {
+      let opponentIndex = playerIndex == 1 ? 2 : 1
+      let player = players[playerIndex]
+      let opponent = players[opponentIndex]
+      if (opponent.isLost) return 1
+      if (player.isLost) return -1
+      let material =
+        (player.towns.length - opponent.towns.length) * 0.35 +
+        (liveUnits(player) - liveUnits(opponent)) * 0.08 +
+        (player.gold - opponent.gold) / 1000
+      return Math.max(-1, Math.min(1, material))
+    }
+    return {
+      mapSize: map.mapSize,
+      players: players.slice(1).map(function(player) {
+        return player.constructor.name
+      }),
+      examples,
+      labels: examples.map(function(example) {
+        return score(example.playerIndex)
+      }),
+      actionCounts,
+      turnsPlayed,
+      finalState: players.slice(1).map(function(player) {
+        return {
+          gold: player.gold,
+          towns: player.towns.length,
+          units: liveUnits(player),
+          lost: player.isLost
+        }
+      }),
+      mapFeatures: {
+        goldmines: map.goldmines.length,
+        units: map.players[1].units.length + map.players[2].units.length,
+        farms: map.players[1].farms.length + map.players[2].farms.length,
+        barracks:
+          map.players[1].barracks.length + map.players[2].barracks.length,
+        external:
+          map.players[1].walls.length + map.players[2].walls.length +
+          map.players[1].bastions.length + map.players[2].bastions.length +
+          map.players[1].towers.length + map.players[2].towers.length
+      }
+    }
+  })()`, { filename: 'economy-training-self-play.js' }).runInContext(context);
+
+  for (const category of ACTION_CATEGORIES) {
+    if (!result.actionCounts[category]) {
+      throw new Error(
+        `real self-play did not apply ${category}: ${JSON.stringify(result.actionCounts)}`
+      );
     }
   }
-  if (!actionCounts['unit-command'] ||
-      !actionCounts['unit-training'] ||
-      !actionCounts['suburb-expansion'] ||
-      !actionCounts['building-placement']) {
-    throw new Error(`incomplete AIPlayerWithEconomy action space: ${JSON.stringify(actionCounts)}`);
+  if (result.players.some(name => name !== 'AIPlayerWithEconomy')) {
+    throw new Error(`unexpected self-play players: ${result.players.join(', ')}`);
   }
-  return { map, boards, globals, labels, actionCounts };
+  return {
+    map: { mapSize: result.mapSize },
+    boards: result.examples.map(example => example.board),
+    globals: result.examples.map(example => example.global),
+    labels: result.labels,
+    actionCounts: result.actionCounts,
+    turnsPlayed: result.turnsPlayed,
+    appliedActions: result.examples.map(example => ({
+      playerIndex: example.playerIndex,
+      turn: example.turn,
+      category: example.category,
+      product: example.product
+    })),
+    finalState: result.finalState,
+    mapFeatures: result.mapFeatures
+  };
 }
 
 async function saveCheckpoint(model, directory, metadata) {
@@ -319,11 +388,6 @@ async function saveCheckpoint(model, directory, metadata) {
 }
 
 async function run(options) {
-  const { context } = loadAiScripts();
-  const generateTownTrainingMap = context.generateTownTrainingMap;
-  if (typeof generateTownTrainingMap !== 'function') {
-    throw new Error('economy map generator is unavailable');
-  }
   const runDir = path.join(options.storageDir, 'runs', options.runId);
   const checkpointRoot = path.join(options.storageDir, 'checkpoints', options.runId);
   const metricsPath = path.join(options.storageDir, 'metrics', `${options.runId}.jsonl`);
@@ -338,9 +402,9 @@ async function run(options) {
   let best = null;
   try {
     for (let game = 1; game <= options.games; game += 1) {
-      const batch = createTrainingBatch(generateTownTrainingMap, options.seed + game - 1);
+      const batch = createTrainingBatch(options.seed + game - 1);
       const boardTensor = tf.tensor4d(
-        batch.boards.flatMap(board => Array.from(board)),
+        batch.boards.flat(3),
         [batch.boards.length, 7, 7, CELL_VECTOR_SIZE]
       );
       const globalTensor = tf.tensor2d(batch.globals, [batch.globals.length, 1]);
@@ -364,12 +428,17 @@ async function run(options) {
         game,
         seed: options.seed + game - 1,
         players: ['AIPlayerWithEconomy', 'AIPlayerWithEconomy'],
-        dataSource: 'self-play-action-enumeration',
+        dataSource: 'real-runtime-self-play',
         mapSize: batch.map.mapSize,
         cellVectorSize: CELL_VECTOR_SIZE,
         examples: batch.labels.length,
         actionCounts: batch.actionCounts,
         economyActions: batch.labels.length - batch.actionCounts['unit-command'],
+        actionsApplied: batch.appliedActions.length,
+        turnsPlayed: batch.turnsPlayed,
+        appliedActions: batch.appliedActions,
+        finalState: batch.finalState,
+        mapFeatures: batch.mapFeatures,
         loss,
         timestamp: new Date().toISOString()
       };
@@ -387,6 +456,8 @@ async function run(options) {
           seed: metric.seed,
           cellVectorSize: CELL_VECTOR_SIZE,
           actionCounts: batch.actionCounts,
+          dataSource: metric.dataSource,
+          actionsApplied: metric.actionsApplied,
           loss,
           mapGenerator: 'generateTownTrainingMap'
         });
@@ -413,7 +484,7 @@ async function run(options) {
     runId: options.runId,
     trainer: 'AIPlayerWithEconomy',
     players: ['AIPlayerWithEconomy', 'AIPlayerWithEconomy'],
-    dataSource: 'self-play-action-enumeration',
+    dataSource: 'real-runtime-self-play',
     mapGenerator: 'generateTownTrainingMap',
     cellVectorSize: CELL_VECTOR_SIZE,
     games: metrics,
