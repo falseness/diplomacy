@@ -964,7 +964,7 @@
     "id": "TASK-042",
     "category": "maintenance",
     "priority": "normal",
-    "description": "Create and maintain follow-up tickets for every failed baseline, unresolved bug, incomplete feature, unstable seed, or benchmark weakness found during the AI roadmap.",
+    "description": "Create and maintain follow-up tickets for every failed baseline, unresolved bug, incomplete feature, unstable seed, or benchmark weakness found during the AI roadmap. Implemented: Reviewed benchmark reports, regression notes, progress failures, and TODO/FIXME markers; confirmed TASK-043 through TASK-045 cover existing npm/package-script and TASK-037 non-result failures, and added TASK-046 for TASK-041 sudden-death benchmark weakness seeds 41046 and 41050.",
     "acceptance_criteria": [
       "Every failed required benchmark has at least one follow-up ticket with reproduction steps.",
       "Every unresolved code review issue has a follow-up ticket or is fixed before closure.",
@@ -981,7 +981,7 @@
     "dependencies": [
       "TASK-041"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-043",
@@ -1042,6 +1042,25 @@
       "Step 2: Reproduce at least one listed non-win seed.",
       "Step 3: Apply a targeted fix or training update.",
       "Step 4: Rerun node ai/benchmark-gamestart-trained-model.js."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-046",
+    "category": "follow-up",
+    "priority": "normal",
+    "description": "Investigate TASK-041 big-map benchmark sudden-death wins. TASK-041 verification report: /mnt/storage/diplomacy/benchmarks/task041-verify-trained-vs-simple-big-map.json. Weakness seeds: big-open-field seed 41046 candidate side A won in sudden death at round 46; big-open-field seed 41050 candidate side A won in sudden death at round 47.",
+    "acceptance_criteria": [
+      "The sudden-death wins from TASK-041 seeds 41046 and 41050 are reproduced or explained.",
+      "Benchmark reporting distinguishes threshold-passing sudden-death wins from clean pre-sudden-death wins.",
+      "AIPlayerWithEconomy behavior, training, or benchmark limits are adjusted if the sudden-death dependency indicates weak play rather than an intended benchmark condition.",
+      "A rerun of the big-map baseline records zero unexpected sudden-death games or documents why the remaining cases are acceptable."
+    ],
+    "test_steps": [
+      "Step 1: Open /mnt/storage/diplomacy/benchmarks/task041-verify-trained-vs-simple-big-map.json and inspect seeds 41046 and 41050.",
+      "Step 2: Reproduce both sudden-death games with the same checkpoint, map, candidate side, and seeds.",
+      "Step 3: Apply a targeted benchmark, AI behavior, or training-data fix if reproduction shows a real weakness.",
+      "Step 4: Rerun the TASK-041 big-map baseline and confirm sudden-death handling is explicit in the report."
     ],
     "status": "pending"
   }
