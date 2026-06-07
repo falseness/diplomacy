@@ -28,3 +28,4 @@ TASK-026: Added seeded configurable all/balanced/combat/economy unit composition
 TASK-027: Added seeded sparse/normal/dense all-building maps, configured wall/bastion/tower startup, and gameplay/vector coverage; all listed steps plus map/model/training regressions pass. Existing prior verification metadata remains unstaged.
 TASK-028: Added configurable seeded suburb density/radius, non-overlapping owned layouts and clear expansion choices, runtime startup/expansion support, and focused income/vector tests; all listed steps and map/model/training regressions pass.
 TASK-029: Blocked because dependencies TASK-027 and TASK-028 are still to-verify; no implementation or tests were started in this iteration.
+TASK-029: Blocked because dependency TASK-028 is still to-verify; no implementation or tests were started in this iteration.
