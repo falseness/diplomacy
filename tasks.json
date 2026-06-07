@@ -1009,7 +1009,7 @@
     "id": "TASK-044",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Restore or replace the AI package script entrypoints referenced by package.json. Created from TASK-003 inspection: package.json references ai/init-model.js and ai/train-cloud.js, but those files are absent.",
+    "description": "Restore or replace the AI package script entrypoints referenced by package.json. Created from TASK-003 inspection: package.json references ai/init-model.js and ai/train-cloud.js, but those files are absent. Implemented: Confirmed package.json points to existing ai/init-model.js and ai/train-cloud.js entrypoints; npm init-model/train and browser entrypoint smokes pass.",
     "acceptance_criteria": [
       "package.json AI scripts point to existing files or are updated to valid current entrypoints.",
       "The init-model script starts far enough to initialize or locate the AI model bootstrap.",
@@ -1025,7 +1025,7 @@
     "dependencies": [
       "TASK-043"
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-045",

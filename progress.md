@@ -53,3 +53,4 @@ TASK-042: Reviewed benchmark/regression reports, progress failure notes, and TOD
 TASK-042: Verification failed because TASK-037 diagnostic seed 37000 and bounded verification non-win seeds 37032-37063 are not explicitly covered by a follow-up ticket.
 TASK-042: Added TASK-047 for the previously uncovered TASK-037 diagnostic loss seed 37000 and bounded verification timeout/non-result seeds 37032-37063; JSON validation and report seed checks pass.
 TASK-043: Confirmed Node/npm smoke runtime is available (node v12.22.9, npm 8.5.1); npm run init-model and npm run train both reach project scripts and pass. Only tasks/progress metadata changed for this task.
+TASK-044: Confirmed package AI script entrypoints exist and pass npm init-model, npm run train, and browser HTTP/local-script smokes; no source-code changes were needed.
