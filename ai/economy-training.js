@@ -387,6 +387,54 @@ async function saveCheckpoint(model, directory, metadata) {
   fs.renameSync(temporary, directory);
 }
 
+function createCandidate(options, checkpointRoot, bestCheckpoint) {
+  if (!bestCheckpoint) return null;
+  const candidatePath = path.join(
+    checkpointRoot,
+    `step-${String(bestCheckpoint.game).padStart(8, '0')}`
+  );
+  return {
+    runId: options.runId,
+    selectedBy: 'lowest-training-loss',
+    checkpoint: path.relative(options.storageDir, candidatePath),
+    game: bestCheckpoint.game,
+    loss: bestCheckpoint.loss
+  };
+}
+
+function writeBenchmarkSnapshot(
+  options,
+  snapshotPath,
+  checkpointRoot,
+  metricsPath,
+  finalDir,
+  metrics,
+  bestCheckpoint,
+  status
+) {
+  const candidate = createCandidate(options, checkpointRoot, bestCheckpoint);
+  writeJson(snapshotPath, {
+    runId: options.runId,
+    status,
+    trainer: 'AIPlayerWithEconomy',
+    players: ['AIPlayerWithEconomy', 'AIPlayerWithEconomy'],
+    dataSource: 'real-runtime-self-play',
+    mapGenerator: 'generateTownTrainingMap',
+    cellVectorSize: CELL_VECTOR_SIZE,
+    completedGames: metrics.length,
+    plannedGames: options.games,
+    games: metrics,
+    candidate,
+    updatedAt: new Date().toISOString(),
+    artifacts: {
+      checkpoints: path.relative(options.storageDir, checkpointRoot),
+      metrics: path.relative(options.storageDir, metricsPath),
+      finalModel: path.relative(options.storageDir, finalDir)
+    }
+  });
+  return candidate;
+}
+
 async function run(options) {
   const runDir = path.join(options.storageDir, 'runs', options.runId);
   const checkpointRoot = path.join(options.storageDir, 'checkpoints', options.runId);
@@ -399,7 +447,7 @@ async function run(options) {
 
   const model = createModel(7, 7);
   const metrics = [];
-  let best = null;
+  let bestCheckpoint = null;
   try {
     for (let game = 1; game <= options.games; game += 1) {
       const batch = createTrainingBatch(options.seed + game - 1);
@@ -444,7 +492,6 @@ async function run(options) {
       };
       metrics.push(metric);
       appendJsonLine(metricsPath, metric);
-      if (!best || loss < best.loss) best = { game, loss };
       if (game % options.checkpointInterval === 0 || game === options.games) {
         const checkpointDir = path.join(
           checkpointRoot,
@@ -461,6 +508,22 @@ async function run(options) {
           loss,
           mapGenerator: 'generateTownTrainingMap'
         });
+        if (!bestCheckpoint || loss < bestCheckpoint.loss) {
+          bestCheckpoint = { game, loss };
+        }
+      }
+      writeBenchmarkSnapshot(
+        options,
+        snapshotPath,
+        checkpointRoot,
+        metricsPath,
+        finalDir,
+        metrics,
+        bestCheckpoint,
+        'running'
+      );
+      if (options.onGameComplete) {
+        await options.onGameComplete({ game, snapshotPath, finalDir });
       }
     }
     await model.save(`file://${finalDir}`);
@@ -468,33 +531,18 @@ async function run(options) {
     model.dispose();
   }
 
-  const candidatePath = path.join(
-    checkpointRoot,
-    `step-${String(best.game).padStart(8, '0')}`
-  );
-  const candidate = {
-    runId: options.runId,
-    selectedBy: 'lowest-training-loss',
-    checkpoint: path.relative(options.storageDir, candidatePath),
-    game: best.game,
-    loss: best.loss
-  };
+  const candidate = createCandidate(options, checkpointRoot, bestCheckpoint);
   writeJson(path.join(checkpointRoot, 'candidate.json'), candidate);
-  writeJson(snapshotPath, {
-    runId: options.runId,
-    trainer: 'AIPlayerWithEconomy',
-    players: ['AIPlayerWithEconomy', 'AIPlayerWithEconomy'],
-    dataSource: 'real-runtime-self-play',
-    mapGenerator: 'generateTownTrainingMap',
-    cellVectorSize: CELL_VECTOR_SIZE,
-    games: metrics,
-    candidate,
-    artifacts: {
-      checkpoints: path.relative(options.storageDir, checkpointRoot),
-      metrics: path.relative(options.storageDir, metricsPath),
-      finalModel: path.relative(options.storageDir, finalDir)
-    }
-  });
+  writeBenchmarkSnapshot(
+    options,
+    snapshotPath,
+    checkpointRoot,
+    metricsPath,
+    finalDir,
+    metrics,
+    bestCheckpoint,
+    'complete'
+  );
   writeJson(path.join(runDir, 'manifest.json'), {
     runId: options.runId,
     status: 'complete',

@@ -9,6 +9,7 @@ function check(condition, message) {
 async function main() {
   const storageDir = path.join('/mnt/storage/diplomacy', `task036-test-${process.pid}`);
   const runId = 'economy-training-test';
+  let incrementalSnapshotChecked = false;
   if (fs.existsSync(storageDir)) {
     fs.rmdirSync(storageDir, { recursive: true });
   }
@@ -18,9 +19,24 @@ async function main() {
     games: 2,
     epochs: 1,
     seed: 36036,
-    checkpointInterval: 1
+    checkpointInterval: 1,
+    onGameComplete({ game, snapshotPath, finalDir }) {
+      if (game !== 1) return;
+      const snapshot = JSON.parse(fs.readFileSync(snapshotPath));
+      check(snapshot.status === 'running',
+        'intermediate benchmark snapshot was not marked running');
+      check(snapshot.completedGames === 1 && snapshot.games.length === 1,
+        'intermediate benchmark snapshot did not contain first-game results');
+      check(snapshot.candidate && snapshot.candidate.game === 1,
+        'intermediate benchmark snapshot did not identify a saved candidate');
+      check(!fs.existsSync(path.join(finalDir, 'model.json')),
+        'benchmark snapshot was not written until after final model saving');
+      incrementalSnapshotChecked = true;
+    }
   });
   try {
+    check(incrementalSnapshotChecked,
+      'benchmark snapshot was not inspected during training');
     check(result.metrics.length === 2, 'longer economy training did not complete');
     for (const metric of result.metrics) {
       check(metric.cellVectorSize === 78, 'economy training did not use 78-channel vectors');
@@ -55,8 +71,11 @@ async function main() {
       'candidate checkpoint selection missing');
     check(fs.existsSync(path.join(storageDir, 'metrics', `${runId}.jsonl`)),
       'intermediate metrics missing');
-    check(fs.existsSync(path.join(storageDir, 'benchmarks', `${runId}.json`)),
-      'benchmark snapshot missing');
+    const snapshotPath = path.join(storageDir, 'benchmarks', `${runId}.json`);
+    check(fs.existsSync(snapshotPath), 'benchmark snapshot missing');
+    const snapshot = JSON.parse(fs.readFileSync(snapshotPath));
+    check(snapshot.status === 'complete' && snapshot.completedGames === 2,
+      'final benchmark snapshot did not record completed training');
     check(fs.existsSync(path.join(storageDir, 'final', runId, 'model.json')),
       'final economy model missing');
   } finally {
