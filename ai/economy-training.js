@@ -88,6 +88,29 @@ function createModel(height, width) {
   return model;
 }
 
+function adaptBoard(board, expectedWidth, expectedHeight) {
+  const width = board.length;
+  const height = board[0] ? board[0].length : 0;
+  if (width === expectedWidth && height === expectedHeight) {
+    return board;
+  }
+  const adapted = new Array(expectedWidth);
+  for (let x = 0; x < expectedWidth; x += 1) {
+    adapted[x] = new Array(expectedHeight);
+    const sourceX = Math.min(width - 1, Math.floor(x * width / expectedWidth));
+    for (let y = 0; y < expectedHeight; y += 1) {
+      const sourceY = Math.min(height - 1, Math.floor(y * height / expectedHeight));
+      adapted[x][y] = board[sourceX][sourceY].slice(0, CELL_VECTOR_SIZE);
+    }
+  }
+  return adapted;
+}
+
+function trainingMapSizeForSeed(seed) {
+  const sizes = ['tiny', 'medium', 'big'];
+  return sizes[Math.abs(seed) % sizes.length];
+}
+
 function createCanvasContext() {
   return new Proxy({
     canvas: { width: 800, height: 600 },
@@ -195,6 +218,7 @@ function createTrainingBatch(seed) {
   const context = createRuntimeContext(seed);
   loadBrowserScripts(context);
   context.__trainingSeed = seed;
+  context.__trainingMapSize = trainingMapSizeForSeed(seed);
   context.__actionCategories = ACTION_CATEGORIES;
   const result = new vm.Script(`(() => {
     isFogOfWar = false
@@ -233,17 +257,18 @@ function createTrainingBatch(seed) {
       }
     }
     let map = generateTownTrainingMap({
-      size: 'tiny',
+      size: __trainingMapSize,
       seed: __trainingSeed,
       buildingDensity: 'dense',
-      barrackDensity: 1,
+      barrackDensity: 0.2,
       pendingBarrackProbability: 0,
-      farmDensity: 1,
+      farmDensity: 0.2,
       pendingFarmProbability: 0,
       externalDensity: 1,
       suburbDensity: 1,
+      suburbDistance: __trainingMapSize == 'tiny' ? 1 : 2,
       unitComposition: 'all',
-      unitsPerPlayer: 5,
+      unitsPerPlayer: 1,
       goldmineCount: 5,
       startingGoldMin: 500,
       startingGoldMax: 500
@@ -336,17 +361,39 @@ function createTrainingBatch(seed) {
           lost: player.isLost
         }
       }),
-      mapFeatures: {
-        goldmines: map.goldmines.length,
-        units: map.players[1].units.length + map.players[2].units.length,
-        farms: map.players[1].farms.length + map.players[2].farms.length,
-        barracks:
-          map.players[1].barracks.length + map.players[2].barracks.length,
-        external:
-          map.players[1].walls.length + map.players[2].walls.length +
-          map.players[1].bastions.length + map.players[2].bastions.length +
-          map.players[1].towers.length + map.players[2].towers.length
-      }
+      mapFeatures: (() => {
+        let features = {
+          generatedSize: __trainingMapSize,
+          towns: 0,
+          neutralTowns: 0,
+          goldmines: goldmines.length,
+          units: 0,
+          farms: 0,
+          barracks: 0,
+          external: external.length
+        }
+        for (let playerIndex = 0; playerIndex < players.length; ++playerIndex) {
+          let player = players[playerIndex]
+          features.towns += player.towns.length
+          if (playerIndex == 0) {
+            features.neutralTowns += player.towns.length
+          }
+          features.units += player.units.length
+          for (let townIndex = 0; townIndex < player.towns.length; ++townIndex) {
+            let buildings = player.towns[townIndex].buildings || []
+            for (let buildingIndex = 0; buildingIndex < buildings.length; ++buildingIndex) {
+              let building = buildings[buildingIndex]
+              if (building.name == 'farm') {
+                features.farms += 1
+              }
+              else if (building.name == 'barrack') {
+                features.barracks += 1
+              }
+            }
+          }
+        }
+        return features
+      })()
     }
   })()`, { filename: 'economy-training-self-play.js' }).runInContext(context);
 
@@ -362,7 +409,7 @@ function createTrainingBatch(seed) {
   }
   return {
     map: { mapSize: result.mapSize },
-    boards: result.examples.map(example => example.board),
+    boards: result.examples.map(example => adaptBoard(example.board, 7, 7)),
     globals: result.examples.map(example => example.global),
     labels: result.labels,
     actionCounts: result.actionCounts,

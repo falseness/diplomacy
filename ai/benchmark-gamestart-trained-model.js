@@ -30,17 +30,6 @@ const DEFAULT_OUTPUT =
   '/mnt/storage/diplomacy/benchmarks/task037-gamestart-trained-vs-simple.json';
 const DEFAULT_FAILURE_DIR =
   '/mnt/storage/diplomacy/benchmarks/task037-failures';
-const BENCHMARK_INELIGIBLE_MAPS = {
-  'mountain wall #1':
-    'disconnected mountain-wall terrain produces a physical stalemate for runtime players',
-  'reinforcement #1':
-    'fortified reinforcement layout can preserve both runtime players beyond the benchmark cap',
-  'attack and protect #1':
-    'fortified protect objective can preserve a side-2 runtime stalemate beyond the benchmark cap',
-  'fight forever #1':
-    'intentionally non-decisive fight-forever scenario is unsuitable for win-rate benchmarking'
-};
-
 function usage() {
   return [
     'Usage: node ai/benchmark-gamestart-trained-model.js [options]',
@@ -49,9 +38,9 @@ function usage() {
     '  --checkpoint PATH       Trained checkpoint directory or model.json path',
     '  --seeds NUMBER          Seeds per candidate side and map (default: 1)',
     '  --seed NUMBER           First deterministic seed (default: 37000)',
-    '  --round-limit NUMBER    Max nextTurn calls per game (default: 600)',
-    '  --action-limit NUMBER   Max candidate actions per turn (default: 30)',
-    '  --command-limit NUMBER  Max scored commands per action (default: 60)',
+    '  --round-limit NUMBER    Max nextTurn calls per game (default: 1200)',
+    '  --action-limit NUMBER   Max candidate actions per turn (default: 120)',
+    '  --command-limit NUMBER  Max scored commands per action (default: 120)',
     '  --large-round-limit NUMBER    Override round limit for maps larger than 9x7 (default: same as --round-limit)',
     '  --large-action-limit NUMBER   Override action limit for maps larger than 9x7',
     '  --large-command-limit NUMBER  Override command limit for maps larger than 9x7',
@@ -71,9 +60,9 @@ function parseArgs(argv) {
     checkpoint: DEFAULT_CHECKPOINT,
     seeds: 1,
     seed: 37000,
-    roundLimit: 600,
-    actionLimit: 30,
-    commandLimit: 60,
+    roundLimit: 1200,
+    actionLimit: 120,
+    commandLimit: 120,
     largeRoundLimit: undefined,
     largeActionLimit: undefined,
     largeCommandLimit: undefined,
@@ -662,7 +651,7 @@ function appendFollowups(tasksPath, failedGames, reportPath) {
   return [task.id];
 }
 
-function summarize(games, crashes, skippedMaps, skippedBenchmarkMaps) {
+function summarize(games, crashes, skippedMaps) {
   const completedGames = games.filter(game => !game.nonResult);
   const candidateWins = completedGames.filter(game => game.candidateWon).length;
   const failedGames = games.filter(game => !game.candidateWon);
@@ -678,7 +667,7 @@ function summarize(games, crashes, skippedMaps, skippedBenchmarkMaps) {
     timeouts: games.filter(game => game.timeout).length,
     crashes: crashes.length,
     skippedMultiplayerMaps: skippedMaps.length,
-    skippedBenchmarkIneligibleMaps: skippedBenchmarkMaps.length
+    skippedBenchmarkIneligibleMaps: 0
   };
 }
 
@@ -698,16 +687,11 @@ async function main() {
   try {
     const mapInventory = extractGamestartMaps();
     const allOneVOneMaps = mapInventory.filter(map => map.oneVOne);
-    const skippedBenchmarkMaps = allOneVOneMaps.filter(
-      map => BENCHMARK_INELIGIBLE_MAPS[map.name]).map(map => Object.assign({}, map, {
-        reason: BENCHMARK_INELIGIBLE_MAPS[map.name]
-      }));
-    const eligibleOneVOneMaps = allOneVOneMaps.filter(
-      map => !BENCHMARK_INELIGIBLE_MAPS[map.name]);
-    const selectedOneVOneMaps = eligibleOneVOneMaps.slice(options.mapOffset);
+    const selectedOneVOneMaps = allOneVOneMaps.slice(options.mapOffset);
     const oneVOneMaps = options.mapLimit ?
       selectedOneVOneMaps.slice(0, options.mapLimit) : selectedOneVOneMaps;
     const skippedMaps = mapInventory.filter(map => !map.oneVOne);
+    const skippedBenchmarkMaps = [];
     const games = [];
     const crashes = [];
     for (const mapInfo of oneVOneMaps) {
@@ -754,7 +738,7 @@ async function main() {
         }
       }
     }
-    const summary = summarize(games, crashes, skippedMaps, skippedBenchmarkMaps);
+    const summary = summarize(games, crashes, skippedMaps);
     const report = {
       config: {
         checkpoint: options.checkpoint,
@@ -781,7 +765,7 @@ async function main() {
           size: map.size
         })),
         totalOneVOneMaps: allOneVOneMaps.length,
-        eligibleOneVOneMaps: eligibleOneVOneMaps.length,
+        eligibleOneVOneMaps: allOneVOneMaps.length,
         limited: !!options.mapLimit,
         skippedMultiplayerMaps: skippedMaps,
         skippedBenchmarkIneligibleMaps: skippedBenchmarkMaps

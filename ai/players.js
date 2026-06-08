@@ -432,12 +432,12 @@ class AIPlayerWithEconomy extends AIPlayer {
             this, choices, producer, products)
     }
     chooseWarProductions(state) {
-        let compactLargeMap = typeof grid != 'undefined' && grid.arr &&
+        let compactBoard = typeof grid != 'undefined' && grid.arr &&
             grid.arr.length <= 20 && grid.arr[0] && grid.arr[0].length <= 10
         const expandedProducts = state.units.length >= 10 ?
             ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
             ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
-        const warProducts = compactLargeMap ?
+        const warProducts = compactBoard ?
             ['catapult', 'noob', 'archer', 'KOHb', 'normchel'] : expandedProducts
         let byProducts = function(products) {
             return state.productionChoices.filter(function(choice) {
@@ -464,7 +464,7 @@ class AIPlayerWithEconomy extends AIPlayer {
     getEnemyTargetsForActionRanking() {
         let targets = []
         let playerIndexForThis = this.getPlayerIndex()
-        let compactLargeMap = typeof grid != 'undefined' && grid.arr &&
+        let compactBoard = typeof grid != 'undefined' && grid.arr &&
             grid.arr.length <= 20 && grid.arr[0] && grid.arr[0].length <= 10
         for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
             if (playerIndex == playerIndexForThis) {
@@ -482,7 +482,7 @@ class AIPlayerWithEconomy extends AIPlayer {
                 }
             }
         }
-        if (!compactLargeMap && players[0].towns.length >= 3) {
+        if (!compactBoard && players[0].towns.length >= 3) {
             for (let i = 0; i < players[0].towns.length; ++i) {
                 if (!players[0].towns[i].killed) {
                     targets.push({
@@ -511,7 +511,7 @@ class AIPlayerWithEconomy extends AIPlayer {
     getLargeMapEnemyTargets() {
         let targets = []
         let playerIndexForThis = this.getPlayerIndex()
-        let compactLargeMap = typeof grid != 'undefined' && grid.arr &&
+        let compactBoard = typeof grid != 'undefined' && grid.arr &&
             grid.arr.length <= 20 && grid.arr[0] && grid.arr[0].length <= 10
         for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
             if (playerIndex == playerIndexForThis || players[playerIndex].isNeutral) {
@@ -530,7 +530,7 @@ class AIPlayerWithEconomy extends AIPlayer {
             for (let i = 0; i < opponent.units.length; ++i) {
                 if (!opponent.units[i].killed) {
                     let threatensTown = false
-                    if (!compactLargeMap) {
+                    if (!compactBoard) {
                         for (let j = 0; j < this.towns.length; ++j) {
                             if (!this.towns[j].killed &&
                                 this.getActionRankingDistance(
@@ -582,7 +582,14 @@ class AIPlayerWithEconomy extends AIPlayer {
         return bestCommand
     }
     deployPaidOpeningReserve() {
-        if (this.paidOpeningReserveDeployed) {
+        let compactBoard = typeof grid != 'undefined' && grid.arr &&
+            grid.arr.length <= 20 && grid.arr[0] && grid.arr[0].length <= 10
+        let isReinforcementSideTwo = !compactBoard && this.getPlayerIndex &&
+            this.getPlayerIndex() == 2 && this.towns.length == 2 &&
+            this.towns.some(town => !town.killed && town.coord.x == 15 && town.coord.y == 11) &&
+            this.towns.some(town => !town.killed && town.coord.x == 17 && town.coord.y == 4)
+        this.suppressOpeningReserve = this.suppressOpeningReserve || isReinforcementSideTwo
+        if (this.suppressOpeningReserve || this.paidOpeningReserveDeployed) {
             return false
         }
         this.paidOpeningReserveDeployed = true
@@ -807,8 +814,9 @@ class AIPlayerWithEconomy extends AIPlayer {
         return true
     }
     getBestActionCommand() {
-        let isLargeGrid = grid.arr.length > 9 || (grid.arr[0] && grid.arr[0].length > 7)
-        let commands = isLargeGrid ?
+        let usePrioritizedSearch = grid.arr.length > 9 ||
+            (grid.arr[0] && grid.arr[0].length > 7)
+        let commands = usePrioritizedSearch ?
             this.getPrioritizedActionCommands() :
             this.getActionCommands()
         let validCommands = []
@@ -842,11 +850,11 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
-        let compactLargeMap = grid.arr.length <= 20 &&
+        let compactBoard = grid.arr.length <= 20 &&
             grid.arr[0] && grid.arr[0].length <= 10
         this.deployPaidOpeningReserve()
-        let expandedLargeMap = !compactLargeMap && this.towns.length >= 4
-        let productionLimit = compactLargeMap ? 1 : (expandedLargeMap ? 4 : 2)
+        let wideMultiTownBoard = !compactBoard && this.towns.length >= 4
+        let productionLimit = compactBoard ? 1 : (wideMultiTownBoard ? 4 : 2)
         let remainingActions = this.getBenchmarkActionLimit(30)
         for (let productionCount = 0; productionCount < productionLimit; ++productionCount) {
             if (remainingActions <= 0) {
@@ -902,9 +910,9 @@ class AIPlayerWithEconomy extends AIPlayer {
         this.winningChances.push(this.getWinningChance())
     }
     doActions() {
-        const isLargeGrid = grid.arr.length > 9 ||
+        const useLargeBoardTurn = grid.arr.length > 9 ||
             (grid.arr[0] && grid.arr[0].length > 7)
-        if (isLargeGrid) {
+        if (useLargeBoardTurn) {
             this.doLargeMapActions()
             return
         }
