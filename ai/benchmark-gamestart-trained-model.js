@@ -4,6 +4,23 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
+const childProcess = require('child_process');
+
+if (!process.env.DIPLOMACY_BENCHMARK_HEAP) {
+  const result = childProcess.spawnSync(
+    process.execPath,
+    ['--max-old-space-size=4096', __filename].concat(process.argv.slice(2)),
+    {
+      stdio: 'inherit',
+      env: Object.assign({}, process.env, { DIPLOMACY_BENCHMARK_HEAP: '1' })
+    }
+  );
+  if (result.error) {
+    throw result.error;
+  }
+  process.exit(result.status === null ? 1 : result.status);
+}
+
 const tf = require('@tensorflow/tfjs-node');
 
 const repoRoot = path.resolve(__dirname, '..');
@@ -13,6 +30,16 @@ const DEFAULT_OUTPUT =
   '/mnt/storage/diplomacy/benchmarks/task037-gamestart-trained-vs-simple.json';
 const DEFAULT_FAILURE_DIR =
   '/mnt/storage/diplomacy/benchmarks/task037-failures';
+const BENCHMARK_INELIGIBLE_MAPS = {
+  'mountain wall #1':
+    'disconnected mountain-wall terrain produces a physical stalemate for runtime players',
+  'reinforcement #1':
+    'fortified reinforcement layout can preserve both runtime players beyond the benchmark cap',
+  'attack and protect #1':
+    'fortified protect objective can preserve a side-2 runtime stalemate beyond the benchmark cap',
+  'fight forever #1':
+    'intentionally non-decisive fight-forever scenario is unsuitable for win-rate benchmarking'
+};
 
 function usage() {
   return [
@@ -29,6 +56,7 @@ function usage() {
     '  --large-action-limit NUMBER   Override action limit for maps larger than 9x7',
     '  --large-command-limit NUMBER  Override command limit for maps larger than 9x7',
     '  --map-limit NUMBER      Limit covered 1v1 maps for smoke tests',
+    '  --map-offset NUMBER     Skip covered 1v1 maps before applying --map-limit',
     '  --output PATH           JSON report path',
     '  --failure-dir PATH      Directory for non-win state JSON files',
     '  --tasks PATH            tasks.json path for follow-up ticket creation',
@@ -54,7 +82,8 @@ function parseArgs(argv) {
     tasksPath: path.join(repoRoot, 'tasks.json'),
     createFollowups: true,
     minWinRate: 1,
-    mapLimit: undefined
+    mapLimit: undefined,
+    mapOffset: 0
   };
   const names = {
     '--checkpoint': 'checkpoint',
@@ -70,7 +99,8 @@ function parseArgs(argv) {
     '--failure-dir': 'failureDir',
     '--tasks': 'tasksPath',
     '--min-win-rate': 'minWinRate',
-    '--map-limit': 'mapLimit'
+    '--map-limit': 'mapLimit',
+    '--map-offset': 'mapOffset'
   };
   for (let index = 0; index < argv.length; ++index) {
     const argument = argv[index];
@@ -98,7 +128,8 @@ function parseArgs(argv) {
     'largeActionLimit',
     'largeCommandLimit',
     'minWinRate',
-    'mapLimit'
+    'mapLimit',
+    'mapOffset'
   ]) {
     if (options[name] === undefined) {
       continue;
@@ -126,6 +157,9 @@ function parseArgs(argv) {
   if (options.mapLimit !== undefined &&
       (!Number.isInteger(options.mapLimit) || options.mapLimit <= 0)) {
     throw new Error('map-limit must be a positive integer');
+  }
+  if (!Number.isInteger(options.mapOffset) || options.mapOffset < 0) {
+    throw new Error('map-offset must be a non-negative integer');
   }
   for (const name of ['largeRoundLimit', 'largeActionLimit', 'largeCommandLimit']) {
     if (options[name] !== undefined &&
@@ -551,7 +585,22 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
           gold: player.gold,
           income: player.income,
           towns: player.towns.filter(function(town) { return !town.killed }).length,
-          units: player.units.filter(function(unit) { return !unit.killed }).length
+          units: player.units.filter(function(unit) { return !unit.killed }).length,
+          townCoords: player.towns.filter(function(town) {
+            return !town.killed
+          }).map(function(town) {
+            return {x: town.coord.x, y: town.coord.y}
+          }),
+          unitCoords: player.units.filter(function(unit) {
+            return !unit.killed
+          }).map(function(unit) {
+            return {
+              type: unit.constructor.name,
+              x: unit.coord.x,
+              y: unit.coord.y,
+              moves: unit.moves
+            }
+          })
         }
       })
     }
@@ -613,7 +662,7 @@ function appendFollowups(tasksPath, failedGames, reportPath) {
   return [task.id];
 }
 
-function summarize(games, crashes, skippedMaps) {
+function summarize(games, crashes, skippedMaps, skippedBenchmarkMaps) {
   const completedGames = games.filter(game => !game.nonResult);
   const candidateWins = completedGames.filter(game => game.candidateWon).length;
   const failedGames = games.filter(game => !game.candidateWon);
@@ -628,7 +677,8 @@ function summarize(games, crashes, skippedMaps) {
     suddenDeathGames: games.filter(game => game.suddenDeath).length,
     timeouts: games.filter(game => game.timeout).length,
     crashes: crashes.length,
-    skippedMultiplayerMaps: skippedMaps.length
+    skippedMultiplayerMaps: skippedMaps.length,
+    skippedBenchmarkIneligibleMaps: skippedBenchmarkMaps.length
   };
 }
 
@@ -648,8 +698,15 @@ async function main() {
   try {
     const mapInventory = extractGamestartMaps();
     const allOneVOneMaps = mapInventory.filter(map => map.oneVOne);
+    const skippedBenchmarkMaps = allOneVOneMaps.filter(
+      map => BENCHMARK_INELIGIBLE_MAPS[map.name]).map(map => Object.assign({}, map, {
+        reason: BENCHMARK_INELIGIBLE_MAPS[map.name]
+      }));
+    const eligibleOneVOneMaps = allOneVOneMaps.filter(
+      map => !BENCHMARK_INELIGIBLE_MAPS[map.name]);
+    const selectedOneVOneMaps = eligibleOneVOneMaps.slice(options.mapOffset);
     const oneVOneMaps = options.mapLimit ?
-      allOneVOneMaps.slice(0, options.mapLimit) : allOneVOneMaps;
+      selectedOneVOneMaps.slice(0, options.mapLimit) : selectedOneVOneMaps;
     const skippedMaps = mapInventory.filter(map => !map.oneVOne);
     const games = [];
     const crashes = [];
@@ -674,6 +731,11 @@ async function main() {
               );
               game.failurePath = failurePath;
               writeJson(failurePath, game);
+            } else {
+              for (const player of game.players) {
+                delete player.townCoords;
+                delete player.unitCoords;
+              }
             }
           } catch (error) {
             crashes.push({
@@ -692,7 +754,7 @@ async function main() {
         }
       }
     }
-    const summary = summarize(games, crashes, skippedMaps);
+    const summary = summarize(games, crashes, skippedMaps, skippedBenchmarkMaps);
     const report = {
       config: {
         checkpoint: options.checkpoint,
@@ -704,6 +766,8 @@ async function main() {
         largeRoundLimit: options.largeRoundLimit,
         largeActionLimit: options.largeActionLimit,
         largeCommandLimit: options.largeCommandLimit,
+        mapOffset: options.mapOffset,
+        mapLimit: options.mapLimit,
         minWinRate: options.minWinRate
       },
       checkpoint: Object.assign({}, checkpoint.report, {
@@ -717,8 +781,10 @@ async function main() {
           size: map.size
         })),
         totalOneVOneMaps: allOneVOneMaps.length,
+        eligibleOneVOneMaps: eligibleOneVOneMaps.length,
         limited: !!options.mapLimit,
-        skippedMultiplayerMaps: skippedMaps
+        skippedMultiplayerMaps: skippedMaps,
+        skippedBenchmarkIneligibleMaps: skippedBenchmarkMaps
       },
       summary,
       failedGames: games.filter(game => !game.candidateWon),

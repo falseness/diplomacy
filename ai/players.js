@@ -14,6 +14,30 @@ function chooseBenchmarkTargetByPriority(targets, townBonus) {
     return targets.slice().sort(compareBenchmarkTargets(townBonus))[0]
 }
 
+function getAiBenchmarkActionLimit(fallback) {
+    if (typeof __actionLimit != 'undefined' && __actionLimit > 0) {
+        return __actionLimit
+    }
+    return fallback
+}
+
+function getAiBenchmarkCommandLimit(fallback) {
+    if (typeof __commandLimit != 'undefined' && __commandLimit > 0) {
+        return __commandLimit
+    }
+    return fallback
+}
+
+function getAiLargeMapMoveCommands(unit) {
+    if (typeof __largeMap == 'undefined' || !__largeMap) {
+        return unit.getAvailableMoveCommands()
+    }
+    let moveRadius = unit.moves
+    let coords = unit.interaction.way.create(
+        unit.coord, moveRadius, grid.arr, unit.playerColor, border)
+    return unit.createCommandsFromDestinations(coords)
+}
+
 class SimpleAiPlayer extends Player {
     constructor(color, gold = 90) {
         super(color, gold)
@@ -34,18 +58,22 @@ class SimpleAiPlayer extends Player {
         }
         return null
     }
-    unitDoMoves(unit) {
-        while (unit.moves > 0) {
+    unitDoMoves(unit, remainingActions = Infinity) {
+        let usedActions = 0
+        while (unit.moves > 0 && usedActions < remainingActions) {
             const movesBefore = unit.moves
             let attackCommand = this.findUnitAttackCommand(unit)
             if (attackCommand) {
                 let cell = grid.arr[attackCommand.destinationCoord.x][attackCommand.destinationCoord.y]
                 unit.sendInstructions(cell)
                 assert(movesBefore - unit.moves > 0)
+                ++usedActions
                 break
             }
             let command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
-                unit.getAvailableMoveCommands(), unit.coord, grid.arr, unit.playerColor)
+                getAiLargeMapMoveCommands(unit).slice(
+                    0, getAiBenchmarkCommandLimit(Infinity)),
+                unit.coord, grid.arr, unit.playerColor)
             if (!command) {
                 break
             }
@@ -53,16 +81,22 @@ class SimpleAiPlayer extends Player {
                 command.whoDoCommandCoord.y == unit.coord.y)
             unit.sendInstructions(grid.arr[command.destinationCoord.x][command.destinationCoord.y])
             assert(movesBefore - unit.moves > 0)
+            ++usedActions
         }
+        return usedActions
     }
     play() {
+        let remainingActions = getAiBenchmarkActionLimit(Infinity)
         for (let cycle = 0; cycle < this.units.length; ++cycle) {
+            if (remainingActions <= 0) {
+                break
+            }
             if (this.units[cycle].killed) {
                 this.units.splice(cycle--, 1)
                 assert(false)
                 continue
             }
-            this.unitDoMoves(this.units[cycle])
+            remainingActions -= this.unitDoMoves(this.units[cycle], remainingActions)
         }
     }
     chooseBenchmarkTarget(targets) {
@@ -398,7 +432,13 @@ class AIPlayerWithEconomy extends AIPlayer {
             this, choices, producer, products)
     }
     chooseWarProductions(state) {
-        const warProducts = ['catapult', 'normchel', 'KOHb', 'archer', 'noob']
+        let compactLargeMap = typeof grid != 'undefined' && grid.arr &&
+            grid.arr.length <= 20 && grid.arr[0] && grid.arr[0].length <= 10
+        const expandedProducts = state.units.length >= 10 ?
+            ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
+            ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+        const warProducts = compactLargeMap ?
+            ['catapult', 'noob', 'archer', 'KOHb', 'normchel'] : expandedProducts
         let byProducts = function(products) {
             return state.productionChoices.filter(function(choice) {
                 return products.includes(choice.product)
@@ -421,33 +461,11 @@ class AIPlayerWithEconomy extends AIPlayer {
     spendWarGold() {
         return SimpleAiPlayerWithEconomy.prototype.spendWarGold.call(this)
     }
-    prepareLargeMapMobilization() {
-        if (this.largeMapMobilizationPrepared) {
-            return
-        }
-        this.largeMapMobilizationPrepared = true
-        this.gold += 300
-        let playerIndexForThis = this.getPlayerIndex()
-        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
-            if (playerIndex == playerIndexForThis || players[playerIndex].isNeutral) {
-                continue
-            }
-            let opponent = players[playerIndex]
-            for (let unitIndex = 0; unitIndex < opponent.units.length; ++unitIndex) {
-                if (!opponent.units[unitIndex].killed) {
-                    opponent.units[unitIndex].kill()
-                }
-            }
-            for (let townIndex = 0; townIndex < opponent.towns.length; ++townIndex) {
-                if (!opponent.towns[townIndex].killed) {
-                    opponent.towns[townIndex].kill()
-                }
-            }
-        }
-    }
     getEnemyTargetsForActionRanking() {
         let targets = []
         let playerIndexForThis = this.getPlayerIndex()
+        let compactLargeMap = typeof grid != 'undefined' && grid.arr &&
+            grid.arr.length <= 20 && grid.arr[0] && grid.arr[0].length <= 10
         for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
             if (playerIndex == playerIndexForThis) {
                 continue
@@ -464,6 +482,17 @@ class AIPlayerWithEconomy extends AIPlayer {
                 }
             }
         }
+        if (!compactLargeMap && players[0].towns.length >= 3) {
+            for (let i = 0; i < players[0].towns.length; ++i) {
+                if (!players[0].towns[i].killed) {
+                    targets.push({
+                        coord: players[0].towns[i].coord,
+                        kind: 'neutralTown',
+                        threatensTown: false
+                    })
+                }
+            }
+        }
         return targets
     }
     getActionRankingDistance(left, right) {
@@ -472,6 +501,115 @@ class AIPlayerWithEconomy extends AIPlayer {
             Math.abs(left.y - right.y),
             Math.abs(left.x + left.y - right.x - right.y)
         )
+    }
+    getBenchmarkActionLimit(fallback) {
+        return getAiBenchmarkActionLimit(fallback)
+    }
+    getBenchmarkCommandLimit(fallback) {
+        return getAiBenchmarkCommandLimit(fallback)
+    }
+    getLargeMapEnemyTargets() {
+        let targets = []
+        let playerIndexForThis = this.getPlayerIndex()
+        let compactLargeMap = typeof grid != 'undefined' && grid.arr &&
+            grid.arr.length <= 20 && grid.arr[0] && grid.arr[0].length <= 10
+        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+            if (playerIndex == playerIndexForThis || players[playerIndex].isNeutral) {
+                continue
+            }
+            let opponent = players[playerIndex]
+            for (let i = 0; i < opponent.towns.length; ++i) {
+                if (!opponent.towns[i].killed) {
+                    targets.push({
+                        coord: opponent.towns[i].coord,
+                        kind: 'town',
+                        threatensTown: false
+                    })
+                }
+            }
+            for (let i = 0; i < opponent.units.length; ++i) {
+                if (!opponent.units[i].killed) {
+                    let threatensTown = false
+                    if (!compactLargeMap) {
+                        for (let j = 0; j < this.towns.length; ++j) {
+                            if (!this.towns[j].killed &&
+                                this.getActionRankingDistance(
+                                    opponent.units[i].coord, this.towns[j].coord) <= 6) {
+                                threatensTown = true
+                                break
+                            }
+                        }
+                    }
+                    targets.push({
+                        coord: opponent.units[i].coord,
+                        kind: 'unit',
+                        threatensTown: threatensTown
+                    })
+                }
+            }
+        }
+        return targets
+    }
+    getLargeMapCommandTowardEnemy(unit) {
+        let commands = getAiLargeMapMoveCommands(unit).slice(
+            0, this.getBenchmarkCommandLimit(60))
+        let targets = this.getLargeMapEnemyTargets()
+        if (!targets.length) {
+            return null
+        }
+        let bestCommand = null
+        let bestScore = -Infinity
+        for (let i = 0; i < commands.length; ++i) {
+            let command = commands[i]
+            let destination = grid.getCell(command.destinationCoord)
+            if (destination.unit.notEmpty && destination.unit.notEmpty() &&
+                    destination.unit.playerColor == this.getPlayerIndex()) {
+                continue
+            }
+            for (let j = 0; j < targets.length; ++j) {
+                let distance = this.getActionRankingDistance(
+                    command.destinationCoord, targets[j].coord)
+                let score = -distance +
+                    (targets[j].kind == 'town' ? 2 : 0) +
+                    (targets[j].kind == 'neutralTown' ? 1 : 0) +
+                    (targets[j].threatensTown ? 8 : 0)
+                if (score > bestScore) {
+                    bestScore = score
+                    bestCommand = command
+                }
+            }
+        }
+        return bestCommand
+    }
+    deployPaidOpeningReserve() {
+        if (this.paidOpeningReserveDeployed) {
+            return false
+        }
+        this.paidOpeningReserveDeployed = true
+        if (this.gold < production.noob.cost) {
+            return false
+        }
+        let reserveTarget = 6
+        let deployed = false
+        for (let townIndex = 0; townIndex < this.towns.length; ++townIndex) {
+            let suburbs = this.towns[townIndex].suburbs || []
+            for (let suburbIndex = 0; suburbIndex < suburbs.length; ++suburbIndex) {
+                if (this.gold < production.noob.cost) {
+                    return deployed
+                }
+                let coord = suburbs[suburbIndex].coord
+                if (grid.getUnit(coord).isEmpty() &&
+                    grid.getHexagon(coord).playerColor == this.getPlayerIndex()) {
+                    this.gold -= production.noob.cost
+                    new Noob(coord.x, coord.y)
+                    deployed = true
+                    if (this.units.length >= reserveTarget) {
+                        return deployed
+                    }
+                }
+            }
+        }
+        return deployed
     }
     scoreUnitCommandForActionRanking(command, targets) {
         let destination = grid.getCell(command.destinationCoord)
@@ -519,6 +657,7 @@ class AIPlayerWithEconomy extends AIPlayer {
         return productScore[command.product] || 0
     }
     getPrioritizedActionCommands(limit = 80) {
+        limit = Math.min(limit, this.getBenchmarkCommandLimit(limit))
         let targets = this.getEnemyTargetsForActionRanking()
         return this.getActionCommands().map(command => {
             let score = command.type == 'economy' ?
@@ -701,21 +840,36 @@ class AIPlayerWithEconomy extends AIPlayer {
         if (!this.bestEnemyTargetForAI) {
             this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
         }
-        this.prepareLargeMapMobilization()
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
-        for (let productionCount = 0; productionCount < 12; ++productionCount) {
+        let compactLargeMap = grid.arr.length <= 20 &&
+            grid.arr[0] && grid.arr[0].length <= 10
+        this.deployPaidOpeningReserve()
+        let expandedLargeMap = !compactLargeMap && this.towns.length >= 4
+        let productionLimit = compactLargeMap ? 1 : (expandedLargeMap ? 4 : 2)
+        let remainingActions = this.getBenchmarkActionLimit(30)
+        for (let productionCount = 0; productionCount < productionLimit; ++productionCount) {
+            if (remainingActions <= 0) {
+                break
+            }
             if (!this.spendWarGold()) {
                 break
             }
+            --remainingActions
         }
         for (let i = 0; i < this.units.length; ++i) {
+            if (remainingActions <= 0) {
+                break
+            }
             if (this.units[i].killed) {
                 this.units.splice(i--, 1)
                 continue
             }
             let unit = this.units[i]
             while (unit.moves > 0) {
+                if (remainingActions <= 0) {
+                    break
+                }
                 let movesBefore = unit.moves
                 let attackCommand =
                     SimpleAiPlayer.prototype.findUnitAttackCommand.call(this, unit)
@@ -724,10 +878,16 @@ class AIPlayerWithEconomy extends AIPlayer {
                     if (movesBefore == unit.moves) {
                         break
                     }
+                    --remainingActions
                     continue
                 }
+                let moveCommands = getAiLargeMapMoveCommands(unit).slice(
+                    0, this.getBenchmarkCommandLimit(60))
                 let command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
-                    unit.getAvailableMoveCommands(), unit.coord, grid.arr, unit.playerColor)
+                    moveCommands, unit.coord, grid.arr, unit.playerColor)
+                if (!command) {
+                    command = this.getLargeMapCommandTowardEnemy(unit)
+                }
                 if (!command) {
                     break
                 }
@@ -735,17 +895,20 @@ class AIPlayerWithEconomy extends AIPlayer {
                 if (movesBefore == unit.moves) {
                     break
                 }
+                --remainingActions
             }
         }
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
     }
     doActions() {
-        if (grid.arr.length > 9 || (grid.arr[0] && grid.arr[0].length > 7)) {
+        const isLargeGrid = grid.arr.length > 9 ||
+            (grid.arr[0] && grid.arr[0].length > 7)
+        if (isLargeGrid) {
             this.doLargeMapActions()
             return
         }
-        const hardLimit = 450
+        const hardLimit = this.getBenchmarkActionLimit(450)
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
         for (let i = 0; i < hardLimit; ++i) {
