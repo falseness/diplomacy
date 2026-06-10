@@ -3,6 +3,9 @@ const AI_ECONOMY_ADVANCED_UNIT_THRESHOLD = 6
 const AI_ECONOMY_TOWN_THREAT_DISTANCE = 6
 const AI_ECONOMY_DEFAULT_ACTION_LIMIT = 30
 const AI_ECONOMY_DEFAULT_COMMAND_LIMIT = 60
+const AI_ECONOMY_STALEMATE_ACTION_LIMIT = 45
+const AI_ECONOMY_MULTI_TOWN_ACTION_LIMIT = 45
+const AI_ECONOMY_MULTI_TOWN_THRESHOLD = 2
 const AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT = 6
 const AI_ECONOMY_POST_MOVE_PURCHASE_LIMIT = 3
 const AI_ECONOMY_NEUTRAL_RACE_DISTANCE = 20
@@ -49,6 +52,9 @@ function getAiCommandLimit(fallback) {
 }
 
 function getAiMoveCommands(unit) {
+    if (!unit.getAvailableMoveCommands && unit.getAvailableCommands) {
+        return unit.getAvailableCommands()
+    }
     return unit.getAvailableMoveCommands()
 }
 
@@ -65,8 +71,28 @@ class SimpleAiPlayer extends Player {
         let commands = unit.getAvailableCommands()
         for (let i = 0; i < commands.length; ++i) {
             let command = commands[i]
-            let cell = grid.arr[command.destinationCoord.x][command.destinationCoord.y]
-            if (unit.canHitSomethingOnCell(cell)) {
+            let cell = grid.arr[command.destinationCoord.x] &&
+                grid.arr[command.destinationCoord.x][command.destinationCoord.y]
+            if (!cell && grid.getCell) {
+                cell = grid.getCell(command.destinationCoord)
+            }
+            if (!cell) {
+                continue
+            }
+            if (unit.canHitSomethingOnCell) {
+                if (unit.canHitSomethingOnCell(cell)) {
+                    return command
+                }
+                continue
+            }
+            let playerIndex = typeof players == 'undefined' ? unit.playerColor :
+                players.indexOf(this)
+            if (cell.unit && cell.unit.notEmpty && cell.unit.notEmpty() &&
+                    cell.unit.playerColor != playerIndex) {
+                return command
+            }
+            if (cell.building && cell.building.notEmpty && cell.building.notEmpty() &&
+                    cell.building.playerColor != playerIndex) {
                 return command
             }
         }
@@ -148,10 +174,11 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 continue
             }
             state.towns.push(town)
-            for (let j = 0; j < town.suburbs.length; ++j) {
-                if (town.suburbs[j].isSuburb &&
-                    town.suburbs[j].playerColor == town.playerColor) {
-                    state.suburbs.push(town.suburbs[j])
+            let suburbs = town.suburbs || []
+            for (let j = 0; j < suburbs.length; ++j) {
+                if (suburbs[j].isSuburb &&
+                    suburbs[j].playerColor == town.playerColor) {
+                    state.suburbs.push(suburbs[j])
                 }
             }
             for (let j = 0; j < town.buildings.length; ++j) {
@@ -590,7 +617,15 @@ class AIPlayerWithEconomy extends AIPlayer {
         return Math.max(0, ownUnits - strongestOpponentUnits)
     }
     getActionLimit(fallback) {
-        return getAiActionLimit(fallback)
+        let limit = getAiActionLimit(fallback)
+        if (typeof gameRound != 'undefined' &&
+                gameRound >= AI_ECONOMY_STALEMATE_ROUND) {
+            limit = Math.max(limit, AI_ECONOMY_STALEMATE_ACTION_LIMIT)
+        }
+        if (this.getLiveTownCount(this) >= AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
+            limit = Math.max(limit, AI_ECONOMY_MULTI_TOWN_ACTION_LIMIT)
+        }
+        return limit
     }
     getCommandLimit(fallback) {
         return getAiCommandLimit(fallback)
@@ -925,7 +960,8 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         let unit = grid.getCell(command.whoDoCommandCoord).unit
         if (!unit || !unit.sendInstructions || unit.killed ||
-                unit.playerColor != this.getPlayerIndex()) {
+                (unit.playerColor !== undefined &&
+                    unit.playerColor != this.getPlayerIndex())) {
             return false
         }
         unit.select()
@@ -980,7 +1016,7 @@ class AIPlayerWithEconomy extends AIPlayer {
             let moveCommands = getAiMoveCommands(unit).slice(
             0, this.getCommandLimit(AI_ECONOMY_DEFAULT_COMMAND_LIMIT))
             let command = this.getCommandTowardEnemy(unit, moveCommands)
-            if (!command) {
+            if (!command && this.bestEnemyTargetForAI.GetCommandNearestToBestTarget) {
                 command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
                     moveCommands, unit.coord, grid.arr, unit.playerColor)
             }

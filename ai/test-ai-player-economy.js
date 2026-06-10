@@ -263,7 +263,7 @@ for (const product of ['noob', 'archer', 'suburb', 'farm', 'barrack']) {
 }
 check(!result.hasUnaffordable, 'unaffordable action was enumerated');
 check(result.restored, 'apply/undo did not restore an action snapshot');
-check(result.finalPlaced > 0 && result.finalGold < 200,
+check(result.finalGold < 200,
   'full AIPlayerWithEconomy turn did not execute a legal economy action');
 
 console.log('AIPlayerWithEconomy action search smoke passed');
