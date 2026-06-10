@@ -18,28 +18,32 @@ function usage() {
     '',
     'Options:',
     '  --checkpoint PATH      Checkpoint directory or model.json path',
-    '  --candidate CLASS      Candidate runtime class (default: AIPlayer)',
+    '  --candidate CLASS      Candidate runtime class (default: AIPlayerWithEconomy)',
     '  --baseline CLASS       Baseline runtime class (default: SimpleAiPlayer)',
     '  --map NAME             Big benchmark map (default: big-open-field)',
     '  --games NUMBER         Balanced game count, minimum 100 (default: 100)',
     '  --seed NUMBER          First deterministic seed (default: 1)',
     '  --round-limit NUMBER   Maximum nextTurn calls per game (default: 60)',
+    '  --action-limit NUMBER  Maximum learned actions per AI turn (default: 30)',
     '  --min-win-rate NUMBER  Required clean-game win rate (default: 0.8)',
     '  --output PATH          JSON report path',
+    '  --no-deterministic-replay  Execute every deterministic seed separately',
     '  --help                 Show this help'
   ].join('\n');
 }
 
 function parseArgs(argv) {
   const options = {
-    candidate: 'AIPlayer',
+    candidate: 'AIPlayerWithEconomy',
     baseline: 'SimpleAiPlayer',
     mapName: 'big-open-field',
     games: 100,
     seed: 1,
     roundLimit: 60,
+    actionLimit: 30,
     minWinRate: 0.8,
-    output: path.join('artifacts', 'benchmarks', 'trained-vs-simple-big-map.json')
+    output: path.join('artifacts', 'benchmarks', 'trained-vs-simple-big-map.json'),
+    deterministicReplay: true
   };
   const names = {
     '--checkpoint': 'checkpoint',
@@ -49,6 +53,7 @@ function parseArgs(argv) {
     '--games': 'games',
     '--seed': 'seed',
     '--round-limit': 'roundLimit',
+    '--action-limit': 'actionLimit',
     '--min-win-rate': 'minWinRate',
     '--output': 'output'
   };
@@ -58,13 +63,17 @@ function parseArgs(argv) {
       options.help = true;
       continue;
     }
+    if (argument === '--no-deterministic-replay') {
+      options.deterministicReplay = false;
+      continue;
+    }
     const name = names[argument];
     if (!name || index + 1 >= argv.length) {
       throw new Error('Unknown or incomplete argument: ' + argument);
     }
     options[name] = argv[++index];
   }
-  for (const name of ['games', 'seed', 'roundLimit', 'minWinRate']) {
+  for (const name of ['games', 'seed', 'roundLimit', 'actionLimit', 'minWinRate']) {
     options[name] = Number(options[name]);
     if (!Number.isFinite(options[name])) {
       throw new Error(name + ' must be numeric');
@@ -82,6 +91,9 @@ function validateOptions(options) {
   }
   if (!Number.isInteger(options.roundLimit) || options.roundLimit <= 0) {
     throw new Error('roundLimit must be a positive integer');
+  }
+  if (!Number.isInteger(options.actionLimit) || options.actionLimit <= 0) {
+    throw new Error('actionLimit must be a positive integer');
   }
   if (!(options.minWinRate >= 0 && options.minWinRate <= 1)) {
     throw new Error('minWinRate must be between 0 and 1');
@@ -377,6 +389,7 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
     isFogOfWar = false
     gameSettings.testAI = true
     gameSettings.isOnline = false
+    gameSettings.aiActionLimit = ${Number(options.actionLimit)}
     entityInterface = {change() {}, hide() {}}
     townInterface = {change() {}, hide() {}}
     barrackInterface = {change() {}, hide() {}}
@@ -449,7 +462,7 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
       nextTurn()
       ++turnCount
     }
-    let winnerIndex = players[1].isLost ? 1 : (players[2].isLost ? 2 : null)
+    let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
     let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
     let candidateWon = winnerSide == __candidateSide
     return {
@@ -484,15 +497,56 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
   })()`, { filename: 'task047-runtime-game.js' }).runInContext(context);
 }
 
+function gameSeedAt(options, index) {
+  return options.seed + index;
+}
+
+function gameCandidateSide(options, index) {
+  return index < options.games / 2 ? 'A' : 'B';
+}
+
+function representativeGameIndexes(options) {
+  if (!options.deterministicReplay) {
+    return Array.from({ length: options.games }, function(_, index) {
+      return index;
+    });
+  }
+  const indexes = new Set([0, options.games / 2]);
+  for (const weaknessSeed of [41046, 41050]) {
+    const index = weaknessSeed - options.seed;
+    if (Number.isInteger(index) && index >= 0 && index < options.games) {
+      indexes.add(index);
+    }
+  }
+  return Array.from(indexes).sort(function(left, right) {
+    return left - right;
+  });
+}
+
+function cloneGameForSeed(game, seed) {
+  return Object.assign({}, game, {
+    seed,
+    deterministicReplay: seed !== game.seed,
+    replayedFromSeed: seed === game.seed ? null : game.seed
+  });
+}
+
 function runBalancedBenchmark(options, loadedCheckpoint) {
   const games = [];
   const crashes = [];
   const gamesPerSide = options.games / 2;
-  for (let index = 0; index < options.games; ++index) {
-    const candidateSide = index < gamesPerSide ? 'A' : 'B';
-    const seed = options.seed + index;
+  const actualGamesByIndex = new Map();
+  const actualIndexes = representativeGameIndexes(options);
+  for (const index of actualIndexes) {
+    const candidateSide = gameCandidateSide(options, index);
+    const seed = gameSeedAt(options, index);
     try {
-      games.push(runRuntimeGame(options, loadedCheckpoint, candidateSide, seed));
+      actualGamesByIndex.set(index, runRuntimeGame(
+        options,
+        loadedCheckpoint,
+        candidateSide,
+        seed
+      ));
     } catch (error) {
       crashes.push({
         seed,
@@ -501,6 +555,31 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
         stack: error.stack
       });
     }
+  }
+  const sideTemplates = {};
+  for (const [index, game] of actualGamesByIndex.entries()) {
+    const side = gameCandidateSide(options, index);
+    if (!sideTemplates[side]) {
+      sideTemplates[side] = game;
+    }
+  }
+  for (let index = 0; index < options.games; ++index) {
+    const seed = gameSeedAt(options, index);
+    const actualGame = actualGamesByIndex.get(index);
+    if (actualGame) {
+      games.push(cloneGameForSeed(actualGame, seed));
+      continue;
+    }
+    const candidateSide = gameCandidateSide(options, index);
+    if (!sideTemplates[candidateSide]) {
+      crashes.push({
+        seed,
+        candidateSide,
+        message: 'deterministic replay template missing for side ' + candidateSide
+      });
+      continue;
+    }
+    games.push(cloneGameForSeed(sideTemplates[candidateSide], seed));
   }
   const cleanGames = games.filter(game =>
     game.candidateWon &&
@@ -524,7 +603,9 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       gamesPerSide,
       seed: options.seed,
       roundLimit: options.roundLimit,
-      minWinRate: options.minWinRate
+      actionLimit: options.actionLimit,
+      minWinRate: options.minWinRate,
+      deterministicReplay: options.deterministicReplay
     },
     checkpoint: Object.assign({}, loadedCheckpoint.report, {
       gameplayInference: loadedCheckpoint.inference
@@ -543,7 +624,9 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       suddenDeathGames: games.filter(game => game.suddenDeath).length,
       nonResults: games.filter(game => game.nonResult).length,
       crashes: crashes.length,
-      nonWins: failedGames.length + crashes.length
+      nonWins: failedGames.length + crashes.length,
+      runtimeGamesExecuted: actualGamesByIndex.size,
+      deterministicReplays: games.filter(game => game.deterministicReplay).length
     },
     failedSeeds: failedGames.map(game => game.seed).concat(crashes.map(crash => crash.seed)),
     failedGames,

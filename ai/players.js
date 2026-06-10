@@ -421,7 +421,7 @@ class AIPlayer extends Player {
         return [foundCommands[maxIndex], foundChances[maxIndex]]
     }
     doActions() {
-        const hardLimit = 150
+        const hardLimit = getAiActionLimit(150)
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
         let unitsLength = this.units.length
@@ -1061,23 +1061,17 @@ class AIPlayerWithEconomy extends AIPlayer {
             state.pendingFarms.length == 0
     }
     doLearnedCombatOnlyActions() {
-        const hardLimit = 150
+        const hardLimit = this.getActionLimit(150)
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
         let unitsLength = this.units.length
         for (let i = 0; i < hardLimit; ++i) {
-            let [bestCommand, chance] = AIPlayer.prototype.selectBestCommand.call(this)
+            let [bestCommand, chance] = this.getBestActionCommand()
             if (!bestCommand) {
                 return
             }
-            let unit = grid.getCell(bestCommand.whoDoCommandCoord).unit
-            assert(unit.isMyTurn)
-            unit.select()
-            if (areCoordsEqual(bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
-                unit.skipMoves()
-            }
-            else {
-                unit.sendInstructions(grid.getCell(bestCommand.destinationCoord))
+            if (!this.applyActionCommand(bestCommand)) {
+                return
             }
             this.chosenGrids.push(vectoriseGrid())
             this.winningChances.push(chance)

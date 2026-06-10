@@ -45,7 +45,7 @@ async function main() {
   const checkpoint = await loadCheckpoint(checkpointDir);
   const report = runBalancedBenchmark({
     checkpoint: checkpointDir,
-    candidate: 'AIPlayer',
+    candidate: 'AIPlayerWithEconomy',
     baseline: 'SimpleAiPlayer',
     mapName: 'big-open-field',
     games: 2,
@@ -56,7 +56,7 @@ async function main() {
   checkpoint.model.dispose();
 
   assert(report.config.mapName === 'big-open-field', 'benchmark did not use the big map');
-  assert(report.config.candidate === 'AIPlayer', 'benchmark used the wrong candidate class');
+  assert(report.config.candidate === 'AIPlayerWithEconomy', 'benchmark used the wrong candidate class');
   assert(report.summary.completedGames === 2, 'focused benchmark did not complete both games');
   assert(report.summary.cleanCandidateWins === 2, 'focused candidate did not win cleanly');
   assert(report.summary.candidateWinRate === 1, 'clean win rate was not reported correctly');
