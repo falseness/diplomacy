@@ -6,7 +6,7 @@ const path = require('path');
 const vm = require('vm');
 const childProcess = require('child_process');
 
-if (!process.env.DIPLOMACY_BENCHMARK_HEAP) {
+if (require.main === module && !process.env.DIPLOMACY_BENCHMARK_HEAP) {
   const result = childProcess.spawnSync(
     process.execPath,
     ['--max-old-space-size=4096', __filename].concat(process.argv.slice(2)),
@@ -25,32 +25,37 @@ const tf = require('@tensorflow/tfjs-node');
 
 const repoRoot = path.resolve(__dirname, '..');
 const DEFAULT_CHECKPOINT =
-  '/mnt/storage/diplomacy/task036-incremental-long/final/task036-long';
+  '/mnt/storage/diplomacy/task046-corrected-feature-model';
 const DEFAULT_OUTPUT =
   '/mnt/storage/diplomacy/benchmarks/task037-gamestart-trained-vs-simple.json';
 const DEFAULT_FAILURE_DIR =
   '/mnt/storage/diplomacy/benchmarks/task037-failures';
+const DEFAULT_SEEDS_PER_SIDE = 1;
+const DEFAULT_FIRST_SEED = 37002;
+const DEFAULT_ROUND_LIMIT = 1200;
+const DEFAULT_ACTION_LIMIT = 60;
+const DEFAULT_COMMAND_LIMIT = 120;
+const DEFAULT_MIN_WIN_RATE = 1;
+const GENERATED_BENCHMARK_SEED = Number(
+  process.env.DIPLOMACY_GENERATED_BENCHMARK_SEED || 36001);
 function usage() {
   return [
     'Usage: node ai/benchmark-gamestart-trained-model.js [options]',
     '',
     'Options:',
     '  --checkpoint PATH       Trained checkpoint directory or model.json path',
-    '  --seeds NUMBER          Seeds per candidate side and map (default: 1)',
-    '  --seed NUMBER           First deterministic seed (default: 37000)',
-    '  --round-limit NUMBER    Max nextTurn calls per game (default: 1200)',
-    '  --action-limit NUMBER   Max candidate actions per turn (default: 120)',
-    '  --command-limit NUMBER  Max scored commands per action (default: 120)',
-    '  --large-round-limit NUMBER    Override round limit for maps larger than 9x7 (default: same as --round-limit)',
-    '  --large-action-limit NUMBER   Override action limit for maps larger than 9x7',
-    '  --large-command-limit NUMBER  Override command limit for maps larger than 9x7',
+    '  --seeds NUMBER          Seeds per candidate side and map (default: ' + DEFAULT_SEEDS_PER_SIDE + ')',
+    '  --seed NUMBER           First deterministic seed (default: ' + DEFAULT_FIRST_SEED + ')',
+    '  --round-limit NUMBER    Max nextTurn calls per game (default: ' + DEFAULT_ROUND_LIMIT + ')',
+    '  --action-limit NUMBER   Max candidate actions per turn (default: ' + DEFAULT_ACTION_LIMIT + ')',
+    '  --command-limit NUMBER  Max scored commands per action (default: ' + DEFAULT_COMMAND_LIMIT + ')',
     '  --map-limit NUMBER      Limit covered 1v1 maps for smoke tests',
     '  --map-offset NUMBER     Skip covered 1v1 maps before applying --map-limit',
     '  --output PATH           JSON report path',
     '  --failure-dir PATH      Directory for non-win state JSON files',
     '  --tasks PATH            tasks.json path for follow-up ticket creation',
     '  --no-followups          Do not append follow-up tickets on failures',
-    '  --min-win-rate NUMBER   Required completed-game win rate (default: 1)',
+    '  --min-win-rate NUMBER   Required completed-game win rate (default: ' + DEFAULT_MIN_WIN_RATE + ')',
     '  --help                  Show this help'
   ].join('\n');
 }
@@ -58,19 +63,16 @@ function usage() {
 function parseArgs(argv) {
   const options = {
     checkpoint: DEFAULT_CHECKPOINT,
-    seeds: 1,
-    seed: 37000,
-    roundLimit: 1200,
-    actionLimit: 120,
-    commandLimit: 120,
-    largeRoundLimit: undefined,
-    largeActionLimit: undefined,
-    largeCommandLimit: undefined,
+    seeds: DEFAULT_SEEDS_PER_SIDE,
+    seed: DEFAULT_FIRST_SEED,
+    roundLimit: DEFAULT_ROUND_LIMIT,
+    actionLimit: DEFAULT_ACTION_LIMIT,
+    commandLimit: DEFAULT_COMMAND_LIMIT,
     output: DEFAULT_OUTPUT,
     failureDir: DEFAULT_FAILURE_DIR,
     tasksPath: path.join(repoRoot, 'tasks.json'),
     createFollowups: true,
-    minWinRate: 1,
+    minWinRate: DEFAULT_MIN_WIN_RATE,
     mapLimit: undefined,
     mapOffset: 0
   };
@@ -81,9 +83,6 @@ function parseArgs(argv) {
     '--round-limit': 'roundLimit',
     '--action-limit': 'actionLimit',
     '--command-limit': 'commandLimit',
-    '--large-round-limit': 'largeRoundLimit',
-    '--large-action-limit': 'largeActionLimit',
-    '--large-command-limit': 'largeCommandLimit',
     '--output': 'output',
     '--failure-dir': 'failureDir',
     '--tasks': 'tasksPath',
@@ -113,9 +112,6 @@ function parseArgs(argv) {
     'roundLimit',
     'actionLimit',
     'commandLimit',
-    'largeRoundLimit',
-    'largeActionLimit',
-    'largeCommandLimit',
     'minWinRate',
     'mapLimit',
     'mapOffset'
@@ -149,12 +145,6 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(options.mapOffset) || options.mapOffset < 0) {
     throw new Error('map-offset must be a non-negative integer');
-  }
-  for (const name of ['largeRoundLimit', 'largeActionLimit', 'largeCommandLimit']) {
-    if (options[name] !== undefined &&
-        (!Number.isInteger(options[name]) || options[name] <= 0)) {
-      throw new Error(name + ' must be a positive integer');
-    }
   }
   return options;
 }
@@ -312,18 +302,31 @@ function loadBrowserScripts(context) {
 
 function extractGamestartMaps() {
   const context = createRuntimeContext(1, function() { return [[0]]; }, {});
+  context.__generatedBenchmarkSeed = GENERATED_BENCHMARK_SEED;
   loadBrowserScripts(context);
   return new vm.Script(`(() => {
     let result = []
-    if (typeof createTinyEconomyAiTestMap == 'function') {
-      let tiny = createTinyEconomyAiTestMap()
+    if (typeof generateTownTrainingMap == 'function') {
+      let generated = generateTownTrainingMap({
+        size: 'medium',
+        seed: __generatedBenchmarkSeed,
+        unitsPerPlayer: 5,
+        unitComposition: 'all',
+        buildingDensity: 'dense',
+        barrackDensity: 1,
+        farmDensity: 1,
+        externalDensity: 0.6,
+        goldmineCount: 6,
+        startingGoldMin: 450,
+        startingGoldMax: 450
+      })
       result.push({
         category: 'generated',
         index: 0,
-        name: tiny.testName || 'tiny economy ai duel',
-        oneVOne: tiny.players.length == 3,
-        players: tiny.players.length,
-        size: tiny.mapSize
+        name: 'generated economy training map',
+        oneVOne: generated.players.length == 3,
+        players: generated.players.length,
+        size: generated.mapSize
       })
     }
     for (let category of Object.keys(maps)) {
@@ -368,72 +371,6 @@ function adaptBoard(board, expectedWidth, expectedHeight) {
   return adapted;
 }
 
-function heuristicScore(board, globalValue) {
-  let score = 0;
-  let friendlyUnits = [];
-  let enemyUnits = [];
-  let friendlyTowns = [];
-  let enemyTowns = [];
-  for (let x = 0; x < board.length; ++x) {
-    for (let y = 0; y < board[x].length; ++y) {
-      const cell = board[x][y];
-      const townOwner = cell[13];
-      if (cell[12]) {
-        const townValue = 18 + 20 * cell[14] + cell[16] * 2 + cell[73];
-        if (townOwner > 0) {
-          score += townValue;
-          friendlyTowns.push({ x, y });
-        } else if (townOwner < 0) {
-          score -= townValue;
-          enemyTowns.push({ x, y });
-        }
-      }
-      const unitOwner = cell[1];
-      if (unitOwner) {
-        const unitValue =
-          6 + cell[50] * 8 + cell[9] * 2 + cell[10] + cell[52] + cell[53];
-        if (unitOwner > 0) {
-          score += unitValue;
-          friendlyUnits.push({ x, y });
-        } else if (unitOwner < 0) {
-          score -= unitValue;
-          enemyUnits.push({ x, y });
-        }
-      }
-      if (cell[39] && cell[40] > 0) score += 4 + cell[42] * 5;
-      if (cell[39] && cell[40] < 0) score -= 4 + cell[42] * 5;
-      if (cell[43] && cell[44] > 0) score += 2 + (1 - cell[45]);
-      if (cell[43] && cell[44] < 0) score -= 2 + (1 - cell[45]);
-      if (cell[21] && cell[22] > 0) score += 5;
-      if (cell[21] && cell[22] < 0) score -= 5;
-      if (cell[27] && cell[28] > 0) score += 3 + (1 - cell[29]);
-      if (cell[27] && cell[28] < 0) score -= 3 + (1 - cell[29]);
-      if ((cell[54] || cell[55] || cell[56]) && cell[57] > 0) score += 2;
-      if ((cell[54] || cell[55] || cell[56]) && cell[57] < 0) score -= 2;
-      score += cell[38] * 8 + cell[48] * 8 + cell[77] * 5;
-    }
-  }
-  const enemies = enemyUnits.concat(enemyTowns);
-  if (friendlyUnits.length && enemies.length) {
-    let distanceTotal = 0;
-    for (const unit of friendlyUnits) {
-      let best = Infinity;
-      for (const enemy of enemies) {
-        best = Math.min(best, Math.max(
-          Math.abs(unit.x - enemy.x),
-          Math.abs(unit.y - enemy.y),
-          Math.abs(unit.x + unit.y - enemy.x - enemy.y)
-        ));
-      }
-      distanceTotal += best;
-    }
-    score -= distanceTotal / friendlyUnits.length;
-  }
-  if (enemyTowns.length === 0 && enemyUnits.length === 0) score += 1000;
-  if (friendlyTowns.length === 0 && friendlyUnits.length === 0) score -= 1000;
-  return score - globalValue * 0.001;
-}
-
 function createPredictor(model, stats) {
   const inputShape = model.inputs[0].shape;
   return function predictFromCheckpoint(checkpointModel, vectors) {
@@ -441,7 +378,6 @@ function createPredictor(model, stats) {
     const expectedHeight = inputShape[2];
     const adaptedBoards = [];
     const globals = [];
-    const heuristicScores = [];
     for (const vector of vectors) {
       const board = vector[0];
       const globalValue = Number(vector[1]) || 0;
@@ -451,28 +387,28 @@ function createPredictor(model, stats) {
       }
       adaptedBoards.push(adaptBoard(board, expectedWidth, expectedHeight));
       globals.push([globalValue]);
-      heuristicScores.push(heuristicScore(board, globalValue));
     }
     stats.calls += 1;
     stats.positions += vectors.length;
-    if (!stats.modelProbe) {
-      const boardTensor = tf.tensor4d(
-        adaptedBoards[0].flat(2),
-        [1, expectedWidth, expectedHeight, 78]
-      );
-      const globalTensor = tf.tensor2d([globals[0]], [1, 1]);
-      try {
-        const prediction = checkpointModel.predict([boardTensor, globalTensor]);
-        stats.modelProbe = Array.from(prediction.dataSync());
-        prediction.dispose();
-      } finally {
-        boardTensor.dispose();
-        globalTensor.dispose();
+    const boardTensor = tf.tensor4d(
+      adaptedBoards.flat(3),
+      [adaptedBoards.length, expectedWidth, expectedHeight, 78]
+    );
+    const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
+    try {
+      const prediction = checkpointModel.predict([boardTensor, globalTensor]);
+      const values = Array.from(prediction.dataSync());
+      if (!stats.modelProbe) {
+        stats.modelProbe = values.slice(0, 8);
       }
+      prediction.dispose();
+      return values.map(function(score) {
+        return [score];
+      });
+    } finally {
+      boardTensor.dispose();
+      globalTensor.dispose();
     }
-    return heuristicScores.map(function(score) {
-      return [score];
-    });
   };
 }
 
@@ -480,21 +416,19 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
   const stats = loadedCheckpoint.inference;
   const predictor = createPredictor(loadedCheckpoint.model, stats);
   const context = createRuntimeContext(seed, predictor, loadedCheckpoint.model);
+  context.__generatedBenchmarkSeed = GENERATED_BENCHMARK_SEED;
   loadBrowserScripts(context);
-  const largeMap = mapInfo.size.x > 9 || mapInfo.size.y > 7;
   context.__task037MapInfo = mapInfo;
   context.__candidateSide = candidateSide;
-  context.__roundLimit = largeMap && options.largeRoundLimit ?
-    options.largeRoundLimit : options.roundLimit;
-  context.__actionLimit = largeMap && options.largeActionLimit ?
-    options.largeActionLimit : options.actionLimit;
-  context.__commandLimit = largeMap && options.largeCommandLimit ?
-    options.largeCommandLimit : options.commandLimit;
-  context.__largeMap = largeMap;
+  context.__roundLimit = options.roundLimit;
+  context.__task037ActionLimit = options.actionLimit;
+  context.__task037CommandLimit = options.commandLimit;
   return new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = true
     gameSettings.isOnline = false
+    gameSettings.aiActionLimit = __task037ActionLimit
+    gameSettings.aiCommandLimit = __task037CommandLimit
     entityInterface = {change() {}, hide() {}}
     townInterface = {change() {}, hide() {}}
     barrackInterface = {change() {}, hide() {}}
@@ -528,7 +462,19 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       }
     }
     let map = __task037MapInfo.category == 'generated' ?
-      createTinyEconomyAiTestMap() :
+      generateTownTrainingMap({
+        size: 'medium',
+        seed: __generatedBenchmarkSeed,
+        unitsPerPlayer: 5,
+        unitComposition: 'all',
+        buildingDensity: 'dense',
+        barrackDensity: 1,
+        farmDensity: 1,
+        externalDensity: 0.6,
+        goldmineCount: 6,
+        startingGoldMin: 450,
+        startingGoldMax: 450
+      }) :
       maps[__task037MapInfo.category][__task037MapInfo.index]
     map.players[1].playerType =
       __candidateSide == 1 ? 'AIPlayerWithEconomy' : 'SimpleAiPlayerWithEconomy'
@@ -562,8 +508,8 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       eliminatedWinner: winner,
       limits: {
         roundLimit: __roundLimit,
-        actionLimit: __actionLimit,
-        commandLimit: __commandLimit
+        actionLimit: __task037ActionLimit,
+        commandLimit: __task037CommandLimit
       },
       benchmarkPolicy: 'runtime AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy',
       players: players.slice(1).map(function(player, index) {
@@ -682,12 +628,13 @@ async function main() {
     calls: 0,
     positions: 0,
     resizedInputs: 0,
-    scoring: 'heuristic-with-single-checkpoint-probe'
+    scoring: 'checkpoint-model-direct'
   };
   try {
     const mapInventory = extractGamestartMaps();
     const allOneVOneMaps = mapInventory.filter(map => map.oneVOne);
-    const selectedOneVOneMaps = allOneVOneMaps.slice(options.mapOffset);
+    const benchmarkOneVOneMaps = allOneVOneMaps;
+    const selectedOneVOneMaps = benchmarkOneVOneMaps.slice(options.mapOffset);
     const oneVOneMaps = options.mapLimit ?
       selectedOneVOneMaps.slice(0, options.mapLimit) : selectedOneVOneMaps;
     const skippedMaps = mapInventory.filter(map => !map.oneVOne);
@@ -747,9 +694,6 @@ async function main() {
         roundLimit: options.roundLimit,
         actionLimit: options.actionLimit,
         commandLimit: options.commandLimit,
-        largeRoundLimit: options.largeRoundLimit,
-        largeActionLimit: options.largeActionLimit,
-        largeCommandLimit: options.largeCommandLimit,
         mapOffset: options.mapOffset,
         mapLimit: options.mapLimit,
         minWinRate: options.minWinRate
@@ -765,7 +709,7 @@ async function main() {
           size: map.size
         })),
         totalOneVOneMaps: allOneVOneMaps.length,
-        eligibleOneVOneMaps: allOneVOneMaps.length,
+        eligibleOneVOneMaps: benchmarkOneVOneMaps.length,
         limited: !!options.mapLimit,
         skippedMultiplayerMaps: skippedMaps,
         skippedBenchmarkIneligibleMaps: skippedBenchmarkMaps
@@ -807,7 +751,6 @@ if (require.main === module) {
 
 module.exports = {
   extractGamestartMaps,
-  heuristicScore,
   loadCheckpoint,
   parseArgs
 };

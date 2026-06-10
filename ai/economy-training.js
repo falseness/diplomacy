@@ -220,6 +220,7 @@ function createTrainingBatch(seed) {
   context.__trainingSeed = seed;
   context.__trainingMapSize = trainingMapSizeForSeed(seed);
   context.__actionCategories = ACTION_CATEGORIES;
+  context.__trainingCandidateLimit = 48;
   const result = new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = false
@@ -278,55 +279,6 @@ function createTrainingBatch(seed) {
     map.start(manager, false)
     suddenDeathRound = 2000
 
-    let examples = []
-    let actionCounts = {}
-    let categoryCursor = 0
-    let turnsPlayed = 0
-    for (let round = 0; round < 12; ++round) {
-      for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
-        whooseTurn = playerIndex
-        let player = players[playerIndex]
-        player.nextTurn()
-        let commands = player.getActionCommands()
-        let desired = __actionCategories[
-          categoryCursor % __actionCategories.length]
-        let ordered = commands.filter(function(command) {
-          let category = command.type == 'economy' ?
-            command.category : 'unit-command'
-          return category == desired
-        }).concat(commands.filter(function(command) {
-          let category = command.type == 'economy' ?
-            command.category : 'unit-command'
-          return category != desired
-        }))
-        let applied = null
-        for (let index = 0; index < ordered.length; ++index) {
-          if (player.applyActionCommand(ordered[index])) {
-            applied = ordered[index]
-            break
-          }
-        }
-        if (applied) {
-          let vector = vectoriseGrid()
-          let category = applied.type == 'economy' ?
-            applied.category : 'unit-command'
-          examples.push({
-            playerIndex,
-            turn: turnsPlayed + 1,
-            category,
-            product: applied.product || null,
-            board: vector[0],
-            global: vector[1]
-          })
-          actionCounts[category] = (actionCounts[category] || 0) + 1
-          categoryCursor += 1
-        }
-        actionManager.clear()
-        turnsPlayed += 1
-      }
-      gameRound += 1
-    }
-
     function liveUnits(player) {
       return player.units.filter(function(unit) { return !unit.killed }).length
     }
@@ -337,20 +289,70 @@ function createTrainingBatch(seed) {
       if (opponent.isLost) return 1
       if (player.isLost) return -1
       let material =
-        (player.towns.length - opponent.towns.length) * 0.35 +
-        (liveUnits(player) - liveUnits(opponent)) * 0.08 +
-        (player.gold - opponent.gold) / 1000
+        (player.towns.filter(function(town) { return !town.killed }).length -
+          opponent.towns.filter(function(town) { return !town.killed }).length) * 0.45 +
+        (liveUnits(player) - liveUnits(opponent)) * 0.14 +
+        (player.gold - opponent.gold) / 800 +
+        (player.income - opponent.income) / 80
       return Math.max(-1, Math.min(1, material))
     }
+    function commandCategory(command) {
+      return command.type == 'economy' ? command.category : 'unit-command'
+    }
+
+    let examples = []
+    let labels = []
+    let actionCounts = {}
+    let turnsPlayed = 0
+    for (let round = 0; round < 12; ++round) {
+      for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
+        whooseTurn = playerIndex
+        let player = players[playerIndex]
+        player.nextTurn()
+        let commands = player.getPrioritizedActionCommands ?
+          player.getPrioritizedActionCommands(__trainingCandidateLimit) :
+          player.getActionCommands().slice(0, __trainingCandidateLimit)
+        let bestCommand = null
+        let bestLabel = -Infinity
+        for (let index = 0; index < commands.length; ++index) {
+          if (!player.applyActionCommand(commands[index])) {
+            continue
+          }
+          let vector = vectoriseGrid()
+          let label = score(playerIndex)
+          let category = commandCategory(commands[index])
+          examples.push({
+            playerIndex,
+            turn: turnsPlayed + 1,
+            category,
+            product: commands[index].product || null,
+            board: vector[0],
+            global: vector[1]
+          })
+          labels.push(label)
+          actionCounts[category] = (actionCounts[category] || 0) + 1
+          if (label > bestLabel) {
+            bestLabel = label
+            bestCommand = commands[index]
+          }
+          actionManager.undo()
+        }
+        if (bestCommand) {
+          player.applyActionCommand(bestCommand)
+        }
+        actionManager.clear()
+        turnsPlayed += 1
+      }
+      gameRound += 1
+    }
+
     return {
       mapSize: map.mapSize,
       players: players.slice(1).map(function(player) {
         return player.constructor.name
       }),
       examples,
-      labels: examples.map(function(example) {
-        return score(example.playerIndex)
-      }),
+      labels,
       actionCounts,
       turnsPlayed,
       finalState: players.slice(1).map(function(player) {

@@ -243,7 +243,7 @@ function chooseTarget(state, player, unit) {
   if (player.decisionPolicy) {
     return player.decisionPolicy.chooseTarget(state, player, unit, targets);
   }
-  return player.runtimePlayer.chooseBenchmarkTarget(targets);
+  return player.runtimePlayer.chooseAiTarget(targets);
 }
 
 function chooseMove(state, player, unit, target) {
@@ -279,7 +279,7 @@ function takeUnitTurn(state, player, unit) {
 
 function applyEconomy(state, player) {
   if (player.town.hp <= 0 ||
-      !player.runtimePlayer.shouldBenchmarkReinforce(
+      !player.runtimePlayer.shouldReinforce(
         state.round,
         livingUnits(player).length
       )) {
