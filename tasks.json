@@ -1016,7 +1016,7 @@
     "id": "TASK-051",
     "category": "functional",
     "priority": "critical",
-    "description": "Audit current browser AI inference support for AIPlayerWithEconomy. Confirm whether the browser entrypoint can load the economy AI player, trained model artifacts, vectorization helpers, and action evaluation without Node-only modules. Browser training is out of scope for this ticket.",
+    "description": "Audit current browser AI inference support for AIPlayerWithEconomy. Confirm whether the browser entrypoint can load the economy AI player, trained model artifacts, vectorization helpers, and action evaluation without Node-only modules. Browser training is out of scope for this ticket. Implemented: Audited browser AI inference loading and confirmed index.html loads TensorFlow.js, vectorization/model helpers, player.js, AIPlayerWithEconomy, and runtime hooks in order; Node-only fs/path/process/tfjs-node usage is confined to tests/training/benchmarks not loaded by index.html, browser-style smokes construct AIPlayerWithEconomy and evaluate/apply a legal economy action, and TASK-052 must add browser-safe trained checkpoint URL/artifact wiring because current browser loadModel only reads hardcoded IndexedDB diplomacy_weights750 while cloud checkpoints are Node file:// artifacts.",
     "acceptance_criteria": [
       "index.html script loading includes the files needed for AIPlayerWithEconomy browser inference.",
       "The audit identifies any Node-only APIs, CommonJS exports, filesystem access, or tfjs-node dependencies that block browser inference.",
@@ -1030,7 +1030,7 @@
       "Step 3: Attempt a browser or jsdom-style smoke that loads the game scripts and constructs AIPlayerWithEconomy.",
       "Step 4: Record every missing browser inference dependency as input for TASK-052."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-052",
