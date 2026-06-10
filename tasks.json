@@ -975,7 +975,7 @@
     "id": "TASK-049",
     "category": "follow-up",
     "priority": "normal",
-    "description": "Investigate TASK-041 big-map benchmark sudden-death wins. TASK-041 verification report: /mnt/storage/diplomacy/benchmarks/task041-verify-trained-vs-simple-big-map.json. Weakness seeds: big-open-field seed 41046 candidate side A won in sudden death at round 46; big-open-field seed 41050 candidate side A won in sudden death at round 47.",
+    "description": "Investigate TASK-041 big-map benchmark sudden-death wins. TASK-041 verification report: /mnt/storage/diplomacy/benchmarks/task041-verify-trained-vs-simple-big-map.json. Weakness seeds: big-open-field seed 41046 candidate side A won in sudden death at round 46; big-open-field seed 41050 candidate side A won in sudden death at round 47. Implemented: Added explicit clean-vs-sudden-death candidate win reporting to the corrected big-map benchmark, reproduced TASK-041 seeds 41046 and 41050 with the original checkpoint/side as clean pre-sudden-death wins, and reran the 100-game baseline with zero sudden-death games.",
     "acceptance_criteria": [
       "The sudden-death wins from TASK-041 seeds 41046 and 41050 are reproduced or explained.",
       "Benchmark reporting distinguishes threshold-passing sudden-death wins from clean pre-sudden-death wins.",
@@ -989,7 +989,7 @@
       "Step 3: Apply a targeted benchmark, AI behavior, or training-data fix if reproduction shows a real weakness.",
       "Step 4: Rerun the TASK-041 big-map baseline and confirm sudden-death handling is explicit in the report."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-050",

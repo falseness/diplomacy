@@ -68,11 +68,26 @@ async function main() {
     'benchmark game rows still contain replay metadata'
   );
   assert(report.summary.cleanCandidateWins === 2, 'focused candidate did not win cleanly');
+  assert(report.summary.thresholdEligibleCandidateWins === 2, 'threshold-eligible wins were not reported');
+  assert(report.summary.cleanPreSuddenDeathCandidateWins === 2, 'clean pre-sudden-death wins were not reported');
+  assert(report.summary.suddenDeathCandidateWins === 0, 'sudden-death candidate wins were not separated');
+  assert(report.summary.candidateWinsIncludingSuddenDeath === 2, 'all candidate wins were not reported separately');
   assert(report.summary.candidateWinRate === 1, 'clean win rate was not reported correctly');
+  assert(report.summary.cleanCandidateWinRate === 1, 'explicit clean win rate was not reported correctly');
+  assert(report.summary.candidateWinRateIncludingSuddenDeath === 1,
+    'candidate win rate including sudden death was not reported correctly');
   assert(report.summary.suddenDeathGames === 0, 'focused seeds should not reach sudden death');
   assert(report.summary.timeouts === 0, 'focused seeds should not time out');
   assert(report.summary.nonWins === 0, 'focused seeds should not report non-wins');
   assert(report.failedSeeds.length === 0, 'failed seeds were not filtered correctly');
+  assert(
+    report.games.every(game => game.cleanPreSuddenDeathWin && game.thresholdEligibleWin),
+    'focused game rows did not expose clean threshold eligibility'
+  );
+  assert(
+    report.games.every(game => game.outcomeType === 'clean-pre-sudden-death-candidate-win'),
+    'focused game rows did not classify clean wins explicitly'
+  );
   assert(report.games.every(game => game.runtimePlayerA && game.runtimePlayerB),
     'runtime player classes were not reported');
   assert(report.games.some(game => game.seed === 41046), 'TASK-041 seed 41046 was not covered');
@@ -85,6 +100,25 @@ async function main() {
       report.checkpoint.gameplayInference.calls,
     'checkpoint did not score competing gameplay actions'
   );
+
+  const secondWeaknessCheckpoint = await loadCheckpoint(checkpointDir);
+  const secondWeaknessReport = runBalancedBenchmark({
+    checkpoint: checkpointDir,
+    candidate: 'AIPlayerWithEconomy',
+    baseline: 'SimpleAiPlayer',
+    mapName: 'big-open-field',
+    games: 2,
+    seed: 41050,
+    roundLimit: 60,
+    minWinRate: 0.8
+  }, secondWeaknessCheckpoint);
+  secondWeaknessCheckpoint.model.dispose();
+  assert(secondWeaknessReport.games.some(game => game.seed === 41050),
+    'TASK-041 seed 41050 was not covered');
+  assert(secondWeaknessReport.summary.suddenDeathGames === 0,
+    'TASK-041 seed 41050 still reached sudden death');
+  assert(secondWeaknessReport.summary.cleanPreSuddenDeathCandidateWins === 2,
+    'TASK-041 seed 41050 focused rerun was not clean');
 
   const strictCheckpoint = await loadCheckpoint(checkpointDir);
   const strictFailure = runBalancedBenchmark({

@@ -459,14 +459,19 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
     let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
     let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
     let candidateWon = winnerSide == __candidateSide
+    let timeout = winnerIndex == null && turnCount >= __roundLimit
+    let suddenDeath = gameRound >= suddenDeathRound
+    let nonResult = winnerIndex == null
+    let cleanPreSuddenDeathWin = candidateWon && !timeout && !suddenDeath && !nonResult
+    let suddenDeathCandidateWin = candidateWon && suddenDeath
     return {
       winner: winnerIndex == null ? null : players[winnerIndex].constructor.name,
       winnerSide,
       roundCount: gameRound,
       turnCount,
-      timeout: winnerIndex == null && turnCount >= __roundLimit,
-      suddenDeath: gameRound >= suddenDeathRound,
-      nonResult: winnerIndex == null,
+      timeout,
+      suddenDeath,
+      nonResult,
       mapName: __task047MapName,
       playerA: __candidateSide == 'A' ? __candidateClass : __baselineClass,
       playerB: __candidateSide == 'B' ? __candidateClass : __baselineClass,
@@ -475,6 +480,14 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
       seed: ${seed},
       candidateSide: __candidateSide,
       candidateWon,
+      cleanPreSuddenDeathWin,
+      suddenDeathCandidateWin,
+      thresholdEligibleWin: cleanPreSuddenDeathWin,
+      outcomeType: cleanPreSuddenDeathWin
+        ? 'clean-pre-sudden-death-candidate-win'
+        : (suddenDeathCandidateWin
+          ? 'sudden-death-candidate-win'
+          : (candidateWon ? 'candidate-win-with-benchmark-flag' : 'candidate-non-win')),
       benchmarkPolicy: 'real GameMap with runtime checkpoint inference versus SimpleAiPlayer',
       players: players.slice(1).map(function(player, index) {
         return {
@@ -522,13 +535,10 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       });
     }
   }
-  const cleanGames = games.filter(game =>
-    game.candidateWon &&
-    !game.timeout &&
-    !game.suddenDeath &&
-    !game.nonResult
-  );
+  const cleanGames = games.filter(game => game.cleanPreSuddenDeathWin);
+  const suddenDeathCandidateWins = games.filter(game => game.suddenDeathCandidateWin);
   const completedGames = games.filter(game => game.winnerSide !== null);
+  const candidateWins = completedGames.filter(game => game.candidateWon);
   const failedGames = games.filter(game =>
     !game.candidateWon ||
     game.timeout ||
@@ -553,9 +563,17 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
     summary: {
       attemptedGames: options.games,
       completedGames: completedGames.length,
+      thresholdEligibleCandidateWins: cleanGames.length,
+      cleanPreSuddenDeathCandidateWins: cleanGames.length,
       cleanCandidateWins: cleanGames.length,
-      candidateWins: completedGames.filter(game => game.candidateWon).length,
+      candidateWins: candidateWins.length,
+      candidateWinsIncludingSuddenDeath: candidateWins.length,
+      suddenDeathCandidateWins: suddenDeathCandidateWins.length,
       candidateWinRate: options.games ? cleanGames.length / options.games : 0,
+      cleanCandidateWinRate: options.games ? cleanGames.length / options.games : 0,
+      candidateWinRateIncludingSuddenDeath: options.games ?
+        candidateWins.length / options.games :
+        0,
       candidateStarts: {
         A: gamesPerSide,
         B: gamesPerSide
