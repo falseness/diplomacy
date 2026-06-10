@@ -995,7 +995,7 @@
     "id": "TASK-050",
     "category": "follow-up",
     "priority": "critical",
-    "description": "Investigate TASK-037 uncovered diagnostic and bounded-verification non-wins. Diagnostic report: /mnt/storage/diplomacy/benchmarks/task037-one-map.json recorded tiny deathmatch seed 37000 candidate side 1 losing to SimpleAiPlayerWithEconomy. Bounded verification report: /mnt/storage/diplomacy/benchmarks/task037-verification-bounded-seeds2.json recorded timeout/non-result seeds 37032-37063, including capture rush, strategic war, reinforcement, rush or defend, sneak attack, flank attack, attack and protect, and fight forever map cases.",
+    "description": "Investigate TASK-037 uncovered diagnostic and bounded-verification non-wins. Diagnostic report: /mnt/storage/diplomacy/benchmarks/task037-one-map.json recorded tiny deathmatch seed 37000 candidate side 1 losing to SimpleAiPlayerWithEconomy. Bounded verification report: /mnt/storage/diplomacy/benchmarks/task037-verification-bounded-seeds2.json recorded timeout/non-result seeds 37032-37063, including capture rush, strategic war, reinforcement, rush or defend, sneak attack, flank attack, attack and protect, and fight forever map cases. Implemented: Reproduced the old tiny-deathmatch checkpoint loss, grouped bounded seeds 37032-37063 as one-turn cap artifacts, fixed AIPlayerWithEconomy economy/combat turn selection plus active-unit command handling and undo restoration, and reran the corrected gamestart benchmark at 30/30 candidate wins with zero non-wins.",
     "acceptance_criteria": [
       "The diagnostic loss seed 37000 is reproduced or explained with the same checkpoint, map, and candidate side.",
       "Every bounded verification non-result seed from 37032 through 37063 is reproduced, explained, or grouped by a shared root cause with saved evidence.",
@@ -1010,7 +1010,7 @@
       "Step 3: Reproduce at least one representative seed from each affected map group with the same checkpoint and bounded limits.",
       "Step 4: Rerun node ai/benchmark-gamestart-trained-model.js with enough coverage to confirm the uncovered seeds are resolved or explicitly reticketed."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-051",

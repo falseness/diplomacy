@@ -384,6 +384,7 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
     gameSettings.testAI = true
     gameSettings.isOnline = false
     gameSettings.aiActionLimit = ${Number(options.actionLimit)}
+    gameSettings.aiModelRankImmediateAttacks = true
     entityInterface = {change() {}, hide() {}}
     townInterface = {change() {}, hide() {}}
     barrackInterface = {change() {}, hide() {}}

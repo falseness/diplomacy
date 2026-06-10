@@ -844,9 +844,10 @@ class AIPlayerWithEconomy extends AIPlayer {
         let commands = []
         for (let i = 0; i < this.units.length; ++i) {
             let unit = this.units[i]
-            if (unit.killed || unit.moves == 0) {
+            if (unit.killed || unit.moves == 0 || !unit.isMyTurn) {
                 continue
             }
+            unit.select()
             let available = unit.getAvailableCommands()
             for (let j = 0; j < available.length; ++j) {
                 commands.push(available[j])
@@ -1008,6 +1009,47 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         return [validCommands[maxIndex], chances[maxIndex]]
     }
+    isImmediateAttackCommand(command) {
+        if (!command || command.type == 'economy' || !command.destinationCoord) {
+            return false
+        }
+        let destination = grid.getCell(command.destinationCoord)
+        let playerIndex = this.getPlayerIndex()
+        return (destination.unit && destination.unit.notEmpty &&
+                destination.unit.notEmpty() &&
+                destination.unit.playerColor != playerIndex) ||
+            (destination.building && destination.building.notEmpty &&
+                destination.building.notEmpty() &&
+                destination.building.playerColor != playerIndex)
+    }
+    applyModelRankedImmediateAttack() {
+        let commands = this.getUnitCommands().filter(command =>
+            this.isImmediateAttackCommand(command))
+        if (!commands.length) {
+            return false
+        }
+        let validCommands = []
+        let vectorisedGrids = []
+        for (let i = 0; i < commands.length; ++i) {
+            if (!this.applyActionCommand(commands[i])) {
+                continue
+            }
+            validCommands.push(commands[i])
+            vectorisedGrids.push(vectoriseGrid())
+            actionManager.undo()
+        }
+        if (!validCommands.length) {
+            return false
+        }
+        let chances = this.getWinningChances(vectorisedGrids)
+        let maxIndex = 0
+        for (let i = 1; i < chances.length; ++i) {
+            if (chances[i] > chances[maxIndex]) {
+                maxIndex = i
+            }
+        }
+        return this.applyActionCommand(validCommands[maxIndex])
+    }
     selectBestCommand() {
         return this.getBestActionCommand()
     }
@@ -1055,7 +1097,8 @@ class AIPlayerWithEconomy extends AIPlayer {
     }
     shouldUseLearnedCombatOnlyTurn() {
         let state = this.inspectEconomy()
-        return state.barracks.length == 0 &&
+        return state.productionChoices.length == 0 &&
+            state.barracks.length == 0 &&
             state.pendingBarracks.length == 0 &&
             state.farms.length == 0 &&
             state.pendingFarms.length == 0
@@ -1095,9 +1138,19 @@ class AIPlayerWithEconomy extends AIPlayer {
             this.getActionLimit(AI_ECONOMY_DEFAULT_ACTION_LIMIT)
         remainingActions = this.spendWarGoldWithinLimit(
             remainingActions, AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT)
+        if (remainingActions > 0 &&
+                typeof gameSettings != 'undefined' &&
+                gameSettings.aiModelRankImmediateAttacks &&
+                this.applyModelRankedImmediateAttack()) {
+            --remainingActions
+            this.updateUnits()
+        }
         for (let i = 0; i < this.units.length && remainingActions > 0; ++i) {
             if (this.units[i].killed) {
                 this.units.splice(i--, 1)
+                continue
+            }
+            if (!this.units[i].isMyTurn) {
                 continue
             }
             remainingActions = this.moveUnitWithEconomy(this.units[i], remainingActions)

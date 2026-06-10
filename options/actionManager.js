@@ -61,6 +61,9 @@ class ActionManager {
 
         res.town = town
 
+        if (!town.buildingProduction) {
+            town.buildingProduction = []
+        }
         town.buildingProduction.push(res)
     }
     removeBuildingProduction(buildingProduction) {
