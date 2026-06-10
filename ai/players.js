@@ -714,6 +714,17 @@ class AIPlayerWithEconomy extends AIPlayer {
     getCommandTowardEnemy(unit, commands) {
         commands = commands || getAiMoveCommands(unit).slice(
             0, this.getCommandLimit(60))
+        if (typeof gameRound != 'undefined' &&
+                gameRound >= AI_ECONOMY_STALEMATE_ROUND &&
+                this.getUnitAdvantagePressure() > 0 &&
+                this.bestEnemyTargetForAI &&
+                this.bestEnemyTargetForAI.GetCommandNearestToBestTarget) {
+            let pathCommand = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
+                commands, unit.coord, grid.arr, unit.playerColor)
+            if (pathCommand) {
+                return pathCommand
+            }
+        }
         let targets = this.getEnemyTargetsForMovement()
         if (!targets.length) {
             return null

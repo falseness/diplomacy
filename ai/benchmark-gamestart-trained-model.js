@@ -33,11 +33,7 @@ const DEFAULT_FAILURE_DIR =
 const DEFAULT_SEEDS_PER_SIDE = 1;
 const DEFAULT_FIRST_SEED = 37002;
 const DEFAULT_ROUND_LIMIT = 1200;
-const DEFAULT_ACTION_LIMIT = 30;
-const DEFAULT_COMMAND_LIMIT = 60;
 const DEFAULT_MIN_WIN_RATE = 1;
-const GENERATED_BENCHMARK_SEED = Number(
-  process.env.DIPLOMACY_GENERATED_BENCHMARK_SEED || 36001);
 function usage() {
   return [
     'Usage: node ai/benchmark-gamestart-trained-model.js [options]',
@@ -47,8 +43,6 @@ function usage() {
     '  --seeds NUMBER          Seeds per candidate side and map (default: ' + DEFAULT_SEEDS_PER_SIDE + ')',
     '  --seed NUMBER           First deterministic seed (default: ' + DEFAULT_FIRST_SEED + ')',
     '  --round-limit NUMBER    Max nextTurn calls per game (default: ' + DEFAULT_ROUND_LIMIT + ')',
-    '  --action-limit NUMBER   Max candidate actions per turn (default: ' + DEFAULT_ACTION_LIMIT + ')',
-    '  --command-limit NUMBER  Max scored commands per action (default: ' + DEFAULT_COMMAND_LIMIT + ')',
     '  --map-limit NUMBER      Limit covered 1v1 maps for smoke tests',
     '  --map-offset NUMBER     Skip covered 1v1 maps before applying --map-limit',
     '  --output PATH           JSON report path',
@@ -66,8 +60,6 @@ function parseArgs(argv) {
     seeds: DEFAULT_SEEDS_PER_SIDE,
     seed: DEFAULT_FIRST_SEED,
     roundLimit: DEFAULT_ROUND_LIMIT,
-    actionLimit: DEFAULT_ACTION_LIMIT,
-    commandLimit: DEFAULT_COMMAND_LIMIT,
     output: DEFAULT_OUTPUT,
     failureDir: DEFAULT_FAILURE_DIR,
     tasksPath: path.join(repoRoot, 'tasks.json'),
@@ -81,8 +73,6 @@ function parseArgs(argv) {
     '--seeds': 'seeds',
     '--seed': 'seed',
     '--round-limit': 'roundLimit',
-    '--action-limit': 'actionLimit',
-    '--command-limit': 'commandLimit',
     '--output': 'output',
     '--failure-dir': 'failureDir',
     '--tasks': 'tasksPath',
@@ -110,8 +100,6 @@ function parseArgs(argv) {
     'seeds',
     'seed',
     'roundLimit',
-    'actionLimit',
-    'commandLimit',
     'minWinRate',
     'mapLimit',
     'mapOffset'
@@ -129,12 +117,6 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(options.roundLimit) || options.roundLimit <= 0) {
     throw new Error('round-limit must be a positive integer');
-  }
-  if (!Number.isInteger(options.actionLimit) || options.actionLimit <= 0) {
-    throw new Error('action-limit must be a positive integer');
-  }
-  if (!Number.isInteger(options.commandLimit) || options.commandLimit <= 0) {
-    throw new Error('command-limit must be a positive integer');
   }
   if (options.minWinRate < 0 || options.minWinRate > 1) {
     throw new Error('min-win-rate must be between 0 and 1');
@@ -402,33 +384,9 @@ function loadBrowserScripts(context) {
 
 function extractGamestartMaps() {
   const context = createRuntimeContext(1, function() { return [[0]]; }, {});
-  context.__generatedBenchmarkSeed = GENERATED_BENCHMARK_SEED;
   loadBrowserScripts(context);
   return new vm.Script(`(() => {
     let result = []
-    if (typeof generateTownTrainingMap == 'function') {
-      let generated = generateTownTrainingMap({
-        size: 'medium',
-        seed: __generatedBenchmarkSeed,
-        unitsPerPlayer: 5,
-        unitComposition: 'all',
-        buildingDensity: 'dense',
-        barrackDensity: 1,
-        farmDensity: 1,
-        externalDensity: 0.6,
-        goldmineCount: 6,
-        startingGoldMin: 450,
-        startingGoldMax: 450
-      })
-      result.push({
-        category: 'generated',
-        index: 0,
-        name: 'generated economy training map',
-        oneVOne: generated.players.length == 3,
-        players: generated.players.length,
-        size: generated.mapSize
-      })
-    }
     for (let category of Object.keys(maps)) {
       for (let index = 0; index < maps[category].length; ++index) {
         let map = maps[category][index]
@@ -516,19 +474,14 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
   const stats = loadedCheckpoint.inference;
   const predictor = createPredictor(loadedCheckpoint.model, stats);
   const context = createRuntimeContext(seed, predictor, loadedCheckpoint.model);
-  context.__generatedBenchmarkSeed = GENERATED_BENCHMARK_SEED;
   loadBrowserScripts(context);
   context.__task037MapInfo = mapInfo;
   context.__candidateSide = candidateSide;
   context.__roundLimit = options.roundLimit;
-  context.__task037ActionLimit = options.actionLimit;
-  context.__task037CommandLimit = options.commandLimit;
   return new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = true
     gameSettings.isOnline = false
-    gameSettings.aiActionLimit = __task037ActionLimit
-    gameSettings.aiCommandLimit = __task037CommandLimit
     entityInterface = {change() {}, hide() {}}
     townInterface = {change() {}, hide() {}}
     barrackInterface = {change() {}, hide() {}}
@@ -561,21 +514,7 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
         gameExit = false
       }
     }
-    let map = __task037MapInfo.category == 'generated' ?
-      generateTownTrainingMap({
-        size: 'medium',
-        seed: __generatedBenchmarkSeed,
-        unitsPerPlayer: 5,
-        unitComposition: 'all',
-        buildingDensity: 'dense',
-        barrackDensity: 1,
-        farmDensity: 1,
-        externalDensity: 0.6,
-        goldmineCount: 6,
-        startingGoldMin: 450,
-        startingGoldMax: 450
-      }) :
-      maps[__task037MapInfo.category][__task037MapInfo.index]
+    let map = maps[__task037MapInfo.category][__task037MapInfo.index]
     map.players[1].playerType =
       __candidateSide == 1 ? 'AIPlayerWithEconomy' : 'SimpleAiPlayerWithEconomy'
     map.players[2].playerType =
@@ -604,14 +543,9 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       nonResult: winner == null,
       suddenDeath: winner == null && gameRound >= suddenDeathRound,
       timeout: winner == null && turnCount >= __roundLimit,
-      adjudicated: false,
       eliminatedWinner: winner,
-      limits: {
-        roundLimit: __roundLimit,
-        actionLimit: __task037ActionLimit,
-        commandLimit: __task037CommandLimit
-      },
-      benchmarkPolicy: 'runtime AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy',
+      limits: { roundLimit: __roundLimit },
+      benchmarkPolicy: 'real gamestart map with runtime AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy',
       players: players.slice(1).map(function(player, index) {
         return {
           side: index + 1,
@@ -712,8 +646,7 @@ function summarize(games, crashes, skippedMaps) {
     suddenDeathGames: games.filter(game => game.suddenDeath).length,
     timeouts: games.filter(game => game.timeout).length,
     crashes: crashes.length,
-    skippedMultiplayerMaps: skippedMaps.length,
-    skippedBenchmarkIneligibleMaps: 0
+    skippedMultiplayerMaps: skippedMaps.length
   };
 }
 
@@ -738,7 +671,6 @@ async function main() {
     const oneVOneMaps = options.mapLimit ?
       selectedOneVOneMaps.slice(0, options.mapLimit) : selectedOneVOneMaps;
     const skippedMaps = mapInventory.filter(map => !map.oneVOne);
-    const skippedBenchmarkMaps = [];
     const games = [];
     const crashes = [];
     for (const mapInfo of oneVOneMaps) {
@@ -792,8 +724,6 @@ async function main() {
         seedsPerSidePerMap: options.seeds,
         seed: options.seed,
         roundLimit: options.roundLimit,
-        actionLimit: options.actionLimit,
-        commandLimit: options.commandLimit,
         mapOffset: options.mapOffset,
         mapLimit: options.mapLimit,
         minWinRate: options.minWinRate
@@ -811,8 +741,7 @@ async function main() {
         totalOneVOneMaps: allOneVOneMaps.length,
         eligibleOneVOneMaps: benchmarkOneVOneMaps.length,
         limited: !!options.mapLimit,
-        skippedMultiplayerMaps: skippedMaps,
-        skippedBenchmarkIneligibleMaps: skippedBenchmarkMaps
+        skippedMultiplayerMaps: skippedMaps
       },
       summary,
       failedGames: games.filter(game => !game.candidateWon),

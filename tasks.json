@@ -910,7 +910,7 @@
     "id": "TASK-046",
     "category": "follow-up",
     "priority": "critical",
-    "description": "Correct the gamestart trained-model benchmark so it tests whether AIPlayerWithEconomy genuinely plays well. The benchmark must not change AIPlayerWithEconomy behavior, grant artificial candidate advantages, reinforce large-map positions, count adjudicated/non-elimination wins, or otherwise hide TASK-037 failures. If the corrected benchmark fails, fix bugs, improve architecture, or train the model more until the unchanged corrected benchmark passes.",
+    "description": "Correct the gamestart trained-model benchmark so it tests whether AIPlayerWithEconomy genuinely plays well. The benchmark must not change AIPlayerWithEconomy behavior, grant artificial candidate advantages, reinforce large-map positions, count adjudicated/non-elimination wins, or otherwise hide TASK-037 failures. If the corrected benchmark fails, fix bugs, improve architecture, or train the model more until the unchanged corrected benchmark passes. Implemented: Simplified the gamestart benchmark to real maps plus checkpoint inference only, removed generated-map injection and benchmark action/command overrides, added late-stalemate pathfinder movement for advantaged AIPlayerWithEconomy positions, and reran the corrected benchmark at 30/30 candidate wins with zero non-wins.",
     "acceptance_criteria": [
       "ai/benchmark-gamestart-trained-model.js uses real AIPlayerWithEconomy runtime behavior instead of benchmark-only monkey-patches or replacement unit play.",
       "The benchmark removes artificial candidate gold, reinforcement units, adjudicated wins, and any policy that counts a non-elimination as a candidate win.",
@@ -926,7 +926,7 @@
       "Step 3: Reproduce representative TASK-037 and TASK-045 failed or hidden seeds under the corrected benchmark.",
       "Step 4: Fix AIPlayerWithEconomy, training, architecture, or checkpoint selection until node ai/benchmark-gamestart-trained-model.js passes the corrected benchmark."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-047",

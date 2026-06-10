@@ -76,8 +76,12 @@ assert(run.status === 1, 'limited benchmark should fail the 100 percent threshol
 const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
 assert(report.mapCoverage.oneVOneMaps.length > 0, 'no 1v1 gamestart maps were covered');
 assert(
-  report.mapCoverage.oneVOneMaps.some(map => map.name === 'generated economy training map'),
-  'generated economy training map was not included'
+  report.mapCoverage.oneVOneMaps.every(map => map.category !== 'generated'),
+  'benchmark must not inject generated maps into gamestart coverage'
+);
+assert(
+  report.mapCoverage.oneVOneMaps.some(map => map.name === 'open field #1'),
+  'real gamestart map coverage was not reported'
 );
 assert(report.summary.attemptedGames > 0, 'benchmark did not attempt games');
 assert(report.summary.skippedMultiplayerMaps > 0, 'multiplayer map skips were not reported');
