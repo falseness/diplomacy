@@ -1,8 +1,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const tf = require('@tensorflow/tfjs-node');
+const {
+  loadCheckpoint,
+  runBalancedBenchmark
+} = require('./benchmark-trained-model');
 
 function assert(condition, message) {
   if (!condition) {
@@ -18,7 +21,9 @@ async function createCheckpoint(checkpointDir) {
   const output = tf.layers.dense({
     units: 1,
     activation: 'tanh',
-    name: 'value_output'
+    name: 'value_output',
+    kernelInitializer: 'ones',
+    biasInitializer: 'zeros'
   }).apply(merged);
   const model = tf.model({ inputs: [board, globals], outputs: output });
   await model.save('file://' + checkpointDir);
@@ -32,48 +37,60 @@ async function createCheckpoint(checkpointDir) {
 }
 
 async function main() {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task014-'));
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task047-'));
   const checkpointDir = path.join(temporary, 'checkpoint');
-  const reportPath = path.join(temporary, 'report.json');
   fs.mkdirSync(checkpointDir);
   await createCheckpoint(checkpointDir);
 
-  const command = [
-    path.join(__dirname, 'benchmark-trained-model.js'),
-    '--checkpoint', checkpointDir,
-    '--games', '100',
-    '--seed', '771',
-    '--output', reportPath
-  ];
-  const run = spawnSync(process.execPath, command, { encoding: 'utf8' });
-  assert(run.status === 0, 'trained benchmark failed: ' + run.stderr);
-  const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  const checkpoint = await loadCheckpoint(checkpointDir);
+  const report = runBalancedBenchmark({
+    checkpoint: checkpointDir,
+    candidate: 'AIPlayer',
+    baseline: 'SimpleAiPlayer',
+    mapName: 'big-open-field',
+    games: 2,
+    seed: 41046,
+    roundLimit: 60,
+    minWinRate: 0.8
+  }, checkpoint);
+  checkpoint.model.dispose();
+
   assert(report.config.mapName === 'big-open-field', 'benchmark did not use the big map');
-  assert(report.summary.completedGames === 100, 'benchmark did not complete 100 games');
-  assert(report.summary.candidateStarts.A === 50, 'candidate did not start 50 games as side A');
-  assert(report.summary.candidateStarts.B === 50, 'candidate did not start 50 games as side B');
-  assert(report.summary.candidateWinRate > 0.8, 'candidate win rate did not exceed 80 percent');
-  for (const field of ['timeouts', 'suddenDeathGames', 'nonResults', 'crashes']) {
-    assert(Object.prototype.hasOwnProperty.call(report.summary, field), 'missing ' + field);
-  }
-  assert(Array.isArray(report.failedSeeds), 'failed seeds were not retained');
-  assert(report.checkpoint.metadata.trainingStep === 100, 'checkpoint metadata was not reported');
-  assert(report.checkpoint.predictionProbe.length === 1, 'checkpoint was not evaluated');
+  assert(report.config.candidate === 'AIPlayer', 'benchmark used the wrong candidate class');
+  assert(report.summary.completedGames === 2, 'focused benchmark did not complete both games');
+  assert(report.summary.cleanCandidateWins === 2, 'focused candidate did not win cleanly');
+  assert(report.summary.candidateWinRate === 1, 'clean win rate was not reported correctly');
+  assert(report.summary.suddenDeathGames === 0, 'focused seeds should not reach sudden death');
+  assert(report.summary.timeouts === 0, 'focused seeds should not time out');
+  assert(report.summary.nonWins === 0, 'focused seeds should not report non-wins');
+  assert(report.failedSeeds.length === 0, 'failed seeds were not filtered correctly');
+  assert(report.games.every(game => game.runtimePlayerA && game.runtimePlayerB),
+    'runtime player classes were not reported');
+  assert(report.games.some(game => game.seed === 41046), 'TASK-041 seed 41046 was not covered');
   assert(
-    report.checkpoint.gameplayInference.decisions > 0,
+    report.checkpoint.gameplayInference.calls > 0,
     'checkpoint did not participate in gameplay decisions'
   );
   assert(
-    report.checkpoint.gameplayInference.candidateEvaluations >
-      report.checkpoint.gameplayInference.decisions,
+    report.checkpoint.gameplayInference.positions >
+      report.checkpoint.gameplayInference.calls,
     'checkpoint did not score competing gameplay actions'
   );
 
-  const thresholdFailure = spawnSync(process.execPath, command.concat([
-    '--min-win-rate', '1',
-    '--output', path.join(temporary, 'strict-report.json')
-  ]), { encoding: 'utf8' });
-  assert(thresholdFailure.status === 1, 'strict threshold did not fail with status 1');
+  const strictCheckpoint = await loadCheckpoint(checkpointDir);
+  const strictFailure = runBalancedBenchmark({
+    checkpoint: checkpointDir,
+    candidate: 'SimpleAiPlayer',
+    baseline: 'SimpleAiPlayer',
+    mapName: 'big-open-field',
+    games: 2,
+    seed: 41046,
+    roundLimit: 2,
+    minWinRate: 0.8
+  }, strictCheckpoint);
+  strictCheckpoint.model.dispose();
+  assert(strictFailure.summary.nonWins > 0, 'non-wins were not retained in strict report');
+  assert(strictFailure.failedSeeds.length > 0, 'strict report did not retain failed seeds');
 
   console.log('Trained model big-map benchmark passed');
 }

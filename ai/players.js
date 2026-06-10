@@ -1053,7 +1053,44 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         return remainingActions
     }
+    shouldUseLearnedCombatOnlyTurn() {
+        let state = this.inspectEconomy()
+        return state.barracks.length == 0 &&
+            state.pendingBarracks.length == 0 &&
+            state.farms.length == 0 &&
+            state.pendingFarms.length == 0
+    }
+    doLearnedCombatOnlyActions() {
+        const hardLimit = 150
+        this.chosenGrids.push(vectoriseGrid())
+        this.winningChances.push(this.getWinningChance())
+        let unitsLength = this.units.length
+        for (let i = 0; i < hardLimit; ++i) {
+            let [bestCommand, chance] = AIPlayer.prototype.selectBestCommand.call(this)
+            if (!bestCommand) {
+                return
+            }
+            let unit = grid.getCell(bestCommand.whoDoCommandCoord).unit
+            assert(unit.isMyTurn)
+            unit.select()
+            if (areCoordsEqual(bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
+                unit.skipMoves()
+            }
+            else {
+                unit.sendInstructions(grid.getCell(bestCommand.destinationCoord))
+            }
+            this.chosenGrids.push(vectoriseGrid())
+            this.winningChances.push(chance)
+            this.updateUnits()
+            assert(unitsLength == this.units.length)
+        }
+        console.log('player reached hard limit')
+    }
     doActions() {
+        if (this.shouldUseLearnedCombatOnlyTurn()) {
+            this.doLearnedCombatOnlyActions()
+            return
+        }
         this.chosenGrids.push(vectoriseGrid())
         this.winningChances.push(this.getWinningChance())
         if (!this.bestEnemyTargetForAI) {

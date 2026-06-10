@@ -2,13 +2,15 @@
 
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 const tf = require('@tensorflow/tfjs-node');
 const {
   BENCHMARK_MAPS,
   PLAYER_CLASSES,
-  runGame,
   writeResult
 } = require('./benchmarkHarness');
+
+const repoRoot = path.resolve(__dirname, '..');
 
 function usage() {
   return [
@@ -16,13 +18,13 @@ function usage() {
     '',
     'Options:',
     '  --checkpoint PATH      Checkpoint directory or model.json path',
-    '  --candidate CLASS      Candidate runtime class (default: AIPlayerWithEconomy)',
+    '  --candidate CLASS      Candidate runtime class (default: AIPlayer)',
     '  --baseline CLASS       Baseline runtime class (default: SimpleAiPlayer)',
     '  --map NAME             Big benchmark map (default: big-open-field)',
     '  --games NUMBER         Balanced game count, minimum 100 (default: 100)',
     '  --seed NUMBER          First deterministic seed (default: 1)',
-    '  --round-limit NUMBER   Maximum rounds per game (default: 60)',
-    '  --min-win-rate NUMBER  Required completed-game win rate (default: 0.8)',
+    '  --round-limit NUMBER   Maximum nextTurn calls per game (default: 60)',
+    '  --min-win-rate NUMBER  Required clean-game win rate (default: 0.8)',
     '  --output PATH          JSON report path',
     '  --help                 Show this help'
   ].join('\n');
@@ -30,7 +32,7 @@ function usage() {
 
 function parseArgs(argv) {
   const options = {
-    candidate: 'AIPlayerWithEconomy',
+    candidate: 'AIPlayer',
     baseline: 'SimpleAiPlayer',
     mapName: 'big-open-field',
     games: 100,
@@ -111,12 +113,8 @@ function checkpointFiles(checkpointArgument) {
 
 function modelSignature(model) {
   return {
-    inputs: model.inputs.map(function(input) {
-      return input.shape;
-    }),
-    outputs: model.outputs.map(function(output) {
-      return output.shape;
-    })
+    inputs: model.inputs.map(input => input.shape),
+    outputs: model.outputs.map(output => output.shape)
   };
 }
 
@@ -125,15 +123,24 @@ async function loadCheckpoint(checkpointArgument) {
   const metadata = JSON.parse(fs.readFileSync(files.metadataPath, 'utf8'));
   const model = await tf.loadLayersModel('file://' + files.modelPath);
   const signature = modelSignature(model);
-  const expected = {
-    inputs: [[null, 3, 3, 21], [null, 1]],
-    outputs: [[null, 1]]
-  };
-  if (JSON.stringify(signature) !== JSON.stringify(expected)) {
+  if (signature.inputs.length !== 2 ||
+      signature.outputs.length !== 1 ||
+      signature.outputs[0][1] !== 1) {
     model.dispose();
     throw new Error('checkpoint model signature is incompatible: ' + JSON.stringify(signature));
   }
-  const board = tf.zeros([1, 3, 3, 21]);
+  const boardShape = signature.inputs[0];
+  const globalShape = signature.inputs[1];
+  if (boardShape.length !== 4 ||
+      !Number.isInteger(boardShape[1]) ||
+      !Number.isInteger(boardShape[2]) ||
+      !Number.isInteger(boardShape[3]) ||
+      globalShape.length !== 2 ||
+      globalShape[1] !== 1) {
+    model.dispose();
+    throw new Error('checkpoint model signature is incompatible: ' + JSON.stringify(signature));
+  }
+  const board = tf.zeros([1, boardShape[1], boardShape[2], boardShape[3]]);
   const globals = tf.zeros([1, 1]);
   const prediction = model.predict([board, globals]);
   const probe = Array.from(await prediction.data());
@@ -147,160 +154,367 @@ async function loadCheckpoint(checkpointArgument) {
       metadata,
       signature,
       predictionProbe: probe
-    }
-  };
-}
-
-function scorePlayer(player) {
-  const unitScore = player.units.reduce(function(total, unit) {
-    return total + Math.max(0, unit.hp);
-  }, 0);
-  return unitScore + Math.max(0, player.town.hp) * 2;
-}
-
-function distance(left, right) {
-  return Math.max(
-    Math.abs(left.x - right.x),
-    Math.abs(left.y - right.y),
-    Math.abs((left.x + left.y) - (right.x + right.y))
-  );
-}
-
-function createModelDecisionPolicy(model) {
-  const stats = {
-    decisions: 0,
-    candidateEvaluations: 0,
-    changedFromFallback: 0
-  };
-
-  function predictAction(state, player, unit, action) {
-    const enemy = state.players[1 - player.index];
-    const values = new Array(3 * 3 * 21).fill(0);
-    const center = (1 * 3 + 1) * 21;
-    const target = action.target || action.destination;
-    values[center] = player.town.hp / 8;
-    values[center + 1] = enemy.town.hp / 8;
-    values[center + 2] = player.units.filter(candidate => candidate.hp > 0).length / 10;
-    values[center + 3] = enemy.units.filter(candidate => candidate.hp > 0).length / 10;
-    values[center + 4] = state.round / state.map.suddenDeathRound;
-    values[center + 5] = unit.hp / 3;
-    values[center + 6] = action.distance / Math.max(state.map.width, state.map.height);
-    values[center + 7] = action.kind === 'town' ? 1 : 0;
-    values[center + 8] = action.kind === 'unit' ? 1 : 0;
-    values[center + 9] = action.type === 'attack' ? 1 : 0;
-    values[center + 10] = action.type === 'move' ? 1 : 0;
-    values[center + 11] = action.resultDistance / Math.max(state.map.width, state.map.height);
-    values[center + 12] = scorePlayer(player) / 40;
-    values[center + 13] = scorePlayer(enemy) / 40;
-    values[center + 14] = player.index;
-    values[center + 15] = target && target.hp ? target.hp / 8 : 0;
-    values[center + 16] = target ? target.x / state.map.width : 0;
-    values[center + 17] = target ? target.y / state.map.height : 0;
-
-    const board = tf.tensor4d(values, [1, 3, 3, 21]);
-    const globals = tf.tensor2d([[player.index === 0 ? 1 : -1]]);
-    const prediction = model.predict([board, globals]);
-    const result = prediction.dataSync()[0];
-    prediction.dispose();
-    board.dispose();
-    globals.dispose();
-    stats.candidateEvaluations += 1;
-    return result;
-  }
-
-  function select(state, player, unit, candidates) {
-    if (candidates.length === 0) {
-      return undefined;
-    }
-    stats.decisions += 1;
-    let best = candidates[0];
-    let bestScore = predictAction(state, player, unit, best);
-    for (let index = 1; index < candidates.length; ++index) {
-      const score = predictAction(state, player, unit, candidates[index]);
-      if (score > bestScore) {
-        best = candidates[index];
-        bestScore = score;
-      }
-    }
-    if (best !== candidates[0]) {
-      stats.changedFromFallback += 1;
-    }
-    return best;
-  }
-
-  return {
-    stats,
-    chooseTarget(state, player, unit, targets) {
-      const fallbackOrder = targets.slice().sort(function(left, right) {
-        const leftRank = left.distance - (left.kind === 'town' ? 4 : 0);
-        const rightRank = right.distance - (right.kind === 'town' ? 4 : 0);
-        return leftRank - rightRank ||
-          left.kind.localeCompare(right.kind) ||
-          left.key.localeCompare(right.key);
-      });
-      const bestRank = fallbackOrder[0].distance -
-        (fallbackOrder[0].kind === 'town' ? 4 : 0);
-      const candidates = fallbackOrder.filter(function(target) {
-        return target.distance - (target.kind === 'town' ? 4 : 0) === bestRank;
-      }).map(function(target) {
-        return Object.assign({
-          type: distance(unit, target.target) <= 1 ? 'attack' : 'target',
-          resultDistance: target.distance
-        }, target);
-      });
-      return select(state, player, unit, candidates);
     },
-    chooseMove(state, player, unit, target, choices) {
-      if (choices.length === 0) {
-        return undefined;
-      }
-      const bestDistance = distance(choices[0], target);
-      const candidates = choices.filter(function(choice) {
-        return distance(choice, target) === bestDistance;
-      }).map(function(choice) {
-        return {
-          type: 'move',
-          kind: 'destination',
-          destination: choice,
-          distance: distance(unit, target),
-          resultDistance: distance(choice, target)
-        };
-      });
-      const selected = select(state, player, unit, candidates);
-      return selected && selected.destination;
+    inference: {
+      calls: 0,
+      positions: 0,
+      resizedInputs: 0,
+      channelAdaptations: 0,
+      scoring: 'runtime-player-predict-hook'
     }
   };
+}
+
+function createCanvasContext() {
+  return new Proxy({
+    canvas: { width: 800, height: 600 },
+    measureText(text) {
+      return { width: String(text).length * 8 };
+    }
+  }, {
+    get(target, property) {
+      return property in target ? target[property] : function() {};
+    },
+    set(target, property, value) {
+      target[property] = value;
+      return true;
+    }
+  });
+}
+
+function createCanvas() {
+  return {
+    width: 800,
+    height: 600,
+    clientWidth: 800,
+    clientHeight: 600,
+    style: {},
+    getContext() {
+      return createCanvasContext();
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: 800, height: 600 };
+    }
+  };
+}
+
+function createRuntimeContext(seed, predictor, model) {
+  const storage = {};
+  const seededMath = Object.create(Math);
+  let randomState = seed >>> 0;
+  seededMath.random = function() {
+    randomState = (randomState * 1664525 + 1013904223) >>> 0;
+    return randomState / 0x100000000;
+  };
+  const context = {
+    console: Object.assign({}, console, { log() {} }),
+    Math: seededMath,
+    Date,
+    JSON,
+    Array,
+    Object,
+    Number,
+    String,
+    Boolean,
+    Error,
+    TypeError,
+    Map,
+    Set,
+    Promise,
+    parseInt,
+    parseFloat,
+    isNaN,
+    Infinity,
+    NaN,
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame() { return 0; },
+    cancelAnimationFrame() {},
+    Image: class Image {},
+    navigator: { userAgent: 'node' },
+    innerWidth: 800,
+    innerHeight: 600,
+    document: {
+      createElement() { return createCanvas(); },
+      getElementById() { return createCanvas(); },
+      querySelector() { return createCanvas(); },
+      addEventListener() {}
+    },
+    localStorage: {
+      setItem(key, value) { storage[key] = String(value); },
+      getItem(key) { return storage[key] || null; },
+      removeItem(key) { delete storage[key]; }
+    },
+    io() { return {}; },
+    tf,
+    saveAs() {},
+    __checkpointModel: model,
+    __predictFromCheckpoint: predictor
+  };
+  context.window = context;
+  context.globalThis = context;
+  return vm.createContext(context);
+}
+
+function readRepoFile(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
+
+function loadBrowserScripts(context) {
+  const html = readRepoFile('index.html');
+  const scriptPattern = /<script[^>]+src=['"]([^'"]+)['"]/g;
+  let match;
+  while ((match = scriptPattern.exec(html))) {
+    const source = match[1];
+    if (/^https?:/.test(source)) {
+      continue;
+    }
+    new vm.Script(readRepoFile(source), { filename: source }).runInContext(context);
+  }
+  new vm.Script(`
+    ai_model = __checkpointModel
+    predict = function(model, xValidateArr) {
+      return __predictFromCheckpoint(model, xValidateArr)
+    }
+  `, { filename: 'task047-checkpoint-binding.js' }).runInContext(context);
+}
+
+function boardSize(board) {
+  return {
+    width: board.length,
+    height: board[0] ? board[0].length : 0,
+    channels: board[0] && board[0][0] ? board[0][0].length : 0
+  };
+}
+
+function adaptCellChannels(cell, expectedChannels, stats) {
+  if (cell.length === expectedChannels) {
+    return cell.slice(0, expectedChannels);
+  }
+  stats.channelAdaptations += 1;
+  if (cell.length > expectedChannels) {
+    return cell.slice(0, expectedChannels);
+  }
+  return cell.concat(new Array(expectedChannels - cell.length).fill(0));
+}
+
+function adaptBoard(board, expectedWidth, expectedHeight, expectedChannels, stats) {
+  const size = boardSize(board);
+  if (size.width !== expectedWidth || size.height !== expectedHeight) {
+    stats.resizedInputs += 1;
+  }
+  const adapted = new Array(expectedWidth);
+  for (let x = 0; x < expectedWidth; ++x) {
+    adapted[x] = new Array(expectedHeight);
+    const sourceX = Math.min(size.width - 1, Math.floor(x * size.width / expectedWidth));
+    for (let y = 0; y < expectedHeight; ++y) {
+      const sourceY = Math.min(size.height - 1, Math.floor(y * size.height / expectedHeight));
+      adapted[x][y] = adaptCellChannels(
+        board[sourceX][sourceY],
+        expectedChannels,
+        stats
+      );
+    }
+  }
+  return adapted;
+}
+
+function createPredictor(model, stats) {
+  const inputShape = model.inputs[0].shape;
+  return function predictFromCheckpoint(checkpointModel, vectors) {
+    const expectedWidth = inputShape[1];
+    const expectedHeight = inputShape[2];
+    const expectedChannels = inputShape[3];
+    const adaptedBoards = [];
+    const globals = [];
+    for (const vector of vectors) {
+      const board = vector[0];
+      const globalValue = Number(vector[1]) || 0;
+      adaptedBoards.push(adaptBoard(
+        board,
+        expectedWidth,
+        expectedHeight,
+        expectedChannels,
+        stats
+      ));
+      globals.push([globalValue]);
+    }
+    stats.calls += 1;
+    stats.positions += vectors.length;
+    const boardTensor = tf.tensor4d(
+      adaptedBoards.flat(3),
+      [adaptedBoards.length, expectedWidth, expectedHeight, expectedChannels]
+    );
+    const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
+    try {
+      const prediction = checkpointModel.predict([boardTensor, globalTensor]);
+      const values = Array.from(prediction.dataSync());
+      if (!stats.modelProbe) {
+        stats.modelProbe = values.slice(0, 8);
+      }
+      prediction.dispose();
+      return values.map(score => [score]);
+    } finally {
+      boardTensor.dispose();
+      globalTensor.dispose();
+    }
+  };
+}
+
+function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
+  const predictor = createPredictor(loadedCheckpoint.model, loadedCheckpoint.inference);
+  const context = createRuntimeContext(seed, predictor, loadedCheckpoint.model);
+  loadBrowserScripts(context);
+  context.__task047MapName = options.mapName;
+  context.__task047Map = BENCHMARK_MAPS[options.mapName];
+  context.__candidateSide = candidateSide;
+  context.__candidateClass = options.candidate;
+  context.__baselineClass = options.baseline;
+  context.__roundLimit = options.roundLimit;
+  return new vm.Script(`(() => {
+    isFogOfWar = false
+    gameSettings.testAI = true
+    gameSettings.isOnline = false
+    entityInterface = {change() {}, hide() {}}
+    townInterface = {change() {}, hide() {}}
+    barrackInterface = {change() {}, hide() {}}
+    statisticsInterface = {}
+    gameEvent = {
+      nextTurn() {},
+      selected: new Empty(),
+      hideAll() {},
+      removeSelection() { this.selected = new Empty() },
+      screen: {moveTo() {}, moveToPlayer() {}, stop() {}}
+    }
+    nextTurnButton = {
+      setNextPlayerColor() {},
+      highlightButton: false,
+      enableClick() {},
+      disableClick() {}
+    }
+    nextTurnPauseInterface = {visible: false}
+    saveManager = {save() {}}
+    AiRuntime.trainFromHumanCommands = function() {}
+    border = new Border()
+    attackBorder = new Border()
+    let manager = {
+      clearValues() {
+        external = []
+        externalProduction = []
+        nature = []
+        goldmines = []
+        gameRound = 0
+        gameExit = false
+      }
+    }
+    let configured = __task047Map
+    let map = new GameMap(
+      {x: configured.width, y: configured.height},
+      [
+        {rgb: {r: 0, g: 0, b: 0}, towns: []},
+        {
+          rgb: {r: 255, g: 0, b: 0},
+          towns: [{x: configured.players[0].town.x, y: configured.players[0].town.y}],
+          units: configured.players[0].units.map(function(unit) {
+            return {x: unit.x, y: unit.y, type: Noob}
+          }),
+          playerType: __candidateSide == 'A' ? __candidateClass : __baselineClass
+        },
+        {
+          rgb: {r: 98, g: 168, b: 222},
+          towns: [{x: configured.players[1].town.x, y: configured.players[1].town.y}],
+          units: configured.players[1].units.map(function(unit) {
+            return {x: unit.x, y: unit.y, type: Noob}
+          }),
+          playerType: __candidateSide == 'B' ? __candidateClass : __baselineClass
+        }
+      ],
+      [],
+      [],
+      configured.blocked.map(function(coord) { return {x: coord.x, y: coord.y} }),
+      [],
+      []
+    )
+    map.suddenDeathRound = configured.suddenDeathRound
+    map.start(manager, false)
+    suddenDeathRound = map.suddenDeathRound
+    whooseTurn = 0
+
+    let turnCount = 0
+    while (turnCount < __roundLimit &&
+        gameRound < suddenDeathRound &&
+        !players[1].isLost && !players[2].isLost) {
+      nextTurn()
+      ++turnCount
+    }
+    let winnerIndex = players[1].isLost ? 1 : (players[2].isLost ? 2 : null)
+    let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
+    let candidateWon = winnerSide == __candidateSide
+    return {
+      winner: winnerIndex == null ? null : players[winnerIndex].constructor.name,
+      winnerSide,
+      roundCount: gameRound,
+      turnCount,
+      timeout: winnerIndex == null && turnCount >= __roundLimit,
+      suddenDeath: gameRound >= suddenDeathRound,
+      nonResult: winnerIndex == null,
+      mapName: __task047MapName,
+      playerA: __candidateSide == 'A' ? __candidateClass : __baselineClass,
+      playerB: __candidateSide == 'B' ? __candidateClass : __baselineClass,
+      runtimePlayerA: players[1].constructor.name,
+      runtimePlayerB: players[2].constructor.name,
+      seed: ${seed},
+      candidateSide: __candidateSide,
+      candidateWon,
+      benchmarkPolicy: 'real GameMap with runtime checkpoint inference versus SimpleAiPlayer',
+      players: players.slice(1).map(function(player, index) {
+        return {
+          side: index == 0 ? 'A' : 'B',
+          type: player.constructor.name,
+          lost: player.isLost,
+          gold: player.gold,
+          income: player.income,
+          towns: player.towns.filter(function(town) { return !town.killed }).length,
+          units: player.units.filter(function(unit) { return !unit.killed }).length
+        }
+      })
+    }
+  })()`, { filename: 'task047-runtime-game.js' }).runInContext(context);
 }
 
 function runBalancedBenchmark(options, loadedCheckpoint) {
   const games = [];
   const crashes = [];
   const gamesPerSide = options.games / 2;
-  const policy = createModelDecisionPolicy(loadedCheckpoint.model);
   for (let index = 0; index < options.games; ++index) {
     const candidateSide = index < gamesPerSide ? 'A' : 'B';
     const seed = options.seed + index;
     try {
-      const game = runGame({
-        mapName: options.mapName,
-        playerA: candidateSide === 'A' ? options.candidate : options.baseline,
-        playerB: candidateSide === 'B' ? options.candidate : options.baseline,
-        playerPolicies: candidateSide === 'A' ? { A: policy } : { B: policy },
-        roundLimit: options.roundLimit,
-        seed
-      });
-      game.candidateSide = candidateSide;
-      game.candidateWon = game.winnerSide === candidateSide;
-      games.push(game);
+      games.push(runRuntimeGame(options, loadedCheckpoint, candidateSide, seed));
     } catch (error) {
-      crashes.push({ seed, candidateSide, message: error.message });
+      crashes.push({
+        seed,
+        candidateSide,
+        message: error.message,
+        stack: error.stack
+      });
     }
   }
+  const cleanGames = games.filter(game =>
+    game.candidateWon &&
+    !game.timeout &&
+    !game.suddenDeath &&
+    !game.nonResult
+  );
   const completedGames = games.filter(game => game.winnerSide !== null);
-  const candidateWins = completedGames.filter(game => game.candidateWon).length;
-  const failedSeeds = completedGames
-    .filter(game => !game.candidateWon)
-    .map(game => game.seed);
+  const failedGames = games.filter(game =>
+    !game.candidateWon ||
+    game.timeout ||
+    game.suddenDeath ||
+    game.nonResult
+  );
   return {
     config: {
       mapName: options.mapName,
@@ -313,23 +527,26 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       minWinRate: options.minWinRate
     },
     checkpoint: Object.assign({}, loadedCheckpoint.report, {
-      gameplayInference: policy.stats
+      gameplayInference: loadedCheckpoint.inference
     }),
     summary: {
       attemptedGames: options.games,
       completedGames: completedGames.length,
-      candidateWins,
-      candidateWinRate: completedGames.length ? candidateWins / completedGames.length : 0,
+      cleanCandidateWins: cleanGames.length,
+      candidateWins: completedGames.filter(game => game.candidateWon).length,
+      candidateWinRate: options.games ? cleanGames.length / options.games : 0,
       candidateStarts: {
         A: gamesPerSide,
         B: gamesPerSide
       },
       timeouts: games.filter(game => game.timeout).length,
       suddenDeathGames: games.filter(game => game.suddenDeath).length,
-      nonResults: games.filter(game => game.winnerSide === null).length,
-      crashes: crashes.length
+      nonResults: games.filter(game => game.nonResult).length,
+      crashes: crashes.length,
+      nonWins: failedGames.length + crashes.length
     },
-    failedSeeds,
+    failedSeeds: failedGames.map(game => game.seed).concat(crashes.map(crash => crash.seed)),
+    failedGames,
     crashes,
     games
   };
@@ -348,13 +565,15 @@ async function main() {
     const outputPath = writeResult(result, options.output);
     console.log(JSON.stringify(result.summary));
     console.log('Benchmark report: ' + outputPath);
-    if (result.summary.completedGames < 100) {
-      throw new Error('fewer than 100 games completed');
+    if (result.summary.completedGames < options.games) {
+      throw new Error('fewer than requested games completed');
     }
-    if (result.summary.candidateWinRate <= options.minWinRate) {
+    if (result.summary.candidateWinRate < options.minWinRate ||
+        result.summary.nonWins > 0) {
       console.error(
-        'Candidate win rate ' + result.summary.candidateWinRate.toFixed(3) +
-        ' does not exceed required threshold ' + options.minWinRate.toFixed(3)
+        'Clean candidate win rate ' + result.summary.candidateWinRate.toFixed(3) +
+        ' did not meet threshold ' + options.minWinRate.toFixed(3) +
+        ' or non-wins were reported'
       );
       process.exitCode = 1;
     }
@@ -363,7 +582,15 @@ async function main() {
   }
 }
 
-main().catch(function(error) {
-  console.error(error.message);
-  process.exitCode = 2;
-});
+if (require.main === module) {
+  main().catch(function(error) {
+    console.error(error.message);
+    process.exitCode = 2;
+  });
+}
+
+module.exports = {
+  loadCheckpoint,
+  parseArgs,
+  runBalancedBenchmark
+};

@@ -932,7 +932,7 @@
     "id": "TASK-047",
     "category": "follow-up",
     "priority": "critical",
-    "description": "Correct the big-map trained-model benchmark so it measures actual trained-model play quality against SimpleAiPlayer. The benchmark must keep sudden-death, timeout, non-result, crash, and weak-play seeds visible. If the corrected benchmark fails, improve training, model architecture, checkpoint selection, or AI bugs until the corrected benchmark passes.",
+    "description": "Correct the big-map trained-model benchmark so it measures actual trained-model play quality against SimpleAiPlayer. The benchmark must keep sudden-death, timeout, non-result, crash, and weak-play seeds visible. If the corrected benchmark fails, improve training, model architecture, checkpoint selection, or AI bugs until the corrected benchmark passes. Implemented: Replaced the big-map benchmark with a runtime GameMap checkpoint-inference path, strict non-win/sudden-death/timeout reporting, default learned AIPlayer vs SimpleAiPlayer play, focused TASK-041 seed coverage, and a sparse-combat learned-action fallback for AIPlayerWithEconomy.",
     "acceptance_criteria": [
       "ai/benchmark-trained-model.js keeps the loaded checkpoint connected to gameplay decisions for every game.",
       "The benchmark does not use hard-coded gameplay heuristics, fallback-only decision paths, or report policy changes to make a weak model pass.",
@@ -948,7 +948,7 @@
       "Step 3: Rerun TASK-041 big-map benchmark seeds, including 41046 and 41050, with structured failure reporting.",
       "Step 4: Fix AIPlayerWithEconomy, training, architecture, or checkpoint selection until the corrected big-map benchmark passes."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-048",
