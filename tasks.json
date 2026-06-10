@@ -1036,7 +1036,7 @@
     "id": "TASK-052",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement missing browser inference wiring for AIPlayerWithEconomy. Keep training in npm/Node, but make browser gameplay able to load a trained AI model and use AIPlayerWithEconomy decisions without requiring Node-only modules.",
+    "description": "Implement missing browser inference wiring for AIPlayerWithEconomy. Keep training in npm/Node, but make browser gameplay able to load a trained AI model and use AIPlayerWithEconomy decisions without requiring Node-only modules. Implemented: Added browser-safe TensorFlow.js model URL selection via gameSettings/window/query parameter with IndexedDB fallback, rejected browser file:// checkpoints, documented exported model URL conventions, and added a browser inference smoke for AIPlayerWithEconomy selection and model loading.",
     "acceptance_criteria": [
       "Browser gameplay can select AIPlayerWithEconomy from gamestart player settings.",
       "Browser inference loads the trained model through a browser-safe TensorFlow.js path or documented model URL.",
@@ -1051,7 +1051,7 @@
       "Step 3: Run npm AI smokes to confirm Node training and benchmarks still load.",
       "Step 4: Run the browser inference smoke from TASK-053 or its local equivalent."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-053",

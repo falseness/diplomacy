@@ -293,8 +293,53 @@ let humanCommands = []
 // 216 last heuristic train
 let modelIndex = 750
 
-async function loadModel() {
-  const model = await tf.loadLayersModel('indexeddb://diplomacy_weights' + modelIndex)
+function getConfiguredAiModelUrl() {
+  if (typeof gameSettings != 'undefined' &&
+      typeof gameSettings.aiModelUrl == 'string' &&
+      gameSettings.aiModelUrl.length > 0) {
+    return gameSettings.aiModelUrl
+  }
+  if (typeof window != 'undefined') {
+    if (typeof window.DIPLOMACY_AI_MODEL_URL == 'string' &&
+        window.DIPLOMACY_AI_MODEL_URL.length > 0) {
+      return window.DIPLOMACY_AI_MODEL_URL
+    }
+    if (window.location && window.location.search &&
+        typeof URLSearchParams != 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const queryModelUrl = params.get('aiModelUrl')
+      if (queryModelUrl) {
+        return queryModelUrl
+      }
+    }
+  }
+  return undefined
+}
+
+function getAiModelSource(explicitSource) {
+  if (typeof explicitSource == 'string' && explicitSource.length > 0) {
+    return explicitSource
+  }
+  const configuredUrl = getConfiguredAiModelUrl()
+  if (configuredUrl) {
+    return configuredUrl
+  }
+  return 'indexeddb://diplomacy_weights' + modelIndex
+}
+
+function assertBrowserSafeModelSource(source) {
+  if (typeof window == 'undefined') {
+    return
+  }
+  if (source.indexOf('file://') == 0) {
+    throw new Error('Browser AI model source must be an HTTP(S), relative, IndexedDB, or localStorage TensorFlow.js URL, not file://')
+  }
+}
+
+async function loadModel(modelSource) {
+  const source = getAiModelSource(modelSource)
+  assertBrowserSafeModelSource(source)
+  const model = await tf.loadLayersModel(source)
   assertModelCellVectorCompatible(model)
   return model
 }

@@ -24,3 +24,16 @@ The browser keeps a few small integration hooks outside `ai/`:
 
 These hooks should not contain model, vectorization, bot decision, training,
 benchmark, or deployment implementations.
+
+## Browser Model Loading
+
+Browser gameplay loads AI inference models through TensorFlow.js browser URLs.
+Set `gameSettings.aiModelUrl` before `loadModel()` runs, set
+`window.DIPLOMACY_AI_MODEL_URL`, or pass `?aiModelUrl=<model.json URL>` to the
+page. The URL should point at an exported TensorFlow.js `model.json` plus its
+weight shards, for example `models/economy/model.json` served next to the game.
+
+If no URL is configured, `loadModel()` keeps the legacy IndexedDB fallback
+`indexeddb://diplomacy_weights750`. Browser model loading must not use
+`file://`, `fs`, `path`, `process`, `tfjs-node`, or npm-only entrypoints; cloud
+training and benchmarks remain responsible for Node-only checkpoint paths.

@@ -13,6 +13,9 @@ let gameSettings = {
     isOnline: false,
     withAI: false,
     testAI: false,
+    // Browser inference can load an exported TensorFlow.js model from this URL.
+    // Leave unset to use the legacy IndexedDB model slot.
+    aiModelUrl: undefined,
     interface: {
         drawChanceOfWinning: false
     }
