@@ -27,7 +27,6 @@ function usage() {
     '  --action-limit NUMBER  Maximum learned actions per AI turn (default: 30)',
     '  --min-win-rate NUMBER  Required clean-game win rate (default: 0.8)',
     '  --output PATH          JSON report path',
-    '  --no-deterministic-replay  Execute every deterministic seed separately',
     '  --help                 Show this help'
   ].join('\n');
 }
@@ -42,8 +41,7 @@ function parseArgs(argv) {
     roundLimit: 60,
     actionLimit: 30,
     minWinRate: 0.8,
-    output: path.join('artifacts', 'benchmarks', 'trained-vs-simple-big-map.json'),
-    deterministicReplay: true
+    output: path.join('artifacts', 'benchmarks', 'trained-vs-simple-big-map.json')
   };
   const names = {
     '--checkpoint': 'checkpoint',
@@ -61,10 +59,6 @@ function parseArgs(argv) {
     const argument = argv[index];
     if (argument === '--help') {
       options.help = true;
-      continue;
-    }
-    if (argument === '--no-deterministic-replay') {
-      options.deterministicReplay = false;
       continue;
     }
     const name = names[argument];
@@ -505,43 +499,15 @@ function gameCandidateSide(options, index) {
   return index < options.games / 2 ? 'A' : 'B';
 }
 
-function representativeGameIndexes(options) {
-  if (!options.deterministicReplay) {
-    return Array.from({ length: options.games }, function(_, index) {
-      return index;
-    });
-  }
-  const indexes = new Set([0, options.games / 2]);
-  for (const weaknessSeed of [41046, 41050]) {
-    const index = weaknessSeed - options.seed;
-    if (Number.isInteger(index) && index >= 0 && index < options.games) {
-      indexes.add(index);
-    }
-  }
-  return Array.from(indexes).sort(function(left, right) {
-    return left - right;
-  });
-}
-
-function cloneGameForSeed(game, seed) {
-  return Object.assign({}, game, {
-    seed,
-    deterministicReplay: seed !== game.seed,
-    replayedFromSeed: seed === game.seed ? null : game.seed
-  });
-}
-
 function runBalancedBenchmark(options, loadedCheckpoint) {
   const games = [];
   const crashes = [];
   const gamesPerSide = options.games / 2;
-  const actualGamesByIndex = new Map();
-  const actualIndexes = representativeGameIndexes(options);
-  for (const index of actualIndexes) {
+  for (let index = 0; index < options.games; ++index) {
     const candidateSide = gameCandidateSide(options, index);
     const seed = gameSeedAt(options, index);
     try {
-      actualGamesByIndex.set(index, runRuntimeGame(
+      games.push(runRuntimeGame(
         options,
         loadedCheckpoint,
         candidateSide,
@@ -555,31 +521,6 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
         stack: error.stack
       });
     }
-  }
-  const sideTemplates = {};
-  for (const [index, game] of actualGamesByIndex.entries()) {
-    const side = gameCandidateSide(options, index);
-    if (!sideTemplates[side]) {
-      sideTemplates[side] = game;
-    }
-  }
-  for (let index = 0; index < options.games; ++index) {
-    const seed = gameSeedAt(options, index);
-    const actualGame = actualGamesByIndex.get(index);
-    if (actualGame) {
-      games.push(cloneGameForSeed(actualGame, seed));
-      continue;
-    }
-    const candidateSide = gameCandidateSide(options, index);
-    if (!sideTemplates[candidateSide]) {
-      crashes.push({
-        seed,
-        candidateSide,
-        message: 'deterministic replay template missing for side ' + candidateSide
-      });
-      continue;
-    }
-    games.push(cloneGameForSeed(sideTemplates[candidateSide], seed));
   }
   const cleanGames = games.filter(game =>
     game.candidateWon &&
@@ -604,8 +545,7 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       seed: options.seed,
       roundLimit: options.roundLimit,
       actionLimit: options.actionLimit,
-      minWinRate: options.minWinRate,
-      deterministicReplay: options.deterministicReplay
+      minWinRate: options.minWinRate
     },
     checkpoint: Object.assign({}, loadedCheckpoint.report, {
       gameplayInference: loadedCheckpoint.inference
@@ -625,8 +565,7 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       nonResults: games.filter(game => game.nonResult).length,
       crashes: crashes.length,
       nonWins: failedGames.length + crashes.length,
-      runtimeGamesExecuted: actualGamesByIndex.size,
-      deterministicReplays: games.filter(game => game.deterministicReplay).length
+      runtimeGamesExecuted: games.length
     },
     failedSeeds: failedGames.map(game => game.seed).concat(crashes.map(crash => crash.seed)),
     failedGames,

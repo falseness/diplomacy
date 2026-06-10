@@ -58,6 +58,15 @@ async function main() {
   assert(report.config.mapName === 'big-open-field', 'benchmark did not use the big map');
   assert(report.config.candidate === 'AIPlayerWithEconomy', 'benchmark used the wrong candidate class');
   assert(report.summary.completedGames === 2, 'focused benchmark did not complete both games');
+  assert(report.summary.runtimeGamesExecuted === 2, 'focused benchmark did not execute every requested game');
+  assert(
+    report.summary.deterministicReplays === undefined,
+    'benchmark still reports deterministic replay shortcuts'
+  );
+  assert(
+    report.games.every(game => !('deterministicReplay' in game) && !('replayedFromSeed' in game)),
+    'benchmark game rows still contain replay metadata'
+  );
   assert(report.summary.cleanCandidateWins === 2, 'focused candidate did not win cleanly');
   assert(report.summary.candidateWinRate === 1, 'clean win rate was not reported correctly');
   assert(report.summary.suddenDeathGames === 0, 'focused seeds should not reach sudden death');
