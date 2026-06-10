@@ -3,6 +3,8 @@ const path = require('path');
 const { execSync } = require('child_process');
 const vm = require('vm');
 
+const repoRoot = path.resolve(__dirname, '..');
+
 function loadPlayerClasses() {
   const context = vm.createContext({
     console,
@@ -74,17 +76,6 @@ const BENCHMARK_MAPS = {
   }
 };
 
-function createSeededRandom(seed) {
-  let state = Number(seed) >>> 0;
-  if (!state) {
-    state = 0x9e3779b9;
-  }
-  return function random() {
-    state = (1664525 * state + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
-}
-
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -92,7 +83,7 @@ function clone(value) {
 function codeRevision() {
   try {
     return execSync('git rev-parse HEAD', {
-      cwd: path.resolve(__dirname, '..'),
+      cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore']
     }).trim();
@@ -138,29 +129,6 @@ function benchmarkMapFromGameMap(gameMap) {
   };
 }
 
-function coordKey(coord) {
-  return coord.x + ':' + coord.y;
-}
-
-function distance(left, right) {
-  return Math.max(
-    Math.abs(left.x - right.x),
-    Math.abs(left.y - right.y),
-    Math.abs((left.x + left.y) - (right.x + right.y))
-  );
-}
-
-function neighbours(coord) {
-  return [
-    { x: coord.x + 1, y: coord.y },
-    { x: coord.x - 1, y: coord.y },
-    { x: coord.x, y: coord.y + 1 },
-    { x: coord.x, y: coord.y - 1 },
-    { x: coord.x + 1, y: coord.y - 1 },
-    { x: coord.x - 1, y: coord.y + 1 }
-  ];
-}
-
 function validatePlayerClass(playerClass) {
   if (!PLAYER_CLASSES[playerClass]) {
     throw new Error(
@@ -170,151 +138,257 @@ function validatePlayerClass(playerClass) {
   }
 }
 
-function makePlayer(index, playerClass, definition, decisionPolicy) {
-  const RuntimePlayerClass = PLAYER_CLASSES[playerClass];
-  return {
-    index,
-    playerClass,
-    runtimePlayer: new RuntimePlayerClass(
-      index === 0 ? { r: 255, g: 0, b: 0 } : { r: 98, g: 168, b: 222 }
-    ),
-    decisionPolicy,
-    town: {
-      x: definition.town.x,
-      y: definition.town.y,
-      hp: 8
+function createSeededMath(seed) {
+  const seededMath = Object.create(Math);
+  let randomState = Number(seed) >>> 0;
+  if (!randomState) {
+    randomState = 0x9e3779b9;
+  }
+  seededMath.random = function() {
+    randomState = (randomState * 1664525 + 1013904223) >>> 0;
+    return randomState / 0x100000000;
+  };
+  return seededMath;
+}
+
+function createCanvasContext() {
+  return new Proxy({
+    canvas: { width: 800, height: 600 },
+    measureText(text) {
+      return { width: String(text).length * 8 };
+    }
+  }, {
+    get(target, property) {
+      return property in target ? target[property] : function() {};
     },
-    units: definition.units.map(function(unit, unitIndex) {
-      return {
-        id: index + '-' + unitIndex,
-        x: unit.x,
-        y: unit.y,
-        hp: 3,
-        attack: 1
-      };
-    })
+    set(target, property, value) {
+      target[property] = value;
+      return true;
+    }
+  });
+}
+
+function createCanvas() {
+  return {
+    width: 800,
+    height: 600,
+    clientWidth: 800,
+    clientHeight: 600,
+    style: {},
+    getContext() {
+      return createCanvasContext();
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: 800, height: 600 };
+    }
   };
 }
 
-function isInside(map, coord) {
-  return coord.x >= 0 && coord.y >= 0 &&
-    coord.x < map.width && coord.y < map.height;
+function createRuntimeContext(seed) {
+  const storage = {};
+  const context = {
+    console: Object.assign({}, console, { log() {} }),
+    Math: createSeededMath(seed),
+    Date,
+    JSON,
+    Array,
+    Object,
+    Number,
+    String,
+    Boolean,
+    Error,
+    TypeError,
+    Map,
+    Set,
+    Promise,
+    parseInt,
+    parseFloat,
+    isNaN,
+    Infinity,
+    NaN,
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame() { return 0; },
+    cancelAnimationFrame() {},
+    Image: class Image {},
+    navigator: { userAgent: 'node' },
+    innerWidth: 800,
+    innerHeight: 600,
+    document: {
+      createElement() { return createCanvas(); },
+      getElementById() { return createCanvas(); },
+      querySelector() { return createCanvas(); },
+      addEventListener() {}
+    },
+    localStorage: {
+      setItem(key, value) { storage[key] = String(value); },
+      getItem(key) { return storage[key] || null; },
+      removeItem(key) { delete storage[key]; }
+    },
+    io() { return {}; },
+    tf: {},
+    saveAs() {},
+    __benchmarkInferenceCalls: 0,
+    __benchmarkInferencePositions: 0
+  };
+  context.window = context;
+  context.globalThis = context;
+  return vm.createContext(context);
 }
 
-function occupiedKeys(state, ignoredUnit) {
-  const occupied = new Set(state.map.blocked.map(coordKey));
-  for (const player of state.players) {
-    if (player.town.hp > 0) {
-      occupied.add(coordKey(player.town));
+function readRepoFile(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
+
+function loadBrowserScripts(context) {
+  const html = readRepoFile('index.html');
+  const scriptPattern = /<script[^>]+src=['"]([^'"]+)['"]/g;
+  let match;
+  while ((match = scriptPattern.exec(html))) {
+    const source = match[1];
+    if (/^https?:/.test(source)) {
+      continue;
     }
-    for (const unit of player.units) {
-      if (unit.hp > 0 && unit !== ignoredUnit) {
-        occupied.add(coordKey(unit));
+    new vm.Script(readRepoFile(source), { filename: source }).runInContext(context);
+  }
+  new vm.Script(`
+    ai_model = { benchmarkSmokeModel: true }
+    predict = function(model, xValidateArr) {
+      __benchmarkInferenceCalls += 1
+      __benchmarkInferencePositions += xValidateArr.length
+      return xValidateArr.map(function(vector) {
+        let board = vector[0]
+        let score = 0
+        for (let x = 0; x < board.length; ++x) {
+          for (let y = 0; y < board[x].length; ++y) {
+            score += Number(board[x][y][0]) || 0
+            score += (Number(board[x][y][1]) || 0) * 0.1
+          }
+        }
+        return [score]
+      })
+    }
+  `, { filename: 'benchmark-smoke-model.js' }).runInContext(context);
+}
+
+function runtimeMapScript(mapName, map, options) {
+  return `
+(() => {
+  isFogOfWar = false
+  gameSettings.testAI = true
+  gameSettings.isOnline = false
+  gameSettings.aiActionLimit = ${Number(options.actionLimit || 30)}
+  gameSettings.aiCommandLimit = ${Number(options.commandLimit || 60)}
+  entityInterface = {change() {}, hide() {}}
+  townInterface = {change() {}, hide() {}}
+  barrackInterface = {change() {}, hide() {}}
+  statisticsInterface = {}
+  gameEvent = {
+    nextTurn() {},
+    selected: new Empty(),
+    hideAll() {},
+    removeSelection() { this.selected = new Empty() },
+    screen: {moveTo() {}, moveToPlayer() {}, stop() {}}
+  }
+  nextTurnButton = {
+    setNextPlayerColor() {},
+    highlightButton: false,
+    enableClick() {},
+    disableClick() {}
+  }
+  nextTurnPauseInterface = {visible: false}
+  saveManager = {save() {}}
+  AiRuntime.trainFromHumanCommands = function() {}
+  border = new Border()
+  attackBorder = new Border()
+  let manager = {
+    clearValues() {
+      external = []
+      externalProduction = []
+      nature = []
+      goldmines = []
+      gameRound = 0
+      gameExit = false
+    }
+  }
+  let configured = ${JSON.stringify(map)}
+  let map = new GameMap(
+    {x: configured.width, y: configured.height},
+    [
+      {rgb: {r: 0, g: 0, b: 0}, towns: []},
+      {
+        rgb: {r: 255, g: 0, b: 0},
+        towns: [{x: configured.players[0].town.x, y: configured.players[0].town.y}],
+        units: configured.players[0].units.map(function(unit) {
+          return {x: unit.x, y: unit.y, type: Noob}
+        }),
+        playerType: ${JSON.stringify(options.playerA)}
+      },
+      {
+        rgb: {r: 98, g: 168, b: 222},
+        towns: [{x: configured.players[1].town.x, y: configured.players[1].town.y}],
+        units: configured.players[1].units.map(function(unit) {
+          return {x: unit.x, y: unit.y, type: Noob}
+        }),
+        playerType: ${JSON.stringify(options.playerB)}
       }
-    }
-  }
-  return occupied;
-}
+    ],
+    [],
+    [],
+    configured.blocked.map(function(coord) { return {x: coord.x, y: coord.y} }),
+    [],
+    []
+  )
+  map.suddenDeathRound = configured.suddenDeathRound
+  map.start(manager, false)
+  suddenDeathRound = map.suddenDeathRound
+  whooseTurn = 0
 
-function livingUnits(player) {
-  return player.units.filter(function(unit) {
-    return unit.hp > 0;
-  });
-}
-
-function chooseTarget(state, player, unit) {
-  const enemy = state.players[1 - player.index];
-  const targets = livingUnits(enemy).map(function(enemyUnit) {
-    return {
-      kind: 'unit',
-      target: enemyUnit,
-      distance: distance(unit, enemyUnit),
-      key: coordKey(enemyUnit)
-    };
-  });
-  if (enemy.town.hp > 0) {
-    targets.push({
-      kind: 'town',
-      target: enemy.town,
-      distance: distance(unit, enemy.town),
-      key: coordKey(enemy.town)
-    });
+  let turnCount = 0
+  while (turnCount < ${Number(options.roundLimit || 40)} &&
+      gameRound < suddenDeathRound &&
+      !players[1].isLost && !players[2].isLost) {
+    nextTurn()
+    ++turnCount
   }
-  if (player.decisionPolicy) {
-    return player.decisionPolicy.chooseTarget(state, player, unit, targets);
+  let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
+  let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
+  return {
+    winner: winnerIndex == null ? null : players[winnerIndex].constructor.name,
+    winnerSide,
+    roundCount: gameRound,
+    turnCount,
+    timeout: winnerIndex == null && turnCount >= ${Number(options.roundLimit || 40)},
+    suddenDeath: winnerIndex == null && gameRound >= suddenDeathRound,
+    nonResult: winnerIndex == null,
+    mapName: ${JSON.stringify(mapName)},
+    playerA: ${JSON.stringify(options.playerA)},
+    playerB: ${JSON.stringify(options.playerB)},
+    runtimePlayerA: players[1].constructor.name,
+    runtimePlayerB: players[2].constructor.name,
+    seed: ${Number(options.seed)},
+    benchmarkPolicy: 'real GameMap runtime with requested player classes',
+    inference: {
+      source: 'benchmark smoke model for runtime AIPlayer decisions',
+      calls: __benchmarkInferenceCalls,
+      positions: __benchmarkInferencePositions
+    },
+    players: players.slice(1).map(function(player, index) {
+      return {
+        side: index == 0 ? 'A' : 'B',
+        type: player.constructor.name,
+        lost: player.isLost,
+        gold: player.gold,
+        income: player.income,
+        towns: player.towns.filter(function(town) { return !town.killed }).length,
+        units: player.units.filter(function(unit) { return !unit.killed }).length
+      }
+    })
   }
-  return player.runtimePlayer.chooseAiTarget(targets);
-}
-
-function chooseMove(state, player, unit, target) {
-  const occupied = occupiedKeys(state, unit);
-  const choices = neighbours(unit).filter(function(coord) {
-    return isInside(state.map, coord) && !occupied.has(coordKey(coord));
-  });
-  choices.sort(function(left, right) {
-    return distance(left, target) - distance(right, target) ||
-      coordKey(left).localeCompare(coordKey(right));
-  });
-  if (player.decisionPolicy) {
-    return player.decisionPolicy.chooseMove(state, player, unit, target, choices);
-  }
-  return choices[0];
-}
-
-function takeUnitTurn(state, player, unit) {
-  const targetChoice = chooseTarget(state, player, unit);
-  if (!targetChoice) {
-    return;
-  }
-  if (distance(unit, targetChoice.target) <= 1) {
-    targetChoice.target.hp -= unit.attack;
-    return;
-  }
-  const destination = chooseMove(state, player, unit, targetChoice.target);
-  if (destination) {
-    unit.x = destination.x;
-    unit.y = destination.y;
-  }
-}
-
-function applyEconomy(state, player) {
-  if (player.town.hp <= 0 ||
-      !player.runtimePlayer.shouldReinforce(
-        state.round,
-        livingUnits(player).length
-      )) {
-    return;
-  }
-  const occupied = occupiedKeys(state);
-  const spawn = neighbours(player.town).find(function(coord) {
-    return isInside(state.map, coord) && !occupied.has(coordKey(coord));
-  });
-  if (spawn) {
-    player.units.push({
-      id: player.index + '-reinforcement-' + state.round,
-      x: spawn.x,
-      y: spawn.y,
-      hp: 3,
-      attack: 1
-    });
-  }
-}
-
-function scorePlayer(player) {
-  const unitScore = livingUnits(player).reduce(function(total, unit) {
-    return total + unit.hp;
-  }, 0);
-  return unitScore + Math.max(0, player.town.hp) * 2;
-}
-
-function winnerIndex(state) {
-  const alive = state.players.map(function(player) {
-    return player.town.hp > 0 || livingUnits(player).length > 0;
-  });
-  if (alive[0] !== alive[1]) {
-    return alive[0] ? 0 : 1;
-  }
-  return null;
+})()
+`;
 }
 
 function runGame(options) {
@@ -331,88 +405,12 @@ function runGame(options) {
   validatePlayerClass(options.playerA);
   validatePlayerClass(options.playerB);
 
-  const seed = Number(options.seed);
-  const random = createSeededRandom(seed);
-  const roundLimit = Number(options.roundLimit || 40);
-  const state = {
-    map: clone(map),
-    players: [
-      makePlayer(
-        0,
-        options.playerA,
-        map.players[0],
-        options.playerPolicies && options.playerPolicies.A
-      ),
-      makePlayer(
-        1,
-        options.playerB,
-        map.players[1],
-        options.playerPolicies && options.playerPolicies.B
-      )
-    ],
-    round: 0
-  };
-  let winner = null;
-  let suddenDeath = false;
-
-  for (let round = 1; round <= roundLimit; ++round) {
-    state.round = round;
-    const firstPlayer = random() < 0.5 ? 0 : 1;
-    for (let offset = 0; offset < 2; ++offset) {
-      const player = state.players[(firstPlayer + offset) % 2];
-      applyEconomy(state, player);
-      const units = livingUnits(player).slice().sort(function(left, right) {
-        return left.id.localeCompare(right.id);
-      });
-      for (const unit of units) {
-        takeUnitTurn(state, player, unit);
-        winner = winnerIndex(state);
-        if (winner !== null) {
-          break;
-        }
-      }
-      if (winner !== null) {
-        break;
-      }
-    }
-    if (winner !== null) {
-      break;
-    }
-    if (round >= map.suddenDeathRound) {
-      suddenDeath = true;
-      for (const player of state.players) {
-        if (player.town.hp > 0) {
-          player.town.hp -= 1;
-        }
-      }
-      winner = winnerIndex(state);
-      if (winner !== null) {
-        break;
-      }
-    }
-  }
-
-  const timeout = winner === null;
-  if (timeout) {
-    const scores = state.players.map(scorePlayer);
-    if (scores[0] !== scores[1]) {
-      winner = scores[0] > scores[1] ? 0 : 1;
-    }
-  }
-
-  return {
-    winner: winner === null ? null : state.players[winner].playerClass,
-    winnerSide: winner === null ? null : winner === 0 ? 'A' : 'B',
-    roundCount: state.round,
-    timeout,
-    suddenDeath,
-    mapName,
-    playerA: options.playerA,
-    playerB: options.playerB,
-    runtimePlayerA: state.players[0].runtimePlayer.constructor.name,
-    runtimePlayerB: state.players[1].runtimePlayer.constructor.name,
-    seed
-  };
+  const context = createRuntimeContext(options.seed);
+  loadBrowserScripts(context);
+  return new vm.Script(
+    runtimeMapScript(mapName, clone(map), options),
+    { filename: 'benchmark-runtime-game.js' }
+  ).runInContext(context);
 }
 
 function runBenchmark(options) {
@@ -432,13 +430,16 @@ function runBenchmark(options) {
     const seed = baseSeed + index;
     try {
       if (crashSeeds.has(seed)) {
-        throw new Error('simulated benchmark failure for seed ' + seed);
+        throw new Error('simulated benchmark failure for report-format test seed ' + seed);
       }
       games.push(runGame({
+        gameMap: options.gameMap,
         mapName: options.mapName,
         playerA: options.playerA,
         playerB: options.playerB,
         roundLimit: options.roundLimit,
+        actionLimit: options.actionLimit,
+        commandLimit: options.commandLimit,
         seed
       }));
     } catch (error) {
@@ -447,7 +448,8 @@ function runBenchmark(options) {
         mapName: options.mapName || 'tiny-duel',
         playerA: options.playerA,
         playerB: options.playerB,
-        message: error.message
+        message: error.message,
+        reportFormatOnlySimulation: crashSeeds.has(seed)
       };
       crashes.push(crash);
       games.push({
@@ -456,8 +458,10 @@ function runBenchmark(options) {
         roundCount: 0,
         timeout: false,
         suddenDeath: false,
+        nonResult: true,
         crash: true,
         failureReason: error.message,
+        reportFormatOnlySimulation: crashSeeds.has(seed),
         mapName: crash.mapName,
         playerA: crash.playerA,
         playerB: crash.playerB,
@@ -471,7 +475,7 @@ function runBenchmark(options) {
     return game.winnerSide === 'A';
   }).length;
   const completedGames = games.filter(function(game) {
-    return game.winnerSide !== null;
+    return game.winnerSide !== null && !game.crash;
   }).length;
   const lengths = games
     .filter(game => !game.crash)
@@ -485,12 +489,13 @@ function runBenchmark(options) {
     lengths[Math.floor((lengths.length - 1) / 2)] : 0;
   const timeoutCount = games.filter(game => game.timeout).length;
   const suddenDeathCount = games.filter(game => game.suddenDeath).length;
+  const nonResultCount = games.filter(game => game.nonResult).length;
   const failedSeeds = games
-    .filter(game => game.winnerSide !== 'A')
+    .filter(game => game.winnerSide !== 'A' || game.timeout || game.crash || game.nonResult)
     .map(game => game.seed);
   return {
     config: {
-      mapName: options.mapName || 'tiny-duel',
+      mapName: options.mapName || (options.gameMap && options.gameMap.testName) || 'tiny-duel',
       playerA: options.playerA,
       playerB: options.playerB,
       playerClasses: {
@@ -501,6 +506,8 @@ function runBenchmark(options) {
       seed: baseSeed,
       repeat,
       roundLimit: Number(options.roundLimit || 40),
+      benchmarkPolicy: 'real-runtime-requested-player-classes',
+      reportFormatSimulations: crashSeeds.size,
       codeRevision: codeRevision()
     },
     summary: {
@@ -515,6 +522,8 @@ function runBenchmark(options) {
       timeouts: timeoutCount,
       suddenDeathCount,
       suddenDeathGames: suddenDeathCount,
+      nonResultCount,
+      nonResults: nonResultCount,
       crashCount: crashes.length,
       crashes: crashes.length,
       failedSeeds

@@ -954,7 +954,7 @@
     "id": "TASK-048",
     "category": "follow-up",
     "priority": "critical",
-    "description": "Correct the generic benchmark harness so benchmark results exercise the real requested player classes. Synthetic behavior, profile substitutions, or benchmark-only player logic may be used only for tests explicitly limited to report formatting. If a real benchmark fails, treat it as a model, architecture, training, or AI bug to fix.",
+    "description": "Correct the generic benchmark harness so benchmark results exercise the real requested player classes. Synthetic behavior, profile substitutions, or benchmark-only player logic may be used only for tests explicitly limited to report formatting. If a real benchmark fails, treat it as a model, architecture, training, or AI bug to fix. Implemented: Reworked the generic benchmark harness to run real GameMap/browser-runtime games with the requested SimpleAiPlayer, SimpleAiPlayerWithEconomy, AIPlayer, and AIPlayerWithEconomy classes, isolated crash simulation to report-format tests, and made timeouts/non-results/crashes fail accounting loudly.",
     "acceptance_criteria": [
       "ai/benchmark.js, ai/benchmarkHarness.js, and related benchmark tests instantiate and exercise the requested runtime player classes for gameplay benchmarks.",
       "Synthetic profiles or simulated outcomes are isolated to report-format tests and are clearly labeled as not measuring AI play quality.",
@@ -969,7 +969,7 @@
       "Step 3: Run corrected benchmark harness smoke checks with real requested player classes.",
       "Step 4: Confirm intentional weak-player or threshold-failure scenarios return nonzero status instead of being hidden by harness policy."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-049",
