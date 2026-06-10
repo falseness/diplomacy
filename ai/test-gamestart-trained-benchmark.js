@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { loadCheckpoint } = require('./benchmark-gamestart-trained-model');
 
 function assert(condition, message) {
   if (!condition) {
@@ -9,6 +10,32 @@ function assert(condition, message) {
   }
 }
 
+async function checkTrainingEvidenceReport() {
+  const checkpoint = await loadCheckpoint(
+    '/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005'
+  );
+  try {
+    assert(
+      checkpoint.report.trainingEvidence &&
+        checkpoint.report.trainingEvidence.dataSource === 'real-runtime-self-play',
+      'trained checkpoint evidence was not reported'
+    );
+    assert(
+      checkpoint.report.trainingEvidence.plateau &&
+        checkpoint.report.trainingEvidence.plateau.evidence === true,
+      'trained checkpoint plateau evidence was not reported'
+    );
+    assert(
+      checkpoint.report.trainingEvidence.validationWinRatePlateau &&
+        checkpoint.report.trainingEvidence.validationWinRatePlateau.plateau === true,
+      'trained checkpoint validation win-rate plateau was not reported'
+    );
+  } finally {
+    checkpoint.model.dispose();
+  }
+}
+
+async function main() {
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task037-'));
 const reportPath = path.join(temporary, 'report.json');
 const tasksPath = path.join(temporary, 'tasks.json');
@@ -65,4 +92,12 @@ const updatedTasks = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
 assert(updatedTasks.length === 2, 'follow-up ticket was not created');
 assert(updatedTasks[1].status === 'pending', 'follow-up ticket must be pending');
 
+await checkTrainingEvidenceReport();
+
 console.log('Gamestart trained benchmark smoke passed');
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

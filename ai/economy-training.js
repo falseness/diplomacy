@@ -451,6 +451,36 @@ function createCandidate(options, checkpointRoot, bestCheckpoint) {
   };
 }
 
+function summarizeTrainingPlateau(metrics, candidate) {
+  const losses = metrics
+    .filter(metric => Number.isFinite(metric.loss))
+    .map(metric => ({ game: metric.game, loss: metric.loss }));
+  if (!losses.length) {
+    return null;
+  }
+  const best = losses.reduce((currentBest, entry) =>
+    entry.loss < currentBest.loss ? entry : currentBest, losses[0]);
+  const selectedLoss = candidate && Number.isFinite(candidate.loss) ?
+    candidate.loss : best.loss;
+  const postBestLosses = losses
+    .filter(entry => entry.game > best.game)
+    .map(entry => entry.loss);
+  return {
+    evidence: postBestLosses.length > 0,
+    selectedBy: candidate ? candidate.selectedBy : 'lowest-training-loss',
+    selectedGame: candidate ? candidate.game : best.game,
+    selectedLoss,
+    bestGame: best.game,
+    bestLoss: best.loss,
+    finalLoss: losses[losses.length - 1].loss,
+    gamesObserved: losses.length,
+    postBestLosses,
+    note: postBestLosses.length > 0 ?
+      'Training continued after the selected low-loss checkpoint without finding a lower loss.' :
+      'No post-selection training games were available to confirm a plateau.'
+  };
+}
+
 function writeBenchmarkSnapshot(
   options,
   snapshotPath,
@@ -474,6 +504,7 @@ function writeBenchmarkSnapshot(
     plannedGames: options.games,
     games: metrics,
     candidate,
+    plateau: summarizeTrainingPlateau(metrics, candidate),
     updatedAt: new Date().toISOString(),
     artifacts: {
       checkpoints: path.relative(options.storageDir, checkpointRoot),

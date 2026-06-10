@@ -25,7 +25,7 @@ const tf = require('@tensorflow/tfjs-node');
 
 const repoRoot = path.resolve(__dirname, '..');
 const DEFAULT_CHECKPOINT =
-  '/mnt/storage/diplomacy/task046-corrected-feature-model';
+  '/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005';
 const DEFAULT_OUTPUT =
   '/mnt/storage/diplomacy/benchmarks/task037-gamestart-trained-vs-simple.json';
 const DEFAULT_FAILURE_DIR =
@@ -155,6 +155,103 @@ function checkpointModelPath(checkpointArgument) {
     resolved : path.join(resolved, 'model.json');
 }
 
+function readJsonIfPresent(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function checkpointRunInfo(checkpointDir) {
+  const parent = path.dirname(checkpointDir);
+  if (path.basename(path.dirname(parent)) !== 'checkpoints') {
+    return null;
+  }
+  const storageDir = path.dirname(path.dirname(parent));
+  const runId = path.basename(parent);
+  return {
+    storageDir,
+    runId,
+    snapshotPath: path.join(storageDir, 'benchmarks', `${runId}.json`),
+    progressionPath: path.join(
+      storageDir,
+      'benchmarks',
+      `${runId}-checkpoint-progression.json`
+    ),
+    manifestPath: path.join(storageDir, 'runs', runId, 'manifest.json'),
+    candidatePath: path.join(parent, 'candidate.json')
+  };
+}
+
+function summarizeTrainingPlateau(games, candidate) {
+  const losses = games
+    .filter(game => Number.isFinite(game.loss))
+    .map(game => ({ game: game.game, loss: game.loss }));
+  if (!losses.length) {
+    return null;
+  }
+  const best = losses.reduce((currentBest, entry) =>
+    entry.loss < currentBest.loss ? entry : currentBest, losses[0]);
+  const selectedLoss = candidate && Number.isFinite(candidate.loss) ?
+    candidate.loss : best.loss;
+  const finalLoss = losses[losses.length - 1].loss;
+  const postBestLosses = losses
+    .filter(entry => entry.game > best.game)
+    .map(entry => entry.loss);
+  return {
+    evidence: postBestLosses.length > 0,
+    selectedBy: candidate ? candidate.selectedBy : 'lowest-training-loss',
+    selectedGame: candidate ? candidate.game : best.game,
+    selectedLoss,
+    bestGame: best.game,
+    bestLoss: best.loss,
+    finalLoss,
+    gamesObserved: losses.length,
+    postBestLosses,
+    note: postBestLosses.length > 0 ?
+      'Training continued after the selected low-loss checkpoint without finding a lower loss.' :
+      'No post-selection training games were available to confirm a plateau.'
+  };
+}
+
+function readTrainingEvidence(checkpointDir) {
+  const runInfo = checkpointRunInfo(checkpointDir);
+  if (!runInfo) {
+    return null;
+  }
+  const snapshot = readJsonIfPresent(runInfo.snapshotPath);
+  if (!snapshot) {
+    return null;
+  }
+  const candidate = readJsonIfPresent(runInfo.candidatePath) || snapshot.candidate;
+  const manifest = readJsonIfPresent(runInfo.manifestPath);
+  const progression = readJsonIfPresent(runInfo.progressionPath);
+  return {
+    runId: runInfo.runId,
+    snapshot: runInfo.snapshotPath,
+    progression: progression ? runInfo.progressionPath : null,
+    manifest: fs.existsSync(runInfo.manifestPath) ? runInfo.manifestPath : null,
+    status: snapshot.status,
+    dataSource: snapshot.dataSource,
+    trainer: snapshot.trainer,
+    players: snapshot.players,
+    mapGenerator: snapshot.mapGenerator,
+    completedGames: snapshot.completedGames,
+    plannedGames: snapshot.plannedGames,
+    configuration: manifest ? manifest.configuration : null,
+    candidate,
+    losses: (snapshot.games || []).map(game => ({
+      game: game.game,
+      seed: game.seed,
+      mapSize: game.mapSize,
+      loss: game.loss
+    })),
+    mapFeatures: (snapshot.games || []).map(game => game.mapFeatures),
+    plateau: summarizeTrainingPlateau(snapshot.games || [], candidate),
+    validationWinRatePlateau: progression
+  };
+}
+
 function modelSignature(model) {
   return {
     inputs: model.inputs.map(input => input.shape),
@@ -167,6 +264,7 @@ async function loadCheckpoint(checkpointArgument) {
   if (!fs.existsSync(modelPath)) {
     throw new Error('checkpoint model is missing: ' + modelPath);
   }
+  const checkpointDir = path.dirname(modelPath);
   const model = await tf.loadLayersModel('file://' + modelPath);
   const signature = modelSignature(model);
   const channelCount = signature.inputs[0] && signature.inputs[0][3];
@@ -177,8 +275,10 @@ async function loadCheckpoint(checkpointArgument) {
   return {
     model,
     report: {
-      path: path.dirname(modelPath),
-      signature
+      path: checkpointDir,
+      signature,
+      metadata: readJsonIfPresent(path.join(checkpointDir, 'metadata.json')),
+      trainingEvidence: readTrainingEvidence(checkpointDir)
     }
   };
 }

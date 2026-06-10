@@ -76,6 +76,8 @@ async function main() {
     const snapshot = JSON.parse(fs.readFileSync(snapshotPath));
     check(snapshot.status === 'complete' && snapshot.completedGames === 2,
       'final benchmark snapshot did not record completed training');
+    check(snapshot.plateau && snapshot.plateau.gamesObserved === 2,
+      'training plateau summary was not recorded');
     check(fs.existsSync(path.join(storageDir, 'final', runId, 'model.json')),
       'final economy model missing');
   } finally {
