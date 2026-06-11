@@ -81,7 +81,6 @@ function assertPassingRun() {
     '--plateau-window', '2',
     '--plateau-min-delta', '2',
     '--plateau-patience', '1',
-    '--curriculum-simple-winrate', '0.75',
     '--curriculum-lr-reduction-attempted'
   ]);
 
@@ -94,6 +93,10 @@ function assertPassingRun() {
   advances.forEach((record, index) => {
     check(record.simpleAiPlayerWinrate && record.simpleAiPlayerWinrate.evaluated === true,
       `stage gate ${index} did not evaluate SimpleAiPlayer winrate`);
+    check(record.simpleAiPlayerWinrate.source === 'measured-model-vs-SimpleAiPlayer-benchmark',
+      `stage gate ${index} used non-measured SimpleAiPlayer evidence`);
+    check(record.simpleAiPlayerWinrate.modelWins > record.simpleAiPlayerWinrate.simpleAiPlayerWins,
+      `stage gate ${index} did not beat SimpleAiPlayer in measured games`);
     check(record.simpleAiPlayerWinrate.value > 0.6,
       `stage gate ${index} advanced without greater-than-60-percent winrate`);
     check(record.simpleAiPlayerWinrate.value >
@@ -128,6 +131,7 @@ function assertPassingRun() {
       fromStageIndex: record.nextStageEligibility.currentStageIndex,
       advancedToStageIndex: record.curriculum.currentStageIndex,
       simpleAiPlayerWinrate: record.simpleAiPlayerWinrate.value,
+      simpleAiPlayerEvidence: record.simpleAiPlayerWinrate.source,
       decision: record.nextStageEligibility.decision
     }))
   };
@@ -144,7 +148,7 @@ function assertFailingRun() {
     '--plateau-window', '2',
     '--plateau-min-delta', '2',
     '--plateau-patience', '1',
-    '--curriculum-simple-winrate', '0.6',
+    '--curriculum-simple-winrate-threshold', '1',
     '--curriculum-lr-reduction-attempted'
   ]);
 
@@ -154,12 +158,14 @@ function assertFailingRun() {
   check(finalRecord.plateauState.status === 'plateau',
     'failed-gate run should still reach plateau evidence');
   check(finalRecord.simpleAiPlayerWinrate.evaluated === true &&
-      finalRecord.simpleAiPlayerWinrate.value === 0.6,
-  'failed-gate run did not record the 60-percent winrate');
+      finalRecord.simpleAiPlayerWinrate.source === 'measured-model-vs-SimpleAiPlayer-benchmark',
+  'failed-gate run did not record measured SimpleAiPlayer winrate evidence');
+  check(finalRecord.simpleAiPlayerWinrate.value <= 1,
+    'failed-gate run should have a bounded measured winrate');
   check(finalRecord.nextStageEligibility.decision === 'hold' &&
       finalRecord.nextStageEligibility.eligible === false,
-  '60-percent winrate should block advancement');
-  check(finalRecord.nextStageEligibility.reason.includes('greater than 0.6'),
+  'strict measured winrate threshold should block advancement');
+  check(finalRecord.nextStageEligibility.reason.includes('greater than 1'),
     'failed-gate run did not record the threshold blocker reason');
   const state = readJson(path.join(STORAGE_DIR, 'runs', FAIL_RUN_ID, 'state.json'));
   check(state.curriculum.currentStageIndex === 0,

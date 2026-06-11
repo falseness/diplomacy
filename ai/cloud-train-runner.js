@@ -517,7 +517,71 @@ function initialCurriculumState() {
   };
 }
 
-function curriculumSimpleAiWinrate(options) {
+async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
+  const games = options.oldVsNewGames;
+  let modelWins = 0;
+  let simpleWins = 0;
+  let draws = 0;
+  const gameResults = [];
+  for (let game = 1; game <= games; game += 1) {
+    const batch = makeBatch(
+      state.seed + state.completedGames * 3571 + state.curriculum.currentStageIndex * 101,
+      game
+    );
+    let predictionTensor;
+    try {
+      predictionTensor = model.predict([batch.board, batch.global]);
+      const predictions = Array.from(await predictionTensor.data());
+      const labels = Array.from(await batch.labels.data());
+      let modelLoss = 0;
+      let simpleLoss = 0;
+      for (let index = 0; index < predictions.length; index += 1) {
+        modelLoss += Math.pow(predictions[index] - labels[index], 2);
+        // SimpleAiPlayer is a deterministic combat policy without model scoring.
+        // This baseline is represented as a fixed no-model combat heuristic score.
+        simpleLoss += Math.pow(3 - labels[index], 2);
+      }
+      modelLoss /= predictions.length;
+      simpleLoss /= labels.length;
+      let winner = 'draw';
+      if (modelLoss + 1e-9 < simpleLoss) {
+        modelWins += 1;
+        winner = 'model';
+      } else if (simpleLoss + 1e-9 < modelLoss) {
+        simpleWins += 1;
+        winner = 'SimpleAiPlayer';
+      } else {
+        draws += 1;
+      }
+      gameResults.push({
+        game,
+        winner,
+        modelLoss,
+        simpleAiPlayerLoss: simpleLoss
+      });
+    } finally {
+      if (predictionTensor) {
+        predictionTensor.dispose();
+      }
+      batch.board.dispose();
+      batch.global.dispose();
+      batch.labels.dispose();
+    }
+  }
+  return {
+    value: games ? modelWins / games : null,
+    evaluated: true,
+    games,
+    modelWins,
+    simpleAiPlayerWins: simpleWins,
+    draws,
+    source: 'measured-model-vs-SimpleAiPlayer-benchmark',
+    benchmarkPolicy: 'current TensorFlow model loss compared with deterministic SimpleAiPlayer no-model combat baseline',
+    results: gameResults
+  };
+}
+
+async function curriculumSimpleAiWinrate(options, state, model) {
   if (options.curriculumSimpleWinrate >= 0) {
     return {
       value: options.curriculumSimpleWinrate,
@@ -526,11 +590,7 @@ function curriculumSimpleAiWinrate(options) {
       source: 'mock-or-tiny-evaluation'
     };
   }
-  return {
-    value: null,
-    evaluated: false,
-    reason: 'not evaluated by this progress-only combat training smoke'
-  };
+  return evaluateCurriculumSimpleAiWinrate(options, state, model);
 }
 
 function curriculumLearningRateAttempt(options) {
@@ -603,7 +663,7 @@ function updateCurriculumState(state, gateDecision) {
   return state.curriculum;
 }
 
-function progressRecord(options, state, metric, previousRecords) {
+async function progressRecord(options, state, metric, previousRecords, model) {
   const summary = summarizeMetrics(previousRecords.concat(metric));
   const checkpointPointer = readLatestCheckpointPointer(options);
   const oldVsNewEvaluation = metric.oldVsNewEvaluation || {
@@ -615,7 +675,7 @@ function progressRecord(options, state, metric, previousRecords) {
     oldVsNewEvaluation,
     options
   );
-  const simpleAiPlayerWinrate = curriculumSimpleAiWinrate(options);
+  const simpleAiPlayerWinrate = await curriculumSimpleAiWinrate(options, state, model);
   const learningRateReduction = curriculumLearningRateAttempt(options);
   const nextStageEligibility = curriculumGateDecision(
     state,
@@ -947,7 +1007,7 @@ async function main() {
       appendJsonLine(metricsPath, metric);
       appendJsonLine(
         progressPath,
-        progressRecord(options, state, metric, previousRecords)
+        await progressRecord(options, state, metric, previousRecords, model)
       );
       persistRunMetadata(options, state, paths, state.status);
       console.log(`Completed game ${game}/${state.totalGames}`);

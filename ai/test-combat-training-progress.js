@@ -77,8 +77,9 @@ function main() {
     check(record.checkpoint === path.join('checkpoints', runId, 'step-00000001'),
       'combat progress checkpoint path is not the saved checkpoint');
     check(record.simpleAiPlayerWinrate &&
-      record.simpleAiPlayerWinrate.evaluated === false,
-    'SimpleAiPlayer winrate field should be explicit when not evaluated');
+      record.simpleAiPlayerWinrate.evaluated === true &&
+      record.simpleAiPlayerWinrate.source === 'measured-model-vs-SimpleAiPlayer-benchmark',
+    'SimpleAiPlayer winrate field should contain measured benchmark evidence');
     check(record.nextStageEligibility &&
       record.nextStageEligibility.eligible === false,
     'next-stage eligibility should stay false for progress-only recording');

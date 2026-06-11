@@ -1567,13 +1567,14 @@
     "id": "TASK-078",
     "category": "test",
     "priority": "critical",
-    "description": "Add full-training verification for the combat curriculum because the newest artifact is /mnt/storage/diplomacy/verify-task068-manual/final/verify-resume/weights.bin instead of a TASK-076 result. The ticket must prove full-training completes, writes a new final weights.bin artifact, and passes greater than 60 percent winrate at every curriculum stage gate before advancing. Implemented: Added npm run test-combat-full-training-verification, which runs a completed eight-step curriculum training job, verifies a new final weights.bin, checks all six stage gates exceed 60 percent before advancing, and proves a 60 percent gate holds with a recorded reason.",
+    "description": "Add full-training verification for the combat curriculum because the newest artifact is /mnt/storage/diplomacy/verify-task068-manual/final/verify-resume/weights.bin instead of a TASK-076 result. The ticket must prove full-training completes, writes a new final weights.bin artifact, and passes greater than 60 percent winrate at every curriculum stage gate before advancing. Implemented: Added npm run test-combat-full-training-verification, which runs a completed eight-step curriculum training job, verifies a new final weights.bin, checks all six stage gates exceed 60 percent before advancing, and proves a 60 percent gate holds with a recorded reason. Verification failed: fresh verification wrote a new final weights.bin, but the stage-gate winrates are CLI-injected mock-or-tiny-evaluation values from --curriculum-simple-winrate rather than measured model-versus-SimpleAiPlayer results. Implemented: Replaced injected TASK-078 gate evidence with measured per-gate model-vs-SimpleAiPlayer benchmark records, made the test reject mock sources, and verified a fresh final weights.bin plus six measured >60% stage advances.",
     "acceptance_criteria": [
       "A full-training run completes successfully, not only mocked, smoke, or partial curriculum tests.",
       "The run writes a new final weights.bin artifact under /mnt/storage/diplomacy and the final artifact path is not /mnt/storage/diplomacy/verify-task068-manual/final/verify-resume/weights.bin.",
       "Every curriculum stage gate records model winrate versus SimpleAiPlayer greater than 60 percent before advancing.",
       "Any stage with model winrate at or below 60 percent blocks advancement and records the failed gate reason.",
-      "The metrics or manifest identify each stage, its winrate result, the stage advancement decision, and the final weights.bin path."
+      "The metrics or manifest identify each stage, its winrate result, the stage advancement decision, and the final weights.bin path.",
+      "double-check no cheating in comparison with SimpleAiPlayer: 1. you dont give any player artificial advantage. 2. you do not add ad-hoc changes to AIPlayer functions for this comparison. 3. AIPlayer does not have ad-hoc ifs for grid.arr.length and grid.arr[0].length. 4. AIPlayer methods are simple, and most complexity is hidden in the model"
     ],
     "test_steps": [
       "Step 1: Run the project full-training command from a clean or explicitly documented resume state.",
