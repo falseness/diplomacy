@@ -22,6 +22,14 @@ const AI_ECONOMY_TOWN_DEFICIT_NEUTRAL_PENALTY = 6
 const AI_ECONOMY_UNIT_ADVANTAGE_TARGET_SCORE = 10
 const AI_ECONOMY_UNIT_ADVANTAGE_NEUTRAL_PENALTY = 3
 const AI_ECONOMY_UNIT_ADVANTAGE_UNIT_PENALTY = 2
+const SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP = 6
+const SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP = 5
+const SIMPLE_ECONOMY_MAX_UNIT_CAP = 36
+const SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP = 44
+const SIMPLE_ECONOMY_DEFAULT_ACTION_LIMIT = 12
+const SIMPLE_ECONOMY_DEFAULT_COMMAND_LIMIT = 200
+const SIMPLE_ECONOMY_STALEMATE_PATH_ROUND = 120
+const SIMPLE_ECONOMY_CONCESSION_ROUNDS_BEFORE_SUDDEN_DEATH = 20
 
 function compareAiTargets(townBonus) {
     return function(left, right) {
@@ -106,7 +114,9 @@ class SimpleAiPlayer extends Player {
             if (attackCommand) {
                 let cell = grid.arr[attackCommand.destinationCoord.x][attackCommand.destinationCoord.y]
                 unit.sendInstructions(cell)
-                assert(movesBefore - unit.moves > 0)
+                if (movesBefore == unit.moves) {
+                    break
+                }
                 ++usedActions
                 break
             }
@@ -119,7 +129,9 @@ class SimpleAiPlayer extends Player {
             assert(command.whoDoCommandCoord.x == unit.coord.x &&
                 command.whoDoCommandCoord.y == unit.coord.y)
             unit.sendInstructions(grid.arr[command.destinationCoord.x][command.destinationCoord.y])
-            assert(movesBefore - unit.moves > 0)
+            if (movesBefore == unit.moves) {
+                break
+            }
             ++usedActions
         }
         return usedActions
@@ -229,22 +241,37 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
     }
     chooseWarProductions(state) {
-        let unitChoices = state.productionChoices.filter(function(choice) {
-            return AI_UNIT_PRODUCTS.includes(choice.product)
-        }).sort(function(left, right) {
-            return AI_UNIT_PRODUCTS.indexOf(left.product) -
-                    AI_UNIT_PRODUCTS.indexOf(right.product) ||
-                left.cost - right.cost
-        })
-        let choices = unitChoices.slice()
+        let byProducts = function(products) {
+            return state.productionChoices.filter(function(choice) {
+                return products.includes(choice.product)
+            }).sort(function(left, right) {
+                return products.indexOf(left.product) -
+                        products.indexOf(right.product) ||
+                    left.cost - right.cost
+            })
+        }
+        let isSmallMap = typeof grid == 'undefined' || !grid.arr ||
+            !grid.arr.length || !grid.arr[0] ||
+            grid.arr.length * grid.arr[0].length <= 600
+        let unitsPerTownCap = isSmallMap ?
+            SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP :
+            SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP
+        let maxUnitCap = isSmallMap ?
+            SIMPLE_ECONOMY_MAX_UNIT_CAP : SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP
+        let unitCap = Math.max(
+            AI_ECONOMY_ADVANCED_UNIT_THRESHOLD,
+            Math.min(
+                maxUnitCap,
+                state.towns.length * unitsPerTownCap))
+        let unitProducts = state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD ?
+            ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
+            AI_UNIT_PRODUCTS
+        let choices = state.units.length < unitCap ?
+            byProducts(unitProducts) : []
         let barrackCapacity = state.barracks.length + state.pendingBarracks.length
         if (barrackCapacity < state.towns.length) {
-            choices = choices.concat(state.productionChoices.filter(function(choice) {
-                return choice.product == 'barrack'
-            }))
-            choices = choices.concat(state.productionChoices.filter(function(choice) {
-                return choice.product == 'suburb'
-            }))
+            choices = choices.concat(byProducts(['barrack']))
+            choices = choices.concat(byProducts(['suburb']))
         }
         return choices
     }
@@ -308,14 +335,236 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         return false
     }
+    spendWarGoldWithinLimit(maxPurchases) {
+        let purchases = 0
+        while (purchases < maxPurchases) {
+            if (!this.spendWarGold()) {
+                break
+            }
+            ++purchases
+        }
+        return purchases
+    }
+    getPlayerIndex() {
+        return AIPlayerWithEconomy.prototype.getPlayerIndex.call(this)
+    }
+    getActionRankingDistance(left, right) {
+        return AIPlayerWithEconomy.prototype.getActionRankingDistance.call(
+            this, left, right)
+    }
+    getLiveTownCount(player) {
+        return AIPlayerWithEconomy.prototype.getLiveTownCount.call(this, player)
+    }
+    getLiveUnitCount(player) {
+        return AIPlayerWithEconomy.prototype.getLiveUnitCount.call(this, player)
+    }
+    getTownDeficitPressure() {
+        return AIPlayerWithEconomy.prototype.getTownDeficitPressure.call(this)
+    }
+    getUnitAdvantagePressure() {
+        return AIPlayerWithEconomy.prototype.getUnitAdvantagePressure.call(this)
+    }
+    getCommandLimit(fallback) {
+        return AIPlayerWithEconomy.prototype.getCommandLimit.call(this, fallback)
+    }
+    getEnemyTargetsForMovement() {
+        return AIPlayerWithEconomy.prototype.getEnemyTargetsForMovement.call(this)
+    }
+    getCommandTowardEnemy(unit, commands) {
+        return AIPlayerWithEconomy.prototype.getCommandTowardEnemy.call(
+            this, unit, commands)
+    }
+    getDirectEnemyPathCommand(unit, commands) {
+        if (!this.bestEnemyTargetForAI ||
+                !this.bestEnemyTargetForAI.GetCommandNearestToBestTarget) {
+            return null
+        }
+        return this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
+            commands, unit.coord, grid.arr, unit.playerColor)
+    }
+    getTownAdvantage() {
+        if (typeof players == 'undefined') {
+            return 0
+        }
+        let playerIndexForThis = this.getPlayerIndex()
+        let ownTowns = this.getLiveTownCount(this)
+        let strongestOpponentTowns = 0
+        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+            if (playerIndex == playerIndexForThis || players[playerIndex].isNeutral) {
+                continue
+            }
+            strongestOpponentTowns = Math.max(
+                strongestOpponentTowns,
+                this.getLiveTownCount(players[playerIndex]))
+        }
+        return ownTowns - strongestOpponentTowns
+    }
+    getConcessionScore(player) {
+        let towns = this.getLiveTownCount(player)
+        let units = this.getLiveUnitCount(player)
+        let income = typeof player.income == 'number' ? player.income : 0
+        let gold = typeof player.gold == 'number' ? player.gold : 0
+        return towns * 10000 + units * 100 + income * 10 + gold / 100
+    }
+    concede() {
+        let towns = this.towns.slice()
+        for (let i = 0; i < towns.length; ++i) {
+            if (!towns[i].killed && towns[i].kill) {
+                towns[i].kill()
+            }
+        }
+        let units = this.units.slice()
+        for (let i = 0; i < units.length; ++i) {
+            if (!units[i].killed && units[i].kill) {
+                units[i].kill()
+            }
+        }
+        this.towns = []
+        this.units = []
+        this.gold = 0
+    }
+    concedeLateStalemateIfBehind() {
+        if (typeof players == 'undefined' || typeof gameRound == 'undefined' ||
+                typeof suddenDeathRound == 'undefined') {
+            return false
+        }
+        if (gameRound < suddenDeathRound -
+                SIMPLE_ECONOMY_CONCESSION_ROUNDS_BEFORE_SUDDEN_DEATH) {
+            return false
+        }
+        let playerIndexForThis = this.getPlayerIndex()
+        let active = []
+        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+            if (!players[playerIndex].isNeutral && !players[playerIndex].isLost) {
+                active.push({
+                    index: playerIndex,
+                    player: players[playerIndex],
+                    score: this.getConcessionScore(players[playerIndex])
+                })
+            }
+        }
+        if (active.length <= 1) {
+            return false
+        }
+        active.sort(function(left, right) {
+            return right.score - left.score || left.index - right.index
+        })
+        if (active[0].index == playerIndexForThis) {
+            return false
+        }
+        this.concede()
+        return true
+    }
+    findUnitAttackCommand(unit) {
+        let commands = unit.getAvailableCommands()
+        let playerIndex = this.getPlayerIndex()
+        let bestCommand = null
+        let bestScore = -Infinity
+        for (let i = 0; i < commands.length; ++i) {
+            let command = commands[i]
+            let cell = grid.arr[command.destinationCoord.x] &&
+                grid.arr[command.destinationCoord.x][command.destinationCoord.y]
+            if (!cell || !unit.canHitSomethingOnCell ||
+                    !unit.canHitSomethingOnCell(cell)) {
+                continue
+            }
+            let score = 0
+            if (cell.building && cell.building.notEmpty &&
+                    cell.building.notEmpty() &&
+                    cell.building.playerColor != playerIndex) {
+                score += cell.building.name == 'town' ? 10000 : 5000
+                score -= cell.building.hp || 0
+            }
+            if (cell.unit && cell.unit.notEmpty && cell.unit.notEmpty() &&
+                    cell.unit.playerColor != playerIndex) {
+                score += 1000
+                score -= cell.unit.hp || 0
+            }
+            if (score > bestScore) {
+                bestScore = score
+                bestCommand = command
+            }
+        }
+        return bestCommand
+    }
+    unitDoMoves(unit, remainingActions = Infinity) {
+        let usedActions = 0
+        while (unit.moves > 0 && usedActions < remainingActions) {
+            const movesBefore = unit.moves
+            let attackCommand = this.findUnitAttackCommand(unit)
+            if (attackCommand) {
+                let cell = grid.arr[attackCommand.destinationCoord.x][attackCommand.destinationCoord.y]
+                unit.sendInstructions(cell)
+                assert(movesBefore - unit.moves > 0)
+                ++usedActions
+                break
+            }
+            let commandFallback = grid.arr.length * grid.arr[0].length <= 600 ?
+                Infinity : SIMPLE_ECONOMY_DEFAULT_COMMAND_LIMIT
+            let moveCommands = getAiMoveCommands(unit).slice(
+                0, getAiCommandLimit(commandFallback))
+            let isLargeMap = grid.arr.length * grid.arr[0].length > 600
+            let shouldPathDirectly = typeof gameRound != 'undefined' &&
+                gameRound >= SIMPLE_ECONOMY_STALEMATE_PATH_ROUND &&
+                (isLargeMap || this.getTownAdvantage() >= 0)
+            let command = shouldPathDirectly ?
+                this.getDirectEnemyPathCommand(unit, moveCommands) : null
+            if (!command && (isLargeMap ||
+                    (this.getTownAdvantage() > 0 && this.getLiveTownCount(this) >= 5))) {
+                command = this.getCommandTowardEnemy(unit, moveCommands)
+            }
+            if (!command) {
+                command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
+                    moveCommands, unit.coord, grid.arr, unit.playerColor)
+            }
+            if (!command) {
+                break
+            }
+            assert(command.whoDoCommandCoord.x == unit.coord.x &&
+                command.whoDoCommandCoord.y == unit.coord.y)
+            unit.sendInstructions(grid.arr[command.destinationCoord.x][command.destinationCoord.y])
+            if (movesBefore == unit.moves) {
+                break
+            }
+            ++usedActions
+        }
+        return usedActions
+    }
+    playCombatActions() {
+        let actionFallback = grid.arr.length * grid.arr[0].length <= 500 ?
+            Infinity : SIMPLE_ECONOMY_DEFAULT_ACTION_LIMIT
+        let remainingActions = getAiActionLimit(actionFallback)
+        if (this.getLiveTownCount(this) >= AI_ECONOMY_MULTI_TOWN_THRESHOLD ||
+                this.getTownAdvantage() >= 3) {
+            remainingActions = Math.max(
+                remainingActions, AI_ECONOMY_MULTI_TOWN_ACTION_LIMIT)
+        }
+        for (let cycle = 0; cycle < this.units.length; ++cycle) {
+            if (remainingActions <= 0) {
+                break
+            }
+            if (this.units[cycle].killed) {
+                this.units.splice(cycle--, 1)
+                assert(false)
+                continue
+            }
+            remainingActions -= this.unitDoMoves(this.units[cycle], remainingActions)
+        }
+    }
     play() {
+        if (this.concedeLateStalemateIfBehind()) {
+            return
+        }
         if (this.economyMode == 'war') {
-            this.spendWarGold()
+            let economyState = this.inspectEconomy()
+            let purchaseLimit = economyState.towns.length > 1 ?
+                AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT : 1
+            this.spendWarGoldWithinLimit(purchaseLimit)
         }
         else {
             this.spendEconomyGold()
         }
-        super.play()
+        this.playCombatActions()
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 3)

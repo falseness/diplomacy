@@ -78,4 +78,70 @@ for (const failure of report.failedGames) {
   assert(fs.existsSync(failure.failurePath), 'failure artifact was not written');
 }
 
+const strictOutput = path.join(tempDir, 'strict-1v1-report.json');
+const strictResult = childProcess.spawnSync(process.execPath, [
+  'ai/gamestart-simple-economy-completion.js',
+  '--player-group',
+  '1v1',
+  '--map-limit',
+  '1',
+  '--seed',
+  '56000',
+  '--round-limit',
+  '500',
+  '--require-complete',
+  '--output',
+  strictOutput,
+  '--failure-dir',
+  path.join(tempDir, 'strict-failures')
+], {
+  cwd: path.resolve(__dirname, '..'),
+  encoding: 'utf8'
+});
+
+assert(
+  strictResult.status === 0,
+  'strict 1v1 completion harness failed:\nstdout:\n' +
+    strictResult.stdout + '\nstderr:\n' + strictResult.stderr
+);
+const strictReport = JSON.parse(fs.readFileSync(strictOutput, 'utf8'));
+assert(strictReport.config.playerGroup === '1v1', 'player group filter missing');
+assert(strictReport.config.requireComplete, 'strict completion flag missing');
+assert(strictReport.mapCoverage.selectedMaps.length === 1, 'strict map limit failed');
+assert(strictReport.games[0].playerGroup === '1v1', 'strict run selected wrong group');
+assert(strictReport.summary.nonResults === 0, 'strict run had a non-result');
+
+const offsetOutput = path.join(tempDir, 'offset-1v1-report.json');
+const offsetResult = childProcess.spawnSync(process.execPath, [
+  'ai/gamestart-simple-economy-completion.js',
+  '--player-group',
+  '1v1',
+  '--map-offset',
+  '5',
+  '--map-limit',
+  '1',
+  '--seed',
+  '56005',
+  '--round-limit',
+  '1',
+  '--output',
+  offsetOutput,
+  '--failure-dir',
+  path.join(tempDir, 'offset-failures')
+], {
+  cwd: path.resolve(__dirname, '..'),
+  encoding: 'utf8'
+});
+
+assert(
+  offsetResult.status === 0,
+  'filtered offset harness failed:\nstdout:\n' +
+    offsetResult.stdout + '\nstderr:\n' + offsetResult.stderr
+);
+const offsetReport = JSON.parse(fs.readFileSync(offsetOutput, 'utf8'));
+assert(
+  offsetReport.mapCoverage.selectedMaps[0].name === 'two in one #1',
+  'filtered map offset selected ' + offsetReport.mapCoverage.selectedMaps[0].name
+);
+
 console.log('Gamestart SimpleAiPlayerWithEconomy completion harness passed');

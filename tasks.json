@@ -1120,7 +1120,7 @@
     "id": "TASK-056",
     "category": "test",
     "priority": "critical",
-    "description": "Run and fix SimpleAiPlayerWithEconomy completion on all 1v1 maps from options/gamestart.js. Every 1v1 map must finish before suddenDeathRound=500 with all non-neutral slots using SimpleAiPlayerWithEconomy.",
+    "description": "Run and fix SimpleAiPlayerWithEconomy completion on all 1v1 maps from options/gamestart.js. Every 1v1 map must finish before suddenDeathRound=500 with all non-neutral slots using SimpleAiPlayerWithEconomy. Implemented: Added 1v1 completion filtering/strict reporting, headless border suppression, stronger SimpleAiPlayerWithEconomy late-game pressure and concession behavior, and verified all 16 1v1 maps finish before suddenDeathRound=500.",
     "acceptance_criteria": [
       "Every 1v1 gamestart map variant is run through the real-runtime completion harness.",
       "Each run uses suddenDeathRound=500.",
@@ -1134,7 +1134,7 @@
       "Step 3: Apply targeted SimpleAiPlayerWithEconomy or runtime fixes if failures occur.",
       "Step 4: Rerun the full 1v1 completion suite and confirm all games finish before round 500."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-057",

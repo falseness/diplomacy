@@ -29,7 +29,9 @@ function usage() {
     '  --failure-dir PATH        Directory for failure state JSON files',
     '  --map-limit NUMBER        Limit selected maps for smoke tests',
     '  --map-offset NUMBER       Skip maps before applying --map-limit',
+    '  --player-group NAME       Select all maps for one player group, e.g. 1v1',
     '  --sample-player-groups CSV  Select the first map for each group, e.g. 1v1,3-player,4-player',
+    '  --require-complete        Exit nonzero unless every selected game has a pre-sudden-death winner',
     '  --help                    Show this help'
   ].join('\n');
 }
@@ -43,6 +45,8 @@ function parseArgs(argv) {
     failureDir: DEFAULT_FAILURE_DIR,
     mapLimit: undefined,
     mapOffset: 0,
+    playerGroup: null,
+    requireComplete: false,
     samplePlayerGroups: null
   };
   const names = {
@@ -53,12 +57,17 @@ function parseArgs(argv) {
     '--failure-dir': 'failureDir',
     '--map-limit': 'mapLimit',
     '--map-offset': 'mapOffset',
+    '--player-group': 'playerGroup',
     '--sample-player-groups': 'samplePlayerGroups'
   };
   for (let index = 0; index < argv.length; ++index) {
     const argument = argv[index];
     if (argument === '--help') {
       options.help = true;
+      continue;
+    }
+    if (argument === '--require-complete') {
+      options.requireComplete = true;
       continue;
     }
     const name = names[argument];
@@ -100,6 +109,9 @@ function parseArgs(argv) {
     if (!options.samplePlayerGroups.length) {
       throw new Error('sample-player-groups must include at least one group');
     }
+  }
+  if (options.playerGroup !== null && String(options.playerGroup).trim() === '') {
+    throw new Error('player-group must not be empty');
   }
   return options;
 }
@@ -217,8 +229,41 @@ function loadBrowserScripts(context) {
   }
 }
 
+function disableHeadlessBorderDrawing(context) {
+  new vm.Script(`(() => {
+    class HeadlessBorder {
+      constructor() {
+        this.lines = []
+        this.visible = false
+      }
+      clean() {
+        this.lines = []
+      }
+      isCleaned() {
+        return true
+      }
+      createLine() {}
+      newBrokenLine() {
+        this.clean()
+        this.visible = false
+      }
+      draw() {}
+    }
+    Border = HeadlessBorder
+    border = new HeadlessBorder()
+    attackBorder = new HeadlessBorder()
+  })()`, { filename: 'task055-headless-border.js' }).runInContext(context);
+}
+
 function selectMaps(coverage, options) {
-  let maps = coverage.maps.slice(options.mapOffset);
+  let maps = coverage.maps.slice();
+  if (options.playerGroup) {
+    maps = maps.filter(candidate => candidate.playerGroup === options.playerGroup);
+    if (!maps.length) {
+      throw new Error('No gamestart maps found for player group ' + options.playerGroup);
+    }
+  }
+  maps = maps.slice(options.mapOffset);
   if (options.samplePlayerGroups) {
     const selected = [];
     for (const group of options.samplePlayerGroups) {
@@ -248,6 +293,7 @@ function writeJson(filePath, value) {
 function runRuntimeScenario(mapEntry, seed, options) {
   const context = createRuntimeContext(seed);
   loadBrowserScripts(context);
+  disableHeadlessBorderDrawing(context);
   context.__task055MapEntry = mapEntry;
   context.__task055Seed = seed;
   context.__task055RoundLimit = options.roundLimit;
@@ -466,6 +512,8 @@ function runHarness(options) {
       forcedSuddenDeathRound: FORCED_SUDDEN_DEATH_ROUND,
       mapOffset: options.mapOffset,
       mapLimit: options.mapLimit,
+      playerGroup: options.playerGroup,
+      requireComplete: options.requireComplete,
       samplePlayerGroups: options.samplePlayerGroups
     },
     mapCoverage: {
@@ -506,7 +554,8 @@ function main() {
   const report = runHarness(options);
   console.log(JSON.stringify(report.summary));
   console.log('Simple economy gamestart report: ' + path.resolve(options.output));
-  if (report.summary.crashes > 0 || report.summary.requiredClassMismatches > 0) {
+  if (report.summary.crashes > 0 || report.summary.requiredClassMismatches > 0 ||
+      (options.requireComplete && report.summary.nonResults > 0)) {
     process.exitCode = 1;
   }
 }
