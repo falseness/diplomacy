@@ -1486,7 +1486,7 @@
     "id": "TASK-074",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage F map generation: introduce some KOHb units only after the Stage E plateau gate passes.",
+    "description": "Add combat curriculum Stage F map generation: introduce some KOHb units only after the Stage E plateau gate passes. Implemented: Added gated Stage F combat map generation with persisted Stage E gate checks, deterministic Noob/Normchel/KOHb fixed-seed maps, combat-only metadata, KOHb unlock metrics, and npm smoke coverage.",
     "acceptance_criteria": [
       "Stage F is unavailable until the curriculum controller records a passed Stage E gate.",
       "Stage F maps include at least one KOHb in some generated seeds.",
@@ -1500,7 +1500,7 @@
       "Step 3: Confirm some maps include KOHb and no Archer units.",
       "Step 4: Confirm metrics identify the KOHb unlock."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-075",
