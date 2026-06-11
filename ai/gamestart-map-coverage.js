@@ -61,6 +61,18 @@ function loadGamestartMaps() {
   return context.maps;
 }
 
+function loadGamestartContext() {
+  const context = createGamestartContext();
+  context.window = context;
+  context.globalThis = context;
+  new vm.Script(readRepoFile(GAMESTART_PATH), { filename: GAMESTART_PATH })
+    .runInContext(context);
+  if (!context.maps || typeof context.maps !== 'object') {
+    throw new Error('options/gamestart.js did not define maps');
+  }
+  return context;
+}
+
 function playerGroup(nonNeutralPlayerCount) {
   if (nonNeutralPlayerCount === 2) {
     return '1v1';
@@ -92,6 +104,12 @@ function matchingBraceEnd(source, startIndex) {
 
 function manualGamestartMapCount() {
   const source = readRepoFile(GAMESTART_PATH);
+  const matches = source.match(/\bnew\s+GameMap\s*\(/g);
+  return matches ? matches.length : 0;
+}
+
+function mapsObjectGameMapCount() {
+  const source = readRepoFile(GAMESTART_PATH);
   const mapsStart = source.indexOf('maps = {');
   if (mapsStart < 0) {
     throw new Error('Unable to find maps object');
@@ -103,34 +121,88 @@ function manualGamestartMapCount() {
   return matches ? matches.length : 0;
 }
 
+function findNoArgMapFactories(source) {
+  const factories = [];
+  const declaration = /\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(\s*\)\s*\{/g;
+  let match;
+  while ((match = declaration.exec(source)) !== null) {
+    const functionName = match[1];
+    const braceStart = source.indexOf('{', match.index);
+    const braceEnd = matchingBraceEnd(source, braceStart);
+    const functionSource = source.slice(braceStart, braceEnd + 1);
+    if (/\bnew\s+GameMap\s*\(/.test(functionSource)) {
+      factories.push(functionName);
+    }
+    declaration.lastIndex = braceEnd + 1;
+  }
+  return factories.sort();
+}
+
+function looksLikeGameMap(map) {
+  return map &&
+    map.mapSize &&
+    Number.isInteger(map.mapSize.x) &&
+    Number.isInteger(map.mapSize.y) &&
+    Array.isArray(map.players);
+}
+
+function entryForMap(map, groupName, variantIndex, defaultSuddenDeathRound, sourceType, sourceName) {
+  const nonNeutralPlayerCount = map.players.length - 1;
+  const configuredSuddenDeathRound = Number.isFinite(map.suddenDeathRound) ?
+    map.suddenDeathRound : null;
+  return {
+    groupName,
+    variantIndex,
+    name: map.testName || groupName + ' #' + (variantIndex + 1),
+    sourceType,
+    sourceName,
+    mapSize: {
+      x: map.mapSize.x,
+      y: map.mapSize.y
+    },
+    nonNeutralPlayerCount,
+    playerGroup: playerGroup(nonNeutralPlayerCount),
+    configuredSuddenDeathRound,
+    suddenDeathRound: configuredSuddenDeathRound || defaultSuddenDeathRound,
+    suddenDeathSource: configuredSuddenDeathRound ?
+      'configured' : 'runtime-default'
+  };
+}
+
 function enumerateGamestartMapCoverage() {
-  const maps = loadGamestartMaps();
+  const context = loadGamestartContext();
+  const maps = context.maps;
   const defaultSuddenDeathRound = runtimeDefaultSuddenDeathRound();
   const entries = [];
 
   for (const groupName of Object.keys(maps)) {
     const variants = maps[groupName];
     for (let variantIndex = 0; variantIndex < variants.length; ++variantIndex) {
-      const map = variants[variantIndex];
-      const nonNeutralPlayerCount = map.players.length - 1;
-      const configuredSuddenDeathRound = Number.isFinite(map.suddenDeathRound) ?
-        map.suddenDeathRound : null;
-      entries.push({
+      entries.push(entryForMap(
+        variants[variantIndex],
         groupName,
         variantIndex,
-        name: groupName + ' #' + (variantIndex + 1),
-        mapSize: {
-          x: map.mapSize.x,
-          y: map.mapSize.y
-        },
-        nonNeutralPlayerCount,
-        playerGroup: playerGroup(nonNeutralPlayerCount),
-        configuredSuddenDeathRound,
-        suddenDeathRound: configuredSuddenDeathRound || defaultSuddenDeathRound,
-        suddenDeathSource: configuredSuddenDeathRound ?
-          'configured' : 'runtime-default'
-      });
+        defaultSuddenDeathRound,
+        'maps-object',
+        'maps.' + groupName
+      ));
     }
+  }
+
+  const standaloneFactories = findNoArgMapFactories(readRepoFile(GAMESTART_PATH));
+  for (const factoryName of standaloneFactories) {
+    const map = context[factoryName]();
+    if (!looksLikeGameMap(map)) {
+      throw new Error(factoryName + ' did not return a GameMap-like object');
+    }
+    entries.push(entryForMap(
+      map,
+      map.testName || factoryName,
+      0,
+      defaultSuddenDeathRound,
+      'standalone-factory',
+      factoryName
+    ));
   }
 
   const groups = Object.keys(maps).map(groupName => {
@@ -141,12 +213,24 @@ function enumerateGamestartMapCoverage() {
       playerGroups: Array.from(new Set(groupEntries.map(entry => entry.playerGroup)))
     };
   });
+  for (const factoryName of standaloneFactories) {
+    const groupEntries = entries.filter(entry => entry.sourceName === factoryName);
+    groups.push({
+      name: groupEntries[0].groupName,
+      variantCount: groupEntries.length,
+      playerGroups: Array.from(new Set(groupEntries.map(entry => entry.playerGroup))),
+      sourceType: 'standalone-factory',
+      sourceName: factoryName
+    });
+  }
 
   return {
     source: GAMESTART_PATH,
     defaultSuddenDeathRound,
     totalMaps: entries.length,
     manualGameMapCount: manualGamestartMapCount(),
+    mapsObjectGameMapCount: mapsObjectGameMapCount(),
+    standaloneFactories,
     groups,
     maps: entries
   };
@@ -216,8 +300,10 @@ if (require.main === module) {
 
 module.exports = {
   enumerateGamestartMapCoverage,
+  findNoArgMapFactories,
   loadGamestartMaps,
   manualGamestartMapCount,
+  mapsObjectGameMapCount,
   playerGroup,
   runtimeDefaultSuddenDeathRound
 };
