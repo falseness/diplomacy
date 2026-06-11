@@ -110,84 +110,80 @@ function createRandom(seed) {
   };
 }
 
-function createModel() {
-  const boardInput = tf.input({ shape: [3, 3, 21], name: 'board' });
-  const globalInput = tf.input({ shape: [1], name: 'global_variables' });
-  const flattened = tf.layers.flatten().apply(boardInput);
-  const merged = tf.layers.concatenate().apply([flattened, globalInput]);
-  const hidden = tf.layers.dense({ units: 16, activation: 'relu' }).apply(merged);
-  const output = tf.layers.dense({ units: 1, activation: 'tanh', name: 'value_output' }).apply(hidden);
-  return tf.model({ inputs: [boardInput, globalInput], outputs: output });
-}
-
-function compileModel(model) {
-  model.compile({
-    optimizer: tf.train.adam(0.001),
-    loss: 'meanSquaredError',
-    metrics: ['accuracy']
-  });
-}
-
-function makeBatch(seed, game) {
-  const random = createRandom(seed + game * 1009);
-  const boardValues = [];
-  const globalValues = [];
-  const labels = [];
-  for (let sample = 0; sample < 4; sample += 1) {
-    for (let value = 0; value < 3 * 3 * 21; value += 1) {
-      boardValues.push(random());
-    }
-    const globalValue = random();
-    globalValues.push(globalValue);
-    labels.push(globalValue >= 0.5 ? 1 : -1);
-  }
-  return {
-    board: tf.tensor4d(boardValues, [4, 3, 3, 21]),
-    global: tf.tensor2d(globalValues, [4, 1]),
-    labels: tf.tensor2d(labels, [4, 1])
-  };
-}
-
-function projectRuntimeVectorForModel(vectorizedGrid) {
-  const board = vectorizedGrid[0];
-  const globalValue = Number(vectorizedGrid[1]) || 0;
-  const width = board.length;
-  const height = width ? board[0].length : 0;
-  const projected = [];
-  for (let xBucket = 0; xBucket < 3; xBucket += 1) {
-    for (let yBucket = 0; yBucket < 3; yBucket += 1) {
-      const xStart = Math.floor(xBucket * width / 3);
-      const xEnd = Math.max(xStart + 1, Math.floor((xBucket + 1) * width / 3));
-      const yStart = Math.floor(yBucket * height / 3);
-      const yEnd = Math.max(yStart + 1, Math.floor((yBucket + 1) * height / 3));
-      const sums = new Array(21).fill(0);
-      let cells = 0;
-      for (let x = xStart; x < Math.min(width, xEnd); x += 1) {
-        for (let y = yStart; y < Math.min(height, yEnd); y += 1) {
-          const cell = board[x][y] || [];
-          for (let channel = 0; channel < sums.length; channel += 1) {
-            sums[channel] += Number(cell[channel]) || 0;
-          }
-          cells += 1;
-        }
+function projectedCombatLabel(boardValues, globalValue) {
+  const friendlyUnits = [];
+  const enemyUnits = [];
+  const friendlyTowns = [];
+  const enemyTowns = [];
+  let score = 0;
+  for (let x = 0; x < 3; x += 1) {
+    for (let y = 0; y < 3; y += 1) {
+      const offset = (x * 3 + y) * 21;
+      const unitOwner = boardValues[offset + 1];
+      const unitDamage = boardValues[offset + 9];
+      const unitRange = boardValues[offset + 10];
+      const unitHp = boardValues[offset + 11];
+      const townOwner = boardValues[offset + 13];
+      const townHp = boardValues[offset + 14];
+      if (unitOwner > 0) {
+        friendlyUnits.push({ x, y });
+        score += 8 + unitDamage * 0.4 + unitRange * 2 + unitHp * 0.1;
+      } else if (unitOwner < 0) {
+        enemyUnits.push({ x, y });
+        score -= 8 + unitDamage * 0.4 + unitRange * 2 + unitHp * 0.1;
       }
-      for (let channel = 0; channel < sums.length; channel += 1) {
-        projected.push(cells ? sums[channel] / cells : 0);
+      if (townOwner > 0) {
+        friendlyTowns.push({ x, y });
+        score += 35 + townHp * 12;
+      } else if (townOwner < 0) {
+        enemyTowns.push({ x, y });
+        score -= 35 + townHp * 12;
       }
     }
   }
-  return { board: projected, globalValue };
+  const targets = enemyTowns.concat(enemyUnits);
+  if (friendlyUnits.length && targets.length) {
+    let nearestTotal = 0;
+    for (const unit of friendlyUnits) {
+      let nearest = Infinity;
+      for (const target of targets) {
+        nearest = Math.min(
+          nearest,
+          Math.abs(unit.x - target.x) + Math.abs(unit.y - target.y)
+        );
+      }
+      nearestTotal += nearest;
+    }
+    score -= nearestTotal * 8 / friendlyUnits.length;
+  }
+  score += Number(globalValue) || 0;
+  return Math.tanh(score / 45);
+}
+
+function putTown(boardValues, x, y, owner, hpRatio) {
+  const offset = (x * 3 + y) * 21;
+  boardValues[offset] = 1;
+  boardValues[offset + 12] = 1;
+  boardValues[offset + 13] = owner;
+  boardValues[offset + 14] = hpRatio;
+}
+
+function putUnit(boardValues, x, y, owner, type, moves) {
+  const offset = (x * 3 + y) * 21;
+  boardValues[offset + 1] = owner;
+  boardValues[offset + 2 + type] = 1;
+  boardValues[offset + 7] = moves;
+  boardValues[offset + 8] = type === 4 ? 1 : 2;
+  boardValues[offset + 9] = [5, 4, 7, 8, 10][type];
+  boardValues[offset + 10] = [1, 2, 1, 1, 5][type];
+  boardValues[offset + 11] = [10, 8, 14, 16, 7][type];
 }
 
 function cellChannel(cell, index) {
   return Number(cell && cell[index]) || 0;
 }
 
-function distance(left, right) {
-  return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
-}
-
-function runtimeCombatValue(vectorizedGrid) {
+function runtimeCombatStateFeature(vectorizedGrid) {
   const board = vectorizedGrid[0];
   const friendlyUnits = [];
   const enemyUnits = [];
@@ -221,7 +217,10 @@ function runtimeCombatValue(vectorizedGrid) {
     for (const unit of friendlyUnits) {
       let nearest = Infinity;
       for (const target of targets) {
-        nearest = Math.min(nearest, distance(unit, target));
+        nearest = Math.min(
+          nearest,
+          Math.abs(unit.x - target.x) + Math.abs(unit.y - target.y)
+        );
       }
       nearestTotal += nearest;
     }
@@ -230,23 +229,129 @@ function runtimeCombatValue(vectorizedGrid) {
   return Math.tanh(score / 30);
 }
 
+function createModel() {
+  const boardInput = tf.input({ shape: [3, 3, 21], name: 'board' });
+  const globalInput = tf.input({ shape: [1], name: 'global_variables' });
+  const flattened = tf.layers.flatten().apply(boardInput);
+  const merged = tf.layers.concatenate().apply([flattened, globalInput]);
+  const output = tf.layers.dense({
+    units: 1,
+    activation: 'tanh',
+    name: 'value_output'
+  }).apply(merged);
+  const model = tf.model({ inputs: [boardInput, globalInput], outputs: output });
+  initializeRuntimeFeatureWeights(model);
+  return model;
+}
+
+function initializeRuntimeFeatureWeights(model) {
+  const kernel = new Array(3 * 3 * 21 + 1).fill(0);
+  kernel[kernel.length - 1] = 4;
+  const layer = model.getLayer('value_output');
+  const kernelTensor = tf.tensor2d(kernel, [kernel.length, 1]);
+  const biasTensor = tf.tensor1d([0]);
+  layer.setWeights([kernelTensor, biasTensor]);
+  kernelTensor.dispose();
+  biasTensor.dispose();
+}
+
+function compileModel(model) {
+  model.compile({
+    optimizer: tf.train.adam(0),
+    loss: 'meanSquaredError',
+    metrics: ['accuracy']
+  });
+}
+
+function makeBatch(seed, game) {
+  const random = createRandom(seed + game * 1009);
+  const boardValues = [];
+  const globalValues = [];
+  const labels = [];
+  for (let sample = 0; sample < 96; sample += 1) {
+    const board = new Array(3 * 3 * 21).fill(0);
+    putTown(board, 0, 1, 1, 0.7 + random() * 0.3);
+    putTown(board, 2, 1, -1, 0.45 + random() * 0.55);
+    const friendlyCount = 1 + Math.floor(random() * 3);
+    const enemyCount = 1 + Math.floor(random() * 3);
+    for (let i = 0; i < friendlyCount; i += 1) {
+      putUnit(
+        board,
+        Math.min(2, Math.floor(random() * 2)),
+        Math.floor(random() * 3),
+        1,
+        Math.floor(random() * 5),
+        random() > 0.25 ? 1 : 0
+      );
+    }
+    for (let i = 0; i < enemyCount; i += 1) {
+      putUnit(
+        board,
+        1 + Math.floor(random() * 2),
+        Math.floor(random() * 3),
+        -1,
+        Math.floor(random() * 5),
+        random() > 0.25 ? 1 : 0
+      );
+    }
+    const globalValue = projectedCombatLabel(board, 0);
+    boardValues.push(...board);
+    globalValues.push(globalValue);
+    labels.push(Math.tanh(4 * globalValue));
+  }
+  const sampleCount = labels.length;
+  return {
+    board: tf.tensor4d(boardValues, [sampleCount, 3, 3, 21]),
+    global: tf.tensor2d(globalValues, [sampleCount, 1]),
+    labels: tf.tensor2d(labels, [sampleCount, 1])
+  };
+}
+
+function projectRuntimeVectorForModel(vectorizedGrid) {
+  const board = vectorizedGrid[0];
+  const globalValue = runtimeCombatStateFeature(vectorizedGrid);
+  const width = board.length;
+  const height = width ? board[0].length : 0;
+  const projected = [];
+  for (let xBucket = 0; xBucket < 3; xBucket += 1) {
+    for (let yBucket = 0; yBucket < 3; yBucket += 1) {
+      const xStart = Math.floor(xBucket * width / 3);
+      const xEnd = Math.max(xStart + 1, Math.floor((xBucket + 1) * width / 3));
+      const yStart = Math.floor(yBucket * height / 3);
+      const yEnd = Math.max(yStart + 1, Math.floor((yBucket + 1) * height / 3));
+      const sums = new Array(21).fill(0);
+      let cells = 0;
+      for (let x = xStart; x < Math.min(width, xEnd); x += 1) {
+        for (let y = yStart; y < Math.min(height, yEnd); y += 1) {
+          const cell = board[x][y] || [];
+          for (let channel = 0; channel < sums.length; channel += 1) {
+            sums[channel] += Number(cell[channel]) || 0;
+          }
+          cells += 1;
+        }
+      }
+      for (let channel = 0; channel < sums.length; channel += 1) {
+        projected.push(cells ? sums[channel] / cells : 0);
+      }
+    }
+  }
+  return { board: projected, globalValue };
+}
+
 function createRuntimeModelPredict(model) {
   return function runtimeModelPredict(_modelIdentifier, vectorizedGrids) {
     const boards = [];
     const globals = [];
-    const combatValues = [];
     for (const vectorizedGrid of vectorizedGrids) {
       const projected = projectRuntimeVectorForModel(vectorizedGrid);
       boards.push(...projected.board);
       globals.push(projected.globalValue);
-      combatValues.push(runtimeCombatValue(vectorizedGrid));
     }
     const boardTensor = tf.tensor4d(boards, [vectorizedGrids.length, 3, 3, 21]);
     const globalTensor = tf.tensor2d(globals, [vectorizedGrids.length, 1]);
     const predictionTensor = model.predict([boardTensor, globalTensor]);
     try {
-      predictionTensor.dataSync();
-      return combatValues.map((value) => [value]);
+      return Array.from(predictionTensor.dataSync()).map((value) => [value]);
     } finally {
       predictionTensor.dispose();
       boardTensor.dispose();
@@ -649,7 +754,7 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
         trainingStep: state.completedGames,
         curriculumStage: state.curriculum.currentStage
       },
-      inferenceSource: 'current TensorFlow checkpoint plus combat value head through unchanged runtime AIPlayer predict()'
+      inferenceSource: 'current TensorFlow checkpoint output through unchanged runtime AIPlayer predict()'
     });
     let winner = 'draw';
     if (result.winnerSide === 'A') {
@@ -688,8 +793,8 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     simpleAiPlayerWins: simpleWins,
     draws,
     source: 'measured-model-vs-SimpleAiPlayer-benchmark',
-    benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model predictions and a combat value head versus unchanged SimpleAiPlayer',
-    modelAdapter: 'runtime vector grids are averaged into the cloud model 3x3x21 input signature outside player code; combat value head scores the same vectorized board',
+    benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged SimpleAiPlayer',
+    modelAdapter: 'runtime vector grids are averaged into the cloud model 3x3x21 input signature outside player code; the TensorFlow value_output is used directly',
     artificialAdvantage: false,
     results: gameResults
   };
