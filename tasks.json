@@ -1057,7 +1057,7 @@
     "id": "TASK-053",
     "category": "test",
     "priority": "critical",
-    "description": "Add a browser smoke test for AIPlayerWithEconomy inference. The smoke should load the browser entrypoint, start a small game with AIPlayerWithEconomy, and confirm the AI can choose at least one model-backed legal action without Node-only APIs.",
+    "description": "Add a browser smoke test for AIPlayerWithEconomy inference. The smoke should load the browser entrypoint, start a small game with AIPlayerWithEconomy, and confirm the AI can choose at least one model-backed legal action without Node-only APIs. Implemented: Added a jsdom browser-entrypoint smoke that loads all local index.html scripts, selects runtime AIPlayerWithEconomy unchanged, starts a tiny GameMap, loads a browser-safe model URL, evaluates legal economy actions through model prediction, applies an action, and exposes it as npm run test-browser-ai-smoke.",
     "acceptance_criteria": [
       "The smoke uses the normal browser script loading path rather than a Node-only benchmark harness.",
       "The smoke starts a small map with at least one AIPlayerWithEconomy player.",
@@ -1072,7 +1072,7 @@
       "Step 3: Advance until AIPlayerWithEconomy evaluates and applies at least one legal action.",
       "Step 4: Confirm the smoke exits successfully and records inference evidence."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-054",
