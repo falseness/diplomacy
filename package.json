@@ -33,6 +33,7 @@
     "test-browser-ai-smoke": "node ai/test-browser-ai-smoke.js",
     "test-play-ai-combat-map": "npx -y node@20 ai/test-play-ai-combat-map.js",
     "test-play-ai-browser-turn": "npx -y node@20 ai/test-play-ai-browser-turn.js",
+    "test-play-ai-full-game": "PLAYWRIGHT_BROWSERS_PATH=0 npx -y node@20 ai/play-ai-full-game-audit.js",
     "test-play-ai-snapback": "npx -y node@20 ai/test-play-ai-snapback-reproduction.js --regression",
     "gamestart-map-coverage": "node ai/gamestart-map-coverage.js",
     "test-gamestart-map-coverage": "node ai/test-gamestart-map-coverage.js",

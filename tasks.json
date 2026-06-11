@@ -1665,5 +1665,26 @@
       "Step 4: Confirm the test passes with the TASK-081 fix."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-083",
+    "category": "test",
+    "priority": "critical",
+    "description": "Play a full Play AI game with browser automation until win/loss, screenshotting each start of turn for red and blue, then audit whether unit movement looks plausible. Implemented: Added a full Play AI browser automation audit that starts through the UI, captures red/blue turn screenshots and JSON snapshots through win/loss, and reports plausible movement observations under /mnt/storage/diplomacy/browser-play-ai.",
+    "acceptance_criteria": [
+      "The Play AI game starts through the normal browser UI.",
+      "A screenshot is saved at the start of every red and blue turn until the game reaches a win/loss end state.",
+      "Runtime position snapshots are saved beside screenshots so visual observations can be checked against actual unit coordinates.",
+      "The audit notes identify any implausible movement, snapping, skipped AI turns, repeated stale positions, or stalled game state.",
+      "Artifacts are written under /mnt/storage/diplomacy/browser-play-ai or DIPLOMACY_PLAY_AI_ARTIFACT_DIR."
+    ],
+    "test_steps": [
+      "Step 1: Start Play AI in a browser automation run.",
+      "Step 2: At each red and blue start of turn, save a screenshot and unit-position snapshot.",
+      "Step 3: Continue until the game reports win/loss.",
+      "Step 4: Review screenshots and position snapshots for plausible movement.",
+      "Step 5: Record pass/fail observations in the ticket notes."
+    ],
+    "status": "to-verify"
   }
 ]
