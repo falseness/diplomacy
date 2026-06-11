@@ -4,6 +4,7 @@ const tf = require('@tensorflow/tfjs-node');
 const { runGame } = require('./benchmarkHarness');
 
 const MODEL_VERSION = 1;
+const CURRICULUM_FINAL_STAGE_INDEX = 6;
 const MODEL_SIGNATURE = {
   inputs: [
     { name: 'board', shape: [null, 3, 3, 21] },
@@ -876,6 +877,19 @@ function curriculumLearningRateAttempt(options) {
 }
 
 function curriculumGateDecision(state, plateauState, simpleAiPlayerWinrate, learningRateAttempt, options) {
+  if (state.curriculum.currentStageIndex >= CURRICULUM_FINAL_STAGE_INDEX) {
+    return {
+      currentStageIndex: state.curriculum.currentStageIndex,
+      currentStage: state.curriculum.currentStage,
+      eligible: false,
+      decision: 'hold',
+      reason: 'final curriculum stage reached',
+      plateauEvidence: plateauState.status === 'plateau',
+      learningRateReduction: learningRateAttempt,
+      simpleAiPlayerWinrate,
+      requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
+    };
+  }
   const reasons = [];
   if (plateauState.status !== 'plateau') {
     reasons.push('old-vs-new plateau evidence is not present');
@@ -925,7 +939,8 @@ function updateCurriculumState(state, gateDecision) {
     timestamp: state.updatedAt
   };
   state.curriculum.gateHistory.push(entry);
-  if (gateDecision.eligible) {
+  if (gateDecision.eligible &&
+      state.curriculum.currentStageIndex < CURRICULUM_FINAL_STAGE_INDEX) {
     state.curriculum.currentStageIndex += 1;
     state.curriculum.currentStage = `combat-stage-${state.curriculum.currentStageIndex}`;
     entry.advancedToStage = state.curriculum.currentStage;

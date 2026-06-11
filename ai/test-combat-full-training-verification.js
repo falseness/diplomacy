@@ -87,7 +87,7 @@ function assertPassingRun() {
   assertNoComparisonShortcut();
   runTrain([
     '--run-id', PASS_RUN_ID,
-    '--games', '11',
+    '--games', '15',
     '--epochs', '1',
     '--seed', '78078',
     '--checkpoint-interval', '1',
@@ -100,7 +100,7 @@ function assertPassingRun() {
 
   const progressPath = path.join(STORAGE_DIR, 'progress', `${PASS_RUN_ID}.jsonl`);
   const progress = readJsonLines(progressPath);
-  check(progress.length === 11, 'full training should write eleven progress records');
+  check(progress.length === 15, 'full training should write fifteen progress records');
   const advances = progress.filter((record) =>
     record.nextStageEligibility && record.nextStageEligibility.decision === 'advance');
   check(advances.length === 6, 'full training should advance exactly six stage gates');
