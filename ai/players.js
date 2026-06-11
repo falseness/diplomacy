@@ -59,6 +59,18 @@ function getAiCommandLimit(fallback) {
     return fallback
 }
 
+function getCurrentGridCellCount() {
+    if (typeof grid == 'undefined' || !grid.arr ||
+            !grid.arr.length || !grid.arr[0]) {
+        return 0
+    }
+    return grid.arr.length * grid.arr[0].length
+}
+
+function isCurrentGridLargeForSimpleEconomy() {
+    return getCurrentGridCellCount() > 600
+}
+
 function getAiMoveCommands(unit) {
     if (!unit.getAvailableMoveCommands && unit.getAvailableCommands) {
         return unit.getAvailableCommands()
@@ -250,13 +262,11 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                     left.cost - right.cost
             })
         }
-        let isSmallMap = typeof grid == 'undefined' || !grid.arr ||
-            !grid.arr.length || !grid.arr[0] ||
-            grid.arr.length * grid.arr[0].length <= 600
-        let unitsPerTownCap = isSmallMap ?
+        let isLargeMap = isCurrentGridLargeForSimpleEconomy()
+        let unitsPerTownCap = !isLargeMap ?
             SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP :
             SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP
-        let maxUnitCap = isSmallMap ?
+        let maxUnitCap = !isLargeMap ?
             SIMPLE_ECONOMY_MAX_UNIT_CAP : SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP
         let unitCap = Math.max(
             AI_ECONOMY_ADVANCED_UNIT_THRESHOLD,
@@ -499,11 +509,11 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 ++usedActions
                 break
             }
-            let commandFallback = grid.arr.length * grid.arr[0].length <= 600 ?
+            let isLargeMap = isCurrentGridLargeForSimpleEconomy()
+            let commandFallback = !isLargeMap ?
                 Infinity : SIMPLE_ECONOMY_DEFAULT_COMMAND_LIMIT
             let moveCommands = getAiMoveCommands(unit).slice(
                 0, getAiCommandLimit(commandFallback))
-            let isLargeMap = grid.arr.length * grid.arr[0].length > 600
             let shouldPathDirectly = typeof gameRound != 'undefined' &&
                 gameRound >= SIMPLE_ECONOMY_STALEMATE_PATH_ROUND &&
                 (isLargeMap || this.getTownAdvantage() >= 0)
@@ -531,7 +541,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         return usedActions
     }
     playCombatActions() {
-        let actionFallback = grid.arr.length * grid.arr[0].length <= 500 ?
+        let actionFallback = getCurrentGridCellCount() <= 500 ?
             Infinity : SIMPLE_ECONOMY_DEFAULT_ACTION_LIMIT
         let remainingActions = getAiActionLimit(actionFallback)
         if (this.getLiveTownCount(this) >= AI_ECONOMY_MULTI_TOWN_THRESHOLD ||

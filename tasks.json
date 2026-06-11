@@ -1526,7 +1526,7 @@
     "id": "TASK-076",
     "category": "test",
     "priority": "critical",
-    "description": "Add curriculum regression tests proving every new mechanic waits for plateau evidence, a failed learning-rate reduction attempt, and SimpleAiPlayer winrate greater than 60 percent before advancing.",
+    "description": "Add curriculum regression tests proving every new mechanic waits for plateau evidence, a failed learning-rate reduction attempt, and SimpleAiPlayer winrate greater than 60 percent before advancing. Implemented: Extended combat curriculum regression coverage across Stage A-G boundaries, missing plateau/LR/winrate blockers, combat-only stage maps, and anti-cheat source checks.",
     "acceptance_criteria": [
       "Tests cover every transition from Stage A through Stage G.",
       "A transition with plateau evidence missing is blocked.",
@@ -1541,7 +1541,7 @@
       "Step 3: Confirm missing learning-rate evidence blocks advancement.",
       "Step 4: Confirm SimpleAiPlayer winrate at or below 60 percent blocks advancement."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-077",
