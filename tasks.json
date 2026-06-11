@@ -1345,7 +1345,7 @@
     "id": "TASK-067",
     "category": "functional",
     "priority": "critical",
-    "description": "Introduce an AlphaZero-lite combat architecture. Add a residual policy-plus-value model and training interfaces for legal combat action policy targets, value targets, replay/self-play data, and future MCTS-style search without adding economy.",
+    "description": "Introduce an AlphaZero-lite combat architecture. Add a residual policy-plus-value model and training interfaces for legal combat action policy targets, value targets, replay/self-play data, and future MCTS-style search without adding economy. Implemented: Added a combat-only AlphaZero-lite residual policy/value module, legal-action policy target and signed value training interfaces, checkpoint metadata validation, save/load helpers, and a focused smoke for synthetic training plus incompatible value-only checkpoint rejection.",
     "acceptance_criteria": [
       "The combat model has separate policy and value outputs.",
       "Policy targets are defined over legal combat actions for the current state.",
@@ -1359,7 +1359,7 @@
       "Step 3: Confirm model save/load preserves both heads and architecture metadata.",
       "Step 4: Try loading an incompatible old value-only checkpoint and confirm a clear error."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-068",
