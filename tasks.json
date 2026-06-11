@@ -1645,5 +1645,25 @@
       "Step 4: Confirm blue AI still takes an automatic visible action after red clicks Next Turn."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-082",
+    "category": "test",
+    "priority": "critical",
+    "description": "Convert the Play AI snapback reproduction into an automated regression test that fails if red unit positions revert after a full red-blue-red turn cycle. Implemented: Converted npm run test-play-ai-snapback into a Play AI browser regression that asserts red moved-unit persistence after a full red-blue-red cycle, records task082 screenshots/report JSON, verifies blue AI predictions, and includes a force-red-restore failure path.",
+    "acceptance_criteria": [
+      "The automated test starts from the normal Play AI browser UI.",
+      "The test makes a deterministic legal red move and waits for blue AI completion.",
+      "The test asserts red moved-unit coordinates after returning to red match the post-move coordinates, not the original coordinates.",
+      "The test also asserts at least one blue AI prediction or legal visible action occurred.",
+      "The test writes screenshots and position JSON under the existing Play AI artifact directory convention."
+    ],
+    "test_steps": [
+      "Step 1: Run npm run test-play-ai-browser-turn or the updated Play AI browser regression command.",
+      "Step 2: Confirm the test captures red-start, blue-start-or-blue-complete, and returned-red screenshots.",
+      "Step 3: Confirm the test fails if red coordinates are manually restored to the original position.",
+      "Step 4: Confirm the test passes with the TASK-081 fix."
+    ],
+    "status": "to-verify"
   }
 ]

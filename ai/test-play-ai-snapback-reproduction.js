@@ -21,6 +21,11 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..');
 const artifactDir = process.env.DIPLOMACY_PLAY_AI_SNAPBACK_ARTIFACT_DIR ||
   '/mnt/storage/diplomacy/browser-play-ai-snapback';
+const regressionMode = process.argv.includes('--regression') ||
+  process.env.DIPLOMACY_PLAY_AI_SNAPBACK_REGRESSION == '1';
+const forceRedRestore = process.argv.includes('--force-red-restore') ||
+  process.env.DIPLOMACY_PLAY_AI_FORCE_RED_RESTORE == '1';
+const artifactPrefix = regressionMode ? 'task082' : 'task080';
 
 function contentType(filePath) {
   const ext = path.extname(filePath);
@@ -265,6 +270,35 @@ function findMovedUnit(snapshot, redMove) {
   return snapshot.redUnits.find(unit => unit.name == redMove.unitName);
 }
 
+async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
+  return await page.evaluate(({ redMove, startMovedUnit }) => {
+    const unit = players[1].units[redMove.unitIndex];
+    const beforeRestore = {
+      x: unit.coord.x,
+      y: unit.coord.y,
+      moves: unit.moves
+    };
+    grid.setUnit(new Empty(), unit.coord);
+    unit.coord = {
+      x: startMovedUnit.x,
+      y: startMovedUnit.y
+    };
+    grid.setUnit(unit, unit.coord);
+    drawAll();
+    return {
+      forced: true,
+      unitIndex: redMove.unitIndex,
+      unitName: unit.constructor.name,
+      beforeRestore,
+      afterRestore: {
+        x: unit.coord.x,
+        y: unit.coord.y,
+        moves: unit.moves
+      }
+    };
+  }, { redMove, startMovedUnit });
+}
+
 (async function main() {
   fs.mkdirSync(artifactDir, { recursive: true });
 
@@ -285,21 +319,20 @@ function findMovedUnit(snapshot, redMove) {
     await waitForGameReady(page);
 
     await clickPlayAi(page);
-    const redStart = await captureState(page, 'red-start', 'task080-red-start.png');
+    const redStart = await captureState(page, 'red-start', `${artifactPrefix}-red-start.png`);
 
     const redMove = await applyOneLegalRedMove(page);
     check(redMove.applied, 'red human player could not make a legal move', redMove);
-    const afterRedMove = await captureState(page, 'after-red-move', 'task080-after-red-move.png');
+    const afterRedMove = await captureState(page, 'after-red-move', `${artifactPrefix}-after-red-move.png`);
 
     await clickNextTurn(page);
     await page.waitForFunction(() => {
       return whooseTurn == 2 && window.__playAiBrowserPredictionCalls > 0;
     }, null, { timeout: 15000 });
-    const blueComplete = await captureState(page, 'blue-complete', 'task080-blue-complete.png');
+    const blueComplete = await captureState(page, 'blue-complete', `${artifactPrefix}-blue-complete.png`);
 
     await clickNextTurn(page);
     await page.waitForFunction(() => whooseTurn == 1, null, { timeout: 15000 });
-    const returnedRed = await captureState(page, 'returned-red', 'task080-returned-red.png');
 
     check(redStart.modelSource == 'models/play-ai/model.json',
       'Play AI did not load the configured browser model', redStart);
@@ -314,13 +347,25 @@ function findMovedUnit(snapshot, redMove) {
     const startMovedUnit = findMovedUnit(redStart, redMove);
     const afterMovedUnit = findMovedUnit(afterRedMove, redMove);
     const blueCompleteMovedUnit = findMovedUnit(blueComplete, redMove);
-    const returnedMovedUnit = findMovedUnit(returnedRed, redMove);
-    check(startMovedUnit && afterMovedUnit && blueCompleteMovedUnit && returnedMovedUnit,
-      'moved red unit could not be tracked across the red-blue-red cycle',
-      { redMove, redStart, afterRedMove, blueComplete, returnedRed });
+    check(startMovedUnit && afterMovedUnit && blueCompleteMovedUnit,
+      'moved red unit could not be tracked before returning to red',
+      { redMove, redStart, afterRedMove, blueComplete });
 
     const movedAwayFromStart = afterMovedUnit.x != startMovedUnit.x ||
       afterMovedUnit.y != startMovedUnit.y;
+    check(movedAwayFromStart,
+      'the selected legal red move did not change the tracked red unit position',
+      { redMove, startMovedUnit, afterMovedUnit });
+
+    const forcedRestore = forceRedRestore ?
+      await forceRestoreMovedRedUnit(page, redMove, startMovedUnit) :
+      null;
+    const returnedRed = await captureState(page, 'returned-red', `${artifactPrefix}-returned-red.png`);
+    const returnedMovedUnit = findMovedUnit(returnedRed, redMove);
+    check(returnedMovedUnit,
+      'moved red unit could not be tracked after returning to red',
+      { redMove, returnedRed });
+
     const persistedAfterReturn = returnedMovedUnit.x == afterMovedUnit.x &&
       returnedMovedUnit.y == afterMovedUnit.y;
     const revertedAtBlueComplete = blueCompleteMovedUnit.x == startMovedUnit.x &&
@@ -329,13 +374,15 @@ function findMovedUnit(snapshot, redMove) {
       returnedMovedUnit.y == startMovedUnit.y;
     const snapbackDetected = movedAwayFromStart &&
       (revertedAtBlueComplete || revertedAtReturnedRed);
-    check(movedAwayFromStart,
-      'the selected legal red move did not change the tracked red unit position',
-      { redMove, startMovedUnit, afterMovedUnit });
 
     const report = {
       status: 'passed',
       url: served.url,
+      mode: regressionMode ? 'regression' : 'reproduction',
+      faultInjection: {
+        forceRedRestore,
+        forcedRestore
+      },
       result: snapbackDetected ? 'snapback-detected' : 'red-position-persisted',
       snapbackDetected,
       redMove,
@@ -362,9 +409,20 @@ function findMovedUnit(snapshot, redMove) {
         returnedRed
       }
     };
-    const reportPath = path.join(artifactDir, 'task080-snapback-report.json');
+    if (regressionMode) {
+      report.status = persistedAfterReturn && !snapbackDetected ? 'passed' : 'failed';
+    }
+    const reportPath = path.join(artifactDir, `${artifactPrefix}-snapback-report.json`);
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
     report.report = reportPath;
+    if (regressionMode) {
+      check(persistedAfterReturn,
+        'Play AI snapback regression failed: red moved unit reverted before returning to red',
+        report);
+      check(!snapbackDetected,
+        'Play AI snapback regression failed: snapback was detected in the red-blue-red cycle',
+        report);
+    }
     console.log(JSON.stringify(report, null, 2));
   } catch (error) {
     console.error(error.stack || error.message);
