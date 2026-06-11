@@ -1506,7 +1506,7 @@
     "id": "TASK-075",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage G map generation: introduce some Archer units only after the Stage F plateau gate passes.",
+    "description": "Add combat curriculum Stage G map generation: introduce some Archer units only after the Stage F plateau gate passes. Implemented: Added gated Stage G combat map generation with persisted Stage F gate checks, deterministic Noob/Normchel/KOHb/Archer fixed-seed maps, Archer unlock metrics, range/line-of-sight action enumeration metadata, and focused npm smoke coverage.",
     "acceptance_criteria": [
       "Stage G is unavailable until the curriculum controller records a passed Stage F gate.",
       "Stage G maps include at least one Archer in some generated seeds.",
@@ -1520,7 +1520,7 @@
       "Step 3: Confirm some maps include Archer plus previously unlocked unit types.",
       "Step 4: Confirm Archer legal actions appear in combat action enumeration."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-076",

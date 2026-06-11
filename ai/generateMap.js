@@ -948,6 +948,31 @@ function requireStageEGateForStageF(options) {
     }
 }
 
+function stageFGatePassed(curriculum) {
+    if (!curriculum) {
+        return false
+    }
+    if (curriculum.currentStageIndex >= 6) {
+        return true
+    }
+    let history = curriculum.gateHistory || []
+    for (let i = 0; i < history.length; ++i) {
+        if (history[i].advancedToStageIndex >= 6 ||
+                history[i].advancedToStage == 'combat-stage-6' ||
+                history[i].advancedToStage == 'combat-stage-G') {
+            return true
+        }
+    }
+    return false
+}
+
+function requireStageFGateForStageG(options) {
+    if (!stageFGatePassed(options.curriculum)) {
+        throw new Error(
+            'Combat Stage G is unavailable until the Stage F gate has passed')
+    }
+}
+
 function stageEUnitsFromCoords(coords, useNormchel) {
     let units = []
     for (let i = 0; i < coords.length; ++i) {
@@ -964,6 +989,22 @@ function stageFUnitsFromCoords(coords, useKOHb, useNormchel) {
         if (useKOHb && i == 0) {
             unitType = KOHb
         } else if (useNormchel && i == 1) {
+            unitType = Normchel
+        }
+        units.push({type: unitType, x: coords[i].x, y: coords[i].y})
+    }
+    return units
+}
+
+function stageGUnitsFromCoords(coords, useArcher, useKOHb, useNormchel) {
+    let units = []
+    for (let i = 0; i < coords.length; ++i) {
+        let unitType = Noob
+        if (useArcher && i == 0) {
+            unitType = Archer
+        } else if (useKOHb && i == 1) {
+            unitType = KOHb
+        } else if (useNormchel && i == 2) {
             unitType = Normchel
         }
         units.push({type: unitType, x: coords[i].x, y: coords[i].y})
@@ -1186,6 +1227,115 @@ function generateCombatStageFTrainingMap(options) {
         unlockedUnitType: 'KOHb',
         previouslyUnlockedUnitTypes: ['Noob', 'Normchel'],
         blockedUnitTypes: ['Archer']
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 0,
+        productionActions: 0,
+        resources: 0
+    }
+    return map
+}
+
+function generateCombatStageGTrainingMap(options) {
+    options = options || {}
+    requireStageFGateForStageG(options)
+    let progress = clampCombatProgress(
+        options.progress === undefined ? 0 : options.progress)
+    let rng = createSeededRandom(options.seed || 1)
+    let bound = Math.min(9, Math.max(5, options.bound || 9))
+    let mapSize = {x: bound, y: bound}
+    let counts = stageDNoobCounts(progress, rng)
+    let playerOneOnRight = rng() >= 0.5
+    let playerOneCoords = stageDUnitCoords(
+        mapSize, playerOneOnRight, counts.playerOne, rng)
+    let playerTwoCoords = stageDUnitCoords(
+        mapSize, !playerOneOnRight, counts.playerTwo, rng)
+    let archerPlayer = rng() >= 0.5 ? 1 : 2
+    let KOHbPlayer = archerPlayer == 1 ? 2 : 1
+    let normchelPlayer = rng() >= 0.5 ? 1 : 2
+    let includeArcher = progress >= 0.25 || rng() >= 0.5
+    let includeKOHb = progress >= 0.4 || rng() >= 0.5
+    let includeNormchel = progress >= 0.6 || rng() >= 0.5
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            towns: [],
+            ai: true,
+            units: stageGUnitsFromCoords(
+                playerOneCoords,
+                includeArcher && archerPlayer == 1,
+                includeKOHb && KOHbPlayer == 1,
+                includeNormchel && normchelPlayer == 1)
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            towns: [],
+            ai: true,
+            units: stageGUnitsFromCoords(
+                playerTwoCoords,
+                includeArcher && archerPlayer == 2,
+                includeKOHb && KOHbPlayer == 2,
+                includeNormchel && normchelPlayer == 2)
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.suddenDeathRound = 10
+    map.combatStage = 'G'
+    map.combatStageProgress = progress
+    map.combatOnly = true
+    map.playerNoobCounts = {
+        playerOne: generatedPlayers[1].units.filter(function(unit) {
+            return unit.type == Noob
+        }).length,
+        playerTwo: generatedPlayers[2].units.filter(function(unit) {
+            return unit.type == Noob
+        }).length
+    }
+    map.playerNormchelCounts = {
+        playerOne: generatedPlayers[1].units.filter(function(unit) {
+            return unit.type == Normchel
+        }).length,
+        playerTwo: generatedPlayers[2].units.filter(function(unit) {
+            return unit.type == Normchel
+        }).length
+    }
+    map.playerKOHbCounts = {
+        playerOne: generatedPlayers[1].units.filter(function(unit) {
+            return unit.type == KOHb
+        }).length,
+        playerTwo: generatedPlayers[2].units.filter(function(unit) {
+            return unit.type == KOHb
+        }).length
+    }
+    map.playerArcherCounts = {
+        playerOne: generatedPlayers[1].units.filter(function(unit) {
+            return unit.type == Archer
+        }).length,
+        playerTwo: generatedPlayers[2].units.filter(function(unit) {
+            return unit.type == Archer
+        }).length
+    }
+    map.combatMetrics = {
+        newlyUnlockedMechanic: 'Archer',
+        unlockedUnitType: 'Archer',
+        previouslyUnlockedUnitTypes: ['Noob', 'Normchel', 'KOHb'],
+        actionEnumerationMechanics: [
+            'Archer range attacks',
+            'Archer line-of-sight checks'
+        ],
+        archerRange: 2
     }
     map.economyObjects = {
         farms: 0,
