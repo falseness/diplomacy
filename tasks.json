@@ -1160,7 +1160,7 @@
     "id": "TASK-058",
     "category": "functional",
     "priority": "critical",
-    "description": "Audit AIPlayerWithEconomy assumptions that only support two players. Check vectorization, model input interpretation, target selection, action scoring, benchmark harnesses, and generated training maps for hard-coded opponent or player-count assumptions.",
+    "description": "Audit AIPlayerWithEconomy assumptions that only support two players. Check vectorization, model input interpretation, target selection, action scoring, benchmark harnesses, and generated training maps for hard-coded opponent or player-count assumptions. Implemented: Audited AIPlayerWithEconomy multi-player assumptions; runtime target/action enumeration already scans all non-neutral opponents and a real 3-player open field #2 probe produced 12 commands targeting owners 2 and 3, while required fixes remain in two-player-only training/self-play scoring loops and 1v1-only benchmark harnesses; vector features are candidate-relative but collapse multiple opponents into strongest-opponent aggregates, which is a TASK-059 compatibility/retraining concern, and TASK-060 must add generated 2/3/4-player training maps plus metrics.",
     "acceptance_criteria": [
       "The audit identifies every AIPlayerWithEconomy path that assumes exactly one opponent.",
       "The audit identifies every vectorization or model feature that uses player 1 versus player 2 instead of candidate-relative perspective.",
@@ -1175,7 +1175,7 @@
       "Step 3: Record every crash, ignored opponent, or incorrect perspective issue.",
       "Step 4: Convert findings into the implementation checklist for TASK-059 and TASK-060."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-059",
