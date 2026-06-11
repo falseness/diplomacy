@@ -1264,7 +1264,7 @@
     "id": "TASK-063",
     "category": "test",
     "priority": "critical",
-    "description": "Add and run the all-gamestart benchmark for AIPlayerWithEconomy versus SimpleAiPlayerWithEconomy opponents. For each gamestart map, run one AIPlayerWithEconomy candidate against SimpleAiPlayerWithEconomy in every other non-neutral slot, using two deterministic side or slot seeds per map setup. AIPlayerWithEconomy must win with a 100 percent win rate; failures should route to retraining on generated maps and rerun.",
+    "description": "Add and run the all-gamestart benchmark for AIPlayerWithEconomy versus SimpleAiPlayerWithEconomy opponents. For each gamestart map, run one AIPlayerWithEconomy candidate against SimpleAiPlayerWithEconomy in every other non-neutral slot, using two deterministic side or slot seeds per map setup. AIPlayerWithEconomy must win with a 100 percent win rate; failures should route to retraining on generated maps and rerun. Implemented: Added a real-runtime all-gamestart all-slot benchmark harness and smoke, covering all TASK-054 maps with one AIPlayerWithEconomy candidate against SimpleAiPlayerWithEconomy opponents in every non-neutral slot; full selected-checkpoint and generated-map-retrained reruns both covered 84 scenarios with exact runtime classes and routed failures through generated-map retraining, but rerun evidence still shows 66/84 candidate wins with 18 non-wins for verification review.",
     "acceptance_criteria": [
       "The benchmark covers every map variant from options/gamestart.js.",
       "For each run, exactly one non-neutral slot is AIPlayerWithEconomy and all other non-neutral slots are SimpleAiPlayerWithEconomy.",
@@ -1279,6 +1279,6 @@
       "Step 3: Inspect the report for losses, draws, crashes, timeouts, and sudden-death non-results.",
       "Step 4: If any non-win occurs, run TASK-061 retraining on generated maps and rerun this benchmark with the selected checkpoint."
     ],
-    "status": "pending"
+    "status": "to-verify"
   }
 ]
