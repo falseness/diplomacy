@@ -1078,7 +1078,7 @@
     "id": "TASK-054",
     "category": "test",
     "priority": "normal",
-    "description": "Enumerate every map variant in options/gamestart.js for benchmark coverage. Record map group name, variant index, map size, non-neutral player count, configured suddenDeathRound, and whether the map is 1v1, 3-player, or 4-player.",
+    "description": "Enumerate every map variant in options/gamestart.js for benchmark coverage. Record map group name, variant index, map size, non-neutral player count, configured suddenDeathRound, and whether the map is 1v1, 3-player, or 4-player. Implemented: Added a reusable gamestart map coverage enumerator and test that load options/gamestart.js in a headless runtime context, save structured metadata for all 18 maps, classify 1v1/3-player/4-player variants, record sudden-death defaults, and cross-check the count against source inspection.",
     "acceptance_criteria": [
       "Every GameMap instance in options/gamestart.js is discovered deterministically.",
       "The coverage metadata includes map name, variant index, map size, and non-neutral player count.",
@@ -1093,7 +1093,7 @@
       "Step 3: Print or save structured coverage metadata.",
       "Step 4: Confirm the count matches a manual inspection of gamestart.js."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-055",

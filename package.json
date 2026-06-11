@@ -16,6 +16,8 @@
     "test-ai-boundary": "node ai/test-runtime-boundary.js",
     "test-browser-inference": "node ai/test-browser-inference-wiring.js",
     "test-browser-ai-smoke": "node ai/test-browser-ai-smoke.js",
+    "gamestart-map-coverage": "node ai/gamestart-map-coverage.js",
+    "test-gamestart-map-coverage": "node ai/test-gamestart-map-coverage.js",
     "test-building-vectorization": "node ai/test-building-vectorization.js",
     "test-building-map-generation": "node ai/test-building-map-generation.js",
     "test-farm-vectorization": "node ai/test-farm-vectorization.js",
