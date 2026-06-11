@@ -95,8 +95,25 @@ function assertPassingRun() {
       `stage gate ${index} did not evaluate SimpleAiPlayer winrate`);
     check(record.simpleAiPlayerWinrate.source === 'measured-model-vs-SimpleAiPlayer-benchmark',
       `stage gate ${index} used non-measured SimpleAiPlayer evidence`);
+    check(record.simpleAiPlayerWinrate.benchmarkPolicy.includes('real GameMap runtime'),
+      `stage gate ${index} did not use a real runtime benchmark`);
+    check(!record.simpleAiPlayerWinrate.benchmarkPolicy.includes('loss compared') &&
+        !record.simpleAiPlayerWinrate.benchmarkPolicy.includes('no-model combat baseline'),
+      `stage gate ${index} used loss-comparison heuristic evidence`);
+    check(record.simpleAiPlayerWinrate.artificialAdvantage === false,
+      `stage gate ${index} reported an artificial benchmark advantage`);
     check(record.simpleAiPlayerWinrate.modelWins > record.simpleAiPlayerWinrate.simpleAiPlayerWins,
       `stage gate ${index} did not beat SimpleAiPlayer in measured games`);
+    record.simpleAiPlayerWinrate.results.forEach((gameResult) => {
+      check(gameResult.runtimePlayerA === 'AIPlayer',
+        `stage gate ${index} model side did not use unchanged AIPlayer`);
+      check(gameResult.runtimePlayerB === 'SimpleAiPlayer',
+        `stage gate ${index} baseline side did not use unchanged SimpleAiPlayer`);
+      check(gameResult.inference &&
+          gameResult.inference.source.includes('current TensorFlow checkpoint') &&
+          gameResult.inference.calls > 0,
+        `stage gate ${index} did not use TensorFlow checkpoint inference`);
+    });
     check(record.simpleAiPlayerWinrate.value > 0.6,
       `stage gate ${index} advanced without greater-than-60-percent winrate`);
     check(record.simpleAiPlayerWinrate.value >
@@ -160,6 +177,9 @@ function assertFailingRun() {
   check(finalRecord.simpleAiPlayerWinrate.evaluated === true &&
       finalRecord.simpleAiPlayerWinrate.source === 'measured-model-vs-SimpleAiPlayer-benchmark',
   'failed-gate run did not record measured SimpleAiPlayer winrate evidence');
+  check(finalRecord.simpleAiPlayerWinrate.benchmarkPolicy.includes('real GameMap runtime') &&
+      !finalRecord.simpleAiPlayerWinrate.benchmarkPolicy.includes('no-model combat baseline'),
+  'failed-gate run used heuristic SimpleAiPlayer evidence');
   check(finalRecord.simpleAiPlayerWinrate.value <= 1,
     'failed-gate run should have a bounded measured winrate');
   check(finalRecord.nextStageEligibility.decision === 'hold' &&

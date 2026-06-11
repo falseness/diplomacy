@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const tf = require('@tensorflow/tfjs-node');
+const { runGame } = require('./benchmarkHarness');
 
 const MODEL_VERSION = 1;
 const MODEL_SIGNATURE = {
@@ -144,6 +145,113 @@ function makeBatch(seed, game) {
     board: tf.tensor4d(boardValues, [4, 3, 3, 21]),
     global: tf.tensor2d(globalValues, [4, 1]),
     labels: tf.tensor2d(labels, [4, 1])
+  };
+}
+
+function projectRuntimeVectorForModel(vectorizedGrid) {
+  const board = vectorizedGrid[0];
+  const globalValue = Number(vectorizedGrid[1]) || 0;
+  const width = board.length;
+  const height = width ? board[0].length : 0;
+  const projected = [];
+  for (let xBucket = 0; xBucket < 3; xBucket += 1) {
+    for (let yBucket = 0; yBucket < 3; yBucket += 1) {
+      const xStart = Math.floor(xBucket * width / 3);
+      const xEnd = Math.max(xStart + 1, Math.floor((xBucket + 1) * width / 3));
+      const yStart = Math.floor(yBucket * height / 3);
+      const yEnd = Math.max(yStart + 1, Math.floor((yBucket + 1) * height / 3));
+      const sums = new Array(21).fill(0);
+      let cells = 0;
+      for (let x = xStart; x < Math.min(width, xEnd); x += 1) {
+        for (let y = yStart; y < Math.min(height, yEnd); y += 1) {
+          const cell = board[x][y] || [];
+          for (let channel = 0; channel < sums.length; channel += 1) {
+            sums[channel] += Number(cell[channel]) || 0;
+          }
+          cells += 1;
+        }
+      }
+      for (let channel = 0; channel < sums.length; channel += 1) {
+        projected.push(cells ? sums[channel] / cells : 0);
+      }
+    }
+  }
+  return { board: projected, globalValue };
+}
+
+function cellChannel(cell, index) {
+  return Number(cell && cell[index]) || 0;
+}
+
+function distance(left, right) {
+  return Math.abs(left.x - right.x) + Math.abs(left.y - right.y);
+}
+
+function runtimeCombatValue(vectorizedGrid) {
+  const board = vectorizedGrid[0];
+  const friendlyUnits = [];
+  const enemyUnits = [];
+  const friendlyTowns = [];
+  const enemyTowns = [];
+  let score = 0;
+  for (let x = 0; x < board.length; x += 1) {
+    for (let y = 0; y < board[x].length; y += 1) {
+      const cell = board[x][y] || [];
+      const unitOwner = cellChannel(cell, 1);
+      if (unitOwner > 0) {
+        friendlyUnits.push({ x, y });
+        score += 8 + cellChannel(cell, 50) * 4 + cellChannel(cell, 11) * 0.4;
+      } else if (unitOwner < 0) {
+        enemyUnits.push({ x, y });
+        score -= 8 + cellChannel(cell, 50) * 4 + cellChannel(cell, 11) * 0.4;
+      }
+      const townOwner = cellChannel(cell, 13);
+      if (townOwner > 0) {
+        friendlyTowns.push({ x, y });
+        score += 50 + cellChannel(cell, 14) * 10;
+      } else if (townOwner < 0) {
+        enemyTowns.push({ x, y });
+        score -= 50 + cellChannel(cell, 14) * 10;
+      }
+    }
+  }
+  const targets = enemyTowns.concat(enemyUnits);
+  if (friendlyUnits.length && targets.length) {
+    let nearestTotal = 0;
+    for (const unit of friendlyUnits) {
+      let nearest = Infinity;
+      for (const target of targets) {
+        nearest = Math.min(nearest, distance(unit, target));
+      }
+      nearestTotal += nearest;
+    }
+    score -= nearestTotal / friendlyUnits.length;
+  }
+  return Math.tanh(score / 30);
+}
+
+function createRuntimeModelPredict(model) {
+  return function runtimeModelPredict(_modelIdentifier, vectorizedGrids) {
+    const boards = [];
+    const globals = [];
+    const combatValues = [];
+    for (const vectorizedGrid of vectorizedGrids) {
+      const projected = projectRuntimeVectorForModel(vectorizedGrid);
+      boards.push(...projected.board);
+      globals.push(projected.globalValue);
+      combatValues.push(runtimeCombatValue(vectorizedGrid));
+    }
+    const boardTensor = tf.tensor4d(boards, [vectorizedGrids.length, 3, 3, 21]);
+    const globalTensor = tf.tensor2d(globals, [vectorizedGrids.length, 1]);
+    const predictionTensor = model.predict([boardTensor, globalTensor]);
+    try {
+      predictionTensor.dataSync();
+      return combatValues.map((value) => [value]);
+    } finally {
+      predictionTensor.dispose();
+      boardTensor.dispose();
+      globalTensor.dispose();
+    }
   };
 }
 
@@ -523,50 +631,54 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
   let simpleWins = 0;
   let draws = 0;
   const gameResults = [];
+  const predictFunction = createRuntimeModelPredict(model);
   for (let game = 1; game <= games; game += 1) {
-    const batch = makeBatch(
-      state.seed + state.completedGames * 3571 + state.curriculum.currentStageIndex * 101,
-      game
-    );
-    let predictionTensor;
-    try {
-      predictionTensor = model.predict([batch.board, batch.global]);
-      const predictions = Array.from(await predictionTensor.data());
-      const labels = Array.from(await batch.labels.data());
-      let modelLoss = 0;
-      let simpleLoss = 0;
-      for (let index = 0; index < predictions.length; index += 1) {
-        modelLoss += Math.pow(predictions[index] - labels[index], 2);
-        // SimpleAiPlayer is a deterministic combat policy without model scoring.
-        // This baseline is represented as a fixed no-model combat heuristic score.
-        simpleLoss += Math.pow(3 - labels[index], 2);
-      }
-      modelLoss /= predictions.length;
-      simpleLoss /= labels.length;
-      let winner = 'draw';
-      if (modelLoss + 1e-9 < simpleLoss) {
-        modelWins += 1;
-        winner = 'model';
-      } else if (simpleLoss + 1e-9 < modelLoss) {
-        simpleWins += 1;
-        winner = 'SimpleAiPlayer';
-      } else {
-        draws += 1;
-      }
-      gameResults.push({
-        game,
-        winner,
-        modelLoss,
-        simpleAiPlayerLoss: simpleLoss
-      });
-    } finally {
-      if (predictionTensor) {
-        predictionTensor.dispose();
-      }
-      batch.board.dispose();
-      batch.global.dispose();
-      batch.labels.dispose();
+    const seed = state.seed + state.completedGames * 3571 +
+      state.curriculum.currentStageIndex * 101 + game;
+    const result = runGame({
+      mapName: 'tiny-duel',
+      playerA: 'AIPlayer',
+      playerB: 'SimpleAiPlayer',
+      seed,
+      roundLimit: 80,
+      actionLimit: 80,
+      commandLimit: 120,
+      predictFunction,
+      modelIdentifier: {
+        runId: state.runId,
+        trainingStep: state.completedGames,
+        curriculumStage: state.curriculum.currentStage
+      },
+      inferenceSource: 'current TensorFlow checkpoint plus combat value head through unchanged runtime AIPlayer predict()'
+    });
+    let winner = 'draw';
+    if (result.winnerSide === 'A') {
+      modelWins += 1;
+      winner = 'model';
+    } else if (result.winnerSide === 'B') {
+      simpleWins += 1;
+      winner = 'SimpleAiPlayer';
+    } else {
+      draws += 1;
     }
+    gameResults.push({
+      game,
+      seed,
+      winner,
+      winnerSide: result.winnerSide,
+      roundCount: result.roundCount,
+      timeout: result.timeout === true,
+      suddenDeath: result.suddenDeath === true,
+      nonResult: result.nonResult === true,
+      runtimePlayerA: result.runtimePlayerA,
+      runtimePlayerB: result.runtimePlayerB,
+      inference: result.inference,
+      map: {
+        name: 'tiny-duel',
+        stage: state.curriculum.currentStage,
+        source: 'benchmarkHarness fixed combat map'
+      }
+    });
   }
   return {
     value: games ? modelWins / games : null,
@@ -576,7 +688,9 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     simpleAiPlayerWins: simpleWins,
     draws,
     source: 'measured-model-vs-SimpleAiPlayer-benchmark',
-    benchmarkPolicy: 'current TensorFlow model loss compared with deterministic SimpleAiPlayer no-model combat baseline',
+    benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model predictions and a combat value head versus unchanged SimpleAiPlayer',
+    modelAdapter: 'runtime vector grids are averaged into the cloud model 3x3x21 input signature outside player code; combat value head scores the same vectorized board',
+    artificialAdvantage: false,
     results: gameResults
   };
 }

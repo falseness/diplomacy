@@ -242,7 +242,8 @@ function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-function loadBrowserScripts(context) {
+function loadBrowserScripts(context, options) {
+  options = options || {};
   const html = readRepoFile('index.html');
   const scriptPattern = /<script[^>]+src=['"]([^'"]+)['"]/g;
   let match;
@@ -252,6 +253,17 @@ function loadBrowserScripts(context) {
       continue;
     }
     new vm.Script(readRepoFile(source), { filename: source }).runInContext(context);
+  }
+  if (typeof options.predictFunction === 'function') {
+    context.ai_model = options.modelIdentifier || { benchmarkInjectedModel: true };
+    context.predict = function(model, xValidateArr) {
+      context.__benchmarkInferenceCalls += 1;
+      context.__benchmarkInferencePositions += xValidateArr.length;
+      return options.predictFunction(model, xValidateArr);
+    };
+    context.__benchmarkInferenceSource =
+      options.inferenceSource || 'injected benchmark model';
+    return;
   }
   new vm.Script(`
     ai_model = { benchmarkSmokeModel: true }
@@ -270,6 +282,7 @@ function loadBrowserScripts(context) {
         return [score]
       })
     }
+    __benchmarkInferenceSource = 'benchmark smoke model for runtime AIPlayer decisions'
   `, { filename: 'benchmark-smoke-model.js' }).runInContext(context);
 }
 
@@ -371,7 +384,7 @@ function runtimeMapScript(mapName, map, options) {
     seed: ${Number(options.seed)},
     benchmarkPolicy: 'real GameMap runtime with requested player classes',
     inference: {
-      source: 'benchmark smoke model for runtime AIPlayer decisions',
+      source: __benchmarkInferenceSource,
       calls: __benchmarkInferenceCalls,
       positions: __benchmarkInferencePositions
     },
@@ -406,7 +419,7 @@ function runGame(options) {
   validatePlayerClass(options.playerB);
 
   const context = createRuntimeContext(options.seed);
-  loadBrowserScripts(context);
+  loadBrowserScripts(context, options);
   return new vm.Script(
     runtimeMapScript(mapName, clone(map), options),
     { filename: 'benchmark-runtime-game.js' }
