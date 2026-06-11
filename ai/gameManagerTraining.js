@@ -42,7 +42,7 @@ GameManager.startTrain = function() {
 GameManager.startAI = async function() {
     ai_model = await loadModel()
     isFogOfWar = false
-    let map = generateTinyMap()
+    let map = generateBrowserPlayAiCombatMap()
     map.start(this, false)
     gameSettings.withAI = true
     this.initValues()

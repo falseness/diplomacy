@@ -1547,7 +1547,7 @@
     "id": "TASK-077",
     "category": "functional",
     "priority": "normal",
-    "description": "Modify browser play AI mode so manual play starts a 9x9 combat map with all unit types and a learned AI opponent, without adding economy mechanics.",
+    "description": "Modify browser play AI mode so manual play starts a 9x9 combat map with all unit types and a learned AI opponent, without adding economy mechanics. Implemented: Routed main-menu play AI to a 9x9 combat-only manual playtest map with human Player versus learned AIPlayer, all combat unit types including Catapult, no economy objects, and a headless browser-flow smoke.",
     "acceptance_criteria": [
       "The browser main-menu play AI action starts a 9x9 map intended for manual playtesting.",
       "The map includes Noob, Normchel, KOHb, and Archer units, plus any already-supported combat-only unit type if required by existing all-unit helpers.",
@@ -1561,6 +1561,6 @@
       "Step 3: Confirm all required combat unit types are present.",
       "Step 4: Confirm the opponent is the learned AI player and no economy objects are present."
     ],
-    "status": "pending"
+    "status": "to-verify"
   }
 ]

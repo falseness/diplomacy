@@ -26,7 +26,7 @@ function start(_slot) {
 function startAI(_slot) {
     gameSlot = _slot
 
-    GameManager.startTrain()
+    return GameManager.startAI()
 }
 function load(_slot) {
     gameSlot = _slot

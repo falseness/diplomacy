@@ -1391,6 +1391,66 @@ function generateTinyMapAllUnits() {
         [])
 }
 
+function generateBrowserPlayAiCombatMap() {
+    let mapSize = {x: 9, y: 9}
+    let unitTypes = [Noob, Normchel, KOHb, Archer, Catapult]
+    let humanUnits = []
+    let aiUnits = []
+
+    for (let i = 0; i < unitTypes.length; ++i) {
+        humanUnits.push({
+            type: unitTypes[i],
+            x: 2 + i,
+            y: 1
+        })
+        aiUnits.push({
+            type: unitTypes[i],
+            x: 2 + i,
+            y: mapSize.y - 2
+        })
+    }
+
+    let map = new GameMap(
+        mapSize,
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                towns: [],
+                units: humanUnits
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'AIPlayer',
+                towns: [],
+                units: aiUnits
+            }
+        ],
+        [],
+        [],
+        [])
+    map.playAiMode = 'browser-combat-playtest'
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 0,
+        productionActions: 0,
+        resources: 0
+    }
+    map.requiredCombatUnitTypes = [
+        'Noob',
+        'Normchel',
+        'KOHb',
+        'Archer',
+        'Catapult'
+    ]
+    return map
+}
+
 function generateTinyMap() {
 
     let mapSize = {x: randomInt(3, 5), y: randomInt(3, 5)}

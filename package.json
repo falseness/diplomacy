@@ -30,6 +30,7 @@
     "test-ai-boundary": "node ai/test-runtime-boundary.js",
     "test-browser-inference": "node ai/test-browser-inference-wiring.js",
     "test-browser-ai-smoke": "node ai/test-browser-ai-smoke.js",
+    "test-play-ai-combat-map": "npx -y node@20 ai/test-play-ai-combat-map.js",
     "gamestart-map-coverage": "node ai/gamestart-map-coverage.js",
     "test-gamestart-map-coverage": "node ai/test-gamestart-map-coverage.js",
     "gamestart-simple-economy-completion": "node ai/gamestart-simple-economy-completion.js",
