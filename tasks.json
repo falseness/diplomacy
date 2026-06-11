@@ -1625,5 +1625,25 @@
       "Step 5: Click Next Turn back to red and confirm whether red unit positions persisted."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-081",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Fix the Play AI turn persistence bug where red units can return to old positions after blue AI moves and the player presses Next Turn again. Implemented: Cleared prior-turn undo history before the next player starts so Play AI blue inference cannot undo the red human move, while preserving the existing saveManager.save turn save path.",
+    "acceptance_criteria": [
+      "Red human moves remain applied after blue AI completes its turn.",
+      "Pressing Next Turn back to red does not restore stale red unit coordinates.",
+      "The fix preserves blue AI automatic movement in Play AI mode.",
+      "The fix does not disable saveManager.save or remove existing turn save behavior unless replaced with an equivalent correct persistence path.",
+      "The fix is limited to turn/state persistence logic needed for this bug."
+    ],
+    "test_steps": [
+      "Step 1: Re-run the reproduction from TASK-080 before the fix and confirm it fails.",
+      "Step 2: Apply the smallest turn/state persistence fix.",
+      "Step 3: Re-run the reproduction and confirm red positions persist after returning to red turn.",
+      "Step 4: Confirm blue AI still takes an automatic visible action after red clicks Next Turn."
+    ],
+    "status": "to-verify"
   }
 ]

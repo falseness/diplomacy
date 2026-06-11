@@ -53,6 +53,7 @@ function offlineNextTurn() {
     timer.pauseAndSaveTime()
 
     whooseTurn = (whooseTurn + 1) % players.length
+    actionManager.clear()
 
     externalNextTurn() 
     natureNextTurn()
