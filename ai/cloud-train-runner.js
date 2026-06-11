@@ -113,37 +113,46 @@ function createRandom(seed) {
 function projectedCombatLabel(boardValues, globalValue) {
   const friendlyUnits = [];
   const enemyUnits = [];
-  const friendlyTowns = [];
-  const enemyTowns = [];
+  const targets = [];
   let score = 0;
   for (let x = 0; x < 3; x += 1) {
     for (let y = 0; y < 3; y += 1) {
       const offset = (x * 3 + y) * 21;
-      const unitOwner = boardValues[offset + 1];
-      const unitDamage = boardValues[offset + 9];
-      const unitRange = boardValues[offset + 10];
-      const unitHp = boardValues[offset + 11];
-      const townOwner = boardValues[offset + 13];
-      const townHp = boardValues[offset + 14];
-      if (unitOwner > 0) {
-        friendlyUnits.push({ x, y });
-        score += 8 + unitDamage * 0.4 + unitRange * 2 + unitHp * 0.1;
-      } else if (unitOwner < 0) {
-        enemyUnits.push({ x, y });
-        score -= 8 + unitDamage * 0.4 + unitRange * 2 + unitHp * 0.1;
+      const friendlyUnitCount = boardValues[offset];
+      const enemyUnitCount = boardValues[offset + 1];
+      const friendlyUnitHp = boardValues[offset + 2];
+      const enemyUnitHp = boardValues[offset + 3];
+      const friendlyDamage = boardValues[offset + 4];
+      const enemyDamage = boardValues[offset + 5];
+      const friendlyRange = boardValues[offset + 6];
+      const enemyRange = boardValues[offset + 7];
+      const friendlyTownCount = boardValues[offset + 8];
+      const enemyTownCount = boardValues[offset + 9];
+      const friendlyTownHp = boardValues[offset + 10];
+      const enemyTownHp = boardValues[offset + 11];
+      const friendlyMoves = boardValues[offset + 12];
+      const enemyMoves = boardValues[offset + 13];
+      if (friendlyUnitCount > 0) {
+        friendlyUnits.push({ x, y, count: friendlyUnitCount });
       }
-      if (townOwner > 0) {
-        friendlyTowns.push({ x, y });
-        score += 35 + townHp * 12;
-      } else if (townOwner < 0) {
-        enemyTowns.push({ x, y });
-        score -= 35 + townHp * 12;
+      if (enemyUnitCount > 0) {
+        enemyUnits.push({ x, y, count: enemyUnitCount });
+        targets.push({ x, y, kind: 'unit', count: enemyUnitCount });
       }
+      if (enemyTownCount > 0) {
+        targets.push({ x, y, kind: 'town', count: enemyTownCount });
+      }
+      score += friendlyUnitCount * 8 + friendlyUnitHp * 0.12 +
+        friendlyDamage * 0.6 + friendlyRange * 2 + friendlyMoves * 0.2;
+      score -= enemyUnitCount * 8 + enemyUnitHp * 0.12 +
+        enemyDamage * 0.6 + enemyRange * 2 + enemyMoves * 0.2;
+      score += friendlyTownCount * 45 + friendlyTownHp * 16;
+      score -= enemyTownCount * 45 + enemyTownHp * 16;
     }
   }
-  const targets = enemyTowns.concat(enemyUnits);
   if (friendlyUnits.length && targets.length) {
     let nearestTotal = 0;
+    let unitTotal = 0;
     for (const unit of friendlyUnits) {
       let nearest = Infinity;
       for (const target of targets) {
@@ -152,9 +161,13 @@ function projectedCombatLabel(boardValues, globalValue) {
           Math.abs(unit.x - target.x) + Math.abs(unit.y - target.y)
         );
       }
-      nearestTotal += nearest;
+      nearestTotal += nearest * unit.count;
+      unitTotal += unit.count;
     }
-    score -= nearestTotal * 8 / friendlyUnits.length;
+    score -= nearestTotal * 8 / Math.max(1, unitTotal);
+  }
+  if (enemyUnits.length && !friendlyUnits.length) {
+    score -= 20;
   }
   score += Number(globalValue) || 0;
   return Math.tanh(score / 45);
@@ -162,71 +175,23 @@ function projectedCombatLabel(boardValues, globalValue) {
 
 function putTown(boardValues, x, y, owner, hpRatio) {
   const offset = (x * 3 + y) * 21;
-  boardValues[offset] = 1;
-  boardValues[offset + 12] = 1;
-  boardValues[offset + 13] = owner;
-  boardValues[offset + 14] = hpRatio;
+  if (owner > 0) {
+    boardValues[offset + 8] += 1;
+    boardValues[offset + 10] += hpRatio;
+  } else if (owner < 0) {
+    boardValues[offset + 9] += 1;
+    boardValues[offset + 11] += hpRatio;
+  }
 }
 
 function putUnit(boardValues, x, y, owner, type, moves) {
   const offset = (x * 3 + y) * 21;
-  boardValues[offset + 1] = owner;
-  boardValues[offset + 2 + type] = 1;
-  boardValues[offset + 7] = moves;
-  boardValues[offset + 8] = type === 4 ? 1 : 2;
-  boardValues[offset + 9] = [5, 4, 7, 8, 10][type];
-  boardValues[offset + 10] = [1, 2, 1, 1, 5][type];
-  boardValues[offset + 11] = [10, 8, 14, 16, 7][type];
-}
-
-function cellChannel(cell, index) {
-  return Number(cell && cell[index]) || 0;
-}
-
-function runtimeCombatStateFeature(vectorizedGrid) {
-  const board = vectorizedGrid[0];
-  const friendlyUnits = [];
-  const enemyUnits = [];
-  const friendlyTowns = [];
-  const enemyTowns = [];
-  let score = 0;
-  for (let x = 0; x < board.length; x += 1) {
-    for (let y = 0; y < board[x].length; y += 1) {
-      const cell = board[x][y] || [];
-      const unitOwner = cellChannel(cell, 1);
-      if (unitOwner > 0) {
-        friendlyUnits.push({ x, y });
-        score += 8 + cellChannel(cell, 50) * 4 + cellChannel(cell, 11) * 0.4;
-      } else if (unitOwner < 0) {
-        enemyUnits.push({ x, y });
-        score -= 8 + cellChannel(cell, 50) * 4 + cellChannel(cell, 11) * 0.4;
-      }
-      const townOwner = cellChannel(cell, 13);
-      if (townOwner > 0) {
-        friendlyTowns.push({ x, y });
-        score += 50 + cellChannel(cell, 14) * 10;
-      } else if (townOwner < 0) {
-        enemyTowns.push({ x, y });
-        score -= 50 + cellChannel(cell, 14) * 10;
-      }
-    }
-  }
-  const targets = enemyTowns.concat(enemyUnits);
-  if (friendlyUnits.length && targets.length) {
-    let nearestTotal = 0;
-    for (const unit of friendlyUnits) {
-      let nearest = Infinity;
-      for (const target of targets) {
-        nearest = Math.min(
-          nearest,
-          Math.abs(unit.x - target.x) + Math.abs(unit.y - target.y)
-        );
-      }
-      nearestTotal += nearest;
-    }
-    score -= nearestTotal / friendlyUnits.length;
-  }
-  return Math.tanh(score / 30);
+  const base = owner > 0 ? 0 : 1;
+  boardValues[offset + base] += 1;
+  boardValues[offset + 2 + base] += [10, 8, 14, 16, 7][type];
+  boardValues[offset + 4 + base] += [5, 4, 7, 8, 10][type];
+  boardValues[offset + 6 + base] += [1, 2, 1, 1, 5][type];
+  boardValues[offset + 12 + base] += moves;
 }
 
 function createModel() {
@@ -237,27 +202,17 @@ function createModel() {
   const output = tf.layers.dense({
     units: 1,
     activation: 'tanh',
+    kernelInitializer: 'zeros',
+    biasInitializer: 'zeros',
     name: 'value_output'
   }).apply(merged);
   const model = tf.model({ inputs: [boardInput, globalInput], outputs: output });
-  initializeRuntimeFeatureWeights(model);
   return model;
-}
-
-function initializeRuntimeFeatureWeights(model) {
-  const kernel = new Array(3 * 3 * 21 + 1).fill(0);
-  kernel[kernel.length - 1] = 4;
-  const layer = model.getLayer('value_output');
-  const kernelTensor = tf.tensor2d(kernel, [kernel.length, 1]);
-  const biasTensor = tf.tensor1d([0]);
-  layer.setWeights([kernelTensor, biasTensor]);
-  kernelTensor.dispose();
-  biasTensor.dispose();
 }
 
 function compileModel(model) {
   model.compile({
-    optimizer: tf.train.adam(0),
+    optimizer: tf.train.adam(0.01),
     loss: 'meanSquaredError',
     metrics: ['accuracy']
   });
@@ -294,10 +249,10 @@ function makeBatch(seed, game) {
         random() > 0.25 ? 1 : 0
       );
     }
-    const globalValue = projectedCombatLabel(board, 0);
+    const globalValue = 0;
     boardValues.push(...board);
     globalValues.push(globalValue);
-    labels.push(Math.tanh(4 * globalValue));
+    labels.push(Math.tanh(4 * projectedCombatLabel(board, globalValue)));
   }
   const sampleCount = labels.length;
   return {
@@ -309,7 +264,7 @@ function makeBatch(seed, game) {
 
 function projectRuntimeVectorForModel(vectorizedGrid) {
   const board = vectorizedGrid[0];
-  const globalValue = runtimeCombatStateFeature(vectorizedGrid);
+  const globalValue = 0;
   const width = board.length;
   const height = width ? board[0].length : 0;
   const projected = [];
@@ -324,14 +279,35 @@ function projectRuntimeVectorForModel(vectorizedGrid) {
       for (let x = xStart; x < Math.min(width, xEnd); x += 1) {
         for (let y = yStart; y < Math.min(height, yEnd); y += 1) {
           const cell = board[x][y] || [];
-          for (let channel = 0; channel < sums.length; channel += 1) {
-            sums[channel] += Number(cell[channel]) || 0;
+          const unitOwner = Number(cell[1]) || 0;
+          if (unitOwner > 0) {
+            sums[0] += 1;
+            sums[2] += Number(cell[11]) || 0;
+            sums[4] += Number(cell[9]) || 0;
+            sums[6] += Number(cell[10]) || 0;
+            sums[12] += Number(cell[7]) || 0;
+          } else if (unitOwner < 0) {
+            sums[1] += 1;
+            sums[3] += Number(cell[11]) || 0;
+            sums[5] += Number(cell[9]) || 0;
+            sums[7] += Number(cell[10]) || 0;
+            sums[13] += Number(cell[7]) || 0;
+          }
+          const townOwner = Number(cell[13]) || 0;
+          if (townOwner > 0) {
+            sums[8] += 1;
+            sums[10] += Number(cell[14]) || 0;
+          } else if (townOwner < 0) {
+            sums[9] += 1;
+            sums[11] += Number(cell[14]) || 0;
           }
           cells += 1;
         }
       }
+      sums[14] = xBucket / 2;
+      sums[15] = yBucket / 2;
       for (let channel = 0; channel < sums.length; channel += 1) {
-        projected.push(cells ? sums[channel] / cells : 0);
+        projected.push(sums[channel]);
       }
     }
   }
@@ -358,6 +334,82 @@ function createRuntimeModelPredict(model) {
       globalTensor.dispose();
     }
   };
+}
+
+function runtimeCombatTeacherLabel(vectorizedGrid) {
+  const projected = projectRuntimeVectorForModel(vectorizedGrid);
+  return {
+    board: projected.board,
+    globalValue: projected.globalValue,
+    label: projectedCombatLabel(projected.board, projected.globalValue)
+  };
+}
+
+function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
+  const boardValues = [];
+  const globalValues = [];
+  const labels = [];
+  const collectPredict = function collectPredict(_modelIdentifier, vectorizedGrids) {
+    const predictions = [];
+    for (const vectorizedGrid of vectorizedGrids) {
+      const example = runtimeCombatTeacherLabel(vectorizedGrid);
+      boardValues.push(...example.board);
+      globalValues.push(example.globalValue);
+      labels.push(example.label);
+      predictions.push([example.label]);
+    }
+    return predictions;
+  };
+  for (let game = 1; game <= 2; game += 1) {
+    runGame({
+      mapName: 'tiny-duel',
+      playerA: 'AIPlayer',
+      playerB: 'SimpleAiPlayer',
+      seed: seed + stageIndex * 997 + game,
+      roundLimit: 80,
+      actionLimit: 80,
+      commandLimit: 120,
+      predictFunction: collectPredict,
+      modelIdentifier: {
+        teacher: 'runtime-combat-curriculum',
+        seed,
+        stageIndex
+      },
+      inferenceSource: 'runtime combat teacher labels for model training'
+    });
+  }
+  const sampleCount = labels.length;
+  if (!sampleCount) {
+    return null;
+  }
+  return {
+    board: tf.tensor4d(boardValues, [sampleCount, 3, 3, 21]),
+    global: tf.tensor2d(globalValues, [sampleCount, 1]),
+    labels: tf.tensor2d(labels, [sampleCount, 1])
+  };
+}
+
+async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
+  const runtimeBatch = makeRuntimeCombatTeacherBatch(seed, stageIndex);
+  if (!runtimeBatch) {
+    return null;
+  }
+  try {
+    return await model.fit(
+      [runtimeBatch.board, runtimeBatch.global],
+      runtimeBatch.labels,
+      {
+        epochs,
+        batchSize: 8,
+        shuffle: true,
+        verbose: 0
+      }
+    );
+  } finally {
+    runtimeBatch.board.dispose();
+    runtimeBatch.global.dispose();
+    runtimeBatch.labels.dispose();
+  }
 }
 
 function replaceDirectory(source, destination) {
@@ -794,7 +846,7 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     draws,
     source: 'measured-model-vs-SimpleAiPlayer-benchmark',
     benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged SimpleAiPlayer',
-    modelAdapter: 'runtime vector grids are averaged into the cloud model 3x3x21 input signature outside player code; the TensorFlow value_output is used directly',
+    modelAdapter: 'runtime vector grids are projected into the cloud model 3x3x21 input signature outside player code; the TensorFlow value_output is used directly',
     artificialAdvantage: false,
     results: gameResults
   };
@@ -819,7 +871,7 @@ function curriculumLearningRateAttempt(options) {
     attemptedLearningRate: options.curriculumLearningRateReductionAttempted
       ? 0.0005
       : null,
-    baseLearningRate: 0.001
+    baseLearningRate: 0.01
   };
 }
 
@@ -1151,6 +1203,16 @@ async function main() {
 
   try {
     compileModel(model);
+    if (!options.resume && state.completedGames === 0) {
+      for (let pretrain = 0; pretrain < 4; pretrain += 1) {
+        await fitRuntimeCombatTeacherBatch(
+          model,
+          state.seed + 50000 + pretrain * 173,
+          state.curriculum.currentStageIndex,
+          8
+        );
+      }
+    }
     const invocationStart = state.completedGames;
     while (state.completedGames < state.totalGames) {
       if (options.maxGamesThisRun > 0 &&
@@ -1169,8 +1231,19 @@ async function main() {
         history = await model.fit(
           [batch.board, batch.global],
           batch.labels,
-          { epochs: state.epochs, batchSize: 4, shuffle: false, verbose: 0 }
+          {
+            epochs: Math.max(state.epochs, 12),
+            batchSize: 8,
+            shuffle: true,
+            verbose: 0
+          }
         );
+        history = await fitRuntimeCombatTeacherBatch(
+          model,
+          state.seed + game * 1543,
+          state.curriculum.currentStageIndex,
+          Math.max(state.epochs, 4)
+        ) || history;
         predictionTensor = model.predict([batch.board, batch.global]);
         prediction = Array.from(await predictionTensor.data());
       } finally {

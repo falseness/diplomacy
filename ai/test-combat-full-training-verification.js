@@ -70,10 +70,24 @@ function assertFinalWeights(manifest, runId) {
   return finalWeightsPath;
 }
 
+function assertNoComparisonShortcut() {
+  const runnerSource = fs.readFileSync(
+    path.resolve(__dirname, 'cloud-train-runner.js'),
+    'utf8'
+  );
+  check(!runnerSource.includes('runtimeCombatStateFeature'),
+    'cloud runner still contains a hand-coded runtime combat state feature');
+  check(!runnerSource.includes('initializeRuntimeFeatureWeights'),
+    'cloud runner still initializes value_output from a hand-coded feature');
+  check(!runnerSource.includes('tf.train.adam(0)'),
+    'cloud runner still disables model learning with a zero learning rate');
+}
+
 function assertPassingRun() {
+  assertNoComparisonShortcut();
   runTrain([
     '--run-id', PASS_RUN_ID,
-    '--games', '8',
+    '--games', '11',
     '--epochs', '1',
     '--seed', '78078',
     '--checkpoint-interval', '1',
@@ -86,7 +100,7 @@ function assertPassingRun() {
 
   const progressPath = path.join(STORAGE_DIR, 'progress', `${PASS_RUN_ID}.jsonl`);
   const progress = readJsonLines(progressPath);
-  check(progress.length === 8, 'full training should write eight progress records');
+  check(progress.length === 11, 'full training should write eleven progress records');
   const advances = progress.filter((record) =>
     record.nextStageEligibility && record.nextStageEligibility.decision === 'advance');
   check(advances.length === 6, 'full training should advance exactly six stage gates');
