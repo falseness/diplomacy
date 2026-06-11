@@ -88,6 +88,11 @@ for (const game of report.games) {
   assert(candidate.length === 1, 'expected exactly one AIPlayerWithEconomy', game);
   assert(candidate[0].side === game.candidateSlot, 'candidate class is in wrong slot', game);
   assert(opponents.length === game.opponentSlots.length, 'opponent count mismatch', game);
+  assert(
+    game.roundCount > 1 || opponents.some(player => !player.lost),
+    'benchmark appears to have forced SimpleAiPlayerWithEconomy opponents to concede',
+    game
+  );
   assert(game.candidateWon === true, 'candidate did not win smoke game', game);
 }
 
