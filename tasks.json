@@ -1588,7 +1588,7 @@
     "id": "TASK-079",
     "category": "test",
     "priority": "critical",
-    "description": "Add real browser verification for Play AI mode because TASK-077 does not prove the blue learned AI opponent actually moves after the red human player ends the turn. Implemented: Added Play AI browser automation with screenshots and enabled the blue AIPlayer to act automatically when gameSettings.withAI is active after the red player clicks Next Turn.",
+    "description": "Add real browser verification for Play AI mode because TASK-077 does not prove the blue learned AI opponent actually moves after the red human player ends the turn. Implemented: Added Play AI browser automation with screenshots and enabled the blue AIPlayer to act automatically when gameSettings.withAI is active after the red player clicks Next Turn. Verification failed: npm run test-play-ai-browser-turn fails during the browser run with a CanvasRenderingContext2D drawImage type error before the blue AI turn can be verified. Implemented: Re-ran the real Play AI browser verification successfully; the test opens index.html, clicks Play AI, captures before/after grid screenshots, makes a legal red move, and confirms the blue AIPlayer runs model-backed predictions and visibly moves units after Next Turn.",
     "acceptance_criteria": [
       "The test opens the game in a real or headless browser through the normal browser entrypoint.",
       "The test clicks Play AI from the game UI and captures an initial screenshot of the game grid.",
