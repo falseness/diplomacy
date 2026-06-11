@@ -6,6 +6,7 @@
     "train": "node ai/train-cloud.js",
     "train-cloud": "./train.sh",
     "test-combat-training-progress": "npx -y node@20 ai/test-combat-training-progress.js",
+    "test-combat-old-vs-new": "npx -y node@20 ai/test-combat-old-vs-new.js",
     "train-economy": "node ai/train-economy.js",
     "test-economy-training": "node ai/test-economy-training.js",
     "test-simple-ai": "node ai/test-simple-ai-baseline.js",

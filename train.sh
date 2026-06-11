@@ -13,6 +13,10 @@ install_deps=false
 max_games_this_run=0
 checkpoint_interval=1
 checkpoint_retain=0
+old_vs_new_games=3
+plateau_window=2
+plateau_min_delta=0.001
+plateau_patience=1
 evaluate_latest=false
 fail_after_game=0
 
@@ -33,6 +37,10 @@ Options:
   --max-games-this-run N    Pause after N games; useful for controlled restart tests
   --checkpoint-interval N   Save every N completed games (default: 1)
   --checkpoint-retain N     Keep newest N checkpoints; 0 keeps all (default: 0)
+  --old-vs-new-games N      Deterministic checkpoint comparison games (default: 3)
+  --plateau-window N        Evaluated checkpoints considered for plateau (default: 2)
+  --plateau-min-delta N     Minimum old-vs-new winrate improvement (default: 0.001)
+  --plateau-patience N      Non-improving comparisons before hold (default: 1)
   --evaluate-latest         Load and evaluate the latest complete checkpoint
   --fail-after-game N       Force a failure after game N for recovery testing
   -h, --help                Show this help
@@ -107,6 +115,26 @@ while (($#)); do
       checkpoint_retain="$2"
       shift 2
       ;;
+    --old-vs-new-games)
+      (($# >= 2)) || die "--old-vs-new-games requires a value"
+      old_vs_new_games="$2"
+      shift 2
+      ;;
+    --plateau-window)
+      (($# >= 2)) || die "--plateau-window requires a value"
+      plateau_window="$2"
+      shift 2
+      ;;
+    --plateau-min-delta)
+      (($# >= 2)) || die "--plateau-min-delta requires a value"
+      plateau_min_delta="$2"
+      shift 2
+      ;;
+    --plateau-patience)
+      (($# >= 2)) || die "--plateau-patience requires a value"
+      plateau_patience="$2"
+      shift 2
+      ;;
     --evaluate-latest)
       evaluate_latest=true
       shift
@@ -130,7 +158,11 @@ require_positive_integer "--games" "$games"
 require_positive_integer "--epochs" "$epochs"
 require_positive_integer "--seed" "$seed"
 require_positive_integer "--checkpoint-interval" "$checkpoint_interval"
+require_positive_integer "--old-vs-new-games" "$old_vs_new_games"
+require_positive_integer "--plateau-window" "$plateau_window"
+require_positive_integer "--plateau-patience" "$plateau_patience"
 [[ "$checkpoint_retain" =~ ^[0-9]+$ ]] || die "--checkpoint-retain must be a non-negative integer"
+[[ "$plateau_min_delta" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--plateau-min-delta must be a non-negative number"
 if [[ "$max_games_this_run" != 0 ]]; then
   require_positive_integer "--max-games-this-run" "$max_games_this_run"
 fi
@@ -191,6 +223,10 @@ runner_args=(
   --max-games-this-run "$max_games_this_run"
   --checkpoint-interval "$checkpoint_interval"
   --checkpoint-retain "$checkpoint_retain"
+  --old-vs-new-games "$old_vs_new_games"
+  --plateau-window "$plateau_window"
+  --plateau-min-delta "$plateau_min_delta"
+  --plateau-patience "$plateau_patience"
   --fail-after-game "$fail_after_game"
 )
 if [[ "$resume" == true ]]; then
