@@ -1140,7 +1140,7 @@
     "id": "TASK-057",
     "category": "test",
     "priority": "critical",
-    "description": "Run and fix SimpleAiPlayerWithEconomy completion on all 3-player and 4-player maps from options/gamestart.js. Every multi-player map must finish before suddenDeathRound=500 with all non-neutral slots using SimpleAiPlayerWithEconomy.",
+    "description": "Run and fix SimpleAiPlayerWithEconomy completion on all 3-player and 4-player maps from options/gamestart.js. Every multi-player map must finish before suddenDeathRound=500 with all non-neutral slots using SimpleAiPlayerWithEconomy. Implemented: Added a strict npm regression for the 3-player and 4-player real-runtime completion suite, verified all multi-player maps finish before suddenDeathRound=500 with SimpleAiPlayerWithEconomy, and reran the full 1v1 completion suite without regressions.",
     "acceptance_criteria": [
       "Every 3-player and 4-player gamestart map variant is run through the real-runtime completion harness.",
       "Each run uses suddenDeathRound=500.",
@@ -1154,7 +1154,7 @@
       "Step 3: Apply targeted SimpleAiPlayerWithEconomy or runtime fixes if failures occur.",
       "Step 4: Rerun the full multi-player completion suite and confirm all games finish before round 500."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-058",
