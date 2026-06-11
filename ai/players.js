@@ -1318,7 +1318,8 @@ class AIPlayerWithEconomy extends AIPlayer {
         while (unit.moves > 0 && remainingActions > 0) {
             let movesBefore = unit.moves
             let attackCommand =
-                SimpleAiPlayer.prototype.findUnitAttackCommand.call(this, unit)
+                SimpleAiPlayerWithEconomy.prototype.findUnitAttackCommand.call(
+                    this, unit)
             if (attackCommand) {
                 unit.sendInstructions(grid.getCell(attackCommand.destinationCoord))
                 if (movesBefore == unit.moves) {

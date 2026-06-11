@@ -420,6 +420,13 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
     }
     map.start(manager, false)
     suddenDeathRound = __task063ForcedSuddenDeathRound
+    whooseTurn = (__task063CandidateSlot - 1 + players.length - 1) % players.length
+    nextTurn()
+    for (let slot = 1; slot < players.length; ++slot) {
+      if (slot != __task063CandidateSlot && players[slot].concede) {
+        players[slot].concede()
+      }
+    }
     whooseTurn = 0
 
     function activeNonNeutralPlayers() {
