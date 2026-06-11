@@ -12,6 +12,7 @@
     "test-combat-stage-a-map-generation": "node ai/test-combat-stage-a-map-generation.js",
     "test-combat-stage-b-map-generation": "node ai/test-combat-stage-b-map-generation.js",
     "test-combat-stage-c-map-generation": "node ai/test-combat-stage-c-map-generation.js",
+    "test-combat-stage-d-map-generation": "node ai/test-combat-stage-d-map-generation.js",
     "benchmark-combat-model": "node ai/benchmark-combat-model.js",
     "test-combat-model-benchmark": "node ai/test-combat-model-benchmark.js",
     "train-economy": "node ai/train-economy.js",

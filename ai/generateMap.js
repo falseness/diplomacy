@@ -863,6 +863,97 @@ function generateCombatStageCTrainingMap(options) {
     return map
 }
 
+function stageDNoobCounts(progress, rng) {
+    let strongerCount = Math.min(4, Math.max(2,
+        2 + Math.floor(clampCombatProgress(progress) * 3)))
+    let weakerCount = Math.max(1, strongerCount - 1)
+    if (rng() >= 0.5) {
+        return {playerOne: strongerCount, playerTwo: weakerCount}
+    }
+    return {playerOne: weakerCount, playerTwo: strongerCount}
+}
+
+function stageDUnitCoords(mapSize, fromRight, count, rng) {
+    let centerY = Math.floor(mapSize.y / 2)
+    let x = fromRight ? mapSize.x - 2 : 1
+    let offsets = [0, -1, 1, -2]
+    if (rng() >= 0.5) {
+        offsets = [0, 1, -1, 2]
+    }
+    let coords = []
+    for (let i = 0; i < count; ++i) {
+        coords.push({
+            x: x,
+            y: Math.max(0, Math.min(mapSize.y - 1, centerY + offsets[i]))
+        })
+    }
+    return coords
+}
+
+function noobUnitsFromCoords(coords) {
+    let units = []
+    for (let i = 0; i < coords.length; ++i) {
+        units.push({type: Noob, x: coords[i].x, y: coords[i].y})
+    }
+    return units
+}
+
+function generateCombatStageDTrainingMap(options) {
+    options = options || {}
+    let progress = clampCombatProgress(
+        options.progress === undefined ? 0 : options.progress)
+    let rng = createSeededRandom(options.seed || 1)
+    let bound = Math.min(9, Math.max(5, options.bound || 9))
+    let mapSize = {x: bound, y: bound}
+    let counts = stageDNoobCounts(progress, rng)
+    let playerOneOnRight = rng() >= 0.5
+    let playerOneCoords = stageDUnitCoords(
+        mapSize, playerOneOnRight, counts.playerOne, rng)
+    let playerTwoCoords = stageDUnitCoords(
+        mapSize, !playerOneOnRight, counts.playerTwo, rng)
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            towns: [],
+            ai: true,
+            units: noobUnitsFromCoords(playerOneCoords)
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            towns: [],
+            ai: true,
+            units: noobUnitsFromCoords(playerTwoCoords)
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.suddenDeathRound = 10
+    map.combatStage = 'D'
+    map.combatStageProgress = progress
+    map.combatOnly = true
+    map.playerNoobCounts = {
+        playerOne: counts.playerOne,
+        playerTwo: counts.playerTwo
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 0,
+        productionActions: 0,
+        resources: 0
+    }
+    return map
+}
+
 function generateTinyMapAllUnits() {
 
     let mapSize = {x: 9, y: 9}

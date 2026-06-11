@@ -1446,7 +1446,7 @@
     "id": "TASK-072",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage D map generation: progressively increase Noob counts up to uneven 4v4-sized combat groups where the two sides do not have equal unit counts.",
+    "description": "Add combat curriculum Stage D map generation: progressively increase Noob counts up to uneven 4v4-sized combat groups where the two sides do not have equal unit counts. Implemented: Added deterministic Stage D combat maps with increasing unequal Noob-only groups up to 3v4, legal non-overlapping 9x9 placement, combat-only metadata, and focused npm smoke coverage.",
     "acceptance_criteria": [
       "Stage D increases Noob counts across progression values.",
       "Late Stage D maps reach up to four Noobs on at least one side.",
@@ -1460,7 +1460,7 @@
       "Step 3: Confirm no unit overlaps or flooded-cell placements exist.",
       "Step 4: Confirm only Noob units are generated."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-073",
