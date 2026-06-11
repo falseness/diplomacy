@@ -48,6 +48,10 @@ function parseArgs(argv) {
     'plateau-window',
     'plateau-min-delta',
     'plateau-patience',
+    'curriculum-simple-winrate',
+    'curriculum-simple-winrate-threshold',
+    'curriculum-lr-reduction-attempted',
+    'curriculum-lr-reduction-improved',
     'fail-after-game'
   ]) {
     if (options[key] === undefined) {
@@ -64,6 +68,13 @@ function parseArgs(argv) {
   options.plateauWindow = Number(options['plateau-window']);
   options.plateauMinDelta = Number(options['plateau-min-delta']);
   options.plateauPatience = Number(options['plateau-patience']);
+  options.curriculumSimpleWinrate = Number(options['curriculum-simple-winrate']);
+  options.curriculumSimpleWinrateThreshold =
+    Number(options['curriculum-simple-winrate-threshold']);
+  options.curriculumLearningRateReductionAttempted =
+    options['curriculum-lr-reduction-attempted'] === 'true';
+  options.curriculumLearningRateReductionImproved =
+    options['curriculum-lr-reduction-improved'] === 'true';
   options.failAfterGame = Number(options['fail-after-game']);
   options.storageDir = path.resolve(options['storage-dir']);
   options.runId = options['run-id'];
@@ -281,7 +292,8 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
       oldVsNewGames: options.oldVsNewGames,
       plateauWindow: options.plateauWindow,
       plateauMinDelta: options.plateauMinDelta,
-      plateauPatience: options.plateauPatience
+      plateauPatience: options.plateauPatience,
+      curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold
     },
     timestamp,
     codeRevision: gitRevision(),
@@ -289,7 +301,8 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
     state: {
       completedGames: state.completedGames,
       status: state.status,
-      updatedAt: state.updatedAt
+      updatedAt: state.updatedAt,
+      curriculum: state.curriculum || initialCurriculumState()
     }
   });
   replaceDirectory(temporary, destination);
@@ -496,6 +509,100 @@ function progressPlateauState(previousRecords, oldVsNewEvaluation, options) {
   };
 }
 
+function initialCurriculumState() {
+  return {
+    currentStageIndex: 0,
+    currentStage: 'combat-foundation',
+    gateHistory: []
+  };
+}
+
+function curriculumSimpleAiWinrate(options) {
+  if (options.curriculumSimpleWinrate >= 0) {
+    return {
+      value: options.curriculumSimpleWinrate,
+      evaluated: true,
+      games: options.oldVsNewGames,
+      source: 'mock-or-tiny-evaluation'
+    };
+  }
+  return {
+    value: null,
+    evaluated: false,
+    reason: 'not evaluated by this progress-only combat training smoke'
+  };
+}
+
+function curriculumLearningRateAttempt(options) {
+  return {
+    attempted: options.curriculumLearningRateReductionAttempted,
+    improved: options.curriculumLearningRateReductionImproved,
+    attemptedLearningRate: options.curriculumLearningRateReductionAttempted
+      ? 0.0005
+      : null,
+    baseLearningRate: 0.001
+  };
+}
+
+function curriculumGateDecision(state, plateauState, simpleAiPlayerWinrate, learningRateAttempt, options) {
+  const reasons = [];
+  if (plateauState.status !== 'plateau') {
+    reasons.push('old-vs-new plateau evidence is not present');
+  }
+  if (!learningRateAttempt.attempted) {
+    reasons.push('lower learning-rate attempt has not been recorded');
+  } else if (learningRateAttempt.improved) {
+    reasons.push('lower learning-rate attempt improved progress');
+  }
+  if (!simpleAiPlayerWinrate.evaluated) {
+    reasons.push('SimpleAiPlayer winrate has not been evaluated');
+  } else if (!(simpleAiPlayerWinrate.value > options.curriculumSimpleWinrateThreshold)) {
+    reasons.push(`SimpleAiPlayer winrate must be greater than ${options.curriculumSimpleWinrateThreshold}`);
+  }
+  return {
+    currentStageIndex: state.curriculum.currentStageIndex,
+    currentStage: state.curriculum.currentStage,
+    eligible: reasons.length === 0,
+    decision: reasons.length === 0 ? 'advance' : 'hold',
+    reason: reasons.length === 0
+      ? 'plateau, learning-rate, and SimpleAiPlayer gates passed'
+      : reasons.join('; '),
+    plateauEvidence: plateauState.status === 'plateau',
+    learningRateReduction: learningRateAttempt,
+    simpleAiPlayerWinrate,
+    requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
+  };
+}
+
+function updateCurriculumState(state, gateDecision) {
+  state.curriculum = state.curriculum || initialCurriculumState();
+  const alreadyRecorded = state.curriculum.gateHistory.some((entry) =>
+    entry.trainingStep === state.completedGames);
+  if (alreadyRecorded) {
+    return state.curriculum;
+  }
+  const entry = {
+    trainingStep: state.completedGames,
+    stageIndex: state.curriculum.currentStageIndex,
+    stage: state.curriculum.currentStage,
+    decision: gateDecision.decision,
+    reason: gateDecision.reason,
+    plateauEvidence: gateDecision.plateauEvidence,
+    learningRateReduction: gateDecision.learningRateReduction,
+    simpleAiPlayerWinrate: gateDecision.simpleAiPlayerWinrate,
+    requiredSimpleAiPlayerWinrate: gateDecision.requiredSimpleAiPlayerWinrate,
+    timestamp: state.updatedAt
+  };
+  state.curriculum.gateHistory.push(entry);
+  if (gateDecision.eligible) {
+    state.curriculum.currentStageIndex += 1;
+    state.curriculum.currentStage = `combat-stage-${state.curriculum.currentStageIndex}`;
+    entry.advancedToStage = state.curriculum.currentStage;
+    entry.advancedToStageIndex = state.curriculum.currentStageIndex;
+  }
+  return state.curriculum;
+}
+
 function progressRecord(options, state, metric, previousRecords) {
   const summary = summarizeMetrics(previousRecords.concat(metric));
   const checkpointPointer = readLatestCheckpointPointer(options);
@@ -508,16 +615,27 @@ function progressRecord(options, state, metric, previousRecords) {
     oldVsNewEvaluation,
     options
   );
+  const simpleAiPlayerWinrate = curriculumSimpleAiWinrate(options);
+  const learningRateReduction = curriculumLearningRateAttempt(options);
+  const nextStageEligibility = curriculumGateDecision(
+    state,
+    plateauState,
+    simpleAiPlayerWinrate,
+    learningRateReduction,
+    options
+  );
+  const curriculum = updateCurriculumState(state, nextStageEligibility);
   return {
     type: 'combat-training-progress',
     runId: options.runId,
-    stage: 'combat-foundation',
+    stage: state.curriculum.currentStage,
+    stageIndex: state.curriculum.currentStageIndex,
     epoch: state.epochs,
     game: metric.game,
     trainingStep: state.completedGames,
     checkpoint: checkpointPointer ? checkpointPointer.path : null,
     loss: metric.loss,
-    learningRate: 0.001,
+    learningRate: learningRateReduction.baseLearningRate,
     oldVsNewWinrate: {
       oldCheckpoint: oldVsNewEvaluation.oldCheckpoint || null,
       newCheckpoint: oldVsNewEvaluation.newCheckpoint || null,
@@ -529,19 +647,11 @@ function progressRecord(options, state, metric, previousRecords) {
       winrate: oldVsNewEvaluation.winrate,
       reason: oldVsNewEvaluation.reason || null
     },
-    simpleAiPlayerWinrate: {
-      value: null,
-      evaluated: false,
-      reason: 'not evaluated by this progress-only combat training smoke'
-    },
+    simpleAiPlayerWinrate,
     plateauState,
-    nextStageEligibility: {
-      eligible: false,
-      decision: plateauState.status === 'plateau' ? 'hold' : 'continue',
-      reason: plateauState.status === 'plateau'
-        ? 'old-vs-new winrate stopped increasing under configured plateau defaults'
-        : 'stage advancement remains external; old-vs-new plateau rule has not requested a hold'
-    },
+    learningRateReduction,
+    nextStageEligibility,
+    curriculum,
     timestamp: state.updatedAt
   };
 }
@@ -579,7 +689,8 @@ function manifestValue(options, state, paths, status, errorMessage) {
       oldVsNewGames: options.oldVsNewGames,
       plateauWindow: options.plateauWindow,
       plateauMinDelta: options.plateauMinDelta,
-      plateauPatience: options.plateauPatience
+      plateauPatience: options.plateauPatience,
+      curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold
     },
     progress: {
       completedGames: state.completedGames,
@@ -592,6 +703,7 @@ function manifestValue(options, state, paths, status, errorMessage) {
       count: (state.resumeEvents || []).length,
       events: state.resumeEvents || []
     },
+    curriculum: state.curriculum || initialCurriculumState(),
     artifacts: {
       checkpoints: path.relative(options.storageDir, paths.checkpointDir),
       latestCheckpoint: fs.existsSync(checkpointPointer)
@@ -699,6 +811,9 @@ async function main() {
     state.completedGames = checkpoint.metadata.state.completedGames;
     state.status = checkpoint.metadata.state.status;
     state.updatedAt = checkpoint.metadata.state.updatedAt;
+    state.curriculum = state.curriculum ||
+      checkpoint.metadata.state.curriculum ||
+      initialCurriculumState();
     if (state.status === 'complete') {
       fail(`run ${options.runId} is already complete`);
     }
@@ -714,6 +829,10 @@ async function main() {
         : options.plateauMinDelta;
     options.plateauPatience = checkpoint.metadata.trainingConfiguration.plateauPatience ||
       options.plateauPatience;
+    options.curriculumSimpleWinrateThreshold =
+      checkpoint.metadata.trainingConfiguration.curriculumSimpleWinrateThreshold !== undefined
+        ? checkpoint.metadata.trainingConfiguration.curriculumSimpleWinrateThreshold
+        : options.curriculumSimpleWinrateThreshold;
     model = await tf.loadLayersModel(`file://${path.join(checkpoint.path, 'model.json')}`);
     validateLoadedModel(model);
     const resumeEvent = {
@@ -743,6 +862,7 @@ async function main() {
       totalGames: options.games,
       completedGames: 0,
       resumeEvents: [],
+      curriculum: initialCurriculumState(),
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

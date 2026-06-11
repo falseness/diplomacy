@@ -17,6 +17,10 @@ old_vs_new_games=3
 plateau_window=2
 plateau_min_delta=0.001
 plateau_patience=1
+curriculum_simple_winrate=""
+curriculum_simple_winrate_threshold=0.6
+curriculum_lr_reduction_attempted=false
+curriculum_lr_reduction_improved=false
 evaluate_latest=false
 fail_after_game=0
 
@@ -41,6 +45,14 @@ Options:
   --plateau-window N        Evaluated checkpoints considered for plateau (default: 2)
   --plateau-min-delta N     Minimum old-vs-new winrate improvement (default: 0.001)
   --plateau-patience N      Non-improving comparisons before hold (default: 1)
+  --curriculum-simple-winrate N
+                             Mock/tiny SimpleAiPlayer winrate for curriculum gating
+  --curriculum-simple-winrate-threshold N
+                             Required SimpleAiPlayer winrate before stage advance (default: 0.6)
+  --curriculum-lr-reduction-attempted
+                             Record one lower learning-rate attempt before advancing
+  --curriculum-lr-reduction-improved
+                             Mark the lower learning-rate attempt as improving
   --evaluate-latest         Load and evaluate the latest complete checkpoint
   --fail-after-game N       Force a failure after game N for recovery testing
   -h, --help                Show this help
@@ -135,6 +147,24 @@ while (($#)); do
       plateau_patience="$2"
       shift 2
       ;;
+    --curriculum-simple-winrate)
+      (($# >= 2)) || die "--curriculum-simple-winrate requires a value"
+      curriculum_simple_winrate="$2"
+      shift 2
+      ;;
+    --curriculum-simple-winrate-threshold)
+      (($# >= 2)) || die "--curriculum-simple-winrate-threshold requires a value"
+      curriculum_simple_winrate_threshold="$2"
+      shift 2
+      ;;
+    --curriculum-lr-reduction-attempted)
+      curriculum_lr_reduction_attempted=true
+      shift
+      ;;
+    --curriculum-lr-reduction-improved)
+      curriculum_lr_reduction_improved=true
+      shift
+      ;;
     --evaluate-latest)
       evaluate_latest=true
       shift
@@ -163,6 +193,12 @@ require_positive_integer "--plateau-window" "$plateau_window"
 require_positive_integer "--plateau-patience" "$plateau_patience"
 [[ "$checkpoint_retain" =~ ^[0-9]+$ ]] || die "--checkpoint-retain must be a non-negative integer"
 [[ "$plateau_min_delta" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--plateau-min-delta must be a non-negative number"
+[[ "$curriculum_simple_winrate_threshold" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--curriculum-simple-winrate-threshold must be a non-negative number"
+if [[ -n "$curriculum_simple_winrate" ]]; then
+  [[ "$curriculum_simple_winrate" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--curriculum-simple-winrate must be a non-negative number"
+else
+  curriculum_simple_winrate=-1
+fi
 if [[ "$max_games_this_run" != 0 ]]; then
   require_positive_integer "--max-games-this-run" "$max_games_this_run"
 fi
@@ -227,6 +263,10 @@ runner_args=(
   --plateau-window "$plateau_window"
   --plateau-min-delta "$plateau_min_delta"
   --plateau-patience "$plateau_patience"
+  --curriculum-simple-winrate "$curriculum_simple_winrate"
+  --curriculum-simple-winrate-threshold "$curriculum_simple_winrate_threshold"
+  --curriculum-lr-reduction-attempted "$curriculum_lr_reduction_attempted"
+  --curriculum-lr-reduction-improved "$curriculum_lr_reduction_improved"
   --fail-after-game "$fail_after_game"
 )
 if [[ "$resume" == true ]]; then

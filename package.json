@@ -8,6 +8,7 @@
     "test-combat-training-progress": "npx -y node@20 ai/test-combat-training-progress.js",
     "test-combat-old-vs-new": "npx -y node@20 ai/test-combat-old-vs-new.js",
     "test-alphazero-lite-combat": "npx -y node@20 ai/test-alphazero-lite-combat.js",
+    "test-combat-curriculum": "npx -y node@20 ai/test-combat-curriculum-controller.js",
     "benchmark-combat-model": "node ai/benchmark-combat-model.js",
     "test-combat-model-benchmark": "node ai/test-combat-model-benchmark.js",
     "train-economy": "node ai/train-economy.js",

@@ -1365,7 +1365,7 @@
     "id": "TASK-068",
     "category": "functional",
     "priority": "critical",
-    "description": "Add a combat curriculum controller that advances stages only after plateau evidence, one learning-rate reduction attempt, and assert-style SimpleAiPlayer winrate greater than 60 percent.",
+    "description": "Add a combat curriculum controller that advances stages only after plateau evidence, one learning-rate reduction attempt, and assert-style SimpleAiPlayer winrate greater than 60 percent. Implemented: Added persisted/resumable combat curriculum stage gating with configurable plateau, learning-rate, and SimpleAiPlayer winrate requirements plus focused pass/fail/resume smoke coverage.",
     "acceptance_criteria": [
       "Curriculum stage state is persisted with the training run and resumes safely.",
       "The plateau rule is configurable and defaults to no old-vs-new winrate improvement across multiple evaluations.",
@@ -1380,7 +1380,7 @@
       "Step 3: Run a failing SimpleAiPlayer winrate case and confirm the stage does not advance.",
       "Step 4: Resume from saved curriculum state and confirm the current stage and gate history are preserved."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-069",
