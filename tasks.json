@@ -1222,7 +1222,7 @@
     "id": "TASK-061",
     "category": "functional",
     "priority": "critical",
-    "description": "Retrain AIPlayerWithEconomy only if multi-player support or benchmark results require it. Retraining must use random generated maps, not options/gamestart.js maps, and must save checkpoints and metrics under /mnt/storage/diplomacy.",
+    "description": "Retrain AIPlayerWithEconomy only if multi-player support or benchmark results require it. Retraining must use random generated maps, not options/gamestart.js maps, and must save checkpoints and metrics under /mnt/storage/diplomacy. Implemented: Skipped retraining based on passing TASK-059 multiplayer inference evidence and a fresh tiny 1v1 gate at /mnt/storage/diplomacy/benchmarks/task061-tiny-1v1-gate.json, keeping /mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005 as the selected checkpoint and documenting the decision in ai/task061-retraining-decision.md.",
     "acceptance_criteria": [
       "The ticket records whether retraining was skipped or performed, with evidence from TASK-059 and TASK-062 results.",
       "If retraining is performed, the training data uses generated random maps and excludes fixed gamestart.js maps.",
@@ -1237,7 +1237,7 @@
       "Step 3: If needed, run generated-map AIPlayerWithEconomy retraining and save artifacts.",
       "Step 4: Record the selected checkpoint or the evidence for skipping retraining."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-062",
