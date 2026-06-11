@@ -1243,7 +1243,7 @@
     "id": "TASK-062",
     "category": "test",
     "priority": "critical",
-    "description": "Reconfirm the tiny 1v1 benchmark after AIPlayerWithEconomy player-count changes. AIPlayerWithEconomy must beat SimpleAiPlayerWithEconomy on tiny 1v1 maps with a 100 percent win rate.",
+    "description": "Reconfirm the tiny 1v1 benchmark after AIPlayerWithEconomy player-count changes. AIPlayerWithEconomy must beat SimpleAiPlayerWithEconomy on tiny 1v1 maps with a 100 percent win rate. Implemented: Added and ran a focused tiny 1v1 gamestart benchmark regression that loads the selected task045 checkpoint, covers both candidate sides against unchanged SimpleAiPlayerWithEconomy, and records a 2/2 100% AIPlayerWithEconomy win report at /mnt/storage/diplomacy/benchmarks/task062-tiny-1v1.json.",
     "acceptance_criteria": [
       "The benchmark uses tiny 1v1 maps from the existing benchmark or gamestart coverage.",
       "AIPlayerWithEconomy plays against SimpleAiPlayerWithEconomy.",
@@ -1258,7 +1258,7 @@
       "Step 3: Confirm the structured report shows 100 percent candidate win rate.",
       "Step 4: Save failed seeds and route failures to TASK-061 if retraining is required."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-063",
