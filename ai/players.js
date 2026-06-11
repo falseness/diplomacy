@@ -22,6 +22,8 @@ const AI_ECONOMY_TOWN_DEFICIT_NEUTRAL_PENALTY = 6
 const AI_ECONOMY_UNIT_ADVANTAGE_TARGET_SCORE = 10
 const AI_ECONOMY_UNIT_ADVANTAGE_NEUTRAL_PENALTY = 3
 const AI_ECONOMY_UNIT_ADVANTAGE_UNIT_PENALTY = 2
+const AI_ECONOMY_MULTIPLAYER_NOOB_THRESHOLD = 6
+const AI_ECONOMY_MULTIPLAYER_PRIMARY_TARGET_BONUS = 35
 const SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP = 6
 const SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP = 5
 const SIMPLE_ECONOMY_MAX_UNIT_CAP = 36
@@ -768,6 +770,24 @@ class AIPlayerWithEconomy extends AIPlayer {
                         left.cost - right.cost
             })
         }
+        let liveOpponentCount = 0
+        if (typeof players != 'undefined') {
+            let playerIndexForThis = this.getPlayerIndex()
+            for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+                if (playerIndex != playerIndexForThis && players[playerIndex] &&
+                        !players[playerIndex].isNeutral && !players[playerIndex].isLost) {
+                    ++liveOpponentCount
+                }
+            }
+        }
+        if (liveOpponentCount > 1 &&
+                state.units.length < AI_ECONOMY_MULTIPLAYER_NOOB_THRESHOLD) {
+            let choices = byProducts(['noob'])
+            if (state.barracks.length + state.pendingBarracks.length == 0) {
+                choices = choices.concat(byProducts(['barrack']))
+            }
+            return choices.concat(byProducts(['archer', 'KOHb', 'suburb']))
+        }
         const expandedProducts =
             state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD ?
             ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
@@ -792,6 +812,9 @@ class AIPlayerWithEconomy extends AIPlayer {
             return targets
         }
         let playerIndexForThis = this.getPlayerIndex()
+        let primaryOpponentIndex = this.constructor &&
+            this.constructor.name == 'AIPlayerWithEconomy' ?
+            this.getPrimaryOpponentIndex() : -1
         for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
             if (playerIndex == playerIndexForThis || !players[playerIndex] ||
                     players[playerIndex].isNeutral || players[playerIndex].isLost) {
@@ -803,7 +826,8 @@ class AIPlayerWithEconomy extends AIPlayer {
                     targets.push({
                         coord: enemy.units[i].coord,
                         kind: 'unit',
-                        opponentIndex: playerIndex
+                        opponentIndex: playerIndex,
+                        primaryOpponent: playerIndex == primaryOpponentIndex
                     })
                 }
             }
@@ -812,7 +836,8 @@ class AIPlayerWithEconomy extends AIPlayer {
                     targets.push({
                         coord: enemy.towns[i].coord,
                         kind: 'town',
-                        opponentIndex: playerIndex
+                        opponentIndex: playerIndex,
+                        primaryOpponent: playerIndex == primaryOpponentIndex
                     })
                 }
             }
@@ -849,6 +874,48 @@ class AIPlayerWithEconomy extends AIPlayer {
             }
         }
         return count
+    }
+    getPrimaryOpponentIndex() {
+        if (typeof players == 'undefined') {
+            return -1
+        }
+        let playerIndexForThis = this.getPlayerIndex()
+        let ownTowns = this.towns.filter(function(town) {
+            return !town.killed
+        })
+        let bestOpponentIndex = -1
+        let bestScore = Infinity
+        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+            if (playerIndex == playerIndexForThis || !players[playerIndex] ||
+                    players[playerIndex].isNeutral || players[playerIndex].isLost) {
+                continue
+            }
+            let opponent = players[playerIndex]
+            let nearestTownDistance = Infinity
+            for (let ownIndex = 0; ownIndex < ownTowns.length; ++ownIndex) {
+                for (let townIndex = 0; townIndex < opponent.towns.length; ++townIndex) {
+                    if (!opponent.towns[townIndex].killed) {
+                        nearestTownDistance = Math.min(
+                            nearestTownDistance,
+                            this.getActionRankingDistance(
+                                ownTowns[ownIndex].coord,
+                                opponent.towns[townIndex].coord))
+                    }
+                }
+            }
+            if (!Number.isFinite(nearestTownDistance)) {
+                nearestTownDistance = 0
+            }
+            let score = nearestTownDistance * 100 +
+                this.getLiveTownCount(opponent) * 20 +
+                this.getLiveUnitCount(opponent) * 3 +
+                playerIndex
+            if (score < bestScore) {
+                bestScore = score
+                bestOpponentIndex = playerIndex
+            }
+        }
+        return bestOpponentIndex
     }
     getTownDeficitPressure() {
         if (typeof players == 'undefined') {
@@ -907,6 +974,9 @@ class AIPlayerWithEconomy extends AIPlayer {
             return targets
         }
         let playerIndexForThis = this.getPlayerIndex()
+        let primaryOpponentIndex = this.constructor &&
+            this.constructor.name == 'AIPlayerWithEconomy' ?
+            this.getPrimaryOpponentIndex() : -1
         for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
             if (playerIndex == playerIndexForThis || !players[playerIndex] ||
                     players[playerIndex].isNeutral || players[playerIndex].isLost) {
@@ -919,6 +989,7 @@ class AIPlayerWithEconomy extends AIPlayer {
                         coord: opponent.towns[i].coord,
                         kind: 'town',
                         opponentIndex: playerIndex,
+                        primaryOpponent: playerIndex == primaryOpponentIndex,
                         threatensTown: false
                     })
                 }
@@ -939,6 +1010,7 @@ class AIPlayerWithEconomy extends AIPlayer {
                         coord: opponent.units[i].coord,
                         kind: 'unit',
                         opponentIndex: playerIndex,
+                        primaryOpponent: playerIndex == primaryOpponentIndex,
                         threatensTown: threatensTown
                     })
                 }
@@ -1045,7 +1117,9 @@ class AIPlayerWithEconomy extends AIPlayer {
                             AI_ECONOMY_NEUTRAL_RACE_DISTANCE -
                                 targets[j].enemyDistance) *
                             AI_ECONOMY_NEUTRAL_RACE_SCORE : 0) +
-                    (targets[j].threatensTown ? AI_ECONOMY_THREAT_TARGET_SCORE : 0)
+                    (targets[j].threatensTown ? AI_ECONOMY_THREAT_TARGET_SCORE : 0) +
+                    (targets[j].primaryOpponent ?
+                        AI_ECONOMY_MULTIPLAYER_PRIMARY_TARGET_BONUS : 0)
                 if (score > bestScore) {
                     bestScore = score
                     bestCommand = command
@@ -1078,6 +1152,26 @@ class AIPlayerWithEconomy extends AIPlayer {
                         (targets[i].kind == 'town' ? 1 : 0))
             }
             score += (before - after) * 50 - after
+            if (targets.some(function(target) { return target.primaryOpponent })) {
+                let beforePrimary = Infinity
+                let afterPrimary = Infinity
+                for (let i = 0; i < targets.length; ++i) {
+                    if (!targets[i].primaryOpponent) {
+                        continue
+                    }
+                    beforePrimary = Math.min(
+                        beforePrimary,
+                        this.getActionRankingDistance(
+                            command.whoDoCommandCoord, targets[i].coord))
+                    afterPrimary = Math.min(
+                        afterPrimary,
+                        this.getActionRankingDistance(
+                            command.destinationCoord, targets[i].coord) -
+                            (targets[i].kind == 'town' ? 1 : 0))
+                }
+                score += (beforePrimary - afterPrimary) *
+                    AI_ECONOMY_MULTIPLAYER_PRIMARY_TARGET_BONUS
+            }
         }
         if (areCoordsEqual(command.whoDoCommandCoord, command.destinationCoord)) {
             score -= 1000
