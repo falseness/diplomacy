@@ -1604,5 +1604,26 @@
       "Step 5: Compare the screenshots or runtime unit positions and confirm blue units actually moved or took a legal visible action."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-080",
+    "category": "test",
+    "priority": "critical",
+    "description": "Reproduce the Play AI red-unit snapback bug in a browser test. Start Play AI, make at least one legal red move, let blue AI move, press Next Turn again, and record whether red units return to their previous positions. Implemented: Added a real browser Play AI snapback reproduction that records red/blue unit positions and screenshots across red-start, after-red-move, blue-complete, and returned-red states; it detects the moved red Noob snapping from (2,0) back to (2,1).",
+    "acceptance_criteria": [
+      "The test uses the normal browser Play AI entrypoint.",
+      "The test records red unit positions before red moves, after red moves, after blue AI moves, and after pressing Next Turn back to red.",
+      "The reproduction proves whether any red unit position reverts unexpectedly after the second Next Turn.",
+      "Screenshots are saved for each start-of-turn state needed to understand the bug.",
+      "No gameplay fix is included in this ticket."
+    ],
+    "test_steps": [
+      "Step 1: Run the browser Play AI flow through index.html.",
+      "Step 2: Capture red unit positions and a screenshot at the start of red turn.",
+      "Step 3: Make a legal red move and click Next Turn.",
+      "Step 4: Wait for blue AI to complete, then capture blue/end-of-blue positions and screenshot.",
+      "Step 5: Click Next Turn back to red and confirm whether red unit positions persisted."
+    ],
+    "status": "to-verify"
   }
 ]
