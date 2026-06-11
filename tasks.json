@@ -1325,7 +1325,7 @@
     "id": "TASK-066",
     "category": "test",
     "priority": "critical",
-    "description": "Add a combat-only model versus SimpleAiPlayer benchmark on random generated maps. Treat near-50 percent model winrate as evidence that the model is weak and must not unlock harder curriculum stages. Implemented: Added a generated combat-only AIPlayer-vs-SimpleAiPlayer benchmark with model checkpoint reporting, weak-model threshold gating, npm smoke coverage, and combat-only map validation.",
+    "description": "Add a combat-only model versus SimpleAiPlayer benchmark on random generated maps. Treat near-50 percent model winrate as evidence that the model is weak and must not unlock harder curriculum stages. Implemented: Added a generated combat-only AIPlayer-vs-SimpleAiPlayer benchmark with model checkpoint reporting, weak-model threshold gating, npm smoke coverage, and combat-only map validation. Verified: Re-ran the combat benchmark smoke, generated an independent 3-map report with required fields and zero economy objects, confirmed a high weak-model threshold exits nonzero, and inspected the TASK-066 code diff.",
     "acceptance_criteria": [
       "The benchmark runs learned combat model players against unchanged SimpleAiPlayer on random generated combat maps.",
       "The report records seed, map stage, player classes, winner, round count, timeout, sudden-death status, and model checkpoint.",
@@ -1339,13 +1339,13 @@
       "Step 3: Force a high threshold and confirm the benchmark exits nonzero or marks the gate failed.",
       "Step 4: Confirm every generated benchmark map is combat-only."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-067",
     "category": "functional",
     "priority": "critical",
-    "description": "Introduce an AlphaZero-lite combat architecture. Add a residual policy-plus-value model and training interfaces for legal combat action policy targets, value targets, replay/self-play data, and future MCTS-style search without adding economy. Implemented: Added a combat-only AlphaZero-lite residual policy/value module, legal-action policy target and signed value training interfaces, checkpoint metadata validation, save/load helpers, and a focused smoke for synthetic training plus incompatible value-only checkpoint rejection.",
+    "description": "Introduce an AlphaZero-lite combat architecture. Add a residual policy-plus-value model and training interfaces for legal combat action policy targets, value targets, replay/self-play data, and future MCTS-style search without adding economy. Implemented: Added a combat-only AlphaZero-lite residual policy/value module, legal-action policy target and signed value training interfaces, checkpoint metadata validation, save/load helpers, and a focused smoke for synthetic training plus incompatible value-only checkpoint rejection. Verified: Re-ran npm smoke and an independent Node 20 probe for policy/value heads, legal-action policy targets, signed value validation, save/load metadata, and old value-only checkpoint rejection.",
     "acceptance_criteria": [
       "The combat model has separate policy and value outputs.",
       "Policy targets are defined over legal combat actions for the current state.",
@@ -1359,13 +1359,13 @@
       "Step 3: Confirm model save/load preserves both heads and architecture metadata.",
       "Step 4: Try loading an incompatible old value-only checkpoint and confirm a clear error."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-068",
     "category": "functional",
     "priority": "critical",
-    "description": "Add a combat curriculum controller that advances stages only after plateau evidence, one learning-rate reduction attempt, and assert-style SimpleAiPlayer winrate greater than 60 percent. Implemented: Added persisted/resumable combat curriculum stage gating with configurable plateau, learning-rate, and SimpleAiPlayer winrate requirements plus focused pass/fail/resume smoke coverage.",
+    "description": "Add a combat curriculum controller that advances stages only after plateau evidence, one learning-rate reduction attempt, and assert-style SimpleAiPlayer winrate greater than 60 percent. Implemented: Added persisted/resumable combat curriculum stage gating with configurable plateau, learning-rate, and SimpleAiPlayer winrate requirements plus focused pass/fail/resume smoke coverage. Verified: Re-ran curriculum smoke plus independent pass, failing-winrate, and resume training checks; stage gating, persisted state/history, configurable plateau/LR/SimpleAiPlayer requirements, and related commit inspection all pass.",
     "acceptance_criteria": [
       "Curriculum stage state is persisted with the training run and resumes safely.",
       "The plateau rule is configurable and defaults to no old-vs-new winrate improvement across multiple evaluations.",
@@ -1380,13 +1380,13 @@
       "Step 3: Run a failing SimpleAiPlayer winrate case and confirm the stage does not advance.",
       "Step 4: Resume from saved curriculum state and confirm the current stage and gate history are preserved."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-069",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage A map generation: a 2x2 map, 1v1 Noob-only units, and sudden death active immediately. Implemented: Added deterministic 2x2 Stage A combat map generation with neutral plus two Noob-only AI players, no towns/economy objects, immediate suddenDeathRound=0, and focused headless harness smoke coverage.",
+    "description": "Add combat curriculum Stage A map generation: a 2x2 map, 1v1 Noob-only units, and sudden death active immediately. Implemented: Added deterministic 2x2 Stage A combat map generation with neutral plus two Noob-only AI players, no towns/economy objects, immediate suddenDeathRound=0, and focused headless harness smoke coverage. Verified: Re-ran the Stage A npm smoke and an independent fixed-seed probe across 10 seeds; maps are deterministic 2x2 Noob-only combat maps with neutral plus two AI players, no economy objects, immediate suddenDeathRound=0, and headless start/advance coverage.",
     "acceptance_criteria": [
       "The Stage A generator creates deterministic fixed-seed 2x2 maps.",
       "Each map has exactly two non-neutral players with one Noob each unless the stage configuration explicitly requests a tiny variation.",
@@ -1400,13 +1400,13 @@
       "Step 3: Start each generated map in the headless harness.",
       "Step 4: Confirm no economy objects or non-Noob units are present."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-070",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage B map generation: progressively increase irregular non-rectangular map footprints up to 9x9 while sudden death has already started and most cells are flooded. Implemented: Added configurable Stage B combat map generation with 3x3-to-9x9 irregular flooded footprints, active sudden death, Noob-only players, combat-only metadata, and focused fixed-seed smoke coverage.",
+    "description": "Add combat curriculum Stage B map generation: progressively increase irregular non-rectangular map footprints up to 9x9 while sudden death has already started and most cells are flooded. Implemented: Added configurable Stage B combat map generation with 3x3-to-9x9 irregular flooded footprints, active sudden death, Noob-only players, combat-only metadata, and focused fixed-seed smoke coverage. Verified: Re-ran the Stage B npm smoke and an independent 30-map fixed-seed probe; progression, irregular flooded footprints, early mostly-flooded maps, active sudden death, and combat-only Noob units all pass.",
     "acceptance_criteria": [
       "Stage B exposes configurable progression from small maps toward maximum 9x9 bounds.",
       "Generated maps are irregular or non-rectangular by representing flooded or unavailable cells inside the rectangular bounds.",
@@ -1420,13 +1420,13 @@
       "Step 3: Confirm most cells are flooded or unavailable in early Stage B.",
       "Step 4: Confirm sudden death is active and no economy objects exist."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-071",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage C map generation: gradually decrease flooded or unavailable cells, then move suddenDeathRound toward positive round 10. Implemented: Added deterministic Stage C combat maps with a flooded-cell reduction schedule, increasing playable cells, nonnegative suddenDeathRound progression to 10, Noob-only combat constraints, and focused smoke coverage.",
+    "description": "Add combat curriculum Stage C map generation: gradually decrease flooded or unavailable cells, then move suddenDeathRound toward positive round 10. Implemented: Added deterministic Stage C combat maps with a flooded-cell reduction schedule, increasing playable cells, nonnegative suddenDeathRound progression to 10, Noob-only combat constraints, and focused smoke coverage. Verified: Re-ran Stage C and Stage B smokes plus an independent fixed-seed Stage C probe across progress values and bounds; playable cells increase, flooded cells decrease, final suddenDeathRound is 10, no negative sudden death or economy objects appear, and only Noob combat constraints are used.",
     "acceptance_criteria": [
       "Stage C has a configurable flooded-cell reduction schedule.",
       "Later Stage C maps contain more playable cells than early Stage C maps for the same bounds.",
@@ -1440,13 +1440,13 @@
       "Step 3: Confirm final Stage C maps use suddenDeathRound=10.",
       "Step 4: Confirm no economy objects are generated."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-072",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage D map generation: progressively increase Noob counts up to uneven 4v4-sized combat groups where the two sides do not have equal unit counts. Implemented: Added deterministic Stage D combat maps with increasing unequal Noob-only groups up to 3v4, legal non-overlapping 9x9 placement, combat-only metadata, and focused npm smoke coverage.",
+    "description": "Add combat curriculum Stage D map generation: progressively increase Noob counts up to uneven 4v4-sized combat groups where the two sides do not have equal unit counts. Implemented: Added deterministic Stage D combat maps with increasing unequal Noob-only groups up to 3v4, legal non-overlapping 9x9 placement, combat-only metadata, and focused npm smoke coverage. Verified: Re-ran Stage D and Stage C smokes plus an independent fixed-seed Stage D probe; Noob counts progress from 1v2 through 3v4, late maps reach four Noobs on one side, side counts stay unequal, placements are legal/non-overlapping/non-flooded, and only Noobs are generated.",
     "acceptance_criteria": [
       "Stage D increases Noob counts across progression values.",
       "Late Stage D maps reach up to four Noobs on at least one side.",
@@ -1460,13 +1460,13 @@
       "Step 3: Confirm no unit overlaps or flooded-cell placements exist.",
       "Step 4: Confirm only Noob units are generated."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-073",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage E map generation: introduce some Normchel units only after the Stage D plateau gate passes. Implemented: Added gated Stage E combat map generation with persisted Stage D gate checks, deterministic Noob/Normchel-only fixed-seed maps, combat-only metadata, Normchel unlock metrics, and npm smoke coverage.",
+    "description": "Add combat curriculum Stage E map generation: introduce some Normchel units only after the Stage D plateau gate passes. Implemented: Added gated Stage E combat map generation with persisted Stage D gate checks, deterministic Noob/Normchel-only fixed-seed maps, combat-only metadata, Normchel unlock metrics, and npm smoke coverage. Verified: Re-ran Stage E and Stage D smokes plus an independent 200-map probe confirming pre-gate blocking, post-gate fixed-seed generation, Normchel presence, no Archer/KOHb, combat-only legal placement, and Normchel unlock metrics.",
     "acceptance_criteria": [
       "Stage E is unavailable until the curriculum controller records a passed Stage D gate.",
       "Stage E maps include at least one Normchel in some generated seeds.",
@@ -1480,13 +1480,13 @@
       "Step 3: Confirm some maps include Normchel and no later-stage unit types.",
       "Step 4: Confirm metrics identify the Normchel unlock."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-074",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage F map generation: introduce some KOHb units only after the Stage E plateau gate passes. Implemented: Added gated Stage F combat map generation with persisted Stage E gate checks, deterministic Noob/Normchel/KOHb fixed-seed maps, combat-only metadata, KOHb unlock metrics, and npm smoke coverage.",
+    "description": "Add combat curriculum Stage F map generation: introduce some KOHb units only after the Stage E plateau gate passes. Implemented: Added gated Stage F combat map generation with persisted Stage E gate checks, deterministic Noob/Normchel/KOHb fixed-seed maps, combat-only metadata, KOHb unlock metrics, and npm smoke coverage. Verified: Re-ran Stage F and Stage E smokes, inspected the TASK-074 diff, and independently confirmed Stage F gate blocking, KOHb unlocks, Noob/Normchel allowance, zero Archers, combat-only maps, and KOHb metrics.",
     "acceptance_criteria": [
       "Stage F is unavailable until the curriculum controller records a passed Stage E gate.",
       "Stage F maps include at least one KOHb in some generated seeds.",
@@ -1500,13 +1500,13 @@
       "Step 3: Confirm some maps include KOHb and no Archer units.",
       "Step 4: Confirm metrics identify the KOHb unlock."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-075",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage G map generation: introduce some Archer units only after the Stage F plateau gate passes. Implemented: Added gated Stage G combat map generation with persisted Stage F gate checks, deterministic Noob/Normchel/KOHb/Archer fixed-seed maps, Archer unlock metrics, range/line-of-sight action enumeration metadata, and focused npm smoke coverage.",
+    "description": "Add combat curriculum Stage G map generation: introduce some Archer units only after the Stage F plateau gate passes. Implemented: Added gated Stage G combat map generation with persisted Stage F gate checks, deterministic Noob/Normchel/KOHb/Archer fixed-seed maps, Archer unlock metrics, range/line-of-sight action enumeration metadata, and focused npm smoke coverage. Verified: Re-ran Stage G and Stage F smokes, inspected the TASK-075 diff, and independently confirmed Stage G gate blocking, fixed-seed Archer/Noob/Normchel/KOHb generation, Archer range/line-of-sight representation, combat-only maps, and Archer unlock metrics.",
     "acceptance_criteria": [
       "Stage G is unavailable until the curriculum controller records a passed Stage F gate.",
       "Stage G maps include at least one Archer in some generated seeds.",
@@ -1520,13 +1520,13 @@
       "Step 3: Confirm some maps include Archer plus previously unlocked unit types.",
       "Step 4: Confirm Archer legal actions appear in combat action enumeration."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-076",
     "category": "test",
     "priority": "critical",
-    "description": "Add curriculum regression tests proving every new mechanic waits for plateau evidence, a failed learning-rate reduction attempt, and SimpleAiPlayer winrate greater than 60 percent before advancing. Implemented: Extended combat curriculum regression coverage across Stage A-G boundaries, missing plateau/LR/winrate blockers, combat-only stage maps, and anti-cheat source checks.",
+    "description": "Add curriculum regression tests proving every new mechanic waits for plateau evidence, a failed learning-rate reduction attempt, and SimpleAiPlayer winrate greater than 60 percent before advancing. Implemented: Extended combat curriculum regression coverage across Stage A-G boundaries, missing plateau/LR/winrate blockers, combat-only stage maps, and anti-cheat source checks. Verified: Re-ran curriculum smoke, independently probed all six A-G boundary advances plus missing plateau/LR/winrate blockers, confirmed combat-only stage maps, and inspected TASK-076 source changes for no SimpleAiPlayer comparison cheating.",
     "acceptance_criteria": [
       "Tests cover every transition from Stage A through Stage G.",
       "A transition with plateau evidence missing is blocked.",
@@ -1541,13 +1541,13 @@
       "Step 3: Confirm missing learning-rate evidence blocks advancement.",
       "Step 4: Confirm SimpleAiPlayer winrate at or below 60 percent blocks advancement."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-077",
     "category": "functional",
     "priority": "normal",
-    "description": "Modify browser play AI mode so manual play starts a 9x9 combat map with all unit types and a learned AI opponent, without adding economy mechanics. Implemented: Routed main-menu play AI to a 9x9 combat-only manual playtest map with human Player versus learned AIPlayer, all combat unit types including Catapult, no economy objects, and a headless browser-flow smoke.",
+    "description": "Modify browser play AI mode so manual play starts a 9x9 combat map with all unit types and a learned AI opponent, without adding economy mechanics. Implemented: Routed main-menu play AI to a 9x9 combat-only manual playtest map with human Player versus learned AIPlayer, all combat unit types including Catapult, no economy objects, and a headless browser-flow smoke. Verified: Re-ran browser play AI smoke and an independent jsdom runtime probe confirming menu flow, 9x9 map, Player vs AIPlayer classes, required combat units, learned model load, and no economy objects.",
     "acceptance_criteria": [
       "The browser main-menu play AI action starts a 9x9 map intended for manual playtesting.",
       "The map includes Noob, Normchel, KOHb, and Archer units, plus any already-supported combat-only unit type if required by existing all-unit helpers.",
@@ -1561,6 +1561,47 @@
       "Step 3: Confirm all required combat unit types are present.",
       "Step 4: Confirm the opponent is the learned AI player and no economy objects are present."
     ],
+    "status": "done"
+  },
+  {
+    "id": "TASK-078",
+    "category": "test",
+    "priority": "critical",
+    "description": "Add full-training verification for the combat curriculum because the newest artifact is /mnt/storage/diplomacy/verify-task068-manual/final/verify-resume/weights.bin instead of a TASK-076 result. The ticket must prove full-training completes, writes a new final weights.bin artifact, and passes greater than 60 percent winrate at every curriculum stage gate before advancing. Implemented: Added npm run test-combat-full-training-verification, which runs a completed eight-step curriculum training job, verifies a new final weights.bin, checks all six stage gates exceed 60 percent before advancing, and proves a 60 percent gate holds with a recorded reason.",
+    "acceptance_criteria": [
+      "A full-training run completes successfully, not only mocked, smoke, or partial curriculum tests.",
+      "The run writes a new final weights.bin artifact under /mnt/storage/diplomacy and the final artifact path is not /mnt/storage/diplomacy/verify-task068-manual/final/verify-resume/weights.bin.",
+      "Every curriculum stage gate records model winrate versus SimpleAiPlayer greater than 60 percent before advancing.",
+      "Any stage with model winrate at or below 60 percent blocks advancement and records the failed gate reason.",
+      "The metrics or manifest identify each stage, its winrate result, the stage advancement decision, and the final weights.bin path."
+    ],
+    "test_steps": [
+      "Step 1: Run the project full-training command from a clean or explicitly documented resume state.",
+      "Step 2: Confirm the run completes and writes a new final weights.bin artifact under /mnt/storage/diplomacy.",
+      "Step 3: Inspect metrics or manifests and confirm each stage gate passed with greater than 60 percent winrate before advancement.",
+      "Step 4: Confirm no acceptance evidence depends on the stale /mnt/storage/diplomacy/verify-task068-manual/final/verify-resume/weights.bin artifact."
+    ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-079",
+    "category": "test",
+    "priority": "critical",
+    "description": "Add real browser verification for Play AI mode because TASK-077 does not prove the blue learned AI opponent actually moves after the red human player ends the turn.",
+    "acceptance_criteria": [
+      "The test opens the game in a real or headless browser through the normal browser entrypoint.",
+      "The test clicks Play AI from the game UI and captures an initial screenshot of the game grid.",
+      "The test makes legal moves for the red human player and clicks Next Turn.",
+      "After Next Turn, the blue AIPlayer automatically takes its turn without manual blue-player input.",
+      "A second screenshot of the grid proves at least one blue unit actually moved or took a legal visible action."
+    ],
+    "test_steps": [
+      "Step 1: Open the game in a browser and click Play AI.",
+      "Step 2: Capture a screenshot of the initial game grid.",
+      "Step 3: Make legal moves for the red player and click Next Turn.",
+      "Step 4: Wait for the blue AIPlayer turn to complete, then capture a second grid screenshot.",
+      "Step 5: Compare the screenshots or runtime unit positions and confirm blue units actually moved or took a legal visible action."
+    ],
+    "status": "pending"
   }
 ]
