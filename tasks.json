@@ -1686,5 +1686,24 @@
       "Step 5: Record pass/fail observations in the ticket notes."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-084",
+    "category": "test",
+    "priority": "normal",
+    "description": "Create follow-up bug tickets for every confirmed issue found during the full Play AI screenshot audit. Implemented: Reviewed TASK-083 verified browser artifacts and audit report; audit.passed was true with no failures, no implausible movement, no skipped AI turns, and no stalled state, so no follow-up bug tickets were needed.",
+    "acceptance_criteria": [
+      "Every confirmed anomaly from TASK-083 gets its own <=15 minute follow-up ticket.",
+      "Each follow-up includes reproduction steps, expected behavior, observed behavior, artifact path, and acceptance criteria.",
+      "No speculative issue is ticketed unless screenshots or position snapshots support it.",
+      "If TASK-083 finds no anomalies, this ticket records that no follow-up bug tickets were needed."
+    ],
+    "test_steps": [
+      "Step 1: Review TASK-083 screenshots, position snapshots, and audit notes.",
+      "Step 2: For each confirmed anomaly, append one focused pending task to tasks.json.",
+      "Step 3: Validate tasks.json remains valid JSON.",
+      "Step 4: Confirm every new ticket follows /root/tools/agents/tasks_format.json."
+    ],
+    "status": "to-verify"
   }
 ]
