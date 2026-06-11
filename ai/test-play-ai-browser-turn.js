@@ -146,6 +146,7 @@ function blueSnapshotInBrowser() {
   return {
     whooseTurn,
     gameRound,
+    pauseOverlayVisible: nextTurnPauseInterface.visible,
     withAI: gameSettings.withAI,
     testAI: gameSettings.testAI,
     modelSource: window.__playAiBrowserModelSource,
@@ -172,6 +173,40 @@ function blueSnapshotInBrowser() {
         hp: unit.hp
       }))
   };
+}
+
+function interfaceCenterPixelInBrowser() {
+  const context = document.getElementById('interface').getContext('2d');
+  const pixel = context.getImageData(
+    Math.floor(WIDTH / 2),
+    Math.floor(HEIGHT / 2),
+    1,
+    1
+  ).data;
+  return {
+    red: pixel[0],
+    green: pixel[1],
+    blue: pixel[2],
+    alpha: pixel[3],
+    pauseOverlayVisible: nextTurnPauseInterface.visible
+  };
+}
+
+async function hideTurnPauseOverlayAndDrawGrid(page) {
+  await page.evaluate(() => {
+    nextTurnPauseInterface.hideButDontUpdateTimer();
+    drawAll();
+  });
+  await page.waitForFunction(() => {
+    const context = document.getElementById('interface').getContext('2d');
+    const pixel = context.getImageData(
+      Math.floor(WIDTH / 2),
+      Math.floor(HEIGHT / 2),
+      1,
+      1
+    ).data;
+    return !nextTurnPauseInterface.visible && pixel[3] == 0;
+  }, null, { timeout: 5000 });
 }
 
 async function applyOneLegalRedMove(page) {
@@ -249,12 +284,10 @@ async function clickNextTurn(page) {
     await waitForGameReady(page);
 
     await clickPlayAi(page);
-    await page.evaluate(() => {
-      nextTurnPauseInterface.hideButDontUpdateTimer();
-      drawAll();
-    });
+    await hideTurnPauseOverlayAndDrawGrid(page);
+    const initialInterfacePixel = await page.evaluate(interfaceCenterPixelInBrowser);
     const initialPath = path.join(artifactDir, 'task079-initial-grid.png');
-    await page.locator('#canvas').screenshot({ path: initialPath });
+    const initialScreenshot = await page.screenshot({ path: initialPath });
 
     const beforeMove = await page.evaluate(blueSnapshotInBrowser);
     const redMove = await applyOneLegalRedMove(page);
@@ -264,11 +297,12 @@ async function clickNextTurn(page) {
     await page.waitForFunction(() => {
       return whooseTurn == 2 && window.__playAiBrowserPredictionCalls > 0;
     }, null, { timeout: 15000 });
-    await page.evaluate(() => drawAll());
 
     const afterMove = await page.evaluate(blueSnapshotInBrowser);
+    await hideTurnPauseOverlayAndDrawGrid(page);
+    const finalInterfacePixel = await page.evaluate(interfaceCenterPixelInBrowser);
     const finalPath = path.join(artifactDir, 'task079-after-blue-ai-turn-grid.png');
-    await page.locator('#canvas').screenshot({ path: finalPath });
+    const finalScreenshot = await page.screenshot({ path: finalPath });
 
     check(beforeMove.modelSource == 'models/play-ai/model.json',
       'Play AI did not load the configured browser model', beforeMove);
@@ -279,12 +313,21 @@ async function clickNextTurn(page) {
     check(afterMove.predictionCalls > beforeMove.predictionCalls,
       'blue AIPlayer did not run model-backed predictions after Next Turn',
       { beforeMove, afterMove });
+    check(afterMove.pauseOverlayVisible === true,
+      'test did not observe the Player 2 turn overlay before dismissing it',
+      afterMove);
+    check(initialInterfacePixel.alpha == 0 && finalInterfacePixel.alpha == 0,
+      'grid screenshots were captured with the turn overlay still visible',
+      { initialInterfacePixel, finalInterfacePixel });
 
     const beforeBlue = JSON.stringify(beforeMove.blueUnits);
     const afterBlue = JSON.stringify(afterMove.blueUnits);
     check(beforeBlue != afterBlue,
       'blue AIPlayer unit state did not visibly change after Next Turn',
       { beforeMove, afterMove, redMove });
+    check(!initialScreenshot.equals(finalScreenshot),
+      'initial and after-action grid screenshots are identical',
+      { initialPath, finalPath, beforeMove, afterMove });
 
     console.log(JSON.stringify({
       status: 'passed',
@@ -292,6 +335,10 @@ async function clickNextTurn(page) {
       screenshots: {
         initialGrid: initialPath,
         afterBlueAiTurnGrid: finalPath
+      },
+      interfacePixels: {
+        initialCenter: initialInterfacePixel,
+        afterBlueAiTurnCenter: finalInterfacePixel
       },
       redMove,
       beforeMove,
