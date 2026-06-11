@@ -1426,7 +1426,7 @@
     "id": "TASK-071",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage C map generation: gradually decrease flooded or unavailable cells, then move suddenDeathRound toward positive round 10.",
+    "description": "Add combat curriculum Stage C map generation: gradually decrease flooded or unavailable cells, then move suddenDeathRound toward positive round 10. Implemented: Added deterministic Stage C combat maps with a flooded-cell reduction schedule, increasing playable cells, nonnegative suddenDeathRound progression to 10, Noob-only combat constraints, and focused smoke coverage.",
     "acceptance_criteria": [
       "Stage C has a configurable flooded-cell reduction schedule.",
       "Later Stage C maps contain more playable cells than early Stage C maps for the same bounds.",
@@ -1440,7 +1440,7 @@
       "Step 3: Confirm final Stage C maps use suddenDeathRound=10.",
       "Step 4: Confirm no economy objects are generated."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-072",
