@@ -681,6 +681,104 @@ function generateCombatStageATrainingMap(options) {
     return map
 }
 
+function clampCombatProgress(progress) {
+    if (!Number.isFinite(progress)) {
+        return 0
+    }
+    return Math.max(0, Math.min(1, progress))
+}
+
+function coordInList(coords, coord) {
+    for (let i = 0; i < coords.length; ++i) {
+        if (coords[i].x == coord.x && coords[i].y == coord.y) {
+            return true
+        }
+    }
+    return false
+}
+
+function stageBPlayableCells(mapSize, progress) {
+    let cells = []
+    let centerY = Math.floor(mapSize.y / 2)
+    let maxWidth = Math.max(1, Math.floor(1 + progress * 3))
+    for (let x = 0; x < mapSize.x; ++x) {
+        let wave = x % 3 == 0 ? -1 : (x % 3 == 1 ? 0 : 1)
+        let center = Math.max(0, Math.min(mapSize.y - 1, centerY + wave))
+        for (let y = 0; y < mapSize.y; ++y) {
+            if (Math.abs(y - center) <= maxWidth - 1) {
+                cells.push({x: x, y: y})
+            }
+        }
+    }
+    return cells
+}
+
+function generateCombatStageBTrainingMap(options) {
+    options = options || {}
+    let progress = clampCombatProgress(
+        options.progress === undefined ? 0 : options.progress)
+    let rng = createSeededRandom(options.seed || 1)
+    let maxBound = options.maxBound || 9
+    let bound = Math.min(9, Math.max(3,
+        Math.floor(3 + progress * (maxBound - 3))))
+    let mapSize = {x: bound, y: bound}
+    let playable = stageBPlayableCells(mapSize, progress)
+    let firstUnit = playable[0]
+    let secondUnit = playable[playable.length - 1]
+    if (rng() >= 0.5) {
+        firstUnit = playable[playable.length - 1]
+        secondUnit = playable[0]
+    }
+    let lakes = []
+    for (let x = 0; x < mapSize.x; ++x) {
+        for (let y = 0; y < mapSize.y; ++y) {
+            let coord = {x: x, y: y}
+            if (!coordInList(playable, coord)) {
+                lakes.push(coord)
+            }
+        }
+    }
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            towns: [],
+            ai: true,
+            units: [{type: Noob, x: firstUnit.x, y: firstUnit.y}]
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            towns: [],
+            ai: true,
+            units: [{type: Noob, x: secondUnit.x, y: secondUnit.y}]
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        lakes,
+        [])
+    map.suddenDeathRound = 0
+    map.combatStage = 'B'
+    map.combatStageProgress = progress
+    map.combatOnly = true
+    map.floodedCellCount = lakes.length
+    map.playableCellCount = playable.length
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 0,
+        productionActions: 0,
+        resources: 0
+    }
+    return map
+}
+
 function generateTinyMapAllUnits() {
 
     let mapSize = {x: 9, y: 9}
