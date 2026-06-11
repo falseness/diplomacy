@@ -325,6 +325,67 @@ function summarizeMetrics(records) {
   };
 }
 
+function readLatestCheckpointPointer(options) {
+  const checkpointPointer = latestCheckpointPath(options.storageDir, options.runId);
+  if (!fs.existsSync(checkpointPointer)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(checkpointPointer, 'utf8'));
+}
+
+function progressPlateauState(previousRecords, loss) {
+  const recent = previousRecords.slice(-3);
+  if (recent.length < 3) {
+    return {
+      status: 'insufficient-data',
+      window: recent.length + 1,
+      lossDelta: null
+    };
+  }
+  const lossDelta = recent[0].loss - loss;
+  return {
+    status: Math.abs(lossDelta) < 0.001 ? 'plateau' : 'improving',
+    window: recent.length + 1,
+    lossDelta
+  };
+}
+
+function progressRecord(options, state, metric, previousRecords) {
+  const summary = summarizeMetrics(previousRecords.concat(metric));
+  const checkpointPointer = readLatestCheckpointPointer(options);
+  const oldWinRate = previousRecords.length
+    ? summarizeMetrics(previousRecords).winRates.red
+    : null;
+  const newWinRate = summary.winRates.red;
+  return {
+    type: 'combat-training-progress',
+    runId: options.runId,
+    stage: 'combat-foundation',
+    epoch: state.epochs,
+    game: metric.game,
+    trainingStep: state.completedGames,
+    checkpoint: checkpointPointer ? checkpointPointer.path : null,
+    loss: metric.loss,
+    learningRate: 0.001,
+    oldVsNewWinrate: {
+      old: oldWinRate,
+      new: newWinRate,
+      delta: oldWinRate === null ? null : newWinRate - oldWinRate
+    },
+    simpleAiPlayerWinrate: {
+      value: null,
+      evaluated: false,
+      reason: 'not evaluated by this progress-only combat training smoke'
+    },
+    plateauState: progressPlateauState(previousRecords, metric.loss),
+    nextStageEligibility: {
+      eligible: false,
+      reason: 'curriculum advancement is outside TASK-064'
+    },
+    timestamp: state.updatedAt
+  };
+}
+
 function manifestValue(options, state, paths, status, errorMessage) {
   const checkpointPointer = latestCheckpointPath(options.storageDir, options.runId);
   const outputFiles = [
@@ -332,6 +393,7 @@ function manifestValue(options, state, paths, status, errorMessage) {
     paths.manifestPath,
     paths.metricsPath,
     paths.metricsSummaryPath,
+    paths.progressPath,
     paths.logPath
   ];
   if (fs.existsSync(checkpointPointer)) {
@@ -369,6 +431,7 @@ function manifestValue(options, state, paths, status, errorMessage) {
         : null,
       metrics: path.relative(options.storageDir, paths.metricsPath),
       metricsSummary: path.relative(options.storageDir, paths.metricsSummaryPath),
+      progress: path.relative(options.storageDir, paths.progressPath),
       log: path.relative(options.storageDir, paths.logPath),
       state: path.relative(options.storageDir, paths.statePath),
       finalModel: path.relative(options.storageDir, paths.finalDir),
@@ -406,6 +469,7 @@ async function main() {
   const manifestPath = path.join(runDir, 'manifest.json');
   const metricsPath = path.join(options.storageDir, 'metrics', `${options.runId}.jsonl`);
   const metricsSummaryPath = path.join(options.storageDir, 'metrics', `${options.runId}.summary.json`);
+  const progressPath = path.join(options.storageDir, 'progress', `${options.runId}.jsonl`);
   const logPath = path.join(options.storageDir, 'logs', `${options.runId}.log`);
   const finalDir = path.join(options.storageDir, 'final', options.runId);
   const paths = {
@@ -415,12 +479,14 @@ async function main() {
     manifestPath,
     metricsPath,
     metricsSummaryPath,
+    progressPath,
     statePath
   };
 
   fs.mkdirSync(runDir, { recursive: true });
   fs.mkdirSync(checkpointDir, { recursive: true });
   fs.mkdirSync(path.dirname(metricsPath), { recursive: true });
+  fs.mkdirSync(path.dirname(progressPath), { recursive: true });
 
   if (options.evaluateLatest) {
     const checkpoint = readLatestCheckpoint(options.storageDir, options.runId);
@@ -569,6 +635,10 @@ async function main() {
       metric.winRates = summary.winRates;
       metric.benchmarkSummary = summary.benchmarkSummary;
       appendJsonLine(metricsPath, metric);
+      appendJsonLine(
+        progressPath,
+        progressRecord(options, state, metric, previousRecords)
+      );
       persistRunMetadata(options, state, paths, state.status);
       console.log(`Completed game ${game}/${state.totalGames}`);
       if (options.failAfterGame === game) {

@@ -1280,5 +1280,25 @@
       "Step 4: If any non-win occurs, run TASK-061 retraining on generated maps and rerun this benchmark with the selected checkpoint."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-064",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Add persisted combat-training progress metrics for the new combat-only curriculum. Keep this ticket scoped to recording progress only, not changing model architecture or curriculum stages. Implemented: Added flushed combat-training progress JSONL records, manifest artifact references, and a Node 20 smoke verifying required fields without changing model architecture or curriculum stages.",
+    "acceptance_criteria": [
+      "Training writes structured progress records with stage, epoch, checkpoint, loss, learning rate, old-vs-new winrate, SimpleAiPlayer winrate, plateau state, and next-stage eligibility.",
+      "Progress records are written to JSONL or summary artifacts under the configured training storage directory.",
+      "Progress records are flushed during training and do not require parsing console logs.",
+      "Existing training manifests reference the progress artifact path.",
+      "The implementation does not introduce economy mechanics into combat-only training."
+    ],
+    "test_steps": [
+      "Step 1: Run a short combat-training smoke with one epoch or minimum supported equivalent.",
+      "Step 2: Confirm the progress artifact exists under the configured storage directory.",
+      "Step 3: Confirm every required progress field is present and machine-readable.",
+      "Step 4: Confirm the run manifest references the progress artifact."
+    ],
+    "status": "to-verify"
   }
 ]
