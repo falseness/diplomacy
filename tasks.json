@@ -1099,7 +1099,7 @@
     "id": "TASK-055",
     "category": "test",
     "priority": "critical",
-    "description": "Add a real-runtime SimpleAiPlayerWithEconomy completion harness for all gamestart maps. The harness must configure every non-neutral player slot as SimpleAiPlayerWithEconomy, force suddenDeathRound=500 for the run, and save structured per-map results.",
+    "description": "Add a real-runtime SimpleAiPlayerWithEconomy completion harness for all gamestart maps. The harness must configure every non-neutral player slot as SimpleAiPlayerWithEconomy, force suddenDeathRound=500 for the run, and save structured per-map results. Implemented: Added the all-gamestart real-runtime completion harness, npm smoke, forced suddenDeathRound=500 reporting, and failure artifact capture for SimpleAiPlayerWithEconomy sample runs.",
     "acceptance_criteria": [
       "The harness uses GameMap.start, nextTurn, and the real runtime game loop rather than the synthetic benchmark state.",
       "Every non-neutral player slot is configured as SimpleAiPlayerWithEconomy.",
@@ -1114,7 +1114,7 @@
       "Step 3: Confirm the harness uses the real runtime loop and suddenDeathRound=500.",
       "Step 4: Inspect the structured report and failure artifact paths."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-056",
