@@ -783,18 +783,27 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         let playerIndexForThis = this.getPlayerIndex()
         for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
-            if (playerIndex == playerIndexForThis) {
+            if (playerIndex == playerIndexForThis || !players[playerIndex] ||
+                    players[playerIndex].isNeutral || players[playerIndex].isLost) {
                 continue
             }
             let enemy = players[playerIndex]
             for (let i = 0; i < enemy.units.length; ++i) {
                 if (!enemy.units[i].killed) {
-                    targets.push({coord: enemy.units[i].coord, kind: 'unit'})
+                    targets.push({
+                        coord: enemy.units[i].coord,
+                        kind: 'unit',
+                        opponentIndex: playerIndex
+                    })
                 }
             }
             for (let i = 0; i < enemy.towns.length; ++i) {
                 if (!enemy.towns[i].killed) {
-                    targets.push({coord: enemy.towns[i].coord, kind: 'town'})
+                    targets.push({
+                        coord: enemy.towns[i].coord,
+                        kind: 'town',
+                        opponentIndex: playerIndex
+                    })
                 }
             }
         }
@@ -889,7 +898,8 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         let playerIndexForThis = this.getPlayerIndex()
         for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
-            if (playerIndex == playerIndexForThis || players[playerIndex].isNeutral) {
+            if (playerIndex == playerIndexForThis || !players[playerIndex] ||
+                    players[playerIndex].isNeutral || players[playerIndex].isLost) {
                 continue
             }
             let opponent = players[playerIndex]
@@ -898,6 +908,7 @@ class AIPlayerWithEconomy extends AIPlayer {
                     targets.push({
                         coord: opponent.towns[i].coord,
                         kind: 'town',
+                        opponentIndex: playerIndex,
                         threatensTown: false
                     })
                 }
@@ -917,6 +928,7 @@ class AIPlayerWithEconomy extends AIPlayer {
                     targets.push({
                         coord: opponent.units[i].coord,
                         kind: 'unit',
+                        opponentIndex: playerIndex,
                         threatensTown: threatensTown
                     })
                 }

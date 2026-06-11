@@ -13,6 +13,7 @@
     "test-simple-ai-economy-game": "node ai/test-simple-ai-economy-game.js",
     "test-simple-ai-war": "node ai/test-simple-ai-war-mode.js",
     "test-ai-economy": "node ai/test-ai-player-economy.js && node ai/test-action-manager-economy-undo.js",
+    "test-ai-economy-multiplayer": "node ai/test-ai-player-economy-multiplayer.js",
     "test-ai-boundary": "node ai/test-runtime-boundary.js",
     "test-browser-inference": "node ai/test-browser-inference-wiring.js",
     "test-browser-ai-smoke": "node ai/test-browser-ai-smoke.js",

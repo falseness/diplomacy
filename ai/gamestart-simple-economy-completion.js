@@ -571,6 +571,9 @@ if (require.main === module) {
 
 module.exports = {
   FORCED_SUDDEN_DEATH_ROUND,
+  createRuntimeContext,
+  disableHeadlessBorderDrawing,
+  loadBrowserScripts,
   parseArgs,
   runHarness,
   runRuntimeScenario,

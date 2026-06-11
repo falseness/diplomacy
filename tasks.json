@@ -1181,7 +1181,7 @@
     "id": "TASK-059",
     "category": "functional",
     "priority": "critical",
-    "description": "Generalize AIPlayerWithEconomy inference to any non-neutral player count. Candidate-relative enemy evaluation must work with multiple opponents while preserving existing 1v1 behavior and model input compatibility.",
+    "description": "Generalize AIPlayerWithEconomy inference to any non-neutral player count. Candidate-relative enemy evaluation must work with multiple opponents while preserving existing 1v1 behavior and model input compatibility. Implemented: Generalized AIPlayerWithEconomy target metadata and neutral/lost-player filtering for multi-opponent action ranking/movement, added a real gamestart 3-player and 4-player model-backed turn regression, and preserved existing 1v1 AI economy and benchmark smokes.",
     "acceptance_criteria": [
       "AIPlayerWithEconomy can enumerate legal actions on 2-player, 3-player, and 4-player maps.",
       "Enemy target selection considers all opposing non-neutral players.",
@@ -1196,7 +1196,7 @@
       "Step 3: Run focused 3-player and 4-player turn regressions.",
       "Step 4: Rerun existing 1v1 AIPlayerWithEconomy tests and benchmark smokes."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-060",
