@@ -637,6 +637,50 @@ function generateBigTownTrainingMap(seed) {
     return generateTownTrainingMap({size: 'big', seed: seed})
 }
 
+function generateCombatStageATrainingMap(options) {
+    options = options || {}
+    let rng = createSeededRandom(options.seed || 1)
+    let mirrored = rng() >= 0.5
+    let firstUnit = mirrored ? {x: 0, y: 1} : {x: 0, y: 0}
+    let secondUnit = mirrored ? {x: 1, y: 0} : {x: 1, y: 1}
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            towns: [],
+            ai: true,
+            units: [{type: Noob, x: firstUnit.x, y: firstUnit.y}]
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            towns: [],
+            ai: true,
+            units: [{type: Noob, x: secondUnit.x, y: secondUnit.y}]
+        }
+    ]
+    let map = new GameMap(
+        {x: 2, y: 2},
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.suddenDeathRound = 0
+    map.combatStage = 'A'
+    map.combatOnly = true
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 0,
+        productionActions: 0,
+        resources: 0
+    }
+    return map
+}
+
 function generateTinyMapAllUnits() {
 
     let mapSize = {x: 9, y: 9}

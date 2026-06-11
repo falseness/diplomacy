@@ -1386,7 +1386,7 @@
     "id": "TASK-069",
     "category": "functional",
     "priority": "critical",
-    "description": "Add combat curriculum Stage A map generation: a 2x2 map, 1v1 Noob-only units, and sudden death active immediately.",
+    "description": "Add combat curriculum Stage A map generation: a 2x2 map, 1v1 Noob-only units, and sudden death active immediately. Implemented: Added deterministic 2x2 Stage A combat map generation with neutral plus two Noob-only AI players, no towns/economy objects, immediate suddenDeathRound=0, and focused headless harness smoke coverage.",
     "acceptance_criteria": [
       "The Stage A generator creates deterministic fixed-seed 2x2 maps.",
       "Each map has exactly two non-neutral players with one Noob each unless the stage configuration explicitly requests a tiny variation.",
@@ -1400,7 +1400,7 @@
       "Step 3: Start each generated map in the headless harness.",
       "Step 4: Confirm no economy objects or non-Noob units are present."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-070",
