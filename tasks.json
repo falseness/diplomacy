@@ -1202,7 +1202,7 @@
     "id": "TASK-060",
     "category": "functional",
     "priority": "critical",
-    "description": "Extend generated training maps and training smoke coverage to 2-player, 3-player, and 4-player AIPlayerWithEconomy games. New training coverage must use random generated maps only, not fixed options/gamestart.js maps.",
+    "description": "Extend generated training maps and training smoke coverage to 2-player, 3-player, and 4-player AIPlayerWithEconomy games. New training coverage must use random generated maps only, not fixed options/gamestart.js maps. Implemented: Added optional 2/3/4-player generated town training maps, generalized economy self-play training and scoring for all non-neutral AIPlayerWithEconomy players, recorded player-count/winner/generated-map provenance metrics, and added fixed-seed multiplayer map/training smoke coverage.",
     "acceptance_criteria": [
       "Generated training map configuration can create valid 2-player, 3-player, and 4-player games.",
       "Generated multi-player maps include economy and combat features used by AIPlayerWithEconomy.",
@@ -1216,7 +1216,7 @@
       "Step 3: Run a short AIPlayerWithEconomy training smoke on generated multi-player maps.",
       "Step 4: Confirm metrics and artifacts record player count, seed, winner, and generated-map provenance."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-061",

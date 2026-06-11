@@ -28,6 +28,7 @@
     "test-suburb-vectorization": "node ai/test-suburb-vectorization.js",
     "test-suburb-map-generation": "node ai/test-suburb-map-generation.js",
     "test-town-map-generation": "node ai/test-town-map-generation.js",
+    "test-multiplayer-training-maps": "node ai/test-multiplayer-training-maps.js",
     "test-barrack-map-generation": "node ai/test-barrack-map-generation.js",
     "test-farm-map-generation": "node ai/test-farm-map-generation.js",
     "test-gold-map-generation": "node ai/test-gold-map-generation.js",

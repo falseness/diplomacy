@@ -19,7 +19,8 @@ function parseArgs(argv) {
     games: 1,
     epochs: 1,
     seed: 36000,
-    checkpointInterval: 1
+    checkpointInterval: 1,
+    playerCounts: [2, 3, 4]
   };
   for (let index = 0; index < argv.length; index += 2) {
     const argument = argv[index];
@@ -34,6 +35,10 @@ function parseArgs(argv) {
     else if (name === 'epochs') options.epochs = Number(value);
     else if (name === 'seed') options.seed = Number(value);
     else if (name === 'checkpoint-interval') options.checkpointInterval = Number(value);
+    else if (name === 'player-count') options.playerCounts = [Number(value)];
+    else if (name === 'player-counts') {
+      options.playerCounts = value.split(',').map(entry => Number(entry.trim()));
+    }
     else throw new Error(`unknown argument: ${argument}`);
   }
   for (const name of ['games', 'epochs', 'seed', 'checkpointInterval']) {
@@ -43,6 +48,10 @@ function parseArgs(argv) {
   }
   if (!/^[A-Za-z0-9._-]+$/.test(options.runId)) {
     throw new Error('run-id contains unsupported characters');
+  }
+  if (!Array.isArray(options.playerCounts) || options.playerCounts.length === 0 ||
+      options.playerCounts.some(count => !Number.isInteger(count) || count < 2 || count > 4)) {
+    throw new Error('playerCounts must contain only 2, 3, or 4');
   }
   options.storageDir = path.resolve(options.storageDir);
   return options;
@@ -109,6 +118,12 @@ function adaptBoard(board, expectedWidth, expectedHeight) {
 function trainingMapSizeForSeed(seed) {
   const sizes = ['tiny', 'medium', 'big'];
   return sizes[Math.abs(seed) % sizes.length];
+}
+
+function trainingPlayerCountForSeed(seed, playerCounts) {
+  const counts = Array.isArray(playerCounts) && playerCounts.length ?
+    playerCounts : [2, 3, 4];
+  return counts[Math.abs(seed) % counts.length];
 }
 
 function createCanvasContext() {
@@ -214,13 +229,15 @@ function loadBrowserScripts(context) {
   }
 }
 
-function createTrainingBatch(seed) {
+function createTrainingBatch(seed, playerCounts) {
   const context = createRuntimeContext(seed);
   loadBrowserScripts(context);
   context.__trainingSeed = seed;
   context.__trainingMapSize = trainingMapSizeForSeed(seed);
+  context.__trainingPlayerCount = trainingPlayerCountForSeed(seed, playerCounts);
   context.__actionCategories = ACTION_CATEGORIES;
   context.__trainingCandidateLimit = 48;
+  context.__trainingRounds = 4;
   const result = new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = false
@@ -260,6 +277,7 @@ function createTrainingBatch(seed) {
     let map = generateTownTrainingMap({
       size: __trainingMapSize,
       seed: __trainingSeed,
+      playerCount: __trainingPlayerCount,
       buildingDensity: 'dense',
       barrackDensity: 0.2,
       pendingBarrackProbability: 0,
@@ -274,8 +292,9 @@ function createTrainingBatch(seed) {
       startingGoldMin: 500,
       startingGoldMax: 500
     })
-    map.players[1].playerType = 'AIPlayerWithEconomy'
-    map.players[2].playerType = 'AIPlayerWithEconomy'
+    for (let playerIndex = 1; playerIndex < map.players.length; ++playerIndex) {
+      map.players[playerIndex].playerType = 'AIPlayerWithEconomy'
+    }
     map.start(manager, false)
     suddenDeathRound = 2000
 
@@ -283,17 +302,34 @@ function createTrainingBatch(seed) {
       return player.units.filter(function(unit) { return !unit.killed }).length
     }
     function score(playerIndex) {
-      let opponentIndex = playerIndex == 1 ? 2 : 1
       let player = players[playerIndex]
-      let opponent = players[opponentIndex]
-      if (opponent.isLost) return 1
       if (player.isLost) return -1
+      let activeOpponents = 0
+      let opponentTownTotal = 0
+      let opponentUnitTotal = 0
+      let opponentGoldTotal = 0
+      let opponentIncomeTotal = 0
+      for (let opponentIndex = 1; opponentIndex < players.length; ++opponentIndex) {
+        if (opponentIndex == playerIndex || players[opponentIndex].isLost) {
+          continue
+        }
+        let opponent = players[opponentIndex]
+        activeOpponents += 1
+        opponentTownTotal += opponent.towns.filter(function(town) {
+          return !town.killed
+        }).length
+        opponentUnitTotal += liveUnits(opponent)
+        opponentGoldTotal += opponent.gold
+        opponentIncomeTotal += opponent.income
+      }
+      if (!activeOpponents) return 1
+      let scale = activeOpponents
       let material =
         (player.towns.filter(function(town) { return !town.killed }).length -
-          opponent.towns.filter(function(town) { return !town.killed }).length) * 0.45 +
-        (liveUnits(player) - liveUnits(opponent)) * 0.14 +
-        (player.gold - opponent.gold) / 800 +
-        (player.income - opponent.income) / 80
+          opponentTownTotal / scale) * 0.45 +
+        (liveUnits(player) - opponentUnitTotal / scale) * 0.14 +
+        (player.gold - opponentGoldTotal / scale) / 800 +
+        (player.income - opponentIncomeTotal / scale) / 80
       return Math.max(-1, Math.min(1, material))
     }
     function commandCategory(command) {
@@ -304,8 +340,11 @@ function createTrainingBatch(seed) {
     let labels = []
     let actionCounts = {}
     let turnsPlayed = 0
-    for (let round = 0; round < 12; ++round) {
-      for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
+    for (let round = 0; round < __trainingRounds; ++round) {
+      for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+        if (players[playerIndex].isLost) {
+          continue
+        }
         whooseTurn = playerIndex
         let player = players[playerIndex]
         player.nextTurn()
@@ -348,6 +387,16 @@ function createTrainingBatch(seed) {
 
     return {
       mapSize: map.mapSize,
+      playerCount: players.length - 1,
+      seed: __trainingSeed,
+      generatedMapProvenance: {
+        generator: 'generateTownTrainingMap',
+        generated: true,
+        fixedGamestartMap: false,
+        size: __trainingMapSize,
+        seed: __trainingSeed,
+        playerCount: players.length - 1
+      },
       players: players.slice(1).map(function(player) {
         return player.constructor.name
       }),
@@ -363,6 +412,15 @@ function createTrainingBatch(seed) {
           lost: player.isLost
         }
       }),
+      winner: (() => {
+        let active = []
+        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+          if (!players[playerIndex].isLost) {
+            active.push(playerIndex)
+          }
+        }
+        return active.length == 1 ? active[0] : null
+      })(),
       mapFeatures: (() => {
         let features = {
           generatedSize: __trainingMapSize,
@@ -410,7 +468,12 @@ function createTrainingBatch(seed) {
     throw new Error(`unexpected self-play players: ${result.players.join(', ')}`);
   }
   return {
-    map: { mapSize: result.mapSize },
+    map: {
+      mapSize: result.mapSize,
+      playerCount: result.playerCount,
+      seed: result.seed,
+      provenance: result.generatedMapProvenance
+    },
     boards: result.examples.map(example => adaptBoard(example.board, 7, 7)),
     globals: result.examples.map(example => example.global),
     labels: result.labels,
@@ -423,6 +486,7 @@ function createTrainingBatch(seed) {
       product: example.product
     })),
     finalState: result.finalState,
+    winner: result.winner,
     mapFeatures: result.mapFeatures
   };
 }
@@ -496,9 +560,14 @@ function writeBenchmarkSnapshot(
     runId: options.runId,
     status,
     trainer: 'AIPlayerWithEconomy',
-    players: ['AIPlayerWithEconomy', 'AIPlayerWithEconomy'],
+    playerCounts: options.playerCounts,
     dataSource: 'real-runtime-self-play',
     mapGenerator: 'generateTownTrainingMap',
+    generatedMapProvenance: {
+      generator: 'generateTownTrainingMap',
+      generated: true,
+      fixedGamestartMap: false
+    },
     cellVectorSize: CELL_VECTOR_SIZE,
     completedGames: metrics.length,
     plannedGames: options.games,
@@ -516,6 +585,9 @@ function writeBenchmarkSnapshot(
 }
 
 async function run(options) {
+  options = Object.assign({
+    playerCounts: [2, 3, 4]
+  }, options);
   const runDir = path.join(options.storageDir, 'runs', options.runId);
   const checkpointRoot = path.join(options.storageDir, 'checkpoints', options.runId);
   const metricsPath = path.join(options.storageDir, 'metrics', `${options.runId}.jsonl`);
@@ -530,7 +602,7 @@ async function run(options) {
   let bestCheckpoint = null;
   try {
     for (let game = 1; game <= options.games; game += 1) {
-      const batch = createTrainingBatch(options.seed + game - 1);
+      const batch = createTrainingBatch(options.seed + game - 1, options.playerCounts);
       const boardTensor = tf.tensor4d(
         batch.boards.flat(3),
         [batch.boards.length, 7, 7, CELL_VECTOR_SIZE]
@@ -555,8 +627,11 @@ async function run(options) {
         runId: options.runId,
         game,
         seed: options.seed + game - 1,
-        players: ['AIPlayerWithEconomy', 'AIPlayerWithEconomy'],
+        playerCount: batch.map.playerCount,
+        players: new Array(batch.map.playerCount).fill('AIPlayerWithEconomy'),
+        winner: batch.winner,
         dataSource: 'real-runtime-self-play',
+        generatedMapProvenance: batch.map.provenance,
         mapSize: batch.map.mapSize,
         cellVectorSize: CELL_VECTOR_SIZE,
         examples: batch.labels.length,
@@ -585,6 +660,8 @@ async function run(options) {
           actionCounts: batch.actionCounts,
           dataSource: metric.dataSource,
           actionsApplied: metric.actionsApplied,
+          playerCount: metric.playerCount,
+          winner: metric.winner,
           loss,
           mapGenerator: 'generateTownTrainingMap'
         });

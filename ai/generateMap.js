@@ -454,7 +454,7 @@ function createUnitComposition(rng, count, composition) {
     return result
 }
 
-function generateGoldmineScenarios(rng, mapSize, used, count, incomeMin, incomeMax) {
+function generateGoldmineScenarios(rng, mapSize, used, count, incomeMin, incomeMax, maxOwner) {
     let goldmines = []
     for (let i = 0; i < count; ++i) {
         let coord = pickCoord(rng, mapSize, used)
@@ -462,16 +462,27 @@ function generateGoldmineScenarios(rng, mapSize, used, count, incomeMin, incomeM
             x: coord.x,
             y: coord.y,
             income: randomIntWithRng(rng, incomeMin, incomeMax),
-            owner: i < 3 ? i : randomIntWithRng(rng, 0, 2)
+            owner: i <= maxOwner ? i : randomIntWithRng(rng, 0, maxOwner)
         })
     }
     return goldmines
+}
+
+function trainingPlayerColor(playerIndex) {
+    let colors = [
+        {r: 255, g: 0, b: 0},
+        {r: 98, g: 168, b: 222},
+        {r: 60, g: 190, b: 100},
+        {r: 230, g: 170, b: 40}
+    ]
+    return colors[(playerIndex - 1) % colors.length]
 }
 
 function generateTownTrainingMap(options) {
     options = options || {}
     let config = townTrainingSizeConfig(options.size || 'tiny')
     let rng = createSeededRandom(options.seed || 1)
+    let playerCount = boundedInteger(options.playerCount, 2, 2, 4)
     let densityProfile = buildingDensityProfile(options.buildingDensity || 'normal', config)
     let barrackDensity =
         clampProbability(options.barrackDensity, densityProfile.barrackDensity)
@@ -519,11 +530,11 @@ function generateTownTrainingMap(options) {
         config.minTownDistance, suburbDistance * 2 + 1)
 
     let neutralTowns = []
-    let redTowns = []
-    let blueTowns = []
+    let playerTowns = []
 
-    redTowns.push(placeTown(rng, mapSize, used, allTowns, suburbTownDistance))
-    blueTowns.push(placeTown(rng, mapSize, used, allTowns, suburbTownDistance))
+    for (let playerIndex = 1; playerIndex <= playerCount; ++playerIndex) {
+        playerTowns.push([placeTown(rng, mapSize, used, allTowns, suburbTownDistance)])
+    }
     for (let i = 0; i < config.neutralTowns; ++i) {
         neutralTowns.push(placeTown(rng, mapSize, used, allTowns, suburbTownDistance))
     }
@@ -532,16 +543,19 @@ function generateTownTrainingMap(options) {
     for (let i = 0; i < allTowns.length; ++i) {
         claimedSuburbs[coordKey(allTowns[i])] = true
     }
-    delete claimedSuburbs[coordKey(redTowns[0])]
-    let redSuburbs = generateSuburbLayouts(
-        rng, mapSize, redTowns, suburbDensity, suburbDistance, claimedSuburbs)
-    delete claimedSuburbs[coordKey(blueTowns[0])]
-    let blueSuburbs = generateSuburbLayouts(
-        rng, mapSize, blueTowns, suburbDensity, suburbDistance, claimedSuburbs)
-    reserveSuburbExpansionCells(redSuburbs, claimedSuburbs, used)
-    reserveSuburbExpansionCells(blueSuburbs, claimedSuburbs, used)
-    let redSuburbKeys = configuredSuburbKeys(redSuburbs)
-    let blueSuburbKeys = configuredSuburbKeys(blueSuburbs)
+    let playerSuburbs = []
+    for (let playerIndex = 0; playerIndex < playerTowns.length; ++playerIndex) {
+        delete claimedSuburbs[coordKey(playerTowns[playerIndex][0])]
+        playerSuburbs.push(generateSuburbLayouts(
+            rng, mapSize, playerTowns[playerIndex], suburbDensity, suburbDistance,
+            claimedSuburbs))
+    }
+    for (let playerIndex = 0; playerIndex < playerSuburbs.length; ++playerIndex) {
+        reserveSuburbExpansionCells(playerSuburbs[playerIndex], claimedSuburbs, used)
+    }
+    let playerSuburbKeys = playerSuburbs.map(function(suburbs) {
+        return configuredSuburbKeys(suburbs)
+    })
 
     let mountains = []
     let lakes = []
@@ -555,71 +569,57 @@ function generateTownTrainingMap(options) {
         }
     }
 
-    let redUnits = []
-    let blueUnits = []
-    let redUnitTypes = createUnitComposition(rng, unitsPerPlayer, unitComposition)
-    let blueUnitTypes = createUnitComposition(rng, unitsPerPlayer, unitComposition)
-    for (let i = 0; i < unitsPerPlayer; ++i) {
-        redUnits.push(placeUnitNearTown(rng, mapSize, used, redTowns[0], redUnitTypes[i]))
-        blueUnits.push(placeUnitNearTown(rng, mapSize, used, blueTowns[0], blueUnitTypes[i]))
+    let playerScenarios = []
+    for (let playerIndex = 0; playerIndex < playerTowns.length; ++playerIndex) {
+        let units = []
+        let unitTypes = createUnitComposition(rng, unitsPerPlayer, unitComposition)
+        for (let i = 0; i < unitsPerPlayer; ++i) {
+            units.push(placeUnitNearTown(
+                rng, mapSize, used, playerTowns[playerIndex][0], unitTypes[i]))
+        }
+        playerScenarios.push({
+            units: units,
+            barracks: generateBarrackScenarios(
+                rng, mapSize, used, playerTowns[playerIndex], barrackDensity,
+                pendingBarrackProbability, playerSuburbKeys[playerIndex]),
+            farms: generateFarmScenarios(
+                rng, mapSize, used, playerTowns[playerIndex], farmDensity,
+                pendingFarmProbability, playerSuburbKeys[playerIndex]),
+            external: generateExternalScenarios(
+                rng, mapSize, used, playerTowns[playerIndex], externalDensity,
+                playerSuburbKeys[playerIndex])
+        })
     }
-    let redBarrackScenarios = generateBarrackScenarios(
-        rng, mapSize, used, redTowns, barrackDensity, pendingBarrackProbability,
-        redSuburbKeys)
-    let blueBarrackScenarios = generateBarrackScenarios(
-        rng, mapSize, used, blueTowns, barrackDensity, pendingBarrackProbability,
-        blueSuburbKeys)
-    let redFarmScenarios = generateFarmScenarios(
-        rng, mapSize, used, redTowns, farmDensity, pendingFarmProbability,
-        redSuburbKeys)
-    let blueFarmScenarios = generateFarmScenarios(
-        rng, mapSize, used, blueTowns, farmDensity, pendingFarmProbability,
-        blueSuburbKeys)
-    let redExternalScenarios = generateExternalScenarios(
-        rng, mapSize, used, redTowns, externalDensity, redSuburbKeys)
-    let blueExternalScenarios = generateExternalScenarios(
-        rng, mapSize, used, blueTowns, externalDensity, blueSuburbKeys)
     let generatedGoldmines = generateGoldmineScenarios(
-        rng, mapSize, used, goldmineCount, goldmineIncomeMin, goldmineIncomeMax)
+        rng, mapSize, used, goldmineCount, goldmineIncomeMin, goldmineIncomeMax,
+        playerCount)
+
+    let generatedPlayers = [{
+        rgb: {r: 208, g: 208, b: 208},
+        towns: neutralTowns
+    }]
+    for (let playerIndex = 1; playerIndex <= playerCount; ++playerIndex) {
+        let scenario = playerScenarios[playerIndex - 1]
+        generatedPlayers.push({
+            rgb: trainingPlayerColor(playerIndex),
+            gold: randomIntWithRng(rng, startingGoldMin, startingGoldMax),
+            towns: playerTowns[playerIndex - 1],
+            suburbs: playerSuburbs[playerIndex - 1],
+            ai: playerIndex == 1 ? !gameSettings.testAI : true,
+            units: scenario.units,
+            barracks: scenario.barracks.barracks,
+            pendingBarracks: scenario.barracks.pendingBarracks,
+            farms: scenario.farms.farms,
+            pendingFarms: scenario.farms.pendingFarms,
+            walls: scenario.external.walls,
+            bastions: scenario.external.bastions,
+            towers: scenario.external.towers
+        })
+    }
 
     return new GameMap(
         mapSize,
-        [
-            {
-                rgb: {r: 208, g: 208, b: 208},
-                towns: neutralTowns
-            },
-            {
-                rgb: {r: 255, g: 0, b: 0},
-                gold: randomIntWithRng(rng, startingGoldMin, startingGoldMax),
-                towns: redTowns,
-                suburbs: redSuburbs,
-                ai: !gameSettings.testAI,
-                units: redUnits,
-                barracks: redBarrackScenarios.barracks,
-                pendingBarracks: redBarrackScenarios.pendingBarracks,
-                farms: redFarmScenarios.farms,
-                pendingFarms: redFarmScenarios.pendingFarms,
-                walls: redExternalScenarios.walls,
-                bastions: redExternalScenarios.bastions,
-                towers: redExternalScenarios.towers
-            },
-            {
-                rgb: {r: 98, g: 168, b: 222},
-                gold: randomIntWithRng(rng, startingGoldMin, startingGoldMax),
-                towns: blueTowns,
-                suburbs: blueSuburbs,
-                units: blueUnits,
-                ai: true,
-                barracks: blueBarrackScenarios.barracks,
-                pendingBarracks: blueBarrackScenarios.pendingBarracks,
-                farms: blueFarmScenarios.farms,
-                pendingFarms: blueFarmScenarios.pendingFarms,
-                walls: blueExternalScenarios.walls,
-                bastions: blueExternalScenarios.bastions,
-                towers: blueExternalScenarios.towers
-            }
-        ],
+        generatedPlayers,
         generatedGoldmines,
         lakes,
         mountains)
