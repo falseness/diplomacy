@@ -707,7 +707,7 @@ class AIPlayer extends Player {
     }
     nextTurn() {
         super.nextTurn()
-        if (gameSettings.testAI) {
+        if (gameSettings.testAI || gameSettings.withAI) {
             this.doActions()
         }
     }
