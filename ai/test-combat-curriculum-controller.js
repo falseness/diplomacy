@@ -112,7 +112,7 @@ function assertEveryStageBoundary() {
       '--plateau-window', '2',
       '--plateau-min-delta', '2',
       '--plateau-patience', '1',
-      '--curriculum-simple-winrate', '0.75',
+      '--curriculum-simple-winrate', '0.85',
       '--curriculum-lr-reduction-attempted'
     ]);
 
@@ -161,7 +161,7 @@ function assertMissingLearningRateGate() {
       '--plateau-window', '2',
       '--plateau-min-delta', '2',
       '--plateau-patience', '1',
-      '--curriculum-simple-winrate', '0.75'
+      '--curriculum-simple-winrate', '0.85'
     ]);
 
     const final = progressRecords(storageDir, runId)[2];
@@ -262,7 +262,7 @@ function assertPassingGate() {
       '--plateau-window', '2',
       '--plateau-min-delta', '2',
       '--plateau-patience', '1',
-      '--curriculum-simple-winrate', '0.75',
+      '--curriculum-simple-winrate', '0.85',
       '--curriculum-lr-reduction-attempted'
     ]);
 
@@ -281,7 +281,7 @@ function assertPassingGate() {
     check(final.learningRateReduction.improved === false,
       'passing run should require the lower learning-rate attempt not to improve');
     check(final.simpleAiPlayerWinrate.evaluated === true &&
-      final.simpleAiPlayerWinrate.value === 0.75,
+      final.simpleAiPlayerWinrate.value === 0.85,
     'passing run did not record SimpleAiPlayer winrate evidence');
     check(final.nextStageEligibility.eligible === true &&
       final.nextStageEligibility.decision === 'advance',
@@ -300,7 +300,7 @@ function assertPassingGate() {
     const manifest = readJson(path.join(storageDir, 'runs', runId, 'manifest.json'));
     check(manifest.curriculum.currentStageIndex === 1,
       'manifest did not include advanced curriculum state');
-    check(manifest.configuration.curriculumSimpleWinrateThreshold === 0.6,
+    check(manifest.configuration.curriculumSimpleWinrateThreshold === 0.8,
       'manifest did not record the SimpleAiPlayer threshold');
   });
 }
@@ -318,7 +318,7 @@ function assertFailingGate() {
       '--plateau-window', '2',
       '--plateau-min-delta', '2',
       '--plateau-patience', '1',
-      '--curriculum-simple-winrate', '0.6',
+      '--curriculum-simple-winrate', '0.79',
       '--curriculum-lr-reduction-attempted'
     ]);
 
@@ -328,7 +328,7 @@ function assertFailingGate() {
     check(final.nextStageEligibility.eligible === false &&
       final.nextStageEligibility.decision === 'hold',
     'failing SimpleAiPlayer gate advanced the stage');
-    check(final.nextStageEligibility.reason.includes('greater than 0.6'),
+    check(final.nextStageEligibility.reason.includes('greater than 0.8'),
       'failing SimpleAiPlayer gate did not record the threshold reason');
     check(final.curriculum.currentStageIndex === 0,
       'failing SimpleAiPlayer gate changed the current stage');
@@ -353,7 +353,7 @@ function assertResumeGateHistory() {
       '--plateau-window', '2',
       '--plateau-min-delta', '2',
       '--plateau-patience', '1',
-      '--curriculum-simple-winrate', '0.75',
+      '--curriculum-simple-winrate', '0.85',
       '--curriculum-lr-reduction-attempted'
     ];
     runTrain(storageDir, [
@@ -372,7 +372,7 @@ function assertResumeGateHistory() {
 
     runTrain(storageDir, [
       '--resume',
-      '--curriculum-simple-winrate', '0.75',
+      '--curriculum-simple-winrate', '0.85',
       '--curriculum-lr-reduction-attempted'
     ]);
 

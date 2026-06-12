@@ -18,7 +18,7 @@ plateau_window=2
 plateau_min_delta=0.001
 plateau_patience=1
 curriculum_simple_winrate=""
-curriculum_simple_winrate_threshold=0.6
+curriculum_simple_winrate_threshold=0.8
 curriculum_lr_reduction_attempted=false
 curriculum_lr_reduction_improved=false
 evaluate_latest=false
@@ -48,7 +48,7 @@ Options:
   --curriculum-simple-winrate N
                              Mock/tiny SimpleAiPlayer winrate for curriculum gating
   --curriculum-simple-winrate-threshold N
-                             Required SimpleAiPlayer winrate before stage advance (default: 0.6)
+                             Required SimpleAiPlayer winrate before stage advance (default: 0.8)
   --curriculum-lr-reduction-attempted
                              Record one lower learning-rate attempt before advancing
   --curriculum-lr-reduction-improved

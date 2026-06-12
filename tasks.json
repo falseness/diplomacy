@@ -2144,7 +2144,7 @@
     "id": "TASK-106",
     "category": "functional",
     "priority": "critical",
-    "description": "Raise the combat curriculum gate for model winrate against SimpleAiPlayer to 80 percent before stage advancement.",
+    "description": "Raise the combat curriculum gate for model winrate against SimpleAiPlayer to 80 percent before stage advancement. Implemented: Raised the combat curriculum and combat-model SimpleAiPlayer thresholds to 80 percent, added focused gate/progress assertions, documented the old 60 percent value as historical only, and re-ran no-cheating checks.",
     "acceptance_criteria": [
       "The combat curriculum uses an 80 percent SimpleAiPlayer winrate threshold for advancement.",
       "Metrics and manifests record the 80 percent threshold with measured AIPlayer-vs-SimpleAiPlayer evidence.",
@@ -2158,7 +2158,7 @@
       "Step 3: Confirm a below-80 percent gate blocks advancement.",
       "Step 4: Inspect AIPlayer and benchmark setup for no-cheating criteria."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-107",

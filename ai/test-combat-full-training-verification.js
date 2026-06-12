@@ -132,8 +132,8 @@ function assertPassingRun() {
           gameResult.inference.calls > 0,
         `stage gate ${index} did not use TensorFlow checkpoint inference`);
     });
-    check(record.simpleAiPlayerWinrate.value > 0.6,
-      `stage gate ${index} advanced without greater-than-60-percent winrate`);
+    check(record.simpleAiPlayerWinrate.value > 0.8,
+      `stage gate ${index} advanced without greater-than-80-percent winrate`);
     check(record.simpleAiPlayerWinrate.value >
         record.nextStageEligibility.requiredSimpleAiPlayerWinrate,
       `stage gate ${index} did not beat the configured winrate threshold`);

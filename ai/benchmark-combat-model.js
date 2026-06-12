@@ -13,7 +13,7 @@ function usage() {
     '  --maps NUMBER              Number of generated combat maps (default: 4)',
     '  --stage NAME               Combat map stage label (default: combat-random)',
     '  --round-limit NUMBER       Maximum turns per game (default: 80)',
-    '  --weak-threshold NUMBER    Minimum required model win rate, 0..1 (default: 0.6)',
+    '  --weak-threshold NUMBER    Minimum required model win rate, 0..1 (default: 0.8)',
     '  --checkpoint PATH          Model checkpoint identifier for reports',
     '  --output PATH              JSON report path',
     '  --help                     Show this help'
@@ -26,7 +26,7 @@ function parseArgs(argv) {
     maps: 4,
     stage: 'combat-random',
     roundLimit: 80,
-    weakThreshold: 0.6,
+    weakThreshold: 0.8,
     checkpoint: 'benchmark-smoke-model',
     output: path.join('/mnt', 'storage', 'diplomacy', 'benchmarks', 'combat-model-vs-simple.json')
   };

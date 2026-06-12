@@ -10,9 +10,9 @@
 
 ## Current Gates And Commands
 
-- `./train.sh` defaults `--curriculum-simple-winrate-threshold` to `0.6` and passes it through to `ai/cloud-train-runner.js`.
+- Historical TASK-102 audit note: `./train.sh` used to default `--curriculum-simple-winrate-threshold` to `0.6`; TASK-106 raises the active curriculum SimpleAiPlayer gate to `0.8` and passes it through to `ai/cloud-train-runner.js`.
 - `ai/cloud-train-runner.js` advances curriculum only when plateau evidence exists, a lower learning-rate attempt is recorded without improvement, and measured or supplied SimpleAiPlayer winrate is strictly greater than the configured threshold.
-- `npm run benchmark-combat-model` maps to `node ai/benchmark-combat-model.js`; its weak model gate default is `--weak-threshold 0.6`, with generated combat-only maps, `AIPlayer` versus `SimpleAiPlayer`, and 80-turn games.
+- `npm run benchmark-combat-model` maps to `node ai/benchmark-combat-model.js`; its weak model gate default is `--weak-threshold 0.8`, with generated combat-only maps, `AIPlayer` versus `SimpleAiPlayer`, and 80-turn games.
 - `npm run benchmark-trained` maps to `node ai/benchmark-trained-model.js`; its final big-map gate default is `--min-win-rate 0.8`, `--games 100`, `--map big-open-field`, `AIPlayerWithEconomy` versus `SimpleAiPlayer`, and clean pre-sudden-death wins only.
 - `npm run benchmark-gamestart-trained` maps to `node ai/benchmark-gamestart-trained-model.js`; its default gate is `--min-win-rate 1` across 1v1 gamestart maps, one seed per side, `AIPlayerWithEconomy` versus `SimpleAiPlayerWithEconomy`.
 - `npm run benchmark-gamestart-all-slots` maps to `node ai/benchmark-gamestart-all-slots.js`; it enforces the symmetrical all-slot gate only when `--require-100` is supplied, over every non-neutral candidate slot with `AIPlayerWithEconomy` against `SimpleAiPlayerWithEconomy`.
@@ -31,4 +31,4 @@
 - Wire the 80 percent final big-map gate in `ai/benchmark-trained-model.js` at the `minWinRate` default and failure check, and keep the report fields `candidateWinRate`, `cleanPreSuddenDeathCandidateWins`, `nonWins`, and `runtimeGamesExecuted` as the gate evidence.
 - Wire the 100 percent 1v1 gamestart symmetrical gate in `ai/benchmark-gamestart-trained-model.js` by keeping `DEFAULT_MIN_WIN_RATE = 1` and requiring zero `nonWins`, with `--no-followups` for verification-only runs.
 - Wire the 100 percent all-gamestart all-slot symmetrical-map gate in `ai/benchmark-gamestart-all-slots.js` behind `--require-100`, with exact class assignment and zero timeout or sudden-death failures.
-- Wire the curriculum SimpleAiPlayer stage gate in `ai/cloud-train-runner.js` at `curriculumGateDecision`; raise the default threshold in `train.sh` only when the later task explicitly changes that policy.
+- Wire the curriculum SimpleAiPlayer stage gate in `ai/cloud-train-runner.js` at `curriculumGateDecision`; TASK-106 changes the active default threshold in `train.sh` to 80 percent.

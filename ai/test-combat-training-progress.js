@@ -83,9 +83,13 @@ function main() {
     check(record.nextStageEligibility &&
       record.nextStageEligibility.eligible === false,
     'next-stage eligibility should stay false for progress-only recording');
+    check(record.nextStageEligibility.requiredSimpleAiPlayerWinrate === 0.8,
+      'progress record did not use the 80 percent SimpleAiPlayer gate');
 
     const manifestPath = path.join(storageDir, 'runs', runId, 'manifest.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    check(manifest.configuration.curriculumSimpleWinrateThreshold === 0.8,
+      'manifest did not record the 80 percent SimpleAiPlayer gate');
     check(manifest.artifacts.progress === path.join('progress', `${runId}.jsonl`),
       'manifest does not reference combat progress artifact');
     check(manifest.artifacts.outputFiles.includes(path.join('progress', `${runId}.jsonl`)),
