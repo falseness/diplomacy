@@ -33,6 +33,13 @@ function normalizeTerrainList(list) {
   })).sort();
 }
 
+function normalizeCoordList(list) {
+  return (list || []).map((coord) => normalizeEntry({
+    x: coord.x,
+    y: coord.y
+  })).sort();
+}
+
 function normalizeUnitList(units) {
   return (units || []).map((unit) => normalizeEntry({
     type: unitTypeName(unit),
@@ -151,6 +158,30 @@ function assertMirroredPlayerSetup(map, seed) {
     );
   }
 
+  const leftMirroredSuburbs = (left.suburbs || []).map((suburb) => ({
+    town: Object.assign({}, suburb.town, mirrorX(suburb.town, map.mapSize)),
+    cells: normalizeCoordList((suburb.cells || []).map((cell) =>
+      Object.assign({}, cell, mirrorX(cell, map.mapSize)))),
+    expansionCells: normalizeCoordList((suburb.expansionCells || []).map((cell) =>
+      Object.assign({}, cell, mirrorX(cell, map.mapSize))))
+  }));
+  const rightSuburbs = (right.suburbs || []).map((suburb) => ({
+    town: suburb.town,
+    cells: normalizeCoordList(suburb.cells),
+    expansionCells: normalizeCoordList(suburb.expansionCells)
+  }));
+  assert(
+    JSON.stringify(leftMirroredSuburbs) === JSON.stringify(rightSuburbs),
+    'suburb ownership layouts are not mirrored for seed ' + seed,
+    { leftMirroredSuburbs, rightSuburbs }
+  );
+
+  assert(
+    left.gold === right.gold,
+    'configured starting resources are not mirrored for seed ' + seed,
+    { leftGold: left.gold, rightGold: right.gold }
+  );
+
   const requiredTypes = ['Noob', 'Normchel', 'KOHb', 'Archer', 'Catapult'];
   const generatedTypes = new Set(left.units.concat(right.units).map(unitTypeName));
   for (const type of requiredTypes) {
@@ -165,6 +196,30 @@ function assertCombatOnly(map) {
   for (const [name, count] of Object.entries(map.economyObjects || {})) {
     assert(count === 0, 'combat generator should not include economy object count for ' + name);
   }
+}
+
+function assertMirroredRuntimeResources(runtime, seed) {
+  assert(runtime.players[1].gold === runtime.players[2].gold,
+    'runtime starting gold is not mirrored for seed ' + seed,
+    { playerOneGold: runtime.players[1].gold, playerTwoGold: runtime.players[2].gold });
+  assert(runtime.players[1].income === runtime.players[2].income,
+    'runtime starting income is not mirrored for seed ' + seed,
+    { playerOneIncome: runtime.players[1].income, playerTwoIncome: runtime.players[2].income });
+}
+
+function expectMirrorFailure(label, mutateMap) {
+  const map = api.generateSymmetricalCombatStageGMap({ seed: 109999 });
+  mutateMap(map);
+  let failed = false;
+  try {
+    assertMirroredPlayerSetup(map, label);
+    for (const property of ['lakes', 'mountains', 'bushes', 'hills']) {
+      assertMirroredTerrain(map, property);
+    }
+  } catch (error) {
+    failed = true;
+  }
+  assert(failed, 'mirror fairness test did not reject intentional asymmetry: ' + label);
 }
 
 const { context } = loadAiScripts();
@@ -191,11 +246,26 @@ for (const seed of seeds) {
   const runtime = map.start();
   assert(runtime.players.length === 3,
     'headless start should preserve players for seed ' + seed);
+  assertMirroredRuntimeResources(runtime, seed);
 
   const repeated = api.generateSymmetricalCombatStageGMap({ seed });
   assert(normalizeMap(map) === normalizeMap(repeated),
     'same seed did not reproduce the same symmetrical combat map for seed ' + seed);
 }
+
+expectMirrorFailure('unit HP advantage', (map) => {
+  map.players[2].units[0].hp += 1;
+});
+expectMirrorFailure('terrain advantage', (map) => {
+  map.mountains.push({ x: 4, y: 4 });
+});
+expectMirrorFailure('resource advantage', (map) => {
+  map.players[1].gold = 90;
+  map.players[2].gold = 95;
+});
+expectMirrorFailure('ownership advantage', (map) => {
+  map.players[2].suburbs[0].cells.pop();
+});
 
 const smokeMap = api.generateSymmetricalCombatStageGMap({ seed: seeds[0] });
 const smokeGame = runGame({
@@ -215,4 +285,4 @@ assert(!smokeGame.crash, 'benchmark harness smoke crashed');
 assert(smokeGame.inference.calls > 0,
   'AIPlayer benchmark smoke did not exercise inference');
 
-console.log('TASK-108 symmetrical combat map generation smoke passed');
+console.log('TASK-109 symmetrical combat fairness smoke passed across ' + seeds.length + ' seeds');

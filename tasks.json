@@ -2204,7 +2204,7 @@
     "id": "TASK-109",
     "category": "test",
     "priority": "critical",
-    "description": "Add tests proving symmetrical combat maps mirror all relevant setup state fairly.",
+    "description": "Add tests proving symmetrical combat maps mirror all relevant setup state fairly. Implemented: Strengthened the symmetrical combat smoke to verify mirrored units, buildings, suburbs/ownership, terrain, configured/runtime starting resources, deterministic replay across four seeds, and deliberate asymmetry rejection.",
     "acceptance_criteria": [
       "Tests verify mirrored unit counts, unit types, HP, and positions.",
       "Tests verify mirrored buildings, terrain, ownership, and starting resources.",
@@ -2218,7 +2218,7 @@
       "Step 3: Confirm the test detects at least one intentional asymmetry in review or by local reasoning.",
       "Step 4: Run the existing combat map generation smoke tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-110",
