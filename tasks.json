@@ -2043,7 +2043,7 @@
     "id": "TASK-101",
     "category": "test",
     "priority": "critical",
-    "description": "Measure full real training speed after fast vectorized actions and compare against TASK-087. Use the same full real training command and environment as the old baseline when practical, confirm the fast path is enabled, and write the old-vs-fast wall-time comparison into progress.md.",
+    "description": "Measure full real training speed after fast vectorized actions and compare against TASK-087. Use the same full real training command and environment as the old baseline when practical, confirm the fast path is enabled, and write the old-vs-fast wall-time comparison into progress.md. Implemented: Confirmed AIPlayer and AIPlayerWithEconomy fast candidate scoring, reran the TASK-087 15-game full real training command under Node 20 with fast actions enabled, and recorded a 247.16s wall-time run versus the 331.097s old baseline.",
     "acceptance_criteria": [
       "The measurement uses the fast-action-enabled full real training path.",
       "The command and environment match TASK-087 as closely as practical.",
@@ -2058,7 +2058,7 @@
       "Step 4: Write the post-fast measurement and old-vs-fast comparison into progress.md.",
       "Step 5: Create follow-up tickets for any correctness failure, stress failure, or training speed regression."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-102",
