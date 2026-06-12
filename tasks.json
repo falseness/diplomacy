@@ -1980,7 +1980,7 @@
     "id": "TASK-098",
     "category": "test",
     "priority": "critical",
-    "description": "Run long fast-action invariant stress verification. Execute the full invariant suite for about 20 minutes across many deterministic seeds and mixed maps, then record the command, seed count, action count, runtime, and any failures in progress.md.",
+    "description": "Run long fast-action invariant stress verification. Execute the full invariant suite for about 20 minutes across many deterministic seeds and mixed maps, then record the command, seed count, action count, runtime, and any failures in progress.md. Implemented: Added timed deterministic stress mode to the generated-map invariant suite, fixed two normal-undo restoration issues exposed by stress seeds 98000 and 101000, and completed a 1,204,324 ms run covering 66 mixed generated maps and 12,347 actions with zero vector, undo, or grid restoration mismatches.",
     "acceptance_criteria": [
       "The stress run uses the full fast-action invariant pipeline across mixed generated maps.",
       "The stress run lasts about 20 minutes unless the suite fails earlier.",
@@ -1995,7 +1995,7 @@
       "Step 4: Write the stress verification summary into progress.md.",
       "Step 5: If the suite fails, create follow-up tickets for each distinct failing action category."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-099",

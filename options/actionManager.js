@@ -30,9 +30,28 @@ class ActionManager {
     get lastAction() {
         return this.arr[this.arr.length - 1]
     }
+    removeKilledEntityAt(collection, coord) {
+        if (!collection || !coord) {
+            return -1
+        }
+        for (let i = collection.length - 1; i >= 0; --i) {
+            let entity = collection[i]
+            if (entity && entity.killed && entity.coord &&
+                    entity.coord.x == coord.x && entity.coord.y == coord.y) {
+                collection.splice(i, 1)
+                return i
+            }
+        }
+        return -1
+    }
     undoBuilding(building) {
         // cant be empty
+        let externalIndex = this.removeKilledEntityAt(external, building.coord)
         let res = unpacker.fullUnpackBuilding(building)
+        if (externalIndex != -1 && external[external.length - 1] == res) {
+            external.pop()
+            external.splice(externalIndex, 0, res)
+        }
         if (building.town) {
             let town = grid.getBuilding(building.town.coord)
             res.town = town
@@ -144,8 +163,14 @@ class ActionManager {
         }
     }
     undoExternalProduction(exProduction) {
+        let externalProductionIndex =
+            this.removeKilledEntityAt(externalProduction, exProduction.coord)
         let res = unpacker.fullUnpackExternal(exProduction)
-        externalProduction.push(res)
+        if (externalProductionIndex == -1) {
+            externalProduction.push(res)
+        } else {
+            externalProduction.splice(externalProductionIndex, 0, res)
+        }
     }
     undoBuildingProduction(buildingProduction) {
         let res = unpacker.fullUnpackManufacture(buildingProduction)

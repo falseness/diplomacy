@@ -219,7 +219,11 @@ class Town extends PreparingManufacture {
         res.buildingProduction = this.buildingProduction
         let suburbs = []
         for (let i = 0; i < this.suburbs.length; ++i) {
-            suburbs.push(this.suburbs[i].coord)
+            suburbs.push({
+                x: this.suburbs[i].coord.x,
+                y: this.suburbs[i].coord.y,
+                isSuburb: Boolean(this.suburbs[i].isSuburb)
+            })
         }
         res.suburbs = suburbs
         res.isRecentlyCaptured = this.isRecentlyCaptured

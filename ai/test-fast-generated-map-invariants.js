@@ -3,9 +3,31 @@ const path = require('path');
 const vm = require('vm');
 
 const repoRoot = path.resolve(__dirname, '..');
+const args = process.argv.slice(2);
+
+function argValue(name, fallback) {
+  const index = args.indexOf(name);
+  if (index < 0 || index + 1 >= args.length) {
+    return fallback;
+  }
+  return args[index + 1];
+}
+
+function numericArg(name, fallback) {
+  const parsed = Number(argValue(name, fallback));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+const stressMs = numericArg('--stress-ms',
+  Number(process.env.FAST_INVARIANT_STRESS_MS || 0));
+const seedStart = numericArg('--seed-start',
+  Number(process.env.FAST_INVARIANT_SEED_START || 98000));
 const reportPath = path.join(
   '/mnt/storage/diplomacy/benchmarks',
-  'task097-fast-generated-map-invariants.json'
+  argValue('--report-name',
+    stressMs > 0
+      ? 'task098-fast-action-invariant-stress.json'
+      : 'task097-fast-generated-map-invariants.json')
 );
 
 function check(condition, message, details) {
@@ -116,6 +138,10 @@ function loadBrowserScripts(context) {
 }
 
 const context = createRuntimeContext();
+context.__fastInvariantOptions = {
+  stressMs,
+  seedStart
+};
 loadBrowserScripts(context);
 
 const report = new vm.Script(`(() => {
@@ -552,9 +578,17 @@ const report = new vm.Script(`(() => {
   }
 
   let summary = {
-    source: 'TASK-097 generated-map fast-action invariant suite',
+    source: __fastInvariantOptions.stressMs > 0
+      ? 'TASK-098 long fast-action invariant stress verification'
+      : 'TASK-097 generated-map fast-action invariant suite',
+    startedAt: new Date().toISOString(),
+    stressTargetMs: __fastInvariantOptions.stressMs,
+    seedStart: __fastInvariantOptions.seedStart,
     generatedMaps: [],
     commandsAudited: 0,
+    vectorMismatches: 0,
+    undoMismatches: 0,
+    gridRestorationMismatches: 0,
     actionCategories: {},
     economyProducts: {},
     combatCommands: {},
@@ -566,7 +600,7 @@ const report = new vm.Script(`(() => {
       economyState: {}
     }
   }
-  let testMaps = [
+  let baseMaps = [
     {
       name: 'all-unit-actions',
       seed: 97097,
@@ -615,13 +649,43 @@ const report = new vm.Script(`(() => {
       }
     }
   ]
-  for (let i = 0; i < testMaps.length; ++i) {
-    auditSeed(testMaps[i], summary)
+  function buildStressMaps(seedBase) {
+    let maps = []
+    for (let i = 0; i < baseMaps.length; ++i) {
+      maps.push(Object.assign({}, baseMaps[i], {
+        name: baseMaps[i].name + '-stress-' + seedBase,
+        seed: seedBase + i * 97
+      }))
+    }
+    return maps
+  }
+
+  let testMaps = baseMaps
+  if (__fastInvariantOptions.stressMs > 0) {
+    testMaps = []
+    let deadline = Date.now() + __fastInvariantOptions.stressMs
+    let seedBase = __fastInvariantOptions.seedStart
+    do {
+      let waveMaps = buildStressMaps(seedBase)
+      for (let i = 0; i < waveMaps.length; ++i) {
+        auditSeed(waveMaps[i], summary)
+        testMaps.push(waveMaps[i])
+      }
+      seedBase += 1000
+    } while (Date.now() < deadline)
+  }
+  else {
+    for (let i = 0; i < testMaps.length; ++i) {
+      auditSeed(testMaps[i], summary)
+    }
   }
   summary.seeds = testMaps.map(function(testMap) { return testMap.seed })
+  summary.seedCount = summary.seeds.length
   summary.testMaps = testMaps.map(function(testMap) {
     return {name: testMap.name, seed: testMap.seed}
   })
+  summary.finishedAt = new Date().toISOString()
+  summary.runtimeMs = Date.parse(summary.finishedAt) - Date.parse(summary.startedAt)
   return summary
 })()`, { filename: 'task097-fast-generated-map-invariants.js' }).runInContext(context);
 
@@ -683,13 +747,25 @@ for (const product of [
 }
 check(report.commandsAudited > 0,
   'generated-map invariant suite did not audit any legal actions', report);
+check(report.vectorMismatches === 0,
+  'generated-map invariant suite reported vector mismatches', report);
+check(report.undoMismatches === 0,
+  'generated-map invariant suite reported undo mismatches', report);
+check(report.gridRestorationMismatches === 0,
+  'generated-map invariant suite reported grid restoration mismatches', report);
 
 console.log('Generated-map fast-action invariant suite passed');
 console.log(JSON.stringify({
   reportPath,
+  source: report.source,
+  runtimeMs: report.runtimeMs,
+  seedCount: report.seedCount,
   seeds: report.seeds,
   generatedMapCount: report.generatedMaps.length,
   commandsAudited: report.commandsAudited,
+  vectorMismatches: report.vectorMismatches,
+  undoMismatches: report.undoMismatches,
+  gridRestorationMismatches: report.gridRestorationMismatches,
   actionCategories: report.actionCategories,
   economyProducts: report.economyProducts,
   objectCoverage: report.objectCoverage

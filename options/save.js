@@ -147,11 +147,15 @@ class JsonUnpackManager {
 
         town.suburbs = []
         for (let q = 0; q < packedTown.suburbs.length; ++q) {
-            let hexagon =  grid.arr[packedTown.suburbs[q].x][packedTown.suburbs[q].y].hexagon
+            let packedSuburb = packedTown.suburbs[q]
+            let hexagon =  grid.arr[packedSuburb.x][packedSuburb.y].hexagon
             town.suburbs.push(hexagon)
-            // hexagon can be in suburbs array, but no be suburb 
+            // hexagon can be in suburbs array, but no be suburb
             // (it need for undo work with no bugs)
-            if (hexagon.playerColor == town.playerColor) {
+            if (Object.prototype.hasOwnProperty.call(packedSuburb, 'isSuburb')) {
+                hexagon.isSuburb = Boolean(packedSuburb.isSuburb)
+            }
+            else if (hexagon.playerColor == town.playerColor) {
                 hexagon.isSuburb = true
             }
         }
