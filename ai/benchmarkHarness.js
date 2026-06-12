@@ -9,6 +9,8 @@ const {
 } = require('./browserScriptCache');
 
 const repoRoot = path.resolve(__dirname, '..');
+let reusableBenchmarkContext = null;
+let compiledBenchmarkRuntimeScript = null;
 
 function loadPlayerClasses() {
   const context = vm.createContext({
@@ -241,6 +243,11 @@ function createRuntimeContext(seed) {
       getItem(key) { return storage[key] || null; },
       removeItem(key) { delete storage[key]; }
     },
+    __resetHarnessStorage() {
+      for (const key of Object.keys(storage)) {
+        delete storage[key];
+      }
+    },
     io() { return {}; },
     tf: {},
     saveAs() {},
@@ -252,6 +259,18 @@ function createRuntimeContext(seed) {
   return vm.createContext(context);
 }
 
+function resetRuntimeContext(context, seed) {
+  context.Math = createSeededMath(seed);
+  if (typeof context.__resetHarnessStorage === 'function') {
+    context.__resetHarnessStorage();
+  }
+  context.__benchmarkInferenceCalls = 0;
+  context.__benchmarkInferencePositions = 0;
+  context.__benchmarkInferenceSource = undefined;
+  context.ai_model = undefined;
+  context.predict = undefined;
+}
+
 function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
@@ -259,6 +278,11 @@ function readRepoFile(relativePath) {
 function loadBenchmarkBrowserScripts(context, options) {
   options = options || {};
   loadBrowserScripts(context, options);
+  injectBenchmarkModel(context, options);
+}
+
+function injectBenchmarkModel(context, options) {
+  options = options || {};
   if (typeof options.predictFunction === 'function') {
     context.ai_model = options.modelIdentifier || { benchmarkInjectedModel: true };
     context.predict = function(model, xValidateArr) {
@@ -291,14 +315,40 @@ function loadBenchmarkBrowserScripts(context, options) {
   `, { filename: 'benchmark-smoke-model.js' }).runInContext(context);
 }
 
-function runtimeMapScript(mapName, map, options) {
+function createLoadedRuntimeContext(seed, options) {
+  const context = createRuntimeContext(seed);
+  loadBenchmarkBrowserScripts(context, options);
+  return context;
+}
+
+function getBenchmarkRuntimeContext(seed, options) {
+  if (options && options.disableBrowserScriptCache) {
+    return createLoadedRuntimeContext(seed, options);
+  }
+  if (!reusableBenchmarkContext) {
+    reusableBenchmarkContext = createRuntimeContext(seed);
+    loadBrowserScripts(reusableBenchmarkContext, options);
+  }
+  resetRuntimeContext(reusableBenchmarkContext, seed);
+  injectBenchmarkModel(reusableBenchmarkContext, options);
+  return reusableBenchmarkContext;
+}
+
+function resetBenchmarkRuntimeCache() {
+  reusableBenchmarkContext = null;
+  resetBrowserScriptCache();
+}
+
+function runtimeMapScript() {
   return `
 (() => {
+  let configured = __benchmarkConfiguredMap
+  let benchmarkOptions = __benchmarkOptions
   isFogOfWar = false
   gameSettings.testAI = true
   gameSettings.isOnline = false
-  gameSettings.aiActionLimit = ${Number(options.actionLimit || 30)}
-  gameSettings.aiCommandLimit = ${Number(options.commandLimit || 60)}
+  gameSettings.aiActionLimit = Number(benchmarkOptions.actionLimit || 30)
+  gameSettings.aiCommandLimit = Number(benchmarkOptions.commandLimit || 60)
   entityInterface = {change() {}, hide() {}}
   townInterface = {change() {}, hide() {}}
   barrackInterface = {change() {}, hide() {}}
@@ -331,7 +381,6 @@ function runtimeMapScript(mapName, map, options) {
       gameExit = false
     }
   }
-  let configured = ${JSON.stringify(map)}
   let unitTypes = {
     Noob: Noob,
     Archer: Archer,
@@ -362,7 +411,7 @@ function runtimeMapScript(mapName, map, options) {
         walls: configured.players[0].walls || [],
         bastions: configured.players[0].bastions || [],
         towers: configured.players[0].towers || [],
-        playerType: ${JSON.stringify(options.playerA)}
+        playerType: benchmarkOptions.playerA
       },
       {
         rgb: {r: 98, g: 168, b: 222},
@@ -372,7 +421,7 @@ function runtimeMapScript(mapName, map, options) {
         walls: configured.players[1].walls || [],
         bastions: configured.players[1].bastions || [],
         towers: configured.players[1].towers || [],
-        playerType: ${JSON.stringify(options.playerB)}
+        playerType: benchmarkOptions.playerB
       }
     ],
     [],
@@ -387,7 +436,7 @@ function runtimeMapScript(mapName, map, options) {
   whooseTurn = 0
 
   let turnCount = 0
-  while (turnCount < ${Number(options.roundLimit || 40)} &&
+  while (turnCount < Number(benchmarkOptions.roundLimit || 40) &&
       gameRound < suddenDeathRound &&
       !players[1].isLost && !players[2].isLost) {
     nextTurn()
@@ -400,15 +449,15 @@ function runtimeMapScript(mapName, map, options) {
     winnerSide,
     roundCount: gameRound,
     turnCount,
-    timeout: winnerIndex == null && turnCount >= ${Number(options.roundLimit || 40)},
+    timeout: winnerIndex == null && turnCount >= Number(benchmarkOptions.roundLimit || 40),
     suddenDeath: winnerIndex == null && gameRound >= suddenDeathRound,
     nonResult: winnerIndex == null,
-    mapName: ${JSON.stringify(mapName)},
-    playerA: ${JSON.stringify(options.playerA)},
-    playerB: ${JSON.stringify(options.playerB)},
+    mapName: __benchmarkMapName,
+    playerA: benchmarkOptions.playerA,
+    playerB: benchmarkOptions.playerB,
     runtimePlayerA: players[1].constructor.name,
     runtimePlayerB: players[2].constructor.name,
-    seed: ${Number(options.seed)},
+    seed: Number(benchmarkOptions.seed),
     benchmarkPolicy: 'real GameMap runtime with requested player classes',
     inference: {
       source: __benchmarkInferenceSource,
@@ -431,6 +480,16 @@ function runtimeMapScript(mapName, map, options) {
 `;
 }
 
+function benchmarkRuntimeScript() {
+  if (!compiledBenchmarkRuntimeScript) {
+    compiledBenchmarkRuntimeScript = new vm.Script(
+      runtimeMapScript(),
+      { filename: 'benchmark-runtime-game.js' }
+    );
+  }
+  return compiledBenchmarkRuntimeScript;
+}
+
 function runGame(options) {
   const mapName = options.gameMap && options.gameMap.testName ?
     options.gameMap.testName : options.mapName || 'tiny-duel';
@@ -445,12 +504,18 @@ function runGame(options) {
   validatePlayerClass(options.playerA);
   validatePlayerClass(options.playerB);
 
-  const context = createRuntimeContext(options.seed);
-  loadBenchmarkBrowserScripts(context, options);
-  return new vm.Script(
-    runtimeMapScript(mapName, clone(map), options),
-    { filename: 'benchmark-runtime-game.js' }
-  ).runInContext(context);
+  const context = getBenchmarkRuntimeContext(options.seed, options);
+  context.__benchmarkConfiguredMap = clone(map);
+  context.__benchmarkMapName = mapName;
+  context.__benchmarkOptions = {
+    actionLimit: options.actionLimit,
+    commandLimit: options.commandLimit,
+    playerA: options.playerA,
+    playerB: options.playerB,
+    roundLimit: options.roundLimit,
+    seed: options.seed
+  };
+  return benchmarkRuntimeScript().runInContext(context);
 }
 
 function runBenchmark(options) {
@@ -591,7 +656,7 @@ module.exports = {
   benchmarkMapFromGameMap,
   getBrowserScriptCacheStats,
   loadBrowserScripts: loadBenchmarkBrowserScripts,
-  resetBrowserScriptCache,
+  resetBrowserScriptCache: resetBenchmarkRuntimeCache,
   runBenchmark,
   runGame,
   writeResult

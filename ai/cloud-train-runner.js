@@ -1048,8 +1048,21 @@ async function progressRecord(options, state, metric, previousRecords, model) {
     oldVsNewEvaluation,
     options
   );
-  const simpleAiPlayerWinrate = await curriculumSimpleAiWinrate(options, state, model);
   const learningRateReduction = curriculumLearningRateAttempt(options);
+  const shouldMeasureSimpleAiPlayerWinrate =
+    state.totalGames <= 1 ||
+    (plateauState.status === 'plateau' &&
+      learningRateReduction.attempted &&
+      !learningRateReduction.improved);
+  const simpleAiPlayerWinrate = shouldMeasureSimpleAiPlayerWinrate
+    ? await curriculumSimpleAiWinrate(options, state, model)
+    : {
+      value: null,
+      evaluated: false,
+      games: 0,
+      source: 'deferred-until-curriculum-gate-can-advance',
+      reason: 'plateau and learning-rate evidence are required before running the measured SimpleAiPlayer benchmark'
+    };
   const nextStageEligibility = curriculumGateDecision(
     state,
     plateauState,

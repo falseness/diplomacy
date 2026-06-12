@@ -15,6 +15,7 @@ const ACTION_CATEGORIES = [
   'suburb-expansion',
   'building-placement'
 ];
+let reusableTrainingContext = null;
 
 function parseArgs(argv) {
   const options = {
@@ -212,6 +213,11 @@ function createRuntimeContext(seed) {
       getItem(key) { return storage[key] || null; },
       removeItem(key) { delete storage[key]; }
     },
+    __resetHarnessStorage() {
+      for (const key of Object.keys(storage)) {
+        delete storage[key];
+      }
+    },
     io() { return {}; },
     tf: {},
     saveAs() {}
@@ -221,9 +227,40 @@ function createRuntimeContext(seed) {
   return vm.createContext(context);
 }
 
+function resetRuntimeContext(context, seed) {
+  const seededMath = Object.create(Math);
+  let randomState = seed >>> 0;
+  seededMath.random = function() {
+    randomState = (randomState * 1664525 + 1013904223) >>> 0;
+    return randomState / 0x100000000;
+  };
+  context.Math = seededMath;
+  if (typeof context.__resetHarnessStorage === 'function') {
+    context.__resetHarnessStorage();
+  }
+}
+
+function getTrainingRuntimeContext(seed) {
+  if (process.env.DIPLOMACY_DISABLE_BROWSER_SCRIPT_CACHE === '1') {
+    const context = createRuntimeContext(seed);
+    loadBrowserScripts(context, { disableBrowserScriptCache: true });
+    return context;
+  }
+  if (!reusableTrainingContext) {
+    reusableTrainingContext = createRuntimeContext(seed);
+    loadBrowserScripts(reusableTrainingContext);
+  }
+  resetRuntimeContext(reusableTrainingContext, seed);
+  return reusableTrainingContext;
+}
+
+function resetTrainingRuntimeCache() {
+  reusableTrainingContext = null;
+  resetBrowserScriptCache();
+}
+
 function createTrainingBatch(seed, playerCounts) {
-  const context = createRuntimeContext(seed);
-  loadBrowserScripts(context);
+  const context = getTrainingRuntimeContext(seed);
   context.__trainingSeed = seed;
   context.__trainingMapSize = trainingMapSizeForSeed(seed);
   context.__trainingPlayerCount = trainingPlayerCountForSeed(seed, playerCounts);
@@ -707,6 +744,6 @@ module.exports = {
   createTrainingBatch,
   getBrowserScriptCacheStats,
   parseArgs,
-  resetBrowserScriptCache,
+  resetBrowserScriptCache: resetTrainingRuntimeCache,
   run
 };
