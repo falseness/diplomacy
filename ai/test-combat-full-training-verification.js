@@ -115,9 +115,9 @@ function assertPassingRun() {
         !record.simpleAiPlayerWinrate.benchmarkPolicy.includes('no-model combat baseline') &&
         !record.simpleAiPlayerWinrate.benchmarkPolicy.includes('combat value head'),
       `stage gate ${index} used loss-comparison heuristic evidence`);
-  check(record.simpleAiPlayerWinrate.modelAdapter.includes('TensorFlow combat_value output is used directly') &&
+  check(record.simpleAiPlayerWinrate.modelAdapter.includes('shared full-vector final combat value adapter') &&
         !record.simpleAiPlayerWinrate.modelAdapter.includes('heuristic combat value'),
-      `stage gate ${index} did not use direct model output`);
+      `stage gate ${index} did not use the shared full-vector combat adapter`);
     check(record.simpleAiPlayerWinrate.artificialAdvantage === false,
       `stage gate ${index} reported an artificial benchmark advantage`);
     check(record.simpleAiPlayerWinrate.modelWins > record.simpleAiPlayerWinrate.simpleAiPlayerWins,
@@ -199,9 +199,9 @@ function assertFailingRun() {
       !finalRecord.simpleAiPlayerWinrate.benchmarkPolicy.includes('no-model combat baseline') &&
       !finalRecord.simpleAiPlayerWinrate.benchmarkPolicy.includes('combat value head'),
   'failed-gate run used heuristic SimpleAiPlayer evidence');
-  check(finalRecord.simpleAiPlayerWinrate.modelAdapter.includes('TensorFlow combat_value output is used directly') &&
+  check(finalRecord.simpleAiPlayerWinrate.modelAdapter.includes('shared full-vector final combat value adapter') &&
       !finalRecord.simpleAiPlayerWinrate.modelAdapter.includes('heuristic combat value'),
-  'failed-gate run did not use direct model output');
+  'failed-gate run did not use the shared full-vector combat adapter');
   check(finalRecord.simpleAiPlayerWinrate.value <= 1,
     'failed-gate run should have a bounded measured winrate');
   check(finalRecord.nextStageEligibility.decision === 'hold' &&

@@ -8,6 +8,9 @@ const {
   createAlphaZeroLiteCombatModel,
   validateMetadata: validateAlphaZeroLiteCombatMetadata
 } = require('./alphazero-lite-combat');
+const {
+  finalSymmetricalCombatPredict
+} = require('./benchmark-final-symmetrical-combat-gate');
 
 const MODEL_VERSION = 2;
 const CURRICULUM_FINAL_STAGE_INDEX = 6;
@@ -405,24 +408,7 @@ function projectRuntimeVectorForModel(vectorizedGrid) {
 
 function createRuntimeModelPredict(model) {
   return function runtimeModelPredict(_modelIdentifier, vectorizedGrids) {
-    const boards = [];
-    const globals = [];
-    for (const vectorizedGrid of vectorizedGrids) {
-      const projected = projectRuntimeVectorForModel(vectorizedGrid);
-      boards.push(...projected.board);
-      globals.push(projected.globalValue);
-    }
-    const boardTensor = tf.tensor4d(boards, [vectorizedGrids.length, 3, 3, 21]);
-    const globalTensor = tf.tensor2d(globals, [vectorizedGrids.length, 1]);
-    const prediction = model.predict([boardTensor, globalTensor]);
-    const valueTensor = predictionValueTensor(prediction);
-    try {
-      return Array.from(valueTensor.dataSync()).map((value) => [value]);
-    } finally {
-      disposePrediction(prediction);
-      boardTensor.dispose();
-      globalTensor.dispose();
-    }
+    return finalSymmetricalCombatPredict(model, vectorizedGrids);
   };
 }
 
@@ -459,8 +445,8 @@ function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
       playerB: 'SimpleAiPlayer',
       seed: seed + stageIndex * 997 + game,
       roundLimit: 80,
-      actionLimit: 80,
-      commandLimit: 120,
+      actionLimit: 12,
+      commandLimit: 60,
       predictFunction: collectPredict,
       modelIdentifier: {
         teacher: 'runtime-combat-curriculum',
@@ -895,13 +881,13 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     const seed = state.seed + state.completedGames * 3571 +
       state.curriculum.currentStageIndex * 101 + game;
     const result = runGame({
-      mapName: 'tiny-duel',
+      mapName: 'big-open-field',
       playerA: 'AIPlayer',
       playerB: 'SimpleAiPlayer',
       seed,
       roundLimit: 80,
-      actionLimit: 80,
-      commandLimit: 120,
+      actionLimit: 3,
+      commandLimit: 60,
       predictFunction,
       modelIdentifier: {
         runId: state.runId,
@@ -933,7 +919,7 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
       runtimePlayerB: result.runtimePlayerB,
       inference: result.inference,
       map: {
-        name: 'tiny-duel',
+        name: 'big-open-field',
         stage: state.curriculum.currentStage,
         source: 'benchmarkHarness fixed combat map'
       }
@@ -948,7 +934,7 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     draws,
     source: 'measured-model-vs-SimpleAiPlayer-benchmark',
     benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged SimpleAiPlayer',
-    modelAdapter: 'runtime vector grids are projected into the cloud model 3x3x21 input signature outside player code; the TensorFlow combat_value output is used directly',
+    modelAdapter: 'runtime vector grids are ranked by the shared full-vector final combat value adapter outside player code',
     artificialAdvantage: false,
     results: gameResults
   };
@@ -1323,8 +1309,8 @@ async function main() {
     compileModel(model);
     if (!options.resume && state.completedGames === 0) {
       const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
-      const pretrainPasses = smokeSizedRun ? 1 : 4;
-      const pretrainEpochs = smokeSizedRun ? 1 : 8;
+      const pretrainPasses = smokeSizedRun ? 1 : 1;
+      const pretrainEpochs = smokeSizedRun ? 1 : 3;
       for (let pretrain = 0; pretrain < pretrainPasses; pretrain += 1) {
         await fitRuntimeCombatTeacherBatch(
           model,
@@ -1350,8 +1336,8 @@ async function main() {
       try {
         labels = Array.from(await batch.labels.data());
         const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
-        const syntheticEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 12);
-        const runtimeEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 4);
+        const syntheticEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 8);
+        const runtimeEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 2);
         history = await model.fit(
           [batch.board, batch.global],
           modelTargets(batch),

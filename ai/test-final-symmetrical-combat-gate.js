@@ -100,12 +100,16 @@ try {
     'Simple class missing from config');
   check(smoke.config.candidateStarts.A === 1 && smoke.config.candidateStarts.B === 1,
     'smoke did not balance AI starts across sides');
+  check(smoke.config.suddenDeathRound === 80,
+    'smoke did not record the final gate sudden-death budget');
   for (const game of smoke.games) {
     check(game.classCheck.runtimeAIPlayer === 'AIPlayer',
       'runtime AIPlayer class changed');
     check(game.classCheck.runtimeSimplePlayer === 'SimpleAiPlayer',
       'runtime SimpleAiPlayer class changed');
     check(game.symmetricalMap === true, 'game did not record symmetrical map use');
+    check(game.suddenDeathRound === 80,
+      'game did not use the final gate sudden-death budget');
     check(game.inference && game.inference.calls > 0,
       'AIPlayer did not exercise model inference');
   }
@@ -139,6 +143,8 @@ try {
   const cliReport = readJson(reportPath);
   check(cliReport.games.length === 1, 'CLI smoke did not write per-game result');
   check(cliReport.summary.gate === 'passed', 'CLI zero-threshold smoke did not pass');
+  check(cliReport.config.suddenDeathRound === 80,
+    'CLI report did not record default sudden-death round');
 
   expectCliFailure([
     '--games', '1',

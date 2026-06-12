@@ -12,6 +12,7 @@ function usage() {
     '  --games NUMBER              Number of games to run (default: 100)',
     '  --seed NUMBER               First deterministic seed (default: 110000)',
     '  --round-limit NUMBER        Maximum turns per game (default: 80)',
+    '  --sudden-death-round NUMBER Map sudden-death round for every game (default: 80)',
     '  --action-limit NUMBER       AI action limit per turn (default: 1)',
     '  --command-limit NUMBER      AI command limit per turn (default: 60)',
     '  --min-no-loss-rate NUMBER   Required AI no-loss rate, 0..1 (default: 1)',
@@ -23,26 +24,12 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const options = {
-    games: 100,
-    seed: 110000,
-    roundLimit: 80,
-    actionLimit: 1,
-    commandLimit: 60,
-    minNoLossRate: 1,
-    minWinRate: 0.95,
-    checkpoint: 'runtime-ai-model',
-    output: path.join(
-      '/mnt',
-      'storage',
-      'diplomacy',
-      'benchmarks',
-      'final-symmetrical-combat-gate.json')
-  };
+  const options = defaultOptions();
   const names = {
     '--games': 'games',
     '--seed': 'seed',
     '--round-limit': 'roundLimit',
+    '--sudden-death-round': 'suddenDeathRound',
     '--action-limit': 'actionLimit',
     '--command-limit': 'commandLimit',
     '--min-no-loss-rate': 'minNoLossRate',
@@ -62,7 +49,32 @@ function parseArgs(argv) {
     }
     options[name] = argv[++index];
   }
-  for (const name of ['games', 'seed', 'roundLimit', 'actionLimit', 'commandLimit']) {
+  return normalizeOptions(options);
+}
+
+function defaultOptions() {
+  return {
+    games: 100,
+    seed: 110000,
+    roundLimit: 80,
+    suddenDeathRound: 80,
+    actionLimit: 1,
+    commandLimit: 60,
+    minNoLossRate: 1,
+    minWinRate: 0.95,
+    checkpoint: 'runtime-ai-model',
+    output: path.join(
+      '/mnt',
+      'storage',
+      'diplomacy',
+      'benchmarks',
+      'final-symmetrical-combat-gate.json')
+  };
+}
+
+function normalizeOptions(input) {
+  const options = Object.assign(defaultOptions(), input || {});
+  for (const name of ['games', 'seed', 'roundLimit', 'suddenDeathRound', 'actionLimit', 'commandLimit']) {
     options[name] = Number(options[name]);
     if (!Number.isInteger(options[name]) || options[name] <= 0) {
       throw new Error(name + ' must be a positive integer');
@@ -204,18 +216,23 @@ function summarizeGames(games, options) {
 }
 
 function runFinalSymmetricalCombatGate(options) {
+  options = normalizeOptions(options);
   const api = loadAiScripts();
   const games = [];
   for (let index = 0; index < options.games; ++index) {
     const seed = options.seed + index;
     const aiSide = aiSideForGame(index);
-    const gameMap = api.context.generateSymmetricalCombatStageGMap({ seed });
+    const gameMap = api.context.generateSymmetricalCombatStageGMap({
+      seed,
+      suddenDeathRound: options.suddenDeathRound
+    });
     const game = runGame({
       gameMap,
       playerA: aiSide === 'A' ? 'AIPlayer' : 'SimpleAiPlayer',
       playerB: aiSide === 'B' ? 'AIPlayer' : 'SimpleAiPlayer',
       seed,
       roundLimit: options.roundLimit,
+      suddenDeathRound: options.suddenDeathRound,
       actionLimit: options.actionLimit,
       commandLimit: options.commandLimit,
       modelIdentifier: {
@@ -237,6 +254,7 @@ function runFinalSymmetricalCombatGate(options) {
       symmetricalMap: true,
       mapStage: gameMap.combatStage,
       mapName: gameMap.testName,
+      suddenDeathRound: gameMap.suddenDeathRound,
       modelCheckpoint: options.checkpoint,
       playerClasses: {
         ai: 'AIPlayer',
@@ -261,6 +279,7 @@ function runFinalSymmetricalCombatGate(options) {
       games: options.games,
       seed: options.seed,
       roundLimit: options.roundLimit,
+      suddenDeathRound: options.suddenDeathRound,
       actionLimit: options.actionLimit,
       commandLimit: options.commandLimit,
       minNoLossRate: options.minNoLossRate,
