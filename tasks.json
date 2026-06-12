@@ -2244,7 +2244,7 @@
     "id": "TASK-111",
     "category": "test",
     "priority": "critical",
-    "description": "Train combat AI with the new pipeline and pass both gates: 80 percent SimpleAiPlayer curriculum gate and final symmetrical combat gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code.",
+    "description": "Train combat AI with the new pipeline and pass both gates: 80 percent SimpleAiPlayer curriculum gate and final symmetrical combat gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code. Implemented: Ran the full 15-game combat training pipeline to final stage 6 with six measured SimpleAiPlayer advancing gates at 100%, saved the final model under /mnt/storage/diplomacy/task111-combat-training-20260612/final/task111-combat-training, passed the official default 100-game final symmetrical gate at 100/100 wins, and re-ran the no-cheating guard.",
     "acceptance_criteria": [
       "A real training run completes with the new model pipeline.",
       "All curriculum SimpleAiPlayer gates pass at 80 percent or higher.",
@@ -2258,7 +2258,7 @@
       "Step 3: Run the final 100-game symmetrical combat benchmark gate.",
       "Step 4: Record final artifact paths and gate summaries."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-112",
