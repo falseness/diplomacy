@@ -103,7 +103,12 @@ function benchmarkMapFromGameMap(gameMap) {
     }
     const town = player.towns[0];
     const units = (player.units || []).map(function(unit) {
-      return { x: unit.x, y: unit.y };
+      return {
+        x: unit.x,
+        y: unit.y,
+        type: unit.type && unit.type.name ? unit.type.name : null,
+        hp: unit.hp
+      };
     });
     if (!units.length) {
       units.push({
@@ -113,7 +118,11 @@ function benchmarkMapFromGameMap(gameMap) {
     }
     return {
       town: { x: town.x, y: town.y },
-      units
+      units,
+      suburbs: player.suburbs || [],
+      walls: player.walls || [],
+      bastions: player.bastions || [],
+      towers: player.towers || []
     };
   });
   return {
@@ -327,6 +336,24 @@ function runtimeMapScript(mapName, map, options) {
     }
   }
   let configured = ${JSON.stringify(map)}
+  let unitTypes = {
+    Noob: Noob,
+    Archer: Archer,
+    KOHb: KOHb,
+    Normchel: Normchel,
+    Catapult: Catapult
+  }
+  function configuredUnit(unit) {
+    let result = {
+      x: unit.x,
+      y: unit.y,
+      type: unitTypes[unit.type] || Noob
+    }
+    if (unit.hp !== undefined) {
+      result.hp = unit.hp
+    }
+    return result
+  }
   let map = new GameMap(
     {x: configured.width, y: configured.height},
     [
@@ -334,17 +361,21 @@ function runtimeMapScript(mapName, map, options) {
       {
         rgb: {r: 255, g: 0, b: 0},
         towns: [{x: configured.players[0].town.x, y: configured.players[0].town.y}],
-        units: configured.players[0].units.map(function(unit) {
-          return {x: unit.x, y: unit.y, type: Noob}
-        }),
+        units: configured.players[0].units.map(configuredUnit),
+        suburbs: configured.players[0].suburbs || [],
+        walls: configured.players[0].walls || [],
+        bastions: configured.players[0].bastions || [],
+        towers: configured.players[0].towers || [],
         playerType: ${JSON.stringify(options.playerA)}
       },
       {
         rgb: {r: 98, g: 168, b: 222},
         towns: [{x: configured.players[1].town.x, y: configured.players[1].town.y}],
-        units: configured.players[1].units.map(function(unit) {
-          return {x: unit.x, y: unit.y, type: Noob}
-        }),
+        units: configured.players[1].units.map(configuredUnit),
+        suburbs: configured.players[1].suburbs || [],
+        walls: configured.players[1].walls || [],
+        bastions: configured.players[1].bastions || [],
+        towers: configured.players[1].towers || [],
         playerType: ${JSON.stringify(options.playerB)}
       }
     ],

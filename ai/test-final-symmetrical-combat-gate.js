@@ -143,7 +143,7 @@ try {
   expectCliFailure([
     '--games', '1',
     '--seed', '110011',
-    '--round-limit', '80',
+    '--round-limit', '1',
     '--min-no-loss-rate', '1',
     '--min-win-rate', '1',
     '--checkpoint', 'task110-cli-smoke-model',

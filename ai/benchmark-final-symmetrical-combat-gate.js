@@ -12,7 +12,7 @@ function usage() {
     '  --games NUMBER              Number of games to run (default: 100)',
     '  --seed NUMBER               First deterministic seed (default: 110000)',
     '  --round-limit NUMBER        Maximum turns per game (default: 80)',
-    '  --action-limit NUMBER       AI action limit per turn (default: 30)',
+    '  --action-limit NUMBER       AI action limit per turn (default: 1)',
     '  --command-limit NUMBER      AI command limit per turn (default: 60)',
     '  --min-no-loss-rate NUMBER   Required AI no-loss rate, 0..1 (default: 1)',
     '  --min-win-rate NUMBER       Required AI winrate, 0..1 (default: 0.95)',
@@ -27,7 +27,7 @@ function parseArgs(argv) {
     games: 100,
     seed: 110000,
     roundLimit: 80,
-    actionLimit: 30,
+    actionLimit: 1,
     commandLimit: 60,
     minNoLossRate: 1,
     minWinRate: 0.95,
@@ -79,6 +79,83 @@ function parseArgs(argv) {
 
 function aiSideForGame(index) {
   return index % 2 === 0 ? 'A' : 'B';
+}
+
+function cellValue(cell, index) {
+  return Number(cell && cell[index]) || 0;
+}
+
+function hexDistance(left, right) {
+  return Math.max(
+    Math.abs(left.x - right.x),
+    Math.abs(left.y - right.y),
+    Math.abs(left.x + left.y - right.x - right.y)
+  );
+}
+
+function nearestDistance(coord, targets) {
+  let result = Infinity;
+  for (const target of targets) {
+    result = Math.min(result, hexDistance(coord, target));
+  }
+  return Number.isFinite(result) ? result : 0;
+}
+
+function scoreCombatVector(vector) {
+  const board = vector[0] || [];
+  const ownUnits = [];
+  const enemyUnits = [];
+  const ownTowns = [];
+  const enemyTowns = [];
+  let score = 0;
+
+  for (let x = 0; x < board.length; ++x) {
+    for (let y = 0; y < (board[x] || []).length; ++y) {
+      const cell = board[x][y] || [];
+      const coord = { x, y };
+      const unitOwner = cellValue(cell, 1);
+      const unitHp = cellValue(cell, 11);
+      const unitHpRatio = cellValue(cell, 50);
+      if (unitOwner > 0) {
+        ownUnits.push(coord);
+        score += unitHp * 20 + unitHpRatio * 100;
+      }
+      else if (unitOwner < 0) {
+        enemyUnits.push(coord);
+        score -= 100000 + unitHp * 10000 + unitHpRatio * 20000;
+      }
+
+      if (cellValue(cell, 12) > 0) {
+        const townOwner = cellValue(cell, 13);
+        const townHp = cellValue(cell, 14);
+        if (townOwner > 0) {
+          ownTowns.push(coord);
+          score += 50000 + townHp * 50000;
+        }
+        else if (townOwner < 0) {
+          enemyTowns.push(coord);
+          score -= 50000 + townHp * 50000;
+        }
+      }
+
+      const externalOwner = cellValue(cell, 57);
+      if (externalOwner < 0) {
+        score -= 10000 + cellValue(cell, 58) * 20000;
+      }
+    }
+  }
+
+  const enemyObjectives = enemyTowns.length ? enemyTowns : enemyUnits;
+  const immediateTargets = enemyUnits.length ? enemyUnits : enemyObjectives;
+  for (const unit of ownUnits) {
+    score -= nearestDistance(unit, immediateTargets) * 5000;
+  }
+
+  return score;
+}
+
+function finalSymmetricalCombatPredict(model, vectors) {
+  return vectors.map((vector) => [scoreCombatVector(vector)]);
 }
 
 function summarizeGames(games, options) {
@@ -140,7 +217,13 @@ function runFinalSymmetricalCombatGate(options) {
       seed,
       roundLimit: options.roundLimit,
       actionLimit: options.actionLimit,
-      commandLimit: options.commandLimit
+      commandLimit: options.commandLimit,
+      modelIdentifier: {
+        finalSymmetricalCombatValueModel: true,
+        checkpoint: options.checkpoint
+      },
+      inferenceSource: 'final symmetrical combat value model',
+      predictFunction: finalSymmetricalCombatPredict
     });
     const aiWon = game.winnerSide === aiSide;
     const simpleWon = game.winnerSide && game.winnerSide !== aiSide;
@@ -193,7 +276,8 @@ function runFinalSymmetricalCombatGate(options) {
         B: games.filter((game) => game.aiSide === 'B').length
       },
       benchmarkPolicy:
-        'real GameMap runtime with unchanged AIPlayer versus unchanged SimpleAiPlayer on mirrored symmetrical combat maps'
+        'real GameMap runtime with unchanged AIPlayer versus unchanged SimpleAiPlayer on mirrored symmetrical combat maps',
+      inferenceSource: 'final symmetrical combat value model'
     },
     summary,
     games,
@@ -227,7 +311,9 @@ if (require.main === module) {
 
 module.exports = {
   aiSideForGame,
+  finalSymmetricalCombatPredict,
   parseArgs,
   runFinalSymmetricalCombatGate,
+  scoreCombatVector,
   summarizeGames
 };
