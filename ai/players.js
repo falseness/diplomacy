@@ -683,6 +683,101 @@ class AIPlayer extends Player {
         }
         return result
     }
+    cloneMutableVectorGridForPrediction(mutableGrid) {
+        return [
+            cloneVectorGridCells(mutableGrid.cells),
+            mutableGrid.suddenDeathMetric
+        ]
+    }
+    captureEntityProgressState(entity) {
+        if (!entity) {
+            return null
+        }
+        return {
+            entity: entity,
+            x: entity.coord ? entity.coord.x : null,
+            y: entity.coord ? entity.coord.y : null,
+            moves: entity.moves,
+            hp: entity.hp,
+            killed: entity.killed
+        }
+    }
+    hasEntityProgressed(snapshot) {
+        if (!snapshot) {
+            return false
+        }
+        let entity = snapshot.entity
+        return (entity.coord && (
+                entity.coord.x != snapshot.x ||
+                entity.coord.y != snapshot.y)) ||
+            entity.moves != snapshot.moves ||
+            entity.hp != snapshot.hp ||
+            entity.killed != snapshot.killed
+    }
+    captureCommandProgressState(command) {
+        if (!command || command.type == 'economy' ||
+                !command.whoDoCommandCoord || !command.destinationCoord ||
+                typeof grid == 'undefined' || !grid.getCell) {
+            return null
+        }
+        let source = grid.getCell(command.whoDoCommandCoord)
+        let destination = grid.getCell(command.destinationCoord)
+        return {
+            sourceUnit: this.captureEntityProgressState(source && source.unit),
+            destinationUnit: this.captureEntityProgressState(
+                destination && destination.unit),
+            destinationBuilding: this.captureEntityProgressState(
+                destination && destination.building)
+        }
+    }
+    commandMadeAuthoritativeProgress(snapshot) {
+        if (!snapshot) {
+            return true
+        }
+        return this.hasEntityProgressed(snapshot.sourceUnit) ||
+            this.hasEntityProgressed(snapshot.destinationUnit) ||
+            this.hasEntityProgressed(snapshot.destinationBuilding)
+    }
+    scoreActionCommandsWithFastVectorGrid(commands, applyCommand) {
+        let validCommands = []
+        let vectorisedGrids = []
+        if (commands.length == 0) {
+            return {commands: validCommands, chances: []}
+        }
+        let baselineVectorGrid = vectoriseGrid()
+        let mutableGrid = createMutableVectorGrid(baselineVectorGrid)
+        for (let i = 0; i < commands.length; ++i) {
+            let applied = null
+            let progressState = this.captureCommandProgressState(commands[i])
+            if (!applyCommand.call(this, commands[i])) {
+                continue
+            }
+            try {
+                if (!this.commandMadeAuthoritativeProgress(progressState)) {
+                    continue
+                }
+                applied = applyFastAction(mutableGrid, commands[i])
+                if (compareVectorGridResults(
+                        baselineVectorGrid, mutableGrid).equal) {
+                    continue
+                }
+                validCommands.push(commands[i])
+                vectorisedGrids.push(
+                    this.cloneMutableVectorGridForPrediction(mutableGrid))
+            }
+            finally {
+                if (applied) {
+                    undoFastAction(mutableGrid, applied)
+                }
+                actionManager.undo()
+            }
+        }
+        return {
+            commands: validCommands,
+            chances: validCommands.length == 0 ?
+                [] : this.getWinningChances(vectorisedGrids)
+        }
+    }
     getActionCommands() {
         let commands = []
         for (let i = 0; i < this.units.length; ++i) {
@@ -699,26 +794,26 @@ class AIPlayer extends Player {
         return commands
     }
     selectBestCommand() {
-        let foundCommands = []
-        let xCommands = []
+        let commands = []
         for (let i = 0; i < this.units.length; ++i) {
             if (this.units[i].killed || this.units[i].moves == 0) {
                 continue
             }
-            let commands = this.units[i].getAvailableCommands()
-            for (let j = 0; j < commands.length; ++j) {
-                if (!applyLiveAiCommandUnit(this, commands[j])) {
-                    continue
-                }
-                foundCommands.push(commands[j])
-                xCommands.push(vectoriseGrid())
-                actionManager.undo()
+            let available = this.units[i].getAvailableCommands()
+            for (let j = 0; j < available.length; ++j) {
+                commands.push(available[j])
             }
         }
+        let scored = this.scoreActionCommandsWithFastVectorGrid(
+            commands,
+            function(command) {
+                return applyLiveAiCommandUnit(this, command)
+            })
+        let foundCommands = scored.commands
         if (foundCommands.length == 0) {
             return [null, -1.0]
         }
-        let foundChances = this.getWinningChances(xCommands)
+        let foundChances = scored.chances
         assert(foundChances.length == foundCommands.length)
         if (selfPlayTemperature > 0.0) {
             let index = sampleByTemperature(foundChances, selfPlayTemperature)
@@ -1397,20 +1492,16 @@ class AIPlayerWithEconomy extends AIPlayer {
     }
     getBestActionCommand() {
         let commands = this.getPrioritizedActionCommands()
-        let validCommands = []
-        let vectorisedGrids = []
-        for (let i = 0; i < commands.length; ++i) {
-            if (!this.applyActionCommand(commands[i])) {
-                continue
-            }
-            validCommands.push(commands[i])
-            vectorisedGrids.push(vectoriseGrid())
-            actionManager.undo()
-        }
+        let scored = this.scoreActionCommandsWithFastVectorGrid(
+            commands,
+            function(command) {
+                return this.applyActionCommand(command)
+            })
+        let validCommands = scored.commands
         if (validCommands.length == 0) {
             return [null, -1.0]
         }
-        let chances = this.getWinningChances(vectorisedGrids)
+        let chances = scored.chances
         let maxIndex = 0
         for (let i = 1; i < chances.length; ++i) {
             if (chances[i] > chances[maxIndex]) {
@@ -1438,20 +1529,16 @@ class AIPlayerWithEconomy extends AIPlayer {
         if (!commands.length) {
             return false
         }
-        let validCommands = []
-        let vectorisedGrids = []
-        for (let i = 0; i < commands.length; ++i) {
-            if (!this.applyActionCommand(commands[i])) {
-                continue
-            }
-            validCommands.push(commands[i])
-            vectorisedGrids.push(vectoriseGrid())
-            actionManager.undo()
-        }
+        let scored = this.scoreActionCommandsWithFastVectorGrid(
+            commands,
+            function(command) {
+                return this.applyActionCommand(command)
+            })
+        let validCommands = scored.commands
         if (!validCommands.length) {
             return false
         }
-        let chances = this.getWinningChances(vectorisedGrids)
+        let chances = scored.chances
         let maxIndex = 0
         for (let i = 1; i < chances.length; ++i) {
             if (chances[i] > chances[maxIndex]) {

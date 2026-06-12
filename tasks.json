@@ -2001,7 +2001,7 @@
     "id": "TASK-099",
     "category": "functional",
     "priority": "critical",
-    "description": "Use fast vectorized actions in AIPlayer candidate scoring. AIPlayer should create one vector grid at the beginning of the turn, fast-apply each candidate command to that vector grid, score the resulting vector, fast-undo it, and avoid full vectoriseGrid() calls inside the per-candidate scoring loop.",
+    "description": "Use fast vectorized actions in AIPlayer candidate scoring. AIPlayer should create one vector grid at the beginning of the turn, fast-apply each candidate command to that vector grid, score the resulting vector, fast-undo it, and avoid full vectoriseGrid() calls inside the per-candidate scoring loop. Implemented: Added shared fast mutable-vector candidate scoring for AIPlayer/AIPlayerWithEconomy, filtered no-progress unit trials, kept selected actions on normal authoritative apply paths, and added npm run test-ai-fast-candidate-scoring.",
     "acceptance_criteria": [
       "AIPlayer creates the candidate-scoring vector grid once at the beginning of the turn.",
       "Each candidate command is scored using fast apply and fast undo on the mutable vector grid.",
@@ -2016,7 +2016,7 @@
       "Step 4: Run AI bootstrap or training smoke checks.",
       "Step 5: Confirm selected actions still mutate the real grid only through normal action logic."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-100",

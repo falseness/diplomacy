@@ -61,6 +61,7 @@
     "test-fast-building-placement-actions": "node ai/test-fast-building-placement-actions.js",
     "test-fast-generated-map-invariants": "node ai/test-fast-generated-map-invariants.js",
     "test-fast-action-coverage": "node ai/test-fast-action-coverage.js",
+    "test-ai-fast-candidate-scoring": "node ai/test-ai-fast-candidate-scoring.js",
     "benchmark": "node ai/benchmark.js",
     "test-benchmark": "node ai/test-benchmark-harness.js",
     "benchmark-trained": "node ai/benchmark-trained-model.js",
