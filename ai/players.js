@@ -683,6 +683,21 @@ class AIPlayer extends Player {
         }
         return result
     }
+    getActionCommands() {
+        let commands = []
+        for (let i = 0; i < this.units.length; ++i) {
+            let unit = this.units[i]
+            if (unit.killed || unit.moves == 0 || !unit.isMyTurn) {
+                continue
+            }
+            unit.select()
+            let available = unit.getAvailableCommands()
+            for (let j = 0; j < available.length; ++j) {
+                commands.push(available[j])
+            }
+        }
+        return commands
+    }
     selectBestCommand() {
         let foundCommands = []
         let xCommands = []

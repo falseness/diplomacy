@@ -1938,7 +1938,7 @@
     "id": "TASK-096",
     "category": "test",
     "priority": "critical",
-    "description": "Add an all-action fast-handler coverage audit. Enumerate every legal action emitted by AIPlayer.getActionCommands(), AIPlayerWithEconomy.getActionCommands(), and prioritized command paths, then fail if any action category lacks a fast-action handler, including economy actions.",
+    "description": "Add an all-action fast-handler coverage audit. Enumerate every legal action emitted by AIPlayer.getActionCommands(), AIPlayerWithEconomy.getActionCommands(), and prioritized command paths, then fail if any action category lacks a fast-action handler, including economy actions. Implemented: Added AIPlayer combat command enumeration plus a real-runtime fast-action coverage audit over generated all-feature maps and all fixed gamestart maps, with explicit prioritized-path, economy-product, handler, and missing-handler-fixture counts.",
     "acceptance_criteria": [
       "The audit covers AIPlayer combat actions and AIPlayerWithEconomy combat plus economy actions.",
       "The audit covers prioritized command paths used by training and runtime candidate scoring.",
@@ -1953,7 +1953,7 @@
       "Step 4: Confirm the audit fails on a deliberately unregistered handler in a local test fixture.",
       "Step 5: Record final action category counts in progress.md during task implementation."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-097",
