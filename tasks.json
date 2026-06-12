@@ -1767,5 +1767,25 @@
       "Step 4: Write the baseline result and environment details into progress.md."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-088",
+    "category": "infrastructure",
+    "priority": "critical",
+    "description": "Add the mutable vector-grid fast-action framework. Create the vector grid once from vectoriseGrid() at the beginning of a turn, add a fast apply/undo dispatcher, and add comparison helpers that can assert a mutable vector grid equals a freshly computed vectoriseGrid() result. Do not integrate the framework into AIPlayer yet. Implemented: Added a mutable vector-grid clone/compare API, explicit fast-action apply/undo dispatcher with clear missing-handler errors, browser/Node loading, and focused smoke coverage without changing AIPlayer candidate scoring.",
+    "acceptance_criteria": [
+      "A turn-start mutable vector grid can be created from vectoriseGrid().",
+      "A fast-action dispatcher exists with explicit apply and undo entrypoints.",
+      "Missing fast-action handlers fail with a clear action category and command summary.",
+      "Helpers can compare vectoriseGrid() with the mutable vector grid and report useful mismatch locations.",
+      "No AIPlayer or AIPlayerWithEconomy candidate scoring behavior is changed by this ticket."
+    ],
+    "test_steps": [
+      "Step 1: Create a generated map and build a mutable vector grid from vectoriseGrid().",
+      "Step 2: Compare the mutable vector grid to a fresh vectoriseGrid() result before any action.",
+      "Step 3: Call the dispatcher with an unsupported legal action and confirm it reports a clear missing-handler error.",
+      "Step 4: Run existing vectorization smoke tests to confirm unchanged behavior."
+    ],
+    "status": "to-verify"
   }
 ]

@@ -341,6 +341,7 @@ function loadAiScripts() {
   const scripts = [
     'ai/generateMap.js',
     'ai/vectorizeContent.js',
+    'ai/mutableVectorGrid.js',
     'ai/model.js'
   ];
   const browserOnlyScripts = [

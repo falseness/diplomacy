@@ -53,6 +53,7 @@
     "test-gold-map-generation": "node ai/test-gold-map-generation.js",
     "test-unit-map-generation": "node ai/test-unit-map-generation.js",
     "test-unit-vectorization": "node ai/test-unit-vectorization.js",
+    "test-mutable-vector-grid": "node ai/test-mutable-vector-grid.js",
     "benchmark": "node ai/benchmark.js",
     "test-benchmark": "node ai/test-benchmark-harness.js",
     "benchmark-trained": "node ai/benchmark-trained-model.js",
