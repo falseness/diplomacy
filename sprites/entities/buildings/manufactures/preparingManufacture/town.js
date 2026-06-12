@@ -124,7 +124,7 @@ class Town extends PreparingManufacture {
     }
     updatePlayer() {
         if (typeof players != 'undefined') {
-            for (let i = 1; i < players.length; ++i) {
+            for (let i = 0; i < players.length; ++i) {
                 let townList = players[i].towns
                 if (!townList) {
                     continue

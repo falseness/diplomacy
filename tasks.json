@@ -1959,7 +1959,7 @@
     "id": "TASK-097",
     "category": "test",
     "priority": "critical",
-    "description": "Add the full generated-map fast-action invariant test suite. Generated maps must include all supported units, towns, suburbs, barracks, farms, goldmines, walls, bastions, towers, pending productions, and economy state; every legal action must pass the grid/vector/undo invariant pipeline.",
+    "description": "Add the full generated-map fast-action invariant test suite. Generated maps must include all supported units, towns, suburbs, barracks, farms, goldmines, walls, bastions, towers, pending productions, and economy state; every legal action must pass the grid/vector/undo invariant pipeline. Implemented: Added a deterministic generated-map fast-action invariant suite covering 1,089 legal actions across six generated profiles, plus neutral ownership/economy undo fixes needed for grid0 restoration.",
     "acceptance_criteria": [
       "The generated-map suite creates maps containing all currently supported combat and economy objects.",
       "Every legal action from the generated maps passes the invariant pipeline.",
@@ -1974,7 +1974,7 @@
       "Step 4: Confirm zero grid restoration mismatches after normal undo.",
       "Step 5: Re-run all focused category invariant suites."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-098",

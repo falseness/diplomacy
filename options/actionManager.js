@@ -44,7 +44,7 @@ class ActionManager {
         if (!players) {
             return
         }
-        for (let i = 1; i < players.length; ++i) {
+        for (let i = 0; i < players.length; ++i) {
             let player = players[i]
             if (!player || !player.towns) {
                 continue
@@ -62,7 +62,7 @@ class ActionManager {
         if (!players) {
             return
         }
-        for (let i = 1; i < players.length; ++i) {
+        for (let i = 0; i < players.length; ++i) {
             let player = players[i]
             if (!player || !player.units) {
                 continue
@@ -109,7 +109,7 @@ class ActionManager {
         if (!snapshot || !players || !grid || !grid.arr) {
             return
         }
-        for (let i = 1; i < players.length; ++i) {
+        for (let i = 0; i < players.length; ++i) {
             let player = players[i]
             if (!player || !snapshot[i]) {
                 continue
@@ -242,6 +242,7 @@ class ActionManager {
             this.undoBuilding(undo.building)
         }
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
+        this.restorePlayerEntityLists(undo.playerEntityLists)
         gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     preparingBuildingUndo() {
@@ -255,6 +256,7 @@ class ActionManager {
         this.undoTown(undo.building)
 
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
+        this.restorePlayerEntityLists(undo.playerEntityLists)
         gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     preparingSuburbUndo() {
@@ -266,6 +268,7 @@ class ActionManager {
         this.undoTown(undo.building)
 
         grid.getBuilding(undo.building.coord).player.gold = undo.gold
+        this.restorePlayerEntityLists(undo.playerEntityLists)
         gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     destroyBuildingUndo() {
