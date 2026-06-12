@@ -7,6 +7,7 @@
     "train-cloud": "./train.sh",
     "test-combat-training-progress": "npx -y node@20 ai/test-combat-training-progress.js",
     "test-task106-curriculum-gate": "npx -y node@20 ai/test-task106-curriculum-gate.js",
+    "test-task107-measured-gate-failure": "npx -y node@20 ai/test-task107-measured-gate-failure.js",
     "test-combat-full-training-verification": "npx -y node@20 ai/test-combat-full-training-verification.js",
     "test-combat-old-vs-new": "npx -y node@20 ai/test-combat-old-vs-new.js",
     "test-alphazero-lite-combat": "npx -y node@20 ai/test-alphazero-lite-combat.js",

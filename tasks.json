@@ -2164,7 +2164,7 @@
     "id": "TASK-107",
     "category": "test",
     "priority": "critical",
-    "description": "Add a regression test proving the 80 percent SimpleAiPlayer gate blocks combat curriculum advancement on failure.",
+    "description": "Add a regression test proving the 80 percent SimpleAiPlayer gate blocks combat curriculum advancement on failure. Implemented: Added a measured AIPlayer-vs-SimpleAiPlayer gate-failure regression that rejects injected evidence, records structured below-80 winrate output, keeps the curriculum at stage 0, and reuses the no-cheating comparison checks.",
     "acceptance_criteria": [
       "The test creates or configures a below-threshold measured gate result.",
       "The curriculum does not advance when winrate is below 80 percent.",
@@ -2178,7 +2178,7 @@
       "Step 3: Confirm the stage remains unchanged after failure.",
       "Step 4: Confirm the failure reason is present in metrics or manifest output."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-108",

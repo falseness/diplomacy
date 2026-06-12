@@ -1478,6 +1478,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  evaluateCurriculumSimpleAiWinrate,
   curriculumGateDecision,
-  initialCurriculumState
+  initialCurriculumState,
+  updateCurriculumState
 };
