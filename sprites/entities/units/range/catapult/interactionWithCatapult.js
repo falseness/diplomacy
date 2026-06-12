@@ -26,13 +26,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
         this.addHittedUnitUndo(cell)
 
         let cellUnit = cell.unit
-        let killed
-        if (this.undoAdded) {
-            killed = cell.unit.hit(catapult.buildingDMG)
-        }
-        else {
-            killed = cell.unit.hit(catapult.dmg)
-        }
+        let killed = cell.unit.hit(catapult.buildingDMG)
         if (!killed) 
             this.addKillUnitUndo(cellUnit)
     }

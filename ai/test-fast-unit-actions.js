@@ -404,6 +404,49 @@ const result = new vm.Script(`(() => {
     })
   }
 
+  function assertCombatSideEffects(testCase) {
+    if (testCase.kind != 'combat') {
+      return
+    }
+    let attacker = grid.getCell(testCase.source).unit
+    if (testCase.targetKind == 'unit-damage') {
+      let target = grid.getCell(testCase.destination).unit
+      assert(target.notEmpty(), 'damage combat target was unexpectedly removed', testCase)
+      assert(target.hp < target.maxHP, 'unit attack did not damage target hp', {
+        seed: testCase.seed,
+        attacker: testCase.unitName,
+        target: testCase.targetKind,
+        command: testCase.command,
+        targetHp: target.hp,
+        targetMaxHp: target.maxHP
+      })
+      assert(!target.killed, 'damage combat target was unexpectedly killed', testCase)
+      assert(target.wasHitted, 'damage combat target was not marked hit', testCase)
+    }
+    if (testCase.targetKind == 'unit-kill') {
+      let target = grid.getCell(testCase.destination).unit
+      assert(target.isEmpty() || target.playerColor != 2,
+        'unit kill attack left enemy target on grid', {
+        seed: testCase.seed,
+        attacker: testCase.unitName,
+        target: testCase.targetKind,
+        command: testCase.command,
+        targetUnit: target.toJSON()
+      })
+    }
+    if (testCase.unitName == 'catapult' &&
+        (testCase.targetKind == 'unit-damage' ||
+        testCase.targetKind == 'unit-kill')) {
+      assert(attacker.moves == 0, 'catapult unit attack did not consume moves', {
+        seed: testCase.seed,
+        attacker: testCase.unitName,
+        target: testCase.targetKind,
+        command: testCase.command,
+        attackerMoves: attacker.moves
+      })
+    }
+  }
+
   function runCase(testCase) {
     if (testCase.kind == 'combat') {
       createCombatMap(testCase)
@@ -443,6 +486,7 @@ const result = new vm.Script(`(() => {
     else {
       unit.sendInstructions(grid.getCell(command.destinationCoord))
     }
+    assertCombatSideEffects(testCase)
     let applied = applyFastAction(mutableGrid, command)
     compareOrThrow(vectoriseGrid(), mutableGrid, testCase, 'after-apply')
 
