@@ -23,7 +23,8 @@ class ActionManager {
             units: [],
             killUnit: [],
             townExternal: [],
-            townExternalProduction: []
+            townExternalProduction: [],
+            playerEntityLists: this.snapshotPlayerEntityLists()
         })
     }
     get lastAction() {
@@ -39,8 +40,99 @@ class ActionManager {
             town.buildings.push(res)
         }
     }
+    removeTownFromPlayers(coord) {
+        if (!players) {
+            return
+        }
+        for (let i = 1; i < players.length; ++i) {
+            let player = players[i]
+            if (!player || !player.towns) {
+                continue
+            }
+            for (let j = player.towns.length - 1; j >= 0; --j) {
+                let town = player.towns[j]
+                if (town && town.coord && town.coord.x == coord.x &&
+                        town.coord.y == coord.y) {
+                    player.towns.splice(j, 1)
+                }
+            }
+        }
+    }
+    removeUnitFromPlayers(coord) {
+        if (!players) {
+            return
+        }
+        for (let i = 1; i < players.length; ++i) {
+            let player = players[i]
+            if (!player || !player.units) {
+                continue
+            }
+            for (let j = player.units.length - 1; j >= 0; --j) {
+                let unit = player.units[j]
+                if (unit && unit.coord && unit.coord.x == coord.x &&
+                        unit.coord.y == coord.y) {
+                    player.units.splice(j, 1)
+                }
+            }
+        }
+    }
+    snapshotPlayerEntityLists() {
+        let snapshot = []
+        if (!players) {
+            return snapshot
+        }
+        for (let i = 0; i < players.length; ++i) {
+            let player = players[i]
+            snapshot[i] = {
+                units: [],
+                towns: []
+            }
+            if (!player) {
+                continue
+            }
+            for (let j = 0; player.units && j < player.units.length; ++j) {
+                let unit = player.units[j]
+                if (unit && unit.coord) {
+                    snapshot[i].units.push({x: unit.coord.x, y: unit.coord.y})
+                }
+            }
+            for (let j = 0; player.towns && j < player.towns.length; ++j) {
+                let town = player.towns[j]
+                if (town && town.coord) {
+                    snapshot[i].towns.push({x: town.coord.x, y: town.coord.y})
+                }
+            }
+        }
+        return snapshot
+    }
+    restorePlayerEntityLists(snapshot) {
+        if (!snapshot || !players || !grid || !grid.arr) {
+            return
+        }
+        for (let i = 1; i < players.length; ++i) {
+            let player = players[i]
+            if (!player || !snapshot[i]) {
+                continue
+            }
+            player.units = []
+            for (let j = 0; j < snapshot[i].units.length; ++j) {
+                let unit = grid.getUnit(snapshot[i].units[j])
+                if (unit && unit.notEmpty && unit.notEmpty() && !unit.killed) {
+                    player.units.push(unit)
+                }
+            }
+            player.towns = []
+            for (let j = 0; j < snapshot[i].towns.length; ++j) {
+                let town = grid.getBuilding(snapshot[i].towns[j])
+                if (town && town.isTown && town.isTown() && !town.killed) {
+                    player.towns.push(town)
+                }
+            }
+        }
+    }
     undoTown(town, isBuildingCaptured = false) {
         //town = town
+        this.removeTownFromPlayers(town.coord)
         unpacker.unpackTown(town)
         if (!isBuildingCaptured)
             return
@@ -97,6 +189,7 @@ class ActionManager {
 
         for (let i = undo.units.length - 1; i >= 0; --i) {
             let unit = undo.units[i]
+            this.removeUnitFromPlayers(unit.coord)
             unpacker.fullUnpackUnit(unit)
         }
 
@@ -127,6 +220,7 @@ class ActionManager {
                 this.undoBuilding(townExternal[i])
             }
         }
+        this.restorePlayerEntityLists(undo.playerEntityLists)
         gameEvent.selected = grid.getUnit(undo.units[0].coord)
         nextTurnButton.highlightButton = false
     }

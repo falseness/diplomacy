@@ -1792,7 +1792,7 @@
     "id": "TASK-089",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast unit movement and skip actions with invariant tests. For every legal movement or self/skip command, update only the affected vector cells and undo metadata while preserving exact equivalence with normal grid action behavior. Implemented: Added a default fast unit-action handler for movement/skip vector updates plus a real-runtime invariant suite covering all unit types across five deterministic seeds.",
+    "description": "Implement fast unit movement and skip actions with invariant tests. For every legal movement or self/skip command, update only the affected vector cells and undo metadata while preserving exact equivalence with normal grid action behavior. Implemented: Added a default fast unit-action handler for movement/skip vector updates plus a real-runtime invariant suite covering all unit types across five deterministic seeds. Verification failed: an independent all-legal-movement check found seed 89089 KOHb move (7,1)->(6,5) leaves ownership/unit-count vector channels stale outside the affected cells after fast apply. Implemented: Refreshed unit fast-action vectors from the real grid for all cells, expanded movement invariants to every legal command, and restored player entity-list snapshots during unit undo so movement/skip vectors and normal undo match fresh vectorization.",
     "acceptance_criteria": [
       "Fast movement updates source and destination cell vectors correctly.",
       "Fast skip or self commands update unit move state consistently with normal actions.",

@@ -212,6 +212,16 @@ function collectUnitFastActionCoords(command) {
     return coords
 }
 
+function collectAllMutableVectorGridCoords(mutableGrid) {
+    let coords = []
+    for (let x = 0; x < mutableGrid.cells.length; ++x) {
+        for (let y = 0; y < mutableGrid.cells[x].length; ++y) {
+            coords.push({x: x, y: y})
+        }
+    }
+    return coords
+}
+
 function replaceMutableCellVectorFromGrid(mutableGrid, coord) {
     if (!mutableGrid.cells[coord.x] || !mutableGrid.cells[coord.x][coord.y]) {
         throw new Error('fast unit action coord is outside mutable vector grid: ' +
@@ -226,7 +236,7 @@ var unitFastActionHandler = {
                 !command.destinationCoord) {
             throw new Error('fast unit action requires source and destination coords')
         }
-        let coords = collectUnitFastActionCoords(command)
+        let coords = collectAllMutableVectorGridCoords(mutableGrid)
         let previous = []
         for (let i = 0; i < coords.length; ++i) {
             let coord = coords[i]

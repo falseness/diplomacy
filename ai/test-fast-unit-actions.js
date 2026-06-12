@@ -234,7 +234,6 @@ const result = new vm.Script(`(() => {
             source: coordCopy(command.whoDoCommandCoord),
             destination: coordCopy(command.destinationCoord)
           })
-          break
         }
       }
     }
