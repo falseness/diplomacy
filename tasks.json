@@ -1747,5 +1747,25 @@
       "Step 5: Confirm blue AI still makes a legal automatic move and no unit.sendInstructions TypeError appears."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-087",
+    "category": "test",
+    "priority": "critical",
+    "description": "Measure current full real training speed before fast vectorized actions. This establishes the old/non-fast baseline before any candidate-scoring vectorization changes are enabled. Write the command, environment, elapsed wall time, games or turns, actions or candidates scored when available, and artifact paths into progress.md during this task implementation. Implemented: Recorded the old/non-fast full real training baseline with AIPlayer still rebuilding vectoriseGrid() for each candidate; 15 games completed in 331.097 seconds with artifacts under /mnt/storage/diplomacy/task087-old-full-real-baseline.",
+    "acceptance_criteria": [
+      "The measurement uses the current old/non-fast full real training path.",
+      "The exact command, working directory, Node/npm versions, and relevant environment variables are recorded in progress.md.",
+      "Elapsed wall time is recorded for the full real training run, not only a short smoke test.",
+      "Available throughput metrics such as games, turns, actions, or candidate vectors scored are recorded when the training output exposes them.",
+      "The recorded baseline explicitly states that fast vectorized actions were not used."
+    ],
+    "test_steps": [
+      "Step 1: Confirm the current AI candidate scoring path still rebuilds full vectors per candidate.",
+      "Step 2: Run the existing full real training command from the repository entrypoint.",
+      "Step 3: Capture elapsed wall time, command output summary, and artifact paths.",
+      "Step 4: Write the baseline result and environment details into progress.md."
+    ],
+    "status": "to-verify"
   }
 ]
