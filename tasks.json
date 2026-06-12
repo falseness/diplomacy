@@ -1896,7 +1896,7 @@
     "id": "TASK-094",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast farm and barrack placement actions with invariant tests. Cover pending and completed farm/barrack vector channels, player gold, producer state, income, destination vectors, and undo.",
+    "description": "Implement fast farm and barrack placement actions with invariant tests. Cover pending and completed farm/barrack vector channels, player gold, producer state, income, destination vectors, and undo. Implemented: Added fast farm/barrack building-placement handling plus real-runtime invariants for pending placement, completion refresh, gold/income/vector side effects, fast undo, and normal grid0 undo.",
     "acceptance_criteria": [
       "Fast farm placement matches fresh vectorization for pending and completed farm states that normal actions create.",
       "Fast barrack placement matches fresh vectorization for pending and completed barrack states that normal actions create.",
@@ -1911,7 +1911,7 @@
       "Step 4: Confirm both players and multiple seeds are covered.",
       "Step 5: Re-run farm, barrack, and building vectorization regressions."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-095",
