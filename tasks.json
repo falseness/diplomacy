@@ -1787,5 +1787,26 @@
       "Step 4: Run existing vectorization smoke tests to confirm unchanged behavior."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-089",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Implement fast unit movement and skip actions with invariant tests. For every legal movement or self/skip command, update only the affected vector cells and undo metadata while preserving exact equivalence with normal grid action behavior. Implemented: Added a default fast unit-action handler for movement/skip vector updates plus a real-runtime invariant suite covering all unit types across five deterministic seeds.",
+    "acceptance_criteria": [
+      "Fast movement updates source and destination cell vectors correctly.",
+      "Fast skip or self commands update unit move state consistently with normal actions.",
+      "Unit move count and ownership-sensitive vector channels match fresh vectorization after apply.",
+      "Fast undo restores the mutable vector grid to the pre-action state.",
+      "The original grid is restored after normal actionManager undo."
+    ],
+    "test_steps": [
+      "Step 1: Generate deterministic maps with all unit types and legal movement commands.",
+      "Step 2: For each movement or skip action, copy grid0 and create vectorGrid from vectoriseGrid().",
+      "Step 3: Apply the normal action to grid and the fast action to vectorGrid, then compare vectoriseGrid() == vectorGrid.",
+      "Step 4: Undo the normal action and fast action, compare vectoriseGrid() == vectorGrid again, then compare grid0 == grid.",
+      "Step 5: Run the movement invariant suite across multiple seeds."
+    ],
+    "status": "to-verify"
   }
 ]

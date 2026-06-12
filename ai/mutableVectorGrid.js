@@ -156,6 +156,98 @@ function missingFastActionHandlerError(phase, command) {
         category + '": ' + summarizeFastActionCommand(command))
 }
 
+function fastActionCoordKey(coord) {
+    return coord.x + ':' + coord.y
+}
+
+function addFastActionCoord(coords, seen, coord) {
+    if (!coord) {
+        return
+    }
+    let key = fastActionCoordKey(coord)
+    if (seen[key]) {
+        return
+    }
+    seen[key] = true
+    coords.push({x: coord.x, y: coord.y})
+}
+
+function collectUnitFastActionCoords(command) {
+    let coords = []
+    let seen = {}
+    addFastActionCoord(coords, seen, command.whoDoCommandCoord)
+    addFastActionCoord(coords, seen, command.destinationCoord)
+    if (typeof actionManager == 'undefined' || !actionManager.lastAction) {
+        return coords
+    }
+    let undo = actionManager.lastAction
+    for (let i = 0; undo.hexagons && i < undo.hexagons.length; ++i) {
+        addFastActionCoord(coords, seen, undo.hexagons[i].coord)
+    }
+    for (let i = 0; undo.units && i < undo.units.length; ++i) {
+        addFastActionCoord(coords, seen, undo.units[i].coord)
+    }
+    for (let i = 0; undo.killUnit && i < undo.killUnit.length; ++i) {
+        addFastActionCoord(coords, seen, undo.killUnit[i].coord)
+    }
+    if (undo.killBuilding) {
+        addFastActionCoord(coords, seen, undo.killBuilding.coord)
+    }
+    for (let i = 0; undo.townExternal && i < undo.townExternal.length; ++i) {
+        addFastActionCoord(coords, seen, undo.townExternal[i].coord)
+    }
+    for (let i = 0; undo.townExternalProduction &&
+            i < undo.townExternalProduction.length; ++i) {
+        addFastActionCoord(coords, seen, undo.townExternalProduction[i].coord)
+    }
+    if (undo.building) {
+        addFastActionCoord(coords, seen, undo.building.coord)
+    }
+    if (undo.buildingProduction) {
+        addFastActionCoord(coords, seen, undo.buildingProduction.coord)
+    }
+    if (undo.externalProduction) {
+        addFastActionCoord(coords, seen, undo.externalProduction.coord)
+    }
+    return coords
+}
+
+function replaceMutableCellVectorFromGrid(mutableGrid, coord) {
+    if (!mutableGrid.cells[coord.x] || !mutableGrid.cells[coord.x][coord.y]) {
+        throw new Error('fast unit action coord is outside mutable vector grid: ' +
+            JSON.stringify(coord))
+    }
+    mutableGrid.cells[coord.x][coord.y] = vectorizeCell(grid.getCell(coord))
+}
+
+var unitFastActionHandler = {
+    apply: function(mutableGrid, command) {
+        if (!command || !command.whoDoCommandCoord ||
+                !command.destinationCoord) {
+            throw new Error('fast unit action requires source and destination coords')
+        }
+        let coords = collectUnitFastActionCoords(command)
+        let previous = []
+        for (let i = 0; i < coords.length; ++i) {
+            let coord = coords[i]
+            previous.push({
+                coord: {x: coord.x, y: coord.y},
+                vector: mutableGrid.cells[coord.x][coord.y].slice()
+            })
+            replaceMutableCellVectorFromGrid(mutableGrid, coord)
+        }
+        return {previous: previous}
+    },
+    undo: function(mutableGrid, command, token) {
+        for (let i = 0; token && token.previous &&
+                i < token.previous.length; ++i) {
+            let entry = token.previous[i]
+            mutableGrid.cells[entry.coord.x][entry.coord.y] =
+                entry.vector.slice()
+        }
+    }
+}
+
 function createFastActionDispatcher(handlers) {
     handlers = handlers || {}
     return {
@@ -192,7 +284,9 @@ function createFastActionDispatcher(handlers) {
     }
 }
 
-var defaultFastActionDispatcher = createFastActionDispatcher()
+var defaultFastActionDispatcher = createFastActionDispatcher({
+    unit: unitFastActionHandler
+})
 
 function applyFastAction(mutableGrid, command) {
     return defaultFastActionDispatcher.apply(mutableGrid, command)
