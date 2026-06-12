@@ -57,6 +57,7 @@
     "test-fast-unit-actions": "node ai/test-fast-unit-actions.js",
     "test-fast-ownership-side-effects": "node ai/test-fast-ownership-side-effects.js",
     "test-fast-unit-production-actions": "node ai/test-fast-unit-production-actions.js",
+    "test-fast-suburb-expansion-actions": "node ai/test-fast-suburb-expansion-actions.js",
     "benchmark": "node ai/benchmark.js",
     "test-benchmark": "node ai/test-benchmark-harness.js",
     "benchmark-trained": "node ai/benchmark-trained-model.js",

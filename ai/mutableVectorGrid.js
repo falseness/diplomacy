@@ -285,6 +285,35 @@ var unitProductionFastActionHandler = {
     }
 }
 
+var suburbExpansionFastActionHandler = {
+    apply: function(mutableGrid, command) {
+        if (!command || !command.producerCoord || !command.destinationCoord ||
+                command.product != 'suburb') {
+            throw new Error('fast suburb expansion requires producer coord, ' +
+                'destination coord, and suburb product')
+        }
+        let coords = collectAllMutableVectorGridCoords(mutableGrid)
+        let previous = []
+        for (let i = 0; i < coords.length; ++i) {
+            let coord = coords[i]
+            previous.push({
+                coord: {x: coord.x, y: coord.y},
+                vector: mutableGrid.cells[coord.x][coord.y].slice()
+            })
+            replaceMutableCellVectorFromGrid(mutableGrid, coord)
+        }
+        return {previous: previous}
+    },
+    undo: function(mutableGrid, command, token) {
+        for (let i = 0; token && token.previous &&
+                i < token.previous.length; ++i) {
+            let entry = token.previous[i]
+            mutableGrid.cells[entry.coord.x][entry.coord.y] =
+                entry.vector.slice()
+        }
+    }
+}
+
 function createFastActionDispatcher(handlers) {
     handlers = handlers || {}
     return {
@@ -323,7 +352,8 @@ function createFastActionDispatcher(handlers) {
 
 var defaultFastActionDispatcher = createFastActionDispatcher({
     unit: unitFastActionHandler,
-    'unit-training': unitProductionFastActionHandler
+    'unit-training': unitProductionFastActionHandler,
+    'suburb-expansion': suburbExpansionFastActionHandler
 })
 
 function applyFastAction(mutableGrid, command) {

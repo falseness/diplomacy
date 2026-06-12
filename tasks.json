@@ -1875,7 +1875,7 @@
     "id": "TASK-093",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast suburb-expansion economy actions with invariant tests. Cover legal suburb production destinations and all vector changes to gold, producer state, suburb flag, ownership, income, and undo.",
+    "description": "Implement fast suburb-expansion economy actions with invariant tests. Cover legal suburb production destinations and all vector changes to gold, producer state, suburb flag, ownership, income, and undo. Implemented: Added fast suburb-expansion vector-grid handling plus a focused invariant suite covering legal expansion commands, gold/suburb/income vectors, both player perspectives, multiple seeds, fast undo, and normal undo.",
     "acceptance_criteria": [
       "Fast suburb expansion updates destination suburb state and ownership-sensitive vector channels.",
       "Fast suburb expansion updates player gold and producer state consistently with normal action behavior.",
@@ -1890,7 +1890,7 @@
       "Step 4: Run the suite for both player perspectives and multiple seeds.",
       "Step 5: Re-run suburb vectorization regressions."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-094",
