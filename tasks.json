@@ -1854,7 +1854,7 @@
     "id": "TASK-092",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast unit-production economy actions with invariant tests. Cover town and barrack unit production for noob, archer, KOHb, normchel, and catapult, including gold, producer state, pending or created unit vectors, and undo.",
+    "description": "Implement fast unit-production economy actions with invariant tests. Cover town and barrack unit production for noob, archer, KOHb, normchel, and catapult, including gold, producer state, pending or created unit vectors, and undo. Implemented: Added fast unit-training vector updates, a focused town/barrack production invariant suite covering all five unit products, and an npm smoke.",
     "acceptance_criteria": [
       "Fast unit production updates player gold and producer preparation state correctly.",
       "Fast unit production covers noob, archer, KOHb, normchel, and catapult where legal.",
@@ -1869,7 +1869,7 @@
       "Step 4: Confirm town-produced and barrack-produced unit commands are both covered.",
       "Step 5: Re-run existing AI economy smoke tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-093",

@@ -258,6 +258,33 @@ var unitFastActionHandler = {
     }
 }
 
+var unitProductionFastActionHandler = {
+    apply: function(mutableGrid, command) {
+        if (!command || !command.producerCoord || !command.product) {
+            throw new Error('fast unit production requires producer coord and product')
+        }
+        let coords = collectAllMutableVectorGridCoords(mutableGrid)
+        let previous = []
+        for (let i = 0; i < coords.length; ++i) {
+            let coord = coords[i]
+            previous.push({
+                coord: {x: coord.x, y: coord.y},
+                vector: mutableGrid.cells[coord.x][coord.y].slice()
+            })
+            replaceMutableCellVectorFromGrid(mutableGrid, coord)
+        }
+        return {previous: previous}
+    },
+    undo: function(mutableGrid, command, token) {
+        for (let i = 0; token && token.previous &&
+                i < token.previous.length; ++i) {
+            let entry = token.previous[i]
+            mutableGrid.cells[entry.coord.x][entry.coord.y] =
+                entry.vector.slice()
+        }
+    }
+}
+
 function createFastActionDispatcher(handlers) {
     handlers = handlers || {}
     return {
@@ -295,7 +322,8 @@ function createFastActionDispatcher(handlers) {
 }
 
 var defaultFastActionDispatcher = createFastActionDispatcher({
-    unit: unitFastActionHandler
+    unit: unitFastActionHandler,
+    'unit-training': unitProductionFastActionHandler
 })
 
 function applyFastAction(mutableGrid, command) {
