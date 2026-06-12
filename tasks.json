@@ -1808,5 +1808,26 @@
       "Step 5: Run the movement invariant suite across multiple seeds."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-090",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Implement fast combat actions with invariant tests. Cover attacks by every unit type against units and buildings, including damage-only, kill, capture, and move-consumption side effects. Implemented: Extended the fast unit invariant suite with deterministic combat scenarios for unit damage/kills, all building categories, pending production targets, captures, fast undo, normal undo, and mismatch diagnostics; fixed pending manufacture undo cleanup so copied grid0 state restores correctly.",
+    "acceptance_criteria": [
+      "Fast combat updates attacking unit move state and affected source/destination vectors.",
+      "Fast combat updates unit hp, killed unit state, building hp, killed building state, and captures when those effects occur.",
+      "Fast combat handles towns, farms, barracks, walls, bastions, towers, and legal pending or edge cases that normal commands can target.",
+      "Fast undo restores the mutable vector grid to the pre-combat state.",
+      "Normal grid undo restores the copied grid0 state for every combat invariant case."
+    ],
+    "test_steps": [
+      "Step 1: Generate deterministic combat scenarios for noob, archer, KOHb, normchel, and catapult.",
+      "Step 2: Run the apply/fast-apply/compare/undo/compare/grid-restore invariant pipeline for attacks against units.",
+      "Step 3: Run the same invariant pipeline for attacks against every building category.",
+      "Step 4: Confirm mismatch output includes seed, attacker, target, command, and vector path.",
+      "Step 5: Re-run movement invariants as a regression check."
+    ],
+    "status": "to-verify"
   }
 ]

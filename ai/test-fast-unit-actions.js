@@ -184,6 +184,152 @@ const result = new vm.Script(`(() => {
     otherSettings.moveCameraToUndoTarget = false
   }
 
+  function unitTypeByName(unitName) {
+    let unitTypes = {
+      noob: Noob,
+      archer: Archer,
+      KOHb: KOHb,
+      normchel: Normchel,
+      catapult: Catapult
+    }
+    return unitTypes[unitName]
+  }
+
+  function sourceForCombatUnit(unitName) {
+    if (unitName == 'archer') {
+      return {x: 3, y: 3}
+    }
+    if (unitName == 'catapult') {
+      return {x: 2, y: 3}
+    }
+    return {x: 4, y: 3}
+  }
+
+  function createCombatMap(testCase) {
+    let source = sourceForCombatUnit(testCase.unitName)
+    let target = {x: 5, y: 3}
+    let playerOneTown = {x: 1, y: 1}
+    let playerTwoTown = testCase.targetKind == 'town' ?
+      target : {x: 8, y: 5}
+    let playerTwo = {
+      rgb: {r: 40, g: 120, b: 220},
+      gold: 100,
+      towns: [playerTwoTown],
+      units: []
+    }
+
+    if (testCase.targetKind == 'unit-damage') {
+      playerTwo.units.push({
+        x: target.x,
+        y: target.y,
+        type: Normchel,
+        hp: Normchel.maxHP
+      })
+    }
+    if (testCase.targetKind == 'unit-kill') {
+      playerTwo.units.push({
+        x: target.x,
+        y: target.y,
+        type: Archer,
+        hp: 1
+      })
+    }
+
+    if (testCase.targetKind != 'unit-damage' &&
+        testCase.targetKind != 'unit-kill' &&
+        testCase.targetKind != 'town') {
+      playerTwo.suburbs = [{
+        town: playerTwoTown,
+        cells: [playerTwoTown, target]
+      }]
+    }
+    if (testCase.targetKind == 'farm') {
+      playerTwo.farms = [{
+        x: target.x,
+        y: target.y,
+        town: playerTwoTown
+      }]
+    }
+    if (testCase.targetKind == 'barrack') {
+      playerTwo.barracks = [{
+        x: target.x,
+        y: target.y,
+        town: playerTwoTown
+      }]
+    }
+    if (testCase.targetKind == 'pending-farm') {
+      playerTwo.pendingFarms = [{
+        x: target.x,
+        y: target.y,
+        town: playerTwoTown,
+        turns: 1
+      }]
+    }
+    if (testCase.targetKind == 'pending-barrack') {
+      playerTwo.pendingBarracks = [{
+        x: target.x,
+        y: target.y,
+        town: playerTwoTown,
+        turns: 1
+      }]
+    }
+    if (testCase.targetKind == 'wall') {
+      playerTwo.walls = [target]
+    }
+    if (testCase.targetKind == 'bastion') {
+      playerTwo.bastions = [target]
+    }
+    if (testCase.targetKind == 'tower') {
+      playerTwo.towers = [target]
+    }
+
+    let map = new GameMap(
+      {x: 10, y: 7},
+      [
+        {rgb: {r: 160, g: 160, b: 160}, towns: []},
+        {
+          rgb: {r: 220, g: 60, b: 60},
+          gold: 100,
+          towns: [playerOneTown],
+          units: [{
+            x: source.x,
+            y: source.y,
+            type: unitTypeByName(testCase.unitName)
+          }]
+        },
+        playerTwo
+      ],
+      [],
+      [],
+      []
+    )
+    map.start({
+      clearValues() {
+        external = []
+        externalProduction = []
+        nature = []
+        goldmines = []
+        gameRound = 0
+        gameExit = false
+      }
+    }, false)
+    grid.getHexagon(source).firstpaint(1)
+    if (testCase.targetKind == 'pending-wall') {
+      let pending = new ExternalProduction(
+        production.wall.turns,
+        production.wall.cost,
+        Wall,
+        'wall'
+      )
+      pending.coord = target
+      externalProduction.push(pending)
+      grid.setBuilding(pending, target)
+    }
+    whooseTurn = 1
+    suddenDeathRound = 40
+    otherSettings.moveCameraToUndoTarget = false
+  }
+
   function snapshotGrid() {
     let snapshot = {
       whooseTurn: whooseTurn,
@@ -248,12 +394,23 @@ const result = new vm.Script(`(() => {
     assert(comparison.equal, 'fast unit action vector mismatch', {
       phase: phase,
       metadata: metadata,
+      seed: metadata.seed,
+      attacker: metadata.unitName,
+      target: metadata.targetKind || metadata.kind,
+      command: metadata.command,
+      vectorPath: comparison.mismatches.length ?
+        comparison.mismatches[0].location : undefined,
       mismatches: comparison.mismatches
     })
   }
 
   function runCase(testCase) {
-    setup(testCase.seed)
+    if (testCase.kind == 'combat') {
+      createCombatMap(testCase)
+    }
+    else {
+      setup(testCase.seed)
+    }
     let initialSnapshot = snapshotGrid()
     let initialVectorGrid = vectoriseGrid()
     let mutableGrid = createMutableVectorGrid(initialVectorGrid)
@@ -262,8 +419,23 @@ const result = new vm.Script(`(() => {
       whoDoCommandCoord: coordCopy(testCase.source),
       destinationCoord: coordCopy(testCase.destination)
     }
+    testCase.command = {
+      type: command.type,
+      whoDoCommandCoord: coordCopy(command.whoDoCommandCoord),
+      destinationCoord: coordCopy(command.destinationCoord)
+    }
     let unit = grid.getCell(command.whoDoCommandCoord).unit
     assert(unit && unit.name == testCase.unitName, 'test unit not found', testCase)
+    let availableCommands = unit.getAvailableCommands()
+    let isAvailable = false
+    for (let i = 0; i < availableCommands.length; ++i) {
+      if (sameCoord(availableCommands[i].destinationCoord,
+              command.destinationCoord)) {
+        isAvailable = true
+        break
+      }
+    }
+    assert(isAvailable, 'combat invariant command is not legal', testCase)
     unit.select()
     if (testCase.kind == 'skip') {
       unit.skipMoves()
@@ -281,6 +453,17 @@ const result = new vm.Script(`(() => {
     compareOrThrow(initialVectorGrid, vectoriseGrid(), testCase, 'after-normal-undo')
     assert(snapshotGrid() == initialSnapshot,
       'normal actionManager undo did not restore grid snapshot', testCase)
+  }
+
+  function combatCase(unitName, targetKind) {
+    return {
+      seed: 90090,
+      kind: 'combat',
+      unitName: unitName,
+      targetKind: targetKind,
+      source: sourceForCombatUnit(unitName),
+      destination: {x: 5, y: 3}
+    }
   }
 
   let allCases = []
@@ -315,11 +498,44 @@ const result = new vm.Script(`(() => {
     runCase(allCases[i])
   }
 
+  let combatCases = []
+  let unitCombatTargets = ['unit-damage', 'unit-kill']
+  let unitAttackers = ['noob', 'archer', 'KOHb', 'normchel']
+  for (let i = 0; i < unitAttackers.length; ++i) {
+    for (let j = 0; j < unitCombatTargets.length; ++j) {
+      combatCases.push(combatCase(unitAttackers[i], unitCombatTargets[j]))
+    }
+  }
+  let buildingTargets = [
+    'town',
+    'farm',
+    'barrack',
+    'wall',
+    'bastion',
+    'tower',
+    'pending-farm',
+    'pending-barrack',
+    'pending-wall'
+  ]
+  let buildingAttackers = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+  for (let i = 0; i < buildingAttackers.length; ++i) {
+    for (let j = 0; j < buildingTargets.length; ++j) {
+      combatCases.push(combatCase(buildingAttackers[i], buildingTargets[j]))
+    }
+  }
+  for (let i = 0; i < combatCases.length; ++i) {
+    runCase(combatCases[i])
+  }
+
   return {
     seeds: seeds,
     totalCases: allCases.length,
     movementCases: movementCases.length,
     skipCases: skipCases.length,
+    combatCases: combatCases.length,
+    combatUnitAttackers: unitAttackers,
+    combatBuildingAttackers: buildingAttackers,
+    combatBuildingTargets: buildingTargets,
     unitTypes: Object.keys(allTypes).sort()
   }
 })()`, { filename: 'task089-fast-unit-actions.js' }).runInContext(context);
@@ -328,5 +544,6 @@ check(result.totalCases > 0, 'fast unit action suite produced no cases', result)
 console.log(
   'Fast unit action invariant suite passed for ' +
   result.totalCases + ' cases across seeds ' + result.seeds.join(', ') +
-  ' and unit types ' + result.unitTypes.join(', ')
+  ', ' + result.combatCases + ' combat cases, and unit types ' +
+  result.unitTypes.join(', ')
 );

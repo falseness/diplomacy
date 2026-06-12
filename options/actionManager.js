@@ -156,6 +156,14 @@ class ActionManager {
         if (!town.buildingProduction) {
             town.buildingProduction = []
         }
+        for (let i = town.buildingProduction.length - 1; i >= 0; --i) {
+            let existing = town.buildingProduction[i]
+            if (existing.killed ||
+                    (existing.coord &&
+                    coordsEqually(existing.coord, buildingProduction.coord))) {
+                town.buildingProduction.splice(i, 1)
+            }
+        }
         town.buildingProduction.push(res)
     }
     removeBuildingProduction(buildingProduction) {
