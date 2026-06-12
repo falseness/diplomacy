@@ -2,8 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const tf = require('@tensorflow/tfjs-node');
 const { runGame } = require('./benchmarkHarness');
+const {
+  ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION,
+  DEFAULT_ACTION_SPACE_SIZE,
+  createAlphaZeroLiteCombatModel,
+  validateMetadata: validateAlphaZeroLiteCombatMetadata
+} = require('./alphazero-lite-combat');
 
-const MODEL_VERSION = 1;
+const MODEL_VERSION = 2;
 const CURRICULUM_FINAL_STAGE_INDEX = 6;
 const MODEL_SIGNATURE = {
   inputs: [
@@ -11,8 +17,28 @@ const MODEL_SIGNATURE = {
     { name: 'global_variables', shape: [null, 1] }
   ],
   outputs: [
-    { name: 'value_output', shape: [null, 1] }
+    { name: 'combat_policy', shape: [null, DEFAULT_ACTION_SPACE_SIZE] },
+    { name: 'combat_value', shape: [null, 1] }
   ]
+};
+const MODEL_ARCHITECTURE_METADATA = {
+  architectureVersion: ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION,
+  combatOnly: true,
+  vectorCompatibility: {
+    kind: 'combat-only',
+    boardShape: [3, 3, 21],
+    globalShape: [1],
+    economyFeatures: false
+  },
+  actionSpace: {
+    kind: 'legal-combat-action-index',
+    size: DEFAULT_ACTION_SPACE_SIZE,
+    maskRequired: true
+  },
+  outputs: {
+    policy: 'combat_policy',
+    value: 'combat_value'
+  }
 };
 
 function fail(message) {
@@ -196,27 +222,86 @@ function putUnit(boardValues, x, y, owner, type, moves) {
 }
 
 function createModel() {
-  const boardInput = tf.input({ shape: [3, 3, 21], name: 'board' });
-  const globalInput = tf.input({ shape: [1], name: 'global_variables' });
-  const flattened = tf.layers.flatten().apply(boardInput);
-  const merged = tf.layers.concatenate().apply([flattened, globalInput]);
-  const output = tf.layers.dense({
-    units: 1,
-    activation: 'tanh',
-    kernelInitializer: 'zeros',
-    biasInitializer: 'zeros',
-    name: 'value_output'
-  }).apply(merged);
-  const model = tf.model({ inputs: [boardInput, globalInput], outputs: output });
-  return model;
+  return createAlphaZeroLiteCombatModel({
+    boardHeight: 3,
+    boardWidth: 3,
+    channels: 21,
+    globalFeatures: 1,
+    actionSpaceSize: DEFAULT_ACTION_SPACE_SIZE,
+    filters: 32,
+    residualBlocks: 3,
+    learningRate: 0.01
+  }).model;
 }
 
 function compileModel(model) {
   model.compile({
     optimizer: tf.train.adam(0.01),
-    loss: 'meanSquaredError',
-    metrics: ['accuracy']
+    loss: {
+      combat_policy: 'categoricalCrossentropy',
+      combat_value: 'meanSquaredError'
+    },
+    lossWeights: {
+      combat_policy: 0.25,
+      combat_value: 1
+    }
   });
+}
+
+function actionIndexFromProjectedBoard(boardValues) {
+  let bestIndex = 0;
+  let bestScore = -Infinity;
+  for (let x = 0; x < 3; x += 1) {
+    for (let y = 0; y < 3; y += 1) {
+      const offset = (x * 3 + y) * 21;
+      const score = (boardValues[offset] || 0) * 2 +
+        (boardValues[offset + 2] || 0) * 0.1 +
+        (boardValues[offset + 4] || 0) -
+        Math.abs(1 - x) * 0.05 -
+        Math.abs(1 - y) * 0.05;
+      const index = x * 3 + y;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+  }
+  return bestIndex;
+}
+
+function oneHotPolicy(index) {
+  const policy = new Array(DEFAULT_ACTION_SPACE_SIZE).fill(0);
+  policy[Math.max(0, Math.min(DEFAULT_ACTION_SPACE_SIZE - 1, index))] = 1;
+  return policy;
+}
+
+function modelTargets(batch) {
+  return {
+    combat_policy: batch.policy,
+    combat_value: batch.labels
+  };
+}
+
+function modelLoss(history) {
+  const valueLoss = history.history.combat_value_loss || history.history.loss || [];
+  return valueLoss.length ? valueLoss[valueLoss.length - 1] : null;
+}
+
+function predictionValueTensor(prediction) {
+  if (Array.isArray(prediction)) {
+    const valueOutputIndex = prediction.findIndex((tensor) =>
+      (tensor.name || '').replace(/:\d+$/, '').split('/')[0] === 'combat_value');
+    return prediction[valueOutputIndex >= 0 ? valueOutputIndex : prediction.length - 1];
+  }
+  return prediction;
+}
+
+function disposePrediction(prediction) {
+  if (Array.isArray(prediction)) {
+    prediction.forEach((tensor) => tensor.dispose());
+  } else if (prediction) {
+    prediction.dispose();
+  }
 }
 
 function makeBatch(seed, game) {
@@ -224,6 +309,7 @@ function makeBatch(seed, game) {
   const boardValues = [];
   const globalValues = [];
   const labels = [];
+  const policies = [];
   for (let sample = 0; sample < 96; sample += 1) {
     const board = new Array(3 * 3 * 21).fill(0);
     putTown(board, 0, 1, 1, 0.7 + random() * 0.3);
@@ -253,12 +339,14 @@ function makeBatch(seed, game) {
     const globalValue = 0;
     boardValues.push(...board);
     globalValues.push(globalValue);
+    policies.push(oneHotPolicy(actionIndexFromProjectedBoard(board)));
     labels.push(Math.tanh(4 * projectedCombatLabel(board, globalValue)));
   }
   const sampleCount = labels.length;
   return {
     board: tf.tensor4d(boardValues, [sampleCount, 3, 3, 21]),
     global: tf.tensor2d(globalValues, [sampleCount, 1]),
+    policy: tf.tensor2d(policies, [sampleCount, DEFAULT_ACTION_SPACE_SIZE]),
     labels: tf.tensor2d(labels, [sampleCount, 1])
   };
 }
@@ -326,11 +414,12 @@ function createRuntimeModelPredict(model) {
     }
     const boardTensor = tf.tensor4d(boards, [vectorizedGrids.length, 3, 3, 21]);
     const globalTensor = tf.tensor2d(globals, [vectorizedGrids.length, 1]);
-    const predictionTensor = model.predict([boardTensor, globalTensor]);
+    const prediction = model.predict([boardTensor, globalTensor]);
+    const valueTensor = predictionValueTensor(prediction);
     try {
-      return Array.from(predictionTensor.dataSync()).map((value) => [value]);
+      return Array.from(valueTensor.dataSync()).map((value) => [value]);
     } finally {
-      predictionTensor.dispose();
+      disposePrediction(prediction);
       boardTensor.dispose();
       globalTensor.dispose();
     }
@@ -350,6 +439,7 @@ function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
   const boardValues = [];
   const globalValues = [];
   const labels = [];
+  const policies = [];
   const collectPredict = function collectPredict(_modelIdentifier, vectorizedGrids) {
     const predictions = [];
     for (const vectorizedGrid of vectorizedGrids) {
@@ -357,6 +447,7 @@ function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
       boardValues.push(...example.board);
       globalValues.push(example.globalValue);
       labels.push(example.label);
+      policies.push(oneHotPolicy(actionIndexFromProjectedBoard(example.board)));
       predictions.push([example.label]);
     }
     return predictions;
@@ -386,6 +477,7 @@ function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
   return {
     board: tf.tensor4d(boardValues, [sampleCount, 3, 3, 21]),
     global: tf.tensor2d(globalValues, [sampleCount, 1]),
+    policy: tf.tensor2d(policies, [sampleCount, DEFAULT_ACTION_SPACE_SIZE]),
     labels: tf.tensor2d(labels, [sampleCount, 1])
   };
 }
@@ -398,7 +490,7 @@ async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
   try {
     return await model.fit(
       [runtimeBatch.board, runtimeBatch.global],
-      runtimeBatch.labels,
+      modelTargets(runtimeBatch),
       {
         epochs,
         batchSize: 8,
@@ -409,6 +501,7 @@ async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
   } finally {
     runtimeBatch.board.dispose();
     runtimeBatch.global.dispose();
+    runtimeBatch.policy.dispose();
     runtimeBatch.labels.dispose();
   }
 }
@@ -457,7 +550,12 @@ function validateCheckpointMetadata(checkpoint, state, manifest) {
     fail(`incompatible checkpoint model version: expected ${MODEL_VERSION}, found ${metadata.modelVersion}`);
   }
   if (!sameValue(metadata.modelSignature, MODEL_SIGNATURE)) {
-    fail('incompatible checkpoint model signature: expected board [3,3,21], globals [1], and value output [1]');
+    fail('incompatible checkpoint model signature: expected board [3,3,21], globals [1], combat policy [128], and combat value [1]');
+  }
+  try {
+    validateAlphaZeroLiteCombatMetadata(metadata.architecture);
+  } catch (error) {
+    fail(error.message);
   }
   if (!metadata.trainingConfiguration) {
     fail('incompatible checkpoint: missing resumable training configuration');
@@ -544,6 +642,7 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
   writeJson(path.join(temporary, 'metadata.json'), {
     modelVersion: MODEL_VERSION,
     modelSignature: MODEL_SIGNATURE,
+    architecture: MODEL_ARCHITECTURE_METADATA,
     runId: state.runId,
     trainingStep: state.completedGames,
     seed: state.seed,
@@ -658,7 +757,8 @@ function readOldEpochPointer(options) {
 }
 
 async function predictionLoss(model, batch) {
-  const predictionTensor = model.predict([batch.board, batch.global]);
+  const prediction = model.predict([batch.board, batch.global]);
+  const predictionTensor = predictionValueTensor(prediction);
   try {
     const predictions = Array.from(await predictionTensor.data());
     const labels = Array.from(await batch.labels.data());
@@ -668,7 +768,7 @@ async function predictionLoss(model, batch) {
     }
     return loss / predictions.length;
   } finally {
-    predictionTensor.dispose();
+    disposePrediction(prediction);
   }
 }
 
@@ -714,6 +814,7 @@ async function evaluateNewVsOld(options, state, newModel, oldPointer) {
       } finally {
         batch.board.dispose();
         batch.global.dispose();
+        batch.policy.dispose();
         batch.labels.dispose();
       }
     }
@@ -847,7 +948,7 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     draws,
     source: 'measured-model-vs-SimpleAiPlayer-benchmark',
     benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged SimpleAiPlayer',
-    modelAdapter: 'runtime vector grids are projected into the cloud model 3x3x21 input signature outside player code; the TensorFlow value_output is used directly',
+    modelAdapter: 'runtime vector grids are projected into the cloud model 3x3x21 input signature outside player code; the TensorFlow combat_value output is used directly',
     artificialAdvantage: false,
     results: gameResults
   };
@@ -1124,7 +1225,8 @@ async function main() {
     );
     const batch = makeBatch(checkpoint.metadata.seed, checkpoint.metadata.trainingStep + 1);
     const prediction = evaluationModel.predict([batch.board, batch.global]);
-    const values = await prediction.data();
+    const valuePrediction = predictionValueTensor(prediction);
+    const values = await valuePrediction.data();
     console.log(JSON.stringify({
       runId: options.runId,
       checkpoint: path.relative(options.storageDir, checkpoint.path),
@@ -1132,9 +1234,10 @@ async function main() {
       modelVersion: checkpoint.metadata.modelVersion,
       predictionCount: values.length
     }));
-    prediction.dispose();
+    disposePrediction(prediction);
     batch.board.dispose();
     batch.global.dispose();
+    batch.policy.dispose();
     batch.labels.dispose();
     evaluationModel.dispose();
     return;
@@ -1219,12 +1322,15 @@ async function main() {
   try {
     compileModel(model);
     if (!options.resume && state.completedGames === 0) {
-      for (let pretrain = 0; pretrain < 4; pretrain += 1) {
+      const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
+      const pretrainPasses = smokeSizedRun ? 1 : 4;
+      const pretrainEpochs = smokeSizedRun ? 1 : 8;
+      for (let pretrain = 0; pretrain < pretrainPasses; pretrain += 1) {
         await fitRuntimeCombatTeacherBatch(
           model,
           state.seed + 50000 + pretrain * 173,
           state.curriculum.currentStageIndex,
-          8
+          pretrainEpochs
         );
       }
     }
@@ -1243,11 +1349,14 @@ async function main() {
       let predictionTensor;
       try {
         labels = Array.from(await batch.labels.data());
+        const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
+        const syntheticEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 12);
+        const runtimeEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 4);
         history = await model.fit(
           [batch.board, batch.global],
-          batch.labels,
+          modelTargets(batch),
           {
-            epochs: Math.max(state.epochs, 12),
+            epochs: syntheticEpochs,
             batchSize: 8,
             shuffle: true,
             verbose: 0
@@ -1257,16 +1366,17 @@ async function main() {
           model,
           state.seed + game * 1543,
           state.curriculum.currentStageIndex,
-          Math.max(state.epochs, 4)
+          runtimeEpochs
         ) || history;
         predictionTensor = model.predict([batch.board, batch.global]);
-        prediction = Array.from(await predictionTensor.data());
+        prediction = Array.from(await predictionValueTensor(predictionTensor).data());
       } finally {
         if (predictionTensor) {
-          predictionTensor.dispose();
+          disposePrediction(predictionTensor);
         }
         batch.board.dispose();
         batch.global.dispose();
+        batch.policy.dispose();
         batch.labels.dispose();
       }
       const labelScore = labels.reduce((total, value) => total + value, 0);
@@ -1282,7 +1392,7 @@ async function main() {
         await saveCheckpoint(model, options, state, checkpointDir, 'interval');
       }
       const previousRecords = metricRecords(metricsPath);
-      const loss = history.history.loss[history.history.loss.length - 1];
+      const loss = modelLoss(history);
       const accuracyHistory = history.history.acc || history.history.accuracy || [];
       const metric = {
         type: 'game',

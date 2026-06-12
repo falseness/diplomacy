@@ -344,6 +344,30 @@ async function loadModel(modelSource) {
   return model
 }
 
+function getPredictionValueTensor(prediction) {
+  if (Array.isArray(prediction)) {
+    for (let i = 0; i < prediction.length; ++i) {
+      let outputName = (prediction[i].name || '').replace(/:\d+$/, '').split('/')[0]
+      if (outputName == 'combat_value' || outputName == 'value_output') {
+        return prediction[i]
+      }
+    }
+    return prediction[prediction.length - 1]
+  }
+  return prediction
+}
+
+function disposePredictionResult(prediction) {
+  if (Array.isArray(prediction)) {
+    for (let i = 0; i < prediction.length; ++i) {
+      prediction[i].dispose()
+    }
+  }
+  else {
+    prediction.dispose()
+  }
+}
+
 async function saveModel() {
   // console.log('saving in', modelIndex + 1)
   await ai_model.save('downloads://diplomacy_weights' + (modelIndex + 1))
@@ -366,10 +390,10 @@ function predict(model, xValidateArr) {
     let tfInput = tf.stack(xValidate)
     let tfGlobal = tf.stack(xGlobalVariables)
     let tf_result = model.predict([tfInput, tfGlobal])
-    let result = tf_result.arraySync() 
+    let result = getPredictionValueTensor(tf_result).arraySync()
     tfInput.dispose()
     tfGlobal.dispose()
-    tf_result.dispose()
+    disposePredictionResult(tf_result)
     for (let i = 0; i < xValidate.length; ++i) {
       xValidate[i].dispose()
     }

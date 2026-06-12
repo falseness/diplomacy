@@ -2104,7 +2104,7 @@
     "id": "TASK-104",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement the AlphaZero-lite combat model architecture behind the existing AIPlayer inference interface without adding ad-hoc comparison logic to AIPlayer.",
+    "description": "Implement the AlphaZero-lite combat model architecture behind the existing AIPlayer inference interface without adding ad-hoc comparison logic to AIPlayer. Implemented: Wired the combat cloud runner to the residual AlphaZero-lite policy/value model, preserved AIPlayer's score inference boundary through combat_value adaptation, wrote v2 checkpoint architecture/signature metadata, and verified init/load plus short combat training smokes without changing ai/players.js.",
     "acceptance_criteria": [
       "The combat model is more complex than the current model and uses a residual policy/value-style architecture where practical.",
       "AIPlayer continues to call the model through the existing inference boundary.",
@@ -2118,7 +2118,7 @@
       "Step 3: Run a short combat training smoke.",
       "Step 4: Inspect AIPlayer changes and confirm no comparison-specific branches were added."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-105",

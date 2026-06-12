@@ -115,8 +115,8 @@ function assertPassingRun() {
         !record.simpleAiPlayerWinrate.benchmarkPolicy.includes('no-model combat baseline') &&
         !record.simpleAiPlayerWinrate.benchmarkPolicy.includes('combat value head'),
       `stage gate ${index} used loss-comparison heuristic evidence`);
-    check(record.simpleAiPlayerWinrate.modelAdapter.includes('TensorFlow value_output is used directly') &&
-        !record.simpleAiPlayerWinrate.modelAdapter.includes('combat value head'),
+  check(record.simpleAiPlayerWinrate.modelAdapter.includes('TensorFlow combat_value output is used directly') &&
+        !record.simpleAiPlayerWinrate.modelAdapter.includes('heuristic combat value'),
       `stage gate ${index} did not use direct model output`);
     check(record.simpleAiPlayerWinrate.artificialAdvantage === false,
       `stage gate ${index} reported an artificial benchmark advantage`);
@@ -199,8 +199,8 @@ function assertFailingRun() {
       !finalRecord.simpleAiPlayerWinrate.benchmarkPolicy.includes('no-model combat baseline') &&
       !finalRecord.simpleAiPlayerWinrate.benchmarkPolicy.includes('combat value head'),
   'failed-gate run used heuristic SimpleAiPlayer evidence');
-  check(finalRecord.simpleAiPlayerWinrate.modelAdapter.includes('TensorFlow value_output is used directly') &&
-      !finalRecord.simpleAiPlayerWinrate.modelAdapter.includes('combat value head'),
+  check(finalRecord.simpleAiPlayerWinrate.modelAdapter.includes('TensorFlow combat_value output is used directly') &&
+      !finalRecord.simpleAiPlayerWinrate.modelAdapter.includes('heuristic combat value'),
   'failed-gate run did not use direct model output');
   check(finalRecord.simpleAiPlayerWinrate.value <= 1,
     'failed-gate run should have a bounded measured winrate');

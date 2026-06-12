@@ -292,17 +292,28 @@ function validateModelOutputs(model, metadata) {
   }
 }
 
+function removeDirectory(directory) {
+  if (!fs.existsSync(directory)) {
+    return;
+  }
+  if (fs.rmSync) {
+    fs.rmSync(directory, { recursive: true, force: true });
+  } else {
+    fs.rmdirSync(directory, { recursive: true });
+  }
+}
+
 async function saveAlphaZeroLiteCombatModel(model, directory, metadata) {
   validateMetadata(metadata);
   validateModelOutputs(model, metadata);
   const destination = path.resolve(directory);
   const temporary = `${destination}.tmp-${process.pid}`;
-  fs.rmSync(temporary, { recursive: true, force: true });
+  removeDirectory(temporary);
   await model.save(`file://${temporary}`);
   fs.writeFileSync(
     path.join(temporary, 'metadata.json'),
     `${JSON.stringify(metadata, null, 2)}\n`);
-  fs.rmSync(destination, { recursive: true, force: true });
+  removeDirectory(destination);
   fs.renameSync(temporary, destination);
 }
 
