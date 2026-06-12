@@ -1726,5 +1726,26 @@
       "Step 5: Record the exact reproduction command and failure summary."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-086",
+    "category": "functional",
+    "priority": "critical",
+    "description": "Fix the Play AI crash reproduced in TASK-085 where AIPlayer.selectBestCommand can call unit.sendInstructions on a non-unit object during the blue AI turn. Keep this ticket limited to the smallest AI command validation or turn simulation fix needed to prevent stale or invalid AI unit commands from executing. Implemented: Added live AI command-source validation before AIPlayer simulation/execution, skipped invalid non-unit/stale sources without selecting them, and updated the Play AI invalid-command regression to assert the TypeError is gone while normal Play AI blue movement still works.",
+    "acceptance_criteria": [
+      "TASK-085 fails before the fix and passes after the fix.",
+      "AIPlayer.selectBestCommand and AIPlayer.doActions do not call sendInstructions unless the command source still resolves to a live unit that supports sendInstructions.",
+      "Invalid, stale, killed, empty, building, or moved-away command sources are skipped without crashing.",
+      "Normal Play AI mode still lets the blue AIPlayer make legal automatic moves after the red player clicks Next Turn.",
+      "No console error contains unit.sendInstructions is not a function during the verified Play AI flow."
+    ],
+    "test_steps": [
+      "Step 1: Re-run the TASK-085 reproduction and confirm it fails before the fix.",
+      "Step 2: Apply the smallest AI command validation or simulation-state fix.",
+      "Step 3: Re-run the TASK-085 regression and confirm it passes.",
+      "Step 4: Re-run the Play AI browser turn test.",
+      "Step 5: Confirm blue AI still makes a legal automatic move and no unit.sendInstructions TypeError appears."
+    ],
+    "status": "to-verify"
   }
 ]

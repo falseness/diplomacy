@@ -254,6 +254,11 @@ function isExpectedCrash(error) {
     text.includes('offlineNextTurn');
 }
 
+function isSendInstructionsTypeError(error) {
+  const text = `${error.message}\n${error.stack || ''}`;
+  return text.includes('unit.sendInstructions is not a function');
+}
+
 (async function main() {
   fs.mkdirSync(artifactDir, { recursive: true });
 
@@ -291,8 +296,14 @@ function isExpectedCrash(error) {
     await page.waitForTimeout(1000);
 
     const expectedError = pageErrors.find(isExpectedCrash);
+    const sendInstructionsTypeError = pageErrors.find(isSendInstructionsTypeError);
+    const postTurnEvidence = await page.evaluate(() => ({
+      invalidSourceSelected: Boolean(window.__playAiInvalidCommandSourceSelected),
+      whooseTurn,
+      predictionCount: window.__aiPlayerPredictionCount || 0
+    }));
     const report = {
-      status: expectedError ? 'passed' : 'failed',
+      status: sendInstructionsTypeError ? 'failed' : 'passed',
       url: served.url,
       reproductionCommand: 'npm run test-play-ai-invalid-command',
       reportedStacktrace: [
@@ -309,6 +320,8 @@ function isExpectedCrash(error) {
       ].join('\n'),
       observedError: expectedError || null,
       evidence,
+      postTurnEvidence,
+      fixedExpectation: 'Invalid command sources are skipped without calling sendInstructions.',
       pageErrors,
       browserConsole: consoleMessages.slice(-50)
     };
@@ -316,8 +329,11 @@ function isExpectedCrash(error) {
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
     report.report = reportPath;
 
-    check(expectedError,
-      'Play AI invalid command reproduction did not observe the expected sendInstructions crash',
+    check(!sendInstructionsTypeError,
+      'Play AI invalid command regression still observed unit.sendInstructions TypeError',
+      report);
+    check(postTurnEvidence.invalidSourceSelected === false,
+      'AI selected the invalid command source instead of skipping it',
       report);
 
     console.log(JSON.stringify(report, null, 2));

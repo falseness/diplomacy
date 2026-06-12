@@ -80,6 +80,47 @@ function getAiMoveCommands(unit) {
     return unit.getAvailableMoveCommands()
 }
 
+function resolveLiveAiCommandUnit(player, command) {
+    if (!command || !command.whoDoCommandCoord || !command.destinationCoord ||
+            typeof grid == 'undefined' || !grid.getCell) {
+        return null
+    }
+    let sourceCell = grid.getCell(command.whoDoCommandCoord)
+    if (!sourceCell || !sourceCell.unit) {
+        return null
+    }
+    let unit = sourceCell.unit
+    if (!unit || typeof unit.sendInstructions != 'function' ||
+            typeof unit.select != 'function' || typeof unit.skipMoves != 'function' ||
+            unit.killed || !unit.isMyTurn) {
+        return null
+    }
+    if (unit.playerColor !== undefined && typeof players != 'undefined' &&
+            players.indexOf(player) != unit.playerColor) {
+        return null
+    }
+    return unit
+}
+
+function applyLiveAiCommandUnit(player, command) {
+    let unit = resolveLiveAiCommandUnit(player, command)
+    if (!unit) {
+        return false
+    }
+    let destinationCell = grid.getCell(command.destinationCoord)
+    if (!destinationCell) {
+        return false
+    }
+    unit.select()
+    if (areCoordsEqual(command.whoDoCommandCoord, command.destinationCoord)) {
+        unit.skipMoves()
+    }
+    else {
+        unit.sendInstructions(destinationCell)
+    }
+    return true
+}
+
 class SimpleAiPlayer extends Player {
     constructor(color, gold = 90) {
         super(color, gold)
@@ -651,13 +692,8 @@ class AIPlayer extends Player {
             }
             let commands = this.units[i].getAvailableCommands()
             for (let j = 0; j < commands.length; ++j) {
-                let unit = grid.getCell(commands[j].whoDoCommandCoord).unit
-                unit.select()
-                if (areCoordsEqual(commands[j].whoDoCommandCoord, commands[j].destinationCoord)) {
-                    unit.skipMoves()
-                }
-                else {
-                    unit.sendInstructions(grid.getCell(commands[j].destinationCoord))
+                if (!applyLiveAiCommandUnit(this, commands[j])) {
+                    continue
                 }
                 foundCommands.push(commands[j])
                 xCommands.push(vectoriseGrid())
@@ -691,14 +727,8 @@ class AIPlayer extends Player {
             if (!bestCommand) {
                 return
             }
-            let unit = grid.getCell(bestCommand.whoDoCommandCoord).unit
-            assert(unit.isMyTurn)
-            unit.select()
-            if (areCoordsEqual(bestCommand.whoDoCommandCoord, bestCommand.destinationCoord)) {
-                unit.skipMoves()
-            }
-            else {
-                unit.sendInstructions(grid.getCell(bestCommand.destinationCoord))
+            if (!applyLiveAiCommandUnit(this, bestCommand)) {
+                continue
             }
             this.chosenGrids.push(vectoriseGrid())
             this.winningChances.push(chance)
