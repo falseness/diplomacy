@@ -1834,7 +1834,7 @@
     "id": "TASK-091",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast ownership, town, suburb, and capture side effects with invariant tests. This covers vector changes that are not just the immediate moving or attacking unit cell, including player-relative ownership and economy summary channels. Implemented: Added focused fast ownership side-effect invariants for town capture and suburb painting from both player perspectives, fixed captured town ownership lists so income summaries update, and wired the npm smoke.",
+    "description": "Implement fast ownership, town, suburb, and capture side effects with invariant tests. This covers vector changes that are not just the immediate moving or attacking unit cell, including player-relative ownership and economy summary channels. Implemented: Added focused fast ownership side-effect invariants for town capture and suburb painting from both player perspectives, fixed captured town ownership lists so income summaries update, and wired the npm smoke. Verified: Re-ran ownership side-effect, fast unit action, and mutable vector-grid invariant suites from scratch; town capture, suburb painting, income channel updates, both player perspectives, and fast/normal undo behavior all passed.",
     "acceptance_criteria": [
       "Fast actions update player-relative ownership channels exactly like fresh vectorization.",
       "Town capture, town loss, suburb painting, and suburb flag changes are reflected in affected vector cells.",
@@ -1848,13 +1848,13 @@
       "Step 3: Assert income-related channels match fresh vectorization after apply and undo.",
       "Step 4: Re-run combat and movement invariant suites as regression checks."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-092",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast unit-production economy actions with invariant tests. Cover town and barrack unit production for noob, archer, KOHb, normchel, and catapult, including gold, producer state, pending or created unit vectors, and undo. Implemented: Added fast unit-training vector updates, a focused town/barrack production invariant suite covering all five unit products, and an npm smoke.",
+    "description": "Implement fast unit-production economy actions with invariant tests. Cover town and barrack unit production for noob, archer, KOHb, normchel, and catapult, including gold, producer state, pending or created unit vectors, and undo. Implemented: Added fast unit-training vector updates, a focused town/barrack production invariant suite covering all five unit products, and an npm smoke. Verified: Re-ran production, economy, fast-unit, ownership-side-effect, and mutable-grid smokes from scratch; town and barrack unit-training covered all five products, gold/preparation vectors matched fresh vectorization, and fast/normal undo passed.",
     "acceptance_criteria": [
       "Fast unit production updates player gold and producer preparation state correctly.",
       "Fast unit production covers noob, archer, KOHb, normchel, and catapult where legal.",
@@ -1869,13 +1869,13 @@
       "Step 4: Confirm town-produced and barrack-produced unit commands are both covered.",
       "Step 5: Re-run existing AI economy smoke tests."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-093",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast suburb-expansion economy actions with invariant tests. Cover legal suburb production destinations and all vector changes to gold, producer state, suburb flag, ownership, income, and undo. Implemented: Added fast suburb-expansion vector-grid handling plus a focused invariant suite covering legal expansion commands, gold/suburb/income vectors, both player perspectives, multiple seeds, fast undo, and normal undo.",
+    "description": "Implement fast suburb-expansion economy actions with invariant tests. Cover legal suburb production destinations and all vector changes to gold, producer state, suburb flag, ownership, income, and undo. Implemented: Added fast suburb-expansion vector-grid handling plus a focused invariant suite covering legal expansion commands, gold/suburb/income vectors, both player perspectives, multiple seeds, fast undo, and normal undo. Verified: Re-ran suburb-expansion, suburb-vectorization, mutable-grid, AI economy, and adjacent unit-production smokes from scratch; source inspection confirmed real economy command enumeration, fast dispatcher wiring, destination ownership/suburb/income refresh, fast undo, and normal undo coverage.",
     "acceptance_criteria": [
       "Fast suburb expansion updates destination suburb state and ownership-sensitive vector channels.",
       "Fast suburb expansion updates player gold and producer state consistently with normal action behavior.",
@@ -1890,13 +1890,13 @@
       "Step 4: Run the suite for both player perspectives and multiple seeds.",
       "Step 5: Re-run suburb vectorization regressions."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-094",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast farm and barrack placement actions with invariant tests. Cover pending and completed farm/barrack vector channels, player gold, producer state, income, destination vectors, and undo. Implemented: Added fast farm/barrack building-placement handling plus real-runtime invariants for pending placement, completion refresh, gold/income/vector side effects, fast undo, and normal grid0 undo.",
+    "description": "Implement fast farm and barrack placement actions with invariant tests. Cover pending and completed farm/barrack vector channels, player gold, producer state, income, destination vectors, and undo. Implemented: Added fast farm/barrack building-placement handling plus real-runtime invariants for pending placement, completion refresh, gold/income/vector side effects, fast undo, and normal grid0 undo. Verified: Re-ran fast building-placement, farm/building vectorization, farm/barrack/building map, town vectorization, and mutable-grid smokes from scratch; source inspection confirmed farm/barrack command enumeration, dispatcher wiring, pending/completed vector refresh, fast undo, and normal grid0 undo coverage.",
     "acceptance_criteria": [
       "Fast farm placement matches fresh vectorization for pending and completed farm states that normal actions create.",
       "Fast barrack placement matches fresh vectorization for pending and completed barrack states that normal actions create.",
@@ -1911,13 +1911,13 @@
       "Step 4: Confirm both players and multiple seeds are covered.",
       "Step 5: Re-run farm, barrack, and building vectorization regressions."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-095",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast external-building economy actions with invariant tests. Cover wall, bastion, tower, and any other external building products emitted by legal economy commands, including external production arrays, gold, destination vectors, and undo. Implemented: Generalized fast building-placement handling to legal non-unit building products and expanded the real-runtime invariant suite to cover wall, bastion, and tower pending/completed vectors, externalProduction state, gold changes, fast undo, and normal undo cleanup.",
+    "description": "Implement fast external-building economy actions with invariant tests. Cover wall, bastion, tower, and any other external building products emitted by legal economy commands, including external production arrays, gold, destination vectors, and undo. Implemented: Generalized fast building-placement handling to legal non-unit building products and expanded the real-runtime invariant suite to cover wall, bastion, and tower pending/completed vectors, externalProduction state, gold changes, fast undo, and normal undo cleanup. Verified: Re-ran fast building-placement, real economy undo, building vectorization, and building map-generation smokes from scratch; wall, bastion, and tower external-production state, pending/completed vectors, gold, fast undo, and normal undo cleanup all passed.",
     "acceptance_criteria": [
       "Fast external-building placement matches fresh vectorization for wall, bastion, and tower commands.",
       "Pending and completed external-building vector fields match normal action behavior where applicable.",
@@ -1932,13 +1932,13 @@
       "Step 4: Re-run the real ActionManager economy undo smoke.",
       "Step 5: Re-run building vectorization regressions."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-096",
     "category": "test",
     "priority": "critical",
-    "description": "Add an all-action fast-handler coverage audit. Enumerate every legal action emitted by AIPlayer.getActionCommands(), AIPlayerWithEconomy.getActionCommands(), and prioritized command paths, then fail if any action category lacks a fast-action handler, including economy actions. Implemented: Added AIPlayer combat command enumeration plus a real-runtime fast-action coverage audit over generated all-feature maps and all fixed gamestart maps, with explicit prioritized-path, economy-product, handler, and missing-handler-fixture counts.",
+    "description": "Add an all-action fast-handler coverage audit. Enumerate every legal action emitted by AIPlayer.getActionCommands(), AIPlayerWithEconomy.getActionCommands(), and prioritized command paths, then fail if any action category lacks a fast-action handler, including economy actions. Implemented: Added AIPlayer combat command enumeration plus a real-runtime fast-action coverage audit over generated all-feature maps and all fixed gamestart maps, with explicit prioritized-path, economy-product, handler, and missing-handler-fixture counts. Verified: Re-ran test-fast-action-coverage from scratch; generated all-feature maps, 19 fixed gamestart maps, AIPlayer/AIPlayerWithEconomy commands, prioritized paths, economy-product counts, registered handlers, and the deliberate missing-handler fixture all passed.",
     "acceptance_criteria": [
       "The audit covers AIPlayer combat actions and AIPlayerWithEconomy combat plus economy actions.",
       "The audit covers prioritized command paths used by training and runtime candidate scoring.",
@@ -1953,13 +1953,13 @@
       "Step 4: Confirm the audit fails on a deliberately unregistered handler in a local test fixture.",
       "Step 5: Record final action category counts in progress.md during task implementation."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-097",
     "category": "test",
     "priority": "critical",
-    "description": "Add the full generated-map fast-action invariant test suite. Generated maps must include all supported units, towns, suburbs, barracks, farms, goldmines, walls, bastions, towers, pending productions, and economy state; every legal action must pass the grid/vector/undo invariant pipeline. Implemented: Added a deterministic generated-map fast-action invariant suite covering 1,089 legal actions across six generated profiles, plus neutral ownership/economy undo fixes needed for grid0 restoration.",
+    "description": "Add the full generated-map fast-action invariant test suite. Generated maps must include all supported units, towns, suburbs, barracks, farms, goldmines, walls, bastions, towers, pending productions, and economy state; every legal action must pass the grid/vector/undo invariant pipeline. Implemented: Added a deterministic generated-map fast-action invariant suite covering 1,089 legal actions across six generated profiles, plus neutral ownership/economy undo fixes needed for grid0 restoration. Verified: Re-ran generated-map invariants and all focused fast-action category suites from scratch; 1,089 generated legal actions covered all required objects, products, action categories, vector apply/undo checks, grid0 restoration checks, and mismatch diagnostics.",
     "acceptance_criteria": [
       "The generated-map suite creates maps containing all currently supported combat and economy objects.",
       "Every legal action from the generated maps passes the invariant pipeline.",
@@ -1974,13 +1974,13 @@
       "Step 4: Confirm zero grid restoration mismatches after normal undo.",
       "Step 5: Re-run all focused category invariant suites."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-098",
     "category": "test",
     "priority": "critical",
-    "description": "Run long fast-action invariant stress verification. Execute the full invariant suite for about 20 minutes across many deterministic seeds and mixed maps, then record the command, seed count, action count, runtime, and any failures in progress.md. Implemented: Added timed deterministic stress mode to the generated-map invariant suite, fixed two normal-undo restoration issues exposed by stress seeds 98000 and 101000, and completed a 1,204,324 ms run covering 66 mixed generated maps and 12,347 actions with zero vector, undo, or grid restoration mismatches.",
+    "description": "Run long fast-action invariant stress verification. Execute the full invariant suite for about 20 minutes across many deterministic seeds and mixed maps, then record the command, seed count, action count, runtime, and any failures in progress.md. Implemented: Added timed deterministic stress mode to the generated-map invariant suite, fixed two normal-undo restoration issues exposed by stress seeds 98000 and 101000, and completed a 1,204,324 ms run covering 66 mixed generated maps and 12,347 actions with zero vector, undo, or grid restoration mismatches. Verified: Re-ran the 20-minute deterministic stress command from scratch under Node v12.22.9 in /opt/diplomacy; the fresh report covered 60 mixed generated maps and 11,237 actions with zero vector, undo, or grid restoration mismatches.",
     "acceptance_criteria": [
       "The stress run uses the full fast-action invariant pipeline across mixed generated maps.",
       "The stress run lasts about 20 minutes unless the suite fails earlier.",
@@ -1995,13 +1995,13 @@
       "Step 4: Write the stress verification summary into progress.md.",
       "Step 5: If the suite fails, create follow-up tickets for each distinct failing action category."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-099",
     "category": "functional",
     "priority": "critical",
-    "description": "Use fast vectorized actions in AIPlayer candidate scoring. AIPlayer should create one vector grid at the beginning of the turn, fast-apply each candidate command to that vector grid, score the resulting vector, fast-undo it, and avoid full vectoriseGrid() calls inside the per-candidate scoring loop. Implemented: Added shared fast mutable-vector candidate scoring for AIPlayer/AIPlayerWithEconomy, filtered no-progress unit trials, kept selected actions on normal authoritative apply paths, and added npm run test-ai-fast-candidate-scoring.",
+    "description": "Use fast vectorized actions in AIPlayer candidate scoring. AIPlayer should create one vector grid at the beginning of the turn, fast-apply each candidate command to that vector grid, score the resulting vector, fast-undo it, and avoid full vectoriseGrid() calls inside the per-candidate scoring loop. Implemented: Added shared fast mutable-vector candidate scoring for AIPlayer/AIPlayerWithEconomy, filtered no-progress unit trials, kept selected actions on normal authoritative apply paths, and added npm run test-ai-fast-candidate-scoring. Verified: Re-ran fast-action invariant suites, coverage audit, fast candidate-scoring probe, Play AI regressions, init-model, and train smokes from scratch; source inspection confirmed one baseline vectoriseGrid, fast apply/undo candidate scoring, and normal authoritative selected-action apply.",
     "acceptance_criteria": [
       "AIPlayer creates the candidate-scoring vector grid once at the beginning of the turn.",
       "Each candidate command is scored using fast apply and fast undo on the mutable vector grid.",
@@ -2016,13 +2016,13 @@
       "Step 4: Run AI bootstrap or training smoke checks.",
       "Step 5: Confirm selected actions still mutate the real grid only through normal action logic."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-100",
     "category": "functional",
     "priority": "critical",
-    "description": "Use fast vectorized actions in AIPlayerWithEconomy candidate scoring. Combat and economy candidate scoring should share the turn-start mutable vector grid and fast apply/undo path, while selected actions remain authoritative normal game actions. Implemented: Extended the fast candidate-scoring probe to cover AIPlayerWithEconomy combat, unit-training, suburb-expansion, farm/barrack placement, and external-building placement categories through one mutable vector grid with fast apply/undo and normal selected-action application.",
+    "description": "Use fast vectorized actions in AIPlayerWithEconomy candidate scoring. Combat and economy candidate scoring should share the turn-start mutable vector grid and fast apply/undo path, while selected actions remain authoritative normal game actions. Implemented: Extended the fast candidate-scoring probe to cover AIPlayerWithEconomy combat, unit-training, suburb-expansion, farm/barrack placement, and external-building placement categories through one mutable vector grid with fast apply/undo and normal selected-action application. Verified: Re-ran all required fast-action, generated-map, coverage, economy, multiplayer, training, and no-per-candidate-vectoriseGrid probes from scratch; source inspection confirmed shared mutable-grid fast scoring and normal selected-action application.",
     "acceptance_criteria": [
       "AIPlayerWithEconomy creates or reuses one mutable vector grid for candidate scoring at the beginning of the turn.",
       "Combat, unit-training, suburb, farm/barrack, and external-building candidates are scored through fast apply and fast undo.",
@@ -2037,13 +2037,13 @@
       "Step 4: Run the economy training smoke.",
       "Step 5: Add or run a probe proving AIPlayerWithEconomy does not call full vectoriseGrid() per candidate."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-101",
     "category": "test",
     "priority": "critical",
-    "description": "Measure full real training speed after fast vectorized actions and compare against TASK-087. Use the same full real training command and environment as the old baseline when practical, confirm the fast path is enabled, and write the old-vs-fast wall-time comparison into progress.md. Implemented: Confirmed AIPlayer and AIPlayerWithEconomy fast candidate scoring, reran the TASK-087 15-game full real training command under Node 20 with fast actions enabled, and recorded a 247.16s wall-time run versus the 331.097s old baseline.",
+    "description": "Measure full real training speed after fast vectorized actions and compare against TASK-087. Use the same full real training command and environment as the old baseline when practical, confirm the fast path is enabled, and write the old-vs-fast wall-time comparison into progress.md. Implemented: Confirmed AIPlayer and AIPlayerWithEconomy fast candidate scoring, reran the TASK-087 15-game full real training command under Node 20 with fast actions enabled, and recorded a 247.16s wall-time run versus the 331.097s old baseline. Verified: Re-ran the fast-path source/smoke checks and the TASK-087-style 15-game full real training command from scratch; fresh wall time was 264.05s versus the 331.097s old baseline, with persisted progress, metrics, checkpoints, and final model artifacts.",
     "acceptance_criteria": [
       "The measurement uses the fast-action-enabled full real training path.",
       "The command and environment match TASK-087 as closely as practical.",
@@ -2058,13 +2058,126 @@
       "Step 4: Write the post-fast measurement and old-vs-fast comparison into progress.md.",
       "Step 5: Create follow-up tickets for any correctness failure, stress failure, or training speed regression."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
     "id": "TASK-102",
+    "category": "performance",
+    "priority": "high",
+    "description": "Speed up training by caching compiled self-play scripts. Currently ai/benchmarkHarness.js loadBrowserScripts (and the duplicate loader in ai/economy-training.js) re-reads index.html and recompiles roughly 83 browser scripts with new vm.Script for every runGame, which dominates real-runtime self-play wall time. Cache compiled vm.Script objects and file reads at module scope and reuse them across fresh contexts, preserving determinism. Attempted: Added a shared browser script cache with an ordered cached bundle, forced no-cache comparator, and focused cache/determinism smoke, but speed verification failed: 50 runGame roundLimit=1 forced no-cache median was 35.30s and cached median was 36.32s, while 50 runGame roundLimit=30 pre-change median was 139.35s and cached median was 172.19s; one full pre-change 15-game training run took 1422.01s before the redundant baseline loop was stopped. Root cause: executing and simulating fresh browser runtime contexts dominates wall time after compile/read caching, so compiled-script caching alone is insufficient.",
+    "acceptance_criteria": [
+      "Each browser self-play script is read from disk and compiled with vm.Script at most once per process; every subsequent runGame or self-play context reuses the cached compiled scripts.",
+      "Self-play results are byte-identical to the pre-change implementation for at least 20 deterministic seeds (winnerSide, winner, roundCount, inference call count, inference position count).",
+      "All existing AI test suites pass with no correctness regression.",
+      "A component micro-benchmark of at least 50 runGame calls and the canonical TASK-087/TASK-101 15-game training command each show at least a 10 percent wall-time reduction versus the immediately preceding state.",
+      "Measure the time diff: record T_before (median of 3 runs), T_after (median of 3 runs), the percent reduction, the exact command, environment, and artifact paths in progress.md.",
+      "Double-check this single speed-up ticket yields at least a 10 percent speedup versus the immediately preceding state; if it does not, record the root cause and create a follow-up tuning ticket or revert, and do not mark the ticket done."
+    ],
+    "test_steps": [
+      "Step 1 (unit): Wrap or spy on vm.Script construction, run 10 self-play games, and assert each script path is compiled exactly once with zero new compilations after the first game.",
+      "Step 2 (invariant/determinism): Run runGame for seeds S..S+19 with caching enabled versus a forced no-cache path and assert identical winnerSide, roundCount, inference call count, and inference position count per seed.",
+      "Step 3 (regression): Run npm run test-gamestart-trained-benchmark, test-combat-model-benchmark, test-ai-fast-candidate-scoring, and test-economy-training; all pass.",
+      "Step 4 (speed): Time 50 runGame calls and the canonical 15-game training command, each as median of 3 runs, before and after; require at least a 10 percent reduction.",
+      "Step 5: Write the before/after wall time, percent reduction, command, and environment into progress.md."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-103",
+    "category": "performance",
+    "priority": "high",
+    "description": "Speed up inference by batching predict() into a single tensor build. Rewrite predict() in ai/model.js to build one flattened tensor4d board input and one tensor2d global input, call model.predict once, and read back once, instead of creating one tensor3d per candidate plus tf.stack. Preserve candidate order and tensor disposal.",
+    "acceptance_criteria": [
+      "predict() creates at most one board tensor and one global tensor per call, with no per-candidate tensor3d allocation.",
+      "predict() output is numerically equal to the previous implementation within 1e-6 elementwise and in the same order for batch sizes 1, 2, 48, and 200.",
+      "No tensor leaks: tf.memory().numTensors returns to its baseline after repeated predict() calls.",
+      "All existing AI test suites pass with no correctness regression.",
+      "A predict micro-benchmark (for example 1000 calls of 48 candidates) and the canonical 15-game training command each show at least a 10 percent wall-time reduction versus the immediately preceding state.",
+      "Measure the time diff: record T_before (median of 3 runs), T_after (median of 3 runs), the percent reduction, the exact command, environment, and artifact paths in progress.md.",
+      "Double-check this single speed-up ticket yields at least a 10 percent speedup versus the immediately preceding state; if it does not, record the root cause and create a follow-up tuning ticket or revert, and do not mark the ticket done."
+    ],
+    "test_steps": [
+      "Step 1 (invariant): For random batches of sizes 1, 2, 48, and 200, compare new versus old predict() outputs elementwise and assert maximum absolute difference at most 1e-6 with identical length and order.",
+      "Step 2 (unit): Spy on tf.tensor3d and tensor counts to assert no per-candidate tensors are created, and assert tf.memory().numTensors returns to baseline after N calls.",
+      "Step 3 (unit/edge): Assert empty input returns an empty array and a single candidate returns exactly one value.",
+      "Step 4 (regression): Run npm run init-model, test-ai-fast-candidate-scoring, and a short train smoke.",
+      "Step 5 (speed): Time 1000 predict() calls of 48 candidates and the canonical command before and after; require at least a 10 percent reduction and record in progress.md."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-104",
+    "category": "performance",
+    "priority": "high",
+    "description": "Speed up the training loop in ai/cloud-train-runner.js by keeping metric records in memory instead of re-reading and re-parsing the full metrics JSONL file every game (O(n^2) to O(n)), and by adding a configurable curriculum and old-vs-new evaluation cadence so the expensive per-step runGame evaluations can run every K steps. The default cadence must preserve current per-step behavior exactly.",
+    "acceptance_criteria": [
+      "The full metrics JSONL file is no longer re-parsed inside the per-game loop; the in-memory record array equals the file-parsed records at every step (asserted).",
+      "With evaluation cadence equal to 1, metrics, progress records, and curriculum gate decisions are identical to the pre-change implementation for a fixed seed and run.",
+      "With cadence K, curriculum and old-vs-new evaluation run exactly ceil(games/K) times while a progress row is still written for every game.",
+      "All existing AI and curriculum gate suites pass (test-combat-training-progress, test-task106-curriculum-gate, and a short test-combat-full-training-verification).",
+      "The canonical 15-game training command with the recommended cadence shows at least a 10 percent wall-time reduction versus the immediately preceding state, and the cadence=1 output-identical invariant is separately proven.",
+      "Measure the time diff: record T_before (median of 3 runs), T_after (median of 3 runs), the percent reduction, the exact command, environment, and artifact paths in progress.md.",
+      "Double-check this single speed-up ticket yields at least a 10 percent speedup versus the immediately preceding state; if it does not, record the root cause and create a follow-up tuning ticket or revert, and do not mark the ticket done."
+    ],
+    "test_steps": [
+      "Step 1 (invariant): Run a fixed 6-game training with cadence 1 before and after the change and diff metrics.jsonl, progress.jsonl, and state.json curriculum.gateHistory; assert identical.",
+      "Step 2 (unit): After each game assert the in-memory record array deep-equals readJsonLines(metricsPath).",
+      "Step 3 (unit): Spy on evaluateCurriculumSimpleAiWinrate and evaluateNewVsOld and assert the call count equals ceil(games/K) at cadence K, while progress rows equal games.",
+      "Step 4 (regression): Run test-combat-training-progress, test-task106-curriculum-gate, and a short test-combat-full-training-verification; all pass.",
+      "Step 5 (speed): Time the canonical command with the recommended cadence as median of 3 runs before and after; require at least a 10 percent reduction and record in progress.md."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-105",
+    "category": "performance",
+    "priority": "high",
+    "description": "Speed up per-candidate scoring by making the fast-action handlers in ai/mutableVectorGrid.js update only changed cells plus recomputed global and relative scalars, instead of re-vectorizing every cell. Split the cell vector in ai/vectorizeContent.js into local per-cell channels and global/relative channels that are broadcast, so incremental updates remain byte-identical to a fresh vectoriseGrid() (the invariant enforced by TASK-089). Also drop the redundant per-candidate full-board compareVectorGridResults in scoreActionCommandsWithFastVectorGrid in ai/players.js, since commandMadeAuthoritativeProgress already filters no-op commands.",
+    "acceptance_criteria": [
+      "For every legal action across the existing generated and fixed maps, the mutable vector grid after applyFastAction equals a fresh vectoriseGrid() byte-for-byte (zero vector mismatches), and undo restores byte-identical state (zero undo and grid-restoration mismatches).",
+      "Per-candidate vectorizeCell calls scale with the number of changed cells plus O(1) global recomputation, not with the total cell count (asserted call-count reduction).",
+      "All fast-action invariant suites pass, including a long stress run, with zero mismatches.",
+      "A candidate-scoring micro-benchmark and the canonical 15-game training command each show at least a 10 percent wall-time reduction versus the immediately preceding state.",
+      "Measure the time diff: record T_before (median of 3 runs), T_after (median of 3 runs), the percent reduction, the exact command, environment, and artifact paths in progress.md.",
+      "Double-check this single speed-up ticket yields at least a 10 percent speedup versus the immediately preceding state; if it does not, record the root cause and create a follow-up tuning ticket or revert, and do not mark the ticket done."
+    ],
+    "test_steps": [
+      "Step 1 (invariant): Run npm run test-fast-unit-actions, test-fast-generated-map-invariants, test-fast-ownership-side-effects, test-fast-unit-production-actions, test-fast-suburb-expansion-actions, test-fast-building-placement-actions, and test-mutable-vector-grid; all pass with zero mismatches.",
+      "Step 2 (invariant/stress): Run node ai/test-fast-generated-map-invariants.js --stress-ms 600000 --seed-start S and assert vectorMismatches, undoMismatches, and gridRestorationMismatches are all zero.",
+      "Step 3 (unit): Instrument vectorizeCell and assert the changed-cell count is much less than the total cell count and that global/relative channels are recomputed exactly once per candidate.",
+      "Step 4 (regression): Run test-ai-fast-candidate-scoring, test-ai-economy, init-model, and a train smoke.",
+      "Step 5 (speed): Time scoreActionCommandsWithFastVectorGrid over a fixed candidate set and the canonical command before and after; require at least a 10 percent reduction and record in progress.md."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-106",
+    "category": "performance",
+    "priority": "high",
+    "description": "Speed up self-play data generation by adding a worker_threads or child-process pool that generates training batches concurrently and feeds the trainer, behind a --workers flag, while preserving per-seed determinism. Note this box has 2 CPU cores, so the local ceiling is roughly 2x; record the projected many-core scaling.",
+    "acceptance_criteria": [
+      "A self-play game produced by a worker is identical to the serial runGame result for the same seed (winnerSide, winner, roundCount, inference counts).",
+      "The aggregated training dataset content is identical regardless of worker count; only generation order may differ, and trainer consumption is deterministic given a fixed ordering.",
+      "No shared-state corruption and no TensorFlow backend conflicts occur across workers.",
+      "All existing AI test suites pass with no correctness regression.",
+      "The canonical 15-game training command with --workers=2 shows at least a 10 percent wall-time reduction on this 2-core machine, with the measured speedup and projected many-core scaling recorded.",
+      "Measure the time diff: record T_before (median of 3 runs), T_after (median of 3 runs), the percent reduction, the exact command, environment, and artifact paths in progress.md.",
+      "Double-check this single speed-up ticket yields at least a 10 percent speedup versus the immediately preceding state; if it does not, record the root cause and create a follow-up tuning ticket or revert, and do not mark the ticket done."
+    ],
+    "test_steps": [
+      "Step 1 (invariant): For seeds S..S+9 compare each worker-produced game result to the serial runGame result and assert they are identical per seed.",
+      "Step 2 (invariant): Generate the same batch with workers 1 and workers 2 and assert identical sorted example sets and labels.",
+      "Step 3 (unit): Assert the pool spins up N workers, dispatches and collects every job with no dropped or duplicated seeds, and shuts down cleanly.",
+      "Step 4 (regression): Run all AI suites and a short training run with no crashes.",
+      "Step 5 (speed): Time the canonical command serial versus --workers=2 as median of 3 runs; require at least a 10 percent reduction and record the measured and projected scaling in progress.md."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-107",
     "category": "test",
     "priority": "critical",
-    "description": "Audit the current combat model, curriculum stages, SimpleAiPlayer gates, benchmark commands, and AIPlayer comparison path before making the next architecture change. Implemented: Added ai/task102-combat-audit.md recording current model signatures, gate thresholds/commands, comparison-path bias risks, and where the 80 percent and symmetrical-map gates should be wired.",
+    "description": "Audit the current combat model, curriculum stages, SimpleAiPlayer gates, benchmark commands, and AIPlayer comparison path before making the next architecture change. Implemented: Added ai/task102-combat-audit.md recording current model signatures, gate thresholds/commands, comparison-path bias risks, and where the 80 percent and symmetrical-map gates should be wired. Verified: Re-inspected combat model, training runner, benchmark, AIPlayer, and SimpleAiPlayer paths from scratch; the audit matches current signatures, thresholds, commands, comparison risks, gate wiring points, and only documentation/task notes changed.",
     "acceptance_criteria": [
       "The current combat model architecture and input/output shapes are recorded.",
       "The current SimpleAiPlayer gate threshold and final combat benchmark commands are identified.",
@@ -2078,13 +2191,13 @@
       "Step 3: Record current thresholds, commands, model signature, and suspicious comparison shortcuts.",
       "Step 4: Confirm the audit changed only documentation or task notes."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
-    "id": "TASK-103",
+    "id": "TASK-108",
     "category": "functional",
     "priority": "critical",
-    "description": "Define the AlphaZero-lite combat model requirements. The first implementation should be a residual policy/value-style model, and the ticket notes must list stronger model options to try if gates cannot pass. Implemented: Added ai/task103-alphazero-lite-requirements.md with residual policy/value requirements, AIPlayer simplicity/no-cheating rules, checkpoint compatibility expectations, fallback model/search options, and TASK-104 build notes.",
+    "description": "Define the AlphaZero-lite combat model requirements. The first implementation should be a residual policy/value-style model, and the ticket notes must list stronger model options to try if gates cannot pass. Implemented: Added ai/task103-alphazero-lite-requirements.md with residual policy/value requirements, AIPlayer simplicity/no-cheating rules, checkpoint compatibility expectations, fallback model/search options, and TASK-104 build notes. Verified: Re-inspected current model signatures and AIPlayer inference from scratch; requirements cover residual policy/value scoring, simple no-cheating AIPlayer boundaries, checkpoint compatibility, fallback options, and enough TASK-104 build detail.",
     "acceptance_criteria": [
       "The model requirements include a deeper residual-style trunk and value output used by AIPlayer scoring.",
       "The design leaves AIPlayer methods simple and keeps most decision complexity inside the model.",
@@ -2098,13 +2211,13 @@
       "Step 3: Confirm the requirements do not require ad-hoc AIPlayer grid-size logic.",
       "Step 4: Confirm the next implementation ticket has enough detail to build the model."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
-    "id": "TASK-104",
+    "id": "TASK-109",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement the AlphaZero-lite combat model architecture behind the existing AIPlayer inference interface without adding ad-hoc comparison logic to AIPlayer. Implemented: Wired the combat cloud runner to the residual AlphaZero-lite policy/value model, preserved AIPlayer's score inference boundary through combat_value adaptation, wrote v2 checkpoint architecture/signature metadata, and verified init/load plus short combat training smokes without changing ai/players.js.",
+    "description": "Implement the AlphaZero-lite combat model architecture behind the existing AIPlayer inference interface without adding ad-hoc comparison logic to AIPlayer. Implemented: Wired the combat cloud runner to the residual AlphaZero-lite policy/value model, preserved AIPlayer's score inference boundary through combat_value adaptation, wrote v2 checkpoint architecture/signature metadata, and verified init/load plus short combat training smokes without changing ai/players.js. Verified: Re-ran init-model, AlphaZero-lite signature/training smoke, npm train bootstrap, and one-game train.sh from scratch; residual policy/value heads, v2 checkpoint metadata, existing AIPlayer inference boundary, and no comparison-specific player changes all passed.",
     "acceptance_criteria": [
       "The combat model is more complex than the current model and uses a residual policy/value-style architecture where practical.",
       "AIPlayer continues to call the model through the existing inference boundary.",
@@ -2118,13 +2231,13 @@
       "Step 3: Run a short combat training smoke.",
       "Step 4: Inspect AIPlayer changes and confirm no comparison-specific branches were added."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
-    "id": "TASK-105",
+    "id": "TASK-110",
     "category": "test",
     "priority": "critical",
-    "description": "Add model-complexity and no-cheating guards proving AIPlayer-vs-SimpleAiPlayer comparison strength comes from model output, not ad-hoc AIPlayer logic. Implemented: Added npm run test-no-cheating-guard covering AIPlayer grid-size branches, SimpleAiPlayer-specific logic, benchmark artificial resource/HP/unit/turn-order advantages, forced concessions, model-inference delegation, and in-memory forbidden-shortcut self-tests.",
+    "description": "Add model-complexity and no-cheating guards proving AIPlayer-vs-SimpleAiPlayer comparison strength comes from model output, not ad-hoc AIPlayer logic. Implemented: Added npm run test-no-cheating-guard covering AIPlayer grid-size branches, SimpleAiPlayer-specific logic, benchmark artificial resource/HP/unit/turn-order advantages, forced concessions, model-inference delegation, and in-memory forbidden-shortcut self-tests. Verified: Re-ran npm run test-no-cheating-guard plus AIPlayer/benchmark smokes from scratch; checked ai/players.js, ai/benchmark-trained-model.js, ai/benchmark-combat-model.js, and ai/benchmarkHarness.js for forbidden grid-size branches, SimpleAiPlayer-specific logic, artificial advantages, turn-order shortcuts, forced concessions, and model-inference delegation.",
     "acceptance_criteria": [
       "A test or audit fails if AIPlayer contains ad-hoc grid.arr.length or grid.arr[0].length comparison branches.",
       "A test or audit fails if benchmark setup grants one player artificial resources, units, HP, or turn-order advantage.",
@@ -2138,16 +2251,17 @@
       "Step 3: Run the relevant AIPlayer and benchmark smoke tests.",
       "Step 4: Record the checked files and guard command in task notes."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
-    "id": "TASK-106",
+    "id": "TASK-111",
     "category": "functional",
     "priority": "critical",
-    "description": "Raise the combat curriculum gate for model winrate against SimpleAiPlayer to 80 percent before stage advancement. Implemented: Raised the combat curriculum and combat-model SimpleAiPlayer thresholds to 80 percent, added focused gate/progress assertions, documented the old 60 percent value as historical only, and re-ran no-cheating checks.",
+    "description": "Raise the combat curriculum gate for model winrate to 80 percent before stage advancement against BOTH SimpleAiPlayer and the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/. Implemented: Raised the combat curriculum and combat-model SimpleAiPlayer thresholds to 80 percent, added focused gate/progress assertions, documented the old 60 percent value as historical only, and re-ran no-cheating checks. Verified: Re-ran focused curriculum gate, progress/manifest, combat benchmark, and no-cheating checks from scratch; active thresholds are 80 percent, below-80 gates hold with a clear reason, and no AIPlayer comparison shortcuts or benchmark advantages were found.",
     "acceptance_criteria": [
       "The combat curriculum uses an 80 percent SimpleAiPlayer winrate threshold for advancement.",
       "Metrics and manifests record the 80 percent threshold with measured AIPlayer-vs-SimpleAiPlayer evidence.",
+      "The combat curriculum also requires an 80 percent winrate against the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/, evaluated as a separate measured gate with the same threshold; advancement requires passing both the SimpleAiPlayer gate and the baseline-AIPlayer gate.",
       "Failed gates block advancement and record a clear reason.",
       "Existing 60 percent references are removed or explicitly documented as historical only.",
       "double-check no cheating in comparison with SimpleAiPlayer: 1. you dont give any player artificial advantage. 2. you do not add ad-hoc changes to AIPlayer functions for this comparison. 3. AIPlayer does not have ad-hoc ifs for grid.arr.length and grid.arr[0].length. 4. AIPlayer methods are simple, and most complexity is hidden in the model"
@@ -2156,35 +2270,38 @@
       "Step 1: Run the combat curriculum controller or full-training verification with a short configuration.",
       "Step 2: Confirm metrics show requiredSimpleAiPlayerWinrate is 0.8.",
       "Step 3: Confirm a below-80 percent gate blocks advancement.",
-      "Step 4: Inspect AIPlayer and benchmark setup for no-cheating criteria."
+      "Step 4: Inspect AIPlayer and benchmark setup for no-cheating criteria.",
+      "Step 5: Confirm a second measured gate runs the new model against the baseline AIPlayer (model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/) and also requires at least 80 percent winrate before advancement."
     ],
-    "status": "to-verify"
+    "status": "pending"
   },
   {
-    "id": "TASK-107",
+    "id": "TASK-112",
     "category": "test",
     "priority": "critical",
-    "description": "Add a regression test proving the 80 percent SimpleAiPlayer gate blocks combat curriculum advancement on failure. Implemented: Added a measured AIPlayer-vs-SimpleAiPlayer gate-failure regression that rejects injected evidence, records structured below-80 winrate output, keeps the curriculum at stage 0, and reuses the no-cheating comparison checks.",
+    "description": "Add a regression test proving the 80 percent gate blocks combat curriculum advancement on failure for BOTH the SimpleAiPlayer gate AND the baseline-AIPlayer gate (baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/). Requirement expanded: previously this gate only covered SimpleAiPlayer; the test must now also prove a below-80 percent winrate against the baseline AIPlayer holds the curriculum, so status reset to pending for re-verification. Implemented: Added a measured AIPlayer-vs-SimpleAiPlayer gate-failure regression that rejects injected evidence, records structured below-80 winrate output, keeps the curriculum at stage 0, and reuses the no-cheating comparison checks. Verified: Re-ran the measured gate-failure regression and no-cheating guard from scratch; structured output recorded a real 0/2 AIPlayer-vs-SimpleAiPlayer winrate, hold decision, stage 0 curriculum, rejected mock evidence, and no artificial comparison advantage.",
     "acceptance_criteria": [
       "The test creates or configures a below-threshold measured gate result.",
       "The curriculum does not advance when winrate is below 80 percent.",
       "The failed gate reason and measured winrate are recorded in structured output.",
       "The test rejects mocked or hand-injected gate evidence.",
+      "The test also proves a below-80 percent winrate against the baseline AIPlayer (model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/) blocks advancement and records its failed gate reason and measured winrate.",
       "double-check no cheating in comparison with SimpleAiPlayer: 1. you dont give any player artificial advantage. 2. you do not add ad-hoc changes to AIPlayer functions for this comparison. 3. AIPlayer does not have ad-hoc ifs for grid.arr.length and grid.arr[0].length. 4. AIPlayer methods are simple, and most complexity is hidden in the model"
     ],
     "test_steps": [
       "Step 1: Run the new 80 percent gate regression test.",
       "Step 2: Confirm the test uses measured AIPlayer-vs-SimpleAiPlayer evidence.",
       "Step 3: Confirm the stage remains unchanged after failure.",
-      "Step 4: Confirm the failure reason is present in metrics or manifest output."
+      "Step 4: Confirm the failure reason is present in metrics or manifest output.",
+      "Step 5: Confirm the test also drives a below-80 percent measured winrate against the baseline AIPlayer (model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/) and that this also holds the curriculum at its current stage."
     ],
-    "status": "to-verify"
+    "status": "pending"
   },
   {
-    "id": "TASK-108",
+    "id": "TASK-113",
     "category": "functional",
     "priority": "critical",
-    "description": "Create a symmetrical combat map generator for the most complicated combat map used by the final combat curriculum stage. Implemented: Added a deterministic mirrored final combat Stage G generator with AIPlayer/SimpleAiPlayer starting sides, all combat unit types, mirrored towns, defensive buildings, terrain, HP metadata, ownership cells, benchmark-harness compatibility, and focused smoke coverage.",
+    "description": "Create a symmetrical combat map generator for the most complicated combat map used by the final combat curriculum stage. Implemented: Added a deterministic mirrored final combat Stage G generator with AIPlayer/SimpleAiPlayer starting sides, all combat unit types, mirrored towns, defensive buildings, terrain, HP metadata, ownership cells, benchmark-harness compatibility, and focused smoke coverage. Verified: Re-ran symmetrical and Stage G map-generation smokes plus an independent five-seed mirror/determinism probe and short benchmark-harness game; mirrored setup, deterministic seeds, harness compatibility, and generator/pass-fail separation all passed.",
     "acceptance_criteria": [
       "The generator creates mirrored starting positions for AIPlayer and SimpleAiPlayer.",
       "Units, buildings, terrain, HP, and ownership are mirrored without artificial advantage.",
@@ -2198,13 +2315,13 @@
       "Step 3: Run a smoke AIPlayer-vs-SimpleAiPlayer game on one generated map.",
       "Step 4: Confirm rerunning the same seed produces the same map."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
-    "id": "TASK-109",
+    "id": "TASK-114",
     "category": "test",
     "priority": "critical",
-    "description": "Add tests proving symmetrical combat maps mirror all relevant setup state fairly. Implemented: Strengthened the symmetrical combat smoke to verify mirrored units, buildings, suburbs/ownership, terrain, configured/runtime starting resources, deterministic replay across four seeds, and deliberate asymmetry rejection.",
+    "description": "Add tests proving symmetrical combat maps mirror all relevant setup state fairly. Implemented: Strengthened the symmetrical combat smoke to verify mirrored units, buildings, suburbs/ownership, terrain, configured/runtime starting resources, deterministic replay across four seeds, and deliberate asymmetry rejection. Verified: Re-ran the symmetrical fairness smoke and all combat Stage A-G map-generation smokes from scratch; source inspection confirmed mirrored setup checks, four-seed deterministic replay, and intentional asymmetry rejection.",
     "acceptance_criteria": [
       "Tests verify mirrored unit counts, unit types, HP, and positions.",
       "Tests verify mirrored buildings, terrain, ownership, and starting resources.",
@@ -2218,37 +2335,40 @@
       "Step 3: Confirm the test detects at least one intentional asymmetry in review or by local reasoning.",
       "Step 4: Run the existing combat map generation smoke tests."
     ],
-    "status": "to-verify"
+    "status": "done"
   },
   {
-    "id": "TASK-110",
+    "id": "TASK-115",
     "category": "test",
     "priority": "critical",
-    "description": "Add the final combat symmetrical benchmark gate: run 100 AIPlayer vs SimpleAiPlayer games on symmetrical maps with 100 percent no-loss rate and at least 95 percent winrate. Implemented: Added npm run benchmark-final-symmetrical-combat and test-final-symmetrical-combat-gate for the 100-game default final symmetrical AIPlayer-vs-SimpleAiPlayer gate, with structured win/draw/loss summaries, strict no-loss/winrate thresholds, balanced starts, and no-cheating guard coverage. Verification failed: the full 100-game gate ran exactly 100 games but AIPlayer scored 0 wins, 0 draws, and 100 losses, for 0 no-loss rate and 0 winrate against required 100 percent no-loss and 95 percent winrate. Implemented: Preserved Stage G combat unit/building setup in the runtime benchmark adapter, added a final symmetrical combat value model through AIPlayer predict(), set the shared final-gate action cadence to one model-selected action per turn, and verified the full 100-game gate at 100 wins, 0 draws, 0 losses.",
+    "description": "Add the final combat symmetrical benchmark gate: run 100 games on symmetrical maps with 100 percent no-loss rate and at least 95 percent winrate against BOTH SimpleAiPlayer AND the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/. Implemented: Added npm run benchmark-final-symmetrical-combat and test-final-symmetrical-combat-gate for the 100-game default final symmetrical AIPlayer-vs-SimpleAiPlayer gate, with structured win/draw/loss summaries, strict no-loss/winrate thresholds, balanced starts, and no-cheating guard coverage. Verification failed: the full 100-game gate ran exactly 100 games but AIPlayer scored 0 wins, 0 draws, and 100 losses, for 0 no-loss rate and 0 winrate against required 100 percent no-loss and 95 percent winrate. Implemented: Preserved Stage G combat unit/building setup in the runtime benchmark adapter, added a final symmetrical combat value model through AIPlayer predict(), set the shared final-gate action cadence to one model-selected action per turn, and verified the full 100-game gate at 100 wins, 0 draws, 0 losses. Verified: Re-ran final gate smoke, no-cheating guard, symmetrical map smoke, and a fresh 100-game final symmetrical combat gate; report showed 100 wins, 0 draws/losses, 50/50 side balance, unchanged runtime classes, model inference in every game, and correct nonzero threshold-failure coverage.",
     "acceptance_criteria": [
       "The gate runs exactly 100 AIPlayer-vs-SimpleAiPlayer games on symmetrical combat maps unless configured lower for smoke tests.",
       "The gate requires no-loss rate to be 100 percent, counting wins or draws as no-loss.",
       "The gate requires AIPlayer winrate to be at least 95 percent.",
       "The gate writes structured per-game and summary results.",
+      "The gate also runs exactly 100 games on symmetrical combat maps against the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/, with the same 100 percent no-loss and at least 95 percent winrate thresholds and the same structured per-game and summary output; the gate passes only when both the SimpleAiPlayer run and the baseline-AIPlayer run pass.",
       "double-check no cheating in comparison with SimpleAiPlayer: 1. you dont give any player artificial advantage. 2. you do not add ad-hoc changes to AIPlayer functions for this comparison. 3. AIPlayer does not have ad-hoc ifs for grid.arr.length and grid.arr[0].length. 4. AIPlayer methods are simple, and most complexity is hidden in the model"
     ],
     "test_steps": [
       "Step 1: Run a short smoke version of the final symmetrical combat gate.",
       "Step 2: Run the full 100-game gate when training artifacts are available.",
       "Step 3: Confirm summary includes wins, draws, losses, no-loss rate, and winrate.",
-      "Step 4: Confirm the command exits nonzero if no-loss or winrate thresholds fail."
+      "Step 4: Confirm the command exits nonzero if no-loss or winrate thresholds fail.",
+      "Step 5: Run the full 100-game gate against the baseline AIPlayer (model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/) and confirm it also reaches 100 percent no-loss and at least 95 percent winrate, exiting nonzero otherwise."
     ],
-    "status": "to-verify"
+    "status": "pending"
   },
   {
-    "id": "TASK-111",
+    "id": "TASK-116",
     "category": "test",
     "priority": "critical",
-    "description": "Train combat AI with the new pipeline and pass both gates: 80 percent SimpleAiPlayer curriculum gate and final symmetrical combat gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code. Implemented: Ran the full 15-game combat training pipeline to final stage 6 with six measured SimpleAiPlayer advancing gates at 100%, saved the final model under /mnt/storage/diplomacy/task111-combat-training-20260612/final/task111-combat-training, passed the official default 100-game final symmetrical gate at 100/100 wins, and re-ran the no-cheating guard. Implemented: Aligned the curriculum and final combat gates on the shared full-vector combat value adapter, made final-gate sudden-death budget explicit and symmetric, completed a fresh 15-game training run at /mnt/storage/diplomacy/task111-combat-training-20260612131303 with all 15 SimpleAiPlayer gate checks at 100% and six advances to final stage 6, and passed the 100-game final symmetrical gate at /mnt/storage/diplomacy/benchmarks/task111-final-symmetrical-combat-gate-20260612.json with 100/100 wins.",
+    "description": "Train combat AI with the new pipeline and pass both gates against BOTH SimpleAiPlayer AND the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/: the 80 percent curriculum gate and the final symmetrical combat gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code. Implemented: Ran the full 15-game combat training pipeline to final stage 6 with six measured SimpleAiPlayer advancing gates at 100%, saved the final model under /mnt/storage/diplomacy/task111-combat-training-20260612/final/task111-combat-training, passed the official default 100-game final symmetrical gate at 100/100 wins, and re-ran the no-cheating guard. Verification failed: fresh full training under /mnt/storage/diplomacy/verify-task111-combat-training-20260612 completed but all 15 measured SimpleAiPlayer gates were 0/2 model wins with hold decisions, and fresh 100-game final gate /mnt/storage/diplomacy/benchmarks/verify-task111-final-symmetrical-combat-20260612.json failed at 50 wins, 50 losses/non-results, 0.5 no-loss rate, and 0.5 winrate. Implemented: Aligned the curriculum and final combat gates on the shared full-vector combat value adapter, made final-gate sudden-death budget explicit and symmetric, completed a fresh 15-game training run at /mnt/storage/diplomacy/task111-combat-training-20260612131303 with all 15 SimpleAiPlayer gate checks at 100% and six advances to final stage 6, and passed the 100-game final symmetrical gate at /mnt/storage/diplomacy/benchmarks/task111-final-symmetrical-combat-gate-20260612.json with 100/100 wins.",
     "acceptance_criteria": [
       "A real training run completes with the new model pipeline.",
       "All curriculum SimpleAiPlayer gates pass at 80 percent or higher.",
       "The final symmetrical combat gate reaches 100 percent no-loss rate and at least 95 percent winrate.",
+      "All curriculum gates and the final symmetrical combat gate also pass against the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/ (80 percent or higher curriculum winrate and 100 percent no-loss with at least 95 percent winrate on the final gate).",
       "If any gate fails, follow-up work changes model architecture or training data, not ad-hoc AIPlayer comparison logic.",
       "double-check no cheating in comparison with SimpleAiPlayer: 1. you dont give any player artificial advantage. 2. you do not add ad-hoc changes to AIPlayer functions for this comparison. 3. AIPlayer does not have ad-hoc ifs for grid.arr.length and grid.arr[0].length. 4. AIPlayer methods are simple, and most complexity is hidden in the model"
     ],
@@ -2256,12 +2376,13 @@
       "Step 1: Run the full combat training command on the new pipeline.",
       "Step 2: Inspect metrics and confirm every SimpleAiPlayer curriculum gate is at least 80 percent.",
       "Step 3: Run the final 100-game symmetrical combat benchmark gate.",
-      "Step 4: Record final artifact paths and gate summaries."
+      "Step 4: Record final artifact paths and gate summaries.",
+      "Step 5: Confirm every curriculum gate and the final 100-game symmetrical gate also pass against the baseline AIPlayer (model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/), and record those gate summaries too."
     ],
-    "status": "to-verify"
+    "status": "pending"
   },
   {
-    "id": "TASK-112",
+    "id": "TASK-117",
     "category": "infrastructure",
     "priority": "critical",
     "description": "Document stronger fallback model options to try if the AlphaZero-lite combat model cannot pass the required gates.",
@@ -2276,12 +2397,12 @@
       "Step 1: Review failed or current combat gate outputs.",
       "Step 2: Write fallback model options and selection criteria.",
       "Step 3: Confirm the options do not require grid-size ifs in AIPlayer.",
-      "Step 4: Review the document against TASK-103 requirements."
+      "Step 4: Review the document against TASK-108 requirements."
     ],
     "status": "pending"
   },
   {
-    "id": "TASK-113",
+    "id": "TASK-118",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 1: small 1v1 noob map with one tower or bastion using random HP amount.",
@@ -2301,7 +2422,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-114",
+    "id": "TASK-119",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 1.",
@@ -2321,7 +2442,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-115",
+    "id": "TASK-120",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 2: bigger map with tower or bastion using random HP amount.",
@@ -2341,7 +2462,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-116",
+    "id": "TASK-121",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 2.",
@@ -2361,7 +2482,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-117",
+    "id": "TASK-122",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 3: bigger economy maps with more noob units.",
@@ -2381,7 +2502,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-118",
+    "id": "TASK-123",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 3.",
@@ -2401,7 +2522,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-119",
+    "id": "TASK-124",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 4: more towers and bastions with random HP amount.",
@@ -2421,7 +2542,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-120",
+    "id": "TASK-125",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 4.",
@@ -2441,7 +2562,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-121",
+    "id": "TASK-126",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 5: some units can be archers.",
@@ -2461,7 +2582,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-122",
+    "id": "TASK-127",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 5.",
@@ -2481,7 +2602,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-123",
+    "id": "TASK-128",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 6: some units can be catapults.",
@@ -2501,7 +2622,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-124",
+    "id": "TASK-129",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 6.",
@@ -2521,7 +2642,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-125",
+    "id": "TASK-130",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 7: 9v9 map with all unit types and towers or bastions.",
@@ -2541,7 +2662,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-126",
+    "id": "TASK-131",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 7.",
@@ -2561,7 +2682,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-127",
+    "id": "TASK-132",
     "category": "functional",
     "priority": "critical",
     "description": "Add AIPlayerWithEconomy generator stage 8: extend the 9v9 all-unit map with mountains, bushes, and lakes.",
@@ -2581,7 +2702,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-128",
+    "id": "TASK-133",
     "category": "test",
     "priority": "critical",
     "description": "Add validation test for AIPlayerWithEconomy generator stage 8.",
@@ -2601,7 +2722,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-129",
+    "id": "TASK-134",
     "category": "functional",
     "priority": "critical",
     "description": "Add symmetrical economy generator for the 9v9 all-unit map with towers and bastions.",
@@ -2621,7 +2742,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-130",
+    "id": "TASK-135",
     "category": "test",
     "priority": "critical",
     "description": "Add tests proving the symmetrical economy generator gives mirrored armies, buildings, HP distributions, economy state, and legal terrain.",
@@ -2641,7 +2762,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-131",
+    "id": "TASK-136",
     "category": "test",
     "priority": "critical",
     "description": "Add the final symmetrical economy benchmark gate: run 100 AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy games on symmetrical maps with 100 percent no-loss rate and at least 95 percent winrate.",
@@ -2661,7 +2782,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-132",
+    "id": "TASK-137",
     "category": "test",
     "priority": "critical",
     "description": "Run training on the new AIPlayerWithEconomy pipeline and pass the last symmetrical economy gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code.",
@@ -2681,7 +2802,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-133",
+    "id": "TASK-138",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 3x3 map with exactly one red town and one blue town, and no extra units, buildings, terrain, or economy objects.",
@@ -2701,7 +2822,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-134",
+    "id": "TASK-139",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with exactly one red town and one blue town, and no extra units, buildings, terrain, or economy objects.",
@@ -2721,7 +2842,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-135",
+    "id": "TASK-140",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: extend the simple town map with goldmines whose random gold rate is one of 10, 25, 50, or 100.",
@@ -2741,7 +2862,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-136",
+    "id": "TASK-141",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with one red town, one blue town, and random captured cells marked as suburbs.",
@@ -2761,7 +2882,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-137",
+    "id": "TASK-142",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with one red town, one blue town, random captured suburbs, and some suburbs containing barracks.",
@@ -2781,7 +2902,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-138",
+    "id": "TASK-143",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with one red town, one blue town, random captured suburbs, and some suburbs containing barracks and farms.",
@@ -2801,7 +2922,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-139",
+    "id": "TASK-144",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with one red town, one blue town, and random captured cells marked as suburbs.",
@@ -2821,7 +2942,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-140",
+    "id": "TASK-145",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with one red town, one blue town, random captured suburbs, and some suburbs containing farms.",
@@ -2841,7 +2962,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-141",
+    "id": "TASK-146",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with one red town, one blue town, random captured suburbs, and some suburbs containing barracks and farms.",
@@ -2861,7 +2982,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-142",
+    "id": "TASK-147",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with captured suburbs, barracks, farms, and randomly generated units of any supported type.",
@@ -2881,7 +3002,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-143",
+    "id": "TASK-148",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 random map with 0-3 towns per player, random units, random towers and bastions, captured cells, random farms or barracks, and random HP from 1 to maxHp for every unit and building.",
@@ -2901,10 +3022,10 @@
     "status": "pending"
   },
   {
-    "id": "TASK-144",
+    "id": "TASK-149",
     "category": "functional",
     "priority": "critical",
-    "description": "Add symmetric version of the advanced 9x9 random generator from TASK-143.",
+    "description": "Add symmetric version of the advanced 9x9 random generator from TASK-148.",
     "acceptance_criteria": [
       "The generator creates deterministic symmetric 9x9 maps from a seed.",
       "Both sides receive mirrored or equivalent towns, units, towers, bastions, captured cells, farms, barracks, HP values, and resources.",
@@ -2921,7 +3042,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-145",
+    "id": "TASK-150",
     "category": "functional",
     "priority": "critical",
     "description": "Add advanced AIPlayerWithEconomy generator stage: 20x20 random map with everything from the advanced 9x9 generator.",
@@ -2941,10 +3062,10 @@
     "status": "pending"
   },
   {
-    "id": "TASK-146",
+    "id": "TASK-151",
     "category": "functional",
     "priority": "critical",
-    "description": "Add symmetric version of the advanced 20x20 random generator from TASK-145.",
+    "description": "Add symmetric version of the advanced 20x20 random generator from TASK-150.",
     "acceptance_criteria": [
       "The generator creates deterministic symmetric 20x20 maps from a seed.",
       "Both sides receive mirrored or equivalent towns, units, towers, bastions, captured cells, farms, barracks, HP values, and resources.",
@@ -2961,7 +3082,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-147",
+    "id": "TASK-152",
     "category": "test",
     "priority": "critical",
     "description": "Add or extend the symmetrical 9x9 all-units plus towers and bastions benchmark gate for AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy: 100 games, 100 percent no-loss rate, and at least 95 percent winrate.",
@@ -2981,7 +3102,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-148",
+    "id": "TASK-153",
     "category": "test",
     "priority": "critical",
     "description": "Train on the new advanced 9x9 economy pipeline and pass the final symmetrical 9x9 gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code.",
@@ -3001,7 +3122,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-149",
+    "id": "TASK-154",
     "category": "test",
     "priority": "critical",
     "description": "Add final symmetrical 20x20 economy benchmark gate using the symmetric 20x20 generator: 100 AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy games, 100 percent no-loss rate, and at least 95 percent winrate.",
@@ -3021,7 +3142,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-150",
+    "id": "TASK-155",
     "category": "test",
     "priority": "critical",
     "description": "Train on the new advanced 20x20 economy pipeline and pass the final symmetrical 20x20 gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code.",
@@ -3041,7 +3162,7 @@
     "status": "pending"
   },
   {
-    "id": "TASK-151",
+    "id": "TASK-156",
     "category": "test",
     "priority": "critical",
     "description": "Run AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy on all maps from gamestart. For maps with 3 or more players, use one AIPlayerWithEconomy candidate against SimpleAiPlayerWithEconomy opponents. Confirm 100 percent winrate for AIPlayerWithEconomy.",
@@ -3061,22 +3182,43 @@
     "status": "pending"
   },
   {
-    "id": "TASK-152",
+    "id": "TASK-157",
     "category": "infrastructure",
     "priority": "critical",
     "description": "If the all-gamestart AIPlayerWithEconomy gate fails, create follow-up tickets for model architecture change, retraining, and rerunning the all-gamestart gate to confirm 100 percent winrate.",
     "acceptance_criteria": [
-      "If TASK-151 passes, this ticket records that no failure follow-ups are needed.",
-      "If TASK-151 fails, create one ticket to change architecture of the model.",
-      "If TASK-151 fails, create one ticket to retrain the model.",
-      "If TASK-151 fails, create one ticket to rerun AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy on all gamestart maps and confirm 100 percent winrate.",
+      "If TASK-156 passes, this ticket records that no failure follow-ups are needed.",
+      "If TASK-156 fails, create one ticket to change architecture of the model.",
+      "If TASK-156 fails, create one ticket to retrain the model.",
+      "If TASK-156 fails, create one ticket to rerun AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy on all gamestart maps and confirm 100 percent winrate.",
       "double-check no cheating in comparison with SimpleAiPlayer: 1. you dont give any player artificial advantage. 2. you do not add ad-hoc changes to AIPlayer functions for this comparison. 3. AIPlayer does not have ad-hoc ifs for grid.arr.length and grid.arr[0].length. 4. AIPlayer methods are simple, and most complexity is hidden in the model"
     ],
     "test_steps": [
-      "Step 1: Inspect TASK-151 structured benchmark results.",
+      "Step 1: Inspect TASK-156 structured benchmark results.",
       "Step 2: If the gate passed, record the pass evidence and do not create extra tickets.",
       "Step 3: If the gate failed, append the three required follow-up tickets to tasks.json.",
       "Step 4: Confirm any created follow-up tickets keep model complexity out of AIPlayer ad-hoc comparison code."
+    ],
+    "status": "pending"
+  },
+  {
+    "id": "TASK-158",
+    "category": "performance",
+    "priority": "high",
+    "description": "Follow up TASK-102 by tuning self-play runtime-context startup beyond compiled script caching. The TASK-102 cache preserved correctness but did not produce the required 10 percent speedup because fresh context execution and game simulation dominated wall time.",
+    "acceptance_criteria": [
+      "Identify and measure the dominant remaining per-game startup costs after browser script read/compile caching.",
+      "Implement a safe speed-up that preserves deterministic fresh-game behavior without sharing mutable game state across runs.",
+      "A 50 runGame component benchmark and the canonical 15-game training command each improve by at least 10 percent versus the TASK-102 failed cached baseline.",
+      "All TASK-102 correctness and AI regression tests continue to pass.",
+      "Do not add gameplay shortcuts or alter AI comparison fairness to obtain speed improvements."
+    ],
+    "test_steps": [
+      "Step 1: Profile cached TASK-102 runGame startup and training self-play to identify remaining dominant costs.",
+      "Step 2: Implement the lowest-risk runtime startup optimization.",
+      "Step 3: Re-run TASK-102 cache/determinism and AI regression tests.",
+      "Step 4: Re-run 50 runGame and canonical 15-game training speed benchmarks as median of 3 runs and record before/after timings.",
+      "Step 5: Confirm no gameplay or AI fairness shortcuts were introduced."
     ],
     "status": "pending"
   }

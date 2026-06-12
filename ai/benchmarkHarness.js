@@ -2,6 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const vm = require('vm');
+const {
+  getBrowserScriptCacheStats,
+  loadBrowserScripts,
+  resetBrowserScriptCache
+} = require('./browserScriptCache');
 
 const repoRoot = path.resolve(__dirname, '..');
 
@@ -251,18 +256,9 @@ function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-function loadBrowserScripts(context, options) {
+function loadBenchmarkBrowserScripts(context, options) {
   options = options || {};
-  const html = readRepoFile('index.html');
-  const scriptPattern = /<script[^>]+src=['"]([^'"]+)['"]/g;
-  let match;
-  while ((match = scriptPattern.exec(html))) {
-    const source = match[1];
-    if (/^https?:/.test(source)) {
-      continue;
-    }
-    new vm.Script(readRepoFile(source), { filename: source }).runInContext(context);
-  }
+  loadBrowserScripts(context, options);
   if (typeof options.predictFunction === 'function') {
     context.ai_model = options.modelIdentifier || { benchmarkInjectedModel: true };
     context.predict = function(model, xValidateArr) {
@@ -450,7 +446,7 @@ function runGame(options) {
   validatePlayerClass(options.playerB);
 
   const context = createRuntimeContext(options.seed);
-  loadBrowserScripts(context, options);
+  loadBenchmarkBrowserScripts(context, options);
   return new vm.Script(
     runtimeMapScript(mapName, clone(map), options),
     { filename: 'benchmark-runtime-game.js' }
@@ -593,6 +589,9 @@ module.exports = {
   BENCHMARK_MAPS,
   PLAYER_CLASSES,
   benchmarkMapFromGameMap,
+  getBrowserScriptCacheStats,
+  loadBrowserScripts: loadBenchmarkBrowserScripts,
+  resetBrowserScriptCache,
   runBenchmark,
   runGame,
   writeResult

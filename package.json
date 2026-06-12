@@ -74,6 +74,7 @@
     "test-trained-benchmark": "node ai/test-trained-model-benchmark.js",
     "benchmark-gamestart-trained": "node ai/benchmark-gamestart-trained-model.js",
     "test-gamestart-trained-benchmark": "node ai/test-gamestart-trained-benchmark.js",
+    "test-browser-script-cache": "node ai/test-browser-script-cache.js",
     "test-task062-tiny-1v1-benchmark": "node ai/test-task062-tiny-1v1-benchmark.js",
     "benchmark-gamestart-all-slots": "node ai/benchmark-gamestart-all-slots.js",
     "test-task063-all-gamestart-benchmark": "node ai/test-task063-all-gamestart-benchmark.js",

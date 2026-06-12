@@ -2,7 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const tf = require('@tensorflow/tfjs-node');
-const { readRepoFile } = require('./smokeHarness');
+const {
+  getBrowserScriptCacheStats,
+  loadBrowserScripts,
+  resetBrowserScriptCache
+} = require('./browserScriptCache');
 
 const CELL_VECTOR_SIZE = 78;
 const ACTION_CATEGORIES = [
@@ -215,18 +219,6 @@ function createRuntimeContext(seed) {
   context.window = context;
   context.globalThis = context;
   return vm.createContext(context);
-}
-
-function loadBrowserScripts(context) {
-  const html = readRepoFile('index.html');
-  const scriptPattern = /<script[^>]+src=['"]([^'"]+)['"]/g;
-  let match;
-  while ((match = scriptPattern.exec(html))) {
-    if (/^https?:/.test(match[1])) continue;
-    new vm.Script(readRepoFile(match[1]), {
-      filename: match[1]
-    }).runInContext(context);
-  }
 }
 
 function createTrainingBatch(seed, playerCounts) {
@@ -713,6 +705,8 @@ async function run(options) {
 module.exports = {
   CELL_VECTOR_SIZE,
   createTrainingBatch,
+  getBrowserScriptCacheStats,
   parseArgs,
+  resetBrowserScriptCache,
   run
 };
