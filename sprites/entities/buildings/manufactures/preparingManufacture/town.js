@@ -123,6 +123,20 @@ class Town extends PreparingManufacture {
         }
     }
     updatePlayer() {
+        if (typeof players != 'undefined') {
+            for (let i = 1; i < players.length; ++i) {
+                let townList = players[i].towns
+                if (!townList) {
+                    continue
+                }
+                for (let j = townList.length - 1; j >= 0; --j) {
+                    let town = townList[j]
+                    if (town && town.coord && coordsEqually(town.coord, this.coord)) {
+                        townList.splice(j, 1)
+                    }
+                }
+            }
+        }
         this.player.towns.push(this)
         grid.getHexagon(this.coord).isSuburb = true
 
