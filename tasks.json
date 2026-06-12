@@ -1705,5 +1705,26 @@
       "Step 4: Confirm every new ticket follows /root/tools/agents/tasks_format.json."
     ],
     "status": "to-verify"
+  },
+  {
+    "id": "TASK-085",
+    "category": "test",
+    "priority": "critical",
+    "description": "Reproduce the Play AI crash reported from the normal Play AI flow: Uncaught TypeError: unit.sendInstructions is not a function at AIPlayer.selectBestCommand (players.js:660:26), AIPlayer.doActions (players.js:690:46), AIPlayer.nextTurn (players.js:713:18), offlineNextTurn (nextTurn.js:60:25), gameLogicButtons.nextTurn [as clickFunc] (nextTurn.js:89:9), gameLogicButtons.click (button.js:97:22), gameLogicButtons.click (nextTurn.js:137:22), Events.click (events.js:311:28), HTMLDocument.click (events.js:57:15). Keep this ticket limited to proving the crash through the normal Play AI browser flow or an equivalent focused regression. Implemented: Added npm run test-play-ai-invalid-command, which starts the normal Play AI browser UI, injects a focused invalid blue AI command source, clicks Next Turn, captures the exact unit.sendInstructions stack through AIPlayer.selectBestCommand, and writes /mnt/storage/diplomacy/browser-play-ai-invalid-command/task085-invalid-command-report.json without changing gameplay code.",
+    "acceptance_criteria": [
+      "The reported stacktrace is preserved in the ticket notes or test failure output.",
+      "The reproduction starts from the normal Play AI browser UI unless a focused regression is needed to isolate the same failure.",
+      "The reproduction reaches the blue AIPlayer turn path through AIPlayer.selectBestCommand.",
+      "The reproduction fails before any gameplay fix is applied with unit.sendInstructions is not a function or an equivalent assertion proving the command source is not a valid unit.",
+      "No gameplay fix is included in this ticket."
+    ],
+    "test_steps": [
+      "Step 1: Run the normal Play AI browser turn flow.",
+      "Step 2: Capture console errors and the call stack when blue AIPlayer acts.",
+      "Step 3: If the crash is intermittent, add a focused regression that creates the stale or invalid command source.",
+      "Step 4: Confirm the regression fails before the fix with unit.sendInstructions is not a function or equivalent invalid-unit evidence.",
+      "Step 5: Record the exact reproduction command and failure summary."
+    ],
+    "status": "to-verify"
   }
 ]
