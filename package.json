@@ -9,6 +9,7 @@
     "test-combat-full-training-verification": "npx -y node@20 ai/test-combat-full-training-verification.js",
     "test-combat-old-vs-new": "npx -y node@20 ai/test-combat-old-vs-new.js",
     "test-alphazero-lite-combat": "npx -y node@20 ai/test-alphazero-lite-combat.js",
+    "test-no-cheating-guard": "node ai/test-no-cheating-guard.js",
     "test-combat-curriculum": "npx -y node@20 ai/test-combat-curriculum-controller.js",
     "test-combat-stage-a-map-generation": "node ai/test-combat-stage-a-map-generation.js",
     "test-combat-stage-b-map-generation": "node ai/test-combat-stage-b-map-generation.js",

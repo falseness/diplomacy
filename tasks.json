@@ -2124,7 +2124,7 @@
     "id": "TASK-105",
     "category": "test",
     "priority": "critical",
-    "description": "Add model-complexity and no-cheating guards proving AIPlayer-vs-SimpleAiPlayer comparison strength comes from model output, not ad-hoc AIPlayer logic.",
+    "description": "Add model-complexity and no-cheating guards proving AIPlayer-vs-SimpleAiPlayer comparison strength comes from model output, not ad-hoc AIPlayer logic. Implemented: Added npm run test-no-cheating-guard covering AIPlayer grid-size branches, SimpleAiPlayer-specific logic, benchmark artificial resource/HP/unit/turn-order advantages, forced concessions, model-inference delegation, and in-memory forbidden-shortcut self-tests.",
     "acceptance_criteria": [
       "A test or audit fails if AIPlayer contains ad-hoc grid.arr.length or grid.arr[0].length comparison branches.",
       "A test or audit fails if benchmark setup grants one player artificial resources, units, HP, or turn-order advantage.",
@@ -2138,7 +2138,7 @@
       "Step 3: Run the relevant AIPlayer and benchmark smoke tests.",
       "Step 4: Record the checked files and guard command in task notes."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-106",
