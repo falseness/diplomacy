@@ -247,7 +247,8 @@ function auditSources(sources) {
   assertNoForcedSimpleConcessions([
     sources.trainedBenchmarkSource,
     sources.combatBenchmarkSource,
-    sources.benchmarkHarnessSource
+    sources.benchmarkHarnessSource,
+    sources.finalSymmetricalGateSource
   ]);
   assertGeneratedCombatMapsAreSymmetric();
 
@@ -256,7 +257,8 @@ function auditSources(sources) {
       'ai/players.js',
       'ai/benchmark-trained-model.js',
       'ai/benchmark-combat-model.js',
-      'ai/benchmarkHarness.js'
+      'ai/benchmarkHarness.js',
+      'ai/benchmark-final-symmetrical-combat-gate.js'
     ],
     command: 'npm run test-no-cheating-guard'
   };
@@ -267,7 +269,8 @@ function loadSources() {
     playersSource: read('ai/players.js'),
     trainedBenchmarkSource: read('ai/benchmark-trained-model.js'),
     combatBenchmarkSource: read('ai/benchmark-combat-model.js'),
-    benchmarkHarnessSource: read('ai/benchmarkHarness.js')
+    benchmarkHarnessSource: read('ai/benchmarkHarness.js'),
+    finalSymmetricalGateSource: read('ai/benchmark-final-symmetrical-combat-gate.js')
   };
 }
 
@@ -327,7 +330,7 @@ function runSelfTest(cleanSources) {
     /neutral turn handoff/);
 
   const forcedConcession = Object.assign({}, cleanSources, {
-    combatBenchmarkSource: cleanSources.combatBenchmarkSource +
+    finalSymmetricalGateSource: cleanSources.finalSymmetricalGateSource +
       '\nfunction forbidden(simple) { if (simple instanceof SimpleAiPlayer) simple.concede() }\n'
   });
   expectAuditFailure(

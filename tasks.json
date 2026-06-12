@@ -2224,7 +2224,7 @@
     "id": "TASK-110",
     "category": "test",
     "priority": "critical",
-    "description": "Add the final combat symmetrical benchmark gate: run 100 AIPlayer vs SimpleAiPlayer games on symmetrical maps with 100 percent no-loss rate and at least 95 percent winrate.",
+    "description": "Add the final combat symmetrical benchmark gate: run 100 AIPlayer vs SimpleAiPlayer games on symmetrical maps with 100 percent no-loss rate and at least 95 percent winrate. Implemented: Added npm run benchmark-final-symmetrical-combat and test-final-symmetrical-combat-gate for the 100-game default final symmetrical AIPlayer-vs-SimpleAiPlayer gate, with structured win/draw/loss summaries, strict no-loss/winrate thresholds, balanced starts, and no-cheating guard coverage.",
     "acceptance_criteria": [
       "The gate runs exactly 100 AIPlayer-vs-SimpleAiPlayer games on symmetrical combat maps unless configured lower for smoke tests.",
       "The gate requires no-loss rate to be 100 percent, counting wins or draws as no-loss.",
@@ -2238,7 +2238,7 @@
       "Step 3: Confirm summary includes wins, draws, losses, no-loss rate, and winrate.",
       "Step 4: Confirm the command exits nonzero if no-loss or winrate thresholds fail."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-111",
