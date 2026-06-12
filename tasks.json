@@ -2084,7 +2084,7 @@
     "id": "TASK-103",
     "category": "functional",
     "priority": "critical",
-    "description": "Define the AlphaZero-lite combat model requirements. The first implementation should be a residual policy/value-style model, and the ticket notes must list stronger model options to try if gates cannot pass.",
+    "description": "Define the AlphaZero-lite combat model requirements. The first implementation should be a residual policy/value-style model, and the ticket notes must list stronger model options to try if gates cannot pass. Implemented: Added ai/task103-alphazero-lite-requirements.md with residual policy/value requirements, AIPlayer simplicity/no-cheating rules, checkpoint compatibility expectations, fallback model/search options, and TASK-104 build notes.",
     "acceptance_criteria": [
       "The model requirements include a deeper residual-style trunk and value output used by AIPlayer scoring.",
       "The design leaves AIPlayer methods simple and keeps most decision complexity inside the model.",
@@ -2098,7 +2098,7 @@
       "Step 3: Confirm the requirements do not require ad-hoc AIPlayer grid-size logic.",
       "Step 4: Confirm the next implementation ticket has enough detail to build the model."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-104",
