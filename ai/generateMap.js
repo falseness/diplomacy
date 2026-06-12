@@ -1012,6 +1012,208 @@ function stageGUnitsFromCoords(coords, useArcher, useKOHb, useNormchel) {
     return units
 }
 
+function mirrorXCoord(coord, mapSize) {
+    let mirrored = {x: mapSize.x - 1 - coord.x, y: coord.y}
+    if ('hp' in coord) {
+        mirrored.hp = coord.hp
+    }
+    if ('turns' in coord) {
+        mirrored.turns = coord.turns
+    }
+    if ('income' in coord) {
+        mirrored.income = coord.income
+    }
+    if ('owner' in coord) {
+        mirrored.owner = coord.owner
+    }
+    return mirrored
+}
+
+function mirrorConfiguredUnit(unit, mapSize) {
+    let mirrored = mirrorXCoord(unit, mapSize)
+    mirrored.type = unit.type
+    return mirrored
+}
+
+function mirrorConfiguredBuilding(building, mapSize) {
+    let mirrored = mirrorXCoord(building, mapSize)
+    mirrored.town = mirrorXCoord(building.town, mapSize)
+    return mirrored
+}
+
+function countUnitsByType(units, unitType) {
+    return units.filter(function(unit) {
+        return unit.type == unitType
+    }).length
+}
+
+function generateSymmetricalCombatStageGMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed)
+    let mapSize = {
+        x: options.width || 11,
+        y: options.height || 9
+    }
+    if (mapSize.x < 9 || mapSize.y < 7 || mapSize.x % 2 == 0) {
+        throw new Error('Symmetrical combat Stage G maps require odd width >= 9 and height >= 7')
+    }
+
+    let centerX = Math.floor(mapSize.x / 2)
+    let centerY = Math.floor(mapSize.y / 2)
+    let leftTown = {x: 1, y: centerY, hp: 10}
+    let rightTown = mirrorXCoord(leftTown, mapSize)
+    let hpOffset = randomIntWithRng(rng, 0, 1)
+    let leftUnits = [
+        {type: Noob, x: 2, y: centerY - 2, hp: 2},
+        {type: Normchel, x: 2, y: centerY, hp: 4 + hpOffset},
+        {type: KOHb, x: 2, y: centerY + 2, hp: 2 + hpOffset},
+        {type: Archer, x: 3, y: centerY - 1, hp: 1},
+        {type: Catapult, x: 3, y: centerY + 1, hp: 1}
+    ]
+    let leftWalls = [
+        {x: 1, y: centerY - 1, hp: 3 + hpOffset, town: leftTown},
+        {x: 1, y: centerY + 1, hp: 4, town: leftTown}
+    ]
+    let leftBastions = [
+        {x: 2, y: centerY - 1, hp: 4 + hpOffset, town: leftTown}
+    ]
+    let leftTowers = [
+        {x: 2, y: centerY + 1, hp: 5 - hpOffset, town: leftTown}
+    ]
+    let leftSuburbCells = [leftTown]
+        .concat(leftWalls)
+        .concat(leftBastions)
+        .concat(leftTowers)
+        .map(function(coord) {
+            return {x: coord.x, y: coord.y}
+        })
+    let rightUnits = leftUnits.map(function(unit) {
+        return mirrorConfiguredUnit(unit, mapSize)
+    })
+    let rightWalls = leftWalls.map(function(building) {
+        return mirrorConfiguredBuilding(building, mapSize)
+    })
+    let rightBastions = leftBastions.map(function(building) {
+        return mirrorConfiguredBuilding(building, mapSize)
+    })
+    let rightTowers = leftTowers.map(function(building) {
+        return mirrorConfiguredBuilding(building, mapSize)
+    })
+    let mirroredTerrainPairs = [
+        {x: centerX - 1, y: centerY - 3},
+        {x: centerX - 1, y: centerY + 3}
+    ]
+    let mountains = mirroredTerrainPairs
+        .concat(mirroredTerrainPairs.map(function(coord) {
+            return mirrorXCoord(coord, mapSize)
+        }))
+    let lakes = [
+        {x: centerX, y: centerY - 1},
+        {x: centerX, y: centerY + 1}
+    ]
+    let bushes = [
+        {x: centerX - 2, y: centerY},
+        {x: centerX + 2, y: centerY}
+    ]
+    let hills = [
+        {x: centerX - 1, y: centerY},
+        {x: centerX + 1, y: centerY}
+    ]
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayer',
+            ai: true,
+            towns: [leftTown],
+            units: leftUnits,
+            suburbs: [{
+                town: leftTown,
+                cells: leftSuburbCells,
+                expansionCells: []
+            }],
+            walls: leftWalls,
+            bastions: leftBastions,
+            towers: leftTowers
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayer',
+            ai: true,
+            towns: [rightTown],
+            units: rightUnits,
+            suburbs: [{
+                town: rightTown,
+                cells: leftSuburbCells.map(function(coord) {
+                    return mirrorXCoord(coord, mapSize)
+                }),
+                expansionCells: []
+            }],
+            walls: rightWalls,
+            bastions: rightBastions,
+            towers: rightTowers
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        lakes,
+        mountains,
+        bushes,
+        hills)
+    map.testName = 'symmetrical-combat-stage-g-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 24
+    map.combatStage = 'G-symmetrical-final'
+    map.combatOnly = true
+    map.symmetry = {
+        axis: 'vertical',
+        mirror: 'x',
+        seed: seed,
+        playerOne: 'AIPlayer',
+        playerTwo: 'SimpleAiPlayer'
+    }
+    map.playerNoobCounts = {
+        playerOne: countUnitsByType(leftUnits, Noob),
+        playerTwo: countUnitsByType(rightUnits, Noob)
+    }
+    map.playerNormchelCounts = {
+        playerOne: countUnitsByType(leftUnits, Normchel),
+        playerTwo: countUnitsByType(rightUnits, Normchel)
+    }
+    map.playerKOHbCounts = {
+        playerOne: countUnitsByType(leftUnits, KOHb),
+        playerTwo: countUnitsByType(rightUnits, KOHb)
+    }
+    map.playerArcherCounts = {
+        playerOne: countUnitsByType(leftUnits, Archer),
+        playerTwo: countUnitsByType(rightUnits, Archer)
+    }
+    map.playerCatapultCounts = {
+        playerOne: countUnitsByType(leftUnits, Catapult),
+        playerTwo: countUnitsByType(rightUnits, Catapult)
+    }
+    map.combatMetrics = {
+        finalSymmetricalCombatStage: true,
+        unitTypes: ['Noob', 'Normchel', 'KOHb', 'Archer', 'Catapult'],
+        mirroredBuildings: ['wall', 'bastion', 'tower'],
+        mirroredTerrain: ['lake', 'mountain', 'bush', 'hill'],
+        benchmarkPassFailLogic: false
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        productionActions: 0,
+        resources: 0
+    }
+    return map
+}
+
 function generateCombatStageDTrainingMap(options) {
     options = options || {}
     let progress = clampCombatProgress(

@@ -2184,7 +2184,7 @@
     "id": "TASK-108",
     "category": "functional",
     "priority": "critical",
-    "description": "Create a symmetrical combat map generator for the most complicated combat map used by the final combat curriculum stage.",
+    "description": "Create a symmetrical combat map generator for the most complicated combat map used by the final combat curriculum stage. Implemented: Added a deterministic mirrored final combat Stage G generator with AIPlayer/SimpleAiPlayer starting sides, all combat unit types, mirrored towns, defensive buildings, terrain, HP metadata, ownership cells, benchmark-harness compatibility, and focused smoke coverage.",
     "acceptance_criteria": [
       "The generator creates mirrored starting positions for AIPlayer and SimpleAiPlayer.",
       "Units, buildings, terrain, HP, and ownership are mirrored without artificial advantage.",
@@ -2198,7 +2198,7 @@
       "Step 3: Run a smoke AIPlayer-vs-SimpleAiPlayer game on one generated map.",
       "Step 4: Confirm rerunning the same seed produces the same map."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-109",
