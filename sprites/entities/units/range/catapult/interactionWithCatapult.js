@@ -85,9 +85,10 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
         let isCellInBlindArea = this.isBlindArea(coord)
         let isEnemyInBlindArea = (isCellInBlindArea &&
                 this.cellHasEnemy(cell, catapult))
-        let noObjectsToAttack = !isCellInBlindArea && 
-            !(this.cellHasEnemyBuilding(cell, catapult) || 
-            this.cellHasEnemyBuildingProduction(cell, catapult))
+        let noObjectsToAttack = !isCellInBlindArea &&
+            !(this.cellHasEnemyBuilding(cell, catapult) ||
+            this.cellHasEnemyBuildingProduction(cell, catapult) ||
+            this.cellHasEnemyUnit(cell, catapult))
 
         if (cell.building.isStaticNature || 
             isEnemyInBlindArea ||

@@ -500,7 +500,7 @@ const result = new vm.Script(`(() => {
 
   let combatCases = []
   let unitCombatTargets = ['unit-damage', 'unit-kill']
-  let unitAttackers = ['noob', 'archer', 'KOHb', 'normchel']
+  let unitAttackers = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
   for (let i = 0; i < unitAttackers.length; ++i) {
     for (let j = 0; j < unitCombatTargets.length; ++j) {
       combatCases.push(combatCase(unitAttackers[i], unitCombatTargets[j]))
