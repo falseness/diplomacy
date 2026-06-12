@@ -2064,7 +2064,7 @@
     "id": "TASK-102",
     "category": "test",
     "priority": "critical",
-    "description": "Audit the current combat model, curriculum stages, SimpleAiPlayer gates, benchmark commands, and AIPlayer comparison path before making the next architecture change.",
+    "description": "Audit the current combat model, curriculum stages, SimpleAiPlayer gates, benchmark commands, and AIPlayer comparison path before making the next architecture change. Implemented: Added ai/task102-combat-audit.md recording current model signatures, gate thresholds/commands, comparison-path bias risks, and where the 80 percent and symmetrical-map gates should be wired.",
     "acceptance_criteria": [
       "The current combat model architecture and input/output shapes are recorded.",
       "The current SimpleAiPlayer gate threshold and final combat benchmark commands are identified.",
@@ -2078,7 +2078,7 @@
       "Step 3: Record current thresholds, commands, model signature, and suspicious comparison shortcuts.",
       "Step 4: Confirm the audit changed only documentation or task notes."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-103",
