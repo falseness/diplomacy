@@ -1917,7 +1917,7 @@
     "id": "TASK-095",
     "category": "functional",
     "priority": "critical",
-    "description": "Implement fast external-building economy actions with invariant tests. Cover wall, bastion, tower, and any other external building products emitted by legal economy commands, including external production arrays, gold, destination vectors, and undo.",
+    "description": "Implement fast external-building economy actions with invariant tests. Cover wall, bastion, tower, and any other external building products emitted by legal economy commands, including external production arrays, gold, destination vectors, and undo. Implemented: Generalized fast building-placement handling to legal non-unit building products and expanded the real-runtime invariant suite to cover wall, bastion, and tower pending/completed vectors, externalProduction state, gold changes, fast undo, and normal undo cleanup.",
     "acceptance_criteria": [
       "Fast external-building placement matches fresh vectorization for wall, bastion, and tower commands.",
       "Pending and completed external-building vector fields match normal action behavior where applicable.",
@@ -1932,7 +1932,7 @@
       "Step 4: Re-run the real ActionManager economy undo smoke.",
       "Step 5: Re-run building vectorization regressions."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-096",

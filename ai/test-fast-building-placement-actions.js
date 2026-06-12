@@ -283,10 +283,14 @@ const result = new vm.Script(`(() => {
 
   function collectPlacementCases(activePlayer, seed) {
     setupPlacementMap(activePlayer, seed)
+    let buildingProducts = Object.keys(production).filter(function(product) {
+      return product != 'suburb' &&
+        !production[product].production.isUnitProduction()
+    })
     let commands = players[activePlayer].getActionCommands().filter(function(command) {
       return command.type == 'economy' &&
         command.category == 'building-placement' &&
-        (command.product == 'farm' || command.product == 'barrack')
+        buildingProducts.indexOf(command.product) >= 0
     })
     let firstByProduct = {}
     for (let i = 0; i < commands.length; ++i) {
@@ -321,24 +325,17 @@ const result = new vm.Script(`(() => {
   function assertPendingChannels(testCase, beforeVectorGrid, afterVectorGrid, beforeGold) {
     let coord = testCase.destinationCoord
     let product = testCase.product
-    let pendingIndex = product == 'farm' ?
-      CELL_VECTOR_INDEX.isPendingFarm : CELL_VECTOR_INDEX.isPendingBarrack
-    let completedIndex = product == 'farm' ?
-      CELL_VECTOR_INDEX.isFarm : CELL_VECTOR_INDEX.isBarrack
-    let ownerIndex = product == 'farm' ?
-      CELL_VECTOR_INDEX.pendingFarmOwner : CELL_VECTOR_INDEX.pendingBarrackOwner
-    let turnIndex = product == 'farm' ?
-      CELL_VECTOR_INDEX.pendingFarmTurns : CELL_VECTOR_INDEX.pendingBarrackTurns
+    let channels = pendingChannelsForProduct(product)
 
-    assert(channel(beforeVectorGrid, coord, pendingIndex) == 0,
+    assert(channel(beforeVectorGrid, coord, channels.pendingIndex) == 0,
       'test destination already had pending product channel', testCase)
-    assert(channel(afterVectorGrid, coord, pendingIndex) == 1,
+    assert(channel(afterVectorGrid, coord, channels.pendingIndex) == 1,
       'pending product channel was not set after placement', testCase)
-    assert(channel(afterVectorGrid, coord, completedIndex) == 0,
+    assert(channel(afterVectorGrid, coord, channels.completedIndex) == 0,
       'completed product channel was set during pending placement', testCase)
-    assert(channel(afterVectorGrid, coord, ownerIndex) == 1,
+    assert(channel(afterVectorGrid, coord, channels.ownerIndex) == 1,
       'pending product owner is not current player relative', testCase)
-    assert(channel(afterVectorGrid, coord, turnIndex) > 0,
+    assert(channel(afterVectorGrid, coord, channels.turnIndex) > 0,
       'pending product turns were not vectorized', testCase)
     assert(players[testCase.activePlayer].gold ==
         beforeGold - production[product].cost,
@@ -353,28 +350,94 @@ const result = new vm.Script(`(() => {
       'player gold vector did not change after placement', testCase)
     assert(grid.getBuilding(coord).isBuildingProduction(),
       'destination is not a pending building production', testCase)
+    if (isExternalProduct(product)) {
+      assert(grid.getBuilding(coord).isExternalProduction(),
+        'destination is not a pending external production', testCase)
+      assert(externalProduction.some(function(item) {
+        return sameCoord(item.coord, coord) && item.name == product && !item.killed
+      }), 'externalProduction does not contain live pending product', testCase)
+    }
   }
 
   function assertCompletedChannels(testCase, completedVectorGrid) {
     let coord = testCase.destinationCoord
     let product = testCase.product
-    let pendingIndex = product == 'farm' ?
-      CELL_VECTOR_INDEX.isPendingFarm : CELL_VECTOR_INDEX.isPendingBarrack
-    let completedIndex = product == 'farm' ?
-      CELL_VECTOR_INDEX.isFarm : CELL_VECTOR_INDEX.isBarrack
-    let ownerIndex = product == 'farm' ?
-      CELL_VECTOR_INDEX.farmOwner : CELL_VECTOR_INDEX.barrackOwner
+    let channels = completedChannelsForProduct(product)
 
-    assert(channel(completedVectorGrid, coord, pendingIndex) == 0,
+    assert(channel(completedVectorGrid, coord, channels.pendingIndex) == 0,
       'pending product channel remained after completion', testCase)
-    assert(channel(completedVectorGrid, coord, completedIndex) == 1,
+    assert(channel(completedVectorGrid, coord, channels.completedIndex) == 1,
       'completed product channel was not set after production completion', testCase)
-    assert(channel(completedVectorGrid, coord, ownerIndex) == 1,
+    assert(channel(completedVectorGrid, coord, channels.ownerIndex) == 1,
       'completed product owner is not current player relative', testCase)
     assert(!grid.getBuilding(coord).isBuildingProduction(),
       'destination still contains pending production after completion', testCase)
     assert(grid.getBuilding(coord).name == product,
       'completed building name does not match product', testCase)
+    if (isExternalProduct(product)) {
+      assert(external.some(function(item) {
+        return sameCoord(item.coord, coord) && item.name == product && !item.killed
+      }), 'external list does not contain completed product', testCase)
+      assert(!externalProduction.some(function(item) {
+        return sameCoord(item.coord, coord) && item.name == product && !item.killed
+      }), 'externalProduction retained completed product', testCase)
+    }
+  }
+
+  function isExternalProduct(product) {
+    return product == 'wall' || product == 'bastion' || product == 'tower'
+  }
+
+  function pendingChannelsForProduct(product) {
+    if (product == 'farm') {
+      return {
+        pendingIndex: CELL_VECTOR_INDEX.isPendingFarm,
+        completedIndex: CELL_VECTOR_INDEX.isFarm,
+        ownerIndex: CELL_VECTOR_INDEX.pendingFarmOwner,
+        turnIndex: CELL_VECTOR_INDEX.pendingFarmTurns
+      }
+    }
+    if (product == 'barrack') {
+      return {
+        pendingIndex: CELL_VECTOR_INDEX.isPendingBarrack,
+        completedIndex: CELL_VECTOR_INDEX.isBarrack,
+        ownerIndex: CELL_VECTOR_INDEX.pendingBarrackOwner,
+        turnIndex: CELL_VECTOR_INDEX.pendingBarrackTurns
+      }
+    }
+    if (isExternalProduct(product)) {
+      let pendingIndex = {
+        wall: CELL_VECTOR_INDEX.isPendingWall,
+        bastion: CELL_VECTOR_INDEX.isPendingBastion,
+        tower: CELL_VECTOR_INDEX.isPendingTower
+      }[product]
+      let completedIndex = {
+        wall: CELL_VECTOR_INDEX.isWall,
+        bastion: CELL_VECTOR_INDEX.isBastion,
+        tower: CELL_VECTOR_INDEX.isTower
+      }[product]
+      return {
+        pendingIndex: pendingIndex,
+        completedIndex: completedIndex,
+        ownerIndex: CELL_VECTOR_INDEX.pendingExternalOwner,
+        turnIndex: CELL_VECTOR_INDEX.pendingExternalTurns
+      }
+    }
+    throw new Error('unmapped pending building product ' + product)
+  }
+
+  function completedChannelsForProduct(product) {
+    let channels = pendingChannelsForProduct(product)
+    if (isExternalProduct(product)) {
+      channels.ownerIndex = CELL_VECTOR_INDEX.externalOwner
+    }
+    else if (product == 'farm') {
+      channels.ownerIndex = CELL_VECTOR_INDEX.farmOwner
+    }
+    else if (product == 'barrack') {
+      channels.ownerIndex = CELL_VECTOR_INDEX.barrackOwner
+    }
+    return channels
   }
 
   function refreshMutableGridFromFresh(mutableGrid) {
@@ -401,7 +464,12 @@ const result = new vm.Script(`(() => {
   function completeActivePlayerProduction(testCase, mutableGrid) {
     let completeRefreshes = []
     for (let i = 0; i < production[testCase.product].turns; ++i) {
-      players[testCase.activePlayer].nextTurn()
+      if (isExternalProduct(testCase.product)) {
+        externalNextTurn()
+      }
+      else {
+        players[testCase.activePlayer].nextTurn()
+      }
       completeRefreshes.push(refreshMutableGridFromFresh(mutableGrid))
     }
     return completeRefreshes
@@ -476,11 +544,15 @@ const result = new vm.Script(`(() => {
     products: cases.map(function(testCase) { return testCase.product }),
     players: cases.map(function(testCase) { return testCase.activePlayer }),
     seeds: seeds,
+    expectedProducts: Object.keys(production).filter(function(product) {
+      return product != 'suburb' &&
+        !production[product].production.isUnitProduction()
+    }),
     coverage: coverage
   }
 })()`, { filename: 'task094-fast-building-placement-actions.js' }).runInContext(context);
 
-check(result.totalCases === 8,
+check(result.totalCases === result.expectedProducts.length * 4,
   'fast building-placement suite did not cover both players, seeds, and products',
   result);
 check(result.products.filter(product => product === 'farm').length === 4,
@@ -489,10 +561,16 @@ check(result.products.filter(product => product === 'farm').length === 4,
 check(result.products.filter(product => product === 'barrack').length === 4,
   'fast building-placement suite did not cover all barrack cases',
   result);
+for (const product of ['wall', 'bastion', 'tower']) {
+  check(result.products.filter(candidate => candidate === product).length === 4,
+    'fast building-placement suite did not cover all ' + product + ' cases',
+    result);
+}
 
 console.log(
   'Fast building-placement invariant suite passed for ' +
-  result.totalCases + ' farm/barrack cases across players ' +
+  result.totalCases + ' building-placement cases across products ' +
+  result.expectedProducts.join(', ') + ', players ' +
   Array.from(new Set(result.players)).join(', ') + ' and seeds ' +
   result.seeds.join(', ')
 );

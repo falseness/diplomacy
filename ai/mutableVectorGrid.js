@@ -317,9 +317,11 @@ var suburbExpansionFastActionHandler = {
 var buildingPlacementFastActionHandler = {
     apply: function(mutableGrid, command) {
         if (!command || !command.producerCoord || !command.destinationCoord ||
-                (command.product != 'farm' && command.product != 'barrack')) {
+                !production[command.product] ||
+                production[command.product].production.isUnitProduction() ||
+                command.product == 'suburb') {
             throw new Error('fast building placement requires producer coord, ' +
-                'destination coord, and farm or barrack product')
+                'destination coord, and non-unit building product')
         }
         let coords = collectAllMutableVectorGridCoords(mutableGrid)
         let previous = []
