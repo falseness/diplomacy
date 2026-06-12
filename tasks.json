@@ -2022,7 +2022,7 @@
     "id": "TASK-100",
     "category": "functional",
     "priority": "critical",
-    "description": "Use fast vectorized actions in AIPlayerWithEconomy candidate scoring. Combat and economy candidate scoring should share the turn-start mutable vector grid and fast apply/undo path, while selected actions remain authoritative normal game actions.",
+    "description": "Use fast vectorized actions in AIPlayerWithEconomy candidate scoring. Combat and economy candidate scoring should share the turn-start mutable vector grid and fast apply/undo path, while selected actions remain authoritative normal game actions. Implemented: Extended the fast candidate-scoring probe to cover AIPlayerWithEconomy combat, unit-training, suburb-expansion, farm/barrack placement, and external-building placement categories through one mutable vector grid with fast apply/undo and normal selected-action application.",
     "acceptance_criteria": [
       "AIPlayerWithEconomy creates or reuses one mutable vector grid for candidate scoring at the beginning of the turn.",
       "Combat, unit-training, suburb, farm/barrack, and external-building candidates are scored through fast apply and fast undo.",
@@ -2037,7 +2037,7 @@
       "Step 4: Run the economy training smoke.",
       "Step 5: Add or run a probe proving AIPlayerWithEconomy does not call full vectoriseGrid() per candidate."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-101",

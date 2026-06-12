@@ -138,6 +138,7 @@ function createContext() {
     Math,
     JSON,
     state,
+    undoStack,
     unit,
     ai_model: {},
     whooseTurn: 1,
@@ -260,6 +261,174 @@ for (const result of [baseResult, economyResult]) {
     result);
   check(result.finalApplications === 1,
     'selected command was not applied exactly once after scoring', result);
+}
+
+function runEconomyCategoryScenario() {
+  const context = createContext();
+  new vm.Script(read('ai/mutableVectorGrid.js'), {
+    filename: 'ai/mutableVectorGrid.js'
+  }).runInContext(context);
+  new vm.Script(playersSource, {
+    filename: 'ai/players.js'
+  }).runInContext(context);
+
+  return new vm.Script(`
+    let originalApplyFastAction = applyFastAction
+    let originalUndoFastAction = undoFastAction
+    let fastAppliedCategories = []
+    let fastUndoneCategories = []
+    applyFastAction = function(mutableGrid, command) {
+      fastAppliedCategories.push(command.category || command.type)
+      return originalApplyFastAction(mutableGrid, command)
+    }
+    undoFastAction = function(mutableGrid, appliedAction) {
+      fastUndoneCategories.push(appliedAction.category)
+      return originalUndoFastAction(mutableGrid, appliedAction)
+    }
+
+    production = {
+      noob: {
+        cost: 10,
+        production: { isUnitProduction: function() { return true } }
+      },
+      suburb: {
+        cost: 20,
+        production: { isUnitProduction: function() { return false } }
+      },
+      farm: {
+        cost: 15,
+        production: { isUnitProduction: function() { return false } }
+      },
+      barrack: {
+        cost: 30,
+        production: { isUnitProduction: function() { return false } }
+      },
+      tower: {
+        cost: 35,
+        production: { isUnitProduction: function() { return false } }
+      }
+    }
+
+    state.vectoriseCalls = 0
+    state.score = 0
+    state.normalApplications = 0
+    let player = new AIPlayerWithEconomy({ r: 255, g: 0, b: 0 }, 200)
+    player.units = [unit]
+    player.towns = []
+    players = [null, player, { isNeutral: false, isLost: false, units: [], towns: [] }]
+
+    let commands = [
+      {
+        type: 'unit',
+        whoDoCommandCoord: { x: 0, y: 0 },
+        destinationCoord: { x: 0, y: 1 }
+      },
+      {
+        type: 'economy',
+        category: 'unit-training',
+        product: 'noob',
+        producerCoord: { x: 0, y: 0 }
+      },
+      {
+        type: 'economy',
+        category: 'suburb-expansion',
+        product: 'suburb',
+        producerCoord: { x: 0, y: 0 },
+        destinationCoord: { x: 0, y: 1 }
+      },
+      {
+        type: 'economy',
+        category: 'building-placement',
+        product: 'farm',
+        producerCoord: { x: 0, y: 0 },
+        destinationCoord: { x: 0, y: 1 }
+      },
+      {
+        type: 'economy',
+        category: 'building-placement',
+        product: 'barrack',
+        producerCoord: { x: 0, y: 0 },
+        destinationCoord: { x: 0, y: 1 }
+      },
+      {
+        type: 'economy',
+        category: 'building-placement',
+        product: 'tower',
+        producerCoord: { x: 0, y: 0 },
+        destinationCoord: { x: 0, y: 1 }
+      }
+    ]
+    let scoreByCategory = {
+      unit: 1,
+      'unit-training': 2,
+      'suburb-expansion': 3,
+      'noob': 2,
+      'suburb': 3,
+      'farm': 4,
+      'barrack': 5,
+      'tower': 6
+    }
+    let normalCategories = []
+    let scored = player.scoreActionCommandsWithFastVectorGrid(
+      commands,
+      function(command) {
+        let category = command.category || command.type
+        let key = command.product || category
+        undoStack.push({
+          score: state.score,
+          moves: unit.moves,
+          normalApplications: state.normalApplications
+        })
+        state.score = scoreByCategory[key]
+        state.normalApplications += 1
+        if (category == 'unit') {
+          unit.moves = 0
+        }
+        normalCategories.push(category + ':' + (command.product || 'command'))
+        return true
+      })
+    ;({
+      vectoriseCalls: state.vectoriseCalls,
+      score: state.score,
+      normalApplications: state.normalApplications,
+      validCount: scored.commands.length,
+      chanceValues: scored.chances.slice(),
+      fastAppliedCategories: fastAppliedCategories,
+      fastUndoneCategories: fastUndoneCategories,
+      normalCategories: normalCategories
+    })
+  `, { filename: 'ai-fast-candidate-economy-categories.js' }).runInContext(context);
+}
+
+const economyCategoryResult = runEconomyCategoryScenario();
+check(economyCategoryResult.vectoriseCalls === 1,
+  'AIPlayerWithEconomy economy-category scoring should seed one vector grid',
+  economyCategoryResult);
+check(economyCategoryResult.score === 0 &&
+    economyCategoryResult.normalApplications === 0,
+  'AIPlayerWithEconomy economy-category scoring did not undo normal trials',
+  economyCategoryResult);
+check(economyCategoryResult.validCount === 6,
+  'AIPlayerWithEconomy economy-category scoring skipped candidates',
+  economyCategoryResult);
+for (const category of [
+  'unit',
+  'unit-training',
+  'suburb-expansion',
+  'building-placement'
+]) {
+  check(economyCategoryResult.fastAppliedCategories.includes(category),
+    'AIPlayerWithEconomy did not fast-apply category ' + category,
+    economyCategoryResult);
+  check(economyCategoryResult.fastUndoneCategories.includes(category),
+    'AIPlayerWithEconomy did not fast-undo category ' + category,
+    economyCategoryResult);
+}
+for (const product of ['farm', 'barrack', 'tower']) {
+  check(economyCategoryResult.normalCategories.includes(
+      'building-placement:' + product),
+    'AIPlayerWithEconomy did not score building product ' + product,
+    economyCategoryResult);
 }
 
 console.log('AI fast candidate scoring smoke passed');
