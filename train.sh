@@ -14,6 +14,7 @@ max_games_this_run=0
 checkpoint_interval=1
 checkpoint_retain=0
 old_vs_new_games=3
+evaluation_cadence=1
 plateau_window=2
 plateau_min_delta=0.001
 plateau_patience=1
@@ -42,6 +43,7 @@ Options:
   --checkpoint-interval N   Save every N completed games (default: 1)
   --checkpoint-retain N     Keep newest N checkpoints; 0 keeps all (default: 0)
   --old-vs-new-games N      Deterministic checkpoint comparison games (default: 3)
+  --evaluation-cadence N    Run expensive curriculum/evaluation checks every N games (default: 1)
   --plateau-window N        Evaluated checkpoints considered for plateau (default: 2)
   --plateau-min-delta N     Minimum old-vs-new winrate improvement (default: 0.001)
   --plateau-patience N      Non-improving comparisons before hold (default: 1)
@@ -132,6 +134,11 @@ while (($#)); do
       old_vs_new_games="$2"
       shift 2
       ;;
+    --evaluation-cadence)
+      (($# >= 2)) || die "--evaluation-cadence requires a value"
+      evaluation_cadence="$2"
+      shift 2
+      ;;
     --plateau-window)
       (($# >= 2)) || die "--plateau-window requires a value"
       plateau_window="$2"
@@ -189,6 +196,7 @@ require_positive_integer "--epochs" "$epochs"
 require_positive_integer "--seed" "$seed"
 require_positive_integer "--checkpoint-interval" "$checkpoint_interval"
 require_positive_integer "--old-vs-new-games" "$old_vs_new_games"
+require_positive_integer "--evaluation-cadence" "$evaluation_cadence"
 require_positive_integer "--plateau-window" "$plateau_window"
 require_positive_integer "--plateau-patience" "$plateau_patience"
 [[ "$checkpoint_retain" =~ ^[0-9]+$ ]] || die "--checkpoint-retain must be a non-negative integer"
@@ -260,6 +268,7 @@ runner_args=(
   --checkpoint-interval "$checkpoint_interval"
   --checkpoint-retain "$checkpoint_retain"
   --old-vs-new-games "$old_vs_new_games"
+  --evaluation-cadence "$evaluation_cadence"
   --plateau-window "$plateau_window"
   --plateau-min-delta "$plateau_min_delta"
   --plateau-patience "$plateau_patience"

@@ -2109,7 +2109,7 @@
     "id": "TASK-104",
     "category": "performance",
     "priority": "high",
-    "description": "Speed up the training loop in ai/cloud-train-runner.js by keeping metric records in memory instead of re-reading and re-parsing the full metrics JSONL file every game (O(n^2) to O(n)), and by adding a configurable curriculum and old-vs-new evaluation cadence so the expensive per-step runGame evaluations can run every K steps. The default cadence must preserve current per-step behavior exactly.",
+    "description": "Speed up the training loop in ai/cloud-train-runner.js by keeping metric records in memory instead of re-reading and re-parsing the full metrics JSONL file every game (O(n^2) to O(n)), and by adding a configurable curriculum and old-vs-new evaluation cadence so the expensive per-step runGame evaluations can run every K steps. The default cadence must preserve current per-step behavior exactly. Implemented: Added in-memory game metric caching with per-game JSONL parity assertions, configurable evaluation cadence defaulting to 1, cadence-aware curriculum/old-vs-new gating, wrapper/docs wiring, and focused cadence coverage; measured 15-game median wall time improved from 642.68s to 489.57s at cadence 3 (23.8% faster).",
     "acceptance_criteria": [
       "The full metrics JSONL file is no longer re-parsed inside the per-game loop; the in-memory record array equals the file-parsed records at every step (asserted).",
       "With evaluation cadence equal to 1, metrics, progress records, and curriculum gate decisions are identical to the pre-change implementation for a fixed seed and run.",
@@ -2126,7 +2126,7 @@
       "Step 4 (regression): Run test-combat-training-progress, test-task106-curriculum-gate, and a short test-combat-full-training-verification; all pass.",
       "Step 5 (speed): Time the canonical command with the recommended cadence as median of 3 runs before and after; require at least a 10 percent reduction and record in progress.md."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-105",

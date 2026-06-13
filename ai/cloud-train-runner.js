@@ -76,6 +76,7 @@ function parseArgs(argv) {
     'checkpoint-interval',
     'checkpoint-retain',
     'old-vs-new-games',
+    'evaluation-cadence',
     'plateau-window',
     'plateau-min-delta',
     'plateau-patience',
@@ -96,6 +97,7 @@ function parseArgs(argv) {
   options.checkpointInterval = Number(options['checkpoint-interval']);
   options.checkpointRetain = Number(options['checkpoint-retain']);
   options.oldVsNewGames = Number(options['old-vs-new-games']);
+  options.evaluationCadence = Number(options['evaluation-cadence']);
   options.plateauWindow = Number(options['plateau-window']);
   options.plateauMinDelta = Number(options['plateau-min-delta']);
   options.plateauPatience = Number(options['plateau-patience']);
@@ -669,6 +671,7 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
       checkpointInterval: options.checkpointInterval,
       checkpointRetain: options.checkpointRetain,
       oldVsNewGames: options.oldVsNewGames,
+      evaluationCadence: options.evaluationCadence,
       plateauWindow: options.plateauWindow,
       plateauMinDelta: options.plateauMinDelta,
       plateauPatience: options.plateauPatience,
@@ -724,6 +727,13 @@ function gitRevision() {
 
 function metricRecords(metricsPath) {
   return readJsonLines(metricsPath).filter((record) => record.type === 'game');
+}
+
+function assertMetricRecordsMatchFile(inMemoryRecords, metricsPath) {
+  const fileRecords = metricRecords(metricsPath);
+  if (!sameValue(inMemoryRecords, fileRecords)) {
+    fail(`in-memory metric records diverged from ${metricsPath}`);
+  }
 }
 
 function summarizeMetrics(records) {
@@ -1064,7 +1074,12 @@ function updateCurriculumState(state, gateDecision) {
   return state.curriculum;
 }
 
-async function progressRecord(options, state, metric, previousRecords, model) {
+function shouldEvaluateTrainingStep(state, cadence) {
+  return state.completedGames % cadence === 0 ||
+    state.completedGames === state.totalGames;
+}
+
+async function progressRecord(options, state, metric, previousRecords, model, shouldEvaluateCurriculum) {
   const summary = summarizeMetrics(previousRecords.concat(metric));
   const checkpointPointer = readLatestCheckpointPointer(options);
   const oldVsNewEvaluation = metric.oldVsNewEvaluation || {
@@ -1077,11 +1092,12 @@ async function progressRecord(options, state, metric, previousRecords, model) {
     options
   );
   const learningRateReduction = curriculumLearningRateAttempt(options);
-  const shouldMeasureSimpleAiPlayerWinrate =
+  const shouldMeasureSimpleAiPlayerWinrate = shouldEvaluateCurriculum && (
     state.totalGames <= 1 ||
     (plateauState.status === 'plateau' &&
       learningRateReduction.attempted &&
-      !learningRateReduction.improved);
+      !learningRateReduction.improved)
+  );
   const simpleAiPlayerWinrate = shouldMeasureSimpleAiPlayerWinrate
     ? await curriculumSimpleAiWinrate(options, state, model)
     : {
@@ -1089,7 +1105,9 @@ async function progressRecord(options, state, metric, previousRecords, model) {
       evaluated: false,
       games: 0,
       source: 'deferred-until-curriculum-gate-can-advance',
-      reason: 'plateau and learning-rate evidence are required before running the measured SimpleAiPlayer benchmark'
+      reason: shouldEvaluateCurriculum
+        ? 'plateau and learning-rate evidence are required before running the measured SimpleAiPlayer benchmark'
+        : 'deferred until the configured evaluation cadence'
     };
   const nextStageEligibility = curriculumGateDecision(
     state,
@@ -1098,7 +1116,9 @@ async function progressRecord(options, state, metric, previousRecords, model) {
     learningRateReduction,
     options
   );
-  const curriculum = updateCurriculumState(state, nextStageEligibility);
+  const curriculum = shouldEvaluateCurriculum
+    ? updateCurriculumState(state, nextStageEligibility)
+    : state.curriculum;
   return {
     type: 'combat-training-progress',
     runId: options.runId,
@@ -1164,7 +1184,8 @@ function manifestValue(options, state, paths, status, errorMessage) {
       plateauWindow: options.plateauWindow,
       plateauMinDelta: options.plateauMinDelta,
       plateauPatience: options.plateauPatience,
-      curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold
+      curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold,
+      evaluationCadence: options.evaluationCadence,
     },
     progress: {
       completedGames: state.completedGames,
@@ -1204,13 +1225,13 @@ function manifestValue(options, state, paths, status, errorMessage) {
   return value;
 }
 
-function persistRunMetadata(options, state, paths, status, errorMessage) {
+function persistRunMetadata(options, state, paths, status, errorMessage, records) {
   writeJson(paths.statePath, state);
   writeJson(paths.metricsSummaryPath, {
     runId: options.runId,
     status,
     updatedAt: state.updatedAt,
-    ...summarizeMetrics(metricRecords(paths.metricsPath))
+    ...summarizeMetrics(records || metricRecords(paths.metricsPath))
   });
   writeJson(
     paths.manifestPath,
@@ -1272,6 +1293,7 @@ async function main() {
 
   let state;
   let model;
+  let gameMetricRecords = [];
   if (options.resume) {
     const checkpoint = readLatestCheckpoint(options.storageDir, options.runId);
     state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
@@ -1279,8 +1301,10 @@ async function main() {
       ? JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
       : null;
     validateCheckpointMetadata(checkpoint, state, manifest);
-    const records = metricRecords(metricsPath);
-    const latestMetricGame = records.length ? records[records.length - 1].game : 0;
+    gameMetricRecords = metricRecords(metricsPath);
+    const latestMetricGame = gameMetricRecords.length
+      ? gameMetricRecords[gameMetricRecords.length - 1].game
+      : 0;
     if (latestMetricGame !== checkpoint.metadata.trainingStep) {
       fail(`resume numbering conflict: latest checkpoint is game ${checkpoint.metadata.trainingStep} but metrics end at game ${latestMetricGame}`);
     }
@@ -1297,6 +1321,9 @@ async function main() {
     options.checkpointRetain = checkpoint.metadata.trainingConfiguration.checkpointRetain;
     options.oldVsNewGames = checkpoint.metadata.trainingConfiguration.oldVsNewGames ||
       options.oldVsNewGames;
+    options.evaluationCadence =
+      checkpoint.metadata.trainingConfiguration.evaluationCadence ||
+      options.evaluationCadence;
     options.plateauWindow = checkpoint.metadata.trainingConfiguration.plateauWindow ||
       options.plateauWindow;
     options.plateauMinDelta =
@@ -1324,7 +1351,7 @@ async function main() {
       runId: options.runId,
       ...resumeEvent
     });
-    persistRunMetadata(options, state, paths, 'running');
+    persistRunMetadata(options, state, paths, 'running', null, gameMetricRecords);
     console.log(`Resuming ${options.runId} from ${resumeEvent.checkpoint} after game ${state.completedGames}`);
   } else {
     if (fs.existsSync(statePath)) {
@@ -1343,7 +1370,7 @@ async function main() {
       updatedAt: new Date().toISOString()
     };
     model = createModel();
-    persistRunMetadata(options, state, paths, 'running');
+    persistRunMetadata(options, state, paths, 'running', null, gameMetricRecords);
   }
 
   try {
@@ -1418,7 +1445,7 @@ async function main() {
       if (game % options.checkpointInterval === 0 || game === state.totalGames) {
         await saveCheckpoint(model, options, state, checkpointDir, 'interval');
       }
-      const previousRecords = metricRecords(metricsPath);
+      const previousRecords = gameMetricRecords.slice();
       const loss = modelLoss(history);
       const accuracyHistory = history.history.acc || history.history.accuracy || [];
       const metric = {
@@ -1436,12 +1463,25 @@ async function main() {
         durationMs: Date.now() - started,
         timestamp: state.updatedAt
       };
-      metric.oldVsNewEvaluation = await evaluateNewVsOld(
-        options,
-        state,
-        model,
-        readOldEpochPointer(options)
-      );
+      const shouldEvaluate = shouldEvaluateTrainingStep(state, options.evaluationCadence);
+      metric.oldVsNewEvaluation = shouldEvaluate
+        ? await evaluateNewVsOld(
+          options,
+          state,
+          model,
+          readOldEpochPointer(options)
+        )
+        : {
+          evaluated: false,
+          reason: 'deferred until the configured evaluation cadence',
+          games: 0,
+          oldCheckpoint: null,
+          newCheckpoint: null,
+          newWins: 0,
+          oldWins: 0,
+          draws: 0,
+          winrate: null
+        };
       const summary = summarizeMetrics(previousRecords.concat(metric));
       metric.winRates = summary.winRates;
       metric.benchmarkSummary = {
@@ -1449,11 +1489,13 @@ async function main() {
         oldVsNewWinrate: metric.oldVsNewEvaluation
       };
       appendJsonLine(metricsPath, metric);
+      gameMetricRecords.push(metric);
+      assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);
       appendJsonLine(
         progressPath,
-        await progressRecord(options, state, metric, previousRecords, model)
+        await progressRecord(options, state, metric, previousRecords, model, shouldEvaluate)
       );
-      persistRunMetadata(options, state, paths, state.status);
+      persistRunMetadata(options, state, paths, state.status, null, gameMetricRecords);
       console.log(`Completed game ${game}/${state.totalGames}`);
       if (options.failAfterGame === game) {
         fail(`forced failure after game ${game}`);
@@ -1465,7 +1507,7 @@ async function main() {
       state.completedAt = new Date().toISOString();
       state.updatedAt = state.completedAt;
       await saveModelAtomically(model, finalDir);
-      persistRunMetadata(options, state, paths, 'complete');
+      persistRunMetadata(options, state, paths, 'complete', null, gameMetricRecords);
       console.log(`Training complete. Final model: ${finalDir}`);
     } else {
       state.status = 'paused';
@@ -1477,7 +1519,7 @@ async function main() {
       if (!latest || latest.metadata.trainingStep !== state.completedGames) {
         await saveCheckpoint(model, options, state, checkpointDir, 'pause');
       }
-      persistRunMetadata(options, state, paths, 'paused');
+      persistRunMetadata(options, state, paths, 'paused', null, gameMetricRecords);
       console.log(`Training paused at ${state.completedGames}/${state.totalGames}; resume with ./train.sh --resume`);
     }
   } catch (error) {
@@ -1490,7 +1532,7 @@ async function main() {
       message: error.message,
       timestamp: state.updatedAt
     });
-    persistRunMetadata(options, state, paths, 'failed', error.message);
+    persistRunMetadata(options, state, paths, 'failed', error.message, gameMetricRecords);
     throw error;
   } finally {
     model.dispose();
