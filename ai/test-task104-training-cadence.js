@@ -90,6 +90,10 @@ function assertCadenceRun(storageDir, runId, cadence, expectedEvaluations) {
   const progressRecords = readJsonLines(progressPath);
   check(gameRecords.length === 5, 'metrics rows should equal games');
   check(progressRecords.length === 5, 'progress rows should equal games');
+  check(gameRecords.every((record, index) => record.game === index + 1),
+    'metrics rows should preserve one row per completed game');
+  check(progressRecords.every((record, index) => record.game === index + 1),
+    'progress rows should preserve one row per completed game');
 
   const oldVsNewEvaluations = gameRecords.filter((record) =>
     record.oldVsNewEvaluation.reason !== 'deferred until the configured evaluation cadence');
@@ -115,6 +119,37 @@ function assertCadenceRun(storageDir, runId, cadence, expectedEvaluations) {
       'cadence 1 must preserve the legacy every-game curriculum gate path');
     check(deferredProgressRows === 0,
       'cadence 1 should not emit cadence-deferred progress rows');
+    for (const record of progressRecords) {
+      check(record.oldVsNewWinrate.reason !== 'deferred until the configured evaluation cadence',
+        'cadence 1 progress should never defer old-vs-new evaluation',
+        { game: record.game, oldVsNewWinrate: record.oldVsNewWinrate });
+      check(record.simpleAiPlayerWinrate.source !== 'deferred-until-curriculum-gate-can-advance' ||
+          record.simpleAiPlayerWinrate.reason !== 'deferred until the configured evaluation cadence',
+        'cadence 1 progress should never defer curriculum evaluation because of cadence',
+        { game: record.game, simpleAiPlayerWinrate: record.simpleAiPlayerWinrate });
+      check(record.curriculum.gateHistory.length === record.game,
+        'cadence 1 progress should include the legacy gate decision for every game',
+        { game: record.game, gateHistory: record.curriculum.gateHistory });
+      check(record.curriculum.gateHistory[record.curriculum.gateHistory.length - 1].trainingStep === record.game,
+        'cadence 1 gate history should end at the current game',
+        { game: record.game, gateHistory: record.curriculum.gateHistory });
+    }
+  } else {
+    for (const record of progressRecords) {
+      const shouldEvaluate = record.game % cadence === 0 || record.game === gameRecords.length;
+      const expectedGateCount = progressRecords
+        .slice(0, record.game)
+        .filter((candidate) => candidate.game % cadence === 0 ||
+          candidate.game === gameRecords.length)
+        .length;
+      check(record.curriculum.gateHistory.length === expectedGateCount,
+        'cadence K progress should only add gate decisions on evaluation games',
+        { game: record.game, cadence, gateHistory: record.curriculum.gateHistory });
+      if (!shouldEvaluate) {
+        check(record.oldVsNewWinrate.reason === 'deferred until the configured evaluation cadence',
+          'non-cadence progress rows should defer old-vs-new evaluation');
+      }
+    }
   }
 
   const summary = readJson(summaryPath);
