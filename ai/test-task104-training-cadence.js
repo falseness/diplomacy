@@ -203,10 +203,12 @@ function assertSourceUsesInMemoryMetrics() {
     'cadence=1 should enable the deterministic output-identical invariant by default');
   check(source.includes('function cadenceSpeedMode(options)'),
     'cadence K should have an explicit training-throughput mode');
-  check(source.includes('cadenceSpeedMode(options) ? 2 : 8'),
+  check(source.includes('cadenceSpeedMode(options) ? 1 : 8'),
     'cadence K should reduce synthetic fit work without changing cadence=1 behavior');
-  check(source.includes('cadenceSpeedMode(options) ? 1 : 2'),
-    'cadence K should reduce runtime teacher fit work without changing cadence=1 behavior');
+  check(source.includes('if (!cadenceSpeedMode(options) || shouldEvaluateGameNow)'),
+    'cadence K should skip runtime teacher fit work on non-evaluation games');
+  check(source.includes('function shouldEvaluateGame(game, totalGames, cadence)'),
+    'cadence K runtime teacher fit should use the same evaluation schedule as gate work');
   check(source.includes('shouldEvaluateCurriculum = true'),
     'progressRecord should default to legacy every-game curriculum evaluation');
   check(source.includes('shuffle: !deterministicTrainingMode(options, state)'),

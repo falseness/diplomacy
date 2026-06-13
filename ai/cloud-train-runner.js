@@ -1123,6 +1123,10 @@ function shouldEvaluateTrainingStep(state, cadence) {
     state.completedGames === state.totalGames;
 }
 
+function shouldEvaluateGame(game, totalGames, cadence) {
+  return game % cadence === 0 || game === totalGames;
+}
+
 async function progressRecord(
   options,
   state,
@@ -1457,12 +1461,17 @@ async function main() {
       try {
         labels = Array.from(await batch.labels.data());
         const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
+        const shouldEvaluateGameNow = shouldEvaluateGame(
+          game,
+          state.totalGames,
+          options.evaluationCadence
+        );
         const syntheticEpochs = smokeSizedRun
           ? 1
-          : Math.max(state.epochs, cadenceSpeedMode(options) ? 2 : 8);
+          : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 8);
         const runtimeEpochs = smokeSizedRun
           ? 1
-          : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 2);
+          : Math.max(state.epochs, 2);
         history = await model.fit(
           [batch.board, batch.global],
           modelTargets(batch),
@@ -1473,13 +1482,15 @@ async function main() {
             verbose: 0
           }
         );
-        history = await fitRuntimeCombatTeacherBatch(
-          model,
-          state.seed + game * 1543,
-          state.curriculum.currentStageIndex,
-          runtimeEpochs,
-          deterministicTrainingMode(options, state)
-        ) || history;
+        if (!cadenceSpeedMode(options) || shouldEvaluateGameNow) {
+          history = await fitRuntimeCombatTeacherBatch(
+            model,
+            state.seed + game * 1543,
+            state.curriculum.currentStageIndex,
+            runtimeEpochs,
+            deterministicTrainingMode(options, state)
+          ) || history;
+        }
         predictionTensor = model.predict([batch.board, batch.global]);
         prediction = Array.from(await predictionValueTensor(predictionTensor).data());
       } finally {
