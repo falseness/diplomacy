@@ -21,9 +21,10 @@ function readJsonLines(filePath) {
     .map((line) => JSON.parse(line));
 }
 
-function runTraining(storageDir, runId, games, extraArgs) {
+function runTraining(storageDir, runId, games, extraArgs, extraEnv = {}) {
   const env = {
     ...process.env,
+    ...extraEnv,
     PATH: `${node20BinDir()}:${process.env.PATH || ''}`
   };
   execFileSync(
@@ -45,6 +46,19 @@ function runTraining(storageDir, runId, games, extraArgs) {
       ...extraArgs
     ],
     { cwd: path.resolve(__dirname, '..'), env, stdio: 'pipe' }
+  );
+}
+
+function runInvariantTraining(storageDir, runId, legacyMetricLoop) {
+  runTraining(
+    storageDir,
+    runId,
+    6,
+    ['--evaluation-cadence', '1'],
+    {
+      DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT: '1',
+      DIPLOMACY_TASK104_LEGACY_METRIC_LOOP: legacyMetricLoop ? '1' : '0'
+    }
   );
 }
 
@@ -173,18 +187,52 @@ function assertSourceUsesInMemoryMetrics() {
     path.join(__dirname, 'cloud-train-runner.js'),
     'utf8'
   );
-  check(source.includes('const previousRecords = gameMetricRecords.slice();'),
+  check(source.includes(': gameMetricRecords.slice();'),
     'training loop should summarize from the in-memory metric cache');
   check(!source.includes('const previousRecords = metricRecords(metricsPath);'),
     'training loop should not re-read the full metrics JSONL per game');
   check(source.includes('assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);'),
     'training loop should assert in-memory metric records match the JSONL file');
+  check(source.includes('DIPLOMACY_TASK104_LEGACY_METRIC_LOOP'),
+    'training cadence test should be able to exercise the legacy file-backed metric loop');
+  check(source.includes('DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT'),
+    'training cadence test should have deterministic invariant controls');
   check(source.includes('shouldEvaluateCurriculum = true'),
     'progressRecord should default to legacy every-game curriculum evaluation');
-  check(source.includes('shuffle: true'),
-    'cadence=1 should preserve the pre-change training shuffle behavior');
-  check(source.includes('model = createModel();'),
+  check(source.includes('shuffle: !task104DeterministicInvariantMode()'),
+    'cadence=1 should preserve pre-change shuffle outside deterministic invariant mode');
+  check(source.includes('model = createModel(task104DeterministicInvariantMode() ? state.seed : undefined);'),
     'cadence=1 should preserve the pre-change model construction path');
+}
+
+function assertCadenceOneMatchesLegacy(storageDir) {
+  const legacyRunId = 'task104-legacy-cadence-one';
+  const currentRunId = 'task104-current-cadence-one';
+  runInvariantTraining(storageDir, legacyRunId, true);
+  runInvariantTraining(storageDir, currentRunId, false);
+
+  const readRun = (runId) => ({
+    metrics: readJsonLines(path.join(storageDir, 'metrics', `${runId}.jsonl`)),
+    progress: readJsonLines(path.join(storageDir, 'progress', `${runId}.jsonl`)),
+    gateHistory: readJson(path.join(storageDir, 'runs', runId, 'state.json'))
+      .curriculum.gateHistory
+  });
+  const normalize = (value, runId) =>
+    JSON.parse(JSON.stringify(value).replace(new RegExp(runId, 'g'), '<run-id>'));
+  const legacy = normalize(readRun(legacyRunId), legacyRunId);
+  const current = normalize(readRun(currentRunId), currentRunId);
+  check(
+    JSON.stringify(current.metrics) === JSON.stringify(legacy.metrics),
+    'cadence=1 metrics JSONL should match the legacy file-backed loop exactly'
+  );
+  check(
+    JSON.stringify(current.progress) === JSON.stringify(legacy.progress),
+    'cadence=1 progress JSONL should match the legacy file-backed loop exactly'
+  );
+  check(
+    JSON.stringify(current.gateHistory) === JSON.stringify(legacy.gateHistory),
+    'cadence=1 curriculum gate history should match the legacy file-backed loop exactly'
+  );
 }
 
 function main() {
@@ -192,6 +240,7 @@ function main() {
   fs.rmSync(storageDir, { recursive: true, force: true });
   try {
     assertSourceUsesInMemoryMetrics();
+    assertCadenceOneMatchesLegacy(storageDir);
 
     const cadenceOneRunId = 'task104-cadence-one';
     runTraining(storageDir, cadenceOneRunId, 6, ['--evaluation-cadence', '1']);

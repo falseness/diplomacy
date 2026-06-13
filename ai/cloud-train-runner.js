@@ -142,6 +142,28 @@ function createRandom(seed) {
   };
 }
 
+function task104DeterministicInvariantMode() {
+  return process.env.DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT === '1';
+}
+
+function task104LegacyMetricLoopMode() {
+  return process.env.DIPLOMACY_TASK104_LEGACY_METRIC_LOOP === '1';
+}
+
+function nowIso(state, label) {
+  if (!task104DeterministicInvariantMode()) {
+    return new Date().toISOString();
+  }
+  const step = state && Number.isInteger(state.completedGames)
+    ? state.completedGames
+    : 0;
+  const labelOffset = label
+    ? Array.from(label).reduce((total, character) =>
+      total + character.charCodeAt(0), 0) % 100
+    : 0;
+  return new Date(Date.UTC(2026, 0, 1, 0, step, labelOffset)).toISOString();
+}
+
 function projectedCombatLabel(boardValues, globalValue) {
   const friendlyUnits = [];
   const enemyUnits = [];
@@ -226,7 +248,7 @@ function putUnit(boardValues, x, y, owner, type, moves) {
   boardValues[offset + 12 + base] += moves;
 }
 
-function createModel() {
+function createModel(seed) {
   return createAlphaZeroLiteCombatModel({
     boardHeight: 3,
     boardWidth: 3,
@@ -235,7 +257,8 @@ function createModel() {
     actionSpaceSize: DEFAULT_ACTION_SPACE_SIZE,
     filters: 32,
     residualBlocks: 3,
-    learningRate: 0.01
+    learningRate: 0.01,
+    seed
   }).model;
 }
 
@@ -510,7 +533,7 @@ async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
       {
         epochs,
         batchSize: 16,
-        shuffle: true,
+        shuffle: !task104DeterministicInvariantMode(),
         verbose: 0
       }
     );
@@ -654,7 +677,7 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
   const temporary = `${destination}.tmp-${process.pid}`;
   fs.rmSync(temporary, { recursive: true, force: true });
   await model.save(`file://${temporary}`);
-  const timestamp = new Date().toISOString();
+  const timestamp = nowIso(state, 'checkpoint');
   writeJson(path.join(temporary, 'metadata.json'), {
     modelVersion: MODEL_VERSION,
     modelSignature: MODEL_SIGNATURE,
@@ -1348,7 +1371,7 @@ async function main() {
     const resumeEvent = {
       checkpoint: path.relative(options.storageDir, checkpoint.path),
       trainingStep: state.completedGames,
-      timestamp: new Date().toISOString()
+      timestamp: nowIso(state, 'resume')
     };
     state.resumeEvents = (state.resumeEvents || []).concat(resumeEvent);
     state.status = 'running';
@@ -1373,10 +1396,10 @@ async function main() {
       completedGames: 0,
       resumeEvents: [],
       curriculum: initialCurriculumState(),
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      startedAt: nowIso({ completedGames: 0 }, 'started'),
+      updatedAt: nowIso({ completedGames: 0 }, 'updated')
     };
-    model = createModel();
+    model = createModel(task104DeterministicInvariantMode() ? state.seed : undefined);
     persistRunMetadata(options, state, paths, 'running', null, gameMetricRecords);
   }
 
@@ -1419,7 +1442,7 @@ async function main() {
           {
             epochs: syntheticEpochs,
             batchSize: 16,
-            shuffle: true,
+            shuffle: !task104DeterministicInvariantMode(),
             verbose: 0
           }
         );
@@ -1447,12 +1470,14 @@ async function main() {
         : (predictionScore >= 0 ? 'red' : 'blue');
       const episodeLength = labels.length * state.epochs;
       state.completedGames = game;
-      state.updatedAt = new Date().toISOString();
+      state.updatedAt = nowIso(state, 'game');
       state.status = state.completedGames === state.totalGames ? 'complete' : 'running';
       if (game % options.checkpointInterval === 0 || game === state.totalGames) {
         await saveCheckpoint(model, options, state, checkpointDir, 'interval');
       }
-      const previousRecords = gameMetricRecords.slice();
+      const previousRecords = task104LegacyMetricLoopMode()
+        ? metricRecords(metricsPath)
+        : gameMetricRecords.slice();
       const loss = modelLoss(history);
       const accuracyHistory = history.history.acc || history.history.accuracy || [];
       const metric = {
@@ -1467,7 +1492,7 @@ async function main() {
           : null,
         episodeLength,
         winner,
-        durationMs: Date.now() - started,
+        durationMs: task104DeterministicInvariantMode() ? 0 : Date.now() - started,
         timestamp: state.updatedAt
       };
       const shouldEvaluate = shouldEvaluateTrainingStep(state, options.evaluationCadence);
@@ -1496,8 +1521,12 @@ async function main() {
         oldVsNewWinrate: metric.oldVsNewEvaluation
       };
       appendJsonLine(metricsPath, metric);
-      gameMetricRecords.push(metric);
-      assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);
+      if (!task104LegacyMetricLoopMode()) {
+        gameMetricRecords.push(metric);
+        assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);
+      } else {
+        gameMetricRecords = metricRecords(metricsPath);
+      }
       appendJsonLine(
         progressPath,
         await progressRecord(options, state, metric, previousRecords, model, shouldEvaluate)
@@ -1511,14 +1540,14 @@ async function main() {
 
     if (state.completedGames === state.totalGames) {
       state.status = 'complete';
-      state.completedAt = new Date().toISOString();
+      state.completedAt = nowIso(state, 'complete');
       state.updatedAt = state.completedAt;
       await saveModelAtomically(model, finalDir);
       persistRunMetadata(options, state, paths, 'complete', null, gameMetricRecords);
       console.log(`Training complete. Final model: ${finalDir}`);
     } else {
       state.status = 'paused';
-      state.updatedAt = new Date().toISOString();
+      state.updatedAt = nowIso(state, 'paused');
       const pointerPath = latestCheckpointPath(options.storageDir, options.runId);
       const latest = fs.existsSync(pointerPath)
         ? readLatestCheckpoint(options.storageDir, options.runId)
@@ -1531,7 +1560,7 @@ async function main() {
     }
   } catch (error) {
     state.status = 'failed';
-    state.updatedAt = new Date().toISOString();
+    state.updatedAt = nowIso(state, 'failed');
     appendJsonLine(metricsPath, {
       type: 'run_failure',
       runId: options.runId,
