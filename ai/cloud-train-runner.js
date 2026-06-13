@@ -146,12 +146,27 @@ function task104DeterministicInvariantMode() {
   return process.env.DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT === '1';
 }
 
+function deterministicTrainingMode(options, state) {
+  if (task104DeterministicInvariantMode()) {
+    return true;
+  }
+  if (state && state.deterministicTraining === true) {
+    return true;
+  }
+  return options && options.evaluationCadence === 1;
+}
+
+function cadenceSpeedMode(options) {
+  return options && options.evaluationCadence > 1;
+}
+
 function task104LegacyMetricLoopMode() {
   return process.env.DIPLOMACY_TASK104_LEGACY_METRIC_LOOP === '1';
 }
 
 function nowIso(state, label) {
-  if (!task104DeterministicInvariantMode()) {
+  if (!task104DeterministicInvariantMode() &&
+      !(state && state.deterministicTraining === true)) {
     return new Date().toISOString();
   }
   const step = state && Number.isInteger(state.completedGames)
@@ -521,7 +536,13 @@ function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
   };
 }
 
-async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
+async function fitRuntimeCombatTeacherBatch(
+  model,
+  seed,
+  stageIndex,
+  epochs,
+  deterministic
+) {
   const runtimeBatch = makeRuntimeCombatTeacherBatch(seed, stageIndex);
   if (!runtimeBatch) {
     return null;
@@ -533,7 +554,7 @@ async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
       {
         epochs,
         batchSize: 16,
-        shuffle: !task104DeterministicInvariantMode(),
+        shuffle: !deterministic,
         verbose: 0
       }
     );
@@ -1396,10 +1417,11 @@ async function main() {
       completedGames: 0,
       resumeEvents: [],
       curriculum: initialCurriculumState(),
-      startedAt: nowIso({ completedGames: 0 }, 'started'),
-      updatedAt: nowIso({ completedGames: 0 }, 'updated')
+      deterministicTraining: options.evaluationCadence === 1
     };
-    model = createModel(task104DeterministicInvariantMode() ? state.seed : undefined);
+    state.startedAt = nowIso(state, 'started');
+    state.updatedAt = nowIso(state, 'updated');
+    model = createModel(deterministicTrainingMode(options, state) ? state.seed : undefined);
     persistRunMetadata(options, state, paths, 'running', null, gameMetricRecords);
   }
 
@@ -1414,7 +1436,8 @@ async function main() {
           model,
           state.seed + 50000 + pretrain * 173,
           state.curriculum.currentStageIndex,
-          pretrainEpochs
+          pretrainEpochs,
+          deterministicTrainingMode(options, state)
         );
       }
     }
@@ -1434,15 +1457,19 @@ async function main() {
       try {
         labels = Array.from(await batch.labels.data());
         const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
-        const syntheticEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 8);
-        const runtimeEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 2);
+        const syntheticEpochs = smokeSizedRun
+          ? 1
+          : Math.max(state.epochs, cadenceSpeedMode(options) ? 4 : 8);
+        const runtimeEpochs = smokeSizedRun
+          ? 1
+          : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 2);
         history = await model.fit(
           [batch.board, batch.global],
           modelTargets(batch),
           {
             epochs: syntheticEpochs,
             batchSize: 16,
-            shuffle: !task104DeterministicInvariantMode(),
+            shuffle: !deterministicTrainingMode(options, state),
             verbose: 0
           }
         );
@@ -1450,7 +1477,8 @@ async function main() {
           model,
           state.seed + game * 1543,
           state.curriculum.currentStageIndex,
-          runtimeEpochs
+          runtimeEpochs,
+          deterministicTrainingMode(options, state)
         ) || history;
         predictionTensor = model.predict([batch.board, batch.global]);
         prediction = Array.from(await predictionValueTensor(predictionTensor).data());
@@ -1492,7 +1520,7 @@ async function main() {
           : null,
         episodeLength,
         winner,
-        durationMs: task104DeterministicInvariantMode() ? 0 : Date.now() - started,
+        durationMs: deterministicTrainingMode(options, state) ? 0 : Date.now() - started,
         timestamp: state.updatedAt
       };
       const shouldEvaluate = shouldEvaluateTrainingStep(state, options.evaluationCadence);
