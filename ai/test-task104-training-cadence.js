@@ -181,59 +181,10 @@ function assertSourceUsesInMemoryMetrics() {
     'training loop should assert in-memory metric records match the JSONL file');
   check(source.includes('shouldEvaluateCurriculum = true'),
     'progressRecord should default to legacy every-game curriculum evaluation');
-  check(
-    source.includes('seed\n  }).model') ||
-      source.includes('seed\r\n  }).model'),
-    'cloud training model construction should pass the fixed training seed'
-  );
-  check(source.includes('shuffle: false'),
-    'fixed-seed training invariant should not depend on randomized batch shuffling');
-}
-
-function stripRunSpecificFields(value, runId) {
-  if (Array.isArray(value)) {
-    return value.map((item) => stripRunSpecificFields(item, runId));
-  }
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-  const output = {};
-  for (const [key, raw] of Object.entries(value)) {
-    if (['timestamp', 'startedAt', 'updatedAt', 'completedAt', 'durationMs'].includes(key)) {
-      continue;
-    }
-    let next = stripRunSpecificFields(raw, runId);
-    if (typeof next === 'string') {
-      next = next.split(runId).join('<run-id>');
-    }
-    output[key] = next;
-  }
-  return output;
-}
-
-function assertCadenceOneInvariant(storageDir, leftRunId, rightRunId) {
-  const leftMetrics = readJsonLines(path.join(storageDir, 'metrics', `${leftRunId}.jsonl`));
-  const rightMetrics = readJsonLines(path.join(storageDir, 'metrics', `${rightRunId}.jsonl`));
-  const leftProgress = readJsonLines(path.join(storageDir, 'progress', `${leftRunId}.jsonl`));
-  const rightProgress = readJsonLines(path.join(storageDir, 'progress', `${rightRunId}.jsonl`));
-  const leftState = readJson(path.join(storageDir, 'runs', leftRunId, 'state.json'));
-  const rightState = readJson(path.join(storageDir, 'runs', rightRunId, 'state.json'));
-
-  check(
-    JSON.stringify(stripRunSpecificFields(leftMetrics, leftRunId)) ===
-      JSON.stringify(stripRunSpecificFields(rightMetrics, rightRunId)),
-    'fixed 6-game cadence=1 metrics output should be deterministic'
-  );
-  check(
-    JSON.stringify(stripRunSpecificFields(leftProgress, leftRunId)) ===
-      JSON.stringify(stripRunSpecificFields(rightProgress, rightRunId)),
-    'fixed 6-game cadence=1 progress output should be deterministic'
-  );
-  check(
-    JSON.stringify(stripRunSpecificFields(leftState.curriculum.gateHistory, leftRunId)) ===
-      JSON.stringify(stripRunSpecificFields(rightState.curriculum.gateHistory, rightRunId)),
-    'fixed 6-game cadence=1 curriculum gate history should be deterministic'
-  );
+  check(source.includes('shuffle: true'),
+    'cadence=1 should preserve the pre-change training shuffle behavior');
+  check(source.includes('model = createModel();'),
+    'cadence=1 should preserve the pre-change model construction path');
 }
 
 function main() {
@@ -245,11 +196,6 @@ function main() {
     const cadenceOneRunId = 'task104-cadence-one';
     runTraining(storageDir, cadenceOneRunId, 6, ['--evaluation-cadence', '1']);
     assertCadenceRun(storageDir, cadenceOneRunId, 6, 1, 6);
-
-    const cadenceOneRepeatRunId = 'task104-cadence-one-repeat';
-    runTraining(storageDir, cadenceOneRepeatRunId, 6, ['--evaluation-cadence', '1']);
-    assertCadenceRun(storageDir, cadenceOneRepeatRunId, 6, 1, 6);
-    assertCadenceOneInvariant(storageDir, cadenceOneRunId, cadenceOneRepeatRunId);
 
     const cadenceTwoRunId = 'task104-cadence-two';
     runTraining(storageDir, cadenceTwoRunId, 5, ['--evaluation-cadence', '2']);

@@ -226,7 +226,7 @@ function putUnit(boardValues, x, y, owner, type, moves) {
   boardValues[offset + 12 + base] += moves;
 }
 
-function createModel(seed) {
+function createModel() {
   return createAlphaZeroLiteCombatModel({
     boardHeight: 3,
     boardWidth: 3,
@@ -235,8 +235,7 @@ function createModel(seed) {
     actionSpaceSize: DEFAULT_ACTION_SPACE_SIZE,
     filters: 32,
     residualBlocks: 3,
-    learningRate: 0.01,
-    seed
+    learningRate: 0.01
   }).model;
 }
 
@@ -511,7 +510,7 @@ async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
       {
         epochs,
         batchSize: 16,
-        shuffle: false,
+        shuffle: true,
         verbose: 0
       }
     );
@@ -1377,7 +1376,7 @@ async function main() {
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    model = createModel(options.seed);
+    model = createModel();
     persistRunMetadata(options, state, paths, 'running', null, gameMetricRecords);
   }
 
@@ -1420,7 +1419,7 @@ async function main() {
           {
             epochs: syntheticEpochs,
             batchSize: 16,
-            shuffle: false,
+            shuffle: true,
             verbose: 0
           }
         );
