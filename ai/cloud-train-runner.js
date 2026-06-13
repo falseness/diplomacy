@@ -354,54 +354,80 @@ function makeBatch(seed, game) {
   };
 }
 
+const runtimeProjectionBucketCache = new Map();
+
+function runtimeProjectionBuckets(width, height) {
+  const key = width + 'x' + height;
+  const cached = runtimeProjectionBucketCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const buckets = [];
+  for (let xBucket = 0; xBucket < 3; xBucket += 1) {
+    for (let yBucket = 0; yBucket < 3; yBucket += 1) {
+      const xStart = Math.floor(xBucket * width / 3);
+      const xEnd = Math.min(
+        width,
+        Math.max(xStart + 1, Math.floor((xBucket + 1) * width / 3))
+      );
+      const yStart = Math.floor(yBucket * height / 3);
+      const yEnd = Math.min(
+        height,
+        Math.max(yStart + 1, Math.floor((yBucket + 1) * height / 3))
+      );
+      buckets.push({
+        xStart,
+        xEnd,
+        yStart,
+        yEnd,
+        xValue: xBucket / 2,
+        yValue: yBucket / 2
+      });
+    }
+  }
+  runtimeProjectionBucketCache.set(key, buckets);
+  return buckets;
+}
+
 function projectRuntimeVectorForModel(vectorizedGrid) {
   const board = vectorizedGrid[0];
   const globalValue = 0;
   const width = board.length;
   const height = width ? board[0].length : 0;
-  const projected = [];
-  for (let xBucket = 0; xBucket < 3; xBucket += 1) {
-    for (let yBucket = 0; yBucket < 3; yBucket += 1) {
-      const xStart = Math.floor(xBucket * width / 3);
-      const xEnd = Math.max(xStart + 1, Math.floor((xBucket + 1) * width / 3));
-      const yStart = Math.floor(yBucket * height / 3);
-      const yEnd = Math.max(yStart + 1, Math.floor((yBucket + 1) * height / 3));
-      const sums = new Array(21).fill(0);
-      let cells = 0;
-      for (let x = xStart; x < Math.min(width, xEnd); x += 1) {
-        for (let y = yStart; y < Math.min(height, yEnd); y += 1) {
-          const cell = board[x][y] || [];
-          const unitOwner = Number(cell[1]) || 0;
-          if (unitOwner > 0) {
-            sums[0] += 1;
-            sums[2] += Number(cell[11]) || 0;
-            sums[4] += Number(cell[9]) || 0;
-            sums[6] += Number(cell[10]) || 0;
-            sums[12] += Number(cell[7]) || 0;
-          } else if (unitOwner < 0) {
-            sums[1] += 1;
-            sums[3] += Number(cell[11]) || 0;
-            sums[5] += Number(cell[9]) || 0;
-            sums[7] += Number(cell[10]) || 0;
-            sums[13] += Number(cell[7]) || 0;
-          }
-          const townOwner = Number(cell[13]) || 0;
-          if (townOwner > 0) {
-            sums[8] += 1;
-            sums[10] += Number(cell[14]) || 0;
-          } else if (townOwner < 0) {
-            sums[9] += 1;
-            sums[11] += Number(cell[14]) || 0;
-          }
-          cells += 1;
+  const projected = new Array(3 * 3 * 21).fill(0);
+  const buckets = runtimeProjectionBuckets(width, height);
+  for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
+    const bucket = buckets[bucketIndex];
+    const offset = bucketIndex * 21;
+    for (let x = bucket.xStart; x < bucket.xEnd; x += 1) {
+      for (let y = bucket.yStart; y < bucket.yEnd; y += 1) {
+        const cell = board[x][y] || [];
+        const unitOwner = Number(cell[1]) || 0;
+        if (unitOwner > 0) {
+          projected[offset] += 1;
+          projected[offset + 2] += Number(cell[11]) || 0;
+          projected[offset + 4] += Number(cell[9]) || 0;
+          projected[offset + 6] += Number(cell[10]) || 0;
+          projected[offset + 12] += Number(cell[7]) || 0;
+        } else if (unitOwner < 0) {
+          projected[offset + 1] += 1;
+          projected[offset + 3] += Number(cell[11]) || 0;
+          projected[offset + 5] += Number(cell[9]) || 0;
+          projected[offset + 7] += Number(cell[10]) || 0;
+          projected[offset + 13] += Number(cell[7]) || 0;
+        }
+        const townOwner = Number(cell[13]) || 0;
+        if (townOwner > 0) {
+          projected[offset + 8] += 1;
+          projected[offset + 10] += Number(cell[14]) || 0;
+        } else if (townOwner < 0) {
+          projected[offset + 9] += 1;
+          projected[offset + 11] += Number(cell[14]) || 0;
         }
       }
-      sums[14] = xBucket / 2;
-      sums[15] = yBucket / 2;
-      for (let channel = 0; channel < sums.length; channel += 1) {
-        projected.push(sums[channel]);
-      }
     }
+    projected[offset + 14] = bucket.xValue;
+    projected[offset + 15] = bucket.yValue;
   }
   return { board: projected, globalValue };
 }
@@ -430,7 +456,9 @@ function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
     const predictions = [];
     for (const vectorizedGrid of vectorizedGrids) {
       const example = runtimeCombatTeacherLabel(vectorizedGrid);
-      boardValues.push(...example.board);
+      for (let index = 0; index < example.board.length; index += 1) {
+        boardValues.push(example.board[index]);
+      }
       globalValues.push(example.globalValue);
       labels.push(example.label);
       policies.push(oneHotPolicy(actionIndexFromProjectedBoard(example.board)));
@@ -479,7 +507,7 @@ async function fitRuntimeCombatTeacherBatch(model, seed, stageIndex, epochs) {
       modelTargets(runtimeBatch),
       {
         epochs,
-        batchSize: 8,
+        batchSize: 16,
         shuffle: true,
         verbose: 0
       }
@@ -1356,7 +1384,7 @@ async function main() {
           modelTargets(batch),
           {
             epochs: syntheticEpochs,
-            batchSize: 8,
+            batchSize: 16,
             shuffle: true,
             verbose: 0
           }

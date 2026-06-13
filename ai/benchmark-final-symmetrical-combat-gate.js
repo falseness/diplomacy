@@ -113,27 +113,42 @@ function nearestDistance(coord, targets) {
   return Number.isFinite(result) ? result : 0;
 }
 
+function nearestDistanceFlat(x, y, targets) {
+  let result = Infinity;
+  for (let index = 0; index < targets.length; index += 2) {
+    const tx = targets[index];
+    const ty = targets[index + 1];
+    const distance = Math.max(
+      Math.abs(x - tx),
+      Math.abs(y - ty),
+      Math.abs(x + y - tx - ty)
+    );
+    if (distance < result) {
+      result = distance;
+    }
+  }
+  return Number.isFinite(result) ? result : 0;
+}
+
 function scoreCombatVector(vector) {
   const board = vector[0] || [];
   const ownUnits = [];
   const enemyUnits = [];
-  const ownTowns = [];
   const enemyTowns = [];
   let score = 0;
 
   for (let x = 0; x < board.length; ++x) {
     for (let y = 0; y < (board[x] || []).length; ++y) {
       const cell = board[x][y] || [];
-      const coord = { x, y };
       const unitOwner = cellValue(cell, 1);
       const unitHp = cellValue(cell, 11);
       const unitHpRatio = cellValue(cell, 50);
       if (unitOwner > 0) {
-        ownUnits.push(coord);
+        ownUnits.push(x, y);
         score += unitHp * 20 + unitHpRatio * 100;
       }
       else if (unitOwner < 0) {
-        enemyUnits.push(coord);
+        enemyUnits.push(x, y);
         score -= 100000 + unitHp * 10000 + unitHpRatio * 20000;
       }
 
@@ -141,11 +156,10 @@ function scoreCombatVector(vector) {
         const townOwner = cellValue(cell, 13);
         const townHp = cellValue(cell, 14);
         if (townOwner > 0) {
-          ownTowns.push(coord);
           score += 50000 + townHp * 50000;
         }
         else if (townOwner < 0) {
-          enemyTowns.push(coord);
+          enemyTowns.push(x, y);
           score -= 50000 + townHp * 50000;
         }
       }
@@ -159,8 +173,12 @@ function scoreCombatVector(vector) {
 
   const enemyObjectives = enemyTowns.length ? enemyTowns : enemyUnits;
   const immediateTargets = enemyUnits.length ? enemyUnits : enemyObjectives;
-  for (const unit of ownUnits) {
-    score -= nearestDistance(unit, immediateTargets) * 5000;
+  for (let index = 0; index < ownUnits.length; index += 2) {
+    score -= nearestDistanceFlat(
+      ownUnits[index],
+      ownUnits[index + 1],
+      immediateTargets
+    ) * 5000;
   }
 
   return score;

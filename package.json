@@ -68,6 +68,8 @@
     "test-fast-generated-map-invariants": "node ai/test-fast-generated-map-invariants.js",
     "test-fast-action-coverage": "node ai/test-fast-action-coverage.js",
     "test-ai-fast-candidate-scoring": "node ai/test-ai-fast-candidate-scoring.js",
+    "test-model-predict-batching": "node ai/test-model-predict-batching.js",
+    "benchmark-model-predict-batching": "node ai/benchmark-model-predict-batching.js",
     "benchmark": "node ai/benchmark.js",
     "test-benchmark": "node ai/test-benchmark-harness.js",
     "benchmark-trained": "node ai/benchmark-trained-model.js",

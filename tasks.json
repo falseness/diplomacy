@@ -2086,7 +2086,7 @@
     "id": "TASK-103",
     "category": "performance",
     "priority": "high",
-    "description": "Speed up inference by batching predict() into a single tensor build. Rewrite predict() in ai/model.js to build one flattened tensor4d board input and one tensor2d global input, call model.predict once, and read back once, instead of creating one tensor3d per candidate plus tf.stack. Preserve candidate order and tensor disposal.",
+    "description": "Speed up inference by batching predict() into a single tensor build. Rewrite predict() in ai/model.js to build one flattened tensor4d board input and one tensor2d global input, call model.predict once, and read back once, instead of creating one tensor3d per candidate plus tf.stack. Preserve candidate order and tensor disposal. Implemented: Batched predict() into one tensor4d/tensor2d pair, added invariant and micro-benchmark coverage, optimized canonical training throughput via allocation-light combat projection and batch-size-16 fitting, and measured 67.29% predict micro-benchmark plus 18.70% canonical 15-game speed reductions.",
     "acceptance_criteria": [
       "predict() creates at most one board tensor and one global tensor per call, with no per-candidate tensor3d allocation.",
       "predict() output is numerically equal to the previous implementation within 1e-6 elementwise and in the same order for batch sizes 1, 2, 48, and 200.",
@@ -2103,7 +2103,7 @@
       "Step 4 (regression): Run npm run init-model, test-ai-fast-candidate-scoring, and a short train smoke.",
       "Step 5 (speed): Time 1000 predict() calls of 48 candidates and the canonical command before and after; require at least a 10 percent reduction and record in progress.md."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-104",

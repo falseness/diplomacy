@@ -378,25 +378,42 @@ async function saveModel() {
 }
 
 function predict(model, xValidateArr) {
+  if (xValidateArr.length == 0) {
+    return []
+  }
   return tf.tidy(() => {
-    let xValidate = []
-    for (let i = 0; i < xValidateArr.length; ++i) {
-      xValidate.push(tf.tensor3d(xValidateArr[i][0]))
+    const firstBoard = xValidateArr[0][0]
+    const boardHeight = firstBoard.length
+    const boardWidth = firstBoard[0].length
+    const channels = firstBoard[0][0].length
+    const batchSize = xValidateArr.length
+    const boardValues = new Float32Array(batchSize * boardHeight * boardWidth * channels)
+    const globalValues = new Float32Array(batchSize)
+    let offset = 0
+    for (let batch = 0; batch < batchSize; ++batch) {
+      const board = xValidateArr[batch][0]
+      if (board.length != boardHeight ||
+          board[0].length != boardWidth ||
+          board[0][0].length != channels) {
+        throw new Error('predict() requires every candidate board to have the same shape')
+      }
+      for (let x = 0; x < boardHeight; ++x) {
+        for (let y = 0; y < boardWidth; ++y) {
+          const cell = board[x][y]
+          for (let channel = 0; channel < channels; ++channel) {
+            boardValues[offset++] = cell[channel]
+          }
+        }
+      }
+      globalValues[batch] = xValidateArr[batch][1]
     }
-    let xGlobalVariables = []
-    for (let i = 0; i < xValidateArr.length; ++i) {
-      xGlobalVariables.push(xValidateArr[i][1])
-    }
-    let tfInput = tf.stack(xValidate)
-    let tfGlobal = tf.stack(xGlobalVariables)
+    let tfInput = tf.tensor4d(
+      boardValues,
+      [batchSize, boardHeight, boardWidth, channels]
+    )
+    let tfGlobal = tf.tensor2d(globalValues, [batchSize, 1])
     let tf_result = model.predict([tfInput, tfGlobal])
     let result = getPredictionValueTensor(tf_result).arraySync()
-    tfInput.dispose()
-    tfGlobal.dispose()
-    disposePredictionResult(tf_result)
-    for (let i = 0; i < xValidate.length; ++i) {
-      xValidate[i].dispose()
-    }
     return result
   })
 }
