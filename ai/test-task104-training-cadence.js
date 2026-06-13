@@ -21,7 +21,7 @@ function readJsonLines(filePath) {
     .map((line) => JSON.parse(line));
 }
 
-function runTraining(storageDir, runId, extraArgs) {
+function runTraining(storageDir, runId, games, extraArgs) {
   const env = {
     ...process.env,
     PATH: `${node20BinDir()}:${process.env.PATH || ''}`
@@ -32,7 +32,7 @@ function runTraining(storageDir, runId, extraArgs) {
       './train.sh',
       '--storage-dir', storageDir,
       '--run-id', runId,
-      '--games', '5',
+      '--games', String(games),
       '--epochs', '1',
       '--seed', '104104',
       '--checkpoint-interval', '1',
@@ -78,7 +78,7 @@ function summarizeGameRecords(records) {
   };
 }
 
-function assertCadenceRun(storageDir, runId, cadence, expectedEvaluations) {
+function assertCadenceRun(storageDir, runId, games, cadence, expectedEvaluations) {
   const metricsPath = path.join(storageDir, 'metrics', `${runId}.jsonl`);
   const progressPath = path.join(storageDir, 'progress', `${runId}.jsonl`);
   const summaryPath = path.join(storageDir, 'metrics', `${runId}.summary.json`);
@@ -88,8 +88,8 @@ function assertCadenceRun(storageDir, runId, cadence, expectedEvaluations) {
   const gameRecords = readJsonLines(metricsPath)
     .filter((record) => record.type === 'game');
   const progressRecords = readJsonLines(progressPath);
-  check(gameRecords.length === 5, 'metrics rows should equal games');
-  check(progressRecords.length === 5, 'progress rows should equal games');
+  check(gameRecords.length === games, 'metrics rows should equal games');
+  check(progressRecords.length === games, 'progress rows should equal games');
   check(gameRecords.every((record, index) => record.game === index + 1),
     'metrics rows should preserve one row per completed game');
   check(progressRecords.every((record, index) => record.game === index + 1),
@@ -109,7 +109,7 @@ function assertCadenceRun(storageDir, runId, cadence, expectedEvaluations) {
   const deferredProgressRows = progressRecords.filter((record) =>
     record.simpleAiPlayerWinrate.reason === 'deferred until the configured evaluation cadence'
   ).length;
-  check(deferredProgressRows === 5 - expectedEvaluations,
+  check(deferredProgressRows === games - expectedEvaluations,
     'non-cadence progress rows should defer curriculum benchmark work');
 
   if (cadence === 1) {
@@ -181,6 +181,59 @@ function assertSourceUsesInMemoryMetrics() {
     'training loop should assert in-memory metric records match the JSONL file');
   check(source.includes('shouldEvaluateCurriculum = true'),
     'progressRecord should default to legacy every-game curriculum evaluation');
+  check(
+    source.includes('seed\n  }).model') ||
+      source.includes('seed\r\n  }).model'),
+    'cloud training model construction should pass the fixed training seed'
+  );
+  check(source.includes('shuffle: false'),
+    'fixed-seed training invariant should not depend on randomized batch shuffling');
+}
+
+function stripRunSpecificFields(value, runId) {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripRunSpecificFields(item, runId));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const output = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (['timestamp', 'startedAt', 'updatedAt', 'completedAt', 'durationMs'].includes(key)) {
+      continue;
+    }
+    let next = stripRunSpecificFields(raw, runId);
+    if (typeof next === 'string') {
+      next = next.split(runId).join('<run-id>');
+    }
+    output[key] = next;
+  }
+  return output;
+}
+
+function assertCadenceOneInvariant(storageDir, leftRunId, rightRunId) {
+  const leftMetrics = readJsonLines(path.join(storageDir, 'metrics', `${leftRunId}.jsonl`));
+  const rightMetrics = readJsonLines(path.join(storageDir, 'metrics', `${rightRunId}.jsonl`));
+  const leftProgress = readJsonLines(path.join(storageDir, 'progress', `${leftRunId}.jsonl`));
+  const rightProgress = readJsonLines(path.join(storageDir, 'progress', `${rightRunId}.jsonl`));
+  const leftState = readJson(path.join(storageDir, 'runs', leftRunId, 'state.json'));
+  const rightState = readJson(path.join(storageDir, 'runs', rightRunId, 'state.json'));
+
+  check(
+    JSON.stringify(stripRunSpecificFields(leftMetrics, leftRunId)) ===
+      JSON.stringify(stripRunSpecificFields(rightMetrics, rightRunId)),
+    'fixed 6-game cadence=1 metrics output should be deterministic'
+  );
+  check(
+    JSON.stringify(stripRunSpecificFields(leftProgress, leftRunId)) ===
+      JSON.stringify(stripRunSpecificFields(rightProgress, rightRunId)),
+    'fixed 6-game cadence=1 progress output should be deterministic'
+  );
+  check(
+    JSON.stringify(stripRunSpecificFields(leftState.curriculum.gateHistory, leftRunId)) ===
+      JSON.stringify(stripRunSpecificFields(rightState.curriculum.gateHistory, rightRunId)),
+    'fixed 6-game cadence=1 curriculum gate history should be deterministic'
+  );
 }
 
 function main() {
@@ -190,12 +243,17 @@ function main() {
     assertSourceUsesInMemoryMetrics();
 
     const cadenceOneRunId = 'task104-cadence-one';
-    runTraining(storageDir, cadenceOneRunId, ['--evaluation-cadence', '1']);
-    assertCadenceRun(storageDir, cadenceOneRunId, 1, 5);
+    runTraining(storageDir, cadenceOneRunId, 6, ['--evaluation-cadence', '1']);
+    assertCadenceRun(storageDir, cadenceOneRunId, 6, 1, 6);
+
+    const cadenceOneRepeatRunId = 'task104-cadence-one-repeat';
+    runTraining(storageDir, cadenceOneRepeatRunId, 6, ['--evaluation-cadence', '1']);
+    assertCadenceRun(storageDir, cadenceOneRepeatRunId, 6, 1, 6);
+    assertCadenceOneInvariant(storageDir, cadenceOneRunId, cadenceOneRepeatRunId);
 
     const cadenceTwoRunId = 'task104-cadence-two';
-    runTraining(storageDir, cadenceTwoRunId, ['--evaluation-cadence', '2']);
-    assertCadenceRun(storageDir, cadenceTwoRunId, 2, Math.ceil(5 / 2));
+    runTraining(storageDir, cadenceTwoRunId, 5, ['--evaluation-cadence', '2']);
+    assertCadenceRun(storageDir, cadenceTwoRunId, 5, 2, Math.ceil(5 / 2));
   } finally {
     fs.rmSync(storageDir, { recursive: true, force: true });
   }

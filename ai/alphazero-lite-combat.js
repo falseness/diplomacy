@@ -36,12 +36,20 @@ function createMetadata(options = {}) {
   };
 }
 
-function residualBlock(input, filters, name) {
+function seededInitializer(kind, baseSeed, offset) {
+  if (baseSeed === undefined || baseSeed === null) {
+    return undefined;
+  }
+  return tf.initializers[kind]({ seed: baseSeed + offset });
+}
+
+function residualBlock(input, filters, name, baseSeed, seedOffset) {
   const conv1 = tf.layers.conv2d({
     filters,
     kernelSize: 3,
     padding: 'same',
     useBias: false,
+    kernelInitializer: seededInitializer('glorotUniform', baseSeed, seedOffset),
     name: `${name}_conv1`
   }).apply(input);
   const bn1 = tf.layers.batchNormalization({ name: `${name}_bn1` }).apply(conv1);
@@ -54,6 +62,7 @@ function residualBlock(input, filters, name) {
     kernelSize: 3,
     padding: 'same',
     useBias: false,
+    kernelInitializer: seededInitializer('glorotUniform', baseSeed, seedOffset + 1),
     name: `${name}_conv2`
   }).apply(relu1);
   const bn2 = tf.layers.batchNormalization({ name: `${name}_bn2` }).apply(conv2);
@@ -71,6 +80,7 @@ function createAlphaZeroLiteCombatModel(options = {}) {
   const filters = options.filters || 32;
   const residualBlocks = options.residualBlocks || 2;
   const learningRate = options.learningRate || 0.001;
+  const seed = options.seed;
 
   const boardInput = tf.input({ shape: boardShape, name: 'board' });
   const globalInput = tf.input({ shape: globalShape, name: 'global_variables' });
@@ -80,10 +90,11 @@ function createAlphaZeroLiteCombatModel(options = {}) {
     kernelSize: 3,
     padding: 'same',
     activation: 'relu',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 1),
     name: 'combat_trunk'
   }).apply(boardInput);
   for (let i = 0; i < residualBlocks; i += 1) {
-    trunk = residualBlock(trunk, filters, `combat_residual_${i + 1}`);
+    trunk = residualBlock(trunk, filters, `combat_residual_${i + 1}`, seed, 10 + i * 2);
   }
 
   const policyConv = tf.layers.conv2d({
@@ -91,17 +102,20 @@ function createAlphaZeroLiteCombatModel(options = {}) {
     kernelSize: 1,
     padding: 'same',
     activation: 'relu',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 100),
     name: 'policy_conv'
   }).apply(trunk);
   const policyFlat = tf.layers.flatten({ name: 'policy_flatten' }).apply(policyConv);
   const policyHidden = tf.layers.dense({
     units: Math.max(32, Math.min(256, actionSpaceSize)),
     activation: 'relu',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 101),
     name: 'policy_hidden'
   }).apply(policyFlat);
   const policyOutput = tf.layers.dense({
     units: actionSpaceSize,
     activation: 'softmax',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 102),
     name: metadata.outputs.policy
   }).apply(policyHidden);
 
@@ -110,6 +124,7 @@ function createAlphaZeroLiteCombatModel(options = {}) {
     kernelSize: 1,
     padding: 'same',
     activation: 'relu',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 200),
     name: 'value_conv'
   }).apply(trunk);
   const valuePool = tf.layers.globalAveragePooling2d({
@@ -121,11 +136,13 @@ function createAlphaZeroLiteCombatModel(options = {}) {
   const valueHidden = tf.layers.dense({
     units: 32,
     activation: 'relu',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 201),
     name: 'value_hidden'
   }).apply(valueMerged);
   const valueOutput = tf.layers.dense({
     units: 1,
     activation: 'tanh',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 202),
     name: metadata.outputs.value
   }).apply(valueHidden);
 
