@@ -198,9 +198,9 @@ function assertSourceUsesInMemoryMetrics() {
   check(source.includes('DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT'),
     'training cadence test should have deterministic invariant controls');
   check(source.includes('function deterministicTrainingMode(options, state)'),
-    'cadence=1 fixed-seed runs should use deterministic training mode');
-  check(source.includes('return options && options.evaluationCadence === 1;'),
-    'cadence=1 should enable the deterministic output-identical invariant by default');
+    'explicit invariant runs should use deterministic training mode');
+  check(source.includes('return task104DeterministicInvariantMode();'),
+    'normal cadence=1 runs should preserve the pre-change non-deterministic training path');
   check(source.includes('function cadenceSpeedMode(options)'),
     'cadence K should have an explicit training-throughput mode');
   check(source.includes('cadenceSpeedMode(options) ? 4 : 8'),
@@ -210,11 +210,11 @@ function assertSourceUsesInMemoryMetrics() {
   check(source.includes('shouldEvaluateCurriculum = true'),
     'progressRecord should default to legacy every-game curriculum evaluation');
   check(source.includes('shuffle: !deterministicTrainingMode(options, state)'),
-    'cadence=1 should use unshuffled deterministic fitting for the output-identical invariant');
+    'normal cadence=1 should preserve pre-change shuffle outside deterministic invariant mode');
   check(source.includes('model = createModel(deterministicTrainingMode(options, state) ? state.seed : undefined);'),
-    'cadence=1 should seed model construction for the output-identical invariant');
-  check(source.includes('durationMs: deterministicTrainingMode(options, state) ? 0 : Date.now() - started'),
-    'cadence=1 should not write volatile duration fields');
+    'normal cadence=1 should preserve the pre-change model construction path');
+  check(source.includes('durationMs: task104DeterministicInvariantMode() ? 0 : Date.now() - started'),
+    'normal cadence=1 should preserve pre-change duration fields');
 }
 
 function assertCadenceOneMatchesLegacy(storageDir) {
