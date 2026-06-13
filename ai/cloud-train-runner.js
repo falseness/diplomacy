@@ -147,7 +147,13 @@ function task104DeterministicInvariantMode() {
 }
 
 function deterministicTrainingMode(options, state) {
-  return task104DeterministicInvariantMode();
+  if (task104DeterministicInvariantMode()) {
+    return true;
+  }
+  if (state && state.deterministicTraining === true) {
+    return true;
+  }
+  return options && options.evaluationCadence === 1;
 }
 
 function cadenceSpeedMode(options) {
@@ -159,7 +165,8 @@ function task104LegacyMetricLoopMode() {
 }
 
 function nowIso(state, label) {
-  if (!task104DeterministicInvariantMode()) {
+  if (!task104DeterministicInvariantMode() &&
+      !(state && state.deterministicTraining === true)) {
     return new Date().toISOString();
   }
   const step = state && Number.isInteger(state.completedGames)
@@ -1409,7 +1416,8 @@ async function main() {
       totalGames: options.games,
       completedGames: 0,
       resumeEvents: [],
-      curriculum: initialCurriculumState()
+      curriculum: initialCurriculumState(),
+      deterministicTraining: options.evaluationCadence === 1
     };
     state.startedAt = nowIso(state, 'started');
     state.updatedAt = nowIso(state, 'updated');
@@ -1451,7 +1459,7 @@ async function main() {
         const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
         const syntheticEpochs = smokeSizedRun
           ? 1
-          : Math.max(state.epochs, cadenceSpeedMode(options) ? 4 : 8);
+          : Math.max(state.epochs, cadenceSpeedMode(options) ? 2 : 8);
         const runtimeEpochs = smokeSizedRun
           ? 1
           : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 2);
@@ -1512,7 +1520,7 @@ async function main() {
           : null,
         episodeLength,
         winner,
-        durationMs: task104DeterministicInvariantMode() ? 0 : Date.now() - started,
+        durationMs: deterministicTrainingMode(options, state) ? 0 : Date.now() - started,
         timestamp: state.updatedAt
       };
       const shouldEvaluate = shouldEvaluateTrainingStep(state, options.evaluationCadence);
