@@ -1079,7 +1079,14 @@ function shouldEvaluateTrainingStep(state, cadence) {
     state.completedGames === state.totalGames;
 }
 
-async function progressRecord(options, state, metric, previousRecords, model, shouldEvaluateCurriculum) {
+async function progressRecord(
+  options,
+  state,
+  metric,
+  previousRecords,
+  model,
+  shouldEvaluateCurriculum = true
+) {
   const summary = summarizeMetrics(previousRecords.concat(metric));
   const checkpointPointer = readLatestCheckpointPointer(options);
   const oldVsNewEvaluation = metric.oldVsNewEvaluation || {

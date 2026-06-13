@@ -144,6 +144,8 @@ function assertSourceUsesInMemoryMetrics() {
     'training loop should not re-read the full metrics JSONL per game');
   check(source.includes('assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);'),
     'training loop should assert in-memory metric records match the JSONL file');
+  check(source.includes('shouldEvaluateCurriculum = true'),
+    'progressRecord should default to legacy every-game curriculum evaluation');
 }
 
 function main() {
