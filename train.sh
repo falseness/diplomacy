@@ -24,6 +24,7 @@ curriculum_lr_reduction_attempted=false
 curriculum_lr_reduction_improved=false
 evaluate_latest=false
 fail_after_game=0
+workers=1
 
 usage() {
   cat <<'EOF'
@@ -57,6 +58,7 @@ Options:
                              Mark the lower learning-rate attempt as improving
   --evaluate-latest         Load and evaluate the latest complete checkpoint
   --fail-after-game N       Force a failure after game N for recovery testing
+  --workers N               Runtime self-play workers for training batch generation (default: 1)
   -h, --help                Show this help
 
 Examples:
@@ -181,6 +183,11 @@ while (($#)); do
       fail_after_game="$2"
       shift 2
       ;;
+    --workers)
+      (($# >= 2)) || die "--workers requires a value"
+      workers="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -199,6 +206,7 @@ require_positive_integer "--old-vs-new-games" "$old_vs_new_games"
 require_positive_integer "--evaluation-cadence" "$evaluation_cadence"
 require_positive_integer "--plateau-window" "$plateau_window"
 require_positive_integer "--plateau-patience" "$plateau_patience"
+require_positive_integer "--workers" "$workers"
 [[ "$checkpoint_retain" =~ ^[0-9]+$ ]] || die "--checkpoint-retain must be a non-negative integer"
 [[ "$plateau_min_delta" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--plateau-min-delta must be a non-negative number"
 [[ "$curriculum_simple_winrate_threshold" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--curriculum-simple-winrate-threshold must be a non-negative number"
@@ -276,6 +284,7 @@ runner_args=(
   --curriculum-simple-winrate-threshold "$curriculum_simple_winrate_threshold"
   --curriculum-lr-reduction-attempted "$curriculum_lr_reduction_attempted"
   --curriculum-lr-reduction-improved "$curriculum_lr_reduction_improved"
+  --workers "$workers"
   --fail-after-game "$fail_after_game"
 )
 if [[ "$resume" == true ]]; then

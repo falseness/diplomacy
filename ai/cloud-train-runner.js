@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const tf = require('@tensorflow/tfjs-node');
+const {
+  Worker,
+  isMainThread,
+  parentPort
+} = require('worker_threads');
+const tf = isMainThread ? require('@tensorflow/tfjs-node') : null;
 const { runGame } = require('./benchmarkHarness');
 const {
   ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION,
@@ -108,9 +113,13 @@ function parseArgs(argv) {
     options['curriculum-lr-reduction-attempted'] === 'true';
   options.curriculumLearningRateReductionImproved =
     options['curriculum-lr-reduction-improved'] === 'true';
+  options.workers = options.workers === undefined ? 1 : Number(options.workers);
   options.failAfterGame = Number(options['fail-after-game']);
   options.storageDir = path.resolve(options['storage-dir']);
   options.runId = options['run-id'];
+  if (!Number.isInteger(options.workers) || options.workers < 1) {
+    fail('--workers must be a positive integer');
+  }
   return options;
 }
 
@@ -487,42 +496,141 @@ function runtimeCombatTeacherLabel(vectorizedGrid) {
   };
 }
 
-function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
-  const boardValues = [];
-  const globalValues = [];
-  const labels = [];
-  const policies = [];
+function runtimeCombatTeacherGameSeed(seed, stageIndex, game) {
+  return seed + stageIndex * 997 + game;
+}
+
+function collectRuntimeCombatTeacherGame(seed, stageIndex, game) {
+  const examples = [];
   const collectPredict = function collectPredict(_modelIdentifier, vectorizedGrids) {
     const predictions = [];
     for (const vectorizedGrid of vectorizedGrids) {
       const example = runtimeCombatTeacherLabel(vectorizedGrid);
+      examples.push({
+        board: example.board,
+        globalValue: example.globalValue,
+        label: example.label,
+        policy: oneHotPolicy(actionIndexFromProjectedBoard(example.board))
+      });
+      predictions.push([example.label]);
+    }
+    return predictions;
+  };
+  const gameSeed = runtimeCombatTeacherGameSeed(seed, stageIndex, game);
+  const result = runGame({
+    mapName: 'tiny-duel',
+    playerA: 'AIPlayer',
+    playerB: 'SimpleAiPlayer',
+    seed: gameSeed,
+    roundLimit: 80,
+    actionLimit: 12,
+    commandLimit: 60,
+    predictFunction: collectPredict,
+    modelIdentifier: {
+      teacher: 'runtime-combat-curriculum',
+      seed,
+      stageIndex
+    },
+    inferenceSource: 'runtime combat teacher labels for model training'
+  });
+  return {
+    game,
+    seed: gameSeed,
+    winnerSide: result.winnerSide,
+    winner: result.winner,
+    roundCount: result.roundCount,
+    inference: result.inference,
+    examples
+  };
+}
+
+class RuntimeTeacherWorkerPool {
+  constructor(workerCount) {
+    this.workerCount = Math.max(1, workerCount || 1);
+    this.nextJobId = 1;
+    this.nextWorkerIndex = 0;
+    this.pending = new Map();
+    this.workers = [];
+    if (this.workerCount <= 1) {
+      return;
+    }
+    for (let index = 0; index < this.workerCount; index += 1) {
+      const worker = new Worker(__filename);
+      worker.on('message', (message) => this.handleMessage(message));
+      worker.on('error', (error) => this.handleWorkerFailure(worker, error));
+      worker.on('exit', (code) => {
+        if (code !== 0) {
+          this.handleWorkerFailure(worker, new Error(`runtime teacher worker exited with code ${code}`));
+        }
+      });
+      this.workers.push(worker);
+    }
+  }
+
+  handleMessage(message) {
+    const pending = this.pending.get(message.id);
+    if (!pending) {
+      return;
+    }
+    this.pending.delete(message.id);
+    if (message.error) {
+      pending.reject(new Error(message.error));
+    } else {
+      pending.resolve(message.result);
+    }
+  }
+
+  handleWorkerFailure(worker, error) {
+    for (const [id, pending] of this.pending.entries()) {
+      if (pending.worker === worker) {
+        this.pending.delete(id);
+        pending.reject(error);
+      }
+    }
+  }
+
+  runRuntimeTeacherGame(job) {
+    if (this.workerCount <= 1) {
+      return Promise.resolve(collectRuntimeCombatTeacherGame(
+        job.seed,
+        job.stageIndex,
+        job.game
+      ));
+    }
+    const worker = this.workers[this.nextWorkerIndex % this.workers.length];
+    this.nextWorkerIndex += 1;
+    const id = this.nextJobId;
+    this.nextJobId += 1;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject, worker });
+      worker.postMessage({
+        id,
+        type: 'runtime-teacher-game',
+        job
+      });
+    });
+  }
+
+  async close() {
+    await Promise.all(this.workers.map((worker) => worker.terminate()));
+    this.workers = [];
+  }
+}
+
+function batchFromRuntimeTeacherGameResults(gameResults) {
+  const boardValues = [];
+  const globalValues = [];
+  const labels = [];
+  const policies = [];
+  for (const result of gameResults.slice().sort((a, b) => a.game - b.game)) {
+    for (const example of result.examples) {
       for (let index = 0; index < example.board.length; index += 1) {
         boardValues.push(example.board[index]);
       }
       globalValues.push(example.globalValue);
       labels.push(example.label);
-      policies.push(oneHotPolicy(actionIndexFromProjectedBoard(example.board)));
-      predictions.push([example.label]);
+      policies.push(example.policy);
     }
-    return predictions;
-  };
-  for (let game = 1; game <= 2; game += 1) {
-    runGame({
-      mapName: 'tiny-duel',
-      playerA: 'AIPlayer',
-      playerB: 'SimpleAiPlayer',
-      seed: seed + stageIndex * 997 + game,
-      roundLimit: 80,
-      actionLimit: 12,
-      commandLimit: 60,
-      predictFunction: collectPredict,
-      modelIdentifier: {
-        teacher: 'runtime-combat-curriculum',
-        seed,
-        stageIndex
-      },
-      inferenceSource: 'runtime combat teacher labels for model training'
-    });
   }
   const sampleCount = labels.length;
   if (!sampleCount) {
@@ -532,8 +640,131 @@ function makeRuntimeCombatTeacherBatch(seed, stageIndex) {
     board: tf.tensor4d(boardValues, [sampleCount, 3, 3, 21]),
     global: tf.tensor2d(globalValues, [sampleCount, 1]),
     policy: tf.tensor2d(policies, [sampleCount, DEFAULT_ACTION_SPACE_SIZE]),
-    labels: tf.tensor2d(labels, [sampleCount, 1])
+    labels: tf.tensor2d(labels, [sampleCount, 1]),
+    gameResults
   };
+}
+
+async function collectRuntimeCombatTeacherGames(seed, stageIndex, workerPool) {
+  const jobs = [];
+  for (let game = 1; game <= 2; game += 1) {
+    jobs.push({ seed, stageIndex, game });
+  }
+  if (workerPool) {
+    return Promise.all(jobs.map((job) => workerPool.runRuntimeTeacherGame(job)));
+  }
+  return jobs.map((job) => collectRuntimeCombatTeacherGame(
+    job.seed,
+    job.stageIndex,
+    job.game
+  ));
+}
+
+async function makeRuntimeCombatTeacherBatch(seed, stageIndex, workerPool) {
+  const gameResults = await collectRuntimeCombatTeacherGames(seed, stageIndex, workerPool);
+  return batchFromRuntimeTeacherGameResults(gameResults);
+}
+
+if (!isMainThread && parentPort) {
+  parentPort.on('message', (message) => {
+    if (!message || message.type !== 'runtime-teacher-game') {
+      return;
+    }
+    try {
+      parentPort.postMessage({
+        id: message.id,
+        result: collectRuntimeCombatTeacherGame(
+          message.job.seed,
+          message.job.stageIndex,
+          message.job.game
+        )
+      });
+    } catch (error) {
+      parentPort.postMessage({
+        id: message.id,
+        error: error.stack || error.message
+      });
+    }
+  });
+} else {
+  // Main-thread execution continues below.
+}
+
+function assertRuntimeTeacherGameResultsEqual(serialResult, workerResult) {
+  const comparable = (result) => ({
+    game: result.game,
+    seed: result.seed,
+    winnerSide: result.winnerSide,
+    winner: result.winner,
+    roundCount: result.roundCount,
+    inference: result.inference,
+    examples: result.examples
+  });
+  const serialJson = JSON.stringify(comparable(serialResult));
+  const workerJson = JSON.stringify(comparable(workerResult));
+  if (serialJson !== workerJson) {
+    fail(`worker runtime teacher result diverged for seed ${serialResult.seed}`);
+  }
+}
+
+async function verifyRuntimeTeacherWorkerInvariants(seedStart, stageIndex, workerCount) {
+  const pool = new RuntimeTeacherWorkerPool(workerCount);
+  try {
+    const comparisons = [];
+    for (let offset = 0; offset < 10; offset += 1) {
+      const seed = seedStart + offset;
+      comparisons.push(pool.runRuntimeTeacherGame({
+        seed,
+        stageIndex,
+        game: 1
+      }).then((workerResult) => {
+        const serialResult = collectRuntimeCombatTeacherGame(seed, stageIndex, 1);
+        assertRuntimeTeacherGameResultsEqual(serialResult, workerResult);
+        return workerResult;
+      }));
+    }
+    return await Promise.all(comparisons);
+  } finally {
+    await pool.close();
+  }
+}
+
+async function runtimeTeacherDatasetSignature(seed, stageIndex, workerCount) {
+  const pool = new RuntimeTeacherWorkerPool(workerCount);
+  try {
+    const results = await collectRuntimeCombatTeacherGames(seed, stageIndex, pool);
+    const records = [];
+    for (const result of results) {
+      for (const example of result.examples) {
+        records.push(JSON.stringify({
+          game: result.game,
+          board: example.board,
+          globalValue: example.globalValue,
+          label: example.label,
+          policy: example.policy
+        }));
+      }
+    }
+    return records.sort();
+  } finally {
+    await pool.close();
+  }
+}
+
+async function workerPoolDispatchProbe(workerCount, jobs) {
+  const pool = new RuntimeTeacherWorkerPool(workerCount);
+  try {
+    const results = await Promise.all(jobs.map((job) => pool.runRuntimeTeacherGame(job)));
+    return {
+      requestedWorkers: workerCount,
+      actualWorkers: pool.workers.length || 1,
+      dispatched: jobs.length,
+      collected: results.length,
+      seeds: results.map((result) => result.seed).sort((a, b) => a - b)
+    };
+  } finally {
+    await pool.close();
+  }
 }
 
 async function fitRuntimeCombatTeacherBatch(
@@ -541,9 +772,10 @@ async function fitRuntimeCombatTeacherBatch(
   seed,
   stageIndex,
   epochs,
-  deterministic
+  deterministic,
+  workerPool
 ) {
-  const runtimeBatch = makeRuntimeCombatTeacherBatch(seed, stageIndex);
+  const runtimeBatch = await makeRuntimeCombatTeacherBatch(seed, stageIndex, workerPool);
   if (!runtimeBatch) {
     return null;
   }
@@ -1241,6 +1473,7 @@ function manifestValue(options, state, paths, status, errorMessage) {
       plateauPatience: options.plateauPatience,
       curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold,
       evaluationCadence: options.evaluationCadence,
+      workers: options.workers,
     },
     progress: {
       completedGames: state.completedGames,
@@ -1318,6 +1551,8 @@ async function main() {
 
   fs.mkdirSync(runDir, { recursive: true });
   fs.mkdirSync(checkpointDir, { recursive: true });
+  fs.mkdirSync(path.dirname(finalDir), { recursive: true });
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
   fs.mkdirSync(path.dirname(metricsPath), { recursive: true });
   fs.mkdirSync(path.dirname(progressPath), { recursive: true });
 
@@ -1431,6 +1666,7 @@ async function main() {
 
   try {
     compileModel(model);
+    const runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
     if (!options.resume && state.completedGames === 0) {
       const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
       const pretrainPasses = smokeSizedRun ? 1 : 1;
@@ -1441,140 +1677,178 @@ async function main() {
           state.seed + 50000 + pretrain * 173,
           state.curriculum.currentStageIndex,
           pretrainEpochs,
-          deterministicTrainingMode(options, state)
+          deterministicTrainingMode(options, state),
+          runtimeTeacherWorkerPool
         );
       }
     }
-    const invocationStart = state.completedGames;
-    while (state.completedGames < state.totalGames) {
-      if (options.maxGamesThisRun > 0 &&
-          state.completedGames - invocationStart >= options.maxGamesThisRun) {
-        break;
-      }
-      const game = state.completedGames + 1;
-      const batch = makeBatch(state.seed, game);
-      const started = Date.now();
-      let history;
-      let labels;
-      let prediction;
-      let predictionTensor;
-      try {
-        labels = Array.from(await batch.labels.data());
-        const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
-        const shouldEvaluateGameNow = shouldEvaluateGame(
-          game,
-          state.totalGames,
-          options.evaluationCadence
-        );
-        const syntheticEpochs = smokeSizedRun
-          ? 1
-          : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 8);
-        const runtimeEpochs = smokeSizedRun
-          ? 1
-          : Math.max(state.epochs, 2);
-        history = await model.fit(
-          [batch.board, batch.global],
-          modelTargets(batch),
-          {
-            epochs: syntheticEpochs,
-            batchSize: 16,
-            shuffle: !deterministicTrainingMode(options, state),
-            verbose: 0
+    try {
+      const invocationStart = state.completedGames;
+      while (state.completedGames < state.totalGames) {
+        if (options.maxGamesThisRun > 0 &&
+            state.completedGames - invocationStart >= options.maxGamesThisRun) {
+          break;
+        }
+        const game = state.completedGames + 1;
+        const batch = makeBatch(state.seed, game);
+        const started = Date.now();
+        let history;
+        let labels;
+        let prediction;
+        let predictionTensor;
+        try {
+          labels = Array.from(await batch.labels.data());
+          const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
+          const shouldEvaluateGameNow = shouldEvaluateGame(
+            game,
+            state.totalGames,
+            options.evaluationCadence
+          );
+          const syntheticEpochs = smokeSizedRun
+            ? 1
+            : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 8);
+          const runtimeEpochs = smokeSizedRun
+            ? 1
+            : Math.max(state.epochs, 2);
+          const shouldFitRuntimeTeacher =
+            !cadenceSpeedMode(options) || shouldEvaluateGameNow;
+          const runtimeBatchPromise = shouldFitRuntimeTeacher && options.workers > 1
+            ? makeRuntimeCombatTeacherBatch(
+              state.seed + game * 1543,
+              state.curriculum.currentStageIndex,
+              runtimeTeacherWorkerPool
+            )
+            : null;
+          history = await model.fit(
+            [batch.board, batch.global],
+            modelTargets(batch),
+            {
+              epochs: syntheticEpochs,
+              batchSize: 16,
+              shuffle: !deterministicTrainingMode(options, state),
+              verbose: 0
+            }
+          );
+          if (!cadenceSpeedMode(options) || shouldEvaluateGameNow) {
+            if (runtimeBatchPromise) {
+              const runtimeBatch = await runtimeBatchPromise;
+              if (runtimeBatch) {
+                try {
+                  history = await model.fit(
+                    [runtimeBatch.board, runtimeBatch.global],
+                    modelTargets(runtimeBatch),
+                    {
+                      epochs: runtimeEpochs,
+                      batchSize: 16,
+                      shuffle: !deterministicTrainingMode(options, state),
+                      verbose: 0
+                    }
+                  );
+                } finally {
+                  runtimeBatch.board.dispose();
+                  runtimeBatch.global.dispose();
+                  runtimeBatch.policy.dispose();
+                  runtimeBatch.labels.dispose();
+                }
+              }
+            } else {
+              history = await fitRuntimeCombatTeacherBatch(
+                model,
+                state.seed + game * 1543,
+                state.curriculum.currentStageIndex,
+                runtimeEpochs,
+                deterministicTrainingMode(options, state),
+                runtimeTeacherWorkerPool
+              ) || history;
+            }
           }
-        );
-        if (!cadenceSpeedMode(options) || shouldEvaluateGameNow) {
-          history = await fitRuntimeCombatTeacherBatch(
-            model,
-            state.seed + game * 1543,
-            state.curriculum.currentStageIndex,
-            runtimeEpochs,
-            deterministicTrainingMode(options, state)
-          ) || history;
+          predictionTensor = model.predict([batch.board, batch.global]);
+          prediction = Array.from(await predictionValueTensor(predictionTensor).data());
+        } finally {
+          if (predictionTensor) {
+            disposePrediction(predictionTensor);
+          }
+          batch.board.dispose();
+          batch.global.dispose();
+          batch.policy.dispose();
+          batch.labels.dispose();
         }
-        predictionTensor = model.predict([batch.board, batch.global]);
-        prediction = Array.from(await predictionValueTensor(predictionTensor).data());
-      } finally {
-        if (predictionTensor) {
-          disposePrediction(predictionTensor);
+        const labelScore = labels.reduce((total, value) => total + value, 0);
+        const predictionScore = prediction.reduce((total, value) => total + value, 0);
+        const winner = labelScore === 0
+          ? 'draw'
+          : (predictionScore >= 0 ? 'red' : 'blue');
+        const episodeLength = labels.length * state.epochs;
+        state.completedGames = game;
+        state.updatedAt = nowIso(state, 'game');
+        state.status = state.completedGames === state.totalGames ? 'complete' : 'running';
+        if (game % options.checkpointInterval === 0 || game === state.totalGames) {
+          await saveCheckpoint(model, options, state, checkpointDir, 'interval');
         }
-        batch.board.dispose();
-        batch.global.dispose();
-        batch.policy.dispose();
-        batch.labels.dispose();
-      }
-      const labelScore = labels.reduce((total, value) => total + value, 0);
-      const predictionScore = prediction.reduce((total, value) => total + value, 0);
-      const winner = labelScore === 0
-        ? 'draw'
-        : (predictionScore >= 0 ? 'red' : 'blue');
-      const episodeLength = labels.length * state.epochs;
-      state.completedGames = game;
-      state.updatedAt = nowIso(state, 'game');
-      state.status = state.completedGames === state.totalGames ? 'complete' : 'running';
-      if (game % options.checkpointInterval === 0 || game === state.totalGames) {
-        await saveCheckpoint(model, options, state, checkpointDir, 'interval');
-      }
-      const previousRecords = task104LegacyMetricLoopMode()
-        ? metricRecords(metricsPath)
-        : gameMetricRecords.slice();
-      const loss = modelLoss(history);
-      const accuracyHistory = history.history.acc || history.history.accuracy || [];
-      const metric = {
-        type: 'game',
-        runId: options.runId,
-        game,
-        gamesPlayed: game,
-        epochs: state.epochs,
-        loss,
-        accuracy: accuracyHistory.length
-          ? accuracyHistory[accuracyHistory.length - 1]
-          : null,
-        episodeLength,
-        winner,
-        durationMs: deterministicTrainingMode(options, state) ? 0 : Date.now() - started,
-        timestamp: state.updatedAt
-      };
-      const shouldEvaluate = shouldEvaluateTrainingStep(state, options.evaluationCadence);
-      metric.oldVsNewEvaluation = shouldEvaluate
-        ? await evaluateNewVsOld(
-          options,
-          state,
-          model,
-          readOldEpochPointer(options)
-        )
-        : {
-          evaluated: false,
-          reason: 'deferred until the configured evaluation cadence',
-          games: 0,
-          oldCheckpoint: null,
-          newCheckpoint: null,
-          newWins: 0,
-          oldWins: 0,
-          draws: 0,
-          winrate: null
+        const previousRecords = task104LegacyMetricLoopMode()
+          ? metricRecords(metricsPath)
+          : gameMetricRecords.slice();
+        const loss = modelLoss(history);
+        const accuracyHistory = history.history.acc || history.history.accuracy || [];
+        const metric = {
+          type: 'game',
+          runId: options.runId,
+          game,
+          gamesPlayed: game,
+          epochs: state.epochs,
+          loss,
+          accuracy: accuracyHistory.length
+            ? accuracyHistory[accuracyHistory.length - 1]
+            : null,
+          episodeLength,
+          winner,
+          durationMs: deterministicTrainingMode(options, state) ? 0 : Date.now() - started,
+          timestamp: state.updatedAt
         };
-      const summary = summarizeMetrics(previousRecords.concat(metric));
-      metric.winRates = summary.winRates;
-      metric.benchmarkSummary = {
-        ...summary.benchmarkSummary,
-        oldVsNewWinrate: metric.oldVsNewEvaluation
-      };
-      appendJsonLine(metricsPath, metric);
-      if (!task104LegacyMetricLoopMode()) {
-        gameMetricRecords.push(metric);
-        assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);
-      } else {
-        gameMetricRecords = metricRecords(metricsPath);
+        const shouldEvaluate = shouldEvaluateTrainingStep(state, options.evaluationCadence);
+        metric.oldVsNewEvaluation = shouldEvaluate
+          ? await evaluateNewVsOld(
+            options,
+            state,
+            model,
+            readOldEpochPointer(options)
+          )
+          : {
+            evaluated: false,
+            reason: 'deferred until the configured evaluation cadence',
+            games: 0,
+            oldCheckpoint: null,
+            newCheckpoint: null,
+            newWins: 0,
+            oldWins: 0,
+            draws: 0,
+            winrate: null
+          };
+        const summary = summarizeMetrics(previousRecords.concat(metric));
+        metric.winRates = summary.winRates;
+        metric.benchmarkSummary = {
+          ...summary.benchmarkSummary,
+          oldVsNewWinrate: metric.oldVsNewEvaluation
+        };
+        appendJsonLine(metricsPath, metric);
+        if (!task104LegacyMetricLoopMode()) {
+          gameMetricRecords.push(metric);
+          assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);
+        } else {
+          gameMetricRecords = metricRecords(metricsPath);
+        }
+        appendJsonLine(
+          progressPath,
+          await progressRecord(options, state, metric, previousRecords, model, shouldEvaluate)
+        );
+        persistRunMetadata(options, state, paths, state.status, null, gameMetricRecords);
+        console.log(`Completed game ${game}/${state.totalGames}`);
+        if (options.failAfterGame === game) {
+          fail(`forced failure after game ${game}`);
+        }
       }
-      appendJsonLine(
-        progressPath,
-        await progressRecord(options, state, metric, previousRecords, model, shouldEvaluate)
-      );
-      persistRunMetadata(options, state, paths, state.status, null, gameMetricRecords);
-      console.log(`Completed game ${game}/${state.totalGames}`);
-      if (options.failAfterGame === game) {
-        fail(`forced failure after game ${game}`);
-      }
+    } finally {
+      await runtimeTeacherWorkerPool.close();
     }
 
     if (state.completedGames === state.totalGames) {
@@ -1614,7 +1888,7 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+if (require.main === module && isMainThread) {
   main().catch((error) => {
     console.error(`cloud training error: ${error.message}`);
     process.exitCode = 1;
@@ -1623,7 +1897,11 @@ if (require.main === module) {
 
 module.exports = {
   evaluateCurriculumSimpleAiWinrate,
+  collectRuntimeCombatTeacherGame,
   curriculumGateDecision,
   initialCurriculumState,
+  runtimeTeacherDatasetSignature,
+  verifyRuntimeTeacherWorkerInvariants,
+  workerPoolDispatchProbe,
   updateCurriculumState
 };
