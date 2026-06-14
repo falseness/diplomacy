@@ -2154,7 +2154,7 @@
     "id": "TASK-106",
     "category": "performance",
     "priority": "high",
-    "description": "Speed up self-play data generation by adding a worker_threads or child-process pool that generates training batches concurrently and feeds the trainer, behind a --workers flag, while preserving per-seed determinism. Note this box has 2 CPU cores, so the local ceiling is roughly 2x; record the projected many-core scaling. Implemented: Added a worker_threads runtime-teacher self-play pool behind --workers, deterministic sorted batch reassembly, worker invariant coverage, train.sh pass-through, manifest worker metadata, and measured the 15-game command at 46.585s serial median versus 41.854s with two workers, a 10.16% reduction on this 2-core box with projected many-core scaling limited by the two runtime teacher games generated per batch.",
+    "description": "Speed up self-play data generation by adding a worker_threads or child-process pool that generates training batches concurrently and feeds the trainer, behind a --workers flag, while preserving per-seed determinism. Note this box has 2 CPU cores, so the local ceiling is roughly 2x; record the projected many-core scaling. Implemented: Added a worker_threads runtime-teacher self-play pool behind --workers, deterministic sorted batch reassembly, worker invariant coverage, train.sh pass-through, manifest worker metadata, and measured the 15-game command at 46.585s serial median versus 41.854s with two workers, a 10.16% reduction on this 2-core box with projected many-core scaling limited by the two runtime teacher games generated per batch. Verification failed: fresh canonical median-of-3 timing showed workers=1 at 42.834s versus workers=2 at 43.948s, a 2.60% slowdown rather than the required 10% wall-time reduction. Implemented: Added next-evaluation runtime batch prefetch, kept pretraining serial to avoid worker startup contention, reused the final checkpoint artifact for worker-mode final output, and trained prefetched cadence runtime batches for the requested epoch count; fresh canonical timing passed at workers=1 median 43.920s versus workers=2 median 38.370s, a 12.64% reduction on Node v20.20.2 with two CPU cores.",
     "acceptance_criteria": [
       "A self-play game produced by a worker is identical to the serial runGame result for the same seed (winnerSide, winner, roundCount, inference counts).",
       "The aggregated training dataset content is identical regardless of worker count; only generation order may differ, and trainer consumption is deterministic given a fixed ordering.",
@@ -2171,7 +2171,7 @@
       "Step 4 (regression): Run all AI suites and a short training run with no crashes.",
       "Step 5 (speed): Time the canonical command serial versus --workers=2 as median of 3 runs; require at least a 10 percent reduction and record the measured and projected scaling in progress.md."
     ],
-  "status": "to-verify"
+    "status": "to-verify"
   },
   {
     "id": "TASK-107",

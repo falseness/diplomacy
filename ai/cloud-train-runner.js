@@ -821,6 +821,15 @@ async function saveModelAtomically(model, destination) {
   replaceDirectory(temporary, destination);
 }
 
+function copyDirectoryAtomically(source, destination) {
+  const temporary = `${destination}.tmp-${process.pid}`;
+  if (fs.existsSync(temporary)) {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+  fs.cpSync(source, temporary, { recursive: true });
+  replaceDirectory(temporary, destination);
+}
+
 function checkpointName(step) {
   return `step-${String(step).padStart(8, '0')}`;
 }
@@ -1666,7 +1675,36 @@ async function main() {
 
   try {
     compileModel(model);
-    const runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
+    let runtimeTeacherWorkerPool = null;
+    let runtimeBatchPrefetch = null;
+    const scheduleRuntimeBatchPrefetch = (afterCompletedGame) => {
+      if (options.workers <= 1 || runtimeBatchPrefetch) {
+        return;
+      }
+      for (let candidateGame = afterCompletedGame + 1;
+        candidateGame <= state.totalGames;
+        candidateGame += 1) {
+        if (!shouldEvaluateGame(
+          candidateGame,
+          state.totalGames,
+          options.evaluationCadence
+        )) {
+          continue;
+        }
+        const promise = makeRuntimeCombatTeacherBatch(
+          state.seed + candidateGame * 1543,
+          state.curriculum.currentStageIndex,
+          runtimeTeacherWorkerPool
+        );
+        promise.catch(() => {});
+        runtimeBatchPrefetch = {
+          game: candidateGame,
+          stageIndex: state.curriculum.currentStageIndex,
+          promise
+        };
+        return;
+      }
+    };
     if (!options.resume && state.completedGames === 0) {
       const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
       const pretrainPasses = smokeSizedRun ? 1 : 1;
@@ -1678,10 +1716,12 @@ async function main() {
           state.curriculum.currentStageIndex,
           pretrainEpochs,
           deterministicTrainingMode(options, state),
-          runtimeTeacherWorkerPool
+          null
         );
       }
     }
+    runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
+    scheduleRuntimeBatchPrefetch(state.completedGames);
     try {
       const invocationStart = state.completedGames;
       while (state.completedGames < state.totalGames) {
@@ -1709,16 +1749,26 @@ async function main() {
             : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 8);
           const runtimeEpochs = smokeSizedRun
             ? 1
-            : Math.max(state.epochs, 2);
+            : (options.workers > 1 && cadenceSpeedMode(options)
+              ? state.epochs
+              : Math.max(state.epochs, 2));
           const shouldFitRuntimeTeacher =
             !cadenceSpeedMode(options) || shouldEvaluateGameNow;
-          const runtimeBatchPromise = shouldFitRuntimeTeacher && options.workers > 1
-            ? makeRuntimeCombatTeacherBatch(
-              state.seed + game * 1543,
-              state.curriculum.currentStageIndex,
-              runtimeTeacherWorkerPool
-            )
-            : null;
+          let runtimeBatchPromise = null;
+          if (shouldFitRuntimeTeacher && options.workers > 1) {
+            if (runtimeBatchPrefetch &&
+                runtimeBatchPrefetch.game === game &&
+                runtimeBatchPrefetch.stageIndex === state.curriculum.currentStageIndex) {
+              runtimeBatchPromise = runtimeBatchPrefetch.promise;
+              runtimeBatchPrefetch = null;
+            } else {
+              runtimeBatchPromise = makeRuntimeCombatTeacherBatch(
+                state.seed + game * 1543,
+                state.curriculum.currentStageIndex,
+                runtimeTeacherWorkerPool
+              );
+            }
+          }
           history = await model.fit(
             [batch.board, batch.global],
             modelTargets(batch),
@@ -1841,6 +1891,7 @@ async function main() {
           progressPath,
           await progressRecord(options, state, metric, previousRecords, model, shouldEvaluate)
         );
+        scheduleRuntimeBatchPrefetch(state.completedGames);
         persistRunMetadata(options, state, paths, state.status, null, gameMetricRecords);
         console.log(`Completed game ${game}/${state.totalGames}`);
         if (options.failAfterGame === game) {
@@ -1848,14 +1899,23 @@ async function main() {
         }
       }
     } finally {
-      await runtimeTeacherWorkerPool.close();
+      if (runtimeTeacherWorkerPool) {
+        await runtimeTeacherWorkerPool.close();
+      }
     }
 
     if (state.completedGames === state.totalGames) {
       state.status = 'complete';
       state.completedAt = nowIso(state, 'complete');
       state.updatedAt = state.completedAt;
-      await saveModelAtomically(model, finalDir);
+      const latestPointer = readLatestCheckpointPointer(options);
+      if (options.workers > 1 &&
+          latestPointer &&
+          latestPointer.trainingStep === state.completedGames) {
+        copyDirectoryAtomically(path.join(options.storageDir, latestPointer.path), finalDir);
+      } else {
+        await saveModelAtomically(model, finalDir);
+      }
       persistRunMetadata(options, state, paths, 'complete', null, gameMetricRecords);
       console.log(`Training complete. Final model: ${finalDir}`);
     } else {
