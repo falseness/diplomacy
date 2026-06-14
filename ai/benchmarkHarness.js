@@ -252,7 +252,8 @@ function createRuntimeContext(seed) {
     tf: {},
     saveAs() {},
     __benchmarkInferenceCalls: 0,
-    __benchmarkInferencePositions: 0
+    __benchmarkInferencePositions: 0,
+    __benchmarkActivePlayerIndex: null
   };
   context.window = context;
   context.globalThis = context;
@@ -267,6 +268,9 @@ function resetRuntimeContext(context, seed) {
   context.__benchmarkInferenceCalls = 0;
   context.__benchmarkInferencePositions = 0;
   context.__benchmarkInferenceSource = undefined;
+  context.__benchmarkActivePlayerIndex = null;
+  context.__benchmarkModelIdentifier = undefined;
+  context.__benchmarkPredictFunction = undefined;
   context.ai_model = undefined;
   context.predict = undefined;
 }
@@ -284,16 +288,24 @@ function loadBenchmarkBrowserScripts(context, options) {
 function injectBenchmarkModel(context, options) {
   options = options || {};
   if (typeof options.predictFunction === 'function') {
-    context.ai_model = options.modelIdentifier || { benchmarkInjectedModel: true };
-    context.predict = function(model, xValidateArr) {
+    context.__benchmarkModelIdentifier =
+      options.modelIdentifier || { benchmarkInjectedModel: true };
+    context.__benchmarkPredictFunction = function(model, xValidateArr) {
       context.__benchmarkInferenceCalls += 1;
       context.__benchmarkInferencePositions += xValidateArr.length;
+      const activePlayerIndex = Number.isFinite(Number(context.__benchmarkActivePlayerIndex))
+        ? Number(context.__benchmarkActivePlayerIndex)
+        : Number(context.whooseTurn);
       return options.predictFunction(model, xValidateArr, {
-        activePlayerIndex: Number(context.whooseTurn),
-        activeSide: Number(context.whooseTurn) === 1 ? 'A' :
-          (Number(context.whooseTurn) === 2 ? 'B' : null)
+        activePlayerIndex,
+        activeSide: activePlayerIndex === 1 ? 'A' :
+          (activePlayerIndex === 2 ? 'B' : null)
       });
     };
+    new vm.Script(`
+      ai_model = __benchmarkModelIdentifier
+      predict = __benchmarkPredictFunction
+    `, { filename: 'benchmark-injected-model.js' }).runInContext(context);
     context.__benchmarkInferenceSource =
       options.inferenceSource || 'injected benchmark model';
     return;
@@ -436,49 +448,65 @@ function runtimeMapScript() {
   )
   map.suddenDeathRound = configured.suddenDeathRound
   map.start(manager, false)
+  let originalAIPlayerNextTurn = AIPlayer.prototype.nextTurn
+  AIPlayer.prototype.nextTurn = function() {
+    __benchmarkActivePlayerIndex = players.indexOf(this)
+    try {
+      return originalAIPlayerNextTurn.apply(this, arguments)
+    }
+    finally {
+      __benchmarkActivePlayerIndex = null
+    }
+  }
   suddenDeathRound = map.suddenDeathRound
   whooseTurn = 0
 
-  let turnCount = 0
-  while (turnCount < Number(benchmarkOptions.roundLimit || 40) &&
-      gameRound < suddenDeathRound &&
-      !players[1].isLost && !players[2].isLost) {
-    nextTurn()
-    ++turnCount
+  try {
+    let turnCount = 0
+    while (turnCount < Number(benchmarkOptions.roundLimit || 40) &&
+        gameRound < suddenDeathRound &&
+        !players[1].isLost && !players[2].isLost) {
+      nextTurn()
+      ++turnCount
+    }
+    let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
+    let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
+    return {
+      winner: winnerIndex == null ? null : players[winnerIndex].constructor.name,
+      winnerSide,
+      roundCount: gameRound,
+      turnCount,
+      timeout: winnerIndex == null && turnCount >= Number(benchmarkOptions.roundLimit || 40),
+      suddenDeath: winnerIndex == null && gameRound >= suddenDeathRound,
+      nonResult: winnerIndex == null,
+      mapName: __benchmarkMapName,
+      playerA: benchmarkOptions.playerA,
+      playerB: benchmarkOptions.playerB,
+      runtimePlayerA: players[1].constructor.name,
+      runtimePlayerB: players[2].constructor.name,
+      seed: Number(benchmarkOptions.seed),
+      benchmarkPolicy: 'real GameMap runtime with requested player classes',
+      inference: {
+        source: __benchmarkInferenceSource,
+        calls: __benchmarkInferenceCalls,
+        positions: __benchmarkInferencePositions
+      },
+      players: players.slice(1).map(function(player, index) {
+        return {
+          side: index == 0 ? 'A' : 'B',
+          type: player.constructor.name,
+          lost: player.isLost,
+          gold: player.gold,
+          income: player.income,
+          towns: player.towns.filter(function(town) { return !town.killed }).length,
+          units: player.units.filter(function(unit) { return !unit.killed }).length
+        }
+      })
+    }
   }
-  let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
-  let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
-  return {
-    winner: winnerIndex == null ? null : players[winnerIndex].constructor.name,
-    winnerSide,
-    roundCount: gameRound,
-    turnCount,
-    timeout: winnerIndex == null && turnCount >= Number(benchmarkOptions.roundLimit || 40),
-    suddenDeath: winnerIndex == null && gameRound >= suddenDeathRound,
-    nonResult: winnerIndex == null,
-    mapName: __benchmarkMapName,
-    playerA: benchmarkOptions.playerA,
-    playerB: benchmarkOptions.playerB,
-    runtimePlayerA: players[1].constructor.name,
-    runtimePlayerB: players[2].constructor.name,
-    seed: Number(benchmarkOptions.seed),
-    benchmarkPolicy: 'real GameMap runtime with requested player classes',
-    inference: {
-      source: __benchmarkInferenceSource,
-      calls: __benchmarkInferenceCalls,
-      positions: __benchmarkInferencePositions
-    },
-    players: players.slice(1).map(function(player, index) {
-      return {
-        side: index == 0 ? 'A' : 'B',
-        type: player.constructor.name,
-        lost: player.isLost,
-        gold: player.gold,
-        income: player.income,
-        towns: player.towns.filter(function(town) { return !town.killed }).length,
-        units: player.units.filter(function(unit) { return !unit.killed }).length
-      }
-    })
+  finally {
+    AIPlayer.prototype.nextTurn = originalAIPlayerNextTurn
+    __benchmarkActivePlayerIndex = null
   }
 })()
 `;

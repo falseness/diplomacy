@@ -156,6 +156,14 @@ try {
     'CLI baseline gate did not use the measured current-side-A convention');
   check(cliReport.gates.baselineAiPlayer.config.baselineCheckpoint,
     'CLI baseline gate did not record checkpoint path');
+  check(cliReport.gates.baselineAiPlayer.config.baselineInferenceStats &&
+      cliReport.gates.baselineAiPlayer.config.baselineInferenceStats.calls > 0,
+    'CLI baseline gate did not exercise the saved baseline AIPlayer checkpoint');
+  check(cliReport.gates.baselineAiPlayer.config.baselineInferenceStats.positions > 0,
+    'CLI baseline gate did not score any positions with the baseline checkpoint');
+  check(cliReport.gates.baselineAiPlayer.config.baselineInferenceStats.modelProbe &&
+      cliReport.gates.baselineAiPlayer.config.baselineInferenceStats.modelProbe.length > 0,
+    'CLI baseline gate did not record baseline checkpoint output evidence');
   check(cliReport.config.suddenDeathRound === 80,
     'CLI report did not record default sudden-death round');
 

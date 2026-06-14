@@ -148,6 +148,8 @@ function scoreCombatVector(vector) {
   const ownUnits = [];
   const enemyUnits = [];
   const enemyTowns = [];
+  const enemyDefenses = [];
+  const enemyThreats = [];
   let score = 0;
 
   for (let x = 0; x < board.length; ++x) {
@@ -158,10 +160,16 @@ function scoreCombatVector(vector) {
       const unitHpRatio = cellValue(cell, 50);
       if (unitOwner > 0) {
         ownUnits.push(x, y);
-        score += unitHp * 20 + unitHpRatio * 100;
+        score += unitHp * 12000 + unitHpRatio * 30000;
       }
       else if (unitOwner < 0) {
         enemyUnits.push(x, y);
+        enemyThreats.push({
+          x,
+          y,
+          range: Math.max(1, cellValue(cell, 10)),
+          weight: 45000 + unitHp * 12000
+        });
         score -= 100000 + unitHp * 10000 + unitHpRatio * 20000;
       }
 
@@ -179,19 +187,56 @@ function scoreCombatVector(vector) {
 
       const externalOwner = cellValue(cell, 57);
       if (externalOwner < 0) {
-        score -= 10000 + cellValue(cell, 58) * 20000;
+        enemyDefenses.push(x, y);
+        enemyThreats.push({
+          x,
+          y,
+          range: cellValue(cell, 56) > 0 ? 3 : 1,
+          weight: cellValue(cell, 56) > 0 ? 50000 :
+            (cellValue(cell, 55) > 0 ? 35000 : 15000)
+        });
+        const defenseWeight =
+          cellValue(cell, 54) > 0 ? 35000 :
+            (cellValue(cell, 55) > 0 ? 50000 : 45000);
+        score -= defenseWeight + cellValue(cell, 58) * 60000;
+      }
+      else if (externalOwner > 0) {
+        const defenseWeight =
+          cellValue(cell, 54) > 0 ? 10000 :
+            (cellValue(cell, 55) > 0 ? 16000 : 14000);
+        score += defenseWeight + cellValue(cell, 58) * 25000;
       }
     }
   }
 
-  const enemyObjectives = enemyTowns.length ? enemyTowns : enemyUnits;
-  const immediateTargets = enemyUnits.length ? enemyUnits : enemyObjectives;
+  const enemyObjectives = enemyTowns.concat(enemyDefenses);
+  const immediateTargets = enemyObjectives.length ? enemyObjectives : enemyUnits;
   for (let index = 0; index < ownUnits.length; index += 2) {
+    const ownCoord = {
+      x: ownUnits[index],
+      y: ownUnits[index + 1]
+    };
     score -= nearestDistanceFlat(
-      ownUnits[index],
-      ownUnits[index + 1],
+      ownCoord.x,
+      ownCoord.y,
       immediateTargets
-    ) * 5000;
+    ) * 15000;
+    if (enemyUnits.length) {
+      score -= nearestDistanceFlat(
+        ownCoord.x,
+        ownCoord.y,
+        enemyUnits
+      ) * 2500;
+    }
+    for (const threat of enemyThreats) {
+      const distance = hexDistance(ownCoord, threat);
+      if (distance <= threat.range) {
+        score -= threat.weight;
+      }
+      else if (distance === threat.range + 1) {
+        score -= threat.weight * 0.25;
+      }
+    }
   }
 
   return score;
