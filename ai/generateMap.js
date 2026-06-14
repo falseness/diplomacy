@@ -67,6 +67,8 @@ const ECONOMY_GENERATOR_STAGE_4_HP_MIN = 2
 const ECONOMY_GENERATOR_STAGE_4_HP_MAX = 5
 const ECONOMY_GENERATOR_STAGE_5_HP_MIN = 2
 const ECONOMY_GENERATOR_STAGE_5_HP_MAX = 5
+const ECONOMY_GENERATOR_STAGE_6_HP_MIN = 2
+const ECONOMY_GENERATOR_STAGE_6_HP_MAX = 5
 
 function townDistance(a, b) {
     let dx = a.x - b.x
@@ -1124,6 +1126,25 @@ function stage5UnitsFromCoords(coords, archerIndexes) {
     return units
 }
 
+function stage6UnitsFromCoords(coords, archerIndexes, catapultIndexes) {
+    let units = []
+    for (let i = 0; i < coords.length; ++i) {
+        let type = Noob
+        if (catapultIndexes[i] === true) {
+            type = Catapult
+        }
+        else if (archerIndexes[i] === true) {
+            type = Archer
+        }
+        units.push({
+            type: type,
+            x: coords[i].x,
+            y: coords[i].y
+        })
+    }
+    return units
+}
+
 function generateEconomyStage5TrainingMap(options) {
     options = options || {}
     let seed = options.seed || 1
@@ -1268,6 +1289,173 @@ function generateEconomyStage5TrainingMap(options) {
         resources: 280,
         noobs: (leftUnits.length - archerCount) + (rightUnits.length - archerCount),
         archers: archerCount * 2,
+        towers: 2,
+        bastions: 2
+    }
+    return map
+}
+
+function generateEconomyStage6TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed)
+    let mapSize = {x: 11, y: 9}
+    let leftTown = {x: 1, y: 4}
+    let rightTown = {x: 9, y: 4}
+    rng()
+    let towerHp = randomIntWithRng(
+        rng,
+        ECONOMY_GENERATOR_STAGE_6_HP_MIN,
+        ECONOMY_GENERATOR_STAGE_6_HP_MAX)
+    let bastionHp = randomIntWithRng(
+        rng,
+        ECONOMY_GENERATOR_STAGE_6_HP_MIN,
+        ECONOMY_GENERATOR_STAGE_6_HP_MAX)
+    let leftTower = {x: 4, y: 3, town: leftTown, hp: towerHp}
+    let rightTower = {x: 6, y: 3, town: rightTown, hp: towerHp}
+    let leftBastion = {x: 4, y: 5, town: leftTown, hp: bastionHp}
+    let rightBastion = {x: 6, y: 5, town: rightTown, hp: bastionHp}
+    let leftSuburbCells = [
+        leftTown,
+        {x: 1, y: 3},
+        {x: 1, y: 5},
+        {x: 2, y: 2},
+        {x: 2, y: 3},
+        {x: 2, y: 4},
+        {x: 2, y: 5},
+        {x: 2, y: 6},
+        {x: 3, y: 3},
+        {x: 3, y: 5},
+        {x: 4, y: 3},
+        {x: 4, y: 5}
+    ]
+    let rightSuburbCells = [
+        rightTown,
+        {x: 9, y: 3},
+        {x: 9, y: 5},
+        {x: 8, y: 2},
+        {x: 8, y: 3},
+        {x: 8, y: 4},
+        {x: 8, y: 5},
+        {x: 8, y: 6},
+        {x: 7, y: 3},
+        {x: 7, y: 5},
+        {x: 6, y: 3},
+        {x: 6, y: 5}
+    ]
+    let leftCoords = [
+        {x: 3, y: 2},
+        {x: 3, y: 4},
+        {x: 3, y: 6},
+        {x: 4, y: 2}
+    ]
+    let rightCoords = [
+        {x: 7, y: 2},
+        {x: 7, y: 4},
+        {x: 7, y: 6},
+        {x: 6, y: 2}
+    ]
+    let archerCount = randomIntWithRng(rng, 0, 9999) % 2 + 1
+    let catapultCount = 1
+    let archerIndexes = {}
+    while (Object.keys(archerIndexes).length < archerCount) {
+        archerIndexes[randomIntWithRng(rng, 0, leftCoords.length - 1)] = true
+    }
+    let catapultIndexes = {}
+    while (Object.keys(catapultIndexes).length < catapultCount) {
+        let index = randomIntWithRng(rng, 0, leftCoords.length - 1)
+        if (archerIndexes[index] !== true) {
+            catapultIndexes[index] = true
+        }
+    }
+    let leftUnits = stage6UnitsFromCoords(leftCoords, archerIndexes, catapultIndexes)
+    let rightUnits = stage6UnitsFromCoords(rightCoords, archerIndexes, catapultIndexes)
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 140,
+            towns: [leftTown],
+            units: leftUnits,
+            suburbs: [{
+                town: leftTown,
+                cells: leftSuburbCells,
+                expansionCells: [{x: 0, y: 4}, {x: 4, y: 1}, {x: 4, y: 7}]
+            }],
+            towers: [leftTower],
+            bastions: [leftBastion]
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 140,
+            towns: [rightTown],
+            units: rightUnits,
+            suburbs: [{
+                town: rightTown,
+                cells: rightSuburbCells,
+                expansionCells: [{x: 10, y: 4}, {x: 6, y: 1}, {x: 6, y: 7}]
+            }],
+            towers: [rightTower],
+            bastions: [rightBastion]
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.testName = 'economy-stage-6-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 70
+    map.economyStage = 6
+    map.economyGenerator = {
+        stage: 6,
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        buildingTypes: ['tower', 'bastion'],
+        hpByType: {
+            tower: towerHp,
+            bastion: bastionHp
+        },
+        hpMin: ECONOMY_GENERATOR_STAGE_6_HP_MIN,
+        hpMax: ECONOMY_GENERATOR_STAGE_6_HP_MAX,
+        unitsPerPlayer: leftUnits.length,
+        noobsPerPlayer: leftUnits.length - archerCount - catapultCount,
+        archersPerPlayer: archerCount,
+        catapultsPerPlayer: catapultCount,
+        archerRatio: archerCount + '/' + leftUnits.length,
+        catapultRatio: catapultCount + '/' + leftUnits.length,
+        archerIndexes: Object.keys(archerIndexes).map(function(index) {
+            return Number(index)
+        }).sort(function(a, b) {
+            return a - b
+        }),
+        catapultIndexes: Object.keys(catapultIndexes).map(function(index) {
+            return Number(index)
+        }).sort(function(a, b) {
+            return a - b
+        }),
+        defensiveBuildingsPerPlayer: 2
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 2,
+        productionActions: 0,
+        resources: 280,
+        noobs: (leftUnits.length - archerCount - catapultCount) +
+            (rightUnits.length - archerCount - catapultCount),
+        archers: archerCount * 2,
+        catapults: catapultCount * 2,
         towers: 2,
         bastions: 2
     }

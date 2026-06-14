@@ -2605,7 +2605,7 @@
     "id": "TASK-128",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 6: some units can be catapults.",
+    "description": "Add AIPlayerWithEconomy generator stage 6: some units can be catapults. Implemented: Added seeded economy stage-6 maps with mirrored Catapult slots alongside Noobs/Archers, preserved tower/bastion complexity, documented catapult ratio metadata, and added a focused stage-6 smoke.",
     "acceptance_criteria": [
       "The generator can include catapult units in addition to previous unit types.",
       "Catapult placement is legal and useful for combat.",
@@ -2619,7 +2619,7 @@
       "Step 3: Confirm no illegal catapult placement.",
       "Step 4: Run one short economy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-129",
