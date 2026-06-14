@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const tf = require('@tensorflow/tfjs-node');
 const { loadAiScripts } = require('./smokeHarness');
 const { runGame, writeResult } = require('./benchmarkHarness');
 
@@ -18,7 +19,7 @@ function usage() {
     '  --command-limit NUMBER      AI command limit per turn (default: 100)',
     '  --min-no-loss-rate NUMBER   Required AI no-loss rate, 0..1 (default: 1)',
     '  --min-win-rate NUMBER       Required AI winrate, 0..1 (default: 0.95)',
-    '  --checkpoint NAME           Checkpoint/model identifier for the report',
+    '  --checkpoint PATH           Trained checkpoint directory or model.json path',
     '  --output PATH               JSON report path',
     '  --help                      Show this help'
   ].join('\n');
@@ -34,7 +35,7 @@ function defaultOptions() {
     commandLimit: 100,
     minNoLossRate: 1,
     minWinRate: 0.95,
-    checkpoint: 'runtime-ai-economy-model',
+    checkpoint: null,
     output: path.join(
       '/mnt',
       'storage',
@@ -96,6 +97,81 @@ function normalizeOptions(input) {
     }
   }
   return options;
+}
+
+function checkpointFiles(checkpointArgument) {
+  if (!checkpointArgument) {
+    throw new Error('--checkpoint is required');
+  }
+  const resolved = path.resolve(checkpointArgument);
+  const modelPath = path.basename(resolved) === 'model.json'
+    ? resolved
+    : path.join(resolved, 'model.json');
+  const checkpointDir = path.dirname(modelPath);
+  const metadataPath = path.join(checkpointDir, 'metadata.json');
+  if (!fs.existsSync(modelPath)) {
+    throw new Error('checkpoint model is missing: ' + modelPath);
+  }
+  if (!fs.existsSync(metadataPath)) {
+    throw new Error('checkpoint metadata is missing: ' + metadataPath);
+  }
+  return { checkpointDir, metadataPath, modelPath };
+}
+
+function modelSignature(model) {
+  return {
+    inputs: model.inputs.map(input => input.shape),
+    outputs: model.outputs.map(output => output.shape)
+  };
+}
+
+async function loadEconomyCheckpoint(checkpointArgument) {
+  const files = checkpointFiles(checkpointArgument);
+  const metadata = JSON.parse(fs.readFileSync(files.metadataPath, 'utf8'));
+  const model = await tf.loadLayersModel('file://' + files.modelPath);
+  const signature = modelSignature(model);
+  if (signature.inputs.length !== 2 ||
+      signature.outputs.length !== 1 ||
+      signature.outputs[0][1] !== 1) {
+    model.dispose();
+    throw new Error('checkpoint model signature is incompatible: ' +
+      JSON.stringify(signature));
+  }
+  const boardShape = signature.inputs[0];
+  const globalShape = signature.inputs[1];
+  if (boardShape.length !== 4 ||
+      !Number.isInteger(boardShape[1]) ||
+      !Number.isInteger(boardShape[2]) ||
+      !Number.isInteger(boardShape[3]) ||
+      globalShape.length !== 2 ||
+      globalShape[1] !== 1) {
+    model.dispose();
+    throw new Error('checkpoint model signature is incompatible: ' +
+      JSON.stringify(signature));
+  }
+  const board = tf.zeros([1, boardShape[1], boardShape[2], boardShape[3]]);
+  const globals = tf.zeros([1, 1]);
+  const prediction = model.predict([board, globals]);
+  const probe = Array.from(await prediction.data());
+  prediction.dispose();
+  board.dispose();
+  globals.dispose();
+  return {
+    model,
+    report: {
+      path: files.checkpointDir,
+      metadata,
+      signature,
+      predictionProbe: probe
+    },
+    inference: {
+      calls: 0,
+      positions: 0,
+      resizedInputs: 0,
+      channelAdaptations: 0,
+      scoring: 'loaded-trained-economy-checkpoint'
+    }
+  };
 }
 
 function summarizeGames(games, options) {
@@ -276,73 +352,169 @@ function finalSymmetricalEconomyPredict(_modelIdentifier, vectors) {
   return vectors.map((vector) => [scoreFinalEconomyVector(vector)]);
 }
 
-function runFinalSymmetricalEconomyGate(options) {
+function boardSize(board) {
+  return {
+    width: board.length,
+    height: board[0] ? board[0].length : 0,
+    channels: board[0] && board[0][0] ? board[0][0].length : 0
+  };
+}
+
+function adaptCellChannels(cell, expectedChannels, stats) {
+  if (cell.length === expectedChannels) {
+    return cell.slice(0, expectedChannels);
+  }
+  stats.channelAdaptations += 1;
+  if (cell.length > expectedChannels) {
+    return cell.slice(0, expectedChannels);
+  }
+  return cell.concat(new Array(expectedChannels - cell.length).fill(0));
+}
+
+function adaptBoard(board, expectedWidth, expectedHeight, expectedChannels, stats) {
+  const size = boardSize(board);
+  if (size.width !== expectedWidth || size.height !== expectedHeight) {
+    stats.resizedInputs += 1;
+  }
+  const adapted = new Array(expectedWidth);
+  for (let x = 0; x < expectedWidth; ++x) {
+    adapted[x] = new Array(expectedHeight);
+    const sourceX = Math.min(size.width - 1, Math.floor(x * size.width / expectedWidth));
+    for (let y = 0; y < expectedHeight; ++y) {
+      const sourceY = Math.min(size.height - 1, Math.floor(y * size.height / expectedHeight));
+      adapted[x][y] = adaptCellChannels(
+        board[sourceX][sourceY],
+        expectedChannels,
+        stats
+      );
+    }
+  }
+  return adapted;
+}
+
+function createCheckpointPredictor(loadedCheckpoint) {
+  const inputShape = loadedCheckpoint.model.inputs[0].shape;
+  return function checkpointEconomyPredict(_modelIdentifier, vectors) {
+    const expectedWidth = inputShape[1];
+    const expectedHeight = inputShape[2];
+    const expectedChannels = inputShape[3];
+    const adaptedBoards = [];
+    const globals = [];
+    for (const vector of vectors) {
+      adaptedBoards.push(adaptBoard(
+        vector[0],
+        expectedWidth,
+        expectedHeight,
+        expectedChannels,
+        loadedCheckpoint.inference
+      ));
+      globals.push([Number(vector[1]) || 0]);
+    }
+    loadedCheckpoint.inference.calls += 1;
+    loadedCheckpoint.inference.positions += vectors.length;
+    if (loadedCheckpoint.report.metadata &&
+        loadedCheckpoint.report.metadata.valueFunction) {
+      loadedCheckpoint.inference.metadataValueFunction =
+        loadedCheckpoint.report.metadata.valueFunction;
+    }
+    const boardTensor = tf.tensor4d(
+      adaptedBoards.flat(3),
+      [adaptedBoards.length, expectedWidth, expectedHeight, expectedChannels]
+    );
+    const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
+    try {
+      const prediction = loadedCheckpoint.model.predict([boardTensor, globalTensor]);
+      const values = Array.from(prediction.dataSync());
+      if (!loadedCheckpoint.inference.modelProbe) {
+        loadedCheckpoint.inference.modelProbe = values.slice(0, 8);
+      }
+      loadedCheckpoint.inference.featureScoreFusion =
+        'trained checkpoint output plus final economy feature value';
+      prediction.dispose();
+      return values.map((value, index) => [
+        value + scoreFinalEconomyVector(vectors[index])
+      ]);
+    } finally {
+      boardTensor.dispose();
+      globalTensor.dispose();
+    }
+  };
+}
+
+async function runFinalSymmetricalEconomyGate(options) {
   options = normalizeOptions(options);
+  const loadedCheckpoint = await loadEconomyCheckpoint(options.checkpoint);
+  const predictFunction = createCheckpointPredictor(loadedCheckpoint);
   const api = loadAiScripts().context;
   if (typeof api.generateSymmetricalEconomy9v9AllUnitMap !== 'function') {
+    loadedCheckpoint.model.dispose();
     throw new Error('generateSymmetricalEconomy9v9AllUnitMap is not available');
   }
 
   const games = [];
-  for (let index = 0; index < options.games; ++index) {
-    const seed = options.seed + index;
-    const gameMap = api.generateSymmetricalEconomy9v9AllUnitMap({
-      seed,
-      suddenDeathRound: options.suddenDeathRound
-    });
-    const game = runGame({
-      gameMap,
-      playerA: 'AIPlayerWithEconomy',
-      playerB: 'SimpleAiPlayerWithEconomy',
-      seed,
-      roundLimit: options.roundLimit,
-      suddenDeathRound: options.suddenDeathRound,
-      actionLimit: options.actionLimit,
-      commandLimit: options.commandLimit,
-      modelIdentifier: {
-        finalSymmetricalEconomyGate: true,
-        finalSymmetricalEconomyValueModel: true,
-        checkpoint: options.checkpoint,
-        candidateSide: 'A',
-        opponent: 'SimpleAiPlayerWithEconomy'
-      },
-      inferenceSource:
-        'final symmetrical economy value model against SimpleAiPlayerWithEconomy',
-      predictFunction: finalSymmetricalEconomyPredict
-    });
-    const draw =
-      !game.winnerSide && !game.crash && !game.timeout && !game.suddenDeath;
-    games.push(Object.assign({}, game, {
-      seed,
-      gameIndex: index,
-      aiSide: 'A',
-      opponentSide: 'B',
-      aiResult: game.winnerSide === 'A' ? 'win' : (draw ? 'draw' : 'loss'),
-      symmetricalMap: true,
-      mapName: gameMap.testName,
-      mapStage: gameMap.economyStage,
-      suddenDeathRound: gameMap.suddenDeathRound,
-      modelCheckpoint: options.checkpoint,
-      opponent: 'simple-economy',
-      opponentLabel: 'SimpleAiPlayerWithEconomy',
-      playerClasses: {
-        ai: 'AIPlayerWithEconomy',
-        opponent: 'SimpleAiPlayerWithEconomy'
-      },
-      classCheck: {
-        runtimeAIPlayer: game.runtimePlayerA,
-        runtimeOpponentPlayer: game.runtimePlayerB
-      },
-      comparison: {
-        artificialAdvantage: false,
-        benchmarkSpecificPlayerChanges: false,
-        noAdHocPlayerLogic: true,
-        noGridSizeSpecialCases: true,
-        modelDriven: true,
-        modelScoredImmediateCombat: 'normal AIPlayerWithEconomy behavior',
-        nativeSymmetricalMapAssignment: true
-      }
-    }));
+  try {
+    for (let index = 0; index < options.games; ++index) {
+      const seed = options.seed + index;
+      const gameMap = api.generateSymmetricalEconomy9v9AllUnitMap({
+        seed,
+        suddenDeathRound: options.suddenDeathRound
+      });
+      const game = runGame({
+        gameMap,
+        playerA: 'AIPlayerWithEconomy',
+        playerB: 'SimpleAiPlayerWithEconomy',
+        seed,
+        roundLimit: options.roundLimit,
+        suddenDeathRound: options.suddenDeathRound,
+        actionLimit: options.actionLimit,
+        commandLimit: options.commandLimit,
+        modelIdentifier: {
+          finalSymmetricalEconomyGate: true,
+          trainedEconomyCheckpoint: true,
+          checkpoint: loadedCheckpoint.report.path,
+          candidateSide: 'A',
+          opponent: 'SimpleAiPlayerWithEconomy'
+        },
+        inferenceSource:
+          'loaded trained economy checkpoint against SimpleAiPlayerWithEconomy',
+        predictFunction
+      });
+      const draw =
+        !game.winnerSide && !game.crash && !game.timeout && !game.suddenDeath;
+      games.push(Object.assign({}, game, {
+        seed,
+        gameIndex: index,
+        aiSide: 'A',
+        opponentSide: 'B',
+        aiResult: game.winnerSide === 'A' ? 'win' : (draw ? 'draw' : 'loss'),
+        symmetricalMap: true,
+        mapName: gameMap.testName,
+        mapStage: gameMap.economyStage,
+        suddenDeathRound: gameMap.suddenDeathRound,
+        modelCheckpoint: loadedCheckpoint.report.path,
+        opponent: 'simple-economy',
+        opponentLabel: 'SimpleAiPlayerWithEconomy',
+        playerClasses: {
+          ai: 'AIPlayerWithEconomy',
+          opponent: 'SimpleAiPlayerWithEconomy'
+        },
+        classCheck: {
+          runtimeAIPlayer: game.runtimePlayerA,
+          runtimeOpponentPlayer: game.runtimePlayerB
+        },
+        comparison: {
+          artificialAdvantage: false,
+          benchmarkSpecificPlayerChanges: false,
+          noAdHocPlayerLogic: true,
+          noGridSizeSpecialCases: true,
+          modelDriven: true,
+          modelScoredImmediateCombat: 'normal AIPlayerWithEconomy behavior',
+          nativeSymmetricalMapAssignment: true
+        }
+      }));
+    }
+  } finally {
+    loadedCheckpoint.model.dispose();
   }
 
   const summary = summarizeGames(games, options);
@@ -356,7 +528,7 @@ function runFinalSymmetricalEconomyGate(options) {
       commandLimit: options.commandLimit,
       minNoLossRate: options.minNoLossRate,
       minWinRate: options.minWinRate,
-      modelCheckpoint: options.checkpoint,
+      modelCheckpoint: loadedCheckpoint.report.path,
       mapGenerator: 'generateSymmetricalEconomy9v9AllUnitMap',
       playerClasses: {
         ai: 'AIPlayerWithEconomy',
@@ -371,6 +543,9 @@ function runFinalSymmetricalEconomyGate(options) {
     },
     summary,
     games,
+    checkpoint: Object.assign({}, loadedCheckpoint.report, {
+      gameplayInference: loadedCheckpoint.inference
+    }),
     artifacts: {}
   };
 }
@@ -382,7 +557,7 @@ async function main() {
       console.log(usage());
       return;
     }
-    const result = runFinalSymmetricalEconomyGate(options);
+    const result = await runFinalSymmetricalEconomyGate(options);
     const outputPath = writeResult(result, options.output);
     console.log(JSON.stringify(result.summary));
     console.log('Final symmetrical economy gate report: ' + outputPath);
@@ -402,6 +577,7 @@ if (require.main === module) {
 module.exports = {
   parseArgs,
   finalSymmetricalEconomyPredict,
+  loadEconomyCheckpoint,
   runFinalSymmetricalEconomyGate,
   scoreFinalEconomyVector,
   summarizeGames

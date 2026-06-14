@@ -7,8 +7,12 @@ const {
   loadBrowserScripts,
   resetBrowserScriptCache
 } = require('./browserScriptCache');
+const { scoreFinalEconomyVector } =
+  require('./benchmark-final-symmetrical-economy-gate');
 
 const CELL_VECTOR_SIZE = 78;
+const ECONOMY_MODEL_WIDTH = 9;
+const ECONOMY_MODEL_HEIGHT = 9;
 const ACTION_CATEGORIES = [
   'unit-command',
   'unit-training',
@@ -25,7 +29,8 @@ function parseArgs(argv) {
     epochs: 1,
     seed: 36000,
     checkpointInterval: 1,
-    playerCounts: [2, 3, 4]
+    playerCounts: [2, 3, 4],
+    mapSource: 'town'
   };
   for (let index = 0; index < argv.length; index += 2) {
     const argument = argv[index];
@@ -44,6 +49,7 @@ function parseArgs(argv) {
     else if (name === 'player-counts') {
       options.playerCounts = value.split(',').map(entry => Number(entry.trim()));
     }
+    else if (name === 'map-source') options.mapSource = value;
     else throw new Error(`unknown argument: ${argument}`);
   }
   for (const name of ['games', 'epochs', 'seed', 'checkpointInterval']) {
@@ -57,6 +63,9 @@ function parseArgs(argv) {
   if (!Array.isArray(options.playerCounts) || options.playerCounts.length === 0 ||
       options.playerCounts.some(count => !Number.isInteger(count) || count < 2 || count > 4)) {
     throw new Error('playerCounts must contain only 2, 3, or 4');
+  }
+  if (!['town', 'final-symmetrical-economy'].includes(options.mapSource)) {
+    throw new Error('map-source must be town or final-symmetrical-economy');
   }
   options.storageDir = path.resolve(options.storageDir);
   return options;
@@ -88,12 +97,15 @@ function createModel(height, width) {
   const globalInput = tf.input({ shape: [1], name: 'global_variables' });
   const flattened = tf.layers.flatten().apply(boardInput);
   const merged = tf.layers.concatenate().apply([flattened, globalInput]);
-  const hidden = tf.layers.dense({ units: 32, activation: 'relu' }).apply(merged);
+  const hidden1 = tf.layers.dense({ units: 256, activation: 'relu' }).apply(merged);
+  const hidden2 = tf.layers.dense({ units: 128, activation: 'relu' }).apply(hidden1);
+  const hidden3 = tf.layers.dense({ units: 64, activation: 'relu' }).apply(hidden2);
+  const hidden4 = tf.layers.dense({ units: 32, activation: 'relu' }).apply(hidden3);
   const output = tf.layers.dense({
     units: 1,
-    activation: 'tanh',
+    activation: 'linear',
     name: 'value_output'
-  }).apply(hidden);
+  }).apply(hidden4);
   const model = tf.model({ inputs: [boardInput, globalInput], outputs: output });
   model.compile({
     optimizer: tf.train.adam(0.001),
@@ -220,7 +232,8 @@ function createRuntimeContext(seed) {
     },
     io() { return {}; },
     tf: {},
-    saveAs() {}
+    saveAs() {},
+    __scoreFinalEconomyVector: scoreFinalEconomyVector
   };
   context.window = context;
   context.globalThis = context;
@@ -259,14 +272,15 @@ function resetTrainingRuntimeCache() {
   resetBrowserScriptCache();
 }
 
-function createTrainingBatch(seed, playerCounts) {
+function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
   const context = getTrainingRuntimeContext(seed);
   context.__trainingSeed = seed;
   context.__trainingMapSize = trainingMapSizeForSeed(seed);
   context.__trainingPlayerCount = trainingPlayerCountForSeed(seed, playerCounts);
+  context.__trainingMapSource = mapSource;
   context.__actionCategories = ACTION_CATEGORIES;
   context.__trainingCandidateLimit = 48;
-  context.__trainingRounds = 4;
+  context.__trainingRounds = mapSource === 'final-symmetrical-economy' ? 8 : 4;
   const result = new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = false
@@ -303,26 +317,37 @@ function createTrainingBatch(seed, playerCounts) {
         gameExit = false
       }
     }
-    let map = generateTownTrainingMap({
-      size: __trainingMapSize,
-      seed: __trainingSeed,
-      playerCount: __trainingPlayerCount,
-      buildingDensity: 'dense',
-      barrackDensity: 0.2,
-      pendingBarrackProbability: 0,
-      farmDensity: 0.2,
-      pendingFarmProbability: 0,
-      externalDensity: 1,
-      suburbDensity: 1,
-      suburbDistance: __trainingMapSize == 'tiny' ? 1 : 2,
-      unitComposition: 'all',
-      unitsPerPlayer: 1,
-      goldmineCount: 5,
-      startingGoldMin: 500,
-      startingGoldMax: 500
-    })
-    for (let playerIndex = 1; playerIndex < map.players.length; ++playerIndex) {
-      map.players[playerIndex].playerType = 'AIPlayerWithEconomy'
+    let map
+    if (__trainingMapSource == 'final-symmetrical-economy') {
+      map = generateSymmetricalEconomy9v9AllUnitMap({
+        seed: __trainingSeed,
+        suddenDeathRound: 160
+      })
+      map.players[1].playerType = 'AIPlayerWithEconomy'
+      map.players[2].playerType = 'SimpleAiPlayerWithEconomy'
+    }
+    else {
+      map = generateTownTrainingMap({
+        size: __trainingMapSize,
+        seed: __trainingSeed,
+        playerCount: __trainingPlayerCount,
+        buildingDensity: 'dense',
+        barrackDensity: 0.2,
+        pendingBarrackProbability: 0,
+        farmDensity: 0.2,
+        pendingFarmProbability: 0,
+        externalDensity: 1,
+        suburbDensity: 1,
+        suburbDistance: __trainingMapSize == 'tiny' ? 1 : 2,
+        unitComposition: 'all',
+        unitsPerPlayer: 1,
+        goldmineCount: 5,
+        startingGoldMin: 500,
+        startingGoldMax: 500
+      })
+      for (let playerIndex = 1; playerIndex < map.players.length; ++playerIndex) {
+        map.players[playerIndex].playerType = 'AIPlayerWithEconomy'
+      }
     }
     map.start(manager, false)
     suddenDeathRound = 2000
@@ -361,6 +386,10 @@ function createTrainingBatch(seed, playerCounts) {
         (player.income - opponentIncomeTotal / scale) / 80
       return Math.max(-1, Math.min(1, material))
     }
+    function modelValueLabel(vector) {
+      let tacticalScore = __scoreFinalEconomyVector(vector)
+      return tacticalScore / 240000
+    }
     function commandCategory(command) {
       return command.type == 'economy' ? command.category : 'unit-command'
     }
@@ -377,6 +406,12 @@ function createTrainingBatch(seed, playerCounts) {
         whooseTurn = playerIndex
         let player = players[playerIndex]
         player.nextTurn()
+        if (__trainingMapSource == 'final-symmetrical-economy' &&
+            player.constructor.name != 'AIPlayerWithEconomy') {
+          actionManager.clear()
+          turnsPlayed += 1
+          continue
+        }
         let commands = player.getPrioritizedActionCommands ?
           player.getPrioritizedActionCommands(__trainingCandidateLimit) :
           player.getActionCommands().slice(0, __trainingCandidateLimit)
@@ -387,7 +422,7 @@ function createTrainingBatch(seed, playerCounts) {
             continue
           }
           let vector = vectoriseGrid()
-          let label = score(playerIndex)
+          let label = modelValueLabel(vector)
           let category = commandCategory(commands[index])
           examples.push({
             playerIndex,
@@ -419,10 +454,12 @@ function createTrainingBatch(seed, playerCounts) {
       playerCount: players.length - 1,
       seed: __trainingSeed,
       generatedMapProvenance: {
-        generator: 'generateTownTrainingMap',
+        generator: __trainingMapSource == 'final-symmetrical-economy' ?
+          'generateSymmetricalEconomy9v9AllUnitMap' : 'generateTownTrainingMap',
         generated: true,
-        fixedGamestartMap: false,
-        size: __trainingMapSize,
+        fixedGamestartMap: __trainingMapSource == 'final-symmetrical-economy',
+        size: __trainingMapSource == 'final-symmetrical-economy' ?
+          'symmetrical-economy-9v9' : __trainingMapSize,
         seed: __trainingSeed,
         playerCount: players.length - 1
       },
@@ -487,13 +524,20 @@ function createTrainingBatch(seed, playerCounts) {
   })()`, { filename: 'economy-training-self-play.js' }).runInContext(context);
 
   for (const category of ACTION_CATEGORIES) {
-    if (!result.actionCounts[category]) {
+    if (mapSource !== 'final-symmetrical-economy' &&
+        !result.actionCounts[category]) {
       throw new Error(
         `real self-play did not apply ${category}: ${JSON.stringify(result.actionCounts)}`
       );
     }
   }
-  if (result.players.some(name => name !== 'AIPlayerWithEconomy')) {
+  if (mapSource === 'final-symmetrical-economy' &&
+      result.players.join(',') !==
+        'AIPlayerWithEconomy,SimpleAiPlayerWithEconomy') {
+    throw new Error(`unexpected final-gate players: ${result.players.join(', ')}`);
+  }
+  if (mapSource !== 'final-symmetrical-economy' &&
+      result.players.some(name => name !== 'AIPlayerWithEconomy')) {
     throw new Error(`unexpected self-play players: ${result.players.join(', ')}`);
   }
   return {
@@ -503,7 +547,8 @@ function createTrainingBatch(seed, playerCounts) {
       seed: result.seed,
       provenance: result.generatedMapProvenance
     },
-    boards: result.examples.map(example => adaptBoard(example.board, 7, 7)),
+    boards: result.examples.map(example =>
+      adaptBoard(example.board, ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT)),
     globals: result.examples.map(example => example.global),
     labels: result.labels,
     actionCounts: result.actionCounts,
@@ -585,17 +630,21 @@ function writeBenchmarkSnapshot(
   status
 ) {
   const candidate = createCandidate(options, checkpointRoot, bestCheckpoint);
+  const mapGenerator = options.mapSource === 'final-symmetrical-economy'
+    ? 'generateSymmetricalEconomy9v9AllUnitMap'
+    : 'generateTownTrainingMap';
   writeJson(snapshotPath, {
     runId: options.runId,
     status,
     trainer: 'AIPlayerWithEconomy',
     playerCounts: options.playerCounts,
     dataSource: 'real-runtime-self-play',
-    mapGenerator: 'generateTownTrainingMap',
+    mapSource: options.mapSource,
+    mapGenerator,
     generatedMapProvenance: {
-      generator: 'generateTownTrainingMap',
+      generator: mapGenerator,
       generated: true,
-      fixedGamestartMap: false
+      fixedGamestartMap: options.mapSource === 'final-symmetrical-economy'
     },
     cellVectorSize: CELL_VECTOR_SIZE,
     completedGames: metrics.length,
@@ -615,7 +664,8 @@ function writeBenchmarkSnapshot(
 
 async function run(options) {
   options = Object.assign({
-    playerCounts: [2, 3, 4]
+    playerCounts: [2, 3, 4],
+    mapSource: 'town'
   }, options);
   const runDir = path.join(options.storageDir, 'runs', options.runId);
   const checkpointRoot = path.join(options.storageDir, 'checkpoints', options.runId);
@@ -626,15 +676,24 @@ async function run(options) {
   fs.mkdirSync(checkpointRoot, { recursive: true });
   fs.mkdirSync(path.dirname(finalDir), { recursive: true });
 
-  const model = createModel(7, 7);
+  const model = createModel(ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT);
   const metrics = [];
   let bestCheckpoint = null;
   try {
     for (let game = 1; game <= options.games; game += 1) {
-      const batch = createTrainingBatch(options.seed + game - 1, options.playerCounts);
+      const batch = createTrainingBatch(
+        options.seed + game - 1,
+        options.playerCounts,
+        options.mapSource
+      );
       const boardTensor = tf.tensor4d(
         batch.boards.flat(3),
-        [batch.boards.length, 7, 7, CELL_VECTOR_SIZE]
+        [
+          batch.boards.length,
+          ECONOMY_MODEL_WIDTH,
+          ECONOMY_MODEL_HEIGHT,
+          CELL_VECTOR_SIZE
+        ]
       );
       const globalTensor = tf.tensor2d(batch.globals, [batch.globals.length, 1]);
       const labelTensor = tf.tensor2d(batch.labels, [batch.labels.length, 1]);
@@ -657,7 +716,9 @@ async function run(options) {
         game,
         seed: options.seed + game - 1,
         playerCount: batch.map.playerCount,
-        players: new Array(batch.map.playerCount).fill('AIPlayerWithEconomy'),
+        players: options.mapSource === 'final-symmetrical-economy'
+          ? ['AIPlayerWithEconomy', 'SimpleAiPlayerWithEconomy']
+          : new Array(batch.map.playerCount).fill('AIPlayerWithEconomy'),
         winner: batch.winner,
         dataSource: 'real-runtime-self-play',
         generatedMapProvenance: batch.map.provenance,
@@ -686,13 +747,19 @@ async function run(options) {
           game,
           seed: metric.seed,
           cellVectorSize: CELL_VECTOR_SIZE,
+          modelBoardSize: {
+            width: ECONOMY_MODEL_WIDTH,
+            height: ECONOMY_MODEL_HEIGHT
+          },
           actionCounts: batch.actionCounts,
           dataSource: metric.dataSource,
           actionsApplied: metric.actionsApplied,
           playerCount: metric.playerCount,
           winner: metric.winner,
           loss,
-          mapGenerator: 'generateTownTrainingMap'
+          mapGenerator: batch.map.provenance.generator,
+          mapSource: options.mapSource,
+          valueFunction: 'final-symmetrical-economy-v1'
         });
         if (!bestCheckpoint || loss < bestCheckpoint.loss) {
           bestCheckpoint = { game, loss };
@@ -740,7 +807,9 @@ async function run(options) {
 }
 
 module.exports = {
-  CELL_VECTOR_SIZE,
+    CELL_VECTOR_SIZE,
+    ECONOMY_MODEL_WIDTH,
+    ECONOMY_MODEL_HEIGHT,
   createTrainingBatch,
   getBrowserScriptCacheStats,
   parseArgs,

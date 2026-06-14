@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const tf = require('@tensorflow/tfjs-node');
 const {
   runFinalSymmetricalEconomyGate,
   summarizeGames
@@ -44,6 +45,36 @@ function expectCliFailure(args) {
   check(failed, 'final symmetrical economy gate did not fail below threshold');
 }
 
+function removePath(filePath) {
+  if (fs.existsSync(filePath)) {
+    fs.rmdirSync(filePath, { recursive: true });
+  }
+}
+
+async function createSmokeCheckpoint(checkpointDir) {
+  removePath(checkpointDir);
+  fs.mkdirSync(checkpointDir, { recursive: true });
+  const boardInput = tf.input({ shape: [7, 7, 78], name: 'board' });
+  const globalInput = tf.input({ shape: [1], name: 'global_variables' });
+  const flat = tf.layers.flatten().apply(boardInput);
+  const merged = tf.layers.concatenate().apply([flat, globalInput]);
+  const output = tf.layers.dense({
+    units: 1,
+    activation: 'tanh',
+    name: 'value_output'
+  }).apply(merged);
+  const model = tf.model({ inputs: [boardInput, globalInput], outputs: output });
+  await model.save('file://' + checkpointDir);
+  model.dispose();
+  fs.writeFileSync(path.join(checkpointDir, 'metadata.json'), JSON.stringify({
+    trainer: 'AIPlayerWithEconomy',
+    dataSource: 'test-trained-economy-checkpoint',
+    cellVectorSize: 78,
+    game: 1,
+    valueFunction: 'final-symmetrical-economy-v1'
+  }, null, 2) + '\n');
+}
+
 function assertNoCheatingSources() {
   const playersSource = read('ai/players.js');
   const gateSource = read('ai/benchmark-final-symmetrical-economy-gate.js');
@@ -83,9 +114,18 @@ const failureReportPath = path.join(
   'diplomacy',
   'benchmarks',
   `task136-final-symmetrical-economy-fail-${process.pid}.json`);
+const checkpointDir = path.join(
+  '/mnt',
+  'storage',
+  'diplomacy',
+  'checkpoints',
+  `task137-economy-gate-smoke-${process.pid}`,
+  'step-00000001');
 
+(async () => {
 try {
-  const smoke = runFinalSymmetricalEconomyGate({
+  await createSmokeCheckpoint(checkpointDir);
+  const smoke = await runFinalSymmetricalEconomyGate({
     games: 2,
     seed: 136000,
     roundLimit: 40,
@@ -94,7 +134,7 @@ try {
     commandLimit: 48,
     minNoLossRate: 0,
     minWinRate: 0,
-    checkpoint: 'task136-smoke-model'
+    checkpoint: checkpointDir
   });
   check(smoke.games.length === 2, 'smoke did not run configured game count');
   check(smoke.summary.requiredGames === 2,
@@ -113,6 +153,18 @@ try {
     'gate used the wrong map generator');
   check(smoke.config.candidateStarts.A === 2 && smoke.config.candidateStarts.B === 0,
     'gate did not record the native symmetrical-map candidate side');
+  check(smoke.checkpoint.path === checkpointDir,
+    'gate did not record the loaded checkpoint path');
+  check(smoke.checkpoint.signature.inputs[0][3] === 78,
+    'gate did not record the checkpoint vector shape');
+  check(smoke.checkpoint.gameplayInference.calls > 0,
+    'loaded checkpoint was not used for gameplay inference');
+  check(smoke.checkpoint.gameplayInference.positions >
+      smoke.checkpoint.gameplayInference.calls,
+    'loaded checkpoint did not score competing gameplay actions');
+  check(smoke.checkpoint.gameplayInference.metadataValueFunction ===
+      'final-symmetrical-economy-v1',
+    'gate did not use the checkpoint-declared value function');
   for (const game of smoke.games) {
     check(game.classCheck.runtimeAIPlayer === 'AIPlayerWithEconomy',
       'runtime AIPlayerWithEconomy class changed');
@@ -124,6 +176,8 @@ try {
       'game comparison did not record fair setup');
     check(game.inference && game.inference.calls > 0,
       'AIPlayerWithEconomy did not exercise model inference');
+    check(game.modelCheckpoint === checkpointDir,
+      'game did not record the loaded checkpoint path');
   }
 
   const summary = summarizeGames([
@@ -150,7 +204,7 @@ try {
     '--sudden-death-round', '40',
     '--min-no-loss-rate', '0',
     '--min-win-rate', '0',
-    '--checkpoint', 'task136-cli-smoke-model',
+    '--checkpoint', checkpointDir,
     '--output', reportPath
   ]);
   const cliReport = readJson(reportPath);
@@ -160,6 +214,19 @@ try {
     'CLI zero-threshold smoke did not pass');
   check(cliReport.summary.requiredGames === 1,
     'CLI report did not record requested game count');
+  check(cliReport.checkpoint.gameplayInference.calls > 0,
+    'CLI gate did not use the loaded checkpoint');
+
+  expectCliFailure([
+    '--games', '1',
+    '--seed', '136012',
+    '--round-limit', '40',
+    '--sudden-death-round', '40',
+    '--min-no-loss-rate', '0',
+    '--min-win-rate', '0',
+    '--checkpoint', path.join(checkpointDir, '..', 'missing-checkpoint'),
+    '--output', failureReportPath
+  ]);
 
   expectCliFailure([
     '--games', '1',
@@ -168,7 +235,7 @@ try {
     '--sudden-death-round', '40',
     '--min-no-loss-rate', '1',
     '--min-win-rate', '1',
-    '--checkpoint', 'task136-cli-fail-model',
+    '--checkpoint', checkpointDir,
     '--output', failureReportPath
   ]);
   const failureReport = readJson(failureReportPath);
@@ -186,6 +253,11 @@ try {
       fs.unlinkSync(filePath);
     }
   }
+  removePath(path.join(checkpointDir, '..'));
 }
 
 console.log('Final symmetrical economy gate smoke passed');
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exitCode = 1;
+});
