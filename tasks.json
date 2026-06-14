@@ -2465,7 +2465,7 @@
     "id": "TASK-121",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 2.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 2. Implemented: Added a focused stage 2 validation npm test covering larger-than-stage-1 dimensions, valid 1v1 AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy setup, tower/bastion HP variation, deterministic replay, and benchmark harness initialization.",
     "acceptance_criteria": [
       "The test verifies stage 2 dimensions are larger than stage 1.",
       "The test verifies valid 1v1 player setup.",
@@ -2479,7 +2479,7 @@
       "Step 3: Confirm deterministic replay for at least one seed.",
       "Step 4: Run existing economy generator tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-122",
