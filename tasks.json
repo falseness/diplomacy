@@ -2445,7 +2445,7 @@
     "id": "TASK-120",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 2: bigger map with tower or bastion using random HP amount.",
+    "description": "Add AIPlayerWithEconomy generator stage 2: bigger map with tower or bastion using random HP amount. Implemented: Added seeded 9x7 stage-2 economy maps with mirrored AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy noob setup, one mirrored tower or bastion at documented 2-5 HP, independent generator metadata, and focused npm smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a bigger map than stage 1.",
       "The stage keeps the 1v1 economy setup compatible with AIPlayerWithEconomy.",
@@ -2459,7 +2459,7 @@
       "Step 3: Confirm tower or bastion HP varies across seeds.",
       "Step 4: Run one short economy AI-vs-baseline smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-121",

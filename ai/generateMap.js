@@ -59,6 +59,8 @@ const GOLDMINE_TRAINING_STARTING_GOLD_MIN = 50
 const GOLDMINE_TRAINING_STARTING_GOLD_MAX = 500
 const ECONOMY_GENERATOR_STAGE_1_HP_MIN = 2
 const ECONOMY_GENERATOR_STAGE_1_HP_MAX = 5
+const ECONOMY_GENERATOR_STAGE_2_HP_MIN = 2
+const ECONOMY_GENERATOR_STAGE_2_HP_MAX = 5
 
 function townDistance(a, b) {
     let dx = a.x - b.x
@@ -734,6 +736,113 @@ function generateEconomyStage1TrainingMap(options) {
         towns: 2,
         productionActions: 0,
         resources: 180,
+        towers: buildingType == 'towers' ? 2 : 0,
+        bastions: buildingType == 'bastions' ? 2 : 0
+    }
+    return map
+}
+
+function generateEconomyStage2TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed)
+    let mapSize = {x: 9, y: 7}
+    let leftTown = {x: 1, y: 3}
+    let rightTown = {x: 7, y: 3}
+    rng()
+    let buildingType = randomIntWithRng(rng, 0, 1) == 0 ? 'towers' : 'bastions'
+    let buildingHp = randomIntWithRng(
+        rng,
+        ECONOMY_GENERATOR_STAGE_2_HP_MIN,
+        ECONOMY_GENERATOR_STAGE_2_HP_MAX)
+    let leftBuilding = {x: 3, y: 3, town: leftTown, hp: buildingHp}
+    let rightBuilding = {x: 5, y: 3, town: rightTown, hp: buildingHp}
+    let leftSuburbCells = [
+        leftTown,
+        {x: 1, y: 2},
+        {x: 1, y: 4},
+        {x: 2, y: 2},
+        {x: 2, y: 3},
+        {x: 2, y: 4},
+        {x: 3, y: 3}
+    ]
+    let rightSuburbCells = [
+        rightTown,
+        {x: 7, y: 2},
+        {x: 7, y: 4},
+        {x: 6, y: 2},
+        {x: 6, y: 3},
+        {x: 6, y: 4},
+        {x: 5, y: 3}
+    ]
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 110,
+            towns: [leftTown],
+            units: [
+                {type: Noob, x: 2, y: 2},
+                {type: Noob, x: 2, y: 4}
+            ],
+            suburbs: [{
+                town: leftTown,
+                cells: leftSuburbCells,
+                expansionCells: [{x: 0, y: 3}, {x: 3, y: 2}, {x: 3, y: 4}]
+            }],
+            towers: buildingType == 'towers' ? [leftBuilding] : [],
+            bastions: buildingType == 'bastions' ? [leftBuilding] : []
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 110,
+            towns: [rightTown],
+            units: [
+                {type: Noob, x: 6, y: 2},
+                {type: Noob, x: 6, y: 4}
+            ],
+            suburbs: [{
+                town: rightTown,
+                cells: rightSuburbCells,
+                expansionCells: [{x: 8, y: 3}, {x: 5, y: 2}, {x: 5, y: 4}]
+            }],
+            towers: buildingType == 'towers' ? [rightBuilding] : [],
+            bastions: buildingType == 'bastions' ? [rightBuilding] : []
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.testName = 'economy-stage-2-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 50
+    map.economyStage = 2
+    map.economyGenerator = {
+        stage: 2,
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        buildingType: buildingType == 'towers' ? 'tower' : 'bastion',
+        hp: buildingHp,
+        hpMin: ECONOMY_GENERATOR_STAGE_2_HP_MIN,
+        hpMax: ECONOMY_GENERATOR_STAGE_2_HP_MAX
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 2,
+        productionActions: 0,
+        resources: 220,
         towers: buildingType == 'towers' ? 2 : 0,
         bastions: buildingType == 'bastions' ? 2 : 0
     }
