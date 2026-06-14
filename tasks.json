@@ -2665,7 +2665,7 @@
     "id": "TASK-131",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 7.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 7. Implemented: Added npm run test-economy-stage-7-validation covering 16 deterministic 9v9 seeds, all five unit types, tower/bastion coverage, mirrored legal starts, deterministic replay, and benchmark initialization.",
     "acceptance_criteria": [
       "The test verifies 9v9 dimensions.",
       "The test verifies all unit types are generated across the seed set.",
@@ -2679,7 +2679,7 @@
       "Step 3: Confirm benchmark initialization succeeds.",
       "Step 4: Run economy AI smoke tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-132",
