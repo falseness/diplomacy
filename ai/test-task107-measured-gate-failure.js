@@ -208,12 +208,12 @@ async function main() {
       'gate decision did not carry the 80 percent threshold', decision);
     check(decision.eligible === false && decision.decision === 'hold',
       'below-80 measured gate advanced the curriculum', decision);
-    check(decision.reason.includes('greater than 0.8'),
+    check(decision.reason.includes('at least 0.8'),
       'below-80 measured gate did not record a threshold reason', decision);
     check(decision.requiredBaselineAiPlayerWinrate === 0.8,
       'gate decision did not carry the baseline AIPlayer 80 percent threshold',
       decision);
-    check(decision.reason.includes('baseline AIPlayer winrate must be greater than 0.8'),
+    check(decision.reason.includes('baseline AIPlayer winrate must be at least 0.8'),
       'below-80 baseline AIPlayer gate did not record a threshold reason',
       decision);
 

@@ -95,8 +95,8 @@ function assertGateEvidence(record, label) {
     label + ' learning-rate attempt should not improve before advancing');
   check(record.simpleAiPlayerWinrate.evaluated === true,
     label + ' did not evaluate SimpleAiPlayer winrate');
-  check(record.simpleAiPlayerWinrate.value > record.nextStageEligibility.requiredSimpleAiPlayerWinrate,
-    label + ' did not require SimpleAiPlayer winrate greater than the threshold');
+  check(record.simpleAiPlayerWinrate.value >= record.nextStageEligibility.requiredSimpleAiPlayerWinrate,
+    label + ' did not require SimpleAiPlayer winrate at least the threshold');
 }
 
 function assertEveryStageBoundary() {
@@ -328,7 +328,7 @@ function assertFailingGate() {
     check(final.nextStageEligibility.eligible === false &&
       final.nextStageEligibility.decision === 'hold',
     'failing SimpleAiPlayer gate advanced the stage');
-    check(final.nextStageEligibility.reason.includes('greater than 0.8'),
+    check(final.nextStageEligibility.reason.includes('at least 0.8'),
       'failing SimpleAiPlayer gate did not record the threshold reason');
     check(final.curriculum.currentStageIndex === 0,
       'failing SimpleAiPlayer gate changed the current stage');

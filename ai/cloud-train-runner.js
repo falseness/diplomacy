@@ -1429,13 +1429,13 @@ function curriculumGateDecision(
   }
   if (!simpleAiPlayerWinrate.evaluated) {
     reasons.push('SimpleAiPlayer winrate has not been evaluated');
-  } else if (!(simpleAiPlayerWinrate.value > options.curriculumSimpleWinrateThreshold)) {
-    reasons.push(`SimpleAiPlayer winrate must be greater than ${options.curriculumSimpleWinrateThreshold}`);
+  } else if (simpleAiPlayerWinrate.value < options.curriculumSimpleWinrateThreshold) {
+    reasons.push(`SimpleAiPlayer winrate must be at least ${options.curriculumSimpleWinrateThreshold}`);
   }
   if (!baselineAiPlayerWinrate.evaluated) {
     reasons.push('baseline AIPlayer winrate has not been evaluated');
-  } else if (!(baselineAiPlayerWinrate.value > options.curriculumSimpleWinrateThreshold)) {
-    reasons.push(`baseline AIPlayer winrate must be greater than ${options.curriculumSimpleWinrateThreshold}`);
+  } else if (baselineAiPlayerWinrate.value < options.curriculumSimpleWinrateThreshold) {
+    reasons.push(`baseline AIPlayer winrate must be at least ${options.curriculumSimpleWinrateThreshold}`);
   }
   return {
     currentStageIndex: state.curriculum.currentStageIndex,

@@ -43,6 +43,11 @@ check(passingGate.decision === 'advance' && passingGate.eligible === true,
   'above-80 SimpleAiPlayer and baseline AIPlayer winrates did not advance',
   passingGate);
 
+const exactThresholdGate = gateFor(0.8, 0.8);
+check(exactThresholdGate.decision === 'advance' && exactThresholdGate.eligible === true,
+  'exact 80 percent SimpleAiPlayer and baseline AIPlayer winrates did not advance',
+  exactThresholdGate);
+
 const blockedGate = gateFor(0.79, 0.85);
 check(blockedGate.requiredSimpleAiPlayerWinrate === 0.8,
   'blocked gate did not carry the 80 percent threshold',
@@ -50,7 +55,7 @@ check(blockedGate.requiredSimpleAiPlayerWinrate === 0.8,
 check(blockedGate.decision === 'hold' && blockedGate.eligible === false,
   'below-80 SimpleAiPlayer winrate did not block advancement',
   blockedGate);
-check(blockedGate.reason.includes('greater than 0.8'),
+check(blockedGate.reason.includes('at least 0.8'),
   'blocked gate did not record a clear 80 percent threshold reason',
   blockedGate);
 
@@ -61,7 +66,7 @@ check(baselineBlockedGate.requiredBaselineAiPlayerWinrate === 0.8,
 check(baselineBlockedGate.decision === 'hold' && baselineBlockedGate.eligible === false,
   'below-80 baseline AIPlayer winrate did not block advancement',
   baselineBlockedGate);
-check(baselineBlockedGate.reason.includes('baseline AIPlayer winrate must be greater than 0.8'),
+check(baselineBlockedGate.reason.includes('baseline AIPlayer winrate must be at least 0.8'),
   'baseline-blocked gate did not record a clear 80 percent threshold reason',
   baselineBlockedGate);
 
