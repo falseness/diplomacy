@@ -757,10 +757,6 @@ class AIPlayer extends Player {
                     continue
                 }
                 applied = applyFastAction(mutableGrid, commands[i])
-                if (compareVectorGridResults(
-                        baselineVectorGrid, mutableGrid).equal) {
-                    continue
-                }
                 validCommands.push(commands[i])
                 vectorisedGrids.push(
                     this.cloneMutableVectorGridForPrediction(mutableGrid))

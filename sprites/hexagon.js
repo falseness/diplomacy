@@ -49,7 +49,11 @@ class Hexagon extends Sprite {
         this.isSuburb = false
         
         if (building.isBuildingProduction() && !building.isExternalProduction()) {
-            actionManager.lastAction.buildingProduction = building.toUndoJSON()
+            let packedProduction = building.toUndoJSON()
+            actionManager.lastAction.buildingProduction = packedProduction
+            if (actionManager.lastAction.buildingProductions) {
+                actionManager.lastAction.buildingProductions.push(packedProduction)
+            }
             building.kill()
         }
     }

@@ -394,6 +394,7 @@ const report = new vm.Script(`(() => {
       phase: phase,
       actionCategory: metadata.actionCategory,
       command: metadata.command,
+      normalUndoAction: metadata.normalUndoAction,
       mismatchPath: firstMismatchPath(comparison),
       mismatches: comparison.mismatches
     })
@@ -529,12 +530,57 @@ const report = new vm.Script(`(() => {
       mismatchPath: 'runtime-apply'
     })
     let afterApplyVectorGrid = vectoriseGrid()
+    let totalCells = mutableGrid.cells.length * mutableGrid.cells[0].length
+    let originalVectorizeCellLocal = vectorizeCellLocal
+    let originalComputeGlobalVectorChannels = computeGlobalVectorChannels
+    let localVectorizeCalls = 0
+    let globalVectorizeCalls = 0
+    vectorizeCellLocal = function(cell, globalChannels) {
+      ++localVectorizeCalls
+      return originalVectorizeCellLocal(cell, globalChannels)
+    }
+    computeGlobalVectorChannels = function() {
+      ++globalVectorizeCalls
+      return originalComputeGlobalVectorChannels()
+    }
     let applied = applyFastAction(mutableGrid, command)
+    vectorizeCellLocal = originalVectorizeCellLocal
+    computeGlobalVectorChannels = originalComputeGlobalVectorChannels
+    assert(localVectorizeCalls == applied.token.changedCellCount,
+      'fast action vectorizeCellLocal call count should equal changed cells', {
+      seed: metadata.seed,
+      sourceName: metadata.sourceName,
+      player: metadata.player,
+      actionCategory: metadata.actionCategory,
+      command: metadata.command,
+      localVectorizeCalls: localVectorizeCalls,
+      changedCellCount: applied.token.changedCellCount
+    })
+    assert(localVectorizeCalls < totalCells,
+      'fast action should vectorize fewer cells than the full board', {
+      seed: metadata.seed,
+      sourceName: metadata.sourceName,
+      player: metadata.player,
+      actionCategory: metadata.actionCategory,
+      command: metadata.command,
+      localVectorizeCalls: localVectorizeCalls,
+      totalCells: totalCells
+    })
+    assert(globalVectorizeCalls == 1,
+      'fast action should recompute global channels once per candidate', {
+      seed: metadata.seed,
+      sourceName: metadata.sourceName,
+      player: metadata.player,
+      actionCategory: metadata.actionCategory,
+      command: metadata.command,
+      globalVectorizeCalls: globalVectorizeCalls
+    })
     compareVectorOrThrow(afterApplyVectorGrid, mutableGrid, metadata, 'after-apply')
 
     undoFastAction(mutableGrid, applied)
     compareVectorOrThrow(initialVectorGrid, mutableGrid, metadata, 'after-fast-undo')
 
+    metadata.normalUndoAction = JSON.stringify(actionManager.lastAction)
     actionManager.undo()
     compareVectorOrThrow(initialVectorGrid, vectoriseGrid(), metadata, 'after-normal-undo')
     assertGridRestored(initialSnapshot, metadata)

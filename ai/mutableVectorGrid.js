@@ -160,6 +160,11 @@ function fastActionCoordKey(coord) {
     return coord.x + ':' + coord.y
 }
 
+function isFastActionCoordOnMutableGrid(mutableGrid, coord) {
+    return coord && Number.isFinite(coord.x) && Number.isFinite(coord.y) &&
+        mutableGrid.cells[coord.x] && mutableGrid.cells[coord.x][coord.y]
+}
+
 function addFastActionCoord(coords, seen, coord) {
     if (!coord) {
         return
@@ -170,6 +175,105 @@ function addFastActionCoord(coords, seen, coord) {
     }
     seen[key] = true
     coords.push({x: coord.x, y: coord.y})
+}
+
+function addFastActionCoordIfOnGrid(mutableGrid, coords, seen, coord) {
+    if (isFastActionCoordOnMutableGrid(mutableGrid, coord)) {
+        addFastActionCoord(coords, seen, coord)
+    }
+}
+
+function addFastActionNeighbourCoords(mutableGrid, coords, seen, coord) {
+    if (!isFastActionCoordOnMutableGrid(mutableGrid, coord)) {
+        return
+    }
+    let cell = grid.getCell(coord)
+    let neighbours = cell && cell.hexagon && cell.hexagon.neighbours
+    for (let i = 0; neighbours && i < neighbours.length; ++i) {
+        addFastActionCoordIfOnGrid(mutableGrid, coords, seen, neighbours[i])
+    }
+}
+
+function addFastActionCoordAndNeighbours(mutableGrid, coords, seen, coord) {
+    addFastActionCoordIfOnGrid(mutableGrid, coords, seen, coord)
+    addFastActionNeighbourCoords(mutableGrid, coords, seen, coord)
+}
+
+function addTownSuburbFastActionCoords(mutableGrid, coords, seen, town) {
+    if (!town || !town.suburbs) {
+        return
+    }
+    addFastActionCoordAndNeighbours(mutableGrid, coords, seen, town.coord)
+    for (let i = 0; i < town.suburbs.length; ++i) {
+        addFastActionCoordAndNeighbours(mutableGrid, coords, seen, town.suburbs[i])
+    }
+}
+
+function addBuildingFastActionCoords(mutableGrid, coords, seen, building) {
+    if (!building) {
+        return
+    }
+    addFastActionCoordAndNeighbours(mutableGrid, coords, seen, building.coord)
+    if (building.town) {
+        addFastActionCoordAndNeighbours(mutableGrid, coords, seen, building.town.coord)
+    }
+}
+
+function addAllTownSummaryFastActionCoords(mutableGrid, coords, seen) {
+    if (typeof players == 'undefined') {
+        return
+    }
+    for (let i = 1; i < players.length; ++i) {
+        let player = players[i]
+        for (let j = 0; player && player.towns && j < player.towns.length; ++j) {
+            addTownSuburbFastActionCoords(mutableGrid, coords, seen, player.towns[j])
+        }
+    }
+}
+
+function collectFastActionChangedCoords(mutableGrid, command) {
+    let coords = []
+    let seen = {}
+    addFastActionCoordAndNeighbours(mutableGrid, coords, seen,
+        command && command.whoDoCommandCoord)
+    addFastActionCoordAndNeighbours(mutableGrid, coords, seen,
+        command && command.producerCoord)
+    addFastActionCoordAndNeighbours(mutableGrid, coords, seen,
+        command && command.destinationCoord)
+    if (typeof actionManager == 'undefined' || !actionManager.lastAction) {
+        return coords
+    }
+    let undo = actionManager.lastAction
+    for (let i = 0; undo.hexagons && i < undo.hexagons.length; ++i) {
+        addFastActionCoordAndNeighbours(mutableGrid, coords, seen,
+            undo.hexagons[i].coord)
+    }
+    for (let i = 0; undo.units && i < undo.units.length; ++i) {
+        addFastActionCoordAndNeighbours(mutableGrid, coords, seen,
+            undo.units[i].coord)
+    }
+    for (let i = 0; undo.killUnit && i < undo.killUnit.length; ++i) {
+        addFastActionCoordAndNeighbours(mutableGrid, coords, seen,
+            undo.killUnit[i].coord)
+    }
+    addBuildingFastActionCoords(mutableGrid, coords, seen, undo.killBuilding)
+    addBuildingFastActionCoords(mutableGrid, coords, seen, undo.building)
+    addBuildingFastActionCoords(mutableGrid, coords, seen, undo.buildingProduction)
+    addBuildingFastActionCoords(mutableGrid, coords, seen, undo.externalProduction)
+    addTownSuburbFastActionCoords(mutableGrid, coords, seen, undo.town)
+    for (let i = 0; undo.townExternal && i < undo.townExternal.length; ++i) {
+        addBuildingFastActionCoords(mutableGrid, coords, seen, undo.townExternal[i])
+    }
+    for (let i = 0; undo.townExternalProduction &&
+            i < undo.townExternalProduction.length; ++i) {
+        addBuildingFastActionCoords(
+            mutableGrid,
+            coords,
+            seen,
+            undo.townExternalProduction[i])
+    }
+    addAllTownSummaryFastActionCoords(mutableGrid, coords, seen)
+    return coords
 }
 
 function collectUnitFastActionCoords(command) {
@@ -222,12 +326,96 @@ function collectAllMutableVectorGridCoords(mutableGrid) {
     return coords
 }
 
-function replaceMutableCellVectorFromGrid(mutableGrid, coord) {
+function replaceMutableCellVectorFromGrid(mutableGrid, coord, globalChannels) {
     if (!mutableGrid.cells[coord.x] || !mutableGrid.cells[coord.x][coord.y]) {
         throw new Error('fast unit action coord is outside mutable vector grid: ' +
             JSON.stringify(coord))
     }
-    mutableGrid.cells[coord.x][coord.y] = vectorizeCell(grid.getCell(coord))
+    if (typeof vectorizeCellLocal == 'undefined') {
+        mutableGrid.cells[coord.x][coord.y] = vectorizeCell(grid.getCell(coord))
+        return
+    }
+    if (!globalChannels && typeof computeGlobalVectorChannels != 'undefined') {
+        globalChannels = computeGlobalVectorChannels()
+    }
+    mutableGrid.cells[coord.x][coord.y] = vectorizeCellLocal(
+        grid.getCell(coord),
+        globalChannels)
+}
+
+function mutableVectorGridGlobalChannelList() {
+    if (typeof CELL_VECTOR_GLOBAL_CHANNELS == 'undefined') {
+        return []
+    }
+    return CELL_VECTOR_GLOBAL_CHANNELS
+}
+
+function captureMutableVectorGridGlobalChannels(mutableGrid) {
+    let firstCell = mutableGrid.cells.length && mutableGrid.cells[0].length ?
+        mutableGrid.cells[0][0] : []
+    let size = typeof CELL_VECTOR_SIZE == 'undefined' ?
+        firstCell.length : CELL_VECTOR_SIZE
+    let result = new Array(size)
+    result = result.fill(0)
+    if (!mutableGrid.cells.length || !mutableGrid.cells[0].length) {
+        return result
+    }
+    let channels = mutableVectorGridGlobalChannelList()
+    for (let i = 0; i < channels.length; ++i) {
+        let channel = channels[i]
+        result[channel] = firstCell[channel]
+    }
+    return result
+}
+
+function refreshMutableVectorGridGlobalChannels(mutableGrid, globalChannels) {
+    if (typeof applyGlobalVectorChannels == 'undefined') {
+        return
+    }
+    for (let x = 0; x < mutableGrid.cells.length; ++x) {
+        for (let y = 0; y < mutableGrid.cells[x].length; ++y) {
+            applyGlobalVectorChannels(mutableGrid.cells[x][y], globalChannels)
+        }
+    }
+}
+
+function applyChangedCellFastAction(mutableGrid, command) {
+    let coords = collectFastActionChangedCoords(mutableGrid, command)
+    let previous = []
+    let previousGlobalChannels = captureMutableVectorGridGlobalChannels(mutableGrid)
+    let currentGlobalChannels = typeof computeGlobalVectorChannels == 'undefined' ?
+        previousGlobalChannels : computeGlobalVectorChannels()
+    for (let i = 0; i < coords.length; ++i) {
+        let coord = coords[i]
+        previous.push({
+            coord: {x: coord.x, y: coord.y},
+            vector: mutableGrid.cells[coord.x][coord.y].slice()
+        })
+        replaceMutableCellVectorFromGrid(mutableGrid, coord, currentGlobalChannels)
+    }
+    refreshMutableVectorGridGlobalChannels(
+        mutableGrid,
+        currentGlobalChannels)
+    return {
+        previous: previous,
+        previousGlobalChannels: previousGlobalChannels,
+        currentGlobalChannels: currentGlobalChannels,
+        changedCellCount: coords.length
+    }
+}
+
+function undoChangedCellFastAction(mutableGrid, token) {
+    for (let i = 0; token && token.previous &&
+            i < token.previous.length; ++i) {
+        let entry = token.previous[i]
+        mutableGrid.cells[entry.coord.x][entry.coord.y] =
+            entry.vector.slice()
+    }
+    if (token && token.previousGlobalChannels) {
+        refreshMutableVectorGridGlobalChannels(
+            mutableGrid,
+            token.previousGlobalChannels)
+    }
 }
 
 var unitFastActionHandler = {
@@ -236,25 +424,10 @@ var unitFastActionHandler = {
                 !command.destinationCoord) {
             throw new Error('fast unit action requires source and destination coords')
         }
-        let coords = collectAllMutableVectorGridCoords(mutableGrid)
-        let previous = []
-        for (let i = 0; i < coords.length; ++i) {
-            let coord = coords[i]
-            previous.push({
-                coord: {x: coord.x, y: coord.y},
-                vector: mutableGrid.cells[coord.x][coord.y].slice()
-            })
-            replaceMutableCellVectorFromGrid(mutableGrid, coord)
-        }
-        return {previous: previous}
+        return applyChangedCellFastAction(mutableGrid, command)
     },
     undo: function(mutableGrid, command, token) {
-        for (let i = 0; token && token.previous &&
-                i < token.previous.length; ++i) {
-            let entry = token.previous[i]
-            mutableGrid.cells[entry.coord.x][entry.coord.y] =
-                entry.vector.slice()
-        }
+        undoChangedCellFastAction(mutableGrid, token)
     }
 }
 
@@ -263,25 +436,10 @@ var unitProductionFastActionHandler = {
         if (!command || !command.producerCoord || !command.product) {
             throw new Error('fast unit production requires producer coord and product')
         }
-        let coords = collectAllMutableVectorGridCoords(mutableGrid)
-        let previous = []
-        for (let i = 0; i < coords.length; ++i) {
-            let coord = coords[i]
-            previous.push({
-                coord: {x: coord.x, y: coord.y},
-                vector: mutableGrid.cells[coord.x][coord.y].slice()
-            })
-            replaceMutableCellVectorFromGrid(mutableGrid, coord)
-        }
-        return {previous: previous}
+        return applyChangedCellFastAction(mutableGrid, command)
     },
     undo: function(mutableGrid, command, token) {
-        for (let i = 0; token && token.previous &&
-                i < token.previous.length; ++i) {
-            let entry = token.previous[i]
-            mutableGrid.cells[entry.coord.x][entry.coord.y] =
-                entry.vector.slice()
-        }
+        undoChangedCellFastAction(mutableGrid, token)
     }
 }
 
@@ -292,25 +450,10 @@ var suburbExpansionFastActionHandler = {
             throw new Error('fast suburb expansion requires producer coord, ' +
                 'destination coord, and suburb product')
         }
-        let coords = collectAllMutableVectorGridCoords(mutableGrid)
-        let previous = []
-        for (let i = 0; i < coords.length; ++i) {
-            let coord = coords[i]
-            previous.push({
-                coord: {x: coord.x, y: coord.y},
-                vector: mutableGrid.cells[coord.x][coord.y].slice()
-            })
-            replaceMutableCellVectorFromGrid(mutableGrid, coord)
-        }
-        return {previous: previous}
+        return applyChangedCellFastAction(mutableGrid, command)
     },
     undo: function(mutableGrid, command, token) {
-        for (let i = 0; token && token.previous &&
-                i < token.previous.length; ++i) {
-            let entry = token.previous[i]
-            mutableGrid.cells[entry.coord.x][entry.coord.y] =
-                entry.vector.slice()
-        }
+        undoChangedCellFastAction(mutableGrid, token)
     }
 }
 
@@ -323,25 +466,10 @@ var buildingPlacementFastActionHandler = {
             throw new Error('fast building placement requires producer coord, ' +
                 'destination coord, and non-unit building product')
         }
-        let coords = collectAllMutableVectorGridCoords(mutableGrid)
-        let previous = []
-        for (let i = 0; i < coords.length; ++i) {
-            let coord = coords[i]
-            previous.push({
-                coord: {x: coord.x, y: coord.y},
-                vector: mutableGrid.cells[coord.x][coord.y].slice()
-            })
-            replaceMutableCellVectorFromGrid(mutableGrid, coord)
-        }
-        return {previous: previous}
+        return applyChangedCellFastAction(mutableGrid, command)
     },
     undo: function(mutableGrid, command, token) {
-        for (let i = 0; token && token.previous &&
-                i < token.previous.length; ++i) {
-            let entry = token.previous[i]
-            mutableGrid.cells[entry.coord.x][entry.coord.y] =
-                entry.vector.slice()
-        }
+        undoChangedCellFastAction(mutableGrid, token)
     }
 }
 

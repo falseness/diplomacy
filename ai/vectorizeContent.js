@@ -81,6 +81,17 @@ var CELL_VECTOR_INDEX = {
 }
 
 var CELL_VECTOR_SIZE = 78
+var CELL_VECTOR_GLOBAL_CHANNELS = [
+    CELL_VECTOR_INDEX.currentPlayerGold,
+    CELL_VECTOR_INDEX.strongestOpponentGold,
+    CELL_VECTOR_INDEX.relativeGoldAdvantage,
+    CELL_VECTOR_INDEX.currentPlayerIncome,
+    CELL_VECTOR_INDEX.strongestOpponentIncome,
+    CELL_VECTOR_INDEX.relativeIncomeAdvantage,
+    CELL_VECTOR_INDEX.currentPlayerSuburbIncome,
+    CELL_VECTOR_INDEX.strongestOpponentSuburbIncome,
+    CELL_VECTOR_INDEX.relativeSuburbIncomeAdvantage
+]
 var TOWN_INCOME_VECTOR_SCALE = 20.0
 var BARRACK_INCOME_VECTOR_SCALE = 20.0
 var FARM_INCOME_VECTOR_SCALE = 20.0
@@ -434,12 +445,26 @@ function unitCombatRange(unit) {
     return unit.name == 'archer' ? 2 : (unit.name == 'catapult' ? 5 : 1)
 }
 
-function vectorizeCell(cell) {
+function computeGlobalVectorChannels() {
     let result = new Array(CELL_VECTOR_SIZE)
     result = result.fill(0)
     vectorizePlayerGold(result)
     vectorizePlayerIncome(result)
     vectorizePlayerSuburbIncome(result)
+    return result
+}
+
+function applyGlobalVectorChannels(result, globalChannels) {
+    for (let i = 0; i < CELL_VECTOR_GLOBAL_CHANNELS.length; ++i) {
+        let channel = CELL_VECTOR_GLOBAL_CHANNELS[i]
+        result[channel] = globalChannels[channel]
+    }
+}
+
+function vectorizeCellLocal(cell, globalChannels) {
+    let result = new Array(CELL_VECTOR_SIZE)
+    result = result.fill(0)
+    applyGlobalVectorChannels(result, globalChannels)
     vectorizeSuburb(cell, result)
     if (!cell.building.isEmpty()) {
         result[CELL_VECTOR_INDEX.hasBuilding] = 1
@@ -500,6 +525,10 @@ function vectorizeCell(cell) {
     return result
 }
 
+function vectorizeCell(cell) {
+    return vectorizeCellLocal(cell, computeGlobalVectorChannels())
+}
+
 
 function vectoriseGridDebug() {
     assert(false)
@@ -507,11 +536,14 @@ function vectoriseGridDebug() {
 
 function vectoriseGrid() {
     let result = new Array(grid.arr.length)
+    let globalChannels = computeGlobalVectorChannels()
 
     for (let i = 0; i < grid.arr.length; ++i) {
         result[i] = new Array(grid.arr[i].length)
         for (let j = 0; j < grid.arr[i].length; ++j) {
-            result[i][j] = vectorizeCell(grid.getCell({x: i, y: j}))
+            result[i][j] = vectorizeCellLocal(
+                grid.getCell({x: i, y: j}),
+                globalChannels)
         }
     }
     let suddenDeathMetric = (suddenDeathRound - gameRound - 1) * (players.length - 1) + 

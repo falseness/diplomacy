@@ -152,6 +152,18 @@ class InterationWithUnit {
         })
     }
     addKillBuildingUndo(building) {
+        if (building.isBuildingProduction && building.isBuildingProduction()) {
+            if (building.isExternalProduction && building.isExternalProduction()) {
+                actionManager.lastAction.externalProduction = building.toUndoJSON()
+            }
+            else {
+                let packedProduction = building.toUndoJSON()
+                actionManager.lastAction.buildingProduction = packedProduction
+                if (actionManager.lastAction.buildingProductions) {
+                    actionManager.lastAction.buildingProductions.push(packedProduction)
+                }
+            }
+        }
         actionManager.lastAction.killBuilding = {
             coord: {
                 x: building.coord.x,
@@ -165,6 +177,16 @@ class InterationWithUnit {
         unit.coord = coord
 
         if (!killUnit) {
+            let oldBuilding = grid.getBuilding(coord)
+            if (oldBuilding && oldBuilding.notEmpty && oldBuilding.notEmpty() &&
+                    oldBuilding.isBuildingProduction &&
+                    oldBuilding.isBuildingProduction() &&
+                    !(oldBuilding.isExternalProduction &&
+                    oldBuilding.isExternalProduction()) &&
+                    actionManager.lastAction.buildingProductions) {
+                actionManager.lastAction.buildingProductions.push(
+                    oldBuilding.toUndoJSON())
+            }
             let oldUnit = grid.getUnit(coord).toJSON()
             if (oldUnit.name == "Empty") {
                 oldUnit.coord = {

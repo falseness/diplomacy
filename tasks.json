@@ -2132,7 +2132,7 @@
     "id": "TASK-105",
     "category": "performance",
     "priority": "high",
-    "description": "Speed up per-candidate scoring by making the fast-action handlers in ai/mutableVectorGrid.js update only changed cells plus recomputed global and relative scalars, instead of re-vectorizing every cell. Split the cell vector in ai/vectorizeContent.js into local per-cell channels and global/relative channels that are broadcast, so incremental updates remain byte-identical to a fresh vectoriseGrid() (the invariant enforced by TASK-089). Also drop the redundant per-candidate full-board compareVectorGridResults in scoreActionCommandsWithFastVectorGrid in ai/players.js, since commandMadeAuthoritativeProgress already filters no-op commands.",
+    "description": "Speed up per-candidate scoring by making the fast-action handlers in ai/mutableVectorGrid.js update only changed cells plus recomputed global and relative scalars, instead of re-vectorizing every cell. Split the cell vector in ai/vectorizeContent.js into local per-cell channels and global/relative channels that are broadcast, so incremental updates remain byte-identical to a fresh vectoriseGrid() (the invariant enforced by TASK-089). Also drop the redundant per-candidate full-board compareVectorGridResults in scoreActionCommandsWithFastVectorGrid in ai/players.js, since commandMadeAuthoritativeProgress already filters no-op commands. Implemented: Split global vector channels from local cell vectorization, updated mutable fast actions by changed cells plus one global broadcast, removed the redundant candidate full-board compare, fixed multi-production unit undo restoration, and recorded 59.58% fixed-candidate plus 34.22% canonical training speed reductions.",
     "acceptance_criteria": [
       "For every legal action across the existing generated and fixed maps, the mutable vector grid after applyFastAction equals a fresh vectoriseGrid() byte-for-byte (zero vector mismatches), and undo restores byte-identical state (zero undo and grid-restoration mismatches).",
       "Per-candidate vectorizeCell calls scale with the number of changed cells plus O(1) global recomputation, not with the total cell count (asserted call-count reduction).",
@@ -2148,7 +2148,7 @@
       "Step 4 (regression): Run test-ai-fast-candidate-scoring, test-ai-economy, init-model, and a train smoke.",
       "Step 5 (speed): Time scoreActionCommandsWithFastVectorGrid over a fixed candidate set and the canonical command before and after; require at least a 10 percent reduction and record in progress.md."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-106",

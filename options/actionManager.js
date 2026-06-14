@@ -24,6 +24,7 @@ class ActionManager {
             killUnit: [],
             townExternal: [],
             townExternalProduction: [],
+            buildingProductions: [],
             playerEntityLists: this.snapshotPlayerEntityLists()
         })
     }
@@ -202,6 +203,28 @@ class ActionManager {
             collection.splice(index, 1)
         }
     }
+    undoBuildingProductionList(primary, list) {
+        let seen = {}
+        let entries = []
+        if (primary) {
+            entries.push(primary)
+        }
+        for (let i = 0; list && i < list.length; ++i) {
+            entries.push(list[i])
+        }
+        for (let i = 0; i < entries.length; ++i) {
+            let entry = entries[i]
+            if (!entry || !entry.coord) {
+                continue
+            }
+            let key = entry.coord.x + ':' + entry.coord.y
+            if (seen[key]) {
+                continue
+            }
+            seen[key] = true
+            this.undoBuildingProduction(entry)
+        }
+    }
     unitUndo() {
         let undo = this.arr.pop() //JSON.parse(this.arr.pop())
 
@@ -233,12 +256,20 @@ class ActionManager {
         let townExternalProduction = undo.townExternalProduction
         let townExternal = undo.townExternal
 
-        if (building) {
+        if (building && Number.isFinite(building.turns)) {
+            if (building.town) {
+                this.undoBuildingProduction(building)
+            }
+            else {
+                this.undoExternalProduction(building)
+            }
+        }
+        else if (building) {
             this.undoBuilding(building)
         }
-        if (buildingProduction) {
-            this.undoBuildingProduction(buildingProduction)
-        }
+        this.undoBuildingProductionList(
+            buildingProduction,
+            undo.buildingProductions)
         if (exProduction) {
             this.undoExternalProduction(exProduction)
         }
