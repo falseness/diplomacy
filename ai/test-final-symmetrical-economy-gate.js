@@ -71,7 +71,9 @@ async function createSmokeCheckpoint(checkpointDir) {
     dataSource: 'test-trained-economy-checkpoint',
     cellVectorSize: 78,
     game: 1,
-    valueFunction: 'final-symmetrical-economy-v1'
+    valueFunction: 'final-symmetrical-economy-v2',
+    labelScale: 240000,
+    featureFusionWeight: 1
   }, null, 2) + '\n');
 }
 
@@ -163,8 +165,12 @@ try {
       smoke.checkpoint.gameplayInference.calls,
     'loaded checkpoint did not score competing gameplay actions');
   check(smoke.checkpoint.gameplayInference.metadataValueFunction ===
-      'final-symmetrical-economy-v1',
+      'final-symmetrical-economy-v2',
     'gate did not use the checkpoint-declared value function');
+  check(smoke.checkpoint.gameplayInference.outputScale === 240000,
+    'gate did not scale trained checkpoint outputs into score units');
+  check(smoke.checkpoint.gameplayInference.featureFusionWeight === 1,
+    'gate did not record the feature fusion weight');
   for (const game of smoke.games) {
     check(game.classCheck.runtimeAIPlayer === 'AIPlayerWithEconomy',
       'runtime AIPlayerWithEconomy class changed');

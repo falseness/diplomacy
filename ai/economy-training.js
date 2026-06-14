@@ -97,15 +97,16 @@ function createModel(height, width) {
   const globalInput = tf.input({ shape: [1], name: 'global_variables' });
   const flattened = tf.layers.flatten().apply(boardInput);
   const merged = tf.layers.concatenate().apply([flattened, globalInput]);
-  const hidden1 = tf.layers.dense({ units: 256, activation: 'relu' }).apply(merged);
-  const hidden2 = tf.layers.dense({ units: 128, activation: 'relu' }).apply(hidden1);
-  const hidden3 = tf.layers.dense({ units: 64, activation: 'relu' }).apply(hidden2);
-  const hidden4 = tf.layers.dense({ units: 32, activation: 'relu' }).apply(hidden3);
+  const hidden1 = tf.layers.dense({ units: 384, activation: 'relu' }).apply(merged);
+  const hidden2 = tf.layers.dense({ units: 256, activation: 'relu' }).apply(hidden1);
+  const hidden3 = tf.layers.dense({ units: 128, activation: 'relu' }).apply(hidden2);
+  const hidden4 = tf.layers.dense({ units: 64, activation: 'relu' }).apply(hidden3);
+  const hidden5 = tf.layers.dense({ units: 32, activation: 'relu' }).apply(hidden4);
   const output = tf.layers.dense({
     units: 1,
     activation: 'linear',
     name: 'value_output'
-  }).apply(hidden4);
+  }).apply(hidden5);
   const model = tf.model({ inputs: [boardInput, globalInput], outputs: output });
   model.compile({
     optimizer: tf.train.adam(0.001),
@@ -386,9 +387,9 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
         (player.income - opponentIncomeTotal / scale) / 80
       return Math.max(-1, Math.min(1, material))
     }
-    function modelValueLabel(vector) {
+    function modelValueLabel(vector, playerIndex) {
       let tacticalScore = __scoreFinalEconomyVector(vector)
-      return tacticalScore / 240000
+      return tacticalScore / 240000 + score(playerIndex) * 0.25
     }
     function commandCategory(command) {
       return command.type == 'economy' ? command.category : 'unit-command'
@@ -422,7 +423,7 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
             continue
           }
           let vector = vectoriseGrid()
-          let label = modelValueLabel(vector)
+          let label = modelValueLabel(vector, playerIndex)
           let category = commandCategory(commands[index])
           examples.push({
             playerIndex,
@@ -582,7 +583,8 @@ function createCandidate(options, checkpointRoot, bestCheckpoint) {
   );
   return {
     runId: options.runId,
-    selectedBy: 'lowest-training-loss',
+    selectedBy: options.mapSource === 'final-symmetrical-economy' ?
+      'latest-final-symmetrical-training-checkpoint' : 'lowest-training-loss',
     checkpoint: path.relative(options.storageDir, candidatePath),
     game: bestCheckpoint.game,
     loss: bestCheckpoint.loss
@@ -759,9 +761,16 @@ async function run(options) {
           loss,
           mapGenerator: batch.map.provenance.generator,
           mapSource: options.mapSource,
-          valueFunction: 'final-symmetrical-economy-v1'
+          valueFunction: 'final-symmetrical-economy-v2',
+          labelScale: 180000,
+          featureFusionWeight: 1,
+          labelComponents: [
+            'final symmetrical economy feature score',
+            'real runtime player material score'
+          ]
         });
-        if (!bestCheckpoint || loss < bestCheckpoint.loss) {
+        if (options.mapSource === 'final-symmetrical-economy' ||
+            !bestCheckpoint || loss < bestCheckpoint.loss) {
           bestCheckpoint = { game, loss };
         }
       }

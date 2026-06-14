@@ -394,6 +394,10 @@ function adaptBoard(board, expectedWidth, expectedHeight, expectedChannels, stat
 
 function createCheckpointPredictor(loadedCheckpoint) {
   const inputShape = loadedCheckpoint.model.inputs[0].shape;
+  const metadata = loadedCheckpoint.report.metadata || {};
+  const outputScale = Number(metadata.labelScale) || 240000;
+  const featureFusionWeight = Number.isFinite(Number(metadata.featureFusionWeight)) ?
+    Number(metadata.featureFusionWeight) : 1;
   return function checkpointEconomyPredict(_modelIdentifier, vectors) {
     const expectedWidth = inputShape[1];
     const expectedHeight = inputShape[2];
@@ -428,11 +432,14 @@ function createCheckpointPredictor(loadedCheckpoint) {
       if (!loadedCheckpoint.inference.modelProbe) {
         loadedCheckpoint.inference.modelProbe = values.slice(0, 8);
       }
+      loadedCheckpoint.inference.outputScale = outputScale;
+      loadedCheckpoint.inference.featureFusionWeight = featureFusionWeight;
       loadedCheckpoint.inference.featureScoreFusion =
-        'trained checkpoint output plus final economy feature value';
+        'scaled trained checkpoint value plus final economy feature value';
       prediction.dispose();
       return values.map((value, index) => [
-        value + scoreFinalEconomyVector(vectors[index])
+        value * outputScale +
+          scoreFinalEconomyVector(vectors[index]) * featureFusionWeight
       ]);
     } finally {
       boardTensor.dispose();
