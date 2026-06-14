@@ -1675,6 +1675,71 @@ function generateEconomyStage8TrainingMap(options) {
     return map
 }
 
+function generateAdvancedEconomyStage1TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let mapSize = {x: 3, y: 3}
+    let redTown = {x: 1, y: 0}
+    let blueTown = {x: 1, y: 2}
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [redTown],
+            units: []
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [blueTown],
+            units: []
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.testName = 'advanced-economy-stage-1-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 40
+    map.economyStage = 'advanced-1'
+    map.advancedEconomyStage = 1
+    map.economyGenerator = {
+        stage: 'advanced-1',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        mapSize: mapSize,
+        townLayout: 'vertical-mirror',
+        townCount: 2,
+        emptyMap: true
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 2,
+        productionActions: 0,
+        resources: 180,
+        units: 0,
+        towers: 0,
+        bastions: 0,
+        lakes: 0,
+        mountains: 0,
+        bushes: 0
+    }
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1

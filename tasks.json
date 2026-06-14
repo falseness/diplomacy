@@ -2805,7 +2805,7 @@
     "id": "TASK-138",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: 3x3 map with exactly one red town and one blue town, and no extra units, buildings, terrain, or economy objects.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: 3x3 map with exactly one red town and one blue town, and no extra units, buildings, terrain, or economy objects. Implemented: Added deterministic advanced economy stage 1 3x3 town-only maps, benchmark-compatible edge-town initialization, and focused generation/smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a deterministic 3x3 map from a seed.",
       "The map contains exactly one red town and one blue town.",
@@ -2819,7 +2819,7 @@
       "Step 3: Confirm the same seed reproduces the same map.",
       "Step 4: Run a short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke initialization."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-139",
