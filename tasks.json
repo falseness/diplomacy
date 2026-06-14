@@ -2645,7 +2645,7 @@
     "id": "TASK-130",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 7: 9v9 map with all unit types and towers or bastions.",
+    "description": "Add AIPlayerWithEconomy generator stage 7: 9v9 map with all unit types and towers or bastions. Implemented: Added deterministic 9v9 economy stage 7 maps with mirrored AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy starts, all five unit types per side, tower/bastion HP metadata, runtime initialization, and a focused benchmark smoke.",
     "acceptance_criteria": [
       "The generator creates a 9v9 map.",
       "All supported unit types can appear.",
@@ -2659,7 +2659,7 @@
       "Step 3: Confirm all unit types and defensive buildings are represented across seeds.",
       "Step 4: Run one short economy AI-vs-baseline smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-131",
