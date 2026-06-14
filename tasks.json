@@ -2545,7 +2545,7 @@
     "id": "TASK-125",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 4.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 4. Implemented: Added npm run test-economy-stage-4-validation with multi-seed assertions for two defensive buildings per side, tower and bastion coverage, HP bounds/randomization, fair mirrored placement, and deterministic replay.",
     "acceptance_criteria": [
       "The test verifies multiple defensive buildings are generated.",
       "The test verifies tower and bastion type coverage across seeds.",
@@ -2559,7 +2559,7 @@
       "Step 3: Confirm deterministic replay for at least one seed.",
       "Step 4: Run existing building map generation tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-126",
