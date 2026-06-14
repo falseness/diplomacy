@@ -2725,7 +2725,7 @@
     "id": "TASK-134",
     "category": "functional",
     "priority": "critical",
-    "description": "Add symmetrical economy generator for the 9v9 all-unit map with towers and bastions.",
+    "description": "Add symmetrical economy generator for the 9v9 all-unit map with towers and bastions. Implemented: Added a deterministic 9v9 mirrored economy/all-unit generator with equal AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy setup, mirrored farms/barracks/goldmines/terrain/tower/bastion HP, and focused runtime smoke coverage.",
     "acceptance_criteria": [
       "The generator creates symmetrical 9v9 maps with all unit types and defensive buildings.",
       "Both sides receive mirrored or equivalent economy state, units, buildings, HP, terrain, and resources.",
@@ -2739,7 +2739,7 @@
       "Step 3: Run one short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke game.",
       "Step 4: Confirm the same seed reproduces the same map."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-135",

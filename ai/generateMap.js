@@ -1675,6 +1675,182 @@ function generateEconomyStage8TrainingMap(options) {
     return map
 }
 
+function generateSymmetricalEconomy9v9AllUnitMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed)
+    let mapSize = {x: 9, y: 9}
+    let leftTown = {x: 1, y: 4}
+    let rightTown = {x: 7, y: 4}
+    let towerHp = randomIntWithRng(rng, 2, 5)
+    let bastionHp = randomIntWithRng(rng, 2, 5)
+    let noobHp = randomIntWithRng(rng, 1, 2)
+    let kohbHp = randomIntWithRng(rng, 1, 3)
+    let normchelHp = randomIntWithRng(rng, 1, 5)
+    let unitTypeOffset = randomIntWithRng(rng, 0, 4)
+    let leftCoords = [
+        {x: 2, y: 1},
+        {x: 2, y: 4},
+        {x: 2, y: 7},
+        {x: 3, y: 1},
+        {x: 3, y: 7}
+    ]
+    let rightCoords = leftCoords.map(function(coord) {
+        return mirrorXCoord(coord, mapSize)
+    })
+    let leftUnits = stage7UnitsFromCoords(leftCoords, unitTypeOffset)
+    let rightUnits = stage7UnitsFromCoords(rightCoords, unitTypeOffset)
+    let hpByUnitType = {
+        Noob: noobHp,
+        Archer: 1,
+        KOHb: kohbHp,
+        Normchel: normchelHp,
+        Catapult: 1
+    }
+    for (let i = 0; i < leftUnits.length; ++i) {
+        let unitName = leftUnits[i].type.name
+        leftUnits[i].hp = hpByUnitType[unitName]
+        rightUnits[i].hp = hpByUnitType[unitName]
+    }
+    let leftSuburbCells = [
+        leftTown,
+        {x: 1, y: 3},
+        {x: 1, y: 5},
+        {x: 2, y: 2},
+        {x: 2, y: 3},
+        {x: 2, y: 4},
+        {x: 2, y: 5},
+        {x: 2, y: 6},
+        {x: 3, y: 3},
+        {x: 3, y: 5}
+    ]
+    let rightSuburbCells = leftSuburbCells.map(function(coord) {
+        return mirrorXCoord(coord, mapSize)
+    })
+    let leftTower = {x: 3, y: 3, town: leftTown, hp: towerHp}
+    let leftBastion = {x: 3, y: 5, town: leftTown, hp: bastionHp}
+    let rightTower = Object.assign(
+        {town: rightTown, hp: towerHp},
+        mirrorXCoord(leftTower, mapSize))
+    let rightBastion = Object.assign(
+        {town: rightTown, hp: bastionHp},
+        mirrorXCoord(leftBastion, mapSize))
+    let leftFarm = {x: 1, y: 3, town: leftTown}
+    let leftBarrack = {x: 1, y: 5, town: leftTown}
+    let rightFarm = Object.assign(
+        {town: rightTown},
+        mirrorXCoord(leftFarm, mapSize))
+    let rightBarrack = Object.assign(
+        {town: rightTown},
+        mirrorXCoord(leftBarrack, mapSize))
+    let goldmineIncome = randomIntWithRng(rng, 20, 40)
+    let neutralGoldmineIncome = randomIntWithRng(rng, 20, 40)
+    let goldmines = [
+        {x: 0, y: 4, income: goldmineIncome, owner: 1},
+        {x: 8, y: 4, income: goldmineIncome, owner: 2},
+        {x: 4, y: 8, income: neutralGoldmineIncome, owner: 0}
+    ]
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 180,
+            towns: [leftTown],
+            units: leftUnits,
+            suburbs: [{
+                town: leftTown,
+                cells: leftSuburbCells,
+                expansionCells: [{x: 0, y: 3}, {x: 0, y: 5}, {x: 4, y: 4}]
+            }],
+            farms: [leftFarm],
+            barracks: [leftBarrack],
+            towers: [leftTower],
+            bastions: [leftBastion]
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 180,
+            towns: [rightTown],
+            units: rightUnits,
+            suburbs: [{
+                town: rightTown,
+                cells: rightSuburbCells,
+                expansionCells: [{x: 8, y: 3}, {x: 8, y: 5}, {x: 4, y: 4}]
+            }],
+            farms: [rightFarm],
+            barracks: [rightBarrack],
+            towers: [rightTower],
+            bastions: [rightBastion]
+        }
+    ]
+    let lakes = [{x: 4, y: 0}]
+    let mountains = [{x: 0, y: 1}, {x: 8, y: 1}]
+    let bushes = [{x: 0, y: 7}, {x: 8, y: 7}]
+    let hills = [{x: 4, y: 2}, {x: 4, y: 6}]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        goldmines,
+        lakes,
+        mountains,
+        bushes,
+        hills)
+    map.testName = 'symmetrical-economy-9v9-all-unit-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 120
+    map.economyStage = 'symmetrical-9v9-all-unit'
+    map.symmetry = {
+        axis: 'vertical',
+        mirror: 'x',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        benchmarkSpecificAdvantage: false
+    }
+    map.economyGenerator = {
+        name: 'symmetrical-economy-9v9-all-unit',
+        seed: seed,
+        mapSize: mapSize,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        unitTypes: ['Noob', 'Archer', 'KOHb', 'Normchel', 'Catapult'],
+        unitTypeOffset: unitTypeOffset,
+        unitsPerPlayer: leftUnits.length,
+        buildingTypes: ['farm', 'barrack', 'tower', 'bastion'],
+        hpByType: Object.assign({}, hpByUnitType, {
+            tower: towerHp,
+            bastion: bastionHp
+        }),
+        goldmineIncome: goldmineIncome,
+        neutralGoldmineIncome: neutralGoldmineIncome,
+        startingGold: 180,
+        terrainTypes: ['lake', 'mountain', 'bush', 'hill'],
+        benchmarkSpecificAdvantage: false
+    }
+    map.economyObjects = {
+        farms: 2,
+        barracks: 2,
+        goldmines: goldmines.length,
+        towns: 2,
+        productionActions: 0,
+        resources: 360,
+        noobs: 2,
+        archers: 2,
+        KOHbs: 2,
+        normchels: 2,
+        catapults: 2,
+        towers: 2,
+        bastions: 2
+    }
+    return map
+}
+
 function generateCombatStageATrainingMap(options) {
     options = options || {}
     let rng = createSeededRandom(options.seed || 1)
