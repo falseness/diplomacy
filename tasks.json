@@ -2745,7 +2745,7 @@
     "id": "TASK-135",
     "category": "test",
     "priority": "critical",
-    "description": "Add tests proving the symmetrical economy generator gives mirrored armies, buildings, HP distributions, economy state, and legal terrain.",
+    "description": "Add tests proving the symmetrical economy generator gives mirrored armies, buildings, HP distributions, economy state, and legal terrain. Implemented: Added a dedicated symmetrical economy validation npm test covering 24 deterministic seeds, mirrored units/buildings/suburbs/goldmines/terrain, runtime economy state, deterministic replay, and explicit unfair resource/HP/terrain mutation rejection.",
     "acceptance_criteria": [
       "Tests verify mirrored or equivalent unit rosters and positions.",
       "Tests verify mirrored buildings, HP distributions, ownership, resources, and economy state.",
@@ -2759,7 +2759,7 @@
       "Step 3: Confirm the test detects unfair resources or asymmetric HP by review or local reasoning.",
       "Step 4: Run existing economy map generation tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-136",
