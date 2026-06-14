@@ -2485,7 +2485,7 @@
     "id": "TASK-122",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 3: bigger economy maps with more noob units.",
+    "description": "Add AIPlayerWithEconomy generator stage 3: bigger economy maps with more noob units. Implemented: Added seeded 11x9 stage-3 economy maps with mirrored four-Noob starts, tower/bastion HP variation, legality metadata, and focused map-generation/runtime smoke coverage.",
     "acceptance_criteria": [
       "The generator increases noob unit count compared with stage 2.",
       "Unit placement remains legal and does not overlap invalid terrain or buildings.",
@@ -2499,7 +2499,7 @@
       "Step 3: Confirm legal placement and fair sides.",
       "Step 4: Run one short economy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-123",

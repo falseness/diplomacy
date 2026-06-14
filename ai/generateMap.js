@@ -61,6 +61,8 @@ const ECONOMY_GENERATOR_STAGE_1_HP_MIN = 2
 const ECONOMY_GENERATOR_STAGE_1_HP_MAX = 5
 const ECONOMY_GENERATOR_STAGE_2_HP_MIN = 2
 const ECONOMY_GENERATOR_STAGE_2_HP_MAX = 5
+const ECONOMY_GENERATOR_STAGE_3_HP_MIN = 2
+const ECONOMY_GENERATOR_STAGE_3_HP_MAX = 5
 
 function townDistance(a, b) {
     let dx = a.x - b.x
@@ -843,6 +845,129 @@ function generateEconomyStage2TrainingMap(options) {
         towns: 2,
         productionActions: 0,
         resources: 220,
+        towers: buildingType == 'towers' ? 2 : 0,
+        bastions: buildingType == 'bastions' ? 2 : 0
+    }
+    return map
+}
+
+function generateEconomyStage3TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed)
+    let mapSize = {x: 11, y: 9}
+    let leftTown = {x: 1, y: 4}
+    let rightTown = {x: 9, y: 4}
+    rng()
+    let buildingType = randomIntWithRng(rng, 0, 1) == 0 ? 'towers' : 'bastions'
+    let buildingHp = randomIntWithRng(
+        rng,
+        ECONOMY_GENERATOR_STAGE_3_HP_MIN,
+        ECONOMY_GENERATOR_STAGE_3_HP_MAX)
+    let leftBuilding = {x: 4, y: 4, town: leftTown, hp: buildingHp}
+    let rightBuilding = {x: 6, y: 4, town: rightTown, hp: buildingHp}
+    let leftSuburbCells = [
+        leftTown,
+        {x: 1, y: 3},
+        {x: 1, y: 5},
+        {x: 2, y: 2},
+        {x: 2, y: 3},
+        {x: 2, y: 4},
+        {x: 2, y: 5},
+        {x: 2, y: 6},
+        {x: 3, y: 3},
+        {x: 3, y: 5},
+        {x: 4, y: 4}
+    ]
+    let rightSuburbCells = [
+        rightTown,
+        {x: 9, y: 3},
+        {x: 9, y: 5},
+        {x: 8, y: 2},
+        {x: 8, y: 3},
+        {x: 8, y: 4},
+        {x: 8, y: 5},
+        {x: 8, y: 6},
+        {x: 7, y: 3},
+        {x: 7, y: 5},
+        {x: 6, y: 4}
+    ]
+    let leftUnits = [
+        {type: Noob, x: 3, y: 2},
+        {type: Noob, x: 3, y: 4},
+        {type: Noob, x: 3, y: 6},
+        {type: Noob, x: 4, y: 3}
+    ]
+    let rightUnits = [
+        {type: Noob, x: 7, y: 2},
+        {type: Noob, x: 7, y: 4},
+        {type: Noob, x: 7, y: 6},
+        {type: Noob, x: 6, y: 3}
+    ]
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 130,
+            towns: [leftTown],
+            units: leftUnits,
+            suburbs: [{
+                town: leftTown,
+                cells: leftSuburbCells,
+                expansionCells: [{x: 0, y: 4}, {x: 4, y: 2}, {x: 4, y: 6}]
+            }],
+            towers: buildingType == 'towers' ? [leftBuilding] : [],
+            bastions: buildingType == 'bastions' ? [leftBuilding] : []
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 130,
+            towns: [rightTown],
+            units: rightUnits,
+            suburbs: [{
+                town: rightTown,
+                cells: rightSuburbCells,
+                expansionCells: [{x: 10, y: 4}, {x: 6, y: 2}, {x: 6, y: 6}]
+            }],
+            towers: buildingType == 'towers' ? [rightBuilding] : [],
+            bastions: buildingType == 'bastions' ? [rightBuilding] : []
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.testName = 'economy-stage-3-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 60
+    map.economyStage = 3
+    map.economyGenerator = {
+        stage: 3,
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        buildingType: buildingType == 'towers' ? 'tower' : 'bastion',
+        hp: buildingHp,
+        hpMin: ECONOMY_GENERATOR_STAGE_3_HP_MIN,
+        hpMax: ECONOMY_GENERATOR_STAGE_3_HP_MAX,
+        noobsPerPlayer: leftUnits.length
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 2,
+        productionActions: 0,
+        resources: 260,
+        noobs: leftUnits.length + rightUnits.length,
         towers: buildingType == 'towers' ? 2 : 0,
         bastions: buildingType == 'bastions' ? 2 : 0
     }
