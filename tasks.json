@@ -2385,7 +2385,7 @@
     "id": "TASK-117",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "Document stronger fallback model options to try if the AlphaZero-lite combat model cannot pass the required gates.",
+    "description": "Document stronger fallback model options to try if the AlphaZero-lite combat model cannot pass the required gates. Implemented: Added ai/task117-combat-fallback-model-options.md with current gate evidence, required gate commands, no-cheating boundaries, five stronger model/training fallback options, and evidence-based selection criteria that keep AIPlayer simple.",
     "acceptance_criteria": [
       "The document lists at least three stronger model options beyond the first AlphaZero-lite implementation.",
       "Each option keeps AIPlayer code simple and moves complexity into model or training code.",
@@ -2399,7 +2399,7 @@
       "Step 3: Confirm the options do not require grid-size ifs in AIPlayer.",
       "Step 4: Review the document against TASK-108 requirements."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-118",
