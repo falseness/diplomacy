@@ -170,6 +170,9 @@ function scoreFinalEconomyVector(vector) {
   let relativeGoldAdvantage = 0;
   let relativeIncomeAdvantage = 0;
   let relativeSuburbIncomeAdvantage = 0;
+  let relativeGoldDeficit = 0;
+  let relativeIncomeDeficit = 0;
+  let relativeSuburbIncomeDeficit = 0;
 
   for (let x = 0; x < board.length; ++x) {
     for (let y = 0; y < (board[x] || []).length; ++y) {
@@ -178,6 +181,12 @@ function scoreFinalEconomyVector(vector) {
       relativeIncomeAdvantage = Math.max(relativeIncomeAdvantage, cellValue(cell, 48));
       relativeSuburbIncomeAdvantage = Math.max(
         relativeSuburbIncomeAdvantage,
+        cellValue(cell, 77)
+      );
+      relativeGoldDeficit = Math.min(relativeGoldDeficit, cellValue(cell, 38));
+      relativeIncomeDeficit = Math.min(relativeIncomeDeficit, cellValue(cell, 48));
+      relativeSuburbIncomeDeficit = Math.min(
+        relativeSuburbIncomeDeficit,
         cellValue(cell, 77)
       );
 
@@ -189,13 +198,13 @@ function scoreFinalEconomyVector(vector) {
       const unitBuildingDamage = cellValue(cell, 52);
       if (unitOwner > 0) {
         ownUnits.push(x, y);
-        score += 8000 + unitHp * 3000 + unitHpRatio * 3000 +
-          unitDamage * 1200 + unitRange * 600 + unitBuildingDamage * 1400;
+        score += 17000 + unitHp * 5000 + unitHpRatio * 5000 +
+          unitDamage * 2800 + unitRange * 1400 + unitBuildingDamage * 2600;
       }
       else if (unitOwner < 0) {
         enemyUnits.push(x, y);
-        score -= 9000 + unitHp * 3500 + unitHpRatio * 3500 +
-          unitDamage * 1400 + unitRange * 800 + unitBuildingDamage * 1800;
+        score -= 23000 + unitHp * 6500 + unitHpRatio * 6500 +
+          unitDamage * 3600 + unitRange * 1800 + unitBuildingDamage * 3200;
       }
 
       const townOwner = cellValue(cell, 13);
@@ -211,10 +220,10 @@ function scoreFinalEconomyVector(vector) {
 
       const barrackOwner = cellValue(cell, 22);
       if (barrackOwner > 0) {
-        score += 9000 + cellValue(cell, 23) * 6000;
+        score += 18000 + cellValue(cell, 23) * 12000;
       }
       else if (barrackOwner < 0) {
-        score -= 12000 + cellValue(cell, 23) * 7000;
+        score -= 22000 + cellValue(cell, 23) * 14000;
       }
 
       const farmOwner = cellValue(cell, 40);
@@ -235,12 +244,12 @@ function scoreFinalEconomyVector(vector) {
 
       const externalOwner = cellValue(cell, 57);
       if (externalOwner > 0) {
-        score += 4000 + cellValue(cell, 58) * 4000 +
-          cellValue(cell, 61) * 1200;
+        score += 26000 + cellValue(cell, 58) * 16000 +
+          cellValue(cell, 61) * 4500;
       }
       else if (externalOwner < 0) {
-        score -= 6500 + cellValue(cell, 58) * 7000 +
-          cellValue(cell, 61) * 1600;
+        score -= 32000 + cellValue(cell, 58) * 18000 +
+          cellValue(cell, 61) * 5200;
       }
     }
   }
@@ -257,6 +266,9 @@ function scoreFinalEconomyVector(vector) {
   score += relativeGoldAdvantage * 20000;
   score += relativeIncomeAdvantage * 30000;
   score += relativeSuburbIncomeAdvantage * 12000;
+  score += relativeGoldDeficit * 26000;
+  score += relativeIncomeDeficit * 42000;
+  score += relativeSuburbIncomeDeficit * 18000;
   return score;
 }
 

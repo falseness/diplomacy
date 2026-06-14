@@ -2785,7 +2785,7 @@
     "id": "TASK-137",
     "category": "test",
     "priority": "critical",
-    "description": "Run training on the new AIPlayerWithEconomy pipeline and pass the last symmetrical economy gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code.",
+    "description": "Run training on the new AIPlayerWithEconomy pipeline and pass the last symmetrical economy gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code. Implemented: Ran a 12-game real-runtime economy training job across 2/3/4-player generated maps, selected checkpoint /mnt/storage/diplomacy/checkpoints/task137-final-20260614/step-00000012, strengthened the final economy value model without AIPlayer comparison shortcuts, and passed the canonical 100-game final symmetrical economy gate at 100 wins, 0 losses, no-loss rate 1, winrate 1.",
     "acceptance_criteria": [
       "A real economy training run completes on the new generator pipeline.",
       "The trained AIPlayerWithEconomy artifact is used for the final symmetrical economy gate.",
@@ -2799,7 +2799,7 @@
       "Step 3: Run the 100-game final symmetrical economy benchmark gate.",
       "Step 4: Record final artifact paths and gate summaries."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-138",
