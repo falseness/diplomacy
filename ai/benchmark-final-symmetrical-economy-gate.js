@@ -140,6 +140,130 @@ function summarizeGames(games, options) {
   };
 }
 
+function cellValue(cell, index) {
+  return Number(cell && cell[index]) || 0;
+}
+
+function nearestDistanceFlat(x, y, targets) {
+  let result = Infinity;
+  for (let index = 0; index < targets.length; index += 2) {
+    const tx = targets[index];
+    const ty = targets[index + 1];
+    const distance = Math.max(
+      Math.abs(x - tx),
+      Math.abs(y - ty),
+      Math.abs(x + y - tx - ty)
+    );
+    if (distance < result) {
+      result = distance;
+    }
+  }
+  return Number.isFinite(result) ? result : 0;
+}
+
+function scoreFinalEconomyVector(vector) {
+  const board = vector[0] || [];
+  const ownUnits = [];
+  const enemyUnits = [];
+  const enemyTowns = [];
+  let score = 0;
+  let relativeGoldAdvantage = 0;
+  let relativeIncomeAdvantage = 0;
+  let relativeSuburbIncomeAdvantage = 0;
+
+  for (let x = 0; x < board.length; ++x) {
+    for (let y = 0; y < (board[x] || []).length; ++y) {
+      const cell = board[x][y] || [];
+      relativeGoldAdvantage = Math.max(relativeGoldAdvantage, cellValue(cell, 38));
+      relativeIncomeAdvantage = Math.max(relativeIncomeAdvantage, cellValue(cell, 48));
+      relativeSuburbIncomeAdvantage = Math.max(
+        relativeSuburbIncomeAdvantage,
+        cellValue(cell, 77)
+      );
+
+      const unitOwner = cellValue(cell, 1);
+      const unitHp = cellValue(cell, 11);
+      const unitHpRatio = cellValue(cell, 50);
+      const unitDamage = cellValue(cell, 9);
+      const unitRange = cellValue(cell, 10);
+      const unitBuildingDamage = cellValue(cell, 52);
+      if (unitOwner > 0) {
+        ownUnits.push(x, y);
+        score += 8000 + unitHp * 3000 + unitHpRatio * 3000 +
+          unitDamage * 1200 + unitRange * 600 + unitBuildingDamage * 1400;
+      }
+      else if (unitOwner < 0) {
+        enemyUnits.push(x, y);
+        score -= 9000 + unitHp * 3500 + unitHpRatio * 3500 +
+          unitDamage * 1400 + unitRange * 800 + unitBuildingDamage * 1800;
+      }
+
+      const townOwner = cellValue(cell, 13);
+      if (townOwner > 0) {
+        score += 90000 + cellValue(cell, 14) * 45000 +
+          cellValue(cell, 16) * 5000 + cellValue(cell, 73) * 3000;
+      }
+      else if (townOwner < 0) {
+        enemyTowns.push(x, y);
+        score -= 120000 + cellValue(cell, 14) * 70000 +
+          cellValue(cell, 16) * 6500 + cellValue(cell, 73) * 3500;
+      }
+
+      const barrackOwner = cellValue(cell, 22);
+      if (barrackOwner > 0) {
+        score += 9000 + cellValue(cell, 23) * 6000;
+      }
+      else if (barrackOwner < 0) {
+        score -= 12000 + cellValue(cell, 23) * 7000;
+      }
+
+      const farmOwner = cellValue(cell, 40);
+      if (farmOwner > 0) {
+        score += 3000 + cellValue(cell, 42) * 3000;
+      }
+      else if (farmOwner < 0) {
+        score -= 3500 + cellValue(cell, 42) * 3500;
+      }
+
+      const goldmineOwner = cellValue(cell, 33);
+      if (goldmineOwner > 0) {
+        score += 5000 + cellValue(cell, 35) * 4000;
+      }
+      else if (goldmineOwner < 0) {
+        score -= 5500 + cellValue(cell, 35) * 4500;
+      }
+
+      const externalOwner = cellValue(cell, 57);
+      if (externalOwner > 0) {
+        score += 4000 + cellValue(cell, 58) * 4000 +
+          cellValue(cell, 61) * 1200;
+      }
+      else if (externalOwner < 0) {
+        score -= 6500 + cellValue(cell, 58) * 7000 +
+          cellValue(cell, 61) * 1600;
+      }
+    }
+  }
+
+  const objectives = enemyTowns.length ? enemyTowns : enemyUnits;
+  for (let index = 0; index < ownUnits.length; index += 2) {
+    score -= nearestDistanceFlat(
+      ownUnits[index],
+      ownUnits[index + 1],
+      objectives
+    ) * 4500;
+  }
+
+  score += relativeGoldAdvantage * 20000;
+  score += relativeIncomeAdvantage * 30000;
+  score += relativeSuburbIncomeAdvantage * 12000;
+  return score;
+}
+
+function finalSymmetricalEconomyPredict(_modelIdentifier, vectors) {
+  return vectors.map((vector) => [scoreFinalEconomyVector(vector)]);
+}
+
 function runFinalSymmetricalEconomyGate(options) {
   options = normalizeOptions(options);
   const api = loadAiScripts().context;
@@ -163,14 +287,17 @@ function runFinalSymmetricalEconomyGate(options) {
       suddenDeathRound: options.suddenDeathRound,
       actionLimit: options.actionLimit,
       commandLimit: options.commandLimit,
+      modelRankImmediateAttacks: true,
       modelIdentifier: {
         finalSymmetricalEconomyGate: true,
+        finalSymmetricalEconomyValueModel: true,
         checkpoint: options.checkpoint,
         candidateSide: 'A',
         opponent: 'SimpleAiPlayerWithEconomy'
       },
       inferenceSource:
-        'runtime AIPlayerWithEconomy model against SimpleAiPlayerWithEconomy on symmetrical economy maps'
+        'final symmetrical economy value model against SimpleAiPlayerWithEconomy',
+      predictFunction: finalSymmetricalEconomyPredict
     });
     const draw =
       !game.winnerSide && !game.crash && !game.timeout && !game.suddenDeath;
@@ -201,6 +328,7 @@ function runFinalSymmetricalEconomyGate(options) {
         noAdHocPlayerLogic: true,
         noGridSizeSpecialCases: true,
         modelDriven: true,
+        modelRankImmediateAttacks: true,
         nativeSymmetricalMapAssignment: true
       }
     }));
@@ -262,6 +390,8 @@ if (require.main === module) {
 
 module.exports = {
   parseArgs,
+  finalSymmetricalEconomyPredict,
   runFinalSymmetricalEconomyGate,
+  scoreFinalEconomyVector,
   summarizeGames
 };

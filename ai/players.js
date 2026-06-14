@@ -1562,10 +1562,11 @@ class AIPlayerWithEconomy extends AIPlayer {
             }
             let moveCommands = getAiMoveCommands(unit).slice(
             0, this.getCommandLimit(AI_ECONOMY_DEFAULT_COMMAND_LIMIT))
-            let command = this.getCommandTowardEnemy(unit, moveCommands)
-            if (!command && this.bestEnemyTargetForAI.GetCommandNearestToBestTarget) {
-                command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
-                    moveCommands, unit.coord, grid.arr, unit.playerColor)
+            let command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget ?
+                this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
+                    moveCommands, unit.coord, grid.arr, unit.playerColor) : null
+            if (!command) {
+                command = this.getCommandTowardEnemy(unit, moveCommands)
             }
             if (!command) {
                 break
@@ -1584,7 +1585,6 @@ class AIPlayerWithEconomy extends AIPlayer {
             if (!this.spendWarGold()) {
                 break
             }
-            --remainingActions
             ++purchases
         }
         return remainingActions

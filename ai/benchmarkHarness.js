@@ -127,6 +127,10 @@ function benchmarkMapFromGameMap(gameMap) {
       town: { x: town.x, y: town.y },
       units,
       suburbs: player.suburbs || [],
+      barracks: player.barracks || [],
+      pendingBarracks: player.pendingBarracks || [],
+      farms: player.farms || [],
+      pendingFarms: player.pendingFarms || [],
       walls: player.walls || [],
       bastions: player.bastions || [],
       towers: player.towers || []
@@ -141,6 +145,11 @@ function benchmarkMapFromGameMap(gameMap) {
       .concat(gameMap.mountains || [])
       .concat(gameMap.bushes || [])
       .concat(gameMap.hills || []),
+    goldmines: gameMap.goldmines || [],
+    lakes: gameMap.lakes || [],
+    mountains: gameMap.mountains || [],
+    bushes: gameMap.bushes || [],
+    hills: gameMap.hills || [],
     players
   };
 }
@@ -365,6 +374,8 @@ function runtimeMapScript() {
   gameSettings.isOnline = false
   gameSettings.aiActionLimit = Number(benchmarkOptions.actionLimit || 30)
   gameSettings.aiCommandLimit = Number(benchmarkOptions.commandLimit || 60)
+  gameSettings.aiModelRankImmediateAttacks =
+    Boolean(benchmarkOptions.modelRankImmediateAttacks)
   entityInterface = {change() {}, hide() {}}
   townInterface = {change() {}, hide() {}}
   barrackInterface = {change() {}, hide() {}}
@@ -424,6 +435,10 @@ function runtimeMapScript() {
         towns: [{x: configured.players[0].town.x, y: configured.players[0].town.y}],
         units: configured.players[0].units.map(configuredUnit),
         suburbs: configured.players[0].suburbs || [],
+        barracks: configured.players[0].barracks || [],
+        pendingBarracks: configured.players[0].pendingBarracks || [],
+        farms: configured.players[0].farms || [],
+        pendingFarms: configured.players[0].pendingFarms || [],
         walls: configured.players[0].walls || [],
         bastions: configured.players[0].bastions || [],
         towers: configured.players[0].towers || [],
@@ -434,17 +449,21 @@ function runtimeMapScript() {
         towns: [{x: configured.players[1].town.x, y: configured.players[1].town.y}],
         units: configured.players[1].units.map(configuredUnit),
         suburbs: configured.players[1].suburbs || [],
+        barracks: configured.players[1].barracks || [],
+        pendingBarracks: configured.players[1].pendingBarracks || [],
+        farms: configured.players[1].farms || [],
+        pendingFarms: configured.players[1].pendingFarms || [],
         walls: configured.players[1].walls || [],
         bastions: configured.players[1].bastions || [],
         towers: configured.players[1].towers || [],
         playerType: benchmarkOptions.playerB
       }
     ],
-    [],
-    [],
-    configured.blocked.map(function(coord) { return {x: coord.x, y: coord.y} }),
-    [],
-    []
+    configured.goldmines || [],
+    configured.lakes || [],
+    configured.mountains || [],
+    configured.bushes || [],
+    configured.hills || []
   )
   map.suddenDeathRound = configured.suddenDeathRound
   map.start(manager, false)
@@ -542,6 +561,7 @@ function runGame(options) {
   context.__benchmarkOptions = {
     actionLimit: options.actionLimit,
     commandLimit: options.commandLimit,
+    modelRankImmediateAttacks: options.modelRankImmediateAttacks,
     playerA: options.playerA,
     playerB: options.playerB,
     roundLimit: options.roundLimit,
