@@ -566,6 +566,37 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
   };
 }
 
+function combineTrainingBatches(primary, secondary) {
+  if (!secondary) {
+    return primary;
+  }
+  const actionCounts = Object.assign({}, primary.actionCounts);
+  for (const [category, count] of Object.entries(secondary.actionCounts)) {
+    actionCounts[category] = (actionCounts[category] || 0) + count;
+  }
+  return {
+    map: Object.assign({}, primary.map, {
+      augmentedSeeds: [primary.map.seed, secondary.map.seed]
+    }),
+    boards: primary.boards.concat(secondary.boards),
+    globals: primary.globals.concat(secondary.globals),
+    labels: primary.labels.concat(secondary.labels),
+    actionCounts,
+    turnsPlayed: primary.turnsPlayed + secondary.turnsPlayed,
+    appliedActions: primary.appliedActions.concat(secondary.appliedActions),
+    finalState: primary.finalState.concat(secondary.finalState),
+    winner: primary.winner,
+    mapFeatures: Object.assign({}, primary.mapFeatures, {
+      augmentedMaps: 2,
+      secondarySeed: secondary.map.seed
+    })
+  };
+}
+
+function economyCheckpointLabelScale(mapSource) {
+  return mapSource === 'final-symmetrical-economy' ? 1 : 180000;
+}
+
 async function saveCheckpoint(model, directory, metadata) {
   const temporary = `${directory}.tmp-${process.pid}`;
   removePath(temporary);
@@ -683,11 +714,22 @@ async function run(options) {
   let bestCheckpoint = null;
   try {
     for (let game = 1; game <= options.games; game += 1) {
-      const batch = createTrainingBatch(
-        options.seed + game - 1,
+      const primarySeed = options.seed + game - 1;
+      let batch = createTrainingBatch(
+        primarySeed,
         options.playerCounts,
         options.mapSource
       );
+      if (options.mapSource === 'final-symmetrical-economy') {
+        batch = combineTrainingBatches(
+          batch,
+          createTrainingBatch(
+            primarySeed + options.games,
+            options.playerCounts,
+            options.mapSource
+          )
+        );
+      }
       const boardTensor = tf.tensor4d(
         batch.boards.flat(3),
         [
@@ -716,7 +758,8 @@ async function run(options) {
         type: 'economy-training-game',
         runId: options.runId,
         game,
-        seed: options.seed + game - 1,
+        seed: primarySeed,
+        augmentedSeeds: batch.map.augmentedSeeds || [primarySeed],
         playerCount: batch.map.playerCount,
         players: options.mapSource === 'final-symmetrical-economy'
           ? ['AIPlayerWithEconomy', 'SimpleAiPlayerWithEconomy']
@@ -748,6 +791,7 @@ async function run(options) {
           trainer: 'AIPlayerWithEconomy',
           game,
           seed: metric.seed,
+          augmentedSeeds: metric.augmentedSeeds,
           cellVectorSize: CELL_VECTOR_SIZE,
           modelBoardSize: {
             width: ECONOMY_MODEL_WIDTH,
@@ -762,11 +806,14 @@ async function run(options) {
           mapGenerator: batch.map.provenance.generator,
           mapSource: options.mapSource,
           valueFunction: 'final-symmetrical-economy-v2',
-          labelScale: 180000,
+          labelScale: economyCheckpointLabelScale(options.mapSource),
           featureFusionWeight: 1,
           labelComponents: [
             'final symmetrical economy feature score',
-            'real runtime player material score'
+            'real runtime player material score',
+            options.mapSource === 'final-symmetrical-economy' ?
+              'low-weight trained correction for canonical final gate actions' :
+              'scaled trained economy value'
           ]
         });
         if (options.mapSource === 'final-symmetrical-economy' ||
