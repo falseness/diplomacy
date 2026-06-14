@@ -287,7 +287,6 @@ function runFinalSymmetricalEconomyGate(options) {
       suddenDeathRound: options.suddenDeathRound,
       actionLimit: options.actionLimit,
       commandLimit: options.commandLimit,
-      modelRankImmediateAttacks: true,
       modelIdentifier: {
         finalSymmetricalEconomyGate: true,
         finalSymmetricalEconomyValueModel: true,
@@ -328,7 +327,7 @@ function runFinalSymmetricalEconomyGate(options) {
         noAdHocPlayerLogic: true,
         noGridSizeSpecialCases: true,
         modelDriven: true,
-        modelRankImmediateAttacks: true,
+        modelScoredImmediateCombat: 'normal AIPlayerWithEconomy behavior',
         nativeSymmetricalMapAssignment: true
       }
     }));

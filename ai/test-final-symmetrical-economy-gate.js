@@ -52,10 +52,17 @@ function assertNoCheatingSources() {
   check(aiStart !== -1 && aiEnd !== -1,
     'could not extract AIPlayer source');
   const aiPlayerSource = playersSource.slice(aiStart, aiEnd);
+  const economySource = playersSource.slice(aiEnd);
   check(!/\bSimpleAiPlayer(?:WithEconomy)?\b/.test(aiPlayerSource),
     'AIPlayer contains SimpleAiPlayer comparison logic');
   check(!/grid\s*\.\s*arr\s*(?:\[\s*0\s*\])?\s*\.\s*length\s*(?:={2,3}|!==?|[<>]=?)\s*\d+/.test(aiPlayerSource),
     'AIPlayer contains exact grid-size special cases');
+  const oldImmediateAttackFlags = new RegExp(
+    'aiModelRankImmediate' + 'Attacks|modelRankImmediate' + 'Attacks');
+  check(!oldImmediateAttackFlags.test(playersSource + gateSource),
+    'final economy gate uses benchmark-specific immediate-attack player logic');
+  check(!/grid\s*\.\s*arr\s*(?:\[\s*0\s*\])?\s*\.\s*length\s*(?:={2,3}|!==?|[<>]=?)\s*\d+/.test(economySource),
+    'AIPlayerWithEconomy contains exact grid-size special cases');
   check(!/concede\s*\(/.test(gateSource),
     'final economy gate forces concessions');
   check(!/gold\s*:\s*999|candidateGoldBonus|simpleHandicap|artificialAdvantage\s*:\s*true/.test(gateSource),

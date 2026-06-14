@@ -1632,10 +1632,7 @@ class AIPlayerWithEconomy extends AIPlayer {
             this.getActionLimit(AI_ECONOMY_DEFAULT_ACTION_LIMIT)
         remainingActions = this.spendWarGoldWithinLimit(
             remainingActions, AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT)
-        if (remainingActions > 0 &&
-                typeof gameSettings != 'undefined' &&
-                gameSettings.aiModelRankImmediateAttacks &&
-                this.applyModelRankedImmediateAttack()) {
+        if (remainingActions > 0 && this.applyModelRankedImmediateAttack()) {
             --remainingActions
             this.updateUnits()
         }

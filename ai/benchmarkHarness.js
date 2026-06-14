@@ -374,8 +374,6 @@ function runtimeMapScript() {
   gameSettings.isOnline = false
   gameSettings.aiActionLimit = Number(benchmarkOptions.actionLimit || 30)
   gameSettings.aiCommandLimit = Number(benchmarkOptions.commandLimit || 60)
-  gameSettings.aiModelRankImmediateAttacks =
-    Boolean(benchmarkOptions.modelRankImmediateAttacks)
   entityInterface = {change() {}, hide() {}}
   townInterface = {change() {}, hide() {}}
   barrackInterface = {change() {}, hide() {}}
@@ -561,7 +559,6 @@ function runGame(options) {
   context.__benchmarkOptions = {
     actionLimit: options.actionLimit,
     commandLimit: options.commandLimit,
-    modelRankImmediateAttacks: options.modelRankImmediateAttacks,
     playerA: options.playerA,
     playerB: options.playerB,
     roundLimit: options.roundLimit,
