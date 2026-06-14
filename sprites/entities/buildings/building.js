@@ -11,6 +11,34 @@ class Building extends Entity {
         let res = this.toJSON()
         return JSON.parse(JSON.stringify(res))
     }
+    findOwningTown() {
+        if (this.town) {
+            return this.town
+        }
+        let player = players ? players[this.playerColor] : null
+        if (!player || !player.towns) {
+            return null
+        }
+        for (let i = 0; i < player.towns.length; ++i) {
+            let town = player.towns[i]
+            if (!town || town.killed) {
+                continue
+            }
+            for (let j = 0; town.buildings && j < town.buildings.length; ++j) {
+                let building = town.buildings[j]
+                if (building.coord && coordsEqually(building.coord, this.coord)) {
+                    return town
+                }
+            }
+            for (let j = 0; town.suburbs && j < town.suburbs.length; ++j) {
+                if (town.suburbs[j].coord &&
+                        coordsEqually(town.suburbs[j].coord, this.coord)) {
+                    return town
+                }
+            }
+        }
+        return null
+    }
     needInstructions() {
         return false
     }

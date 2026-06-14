@@ -45,6 +45,40 @@ class ActionManager {
         }
         return -1
     }
+    findTownForBuilding(building, restoredBuilding) {
+        if (building.town && building.town.coord &&
+                !isCoordNotOnMap(
+                    building.town.coord, grid.arr.length, grid.arr[0].length)) {
+            let town = grid.getBuilding(building.town.coord)
+            if (town && town.isTown && town.isTown()) {
+                return town
+            }
+        }
+        let player = restoredBuilding && players ?
+            players[restoredBuilding.playerColor] : null
+        if (!player || !player.towns) {
+            return null
+        }
+        for (let i = 0; i < player.towns.length; ++i) {
+            let town = player.towns[i]
+            if (!town || town.killed) {
+                continue
+            }
+            for (let j = 0; town.buildings && j < town.buildings.length; ++j) {
+                let existing = town.buildings[j]
+                if (existing.coord && coordsEqually(existing.coord, building.coord)) {
+                    return town
+                }
+            }
+            for (let j = 0; town.suburbs && j < town.suburbs.length; ++j) {
+                if (town.suburbs[j].coord &&
+                        coordsEqually(town.suburbs[j].coord, building.coord)) {
+                    return town
+                }
+            }
+        }
+        return null
+    }
     undoBuilding(building) {
         // cant be empty
         let externalIndex = this.removeKilledEntityAt(external, building.coord)
@@ -54,9 +88,22 @@ class ActionManager {
             external.splice(externalIndex, 0, res)
         }
         if (building.town) {
-            let town = grid.getBuilding(building.town.coord)
+            let town = this.findTownForBuilding(building, res)
+            if (!town) {
+                return
+            }
             res.town = town
 
+            if (!town.buildings) {
+                town.buildings = []
+            }
+            for (let i = town.buildings.length - 1; i >= 0; --i) {
+                let existing = town.buildings[i]
+                if (existing.killed ||
+                        (existing.coord && coordsEqually(existing.coord, building.coord))) {
+                    town.buildings.splice(i, 1)
+                }
+            }
             town.buildings.push(res)
         }
     }
@@ -255,6 +302,11 @@ class ActionManager {
 
         let townExternalProduction = undo.townExternalProduction
         let townExternal = undo.townExternal
+        let town = undo.town
+
+        if (town) {
+            this.undoTown(town, undo.isBuildingCaptured)
+        }
 
         if (building && Number.isFinite(building.turns)) {
             if (building.town) {
@@ -273,10 +325,7 @@ class ActionManager {
         if (exProduction) {
             this.undoExternalProduction(exProduction)
         }
-        let town = undo.town
         if (town) {
-            this.undoTown(town, undo.isBuildingCaptured)
-
             for (let i = 0; i < townExternalProduction.length; ++i) {
                 this.undoExternalProduction(townExternalProduction[i])
             }

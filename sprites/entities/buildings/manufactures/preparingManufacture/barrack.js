@@ -13,12 +13,14 @@ class Barrack extends PreparingManufacture {
     }
     toUndoJSON() {
         let res = this.toJSON()
-        res.town = {
+        let town = this.findOwningTown()
+        this.town = town
+        res.town = town ? {
             coord: {
-                x: this.town.coord.x,
-                y: this.town.coord.y
+                x: town.coord.x,
+                y: town.coord.y
             }
-        }
+        } : null
         return JSON.parse(JSON.stringify(res))
     }
     removeSelect() {
