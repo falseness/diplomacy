@@ -71,6 +71,8 @@ const ECONOMY_GENERATOR_STAGE_6_HP_MIN = 2
 const ECONOMY_GENERATOR_STAGE_6_HP_MAX = 5
 const ECONOMY_GENERATOR_STAGE_7_HP_MIN = 2
 const ECONOMY_GENERATOR_STAGE_7_HP_MAX = 5
+const ECONOMY_GENERATOR_STAGE_8_HP_MIN = 2
+const ECONOMY_GENERATOR_STAGE_8_HP_MAX = 5
 
 function townDistance(a, b) {
     let dx = a.x - b.x
@@ -1620,6 +1622,56 @@ function generateEconomyStage7TrainingMap(options) {
         towers: 2,
         bastions: 2
     }
+    return map
+}
+
+function generateEconomyStage8TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let map = generateEconomyStage7TrainingMap(options)
+    let rng = createSeededRandom(seed)
+    rng()
+    rng()
+    rng()
+    let upperLane = rng() < 0.5
+    let lowerLane = rng() < 0.5
+    let mapSize = map.mapSize
+    let mountainY = upperLane ? 1 : 7
+    let lakeY = lowerLane ? 1 : 7
+    let bushY = upperLane ? 2 : 6
+
+    map.lakes = [
+        {x: 4, y: lakeY}
+    ]
+    map.mountains = [
+        {x: 0, y: mountainY},
+        {x: mapSize.x - 1, y: mountainY}
+    ]
+    map.bushes = [
+        {x: 0, y: bushY},
+        {x: mapSize.x - 1, y: bushY}
+    ]
+    map.testName = 'economy-stage-8-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 90
+    map.economyStage = 8
+    map.economyGenerator = Object.assign({}, map.economyGenerator, {
+        stage: 8,
+        seed: seed,
+        terrainTypes: ['mountain', 'bush', 'lake'],
+        terrainCounts: {
+            mountains: map.mountains.length,
+            bushes: map.bushes.length,
+            lakes: map.lakes.length
+        },
+        terrainSymmetry: {
+            axis: 'vertical',
+            mirror: 'x',
+            fairForBothSides: true
+        },
+        stage7RequirementsPreserved: true,
+        hpMin: ECONOMY_GENERATOR_STAGE_8_HP_MIN,
+        hpMax: ECONOMY_GENERATOR_STAGE_8_HP_MAX
+    })
     return map
 }
 

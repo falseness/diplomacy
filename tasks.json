@@ -2685,7 +2685,7 @@
     "id": "TASK-132",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 8: extend the 9v9 all-unit map with mountains, bushes, and lakes.",
+    "description": "Add AIPlayerWithEconomy generator stage 8: extend the 9v9 all-unit map with mountains, bushes, and lakes. Implemented: Added deterministic stage-8 maps by extending stage 7 with fair mirrored mountains, bushes, and a center-axis lake, plus focused terrain legality/pathing, determinism, preserved-stage-7, and short economy smoke coverage.",
     "acceptance_criteria": [
       "The generator adds mountains, bushes, and lakes to the 9v9 all-unit stage.",
       "Terrain placement is legal and does not trap required units or make the map unplayable.",
@@ -2699,7 +2699,7 @@
       "Step 3: Confirm no required unit starts on illegal terrain.",
       "Step 4: Run one short economy AI-vs-baseline smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-133",
