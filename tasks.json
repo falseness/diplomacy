@@ -2505,7 +2505,7 @@
     "id": "TASK-123",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 3.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 3. Implemented: Added a focused stage 3 economy generator validation npm test covering increased Noob counts versus stage 2, legal non-overlapping placement, fair mirrored setup, deterministic replay across 12 seeds, and an injected invalid-overlap failure check.",
     "acceptance_criteria": [
       "The test verifies increased noob unit count.",
       "The test verifies no illegal or overlapping placement.",
@@ -2519,7 +2519,7 @@
       "Step 3: Confirm the test fails on an intentionally invalid unit placement by review or local reasoning.",
       "Step 4: Run existing unit map generation tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-124",
