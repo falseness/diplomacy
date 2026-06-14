@@ -28,6 +28,8 @@
     "test-combat-model-benchmark": "node ai/test-combat-model-benchmark.js",
     "benchmark-final-symmetrical-combat": "node ai/benchmark-final-symmetrical-combat-gate.js",
     "test-final-symmetrical-combat-gate": "node ai/test-final-symmetrical-combat-gate.js",
+    "benchmark-final-symmetrical-economy": "node ai/benchmark-final-symmetrical-economy-gate.js",
+    "test-final-symmetrical-economy-gate": "node ai/test-final-symmetrical-economy-gate.js",
     "train-economy": "node ai/train-economy.js",
     "test-economy-training": "node ai/test-economy-training.js",
     "test-simple-ai": "node ai/test-simple-ai-baseline.js",

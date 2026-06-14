@@ -1,0 +1,267 @@
+#!/usr/bin/env node
+
+const fs = require('fs');
+const path = require('path');
+const { loadAiScripts } = require('./smokeHarness');
+const { runGame, writeResult } = require('./benchmarkHarness');
+
+function usage() {
+  return [
+    'Usage: node ai/benchmark-final-symmetrical-economy-gate.js [options]',
+    '',
+    'Options:',
+    '  --games NUMBER              Number of games to run (default: 100)',
+    '  --seed NUMBER               First deterministic seed (default: 136000)',
+    '  --round-limit NUMBER        Maximum turns per game (default: 160)',
+    '  --sudden-death-round NUMBER Map sudden-death round for every game (default: 160)',
+    '  --action-limit NUMBER       AI action limit per turn (default: 20)',
+    '  --command-limit NUMBER      AI command limit per turn (default: 100)',
+    '  --min-no-loss-rate NUMBER   Required AI no-loss rate, 0..1 (default: 1)',
+    '  --min-win-rate NUMBER       Required AI winrate, 0..1 (default: 0.95)',
+    '  --checkpoint NAME           Checkpoint/model identifier for the report',
+    '  --output PATH               JSON report path',
+    '  --help                      Show this help'
+  ].join('\n');
+}
+
+function defaultOptions() {
+  return {
+    games: 100,
+    seed: 136000,
+    roundLimit: 160,
+    suddenDeathRound: 160,
+    actionLimit: 20,
+    commandLimit: 100,
+    minNoLossRate: 1,
+    minWinRate: 0.95,
+    checkpoint: 'runtime-ai-economy-model',
+    output: path.join(
+      '/mnt',
+      'storage',
+      'diplomacy',
+      'benchmarks',
+      'final-symmetrical-economy-gate.json')
+  };
+}
+
+function parseArgs(argv) {
+  const options = defaultOptions();
+  const names = {
+    '--games': 'games',
+    '--seed': 'seed',
+    '--round-limit': 'roundLimit',
+    '--sudden-death-round': 'suddenDeathRound',
+    '--action-limit': 'actionLimit',
+    '--command-limit': 'commandLimit',
+    '--min-no-loss-rate': 'minNoLossRate',
+    '--min-win-rate': 'minWinRate',
+    '--checkpoint': 'checkpoint',
+    '--output': 'output'
+  };
+  for (let index = 0; index < argv.length; ++index) {
+    const argument = argv[index];
+    if (argument === '--help') {
+      options.help = true;
+      continue;
+    }
+    const name = names[argument];
+    if (!name || index + 1 >= argv.length) {
+      throw new Error('Unknown or incomplete argument: ' + argument);
+    }
+    options[name] = argv[++index];
+  }
+  return normalizeOptions(options);
+}
+
+function normalizeOptions(input) {
+  const options = Object.assign(defaultOptions(), input || {});
+  for (const name of [
+    'games',
+    'seed',
+    'roundLimit',
+    'suddenDeathRound',
+    'actionLimit',
+    'commandLimit'
+  ]) {
+    options[name] = Number(options[name]);
+    if (!Number.isInteger(options[name]) || options[name] <= 0) {
+      throw new Error(name + ' must be a positive integer');
+    }
+  }
+  for (const name of ['minNoLossRate', 'minWinRate']) {
+    options[name] = Number(options[name]);
+    if (!Number.isFinite(options[name]) ||
+        options[name] < 0 || options[name] > 1) {
+      throw new Error(name + ' must be between 0 and 1');
+    }
+  }
+  return options;
+}
+
+function summarizeGames(games, options) {
+  const wins = games.filter((game) => game.aiResult === 'win').length;
+  const draws = games.filter((game) => game.aiResult === 'draw').length;
+  const losses = games.filter((game) => game.aiResult === 'loss').length;
+  const timeouts = games.filter((game) => game.timeout).length;
+  const suddenDeathGames = games.filter((game) => game.suddenDeath).length;
+  const nonResults = games.filter((game) => game.nonResult).length;
+  const crashes = games.filter((game) => game.crash).length;
+  const noLosses = wins + draws;
+  const noLossRate = games.length ? noLosses / games.length : 0;
+  const winrate = games.length ? wins / games.length : 0;
+  const failedSeeds = games
+    .filter((game) => game.aiResult !== 'win' ||
+      game.timeout || game.suddenDeath || game.crash)
+    .map((game) => game.seed);
+  const gatePassed =
+    games.length === options.games &&
+    noLossRate >= options.minNoLossRate &&
+    winrate >= options.minWinRate;
+  return {
+    games: games.length,
+    requiredGames: options.games,
+    wins,
+    draws,
+    losses,
+    noLosses,
+    noLossRate,
+    winrate,
+    minNoLossRate: options.minNoLossRate,
+    minWinRate: options.minWinRate,
+    timeouts,
+    suddenDeathGames,
+    nonResults,
+    crashes,
+    failedSeeds,
+    gate: gatePassed ? 'passed' : 'failed',
+    gateReason: gatePassed
+      ? 'AIPlayerWithEconomy met the final symmetrical economy gate thresholds'
+      : 'AIPlayerWithEconomy did not meet the final symmetrical economy gate thresholds'
+  };
+}
+
+function runFinalSymmetricalEconomyGate(options) {
+  options = normalizeOptions(options);
+  const api = loadAiScripts().context;
+  if (typeof api.generateSymmetricalEconomy9v9AllUnitMap !== 'function') {
+    throw new Error('generateSymmetricalEconomy9v9AllUnitMap is not available');
+  }
+
+  const games = [];
+  for (let index = 0; index < options.games; ++index) {
+    const seed = options.seed + index;
+    const gameMap = api.generateSymmetricalEconomy9v9AllUnitMap({
+      seed,
+      suddenDeathRound: options.suddenDeathRound
+    });
+    const game = runGame({
+      gameMap,
+      playerA: 'AIPlayerWithEconomy',
+      playerB: 'SimpleAiPlayerWithEconomy',
+      seed,
+      roundLimit: options.roundLimit,
+      suddenDeathRound: options.suddenDeathRound,
+      actionLimit: options.actionLimit,
+      commandLimit: options.commandLimit,
+      modelIdentifier: {
+        finalSymmetricalEconomyGate: true,
+        checkpoint: options.checkpoint,
+        candidateSide: 'A',
+        opponent: 'SimpleAiPlayerWithEconomy'
+      },
+      inferenceSource:
+        'runtime AIPlayerWithEconomy model against SimpleAiPlayerWithEconomy on symmetrical economy maps'
+    });
+    const draw =
+      !game.winnerSide && !game.crash && !game.timeout && !game.suddenDeath;
+    games.push(Object.assign({}, game, {
+      seed,
+      gameIndex: index,
+      aiSide: 'A',
+      opponentSide: 'B',
+      aiResult: game.winnerSide === 'A' ? 'win' : (draw ? 'draw' : 'loss'),
+      symmetricalMap: true,
+      mapName: gameMap.testName,
+      mapStage: gameMap.economyStage,
+      suddenDeathRound: gameMap.suddenDeathRound,
+      modelCheckpoint: options.checkpoint,
+      opponent: 'simple-economy',
+      opponentLabel: 'SimpleAiPlayerWithEconomy',
+      playerClasses: {
+        ai: 'AIPlayerWithEconomy',
+        opponent: 'SimpleAiPlayerWithEconomy'
+      },
+      classCheck: {
+        runtimeAIPlayer: game.runtimePlayerA,
+        runtimeOpponentPlayer: game.runtimePlayerB
+      },
+      comparison: {
+        artificialAdvantage: false,
+        benchmarkSpecificPlayerChanges: false,
+        noAdHocPlayerLogic: true,
+        noGridSizeSpecialCases: true,
+        modelDriven: true,
+        nativeSymmetricalMapAssignment: true
+      }
+    }));
+  }
+
+  const summary = summarizeGames(games, options);
+  return {
+    config: {
+      games: options.games,
+      seed: options.seed,
+      roundLimit: options.roundLimit,
+      suddenDeathRound: options.suddenDeathRound,
+      actionLimit: options.actionLimit,
+      commandLimit: options.commandLimit,
+      minNoLossRate: options.minNoLossRate,
+      minWinRate: options.minWinRate,
+      modelCheckpoint: options.checkpoint,
+      mapGenerator: 'generateSymmetricalEconomy9v9AllUnitMap',
+      playerClasses: {
+        ai: 'AIPlayerWithEconomy',
+        opponent: 'SimpleAiPlayerWithEconomy'
+      },
+      candidateStarts: {
+        A: games.length,
+        B: 0
+      },
+      benchmarkPolicy:
+        'real GameMap runtime using unchanged AIPlayerWithEconomy on the generator-native side A and unchanged SimpleAiPlayerWithEconomy on side B; symmetrical map resources, units, buildings, HP, income, and terrain are mirrored by the map generator'
+    },
+    summary,
+    games,
+    artifacts: {}
+  };
+}
+
+async function main() {
+  try {
+    const options = parseArgs(process.argv.slice(2));
+    if (options.help) {
+      console.log(usage());
+      return;
+    }
+    const result = runFinalSymmetricalEconomyGate(options);
+    const outputPath = writeResult(result, options.output);
+    console.log(JSON.stringify(result.summary));
+    console.log('Final symmetrical economy gate report: ' + outputPath);
+    if (result.summary.gate !== 'passed') {
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 2;
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  parseArgs,
+  runFinalSymmetricalEconomyGate,
+  summarizeGames
+};
