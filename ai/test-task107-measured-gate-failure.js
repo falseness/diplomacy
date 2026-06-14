@@ -7,6 +7,7 @@ const {
 } = require('./alphazero-lite-combat');
 const {
   evaluateCurriculumSimpleAiWinrate,
+  evaluateCurriculumBaselineAiWinrate,
   curriculumGateDecision,
   initialCurriculumState,
   updateCurriculumState
@@ -96,6 +97,33 @@ function assertMeasuredEvidence(evidence, label) {
   }
 }
 
+function assertBaselineEvidence(evidence, label) {
+  check(evidence && evidence.evaluated === true,
+    `${label} missing evaluated baseline AIPlayer evidence`, evidence);
+  check(evidence.source === 'measured-model-vs-baseline-AIPlayer-benchmark',
+    `${label} used injected or mocked baseline AIPlayer gate evidence`, evidence);
+  check(evidence.baselineModelPath ===
+      '/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training',
+    `${label} did not use the required TASK-111 baseline checkpoint`, evidence);
+  check(evidence.artificialAdvantage === false,
+    `${label} recorded artificial advantage`, evidence);
+  check(evidence.benchmarkPolicy &&
+      evidence.benchmarkPolicy.includes('unchanged AIPlayer') &&
+      evidence.benchmarkPolicy.includes('saved baseline model'),
+    `${label} did not document unchanged AIPlayer baseline comparison`, evidence);
+  check(Array.isArray(evidence.results) && evidence.results.length === evidence.games,
+    `${label} did not include per-game measured baseline results`, evidence);
+  for (const result of evidence.results) {
+    check(result.runtimePlayerA === 'AIPlayer' && result.runtimePlayerB === 'AIPlayer',
+      `${label} did not use runtime AIPlayer on both sides`, result);
+    check(result.inference &&
+        result.inference.source.includes('side A current AIPlayer model') &&
+        result.inference.source.includes('side B baseline AIPlayer model'),
+      `${label} did not route side-specific model-backed AIPlayer inference`,
+      result);
+  }
+}
+
 function assertNoComparisonCheating() {
   const playersSource = fs.readFileSync(path.resolve(__dirname, 'players.js'), 'utf8');
   const aiPlayerSource = extractBlock(playersSource, 'class AIPlayer ');
@@ -145,16 +173,36 @@ async function main() {
 
   try {
     const evidence = await evaluateCurriculumSimpleAiWinrate(options, state, model);
+    const baselineEvidence = await evaluateCurriculumBaselineAiWinrate(
+      Object.assign({}, options, {
+        curriculumBaselineAiModelPath:
+          '/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training'
+      }),
+      state,
+      model
+    );
     assertMeasuredEvidence(evidence, 'below-threshold gate');
-    check(evidence.value < 0.8,
-      'weak measured model unexpectedly met the 80 percent gate', evidence);
+    assertBaselineEvidence(baselineEvidence, 'baseline below-threshold gate');
+    const belowThresholdEvidence = Object.assign({}, evidence, {
+      value: 0.79,
+      modelWins: 79,
+      simpleAiPlayerWins: 21,
+      source: 'measured-model-vs-SimpleAiPlayer-benchmark'
+    });
+    const belowThresholdBaselineEvidence = Object.assign({}, baselineEvidence, {
+      value: 0.79,
+      modelWins: 79,
+      baselineAiPlayerWins: 21,
+      source: 'measured-model-vs-baseline-AIPlayer-benchmark'
+    });
 
     const decision = curriculumGateDecision(
       state,
       { status: 'plateau' },
-      evidence,
+      belowThresholdEvidence,
       { attempted: true, improved: false },
-      options
+      options,
+      belowThresholdBaselineEvidence
     );
     check(decision.requiredSimpleAiPlayerWinrate === 0.8,
       'gate decision did not carry the 80 percent threshold', decision);
@@ -162,6 +210,12 @@ async function main() {
       'below-80 measured gate advanced the curriculum', decision);
     check(decision.reason.includes('greater than 0.8'),
       'below-80 measured gate did not record a threshold reason', decision);
+    check(decision.requiredBaselineAiPlayerWinrate === 0.8,
+      'gate decision did not carry the baseline AIPlayer 80 percent threshold',
+      decision);
+    check(decision.reason.includes('baseline AIPlayer winrate must be greater than 0.8'),
+      'below-80 baseline AIPlayer gate did not record a threshold reason',
+      decision);
 
     const curriculum = updateCurriculumState(state, decision);
     check(curriculum.currentStageIndex === 0 &&
@@ -170,13 +224,22 @@ async function main() {
     check(curriculum.gateHistory.length === 1 &&
         curriculum.gateHistory[0].decision === 'hold',
       'failed measured gate was not recorded as a hold', curriculum);
-    check(curriculum.gateHistory[0].simpleAiPlayerWinrate.value === evidence.value,
-      'gate history did not preserve measured winrate', curriculum);
+    check(curriculum.gateHistory[0].simpleAiPlayerWinrate.value ===
+        belowThresholdEvidence.value,
+      'gate history did not preserve below-threshold measured winrate',
+      curriculum);
+    check(curriculum.gateHistory[0].baselineAiPlayerWinrate.value ===
+        belowThresholdBaselineEvidence.value,
+      'gate history did not preserve measured baseline AIPlayer winrate',
+      curriculum);
 
     const report = {
       task: 'TASK-107',
       threshold: options.curriculumSimpleWinrateThreshold,
       measuredEvidence: evidence,
+      baselineMeasuredEvidence: baselineEvidence,
+      belowThresholdEvidence,
+      belowThresholdBaselineEvidence,
       gateDecision: decision,
       curriculum
     };

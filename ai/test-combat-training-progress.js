@@ -64,6 +64,7 @@ function main() {
       'learningRate',
       'oldVsNewWinrate',
       'simpleAiPlayerWinrate',
+      'baselineAiPlayerWinrate',
       'plateauState',
       'nextStageEligibility'
     ]) {
@@ -85,11 +86,23 @@ function main() {
     'next-stage eligibility should stay false for progress-only recording');
     check(record.nextStageEligibility.requiredSimpleAiPlayerWinrate === 0.8,
       'progress record did not use the 80 percent SimpleAiPlayer gate');
+    check(record.baselineAiPlayerWinrate &&
+      record.baselineAiPlayerWinrate.evaluated === true &&
+      record.baselineAiPlayerWinrate.source === 'measured-model-vs-baseline-AIPlayer-benchmark',
+    'baseline AIPlayer winrate field should contain measured benchmark evidence');
+    check(record.baselineAiPlayerWinrate.baselineModelPath ===
+      '/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training',
+    'baseline AIPlayer gate did not use the TASK-111 checkpoint path');
+    check(record.nextStageEligibility.requiredBaselineAiPlayerWinrate === 0.8,
+      'progress record did not use the 80 percent baseline AIPlayer gate');
 
     const manifestPath = path.join(storageDir, 'runs', runId, 'manifest.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     check(manifest.configuration.curriculumSimpleWinrateThreshold === 0.8,
       'manifest did not record the 80 percent SimpleAiPlayer gate');
+    check(manifest.configuration.curriculumBaselineAiModelPath ===
+      '/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training',
+    'manifest did not record the TASK-111 baseline AIPlayer model path');
     check(manifest.artifacts.progress === path.join('progress', `${runId}.jsonl`),
       'manifest does not reference combat progress artifact');
     check(manifest.artifacts.outputFiles.includes(path.join('progress', `${runId}.jsonl`)),

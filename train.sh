@@ -20,6 +20,7 @@ plateau_min_delta=0.001
 plateau_patience=1
 curriculum_simple_winrate=""
 curriculum_simple_winrate_threshold=0.8
+curriculum_baseline_ai_model="/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training"
 curriculum_lr_reduction_attempted=false
 curriculum_lr_reduction_improved=false
 evaluate_latest=false
@@ -52,6 +53,8 @@ Options:
                              Mock/tiny SimpleAiPlayer winrate for curriculum gating
   --curriculum-simple-winrate-threshold N
                              Required SimpleAiPlayer winrate before stage advance (default: 0.8)
+  --curriculum-baseline-ai-model PATH
+                             Existing trained AIPlayer model used for the second 80% curriculum gate
   --curriculum-lr-reduction-attempted
                              Record one lower learning-rate attempt before advancing
   --curriculum-lr-reduction-improved
@@ -164,6 +167,11 @@ while (($#)); do
     --curriculum-simple-winrate-threshold)
       (($# >= 2)) || die "--curriculum-simple-winrate-threshold requires a value"
       curriculum_simple_winrate_threshold="$2"
+      shift 2
+      ;;
+    --curriculum-baseline-ai-model)
+      (($# >= 2)) || die "--curriculum-baseline-ai-model requires a path"
+      curriculum_baseline_ai_model="$2"
       shift 2
       ;;
     --curriculum-lr-reduction-attempted)
@@ -282,6 +290,7 @@ runner_args=(
   --plateau-patience "$plateau_patience"
   --curriculum-simple-winrate "$curriculum_simple_winrate"
   --curriculum-simple-winrate-threshold "$curriculum_simple_winrate_threshold"
+  --curriculum-baseline-ai-model "$curriculum_baseline_ai_model"
   --curriculum-lr-reduction-attempted "$curriculum_lr_reduction_attempted"
   --curriculum-lr-reduction-improved "$curriculum_lr_reduction_improved"
   --workers "$workers"

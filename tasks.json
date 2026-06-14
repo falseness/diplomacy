@@ -2257,7 +2257,7 @@
     "id": "TASK-111",
     "category": "functional",
     "priority": "critical",
-    "description": "Raise the combat curriculum gate for model winrate to 80 percent before stage advancement against BOTH SimpleAiPlayer and the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/. Implemented: Raised the combat curriculum and combat-model SimpleAiPlayer thresholds to 80 percent, added focused gate/progress assertions, documented the old 60 percent value as historical only, and re-ran no-cheating checks. Verified: Re-ran focused curriculum gate, progress/manifest, combat benchmark, and no-cheating checks from scratch; active thresholds are 80 percent, below-80 gates hold with a clear reason, and no AIPlayer comparison shortcuts or benchmark advantages were found.",
+    "description": "Raise the combat curriculum gate for model winrate to 80 percent before stage advancement against BOTH SimpleAiPlayer and the baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/. Implemented: Raised the combat curriculum and combat-model SimpleAiPlayer thresholds to 80 percent, added focused gate/progress assertions, documented the old 60 percent value as historical only, and re-ran no-cheating checks. Verified: Re-ran focused curriculum gate, progress/manifest, combat benchmark, and no-cheating checks from scratch; active thresholds are 80 percent, below-80 gates hold with a clear reason, and no AIPlayer comparison shortcuts or benchmark advantages were found. Implemented: Added the second measured baseline-AIPlayer gate using the TASK-111 checkpoint, persisted its threshold/path/evidence in progress and manifests, and extended no-cheating/gate coverage.",
     "acceptance_criteria": [
       "The combat curriculum uses an 80 percent SimpleAiPlayer winrate threshold for advancement.",
       "Metrics and manifests record the 80 percent threshold with measured AIPlayer-vs-SimpleAiPlayer evidence.",
@@ -2273,7 +2273,7 @@
       "Step 4: Inspect AIPlayer and benchmark setup for no-cheating criteria.",
       "Step 5: Confirm a second measured gate runs the new model against the baseline AIPlayer (model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/) and also requires at least 80 percent winrate before advancement."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-112",

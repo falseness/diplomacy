@@ -288,7 +288,11 @@ function injectBenchmarkModel(context, options) {
     context.predict = function(model, xValidateArr) {
       context.__benchmarkInferenceCalls += 1;
       context.__benchmarkInferencePositions += xValidateArr.length;
-      return options.predictFunction(model, xValidateArr);
+      return options.predictFunction(model, xValidateArr, {
+        activePlayerIndex: Number(context.whooseTurn),
+        activeSide: Number(context.whooseTurn) === 1 ? 'A' :
+          (Number(context.whooseTurn) === 2 ? 'B' : null)
+      });
     };
     context.__benchmarkInferenceSource =
       options.inferenceSource || 'injected benchmark model';

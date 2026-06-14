@@ -48,6 +48,8 @@ const MODEL_ARCHITECTURE_METADATA = {
     value: 'combat_value'
   }
 };
+const DEFAULT_BASELINE_AI_MODEL_PATH =
+  '/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training';
 
 function fail(message) {
   throw new Error(message);
@@ -87,6 +89,7 @@ function parseArgs(argv) {
     'plateau-patience',
     'curriculum-simple-winrate',
     'curriculum-simple-winrate-threshold',
+    'curriculum-baseline-ai-model',
     'curriculum-lr-reduction-attempted',
     'curriculum-lr-reduction-improved',
     'fail-after-game'
@@ -109,6 +112,8 @@ function parseArgs(argv) {
   options.curriculumSimpleWinrate = Number(options['curriculum-simple-winrate']);
   options.curriculumSimpleWinrateThreshold =
     Number(options['curriculum-simple-winrate-threshold']);
+  options.curriculumBaselineAiModelPath =
+    path.resolve(options['curriculum-baseline-ai-model']);
   options.curriculumLearningRateReductionAttempted =
     options['curriculum-lr-reduction-attempted'] === 'true';
   options.curriculumLearningRateReductionImproved =
@@ -960,7 +965,8 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
       plateauWindow: options.plateauWindow,
       plateauMinDelta: options.plateauMinDelta,
       plateauPatience: options.plateauPatience,
-      curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold
+      curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold,
+      curriculumBaselineAiModelPath: options.curriculumBaselineAiModelPath
     },
     timestamp,
     codeRevision: gitRevision(),
@@ -1263,6 +1269,102 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
   };
 }
 
+async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
+  const baselinePath = options.curriculumBaselineAiModelPath ||
+    DEFAULT_BASELINE_AI_MODEL_PATH;
+  const modelPath = path.join(baselinePath, 'model.json');
+  if (!fs.existsSync(modelPath)) {
+    return {
+      value: null,
+      evaluated: false,
+      games: 0,
+      source: 'measured-model-vs-baseline-AIPlayer-benchmark',
+      baselineModelPath: baselinePath,
+      reason: 'baseline AIPlayer model checkpoint is missing'
+    };
+  }
+
+  const baselineModel = await tf.loadLayersModel(`file://${modelPath}`);
+  const currentPredict = createRuntimeModelPredict(model);
+  const baselinePredict = createRuntimeModelPredict(baselineModel);
+  const games = options.oldVsNewGames;
+  let modelWins = 0;
+  let baselineWins = 0;
+  let draws = 0;
+  const gameResults = [];
+  try {
+    for (let game = 1; game <= games; game += 1) {
+      const seed = state.seed + state.completedGames * 4129 +
+        state.curriculum.currentStageIndex * 131 + game;
+      const result = runGame({
+        mapName: 'big-open-field',
+        playerA: 'AIPlayer',
+        playerB: 'AIPlayer',
+        seed,
+        roundLimit: 80,
+        actionLimit: 3,
+        commandLimit: 60,
+        predictFunction(_modelIdentifier, vectorizedGrids, metadata) {
+          return metadata && metadata.activeSide === 'B'
+            ? baselinePredict(_modelIdentifier, vectorizedGrids)
+            : currentPredict(_modelIdentifier, vectorizedGrids);
+        },
+        modelIdentifier: {
+          runId: state.runId,
+          trainingStep: state.completedGames,
+          curriculumStage: state.curriculum.currentStage,
+          baselineModelPath: baselinePath
+        },
+        inferenceSource: 'side-routed TensorFlow checkpoint output: side A current AIPlayer model, side B baseline AIPlayer model'
+      });
+      let winner = 'draw';
+      if (result.winnerSide === 'A') {
+        modelWins += 1;
+        winner = 'model';
+      } else if (result.winnerSide === 'B') {
+        baselineWins += 1;
+        winner = 'baseline-AIPlayer';
+      } else {
+        draws += 1;
+      }
+      gameResults.push({
+        game,
+        seed,
+        winner,
+        winnerSide: result.winnerSide,
+        roundCount: result.roundCount,
+        timeout: result.timeout === true,
+        suddenDeath: result.suddenDeath === true,
+        nonResult: result.nonResult === true,
+        runtimePlayerA: result.runtimePlayerA,
+        runtimePlayerB: result.runtimePlayerB,
+        inference: result.inference,
+        map: {
+          name: 'big-open-field',
+          stage: state.curriculum.currentStage,
+          source: 'benchmarkHarness fixed combat map'
+        }
+      });
+    }
+  } finally {
+    baselineModel.dispose();
+  }
+  return {
+    value: games ? modelWins / games : null,
+    evaluated: true,
+    games,
+    modelWins,
+    baselineAiPlayerWins: baselineWins,
+    draws,
+    source: 'measured-model-vs-baseline-AIPlayer-benchmark',
+    baselineModelPath: baselinePath,
+    benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged AIPlayer using the saved baseline model',
+    modelAdapter: 'runtime vector grids are ranked by the shared full-vector final combat value adapter outside player code',
+    artificialAdvantage: false,
+    results: gameResults
+  };
+}
+
 async function curriculumSimpleAiWinrate(options, state, model) {
   if (options.curriculumSimpleWinrate >= 0) {
     return {
@@ -1286,7 +1388,21 @@ function curriculumLearningRateAttempt(options) {
   };
 }
 
-function curriculumGateDecision(state, plateauState, simpleAiPlayerWinrate, learningRateAttempt, options) {
+function curriculumGateDecision(
+  state,
+  plateauState,
+  simpleAiPlayerWinrate,
+  learningRateAttempt,
+  options,
+  baselineAiPlayerWinrate
+) {
+  baselineAiPlayerWinrate = baselineAiPlayerWinrate || {
+    value: null,
+    evaluated: false,
+    games: 0,
+    source: 'deferred-until-curriculum-gate-can-advance',
+    reason: 'baseline AIPlayer gate was not evaluated'
+  };
   if (state.curriculum.currentStageIndex >= CURRICULUM_FINAL_STAGE_INDEX) {
     return {
       currentStageIndex: state.curriculum.currentStageIndex,
@@ -1297,7 +1413,9 @@ function curriculumGateDecision(state, plateauState, simpleAiPlayerWinrate, lear
       plateauEvidence: plateauState.status === 'plateau',
       learningRateReduction: learningRateAttempt,
       simpleAiPlayerWinrate,
-      requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
+      baselineAiPlayerWinrate,
+      requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold,
+      requiredBaselineAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
     };
   }
   const reasons = [];
@@ -1314,18 +1432,25 @@ function curriculumGateDecision(state, plateauState, simpleAiPlayerWinrate, lear
   } else if (!(simpleAiPlayerWinrate.value > options.curriculumSimpleWinrateThreshold)) {
     reasons.push(`SimpleAiPlayer winrate must be greater than ${options.curriculumSimpleWinrateThreshold}`);
   }
+  if (!baselineAiPlayerWinrate.evaluated) {
+    reasons.push('baseline AIPlayer winrate has not been evaluated');
+  } else if (!(baselineAiPlayerWinrate.value > options.curriculumSimpleWinrateThreshold)) {
+    reasons.push(`baseline AIPlayer winrate must be greater than ${options.curriculumSimpleWinrateThreshold}`);
+  }
   return {
     currentStageIndex: state.curriculum.currentStageIndex,
     currentStage: state.curriculum.currentStage,
     eligible: reasons.length === 0,
     decision: reasons.length === 0 ? 'advance' : 'hold',
     reason: reasons.length === 0
-      ? 'plateau, learning-rate, and SimpleAiPlayer gates passed'
+      ? 'plateau, learning-rate, SimpleAiPlayer, and baseline AIPlayer gates passed'
       : reasons.join('; '),
     plateauEvidence: plateauState.status === 'plateau',
     learningRateReduction: learningRateAttempt,
     simpleAiPlayerWinrate,
-    requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
+    baselineAiPlayerWinrate,
+    requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold,
+    requiredBaselineAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
   };
 }
 
@@ -1345,7 +1470,9 @@ function updateCurriculumState(state, gateDecision) {
     plateauEvidence: gateDecision.plateauEvidence,
     learningRateReduction: gateDecision.learningRateReduction,
     simpleAiPlayerWinrate: gateDecision.simpleAiPlayerWinrate,
+    baselineAiPlayerWinrate: gateDecision.baselineAiPlayerWinrate,
     requiredSimpleAiPlayerWinrate: gateDecision.requiredSimpleAiPlayerWinrate,
+    requiredBaselineAiPlayerWinrate: gateDecision.requiredBaselineAiPlayerWinrate,
     timestamp: state.updatedAt
   };
   state.curriculum.gateHistory.push(entry);
@@ -1405,12 +1532,25 @@ async function progressRecord(
         ? 'plateau and learning-rate evidence are required before running the measured SimpleAiPlayer benchmark'
         : 'deferred until the configured evaluation cadence'
     };
+  const baselineAiPlayerWinrate = shouldMeasureSimpleAiPlayerWinrate
+    ? await evaluateCurriculumBaselineAiWinrate(options, state, model)
+    : {
+      value: null,
+      evaluated: false,
+      games: 0,
+      source: 'deferred-until-curriculum-gate-can-advance',
+      baselineModelPath: options.curriculumBaselineAiModelPath,
+      reason: shouldEvaluateCurriculum
+        ? 'plateau and learning-rate evidence are required before running the measured baseline AIPlayer benchmark'
+        : 'deferred until the configured evaluation cadence'
+    };
   const nextStageEligibility = curriculumGateDecision(
     state,
     plateauState,
     simpleAiPlayerWinrate,
     learningRateReduction,
-    options
+    options,
+    baselineAiPlayerWinrate
   );
   const curriculum = shouldEvaluateCurriculum
     ? updateCurriculumState(state, nextStageEligibility)
@@ -1438,6 +1578,7 @@ async function progressRecord(
       reason: oldVsNewEvaluation.reason || null
     },
     simpleAiPlayerWinrate,
+    baselineAiPlayerWinrate,
     plateauState,
     learningRateReduction,
     nextStageEligibility,
@@ -1481,6 +1622,7 @@ function manifestValue(options, state, paths, status, errorMessage) {
       plateauMinDelta: options.plateauMinDelta,
       plateauPatience: options.plateauPatience,
       curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold,
+      curriculumBaselineAiModelPath: options.curriculumBaselineAiModelPath,
       evaluationCadence: options.evaluationCadence,
       workers: options.workers,
     },
@@ -1635,6 +1777,9 @@ async function main() {
       checkpoint.metadata.trainingConfiguration.curriculumSimpleWinrateThreshold !== undefined
         ? checkpoint.metadata.trainingConfiguration.curriculumSimpleWinrateThreshold
         : options.curriculumSimpleWinrateThreshold;
+    options.curriculumBaselineAiModelPath =
+      checkpoint.metadata.trainingConfiguration.curriculumBaselineAiModelPath ||
+      options.curriculumBaselineAiModelPath;
     model = await tf.loadLayersModel(`file://${path.join(checkpoint.path, 'model.json')}`);
     validateLoadedModel(model);
     const resumeEvent = {
@@ -1957,6 +2102,7 @@ if (require.main === module && isMainThread) {
 
 module.exports = {
   evaluateCurriculumSimpleAiWinrate,
+  evaluateCurriculumBaselineAiWinrate,
   collectRuntimeCombatTeacherGame,
   curriculumGateDecision,
   initialCurriculumState,
