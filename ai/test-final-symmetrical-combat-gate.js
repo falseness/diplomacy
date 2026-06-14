@@ -96,7 +96,7 @@ try {
   check(Object.prototype.hasOwnProperty.call(smoke.summary, 'noLossRate'), 'no-loss rate missing');
   check(Object.prototype.hasOwnProperty.call(smoke.summary, 'winrate'), 'winrate missing');
   check(smoke.config.playerClasses.ai === 'AIPlayer', 'AI class missing from config');
-  check(smoke.config.playerClasses.simple === 'SimpleAiPlayer',
+  check(smoke.config.playerClasses.opponent === 'SimpleAiPlayer',
     'Simple class missing from config');
   check(smoke.config.candidateStarts.A === 1 && smoke.config.candidateStarts.B === 1,
     'smoke did not balance AI starts across sides');
@@ -105,7 +105,7 @@ try {
   for (const game of smoke.games) {
     check(game.classCheck.runtimeAIPlayer === 'AIPlayer',
       'runtime AIPlayer class changed');
-    check(game.classCheck.runtimeSimplePlayer === 'SimpleAiPlayer',
+    check(game.classCheck.runtimeOpponentPlayer === 'SimpleAiPlayer',
       'runtime SimpleAiPlayer class changed');
     check(game.symmetricalMap === true, 'game did not record symmetrical map use');
     check(game.suddenDeathRound === 80,
@@ -141,8 +141,21 @@ try {
     '--output', reportPath
   ]);
   const cliReport = readJson(reportPath);
-  check(cliReport.games.length === 1, 'CLI smoke did not write per-game result');
+  check(cliReport.games.length === 2, 'CLI smoke did not write both per-game results');
   check(cliReport.summary.gate === 'passed', 'CLI zero-threshold smoke did not pass');
+  check(cliReport.gates.simple, 'CLI default report missing SimpleAiPlayer gate');
+  check(cliReport.gates.baselineAiPlayer, 'CLI default report missing baseline AIPlayer gate');
+  check(cliReport.gates.simple.games.length === 1,
+    'CLI SimpleAiPlayer gate did not run configured game count');
+  check(cliReport.gates.baselineAiPlayer.games.length === 1,
+    'CLI baseline AIPlayer gate did not run configured game count');
+  check(cliReport.gates.baselineAiPlayer.config.playerClasses.opponent === 'AIPlayer',
+    'CLI baseline opponent did not use AIPlayer');
+  check(cliReport.gates.baselineAiPlayer.config.candidateStarts.A === 1 &&
+      cliReport.gates.baselineAiPlayer.config.candidateStarts.B === 0,
+    'CLI baseline gate did not use the measured current-side-A convention');
+  check(cliReport.gates.baselineAiPlayer.config.baselineCheckpoint,
+    'CLI baseline gate did not record checkpoint path');
   check(cliReport.config.suddenDeathRound === 80,
     'CLI report did not record default sudden-death round');
 
