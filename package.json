@@ -71,6 +71,7 @@
     "test-economy-stage-7-map-generation": "node ai/test-economy-stage-7-map-generation.js",
     "test-economy-stage-7-validation": "node ai/test-economy-stage-7-validation.js",
     "test-economy-stage-8-map-generation": "node ai/test-economy-stage-8-map-generation.js",
+    "test-economy-stage-8-validation": "node ai/test-economy-stage-8-validation.js",
     "test-multiplayer-training-maps": "node ai/test-multiplayer-training-maps.js",
     "test-barrack-map-generation": "node ai/test-barrack-map-generation.js",
     "test-farm-map-generation": "node ai/test-farm-map-generation.js",

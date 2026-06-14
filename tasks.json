@@ -2705,7 +2705,7 @@
     "id": "TASK-133",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 8.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 8. Implemented: Added npm run test-economy-stage-8-validation with 24-seed terrain coverage for mountains, bushes, lakes, mirrored fairness, reachability, preserved stage-7 unit/building coverage, deterministic replay, and benchmark initialization.",
     "acceptance_criteria": [
       "The test verifies mountains, bushes, and lakes are generated across seeds.",
       "The test verifies terrain does not block required starts or make objectives unreachable.",
@@ -2719,7 +2719,7 @@
       "Step 3: Confirm benchmark initialization succeeds.",
       "Step 4: Run terrain-related map generation tests if available."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-134",
