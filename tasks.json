@@ -2625,7 +2625,7 @@
     "id": "TASK-129",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 6.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 6. Implemented: Added npm run test-economy-stage-6-validation covering 16 deterministic seeds, catapult and prior-unit coverage, legal mirrored placement, preserved tower/bastion complexity, HP variation, and deterministic replay.",
     "acceptance_criteria": [
       "The test verifies catapult coverage across seeds.",
       "The test verifies earlier unit types remain possible.",
@@ -2639,7 +2639,7 @@
       "Step 3: Confirm catapult and prior unit types are represented.",
       "Step 4: Run existing unit map generation tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-130",
