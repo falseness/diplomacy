@@ -2565,7 +2565,7 @@
     "id": "TASK-126",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 5: some units can be archers.",
+    "description": "Add AIPlayerWithEconomy generator stage 5: some units can be archers. Implemented: Added deterministic stage-5 economy maps with mirrored noob/archer mixes, documented per-seed archer ratios, preserved tower/bastion defenses, npm smoke coverage, and short economy AI runtime validation.",
     "acceptance_criteria": [
       "The generator can include archer units in addition to noobs.",
       "Archer placement is legal for both sides.",
@@ -2579,7 +2579,7 @@
       "Step 3: Confirm no illegal archer placement.",
       "Step 4: Run one short economy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-127",
