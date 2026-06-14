@@ -174,7 +174,12 @@ class GameMap {
                     let configured = configuredBuildings[i]
                     assert(grid.getBuilding(configured).isEmpty())
                     assert(grid.getHexagon(configured).playerColor == playerIndex)
-                    new BuildingType(configured.x, configured.y)
+                    let building = new BuildingType(configured.x, configured.y)
+                    if (!('hp' in configured)) {
+                        continue
+                    }
+                    assert(0 < configured.hp && configured.hp <= building.hp)
+                    building.hit(building.hp - configured.hp)
                 }
             }
         }

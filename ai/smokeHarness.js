@@ -89,11 +89,16 @@ function createSmokeContext() {
           isBuildingProduction() { return true; }
         };
       }
-      function completeExternal(name, playerIndex) {
+      function completeExternal(name, playerIndex, configured) {
+        const maxHP = 5;
+        const hp = configured && configured.hp !== undefined ? configured.hp : maxHP;
+        if (!(hp > 0 && hp <= maxHP)) {
+          throw new Error('configured external building hp out of range');
+        }
         return {
           name,
-          hp: 5,
-          maxHP: 5,
+          hp,
+          maxHP,
           playerColor: playerIndex,
           rangeIncrease: name === 'tower' ? 1 : 0,
           isEmpty() { return false; },
@@ -206,7 +211,7 @@ function createSmokeContext() {
           for (const property of ['walls', 'bastions', 'towers']) {
             const name = property.slice(0, -1);
             externalBuildings[property] = (player[property] || []).map(configured => {
-              const building = completeExternal(name, playerIndex);
+              const building = completeExternal(name, playerIndex, configured);
               setCell(configured, playerIndex, building);
               return {configured, building};
             });

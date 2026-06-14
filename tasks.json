@@ -2405,7 +2405,7 @@
     "id": "TASK-118",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 1: small 1v1 noob map with one tower or bastion using random HP amount.",
+    "description": "Add AIPlayerWithEconomy generator stage 1: small 1v1 noob map with one tower or bastion using random HP amount. Implemented: Added seeded 7x5 economy stage-1 maps with mirrored noob starts, one mirrored tower or bastion at documented 2-5 HP, runtime configured-HP support, and focused fixed-seed/runtime smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a small 1v1 economy map.",
       "Each side starts with noob units and mirrored access to one tower or bastion.",
@@ -2419,7 +2419,7 @@
       "Step 3: Run one short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke game.",
       "Step 4: Confirm the same seed reproduces the same map."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-119",
