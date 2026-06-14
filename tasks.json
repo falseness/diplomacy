@@ -2425,7 +2425,7 @@
     "id": "TASK-119",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 1.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 1. Implemented: Added a focused economy stage 1 validation npm test covering small 1v1 size/player count, noob units, exact tower/bastion setup, HP variation, seed replay determinism, and benchmark harness initialization.",
     "acceptance_criteria": [
       "The test verifies small 1v1 map size and player count.",
       "The test verifies noob units are present.",
@@ -2439,7 +2439,7 @@
       "Step 3: Confirm deterministic replay for at least one seed.",
       "Step 4: Run the economy training smoke after adding the test."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-120",
