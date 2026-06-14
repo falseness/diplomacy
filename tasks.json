@@ -2525,7 +2525,7 @@
     "id": "TASK-124",
     "category": "functional",
     "priority": "critical",
-    "description": "Add AIPlayerWithEconomy generator stage 4: more towers and bastions with random HP amount.",
+    "description": "Add AIPlayerWithEconomy generator stage 4: more towers and bastions with random HP amount. Implemented: Added seeded stage-4 economy maps with mirrored AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy setup, one tower and one bastion per side, randomized mirrored HP within 2-5 bounds, deterministic metadata, npm smoke coverage, and a short economy runtime check.",
     "acceptance_criteria": [
       "The generator adds more than one defensive building per relevant map.",
       "Towers and bastions can both appear.",
@@ -2539,7 +2539,7 @@
       "Step 3: Confirm HP varies and remains in bounds.",
       "Step 4: Run one short economy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-125",
