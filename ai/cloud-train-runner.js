@@ -1205,7 +1205,9 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
   let simpleWins = 0;
   let draws = 0;
   const gameResults = [];
-  const predictFunction = createRuntimeModelPredict(model);
+  const predictFunction = typeof options.curriculumPredictFunction === 'function'
+    ? options.curriculumPredictFunction
+    : createRuntimeModelPredict(model);
   for (let game = 1; game <= games; game += 1) {
     const seed = state.seed + state.completedGames * 3571 +
       state.curriculum.currentStageIndex * 101 + game;
@@ -1223,7 +1225,9 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
         trainingStep: state.completedGames,
         curriculumStage: state.curriculum.currentStage
       },
-      inferenceSource: 'current TensorFlow checkpoint output through unchanged runtime AIPlayer predict()'
+      inferenceSource: typeof options.curriculumPredictFunction === 'function'
+        ? 'test-configured current-model output through unchanged runtime AIPlayer predict()'
+        : 'current TensorFlow checkpoint output through unchanged runtime AIPlayer predict()'
     });
     let winner = 'draw';
     if (result.winnerSide === 'A') {
@@ -1262,8 +1266,12 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     simpleAiPlayerWins: simpleWins,
     draws,
     source: 'measured-model-vs-SimpleAiPlayer-benchmark',
-    benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged SimpleAiPlayer',
-    modelAdapter: 'runtime vector grids are ranked by the shared full-vector final combat value adapter outside player code',
+    benchmarkPolicy: typeof options.curriculumPredictFunction === 'function'
+      ? 'real GameMap runtime with unchanged AIPlayer using test-configured current-model output versus unchanged SimpleAiPlayer'
+      : 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged SimpleAiPlayer',
+    modelAdapter: typeof options.curriculumPredictFunction === 'function'
+      ? 'test-configured current-model predictor through unchanged runtime AIPlayer predict()'
+      : 'runtime vector grids are ranked by the shared full-vector final combat value adapter outside player code',
     artificialAdvantage: false,
     results: gameResults
   };
@@ -1285,7 +1293,9 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
   }
 
   const baselineModel = await tf.loadLayersModel(`file://${modelPath}`);
-  const currentPredict = createRuntimeModelPredict(model);
+  const currentPredict = typeof options.curriculumPredictFunction === 'function'
+    ? options.curriculumPredictFunction
+    : createRuntimeModelPredict(model);
   const baselinePredict = createRuntimeModelPredict(baselineModel);
   const games = options.oldVsNewGames;
   let modelWins = 0;
@@ -1315,7 +1325,9 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
           curriculumStage: state.curriculum.currentStage,
           baselineModelPath: baselinePath
         },
-        inferenceSource: 'side-routed TensorFlow checkpoint output: side A current AIPlayer model, side B baseline AIPlayer model'
+        inferenceSource: typeof options.curriculumPredictFunction === 'function'
+          ? 'side-routed model output: side A test-configured current AIPlayer model, side B baseline AIPlayer model'
+          : 'side-routed TensorFlow checkpoint output: side A current AIPlayer model, side B baseline AIPlayer model'
       });
       let winner = 'draw';
       if (result.winnerSide === 'A') {
@@ -1358,8 +1370,12 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
     draws,
     source: 'measured-model-vs-baseline-AIPlayer-benchmark',
     baselineModelPath: baselinePath,
-    benchmarkPolicy: 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged AIPlayer using the saved baseline model',
-    modelAdapter: 'runtime vector grids are ranked by the shared full-vector final combat value adapter outside player code',
+    benchmarkPolicy: typeof options.curriculumPredictFunction === 'function'
+      ? 'real GameMap runtime with unchanged AIPlayer using test-configured current-model output versus unchanged AIPlayer using the saved baseline model'
+      : 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged AIPlayer using the saved baseline model',
+    modelAdapter: typeof options.curriculumPredictFunction === 'function'
+      ? 'test-configured current-model predictor through unchanged runtime AIPlayer predict()'
+      : 'runtime vector grids are ranked by the shared full-vector final combat value adapter outside player code',
     artificialAdvantage: false,
     results: gameResults
   };

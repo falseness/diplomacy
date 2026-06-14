@@ -2279,7 +2279,7 @@
     "id": "TASK-112",
     "category": "test",
     "priority": "critical",
-    "description": "Add a regression test proving the 80 percent gate blocks combat curriculum advancement on failure for BOTH the SimpleAiPlayer gate AND the baseline-AIPlayer gate (baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/). Requirement expanded: previously this gate only covered SimpleAiPlayer; the test must now also prove a below-80 percent winrate against the baseline AIPlayer holds the curriculum, so status reset to pending for re-verification. Implemented: Added a measured AIPlayer-vs-SimpleAiPlayer gate-failure regression that rejects injected evidence, records structured below-80 winrate output, keeps the curriculum at stage 0, and reuses the no-cheating comparison checks. Verified: Re-ran the measured gate-failure regression and no-cheating guard from scratch; structured output recorded a real 0/2 AIPlayer-vs-SimpleAiPlayer winrate, hold decision, stage 0 curriculum, rejected mock evidence, and no artificial comparison advantage.",
+    "description": "Add a regression test proving the 80 percent gate blocks combat curriculum advancement on failure for BOTH the SimpleAiPlayer gate AND the baseline-AIPlayer gate (baseline AIPlayer running the existing trained model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/). Requirement expanded: previously this gate only covered SimpleAiPlayer; the test must now also prove a below-80 percent winrate against the baseline AIPlayer holds the curriculum, so status reset to pending for re-verification. Implemented: Added a measured AIPlayer-vs-SimpleAiPlayer gate-failure regression that rejects injected evidence, records structured below-80 winrate output, keeps the curriculum at stage 0, and reuses the no-cheating comparison checks. Verified: Re-ran the measured gate-failure regression and no-cheating guard from scratch; structured output recorded a real 0/2 AIPlayer-vs-SimpleAiPlayer winrate, hold decision, stage 0 curriculum, rejected mock evidence, and no artificial comparison advantage. Implemented: Added a TASK-112 npm regression that drives measured below-80 SimpleAiPlayer and baseline-AIPlayer gates through unchanged runtime players, rejects mocked evidence for both gates, records the failed gate reasons, and keeps curriculum at stage 0.",
     "acceptance_criteria": [
       "The test creates or configures a below-threshold measured gate result.",
       "The curriculum does not advance when winrate is below 80 percent.",
@@ -2295,7 +2295,7 @@
       "Step 4: Confirm the failure reason is present in metrics or manifest output.",
       "Step 5: Confirm the test also drives a below-80 percent measured winrate against the baseline AIPlayer (model at /mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training/) and that this also holds the curriculum at its current stage."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-113",

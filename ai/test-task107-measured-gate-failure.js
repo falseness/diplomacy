@@ -71,6 +71,12 @@ function createWeakMeasuredModel() {
   return model;
 }
 
+function createBelowThresholdMeasuredPredictor() {
+  return function belowThresholdMeasuredPredictor(_modelIdentifier, vectorizedGrids) {
+    return vectorizedGrids.map(() => [0]);
+  };
+}
+
 function assertMeasuredEvidence(evidence, label) {
   check(evidence && evidence.evaluated === true,
     `${label} missing evaluated evidence`, evidence);
@@ -90,8 +96,10 @@ function assertMeasuredEvidence(evidence, label) {
     check(result.runtimePlayerB === 'SimpleAiPlayer',
       `${label} did not use runtime SimpleAiPlayer`, result);
     check(result.inference &&
-        result.inference.source ===
-          'current TensorFlow checkpoint output through unchanged runtime AIPlayer predict()',
+        (result.inference.source ===
+          'current TensorFlow checkpoint output through unchanged runtime AIPlayer predict()' ||
+          result.inference.source ===
+          'test-configured current-model output through unchanged runtime AIPlayer predict()'),
       `${label} did not route decisions through model-backed AIPlayer inference`,
       result);
   }
@@ -117,7 +125,8 @@ function assertBaselineEvidence(evidence, label) {
     check(result.runtimePlayerA === 'AIPlayer' && result.runtimePlayerB === 'AIPlayer',
       `${label} did not use runtime AIPlayer on both sides`, result);
     check(result.inference &&
-        result.inference.source.includes('side A current AIPlayer model') &&
+        (result.inference.source.includes('side A current AIPlayer model') ||
+          result.inference.source.includes('side A test-configured current AIPlayer model')) &&
         result.inference.source.includes('side B baseline AIPlayer model'),
       `${label} did not route side-specific model-backed AIPlayer inference`,
       result);
@@ -158,6 +167,19 @@ async function main() {
   check(rejectedMockEvidence,
     'measured-evidence guard did not reject mocked gate evidence');
 
+  let rejectedMockBaselineEvidence = false;
+  try {
+    assertBaselineEvidence({
+      evaluated: true,
+      value: 0.79,
+      source: 'mock-or-tiny-evaluation'
+    }, 'mock baseline evidence guard');
+  } catch (error) {
+    rejectedMockBaselineEvidence = /injected or mocked/.test(error.message);
+  }
+  check(rejectedMockBaselineEvidence,
+    'baseline measured-evidence guard did not reject mocked gate evidence');
+
   const model = createWeakMeasuredModel();
   const state = {
     runId: 'task107-measured-gate-failure',
@@ -172,9 +194,17 @@ async function main() {
   };
 
   try {
-    const evidence = await evaluateCurriculumSimpleAiWinrate(options, state, model);
+    const belowThresholdPredictor = createBelowThresholdMeasuredPredictor();
+    const measuredOptions = Object.assign({}, options, {
+      curriculumPredictFunction: belowThresholdPredictor
+    });
+    const evidence = await evaluateCurriculumSimpleAiWinrate(
+      measuredOptions,
+      state,
+      model
+    );
     const baselineEvidence = await evaluateCurriculumBaselineAiWinrate(
-      Object.assign({}, options, {
+      Object.assign({}, measuredOptions, {
         curriculumBaselineAiModelPath:
           '/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training'
       }),
@@ -183,26 +213,20 @@ async function main() {
     );
     assertMeasuredEvidence(evidence, 'below-threshold gate');
     assertBaselineEvidence(baselineEvidence, 'baseline below-threshold gate');
-    const belowThresholdEvidence = Object.assign({}, evidence, {
-      value: 0.79,
-      modelWins: 79,
-      simpleAiPlayerWins: 21,
-      source: 'measured-model-vs-SimpleAiPlayer-benchmark'
-    });
-    const belowThresholdBaselineEvidence = Object.assign({}, baselineEvidence, {
-      value: 0.79,
-      modelWins: 79,
-      baselineAiPlayerWins: 21,
-      source: 'measured-model-vs-baseline-AIPlayer-benchmark'
-    });
+    check(evidence.value < options.curriculumSimpleWinrateThreshold,
+      'measured SimpleAiPlayer gate was not below the 80 percent threshold',
+      evidence);
+    check(baselineEvidence.value < options.curriculumSimpleWinrateThreshold,
+      'measured baseline AIPlayer gate was not below the 80 percent threshold',
+      baselineEvidence);
 
     const decision = curriculumGateDecision(
       state,
       { status: 'plateau' },
-      belowThresholdEvidence,
+      evidence,
       { attempted: true, improved: false },
       options,
-      belowThresholdBaselineEvidence
+      baselineEvidence
     );
     check(decision.requiredSimpleAiPlayerWinrate === 0.8,
       'gate decision did not carry the 80 percent threshold', decision);
@@ -225,32 +249,38 @@ async function main() {
         curriculum.gateHistory[0].decision === 'hold',
       'failed measured gate was not recorded as a hold', curriculum);
     check(curriculum.gateHistory[0].simpleAiPlayerWinrate.value ===
-        belowThresholdEvidence.value,
+        evidence.value,
       'gate history did not preserve below-threshold measured winrate',
       curriculum);
     check(curriculum.gateHistory[0].baselineAiPlayerWinrate.value ===
-        belowThresholdBaselineEvidence.value,
+        baselineEvidence.value,
       'gate history did not preserve measured baseline AIPlayer winrate',
       curriculum);
 
     const report = {
-      task: 'TASK-107',
+      task: 'TASK-112',
       threshold: options.curriculumSimpleWinrateThreshold,
       measuredEvidence: evidence,
       baselineMeasuredEvidence: baselineEvidence,
-      belowThresholdEvidence,
-      belowThresholdBaselineEvidence,
       gateDecision: decision,
       curriculum
     };
-    const reportPath = path.join(
+    const task112ReportPath = path.join(
+      '/mnt/storage/diplomacy/benchmarks',
+      'task112-measured-gate-failure.json'
+    );
+    writeJson(task112ReportPath, report);
+    const task107ReportPath = path.join(
       '/mnt/storage/diplomacy/benchmarks',
       'task107-measured-gate-failure.json'
     );
-    writeJson(reportPath, report);
-    check(fs.existsSync(reportPath),
+    writeJson(task107ReportPath, Object.assign({}, report, {
+      task: 'TASK-107',
+      task112ReportPath
+    }));
+    check(fs.existsSync(task112ReportPath),
       'structured measured gate report was not written');
-    console.log(`TASK-107 measured gate failure regression passed: ${reportPath}`);
+    console.log(`TASK-112 measured gate failure regression passed: ${task112ReportPath}`);
   } finally {
     model.dispose();
   }

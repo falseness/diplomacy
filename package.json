@@ -9,6 +9,7 @@
     "test-task106-self-play-workers": "npx -y node@20 ai/test-task106-self-play-workers.js",
     "test-task106-curriculum-gate": "npx -y node@20 ai/test-task106-curriculum-gate.js",
     "test-task107-measured-gate-failure": "npx -y node@20 ai/test-task107-measured-gate-failure.js",
+    "test-task112-gate-failure": "npx -y node@20 ai/test-task107-measured-gate-failure.js",
     "test-combat-full-training-verification": "npx -y node@20 ai/test-combat-full-training-verification.js",
     "test-combat-old-vs-new": "npx -y node@20 ai/test-combat-old-vs-new.js",
     "test-task104-training-cadence": "npx -y node@20 ai/test-task104-training-cadence.js",
