@@ -2585,7 +2585,7 @@
     "id": "TASK-127",
     "category": "test",
     "priority": "critical",
-    "description": "Add validation test for AIPlayerWithEconomy generator stage 5.",
+    "description": "Add validation test for AIPlayerWithEconomy generator stage 5. Implemented: Added npm run test-economy-stage-5-validation covering 16 deterministic seeds, archer/noob coverage, legal mirrored placement, preserved tower/bastion defensive requirements, HP variation, and deterministic replay.",
     "acceptance_criteria": [
       "The test verifies archer coverage across seeds.",
       "The test verifies noobs remain available in the stage.",
@@ -2599,7 +2599,7 @@
       "Step 3: Confirm archer and noob units are both represented.",
       "Step 4: Run existing unit vectorization tests."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-128",
