@@ -59,7 +59,11 @@ class GameMap {
     createTowns() {
         for (let i = 0; i < this.players[0].towns.length; ++i) {
             let town_coord = this.players[0].towns[i]
-            new Town(town_coord.x, town_coord.y, false, -1)
+            let town = new Town(town_coord.x, town_coord.y, false, -1)
+            if ('hp' in town_coord) {
+                assert(0 < town_coord.hp && town_coord.hp <= town.hp)
+                town.hit(town.hp - town_coord.hp)
+            }
         }
         for (let i = 1; i < this.players.length; ++i) {
             let towns = this.players[i].towns
@@ -67,7 +71,11 @@ class GameMap {
                 let town_coord = towns[j]
 
                 grid.arr[town_coord.x][town_coord.y].hexagon.firstpaint(i)
-                new Town(town_coord.x, town_coord.y, false, true)
+                let town = new Town(town_coord.x, town_coord.y, false, true)
+                if ('hp' in town_coord) {
+                    assert(0 < town_coord.hp && town_coord.hp <= town.hp)
+                    town.hit(town.hp - town_coord.hp)
+                }
             }
         }
     }
@@ -115,6 +123,10 @@ class GameMap {
                 let town = this.getConfiguredTown(playerIndex, configured.town)
                 assert(grid.getBuilding(configured).isEmpty())
                 let barrack = new Barrack(configured.x, configured.y, town)
+                if ('hp' in configured) {
+                    assert(0 < configured.hp && configured.hp <= barrack.hp)
+                    barrack.hit(barrack.hp - configured.hp)
+                }
                 town.buildings.push(barrack)
             }
 
@@ -141,6 +153,10 @@ class GameMap {
                 let town = this.getConfiguredTown(playerIndex, configured.town)
                 assert(grid.getBuilding(configured).isEmpty())
                 let farm = new Farm(configured.x, configured.y, town)
+                if ('hp' in configured) {
+                    assert(0 < configured.hp && configured.hp <= farm.hp)
+                    farm.hit(farm.hp - configured.hp)
+                }
                 town.buildings.push(farm)
             }
 

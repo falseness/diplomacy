@@ -28,10 +28,14 @@ function createSmokeContext() {
       this.hills = hills || [];
     }
 
-    completeFarm(playerIndex) {
+    completeFarm(playerIndex, configured) {
+      const hp = configured && configured.hp !== undefined ? configured.hp : 1;
+      if (!(hp > 0 && hp <= 1)) {
+        throw new Error('configured farm hp out of range');
+      }
       return {
         name: 'farm',
-        hp: 1,
+        hp,
         maxHP: 1,
         income: 4,
         playerColor: playerIndex,
@@ -56,9 +60,13 @@ function createSmokeContext() {
         return { isEmpty() { return true; }, isMyTurn: false };
       }
       function completeBarrack(playerIndex, configured) {
+        const hp = configured && configured.hp !== undefined ? configured.hp : 1;
+        if (!(hp > 0 && hp <= 1)) {
+          throw new Error('configured barrack hp out of range');
+        }
         return {
           name: 'barrack',
-          hp: 1,
+          hp,
           maxHP: 1,
           income: -2,
           playerColor: playerIndex,
@@ -133,23 +141,43 @@ function createSmokeContext() {
         turn: 0,
         cells,
         players: this.players.map((player, playerIndex) => {
-          const units = (player.units || []).map(unit => ({
-            type: unit.type,
-            name: unit.type.name,
-            x: unit.x,
-            y: unit.y,
-            coord: {x: unit.x, y: unit.y},
-            moves: 1,
-            source: 'configured',
-            getAvailableCommands() {
-              return [{
-                type: 'unit',
-                whoDoCommandCoord: this.coord,
-                destinationCoord: this.coord
-              }];
+          const units = (player.units || []).map(unit => {
+            const maxByName = {
+              Noob: 2,
+              Archer: 1,
+              KOHb: 3,
+              Normchel: 5,
+              Catapult: 1
+            };
+            const maxHP = unit.type.maxHP || maxByName[unit.type.name] || 1;
+            const hp = unit.hp === undefined ? maxHP : unit.hp;
+            if (!(hp > 0 && hp <= maxHP)) {
+              throw new Error('configured unit hp out of range');
             }
-          }));
+            return {
+              type: unit.type,
+              name: unit.type.name,
+              x: unit.x,
+              y: unit.y,
+              coord: {x: unit.x, y: unit.y},
+              hp,
+              maxHP,
+              moves: 1,
+              source: 'configured',
+              getAvailableCommands() {
+                return [{
+                  type: 'unit',
+                  whoDoCommandCoord: this.coord,
+                  destinationCoord: this.coord
+                }];
+              }
+            };
+          });
           const towns = player.towns.map(town => {
+            const townHp = town.hp === undefined ? 10 : town.hp;
+            if (!(townHp > 0 && townHp <= 10)) {
+              throw new Error('configured town hp out of range');
+            }
             const configuredLayout = (player.suburbs || []).find(layout =>
               layout.town.x === town.x && layout.town.y === town.y);
             let suburbs = [{x: town.x, y: town.y}];
@@ -176,7 +204,7 @@ function createSmokeContext() {
             return {
               coord: town,
               playerColor: playerIndex,
-              hp: 10,
+              hp: townHp,
               maxHP: 10,
               killed: false,
               suburbs,
@@ -198,7 +226,7 @@ function createSmokeContext() {
             return {configured, building};
           });
           const farms = (player.farms || []).map(configured => {
-            const building = this.completeFarm(playerIndex);
+            const building = this.completeFarm(playerIndex, configured);
             setCell(configured, playerIndex, building);
             return {configured, building};
           });
