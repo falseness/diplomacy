@@ -2985,7 +2985,7 @@
     "id": "TASK-147",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with captured suburbs, barracks, farms, and randomly generated units of any supported type.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with captured suburbs, barracks, farms, and randomly generated units of any supported type. Implemented: Added advanced economy stage 10 9x9 maps by extending the stage-9 captured-suburb/farm/barrack layout with deterministic legal random units across all supported unit types plus focused generation and economy smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a deterministic 9x9 map from a seed.",
       "Random units can include every supported unit type across the seed set.",
@@ -2999,7 +2999,7 @@
       "Step 3: Confirm captured suburbs, barracks, and farms remain valid.",
       "Step 4: Run a short economy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-148",

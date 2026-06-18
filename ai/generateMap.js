@@ -2681,6 +2681,112 @@ function generateAdvancedEconomyStage9TrainingMap(options) {
     return map
 }
 
+function selectableAdvancedEconomyStage10UnitCells(map, occupied) {
+    let cells = []
+    let redTown = map.players[1].towns[0]
+    let candidatePairs = advancedEconomyStage7SuburbCandidatePairs(map.mapSize, redTown)
+    for (let i = 0; i < candidatePairs.length; ++i) {
+        let pair = candidatePairs[i]
+        if (!hasCoordKey(occupied, pair.red) && !hasCoordKey(occupied, pair.blue)) {
+            cells.push(pair)
+        }
+    }
+    return cells
+}
+
+function addAdvancedEconomyStage10Units(map, options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed * 23 + 10)
+    let unitCountPerPlayer = boundedInteger(options.unitCountPerPlayer, 4, 1, 6)
+    let composition = options.unitComposition || 'all'
+    let occupied = {}
+
+    for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
+        for (let i = 0; i < map.players[playerIndex].towns.length; ++i) {
+            markCoordKey(occupied, map.players[playerIndex].towns[i])
+        }
+        for (let i = 0; i < (map.players[playerIndex].farms || []).length; ++i) {
+            markCoordKey(occupied, map.players[playerIndex].farms[i])
+        }
+        for (let i = 0; i < (map.players[playerIndex].barracks || []).length; ++i) {
+            markCoordKey(occupied, map.players[playerIndex].barracks[i])
+        }
+    }
+
+    let candidatePairs = selectableAdvancedEconomyStage10UnitCells(map, occupied)
+    let selectedPairs = []
+    let offset = candidatePairs.length ? randomIntWithRng(rng, 0, candidatePairs.length - 1) : 0
+    for (let i = 0; i < candidatePairs.length && selectedPairs.length < unitCountPerPlayer; ++i) {
+        let pair = candidatePairs[(offset + i) % candidatePairs.length]
+        selectedPairs.push(pair)
+        markCoordKey(occupied, pair.red)
+        markCoordKey(occupied, pair.blue)
+    }
+
+    let unitTypes = createUnitComposition(rng, selectedPairs.length, composition)
+    map.players[1].units = []
+    map.players[2].units = []
+    let unitTypeCounts = {
+        Noob: 0,
+        Archer: 0,
+        KOHb: 0,
+        Normchel: 0,
+        Catapult: 0
+    }
+    for (let i = 0; i < selectedPairs.length; ++i) {
+        let type = unitTypes[i]
+        map.players[1].units.push({
+            type: type,
+            x: selectedPairs[i].red.x,
+            y: selectedPairs[i].red.y
+        })
+        map.players[2].units.push({
+            type: type,
+            x: selectedPairs[i].blue.x,
+            y: selectedPairs[i].blue.y
+        })
+        unitTypeCounts[type.name] += 2
+    }
+
+    map.economyGenerator.unitComposition = composition
+    map.economyGenerator.unitCountPerPlayer = selectedPairs.length
+    map.economyGenerator.unitPairs = selectedPairs.map(function(pair, index) {
+        return {
+            red: {x: pair.red.x, y: pair.red.y},
+            blue: {x: pair.blue.x, y: pair.blue.y},
+            type: unitTypes[index].name
+        }
+    })
+    map.economyGenerator.unitTypes = Object.keys(unitTypeCounts).filter(function(name) {
+        return unitTypeCounts[name] > 0
+    })
+    map.economyObjects.units = selectedPairs.length * 2
+    map.economyObjects.noobs = unitTypeCounts.Noob
+    map.economyObjects.archers = unitTypeCounts.Archer
+    map.economyObjects.KOHbs = unitTypeCounts.KOHb
+    map.economyObjects.normchels = unitTypeCounts.Normchel
+    map.economyObjects.catapults = unitTypeCounts.Catapult
+}
+
+function generateAdvancedEconomyStage10TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let map = generateAdvancedEconomyStage9TrainingMap(options)
+    addAdvancedEconomyStage10Units(map, {
+        seed: seed,
+        unitCountPerPlayer: options.unitCountPerPlayer,
+        unitComposition: options.unitComposition
+    })
+
+    map.testName = 'advanced-economy-stage-10-' + seed
+    map.economyStage = 'advanced-10'
+    map.advancedEconomyStage = 10
+    map.economyGenerator.stage = 'advanced-10'
+    map.economyGenerator.stage9RequirementsPreserved = true
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1
