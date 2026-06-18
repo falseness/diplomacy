@@ -2516,6 +2516,171 @@ function generateAdvancedEconomyStage8TrainingMap(options) {
     return map
 }
 
+function ensureAdvancedEconomyStageCapturedPairs(map, minPairs) {
+    let redTown = map.players[1].towns[0]
+    let blueTown = map.players[2].towns[0]
+    let redLayout = map.players[1].suburbs[0]
+    let blueLayout = map.players[2].suburbs[0]
+    let redClaimed = {}
+    let blueClaimed = {}
+    for (let i = 0; i < redLayout.cells.length; ++i) {
+        markCoordKey(redClaimed, redLayout.cells[i])
+    }
+    for (let i = 0; i < blueLayout.cells.length; ++i) {
+        markCoordKey(blueClaimed, blueLayout.cells[i])
+    }
+    let candidatePairs = advancedEconomyStage7SuburbCandidatePairs(map.mapSize, redTown)
+    let capturedPairs = map.economyGenerator.capturedSuburbPairs || []
+
+    function hasConnectedNeighbour(coord, claimed) {
+        let neighbours = townNeighbourCoords(coord)
+        for (let i = 0; i < neighbours.length; ++i) {
+            if (claimed[coordKey(neighbours[i])]) {
+                return true
+            }
+        }
+        return false
+    }
+
+    for (let i = 0; capturedPairs.length < minPairs && i < candidatePairs.length; ++i) {
+        let pair = candidatePairs[i]
+        if (hasCoordKey(redClaimed, pair.red) || hasCoordKey(blueClaimed, pair.blue) ||
+            !hasConnectedNeighbour(pair.red, redClaimed) ||
+            !hasConnectedNeighbour(pair.blue, blueClaimed)) {
+            continue
+        }
+        let redCoord = {x: pair.red.x, y: pair.red.y}
+        let blueCoord = {x: pair.blue.x, y: pair.blue.y}
+        redLayout.cells.push(redCoord)
+        blueLayout.cells.push(blueCoord)
+        markCoordKey(redClaimed, redCoord)
+        markCoordKey(blueClaimed, blueCoord)
+        capturedPairs.push({
+            red: redCoord,
+            blue: blueCoord
+        })
+    }
+
+    redLayout.expansionCells = connectedSuburbExpansionCells(map.mapSize, redClaimed)
+    blueLayout.expansionCells = connectedSuburbExpansionCells(map.mapSize, blueClaimed)
+    map.economyGenerator.capturedSuburbPairs = capturedPairs
+    map.economyGenerator.capturedSuburbCountPerPlayer = capturedPairs.length
+    map.economyObjects.capturedSuburbs = capturedPairs.length * 2
+}
+
+function selectAdvancedEconomyStagePairs(rng, candidatePairs, density, minimum, excluded) {
+    let selected = []
+    for (let i = 0; i < candidatePairs.length; ++i) {
+        let pair = candidatePairs[i]
+        if (excluded && (excluded[coordKey(pair.red)] || excluded[coordKey(pair.blue)])) {
+            continue
+        }
+        if (rng() < density) {
+            selected.push(pair)
+        }
+    }
+    if (selected.length < minimum) {
+        for (let i = 0; selected.length < minimum && i < candidatePairs.length; ++i) {
+            let pair = candidatePairs[i]
+            if (excluded && (excluded[coordKey(pair.red)] || excluded[coordKey(pair.blue)])) {
+                continue
+            }
+            if (!selected.some(function(existing) {
+                return coordKey(existing.red) == coordKey(pair.red) ||
+                    coordKey(existing.blue) == coordKey(pair.blue)
+            })) {
+                selected.push(pair)
+            }
+        }
+    }
+    return selected
+}
+
+function addAdvancedEconomyStagePairBuildings(map, pairs, field) {
+    map.players[1][field] = []
+    map.players[2][field] = []
+    for (let i = 0; i < pairs.length; ++i) {
+        let pair = pairs[i]
+        map.players[1][field].push({
+            x: pair.red.x,
+            y: pair.red.y,
+            town: {
+                x: map.players[1].towns[0].x,
+                y: map.players[1].towns[0].y
+            }
+        })
+        map.players[2][field].push({
+            x: pair.blue.x,
+            y: pair.blue.y,
+            town: {
+                x: map.players[2].towns[0].x,
+                y: map.players[2].towns[0].y
+            }
+        })
+    }
+}
+
+function generateAdvancedEconomyStage9TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed * 19 + 9)
+    let farmDensity = options.farmDensity
+    if (farmDensity === undefined) {
+        farmDensity = 0.45
+    }
+    let barrackDensity = options.barrackDensity
+    if (barrackDensity === undefined) {
+        barrackDensity = 0.55
+    }
+    farmDensity = clampProbability(farmDensity, 0.45)
+    barrackDensity = clampProbability(barrackDensity, 0.55)
+
+    let map = generateAdvancedEconomyStage7TrainingMap(options)
+    ensureAdvancedEconomyStageCapturedPairs(map, 2)
+    let candidatePairs = map.economyGenerator.capturedSuburbPairs || []
+    let farmPairs = selectAdvancedEconomyStagePairs(rng, candidatePairs, farmDensity, 1)
+    if (farmPairs.length >= candidatePairs.length && candidatePairs.length > 1) {
+        farmPairs = farmPairs.slice(0, candidatePairs.length - 1)
+    }
+    let farmOccupied = {}
+    for (let i = 0; i < farmPairs.length; ++i) {
+        markCoordKey(farmOccupied, farmPairs[i].red)
+        markCoordKey(farmOccupied, farmPairs[i].blue)
+    }
+    let barrackPairs = selectAdvancedEconomyStagePairs(
+        rng, candidatePairs, barrackDensity, 1, farmOccupied)
+
+    addAdvancedEconomyStagePairBuildings(map, farmPairs, 'farms')
+    addAdvancedEconomyStagePairBuildings(map, barrackPairs, 'barracks')
+
+    map.testName = 'advanced-economy-stage-9-' + seed
+    map.economyStage = 'advanced-9'
+    map.advancedEconomyStage = 9
+    map.economyGenerator.stage = 'advanced-9'
+    map.economyGenerator.farmDensity = farmDensity
+    map.economyGenerator.barrackDensity = barrackDensity
+    map.economyGenerator.farmPairs = farmPairs.map(function(pair) {
+        return {
+            red: {x: pair.red.x, y: pair.red.y},
+            blue: {x: pair.blue.x, y: pair.blue.y}
+        }
+    })
+    map.economyGenerator.barrackPairs = barrackPairs.map(function(pair) {
+        return {
+            red: {x: pair.red.x, y: pair.red.y},
+            blue: {x: pair.blue.x, y: pair.blue.y}
+        }
+    })
+    map.economyGenerator.farmCountPerPlayer = farmPairs.length
+    map.economyGenerator.barrackCountPerPlayer = barrackPairs.length
+    map.economyGenerator.stage8RequirementsPreserved = true
+    map.economyObjects.farms = farmPairs.length * 2
+    map.economyObjects.barracks = barrackPairs.length * 2
+    map.economyObjects.productionActions =
+        map.economyObjects.farms + map.economyObjects.barracks
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1
