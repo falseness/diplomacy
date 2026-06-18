@@ -2945,7 +2945,7 @@
     "id": "TASK-145",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with one red town, one blue town, random captured suburbs, and some suburbs containing farms.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with one red town, one blue town, random captured suburbs, and some suburbs containing farms. Implemented: Added deterministic advanced economy stage 8 9x9 maps by extending the captured-suburb stage with correctly owned mirrored farms on legal non-town suburb cells, plus focused map-generation and economy smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a deterministic 9x9 map from a seed.",
       "Captured suburbs from the prior 9x9 stage remain legal.",
@@ -2959,7 +2959,7 @@
       "Step 3: Confirm placement is deterministic and non-overlapping.",
       "Step 4: Run a short economy smoke initialization."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-146",

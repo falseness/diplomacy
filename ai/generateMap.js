@@ -2455,6 +2455,67 @@ function generateAdvancedEconomyStage7TrainingMap(options) {
     return map
 }
 
+function generateAdvancedEconomyStage8TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed * 17 + 8)
+    let farmDensity = options.farmDensity
+    if (farmDensity === undefined) {
+        farmDensity = 0.55
+    }
+    let map = generateAdvancedEconomyStage7TrainingMap(options)
+    let farmPairs = []
+    let candidatePairs = map.economyGenerator.capturedSuburbPairs || []
+
+    for (let i = 0; i < candidatePairs.length; ++i) {
+        if (rng() < farmDensity) {
+            farmPairs.push(candidatePairs[i])
+        }
+    }
+    if (farmPairs.length == 0 && candidatePairs.length > 0 && farmDensity > 0) {
+        farmPairs.push(candidatePairs[randomIntWithRng(rng, 0, candidatePairs.length - 1)])
+    }
+
+    map.players[1].farms = []
+    map.players[2].farms = []
+    for (let i = 0; i < farmPairs.length; ++i) {
+        let pair = farmPairs[i]
+        map.players[1].farms.push({
+            x: pair.red.x,
+            y: pair.red.y,
+            town: {
+                x: map.players[1].towns[0].x,
+                y: map.players[1].towns[0].y
+            }
+        })
+        map.players[2].farms.push({
+            x: pair.blue.x,
+            y: pair.blue.y,
+            town: {
+                x: map.players[2].towns[0].x,
+                y: map.players[2].towns[0].y
+            }
+        })
+    }
+
+    map.testName = 'advanced-economy-stage-8-' + seed
+    map.economyStage = 'advanced-8'
+    map.advancedEconomyStage = 8
+    map.economyGenerator.stage = 'advanced-8'
+    map.economyGenerator.farmDensity = farmDensity
+    map.economyGenerator.farmPairs = farmPairs.map(function(pair) {
+        return {
+            red: {x: pair.red.x, y: pair.red.y},
+            blue: {x: pair.blue.x, y: pair.blue.y}
+        }
+    })
+    map.economyGenerator.farmCountPerPlayer = farmPairs.length
+    map.economyGenerator.stage7RequirementsPreserved = true
+    map.economyObjects.farms = farmPairs.length * 2
+    map.economyObjects.productionActions = map.economyObjects.farms
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1
