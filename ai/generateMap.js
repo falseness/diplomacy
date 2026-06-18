@@ -2101,6 +2101,182 @@ function generateAdvancedEconomyStage5TrainingMap(options) {
     return map
 }
 
+function advancedEconomyStage4SuburbCandidatePairs(map) {
+    let mapSize = {x: 5, y: 5}
+    let lane = map.economyGenerator && map.economyGenerator.townLane !== undefined ?
+        map.economyGenerator.townLane : 2
+    return [
+        {
+            red: {x: lane, y: 0},
+            blue: {x: lane, y: 4}
+        },
+        {
+            red: {x: Math.max(0, lane - 1), y: 1},
+            blue: {x: Math.max(0, lane - 1), y: 3}
+        },
+        {
+            red: {x: Math.min(mapSize.x - 1, lane + 1), y: 1},
+            blue: {x: Math.min(mapSize.x - 1, lane + 1), y: 3}
+        },
+        {
+            red: {x: Math.min(mapSize.x - 1, lane + 1), y: 0},
+            blue: {x: Math.max(0, lane - 1), y: 4}
+        }
+    ]
+}
+
+function generateAdvancedEconomyStage6TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let stage5Options = Object.assign({barrackDensity: 0.5}, options)
+    let rng = createSeededRandom((Number(seed) || 1) ^ 0x6b6b6b6b)
+    let map = generateAdvancedEconomyStage5TrainingMap(stage5Options)
+    let farmDensity = options.farmDensity
+    if (farmDensity === undefined) {
+        farmDensity = 0.65
+    }
+
+    let candidatePairs = advancedEconomyStage4SuburbCandidatePairs(map)
+    function addCapturedPairIfNeeded() {
+        let redLayout = map.players[1].suburbs[0]
+        let blueLayout = map.players[2].suburbs[0]
+        let redExisting = {}
+        let blueExisting = {}
+        for (let i = 0; i < redLayout.cells.length; ++i) {
+            markCoordKey(redExisting, redLayout.cells[i])
+        }
+        for (let i = 0; i < blueLayout.cells.length; ++i) {
+            markCoordKey(blueExisting, blueLayout.cells[i])
+        }
+        for (let i = 0; i < candidatePairs.length; ++i) {
+            let pair = candidatePairs[i]
+            if (!hasCoordKey(redExisting, pair.red) && !hasCoordKey(blueExisting, pair.blue)) {
+                redLayout.cells.push({x: pair.red.x, y: pair.red.y})
+                blueLayout.cells.push({x: pair.blue.x, y: pair.blue.y})
+                map.economyGenerator.capturedSuburbPairs.push({
+                    red: {x: pair.red.x, y: pair.red.y},
+                    blue: {x: pair.blue.x, y: pair.blue.y}
+                })
+                map.economyGenerator.capturedSuburbCountPerPlayer =
+                    map.economyGenerator.capturedSuburbPairs.length
+                map.economyObjects.capturedSuburbs =
+                    map.economyGenerator.capturedSuburbPairs.length * 2
+                return true
+            }
+        }
+        return false
+    }
+
+    function nonTownSuburbCells(playerIndex) {
+        let player = map.players[playerIndex]
+        let layout = player.suburbs[0]
+        let townKey = coordKey(layout.town)
+        let cells = []
+        for (let i = 0; i < layout.cells.length; ++i) {
+            if (coordKey(layout.cells[i]) != townKey) {
+                cells.push(layout.cells[i])
+            }
+        }
+        return cells
+    }
+
+    function trimBarracksForFarmSpace(playerIndex) {
+        let player = map.players[playerIndex]
+        player.barracks = player.barracks || []
+        while (nonTownSuburbCells(playerIndex).length <= player.barracks.length) {
+            if (addCapturedPairIfNeeded()) {
+                continue
+            }
+            if (player.barracks.length <= 1) {
+                break
+            }
+            player.barracks.pop()
+        }
+    }
+
+    trimBarracksForFarmSpace(1)
+    trimBarracksForFarmSpace(2)
+
+    let used = {}
+    for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
+        let player = map.players[playerIndex]
+        for (let i = 0; i < player.towns.length; ++i) {
+            markCoordKey(used, player.towns[i])
+        }
+        for (let i = 0; i < (player.barracks || []).length; ++i) {
+            markCoordKey(used, player.barracks[i])
+        }
+    }
+
+    function addFarmsForPlayer(playerIndex) {
+        let player = map.players[playerIndex]
+        let layout = player.suburbs[0]
+        let townKey = coordKey(layout.town)
+        let candidates = []
+        for (let i = 0; i < layout.cells.length; ++i) {
+            let cell = layout.cells[i]
+            if (coordKey(cell) != townKey && !hasCoordKey(used, cell)) {
+                candidates.push(cell)
+            }
+        }
+        let selected = []
+        for (let i = 0; i < candidates.length; ++i) {
+            if (rng() < farmDensity) {
+                selected.push(candidates[i])
+            }
+        }
+        if (selected.length == 0 && candidates.length > 0 && farmDensity > 0) {
+            selected.push(candidates[Math.floor(rng() * candidates.length)])
+        }
+        player.farms = []
+        for (let i = 0; i < selected.length; ++i) {
+            let coord = selected[i]
+            markCoordKey(used, coord)
+            player.farms.push({
+                x: coord.x,
+                y: coord.y,
+                town: {x: layout.town.x, y: layout.town.y}
+            })
+        }
+    }
+
+    addFarmsForPlayer(1)
+    addFarmsForPlayer(2)
+
+    let redBarracks = map.players[1].barracks || []
+    let blueBarracks = map.players[2].barracks || []
+    let redFarms = map.players[1].farms || []
+    let blueFarms = map.players[2].farms || []
+    let farmPairs = []
+    for (let i = 0; i < Math.min(redFarms.length, blueFarms.length); ++i) {
+        farmPairs.push({
+            red: {x: redFarms[i].x, y: redFarms[i].y},
+            blue: {x: blueFarms[i].x, y: blueFarms[i].y}
+        })
+    }
+
+    map.testName = 'advanced-economy-stage-6-' + seed
+    map.economyStage = 'advanced-6'
+    map.advancedEconomyStage = 6
+    map.economyGenerator.stage = 'advanced-6'
+    map.economyGenerator.farmDensity = farmDensity
+    map.economyGenerator.farmPairs = farmPairs
+    map.economyGenerator.farmCountPerPlayer = {
+        red: redFarms.length,
+        blue: blueFarms.length
+    }
+    map.economyGenerator.barrackCountPerPlayer = {
+        red: redBarracks.length,
+        blue: blueBarracks.length
+    }
+    map.economyGenerator.stage5RequirementsPreserved = true
+    map.economyObjects.farms = redFarms.length + blueFarms.length
+    map.economyObjects.barracks = redBarracks.length + blueBarracks.length
+    map.economyObjects.productionActions =
+        map.economyObjects.farms + map.economyObjects.barracks
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1

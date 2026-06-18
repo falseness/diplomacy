@@ -2905,7 +2905,7 @@
     "id": "TASK-143",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with one red town, one blue town, random captured suburbs, and some suburbs containing barracks and farms.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with one red town, one blue town, random captured suburbs, and some suburbs containing barracks and farms. Implemented: Added deterministic advanced economy stage 6 maps by extending the captured-suburb/barrack 5x5 stage with correctly owned non-overlapping farms on legal suburb cells, plus focused npm smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a deterministic 5x5 map from a seed.",
       "Captured suburbs and barracks from the prior stage remain legal.",
@@ -2919,7 +2919,7 @@
       "Step 3: Confirm placement is deterministic and non-overlapping.",
       "Step 4: Run a short economy smoke initialization."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-144",
