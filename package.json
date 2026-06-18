@@ -78,6 +78,7 @@
     "test-advanced-economy-stage-2-map-generation": "node ai/test-advanced-economy-stage-2-map-generation.js",
     "test-advanced-economy-stage-3-map-generation": "node ai/test-advanced-economy-stage-3-map-generation.js",
     "test-advanced-economy-stage-4-map-generation": "node ai/test-advanced-economy-stage-4-map-generation.js",
+    "test-advanced-economy-stage-5-map-generation": "node ai/test-advanced-economy-stage-5-map-generation.js",
     "test-symmetrical-economy-9v9-map-generation": "node ai/test-symmetrical-economy-9v9-map-generation.js",
     "test-symmetrical-economy-9v9-validation": "node ai/test-symmetrical-economy-9v9-validation.js",
     "test-multiplayer-training-maps": "node ai/test-multiplayer-training-maps.js",

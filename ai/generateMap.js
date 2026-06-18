@@ -2028,6 +2028,79 @@ function generateAdvancedEconomyStage4TrainingMap(options) {
     return map
 }
 
+function generateAdvancedEconomyStage5TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom((Number(seed) || 1) ^ 0x5a5a5a5a)
+    let map = generateAdvancedEconomyStage4TrainingMap(options)
+    let barrackDensity = options.barrackDensity
+    if (barrackDensity === undefined) {
+        barrackDensity = 0.65
+    }
+    let barrackPairs = []
+    let used = {}
+    for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
+        for (let i = 0; i < map.players[playerIndex].towns.length; ++i) {
+            markCoordKey(used, map.players[playerIndex].towns[i])
+        }
+    }
+    function addBarrackForPlayer(playerIndex) {
+        let player = map.players[playerIndex]
+        let layout = player.suburbs[0]
+        let townKey = coordKey(layout.town)
+        let candidates = []
+        for (let i = 0; i < layout.cells.length; ++i) {
+            let cell = layout.cells[i]
+            if (coordKey(cell) != townKey && !hasCoordKey(used, cell)) {
+                candidates.push(cell)
+            }
+        }
+        let selected = []
+        for (let i = 0; i < candidates.length; ++i) {
+            if (rng() < barrackDensity) {
+                selected.push(candidates[i])
+            }
+        }
+        if (selected.length == 0 && candidates.length > 0 && barrackDensity > 0) {
+            selected.push(candidates[Math.floor(rng() * candidates.length)])
+        }
+        player.barracks = []
+        for (let i = 0; i < selected.length; ++i) {
+            let coord = selected[i]
+            markCoordKey(used, coord)
+            player.barracks.push({
+                x: coord.x,
+                y: coord.y,
+                town: {x: layout.town.x, y: layout.town.y}
+            })
+        }
+    }
+    addBarrackForPlayer(1)
+    addBarrackForPlayer(2)
+    let redBarracks = map.players[1].barracks || []
+    let blueBarracks = map.players[2].barracks || []
+    for (let i = 0; i < Math.min(redBarracks.length, blueBarracks.length); ++i) {
+        barrackPairs.push({
+            red: {x: redBarracks[i].x, y: redBarracks[i].y},
+            blue: {x: blueBarracks[i].x, y: blueBarracks[i].y}
+        })
+    }
+    map.testName = 'advanced-economy-stage-5-' + seed
+    map.economyStage = 'advanced-5'
+    map.advancedEconomyStage = 5
+    map.economyGenerator.stage = 'advanced-5'
+    map.economyGenerator.barrackDensity = barrackDensity
+    map.economyGenerator.barrackPairs = barrackPairs
+    map.economyGenerator.barrackCountPerPlayer = {
+        red: redBarracks.length,
+        blue: blueBarracks.length
+    }
+    map.economyGenerator.stage4RequirementsPreserved = true
+    map.economyObjects.barracks = redBarracks.length + blueBarracks.length
+    map.economyObjects.productionActions = map.economyObjects.barracks
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1
