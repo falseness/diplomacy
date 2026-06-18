@@ -2925,7 +2925,7 @@
     "id": "TASK-144",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with one red town, one blue town, and random captured cells marked as suburbs.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: 9x9 map with one red town, one blue town, and random captured cells marked as suburbs. Implemented: Added deterministic advanced economy stage 7 9x9 captured-suburb maps with mirrored one-town starts, legal connected seed-varied suburb cells, benchmark initialization coverage, and npm smoke wiring.",
     "acceptance_criteria": [
       "The generator creates a deterministic 9x9 map from a seed.",
       "Each player has exactly one town.",
@@ -2939,7 +2939,7 @@
       "Step 3: Confirm captured cells are legal and reproducible by seed.",
       "Step 4: Run a short economy smoke initialization."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-145",

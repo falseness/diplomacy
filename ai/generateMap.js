@@ -2277,6 +2277,184 @@ function generateAdvancedEconomyStage6TrainingMap(options) {
     return map
 }
 
+function advancedEconomyStage7SuburbCandidatePairs(mapSize, town) {
+    let candidates = []
+    for (let y = 0; y < mapSize.y; ++y) {
+        for (let x = 0; x < mapSize.x; ++x) {
+            let coord = {x: x, y: y}
+            if (coordKey(coord) == coordKey(town) || townDistance(coord, town) > 2 || y >= 4) {
+                continue
+            }
+            candidates.push({
+                red: coord,
+                blue: {x: town.x * 2 - x, y: mapSize.y - 1 - y}
+            })
+        }
+    }
+    candidates.sort(function(a, b) {
+        return townDistance(a.red, town) - townDistance(b.red, town) ||
+            a.red.y - b.red.y ||
+            a.red.x - b.red.x
+    })
+    return candidates
+}
+
+function connectedSuburbExpansionCells(mapSize, claimed) {
+    let expansionCells = []
+    let expansionSeen = {}
+    let claimedCells = Object.keys(claimed).map(function(key) {
+        let parts = key.split(':')
+        return {x: Number(parts[0]), y: Number(parts[1])}
+    })
+    for (let i = 0; i < claimedCells.length; ++i) {
+        let neighbours = townNeighbourCoords(claimedCells[i])
+        for (let j = 0; j < neighbours.length; ++j) {
+            let coord = neighbours[j]
+            let key = coordKey(coord)
+            if (!isCoordInsideMap(coord, mapSize) || claimed[key] || expansionSeen[key]) {
+                continue
+            }
+            expansionSeen[key] = true
+            expansionCells.push(coord)
+        }
+    }
+    return expansionCells
+}
+
+function generateAdvancedEconomyStage7TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed)
+    let mapSize = {x: 9, y: 9}
+    let lane = ((Number(seed) || 1) % 5) + 2
+    let redTown = {x: lane, y: 2}
+    let blueTown = {x: lane, y: 6}
+    let candidatePairs = advancedEconomyStage7SuburbCandidatePairs(mapSize, redTown)
+    let redCells = [redTown]
+    let blueCells = [blueTown]
+    let redClaimed = {}
+    let blueClaimed = {}
+    let capturedPairs = []
+    markCoordKey(redClaimed, redTown)
+    markCoordKey(blueClaimed, blueTown)
+
+    for (let i = 0; i < candidatePairs.length; ++i) {
+        let pair = candidatePairs[i]
+        let redDistance = townDistance(pair.red, redTown)
+        if (redDistance > 1 && !redCells.some(function(cell) {
+            return townDistance(cell, pair.red) == 1
+        })) {
+            continue
+        }
+        if (rng() >= 0.48) {
+            continue
+        }
+        if (hasCoordKey(redClaimed, pair.red) || hasCoordKey(blueClaimed, pair.blue)) {
+            continue
+        }
+        redCells.push(pair.red)
+        blueCells.push(pair.blue)
+        markCoordKey(redClaimed, pair.red)
+        markCoordKey(blueClaimed, pair.blue)
+        capturedPairs.push({
+            red: pair.red,
+            blue: pair.blue
+        })
+    }
+
+    if (capturedPairs.length == 0) {
+        let fallbackCandidates = candidatePairs.filter(function(pair) {
+            return townDistance(pair.red, redTown) == 1
+        })
+        let fallback = fallbackCandidates[randomIntWithRng(rng, 0, fallbackCandidates.length - 1)]
+        redCells.push(fallback.red)
+        blueCells.push(fallback.blue)
+        markCoordKey(redClaimed, fallback.red)
+        markCoordKey(blueClaimed, fallback.blue)
+        capturedPairs.push({
+            red: fallback.red,
+            blue: fallback.blue
+        })
+    }
+
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [redTown],
+            units: [],
+            suburbs: [{
+                town: redTown,
+                cells: redCells,
+                expansionCells: connectedSuburbExpansionCells(mapSize, redClaimed)
+            }]
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [blueTown],
+            units: [],
+            suburbs: [{
+                town: blueTown,
+                cells: blueCells,
+                expansionCells: connectedSuburbExpansionCells(mapSize, blueClaimed)
+            }]
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.testName = 'advanced-economy-stage-7-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 60
+    map.economyStage = 'advanced-7'
+    map.advancedEconomyStage = 7
+    map.economyGenerator = {
+        stage: 'advanced-7',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        mapSize: mapSize,
+        townLayout: 'rotated-mirror',
+        townLane: lane,
+        townCount: 2,
+        capturedSuburbPairs: capturedPairs,
+        capturedSuburbCountPerPlayer: capturedPairs.length,
+        suburbSymmetry: {
+            axis: 'town-center',
+            mirror: 'rotate-180',
+            fairForBothSides: true
+        },
+        mapExpansion: '9x9'
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 2,
+        productionActions: 0,
+        resources: 180,
+        units: 0,
+        towers: 0,
+        bastions: 0,
+        lakes: 0,
+        mountains: 0,
+        bushes: 0,
+        capturedSuburbs: capturedPairs.length * 2
+    }
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1
