@@ -32,6 +32,7 @@
     "test-final-symmetrical-economy-gate": "node ai/test-final-symmetrical-economy-gate.js",
     "benchmark-task152-symmetrical-9x9": "node ai/benchmark-symmetrical-9x9-all-units-gate.js",
     "test-task152-symmetrical-9x9": "node ai/test-task152-symmetrical-9x9-gate.js",
+    "test-task153-advanced-9x9-training": "node ai/test-task153-advanced-9x9-training.js",
     "train-economy": "node ai/train-economy.js",
     "test-economy-training": "node ai/test-economy-training.js",
     "test-simple-ai": "node ai/test-simple-ai-baseline.js",

@@ -3105,7 +3105,7 @@
     "id": "TASK-153",
     "category": "test",
     "priority": "critical",
-    "description": "Train on the new advanced 9x9 economy pipeline and pass the final symmetrical 9x9 gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code.",
+    "description": "Train on the new advanced 9x9 economy pipeline and pass the final symmetrical 9x9 gate. Note: if doesnt pass the gate, then modify the model. the model should be complicated, not the AIPlayer code. Implemented: Added advanced-9x9-economy training source over stages 7-12, trained /mnt/storage/diplomacy/checkpoints/task153-advanced-9x9-20260618/step-00000001, and passed the canonical 100-game symmetrical 9x9 gate at 100 wins, 0 losses, no-loss rate 1, winrate 1 with checkpoint inference.",
     "acceptance_criteria": [
       "A real training run completes on the advanced 9x9 economy generator pipeline.",
       "The trained AIPlayerWithEconomy artifact is used for the final symmetrical 9x9 gate.",
@@ -3119,7 +3119,7 @@
       "Step 3: Run the 100-game symmetrical 9x9 benchmark gate.",
       "Step 4: Record final artifact paths and gate summaries."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-154",

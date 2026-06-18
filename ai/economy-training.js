@@ -19,6 +19,12 @@ const ACTION_CATEGORIES = [
   'suburb-expansion',
   'building-placement'
 ];
+const MAP_SOURCES = [
+  'town',
+  'final-symmetrical-economy',
+  'advanced-9x9-economy'
+];
+const ADVANCED_9X9_STAGES = [7, 8, 9, 10, 11, 12];
 let reusableTrainingContext = null;
 
 function parseArgs(argv) {
@@ -64,8 +70,8 @@ function parseArgs(argv) {
       options.playerCounts.some(count => !Number.isInteger(count) || count < 2 || count > 4)) {
     throw new Error('playerCounts must contain only 2, 3, or 4');
   }
-  if (!['town', 'final-symmetrical-economy'].includes(options.mapSource)) {
-    throw new Error('map-source must be town or final-symmetrical-economy');
+  if (!MAP_SOURCES.includes(options.mapSource)) {
+    throw new Error('map-source must be one of ' + MAP_SOURCES.join(', '));
   }
   options.storageDir = path.resolve(options.storageDir);
   return options;
@@ -85,7 +91,7 @@ function appendJsonLine(filePath, value) {
 
 function removePath(filePath) {
   if (fs.existsSync(filePath)) {
-    fs.rmSync(filePath, { recursive: true, force: true });
+    fs.rmdirSync(filePath, { recursive: true });
   }
 }
 
@@ -142,6 +148,10 @@ function trainingPlayerCountForSeed(seed, playerCounts) {
   const counts = Array.isArray(playerCounts) && playerCounts.length ?
     playerCounts : [2, 3, 4];
   return counts[Math.abs(seed) % counts.length];
+}
+
+function advancedEconomy9x9StageForSeed(seed) {
+  return ADVANCED_9X9_STAGES[Math.abs(seed) % ADVANCED_9X9_STAGES.length];
 }
 
 function createCanvasContext() {
@@ -279,9 +289,12 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
   context.__trainingMapSize = trainingMapSizeForSeed(seed);
   context.__trainingPlayerCount = trainingPlayerCountForSeed(seed, playerCounts);
   context.__trainingMapSource = mapSource;
+  context.__advanced9x9Stage = advancedEconomy9x9StageForSeed(seed);
   context.__actionCategories = ACTION_CATEGORIES;
   context.__trainingCandidateLimit = 48;
-  context.__trainingRounds = mapSource === 'final-symmetrical-economy' ? 8 : 4;
+  context.__trainingRounds =
+    mapSource === 'final-symmetrical-economy' ? 8 :
+      (mapSource === 'advanced-9x9-economy' ? 6 : 4);
   const result = new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = false
@@ -324,6 +337,36 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
         seed: __trainingSeed,
         suddenDeathRound: 160
       })
+      map.players[1].playerType = 'AIPlayerWithEconomy'
+      map.players[2].playerType = 'SimpleAiPlayerWithEconomy'
+    }
+    else if (__trainingMapSource == 'advanced-9x9-economy') {
+      let advancedOptions = {
+        seed: __trainingSeed,
+        suddenDeathRound: 120,
+        unitComposition: 'all'
+      }
+      if (__advanced9x9Stage == 7) {
+        map = generateAdvancedEconomyStage7TrainingMap(advancedOptions)
+      }
+      else if (__advanced9x9Stage == 8) {
+        map = generateAdvancedEconomyStage8TrainingMap(advancedOptions)
+      }
+      else if (__advanced9x9Stage == 9) {
+        map = generateAdvancedEconomyStage9TrainingMap(advancedOptions)
+      }
+      else if (__advanced9x9Stage == 10) {
+        map = generateAdvancedEconomyStage10TrainingMap(advancedOptions)
+      }
+      else if (__advanced9x9Stage == 11) {
+        map = generateAdvancedEconomyStage11TrainingMap(advancedOptions)
+      }
+      else if (__advanced9x9Stage == 12) {
+        map = generateAdvancedEconomyStage12TrainingMap(advancedOptions)
+      }
+      else {
+        throw new Error('unsupported advanced 9x9 economy stage ' + __advanced9x9Stage)
+      }
       map.players[1].playerType = 'AIPlayerWithEconomy'
       map.players[2].playerType = 'SimpleAiPlayerWithEconomy'
     }
@@ -407,7 +450,8 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
         whooseTurn = playerIndex
         let player = players[playerIndex]
         player.nextTurn()
-        if (__trainingMapSource == 'final-symmetrical-economy' &&
+        if ((__trainingMapSource == 'final-symmetrical-economy' ||
+            __trainingMapSource == 'advanced-9x9-economy') &&
             player.constructor.name != 'AIPlayerWithEconomy') {
           actionManager.clear()
           turnsPlayed += 1
@@ -456,13 +500,20 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
       seed: __trainingSeed,
       generatedMapProvenance: {
         generator: __trainingMapSource == 'final-symmetrical-economy' ?
-          'generateSymmetricalEconomy9v9AllUnitMap' : 'generateTownTrainingMap',
+          'generateSymmetricalEconomy9v9AllUnitMap' :
+          (__trainingMapSource == 'advanced-9x9-economy' ?
+            'generateAdvancedEconomyStage' + __advanced9x9Stage + 'TrainingMap' :
+            'generateTownTrainingMap'),
         generated: true,
         fixedGamestartMap: __trainingMapSource == 'final-symmetrical-economy',
         size: __trainingMapSource == 'final-symmetrical-economy' ?
-          'symmetrical-economy-9v9' : __trainingMapSize,
+          'symmetrical-economy-9v9' :
+          (__trainingMapSource == 'advanced-9x9-economy' ?
+            'advanced-economy-9x9' : __trainingMapSize),
         seed: __trainingSeed,
-        playerCount: players.length - 1
+        playerCount: players.length - 1,
+        advancedEconomyStage: __trainingMapSource == 'advanced-9x9-economy' ?
+          __advanced9x9Stage : null
       },
       players: players.slice(1).map(function(player) {
         return player.constructor.name
@@ -491,6 +542,8 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
       mapFeatures: (() => {
         let features = {
           generatedSize: __trainingMapSize,
+          advancedEconomyStage: __trainingMapSource == 'advanced-9x9-economy' ?
+            __advanced9x9Stage : null,
           towns: 0,
           neutralTowns: 0,
           goldmines: goldmines.length,
@@ -525,19 +578,20 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
   })()`, { filename: 'economy-training-self-play.js' }).runInContext(context);
 
   for (const category of ACTION_CATEGORIES) {
-    if (mapSource !== 'final-symmetrical-economy' &&
+    if (mapSource === 'town' &&
         !result.actionCounts[category]) {
       throw new Error(
         `real self-play did not apply ${category}: ${JSON.stringify(result.actionCounts)}`
       );
     }
   }
-  if (mapSource === 'final-symmetrical-economy' &&
-      result.players.join(',') !==
-        'AIPlayerWithEconomy,SimpleAiPlayerWithEconomy') {
-    throw new Error(`unexpected final-gate players: ${result.players.join(', ')}`);
+  if ((mapSource === 'final-symmetrical-economy' ||
+      mapSource === 'advanced-9x9-economy') &&
+      result.players.join(',') !== 'AIPlayerWithEconomy,SimpleAiPlayerWithEconomy') {
+    throw new Error(`unexpected comparison players: ${result.players.join(', ')}`);
   }
   if (mapSource !== 'final-symmetrical-economy' &&
+      mapSource !== 'advanced-9x9-economy' &&
       result.players.some(name => name !== 'AIPlayerWithEconomy')) {
     throw new Error(`unexpected self-play players: ${result.players.join(', ')}`);
   }
@@ -553,6 +607,7 @@ function createTrainingBatch(seed, playerCounts, mapSource = 'town') {
     globals: result.examples.map(example => example.global),
     labels: result.labels,
     actionCounts: result.actionCounts,
+    players: result.players,
     turnsPlayed: result.turnsPlayed,
     appliedActions: result.examples.map(example => ({
       playerIndex: example.playerIndex,
@@ -594,7 +649,8 @@ function combineTrainingBatches(primary, secondary) {
 }
 
 function economyCheckpointLabelScale(mapSource) {
-  return mapSource === 'final-symmetrical-economy' ? 1 : 180000;
+  return (mapSource === 'final-symmetrical-economy' ||
+    mapSource === 'advanced-9x9-economy') ? 1 : 180000;
 }
 
 async function saveCheckpoint(model, directory, metadata) {
@@ -615,7 +671,9 @@ function createCandidate(options, checkpointRoot, bestCheckpoint) {
   return {
     runId: options.runId,
     selectedBy: options.mapSource === 'final-symmetrical-economy' ?
-      'latest-final-symmetrical-training-checkpoint' : 'lowest-training-loss',
+      'latest-final-symmetrical-training-checkpoint' :
+      (options.mapSource === 'advanced-9x9-economy' ?
+        'lowest-advanced-9x9-training-loss' : 'lowest-training-loss'),
     checkpoint: path.relative(options.storageDir, candidatePath),
     game: bestCheckpoint.game,
     loss: bestCheckpoint.loss
@@ -665,7 +723,9 @@ function writeBenchmarkSnapshot(
   const candidate = createCandidate(options, checkpointRoot, bestCheckpoint);
   const mapGenerator = options.mapSource === 'final-symmetrical-economy'
     ? 'generateSymmetricalEconomy9v9AllUnitMap'
-    : 'generateTownTrainingMap';
+    : (options.mapSource === 'advanced-9x9-economy'
+      ? 'generateAdvancedEconomyStage7To12TrainingMap'
+      : 'generateTownTrainingMap');
   writeJson(snapshotPath, {
     runId: options.runId,
     status,
@@ -677,7 +737,10 @@ function writeBenchmarkSnapshot(
     generatedMapProvenance: {
       generator: mapGenerator,
       generated: true,
-      fixedGamestartMap: options.mapSource === 'final-symmetrical-economy'
+      fixedGamestartMap: options.mapSource === 'final-symmetrical-economy',
+      advancedEconomyStages: options.mapSource === 'advanced-9x9-economy'
+        ? ADVANCED_9X9_STAGES
+        : undefined
     },
     cellVectorSize: CELL_VECTOR_SIZE,
     completedGames: metrics.length,
@@ -761,9 +824,7 @@ async function run(options) {
         seed: primarySeed,
         augmentedSeeds: batch.map.augmentedSeeds || [primarySeed],
         playerCount: batch.map.playerCount,
-        players: options.mapSource === 'final-symmetrical-economy'
-          ? ['AIPlayerWithEconomy', 'SimpleAiPlayerWithEconomy']
-          : new Array(batch.map.playerCount).fill('AIPlayerWithEconomy'),
+        players: batch.players,
         winner: batch.winner,
         dataSource: 'real-runtime-self-play',
         generatedMapProvenance: batch.map.provenance,
@@ -771,7 +832,7 @@ async function run(options) {
         cellVectorSize: CELL_VECTOR_SIZE,
         examples: batch.labels.length,
         actionCounts: batch.actionCounts,
-        economyActions: batch.labels.length - batch.actionCounts['unit-command'],
+        economyActions: batch.labels.length - (batch.actionCounts['unit-command'] || 0),
         actionsApplied: batch.appliedActions.length,
         turnsPlayed: batch.turnsPlayed,
         appliedActions: batch.appliedActions,
@@ -811,8 +872,9 @@ async function run(options) {
           labelComponents: [
             'final symmetrical economy feature score',
             'real runtime player material score',
-            options.mapSource === 'final-symmetrical-economy' ?
-              'low-weight trained correction for canonical final gate actions' :
+            (options.mapSource === 'final-symmetrical-economy' ||
+              options.mapSource === 'advanced-9x9-economy') ?
+              'low-weight trained correction for 9x9 economy actions' :
               'scaled trained economy value'
           ]
         });
