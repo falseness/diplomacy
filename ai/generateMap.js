@@ -3389,6 +3389,168 @@ function generateAdvancedEconomyStage12TrainingMap(options) {
     return map
 }
 
+function generateAdvancedEconomyStage13TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed * 37 + 13)
+    let mapSize = {x: 20, y: 20}
+    let usedObjects = {}
+    let claimed = {}
+    let unitTypes = [Noob, Archer, KOHb, Normchel, Catapult]
+    let playersConfig = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        }
+    ]
+    let summary = {
+        towns: 0,
+        units: 0,
+        farms: 0,
+        barracks: 0,
+        towers: 0,
+        bastions: 0,
+        capturedSuburbs: 0
+    }
+    let playerTownCounts = {}
+
+    for (let playerIndex = 1; playerIndex <= 2; ++playerIndex) {
+        let townCount = randomIntWithRng(rng, 0, 3)
+        let player = {
+            rgb: trainingPlayerColor(playerIndex),
+            playerType: playerIndex == 1 ? 'AIPlayerWithEconomy' : 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: randomIntWithRng(rng, 70, 130),
+            towns: [],
+            units: [],
+            suburbs: [],
+            farms: [],
+            barracks: [],
+            towers: [],
+            bastions: []
+        }
+        playerTownCounts[playerIndex] = townCount
+
+        for (let i = 0; i < townCount; ++i) {
+            let town = advancedEconomyStage11RandomCoord(
+                rng,
+                mapSize,
+                usedObjects,
+                function(coord) {
+                    return coord.x > 0 && coord.y > 0 &&
+                        coord.x < mapSize.x - 1 && coord.y < mapSize.y - 1 &&
+                        !claimed[coordKey(coord)] &&
+                        advancedEconomyStage11HasFreeNeighbour(
+                            coord, mapSize, claimed, usedObjects)
+                })
+            town.hp = advancedEconomyStage11RandomHp(
+                rng, advancedEconomyStage11BuildingMaxHp('towns'))
+            player.towns.push(town)
+            markCoordKey(usedObjects, town)
+            summary.towns += 1
+            let layout = advancedEconomyStage11BuildSuburbLayout(
+                rng, mapSize, town, claimed, usedObjects)
+            player.suburbs.push(layout)
+            summary.capturedSuburbs += layout.cells.length
+        }
+
+        let buildCells = advancedEconomyStage11OwnedBuildCells(player)
+        let offset = buildCells.length ? randomIntWithRng(rng, 0, buildCells.length - 1) : 0
+        for (let i = 0; i < buildCells.length; ++i) {
+            let cell = buildCells[(offset + i) % buildCells.length]
+            if (hasCoordKey(usedObjects, cell) || rng() >= 0.55) {
+                continue
+            }
+            let field = rng() < 0.5 ? 'farms' : 'barracks'
+            let building = {
+                x: cell.x,
+                y: cell.y,
+                town: {x: cell.town.x, y: cell.town.y},
+                hp: advancedEconomyStage11RandomHp(
+                    rng, advancedEconomyStage11BuildingMaxHp(field))
+            }
+            player[field].push(building)
+            markCoordKey(usedObjects, cell)
+            summary[field] += 1
+        }
+
+        for (let i = 0; i < buildCells.length; ++i) {
+            let cell = buildCells[(offset + i) % buildCells.length]
+            if (hasCoordKey(usedObjects, cell) || rng() >= 0.45) {
+                continue
+            }
+            let field = rng() < 0.5 ? 'towers' : 'bastions'
+            let building = {
+                x: cell.x,
+                y: cell.y,
+                hp: advancedEconomyStage11RandomHp(
+                    rng, advancedEconomyStage11BuildingMaxHp(field))
+            }
+            player[field].push(building)
+            markCoordKey(usedObjects, cell)
+            summary[field] += 1
+        }
+
+        let unitCount = randomIntWithRng(rng, 1, 8)
+        for (let i = 0; i < unitCount; ++i) {
+            let coord = advancedEconomyStage11RandomCoord(rng, mapSize, usedObjects)
+            let type = unitTypes[randomIntWithRng(rng, 0, unitTypes.length - 1)]
+            player.units.push({
+                type: type,
+                x: coord.x,
+                y: coord.y,
+                hp: advancedEconomyStage11RandomHp(
+                    rng, advancedEconomyStage11MaxHpForUnit(type))
+            })
+            markCoordKey(usedObjects, coord)
+            summary.units += 1
+        }
+
+        playersConfig.push(player)
+    }
+
+    let map = new GameMap(
+        mapSize,
+        playersConfig,
+        [],
+        [],
+        [])
+    map.testName = 'advanced-economy-stage-13-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 100
+    map.economyStage = 'advanced-13'
+    map.advancedEconomyStage = 13
+    map.economyGenerator = {
+        stage: 'advanced-13',
+        baseStage: 'advanced-11',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        mapSize: mapSize,
+        townCounts: playerTownCounts,
+        randomHp: true,
+        randomUnits: true,
+        randomBuildings: true,
+        capturedCells: true,
+        stage11MechanicsExtended: true
+    }
+    map.economyObjects = {
+        farms: summary.farms,
+        barracks: summary.barracks,
+        goldmines: 0,
+        towns: summary.towns,
+        productionActions: summary.farms + summary.barracks,
+        resources: playersConfig[1].gold + playersConfig[2].gold,
+        units: summary.units,
+        towers: summary.towers,
+        bastions: summary.bastions,
+        lakes: 0,
+        mountains: 0,
+        bushes: 0,
+        capturedSuburbs: summary.capturedSuburbs
+    }
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1

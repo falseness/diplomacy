@@ -3045,7 +3045,7 @@
     "id": "TASK-150",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: 20x20 random map with everything from the advanced 9x9 generator.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: 20x20 random map with everything from the advanced 9x9 generator. Implemented: Added advanced economy stage 13 as a deterministic 20x20 random generator with 0-3 towns per player, captured suburbs, random units, farms, barracks, towers, bastions, configured HP, and focused smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a deterministic 20x20 map from a seed.",
       "The map supports 0 to 3 towns per player, random units, towers, bastions, captured cells, farms, and barracks.",
@@ -3059,7 +3059,7 @@
       "Step 3: Confirm generated units and buildings have HP from 1 to maxHp.",
       "Step 4: Run a short economy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-151",
