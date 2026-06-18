@@ -3037,6 +3037,358 @@ function generateAdvancedEconomyStage11TrainingMap(options) {
     return map
 }
 
+function advancedEconomyStage12MirrorCoord(coord, mapSize) {
+    return mirrorXCoord(coord, mapSize)
+}
+
+function advancedEconomyStage12SymmetricCoordPair(rng, mapSize, used, predicate) {
+    function isValid(left) {
+        let right = advancedEconomyStage12MirrorCoord(left, mapSize)
+        return coordKey(left) != coordKey(right) &&
+            !hasCoordKey(used, left) &&
+            !hasCoordKey(used, right) &&
+            (!predicate || predicate(left, right))
+    }
+
+    for (let attempts = 0; attempts < 1000; ++attempts) {
+        let left = {
+            x: randomIntWithRng(rng, 0, Math.floor(mapSize.x / 2) - 1),
+            y: randomIntWithRng(rng, 0, mapSize.y - 1)
+        }
+        if (isValid(left)) {
+            let right = advancedEconomyStage12MirrorCoord(left, mapSize)
+            markCoordKey(used, left)
+            markCoordKey(used, right)
+            return {
+                left: left,
+                right: right
+            }
+        }
+    }
+
+    let leftHalfWidth = Math.floor(mapSize.x / 2)
+    let start = randomIntWithRng(rng, 0, leftHalfWidth * mapSize.y - 1)
+    for (let offset = 0; offset < leftHalfWidth * mapSize.y; ++offset) {
+        let index = (start + offset) % (leftHalfWidth * mapSize.y)
+        let left = {
+            x: index % leftHalfWidth,
+            y: Math.floor(index / leftHalfWidth)
+        }
+        if (isValid(left)) {
+            let right = advancedEconomyStage12MirrorCoord(left, mapSize)
+            markCoordKey(used, left)
+            markCoordKey(used, right)
+            return {
+                left: left,
+                right: right
+            }
+        }
+    }
+    throw new Error('Unable to place symmetrical advanced economy object')
+}
+
+function advancedEconomyStage12FreeNeighbourPairs(town, mapSize, claimed, occupied) {
+    let candidates = []
+    let neighbours = townNeighbourCoords(town)
+    for (let i = 0; i < neighbours.length; ++i) {
+        let left = neighbours[i]
+        let right = advancedEconomyStage12MirrorCoord(left, mapSize)
+        if (coordKey(left) == coordKey(right) ||
+            !isCoordInsideMap(left, mapSize) ||
+            !isCoordInsideMap(right, mapSize) ||
+            claimed[coordKey(left)] ||
+            claimed[coordKey(right)] ||
+            hasCoordKey(occupied, left) ||
+            hasCoordKey(occupied, right)) {
+            continue
+        }
+        candidates.push({
+            left: {x: left.x, y: left.y},
+            right: {x: right.x, y: right.y}
+        })
+    }
+    return candidates
+}
+
+function advancedEconomyStage12BuildSuburbLayouts(rng, mapSize, leftTown, rightTown, claimed, occupied) {
+    let leftCells = [{x: leftTown.x, y: leftTown.y}]
+    let rightCells = [{x: rightTown.x, y: rightTown.y}]
+    claimed[coordKey(leftTown)] = true
+    claimed[coordKey(rightTown)] = true
+
+    let candidates = advancedEconomyStage12FreeNeighbourPairs(
+        leftTown, mapSize, claimed, occupied)
+    let desired = Math.min(4, candidates.length)
+    let offset = candidates.length ? randomIntWithRng(rng, 0, candidates.length - 1) : 0
+    for (let i = 0; i < candidates.length && leftCells.length <= desired; ++i) {
+        let pair = candidates[(offset + i) % candidates.length]
+        if (claimed[coordKey(pair.left)] || claimed[coordKey(pair.right)]) {
+            continue
+        }
+        claimed[coordKey(pair.left)] = true
+        claimed[coordKey(pair.right)] = true
+        leftCells.push({x: pair.left.x, y: pair.left.y})
+        rightCells.push({x: pair.right.x, y: pair.right.y})
+    }
+
+    let leftExpansion = []
+    let leftExpansionSeen = {}
+    for (let i = 0; i < leftCells.length; ++i) {
+        let neighbours = townNeighbourCoords(leftCells[i])
+        for (let j = 0; j < neighbours.length; ++j) {
+            let left = neighbours[j]
+            let right = advancedEconomyStage12MirrorCoord(left, mapSize)
+            let key = coordKey(left)
+            if (coordKey(left) == coordKey(right) ||
+                !isCoordInsideMap(left, mapSize) ||
+                !isCoordInsideMap(right, mapSize) ||
+                claimed[key] ||
+                claimed[coordKey(right)] ||
+                leftExpansionSeen[key]) {
+                continue
+            }
+            leftExpansionSeen[key] = true
+            leftExpansion.push({x: left.x, y: left.y})
+        }
+    }
+
+    return {
+        left: {
+            town: {x: leftTown.x, y: leftTown.y},
+            cells: leftCells,
+            expansionCells: leftExpansion
+        },
+        right: {
+            town: {x: rightTown.x, y: rightTown.y},
+            cells: rightCells,
+            expansionCells: leftExpansion.map(function(coord) {
+                return advancedEconomyStage12MirrorCoord(coord, mapSize)
+            })
+        }
+    }
+}
+
+function advancedEconomyStage12MirrorBuilding(building, mapSize) {
+    let mirrored = advancedEconomyStage12MirrorCoord(building, mapSize)
+    let result = {
+        x: mirrored.x,
+        y: mirrored.y
+    }
+    if (building.town) {
+        result.town = advancedEconomyStage12MirrorCoord(building.town, mapSize)
+    }
+    if (Object.prototype.hasOwnProperty.call(building, 'hp')) {
+        result.hp = building.hp
+    }
+    return result
+}
+
+function generateAdvancedEconomyStage12TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed * 31 + 12)
+    let mapSize = {x: 9, y: 9}
+    let usedObjects = {}
+    let claimed = {}
+    let unitTypes = [Noob, Archer, KOHb, Normchel, Catapult]
+    let startingGold = randomIntWithRng(rng, 70, 130)
+    let playersConfig = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: startingGold,
+            towns: [],
+            units: [],
+            suburbs: [],
+            farms: [],
+            barracks: [],
+            towers: [],
+            bastions: []
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: startingGold,
+            towns: [],
+            units: [],
+            suburbs: [],
+            farms: [],
+            barracks: [],
+            towers: [],
+            bastions: []
+        }
+    ]
+    let summary = {
+        towns: 0,
+        units: 0,
+        farms: 0,
+        barracks: 0,
+        towers: 0,
+        bastions: 0,
+        capturedSuburbs: 0
+    }
+    let townCount = randomIntWithRng(rng, 1, 3)
+
+    for (let i = 0; i < townCount; ++i) {
+        let pair = advancedEconomyStage12SymmetricCoordPair(
+            rng,
+            mapSize,
+            usedObjects,
+            function(left, right) {
+                return left.x > 0 && left.y > 0 &&
+                    right.x < mapSize.x - 1 && right.y < mapSize.y - 1 &&
+                    !claimed[coordKey(left)] &&
+                    !claimed[coordKey(right)] &&
+                    advancedEconomyStage12FreeNeighbourPairs(
+                        left, mapSize, claimed, usedObjects).length >= 4
+            })
+        let townHp = advancedEconomyStage11RandomHp(
+            rng, advancedEconomyStage11BuildingMaxHp('towns'))
+        pair.left.hp = townHp
+        pair.right.hp = townHp
+        playersConfig[1].towns.push(pair.left)
+        playersConfig[2].towns.push(pair.right)
+        summary.towns += 2
+
+        let layouts = advancedEconomyStage12BuildSuburbLayouts(
+            rng, mapSize, pair.left, pair.right, claimed, usedObjects)
+        playersConfig[1].suburbs.push(layouts.left)
+        playersConfig[2].suburbs.push(layouts.right)
+        summary.capturedSuburbs += layouts.left.cells.length + layouts.right.cells.length
+    }
+
+    let leftBuildCells = advancedEconomyStage11OwnedBuildCells(playersConfig[1])
+    let mandatoryFields = ['farms', 'barracks', 'towers', 'bastions']
+    let buildOffset = leftBuildCells.length ? randomIntWithRng(rng, 0, leftBuildCells.length - 1) : 0
+    let nextBuildIndex = 0
+    for (let fieldIndex = 0; fieldIndex < mandatoryFields.length && nextBuildIndex < leftBuildCells.length; ++fieldIndex) {
+        while (nextBuildIndex < leftBuildCells.length) {
+            let cell = leftBuildCells[(buildOffset + nextBuildIndex) % leftBuildCells.length]
+            nextBuildIndex += 1
+            let rightCell = advancedEconomyStage12MirrorCoord(cell, mapSize)
+            if (hasCoordKey(usedObjects, cell) || hasCoordKey(usedObjects, rightCell)) {
+                continue
+            }
+            let field = mandatoryFields[fieldIndex]
+            let hp = advancedEconomyStage11RandomHp(
+                rng, advancedEconomyStage11BuildingMaxHp(field))
+            let leftBuilding = {
+                x: cell.x,
+                y: cell.y,
+                town: {x: cell.town.x, y: cell.town.y},
+                hp: hp
+            }
+            let rightBuilding = advancedEconomyStage12MirrorBuilding(leftBuilding, mapSize)
+            playersConfig[1][field].push(leftBuilding)
+            playersConfig[2][field].push(rightBuilding)
+            markCoordKey(usedObjects, cell)
+            markCoordKey(usedObjects, rightCell)
+            summary[field] += 2
+            break
+        }
+    }
+
+    for (let i = nextBuildIndex; i < leftBuildCells.length; ++i) {
+        let cell = leftBuildCells[(buildOffset + i) % leftBuildCells.length]
+        let rightCell = advancedEconomyStage12MirrorCoord(cell, mapSize)
+        if (hasCoordKey(usedObjects, cell) || hasCoordKey(usedObjects, rightCell) || rng() >= 0.35) {
+            continue
+        }
+        let field = mandatoryFields[randomIntWithRng(rng, 0, mandatoryFields.length - 1)]
+        let hp = advancedEconomyStage11RandomHp(
+            rng, advancedEconomyStage11BuildingMaxHp(field))
+        let leftBuilding = {
+            x: cell.x,
+            y: cell.y,
+            town: {x: cell.town.x, y: cell.town.y},
+            hp: hp
+        }
+        let rightBuilding = advancedEconomyStage12MirrorBuilding(leftBuilding, mapSize)
+        playersConfig[1][field].push(leftBuilding)
+        playersConfig[2][field].push(rightBuilding)
+        markCoordKey(usedObjects, cell)
+        markCoordKey(usedObjects, rightCell)
+        summary[field] += 2
+    }
+
+    let unitCount = randomIntWithRng(rng, 1, 5)
+    for (let i = 0; i < unitCount; ++i) {
+        let pair = advancedEconomyStage12SymmetricCoordPair(rng, mapSize, usedObjects)
+        let type = unitTypes[randomIntWithRng(rng, 0, unitTypes.length - 1)]
+        let hp = advancedEconomyStage11RandomHp(
+            rng, advancedEconomyStage11MaxHpForUnit(type))
+        playersConfig[1].units.push({
+            type: type,
+            x: pair.left.x,
+            y: pair.left.y,
+            hp: hp
+        })
+        playersConfig[2].units.push({
+            type: type,
+            x: pair.right.x,
+            y: pair.right.y,
+            hp: hp
+        })
+        summary.units += 2
+    }
+
+    let map = new GameMap(
+        mapSize,
+        playersConfig,
+        [],
+        [],
+        [])
+    map.testName = 'advanced-economy-stage-12-symmetric-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 80
+    map.economyStage = 'advanced-12'
+    map.advancedEconomyStage = 12
+    map.symmetry = {
+        axis: 'vertical',
+        mirror: 'x',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        benchmarkSpecificAdvantage: false
+    }
+    map.economyGenerator = {
+        stage: 'advanced-12',
+        baseStage: 'advanced-11',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        mapSize: mapSize,
+        townCountPerPlayer: townCount,
+        symmetric: true,
+        randomHp: true,
+        randomUnits: true,
+        randomBuildings: true,
+        capturedCells: true,
+        benchmarkSpecificAdvantage: false
+    }
+    map.economyObjects = {
+        farms: summary.farms,
+        barracks: summary.barracks,
+        goldmines: 0,
+        towns: summary.towns,
+        productionActions: summary.farms + summary.barracks,
+        resources: playersConfig[1].gold + playersConfig[2].gold,
+        units: summary.units,
+        towers: summary.towers,
+        bastions: summary.bastions,
+        lakes: 0,
+        mountains: 0,
+        bushes: 0,
+        capturedSuburbs: summary.capturedSuburbs
+    }
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1

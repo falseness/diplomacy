@@ -3025,7 +3025,7 @@
     "id": "TASK-149",
     "category": "functional",
     "priority": "critical",
-    "description": "Add symmetric version of the advanced 9x9 random generator from TASK-148.",
+    "description": "Add symmetric version of the advanced 9x9 random generator from TASK-148. Implemented: Added advanced economy stage 12 symmetric 9x9 generator with deterministic mirrored towns, units, captured suburbs, farms, barracks, towers, bastions, HP, and equal resources plus focused npm smoke coverage.",
     "acceptance_criteria": [
       "The generator creates deterministic symmetric 9x9 maps from a seed.",
       "Both sides receive mirrored or equivalent towns, units, towers, bastions, captured cells, farms, barracks, HP values, and resources.",
@@ -3039,7 +3039,7 @@
       "Step 3: Confirm HP values and resources are fair and deterministic.",
       "Step 4: Run a short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-150",
