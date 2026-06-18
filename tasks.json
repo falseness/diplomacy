@@ -2845,7 +2845,7 @@
     "id": "TASK-140",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: extend the simple town map with goldmines whose random gold rate is one of 10, 25, 50, or 100.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: extend the simple town map with goldmines whose random gold rate is one of 10, 25, 50, or 100. Implemented: Added deterministic advanced economy stage 3 5x5 maps with mirrored neutral goldmines whose seed-derived income is one of 10, 25, 50, or 100, plus focused generation and benchmark smoke coverage.",
     "acceptance_criteria": [
       "The generator places goldmines legally without overlapping towns or invalid cells.",
       "Every generated goldmine income is exactly one of 10, 25, 50, or 100.",
@@ -2859,7 +2859,7 @@
       "Step 3: Confirm no goldmine overlaps towns or invalid cells.",
       "Step 4: Run a short economy smoke initialization."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-141",

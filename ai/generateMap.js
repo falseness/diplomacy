@@ -1807,6 +1807,90 @@ function generateAdvancedEconomyStage2TrainingMap(options) {
     return map
 }
 
+function generateAdvancedEconomyStage3TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let mapSize = {x: 5, y: 5}
+    let lane = ((Number(seed) || 1) % 3) + 1
+    let redTown = {x: lane, y: 1}
+    let blueTown = {x: lane, y: 3}
+    let goldmineIncomeOptions = [10, 25, 50, 100]
+    let goldmineIncome = goldmineIncomeOptions[
+        ((Number(seed) || 1) * 17 + 3) % goldmineIncomeOptions.length]
+    let mineLane = ((Number(seed) || 1) * 31 + 7) % mapSize.x
+    let goldmines = [
+        {x: mineLane, y: 0, income: goldmineIncome, owner: 0},
+        {x: mineLane, y: 4, income: goldmineIncome, owner: 0}
+    ]
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [redTown],
+            units: []
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [blueTown],
+            units: []
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        goldmines,
+        [],
+        [])
+    map.testName = 'advanced-economy-stage-3-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 50
+    map.economyStage = 'advanced-3'
+    map.advancedEconomyStage = 3
+    map.economyGenerator = {
+        stage: 'advanced-3',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        mapSize: mapSize,
+        townLayout: 'vertical-mirror',
+        townLane: lane,
+        townCount: 2,
+        goldmineCount: goldmines.length,
+        goldmineLane: mineLane,
+        goldmineIncomeOptions: goldmineIncomeOptions,
+        goldmineIncome: goldmineIncome,
+        goldmineOwnership: 'neutral',
+        goldmineSymmetry: {
+            axis: 'horizontal',
+            mirror: 'y',
+            fairForBothSides: true
+        }
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: goldmines.length,
+        towns: 2,
+        productionActions: 0,
+        resources: 180,
+        units: 0,
+        towers: 0,
+        bastions: 0,
+        lakes: 0,
+        mountains: 0,
+        bushes: 0
+    }
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1
