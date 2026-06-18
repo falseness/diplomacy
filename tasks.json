@@ -3085,7 +3085,7 @@
     "id": "TASK-152",
     "category": "test",
     "priority": "critical",
-    "description": "Add or extend the symmetrical 9x9 all-units plus towers and bastions benchmark gate for AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy: 100 games, 100 percent no-loss rate, and at least 95 percent winrate.",
+    "description": "Add or extend the symmetrical 9x9 all-units plus towers and bastions benchmark gate for AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy: 100 games, 100 percent no-loss rate, and at least 95 percent winrate. Implemented: Added dedicated TASK-152 smoke/full benchmark scripts over the symmetrical 9x9 all-unit tower/bastion gate, verified no comparison cheats, and passed the full 100-game gate at 100 wins, 0 losses, no-loss rate 1, winrate 1.",
     "acceptance_criteria": [
       "The gate runs exactly 100 AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy games unless configured lower for smoke tests.",
       "The gate uses symmetrical 9x9 maps with all unit types plus towers and bastions.",
@@ -3099,7 +3099,7 @@
       "Step 3: Confirm result summaries include wins, draws, losses, no-loss rate, and winrate.",
       "Step 4: Run the full 100-game gate when trained artifacts are available."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-153",
