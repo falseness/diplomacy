@@ -3065,7 +3065,7 @@
     "id": "TASK-151",
     "category": "functional",
     "priority": "critical",
-    "description": "Add symmetric version of the advanced 20x20 random generator from TASK-150.",
+    "description": "Add symmetric version of the advanced 20x20 random generator from TASK-150. Implemented: Added advanced economy stage 14 symmetric 20x20 generator with mirrored towns, units, captured suburbs, farms, barracks, towers, bastions, HP, resources, npm smoke coverage, and benchmark initialization.",
     "acceptance_criteria": [
       "The generator creates deterministic symmetric 20x20 maps from a seed.",
       "Both sides receive mirrored or equivalent towns, units, towers, bastions, captured cells, farms, barracks, HP values, and resources.",
@@ -3079,7 +3079,7 @@
       "Step 3: Confirm HP values and resources are fair and deterministic.",
       "Step 4: Run a short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke game."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-152",
