@@ -2865,7 +2865,7 @@
     "id": "TASK-141",
     "category": "functional",
     "priority": "critical",
-    "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with one red town, one blue town, and random captured cells marked as suburbs.",
+    "description": "Add advanced AIPlayerWithEconomy generator stage: 5x5 map with one red town, one blue town, and random captured cells marked as suburbs. Implemented: Added deterministic advanced economy stage 4 5x5 maps with one AIPlayerWithEconomy town, one SimpleAiPlayerWithEconomy town, seed-varied mirrored captured suburb cells, legality metadata, and benchmark/economy smoke coverage.",
     "acceptance_criteria": [
       "The generator creates a deterministic 5x5 map from a seed.",
       "Each player has exactly one town.",
@@ -2879,7 +2879,7 @@
       "Step 3: Confirm captured cells are legal and reproducible by seed.",
       "Step 4: Run a short economy smoke initialization."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-142",

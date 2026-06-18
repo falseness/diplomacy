@@ -1891,6 +1891,143 @@ function generateAdvancedEconomyStage3TrainingMap(options) {
     return map
 }
 
+function generateAdvancedEconomyStage4TrainingMap(options) {
+    options = options || {}
+    let seed = options.seed || 1
+    let rng = createSeededRandom(seed)
+    let mapSize = {x: 5, y: 5}
+    let lane = ((Number(seed) || 1) % 3) + 1
+    let redTown = {x: lane, y: 1}
+    let blueTown = {x: lane, y: 3}
+    let suburbCandidatePairs = [
+        {
+            red: {x: lane, y: 0},
+            blue: {x: lane, y: 4}
+        },
+        {
+            red: {x: Math.max(0, lane - 1), y: 1},
+            blue: {x: Math.max(0, lane - 1), y: 3}
+        },
+        {
+            red: {x: Math.min(mapSize.x - 1, lane + 1), y: 1},
+            blue: {x: Math.min(mapSize.x - 1, lane + 1), y: 3}
+        },
+        {
+            red: {x: Math.min(mapSize.x - 1, lane + 1), y: 0},
+            blue: {x: Math.max(0, lane - 1), y: 4}
+        }
+    ]
+    let redCells = [redTown]
+    let blueCells = [blueTown]
+    let capturedPairs = []
+    for (let i = 0; i < suburbCandidatePairs.length; ++i) {
+        if (rng() >= 0.55) {
+            continue
+        }
+        let redCoord = suburbCandidatePairs[i].red
+        let blueCoord = suburbCandidatePairs[i].blue
+        redCells.push(redCoord)
+        blueCells.push(blueCoord)
+        capturedPairs.push({
+            red: redCoord,
+            blue: blueCoord
+        })
+    }
+    if (capturedPairs.length == 0) {
+        let fallbackIndex = Math.floor(rng() * suburbCandidatePairs.length)
+        let redCoord = suburbCandidatePairs[fallbackIndex].red
+        let blueCoord = suburbCandidatePairs[fallbackIndex].blue
+        redCells.push(redCoord)
+        blueCells.push(blueCoord)
+        capturedPairs.push({
+            red: redCoord,
+            blue: blueCoord
+        })
+    }
+    let redExpansionCells = [
+        {x: Math.max(0, lane - 1), y: 2},
+        {x: Math.min(mapSize.x - 1, lane + 1), y: 2}
+    ]
+    let blueExpansionCells = redExpansionCells.map(function(coord) {
+        return {x: coord.x, y: mapSize.y - 1 - coord.y}
+    })
+    let generatedPlayers = [
+        {
+            rgb: {r: 208, g: 208, b: 208},
+            towns: []
+        },
+        {
+            rgb: trainingPlayerColor(1),
+            playerType: 'AIPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [redTown],
+            units: [],
+            suburbs: [{
+                town: redTown,
+                cells: redCells,
+                expansionCells: redExpansionCells
+            }]
+        },
+        {
+            rgb: trainingPlayerColor(2),
+            playerType: 'SimpleAiPlayerWithEconomy',
+            ai: true,
+            gold: 90,
+            towns: [blueTown],
+            units: [],
+            suburbs: [{
+                town: blueTown,
+                cells: blueCells,
+                expansionCells: blueExpansionCells
+            }]
+        }
+    ]
+    let map = new GameMap(
+        mapSize,
+        generatedPlayers,
+        [],
+        [],
+        [])
+    map.testName = 'advanced-economy-stage-4-' + seed
+    map.suddenDeathRound = options.suddenDeathRound || 50
+    map.economyStage = 'advanced-4'
+    map.advancedEconomyStage = 4
+    map.economyGenerator = {
+        stage: 'advanced-4',
+        seed: seed,
+        playerOne: 'AIPlayerWithEconomy',
+        playerTwo: 'SimpleAiPlayerWithEconomy',
+        mapSize: mapSize,
+        townLayout: 'vertical-mirror',
+        townLane: lane,
+        townCount: 2,
+        capturedSuburbPairs: capturedPairs,
+        capturedSuburbCountPerPlayer: capturedPairs.length,
+        suburbSymmetry: {
+            axis: 'horizontal',
+            mirror: 'y',
+            fairForBothSides: true
+        }
+    }
+    map.economyObjects = {
+        farms: 0,
+        barracks: 0,
+        goldmines: 0,
+        towns: 2,
+        productionActions: 0,
+        resources: 180,
+        units: 0,
+        towers: 0,
+        bastions: 0,
+        lakes: 0,
+        mountains: 0,
+        bushes: 0,
+        capturedSuburbs: capturedPairs.length * 2
+    }
+    return map
+}
+
 function generateSymmetricalEconomy9v9AllUnitMap(options) {
     options = options || {}
     let seed = options.seed || 1
