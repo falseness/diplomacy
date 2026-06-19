@@ -71,12 +71,16 @@ function parseArgs(argv) {
   const options = parseFinalGateArgs(args);
   options.task154Gate = true;
   options.mapGeneratorName = 'generateAdvancedEconomyStage14TrainingMap';
+  options.candidateSideResolver = (_index, seed) => seed % 2 === 0 ? 'A' : 'B';
   return options;
 }
 
 async function runSymmetrical20x20EconomyGate(options) {
   options = Object.assign({}, options || {}, {
-    mapGeneratorName: 'generateAdvancedEconomyStage14TrainingMap'
+    mapGeneratorName: 'generateAdvancedEconomyStage14TrainingMap',
+    candidateSideResolver: options && options.candidateSideResolver ?
+      options.candidateSideResolver :
+      (_index, seed) => seed % 2 === 0 ? 'A' : 'B'
   });
   const result = await runFinalSymmetricalEconomyGate(options);
   result.config.task = 'TASK-154';

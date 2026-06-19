@@ -37,6 +37,7 @@ function defaultOptions() {
     minWinRate: 0.95,
     checkpoint: null,
     mapGeneratorName: 'generateSymmetricalEconomy9v9AllUnitMap',
+    candidateSideResolver: null,
     output: path.join(
       '/mnt',
       'storage',
@@ -215,6 +216,17 @@ function summarizeGames(games, options) {
       ? 'AIPlayerWithEconomy met the final symmetrical economy gate thresholds'
       : 'AIPlayerWithEconomy did not meet the final symmetrical economy gate thresholds'
   };
+}
+
+function resolveCandidateSide(index, seed, options, api) {
+  if (typeof options.candidateSideResolver === 'function') {
+    const side = options.candidateSideResolver(index, seed, options, api);
+    if (side !== 'A' && side !== 'B') {
+      throw new Error('candidateSideResolver must return A or B');
+    }
+    return side;
+  }
+  return 'A';
 }
 
 function cellValue(cell, index) {
@@ -468,6 +480,8 @@ async function runFinalSymmetricalEconomyGate(options) {
       const seed = typeof options.seedResolver === 'function'
         ? options.seedResolver(index, options, api)
         : options.seed + index;
+      const aiSide = resolveCandidateSide(index, seed, options, api);
+      const opponentSide = aiSide === 'A' ? 'B' : 'A';
       let gameMap = null;
       try {
         gameMap = mapGenerator({
@@ -476,8 +490,10 @@ async function runFinalSymmetricalEconomyGate(options) {
         });
         const game = runGame({
           gameMap,
-          playerA: 'AIPlayerWithEconomy',
-          playerB: 'SimpleAiPlayerWithEconomy',
+          playerA: aiSide === 'A' ?
+            'AIPlayerWithEconomy' : 'SimpleAiPlayerWithEconomy',
+          playerB: aiSide === 'B' ?
+            'AIPlayerWithEconomy' : 'SimpleAiPlayerWithEconomy',
           seed,
           roundLimit: options.roundLimit,
           suddenDeathRound: options.suddenDeathRound,
@@ -487,7 +503,7 @@ async function runFinalSymmetricalEconomyGate(options) {
             finalSymmetricalEconomyGate: true,
             trainedEconomyCheckpoint: true,
             checkpoint: loadedCheckpoint.report.path,
-            candidateSide: 'A',
+            candidateSide: aiSide,
             opponent: 'SimpleAiPlayerWithEconomy'
           },
           inferenceSource:
@@ -499,9 +515,10 @@ async function runFinalSymmetricalEconomyGate(options) {
         games.push(Object.assign({}, game, {
           seed,
           gameIndex: index,
-          aiSide: 'A',
-          opponentSide: 'B',
-          aiResult: game.winnerSide === 'A' ? 'win' : (draw ? 'draw' : 'loss'),
+          aiSide,
+          opponentSide,
+          aiResult: game.winnerSide === aiSide ? 'win' :
+            (draw ? 'draw' : 'loss'),
           symmetricalMap: true,
           mapName: gameMap.testName,
           mapStage: gameMap.economyStage,
@@ -514,8 +531,10 @@ async function runFinalSymmetricalEconomyGate(options) {
             opponent: 'SimpleAiPlayerWithEconomy'
           },
           classCheck: {
-            runtimeAIPlayer: game.runtimePlayerA,
-            runtimeOpponentPlayer: game.runtimePlayerB
+            runtimeAIPlayer: aiSide === 'A' ?
+              game.runtimePlayerA : game.runtimePlayerB,
+            runtimeOpponentPlayer: aiSide === 'A' ?
+              game.runtimePlayerB : game.runtimePlayerA
           },
           comparison: {
             artificialAdvantage: false,
@@ -531,8 +550,8 @@ async function runFinalSymmetricalEconomyGate(options) {
         games.push({
           seed,
           gameIndex: index,
-          aiSide: 'A',
-          opponentSide: 'B',
+          aiSide,
+          opponentSide,
           aiResult: 'loss',
           winner: null,
           winnerSide: null,
@@ -594,11 +613,11 @@ async function runFinalSymmetricalEconomyGate(options) {
         opponent: 'SimpleAiPlayerWithEconomy'
       },
       candidateStarts: {
-        A: games.length,
-        B: 0
+        A: games.filter(game => game.aiSide === 'A').length,
+        B: games.filter(game => game.aiSide === 'B').length
       },
       benchmarkPolicy:
-        'real GameMap runtime using unchanged AIPlayerWithEconomy on the generator-native side A and unchanged SimpleAiPlayerWithEconomy on side B; symmetrical map resources, units, buildings, HP, income, and terrain are mirrored by the map generator'
+        'real GameMap runtime using unchanged AIPlayerWithEconomy and unchanged SimpleAiPlayerWithEconomy; symmetrical map resources, units, buildings, HP, income, and terrain are mirrored by the map generator'
     },
     summary,
     games,

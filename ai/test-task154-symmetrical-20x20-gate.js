@@ -117,6 +117,10 @@ function assertGateMapShape(seed) {
   check(smoke.config.requiredMap.mapSize.x === 20 &&
       smoke.config.requiredMap.mapSize.y === 20,
     'gate did not record 20x20 map requirement');
+  check(smoke.config.candidateStarts.A === 1 &&
+      smoke.config.candidateStarts.B === 1,
+    'TASK-154 smoke should use deterministic alternating candidate sides',
+    smoke.config.candidateStarts);
   check(smoke.checkpoint.gameplayInference.calls > 0,
     'gate did not use checkpoint-backed inference');
   for (const key of ['wins', 'draws', 'losses', 'noLossRate', 'winrate']) {
@@ -134,6 +138,8 @@ function assertGateMapShape(seed) {
       'game used the wrong map stage');
     check(game.seed === 154000 + game.gameIndex,
       'gate did not use the natural stage-14 seed sequence');
+    check(game.aiSide === (game.seed % 2 === 0 ? 'A' : 'B'),
+      'gate did not use the deterministic stage-14 side policy');
   }
 
   const reportPath = path.join(
