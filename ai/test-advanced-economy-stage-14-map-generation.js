@@ -288,6 +288,26 @@ for (let seed = 15100; seed < 15380; seed += 1) {
   }
 }
 
+for (let seed = 154000; seed < 154100; seed += 1) {
+  const map = api.generateAdvancedEconomyStage14TrainingMap({
+    seed,
+    suddenDeathRound: 160
+  });
+  assertMirroredSetup(map, seed, observed);
+  const runtimeSmoke = runGame({
+    gameMap: map,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed,
+    roundLimit: 1,
+    actionLimit: 1,
+    commandLimit: 1
+  });
+  assert(!runtimeSmoke.crash,
+    'canonical TASK-154 stage 14 map failed benchmark runtime reconstruction',
+    { seed, runtimeSmoke });
+}
+
 for (const count of [0, 1, 2, 3]) {
   assert(observed.townCounts.has(count),
     'advanced stage 14 fixed-seed sample did not generate town count ' + count,

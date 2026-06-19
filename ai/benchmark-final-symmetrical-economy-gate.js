@@ -468,63 +468,109 @@ async function runFinalSymmetricalEconomyGate(options) {
       const seed = typeof options.seedResolver === 'function'
         ? options.seedResolver(index, options, api)
         : options.seed + index;
-      const gameMap = mapGenerator({
-        seed,
-        suddenDeathRound: options.suddenDeathRound
-      });
-      const game = runGame({
-        gameMap,
-        playerA: 'AIPlayerWithEconomy',
-        playerB: 'SimpleAiPlayerWithEconomy',
-        seed,
-        roundLimit: options.roundLimit,
-        suddenDeathRound: options.suddenDeathRound,
-        actionLimit: options.actionLimit,
-        commandLimit: options.commandLimit,
-        modelIdentifier: {
-          finalSymmetricalEconomyGate: true,
-          trainedEconomyCheckpoint: true,
-          checkpoint: loadedCheckpoint.report.path,
-          candidateSide: 'A',
-          opponent: 'SimpleAiPlayerWithEconomy'
-        },
-        inferenceSource:
-          'loaded trained economy checkpoint against SimpleAiPlayerWithEconomy',
-        predictFunction
-      });
-      const draw =
-        !game.winnerSide && !game.crash && !game.timeout && !game.suddenDeath;
-      games.push(Object.assign({}, game, {
-        seed,
-        gameIndex: index,
-        aiSide: 'A',
-        opponentSide: 'B',
-        aiResult: game.winnerSide === 'A' ? 'win' : (draw ? 'draw' : 'loss'),
-        symmetricalMap: true,
-        mapName: gameMap.testName,
-        mapStage: gameMap.economyStage,
-        suddenDeathRound: gameMap.suddenDeathRound,
-        modelCheckpoint: loadedCheckpoint.report.path,
-        opponent: 'simple-economy',
-        opponentLabel: 'SimpleAiPlayerWithEconomy',
-        playerClasses: {
-          ai: 'AIPlayerWithEconomy',
-          opponent: 'SimpleAiPlayerWithEconomy'
-        },
-        classCheck: {
-          runtimeAIPlayer: game.runtimePlayerA,
-          runtimeOpponentPlayer: game.runtimePlayerB
-        },
-        comparison: {
-          artificialAdvantage: false,
-          benchmarkSpecificPlayerChanges: false,
-          noAdHocPlayerLogic: true,
-          noGridSizeSpecialCases: true,
-          modelDriven: true,
-          modelScoredImmediateCombat: 'normal AIPlayerWithEconomy behavior',
-          nativeSymmetricalMapAssignment: true
-        }
-      }));
+      let gameMap = null;
+      try {
+        gameMap = mapGenerator({
+          seed,
+          suddenDeathRound: options.suddenDeathRound
+        });
+        const game = runGame({
+          gameMap,
+          playerA: 'AIPlayerWithEconomy',
+          playerB: 'SimpleAiPlayerWithEconomy',
+          seed,
+          roundLimit: options.roundLimit,
+          suddenDeathRound: options.suddenDeathRound,
+          actionLimit: options.actionLimit,
+          commandLimit: options.commandLimit,
+          modelIdentifier: {
+            finalSymmetricalEconomyGate: true,
+            trainedEconomyCheckpoint: true,
+            checkpoint: loadedCheckpoint.report.path,
+            candidateSide: 'A',
+            opponent: 'SimpleAiPlayerWithEconomy'
+          },
+          inferenceSource:
+            'loaded trained economy checkpoint against SimpleAiPlayerWithEconomy',
+          predictFunction
+        });
+        const draw =
+          !game.winnerSide && !game.crash && !game.timeout && !game.suddenDeath;
+        games.push(Object.assign({}, game, {
+          seed,
+          gameIndex: index,
+          aiSide: 'A',
+          opponentSide: 'B',
+          aiResult: game.winnerSide === 'A' ? 'win' : (draw ? 'draw' : 'loss'),
+          symmetricalMap: true,
+          mapName: gameMap.testName,
+          mapStage: gameMap.economyStage,
+          suddenDeathRound: gameMap.suddenDeathRound,
+          modelCheckpoint: loadedCheckpoint.report.path,
+          opponent: 'simple-economy',
+          opponentLabel: 'SimpleAiPlayerWithEconomy',
+          playerClasses: {
+            ai: 'AIPlayerWithEconomy',
+            opponent: 'SimpleAiPlayerWithEconomy'
+          },
+          classCheck: {
+            runtimeAIPlayer: game.runtimePlayerA,
+            runtimeOpponentPlayer: game.runtimePlayerB
+          },
+          comparison: {
+            artificialAdvantage: false,
+            benchmarkSpecificPlayerChanges: false,
+            noAdHocPlayerLogic: true,
+            noGridSizeSpecialCases: true,
+            modelDriven: true,
+            modelScoredImmediateCombat: 'normal AIPlayerWithEconomy behavior',
+            nativeSymmetricalMapAssignment: true
+          }
+        }));
+      } catch (error) {
+        games.push({
+          seed,
+          gameIndex: index,
+          aiSide: 'A',
+          opponentSide: 'B',
+          aiResult: 'loss',
+          winner: null,
+          winnerSide: null,
+          roundCount: 0,
+          turnCount: 0,
+          timeout: false,
+          suddenDeath: false,
+          nonResult: true,
+          crash: true,
+          failureReason: error.message,
+          failureStack: error.stack,
+          symmetricalMap: true,
+          mapName: gameMap && gameMap.testName ? gameMap.testName : null,
+          mapStage: gameMap && gameMap.economyStage ? gameMap.economyStage : null,
+          suddenDeathRound: gameMap && gameMap.suddenDeathRound ?
+            gameMap.suddenDeathRound : options.suddenDeathRound,
+          modelCheckpoint: loadedCheckpoint.report.path,
+          opponent: 'simple-economy',
+          opponentLabel: 'SimpleAiPlayerWithEconomy',
+          playerClasses: {
+            ai: 'AIPlayerWithEconomy',
+            opponent: 'SimpleAiPlayerWithEconomy'
+          },
+          classCheck: {
+            runtimeAIPlayer: null,
+            runtimeOpponentPlayer: null
+          },
+          comparison: {
+            artificialAdvantage: false,
+            benchmarkSpecificPlayerChanges: false,
+            noAdHocPlayerLogic: true,
+            noGridSizeSpecialCases: true,
+            modelDriven: true,
+            modelScoredImmediateCombat: 'normal AIPlayerWithEconomy behavior',
+            nativeSymmetricalMapAssignment: true
+          }
+        });
+      }
     }
   } finally {
     loadedCheckpoint.model.dispose();

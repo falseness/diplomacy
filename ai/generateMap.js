@@ -3610,6 +3610,8 @@ function generateAdvancedEconomyStage14TrainingMap(options) {
             usedObjects,
             function(left, right) {
                 return left.x > 0 && left.y > 0 &&
+                    left.x < Math.floor(mapSize.x / 2) - 1 &&
+                    right.x > Math.floor(mapSize.x / 2) &&
                     right.x < mapSize.x - 1 && right.y < mapSize.y - 1 &&
                     !claimed[coordKey(left)] &&
                     !claimed[coordKey(right)] &&
