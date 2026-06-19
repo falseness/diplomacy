@@ -105,10 +105,13 @@ function benchmarkMapFromGameMap(gameMap) {
     throw new Error('GameMap benchmark requires neutral plus two players');
   }
   const players = gameMap.players.slice(1).map(function(player, playerIndex) {
-    if (!player.towns || player.towns.length !== 1) {
-      throw new Error('GameMap benchmark players require exactly one town');
+    if (!player.towns) {
+      throw new Error('GameMap benchmark players require towns arrays');
     }
-    const town = player.towns[0];
+    const towns = player.towns.map(function(town) {
+      return { x: town.x, y: town.y };
+    });
+    const primaryTown = towns[0] || null;
     const units = (player.units || []).map(function(unit) {
       return {
         x: unit.x,
@@ -117,14 +120,15 @@ function benchmarkMapFromGameMap(gameMap) {
         hp: unit.hp
       };
     });
-    if (!units.length) {
+    if (!units.length && primaryTown) {
       units.push({
-        x: town.x + (playerIndex === 0 ? 1 : -1),
-        y: town.y
+        x: primaryTown.x + (playerIndex === 0 ? 1 : -1),
+        y: primaryTown.y
       });
     }
     return {
-      town: { x: town.x, y: town.y },
+      town: primaryTown,
+      towns,
       units,
       suburbs: player.suburbs || [],
       barracks: player.barracks || [],
@@ -252,6 +256,8 @@ function createRuntimeContext(seed) {
       getItem(key) { return storage[key] || null; },
       removeItem(key) { delete storage[key]; }
     },
+    loadSlotInfo() { return { whooseTurn: -1 }; },
+    saveSlotInfo() {},
     __resetHarnessStorage() {
       for (const key of Object.keys(storage)) {
         delete storage[key];
@@ -391,7 +397,7 @@ function runtimeMapScript() {
     enableClick() {},
     disableClick() {}
   }
-  nextTurnPauseInterface = {visible: false}
+  nextTurnPauseInterface = {visible: false, backToMenu() {}}
   saveManager = {save() {}}
   AiRuntime.trainFromHumanCommands = function() {}
   border = new Border()
@@ -430,7 +436,8 @@ function runtimeMapScript() {
       {rgb: {r: 0, g: 0, b: 0}, towns: []},
       {
         rgb: {r: 255, g: 0, b: 0},
-        towns: [{x: configured.players[0].town.x, y: configured.players[0].town.y}],
+        towns: configured.players[0].towns ||
+          (configured.players[0].town ? [configured.players[0].town] : []),
         units: configured.players[0].units.map(configuredUnit),
         suburbs: configured.players[0].suburbs || [],
         barracks: configured.players[0].barracks || [],
@@ -444,7 +451,8 @@ function runtimeMapScript() {
       },
       {
         rgb: {r: 98, g: 168, b: 222},
-        towns: [{x: configured.players[1].town.x, y: configured.players[1].town.y}],
+        towns: configured.players[1].towns ||
+          (configured.players[1].town ? [configured.players[1].town] : []),
         units: configured.players[1].units.map(configuredUnit),
         suburbs: configured.players[1].suburbs || [],
         barracks: configured.players[1].barracks || [],

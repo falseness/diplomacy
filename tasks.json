@@ -3125,7 +3125,7 @@
     "id": "TASK-154",
     "category": "test",
     "priority": "critical",
-    "description": "Add final symmetrical 20x20 economy benchmark gate using the symmetric 20x20 generator: 100 AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy games, 100 percent no-loss rate, and at least 95 percent winrate.",
+    "description": "Add final symmetrical 20x20 economy benchmark gate using the symmetric 20x20 generator: 100 AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy games, 100 percent no-loss rate, and at least 95 percent winrate. Implemented: Added the TASK-154 symmetric stage-14 20x20 gate wrapper, package smoke, structured reports, default 100-game thresholds, canonical seed 154000, and no-cheating/source guards; full threshold pass remains for TASK-155 training artifacts.",
     "acceptance_criteria": [
       "The gate runs exactly 100 AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy games unless configured lower for smoke tests.",
       "The gate uses the symmetric advanced 20x20 generator.",
@@ -3139,7 +3139,7 @@
       "Step 3: Confirm result summaries include wins, draws, losses, no-loss rate, and winrate.",
       "Step 4: Run the full 100-game gate when trained artifacts are available."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-155",

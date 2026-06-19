@@ -36,6 +36,7 @@ function defaultOptions() {
     minNoLossRate: 1,
     minWinRate: 0.95,
     checkpoint: null,
+    mapGeneratorName: 'generateSymmetricalEconomy9v9AllUnitMap',
     output: path.join(
       '/mnt',
       'storage',
@@ -453,16 +454,21 @@ async function runFinalSymmetricalEconomyGate(options) {
   const loadedCheckpoint = await loadEconomyCheckpoint(options.checkpoint);
   const predictFunction = createCheckpointPredictor(loadedCheckpoint);
   const api = loadAiScripts().context;
-  if (typeof api.generateSymmetricalEconomy9v9AllUnitMap !== 'function') {
+  const mapGeneratorName = options.mapGeneratorName ||
+    'generateSymmetricalEconomy9v9AllUnitMap';
+  const mapGenerator = api[mapGeneratorName];
+  if (typeof mapGenerator !== 'function') {
     loadedCheckpoint.model.dispose();
-    throw new Error('generateSymmetricalEconomy9v9AllUnitMap is not available');
+    throw new Error(mapGeneratorName + ' is not available');
   }
 
   const games = [];
   try {
     for (let index = 0; index < options.games; ++index) {
-      const seed = options.seed + index;
-      const gameMap = api.generateSymmetricalEconomy9v9AllUnitMap({
+      const seed = typeof options.seedResolver === 'function'
+        ? options.seedResolver(index, options, api)
+        : options.seed + index;
+      const gameMap = mapGenerator({
         seed,
         suddenDeathRound: options.suddenDeathRound
       });
@@ -536,7 +542,7 @@ async function runFinalSymmetricalEconomyGate(options) {
       minNoLossRate: options.minNoLossRate,
       minWinRate: options.minWinRate,
       modelCheckpoint: loadedCheckpoint.report.path,
-      mapGenerator: 'generateSymmetricalEconomy9v9AllUnitMap',
+      mapGenerator: mapGeneratorName,
       playerClasses: {
         ai: 'AIPlayerWithEconomy',
         opponent: 'SimpleAiPlayerWithEconomy'
