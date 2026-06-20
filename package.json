@@ -123,6 +123,7 @@
     "test-task062-tiny-1v1-benchmark": "node ai/test-task062-tiny-1v1-benchmark.js",
     "benchmark-gamestart-all-slots": "node ai/benchmark-gamestart-all-slots.js",
     "test-task063-all-gamestart-benchmark": "node ai/test-task063-all-gamestart-benchmark.js",
+    "test-task156-all-gamestart-benchmark": "node ai/test-task156-all-gamestart-benchmark.js",
     "test-regression-seeds": "node ai/test-regression-seeds.js",
     "test-regression-map-seeds": "node ai/test-regression-seeds.js map-generation",
     "test-regression-vector-seeds": "node ai/test-regression-seeds.js vectorization",

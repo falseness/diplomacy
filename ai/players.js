@@ -32,6 +32,7 @@ const SIMPLE_ECONOMY_DEFAULT_ACTION_LIMIT = 12
 const SIMPLE_ECONOMY_DEFAULT_COMMAND_LIMIT = 200
 const SIMPLE_ECONOMY_STALEMATE_PATH_ROUND = 120
 const SIMPLE_ECONOMY_CONCESSION_ROUNDS_BEFORE_SUDDEN_DEATH = 20
+const SIMPLE_ECONOMY_LARGE_MAP_CELL_THRESHOLD = 600
 
 function compareAiTargets(townBonus) {
     return function(left, right) {
@@ -70,7 +71,7 @@ function getCurrentGridCellCount() {
 }
 
 function isCurrentGridLargeForSimpleEconomy() {
-    return getCurrentGridCellCount() > 600
+    return getCurrentGridCellCount() > SIMPLE_ECONOMY_LARGE_MAP_CELL_THRESHOLD
 }
 
 function getAiMoveCommands(unit) {
@@ -1562,10 +1563,14 @@ class AIPlayerWithEconomy extends AIPlayer {
             }
             let moveCommands = getAiMoveCommands(unit).slice(
             0, this.getCommandLimit(AI_ECONOMY_DEFAULT_COMMAND_LIMIT))
-            let command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget ?
-                this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
-                    moveCommands, unit.coord, grid.arr, unit.playerColor) : null
-            if (!command) {
+            let isLargeMap = isCurrentGridLargeForSimpleEconomy()
+            let command = isLargeMap ?
+                this.getCommandTowardEnemy(unit, moveCommands) : null
+            if (!command && this.bestEnemyTargetForAI.GetCommandNearestToBestTarget) {
+                command = this.bestEnemyTargetForAI.GetCommandNearestToBestTarget(
+                    moveCommands, unit.coord, grid.arr, unit.playerColor)
+            }
+            if (!command && !isLargeMap) {
                 command = this.getCommandTowardEnemy(unit, moveCommands)
             }
             if (!command) {

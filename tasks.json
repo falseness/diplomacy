@@ -3165,7 +3165,7 @@
     "id": "TASK-156",
     "category": "test",
     "priority": "critical",
-    "description": "Run AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy on all maps from gamestart. For maps with 3 or more players, use one AIPlayerWithEconomy candidate against SimpleAiPlayerWithEconomy opponents. Confirm 100 percent winrate for AIPlayerWithEconomy.",
+    "description": "Run AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy on all maps from gamestart. For maps with 3 or more players, use one AIPlayerWithEconomy candidate against SimpleAiPlayerWithEconomy opponents. Confirm 100 percent winrate for AIPlayerWithEconomy. Implemented: Added a TASK-156 gamestart candidate-slot benchmark policy and smoke test, ran all 19 gamestart maps with structured coverage/failures, and recorded the enforced gate result at 22/24 candidate wins with the standalone tiny economy duel failures ready for TASK-157 follow-up.",
     "acceptance_criteria": [
       "Every gamestart map is included in the benchmark coverage.",
       "For 1v1 maps, AIPlayerWithEconomy is evaluated against SimpleAiPlayerWithEconomy from both relevant sides when practical.",
@@ -3179,7 +3179,7 @@
       "Step 3: Confirm multiplayer maps use one AIPlayerWithEconomy candidate and SimpleAiPlayerWithEconomy opponents.",
       "Step 4: Confirm the summary reports 100 percent AIPlayerWithEconomy winrate or detailed failures."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-157",

@@ -45,6 +45,7 @@ const DEFAULT_ROUND_LIMIT = 1200;
 const FORCED_SUDDEN_DEATH_ROUND = 500;
 const DEFAULT_ACTION_LIMIT = 30;
 const DEFAULT_COMMAND_LIMIT = 60;
+const DEFAULT_CANDIDATE_SLOT_POLICY = 'all-slots';
 
 function usage() {
   return [
@@ -56,8 +57,12 @@ function usage() {
     '  --seeds NUMBER          Seeds per map and candidate slot (default: ' + DEFAULT_SEEDS + ')',
   '  --round-limit NUMBER    Max nextTurn calls per game (default: ' + DEFAULT_ROUND_LIMIT + ')',
   '  --sudden-death NUMBER   Forced runtime sudden-death round (default: ' + FORCED_SUDDEN_DEATH_ROUND + ')',
+  '  --use-gamestart-sudden-death',
+  '                         Use each gamestart map sudden-death setting instead of forcing one value',
   '  --action-limit NUMBER   Max AI actions per turn (default: ' + DEFAULT_ACTION_LIMIT + ')',
   '  --command-limit NUMBER  Max movement commands considered per unit (default: ' + DEFAULT_COMMAND_LIMIT + ')',
+    '  --candidate-slot-policy NAME',
+    '                         all-slots or task156 (default: ' + DEFAULT_CANDIDATE_SLOT_POLICY + ')',
     '  --output PATH           JSON report path',
     '  --failure-dir PATH      Directory for non-win state JSON files',
     '  --map-limit NUMBER      Limit selected maps for smoke tests',
@@ -74,8 +79,10 @@ function parseArgs(argv) {
     seeds: DEFAULT_SEEDS,
     roundLimit: DEFAULT_ROUND_LIMIT,
     suddenDeathRound: FORCED_SUDDEN_DEATH_ROUND,
+    useGamestartSuddenDeath: false,
     actionLimit: DEFAULT_ACTION_LIMIT,
     commandLimit: DEFAULT_COMMAND_LIMIT,
+    candidateSlotPolicy: DEFAULT_CANDIDATE_SLOT_POLICY,
     output: DEFAULT_OUTPUT,
     failureDir: DEFAULT_FAILURE_DIR,
     mapLimit: undefined,
@@ -90,6 +97,7 @@ function parseArgs(argv) {
     '--sudden-death': 'suddenDeathRound',
     '--action-limit': 'actionLimit',
     '--command-limit': 'commandLimit',
+    '--candidate-slot-policy': 'candidateSlotPolicy',
     '--output': 'output',
     '--failure-dir': 'failureDir',
     '--map-limit': 'mapLimit',
@@ -103,6 +111,10 @@ function parseArgs(argv) {
     }
     if (argument === '--require-100') {
       options.require100 = true;
+      continue;
+    }
+    if (argument === '--use-gamestart-sudden-death') {
+      options.useGamestartSuddenDeath = true;
       continue;
     }
     const name = names[argument];
@@ -144,6 +156,9 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(options.mapOffset) || options.mapOffset < 0) {
     throw new Error('map-offset must be a non-negative integer');
+  }
+  if (!['all-slots', 'task156'].includes(options.candidateSlotPolicy)) {
+    throw new Error('candidate-slot-policy must be all-slots or task156');
   }
   return options;
 }
@@ -322,10 +337,26 @@ function selectedMaps(coverage, options) {
   return maps;
 }
 
-function candidateSlots(mapEntry) {
+function candidateSlots(mapEntry, policy = DEFAULT_CANDIDATE_SLOT_POLICY) {
   const slots = [];
   for (let slot = 1; slot <= mapEntry.nonNeutralPlayerCount; ++slot) {
     slots.push(slot);
+  }
+  if (policy === 'task156') {
+    if (mapEntry.nonNeutralPlayerCount >= 3) {
+      return [Math.ceil(mapEntry.nonNeutralPlayerCount / 2)];
+    }
+    const bothSidesPracticalGroups = [
+      'open field',
+      'tiny deathmatch',
+      'stationary warfare',
+      'two rivers',
+      'tiny economy ai duel'
+    ];
+    if (bothSidesPracticalGroups.includes(mapEntry.groupName)) {
+      return slots;
+    }
+    return [1];
   }
   return slots;
 }
@@ -362,7 +393,8 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
   context.__task063CandidateSlot = candidateSlot;
   context.__task063Seed = seed;
   context.__task063RoundLimit = options.roundLimit;
-  context.__task063ForcedSuddenDeathRound = options.suddenDeathRound;
+  context.__task063ForcedSuddenDeathRound = options.useGamestartSuddenDeath ?
+    null : options.suddenDeathRound;
   context.__task063ActionLimit = options.actionLimit;
   context.__task063CommandLimit = options.commandLimit;
   return new vm.Script(`(() => {
@@ -408,7 +440,9 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
       maps[__task063MapEntry.groupName][__task063MapEntry.variantIndex]
     let configuredSuddenDeathRound = map.suddenDeathRound ||
       __task063MapEntry.suddenDeathRound || null
-    map.suddenDeathRound = __task063ForcedSuddenDeathRound
+    if (__task063ForcedSuddenDeathRound !== null) {
+      map.suddenDeathRound = __task063ForcedSuddenDeathRound
+    }
     let opponentSlots = []
     for (let slot = 1; slot < map.players.length; ++slot) {
       if (slot == __task063CandidateSlot) {
@@ -419,7 +453,8 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
       }
     }
     map.start(manager, false)
-    suddenDeathRound = __task063ForcedSuddenDeathRound
+    suddenDeathRound = map.suddenDeathRound || configuredSuddenDeathRound ||
+      __task063MapEntry.suddenDeathRound
     whooseTurn = 0
 
     function activeNonNeutralPlayers() {
@@ -489,6 +524,7 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
       suddenDeathRound,
       configuredSuddenDeathRound,
       forcedSuddenDeathRound: __task063ForcedSuddenDeathRound,
+      useGamestartSuddenDeath: __task063ForcedSuddenDeathRound === null,
       candidateWon: winner == __task063CandidateSlot,
       candidateLost: players[__task063CandidateSlot].isLost,
       exactClassAssignment:
@@ -503,9 +539,9 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
   })()`, { filename: 'task063-runtime-scenario.js' }).runInContext(context);
 }
 
-function scenarioCount(maps, seeds) {
+function scenarioCount(maps, seeds, policy = DEFAULT_CANDIDATE_SLOT_POLICY) {
   return maps.reduce((total, map) =>
-    total + map.nonNeutralPlayerCount * seeds, 0);
+    total + candidateSlots(map, policy).length * seeds, 0);
 }
 
 function summarize(games, crashes) {
@@ -536,8 +572,10 @@ function buildReport(coverage, maps, options, checkpoint, games, crashes, status
       seedsPerMapCandidateSlot: options.seeds,
       roundLimit: options.roundLimit,
       suddenDeathRound: options.suddenDeathRound,
+      useGamestartSuddenDeath: options.useGamestartSuddenDeath,
       actionLimit: options.actionLimit,
       commandLimit: options.commandLimit,
+      candidateSlotPolicy: options.candidateSlotPolicy,
       mapOffset: options.mapOffset,
       mapLimit: options.mapLimit,
       require100: options.require100
@@ -556,12 +594,15 @@ function buildReport(coverage, maps, options, checkpoint, games, crashes, status
         sourceName: map.sourceName,
         playerGroup: map.playerGroup,
         playerCount: map.nonNeutralPlayerCount,
-        candidateSlots: candidateSlots(map)
+        candidateSlots: candidateSlots(map, options.candidateSlotPolicy)
       })),
-      expectedGames: scenarioCount(maps, options.seeds)
+      expectedGames: scenarioCount(
+        maps, options.seeds, options.candidateSlotPolicy)
     },
     benchmarkPolicy:
-      'real runtime all-gamestart benchmark: one AIPlayerWithEconomy candidate in every non-neutral slot, SimpleAiPlayerWithEconomy in every other slot',
+      options.candidateSlotPolicy === 'task156' ?
+        'TASK-156 real runtime gamestart benchmark: both 1v1 sides when practical, one middle AIPlayerWithEconomy candidate slot on multiplayer maps, SimpleAiPlayerWithEconomy opponents' :
+        'real runtime all-gamestart benchmark: one AIPlayerWithEconomy candidate in every non-neutral slot, SimpleAiPlayerWithEconomy in every other slot',
     summary,
     failedGames: games.filter(game => !game.candidateWon || game.timeout ||
       game.suddenDeath || !game.exactClassAssignment),
@@ -586,7 +627,7 @@ async function runBenchmark(options) {
     const crashes = [];
     let nextSeed = options.seed;
     for (const mapEntry of maps) {
-      for (const candidateSlot of candidateSlots(mapEntry)) {
+      for (const candidateSlot of candidateSlots(mapEntry, options.candidateSlotPolicy)) {
         for (let seedIndex = 0; seedIndex < options.seeds; ++seedIndex) {
           const seed = nextSeed++;
           try {
@@ -624,7 +665,8 @@ async function runBenchmark(options) {
               playerGroup: mapEntry.playerGroup,
               playerCount: mapEntry.nonNeutralPlayerCount,
               candidateSlot,
-              opponentSlots: candidateSlots(mapEntry).filter(slot => slot !== candidateSlot),
+              opponentSlots: candidateSlots(mapEntry)
+                .filter(slot => slot !== candidateSlot),
               seed,
               winner: null,
               roundCount: null,
