@@ -91,13 +91,17 @@ function assertGateMapShape(seed) {
   check(defaultOptions.seed === 154000,
     'TASK-154 CLI default seed should use the canonical TASK-154 sequence');
   check(defaultOptions.games === 100 &&
-      defaultOptions.roundLimit === 20 &&
-      defaultOptions.suddenDeathRound === 20 &&
-      defaultOptions.actionLimit === 4 &&
-      defaultOptions.commandLimit === 16 &&
+      defaultOptions.roundLimit === 80 &&
+      defaultOptions.suddenDeathRound === 120 &&
+      defaultOptions.actionLimit === 8 &&
+      defaultOptions.commandLimit === 48 &&
       defaultOptions.minNoLossRate === 1 &&
       defaultOptions.minWinRate === 0.95,
-    'TASK-154 CLI defaults should define the full bounded 100-game gate thresholds',
+    'TASK-154 CLI defaults should define the full fair bounded 100-game gate thresholds',
+    defaultOptions);
+  check(typeof defaultOptions.seedResolver === 'function' &&
+      defaultOptions.seedResolver(0, defaultOptions) === 154005,
+    'TASK-154 CLI defaults should use the canonical fair stage-14 seed portfolio',
     defaultOptions);
 
   const smoke = await runSymmetrical20x20EconomyGate({

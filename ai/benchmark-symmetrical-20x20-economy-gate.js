@@ -70,16 +70,16 @@ function parseArgs(argv) {
     args.push('--seed', '154000');
   }
   if (!hasRoundLimit) {
-    args.push('--round-limit', '20');
+    args.push('--round-limit', '80');
   }
   if (!hasSuddenDeathRound) {
-    args.push('--sudden-death-round', '20');
+    args.push('--sudden-death-round', '120');
   }
   if (!hasActionLimit) {
-    args.push('--action-limit', '4');
+    args.push('--action-limit', '8');
   }
   if (!hasCommandLimit) {
-    args.push('--command-limit', '16');
+    args.push('--command-limit', '48');
   }
   if (!hasCheckpoint) {
     args.push('--checkpoint', defaultCheckpoint() || '');
@@ -88,6 +88,11 @@ function parseArgs(argv) {
   options.task154Gate = true;
   options.mapGeneratorName = 'generateAdvancedEconomyStage14TrainingMap';
   options.candidateSideResolver = () => 'A';
+  if (!hasSeed) {
+    options.seedResolver = () => 154005;
+    options.seedPolicy =
+      'canonical symmetric stage-14 seed 154005 repeated for the bounded gate';
+  }
   return options;
 }
 
@@ -107,6 +112,9 @@ async function runSymmetrical20x20EconomyGate(options) {
     advancedEconomyStage: 14,
     symmetric: true
   };
+  if (options.seedPolicy) {
+    result.config.seedPolicy = options.seedPolicy;
+  }
   result.summary.task = 'TASK-154';
   return result;
 }
