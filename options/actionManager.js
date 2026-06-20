@@ -221,8 +221,18 @@ class ActionManager {
         }
     }
     undoBuildingProduction(buildingProduction) {
-        let res = unpacker.fullUnpackManufacture(buildingProduction)
+        if (!buildingProduction.town || !buildingProduction.town.coord ||
+                isCoordNotOnMap(
+                    buildingProduction.town.coord,
+                    grid.arr.length,
+                    grid.arr[0].length)) {
+            return
+        }
         let town = grid.getBuilding(buildingProduction.town.coord)
+        if (!town || !town.isTown || !town.isTown()) {
+            return
+        }
+        let res = unpacker.fullUnpackManufacture(buildingProduction)
 
         res.town = town
 

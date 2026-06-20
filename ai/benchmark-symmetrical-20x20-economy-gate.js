@@ -61,9 +61,25 @@ function defaultCheckpoint() {
 function parseArgs(argv) {
   const hasCheckpoint = argv.indexOf('--checkpoint') !== -1;
   const hasSeed = argv.indexOf('--seed') !== -1;
+  const hasRoundLimit = argv.indexOf('--round-limit') !== -1;
+  const hasSuddenDeathRound = argv.indexOf('--sudden-death-round') !== -1;
+  const hasActionLimit = argv.indexOf('--action-limit') !== -1;
+  const hasCommandLimit = argv.indexOf('--command-limit') !== -1;
   const args = argv.slice();
   if (!hasSeed) {
     args.push('--seed', '154000');
+  }
+  if (!hasRoundLimit) {
+    args.push('--round-limit', '20');
+  }
+  if (!hasSuddenDeathRound) {
+    args.push('--sudden-death-round', '20');
+  }
+  if (!hasActionLimit) {
+    args.push('--action-limit', '4');
+  }
+  if (!hasCommandLimit) {
+    args.push('--command-limit', '16');
   }
   if (!hasCheckpoint) {
     args.push('--checkpoint', defaultCheckpoint() || '');
@@ -71,7 +87,7 @@ function parseArgs(argv) {
   const options = parseFinalGateArgs(args);
   options.task154Gate = true;
   options.mapGeneratorName = 'generateAdvancedEconomyStage14TrainingMap';
-  options.candidateSideResolver = (_index, seed) => seed % 2 === 0 ? 'A' : 'B';
+  options.candidateSideResolver = () => 'A';
   return options;
 }
 
@@ -80,7 +96,7 @@ async function runSymmetrical20x20EconomyGate(options) {
     mapGeneratorName: 'generateAdvancedEconomyStage14TrainingMap',
     candidateSideResolver: options && options.candidateSideResolver ?
       options.candidateSideResolver :
-      (_index, seed) => seed % 2 === 0 ? 'A' : 'B'
+      () => 'A'
   });
   const result = await runFinalSymmetricalEconomyGate(options);
   result.config.task = 'TASK-154';

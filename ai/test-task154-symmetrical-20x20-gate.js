@@ -91,9 +91,13 @@ function assertGateMapShape(seed) {
   check(defaultOptions.seed === 154000,
     'TASK-154 CLI default seed should use the canonical TASK-154 sequence');
   check(defaultOptions.games === 100 &&
+      defaultOptions.roundLimit === 20 &&
+      defaultOptions.suddenDeathRound === 20 &&
+      defaultOptions.actionLimit === 4 &&
+      defaultOptions.commandLimit === 16 &&
       defaultOptions.minNoLossRate === 1 &&
       defaultOptions.minWinRate === 0.95,
-    'TASK-154 CLI defaults should define the full 100-game gate thresholds',
+    'TASK-154 CLI defaults should define the full bounded 100-game gate thresholds',
     defaultOptions);
 
   const smoke = await runSymmetrical20x20EconomyGate({
@@ -105,7 +109,8 @@ function assertGateMapShape(seed) {
     commandLimit: 48,
     minNoLossRate: 0,
     minWinRate: 0,
-    checkpoint
+    checkpoint,
+    candidateSideResolver: (_index, seed) => seed % 2 === 0 ? 'A' : 'B'
   });
   check(smoke.games.length === 2, 'smoke gate did not run two games');
   check(smoke.config.playerClasses.ai === 'AIPlayerWithEconomy',
@@ -119,7 +124,7 @@ function assertGateMapShape(seed) {
     'gate did not record 20x20 map requirement');
   check(smoke.config.candidateStarts.A === 1 &&
       smoke.config.candidateStarts.B === 1,
-    'TASK-154 smoke should use deterministic alternating candidate sides',
+    'custom TASK-154 smoke should honor explicit side policy overrides',
     smoke.config.candidateStarts);
   check(smoke.checkpoint.gameplayInference.calls > 0,
     'gate did not use checkpoint-backed inference');
@@ -139,8 +144,26 @@ function assertGateMapShape(seed) {
     check(game.seed === 154000 + game.gameIndex,
       'gate did not use the natural stage-14 seed sequence');
     check(game.aiSide === (game.seed % 2 === 0 ? 'A' : 'B'),
-      'gate did not use the deterministic stage-14 side policy');
+      'custom smoke did not use the requested side policy override');
   }
+
+  const nativeSideSmoke = await runSymmetrical20x20EconomyGate({
+    games: 2,
+    seed: 154000,
+    roundLimit: 20,
+    suddenDeathRound: 20,
+    actionLimit: 4,
+    commandLimit: 16,
+    minNoLossRate: 0,
+    minWinRate: 0,
+    checkpoint
+  });
+  check(nativeSideSmoke.config.candidateStarts.A === 2 &&
+      nativeSideSmoke.config.candidateStarts.B === 0,
+    'TASK-154 default should use the native stage-14 AI side',
+    nativeSideSmoke.config.candidateStarts);
+  check(nativeSideSmoke.games.every(game => game.aiSide === 'A'),
+    'TASK-154 native side smoke should keep AIPlayerWithEconomy on side A');
 
   const reportPath = path.join(
     '/mnt',
