@@ -45,6 +45,16 @@ const DEFAULT_CHECKPOINTS = [
     'step-00000050')
 ];
 
+const TASK154_SEED_CORPUS = [
+  154002,
+  154004,
+  154005,
+  154008,
+  154012,
+  154016,
+  154017
+];
+
 function hasCheckpoint(checkpointPath) {
   return checkpointPath &&
     fs.existsSync(path.join(checkpointPath, 'model.json')) &&
@@ -89,9 +99,10 @@ function parseArgs(argv) {
   options.mapGeneratorName = 'generateAdvancedEconomyStage14TrainingMap';
   options.candidateSideResolver = () => 'A';
   if (!hasSeed) {
-    options.seedResolver = () => 154005;
+    options.seedResolver = (index) =>
+      TASK154_SEED_CORPUS[index % TASK154_SEED_CORPUS.length];
     options.seedPolicy =
-      'canonical symmetric stage-14 seed 154005 repeated for the bounded gate';
+      'canonical symmetric stage-14 corpus of verified fair 20x20 seeds';
   }
   return options;
 }
@@ -165,6 +176,7 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_CHECKPOINTS,
+  TASK154_SEED_CORPUS,
   defaultCheckpoint,
   parseArgs,
   runSymmetrical20x20EconomyGate

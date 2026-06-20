@@ -4,7 +4,8 @@ const { execFileSync } = require('child_process');
 const {
   defaultCheckpoint,
   parseArgs,
-  runSymmetrical20x20EconomyGate
+  runSymmetrical20x20EconomyGate,
+  TASK154_SEED_CORPUS
 } = require('./benchmark-symmetrical-20x20-economy-gate');
 const { loadAiScripts } = require('./smokeHarness');
 
@@ -100,9 +101,14 @@ function assertGateMapShape(seed) {
     'TASK-154 CLI defaults should define the full fair bounded 100-game gate thresholds',
     defaultOptions);
   check(typeof defaultOptions.seedResolver === 'function' &&
-      defaultOptions.seedResolver(0, defaultOptions) === 154005,
-    'TASK-154 CLI defaults should use the canonical fair stage-14 seed portfolio',
+      defaultOptions.seedResolver(0, defaultOptions) === TASK154_SEED_CORPUS[0],
+    'TASK-154 CLI defaults should use the canonical fair stage-14 seed corpus',
     defaultOptions);
+  const defaultSeedSample = Array.from({ length: 14 }, (_entry, index) =>
+    defaultOptions.seedResolver(index, defaultOptions));
+  check(new Set(defaultSeedSample).size === TASK154_SEED_CORPUS.length,
+    'TASK-154 default seed corpus should not collapse to one repeated seed',
+    defaultSeedSample);
 
   const smoke = await runSymmetrical20x20EconomyGate({
     games: 2,
