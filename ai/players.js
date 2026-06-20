@@ -1088,6 +1088,33 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         return Math.max(0, ownUnits - strongestOpponentUnits)
     }
+    getTownAdvantage() {
+        return SimpleAiPlayerWithEconomy.prototype.getTownAdvantage.call(this)
+    }
+    getDirectEnemyPathCommand(unit, commands) {
+        return SimpleAiPlayerWithEconomy.prototype.getDirectEnemyPathCommand.call(
+            this, unit, commands)
+    }
+    findUnitAttackCommand(unit) {
+        return SimpleAiPlayerWithEconomy.prototype.findUnitAttackCommand.call(
+            this, unit)
+    }
+    unitDoMoves(unit, remainingActions = Infinity) {
+        return SimpleAiPlayerWithEconomy.prototype.unitDoMoves.call(
+            this, unit, remainingActions)
+    }
+    shouldUseTacticalEconomyFallback(state) {
+        return state.towns.length <= 2 &&
+            state.productionChoices.length > 0 &&
+            state.units.length <= AI_ECONOMY_MULTIPLAYER_NOOB_THRESHOLD
+    }
+    doTacticalEconomyFallback(state) {
+        let purchaseLimit = state.towns.length > 1 ?
+            AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT : 1
+        SimpleAiPlayerWithEconomy.prototype.spendWarGoldWithinLimit.call(
+            this, purchaseLimit)
+        SimpleAiPlayerWithEconomy.prototype.playCombatActions.call(this)
+    }
     getActionLimit(fallback) {
         let limit = getAiActionLimit(fallback)
         if (typeof gameRound != 'undefined' &&
@@ -1627,11 +1654,16 @@ class AIPlayerWithEconomy extends AIPlayer {
             this.doLearnedCombatOnlyActions()
             return
         }
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
         if (!this.bestEnemyTargetForAI) {
             this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
         }
+        let tacticalEconomyState = this.inspectEconomy()
+        if (this.shouldUseTacticalEconomyFallback(tacticalEconomyState)) {
+            this.doTacticalEconomyFallback(tacticalEconomyState)
+            return
+        }
+        this.chosenGrids.push(vectoriseGrid())
+        this.winningChances.push(this.getWinningChance())
         this.prioritizedTargetsForTurn = null
         let remainingActions =
             this.getActionLimit(AI_ECONOMY_DEFAULT_ACTION_LIMIT)

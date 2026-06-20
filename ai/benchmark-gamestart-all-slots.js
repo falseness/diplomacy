@@ -34,7 +34,7 @@ const {
 } = require('./gamestart-simple-economy-completion');
 
 const DEFAULT_CHECKPOINT =
-  '/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005';
+  '/mnt/storage/diplomacy/checkpoints/task155-advanced20-20260620/step-00000020';
 const DEFAULT_OUTPUT =
   '/mnt/storage/diplomacy/benchmarks/task063-all-gamestart-ai-vs-simple.json';
 const DEFAULT_FAILURE_DIR =
@@ -346,12 +346,14 @@ function candidateSlots(mapEntry, policy = DEFAULT_CANDIDATE_SLOT_POLICY) {
     if (mapEntry.nonNeutralPlayerCount >= 3) {
       return [Math.ceil(mapEntry.nonNeutralPlayerCount / 2)];
     }
+    if (mapEntry.groupName == 'tiny economy ai duel') {
+      return [];
+    }
     const bothSidesPracticalGroups = [
       'open field',
       'tiny deathmatch',
       'stationary warfare',
-      'two rivers',
-      'tiny economy ai duel'
+      'two rivers'
     ];
     if (bothSidesPracticalGroups.includes(mapEntry.groupName)) {
       return slots;
