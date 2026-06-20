@@ -346,14 +346,12 @@ function candidateSlots(mapEntry, policy = DEFAULT_CANDIDATE_SLOT_POLICY) {
     if (mapEntry.nonNeutralPlayerCount >= 3) {
       return [Math.ceil(mapEntry.nonNeutralPlayerCount / 2)];
     }
-    if (mapEntry.groupName == 'tiny economy ai duel') {
-      return [];
-    }
     const bothSidesPracticalGroups = [
       'open field',
       'tiny deathmatch',
       'stationary warfare',
-      'two rivers'
+      'two rivers',
+      'tiny economy ai duel'
     ];
     if (bothSidesPracticalGroups.includes(mapEntry.groupName)) {
       return slots;
