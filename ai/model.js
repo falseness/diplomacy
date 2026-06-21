@@ -44,6 +44,130 @@ function assertModelCellVectorCompatible(model) {
   }
 }
 
+function getAiEconomyObjectiveCounts(player, playerIndex, distanceFn) {
+  let counts = {
+    liveOpponentCount: 0,
+    neutralTownCount: 0,
+    hadNeutralTownsAtStart: false,
+    goldmineCount: 0,
+    lakeCount: 0,
+    mountainCount: 0,
+    nearestEnemyThreatDistance: Infinity
+  }
+  if (typeof players != 'undefined' && players[0]) {
+    counts.hadNeutralTownsAtStart =
+      player.hadNeutralTownsAtStart === true || players[0].towns.length > 0
+    for (let townIndex = 0; townIndex < players[0].towns.length; ++townIndex) {
+      if (!players[0].towns[townIndex].killed) {
+        ++counts.neutralTownCount
+      }
+    }
+    for (let opponentIndex = 1; opponentIndex < players.length; ++opponentIndex) {
+      let opponent = players[opponentIndex]
+      if (opponentIndex == playerIndex || !opponent || opponent.isNeutral ||
+          opponent.isLost) {
+        continue
+      }
+      ++counts.liveOpponentCount
+      for (let unitIndex = 0; unitIndex < opponent.units.length; ++unitIndex) {
+        let enemy = opponent.units[unitIndex]
+        if (enemy.killed) {
+          continue
+        }
+        for (let townIndex = 0; townIndex < player.towns.length; ++townIndex) {
+          if (!player.towns[townIndex].killed) {
+            counts.nearestEnemyThreatDistance = Math.min(
+              counts.nearestEnemyThreatDistance,
+              distanceFn(enemy.coord, player.towns[townIndex].coord))
+          }
+        }
+      }
+    }
+  }
+  if (typeof grid != 'undefined' && grid.arr &&
+      player.hadNeutralTownsAtStart === undefined) {
+    for (let x = 0; x < grid.arr.length; ++x) {
+      for (let y = 0; y < grid.arr[x].length; ++y) {
+        let building = grid.arr[x][y].building
+        if (building && building.notEmpty && building.notEmpty() &&
+            building.name == 'town' && building.playerColor == -1) {
+          counts.hadNeutralTownsAtStart = true
+        }
+      }
+    }
+  }
+  if (typeof goldmines != 'undefined') {
+    for (let i = 0; i < goldmines.length; ++i) {
+      if (!goldmines[i].killed) {
+        ++counts.goldmineCount
+      }
+    }
+  }
+  if (typeof nature != 'undefined') {
+    for (let i = 0; i < nature.length; ++i) {
+      if (nature[i].killed) {
+        continue
+      }
+      if (nature[i].name == 'lake') {
+        ++counts.lakeCount
+      }
+      else if (nature[i].name == 'mountain') {
+        ++counts.mountainCount
+      }
+    }
+  }
+  return counts
+}
+
+function getAiEconomyObjectivePolicy(player, playerIndex, distanceFn) {
+  let counts = getAiEconomyObjectiveCounts(player, playerIndex, distanceFn)
+  let directDuel = counts.liveOpponentCount == 1 &&
+    !counts.hadNeutralTownsAtStart && counts.goldmineCount == 0
+  let resourceObstacleField = counts.goldmineCount >= 8 &&
+    counts.lakeCount > 0 && counts.mountainCount > 0
+  let balancedResourceObstacleField = resourceObstacleField &&
+    Math.abs(counts.lakeCount - counts.mountainCount) <= 1
+  let cleanDirectDuel = directDuel &&
+    counts.lakeCount == 0 && counts.mountainCount == 0
+  return {
+    enemyTownTargetScore: directDuel ?
+      AI_ECONOMY_THREAT_TARGET_SCORE : AI_ECONOMY_TOWN_TARGET_SCORE,
+    useTargetPriorityMovement: directDuel || balancedResourceObstacleField,
+    holdTownThreatDistance: cleanDirectDuel || resourceObstacleField ? 6 : null
+  }
+}
+
+function shouldHoldTownForAiEconomyObjective(player, unit, playerIndex, distanceFn) {
+  let policy = getAiEconomyObjectivePolicy(player, playerIndex, distanceFn)
+  if (!Number.isFinite(policy.holdTownThreatDistance)) {
+    return false
+  }
+  let cell = grid.getCell(unit.coord)
+  if (!cell || !cell.building || !cell.building.notEmpty ||
+      !cell.building.notEmpty() || cell.building.name != 'town' ||
+      cell.building.playerColor != playerIndex) {
+    return false
+  }
+  if (typeof players == 'undefined') {
+    return false
+  }
+  for (let opponentIndex = 1; opponentIndex < players.length; ++opponentIndex) {
+    let opponent = players[opponentIndex]
+    if (opponentIndex == playerIndex || !opponent || opponent.isNeutral ||
+        opponent.isLost) {
+      continue
+    }
+    for (let unitIndex = 0; unitIndex < opponent.units.length; ++unitIndex) {
+      let enemy = opponent.units[unitIndex]
+      if (!enemy.killed &&
+          distanceFn(enemy.coord, unit.coord) <= policy.holdTownThreatDistance) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 function createAlphaZeroModel(boardHeight, boardWidth, numChannels = getCellVectorSize()) {
   
   const globalVariablesInput = tf.input({ shape: [1], name: 'global_variables' });

@@ -62,6 +62,25 @@ function getAiCommandLimit(fallback) {
     return fallback
 }
 
+function getAiEconomyModelPolicy(player, playerIndex, distanceFn) {
+    if (typeof getAiEconomyObjectivePolicy == 'function') {
+        return getAiEconomyObjectivePolicy(player, playerIndex, distanceFn)
+    }
+    return {
+        enemyTownTargetScore: AI_ECONOMY_TOWN_TARGET_SCORE,
+        useTargetPriorityMovement: false,
+        holdTownThreatDistance: null
+    }
+}
+
+function shouldAiEconomyModelHoldTown(player, unit, playerIndex, distanceFn) {
+    if (typeof shouldHoldTownForAiEconomyObjective == 'function') {
+        return shouldHoldTownForAiEconomyObjective(
+            player, unit, playerIndex, distanceFn)
+    }
+    return false
+}
+
 function getCurrentGridCellCount() {
     if (typeof grid == 'undefined' || !grid.arr ||
             !grid.arr.length || !grid.arr[0]) {
@@ -1096,120 +1115,17 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         return Math.max(0, ownUnits - strongestOpponentUnits)
     }
-    hasSingleLiveOpponent() {
-        if (typeof players == 'undefined') {
-            return false
-        }
-        if (this.startedWithNeutralTowns && this.startedWithNeutralTowns()) {
-            return false
-        }
-        let ownPlayerIndex = this.getPlayerIndex()
-        let liveOpponents = 0
-        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
-            if (playerIndex != ownPlayerIndex && players[playerIndex] &&
-                    !players[playerIndex].isNeutral &&
-                    !players[playerIndex].isLost) {
-                ++liveOpponents
-            }
-        }
-        return liveOpponents == 1
-    }
-    hasLiveNeutralTowns() {
-        if (typeof players == 'undefined' || !players[0]) {
-            return false
-        }
-        return players[0].towns.some(function(town) {
-            return !town.killed
-        })
-    }
-    startedWithNeutralTowns() {
-        if (this.hadNeutralTownsAtStart === undefined) {
-            this.hadNeutralTownsAtStart =
-                typeof players != 'undefined' && players[0] &&
-                players[0].towns.length > 0
-            if (!this.hadNeutralTownsAtStart && typeof grid != 'undefined' &&
-                    grid.arr) {
-                for (let x = 0; x < grid.arr.length; ++x) {
-                    for (let y = 0; y < grid.arr[x].length; ++y) {
-                        let building = grid.arr[x][y].building
-                        if (building && building.notEmpty && building.notEmpty() &&
-                                building.name == 'town' &&
-                                building.playerColor == -1) {
-                            this.hadNeutralTownsAtStart = true
-                        }
-                    }
-                }
-            }
-        }
-        return this.hadNeutralTownsAtStart
+    getEconomyObjectivePolicy() {
+        return getAiEconomyModelPolicy(
+            this,
+            this.getPlayerIndex(),
+            this.getActionRankingDistance.bind(this))
     }
     getEnemyTownTargetScore() {
-        return this.isClosedNoObjectiveDuel() ?
-            AI_ECONOMY_THREAT_TARGET_SCORE : AI_ECONOMY_TOWN_TARGET_SCORE
-    }
-    hasAnyGoldmineObjectives() {
-        if (typeof goldmines == 'undefined') {
-            return false
-        }
-        return goldmines.some(function(goldmine) {
-            return !goldmine.killed
-        })
-    }
-    hasGoldmineObjectives() {
-        if (typeof goldmines == 'undefined') {
-            return false
-        }
-        return goldmines.filter(function(goldmine) {
-            return !goldmine.killed
-        }).length >= 8
-    }
-    hasTerrainObstacles() {
-        return typeof nature != 'undefined' && nature.some(function(entity) {
-            return !entity.killed
-        })
-    }
-    hasMixedTerrainObstacles() {
-        if (typeof nature == 'undefined') {
-            return false
-        }
-        let hasLake = false
-        let hasMountain = false
-        for (let i = 0; i < nature.length; ++i) {
-            if (nature[i].killed) {
-                continue
-            }
-            hasLake = hasLake || nature[i].name == 'lake'
-            hasMountain = hasMountain || nature[i].name == 'mountain'
-        }
-        return hasLake && hasMountain
-    }
-    hasBalancedResourceTerrain() {
-        if (!this.hasGoldmineObjectives() || typeof nature == 'undefined') {
-            return false
-        }
-        let lakes = 0
-        let mountains = 0
-        for (let i = 0; i < nature.length; ++i) {
-            if (nature[i].killed) {
-                continue
-            }
-            if (nature[i].name == 'lake') {
-                ++lakes
-            }
-            else if (nature[i].name == 'mountain') {
-                ++mountains
-            }
-        }
-        return lakes > 0 && mountains > 0 &&
-            Math.abs(lakes - mountains) <= 1
+        return this.getEconomyObjectivePolicy().enemyTownTargetScore
     }
     shouldUseTargetPriorityMovement() {
-        return this.isClosedNoObjectiveDuel() ||
-            this.hasBalancedResourceTerrain()
-    }
-    isClosedNoObjectiveDuel() {
-        return this.hasSingleLiveOpponent() && !this.startedWithNeutralTowns() &&
-            !this.hasAnyGoldmineObjectives()
+        return this.getEconomyObjectivePolicy().useTargetPriorityMovement
     }
     getTownAdvantage() {
         return SimpleAiPlayerWithEconomy.prototype.getTownAdvantage.call(this)
@@ -1730,37 +1646,11 @@ class AIPlayerWithEconomy extends AIPlayer {
         return remainingActions
     }
     shouldHoldTownWithUnit(unit) {
-        if (!this.isClosedNoObjectiveDuel() &&
-                !(this.hasGoldmineObjectives() &&
-                    this.hasMixedTerrainObstacles())) {
-            return false
-        }
-        let playerIndex = this.getPlayerIndex()
-        let cell = grid.getCell(unit.coord)
-        if (!cell || !cell.building || !cell.building.notEmpty ||
-                !cell.building.notEmpty() || cell.building.name != 'town' ||
-                cell.building.playerColor != playerIndex) {
-            return false
-        }
-        if (typeof players == 'undefined') {
-            return false
-        }
-        let ownPlayerIndex = this.getPlayerIndex()
-        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
-            if (playerIndex == ownPlayerIndex || !players[playerIndex] ||
-                    players[playerIndex].isNeutral || players[playerIndex].isLost) {
-                continue
-            }
-            for (let unitIndex = 0; unitIndex < players[playerIndex].units.length;
-                    ++unitIndex) {
-                let enemy = players[playerIndex].units[unitIndex]
-                if (!enemy.killed &&
-                        this.getActionRankingDistance(enemy.coord, unit.coord) <= 6) {
-                    return true
-                }
-            }
-        }
-        return false
+        return shouldAiEconomyModelHoldTown(
+            this,
+            unit,
+            this.getPlayerIndex(),
+            this.getActionRankingDistance.bind(this))
     }
     spendWarGoldWithinLimit(remainingActions, maxPurchases) {
         let purchases = 0

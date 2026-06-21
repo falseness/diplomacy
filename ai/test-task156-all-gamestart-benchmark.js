@@ -54,7 +54,8 @@ function assertNoTask156ComparisonShortcuts() {
     { pattern: /grid\s*\.\s*arr\s*\.\s*length\s*(?:={2,3}|[<>]=?)\s*\d+/, label: 'grid width special case' },
     { pattern: /grid\s*\.\s*arr\s*\[\s*0\s*\]\s*\.\s*length\s*(?:={2,3}|[<>]=?)\s*\d+/, label: 'grid height special case' },
     { pattern: /open field|tiny economy|strategic war|rush or defend|two rivers|tower defense/i, label: 'gamestart map-name branch' },
-    { pattern: /candidateGoldBonus|simpleHandicap|artificialAdvantage/i, label: 'named artificial advantage hook' }
+    { pattern: /candidateGoldBonus|simpleHandicap|artificialAdvantage/i, label: 'named artificial advantage hook' },
+    { pattern: /isClosedNoObjectiveDuel|hasBalancedResourceTerrain|hasMixedTerrainObstacles|hasGoldmineObjectives|startedWithNeutralTowns/, label: 'comparison-shaped objective branch' }
   ];
   const playerOffenders = forbiddenPlayerPatterns.filter(entry =>
     entry.pattern.test(economyPlayerSource)).map(entry => entry.label);
@@ -77,6 +78,19 @@ function assertNoTask156ComparisonShortcuts() {
     runtimeOffenders.length === 0,
     'TASK-156 benchmark grants an artificial comparison advantage',
     runtimeOffenders
+  );
+
+  const modelSource = readRepoFile('ai/model.js');
+  const modelOffenders = [
+    { pattern: /open field|tiny economy|strategic war|rush or defend|two rivers|tower defense/i, label: 'gamestart map-name branch' },
+    { pattern: /grid\s*\.\s*arr\s*\.\s*length\s*(?:={2,3}|[<>]=?)\s*\d+/, label: 'grid width special case' },
+    { pattern: /grid\s*\.\s*arr\s*\[\s*0\s*\]\s*\.\s*length\s*(?:={2,3}|[<>]=?)\s*\d+/, label: 'grid height special case' },
+    { pattern: /candidateGoldBonus|simpleHandicap|artificialAdvantage/i, label: 'named artificial advantage hook' }
+  ].filter(entry => entry.pattern.test(modelSource)).map(entry => entry.label);
+  assert(
+    modelOffenders.length === 0,
+    'TASK-156 model-side objective policy contains comparison shortcuts',
+    modelOffenders
   );
 }
 
