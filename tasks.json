@@ -3185,7 +3185,7 @@
     "id": "TASK-157",
     "category": "infrastructure",
     "priority": "critical",
-    "description": "If the all-gamestart AIPlayerWithEconomy gate fails, create follow-up tickets for model architecture change, retraining, and rerunning the all-gamestart gate to confirm 100 percent winrate.",
+    "description": "If the all-gamestart AIPlayerWithEconomy gate fails, create follow-up tickets for model architecture change, retraining, and rerunning the all-gamestart gate to confirm 100 percent winrate. Implemented: Inspected the final TASK-156 structured benchmark and no-cheating guard; the gate passed at 24/24 candidate wins across all 19 gamestart maps with no failures, so no model-architecture, retraining, or rerun follow-up tickets were created.",
     "acceptance_criteria": [
       "If TASK-156 passes, this ticket records that no failure follow-ups are needed.",
       "If TASK-156 fails, create one ticket to change architecture of the model.",
@@ -3199,7 +3199,7 @@
       "Step 3: If the gate failed, append the three required follow-up tickets to tasks.json.",
       "Step 4: Confirm any created follow-up tickets keep model complexity out of AIPlayer ad-hoc comparison code."
     ],
-    "status": "pending"
+    "status": "to-verify"
   },
   {
     "id": "TASK-158",
