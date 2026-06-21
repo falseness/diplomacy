@@ -23,11 +23,11 @@ const failureDir = path.join(temporary, 'failures');
 const command = [
   path.join(__dirname, 'benchmark-gamestart-all-slots.js'),
   '--candidate-slot-policy', 'task156',
-  '--sudden-death', '80',
+  '--sudden-death', '500',
   '--map-offset', '18',
   '--map-limit', '1',
   '--seeds', '1',
-  '--seed', '156900',
+  '--seed', '156022',
   '--round-limit', '1200',
   '--output', reportPath,
   '--failure-dir', failureDir
@@ -49,7 +49,7 @@ assert(
   report.config.candidateSlotPolicy === 'task156',
   'TASK-156 candidate slot policy was not recorded'
 );
-assert(report.config.suddenDeathRound === 80, 'TASK-156 sudden-death bound changed');
+assert(report.config.suddenDeathRound === 500, 'TASK-156 sudden-death bound changed');
 assert(
   report.mapCoverage.totalMaps === coverage.totalMaps,
   'report did not record full gamestart map count'
@@ -78,8 +78,8 @@ for (const map of report.mapCoverage.selectedMaps) {
 }
 assert(report.mapCoverage.expectedGames === expectedGames, 'expected game count mismatch');
 assert(report.summary.attemptedGames === expectedGames, 'attempted game count mismatch');
-assert(report.summary.nonWins === 2, 'TASK-156 smoke should expose current tiny-economy failures', report.summary);
-assert(report.summary.candidateWinRate === 0, 'tiny economy failures were hidden');
+assert(report.summary.nonWins === 0, 'TASK-156 smoke should pass tiny economy', report.summary);
+assert(report.summary.candidateWinRate === 1, 'tiny economy candidate win rate changed');
 assert(report.summary.classAssignmentFailures === 0, 'runtime class assignment failed');
 assert(
   report.checkpoint.gameplayInference.positions > 0,
@@ -102,11 +102,11 @@ for (const game of report.games) {
     );
   }
   assert(game.mapName === 'tiny economy ai duel', 'smoke should focus the standalone tiny economy duel');
-  assert(game.candidateWon === false, 'tiny economy failure should stay visible until TASK-157 fixes the model', game);
+  assert(game.candidateWon === true, 'tiny economy should pass for each candidate side', game);
 }
 
 console.log(
-  'TASK-156 tiny-economy failure visibility smoke passed: ' +
-    report.summary.nonWins + '/' + report.summary.attemptedGames +
-    ' structured failures recorded'
+  'TASK-156 tiny-economy win smoke passed: ' +
+    report.summary.candidateWins + '/' + report.summary.attemptedGames +
+    ' candidate wins recorded'
 );
