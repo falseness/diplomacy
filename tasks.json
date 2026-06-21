@@ -3205,7 +3205,7 @@
     "id": "TASK-158",
     "category": "performance",
     "priority": "high",
-    "description": "Follow up TASK-102 by tuning self-play runtime-context startup beyond compiled script caching. The TASK-102 cache preserved correctness but did not produce the required 10 percent speedup because fresh context execution and game simulation dominated wall time.",
+    "description": "Follow up TASK-102 by tuning self-play runtime-context startup beyond compiled script caching. The TASK-102 cache preserved correctness but did not produce the required 10 percent speedup because fresh context execution and game simulation dominated wall time. Implemented: Cached benchmark model-injection VM scripts, profiled cached startup versus forced no-cache runtime, re-ran TASK-102 regression tests, and measured 50-runGame median 11.455s plus canonical 15-game training median 868.30s against the TASK-102 failed baselines.",
     "acceptance_criteria": [
       "Identify and measure the dominant remaining per-game startup costs after browser script read/compile caching.",
       "Implement a safe speed-up that preserves deterministic fresh-game behavior without sharing mutable game state across runs.",
@@ -3220,6 +3220,6 @@
       "Step 4: Re-run 50 runGame and canonical 15-game training speed benchmarks as median of 3 runs and record before/after timings.",
       "Step 5: Confirm no gameplay or AI fairness shortcuts were introduced."
     ],
-    "status": "pending"
+    "status": "to-verify"
   }
 ]

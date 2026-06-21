@@ -11,6 +11,8 @@ const {
 const repoRoot = path.resolve(__dirname, '..');
 let reusableBenchmarkContext = null;
 let compiledBenchmarkRuntimeScript = null;
+let compiledInjectedModelScript = null;
+let compiledSmokeModelScript = null;
 
 function loadPlayerClasses() {
   const context = vm.createContext({
@@ -317,15 +319,19 @@ function injectBenchmarkModel(context, options) {
           (activePlayerIndex === 2 ? 'B' : null)
       });
     };
-    new vm.Script(`
+    if (!compiledInjectedModelScript) {
+      compiledInjectedModelScript = new vm.Script(`
       ai_model = __benchmarkModelIdentifier
       predict = __benchmarkPredictFunction
-    `, { filename: 'benchmark-injected-model.js' }).runInContext(context);
+    `, { filename: 'benchmark-injected-model.js' });
+    }
+    compiledInjectedModelScript.runInContext(context);
     context.__benchmarkInferenceSource =
       options.inferenceSource || 'injected benchmark model';
     return;
   }
-  new vm.Script(`
+  if (!compiledSmokeModelScript) {
+    compiledSmokeModelScript = new vm.Script(`
     ai_model = { benchmarkSmokeModel: true }
     predict = function(model, xValidateArr) {
       __benchmarkInferenceCalls += 1
@@ -343,7 +349,9 @@ function injectBenchmarkModel(context, options) {
       })
     }
     __benchmarkInferenceSource = 'benchmark smoke model for runtime AIPlayer decisions'
-  `, { filename: 'benchmark-smoke-model.js' }).runInContext(context);
+  `, { filename: 'benchmark-smoke-model.js' });
+  }
+  compiledSmokeModelScript.runInContext(context);
 }
 
 function createLoadedRuntimeContext(seed, options) {
