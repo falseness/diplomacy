@@ -36,9 +36,9 @@ const {
 const DEFAULT_CHECKPOINT =
   '/mnt/storage/diplomacy/checkpoints/task155-advanced20-20260620/step-00000020';
 const DEFAULT_OUTPUT =
-  '/mnt/storage/diplomacy/benchmarks/task063-all-gamestart-ai-vs-simple.json';
+  '/mnt/storage/diplomacy/benchmarks/task156-all-gamestart-ai-vs-simple.json';
 const DEFAULT_FAILURE_DIR =
-  '/mnt/storage/diplomacy/benchmarks/task063-all-gamestart-failures';
+  '/mnt/storage/diplomacy/benchmarks/task156-all-gamestart-failures';
 const DEFAULT_FIRST_SEED = 63000;
 const DEFAULT_SEEDS = 2;
 const DEFAULT_ROUND_LIMIT = 1200;
@@ -635,7 +635,7 @@ async function runBenchmark(options) {
               mapEntry, candidateSlot, seed, options, checkpoint);
             games.push(game);
             console.error(
-              'TASK-063 game ' + (games.length + crashes.length) + ': ' +
+              'TASK-156 game ' + (games.length + crashes.length) + ': ' +
               game.mapName + ' seed ' + seed +
               ' candidateSlot=' + candidateSlot +
               ' winner=' + game.winner +
@@ -690,7 +690,7 @@ async function runBenchmark(options) {
             writeJson(options.output, buildReport(
               coverage, maps, options, checkpoint, games, crashes, 'running'));
             console.error(
-              'TASK-063 crash ' + (games.length + crashes.length) + ': ' +
+              'TASK-156 crash ' + (games.length + crashes.length) + ': ' +
               mapEntry.name + ' seed ' + seed +
               ' candidateSlot=' + candidateSlot +
               ' message=' + error.message

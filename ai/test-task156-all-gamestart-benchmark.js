@@ -7,6 +7,8 @@ const {
   enumerateGamestartMapCoverage
 } = require('./gamestart-map-coverage');
 
+const repoRoot = path.resolve(__dirname, '..');
+
 function assert(condition, message, details) {
   if (!condition) {
     const error = new Error(message);
@@ -16,6 +18,69 @@ function assert(condition, message, details) {
     throw error;
   }
 }
+
+function readRepoFile(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
+
+function extractBlock(source, marker) {
+  const start = source.indexOf(marker);
+  assert(start !== -1, 'missing source marker ' + marker);
+  const brace = source.indexOf('{', start);
+  assert(brace !== -1, 'missing opening brace for ' + marker);
+  let depth = 0;
+  for (let index = brace; index < source.length; ++index) {
+    if (source[index] === '{') {
+      ++depth;
+    } else if (source[index] === '}') {
+      --depth;
+      if (depth === 0) {
+        return source.slice(brace + 1, index);
+      }
+    }
+  }
+  throw new Error('unterminated source block for ' + marker);
+}
+
+function assertNoTask156ComparisonShortcuts() {
+  const playersSource = readRepoFile('ai/players.js');
+  const economyPlayerSource = extractBlock(
+    playersSource, 'class AIPlayerWithEconomy');
+  const benchmarkSource = readRepoFile('ai/benchmark-gamestart-all-slots.js');
+  const runtimeScenarioSource = extractBlock(
+    benchmarkSource, 'function runRuntimeScenario');
+
+  const forbiddenPlayerPatterns = [
+    { pattern: /grid\s*\.\s*arr\s*\.\s*length\s*(?:={2,3}|[<>]=?)\s*\d+/, label: 'grid width special case' },
+    { pattern: /grid\s*\.\s*arr\s*\[\s*0\s*\]\s*\.\s*length\s*(?:={2,3}|[<>]=?)\s*\d+/, label: 'grid height special case' },
+    { pattern: /open field|tiny economy|strategic war|rush or defend|two rivers|tower defense/i, label: 'gamestart map-name branch' },
+    { pattern: /candidateGoldBonus|simpleHandicap|artificialAdvantage/i, label: 'named artificial advantage hook' }
+  ];
+  const playerOffenders = forbiddenPlayerPatterns.filter(entry =>
+    entry.pattern.test(economyPlayerSource)).map(entry => entry.label);
+  assert(
+    playerOffenders.length === 0,
+    'AIPlayerWithEconomy contains TASK-156 comparison shortcuts',
+    playerOffenders
+  );
+
+  const forbiddenRuntimePatterns = [
+    { pattern: /\.concede\s*\(/, label: 'forced player concession' },
+    { pattern: /\.gold\s*[+\-*/]?=/, label: 'runtime gold mutation' },
+    { pattern: /\.hp\s*[+\-*/]?=/, label: 'runtime HP mutation' },
+    { pattern: /\.units\s*\.push\s*\(/, label: 'runtime unit injection' },
+    { pattern: /candidateGoldBonus|simpleHandicap|artificialAdvantage/i, label: 'named artificial advantage hook' }
+  ];
+  const runtimeOffenders = forbiddenRuntimePatterns.filter(entry =>
+    entry.pattern.test(runtimeScenarioSource)).map(entry => entry.label);
+  assert(
+    runtimeOffenders.length === 0,
+    'TASK-156 benchmark grants an artificial comparison advantage',
+    runtimeOffenders
+  );
+}
+
+assertNoTask156ComparisonShortcuts();
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task156-'));
 const reportPath = path.join(temporary, 'report.json');
