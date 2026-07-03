@@ -117,3 +117,20 @@ class LongTimer extends Timer {
         return res
     }
 }
+
+function recalculatePlayerTimer(playerIndex, packedTimer) {
+    const previousWhooseTurn = whooseTurn
+    whooseTurn = playerIndex
+    unpacker.setPlayerTimerByIndex(playerIndex, packedTimer)
+
+    try {
+        let playerTimer = packedTimer && packedTimer.type == 'long'
+            ? new LongTimer(packedTimer.time)
+            : new Timer()
+        playerTimer.setNextTurnTime()
+        unpacker.setPlayerTimerByIndex(playerIndex, playerTimer)
+        return JSON.parse(unpacker.getPlayerTimerByIndex(playerIndex))
+    } finally {
+        whooseTurn = previousWhooseTurn
+    }
+}
