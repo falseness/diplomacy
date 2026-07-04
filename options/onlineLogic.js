@@ -24,7 +24,6 @@ class OnlineLogic {
 
 function SetupServerCommunicationLogic(password) {
     const socket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
-    const onlineGoldCorrectionByPlayer = {}
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
@@ -48,15 +47,16 @@ function SetupServerCommunicationLogic(password) {
         game = JSON.stringify(game)
         loadFromJson(game)
         GameManager.updateCameraBorders()
-        timer.setNextTurnTime()
         nextTurnPauseInterface.visible = true
         
         unfreezeGame()
         
-        const playerIndex = whooseTurn
-        const goldBeforeNextTurn = players[playerIndex].gold
-        players[playerIndex].nextTurn()
-        onlineGoldCorrectionByPlayer[playerIndex] = players[playerIndex].gold - goldBeforeNextTurn
+        const packedTimer = JSON.parse(unpacker.getPlayerTimerByIndex(whooseTurn))
+        players[whooseTurn].nextTurn()
+        if (packedTimer.type != 'long') {
+            timer.setNextTurnTime()
+            unpacker.setPlayerTimerByIndex(whooseTurn, timer)
+        }
         gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
@@ -85,10 +85,6 @@ function SetupServerCommunicationLogic(password) {
     SendNextTurn = () => {
         console.log('SendNextTurn')
         const gameObject = getGameObject()
-        const goldCorrection = onlineGoldCorrectionByPlayer[whooseTurn] || 0
-        if (goldCorrection && gameObject.players[whooseTurn]) {
-            gameObject.players[whooseTurn].gold -= goldCorrection
-        }
         socket.emit('nextTurn', JSON.stringify({
             'password': password,
             'game': gameObject,
