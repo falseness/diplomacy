@@ -24,6 +24,7 @@ class OnlineLogic {
 
 function SetupServerCommunicationLogic(password) {
     const socket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
+    const onlineGoldCorrectionByPlayer = {}
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
@@ -52,7 +53,10 @@ function SetupServerCommunicationLogic(password) {
         
         unfreezeGame()
         
-        players[whooseTurn].nextTurn()
+        const playerIndex = whooseTurn
+        const goldBeforeNextTurn = players[playerIndex].gold
+        players[playerIndex].nextTurn()
+        onlineGoldCorrectionByPlayer[playerIndex] = players[playerIndex].gold - goldBeforeNextTurn
         gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
@@ -80,12 +84,16 @@ function SetupServerCommunicationLogic(password) {
     }))
     SendNextTurn = () => {
         console.log('SendNextTurn')
+        const gameObject = getGameObject()
+        const goldCorrection = onlineGoldCorrectionByPlayer[whooseTurn] || 0
+        if (goldCorrection && gameObject.players[whooseTurn]) {
+            gameObject.players[whooseTurn].gold -= goldCorrection
+        }
         socket.emit('nextTurn', JSON.stringify({
             'password': password,
-            'game': getGameObject(),
+            'game': gameObject,
             // whoseTurn currently means the only index of CURRENT player on client
             'whooseTurn': whooseTurn
         }))
     }
 }
-
