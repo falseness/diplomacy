@@ -52,7 +52,7 @@ function SetupServerCommunicationLogic(password) {
         unfreezeGame()
         
         const packedTimer = JSON.parse(unpacker.getPlayerTimerByIndex(whooseTurn))
-        players[whooseTurn].nextTurn()
+        //players[whooseTurn].nextTurn()
         if (packedTimer.type != 'long') {
             timer.setNextTurnTime()
             unpacker.setPlayerTimerByIndex(whooseTurn, timer)
