@@ -23,13 +23,12 @@ class OnlineLogic {
 }
 
 function SetupServerCommunicationLogic(password) {
-    const socket = io('wss://playdiplomacy.online:8080')
+    const socket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
         
         game = JSON.parse(game)
-        game.timers[game.whooseTurn] = new Timer()
         game = JSON.stringify(game)
         loadFromJson(game)
         timer.setNextTurnTime()
@@ -45,7 +44,6 @@ function SetupServerCommunicationLogic(password) {
 
         console.log(`playYourTurn`)
         game = JSON.parse(game)
-        game.timers[game.whooseTurn] = new Timer()
         game = JSON.stringify(game)
         loadFromJson(game)
         GameManager.updateCameraBorders()
