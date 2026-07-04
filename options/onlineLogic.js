@@ -35,8 +35,6 @@ function SetupServerCommunicationLogic(password) {
         
         nextTurnPauseInterface.visible = false
         unfreezeGame()
-        // we do not call players[whooseTurn].nextTurn() here 
-        // since we call startTurn in the beginning of the game
         gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
@@ -51,12 +49,6 @@ function SetupServerCommunicationLogic(password) {
         
         unfreezeGame()
         
-        const packedTimer = JSON.parse(unpacker.getPlayerTimerByIndex(whooseTurn))
-        //players[whooseTurn].nextTurn()
-        if (packedTimer.type != 'long') {
-            timer.setNextTurnTime()
-            unpacker.setPlayerTimerByIndex(whooseTurn, timer)
-        }
         gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
