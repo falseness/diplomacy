@@ -47,12 +47,16 @@ function SetupServerCommunicationLogic(password) {
         game = JSON.stringify(game)
         loadFromJson(game)
         GameManager.updateCameraBorders()
-        timer.setNextTurnTime()
         nextTurnPauseInterface.visible = true
         
         unfreezeGame()
         
+        const packedTimer = JSON.parse(unpacker.getPlayerTimerByIndex(whooseTurn))
         players[whooseTurn].nextTurn()
+        if (packedTimer.type != 'long') {
+            timer.setNextTurnTime()
+            unpacker.setPlayerTimerByIndex(whooseTurn, timer)
+        }
         gameEvent.screen.moveToPlayer(players[whooseTurn])
         
     });
@@ -80,12 +84,12 @@ function SetupServerCommunicationLogic(password) {
     }))
     SendNextTurn = () => {
         console.log('SendNextTurn')
+        const gameObject = getGameObject()
         socket.emit('nextTurn', JSON.stringify({
             'password': password,
-            'game': getGameObject(),
+            'game': gameObject,
             // whoseTurn currently means the only index of CURRENT player on client
             'whooseTurn': whooseTurn
         }))
     }
 }
-
