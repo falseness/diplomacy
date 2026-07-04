@@ -76,6 +76,7 @@ function SetupServerCommunicationLogic(password) {
     }))
     SendNextTurn = () => {
         console.log('SendNextTurn')
+        console.trace('SendNextTurn called')
         const gameObject = getGameObject()
         socket.emit('nextTurn', JSON.stringify({
             'password': password,
