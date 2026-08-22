@@ -32,7 +32,6 @@ function SetupServerCommunicationLogic(password) {
         game = JSON.parse(game)
         game = JSON.stringify(game)
         loadFromJson(game)
-        timer.setNextTurnTime()
         
         nextTurnPauseInterface.visible = false
         unfreezeGame()
