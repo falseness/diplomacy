@@ -3,6 +3,7 @@ let SendNextTurn
 
 function unfreezeGame() {
     gameEvent.waitingMode = false
+    timer.updateLastPause()
     nextTurnButton.highlightButton = false
     undoButton.enableClick()
     nextTurnButton.enableClick()
