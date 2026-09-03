@@ -31,7 +31,6 @@ const SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP = 44
 const SIMPLE_ECONOMY_DEFAULT_ACTION_LIMIT = 12
 const SIMPLE_ECONOMY_DEFAULT_COMMAND_LIMIT = 200
 const SIMPLE_ECONOMY_STALEMATE_PATH_ROUND = 120
-const SIMPLE_ECONOMY_CONCESSION_ROUNDS_BEFORE_SUDDEN_DEATH = 20
 const SIMPLE_ECONOMY_LARGE_MAP_CELL_THRESHOLD = 600
 
 function compareAiTargets(townBonus) {
@@ -476,62 +475,6 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         return ownTowns - strongestOpponentTowns
     }
-    getConcessionScore(player) {
-        let towns = this.getLiveTownCount(player)
-        let units = this.getLiveUnitCount(player)
-        let income = typeof player.income == 'number' ? player.income : 0
-        let gold = typeof player.gold == 'number' ? player.gold : 0
-        return towns * 10000 + units * 100 + income * 10 + gold / 100
-    }
-    concede() {
-        let towns = this.towns.slice()
-        for (let i = 0; i < towns.length; ++i) {
-            if (!towns[i].killed && towns[i].kill) {
-                towns[i].kill()
-            }
-        }
-        let units = this.units.slice()
-        for (let i = 0; i < units.length; ++i) {
-            if (!units[i].killed && units[i].kill) {
-                units[i].kill()
-            }
-        }
-        this.towns = []
-        this.units = []
-        this.gold = 0
-    }
-    concedeLateStalemateIfBehind() {
-        if (typeof players == 'undefined' || typeof gameRound == 'undefined' ||
-                typeof suddenDeathRound == 'undefined') {
-            return false
-        }
-        if (gameRound < suddenDeathRound -
-                SIMPLE_ECONOMY_CONCESSION_ROUNDS_BEFORE_SUDDEN_DEATH) {
-            return false
-        }
-        let playerIndexForThis = this.getPlayerIndex()
-        let active = []
-        for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
-            if (!players[playerIndex].isNeutral && !players[playerIndex].isLost) {
-                active.push({
-                    index: playerIndex,
-                    player: players[playerIndex],
-                    score: this.getConcessionScore(players[playerIndex])
-                })
-            }
-        }
-        if (active.length <= 1) {
-            return false
-        }
-        active.sort(function(left, right) {
-            return right.score - left.score || left.index - right.index
-        })
-        if (active[0].index == playerIndexForThis) {
-            return false
-        }
-        this.concede()
-        return true
-    }
     findUnitAttackCommand(unit) {
         let commands = unit.getAvailableCommands()
         let playerIndex = this.getPlayerIndex()
@@ -633,9 +576,6 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
     }
     play() {
-        if (this.concedeLateStalemateIfBehind()) {
-            return
-        }
         if (this.economyMode == 'war') {
             let economyState = this.inspectEconomy()
             let purchaseLimit = economyState.towns.length > 1 ?
@@ -771,6 +711,30 @@ class AIPlayer extends Player {
         let vectorisedGrids = []
         if (commands.length == 0) {
             return {commands: validCommands, chances: []}
+        }
+        if (typeof createMutableVectorGrid != 'function' ||
+                typeof applyFastAction != 'function' ||
+                typeof undoFastAction != 'function') {
+            for (let i = 0; i < commands.length; ++i) {
+                let progressState = this.captureCommandProgressState(commands[i])
+                if (!applyCommand.call(this, commands[i])) {
+                    continue
+                }
+                try {
+                    if (this.commandMadeAuthoritativeProgress(progressState)) {
+                        validCommands.push(commands[i])
+                        vectorisedGrids.push(vectoriseGrid())
+                    }
+                }
+                finally {
+                    actionManager.undo()
+                }
+            }
+            return {
+                commands: validCommands,
+                chances: validCommands.length == 0 ?
+                    [] : this.getWinningChances(vectorisedGrids)
+            }
         }
         let baselineVectorGrid = vectoriseGrid()
         let mutableGrid = createMutableVectorGrid(baselineVectorGrid)
@@ -1691,10 +1655,6 @@ class AIPlayerWithEconomy extends AIPlayer {
         console.log('player reached hard limit')
     }
     doActions() {
-        if (this.shouldUseLearnedCombatOnlyTurn()) {
-            this.doLearnedCombatOnlyActions()
-            return
-        }
         if (!this.bestEnemyTargetForAI) {
             this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
         }

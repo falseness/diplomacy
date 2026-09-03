@@ -13,6 +13,8 @@ const { scoreFinalEconomyVector } =
 const CELL_VECTOR_SIZE = 78;
 const ECONOMY_MODEL_WIDTH = 9;
 const ECONOMY_MODEL_HEIGHT = 9;
+const ECONOMY_CONV_FILTERS = 16;
+const ECONOMY_HIDDEN_UNITS = 64;
 const ACTION_CATEGORIES = [
   'unit-command',
   'unit-training',
@@ -102,18 +104,23 @@ function createModel(height, width) {
     name: 'board'
   });
   const globalInput = tf.input({ shape: [1], name: 'global_variables' });
-  const flattened = tf.layers.flatten().apply(boardInput);
+  const spatialFeatures = tf.layers.conv2d({
+    filters: ECONOMY_CONV_FILTERS,
+    kernelSize: 3,
+    padding: 'same',
+    activation: 'relu'
+  }).apply(boardInput);
+  const flattened = tf.layers.flatten().apply(spatialFeatures);
   const merged = tf.layers.concatenate().apply([flattened, globalInput]);
-  const hidden1 = tf.layers.dense({ units: 384, activation: 'relu' }).apply(merged);
-  const hidden2 = tf.layers.dense({ units: 256, activation: 'relu' }).apply(hidden1);
-  const hidden3 = tf.layers.dense({ units: 128, activation: 'relu' }).apply(hidden2);
-  const hidden4 = tf.layers.dense({ units: 64, activation: 'relu' }).apply(hidden3);
-  const hidden5 = tf.layers.dense({ units: 32, activation: 'relu' }).apply(hidden4);
+  const hidden = tf.layers.dense({
+    units: ECONOMY_HIDDEN_UNITS,
+    activation: 'relu'
+  }).apply(merged);
   const output = tf.layers.dense({
     units: 1,
     activation: 'linear',
     name: 'value_output'
-  }).apply(hidden5);
+  }).apply(hidden);
   const model = tf.model({ inputs: [boardInput, globalInput], outputs: output });
   model.compile({
     optimizer: tf.train.adam(0.001),
@@ -497,11 +504,10 @@ function createTrainingBatch(
           turnsPlayed += 1
           continue
         }
-        let commands = player.getPrioritizedActionCommands ?
-          player.getPrioritizedActionCommands(__trainingCandidateLimit) :
-          player.getActionCommands().slice(0, __trainingCandidateLimit)
+        let commands = player.getActionCommands()
         let bestCommand = null
         let bestLabel = -Infinity
+        let stateLabelStart = labels.length
         for (let index = 0; index < commands.length; ++index) {
           if (!player.applyActionCommand(commands[index])) {
             continue
@@ -524,6 +530,16 @@ function createTrainingBatch(
             bestCommand = commands[index]
           }
           actionManager.undo()
+        }
+        let stateLabels = labels.slice(stateLabelStart)
+        if (stateLabels.length) {
+          let stateMin = Math.min(...stateLabels)
+          let stateMax = Math.max(...stateLabels)
+          let stateRange = stateMax - stateMin
+          for (let index = stateLabelStart; index < labels.length; ++index) {
+            labels[index] = stateRange > 0 ?
+              (labels[index] - stateMin) / stateRange : 0.5
+          }
         }
         if (bestCommand) {
           player.applyActionCommand(bestCommand)
