@@ -657,6 +657,10 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
     chosenNonFirst:
       loadedCheckpoint.inference.chosenNonFirst - inferenceBefore.chosenNonFirst
   };
+  game.trajectoryHash = crypto.createHash('sha256').update(JSON.stringify({
+    scenarioHash: game.scenarioHash,
+    trajectory: game.trajectory
+  })).digest('hex');
   return game;
 }
 
@@ -696,6 +700,10 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
 
 function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
   const gamesPerSide = options.games / 2;
+  const uniqueScenarioCount = new Set(
+    games.map(game => game.scenarioHash)).size;
+  const uniqueTrajectoryCount = new Set(
+    games.map(game => game.trajectoryHash)).size;
   const cleanGames = games.filter(game => game.cleanPreSuddenDeathWin);
   const suddenDeathCandidateWins = games.filter(game => game.suddenDeathCandidateWin);
   const completedGames = games.filter(game => game.winnerSide !== null);
@@ -724,7 +732,8 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
       name: SCENARIO_POLICY,
       frozenBeforeFinalTest: true,
       fairness: '180-degree mirrored towns, units, and blocked cells',
-      distinctScenarioInputs: new Set(games.map(game => game.scenarioHash)).size
+      distinctScenarioInputs: uniqueScenarioCount,
+      distinctRuntimeTrajectories: uniqueTrajectoryCount
     },
     candidatePolicy: {
       classification: 'trained value model ranks every bounded legal action',
@@ -766,7 +775,8 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
       crashes: crashes.length,
       nonWins: failedGames.length + crashes.length,
       runtimeGamesExecuted: games.length,
-      uniqueScenarioCount: new Set(games.map(game => game.scenarioHash)).size
+      uniqueScenarioCount,
+      uniqueTrajectoryCount
     },
     failedSeeds: failedGames.map(game => game.seed).concat(crashes.map(crash => crash.seed)),
     failedGames,
@@ -790,6 +800,10 @@ async function main() {
     console.log('Benchmark report: ' + outputPath);
     if (result.summary.completedGames < options.games) {
       throw new Error('fewer than requested games completed');
+    }
+    if (result.summary.uniqueScenarioCount !== options.games ||
+        result.summary.uniqueTrajectoryCount !== options.games) {
+      throw new Error('every requested game must have a distinct scenario and trajectory');
     }
     if (result.summary.candidateWinRate < options.minWinRate ||
         result.summary.nonWins > 0) {

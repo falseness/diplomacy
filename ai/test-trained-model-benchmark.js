@@ -63,6 +63,10 @@ async function main() {
     'focused benchmark did not execute distinct seeded scenarios');
   assert(new Set(report.games.map(game => game.scenarioHash)).size === 2,
     'scenario hashes were repeated');
+  assert(report.summary.uniqueTrajectoryCount === 2,
+    'focused benchmark did not execute distinct runtime trajectories');
+  assert(report.games.every(game => /^[0-9a-f]{64}$/.test(game.trajectoryHash)),
+    'runtime trajectory hashes were not reported');
   assert(report.scenarioPolicy.name === 'seeded-mirrored-big-map-v1',
     'seeded scenario policy was not reported');
   assert(
