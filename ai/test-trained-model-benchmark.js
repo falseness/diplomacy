@@ -14,7 +14,7 @@ function assert(condition, message) {
 }
 
 async function createCheckpoint(checkpointDir) {
-  const board = tf.input({ shape: [3, 3, 21], name: 'board' });
+  const board = tf.input({ shape: [21, 21, 78], name: 'board' });
   const globals = tf.input({ shape: [1], name: 'global_variables' });
   const flattened = tf.layers.flatten().apply(board);
   const merged = tf.layers.concatenate().apply([flattened, globals]);
@@ -69,9 +69,9 @@ async function main() {
   );
   assert(report.summary.cleanCandidateWins === 2, 'focused candidate did not win cleanly');
   assert(report.summary.thresholdEligibleCandidateWins === 2, 'threshold-eligible wins were not reported');
-  assert(report.summary.cleanPreSuddenDeathCandidateWins === 2, 'clean pre-sudden-death wins were not reported');
+  assert(report.summary.cleanPreSuddenDeathCandidateWins === 2, 'clean wins were not reported');
   assert(report.summary.suddenDeathCandidateWins === 0, 'sudden-death candidate wins were not separated');
-  assert(report.summary.candidateWinsIncludingSuddenDeath === 2, 'all candidate wins were not reported separately');
+  assert(report.summary.candidateWinsIncludingSuddenDeath === 2, 'candidate wins were not reported');
   assert(report.summary.candidateWinRate === 1, 'clean win rate was not reported correctly');
   assert(report.summary.cleanCandidateWinRate === 1, 'explicit clean win rate was not reported correctly');
   assert(report.summary.candidateWinRateIncludingSuddenDeath === 1,
@@ -79,7 +79,7 @@ async function main() {
   assert(report.summary.suddenDeathGames === 0, 'focused seeds should not reach sudden death');
   assert(report.summary.timeouts === 0, 'focused seeds should not time out');
   assert(report.summary.nonWins === 0, 'focused seeds should not report non-wins');
-  assert(report.failedSeeds.length === 0, 'failed seeds were not filtered correctly');
+  assert(report.failedSeeds.length === 0, 'focused seeds were reported as failures');
   assert(
     report.games.every(game => game.cleanPreSuddenDeathWin && game.thresholdEligibleWin),
     'focused game rows did not expose clean threshold eligibility'

@@ -3,14 +3,16 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const tf = require('@tensorflow/tfjs-node');
 const {
   BENCHMARK_MAPS,
-  PLAYER_CLASSES,
   writeResult
 } = require('./benchmarkHarness');
 
 const repoRoot = path.resolve(__dirname, '..');
+const MODEL_INFERENCE_BATCH_SIZE = 8;
 
 function usage() {
   return [
@@ -18,13 +20,10 @@ function usage() {
     '',
     'Options:',
     '  --checkpoint PATH      Checkpoint directory or model.json path',
-    '  --candidate CLASS      Candidate runtime class (default: AIPlayerWithEconomy)',
-    '  --baseline CLASS       Baseline runtime class (default: SimpleAiPlayer)',
     '  --map NAME             Big benchmark map (default: big-open-field)',
     '  --games NUMBER         Balanced game count, minimum 100 (default: 100)',
     '  --seed NUMBER          First deterministic seed (default: 1)',
     '  --round-limit NUMBER   Maximum nextTurn calls per game (default: 60)',
-    '  --action-limit NUMBER  Maximum learned actions per AI turn (default: 30)',
     '  --min-win-rate NUMBER  Required clean-game win rate (default: 0.8)',
     '  --output PATH          JSON report path',
     '  --help                 Show this help'
@@ -39,19 +38,15 @@ function parseArgs(argv) {
     games: 100,
     seed: 1,
     roundLimit: 60,
-    actionLimit: 30,
     minWinRate: 0.8,
     output: path.join('artifacts', 'benchmarks', 'trained-vs-simple-big-map.json')
   };
   const names = {
     '--checkpoint': 'checkpoint',
-    '--candidate': 'candidate',
-    '--baseline': 'baseline',
     '--map': 'mapName',
     '--games': 'games',
     '--seed': 'seed',
     '--round-limit': 'roundLimit',
-    '--action-limit': 'actionLimit',
     '--min-win-rate': 'minWinRate',
     '--output': 'output'
   };
@@ -67,7 +62,7 @@ function parseArgs(argv) {
     }
     options[name] = argv[++index];
   }
-  for (const name of ['games', 'seed', 'roundLimit', 'actionLimit', 'minWinRate']) {
+  for (const name of ['games', 'seed', 'roundLimit', 'minWinRate']) {
     options[name] = Number(options[name]);
     if (!Number.isFinite(options[name])) {
       throw new Error(name + ' must be numeric');
@@ -86,14 +81,14 @@ function validateOptions(options) {
   if (!Number.isInteger(options.roundLimit) || options.roundLimit <= 0) {
     throw new Error('roundLimit must be a positive integer');
   }
-  if (!Number.isInteger(options.actionLimit) || options.actionLimit <= 0) {
-    throw new Error('actionLimit must be a positive integer');
-  }
   if (!(options.minWinRate >= 0 && options.minWinRate <= 1)) {
     throw new Error('minWinRate must be between 0 and 1');
   }
-  if (!PLAYER_CLASSES[options.candidate] || !PLAYER_CLASSES[options.baseline]) {
-    throw new Error('candidate and baseline must name available runtime player classes');
+  if (options.candidate !== 'AIPlayerWithEconomy' ||
+      options.baseline !== 'SimpleAiPlayer') {
+    throw new Error(
+      'trained benchmark requires unchanged AIPlayerWithEconomy versus SimpleAiPlayer'
+    );
   }
   const map = BENCHMARK_MAPS[options.mapName];
   if (!map || map.width < 20 || map.height < 20) {
@@ -121,6 +116,23 @@ function modelSignature(model) {
   return {
     inputs: model.inputs.map(input => input.shape),
     outputs: model.outputs.map(output => output.shape)
+  };
+}
+
+function sha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function repositoryProvenance() {
+  return {
+    commit: execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    }).trim(),
+    dirtyStatus: execFileSync('git', ['status', '--short'], {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    }).trim().split('\n').filter(Boolean)
   };
 }
 
@@ -157,15 +169,27 @@ async function loadCheckpoint(checkpointArgument) {
     model,
     report: {
       path: files.checkpointDir,
+      files: {
+        model: { path: files.modelPath, sha256: sha256(files.modelPath) },
+        metadata: { path: files.metadataPath, sha256: sha256(files.metadataPath) }
+      },
       metadata,
       signature,
-      predictionProbe: probe
+      predictionProbe: probe,
+      repository: repositoryProvenance(),
+      sourceFiles: {
+        benchmark: sha256(__filename),
+        playerPolicy: sha256(path.join(repoRoot, 'ai', 'players.js')),
+        modelPolicy: sha256(path.join(repoRoot, 'ai', 'model.js'))
+      }
     },
     inference: {
       calls: 0,
+      batches: 0,
       positions: 0,
-      resizedInputs: 0,
-      channelAdaptations: 0,
+      scoringCalls: 0,
+      nonConstantScoringCalls: 0,
+      chosenNonFirst: 0,
       scoring: 'runtime-player-predict-hook'
     }
   };
@@ -287,46 +311,6 @@ function loadBrowserScripts(context) {
   `, { filename: 'task047-checkpoint-binding.js' }).runInContext(context);
 }
 
-function boardSize(board) {
-  return {
-    width: board.length,
-    height: board[0] ? board[0].length : 0,
-    channels: board[0] && board[0][0] ? board[0][0].length : 0
-  };
-}
-
-function adaptCellChannels(cell, expectedChannels, stats) {
-  if (cell.length === expectedChannels) {
-    return cell.slice(0, expectedChannels);
-  }
-  stats.channelAdaptations += 1;
-  if (cell.length > expectedChannels) {
-    return cell.slice(0, expectedChannels);
-  }
-  return cell.concat(new Array(expectedChannels - cell.length).fill(0));
-}
-
-function adaptBoard(board, expectedWidth, expectedHeight, expectedChannels, stats) {
-  const size = boardSize(board);
-  if (size.width !== expectedWidth || size.height !== expectedHeight) {
-    stats.resizedInputs += 1;
-  }
-  const adapted = new Array(expectedWidth);
-  for (let x = 0; x < expectedWidth; ++x) {
-    adapted[x] = new Array(expectedHeight);
-    const sourceX = Math.min(size.width - 1, Math.floor(x * size.width / expectedWidth));
-    for (let y = 0; y < expectedHeight; ++y) {
-      const sourceY = Math.min(size.height - 1, Math.floor(y * size.height / expectedHeight));
-      adapted[x][y] = adaptCellChannels(
-        board[sourceX][sourceY],
-        expectedChannels,
-        stats
-      );
-    }
-  }
-  return adapted;
-}
-
 function createPredictor(model, stats) {
   const inputShape = model.inputs[0].shape;
   return function predictFromCheckpoint(checkpointModel, vectors) {
@@ -338,38 +322,79 @@ function createPredictor(model, stats) {
     for (const vector of vectors) {
       const board = vector[0];
       const globalValue = Number(vector[1]) || 0;
-      adaptedBoards.push(adaptBoard(
-        board,
-        expectedWidth,
-        expectedHeight,
-        expectedChannels,
-        stats
-      ));
+      const actualWidth = board.length;
+      const actualHeight = board[0] ? board[0].length : 0;
+      const actualChannels = board[0] && board[0][0] ? board[0][0].length : 0;
+      if (actualWidth !== expectedWidth || actualHeight !== expectedHeight ||
+          actualChannels !== expectedChannels) {
+        throw new Error(
+          'checkpoint input must exactly match runtime map vectors: expected ' +
+          [expectedWidth, expectedHeight, expectedChannels].join('x') +
+          ', received ' + [actualWidth, actualHeight, actualChannels].join('x')
+        );
+      }
+      adaptedBoards.push(board);
       globals.push([globalValue]);
     }
     stats.calls += 1;
     stats.positions += vectors.length;
-    const boardTensor = tf.tensor4d(
-      adaptedBoards.flat(3),
-      [adaptedBoards.length, expectedWidth, expectedHeight, expectedChannels]
-    );
-    const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
-    try {
-      const prediction = checkpointModel.predict([boardTensor, globalTensor]);
-      const values = Array.from(prediction.dataSync());
-      if (!stats.modelProbe) {
-        stats.modelProbe = values.slice(0, 8);
+    const values = [];
+    for (let start = 0; start < adaptedBoards.length;
+        start += MODEL_INFERENCE_BATCH_SIZE) {
+      const end = Math.min(start + MODEL_INFERENCE_BATCH_SIZE, adaptedBoards.length);
+      const boardBatch = adaptedBoards.slice(start, end);
+      const globalBatch = globals.slice(start, end);
+      const boardTensor = tf.tensor4d(
+        boardBatch.flat(3),
+        [boardBatch.length, expectedWidth, expectedHeight, expectedChannels]
+      );
+      const globalTensor = tf.tensor2d(globalBatch, [globalBatch.length, 1]);
+      try {
+        const prediction = checkpointModel.predict([boardTensor, globalTensor]);
+        values.push(...Array.from(prediction.dataSync()));
+        prediction.dispose();
+        ++stats.batches;
+      } finally {
+        boardTensor.dispose();
+        globalTensor.dispose();
       }
-      prediction.dispose();
-      return values.map(score => [score]);
-    } finally {
-      boardTensor.dispose();
-      globalTensor.dispose();
     }
+    if (!stats.modelProbe) {
+      stats.modelProbe = values.slice(0, MODEL_INFERENCE_BATCH_SIZE);
+    }
+    if (values.length > 1) {
+      ++stats.scoringCalls;
+      const firstValue = values[0];
+      let maxIndex = 0;
+      let isConstant = true;
+      for (let index = 1; index < values.length; ++index) {
+        if (values[index] !== firstValue) {
+          isConstant = false;
+        }
+        if (values[index] > values[maxIndex]) {
+          maxIndex = index;
+        }
+      }
+      if (!isConstant) {
+        ++stats.nonConstantScoringCalls;
+      }
+      if (maxIndex !== 0) {
+        ++stats.chosenNonFirst;
+      }
+    }
+    return values.map(score => [score]);
   };
 }
 
 function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
+  const inferenceBefore = {
+    calls: loadedCheckpoint.inference.calls,
+    batches: loadedCheckpoint.inference.batches,
+    positions: loadedCheckpoint.inference.positions,
+    scoringCalls: loadedCheckpoint.inference.scoringCalls,
+    nonConstantScoringCalls: loadedCheckpoint.inference.nonConstantScoringCalls,
+    chosenNonFirst: loadedCheckpoint.inference.chosenNonFirst
+  };
   const predictor = createPredictor(loadedCheckpoint.model, loadedCheckpoint.inference);
   const context = createRuntimeContext(seed, predictor, loadedCheckpoint.model);
   loadBrowserScripts(context);
@@ -379,11 +404,10 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
   context.__candidateClass = options.candidate;
   context.__baselineClass = options.baseline;
   context.__roundLimit = options.roundLimit;
-  return new vm.Script(`(() => {
+  const game = new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = true
     gameSettings.isOnline = false
-    gameSettings.aiActionLimit = ${Number(options.actionLimit)}
     entityInterface = {change() {}, hide() {}}
     townInterface = {change() {}, hide() {}}
     barrackInterface = {change() {}, hide() {}}
@@ -489,6 +513,17 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
           ? 'sudden-death-candidate-win'
           : (candidateWon ? 'candidate-win-with-benchmark-flag' : 'candidate-non-win')),
       benchmarkPolicy: 'real GameMap with runtime checkpoint inference versus SimpleAiPlayer',
+      terminationReason: winnerIndex == null ?
+        (timeout ? 'round-limit-timeout' :
+          (suddenDeath ? 'sudden-death-non-result' : 'non-result')) :
+        'opponent-eliminated',
+      exactClassAssignment:
+        players[1].constructor.name ==
+          (__candidateSide == 'A' ? 'AIPlayerWithEconomy' : 'SimpleAiPlayer') &&
+        players[2].constructor.name ==
+          (__candidateSide == 'B' ? 'AIPlayerWithEconomy' : 'SimpleAiPlayer'),
+      genuineOpponentElimination: candidateWon &&
+        players[__candidateSide == 'A' ? 2 : 1].isLost,
       players: players.slice(1).map(function(player, index) {
         return {
           side: index == 0 ? 'A' : 'B',
@@ -502,6 +537,18 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
       })
     }
   })()`, { filename: 'task047-runtime-game.js' }).runInContext(context);
+  game.gameplayInference = {
+    calls: loadedCheckpoint.inference.calls - inferenceBefore.calls,
+    batches: loadedCheckpoint.inference.batches - inferenceBefore.batches,
+    positions: loadedCheckpoint.inference.positions - inferenceBefore.positions,
+    scoringCalls: loadedCheckpoint.inference.scoringCalls - inferenceBefore.scoringCalls,
+    nonConstantScoringCalls:
+      loadedCheckpoint.inference.nonConstantScoringCalls -
+      inferenceBefore.nonConstantScoringCalls,
+    chosenNonFirst:
+      loadedCheckpoint.inference.chosenNonFirst - inferenceBefore.chosenNonFirst
+  };
+  return game;
 }
 
 function gameSeedAt(options, index) {
@@ -543,7 +590,10 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
     !game.candidateWon ||
     game.timeout ||
     game.suddenDeath ||
-    game.nonResult
+    game.nonResult ||
+    !game.exactClassAssignment ||
+    !game.genuineOpponentElimination ||
+    game.gameplayInference.calls === 0
   );
   return {
     config: {
@@ -554,8 +604,20 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       gamesPerSide,
       seed: options.seed,
       roundLimit: options.roundLimit,
-      actionLimit: options.actionLimit,
       minWinRate: options.minWinRate
+    },
+    candidatePolicy: {
+      classification: 'hybrid production runtime class',
+      modelScoredComponents: [
+        'turn-state evaluation',
+        'immediate-attack selection among legal attack commands'
+      ],
+      deterministicRuntimeComponents: [
+        'economy production',
+        'target-directed non-attack movement',
+        'legal-command generation'
+      ],
+      benchmarkOverrides: []
     },
     checkpoint: Object.assign({}, loadedCheckpoint.report, {
       gameplayInference: loadedCheckpoint.inference
