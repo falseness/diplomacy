@@ -26,10 +26,13 @@ async function checkTrainingEvidenceReport() {
       'trained checkpoint plateau evidence was not reported'
     );
     assert(
-      checkpoint.report.trainingEvidence.validationWinRatePlateau &&
-        checkpoint.report.trainingEvidence.validationWinRatePlateau.plateau === true,
-      'trained checkpoint validation win-rate plateau was not reported'
+      checkpoint.report.trainingEvidence.progression &&
+        checkpoint.report.trainingEvidence.progression.status ===
+          'historical-only-not-used-as-current-run-evidence',
+      'historical progression was not isolated from current-run evidence'
     );
+    assert(checkpoint.report.files.every(file => /^[a-f0-9]{64}$/.test(file.sha256)),
+      'checkpoint hashes were not reported');
   } finally {
     checkpoint.model.dispose();
   }
@@ -92,6 +95,22 @@ assert(
 );
 assert(report.summary.nonWins > 0, 'non-wins were not counted');
 assert(report.failedGames.length + report.crashes.length > 0, 'non-wins were not retained');
+assert(report.repository.commit, 'repository commit was not recorded');
+assert(report.invocation.argv.some(value =>
+  /benchmark-gamestart-trained-model\.js$/.test(value)),
+  'exact benchmark invocation was not recorded');
+assert(report.games.every(game => game.terminationReason),
+  'termination reasons were not reported');
+assert(report.games.every(game => game.exactClassAssignment),
+  'runtime class assignment was not exact');
+assert(report.games.every(game => game.candidateWon ===
+  (game.exactClassAssignment && game.genuineOpponentElimination)),
+  'candidate wins were not restricted to exact-class genuine eliminations');
+assert(report.summary.candidateWinRate ===
+  report.summary.candidateWins / report.summary.attemptedGames,
+  'win rate did not count every attempted game');
+assert(report.seedEvidence.intersections.trainingTest.length === 0,
+  'training and test seeds overlap');
 const updatedTasks = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
 assert(updatedTasks.length === 2, 'follow-up ticket was not created');
 assert(updatedTasks[1].status === 'pending', 'follow-up ticket must be pending');

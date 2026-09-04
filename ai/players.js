@@ -6,19 +6,25 @@ const AI_ECONOMY_DEFAULT_COMMAND_LIMIT = 60
 const AI_ECONOMY_STALEMATE_ACTION_LIMIT = 45
 const AI_ECONOMY_MULTI_TOWN_ACTION_LIMIT = 45
 const AI_ECONOMY_MULTI_TOWN_THRESHOLD = 2
+const AI_ECONOMY_SINGLE_TOWN_COUNT = 1
 const AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT = 6
 const AI_ECONOMY_POST_MOVE_PURCHASE_LIMIT = 3
 const AI_ECONOMY_NEUTRAL_RACE_DISTANCE = 20
 const AI_ECONOMY_TOWN_TARGET_SCORE = 12
 const AI_ECONOMY_UNIT_TARGET_SCORE = 4
-const AI_ECONOMY_NEUTRAL_TOWN_TARGET_SCORE = 12
-const AI_ECONOMY_NEUTRAL_RACE_SCORE = 0.5
+const AI_ECONOMY_NEUTRAL_TOWN_TARGET_SCORE = 48
+const AI_ECONOMY_NEUTRAL_RACE_SCORE = 0
 const AI_ECONOMY_THREAT_TARGET_SCORE = 90
+const AI_ECONOMY_DEFENSIVE_THREAT_TARGET_SCORE = 180
+const AI_ECONOMY_SCARCE_OBJECTIVE_THREAT_TARGET_SCORE = 300
+const AI_ECONOMY_EARLY_PRESSURE_ROUND = 10
+const AI_ECONOMY_OPENING_ASSESSMENT_ROUND = 15
 const AI_ECONOMY_STALEMATE_ROUND = 160
 const AI_ECONOMY_STALEMATE_TOWN_TARGET_SCORE = 120
 const AI_ECONOMY_STALEMATE_UNIT_TARGET_SCORE = -4
 const AI_ECONOMY_TOWN_DEFICIT_TARGET_SCORE = 18
 const AI_ECONOMY_TOWN_DEFICIT_NEUTRAL_PENALTY = 6
+const AI_ECONOMY_TOWN_DEFICIT_NEUTRAL_RECOVERY_SCORE = 30
 const AI_ECONOMY_UNIT_ADVANTAGE_TARGET_SCORE = 10
 const AI_ECONOMY_UNIT_ADVANTAGE_NEUTRAL_PENALTY = 3
 const AI_ECONOMY_UNIT_ADVANTAGE_UNIT_PENALTY = 2
@@ -65,9 +71,134 @@ function getAiEconomyModelPolicy(player, playerIndex, distanceFn) {
     if (typeof getAiEconomyObjectivePolicy == 'function') {
         return getAiEconomyObjectivePolicy(player, playerIndex, distanceFn)
     }
+    let liveTownCount = player && player.towns ?
+        player.towns.filter(function(town) { return !town.killed }).length : 0
+    if (player && player.aiInitialTownCount === undefined) {
+        player.aiInitialTownCount = liveTownCount
+    }
+    let hasMultipleFronts = player &&
+        player.aiInitialTownCount >= AI_ECONOMY_MULTI_TOWN_THRESHOLD
+    let strongestOpponentTownCount = 0
+    let strongestOpponentUnitCount = 0
+    let liveOpponentCount = 0
+    let liveNeutralTownCount = 0
+    let nearestNeutralTownDistance = Infinity
+    let nearestOpponentTownDistance = Infinity
+    if (typeof players != 'undefined') {
+        if (players[0] && players[0].towns) {
+            liveNeutralTownCount = players[0].towns.filter(function(town) {
+                return !town.killed
+            }).length
+            for (let ownTown of player.towns) {
+                if (ownTown.killed) {
+                    continue
+                }
+                for (let neutralTown of players[0].towns) {
+                    if (!neutralTown.killed) {
+                        nearestNeutralTownDistance = Math.min(
+                            nearestNeutralTownDistance,
+                            distanceFn(ownTown.coord, neutralTown.coord))
+                    }
+                }
+            }
+        }
+        for (let opponentIndex = 1; opponentIndex < players.length; ++opponentIndex) {
+            let opponent = players[opponentIndex]
+            if (opponentIndex == playerIndex || !opponent || opponent.isNeutral ||
+                    opponent.isLost) {
+                continue
+            }
+            ++liveOpponentCount
+            strongestOpponentTownCount = Math.max(
+                strongestOpponentTownCount,
+                opponent.towns.filter(function(town) { return !town.killed }).length)
+            for (let ownTown of player.towns) {
+                if (ownTown.killed) {
+                    continue
+                }
+                for (let opponentTown of opponent.towns) {
+                    if (!opponentTown.killed) {
+                        nearestOpponentTownDistance = Math.min(
+                            nearestOpponentTownDistance,
+                            distanceFn(ownTown.coord, opponentTown.coord))
+                    }
+                }
+            }
+            strongestOpponentUnitCount = Math.max(
+                strongestOpponentUnitCount,
+                opponent.units.filter(function(unit) { return !unit.killed }).length)
+        }
+    }
+    let liveUnitCount = player && player.units ?
+        player.units.filter(function(unit) { return !unit.killed }).length : 0
+    if (player &&
+            strongestOpponentTownCount > liveTownCount &&
+            liveUnitCount <= strongestOpponentUnitCount + 1) {
+        player.aiNeedsDefensiveFocus = true
+    }
+    let openingAssessmentDue = player &&
+        player.aiOpeningAssessmentComplete !== true &&
+        typeof gameRound != 'undefined' &&
+        gameRound >= AI_ECONOMY_OPENING_ASSESSMENT_ROUND
+    if (openingAssessmentDue) {
+        player.aiOpeningAssessmentComplete = true
+        player.aiOpeningAssessment = {
+            round: gameRound,
+            liveTownCount: liveTownCount,
+            strongestOpponentTownCount: strongestOpponentTownCount,
+            liveUnitCount: liveUnitCount,
+            strongestOpponentUnitCount: strongestOpponentUnitCount
+        }
+        if (liveTownCount <= player.aiInitialTownCount &&
+                liveTownCount == strongestOpponentTownCount &&
+                liveUnitCount <= strongestOpponentUnitCount + 1) {
+            player.aiPrioritizeOpponent = true
+        }
+        if ((hasMultipleFronts ||
+                liveTownCount < strongestOpponentTownCount) &&
+                liveUnitCount <= strongestOpponentUnitCount + 1) {
+            player.aiNeedsDefensiveFocus = true
+        }
+    }
+    let underStrategicPressure = strongestOpponentTownCount > liveTownCount &&
+        liveUnitCount <= strongestOpponentUnitCount + 1
+    let underEarlyStrategicPressure = underStrategicPressure &&
+        player.aiInitialTownCount == AI_ECONOMY_SINGLE_TOWN_COUNT &&
+        typeof gameRound != 'undefined' &&
+        gameRound < AI_ECONOMY_EARLY_PRESSURE_ROUND
+    let prioritizeOpponent = hasMultipleFronts ||
+        underEarlyStrategicPressure ||
+        (player && player.aiPrioritizeOpponent === true)
+    if (player && player.aiPrioritizeOpponent !== true &&
+            strongestOpponentTownCount >=
+                liveTownCount + AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
+        player.aiNeedsObjectiveRecovery = true
+    }
+    let recoverObjectives = player && player.aiNeedsObjectiveRecovery === true
+    let neutralObjectivesDominate =
+        liveNeutralTownCount >=
+            (liveOpponentCount + 1) * AI_ECONOMY_MULTI_TOWN_THRESHOLD
+    if (player && player.aiStartedWithDominantNeutralObjectives === undefined) {
+        player.aiStartedWithDominantNeutralObjectives = neutralObjectivesDominate
+        player.aiInitialNeutralTownCount = liveNeutralTownCount
+        player.aiInitialNeutralObjectiveOnDirectFront =
+            liveNeutralTownCount == 0 ||
+            nearestNeutralTownDistance * 2 <= nearestOpponentTownDistance
+    }
+    let singleTownCounterattack = prioritizeOpponent && player &&
+        player.aiInitialTownCount == AI_ECONOMY_SINGLE_TOWN_COUNT
+    let hasTownAdvantage = liveTownCount > strongestOpponentTownCount
+    let shouldPressureEnemyTowns = hasTownAdvantage ||
+        (prioritizeOpponent && player &&
+            player.aiStartedWithDominantNeutralObjectives !== true &&
+            (player.aiInitialNeutralTownCount > 1 || liveNeutralTownCount == 0))
     return {
-        enemyTownTargetScore: AI_ECONOMY_TOWN_TARGET_SCORE,
-        useTargetPriorityMovement: false,
+        enemyTownTargetScore: (singleTownCounterattack ||
+                shouldPressureEnemyTowns) &&
+                !recoverObjectives ?
+            AI_ECONOMY_STALEMATE_TOWN_TARGET_SCORE : AI_ECONOMY_TOWN_TARGET_SCORE,
+        useTargetPriorityMovement: prioritizeOpponent || recoverObjectives ||
+            neutralObjectivesDominate,
         holdTownThreatDistance: null
     }
 }
@@ -850,6 +981,12 @@ class AIPlayer extends Player {
 }
 
 class AIPlayerWithEconomy extends AIPlayer {
+    nextTurn() {
+        if (this.aiInitialTownCount === undefined) {
+            this.aiInitialTownCount = this.getLiveTownCount(this)
+        }
+        super.nextTurn()
+    }
     calculateCellsCount(playerColor) {
         let cellsCount = 0
         if (typeof players == 'undefined') {
@@ -1263,8 +1400,9 @@ class AIPlayerWithEconomy extends AIPlayer {
                                 AI_ECONOMY_UNIT_ADVANTAGE_UNIT_PENALTY : 0) : 0) +
                     (targets[j].kind == 'neutralTown' ?
                         AI_ECONOMY_NEUTRAL_TOWN_TARGET_SCORE -
-                            townDeficitPressure *
-                                AI_ECONOMY_TOWN_DEFICIT_NEUTRAL_PENALTY -
+                            townDeficitPressure * (this.aiNeedsObjectiveRecovery ?
+                                -AI_ECONOMY_TOWN_DEFICIT_NEUTRAL_RECOVERY_SCORE :
+                                AI_ECONOMY_TOWN_DEFICIT_NEUTRAL_PENALTY) -
                             unitAdvantagePressure *
                                 AI_ECONOMY_UNIT_ADVANTAGE_NEUTRAL_PENALTY : 0) +
                     (targets[j].kind == 'neutralTown' &&
@@ -1274,7 +1412,12 @@ class AIPlayerWithEconomy extends AIPlayer {
                             AI_ECONOMY_NEUTRAL_RACE_DISTANCE -
                                 targets[j].enemyDistance) *
                             AI_ECONOMY_NEUTRAL_RACE_SCORE : 0) +
-                    (targets[j].threatensTown ? AI_ECONOMY_THREAT_TARGET_SCORE : 0) +
+                    (targets[j].threatensTown ?
+                        (this.aiNeedsDefensiveFocus ?
+                            AI_ECONOMY_DEFENSIVE_THREAT_TARGET_SCORE :
+                            (this.aiInitialNeutralTownCount <= 1 ?
+                                AI_ECONOMY_SCARCE_OBJECTIVE_THREAT_TARGET_SCORE :
+                                AI_ECONOMY_THREAT_TARGET_SCORE)) : 0) +
                     (targets[j].primaryOpponent ?
                         AI_ECONOMY_MULTIPLAYER_PRIMARY_TARGET_BONUS : 0)
                 if (score > bestScore) {
@@ -1540,11 +1683,28 @@ class AIPlayerWithEconomy extends AIPlayer {
                 destination.building.notEmpty() &&
                 destination.building.playerColor != playerIndex)
     }
+    isImmediateTownCaptureCommand(command) {
+        if (!this.isImmediateAttackCommand(command)) {
+            return false
+        }
+        let building = grid.getCell(command.destinationCoord).building
+        return building && building.notEmpty && building.notEmpty() &&
+            building.playerColor != this.getPlayerIndex() &&
+            building.name == 'town'
+    }
     applyModelRankedImmediateAttack() {
         let commands = this.getUnitCommands().filter(command =>
             this.isImmediateAttackCommand(command))
         if (!commands.length) {
             return false
+        }
+        let townCaptures = commands.filter(command =>
+            this.isImmediateTownCaptureCommand(command))
+        if (townCaptures.length &&
+                this.aiStartedWithDominantNeutralObjectives === false &&
+                (this.aiInitialNeutralTownCount <= 1 ||
+                    this.aiInitialNeutralObjectiveOnDirectFront === true)) {
+            commands = townCaptures
         }
         let scored = this.scoreActionCommandsWithFastVectorGrid(
             commands,

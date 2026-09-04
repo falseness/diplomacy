@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const vm = require('vm');
@@ -12,7 +13,9 @@ if (require.main === module && !process.env.DIPLOMACY_BENCHMARK_HEAP) {
     ['--max-old-space-size=4096', __filename].concat(process.argv.slice(2)),
     {
       stdio: 'inherit',
-      env: Object.assign({}, process.env, { DIPLOMACY_BENCHMARK_HEAP: '1' })
+      env: Object.assign({}, process.env, {
+        DIPLOMACY_BENCHMARK_HEAP: '1'
+      })
     }
   );
   if (result.error) {
@@ -207,11 +210,14 @@ function readTrainingEvidence(checkpointDir) {
   }
   const candidate = readJsonIfPresent(runInfo.candidatePath) || snapshot.candidate;
   const manifest = readJsonIfPresent(runInfo.manifestPath);
-  const progression = readJsonIfPresent(runInfo.progressionPath);
   return {
     runId: runInfo.runId,
     snapshot: runInfo.snapshotPath,
-    progression: progression ? runInfo.progressionPath : null,
+    progression: fs.existsSync(runInfo.progressionPath) ? {
+      path: runInfo.progressionPath,
+      status: 'historical-only-not-used-as-current-run-evidence',
+      note: 'Historical aggregate summaries are excluded because they are not tied to this benchmark invocation.'
+    } : null,
     manifest: fs.existsSync(runInfo.manifestPath) ? runInfo.manifestPath : null,
     status: snapshot.status,
     dataSource: snapshot.dataSource,
@@ -229,8 +235,89 @@ function readTrainingEvidence(checkpointDir) {
       loss: game.loss
     })),
     mapFeatures: (snapshot.games || []).map(game => game.mapFeatures),
-    plateau: summarizeTrainingPlateau(snapshot.games || [], candidate),
-    validationWinRatePlateau: progression
+    plateau: summarizeTrainingPlateau(snapshot.games || [], candidate)
+  };
+}
+
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function checkpointFileEvidence(modelPath) {
+  const checkpointDir = path.dirname(modelPath);
+  const modelJson = JSON.parse(fs.readFileSync(modelPath, 'utf8'));
+  const files = [modelPath];
+  for (const group of modelJson.weightsManifest || []) {
+    for (const relativePath of group.paths || []) {
+      files.push(path.resolve(checkpointDir, relativePath));
+    }
+  }
+  return files.map(filePath => ({
+    path: filePath,
+    bytes: fs.statSync(filePath).size,
+    sha256: sha256File(filePath)
+  }));
+}
+
+function repositoryEvidence() {
+  function git(args) {
+    return childProcess.execFileSync('git', args, {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    }).trim();
+  }
+  const status = git(['status', '--short']);
+  const sourcePaths = [
+    'ai/benchmark-gamestart-trained-model.js',
+    'ai/players.js',
+    'ai/model.js',
+    'ai/economy-training.js'
+  ];
+  return {
+    commit: git(['rev-parse', 'HEAD']),
+    dirty: status.length > 0,
+    status: status ? status.split('\n') : [],
+    sources: sourcePaths.map(relativePath => ({
+      path: relativePath,
+      sha256: sha256File(path.join(repoRoot, relativePath))
+    }))
+  };
+}
+
+function invocationEvidence() {
+  return {
+    argv: [process.execPath].concat(process.argv.slice(1)),
+    node: process.version,
+    platform: process.platform + '-' + process.arch,
+    startedAt: new Date().toISOString()
+  };
+}
+
+function intersection(left, right) {
+  const rightSet = new Set(right);
+  return Array.from(new Set(left.filter(value => rightSet.has(value)))).sort((a, b) => a - b);
+}
+
+function seedEvidence(games, trainingEvidence) {
+  const training = trainingEvidence ?
+    trainingEvidence.losses.map(entry => entry.seed).filter(Number.isFinite) : [];
+  const validation = [];
+  const test = games.map(game => game.seed);
+  return {
+    trainingSeeds: Array.from(new Set(training)).sort((a, b) => a - b),
+    validationSeeds: validation,
+    validationNote: 'No validation seed set is claimed by this benchmark; checkpoint selection used recorded training loss.',
+    testSeeds: Array.from(new Set(test)).sort((a, b) => a - b),
+    testScenarios: games.map(game => ({
+      mapName: game.mapName,
+      seed: game.seed,
+      candidateSide: game.candidateSide
+    })),
+    intersections: {
+      trainingValidation: intersection(training, validation),
+      trainingTest: intersection(training, test),
+      validationTest: intersection(validation, test)
+    }
   };
 }
 
@@ -258,6 +345,7 @@ async function loadCheckpoint(checkpointArgument) {
     model,
     report: {
       path: checkpointDir,
+      files: checkpointFileEvidence(modelPath),
       signature,
       metadata: readJsonIfPresent(path.join(checkpointDir, 'metadata.json')),
       trainingEvidence: readTrainingEvidence(checkpointDir)
@@ -531,6 +619,19 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       ++turnCount
     }
     let winner = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
+    let exactClassAssignment =
+      players[__candidateSide].constructor.name == 'AIPlayerWithEconomy' &&
+      players[__candidateSide == 1 ? 2 : 1].constructor.name ==
+        'SimpleAiPlayerWithEconomy'
+    let opponent = players[__candidateSide == 1 ? 2 : 1]
+    let opponentEliminated = winner == __candidateSide && opponent.isLost &&
+      opponent.towns.filter(function(town) { return !town.killed }).length == 0
+    let terminationReason = opponentEliminated ?
+      'opponent-eliminated' : (winner == null ?
+        (gameRound >= suddenDeathRound ? 'sudden-death-non-result' :
+          (turnCount >= __roundLimit ? 'round-limit-timeout' : 'non-result')) :
+        (winner == __candidateSide ? 'invalid-elimination-state' :
+          'candidate-eliminated'))
     return {
       mapName: __task037MapInfo.name,
       candidateSide: __candidateSide,
@@ -539,11 +640,14 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       gameRound,
       suddenDeathRound,
       winner,
-      candidateWon: winner == __candidateSide,
+      candidateWon: opponentEliminated && exactClassAssignment,
       nonResult: winner == null,
       suddenDeath: winner == null && gameRound >= suddenDeathRound,
       timeout: winner == null && turnCount >= __roundLimit,
       eliminatedWinner: winner,
+      terminationReason,
+      exactClassAssignment,
+      genuineOpponentElimination: opponentEliminated,
       limits: { roundLimit: __roundLimit },
       benchmarkPolicy: 'real gamestart map with runtime AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy',
       players: players.slice(1).map(function(player, index) {
@@ -553,6 +657,11 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
           lost: player.isLost,
           gold: player.gold,
           income: player.income,
+          aiOpeningAssessment: player.aiOpeningAssessment || null,
+          aiPrioritizeOpponent: player.aiPrioritizeOpponent === true,
+          aiInitialNeutralTownCount: player.aiInitialNeutralTownCount,
+          aiInitialNeutralObjectiveOnDirectFront:
+            player.aiInitialNeutralObjectiveOnDirectFront,
           towns: player.towns.filter(function(town) { return !town.killed }).length,
           units: player.units.filter(function(unit) { return !unit.killed }).length,
           townCoords: player.towns.filter(function(town) {
@@ -635,11 +744,12 @@ function summarize(games, crashes, skippedMaps) {
   const completedGames = games.filter(game => !game.nonResult);
   const candidateWins = completedGames.filter(game => game.candidateWon).length;
   const failedGames = games.filter(game => !game.candidateWon);
+  const attemptedGames = games.length + crashes.length;
   return {
-    attemptedGames: games.length + crashes.length,
+    attemptedGames,
     completedGames: completedGames.length,
     candidateWins,
-    candidateWinRate: completedGames.length ? candidateWins / completedGames.length : 0,
+    candidateWinRate: attemptedGames ? candidateWins / attemptedGames : 0,
     nonWins: failedGames.length + crashes.length,
     nonResults: games.filter(game => game.nonResult).length,
     losses: completedGames.filter(game => !game.candidateWon).length,
@@ -705,6 +815,7 @@ async function main() {
               mapName: mapInfo.name,
               candidateSide,
               seed,
+              terminationReason: 'crash',
               message: error.message,
               stack: error.stack
             });
@@ -719,6 +830,8 @@ async function main() {
     }
     const summary = summarize(games, crashes, skippedMaps);
     const report = {
+      invocation: invocationEvidence(),
+      repository: repositoryEvidence(),
       config: {
         checkpoint: options.checkpoint,
         seedsPerSidePerMap: options.seeds,
@@ -731,6 +844,7 @@ async function main() {
       checkpoint: Object.assign({}, checkpoint.report, {
         gameplayInference: checkpoint.inference
       }),
+      seedEvidence: seedEvidence(games, checkpoint.report.trainingEvidence),
       mapCoverage: {
         oneVOneMaps: oneVOneMaps.map(map => ({
           name: map.name,
