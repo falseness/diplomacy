@@ -1651,7 +1651,8 @@ class AIPlayerWithEconomy extends AIPlayer {
         return true
     }
     getBestActionCommand() {
-        let commands = this.getPrioritizedActionCommands()
+        let commands = this.getActionCommands().slice(
+            0, this.getCommandLimit(AI_ECONOMY_DEFAULT_COMMAND_LIMIT))
         let scored = this.scoreActionCommandsWithFastVectorGrid(
             commands,
             function(command) {
@@ -1815,35 +1816,7 @@ class AIPlayerWithEconomy extends AIPlayer {
         console.log('player reached hard limit')
     }
     doActions() {
-        if (!this.bestEnemyTargetForAI) {
-            this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
-        }
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
-        this.prioritizedTargetsForTurn = null
-        let remainingActions =
-            this.getActionLimit(AI_ECONOMY_DEFAULT_ACTION_LIMIT)
-        remainingActions = this.spendWarGoldWithinLimit(
-            remainingActions, AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT)
-        if (remainingActions > 0 && this.applyModelRankedImmediateAttack()) {
-            --remainingActions
-            this.updateUnits()
-        }
-        for (let i = 0; i < this.units.length && remainingActions > 0; ++i) {
-            if (this.units[i].killed) {
-                this.units.splice(i--, 1)
-                continue
-            }
-            if (!this.units[i].isMyTurn) {
-                continue
-            }
-            remainingActions = this.moveUnitWithEconomy(this.units[i], remainingActions)
-        }
-        this.prioritizedTargetsForTurn = null
-        this.spendWarGoldWithinLimit(
-            remainingActions, AI_ECONOMY_POST_MOVE_PURCHASE_LIMIT)
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
+        this.doLearnedCombatOnlyActions()
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 4)

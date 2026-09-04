@@ -10,7 +10,7 @@ const {
 const { scoreFinalEconomyVector } =
   require('./benchmark-final-symmetrical-economy-gate');
 
-const CELL_VECTOR_SIZE = 78;
+const CELL_VECTOR_SIZE = 81;
 const ECONOMY_MODEL_WIDTH = 9;
 const ECONOMY_MODEL_HEIGHT = 9;
 const ECONOMY_CONV_FILTERS = 16;

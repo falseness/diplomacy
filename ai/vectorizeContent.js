@@ -77,10 +77,13 @@ var CELL_VECTOR_INDEX = {
     townSuburbIncome: 74,
     currentPlayerSuburbIncome: 75,
     strongestOpponentSuburbIncome: 76,
-    relativeSuburbIncomeAdvantage: 77
+    relativeSuburbIncomeAdvantage: 77,
+    relativeUnitHp: 78,
+    relativeTownHpRatio: 79,
+    relativeUnitObjectiveDistance: 80
 }
 
-var CELL_VECTOR_SIZE = 78
+var CELL_VECTOR_SIZE = 81
 var CELL_VECTOR_GLOBAL_CHANNELS = [
     CELL_VECTOR_INDEX.currentPlayerGold,
     CELL_VECTOR_INDEX.strongestOpponentGold,
@@ -254,6 +257,8 @@ function vectorizeTown(town, playerColor, result) {
     result[CELL_VECTOR_INDEX.isTown] = 1
     result[CELL_VECTOR_INDEX.townOwner] = relativePlayerValue(playerColor)
     result[CELL_VECTOR_INDEX.townHpRatio] = town.maxHP ? town.hp / town.maxHP : 0
+    result[CELL_VECTOR_INDEX.relativeTownHpRatio] =
+        result[CELL_VECTOR_INDEX.townOwner] * result[CELL_VECTOR_INDEX.townHpRatio]
     result[CELL_VECTOR_INDEX.townBadlyDamaged] = town.isBadlyDamaged ? 1 : 0
     result[CELL_VECTOR_INDEX.townIncome] = town.income / TOWN_INCOME_VECTOR_SCALE
     let suburbCount = validTownSuburbCount(town)
@@ -438,6 +443,39 @@ function finiteUnitValue(value) {
     return Number.isFinite(value) ? value : 0
 }
 
+function relativeUnitObjectiveDistance(cell) {
+    if (typeof players == 'undefined' || typeof grid == 'undefined') {
+        return 0
+    }
+    let owner = cell.playerColor
+    let targets = []
+    for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+        if (!players[playerIndex] || players[playerIndex].isNeutral ||
+                playerIndex == owner) {
+            continue
+        }
+        for (let i = 0; i < players[playerIndex].towns.length; ++i) {
+            if (!players[playerIndex].towns[i].killed) {
+                targets.push(players[playerIndex].towns[i].coord)
+            }
+        }
+    }
+    if (!targets.length) {
+        return 0
+    }
+    let nearest = Infinity
+    for (let i = 0; i < targets.length; ++i) {
+        nearest = Math.min(nearest,
+            Math.max(
+                Math.abs(cell.coord.x - targets[i].x),
+                Math.abs(cell.coord.y - targets[i].y),
+                Math.abs(cell.coord.x + cell.coord.y -
+                    targets[i].x - targets[i].y)))
+    }
+    let scale = Math.max(grid.arr.length, grid.arr[0].length)
+    return -relativePlayerValue(owner) * nearest / scale
+}
+
 function unitCombatRange(unit) {
     if (Number.isFinite(unit.range)) {
         return unit.range
@@ -517,6 +555,10 @@ function vectorizeCellLocal(cell, globalChannels) {
     result[CELL_VECTOR_INDEX.unitMaxHp] = finiteUnitValue(unit.maxHP)
     result[CELL_VECTOR_INDEX.unitHpRatio] =
         unit.maxHP ? finiteUnitValue(unit.hp) / unit.maxHP : 0
+    result[CELL_VECTOR_INDEX.relativeUnitHp] =
+        result[CELL_VECTOR_INDEX.unitOwner] * result[CELL_VECTOR_INDEX.unitHp]
+    result[CELL_VECTOR_INDEX.relativeUnitObjectiveDistance] =
+        relativeUnitObjectiveDistance(cell)
     result[CELL_VECTOR_INDEX.unitMinRange] = unit.name == 'catapult' ? 2 : 1
     result[CELL_VECTOR_INDEX.unitBuildingDamage] =
         finiteUnitValue(unit.buildingDMG)

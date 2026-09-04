@@ -195,7 +195,7 @@ function assertBenchmarkSetupIsFair(source, label) {
 }
 
 function assertBalancedCandidateStarts(source) {
-  check(/function\s+gameCandidateSide\s*\([^)]*\)\s*\{[\s\S]*?index\s*<\s*options\.games\s*\/\s*2\s*\?\s*'A'\s*:\s*'B'/.test(source),
+  check(/function\s+gameCandidateSide\s*\([^)]*\)\s*\{[\s\S]*?(?:index\s*<\s*options\.games\s*\/\s*2|index\s*%\s*2\s*===\s*0)\s*\?\s*'A'\s*:\s*'B'/.test(source),
     'trained benchmark must balance candidate starts across both sides');
   check(/games\s*%\s*2\s*!==\s*0/.test(source),
     'trained benchmark must reject odd game counts');

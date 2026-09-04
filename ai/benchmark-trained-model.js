@@ -12,7 +12,8 @@ const {
 } = require('./benchmarkHarness');
 
 const repoRoot = path.resolve(__dirname, '..');
-const MODEL_INFERENCE_BATCH_SIZE = 8;
+const MODEL_INFERENCE_BATCH_SIZE = 64;
+const SCENARIO_POLICY = 'seeded-mirrored-big-map-v1';
 
 function usage() {
   return [
@@ -386,6 +387,92 @@ function createPredictor(model, stats) {
   };
 }
 
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return function() {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function shuffled(values, random) {
+  const result = values.slice();
+  for (let index = result.length - 1; index > 0; --index) {
+    const other = Math.floor(random() * (index + 1));
+    [result[index], result[other]] = [result[other], result[index]];
+  }
+  return result;
+}
+
+function createScenarioMap(configured, seed) {
+  const random = seededRandom(seed);
+  const width = configured.width;
+  const height = configured.height;
+  const leftTown = {
+    x: 2 + Math.floor(random() * 4),
+    y: 4 + Math.floor(random() * (height - 8))
+  };
+  const rightTown = {
+    x: width - 1 - leftTown.x,
+    y: height - 1 - leftTown.y
+  };
+  const neighbourOffsets = shuffled([
+    { x: 1, y: -1 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 }
+  ], random).slice(0, 3);
+  const leftUnits = neighbourOffsets.map(offset => ({
+    x: leftTown.x + offset.x,
+    y: leftTown.y + offset.y
+  }));
+  const rightUnits = leftUnits.map(coord => ({
+    x: width - 1 - coord.x,
+    y: height - 1 - coord.y
+  }));
+  const occupied = new Set(
+    [leftTown, rightTown].concat(leftUnits, rightUnits)
+      .map(coord => coord.x + ',' + coord.y)
+  );
+  const blocked = [];
+  const blockedKeys = new Set();
+  const pairCount = 2 + Math.floor(random() * 4);
+  while (blocked.length < pairCount * 2) {
+    const coord = {
+      x: 7 + Math.floor(random() * 7),
+      y: 2 + Math.floor(random() * (height - 4))
+    };
+    const mirror = {
+      x: width - 1 - coord.x,
+      y: height - 1 - coord.y
+    };
+    const keys = [coord, mirror].map(value => value.x + ',' + value.y);
+    if (keys.some(key => occupied.has(key) || blockedKeys.has(key)) ||
+        keys[0] === keys[1]) {
+      continue;
+    }
+    blocked.push(coord, mirror);
+    keys.forEach(key => blockedKeys.add(key));
+  }
+  const scenario = {
+    width,
+    height,
+    suddenDeathRound: configured.suddenDeathRound,
+    blocked,
+    players: [
+      { town: leftTown, units: leftUnits },
+      { town: rightTown, units: rightUnits }
+    ]
+  };
+  return {
+    map: scenario,
+    hash: crypto.createHash('sha256')
+      .update(JSON.stringify(scenario)).digest('hex')
+  };
+}
+
 function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
   const inferenceBefore = {
     calls: loadedCheckpoint.inference.calls,
@@ -399,7 +486,9 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
   const context = createRuntimeContext(seed, predictor, loadedCheckpoint.model);
   loadBrowserScripts(context);
   context.__task047MapName = options.mapName;
-  context.__task047Map = BENCHMARK_MAPS[options.mapName];
+  const scenario = createScenarioMap(BENCHMARK_MAPS[options.mapName], seed);
+  context.__task047Map = scenario.map;
+  context.__scenarioHash = scenario.hash;
   context.__candidateSide = candidateSide;
   context.__candidateClass = options.candidate;
   context.__baselineClass = options.baseline;
@@ -474,11 +563,28 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
     whooseTurn = 0
 
     let turnCount = 0
+    let trajectory = []
     while (turnCount < __roundLimit &&
         gameRound < suddenDeathRound &&
         !players[1].isLost && !players[2].isLost) {
       nextTurn()
       ++turnCount
+      trajectory.push({
+        turnCount,
+        gameRound,
+        nextPlayer: whooseTurn,
+        players: players.slice(1).map(function(player, index) {
+          return {
+            side: index == 0 ? 'A' : 'B',
+            towns: player.towns.filter(function(town) { return !town.killed }).map(
+              function(town) { return {x: town.coord.x, y: town.coord.y, hp: town.hp} }),
+            units: player.units.filter(function(unit) { return !unit.killed }).map(
+              function(unit) {
+                return {x: unit.coord.x, y: unit.coord.y, hp: unit.hp, moves: unit.moves}
+              })
+          }
+        })
+      })
     }
     let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
     let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
@@ -502,6 +608,8 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
       runtimePlayerA: players[1].constructor.name,
       runtimePlayerB: players[2].constructor.name,
       seed: ${seed},
+      scenarioPolicy: '${SCENARIO_POLICY}',
+      scenarioHash: __scenarioHash,
       candidateSide: __candidateSide,
       candidateWon,
       cleanPreSuddenDeathWin,
@@ -524,6 +632,7 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
           (__candidateSide == 'B' ? 'AIPlayerWithEconomy' : 'SimpleAiPlayer'),
       genuineOpponentElimination: candidateWon &&
         players[__candidateSide == 'A' ? 2 : 1].isLost,
+      trajectory,
       players: players.slice(1).map(function(player, index) {
         return {
           side: index == 0 ? 'A' : 'B',
@@ -556,7 +665,7 @@ function gameSeedAt(options, index) {
 }
 
 function gameCandidateSide(options, index) {
-  return index < options.games / 2 ? 'A' : 'B';
+  return index % 2 === 0 ? 'A' : 'B';
 }
 
 function runBalancedBenchmark(options, loadedCheckpoint) {
@@ -582,6 +691,11 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       });
     }
   }
+  return buildBenchmarkReport(options, loadedCheckpoint, games, crashes);
+}
+
+function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
+  const gamesPerSide = options.games / 2;
   const cleanGames = games.filter(game => game.cleanPreSuddenDeathWin);
   const suddenDeathCandidateWins = games.filter(game => game.suddenDeathCandidateWin);
   const completedGames = games.filter(game => game.winnerSide !== null);
@@ -606,16 +720,22 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       roundLimit: options.roundLimit,
       minWinRate: options.minWinRate
     },
+    scenarioPolicy: {
+      name: SCENARIO_POLICY,
+      frozenBeforeFinalTest: true,
+      fairness: '180-degree mirrored towns, units, and blocked cells',
+      distinctScenarioInputs: new Set(games.map(game => game.scenarioHash)).size
+    },
     candidatePolicy: {
-      classification: 'hybrid production runtime class',
+      classification: 'trained value model ranks every bounded legal action',
       modelScoredComponents: [
         'turn-state evaluation',
-        'immediate-attack selection among legal attack commands'
+        'unit movement and combat',
+        'economy production and placement'
       ],
       deterministicRuntimeComponents: [
-        'economy production',
-        'target-directed non-attack movement',
-        'legal-command generation'
+        'legal-command generation and execution',
+        'normal runtime action and command limits'
       ],
       benchmarkOverrides: []
     },
@@ -645,7 +765,8 @@ function runBalancedBenchmark(options, loadedCheckpoint) {
       nonResults: games.filter(game => game.nonResult).length,
       crashes: crashes.length,
       nonWins: failedGames.length + crashes.length,
-      runtimeGamesExecuted: games.length
+      runtimeGamesExecuted: games.length,
+      uniqueScenarioCount: new Set(games.map(game => game.scenarioHash)).size
     },
     failedSeeds: failedGames.map(game => game.seed).concat(crashes.map(crash => crash.seed)),
     failedGames,
@@ -692,7 +813,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildBenchmarkReport,
   loadCheckpoint,
   parseArgs,
-  runBalancedBenchmark
+  runBalancedBenchmark,
+  runRuntimeGame
 };

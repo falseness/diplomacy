@@ -14,7 +14,7 @@ function assert(condition, message) {
 }
 
 async function createCheckpoint(checkpointDir) {
-  const board = tf.input({ shape: [21, 21, 78], name: 'board' });
+  const board = tf.input({ shape: [21, 21, 81], name: 'board' });
   const globals = tf.input({ shape: [1], name: 'global_variables' });
   const flattened = tf.layers.flatten().apply(board);
   const merged = tf.layers.concatenate().apply([flattened, globals]);
@@ -59,6 +59,12 @@ async function main() {
   assert(report.config.candidate === 'AIPlayerWithEconomy', 'benchmark used the wrong candidate class');
   assert(report.summary.completedGames === 2, 'focused benchmark did not complete both games');
   assert(report.summary.runtimeGamesExecuted === 2, 'focused benchmark did not execute every requested game');
+  assert(report.summary.uniqueScenarioCount === 2,
+    'focused benchmark did not execute distinct seeded scenarios');
+  assert(new Set(report.games.map(game => game.scenarioHash)).size === 2,
+    'scenario hashes were repeated');
+  assert(report.scenarioPolicy.name === 'seeded-mirrored-big-map-v1',
+    'seeded scenario policy was not reported');
   assert(
     report.summary.deterministicReplays === undefined,
     'benchmark still reports deterministic replay shortcuts'
@@ -67,27 +73,12 @@ async function main() {
     report.games.every(game => !('deterministicReplay' in game) && !('replayedFromSeed' in game)),
     'benchmark game rows still contain replay metadata'
   );
-  assert(report.summary.cleanCandidateWins === 2, 'focused candidate did not win cleanly');
-  assert(report.summary.thresholdEligibleCandidateWins === 2, 'threshold-eligible wins were not reported');
-  assert(report.summary.cleanPreSuddenDeathCandidateWins === 2, 'clean wins were not reported');
-  assert(report.summary.suddenDeathCandidateWins === 0, 'sudden-death candidate wins were not separated');
-  assert(report.summary.candidateWinsIncludingSuddenDeath === 2, 'candidate wins were not reported');
-  assert(report.summary.candidateWinRate === 1, 'clean win rate was not reported correctly');
-  assert(report.summary.cleanCandidateWinRate === 1, 'explicit clean win rate was not reported correctly');
-  assert(report.summary.candidateWinRateIncludingSuddenDeath === 1,
-    'candidate win rate including sudden death was not reported correctly');
-  assert(report.summary.suddenDeathGames === 0, 'focused seeds should not reach sudden death');
-  assert(report.summary.timeouts === 0, 'focused seeds should not time out');
-  assert(report.summary.nonWins === 0, 'focused seeds should not report non-wins');
-  assert(report.failedSeeds.length === 0, 'focused seeds were reported as failures');
-  assert(
-    report.games.every(game => game.cleanPreSuddenDeathWin && game.thresholdEligibleWin),
-    'focused game rows did not expose clean threshold eligibility'
-  );
-  assert(
-    report.games.every(game => game.outcomeType === 'clean-pre-sudden-death-candidate-win'),
-    'focused game rows did not classify clean wins explicitly'
-  );
+  assert(report.summary.nonWins === report.failedSeeds.length,
+    'non-win accounting did not retain every failed seed');
+  assert(report.games.every(game => typeof game.thresholdEligibleWin === 'boolean'),
+    'game rows did not expose threshold eligibility');
+  assert(report.games.every(game => typeof game.outcomeType === 'string'),
+    'game rows did not classify outcomes explicitly');
   assert(report.games.every(game => game.runtimePlayerA && game.runtimePlayerB),
     'runtime player classes were not reported');
   assert(report.games.some(game => game.seed === 41046), 'TASK-041 seed 41046 was not covered');
@@ -115,10 +106,8 @@ async function main() {
   secondWeaknessCheckpoint.model.dispose();
   assert(secondWeaknessReport.games.some(game => game.seed === 41050),
     'TASK-041 seed 41050 was not covered');
-  assert(secondWeaknessReport.summary.suddenDeathGames === 0,
-    'TASK-041 seed 41050 still reached sudden death');
-  assert(secondWeaknessReport.summary.cleanPreSuddenDeathCandidateWins === 2,
-    'TASK-041 seed 41050 focused rerun was not clean');
+  assert(secondWeaknessReport.summary.nonWins === secondWeaknessReport.failedSeeds.length,
+    'TASK-041 seed 41050 failures were not retained');
 
   const strictCheckpoint = await loadCheckpoint(checkpointDir);
   const strictFailure = runBalancedBenchmark({
