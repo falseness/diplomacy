@@ -755,6 +755,43 @@ function sampleByTemperature(values, temperature) {
 
 // Zero is greedy play; positive values enable exploration during self-play.
 let selfPlayTemperature = 0.0
+const AI_MODEL_EQUIVALENT_SCORE_MARGIN = 0.0
+let aiModelChoiceStats = {
+    modelChoices: 0,
+    equivalentChoiceSets: 0,
+    maximumEquivalentChoices: 1,
+    minimumTopTwoGap: Infinity
+}
+
+function selectBestModelIndex(chances) {
+    assert(chances.length > 0)
+    if (selfPlayTemperature > 0.0) {
+        return sampleByTemperature(chances, selfPlayTemperature)
+    }
+    let maxChance = Math.max(...chances)
+    let orderedChances = chances.slice().sort(function(left, right) {
+        return right - left
+    })
+    ++aiModelChoiceStats.modelChoices
+    if (orderedChances.length > 1) {
+        aiModelChoiceStats.minimumTopTwoGap = Math.min(
+            aiModelChoiceStats.minimumTopTwoGap,
+            orderedChances[0] - orderedChances[1])
+    }
+    let maxIndices = []
+    for (let i = 0; i < chances.length; ++i) {
+        if (maxChance - chances[i] <= AI_MODEL_EQUIVALENT_SCORE_MARGIN) {
+            maxIndices.push(i)
+        }
+    }
+    if (maxIndices.length > 1) {
+        ++aiModelChoiceStats.equivalentChoiceSets
+        aiModelChoiceStats.maximumEquivalentChoices = Math.max(
+            aiModelChoiceStats.maximumEquivalentChoices, maxIndices.length)
+    }
+    return maxIndices.length == 1 ?
+        maxIndices[0] : maxIndices[Math.floor(Math.random() * maxIndices.length)]
+}
 
 class AIPlayer extends Player {
     constructor(color, gold = 90) {
@@ -934,16 +971,7 @@ class AIPlayer extends Player {
         }
         let foundChances = scored.chances
         assert(foundChances.length == foundCommands.length)
-        if (selfPlayTemperature > 0.0) {
-            let index = sampleByTemperature(foundChances, selfPlayTemperature)
-            return [foundCommands[index], foundChances[index]]
-        }
-        let maxIndex = 0
-        for (let i = 0; i < foundChances.length; ++i) {
-            if (foundChances[i] > foundChances[maxIndex]) {
-                maxIndex = i
-            }
-        }
+        let maxIndex = selectBestModelIndex(foundChances)
         return [foundCommands[maxIndex], foundChances[maxIndex]]
     }
     doActions() {
@@ -1663,12 +1691,7 @@ class AIPlayerWithEconomy extends AIPlayer {
             return [null, -1.0]
         }
         let chances = scored.chances
-        let maxIndex = 0
-        for (let i = 1; i < chances.length; ++i) {
-            if (chances[i] > chances[maxIndex]) {
-                maxIndex = i
-            }
-        }
+        let maxIndex = selectBestModelIndex(chances)
         return [validCommands[maxIndex], chances[maxIndex]]
     }
     isImmediateAttackCommand(command) {
@@ -1717,12 +1740,7 @@ class AIPlayerWithEconomy extends AIPlayer {
             return false
         }
         let chances = scored.chances
-        let maxIndex = 0
-        for (let i = 1; i < chances.length; ++i) {
-            if (chances[i] > chances[maxIndex]) {
-                maxIndex = i
-            }
-        }
+        let maxIndex = selectBestModelIndex(chances)
         return this.applyActionCommand(validCommands[maxIndex])
     }
     selectBestCommand() {

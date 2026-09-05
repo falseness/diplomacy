@@ -133,8 +133,10 @@ async function main() {
     roundLimit: 60,
     minWinRate: 0.8
   }, checkpoint, duplicateGames, []);
-  assert(duplicateReport.summary.nonWins === 0,
-    'an honest repeated fixed-map trajectory was converted into a non-win');
+  assert(duplicateReport.summary.nonWins === 1,
+    'duplicate runtime evidence did not fail the quality gate');
+  assert(duplicateReport.failedSeeds.includes(duplicateGames[1].seed),
+    'duplicate runtime evidence did not retain the failed seed');
   assert(duplicateReport.summary.repeatedTrajectoryGames === 1,
     'repeated fixed-map trajectories were not reported explicitly');
   assert(report.games.every(game => typeof game.thresholdEligibleWin === 'boolean'),

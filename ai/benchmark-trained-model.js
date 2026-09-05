@@ -561,6 +561,10 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
           (__candidateSide == 'B' ? 'AIPlayerWithEconomy' : 'SimpleAiPlayer'),
       genuineOpponentElimination: candidateWon &&
         players[__candidateSide == 'A' ? 2 : 1].isLost,
+      modelChoiceStats: Object.assign({}, aiModelChoiceStats, {
+        minimumTopTwoGap: Number.isFinite(aiModelChoiceStats.minimumTopTwoGap) ?
+          aiModelChoiceStats.minimumTopTwoGap : null
+      }),
       trajectory,
       players: players.slice(1).map(function(player, index) {
         return {
@@ -636,6 +640,14 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
   const completedGames = games.filter(game => game.winnerSide !== null);
   const candidateWins = completedGames.filter(game => game.candidateWon);
   const distinctSeedCount = new Set(games.map(game => game.seed)).size;
+  const seenTrajectories = new Set();
+  const duplicateTrajectoryGames = new Set();
+  for (const game of games) {
+    if (seenTrajectories.has(game.trajectoryHash)) {
+      duplicateTrajectoryGames.add(game);
+    }
+    seenTrajectories.add(game.trajectoryHash);
+  }
   const failedGames = games.filter(game =>
     !game.candidateWon ||
     game.timeout ||
@@ -643,7 +655,8 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
     game.nonResult ||
     !game.exactClassAssignment ||
     !game.genuineOpponentElimination ||
-    game.gameplayInference.calls === 0
+    game.gameplayInference.calls === 0 ||
+    duplicateTrajectoryGames.has(game)
   );
   return {
     config: {
@@ -672,7 +685,8 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
       ],
       deterministicRuntimeComponents: [
         'legal-command generation and execution',
-        'normal runtime action and command limits'
+        'normal runtime action and command limits',
+        'seeded uniform tie-breaking between exactly equal model maxima'
       ],
       benchmarkOverrides: []
     },
@@ -732,9 +746,11 @@ async function main() {
       throw new Error('fewer than requested games completed');
     }
     if (result.summary.uniqueScenarioCount !== 1 ||
-        result.summary.distinctSeedCount !== options.games) {
+        result.summary.distinctSeedCount !== options.games ||
+        result.summary.uniqueTrajectoryCount !== options.games) {
       throw new Error(
-        'the configured map must remain fixed and every requested seed must execute'
+        'the configured map must remain fixed and every requested seed must execute ' +
+        'an independently varying runtime trajectory'
       );
     }
     if (result.summary.candidateWinRate < options.minWinRate ||
