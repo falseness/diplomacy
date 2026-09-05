@@ -41,7 +41,7 @@ async function main() {
     const observedPlayerCounts = new Set();
     for (const metric of result.metrics) {
       observedPlayerCounts.add(metric.playerCount);
-      check(metric.cellVectorSize === 78, 'economy training did not use 78-channel vectors');
+      check(metric.cellVectorSize === 82, 'economy training did not use 82-channel vectors');
       check(metric.playerCount >= 2 && metric.playerCount <= 4,
         'training metric did not record a supported player count');
       check(metric.seed >= 36036 && metric.seed <= 36038,

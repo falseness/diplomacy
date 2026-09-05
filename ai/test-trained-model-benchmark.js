@@ -1,8 +1,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const tf = require('@tensorflow/tfjs-node');
 const {
+  buildBenchmarkReport,
   loadCheckpoint,
   runBalancedBenchmark
 } = require('./benchmark-trained-model');
@@ -14,7 +16,7 @@ function assert(condition, message) {
 }
 
 async function createCheckpoint(checkpointDir) {
-  const board = tf.input({ shape: [21, 21, 81], name: 'board' });
+  const board = tf.input({ shape: [21, 21, 82], name: 'board' });
   const globals = tf.input({ shape: [1], name: 'global_variables' });
   const flattened = tf.layers.flatten().apply(board);
   const merged = tf.layers.concatenate().apply([flattened, globals]);
@@ -67,6 +69,9 @@ async function main() {
     'focused benchmark did not execute distinct runtime trajectories');
   assert(report.games.every(game => /^[0-9a-f]{64}$/.test(game.trajectoryHash)),
     'runtime trajectory hashes were not reported');
+  assert(report.games.every(game => game.trajectoryHash === crypto.createHash('sha256')
+    .update(JSON.stringify(game.trajectory)).digest('hex')),
+    'trajectory hashes depended on data outside the runtime trajectory');
   assert(report.scenarioPolicy.name === 'seeded-mirrored-big-map-v1',
     'seeded scenario policy was not reported');
   assert(
@@ -79,6 +84,36 @@ async function main() {
   );
   assert(report.summary.nonWins === report.failedSeeds.length,
     'non-win accounting did not retain every failed seed');
+  const cleanDuplicate = Object.assign({}, report.games[0], {
+    winnerSide: 'A',
+    candidateSide: 'A',
+    candidateWon: true,
+    cleanPreSuddenDeathWin: true,
+    timeout: false,
+    suddenDeath: false,
+    nonResult: false,
+    exactClassAssignment: true,
+    genuineOpponentElimination: true,
+    gameplayInference: { calls: 1 }
+  });
+  const duplicateGames = [
+    Object.assign({}, cleanDuplicate, { seed: 41046 }),
+    Object.assign({}, cleanDuplicate, { seed: 41047 })
+  ];
+  const duplicateReport = buildBenchmarkReport({
+    checkpoint: checkpointDir,
+    candidate: 'AIPlayerWithEconomy',
+    baseline: 'SimpleAiPlayer',
+    mapName: 'big-open-field',
+    games: 2,
+    seed: 41046,
+    roundLimit: 60,
+    minWinRate: 0.8
+  }, checkpoint, duplicateGames, []);
+  assert(duplicateReport.summary.nonWins === 1,
+    'duplicate benchmark evidence did not count against the quality gate');
+  assert(duplicateReport.failedSeeds.includes(duplicateGames[1].seed),
+    'duplicate benchmark evidence did not retain the failed seed');
   assert(report.games.every(game => typeof game.thresholdEligibleWin === 'boolean'),
     'game rows did not expose threshold eligibility');
   assert(report.games.every(game => typeof game.outcomeType === 'string'),

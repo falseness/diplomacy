@@ -657,10 +657,8 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
     chosenNonFirst:
       loadedCheckpoint.inference.chosenNonFirst - inferenceBefore.chosenNonFirst
   };
-  game.trajectoryHash = crypto.createHash('sha256').update(JSON.stringify({
-    scenarioHash: game.scenarioHash,
-    trajectory: game.trajectory
-  })).digest('hex');
+  game.trajectoryHash = crypto.createHash('sha256')
+    .update(JSON.stringify(game.trajectory)).digest('hex');
   return game;
 }
 
@@ -708,6 +706,17 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
   const suddenDeathCandidateWins = games.filter(game => game.suddenDeathCandidateWin);
   const completedGames = games.filter(game => game.winnerSide !== null);
   const candidateWins = completedGames.filter(game => game.candidateWon);
+  const seenScenarios = new Set();
+  const seenTrajectories = new Set();
+  const duplicateEvidenceGames = new Set();
+  for (const game of games) {
+    if (seenScenarios.has(game.scenarioHash) ||
+        seenTrajectories.has(game.trajectoryHash)) {
+      duplicateEvidenceGames.add(game);
+    }
+    seenScenarios.add(game.scenarioHash);
+    seenTrajectories.add(game.trajectoryHash);
+  }
   const failedGames = games.filter(game =>
     !game.candidateWon ||
     game.timeout ||
@@ -715,7 +724,8 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
     game.nonResult ||
     !game.exactClassAssignment ||
     !game.genuineOpponentElimination ||
-    game.gameplayInference.calls === 0
+    game.gameplayInference.calls === 0 ||
+    duplicateEvidenceGames.has(game)
   );
   return {
     config: {

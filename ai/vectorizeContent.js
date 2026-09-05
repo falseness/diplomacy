@@ -80,10 +80,11 @@ var CELL_VECTOR_INDEX = {
     relativeSuburbIncomeAdvantage: 77,
     relativeUnitHp: 78,
     relativeTownHpRatio: 79,
-    relativeUnitObjectiveDistance: 80
+    relativeUnitObjectiveDistance: 80,
+    townDefenseMargin: 81
 }
 
-var CELL_VECTOR_SIZE = 81
+var CELL_VECTOR_SIZE = 82
 var CELL_VECTOR_GLOBAL_CHANNELS = [
     CELL_VECTOR_INDEX.currentPlayerGold,
     CELL_VECTOR_INDEX.strongestOpponentGold,
@@ -93,7 +94,8 @@ var CELL_VECTOR_GLOBAL_CHANNELS = [
     CELL_VECTOR_INDEX.relativeIncomeAdvantage,
     CELL_VECTOR_INDEX.currentPlayerSuburbIncome,
     CELL_VECTOR_INDEX.strongestOpponentSuburbIncome,
-    CELL_VECTOR_INDEX.relativeSuburbIncomeAdvantage
+    CELL_VECTOR_INDEX.relativeSuburbIncomeAdvantage,
+    CELL_VECTOR_INDEX.townDefenseMargin
 ]
 var TOWN_INCOME_VECTOR_SCALE = 20.0
 var BARRACK_INCOME_VECTOR_SCALE = 20.0
@@ -443,6 +445,13 @@ function finiteUnitValue(value) {
     return Number.isFinite(value) ? value : 0
 }
 
+function vectorHexDistance(left, right) {
+    return Math.max(
+        Math.abs(left.x - right.x),
+        Math.abs(left.y - right.y),
+        Math.abs(left.x + left.y - right.x - right.y))
+}
+
 function relativeUnitObjectiveDistance(cell) {
     if (typeof players == 'undefined' || typeof grid == 'undefined') {
         return 0
@@ -466,14 +475,55 @@ function relativeUnitObjectiveDistance(cell) {
     let nearest = Infinity
     for (let i = 0; i < targets.length; ++i) {
         nearest = Math.min(nearest,
-            Math.max(
-                Math.abs(cell.coord.x - targets[i].x),
-                Math.abs(cell.coord.y - targets[i].y),
-                Math.abs(cell.coord.x + cell.coord.y -
-                    targets[i].x - targets[i].y)))
+            vectorHexDistance(cell.coord, targets[i]))
     }
     let scale = Math.max(grid.arr.length, grid.arr[0].length)
     return -relativePlayerValue(owner) * nearest / scale
+}
+
+function currentTownDefenseMargin() {
+    if (typeof players == 'undefined' || typeof grid == 'undefined' ||
+            !players[whooseTurn]) {
+        return 0
+    }
+    let current = players[whooseTurn]
+    let towns = (current.towns || []).filter(function(town) { return !town.killed })
+    if (!towns.length) {
+        return -1
+    }
+    let defenders = (current.units || []).filter(function(unit) { return !unit.killed })
+    let attackers = []
+    for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+        if (playerIndex == whooseTurn || !players[playerIndex] ||
+                players[playerIndex].isNeutral) {
+            continue
+        }
+        attackers = attackers.concat((players[playerIndex].units || []).filter(
+            function(unit) { return !unit.killed }))
+    }
+    if (!attackers.length) {
+        return 1
+    }
+    if (!defenders.length) {
+        return -1
+    }
+    let scale = Math.max(grid.arr.length, grid.arr[0].length)
+    let total = 0
+    for (let townIndex = 0; townIndex < towns.length; ++townIndex) {
+        let defenderDistance = Infinity
+        let attackerDistance = Infinity
+        for (let i = 0; i < defenders.length; ++i) {
+            defenderDistance = Math.min(defenderDistance,
+                vectorHexDistance(towns[townIndex].coord, defenders[i].coord))
+        }
+        for (let i = 0; i < attackers.length; ++i) {
+            attackerDistance = Math.min(attackerDistance,
+                vectorHexDistance(towns[townIndex].coord, attackers[i].coord))
+        }
+        total += Math.max(-1, Math.min(1,
+            (attackerDistance - defenderDistance) / scale))
+    }
+    return total / towns.length
 }
 
 function unitCombatRange(unit) {
@@ -489,6 +539,7 @@ function computeGlobalVectorChannels() {
     vectorizePlayerGold(result)
     vectorizePlayerIncome(result)
     vectorizePlayerSuburbIncome(result)
+    result[CELL_VECTOR_INDEX.townDefenseMargin] = currentTownDefenseMargin()
     return result
 }
 

@@ -204,6 +204,20 @@ let vectorizedGrid = vectoriseGrid()[0]
 assertEqual(vectorizedGrid[0][0][CELL_VECTOR_INDEX.townOwner], 1, 'grid friendly town owner')
 assertEqual(vectorizedGrid[0][1][CELL_VECTOR_INDEX.townOwner], -1, 'grid enemy town owner')
 assertEqual(vectorizedGrid[0][2][CELL_VECTOR_INDEX.townOwner], 0, 'grid neutral town owner')
+
+grid.arr = new Array(21).fill(null).map(function() { return new Array(21) })
+players = [
+  {},
+  {towns: [{coord: {x: 0, y: 0}, killed: false}],
+    units: [{coord: {x: 1, y: 0}, killed: false}]},
+  {towns: [{coord: {x: 20, y: 20}, killed: false}],
+    units: [{coord: {x: 10, y: 0}, killed: false}]}
+]
+assertClose(currentTownDefenseMargin(), 9 / 21,
+  'town defense margin rewards a closer defender')
+players[1].units[0].coord = {x: 9, y: 0}
+assertClose(currentTownDefenseMargin(), 1 / 21,
+  'town defense margin changes continuously with defender distance')
 `);
 
 console.log('Town vectorization smoke passed');

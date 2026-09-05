@@ -1,7 +1,7 @@
 # AI Model Input Schema
 
 Training and inference both call `vectoriseGrid()` from
-`ai/vectorizeContent.js`. Each board cell is an 81-channel vector indexed by
+`ai/vectorizeContent.js`. Each board cell is an 82-channel vector indexed by
 `CELL_VECTOR_INDEX`. Model creation and checkpoint loading use
 `CELL_VECTOR_SIZE` and reject checkpoints with a different channel count.
 
@@ -21,6 +21,7 @@ Training and inference both call `vectoriseGrid()` from
 | 75-77 | Current and opposing suburb income plus relative suburb-income advantage |
 | 78-79 | Acting-player-relative unit HP and town HP ratio |
 | 80 | Acting-player-relative unit distance to the nearest opposing live town |
+| 81 | Continuous acting-player town-defense margin: nearest attacker distance minus nearest defender distance, normalized by map size |
 
 Ownership channels are relative to the acting player: `1` friendly, `-1`
 enemy, and `0` neutral. Health is normalized by maximum health. Production
