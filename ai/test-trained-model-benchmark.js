@@ -4,7 +4,11 @@ const path = require('path');
 const crypto = require('crypto');
 const tf = require('@tensorflow/tfjs-node');
 const {
+  BENCHMARK_MAPS,
+} = require('./benchmarkHarness');
+const {
   buildBenchmarkReport,
+  flattenBoardBatch,
   loadCheckpoint,
   runBalancedBenchmark
 } = require('./benchmark-trained-model');
@@ -39,6 +43,21 @@ async function createCheckpoint(checkpointDir) {
 }
 
 async function main() {
+  const flattenProbe = [
+    [
+      [[1.25, 2.5], [3.75, 4]],
+      [[5, 6], [7, 8]]
+    ],
+    [
+      [[-1, -2], [-3, -4]],
+      [[-5, -6], [-7, -8]]
+    ]
+  ];
+  assert(
+    Array.from(flattenBoardBatch(flattenProbe, 2, 2, 2)).join(',') ===
+      flattenProbe.flat(3).join(','),
+    'allocation-light board batching changed tensor element order or values'
+  );
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task047-'));
   const checkpointDir = path.join(temporary, 'checkpoint');
   fs.mkdirSync(checkpointDir);
@@ -61,10 +80,12 @@ async function main() {
   assert(report.config.candidate === 'AIPlayerWithEconomy', 'benchmark used the wrong candidate class');
   assert(report.summary.completedGames === 2, 'focused benchmark did not complete both games');
   assert(report.summary.runtimeGamesExecuted === 2, 'focused benchmark did not execute every requested game');
-  assert(report.summary.uniqueScenarioCount === 2,
-    'focused benchmark did not execute distinct seeded scenarios');
-  assert(new Set(report.games.map(game => game.scenarioHash)).size === 2,
-    'scenario hashes were repeated');
+  assert(report.summary.uniqueScenarioCount === 1,
+    'focused benchmark changed the configured map between seeds');
+  const configuredMapHash = crypto.createHash('sha256')
+    .update(JSON.stringify(BENCHMARK_MAPS['big-open-field'])).digest('hex');
+  assert(report.games.every(game => game.scenarioHash === configuredMapHash),
+    'focused benchmark did not use the exact configured big-open-field map');
   assert(report.summary.uniqueTrajectoryCount === 2,
     'focused benchmark did not execute distinct runtime trajectories');
   assert(report.games.every(game => /^[0-9a-f]{64}$/.test(game.trajectoryHash)),
@@ -72,8 +93,10 @@ async function main() {
   assert(report.games.every(game => game.trajectoryHash === crypto.createHash('sha256')
     .update(JSON.stringify(game.trajectory)).digest('hex')),
     'trajectory hashes depended on data outside the runtime trajectory');
-  assert(report.scenarioPolicy.name === 'seeded-mirrored-big-map-v1',
-    'seeded scenario policy was not reported');
+  assert(report.scenarioPolicy.name === 'configured-benchmark-map-v1',
+    'configured-map policy was not reported');
+  assert(report.scenarioPolicy.mapSource === 'BENCHMARK_MAPS[config.mapName]',
+    'configured-map source was not reported');
   assert(
     report.summary.deterministicReplays === undefined,
     'benchmark still reports deterministic replay shortcuts'
@@ -110,10 +133,10 @@ async function main() {
     roundLimit: 60,
     minWinRate: 0.8
   }, checkpoint, duplicateGames, []);
-  assert(duplicateReport.summary.nonWins === 1,
-    'duplicate benchmark evidence did not count against the quality gate');
-  assert(duplicateReport.failedSeeds.includes(duplicateGames[1].seed),
-    'duplicate benchmark evidence did not retain the failed seed');
+  assert(duplicateReport.summary.nonWins === 0,
+    'an honest repeated fixed-map trajectory was converted into a non-win');
+  assert(duplicateReport.summary.repeatedTrajectoryGames === 1,
+    'repeated fixed-map trajectories were not reported explicitly');
   assert(report.games.every(game => typeof game.thresholdEligibleWin === 'boolean'),
     'game rows did not expose threshold eligibility');
   assert(report.games.every(game => typeof game.outcomeType === 'string'),

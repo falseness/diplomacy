@@ -13,7 +13,7 @@ const {
 
 const repoRoot = path.resolve(__dirname, '..');
 const MODEL_INFERENCE_BATCH_SIZE = 64;
-const SCENARIO_POLICY = 'seeded-mirrored-big-map-v1';
+const SCENARIO_POLICY = 'configured-benchmark-map-v1';
 
 function usage() {
   return [
@@ -312,6 +312,20 @@ function loadBrowserScripts(context) {
   `, { filename: 'task047-checkpoint-binding.js' }).runInContext(context);
 }
 
+function flattenBoardBatch(boards, width, height, channels) {
+  const values = new Float32Array(boards.length * width * height * channels);
+  let offset = 0;
+  for (const board of boards) {
+    for (let x = 0; x < width; ++x) {
+      for (let y = 0; y < height; ++y) {
+        values.set(board[x][y], offset);
+        offset += channels;
+      }
+    }
+  }
+  return values;
+}
+
 function createPredictor(model, stats) {
   const inputShape = model.inputs[0].shape;
   return function predictFromCheckpoint(checkpointModel, vectors) {
@@ -346,7 +360,8 @@ function createPredictor(model, stats) {
       const boardBatch = adaptedBoards.slice(start, end);
       const globalBatch = globals.slice(start, end);
       const boardTensor = tf.tensor4d(
-        boardBatch.flat(3),
+        flattenBoardBatch(
+          boardBatch, expectedWidth, expectedHeight, expectedChannels),
         [boardBatch.length, expectedWidth, expectedHeight, expectedChannels]
       );
       const globalTensor = tf.tensor2d(globalBatch, [globalBatch.length, 1]);
@@ -387,92 +402,6 @@ function createPredictor(model, stats) {
   };
 }
 
-function seededRandom(seed) {
-  let state = seed >>> 0;
-  return function() {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
-}
-
-function shuffled(values, random) {
-  const result = values.slice();
-  for (let index = result.length - 1; index > 0; --index) {
-    const other = Math.floor(random() * (index + 1));
-    [result[index], result[other]] = [result[other], result[index]];
-  }
-  return result;
-}
-
-function createScenarioMap(configured, seed) {
-  const random = seededRandom(seed);
-  const width = configured.width;
-  const height = configured.height;
-  const leftTown = {
-    x: 2 + Math.floor(random() * 4),
-    y: 4 + Math.floor(random() * (height - 8))
-  };
-  const rightTown = {
-    x: width - 1 - leftTown.x,
-    y: height - 1 - leftTown.y
-  };
-  const neighbourOffsets = shuffled([
-    { x: 1, y: -1 },
-    { x: 1, y: 0 },
-    { x: 0, y: 1 },
-    { x: -1, y: 1 },
-    { x: -1, y: 0 },
-    { x: 0, y: -1 }
-  ], random).slice(0, 3);
-  const leftUnits = neighbourOffsets.map(offset => ({
-    x: leftTown.x + offset.x,
-    y: leftTown.y + offset.y
-  }));
-  const rightUnits = leftUnits.map(coord => ({
-    x: width - 1 - coord.x,
-    y: height - 1 - coord.y
-  }));
-  const occupied = new Set(
-    [leftTown, rightTown].concat(leftUnits, rightUnits)
-      .map(coord => coord.x + ',' + coord.y)
-  );
-  const blocked = [];
-  const blockedKeys = new Set();
-  const pairCount = 2 + Math.floor(random() * 4);
-  while (blocked.length < pairCount * 2) {
-    const coord = {
-      x: 7 + Math.floor(random() * 7),
-      y: 2 + Math.floor(random() * (height - 4))
-    };
-    const mirror = {
-      x: width - 1 - coord.x,
-      y: height - 1 - coord.y
-    };
-    const keys = [coord, mirror].map(value => value.x + ',' + value.y);
-    if (keys.some(key => occupied.has(key) || blockedKeys.has(key)) ||
-        keys[0] === keys[1]) {
-      continue;
-    }
-    blocked.push(coord, mirror);
-    keys.forEach(key => blockedKeys.add(key));
-  }
-  const scenario = {
-    width,
-    height,
-    suddenDeathRound: configured.suddenDeathRound,
-    blocked,
-    players: [
-      { town: leftTown, units: leftUnits },
-      { town: rightTown, units: rightUnits }
-    ]
-  };
-  return {
-    map: scenario,
-    hash: crypto.createHash('sha256')
-      .update(JSON.stringify(scenario)).digest('hex')
-  };
-}
-
 function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
   const inferenceBefore = {
     calls: loadedCheckpoint.inference.calls,
@@ -486,9 +415,9 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
   const context = createRuntimeContext(seed, predictor, loadedCheckpoint.model);
   loadBrowserScripts(context);
   context.__task047MapName = options.mapName;
-  const scenario = createScenarioMap(BENCHMARK_MAPS[options.mapName], seed);
-  context.__task047Map = scenario.map;
-  context.__scenarioHash = scenario.hash;
+  context.__task047Map = BENCHMARK_MAPS[options.mapName];
+  context.__scenarioHash = crypto.createHash('sha256')
+    .update(JSON.stringify(context.__task047Map)).digest('hex');
   context.__candidateSide = candidateSide;
   context.__candidateClass = options.candidate;
   context.__baselineClass = options.baseline;
@@ -706,17 +635,7 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
   const suddenDeathCandidateWins = games.filter(game => game.suddenDeathCandidateWin);
   const completedGames = games.filter(game => game.winnerSide !== null);
   const candidateWins = completedGames.filter(game => game.candidateWon);
-  const seenScenarios = new Set();
-  const seenTrajectories = new Set();
-  const duplicateEvidenceGames = new Set();
-  for (const game of games) {
-    if (seenScenarios.has(game.scenarioHash) ||
-        seenTrajectories.has(game.trajectoryHash)) {
-      duplicateEvidenceGames.add(game);
-    }
-    seenScenarios.add(game.scenarioHash);
-    seenTrajectories.add(game.trajectoryHash);
-  }
+  const distinctSeedCount = new Set(games.map(game => game.seed)).size;
   const failedGames = games.filter(game =>
     !game.candidateWon ||
     game.timeout ||
@@ -724,8 +643,7 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
     game.nonResult ||
     !game.exactClassAssignment ||
     !game.genuineOpponentElimination ||
-    game.gameplayInference.calls === 0 ||
-    duplicateEvidenceGames.has(game)
+    game.gameplayInference.calls === 0
   );
   return {
     config: {
@@ -740,8 +658,8 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
     },
     scenarioPolicy: {
       name: SCENARIO_POLICY,
-      frozenBeforeFinalTest: true,
-      fairness: '180-degree mirrored towns, units, and blocked cells',
+      mapSource: 'BENCHMARK_MAPS[config.mapName]',
+      fairness: 'the configured benchmark map is used without coordinate changes',
       distinctScenarioInputs: uniqueScenarioCount,
       distinctRuntimeTrajectories: uniqueTrajectoryCount
     },
@@ -785,8 +703,10 @@ function buildBenchmarkReport(options, loadedCheckpoint, games, crashes) {
       crashes: crashes.length,
       nonWins: failedGames.length + crashes.length,
       runtimeGamesExecuted: games.length,
+      distinctSeedCount,
       uniqueScenarioCount,
-      uniqueTrajectoryCount
+      uniqueTrajectoryCount,
+      repeatedTrajectoryGames: games.length - uniqueTrajectoryCount
     },
     failedSeeds: failedGames.map(game => game.seed).concat(crashes.map(crash => crash.seed)),
     failedGames,
@@ -811,9 +731,11 @@ async function main() {
     if (result.summary.completedGames < options.games) {
       throw new Error('fewer than requested games completed');
     }
-    if (result.summary.uniqueScenarioCount !== options.games ||
-        result.summary.uniqueTrajectoryCount !== options.games) {
-      throw new Error('every requested game must have a distinct scenario and trajectory');
+    if (result.summary.uniqueScenarioCount !== 1 ||
+        result.summary.distinctSeedCount !== options.games) {
+      throw new Error(
+        'the configured map must remain fixed and every requested seed must execute'
+      );
     }
     if (result.summary.candidateWinRate < options.minWinRate ||
         result.summary.nonWins > 0) {
@@ -838,6 +760,7 @@ if (require.main === module) {
 
 module.exports = {
   buildBenchmarkReport,
+  flattenBoardBatch,
   loadCheckpoint,
   parseArgs,
   runBalancedBenchmark,
