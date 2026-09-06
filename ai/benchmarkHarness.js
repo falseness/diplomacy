@@ -575,6 +575,9 @@ function runBenchmark(options) {
         roundLimit: options.roundLimit,
         actionLimit: options.actionLimit,
         commandLimit: options.commandLimit,
+        predictFunction: options.predictFunction,
+        inferenceSource: options.inferenceSource,
+        modelIdentifier: options.modelIdentifier,
         seed
       }));
     } catch (error) {

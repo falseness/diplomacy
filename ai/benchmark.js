@@ -20,6 +20,7 @@ function usage() {
     '  --repeat NUMBER        Number of games (default: 1)',
     '  --round-limit NUMBER   Maximum rounds per game (default: 40)',
     '  --min-win-rate NUMBER  Required player A win rate, from 0 to 1',
+    '  --checkpoint PATH      Real checkpoint for AIPlayer classes',
     '  --checkpoint-id TEXT   Checkpoint or candidate identifier for reports',
     '  --output PATH          JSON report path',
     '  --list                 List player classes and maps',
@@ -45,6 +46,7 @@ function parseArgs(argv) {
     '--repeat': 'repeat',
     '--round-limit': 'roundLimit',
     '--min-win-rate': 'minWinRate',
+    '--checkpoint': 'checkpoint',
     '--checkpoint-id': 'checkpointIdentifier',
     '--output': 'output'
   };
@@ -75,8 +77,9 @@ function parseArgs(argv) {
   return options;
 }
 
-function main() {
+async function main() {
   let options;
+  let loadedCheckpoint;
   try {
     options = parseArgs(process.argv.slice(2));
     if (options.help) {
@@ -87,6 +90,26 @@ function main() {
       console.log('Player classes: ' + Object.keys(PLAYER_CLASSES).join(', '));
       console.log('Maps: ' + Object.keys(BENCHMARK_MAPS).join(', '));
       return;
+    }
+    const modelPlayers = [options.playerA, options.playerB].filter(function(playerClass) {
+      return playerClass === 'AIPlayer' || playerClass === 'AIPlayerWithEconomy';
+    });
+    if (modelPlayers.length) {
+      if (!options.checkpoint) {
+        throw new Error(
+          '--checkpoint is required when benchmarking AIPlayer or AIPlayerWithEconomy'
+        );
+      }
+      const { createPredictor, loadCheckpoint } = require('./benchmark-trained-model');
+      loadedCheckpoint = await loadCheckpoint(options.checkpoint);
+      options.predictFunction = createPredictor(
+        loadedCheckpoint.model,
+        loadedCheckpoint.inference
+      );
+      options.modelIdentifier = loadedCheckpoint.model;
+      options.inferenceSource = 'checkpoint:' + loadedCheckpoint.report.path;
+      options.checkpointIdentifier = options.checkpointIdentifier ||
+        loadedCheckpoint.report.path;
     }
     const result = runBenchmark(options);
     const outputPath = writeResult(result, options.output);
@@ -113,6 +136,10 @@ function main() {
   } catch (error) {
     console.error(error.message);
     process.exitCode = 2;
+  } finally {
+    if (loadedCheckpoint) {
+      loadedCheckpoint.model.dispose();
+    }
   }
 }
 

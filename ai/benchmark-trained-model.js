@@ -776,6 +776,7 @@ if (require.main === module) {
 
 module.exports = {
   buildBenchmarkReport,
+  createPredictor,
   flattenBoardBatch,
   loadCheckpoint,
   parseArgs,

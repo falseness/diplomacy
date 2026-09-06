@@ -2,11 +2,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const tf = require('@tensorflow/tfjs-node');
 const {
   PLAYER_CLASSES,
   runBenchmark,
   writeResult
 } = require('./benchmarkHarness');
+const {
+  createPredictor,
+  loadCheckpoint
+} = require('./benchmark-trained-model');
 
 function assert(condition, message) {
   if (!condition) {
@@ -21,6 +26,28 @@ assert(!/AIPlayer\.prototype\.nextTurn\s*=/.test(harnessSource),
 assert(!/simulate-crash-seed/.test(cliSource),
   'production benchmark CLI exposes report-format crash simulation');
 
+async function createCheckpoint(checkpointDir) {
+  const board = tf.input({ shape: [9, 7, 82], name: 'board' });
+  const globals = tf.input({ shape: [1], name: 'global_variables' });
+  const flattened = tf.layers.flatten().apply(board);
+  const merged = tf.layers.concatenate().apply([flattened, globals]);
+  const output = tf.layers.dense({
+    units: 1,
+    activation: 'tanh',
+    name: 'value_output',
+    kernelInitializer: 'ones',
+    biasInitializer: 'zeros'
+  }).apply(merged);
+  const model = tf.model({ inputs: [board, globals], outputs: output });
+  await model.save('file://' + checkpointDir);
+  model.dispose();
+  fs.writeFileSync(path.join(checkpointDir, 'metadata.json'), JSON.stringify({
+    purpose: 'generic benchmark runtime-class smoke; not AI quality evidence',
+    seed: 431
+  }, null, 2) + '\n');
+}
+
+async function main() {
 const options = {
   mapName: 'tiny-duel',
   playerA: 'SimpleAiPlayer',
@@ -86,14 +113,68 @@ for (const playerClass of ['SimpleAiPlayer', 'SimpleAiPlayerWithEconomy']) {
     playerClass + ' runtime constructor was not instantiated'
   );
 }
-for (const playerClass of [
-  'SimpleAiPlayer',
-  'SimpleAiPlayerWithEconomy',
-  'AIPlayer',
-  'AIPlayerWithEconomy'
-]) {
+for (const playerClass of Object.keys(PLAYER_CLASSES)) {
   assert(typeof PLAYER_CLASSES[playerClass] === 'function',
     playerClass + ' was not loaded from the runtime player source');
+}
+
+const modelCheckpointDirectory = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'diplomacy-generic-benchmark-checkpoint-')
+);
+await createCheckpoint(modelCheckpointDirectory);
+const loadedCheckpoint = await loadCheckpoint(modelCheckpointDirectory);
+try {
+  const predictor = createPredictor(loadedCheckpoint.model, loadedCheckpoint.inference);
+  for (const playerClass of ['AIPlayer', 'AIPlayerWithEconomy']) {
+    const comparison = runBenchmark({
+      mapName: 'tiny-duel',
+      playerA: playerClass,
+      playerB: 'SimpleAiPlayer',
+      seed: playerClass === 'AIPlayer' ? 23 : 24,
+      repeat: 1,
+      roundLimit: 2,
+      predictFunction: predictor,
+      inferenceSource: 'serialized smoke checkpoint; not AI quality evidence',
+      modelIdentifier: loadedCheckpoint.model,
+      checkpointIdentifier: modelCheckpointDirectory
+    });
+    assert(comparison.summary.crashCount === 0,
+      playerClass + ' crashed in the generic runBenchmark path');
+    assert(comparison.games[0].runtimePlayerA === playerClass,
+      playerClass + ' generic runtime constructor was not instantiated');
+    assert(comparison.games[0].inference.calls > 0,
+      playerClass + ' did not use checkpoint inference through runBenchmark');
+  }
+
+  const checkpointCliOutput = path.join(
+    modelCheckpointDirectory,
+    'generic-cli-ai-report.json'
+  );
+  const checkpointCli = spawnSync(process.execPath, [
+    path.join(__dirname, 'benchmark.js'),
+    '--player-a', 'AIPlayerWithEconomy',
+    '--player-b', 'SimpleAiPlayer',
+    '--map', 'tiny-duel',
+    '--seed', '25',
+    '--repeat', '1',
+    '--round-limit', '2',
+    '--min-win-rate', '0',
+    '--checkpoint', modelCheckpointDirectory,
+    '--output', checkpointCliOutput
+  ], { encoding: 'utf8' });
+  assert(checkpointCli.status === 1,
+    'generic checkpoint CLI hid its intentionally bounded non-result');
+  const checkpointCliReport = JSON.parse(
+    fs.readFileSync(checkpointCliOutput, 'utf8')
+  );
+  assert(checkpointCliReport.summary.crashCount === 0,
+    'generic checkpoint CLI failed to execute the real model player');
+  assert(checkpointCliReport.games[0].runtimePlayerA === 'AIPlayerWithEconomy',
+    'generic checkpoint CLI substituted the requested runtime class');
+  assert(checkpointCliReport.games[0].inference.calls > 0,
+    'generic checkpoint CLI did not execute checkpoint-backed inference');
+} finally {
+  loadedCheckpoint.model.dispose();
 }
 
 const missingCheckpointReport = runBenchmark({
@@ -178,3 +259,9 @@ assert(/fix the player, model, architecture, or training/.test(failedThreshold.s
   'real gameplay failure was not routed to an AI/model/training fix');
 
 console.log('Deterministic benchmark harness smoke passed');
+}
+
+main().catch(function(error) {
+  console.error(error.message);
+  process.exitCode = 1;
+});
