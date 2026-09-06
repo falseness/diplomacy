@@ -192,9 +192,6 @@ function nowIso(state, label) {
 }
 
 function projectedCombatLabel(boardValues, globalValue) {
-  const friendlyUnits = [];
-  const enemyUnits = [];
-  const targets = [];
   let score = 0;
   for (let x = 0; x < 3; x += 1) {
     for (let y = 0; y < 3; y += 1) {
@@ -203,55 +200,19 @@ function projectedCombatLabel(boardValues, globalValue) {
       const enemyUnitCount = boardValues[offset + 1];
       const friendlyUnitHp = boardValues[offset + 2];
       const enemyUnitHp = boardValues[offset + 3];
-      const friendlyDamage = boardValues[offset + 4];
-      const enemyDamage = boardValues[offset + 5];
-      const friendlyRange = boardValues[offset + 6];
-      const enemyRange = boardValues[offset + 7];
       const friendlyTownCount = boardValues[offset + 8];
       const enemyTownCount = boardValues[offset + 9];
       const friendlyTownHp = boardValues[offset + 10];
       const enemyTownHp = boardValues[offset + 11];
-      const friendlyMoves = boardValues[offset + 12];
-      const enemyMoves = boardValues[offset + 13];
-      if (friendlyUnitCount > 0) {
-        friendlyUnits.push({ x, y, count: friendlyUnitCount });
-      }
-      if (enemyUnitCount > 0) {
-        enemyUnits.push({ x, y, count: enemyUnitCount });
-        targets.push({ x, y, kind: 'unit', count: enemyUnitCount });
-      }
-      if (enemyTownCount > 0) {
-        targets.push({ x, y, kind: 'town', count: enemyTownCount });
-      }
-      score += friendlyUnitCount * 8 + friendlyUnitHp * 0.12 +
-        friendlyDamage * 0.6 + friendlyRange * 2 + friendlyMoves * 0.2;
-      score -= enemyUnitCount * 8 + enemyUnitHp * 0.12 +
-        enemyDamage * 0.6 + enemyRange * 2 + enemyMoves * 0.2;
-      score += friendlyTownCount * 45 + friendlyTownHp * 16;
-      score -= enemyTownCount * 45 + enemyTownHp * 16;
+      score += friendlyUnitCount * 1000 + friendlyUnitHp * 50;
+      score -= enemyUnitCount * 1000 + enemyUnitHp * 50;
+      score += friendlyTownCount * 5000 + friendlyTownHp * 5000;
+      score -= enemyTownCount * 5000 + enemyTownHp * 5000;
+      score += boardValues[offset + 16] * 210;
     }
-  }
-  if (friendlyUnits.length && targets.length) {
-    let nearestTotal = 0;
-    let unitTotal = 0;
-    for (const unit of friendlyUnits) {
-      let nearest = Infinity;
-      for (const target of targets) {
-        nearest = Math.min(
-          nearest,
-          Math.abs(unit.x - target.x) + Math.abs(unit.y - target.y)
-        );
-      }
-      nearestTotal += nearest * unit.count;
-      unitTotal += unit.count;
-    }
-    score -= nearestTotal * 8 / Math.max(1, unitTotal);
-  }
-  if (enemyUnits.length && !friendlyUnits.length) {
-    score -= 20;
   }
   score += Number(globalValue) || 0;
-  return Math.tanh(score / 45);
+  return score / 1000;
 }
 
 function putTown(boardValues, x, y, owner, hpRatio) {
@@ -461,12 +422,14 @@ function projectRuntimeVectorForModel(vectorizedGrid) {
           projected[offset + 4] += Number(cell[9]) || 0;
           projected[offset + 6] += Number(cell[10]) || 0;
           projected[offset + 12] += Number(cell[7]) || 0;
+          projected[offset + 16] += Number(cell[80]) || 0;
         } else if (unitOwner < 0) {
           projected[offset + 1] += 1;
           projected[offset + 3] += Number(cell[11]) || 0;
           projected[offset + 5] += Number(cell[9]) || 0;
           projected[offset + 7] += Number(cell[10]) || 0;
           projected[offset + 13] += Number(cell[7]) || 0;
+          projected[offset + 16] += Number(cell[80]) || 0;
         }
         const townOwner = Number(cell[13]) || 0;
         if (townOwner > 0) {
@@ -546,25 +509,26 @@ function runtimeCombatTeacherGameSeed(seed, stageIndex, game) {
 
 function collectRuntimeCombatTeacherGame(seed, stageIndex, game) {
   const examples = [];
+  const modelSide = game % 2 === 1 ? 'A' : 'B';
   const collectPredict = function collectPredict(_modelIdentifier, vectorizedGrids) {
-    const predictions = [];
-    for (const vectorizedGrid of vectorizedGrids) {
-      const example = runtimeCombatTeacherLabel(vectorizedGrid);
+    const labeledGrids = vectorizedGrids.map(runtimeCombatTeacherLabel);
+    const scores = labeledGrids.map((example) => example.label);
+    for (let index = 0; index < vectorizedGrids.length; index += 1) {
+      const example = labeledGrids[index];
       examples.push({
         board: example.board,
         globalValue: example.globalValue,
         label: example.label,
         policy: oneHotPolicy(actionIndexFromProjectedBoard(example.board))
       });
-      predictions.push([example.label]);
     }
-    return predictions;
+    return scores.map((score) => [score]);
   };
   const gameSeed = runtimeCombatTeacherGameSeed(seed, stageIndex, game);
   const result = runGame({
-    mapName: 'tiny-duel',
-    playerA: 'AIPlayer',
-    playerB: 'SimpleAiPlayer',
+    mapName: 'big-open-field',
+    playerA: modelSide === 'A' ? 'AIPlayer' : 'SimpleAiPlayer',
+    playerB: modelSide === 'B' ? 'AIPlayer' : 'SimpleAiPlayer',
     seed: gameSeed,
     roundLimit: 80,
     actionLimit: 12,
@@ -580,6 +544,7 @@ function collectRuntimeCombatTeacherGame(seed, stageIndex, game) {
   return {
     game,
     seed: gameSeed,
+    modelSide,
     winnerSide: result.winnerSide,
     winner: result.winner,
     roundCount: result.roundCount,
@@ -667,7 +632,11 @@ function batchFromRuntimeTeacherGameResults(gameResults) {
   const labels = [];
   const policies = [];
   for (const result of gameResults.slice().sort((a, b) => a.game - b.game)) {
-    for (const example of result.examples) {
+    const stride = Math.max(1, Math.floor(result.examples.length / 256));
+    for (let exampleIndex = 0;
+      exampleIndex < result.examples.length && policies.length < result.game * 256;
+      exampleIndex += stride) {
+      const example = result.examples[exampleIndex];
       for (let index = 0; index < example.board.length; index += 1) {
         boardValues.push(example.board[index]);
       }
@@ -811,29 +780,104 @@ async function workerPoolDispatchProbe(workerCount, jobs) {
   }
 }
 
+function solveLinearSystem(matrix, values) {
+  for (let i = 0; i < values.length; i += 1) {
+    let pivot = i;
+    for (let j = i + 1; j < values.length; j += 1) {
+      if (Math.abs(matrix[j][i]) > Math.abs(matrix[pivot][i])) {
+        pivot = j;
+      }
+    }
+    [matrix[i], matrix[pivot]] = [matrix[pivot], matrix[i]];
+    [values[i], values[pivot]] = [values[pivot], values[i]];
+    const divisor = matrix[i][i];
+    if (Math.abs(divisor) < 1e-12) {
+      fail('runtime combat value regression is singular');
+    }
+    for (let j = i; j < values.length; j += 1) {
+      matrix[i][j] /= divisor;
+    }
+    values[i] /= divisor;
+    for (let k = 0; k < values.length; k += 1) {
+      if (k === i || matrix[k][i] === 0) {
+        continue;
+      }
+      const factor = matrix[k][i];
+      for (let j = i; j < values.length; j += 1) {
+        matrix[k][j] -= factor * matrix[i][j];
+      }
+      values[k] -= factor * values[i];
+    }
+  }
+  return values;
+}
+
+function createRuntimeCombatValueRegression() {
+  const featureCount = 3 * 3 * 21 + 2;
+  return {
+    matrix: Array.from({ length: featureCount }, () =>
+      new Float64Array(featureCount)),
+    values: new Float64Array(featureCount)
+  };
+}
+
+function fitRuntimeCombatValueBatch(model, runtimeBatch, regression) {
+  const boardValues = runtimeBatch.board.dataSync();
+  const globalValues = runtimeBatch.global.dataSync();
+  const labels = runtimeBatch.labels.dataSync();
+  const boardFeatureCount = 3 * 3 * 21;
+  const featureCount = boardFeatureCount + 2;
+  for (let sample = 0; sample < labels.length; sample += 1) {
+    const features = Array.from(
+      boardValues.subarray(sample * boardFeatureCount, (sample + 1) * boardFeatureCount)
+    ).concat(globalValues[sample], 1);
+    for (let i = 0; i < featureCount; i += 1) {
+      regression.values[i] += features[i] * labels[sample];
+      for (let j = 0; j < featureCount; j += 1) {
+        regression.matrix[i][j] += features[i] * features[j];
+      }
+    }
+  }
+  const matrix = regression.matrix.map((row) => Float64Array.from(row));
+  const values = Float64Array.from(regression.values);
+  for (let i = 0; i < featureCount; i += 1) {
+    matrix[i][i] += 1e-8;
+  }
+  const weights = solveLinearSystem(matrix, values);
+  const kernel = tf.tensor2d(
+    Array.from(weights.slice(0, featureCount - 1)),
+    [featureCount - 1, 1]
+  );
+  const bias = tf.tensor1d([weights[featureCount - 1]]);
+  model.getLayer('combat_value').setWeights([kernel, bias]);
+  kernel.dispose();
+  bias.dispose();
+  let squaredError = 0;
+  for (let sample = 0; sample < labels.length; sample += 1) {
+    let prediction = weights[featureCount - 1] +
+      weights[boardFeatureCount] * globalValues[sample];
+    for (let i = 0; i < boardFeatureCount; i += 1) {
+      prediction += weights[i] * boardValues[sample * boardFeatureCount + i];
+    }
+    squaredError += Math.pow(prediction - labels[sample], 2);
+  }
+  const loss = squaredError / labels.length;
+  return { history: { combat_value_loss: [loss], loss: [loss] } };
+}
+
 async function fitRuntimeCombatTeacherBatch(
   model,
   seed,
   stageIndex,
-  epochs,
-  deterministic,
-  workerPool
+  workerPool,
+  regression
 ) {
   const runtimeBatch = await makeRuntimeCombatTeacherBatch(seed, stageIndex, workerPool);
   if (!runtimeBatch) {
     return null;
   }
   try {
-    return await model.fit(
-      [runtimeBatch.board, runtimeBatch.global],
-      modelTargets(runtimeBatch),
-      {
-        epochs,
-        batchSize: 16,
-        shuffle: !deterministic,
-        verbose: 0
-      }
-    );
+    return fitRuntimeCombatValueBatch(model, runtimeBatch, regression);
   } finally {
     runtimeBatch.board.dispose();
     runtimeBatch.global.dispose();
@@ -1281,12 +1325,14 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     ? options.curriculumPredictFunction
     : createRuntimeModelPredict(model);
   for (let game = 1; game <= games; game += 1) {
+    const modelSide = game % 2 === 1 ? 'A' : 'B';
+    const simpleAiPlayerSide = modelSide === 'A' ? 'B' : 'A';
     const seed = state.seed + state.completedGames * 3571 +
       state.curriculum.currentStageIndex * 101 + game;
     const result = runGame({
       mapName: 'big-open-field',
-      playerA: 'AIPlayer',
-      playerB: 'SimpleAiPlayer',
+      playerA: modelSide === 'A' ? 'AIPlayer' : 'SimpleAiPlayer',
+      playerB: modelSide === 'B' ? 'AIPlayer' : 'SimpleAiPlayer',
       seed,
       roundLimit: 80,
       actionLimit: 3,
@@ -1302,10 +1348,10 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
         : 'current TensorFlow checkpoint output through unchanged runtime AIPlayer predict()'
     });
     let winner = 'draw';
-    if (result.winnerSide === 'A') {
+    if (result.winnerSide === modelSide) {
       modelWins += 1;
       winner = 'model';
-    } else if (result.winnerSide === 'B') {
+    } else if (result.winnerSide === simpleAiPlayerSide) {
       simpleWins += 1;
       winner = 'SimpleAiPlayer';
     } else {
@@ -1314,6 +1360,8 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     gameResults.push({
       game,
       seed,
+      modelSide,
+      simpleAiPlayerSide,
       winner,
       winnerSide: result.winnerSide,
       roundCount: result.roundCount,
@@ -1338,6 +1386,10 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
     simpleAiPlayerWins: simpleWins,
     draws,
     source: 'measured-model-vs-SimpleAiPlayer-benchmark',
+    sideDistribution: {
+      modelA: gameResults.filter((result) => result.modelSide === 'A').length,
+      modelB: gameResults.filter((result) => result.modelSide === 'B').length
+    },
     benchmarkPolicy: typeof options.curriculumPredictFunction === 'function'
       ? 'real GameMap runtime with unchanged AIPlayer using test-configured current-model output versus unchanged SimpleAiPlayer'
       : 'real GameMap runtime with unchanged AIPlayer using current TensorFlow model output versus unchanged SimpleAiPlayer',
@@ -1376,6 +1428,8 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
   const gameResults = [];
   try {
     for (let game = 1; game <= games; game += 1) {
+      const modelSide = game % 2 === 1 ? 'A' : 'B';
+      const baselineAiPlayerSide = modelSide === 'A' ? 'B' : 'A';
       const seed = state.seed + state.completedGames * 4129 +
         state.curriculum.currentStageIndex * 131 + game;
       const result = runGame({
@@ -1384,10 +1438,10 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
         playerB: 'AIPlayer',
         seed,
         roundLimit: 80,
-        actionLimit: 3,
+        actionLimit: 12,
         commandLimit: 60,
         predictFunction(_modelIdentifier, vectorizedGrids, metadata) {
-          return metadata && metadata.activeSide === 'B'
+          return metadata && metadata.activeSide === baselineAiPlayerSide
             ? baselinePredict(_modelIdentifier, vectorizedGrids)
             : currentPredict(_modelIdentifier, vectorizedGrids);
         },
@@ -1398,14 +1452,14 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
           baselineModelPath: baselinePath
         },
         inferenceSource: typeof options.curriculumPredictFunction === 'function'
-          ? 'side-routed model output: side A test-configured current AIPlayer model, side B baseline AIPlayer model'
-          : 'side-routed TensorFlow checkpoint output: side A current AIPlayer model, side B baseline AIPlayer model'
+          ? 'balanced side-routed test-configured current and baseline AIPlayer model outputs'
+          : 'balanced side-routed current and baseline TensorFlow checkpoint outputs'
       });
       let winner = 'draw';
-      if (result.winnerSide === 'A') {
+      if (result.winnerSide === modelSide) {
         modelWins += 1;
         winner = 'model';
-      } else if (result.winnerSide === 'B') {
+      } else if (result.winnerSide === baselineAiPlayerSide) {
         baselineWins += 1;
         winner = 'baseline-AIPlayer';
       } else {
@@ -1414,6 +1468,8 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
       gameResults.push({
         game,
         seed,
+        modelSide,
+        baselineAiPlayerSide,
         winner,
         winnerSide: result.winnerSide,
         roundCount: result.roundCount,
@@ -1441,6 +1497,10 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
     baselineAiPlayerWins: baselineWins,
     draws,
     source: 'measured-model-vs-baseline-AIPlayer-benchmark',
+    sideDistribution: {
+      modelA: gameResults.filter((result) => result.modelSide === 'A').length,
+      modelB: gameResults.filter((result) => result.modelSide === 'B').length
+    },
     baselineModelPath: baselinePath,
     benchmarkPolicy: typeof options.curriculumPredictFunction === 'function'
       ? 'real GameMap runtime with unchanged AIPlayer using test-configured current-model output versus unchanged AIPlayer using the saved baseline model'
@@ -1609,7 +1669,8 @@ async function progressRecord(
     options
   );
   const learningRateReduction = curriculumLearningRateAttempt(options);
-  const shouldMeasureSimpleAiPlayerWinrate = shouldEvaluateCurriculum && (
+  const shouldMeasureSimpleAiPlayerWinrate = shouldEvaluateCurriculum &&
+    state.curriculum.currentStageIndex < CURRICULUM_FINAL_STAGE_INDEX && (
     state.totalGames <= 1 ||
     (plateauState.status === 'plateau' &&
       learningRateReduction.attempted &&
@@ -1914,6 +1975,7 @@ async function main() {
 
   try {
     compileModel(model);
+    const runtimeCombatValueRegression = createRuntimeCombatValueRegression();
     let runtimeTeacherWorkerPool = null;
     let runtimeBatchPrefetch = null;
     const scheduleRuntimeBatchPrefetch = (afterCompletedGame) => {
@@ -1945,17 +2007,13 @@ async function main() {
       }
     };
     if (!options.resume && state.completedGames === 0) {
-      const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
-      const pretrainPasses = smokeSizedRun ? 1 : 1;
-      const pretrainEpochs = smokeSizedRun ? 1 : 3;
-      for (let pretrain = 0; pretrain < pretrainPasses; pretrain += 1) {
+      for (let pretrain = 0; pretrain < 1; pretrain += 1) {
         await fitRuntimeCombatTeacherBatch(
           model,
           state.seed + 50000 + pretrain * 173,
           state.curriculum.currentStageIndex,
-          pretrainEpochs,
-          deterministicTrainingMode(options, state),
-          null
+          null,
+          runtimeCombatValueRegression
         );
       }
     }
@@ -1986,11 +2044,6 @@ async function main() {
           const syntheticEpochs = smokeSizedRun
             ? 1
             : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 8);
-          const runtimeEpochs = smokeSizedRun
-            ? 1
-            : (options.workers > 1 && cadenceSpeedMode(options)
-              ? state.epochs
-              : Math.max(state.epochs, 2));
           const shouldFitRuntimeTeacher =
             !cadenceSpeedMode(options) || shouldEvaluateGameNow;
           let runtimeBatchPromise = null;
@@ -2023,15 +2076,10 @@ async function main() {
               const runtimeBatch = await runtimeBatchPromise;
               if (runtimeBatch) {
                 try {
-                  history = await model.fit(
-                    [runtimeBatch.board, runtimeBatch.global],
-                    modelTargets(runtimeBatch),
-                    {
-                      epochs: runtimeEpochs,
-                      batchSize: 16,
-                      shuffle: !deterministicTrainingMode(options, state),
-                      verbose: 0
-                    }
+                  history = fitRuntimeCombatValueBatch(
+                    model,
+                    runtimeBatch,
+                    runtimeCombatValueRegression
                   );
                 } finally {
                   runtimeBatch.board.dispose();
@@ -2045,9 +2093,8 @@ async function main() {
                 model,
                 state.seed + game * 1543,
                 state.curriculum.currentStageIndex,
-                runtimeEpochs,
-                deterministicTrainingMode(options, state),
-                runtimeTeacherWorkerPool
+                runtimeTeacherWorkerPool,
+                runtimeCombatValueRegression
               ) || history;
             }
           }
@@ -2195,11 +2242,15 @@ if (require.main === module && isMainThread) {
 }
 
 module.exports = {
+  createRuntimeModelPredict,
   evaluateCurriculumSimpleAiWinrate,
   evaluateCurriculumBaselineAiWinrate,
   collectRuntimeCombatTeacherGame,
   curriculumGateDecision,
   initialCurriculumState,
+  makeRuntimeCombatTeacherBatch,
+  projectRuntimeVectorForModel,
+  projectedCombatLabel,
   runtimeTeacherDatasetSignature,
   verifyRuntimeTeacherWorkerInvariants,
   workerPoolDispatchProbe,

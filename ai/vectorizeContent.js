@@ -457,18 +457,25 @@ function relativeUnitObjectiveDistance(cell) {
         return 0
     }
     let owner = cell.playerColor
-    let targets = []
+    let enemyUnits = []
+    let enemyTowns = []
     for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
         if (!players[playerIndex] || players[playerIndex].isNeutral ||
                 playerIndex == owner) {
             continue
         }
+        for (let i = 0; i < players[playerIndex].units.length; ++i) {
+            if (!players[playerIndex].units[i].killed) {
+                enemyUnits.push(players[playerIndex].units[i].coord)
+            }
+        }
         for (let i = 0; i < players[playerIndex].towns.length; ++i) {
             if (!players[playerIndex].towns[i].killed) {
-                targets.push(players[playerIndex].towns[i].coord)
+                enemyTowns.push(players[playerIndex].towns[i].coord)
             }
         }
     }
+    let targets = enemyUnits.length ? enemyUnits : enemyTowns
     if (!targets.length) {
         return 0
     }

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const tf = require('@tensorflow/tfjs-node');
 
-const ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION = 'alphazero-lite-combat-v1';
+const ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION = 'alphazero-lite-combat-v2';
 const DEFAULT_BOARD_HEIGHT = 3;
 const DEFAULT_BOARD_WIDTH = 3;
 const DEFAULT_COMBAT_CHANNELS = 21;
@@ -119,32 +119,18 @@ function createAlphaZeroLiteCombatModel(options = {}) {
     name: metadata.outputs.policy
   }).apply(policyHidden);
 
-  const valueConv = tf.layers.conv2d({
-    filters: 1,
-    kernelSize: 1,
-    padding: 'same',
-    activation: 'relu',
-    kernelInitializer: seededInitializer('glorotUniform', seed, 200),
-    name: 'value_conv'
-  }).apply(trunk);
-  const valuePool = tf.layers.globalAveragePooling2d({
-    name: 'value_pool'
-  }).apply(valueConv);
+  const valuePool = tf.layers.flatten({
+    name: 'value_flatten'
+  }).apply(boardInput);
   const valueMerged = tf.layers.concatenate({
     name: 'value_context'
   }).apply([valuePool, globalInput]);
-  const valueHidden = tf.layers.dense({
-    units: 32,
-    activation: 'relu',
-    kernelInitializer: seededInitializer('glorotUniform', seed, 201),
-    name: 'value_hidden'
-  }).apply(valueMerged);
   const valueOutput = tf.layers.dense({
     units: 1,
-    activation: 'tanh',
-    kernelInitializer: seededInitializer('glorotUniform', seed, 202),
+    activation: 'linear',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 201),
     name: metadata.outputs.value
-  }).apply(valueHidden);
+  }).apply(valueMerged);
 
   const model = tf.model({
     inputs: [boardInput, globalInput],

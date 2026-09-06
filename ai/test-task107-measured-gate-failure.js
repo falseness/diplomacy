@@ -90,11 +90,14 @@ function assertMeasuredEvidence(evidence, label) {
     `${label} did not document unchanged player-class comparison`, evidence);
   check(Array.isArray(evidence.results) && evidence.results.length === evidence.games,
     `${label} did not include per-game measured results`, evidence);
+  check(evidence.sideDistribution.modelA === evidence.sideDistribution.modelB,
+    `${label} did not balance the measured model across both sides`, evidence);
   for (const result of evidence.results) {
-    check(result.runtimePlayerA === 'AIPlayer',
-      `${label} did not use runtime AIPlayer`, result);
-    check(result.runtimePlayerB === 'SimpleAiPlayer',
-      `${label} did not use runtime SimpleAiPlayer`, result);
+    check(result.modelSide !== result.simpleAiPlayerSide &&
+        result[`runtimePlayer${result.modelSide}`] === 'AIPlayer',
+      `${label} did not use runtime AIPlayer on the recorded model side`, result);
+    check(result[`runtimePlayer${result.simpleAiPlayerSide}`] === 'SimpleAiPlayer',
+      `${label} did not use runtime SimpleAiPlayer on the recorded baseline side`, result);
     check(result.inference &&
         (result.inference.source ===
           'current TensorFlow checkpoint output through unchanged runtime AIPlayer predict()' ||
@@ -121,13 +124,13 @@ function assertBaselineEvidence(evidence, label) {
     `${label} did not document unchanged AIPlayer baseline comparison`, evidence);
   check(Array.isArray(evidence.results) && evidence.results.length === evidence.games,
     `${label} did not include per-game measured baseline results`, evidence);
+  check(evidence.sideDistribution.modelA === evidence.sideDistribution.modelB,
+    `${label} did not balance the current model across both sides`, evidence);
   for (const result of evidence.results) {
     check(result.runtimePlayerA === 'AIPlayer' && result.runtimePlayerB === 'AIPlayer',
       `${label} did not use runtime AIPlayer on both sides`, result);
-    check(result.inference &&
-        (result.inference.source.includes('side A current AIPlayer model') ||
-          result.inference.source.includes('side A test-configured current AIPlayer model')) &&
-        result.inference.source.includes('side B baseline AIPlayer model'),
+    check(result.modelSide !== result.baselineAiPlayerSide &&
+        result.inference && result.inference.source.includes('balanced side-routed'),
       `${label} did not route side-specific model-backed AIPlayer inference`,
       result);
   }
