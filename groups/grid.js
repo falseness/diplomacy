@@ -203,11 +203,13 @@ class Grid extends SpritesGroup {
         }
     }
     draw(ctx) {
+        mapDepth.drawUnderlay(ctx, this)
         this.drawHexagons(ctx)
 
         if (isFogOfWar)
             this.drawFogOfWar(ctx)
 
+        mapDepth.drawRim(ctx, this)
         this.drawOther(ctx)
 
 

@@ -904,12 +904,13 @@ class GameManager {
         this.clearBasisValues()
     }
     static updateCameraBorders() {
+        mapDepth.rebuild(grid)
         let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
         mapBorder = {
-	        left: 0,
-	        right: grid.right,
-	        top: 0,
-	        bottom: grid.bottom,
+	        left: mapDepth.bounds.left,
+	        right: mapDepth.bounds.right,
+	        top: mapDepth.bounds.top,
+	        bottom: mapDepth.bounds.bottom,
 	        scale: {
 	            min: 1 / grid_min_size * 5, //0.275,
 	            max: 1
