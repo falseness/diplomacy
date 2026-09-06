@@ -1,4 +1,9 @@
-const { loadAiScripts, readRepoFile } = require('./smokeHarness');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const { loadAiScripts } = require('./smokeHarness');
+
+const repoRoot = path.resolve(__dirname, '..');
 
 function assert(condition, message) {
   if (!condition) {
@@ -142,36 +147,194 @@ function validateStageGMap(map, seed, progress) {
     label + ' Normchel count metadata is wrong');
   assert(noobCount === map.playerNoobCounts.playerOne + map.playerNoobCounts.playerTwo,
     label + ' Noob count metadata is wrong');
-  return { archerCount, KOHbCount, normchelCount };
+  return { archerCount, KOHbCount, normchelCount, noobCount };
 }
 
-function enumerateCombatActionMechanics(map) {
-  const actions = [];
-  for (let playerIndex = 1; playerIndex <= 2; playerIndex += 1) {
-    for (const unit of map.players[playerIndex].units || []) {
-      if (unitTypeName(unit) === 'Archer') {
-        actions.push({
-          playerIndex,
-          unitType: 'Archer',
-          actionType: 'range-attack',
-          range: map.combatMetrics.archerRange,
-          lineOfSight: true
-        });
-      }
+function createCanvasContext() {
+  return new Proxy({
+    canvas: { width: 800, height: 600 },
+    measureText(text) {
+      return { width: String(text).length * 8 };
     }
-  }
-  return actions;
+  }, {
+    get(target, property) {
+      return property in target ? target[property] : function() {};
+    },
+    set(target, property, value) {
+      target[property] = value;
+      return true;
+    }
+  });
 }
 
-function assertArcherRuntimeMechanicsAreRepresented() {
-  const archerSource = readRepoFile('sprites/entities/units/range/archer/archer.js');
-  const interactionSource =
-    readRepoFile('sprites/entities/units/range/archer/interactionWithArcher.js');
-  assert(/static range = 2/.test(archerSource),
-    'Archer runtime range constant changed without Stage G test update');
-  assert(/ArcherRangeWay/.test(interactionSource) &&
-      /standartRangeWay/.test(interactionSource),
-    'Archer runtime range/line-of-sight path is not represented');
+function createCanvas() {
+  return {
+    width: 800,
+    height: 600,
+    clientWidth: 800,
+    clientHeight: 600,
+    style: {},
+    getContext() { return createCanvasContext(); },
+    addEventListener() {},
+    removeEventListener() {},
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: 800, height: 600 };
+    }
+  };
+}
+
+function createBrowserRuntimeContext() {
+  const storage = {};
+  const context = {
+    console: Object.assign({}, console, { log() {} }),
+    Math,
+    Date,
+    JSON,
+    Array,
+    Object,
+    Number,
+    String,
+    Boolean,
+    Error,
+    TypeError,
+    Map,
+    Set,
+    Promise,
+    parseInt,
+    parseFloat,
+    isNaN,
+    Infinity,
+    NaN,
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame() { return 0; },
+    cancelAnimationFrame() {},
+    Image: class Image {},
+    navigator: { userAgent: 'node' },
+    innerWidth: 800,
+    innerHeight: 600,
+    document: {
+      createElement() { return createCanvas(); },
+      getElementById() { return createCanvas(); },
+      querySelector() { return createCanvas(); },
+      addEventListener() {}
+    },
+    localStorage: {
+      setItem(key, value) { storage[key] = String(value); },
+      getItem(key) { return storage[key] || null; },
+      removeItem(key) { delete storage[key]; }
+    },
+    io() { return {}; },
+    tf: {},
+    saveAs() {}
+  };
+  context.window = context;
+  context.globalThis = context;
+  return vm.createContext(context);
+}
+
+function loadBrowserScripts(context) {
+  const html = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8');
+  const scriptPattern = /<script[^>]+src=['"]([^'"]+)['"]/g;
+  let match;
+  while ((match = scriptPattern.exec(html))) {
+    const source = match[1];
+    if (/^https?:/.test(source)) {
+      continue;
+    }
+    const code = fs.readFileSync(path.join(repoRoot, source), 'utf8');
+    new vm.Script(code, { filename: source }).runInContext(context);
+  }
+}
+
+function enumerateRealArcherAttack() {
+  const context = createBrowserRuntimeContext();
+  loadBrowserScripts(context);
+  return new vm.Script(`(() => {
+    isFogOfWar = false
+    gameSettings.testAI = false
+    entityInterface = {change() {}, hide() {}}
+    townInterface = {change() {}, hide() {}}
+    barrackInterface = {change() {}, hide() {}}
+    statisticsInterface = {}
+    gameEvent = {
+      selected: new Empty(),
+      hideAll() {},
+      removeSelection() { this.selected = new Empty() },
+      screen: {moveTo() {}, moveToPlayer() {}, stop() {}}
+    }
+    nextTurnButton = {
+      setNextPlayerColor() {},
+      highlightButton: false,
+      enableClick() {},
+      disableClick() {}
+    }
+    nextTurnPauseInterface = {visible: false}
+    saveManager = {save() {}}
+    AiRuntime.trainFromHumanCommands = function() {}
+    border = new Border()
+    attackBorder = new Border()
+
+    let curriculum = {
+      currentStageIndex: 6,
+      currentStage: 'combat-stage-6',
+      gateHistory: [{
+        stageIndex: 5,
+        stage: 'combat-stage-5',
+        decision: 'advance',
+        advancedToStageIndex: 6,
+        advancedToStage: 'combat-stage-6'
+      }]
+    }
+    let map = generateCombatStageGTrainingMap({
+      seed: 75075,
+      progress: 1,
+      bound: 5,
+      curriculum: curriculum
+    })
+    map.start({
+      clearValues() {
+        external = []
+        externalProduction = []
+        nature = []
+        goldmines = []
+        gameRound = 0
+        gameExit = false
+      }
+    }, false)
+
+    let archerPlayerIndex = players[1].units.some(unit => unit.name == 'archer') ? 1 : 2
+    whooseTurn = archerPlayerIndex
+    suddenDeathRound = map.suddenDeathRound
+    otherSettings.moveCameraToUndoTarget = false
+    let archer = players[archerPlayerIndex].units.find(unit => unit.name == 'archer')
+    let commands = players[archerPlayerIndex].getActionCommands()
+    let attack = commands.find(command => {
+      if (command.whoDoCommandCoord.x != archer.coord.x ||
+          command.whoDoCommandCoord.y != archer.coord.y) {
+        return false
+      }
+      let target = grid.getCell(command.destinationCoord).unit
+      return target.notEmpty() && target.playerColor != archerPlayerIndex
+    })
+    if (!attack) {
+      throw new Error('real AI action enumeration did not include an Archer attack')
+    }
+    return {
+      seed: 75075,
+      bound: map.mapSize.x,
+      playerIndex: archerPlayerIndex,
+      unitType: archer.constructor.name,
+      actionType: attack.type,
+      source: attack.whoDoCommandCoord,
+      destination: attack.destinationCoord,
+      range: archer.interaction.range,
+      enumeratedDistance: archer.interaction.rangeWay.getDistance(
+        attack.destinationCoord),
+      lineOfSightEngine: archer.interaction.rangeWay.constructor.name,
+      targetPlayerIndex: grid.getCell(attack.destinationCoord).unit.playerColor
+    }
+  })()`, { filename: 'stage-g-real-action-enumeration.js' }).runInContext(context);
 }
 
 function startInHeadlessHarness(map, seed, progress) {
@@ -219,13 +382,11 @@ const passedStageFGate = {
   }]
 };
 
-assertArcherRuntimeMechanicsAreRepresented();
-
 const seeds = [75075, 75076, 75077, 75078, 75079];
 let generatedArcher = false;
 let generatedKOHb = false;
 let generatedNormchel = false;
-let enumeratedArcherAction = false;
+let generatedNoob = false;
 for (let index = 0; index < seeds.length; index += 1) {
   const seed = seeds[index];
   const progress = index === 0 ? 0 : 1;
@@ -238,12 +399,7 @@ for (let index = 0; index < seeds.length; index += 1) {
   generatedArcher = generatedArcher || counts.archerCount > 0;
   generatedKOHb = generatedKOHb || counts.KOHbCount > 0;
   generatedNormchel = generatedNormchel || counts.normchelCount > 0;
-  enumeratedArcherAction = enumeratedArcherAction ||
-    enumerateCombatActionMechanics(map).some((action) =>
-      action.unitType === 'Archer' &&
-      action.actionType === 'range-attack' &&
-      action.range === 2 &&
-      action.lineOfSight === true);
+  generatedNoob = generatedNoob || counts.noobCount > 0;
   startInHeadlessHarness(map, seed, progress);
 
   const repeated = api.generateCombatStageGTrainingMap({
@@ -258,7 +414,22 @@ for (let index = 0; index < seeds.length; index += 1) {
 assert(generatedArcher, 'Stage G fixed seeds did not generate any Archer units');
 assert(generatedKOHb, 'Stage G fixed seeds did not retain any KOHb units');
 assert(generatedNormchel, 'Stage G fixed seeds did not retain any Normchel units');
-assert(enumeratedArcherAction,
-  'Stage G combat action enumeration did not include Archer range/line-of-sight actions');
+assert(generatedNoob, 'Stage G fixed seeds did not retain any Noob units');
+const archerAction = enumerateRealArcherAttack();
+assert(archerAction.unitType === 'Archer',
+  'Stage G runtime action was not enumerated by an Archer');
+assert(archerAction.actionType === 'unit',
+  'Stage G runtime Archer action did not use the unit command path');
+assert(archerAction.range === 2 && archerAction.enumeratedDistance === 2,
+  'Stage G runtime Archer attack was not enumerated at Archer range 2');
+assert(archerAction.lineOfSightEngine === 'ArcherRangeWay',
+  'Stage G runtime Archer attack did not use the Archer line-of-sight engine');
+assert(archerAction.targetPlayerIndex !== archerAction.playerIndex,
+  'Stage G runtime Archer attack did not target an enemy');
 
+console.log('Stage G pre-gate control passed: generation blocked until Stage F gate');
+console.log('Stage G fixed-seed generation passed: seeds=' + seeds.join(','));
+console.log('Stage G unit coverage passed: Archer,Noob,Normchel,KOHb');
+console.log('Stage G metrics passed: newlyUnlockedMechanic=Archer');
+console.log('Real Archer action enumeration passed: ' + JSON.stringify(archerAction));
 console.log('Combat Stage G map generation smoke passed with gated Archer unlocks');
