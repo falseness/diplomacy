@@ -111,19 +111,26 @@ function createBrowserSmokeDom() {
 
   let predictionCalls = 0;
   let loadedModelSource;
-  function tensor(value) {
+  const boardTensorShapes = [];
+  const globalTensorShapes = [];
+  function tensor(value, shape) {
     return {
-      value,
+      values: value,
+      shape,
       dispose() {}
     };
   }
   window.__browserSmokeModel = {
-    inputs: [{ shape: [null, null, null, 78] }],
+    inputs: [{ shape: [null, null, null, null] }],
     predict(inputs) {
       predictionCalls += 1;
+      const batchSize = inputs[0].shape[0];
       return {
         arraySync() {
-          return inputs[0].values.map((unused, index) => [0.1 + index / 1000]);
+          return Array.from(
+            { length: batchSize },
+            (unused, index) => [0.1 + index / 1000]
+          );
         },
         dispose() {}
       };
@@ -132,15 +139,16 @@ function createBrowserSmokeDom() {
   window.tf = {
     async loadLayersModel(source) {
       loadedModelSource = source;
+      window.__browserSmokeModel.inputs[0].shape[3] = window.CELL_VECTOR_SIZE;
       return window.__browserSmokeModel;
     },
-    tensor3d: tensor,
-    tensor,
-    stack(values) {
-      return {
-        values,
-        dispose() {}
-      };
+    tensor4d(values, shape) {
+      boardTensorShapes.push(Array.from(shape));
+      return tensor(values, shape);
+    },
+    tensor2d(values, shape) {
+      globalTensorShapes.push(Array.from(shape));
+      return tensor(values, shape);
     },
     tidy(callback) {
       return callback();
@@ -152,7 +160,9 @@ function createBrowserSmokeDom() {
     getModelEvidence() {
       return {
         loadedModelSource,
-        predictionCalls
+        predictionCalls,
+        boardTensorShapes,
+        globalTensorShapes
       };
     }
   };
@@ -175,12 +185,15 @@ async function runTinyAiGame(context) {
     border = new Border();
     attackBorder = new Border();
     entityInterface = { visible: false, change() {} };
+    townInterface = { visible: false, change() {}, hide() {} };
+    barrackInterface = { visible: false, change() {}, hide() {} };
     nextTurnButton = { highlightButton: false, setNextPlayerColor() {} };
     nextTurnPauseInterface = { visible: false };
     gameEvent = {
-      selected: undefined,
-      screen: { stop() {}, moveToPlayer() {} },
+      selected: new Empty(),
+      screen: { stop() {}, moveTo() {}, moveToPlayer() {} },
       hideAll() {},
+      removeSelection() { this.selected = new Empty(); },
       nextTurn() {}
     };
     saveManager = { save() {} };
@@ -291,6 +304,14 @@ async function runTinyAiGame(context) {
   check(modelEvidence.predictionCalls > 0,
     'AIPlayerWithEconomy did not call the browser model prediction path',
     modelEvidence);
+  check(modelEvidence.boardTensorShapes.every(shape =>
+    shape.length == 4 && shape[3] == context.CELL_VECTOR_SIZE),
+  'browser model prediction did not receive batched vectorizer output',
+  modelEvidence);
+  check(modelEvidence.globalTensorShapes.every(shape =>
+    shape.length == 2 && shape[1] == 1),
+  'browser model prediction did not receive batched global input',
+  modelEvidence);
   check(gameEvidence.chosenGridDelta > 0 && gameEvidence.winningChanceCount > 0,
     'AIPlayerWithEconomy did not record model-backed action evidence',
     gameEvidence);
