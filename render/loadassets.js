@@ -25,14 +25,16 @@ let assets = {
     lake: new Image(),
     sea: new Image(),
     goldmine: new Image(),
-    bush: new Image(),
-    grassHex: new Image()
+    bush: new Image()
 }
+let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
+for (let i = 0; i < grassHexImages.length; ++i)
+    assets[grassHexImages[i]] = new Image()
 let imagesCountLoaded = 0
 let images = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
-        'mountain', 'lake', 'sea', 'goldmine', 'bush', 'grassHex']
+        'mountain', 'lake', 'sea', 'goldmine', 'bush'].concat(grassHexImages)
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         ++imagesCountLoaded
@@ -41,8 +43,8 @@ for (let i = 0; i < images.length; ++i) {
 
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
-    let width = image == 'grassHex' ? basis.hexHalfRectWithStrokeOffset.width * 2 : assets.size
-    let height = image == 'grassHex' ? basis.hexHalfRectWithStrokeOffset.height * 2 : assets.size
+    let width = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.width * 2 : assets.size
+    let height = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.height * 2 : assets.size
     
     tmpCanvas.width = width
     tmpCanvas.height = height

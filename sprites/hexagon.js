@@ -13,6 +13,16 @@ class Hexagon extends Sprite {
     get player() {
         return players[this.playerColor]
     }
+    get grassHex() {
+        if (!this.grassHexImage) {
+            let hash = Math.imul(this.coord.x + 1, 73856093) ^
+                Math.imul(this.coord.y + 1, 19349663) ^
+                Math.imul(grid.arr.length, 83492791) ^
+                Math.imul(grid.arr[0].length, 2654435761)
+            this.grassHexImage = cachedImages[grassHexImages[(hash >>> 0) % grassHexImages.length]]
+        }
+        return this.grassHexImage
+    }
     firstpaint(_player) {
         this.playerColor = _player
     }
@@ -62,7 +72,7 @@ class Hexagon extends Sprite {
         else {
             drawCachedImage(ctx, this.player.hexagon, pos)
         }
-        drawCachedImage(ctx, cachedImages.grassHex, pos)
+        drawCachedImage(ctx, this.grassHex, pos)
     }
 }
 class Suburb {
