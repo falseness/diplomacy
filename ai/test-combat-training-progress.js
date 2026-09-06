@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 function check(condition, message) {
@@ -26,9 +27,53 @@ function node20BinDir() {
   return output.trim();
 }
 
+function checkpointHashes(storageDir, checkpointPath) {
+  const checkpointDir = path.join(storageDir, checkpointPath);
+  return fs.readdirSync(checkpointDir)
+    .filter((name) => fs.statSync(path.join(checkpointDir, name)).isFile())
+    .sort()
+    .map((name) => {
+      const contents = fs.readFileSync(path.join(checkpointDir, name));
+      return `${crypto.createHash('sha256').update(contents).digest('hex')}  ${path.join(checkpointPath, name)}`;
+    })
+    .join('\n') + '\n';
+}
+
+function retainEvidence(evidenceDir, storageDir, runId, record, trainingOutput) {
+  if (!evidenceDir) return;
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  const progressPath = path.join(storageDir, 'progress', `${runId}.jsonl`);
+  const manifestPath = path.join(storageDir, 'runs', runId, 'manifest.json');
+  fs.copyFileSync(progressPath, path.join(evidenceDir, 'progress.jsonl'));
+  fs.copyFileSync(manifestPath, path.join(evidenceDir, 'manifest.json'));
+  fs.writeFileSync(
+    path.join(evidenceDir, 'checkpoint.sha256'),
+    checkpointHashes(storageDir, record.checkpoint)
+  );
+  fs.writeFileSync(
+    path.join(evidenceDir, 'implementation-evidence.log'),
+    [
+      'COMMAND: npm run test-combat-training-progress',
+      'TRAINING_COMMAND: bash ./train.sh --storage-dir <temporary-storage> --run-id task064-combat-progress --games 1 --epochs 1 --seed 64064 --checkpoint-interval 1',
+      'SEED: 64064',
+      'EXIT_CODE: 0',
+      trainingOutput.trimEnd(),
+      'ASSERTION: progress artifact exists under configured storage directory',
+      'ASSERTION: required progress fields are present and machine-readable',
+      'ASSERTION: manifest references progress/task064-combat-progress.jsonl',
+      'ASSERTION: stage is combat-foundation and next-stage eligibility is false',
+      'Combat training progress smoke passed',
+      ''
+    ].join('\n')
+  );
+}
+
 function main() {
   const storageDir = path.join('/mnt/storage/diplomacy', `task064-progress-${process.pid}`);
   const runId = 'task064-combat-progress';
+  const evidenceDir = process.env.TASK064_EVIDENCE_DIR
+    ? path.resolve(process.env.TASK064_EVIDENCE_DIR)
+    : null;
   if (fs.existsSync(storageDir)) {
     fs.rmSync(storageDir, { recursive: true, force: true });
   }
@@ -37,7 +82,7 @@ function main() {
       ...process.env,
       PATH: `${node20BinDir()}:${process.env.PATH || ''}`
     };
-    execFileSync(
+    const trainingOutput = execFileSync(
       'bash',
       [
         './train.sh',
@@ -48,7 +93,7 @@ function main() {
         '--seed', '64064',
         '--checkpoint-interval', '1'
       ],
-      { cwd: path.resolve(__dirname, '..'), env, stdio: 'pipe' }
+      { cwd: path.resolve(__dirname, '..'), env, encoding: 'utf8' }
     );
 
     const progressPath = path.join(storageDir, 'progress', `${runId}.jsonl`);
@@ -107,6 +152,7 @@ function main() {
       'manifest does not reference combat progress artifact');
     check(manifest.artifacts.outputFiles.includes(path.join('progress', `${runId}.jsonl`)),
       'manifest outputFiles does not include combat progress artifact');
+    retainEvidence(evidenceDir, storageDir, runId, record, trainingOutput);
   } finally {
     if (fs.existsSync(storageDir)) {
       fs.rmSync(storageDir, { recursive: true, force: true });
