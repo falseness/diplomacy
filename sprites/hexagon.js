@@ -62,6 +62,7 @@ class Hexagon extends Sprite {
         else {
             drawCachedImage(ctx, this.player.hexagon, pos)
         }
+        drawCachedImage(ctx, cachedImages.grassHex, pos)
     }
 }
 class Suburb {

@@ -25,13 +25,14 @@ let assets = {
     lake: new Image(),
     sea: new Image(),
     goldmine: new Image(),
-    bush: new Image()
+    bush: new Image(),
+    grassHex: new Image()
 }
 let imagesCountLoaded = 0
 let images = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
-        'mountain', 'lake', 'sea', 'goldmine', 'bush']
+        'mountain', 'lake', 'sea', 'goldmine', 'bush', 'grassHex']
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         ++imagesCountLoaded
@@ -40,17 +41,19 @@ for (let i = 0; i < images.length; ++i) {
 
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
+    let width = image == 'grassHex' ? basis.hexHalfRectWithStrokeOffset.width * 2 : assets.size
+    let height = image == 'grassHex' ? basis.hexHalfRectWithStrokeOffset.height * 2 : assets.size
     
-    tmpCanvas.width = assets.size
-    tmpCanvas.height = assets.size
+    tmpCanvas.width = width
+    tmpCanvas.height = height
 
     let tmpCtx = tmpCanvas.getContext('2d')
 
     let pos = {
-        x: assets.size / 2,
-        y: assets.size / 2
+        x: width / 2,
+        y: height / 2
     }
-    drawImage(tmpCtx, image, pos)
+    drawImage(tmpCtx, image, pos, width, height)
 
     return tmpCanvas
 }
