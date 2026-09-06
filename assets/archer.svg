@@ -1,170 +1,188 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="hoodless1-archer-title hoodless1-archer-desc">
- <title id="hoodless1-archer-title">Hoodless archer 1 — Pathfinder</title>
- <desc id="hoodless1-archer-desc">Short cape · quiver · leather strap. Hoodless character in the original noob proportions with the same head, face, hands, bow and arrow. Shaded editable SVG, transparent background.</desc>
- <defs>
- <clipPath id="hoodless1-archer-legs-clip"><path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z"/></clipPath>
- <clipPath id="hoodless1-archer-pants-clip"><path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z"/></clipPath>
- <clipPath id="hoodless1-archer-arms-clip"><path d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z"/></clipPath>
- <clipPath id="hoodless1-archer-shirt-clip"><path d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z"/></clipPath>
- <radialGradient id="hoodless1-archer-skin" cx="72%" cy="24%" r="86%">
-  <stop stop-color="#ffe1a0"/><stop offset=".38" stop-color="#edc88a"/><stop offset=".7" stop-color="#cda66c"/><stop offset="1" stop-color="#916c43"/>
- </radialGradient>
- <linearGradient id="hoodless1-archer-left-arm" gradientUnits="userSpaceOnUse" x1="105" y1="255" x2="138" y2="268">
-  <stop stop-color="#a78151"/><stop offset=".4" stop-color="#e1bc7e"/><stop offset=".69" stop-color="#f0cf92"/><stop offset="1" stop-color="#b28d58"/>
- </linearGradient>
- <linearGradient id="hoodless1-archer-right-arm" gradientUnits="userSpaceOnUse" x1="373" y1="269" x2="409" y2="251">
-  <stop stop-color="#a47a48"/><stop offset=".4" stop-color="#d9ae6d"/><stop offset=".76" stop-color="#f6d99b"/><stop offset="1" stop-color="#ddb97b"/>
- </linearGradient>
- <radialGradient id="hoodless1-archer-shirt-paint" cx="78%" cy="19%" r="99%">
-  <stop stop-color="#90b955"/><stop offset=".28" stop-color="#6c9c40"/><stop offset=".6" stop-color="#4c8033"/><stop offset="1" stop-color="#28552b"/>
- </radialGradient>
- <radialGradient id="hoodless1-archer-sleeve-left" cx="76%" cy="15%" r="110%">
-  <stop stop-color="#71a049"/><stop offset=".46" stop-color="#548737"/><stop offset="1" stop-color="#2d5b2b"/>
- </radialGradient>
- <radialGradient id="hoodless1-archer-sleeve-right" cx="57%" cy="29%" r="75%">
-  <stop stop-color="#acd176"/><stop offset=".27" stop-color="#82b250"/><stop offset=".6" stop-color="#5b8e38"/><stop offset="1" stop-color="#305b2a"/>
- </radialGradient>
- <radialGradient id="hoodless1-archer-pants-paint" cx="75%" cy="14%" r="101%">
-  <stop stop-color="#829755"/><stop offset=".36" stop-color="#657b40"/><stop offset=".76" stop-color="#495e32"/><stop offset="1" stop-color="#30432a"/>
- </radialGradient>
- <radialGradient id="hoodless1-archer-cloth-light">
-  <stop stop-color="#ead19a" stop-opacity=".29"/><stop offset=".55" stop-color="#dfc187" stop-opacity=".15"/><stop offset="1" stop-color="#d7b780" stop-opacity="0"/>
- </radialGradient>
- <linearGradient id="hoodless1-archer-boot-left" gradientUnits="userSpaceOnUse" x1="181" y1="440" x2="228" y2="445">
-  <stop stop-color="#86623a"/><stop offset=".35" stop-color="#c2995c"/><stop offset=".68" stop-color="#e0b976"/><stop offset="1" stop-color="#957044"/>
- </linearGradient>
- <linearGradient id="hoodless1-archer-boot-right" gradientUnits="userSpaceOnUse" x1="284" y1="440" x2="332" y2="445">
-  <stop stop-color="#795c36"/><stop offset=".35" stop-color="#b89054"/><stop offset=".74" stop-color="#edc784"/><stop offset="1" stop-color="#ae884e"/>
- </linearGradient>
- <linearGradient id="hoodless1-archer-sole-shadow" gradientUnits="userSpaceOnUse" x1="0" y1="462" x2="0" y2="485">
-  <stop stop-color="#493a24" stop-opacity="0"/><stop offset=".64" stop-color="#493a24" stop-opacity=".14"/><stop offset="1" stop-color="#493a24" stop-opacity=".66"/>
- </linearGradient>
- <radialGradient id="hoodless1-archer-boot-toe" cx="64%" cy="33%" r="68%">
-  <stop stop-color="#f5d294" stop-opacity=".75"/><stop offset=".44" stop-color="#e4bd78" stop-opacity=".4"/><stop offset="1" stop-color="#d9b073" stop-opacity="0"/>
- </radialGradient>
- <linearGradient id="hoodless1-archer-belt-paint" x1="0" y1="0" x2="1" y2=".3">
-  <stop stop-color="#384027"/><stop offset=".57" stop-color="#4c5630"/><stop offset=".85" stop-color="#6e7443"/><stop offset="1" stop-color="#494d2c"/>
- </linearGradient>
- <linearGradient id="hoodless1-archer-buckle-paint" x1="0" y1="0" x2="1" y2=".7">
-  <stop stop-color="#b78937"/><stop offset=".25" stop-color="#d5a64b"/><stop offset=".66" stop-color="#ffe08a"/><stop offset="1" stop-color="#b88432"/>
- </linearGradient>
- <radialGradient id="hoodless1-archer-eye-rim" cx="66%" cy="28%" r="80%">
-  <stop stop-color="#fff0c5"/><stop offset=".6" stop-color="#f1dbaa"/><stop offset="1" stop-color="#c7a777"/>
- </radialGradient>
- <radialGradient id="hoodless1-archer-eye-paint" cx="72%" cy="22%" r="85%">
-  <stop stop-color="#2e3c2e"/><stop offset=".47" stop-color="#122217"/><stop offset="1" stop-color="#17251b"/>
- </radialGradient>
- <filter id="hoodless1-archer-soft" x="-.3" y="-.3" width="1.6" height="1.6"><feGaussianBlur stdDeviation="2"/></filter>
- <filter id="hoodless1-archer-light-soft" x="-.6" y="-.6" width="2.2" height="2.2"><feGaussianBlur stdDeviation="4"/></filter>
- <filter id="hoodless1-archer-painted" x="-.02" y="-.02" width="1.04" height="1.04" color-interpolation-filters="sRGB">
-  <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" seed="17" result="noise"/>
-  <feColorMatrix in="noise" type="matrix" values="0 0 0 0 .23 0 0 0 0 .19 0 0 0 0 .11 0 0 0 .065 0" result="grain"/>
-  <feComposite in="grain" in2="SourceGraphic" operator="in" result="clippedGrain"/>
-  <feBlend in="SourceGraphic" in2="clippedGrain" mode="multiply"/>
- </filter>
-<linearGradient xmlns="http://www.w3.org/2000/svg" id="hoodless1-archer-gear-bowWood" x1="0" y1="0" x2="1" y2=".4">
-  <stop stop-color="#593e25"/><stop offset=".3" stop-color="#8b602e"/><stop offset=".65" stop-color="#be914d"/><stop offset=".85" stop-color="#ddbb73"/><stop offset="1" stop-color="#8c632e"/>
- </linearGradient>
- <linearGradient xmlns="http://www.w3.org/2000/svg" id="hoodless1-archer-gear-redLeather" x1="0" y1="0" x2="1" y2=".1">
-  <stop stop-color="#62302a"/><stop offset=".3" stop-color="#8a3d30"/><stop offset=".7" stop-color="#bd6650"/><stop offset="1" stop-color="#73372a"/>
- </linearGradient>
- <linearGradient xmlns="http://www.w3.org/2000/svg" id="hoodless1-archer-gear-arrowWood" x1="0" y1="0" x2=".6" y2="1">
-  <stop stop-color="#e4c481"/><stop offset=".45" stop-color="#b28b4f"/><stop offset="1" stop-color="#624829"/>
- </linearGradient>
- <linearGradient xmlns="http://www.w3.org/2000/svg" id="hoodless1-archer-gear-arrowMetal" x1="0" y1="0" x2="1" y2="1">
-  <stop stop-color="#e7ecdc"/><stop offset=".45" stop-color="#bacac6"/><stop offset="1" stop-color="#677f7b"/>
- </linearGradient>
- <radialGradient id="hoodless1-detail-leather" cx="76%" cy="18%" r="97%"><stop stop-color="#bc915b"/><stop offset=".4" stop-color="#977040"/><stop offset="1" stop-color="#513d29"/></radialGradient>
-<linearGradient id="hoodless1-detail-strap" x1="0" y1=".4" x2="1" y2=".1"><stop stop-color="#533e2a"/><stop offset=".5" stop-color="#a27b49"/><stop offset=".76" stop-color="#bd995f"/><stop offset="1" stop-color="#70502e"/></linearGradient>
-<radialGradient id="hoodless1-detail-dark-leather" cx="78%" cy="17%" r="96%"><stop stop-color="#967751"/><stop offset=".4" stop-color="#72583a"/><stop offset="1" stop-color="#3f3327"/></radialGradient>
-<radialGradient id="hoodless1-detail-moss" cx="76%" cy="14%" r="94%"><stop stop-color="#a4b978"/><stop offset=".3" stop-color="#7f9757"/><stop offset=".7" stop-color="#506f3e"/><stop offset="1" stop-color="#2c4e30"/></radialGradient>
-<radialGradient id="hoodless1-detail-pine" cx="76%" cy="14%" r="94%"><stop stop-color="#83967a"/><stop offset=".3" stop-color="#526e50"/><stop offset=".7" stop-color="#314d37"/><stop offset="1" stop-color="#203b2c"/></radialGradient>
-<radialGradient id="hoodless1-detail-linen" cx="75%" cy="18%" r="98%"><stop stop-color="#eee3bb"/><stop offset=".35" stop-color="#d4c699"/><stop offset=".72" stop-color="#ac9e72"/><stop offset="1" stop-color="#796d4a"/></radialGradient>
-</defs>
- <g id="hoodless1-archer-character" filter="url(#hoodless1-archer-painted)">
- <g id="hoodless1-detail-back-gear"><path d="M195 143 Q174 161 169 190 L150 318 Q193 340 233 323 L234 151Z" fill="url(#hoodless1-detail-pine)"/><path d="M181 182 Q176 252 160 315 Q189 328 221 322" fill="none" stroke="#a0b585" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/><g id="hoodless1-detail-quiver" transform="translate(326 153) rotate(13)"><path d="M8 -46 L8 65" fill="none" stroke="#59452c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 -45 L9 64" fill="none" stroke="#ccb078" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 -52 L1 -43 L1 -25 L8 -30 L15 -24 L15 -43Z" fill="#d8ceb0"/><path d="M8 -49 L8 -28" fill="none" stroke="#8f9678" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 -55 L18 65" fill="none" stroke="#59452c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 -54 L19 64" fill="none" stroke="#ccb078" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 -61 L11 -52 L11 -34 L18 -39 L25 -33 L25 -52Z" fill="#d8ceb0"/><path d="M18 -58 L18 -37" fill="none" stroke="#8f9678" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 -43 L28 65" fill="none" stroke="#59452c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M29 -42 L29 64" fill="none" stroke="#ccb078" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 -49 L21 -40 L21 -22 L28 -27 L35 -21 L35 -40Z" fill="#d8ceb0"/><path d="M28 -46 L28 -25" fill="none" stroke="#8f9678" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M0 0 Q18 -7 37 0 L33 98 Q19 110 5 98Z" fill="url(#hoodless1-detail-leather)"/><path d="M0 0 Q18 -6 37 0 L37 13 Q18 7 0 13Z" fill="url(#hoodless1-detail-dark-leather)"/><path d="M4 3 Q19 -1 34 3" fill="none" stroke="#d0b178" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/><path d="M29 18 L26 91" fill="none" stroke="#e0bd7e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".38"/><path d="M6 85 Q18 92 32 87" fill="none" stroke="#382e24" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></g></g><g id="hoodless1-archer-boots" clip-path="url(#hoodless1-archer-legs-clip)">
-  <path id="hoodless1-archer-original-legs-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#hoodless1-archer-boot-left)"/>
-  <path d="M255 295 H332 V486 H255Z" fill="url(#hoodless1-archer-boot-right)"/>
-  <path d="M182 417 H226 V427 Q205 431 182 426Z M286 417 H330 V427 Q307 431 286 426Z" fill="#7e623c" opacity=".4"/>
-  <path d="M185 424 Q205 428 223 424 M289 424 Q307 428 327 424" fill="none" stroke="#edc992" stroke-width="1.1" opacity=".28"/>
-  <ellipse cx="205" cy="465" rx="25" ry="23" fill="url(#hoodless1-archer-boot-toe)"/>
-  <ellipse cx="309" cy="465" rx="25" ry="23" fill="url(#hoodless1-archer-boot-toe)"/>
-  <path d="M180 452 H334 V486 H180Z" fill="url(#hoodless1-archer-sole-shadow)"/>
- </g>
- <g id="hoodless1-archer-pants" clip-path="url(#hoodless1-archer-pants-clip)">
-  <path id="hoodless1-archer-original-pants-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#hoodless1-archer-pants-paint)"/>
-  <ellipse cx="209" cy="365" rx="30" ry="66" fill="url(#hoodless1-archer-cloth-light)"/>
-  <ellipse cx="315" cy="365" rx="29" ry="66" fill="url(#hoodless1-archer-cloth-light)"/>
-  <path d="M255 325 Q234 327 229 346 L229 415 M259 325 Q280 329 283 346 L283 416" fill="none" stroke="#3f3527" stroke-width="7" opacity=".27" filter="url(#hoodless1-archer-soft)"/>
-  <path d="M256 302 L256 321" fill="none" stroke="#35462a" stroke-width="1.7" stroke-linecap="round" opacity=".45"/>
-  <path d="M259 303 L259 318" fill="none" stroke="#dac193" stroke-width="1.1" opacity=".24"/>
-  <path d="M188 309 L188 403 M325 309 L325 403" fill="none" stroke="#c5a876" stroke-width="1.4" stroke-linecap="round" opacity=".23"/>
-  <path d="M182 415 H226 M286 415 H330" fill="none" stroke="#35462a" stroke-width="2.4" opacity=".55"/>
-  <path d="M185 412 H223 M289 412 H327" fill="none" stroke="#d0ae7c" stroke-width="1.1" opacity=".23"/>
- </g>
- <g id="hoodless1-archer-arms" clip-path="url(#hoodless1-archer-arms-clip)">
-  <path id="hoodless1-archer-original-arms-silhouette" d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z" fill="url(#hoodless1-archer-left-arm)"/>
-  <path d="M256 130 H428 V320 H256Z" fill="url(#hoodless1-archer-right-arm)"/>
-  <path d="M110 220 L150 244 M361 244 L404 219" fill="none" stroke="#5e482d" stroke-width="7" opacity=".17" filter="url(#hoodless1-archer-soft)"/>
-  <ellipse cx="108" cy="296" rx="21" ry="21" fill="url(#hoodless1-archer-boot-toe)" opacity=".4"/>
-  <ellipse cx="405" cy="296" rx="20" ry="21" fill="url(#hoodless1-archer-boot-toe)" opacity=".42"/>
- </g>
- <g id="hoodless1-archer-shirt" clip-path="url(#hoodless1-archer-shirt-clip)">
-  <path id="hoodless1-archer-original-shirt-silhouette" d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z" fill="url(#hoodless1-archer-shirt-paint)"/>
-  <path d="M195 135 C175 145 169 158 158 180 L125 231 L110 227 L134 184 L159 149 Q174 133 195 135Z" fill="url(#hoodless1-archer-sleeve-left)"/>
-  <path d="M315 134 Q340 130 358 155 Q380 181 401 223 L363 245 Q343 201 331 182 Q327 151 315 134Z" fill="url(#hoodless1-archer-sleeve-right)"/>
-  <path d="M335 147 Q362 176 383 217" fill="none" stroke="#d4e5a0" stroke-width="7" stroke-linecap="round" opacity=".25" filter="url(#hoodless1-archer-light-soft)"/>
-  <path d="M180 185 L184 275 M332 186 L328 278" fill="none" stroke="#174523" stroke-width="10" stroke-linecap="round" opacity=".28" filter="url(#hoodless1-archer-soft)"/>
-  <path d="M195 188 Q193 238 195 278" fill="none" stroke="#bdd087" stroke-width="6" stroke-linecap="round" opacity=".1" filter="url(#hoodless1-archer-light-soft)"/>
-  <path d="M112 219 L147 242 M363 242 L398 220" fill="none" stroke="#a5c273" stroke-width="2" opacity=".4"/>
-  <path d="M230 138 Q255 129 281 138 L256 164Z" fill="#2d5228"/>
-  <path d="M239 140 Q255 137 273 141 L256 158Z" fill="#b08b48"/>
-  <path d="M232 140 L256 162 L278 141" fill="none" stroke="#8bb34e" stroke-width="1.9" opacity=".45"/>
-  <ellipse cx="251" cy="145" rx="40" ry="11" fill="#253e24" opacity=".45" filter="url(#hoodless1-archer-soft)"/>
- </g>
- <g id="hoodless1-archer-belt">
-  <path d="M182.2 285 Q256 293 329.8 285 V297 Q256 305 182.2 297Z" fill="url(#hoodless1-archer-belt-paint)"/>
-  <path d="M184 287 Q256 295 328 287" fill="none" stroke="#a1a260" stroke-width="1.4" opacity=".45"/>
-  <path d="M247 288 L264 289 L265 302 L247 301Z" fill="#594522"/>
-  <path d="M246 286 L263 287 L264 300 L246 299Z" fill="url(#hoodless1-archer-buckle-paint)"/>
-  <path d="M250 290 L260 290 L260 297 L250 296Z" fill="#8f7c3e"/>
-  <path d="M254 290 L255 296" stroke="#e1b55d" stroke-width="1.5"/>
-  <path d="M248 288 L261 289" stroke="#ffe7a0" stroke-width="1.1" opacity=".66"/>
- </g>
- <g id="hoodless1-detail-clothing-and-gear"><path d="M309 144 L206 286" fill="none" stroke="#2e3023" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity=".25" transform="translate(0 2)"/><path d="M309 144 L206 286" fill="none" stroke="url(#hoodless1-detail-strap)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/><path d="M309 144 L206 286" fill="none" stroke="#e0bd82" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".44"/><path d="M213 138 Q174 137 151 165 L173 199 Q204 198 230 170Z" fill="url(#hoodless1-detail-moss)"/><path d="M157 166 L177 192 Q203 190 223 170" fill="none" stroke="#c2cf91" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><g transform="translate(263 208) rotate(36)"><path d="M-11 -11 H11 V11 H-11Z M-6 -6 V6 H6 V-6Z" fill="url(#hoodless1-archer-buckle-paint)" fill-rule="evenodd"/><path d="M0 -5 V6" fill="none" stroke="#ece1ab" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g><g id="hoodless1-detail-armguards" clip-path="url(#hoodless1-archer-arms-clip)"><path d="M107 242 L140 258 L132 283 Q115 283 97 273Z" fill="url(#hoodless1-detail-leather)"/><path d="M105 250 L136 263 M100 267 L131 279" fill="none" stroke="#dab780" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/></g><path d="M287 290 Q306.5 285 326 290 L325 327 Q306.5 338 288 327Z" fill="url(#hoodless1-detail-leather)"/><path d="M286 288 Q306.5 283 327 288 L325 303 L306.5 310 L288 303Z" fill="url(#hoodless1-detail-leather)"/><path d="M290 302 L306.5 307 L323 302" fill="none" stroke="#d0ac73" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity=".65"/><path d="M302.5 300 H310.5 V315 H302.5Z" fill="url(#hoodless1-detail-dark-leather)"/><circle cx="306.5" cy="307" r="2.6" fill="url(#hoodless1-archer-buckle-paint)"/><g id="hoodless1-detail-boots" clip-path="url(#hoodless1-archer-legs-clip)"><path d="M180 383 H228 V488 H180Z M284 383 H332 V488 H284Z" fill="url(#hoodless1-detail-dark-leather)"/><path d="M180 383 Q204 389 228 383 V396 Q204 402 180 396Z M284 383 Q308 389 332 383 V396 Q308 402 284 396Z" fill="url(#hoodless1-detail-leather)"/><path d="M186 388 Q204 392 222 388 M290 388 Q308 392 326 388" fill="none" stroke="#d9b37c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/><path d="M215 407 L215 451 M319 407 L319 451" fill="none" stroke="#d0af7b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".19"/><path d="M188 476 Q205 484 221 474 M292 476 Q308 484 324 474" fill="none" stroke="#251e19" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></g><path d="M234 143 L252 161 L241 180 L219 148Z" fill="url(#hoodless1-detail-linen)"/><path d="M276 143 L256 161 L269 178 L293 147Z" fill="url(#hoodless1-detail-linen)"/></g><g id="hoodless1-archer-head">
-  <circle id="hoodless1-archer-original-head-silhouette" cx="256" cy="91" r="62.5" fill="url(#hoodless1-archer-skin)"/>
-  <ellipse cx="236" cy="72" rx="9.2" ry="10.2" fill="url(#hoodless1-archer-eye-rim)"/>
-  <ellipse cx="277" cy="72" rx="9" ry="10" fill="url(#hoodless1-archer-eye-rim)"/>
-  <ellipse cx="236.7" cy="72.5" rx="6.4" ry="7.8" fill="url(#hoodless1-archer-eye-paint)"/>
-  <ellipse cx="277.4" cy="72.5" rx="6.3" ry="7.6" fill="url(#hoodless1-archer-eye-paint)"/>
-  <ellipse cx="239" cy="68.4" rx="1.7" ry="1.3" fill="#8a9575" opacity=".2"/>
-  <ellipse cx="279.6" cy="68.5" rx="1.6" ry="1.3" fill="#8a9575" opacity=".2"/>
-  <path d="M241 112 Q256 111.2 271 112 L272 116 Q256 115 240 116Z" fill="#5c4b2f"/>
-  <path d="M245 118 Q256 119 267 118" fill="none" stroke="#eecb89" stroke-width="1" opacity=".3"/>
- </g>
-</g><g id="hoodless1-archer-bow-sized" transform="matrix(1.151411108 0 0 1.077173201 1.785378200 -29.888225683)"><g transform="matrix(.79 0 0 .625 64 -2)"><g id="hoodless1-archer-gear-bow">
-  <path d="M121 207 L153 595" fill="none" stroke="#2b3829" stroke-width="5" stroke-opacity=".24"/>
-  <path d="M121 207 L153 595" fill="none" stroke="#e2d6b3" stroke-width="2.7" stroke-linecap="round"/>
-  <path d="M121 207 C117 249 58 286 30 342 C9 382 10 422 35 464 C62 510 93 534 113 551 C133 568 146 580 153 595" fill="none" stroke="#4a3522" stroke-width="15" stroke-linecap="round"/>
-  <path d="M122 206 C118 248 59 285 31 341 C10 381 11 421 36 463 C63 509 94 533 114 550 C134 567 147 579 154 594" fill="none" stroke="url(#hoodless1-archer-gear-bowWood)" stroke-width="11.5" stroke-linecap="round"/>
-  <path d="M125 210 C120 253 65 285 35 343 C14 384 18 423 40 459 C66 504 100 535 119 551 Q144 574 155 590" fill="none" stroke="#dfbb73" stroke-width="2.7" stroke-linecap="round" opacity=".68"/>
-  <path d="M116 211 L126 212 M149 588 L158 585" fill="none" stroke="#e0d0a2" stroke-width="4" stroke-linecap="round"/>
-  <path d="M21 432 Q29 460 51 486" fill="none" stroke="#5b3025" stroke-width="20" stroke-linecap="round"/>
-  <path d="M22 431 Q30 459 52 485" fill="none" stroke="url(#hoodless1-archer-gear-redLeather)" stroke-width="16" stroke-linecap="round"/>
-  <path d="M16 438 L32 434 M19 446 L35 442 M22 453 L39 450 M26 461 L43 457 M31 468 L48 464 M37 476 L53 471 M43 483 L58 477" fill="none" stroke="#d69b71" stroke-width="1.9" stroke-linecap="round" opacity=".55"/>
- </g>
- </g></g><g id="hoodless1-archer-arrow-sized" transform="matrix(0.947120818 0 0 1.154045777 3.708138167 -40.369300641)"><g transform="matrix(.79 0 0 .625 64 -2)"><g id="hoodless1-archer-gear-arrow" transform="translate(430 470) scale(.7) translate(-430 -470)">
-  <path d="M349 527 L548 389" fill="none" stroke="#58432a" stroke-width="7.5" stroke-linecap="round"/>
-  <path d="M350 525 L548 388" fill="none" stroke="url(#hoodless1-archer-gear-arrowWood)" stroke-width="4.9" stroke-linecap="round"/>
-  <path d="M352 524 L546 389" fill="none" stroke="#ead298" stroke-width="1.4" stroke-linecap="round" opacity=".65"/>
-  <path d="M369 507 L349 505 L326 526 L348 524 L351 546 L376 524Z" fill="#73362c"/>
-  <path d="M369 507 L350 507 L330 523 L351 520Z" fill="#c17651"/>
-  <path d="M351 525 L354 541 L373 523 L372 513Z" fill="#a04f39"/>
-  <path d="M334 522 L372 510 M354 531 L367 521" fill="none" stroke="#e5b080" stroke-width="1.5" opacity=".5"/>
-  <path d="M529 387 L582 367 L558 418 L549 394Z" fill="#536760"/>
-  <path d="M529 385 L582 365 L550 393Z" fill="url(#hoodless1-archer-gear-arrowMetal)"/>
-  <path d="M582 365 L558 416 L550 393Z" fill="#809790"/>
-  <path d="M532 385 L580 366 L552 392" fill="none" stroke="#f4ecce" stroke-width="1.9" stroke-linejoin="round" opacity=".9"/>
-  <path d="M544 393 L550 400 M539 397 L545 404" fill="none" stroke="#dac598" stroke-width="2.5"/>
- </g>
- </g></g></svg>
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="ar-archer-title ar-archer-desc">
+  <title id="ar-archer-title">Archer</title>
+  <desc id="ar-archer-desc">Simplified shaded archer. An oversized recurve bow, large arrow, short cape and broad leather sash distinguish the unit at small game scales. Original human proportions and hand positions. Transparent editable vectors.</desc>
+  <defs>
+    <clipPath id="ar-noob-legs-clip">
+      <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" />
+    </clipPath>
+    <clipPath id="ar-noob-pants-clip">
+      <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z" />
+    </clipPath>
+    <clipPath id="ar-noob-arms-clip">
+      <path d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z" />
+    </clipPath>
+    <clipPath id="ar-noob-shirt-clip">
+      <path d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z" />
+    </clipPath>
+    <radialGradient id="ar-noob-skin" cx="72%" cy="24%" r="86%">
+      <stop stop-color="#ffe1a0" />
+      <stop offset=".38" stop-color="#edc88a" />
+      <stop offset=".7" stop-color="#cda66c" />
+      <stop offset="1" stop-color="#916c43" />
+    </radialGradient>
+    <radialGradient id="ar-noob-palm" cx="66%" cy="31%" r="80%">
+      <stop stop-color="#f7d99b" />
+      <stop offset=".5" stop-color="#deb97b" />
+      <stop offset="1" stop-color="#967142" />
+    </radialGradient>
+    <linearGradient id="ar-noob-left-arm" gradientUnits="userSpaceOnUse" x1="105" y1="255" x2="138" y2="268">
+      <stop stop-color="#a78151" />
+      <stop offset=".4" stop-color="#e1bc7e" />
+      <stop offset=".69" stop-color="#f0cf92" />
+      <stop offset="1" stop-color="#b28d58" />
+    </linearGradient>
+    <linearGradient id="ar-noob-right-arm" gradientUnits="userSpaceOnUse" x1="373" y1="269" x2="409" y2="251">
+      <stop stop-color="#a47a48" />
+      <stop offset=".4" stop-color="#d9ae6d" />
+      <stop offset=".76" stop-color="#f6d99b" />
+      <stop offset="1" stop-color="#ddb97b" />
+    </linearGradient>
+    <radialGradient id="ar-noob-shirt-paint" cx="78%" cy="19%" r="99%">
+      <stop stop-color="#90b955" />
+      <stop offset=".28" stop-color="#6c9c40" />
+      <stop offset=".6" stop-color="#4c8033" />
+      <stop offset="1" stop-color="#28552b" />
+    </radialGradient>
+    <radialGradient id="ar-noob-sleeve-left" cx="76%" cy="15%" r="110%">
+      <stop stop-color="#71a049" />
+      <stop offset=".46" stop-color="#548737" />
+      <stop offset="1" stop-color="#2d5b2b" />
+    </radialGradient>
+    <radialGradient id="ar-noob-sleeve-right" cx="57%" cy="29%" r="75%">
+      <stop stop-color="#acd176" />
+      <stop offset=".27" stop-color="#82b250" />
+      <stop offset=".6" stop-color="#5b8e38" />
+      <stop offset="1" stop-color="#305b2a" />
+    </radialGradient>
+    <radialGradient id="ar-noob-pants-paint" cx="75%" cy="14%" r="101%">
+      <stop stop-color="#b69968" />
+      <stop offset=".36" stop-color="#9e8055" />
+      <stop offset=".76" stop-color="#7b6040" />
+      <stop offset="1" stop-color="#56452f" />
+    </radialGradient>
+    <radialGradient id="ar-noob-cloth-light">
+      <stop stop-color="#ead19a" stop-opacity=".29" />
+      <stop offset=".55" stop-color="#dfc187" stop-opacity=".15" />
+      <stop offset="1" stop-color="#d7b780" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ar-noob-boot-left" gradientUnits="userSpaceOnUse" x1="181" y1="440" x2="228" y2="445">
+      <stop stop-color="#86623a" />
+      <stop offset=".35" stop-color="#c2995c" />
+      <stop offset=".68" stop-color="#e0b976" />
+      <stop offset="1" stop-color="#957044" />
+    </linearGradient>
+    <linearGradient id="ar-noob-boot-right" gradientUnits="userSpaceOnUse" x1="284" y1="440" x2="332" y2="445">
+      <stop stop-color="#795c36" />
+      <stop offset=".35" stop-color="#b89054" />
+      <stop offset=".74" stop-color="#edc784" />
+      <stop offset="1" stop-color="#ae884e" />
+    </linearGradient>
+    <linearGradient id="ar-noob-sole-shadow" gradientUnits="userSpaceOnUse" x1="0" y1="462" x2="0" y2="485">
+      <stop stop-color="#493a24" stop-opacity="0" />
+      <stop offset=".64" stop-color="#493a24" stop-opacity=".14" />
+      <stop offset="1" stop-color="#493a24" stop-opacity=".66" />
+    </linearGradient>
+    <radialGradient id="ar-noob-boot-toe" cx="64%" cy="33%" r="68%">
+      <stop stop-color="#f5d294" stop-opacity=".75" />
+      <stop offset=".44" stop-color="#e4bd78" stop-opacity=".4" />
+      <stop offset="1" stop-color="#d9b073" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ar-noob-belt-paint" x1="0" y1="0" x2="1" y2=".3">
+      <stop stop-color="#384027" />
+      <stop offset=".57" stop-color="#4c5630" />
+      <stop offset=".85" stop-color="#6e7443" />
+      <stop offset="1" stop-color="#494d2c" />
+    </linearGradient>
+    <linearGradient id="ar-noob-buckle-paint" x1="0" y1="0" x2="1" y2=".7">
+      <stop stop-color="#b78937" />
+      <stop offset=".25" stop-color="#d5a64b" />
+      <stop offset=".66" stop-color="#ffe08a" />
+      <stop offset="1" stop-color="#b88432" />
+    </linearGradient>
+    <radialGradient id="ar-archer-leather" cx="74%" cy="20%" r="94%">
+      <stop stop-color="#c6a06b" />
+      <stop offset=".42" stop-color="#99713f" />
+      <stop offset="1" stop-color="#493a29" />
+    </radialGradient>
+    <radialGradient id="ar-archer-cape" cx="78%" cy="14%" r="94%">
+      <stop stop-color="#748f61" />
+      <stop offset=".42" stop-color="#476341" />
+      <stop offset="1" stop-color="#253d2d" />
+    </radialGradient>
+    <linearGradient id="ar-archer-bow" x1="0" y1="0" x2="1" y2=".1">
+      <stop stop-color="#76502b" />
+      <stop offset=".45" stop-color="#c08a43" />
+      <stop offset=".7" stop-color="#e3b76e" />
+      <stop offset="1" stop-color="#a87137" />
+    </linearGradient>
+    <linearGradient id="ar-archer-metal" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#e4e8d5" />
+      <stop offset=".45" stop-color="#b8c9ba" />
+      <stop offset="1" stop-color="#536d64" />
+    </linearGradient>
+  </defs>
+  <g id="ar-cape-and-quiver">
+    <path d="M184 139 Q153 165 156 215 L143 359 Q185 374 225 345 L225 146Z" fill="url(#ar-archer-cape)" />
+    <path d="M318 133 L348 142 L353 254 Q335 268 318 254Z" fill="url(#ar-archer-leather)" />
+    <path d="M331 157 L337 98 M350 156 L363 91" stroke="#655333" stroke-width="7" stroke-linecap="round" />
+    <path d="M337 76 L325 94 L324 119 L337 108 L346 120 L349 94Z M365 68 L353 86 L349 112 L362 101 L372 113 L378 89Z" fill="#e6d9ae" />
+  </g>
+  <g id="ar-unit-body">
+    <g id="ar-noob-boots" clip-path="url(#ar-noob-legs-clip)">
+      <path id="ar-noob-original-legs-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#ar-noob-boot-left)" />
+      <path d="M255 295 H332 V486 H255Z" fill="url(#ar-noob-boot-right)" />
+      <ellipse cx="205" cy="465" rx="25" ry="23" fill="url(#ar-noob-boot-toe)" />
+      <ellipse cx="309" cy="465" rx="25" ry="23" fill="url(#ar-noob-boot-toe)" />
+      <path d="M180 452 H334 V486 H180Z" fill="url(#ar-noob-sole-shadow)" />
+    </g>
+    <g id="ar-noob-pants" clip-path="url(#ar-noob-pants-clip)">
+      <path id="ar-noob-original-pants-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#ar-noob-pants-paint)" />
+      <ellipse cx="209" cy="365" rx="30" ry="66" fill="url(#ar-noob-cloth-light)" />
+      <ellipse cx="315" cy="365" rx="29" ry="66" fill="url(#ar-noob-cloth-light)" />
+    </g>
+    <g id="ar-noob-arms" clip-path="url(#ar-noob-arms-clip)">
+      <path id="ar-noob-original-arms-silhouette" d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z" fill="url(#ar-noob-left-arm)" />
+      <path d="M256 130 H428 V320 H256Z" fill="url(#ar-noob-right-arm)" />
+    </g>
+    <g id="ar-noob-shirt" clip-path="url(#ar-noob-shirt-clip)">
+      <path id="ar-noob-original-shirt-silhouette" d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z" fill="url(#ar-noob-shirt-paint)" />
+      <path d="M195 135 C175 145 169 158 158 180 L125 231 L110 227 L134 184 L159 149 Q174 133 195 135Z" fill="url(#ar-noob-sleeve-left)" />
+      <path d="M315 134 Q340 130 358 155 Q380 181 401 223 L363 245 Q343 201 331 182 Q327 151 315 134Z" fill="url(#ar-noob-sleeve-right)" />
+      <path d="M230 138 Q255 129 281 138 L256 164Z" fill="#2d5228" />
+      <path d="M239 140 Q255 137 273 141 L256 158Z" fill="#b08b48" />
+    </g>
+  </g>
+  <g id="ar-leather-gear">
+    <path d="M184 141 Q170 155 165 176 L198 198 L218 156Z" fill="url(#ar-archer-cape)" />
+    <path d="M308 139 L327 153 L209 291 L187 288Z" fill="url(#ar-archer-leather)" />
+    <path d="M183 372 H227 V462 Q224 483 207 485 Q186 482 183 462Z M286 372 H330 V462 Q327 483 310 485 Q289 482 286 462Z" fill="url(#ar-archer-leather)" />
+  </g>
+  <g id="ar-belt">
+    <path d="M182 282 Q256 291 330 282 V302 Q256 312 182 302Z" fill="url(#ar-noob-belt-paint)" />
+    <path d="M247 286 H265 V303 H247Z" fill="url(#ar-noob-buckle-paint)" />
+  </g>
+  <g id="ar-unit-head">
+    <circle id="ar-noob-original-head-silhouette" cx="256" cy="91" r="62.5" fill="url(#ar-noob-skin)" />
+    <ellipse cx="236" cy="73" rx="7.2" ry="8.5" fill="#243328" />
+    <ellipse cx="277" cy="73" rx="7.2" ry="8.5" fill="#243328" />
+    <path d="M242 114 H270" stroke="#6b5334" stroke-width="5" stroke-linecap="round" />
+  </g>
+  <g id="ar-longbow">
+    <path d="M158 88 L158 473" stroke="#423825" stroke-width="8" stroke-linecap="round" />
+    <path d="M158 88 L158 473" stroke="#ead9af" stroke-width="5" stroke-linecap="round" />
+    <path d="M158 88 C114 124 93 193 95 263 L96 320 C99 387 117 440 158 473" stroke="#513b27" stroke-width="25" stroke-linecap="round" />
+    <path d="M158 88 C114 124 93 193 95 263 L96 320 C99 387 117 440 158 473" stroke="url(#ar-archer-bow)" stroke-width="18" stroke-linecap="round" />
+    <path d="M96 277 L96 313" stroke="#5b432c" stroke-width="27" stroke-linecap="round" />
+    <ellipse cx="108" cy="295" rx="20" ry="18" fill="url(#ar-noob-palm)" />
+  </g>
+  <g id="ar-arrow">
+    <path d="M347 347 L469 247" stroke="#57452e" stroke-width="11" stroke-linecap="round" />
+    <path d="M347 347 L469 247" stroke="#d0ac69" stroke-width="6" stroke-linecap="round" />
+    <path d="M343 332 L325 348 L347 350 L354 371 L372 352 L362 335Z" fill="#7d4d32" />
+    <path d="M343 332 L325 348 L347 350 L362 335Z" fill="#c7a16a" />
+    <path d="M446 246 L496 220 L475 272 L467 253Z" fill="url(#ar-archer-metal)" stroke="#5b7267" stroke-width="3" stroke-linejoin="round" />
+    <path d="M496 220 L475 272 L467 253Z" fill="#6d8879" />
+    <ellipse cx="405" cy="296" rx="18" ry="18" fill="url(#ar-noob-palm)" />
+  </g>
+</svg>
