@@ -15,6 +15,7 @@
     "test-task104-training-cadence": "npx -y node@20 ai/test-task104-training-cadence.js",
     "test-alphazero-lite-combat": "npx -y node@20 ai/test-alphazero-lite-combat.js",
     "test-no-cheating-guard": "node ai/test-no-cheating-guard.js",
+    "test-task068-combat-curriculum": "npx -y node@20 ai/test-combat-curriculum-controller.js --task068-only",
     "test-combat-curriculum": "npx -y node@20 ai/test-combat-curriculum-controller.js",
     "test-combat-stage-a-map-generation": "node ai/test-combat-stage-a-map-generation.js",
     "test-combat-stage-b-map-generation": "node ai/test-combat-stage-b-map-generation.js",

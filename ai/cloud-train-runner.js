@@ -16,6 +16,7 @@ const {
 
 const MODEL_VERSION = 2;
 const CURRICULUM_FINAL_STAGE_INDEX = 6;
+const SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR = 0.6;
 const MODEL_SIGNATURE = {
   inputs: [
     { name: 'board', shape: [null, 3, 3, 21] },
@@ -1501,6 +1502,7 @@ function curriculumGateDecision(
       learningRateReduction: learningRateAttempt,
       simpleAiPlayerWinrate,
       baselineAiPlayerWinrate,
+      requiredSimpleAiPlayerWinrateExclusiveFloor: SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR,
       requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold,
       requiredBaselineAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
     };
@@ -1516,6 +1518,10 @@ function curriculumGateDecision(
   }
   if (!simpleAiPlayerWinrate.evaluated) {
     reasons.push('SimpleAiPlayer winrate has not been evaluated');
+  } else if (!(simpleAiPlayerWinrate.value > SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR)) {
+    reasons.push(
+      `SimpleAiPlayer winrate must be greater than ${SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR}`
+    );
   } else if (simpleAiPlayerWinrate.value < options.curriculumSimpleWinrateThreshold) {
     reasons.push(`SimpleAiPlayer winrate must be at least ${options.curriculumSimpleWinrateThreshold}`);
   }
@@ -1536,6 +1542,7 @@ function curriculumGateDecision(
     learningRateReduction: learningRateAttempt,
     simpleAiPlayerWinrate,
     baselineAiPlayerWinrate,
+    requiredSimpleAiPlayerWinrateExclusiveFloor: SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR,
     requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold,
     requiredBaselineAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
   };

@@ -2,6 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { loadAiScripts } = require('./smokeHarness');
+const {
+  curriculumGateDecision,
+  initialCurriculumState,
+  updateCurriculumState
+} = require('./cloud-train-runner');
 
 const CURRICULUM_STAGE_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
@@ -95,8 +100,145 @@ function assertGateEvidence(record, label) {
     label + ' learning-rate attempt should not improve before advancing');
   check(record.simpleAiPlayerWinrate.evaluated === true,
     label + ' did not evaluate SimpleAiPlayer winrate');
+  check(record.simpleAiPlayerWinrate.value >
+      record.nextStageEligibility.requiredSimpleAiPlayerWinrateExclusiveFloor,
+    label + ' did not require SimpleAiPlayer winrate greater than 60 percent');
   check(record.simpleAiPlayerWinrate.value >= record.nextStageEligibility.requiredSimpleAiPlayerWinrate,
     label + ' did not require SimpleAiPlayer winrate at least the threshold');
+}
+
+function assertStrictSixtyPercentBoundary() {
+  const state = { curriculum: { currentStageIndex: 0, currentStage: 'combat-foundation' } };
+  const plateau = { status: 'plateau' };
+  const learningRateAttempt = { attempted: true, improved: false };
+  const evaluated = (value) => ({ value, evaluated: true, games: 10, source: 'tiny-evaluation' });
+  const options = { curriculumSimpleWinrateThreshold: 0.6 };
+  const exactBoundary = curriculumGateDecision(
+    state,
+    plateau,
+    evaluated(0.6),
+    learningRateAttempt,
+    options,
+    evaluated(0.6)
+  );
+  check(exactBoundary.decision === 'hold' && exactBoundary.eligible === false,
+    'exactly 60 percent SimpleAiPlayer winrate must not advance');
+  check(exactBoundary.reason.includes('greater than 0.6'),
+    'exactly 60 percent rejection did not record the strict boundary reason');
+  check(exactBoundary.requiredSimpleAiPlayerWinrateExclusiveFloor === 0.6,
+    'gate did not expose the strict 60 percent floor');
+
+  const aboveBoundary = curriculumGateDecision(
+    state,
+    plateau,
+    evaluated(0.61),
+    learningRateAttempt,
+    options,
+    evaluated(0.6)
+  );
+  check(aboveBoundary.decision === 'advance' && aboveBoundary.eligible === true,
+    'above-60 percent SimpleAiPlayer winrate did not advance after all gates passed');
+}
+
+function assertFocusedTask068Controller() {
+  const evaluated = (value) => ({
+    value,
+    evaluated: true,
+    games: 10,
+    source: 'fixed tiny curriculum evaluation',
+    artificialAdvantage: false
+  });
+  const options = { curriculumSimpleWinrateThreshold: 0.6 };
+  const passingEvidence = [
+    ['missing plateau', { status: 'insufficient-history' }, { attempted: true, improved: false }],
+    ['missing learning-rate attempt', { status: 'plateau' }, { attempted: false, improved: false }],
+    ['improving learning-rate attempt', { status: 'plateau' }, { attempted: true, improved: true }]
+  ];
+  for (const [label, plateau, learningRateAttempt] of passingEvidence) {
+    const decision = curriculumGateDecision(
+      { curriculum: initialCurriculumState() },
+      plateau,
+      evaluated(0.61),
+      learningRateAttempt,
+      options,
+      evaluated(0.6)
+    );
+    check(decision.decision === 'hold' && decision.eligible === false,
+      `${label} advanced the curriculum stage`);
+  }
+
+  const storageDir = path.join('/mnt/storage/diplomacy', `task068-focused-${process.pid}`);
+  const statePath = path.join(storageDir, 'state.json');
+  fs.mkdirSync(storageDir, { recursive: true });
+  try {
+    const pausedState = {
+      runId: 'task068-focused',
+      completedGames: 1,
+      status: 'paused',
+      curriculum: initialCurriculumState()
+    };
+    const held = curriculumGateDecision(
+      pausedState,
+      { status: 'insufficient-history' },
+      evaluated(0.61),
+      { attempted: true, improved: false },
+      options,
+      evaluated(0.6)
+    );
+    updateCurriculumState(pausedState, held);
+    fs.writeFileSync(statePath, `${JSON.stringify(pausedState, null, 2)}\n`);
+
+    const resumedState = readJson(statePath);
+    check(resumedState.curriculum.currentStageIndex === 0 &&
+        resumedState.curriculum.gateHistory.length === 1,
+      'saved curriculum stage or gate history was not restored');
+    resumedState.status = 'running';
+    resumedState.completedGames = 2;
+    const passing = curriculumGateDecision(
+      resumedState,
+      { status: 'plateau' },
+      evaluated(0.61),
+      { attempted: true, improved: false },
+      options,
+      evaluated(0.6)
+    );
+    check(passing.decision === 'advance' && passing.eligible === true,
+      'complete plateau, learning-rate, and SimpleAiPlayer evidence did not pass');
+    updateCurriculumState(resumedState, passing);
+    fs.writeFileSync(statePath, `${JSON.stringify(resumedState, null, 2)}\n`);
+
+    const completedState = readJson(statePath);
+    check(completedState.curriculum.currentStageIndex === 1 &&
+        completedState.curriculum.gateHistory.length === 2,
+      'resumed curriculum did not preserve history and persist advancement');
+    check(completedState.curriculum.gateHistory[1].simpleAiPlayerWinrate.value === 0.61,
+      'resumed gate history did not preserve SimpleAiPlayer evidence');
+
+    const failingState = {
+      completedGames: 1,
+      curriculum: initialCurriculumState()
+    };
+    const exactSixty = curriculumGateDecision(
+      failingState,
+      { status: 'plateau' },
+      evaluated(0.6),
+      { attempted: true, improved: false },
+      options,
+      evaluated(0.6)
+    );
+    updateCurriculumState(failingState, exactSixty);
+    check(failingState.curriculum.currentStageIndex === 0 &&
+        failingState.curriculum.gateHistory[0].decision === 'hold',
+      'failed 60-percent gate changed the stage or omitted the hold history');
+    check(failingState.curriculum.gateHistory[0].reason.includes('greater than 0.6'),
+      'failed 60-percent gate did not persist its blocker reason');
+  } finally {
+    fs.rmSync(storageDir, { recursive: true, force: true });
+  }
+  console.log('Step 1 PASS: fixed tiny curriculum evaluations exercised the controller');
+  console.log('Step 2 PASS: advancement required plateau, one failed learning-rate reduction, and SimpleAiPlayer winrate above 60 percent');
+  console.log('Step 3 PASS: exactly 60 percent held the current stage and persisted the blocker reason');
+  console.log('Step 4 PASS: saved curriculum stage and gate history survived resume and advancement');
 }
 
 function assertEveryStageBoundary() {
@@ -392,6 +534,12 @@ function assertResumeGateHistory() {
 }
 
 assertNoCheatingSourceChanges();
+assertStrictSixtyPercentBoundary();
+if (process.argv.includes('--task068-only')) {
+  assertFocusedTask068Controller();
+  console.log('TASK-068 focused combat curriculum controller smoke passed');
+  process.exit(0);
+}
 assertStageMapsRemainCombatOnly();
 assertEveryStageBoundary();
 assertPassingGate();
