@@ -473,9 +473,19 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         let unitProducts = state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD ?
             ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
             AI_UNIT_PRODUCTS
-        let choices = state.units.length < unitCap ?
+        let unitChoices = state.units.length < unitCap ?
             byProducts(unitProducts) : []
         let barrackCapacity = state.barracks.length + state.pendingBarracks.length
+        if (this.aiInitialTownCount == AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
+            let choices = []
+            if (state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD &&
+                    barrackCapacity < state.towns.length) {
+                choices = choices.concat(byProducts(['barrack']))
+                choices = choices.concat(byProducts(['suburb']))
+            }
+            return choices.concat(unitChoices)
+        }
+        let choices = unitChoices.slice()
         if (barrackCapacity < state.towns.length) {
             choices = choices.concat(byProducts(['barrack']))
             choices = choices.concat(byProducts(['suburb']))
@@ -514,12 +524,42 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             return true
         }
         let available = activeProduction.availableHexagons || []
+        let validCells = []
         for (let i = 0; i < available.length; ++i) {
             let cell = grid.getCell(available[i].coord)
             if (activeProduction.canCreateOnCell(cell, choice.producer)) {
-                choice.producer.sendInstructions(cell)
-                return true
+                validCells.push(cell)
             }
+        }
+        if (AI_UNIT_PRODUCTS.includes(choice.product) &&
+                this.aiInitialTownCount == AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
+            let targets = []
+            let playerIndexForThis = this.getPlayerIndex()
+            if (typeof players != 'undefined') {
+                for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+                    if (playerIndex == playerIndexForThis || !players[playerIndex] ||
+                            players[playerIndex].isNeutral || players[playerIndex].isLost) {
+                        continue
+                    }
+                    for (let town of players[playerIndex].towns) {
+                        if (!town.killed) {
+                            targets.push(town.coord)
+                        }
+                    }
+                }
+            }
+            validCells.sort((left, right) => {
+                let nearestDistance = cell => targets.reduce(
+                    (distance, target) => Math.min(
+                        distance,
+                        this.getActionRankingDistance(cell.coord, target)),
+                    Infinity)
+                return nearestDistance(left) - nearestDistance(right)
+            })
+        }
+        if (validCells.length) {
+            choice.producer.sendInstructions(validCells[0])
+            return true
         }
         choice.producer.removeSelect()
         return false
@@ -707,6 +747,9 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
     }
     play() {
+        if (this.aiInitialTownCount === undefined) {
+            this.aiInitialTownCount = this.getLiveTownCount(this)
+        }
         if (this.economyMode == 'war') {
             let economyState = this.inspectEconomy()
             let purchaseLimit = economyState.towns.length > 1 ?

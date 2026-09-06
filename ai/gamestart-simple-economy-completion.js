@@ -401,7 +401,7 @@ function runRuntimeScenario(mapEntry, seed, options) {
       turnCount,
       crash: null,
       timeout: winner == null && turnCount >= __task055RoundLimit,
-      suddenDeath: winner == null && gameRound >= suddenDeathRound,
+      suddenDeath: gameRound >= suddenDeathRound,
       suddenDeathRound,
       forcedSuddenDeathRound: __task055ForcedSuddenDeathRound,
       runtimeLoop: 'GameMap.start + nextTurn',
@@ -421,7 +421,7 @@ function runRuntimeScenario(mapEntry, seed, options) {
 
 function conciseGame(game) {
   const copy = Object.assign({}, game);
-  if (copy.winner !== null && !copy.timeout && !copy.suddenDeath) {
+  if (isPreSuddenDeathCompletion(copy)) {
     copy.players = copy.players.map(player => {
       const playerCopy = Object.assign({}, player);
       delete playerCopy.townCoords;
@@ -432,12 +432,19 @@ function conciseGame(game) {
   return copy;
 }
 
+function isPreSuddenDeathCompletion(game) {
+  return game.winner !== null &&
+    !game.timeout &&
+    !game.suddenDeath &&
+    game.roundCount < game.suddenDeathRound;
+}
+
 function summarize(games, crashes) {
   return {
     attemptedScenarios: games.length + crashes.length,
-    completedScenarios: games.filter(game => game.winner !== null).length,
-    winners: games.filter(game => game.winner !== null).length,
-    nonResults: games.filter(game => game.winner === null).length,
+    completedScenarios: games.filter(isPreSuddenDeathCompletion).length,
+    winners: games.filter(isPreSuddenDeathCompletion).length,
+    nonResults: games.filter(game => !isPreSuddenDeathCompletion(game)).length,
     timeouts: games.filter(game => game.timeout).length,
     suddenDeathNonResults: games.filter(game => game.suddenDeath).length,
     crashes: crashes.length,
@@ -467,7 +474,7 @@ function runHarness(options) {
           game.mapName + ' seed ' + seed + ' winner=' + game.winner +
           ' round=' + game.roundCount + ' timeout=' + game.timeout
         );
-        if (game.winner === null || game.timeout || game.suddenDeath ||
+        if (!isPreSuddenDeathCompletion(game) ||
             !game.allNonNeutralPlayersUseRequiredClass ||
             !game.allNonNeutralPlayersUseExactRequiredClass ||
             !game.requiredPlayerPrototypeUnchanged) {
@@ -544,9 +551,7 @@ function runHarness(options) {
       'real runtime GameMap.start and nextTurn with all non-neutral players set to SimpleAiPlayerWithEconomy',
     summary,
     failedGames: games.filter(game =>
-      game.winner === null ||
-      game.timeout ||
-      game.suddenDeath ||
+      !isPreSuddenDeathCompletion(game) ||
       !game.allNonNeutralPlayersUseRequiredClass ||
       !game.allNonNeutralPlayersUseExactRequiredClass ||
       !game.requiredPlayerPrototypeUnchanged
@@ -586,9 +591,11 @@ module.exports = {
   FORCED_SUDDEN_DEATH_ROUND,
   createRuntimeContext,
   disableHeadlessBorderDrawing,
+  isPreSuddenDeathCompletion,
   loadBrowserScripts,
   parseArgs,
   runHarness,
   runRuntimeScenario,
-  selectMaps
+  selectMaps,
+  summarize
 };

@@ -4,7 +4,9 @@ const path = require('path');
 const childProcess = require('child_process');
 
 const {
-  FORCED_SUDDEN_DEATH_ROUND
+  FORCED_SUDDEN_DEATH_ROUND,
+  isPreSuddenDeathCompletion,
+  summarize
 } = require('./gamestart-simple-economy-completion');
 
 function assert(condition, message) {
@@ -12,6 +14,25 @@ function assert(condition, message) {
     throw new Error(message);
   }
 }
+
+const round500Winner = {
+  winner: 1,
+  timeout: false,
+  suddenDeath: true,
+  roundCount: 500,
+  suddenDeathRound: 500,
+  allNonNeutralPlayersUseRequiredClass: true,
+  allNonNeutralPlayersUseExactRequiredClass: true,
+  requiredPlayerPrototypeUnchanged: true
+};
+assert(
+  !isPreSuddenDeathCompletion(round500Winner),
+  'winner on sudden-death round was accepted as a completion'
+);
+assert(
+  summarize([round500Winner], []).nonResults === 1,
+  'winner on sudden-death round was not counted as a non-result'
+);
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task055-'));
 const output = path.join(tempDir, 'report.json');
@@ -70,6 +91,12 @@ for (const game of report.games) {
   assert(Object.prototype.hasOwnProperty.call(game, 'crash'), 'crash field missing');
   assert(Object.prototype.hasOwnProperty.call(game, 'timeout'), 'timeout field missing');
   assert(Object.prototype.hasOwnProperty.call(game, 'suddenDeath'), 'sudden death field missing');
+  if (game.winner !== null) {
+    assert(
+      game.roundCount < game.suddenDeathRound || game.suddenDeath,
+      'winner at or after sudden death was not classified as sudden death'
+    );
+  }
   for (const player of game.players) {
     assert(player.type === 'SimpleAiPlayerWithEconomy', 'unexpected runtime class');
   }
@@ -112,6 +139,10 @@ assert(strictReport.config.requireComplete, 'strict completion flag missing');
 assert(strictReport.mapCoverage.selectedMaps.length === 1, 'strict map limit failed');
 assert(strictReport.games[0].playerGroup === '1v1', 'strict run selected wrong group');
 assert(strictReport.summary.nonResults === 0, 'strict run had a non-result');
+assert(
+  strictReport.games[0].roundCount < strictReport.games[0].suddenDeathRound,
+  'strict run winner did not finish before sudden death'
+);
 
 const offsetOutput = path.join(tempDir, 'offset-1v1-report.json');
 const offsetResult = childProcess.spawnSync(process.execPath, [
