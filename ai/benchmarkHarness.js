@@ -131,6 +131,7 @@ function benchmarkMapFromGameMap(gameMap) {
       town: primaryTown,
       towns,
       units,
+      economyEnabled: player.economyEnabled !== false,
       suburbs: player.suburbs || [],
       barracks: player.barracks || [],
       pendingBarracks: player.pendingBarracks || [],
@@ -426,6 +427,7 @@ function runtimeMapScript() {
         towns: configured.players[0].towns ||
           (configured.players[0].town ? [configured.players[0].town] : []),
         units: configured.players[0].units.map(configuredUnit),
+        economyEnabled: configured.players[0].economyEnabled,
         suburbs: configured.players[0].suburbs || [],
         barracks: configured.players[0].barracks || [],
         pendingBarracks: configured.players[0].pendingBarracks || [],
@@ -441,6 +443,7 @@ function runtimeMapScript() {
         towns: configured.players[1].towns ||
           (configured.players[1].town ? [configured.players[1].town] : []),
         units: configured.players[1].units.map(configuredUnit),
+        economyEnabled: configured.players[1].economyEnabled,
         suburbs: configured.players[1].suburbs || [],
         barracks: configured.players[1].barracks || [],
         pendingBarracks: configured.players[1].pendingBarracks || [],

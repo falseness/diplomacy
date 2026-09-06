@@ -34,10 +34,12 @@ class GameMap {
 
         for (let i = 1; i < this.players.length; ++i) {
             let playerType = this.getPlayerType(this.players[i])
-            let configuredGold = this.players[i].gold
+            let economyEnabled = this.players[i].economyEnabled !== false
+            let configuredGold = economyEnabled ? this.players[i].gold : 0
             players[i] = configuredGold === undefined ?
                 new playerType(this.players[i].rgb) :
                 new playerType(this.players[i].rgb, configuredGold)
+            players[i].economyEnabled = economyEnabled
 
             if (!('units' in this.players[i])) {
                 continue;

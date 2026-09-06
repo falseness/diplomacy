@@ -319,10 +319,12 @@ function generatedCombatGameMap(seed, stage) {
     players: [
       { towns: [] },
       {
+        economyEnabled: false,
         towns: [leftTown],
         units: leftUnits.map((coord) => ({ x: coord.x, y: coord.y }))
       },
       {
+        economyEnabled: false,
         towns: [rightTown],
         units: rightUnits.map((coord) => ({ x: coord.x, y: coord.y }))
       }
@@ -350,6 +352,9 @@ function assertCombatOnly(gameMap) {
   }
   const occupied = new Set();
   for (const player of gameMap.players.slice(1)) {
+    if (player.economyEnabled !== false) {
+      throw new Error('generated combat benchmark must disable runtime economy');
+    }
     if (!player.towns || player.towns.length !== 1) {
       throw new Error('generated combat benchmark requires exactly one objective town per side');
     }
@@ -393,6 +398,12 @@ function runCombatBenchmark(options, checkpoint) {
       modelIdentifier: checkpoint.report.path,
       inferenceSource: 'loaded learned combat checkpoint value output'
     });
+    for (const player of game.players) {
+      if (player.gold !== 0 || player.income !== 0) {
+        throw new Error('combat-only runtime produced economy resources: ' +
+          JSON.stringify(player));
+      }
+    }
     games.push(Object.assign({}, game, {
       seed,
       mapStage: options.stage,

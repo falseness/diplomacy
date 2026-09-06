@@ -132,6 +132,8 @@ async function main() {
       'combat map contains production actions');
     check(game.economyObjects.resources === 0,
       'combat map contains resources');
+    check(game.players.every((player) => player.gold === 0 && player.income === 0),
+      'combat runtime contains gold or income resources');
   }
 
   let failed = false;
@@ -177,6 +179,9 @@ async function main() {
     const gameMap = generatedCombatGameMap(seed, 'task066-inspection');
     assertCombatOnly(gameMap);
     check(gameMap.combatOnly === true, 'generated map lacks combat-only marker');
+    check(gameMap.players.slice(1).every((player) =>
+      player.economyEnabled === false),
+    'generated map did not disable runtime economy');
   }
   for (let seed = 66660; seed < 66664; ++seed) {
     assertCombatOnly(generatedCombatGameMap(seed, 'task066-narrow-map-regression'));

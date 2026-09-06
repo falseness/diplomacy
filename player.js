@@ -94,6 +94,9 @@ class Player {
         return income
     }
     get income() {
+        if (this.economyEnabled === false) {
+            return 0
+        }
         let income = 0
         for (let i = 0; i < this.towns.length; ++i) {
         if (this.isTownKilled(this.towns[i])) {
