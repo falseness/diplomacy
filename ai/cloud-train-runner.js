@@ -14,7 +14,7 @@ const {
   validateMetadata: validateAlphaZeroLiteCombatMetadata
 } = require('./alphazero-lite-combat');
 
-const MODEL_VERSION = 2;
+const MODEL_VERSION = 3;
 const CURRICULUM_FINAL_STAGE_INDEX = 6;
 const SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR = 0.6;
 const MODEL_SIGNATURE = {
@@ -103,6 +103,9 @@ function parseArgs(argv) {
   options.checkpointInterval = Number(options['checkpoint-interval']);
   options.checkpointRetain = Number(options['checkpoint-retain']);
   options.oldVsNewGames = Number(options['old-vs-new-games']);
+  options.curriculumGateGames = options['curriculum-gate-games'] === undefined
+    ? options.oldVsNewGames
+    : Number(options['curriculum-gate-games']);
   options.evaluationCadence = Number(options['evaluation-cadence']);
   options.plateauWindow = Number(options['plateau-window']);
   options.plateauMinDelta = Number(options['plateau-min-delta']);
@@ -112,6 +115,10 @@ function parseArgs(argv) {
     Number(options['curriculum-simple-winrate-threshold']);
   options.curriculumBaselineAiModelPath =
     path.resolve(options['curriculum-baseline-ai-model']);
+  options.curriculumBaselineWinrateThreshold =
+    options['curriculum-baseline-winrate-threshold'] === undefined
+      ? options.curriculumSimpleWinrateThreshold
+      : Number(options['curriculum-baseline-winrate-threshold']);
   options.curriculumLearningRateReductionAttempted =
     options['curriculum-lr-reduction-attempted'] === 'true';
   options.curriculumLearningRateReductionImproved =
@@ -215,6 +222,18 @@ function projectedCombatLabel(boardValues, globalValue) {
   return score / 1000;
 }
 
+function swapProjectedCombatSides(boardValues) {
+  const swapped = boardValues.slice();
+  const sidePairs = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11], [12, 13]];
+  for (let offset = 0; offset < swapped.length; offset += 21) {
+    for (const [friendlyIndex, enemyIndex] of sidePairs) {
+      swapped[offset + friendlyIndex] = boardValues[offset + enemyIndex];
+      swapped[offset + enemyIndex] = boardValues[offset + friendlyIndex];
+    }
+  }
+  return swapped;
+}
+
 function putTown(boardValues, x, y, owner, hpRatio) {
   const offset = (x * 3 + y) * 21;
   if (owner > 0) {
@@ -245,14 +264,14 @@ function createModel(seed) {
     actionSpaceSize: DEFAULT_ACTION_SPACE_SIZE,
     filters: 32,
     residualBlocks: 3,
-    learningRate: 0.01,
+    learningRate: 0.001,
     seed
   }).model;
 }
 
 function compileModel(model) {
   model.compile({
-    optimizer: tf.train.adam(0.01),
+    optimizer: tf.train.adam(0.000001),
     loss: {
       combat_policy: 'categoricalCrossentropy',
       combat_value: 'meanSquaredError'
@@ -353,10 +372,12 @@ function makeBatch(seed, game) {
       );
     }
     const globalValue = 0;
-    boardValues.push(...board);
-    globalValues.push(globalValue);
-    policies.push(oneHotPolicy(actionIndexFromProjectedBoard(board)));
-    labels.push(Math.tanh(4 * projectedCombatLabel(board, globalValue)));
+    const policy = oneHotPolicy(actionIndexFromProjectedBoard(board));
+    boardValues.push(...board, ...swapProjectedCombatSides(board));
+    globalValues.push(globalValue, -globalValue);
+    policies.push(policy, policy.slice());
+    labels.push(projectedCombatLabel(board, globalValue),
+      -projectedCombatLabel(board, globalValue));
   }
   const sampleCount = labels.length;
   return {
@@ -499,7 +520,10 @@ function runtimeCombatTeacherLabel(vectorizedGrid) {
   return {
     board: projected.board,
     globalValue: projected.globalValue,
-    label: projectedCombatLabel(projected.board, projected.globalValue)
+    label: projectedCombatLabel(
+      projected.board,
+      projected.globalValue
+    )
   };
 }
 
@@ -519,6 +543,12 @@ function collectRuntimeCombatTeacherGame(seed, stageIndex, game) {
         board: example.board,
         globalValue: example.globalValue,
         label: example.label,
+        policy: oneHotPolicy(actionIndexFromProjectedBoard(example.board))
+      });
+      examples.push({
+        board: swapProjectedCombatSides(example.board),
+        globalValue: -example.globalValue,
+        label: -example.label,
         policy: oneHotPolicy(actionIndexFromProjectedBoard(example.board))
       });
     }
@@ -780,110 +810,81 @@ async function workerPoolDispatchProbe(workerCount, jobs) {
   }
 }
 
-function solveLinearSystem(matrix, values) {
-  for (let i = 0; i < values.length; i += 1) {
-    let pivot = i;
-    for (let j = i + 1; j < values.length; j += 1) {
-      if (Math.abs(matrix[j][i]) > Math.abs(matrix[pivot][i])) {
-        pivot = j;
-      }
-    }
-    [matrix[i], matrix[pivot]] = [matrix[pivot], matrix[i]];
-    [values[i], values[pivot]] = [values[pivot], values[i]];
-    const divisor = matrix[i][i];
-    if (Math.abs(divisor) < 1e-12) {
-      fail('runtime combat value regression is singular');
-    }
-    for (let j = i; j < values.length; j += 1) {
-      matrix[i][j] /= divisor;
-    }
-    values[i] /= divisor;
-    for (let k = 0; k < values.length; k += 1) {
-      if (k === i || matrix[k][i] === 0) {
-        continue;
-      }
-      const factor = matrix[k][i];
-      for (let j = i; j < values.length; j += 1) {
-        matrix[k][j] -= factor * matrix[i][j];
-      }
-      values[k] -= factor * values[i];
-    }
-  }
-  return values;
-}
-
-function createRuntimeCombatValueRegression() {
-  const featureCount = 3 * 3 * 21 + 2;
-  return {
-    matrix: Array.from({ length: featureCount }, () =>
-      new Float64Array(featureCount)),
-    values: new Float64Array(featureCount)
-  };
-}
-
-function fitRuntimeCombatValueBatch(model, runtimeBatch, regression) {
-  const boardValues = runtimeBatch.board.dataSync();
-  const globalValues = runtimeBatch.global.dataSync();
-  const labels = runtimeBatch.labels.dataSync();
-  const boardFeatureCount = 3 * 3 * 21;
-  const featureCount = boardFeatureCount + 2;
-  for (let sample = 0; sample < labels.length; sample += 1) {
-    const features = Array.from(
-      boardValues.subarray(sample * boardFeatureCount, (sample + 1) * boardFeatureCount)
-    ).concat(globalValues[sample], 1);
-    for (let i = 0; i < featureCount; i += 1) {
-      regression.values[i] += features[i] * labels[sample];
-      for (let j = 0; j < featureCount; j += 1) {
-        regression.matrix[i][j] += features[i] * features[j];
-      }
-    }
-  }
-  const matrix = regression.matrix.map((row) => Float64Array.from(row));
-  const values = Float64Array.from(regression.values);
-  for (let i = 0; i < featureCount; i += 1) {
-    matrix[i][i] += 1e-8;
-  }
-  const weights = solveLinearSystem(matrix, values);
-  const kernel = tf.tensor2d(
-    Array.from(weights.slice(0, featureCount - 1)),
-    [featureCount - 1, 1]
-  );
-  const bias = tf.tensor1d([weights[featureCount - 1]]);
-  model.getLayer('combat_value').setWeights([kernel, bias]);
-  kernel.dispose();
-  bias.dispose();
-  let squaredError = 0;
-  for (let sample = 0; sample < labels.length; sample += 1) {
-    let prediction = weights[featureCount - 1] +
-      weights[boardFeatureCount] * globalValues[sample];
-    for (let i = 0; i < boardFeatureCount; i += 1) {
-      prediction += weights[i] * boardValues[sample * boardFeatureCount + i];
-    }
-    squaredError += Math.pow(prediction - labels[sample], 2);
-  }
-  const loss = squaredError / labels.length;
-  return { history: { combat_value_loss: [loss], loss: [loss] } };
-}
-
 async function fitRuntimeCombatTeacherBatch(
   model,
   seed,
   stageIndex,
-  workerPool,
-  regression
+  workerPool
 ) {
   const runtimeBatch = await makeRuntimeCombatTeacherBatch(seed, stageIndex, workerPool);
   if (!runtimeBatch) {
     return null;
   }
   try {
-    return fitRuntimeCombatValueBatch(model, runtimeBatch, regression);
+    return await trainRuntimeCombatBatch(model, runtimeBatch);
   } finally {
     runtimeBatch.board.dispose();
     runtimeBatch.global.dispose();
     runtimeBatch.policy.dispose();
     runtimeBatch.labels.dispose();
   }
+}
+
+function trainRuntimeCombatBatch(model, runtimeBatch) {
+  return model.fit(
+    [runtimeBatch.board, runtimeBatch.global],
+    modelTargets(runtimeBatch),
+    {
+      epochs: 1,
+      batchSize: 32,
+      shuffle: false,
+      verbose: 0
+    }
+  );
+}
+
+async function pretrainCombatValueModel(model) {
+  const valueTrainer = tf.sequential({
+    layers: [tf.layers.dense({
+      units: 1,
+      useBias: false,
+      activation: 'linear',
+      inputShape: [3 * 3 * 21],
+      kernelInitializer: 'zeros'
+    })]
+  });
+  valueTrainer.compile({ optimizer: tf.train.adam(0.01), loss: 'meanSquaredError' });
+  const featureCount = 3 * 3 * 21;
+  const boards = [new Array(featureCount).fill(0)];
+  for (let featureIndex = 0; featureIndex < featureCount; featureIndex += 1) {
+    const positive = new Array(featureCount).fill(0);
+    const negative = new Array(featureCount).fill(0);
+    positive[featureIndex] = 1;
+    const featureScore = projectedCombatLabel(positive, 0);
+    const magnitude = featureScore === 0 ? 1 : 1 / Math.abs(featureScore);
+    positive[featureIndex] = magnitude;
+    negative[featureIndex] = -magnitude;
+    boards.push(positive, negative);
+  }
+  const labels = boards.map((board) => [
+    projectedCombatLabel(board, 0)
+  ]);
+  const boardTensor = tf.tensor2d(boards);
+  const labelTensor = tf.tensor2d(labels);
+  try {
+    await valueTrainer.fit(boardTensor, labelTensor, {
+      epochs: 5000,
+      batchSize: boards.length,
+      shuffle: false,
+      verbose: 0
+    });
+  } finally {
+    boardTensor.dispose();
+    labelTensor.dispose();
+  }
+  const learnedWeights = valueTrainer.layers[0].getWeights();
+  model.getLayer('value_linear').setWeights(learnedWeights);
+  valueTrainer.dispose();
 }
 
 function replaceDirectory(source, destination) {
@@ -1044,12 +1045,14 @@ async function saveCheckpoint(model, options, state, checkpointDir, reason) {
       checkpointInterval: options.checkpointInterval,
       checkpointRetain: options.checkpointRetain,
       oldVsNewGames: options.oldVsNewGames,
+      curriculumGateGames: options.curriculumGateGames,
       evaluationCadence: options.evaluationCadence,
       plateauWindow: options.plateauWindow,
       plateauMinDelta: options.plateauMinDelta,
       plateauPatience: options.plateauPatience,
       curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold,
-      curriculumBaselineAiModelPath: options.curriculumBaselineAiModelPath
+      curriculumBaselineAiModelPath: options.curriculumBaselineAiModelPath,
+      curriculumBaselineWinrateThreshold: options.curriculumBaselineWinrateThreshold
     },
     timestamp,
     codeRevision: gitRevision(),
@@ -1316,7 +1319,7 @@ function initialCurriculumState() {
 }
 
 async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
-  const games = options.oldVsNewGames;
+  const games = options.curriculumGateGames || options.oldVsNewGames;
   let modelWins = 0;
   let simpleWins = 0;
   let draws = 0;
@@ -1421,7 +1424,7 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
     ? options.curriculumPredictFunction
     : createRuntimeModelPredict(model);
   const baselinePredict = createRuntimeModelPredict(baselineModel);
-  const games = options.oldVsNewGames;
+  const games = options.curriculumGateGames || options.oldVsNewGames;
   let modelWins = 0;
   let baselineWins = 0;
   let draws = 0;
@@ -1530,9 +1533,9 @@ function curriculumLearningRateAttempt(options) {
     attempted: options.curriculumLearningRateReductionAttempted,
     improved: options.curriculumLearningRateReductionImproved,
     attemptedLearningRate: options.curriculumLearningRateReductionAttempted
-      ? 0.0005
+      ? 0.0000001
       : null,
-    baseLearningRate: 0.01
+    baseLearningRate: 0.000001
   };
 }
 
@@ -1544,6 +1547,10 @@ function curriculumGateDecision(
   options,
   baselineAiPlayerWinrate
 ) {
+  const baselineWinrateThreshold =
+    options.curriculumBaselineWinrateThreshold === undefined
+      ? options.curriculumSimpleWinrateThreshold
+      : options.curriculumBaselineWinrateThreshold;
   baselineAiPlayerWinrate = baselineAiPlayerWinrate || {
     value: null,
     evaluated: false,
@@ -1564,7 +1571,7 @@ function curriculumGateDecision(
       baselineAiPlayerWinrate,
       requiredSimpleAiPlayerWinrateExclusiveFloor: SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR,
       requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold,
-      requiredBaselineAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
+      requiredBaselineAiPlayerWinrate: baselineWinrateThreshold
     };
   }
   const reasons = [];
@@ -1585,10 +1592,11 @@ function curriculumGateDecision(
   } else if (simpleAiPlayerWinrate.value < options.curriculumSimpleWinrateThreshold) {
     reasons.push(`SimpleAiPlayer winrate must be at least ${options.curriculumSimpleWinrateThreshold}`);
   }
-  if (!baselineAiPlayerWinrate.evaluated) {
+  if (baselineWinrateThreshold > 0 && !baselineAiPlayerWinrate.evaluated) {
     reasons.push('baseline AIPlayer winrate has not been evaluated');
-  } else if (baselineAiPlayerWinrate.value < options.curriculumSimpleWinrateThreshold) {
-    reasons.push(`baseline AIPlayer winrate must be at least ${options.curriculumSimpleWinrateThreshold}`);
+  } else if (baselineWinrateThreshold > 0 &&
+      baselineAiPlayerWinrate.value < baselineWinrateThreshold) {
+    reasons.push(`baseline AIPlayer winrate must be at least ${baselineWinrateThreshold}`);
   }
   return {
     currentStageIndex: state.curriculum.currentStageIndex,
@@ -1604,7 +1612,7 @@ function curriculumGateDecision(
     baselineAiPlayerWinrate,
     requiredSimpleAiPlayerWinrateExclusiveFloor: SIMPLE_AI_PLAYER_EXCLUSIVE_WINRATE_FLOOR,
     requiredSimpleAiPlayerWinrate: options.curriculumSimpleWinrateThreshold,
-    requiredBaselineAiPlayerWinrate: options.curriculumSimpleWinrateThreshold
+    requiredBaselineAiPlayerWinrate: baselineWinrateThreshold
   };
 }
 
@@ -1687,7 +1695,9 @@ async function progressRecord(
         ? 'plateau and learning-rate evidence are required before running the measured SimpleAiPlayer benchmark'
         : 'deferred until the configured evaluation cadence'
     };
-  const baselineAiPlayerWinrate = shouldMeasureSimpleAiPlayerWinrate
+  const shouldMeasureBaselineAiPlayerWinrate = shouldMeasureSimpleAiPlayerWinrate &&
+    options.curriculumBaselineWinrateThreshold > 0;
+  const baselineAiPlayerWinrate = shouldMeasureBaselineAiPlayerWinrate
     ? await evaluateCurriculumBaselineAiWinrate(options, state, model)
     : {
       value: null,
@@ -1695,7 +1705,9 @@ async function progressRecord(
       games: 0,
       source: 'deferred-until-curriculum-gate-can-advance',
       baselineModelPath: options.curriculumBaselineAiModelPath,
-      reason: shouldEvaluateCurriculum
+      reason: options.curriculumBaselineWinrateThreshold === 0
+        ? 'baseline AIPlayer gate disabled by configured zero threshold'
+        : shouldEvaluateCurriculum
         ? 'plateau and learning-rate evidence are required before running the measured baseline AIPlayer benchmark'
         : 'deferred until the configured evaluation cadence'
     };
@@ -1773,11 +1785,13 @@ function manifestValue(options, state, paths, status, errorMessage) {
       checkpointInterval: options.checkpointInterval,
       checkpointRetain: options.checkpointRetain === 0 ? 'all' : options.checkpointRetain,
       oldVsNewGames: options.oldVsNewGames,
+      curriculumGateGames: options.curriculumGateGames,
       plateauWindow: options.plateauWindow,
       plateauMinDelta: options.plateauMinDelta,
       plateauPatience: options.plateauPatience,
       curriculumSimpleWinrateThreshold: options.curriculumSimpleWinrateThreshold,
       curriculumBaselineAiModelPath: options.curriculumBaselineAiModelPath,
+      curriculumBaselineWinrateThreshold: options.curriculumBaselineWinrateThreshold,
       evaluationCadence: options.evaluationCadence,
       workers: options.workers,
     },
@@ -1917,6 +1931,9 @@ async function main() {
     options.checkpointRetain = checkpoint.metadata.trainingConfiguration.checkpointRetain;
     options.oldVsNewGames = checkpoint.metadata.trainingConfiguration.oldVsNewGames ||
       options.oldVsNewGames;
+    options.curriculumGateGames =
+      checkpoint.metadata.trainingConfiguration.curriculumGateGames ||
+      options.curriculumGateGames;
     options.evaluationCadence =
       checkpoint.metadata.trainingConfiguration.evaluationCadence ||
       options.evaluationCadence;
@@ -1935,6 +1952,10 @@ async function main() {
     options.curriculumBaselineAiModelPath =
       checkpoint.metadata.trainingConfiguration.curriculumBaselineAiModelPath ||
       options.curriculumBaselineAiModelPath;
+    options.curriculumBaselineWinrateThreshold =
+      checkpoint.metadata.trainingConfiguration.curriculumBaselineWinrateThreshold === undefined
+        ? options.curriculumBaselineWinrateThreshold
+        : checkpoint.metadata.trainingConfiguration.curriculumBaselineWinrateThreshold;
     model = await tf.loadLayersModel(`file://${path.join(checkpoint.path, 'model.json')}`);
     validateLoadedModel(model);
     const resumeEvent = {
@@ -1975,7 +1996,6 @@ async function main() {
 
   try {
     compileModel(model);
-    const runtimeCombatValueRegression = createRuntimeCombatValueRegression();
     let runtimeTeacherWorkerPool = null;
     let runtimeBatchPrefetch = null;
     const scheduleRuntimeBatchPrefetch = (afterCompletedGame) => {
@@ -2007,13 +2027,13 @@ async function main() {
       }
     };
     if (!options.resume && state.completedGames === 0) {
+      await pretrainCombatValueModel(model);
       for (let pretrain = 0; pretrain < 1; pretrain += 1) {
         await fitRuntimeCombatTeacherBatch(
           model,
           state.seed + 50000 + pretrain * 173,
           state.curriculum.currentStageIndex,
-          null,
-          runtimeCombatValueRegression
+          null
         );
       }
     }
@@ -2041,9 +2061,7 @@ async function main() {
             state.totalGames,
             options.evaluationCadence
           );
-          const syntheticEpochs = smokeSizedRun
-            ? 1
-            : Math.max(state.epochs, cadenceSpeedMode(options) ? 1 : 8);
+          const syntheticEpochs = smokeSizedRun ? 1 : state.epochs;
           const shouldFitRuntimeTeacher =
             !cadenceSpeedMode(options) || shouldEvaluateGameNow;
           let runtimeBatchPromise = null;
@@ -2076,11 +2094,7 @@ async function main() {
               const runtimeBatch = await runtimeBatchPromise;
               if (runtimeBatch) {
                 try {
-                  history = fitRuntimeCombatValueBatch(
-                    model,
-                    runtimeBatch,
-                    runtimeCombatValueRegression
-                  );
+                  history = await trainRuntimeCombatBatch(model, runtimeBatch);
                 } finally {
                   runtimeBatch.board.dispose();
                   runtimeBatch.global.dispose();
@@ -2093,8 +2107,7 @@ async function main() {
                 model,
                 state.seed + game * 1543,
                 state.curriculum.currentStageIndex,
-                runtimeTeacherWorkerPool,
-                runtimeCombatValueRegression
+                runtimeTeacherWorkerPool
               ) || history;
             }
           }

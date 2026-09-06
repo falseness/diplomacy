@@ -4,9 +4,12 @@ const { execFileSync } = require('child_process');
 const tf = require('@tensorflow/tfjs-node');
 const { createAlphaZeroLiteCombatModel } = require('./alphazero-lite-combat');
 const {
+  createRuntimeModelPredict,
   curriculumGateDecision,
   evaluateCurriculumSimpleAiWinrate,
-  initialCurriculumState
+  initialCurriculumState,
+  makeRuntimeCombatTeacherBatch,
+  projectRuntimeVectorForModel
 } = require('./cloud-train-runner');
 
 const STALE_WEIGHTS = '/mnt/storage/diplomacy/verify-task068-manual/final/verify-resume/weights.bin';
@@ -64,22 +67,36 @@ function runTrain(args) {
   return output;
 }
 
-function valuePredictions(model, boards, globals) {
-  const boardTensor = tf.tensor4d(boards.flat(), [boards.length, 3, 3, 21]);
-  const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
-  const prediction = model.predict([boardTensor, globalTensor]);
-  const outputs = Array.isArray(prediction) ? prediction : [prediction];
-  try {
-    const valueOutput = outputs.find((tensor) =>
-      (tensor.name || '').replace(/:\d+$/, '').split('/')[0] === 'combat_value') ||
-      outputs[outputs.length - 1];
-    check(valueOutput, 'model controls could not find combat_value output');
-    return Array.from(valueOutput.dataSync());
-  } finally {
-    outputs.forEach((tensor) => tensor.dispose());
-    boardTensor.dispose();
-    globalTensor.dispose();
-  }
+function heuristicPredict(_modelIdentifier, vectorizedGrids) {
+  return vectorizedGrids.map((vectorizedGrid) => {
+    const projected = projectRuntimeVectorForModel(vectorizedGrid);
+    let material = 0;
+    for (let offset = 0; offset < projected.board.length; offset += 21) {
+      material += projected.board[offset] - projected.board[offset + 1];
+      material += projected.board[offset + 2] - projected.board[offset + 3];
+      material += projected.board[offset + 4] - projected.board[offset + 5];
+      material += projected.board[offset + 6] - projected.board[offset + 7];
+    }
+    return [material];
+  });
+}
+
+async function runGameplayControl(label, model, predictFunction) {
+  const state = {
+    runId: `task078-${label}-control`,
+    seed: 789000,
+    completedGames: 1,
+    curriculum: initialCurriculumState()
+  };
+  const options = {
+    oldVsNewGames: 4,
+    curriculumGateGames: 4,
+    curriculumPredictFunction: predictFunction
+  };
+  const result = await evaluateCurriculumSimpleAiWinrate(options, state, model);
+  check(result.games === 4 && result.results.length === 4,
+    `${label} gameplay control did not account for four games`);
+  return result;
 }
 
 async function assertModelControls(finalWeightsPath) {
@@ -92,34 +109,96 @@ async function assertModelControls(finalWeightsPath) {
     missingRejected = error.message.includes('does not exist');
   }
   check(missingRejected, 'missing-checkpoint control was not rejected');
-  const boards = [new Array(3 * 3 * 21).fill(0), new Array(3 * 3 * 21).fill(0)];
-  boards[0][0] = 1;
-  boards[0][2] = 10;
-  boards[1][1] = 1;
-  boards[1][3] = 10;
-  const globals = [[0], [0.1]];
   const realModel = await tf.loadLayersModel(`file://${modelPath}`);
   const zeroModel = createAlphaZeroLiteCombatModel({ seed: 780780 }).model;
   const randomModel = createAlphaZeroLiteCombatModel({ seed: 780781 }).model;
   try {
+    check(realModel.getLayer('value_hidden').getConfig().activation === 'relu' &&
+        realModel.getLayer('value_deep').trainable === true &&
+        realModel.getLayer('combat_value').getConfig().activation === 'linear',
+      'trained checkpoint does not use the nonlinear learned value head');
     const zeroWeights = zeroModel.getWeights().map((weight) => tf.zerosLike(weight));
     zeroModel.setWeights(zeroWeights);
     zeroWeights.forEach((weight) => weight.dispose());
-    const real = valuePredictions(realModel, boards, globals);
-    const zeroed = valuePredictions(zeroModel, boards, globals);
-    const randomized = valuePredictions(randomModel, boards, globals);
-    const heuristicOnly = [1.5, -1.5];
-    check(real.some((value, index) => value !== zeroed[index]),
-      'real checkpoint matched the zeroed-model control');
-    check(real.some((value, index) => value !== randomized[index]),
-      'real checkpoint matched the randomized-model control');
-    check(real.some((value, index) => value !== heuristicOnly[index]),
-      'real checkpoint output was identical to the heuristic-only control');
+    const real = await runGameplayControl(
+      'real',
+      realModel,
+      createRuntimeModelPredict(realModel)
+    );
+    const zeroed = await runGameplayControl(
+      'zeroed',
+      zeroModel,
+      createRuntimeModelPredict(zeroModel)
+    );
+    const randomized = await runGameplayControl(
+      'randomized',
+      randomModel,
+      createRuntimeModelPredict(randomModel)
+    );
+    const heuristicOnly = await runGameplayControl(
+      'heuristic-only',
+      realModel,
+      heuristicPredict
+    );
+    check(real.results.some((result, index) =>
+      result.winnerSide !== zeroed.results[index].winnerSide ||
+      result.roundCount !== zeroed.results[index].roundCount),
+    'real checkpoint gameplay matched every zeroed-model trajectory');
+    check(real.results.some((result, index) =>
+      result.winnerSide !== randomized.results[index].winnerSide ||
+      result.roundCount !== randomized.results[index].roundCount),
+    'real checkpoint gameplay matched every randomized-model trajectory');
+    check(real.results.some((result, index) =>
+      result.winnerSide !== heuristicOnly.results[index].winnerSide ||
+      result.roundCount !== heuristicOnly.results[index].roundCount),
+    'real checkpoint gameplay matched every heuristic-only trajectory');
     return { missingRejected, real, zeroed, randomized, heuristicOnly };
   } finally {
     realModel.dispose();
     zeroModel.dispose();
     randomModel.dispose();
+  }
+}
+
+async function assertValidationSplit(finalWeightsPath) {
+  const validationBaseSeed = 880000;
+  const validationStageIndex = 6;
+  const batch = await makeRuntimeCombatTeacherBatch(
+    validationBaseSeed,
+    validationStageIndex
+  );
+  const model = await tf.loadLayersModel(
+    `file://${path.join(path.dirname(finalWeightsPath), 'model.json')}`
+  );
+  let prediction;
+  try {
+    prediction = model.predict([batch.board, batch.global]);
+    const outputs = Array.isArray(prediction) ? prediction : [prediction];
+    const valueOutput = outputs.find((tensor) =>
+      (tensor.name || '').replace(/:\d+$/, '').split('/')[0] === 'combat_value') ||
+      outputs[outputs.length - 1];
+    const predictions = valueOutput.dataSync();
+    const labels = batch.labels.dataSync();
+    let squaredError = 0;
+    for (let index = 0; index < labels.length; index += 1) {
+      squaredError += Math.pow(predictions[index] - labels[index], 2);
+    }
+    return {
+      baseSeed: validationBaseSeed,
+      seeds: batch.gameResults.map((result) => result.seed),
+      examples: labels.length,
+      meanSquaredError: squaredError / labels.length
+    };
+  } finally {
+    if (prediction) {
+      const outputs = Array.isArray(prediction) ? prediction : [prediction];
+      outputs.forEach((tensor) => tensor.dispose());
+    }
+    batch.board.dispose();
+    batch.global.dispose();
+    batch.policy.dispose();
+    batch.labels.dispose();
+    model.dispose();
   }
 }
 
@@ -150,6 +229,9 @@ function assertNoComparisonShortcut() {
     'cloud runner still initializes value_output from a hand-coded feature');
   check(!runnerSource.includes('tf.train.adam(0)'),
     'cloud runner still disables model learning with a zero learning rate');
+  check(!runnerSource.includes('fitRuntimeCombatValueBatch') &&
+      !runnerSource.includes('solveLinearSystem'),
+    'cloud runner still installs a closed-form combat value head');
 }
 
 function assertPassingRun() {
@@ -165,11 +247,14 @@ function assertPassingRun() {
       '--epochs', '1',
       '--seed', '78078',
       '--checkpoint-interval', '1',
-      '--old-vs-new-games', '2',
+      '--old-vs-new-games', '1',
+      '--curriculum-gate-games', '10',
+      '--evaluation-cadence', '2',
       '--plateau-window', '2',
       '--plateau-min-delta', '2',
       '--plateau-patience', '1',
-      '--curriculum-simple-winrate-threshold', '0.5',
+      '--curriculum-simple-winrate-threshold', '0.6',
+      '--curriculum-baseline-winrate-threshold', '0',
       '--curriculum-lr-reduction-attempted'
     ]);
   }
@@ -191,15 +276,16 @@ function assertPassingRun() {
         !record.simpleAiPlayerWinrate.benchmarkPolicy.includes('no-model combat baseline') &&
         !record.simpleAiPlayerWinrate.benchmarkPolicy.includes('combat value head'),
       `stage gate ${index} used loss-comparison heuristic evidence`);
-  check(record.simpleAiPlayerWinrate.modelAdapter.includes('shared full-vector final combat value adapter') &&
+    check(record.simpleAiPlayerWinrate.modelAdapter.includes('shared full-vector final combat value adapter') &&
         !record.simpleAiPlayerWinrate.modelAdapter.includes('heuristic combat value'),
       `stage gate ${index} did not use the shared full-vector combat adapter`);
     check(record.simpleAiPlayerWinrate.artificialAdvantage === false,
       `stage gate ${index} reported an artificial benchmark advantage`);
     check(record.simpleAiPlayerWinrate.modelWins > record.simpleAiPlayerWinrate.simpleAiPlayerWins,
       `stage gate ${index} did not beat SimpleAiPlayer in measured games`);
-    check(record.simpleAiPlayerWinrate.sideDistribution.modelA === 1 &&
-        record.simpleAiPlayerWinrate.sideDistribution.modelB === 1,
+    check(record.simpleAiPlayerWinrate.games === 10 &&
+        record.simpleAiPlayerWinrate.sideDistribution.modelA === 5 &&
+        record.simpleAiPlayerWinrate.sideDistribution.modelB === 5,
       `stage gate ${index} did not balance the model across both sides`);
     record.simpleAiPlayerWinrate.results.forEach((gameResult) => {
       check(gameResult.modelSide !== gameResult.simpleAiPlayerSide &&
@@ -236,10 +322,27 @@ function assertPassingRun() {
     'manifest does not identify the progress artifact');
   check(manifest.artifacts.finalModel === path.join('final', PASS_RUN_ID),
     'manifest does not identify the final model artifact');
+  const trainingSeeds = [128079, 128080];
+  progress.filter((record) =>
+    record.trainingStep % 2 === 0 || record.trainingStep === 15
+  ).forEach((record) => {
+    const stageIndex = record.nextStageEligibility.currentStageIndex;
+    const baseSeed = 78078 + record.trainingStep * 1543;
+    trainingSeeds.push(
+      baseSeed + stageIndex * 997 + 1,
+      baseSeed + stageIndex * 997 + 2
+    );
+  });
+  const finalTestSeeds = advances.flatMap((record) =>
+    record.simpleAiPlayerWinrate.results.map((result) => result.seed));
+  check(new Set(finalTestSeeds).size === 60,
+    'final stage gates did not use sixty unique predeclared scenarios');
   return {
     runId: PASS_RUN_ID,
     progressPath,
     finalWeightsPath,
+    trainingSeeds,
+    finalTestSeeds,
     advances: advances.map((record) => ({
       trainingStep: record.trainingStep,
       fromStageIndex: record.nextStageEligibility.currentStageIndex,
@@ -265,7 +368,7 @@ async function assertFailingRun() {
   let measuredEvidence;
   try {
     measuredEvidence = await evaluateCurriculumSimpleAiWinrate(
-      { oldVsNewGames: 2 },
+      { oldVsNewGames: 2, curriculumGateGames: 10 },
       state,
       zeroModel
     );
@@ -302,6 +405,20 @@ async function main() {
   fs.mkdirSync(path.dirname(SUMMARY_PATH), { recursive: true });
   const passingRun = assertPassingRun();
   const failingRun = await assertFailingRun();
+  const validation = await assertValidationSplit(passingRun.finalWeightsPath);
+  check(validation.seeds.length === 2 && validation.examples > 0 &&
+      Number.isFinite(validation.meanSquaredError),
+    'held-out validation split did not produce finite checkpoint metrics');
+  const trainingValidationIntersection = passingRun.trainingSeeds.filter((seed) =>
+    validation.seeds.includes(seed));
+  const trainingFinalTestIntersection = passingRun.trainingSeeds.filter((seed) =>
+    passingRun.finalTestSeeds.includes(seed));
+  const validationFinalTestIntersection = validation.seeds.filter((seed) =>
+    passingRun.finalTestSeeds.includes(seed));
+  check(trainingValidationIntersection.length === 0 &&
+      trainingFinalTestIntersection.length === 0 &&
+      validationFinalTestIntersection.length === 0,
+    'training, validation, and final gate seeds overlap');
   const modelControls = await assertModelControls(passingRun.finalWeightsPath);
   const summary = {
     task: 'TASK-078',
@@ -309,6 +426,12 @@ async function main() {
     staleArtifactRejected: STALE_WEIGHTS,
     passingRun,
     failingRun,
+    validation,
+    seedIntersections: {
+      trainingValidationIntersection,
+      trainingFinalTestIntersection,
+      validationFinalTestIntersection
+    },
     modelControls
   };
   fs.writeFileSync(SUMMARY_PATH, `${JSON.stringify(summary, null, 2)}\n`);

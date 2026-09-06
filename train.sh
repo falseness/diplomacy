@@ -14,12 +14,14 @@ max_games_this_run=0
 checkpoint_interval=1
 checkpoint_retain=0
 old_vs_new_games=3
+curriculum_gate_games=""
 evaluation_cadence=1
 plateau_window=2
 plateau_min_delta=0.001
 plateau_patience=1
 curriculum_simple_winrate=""
 curriculum_simple_winrate_threshold=0.8
+curriculum_baseline_winrate_threshold=""
 curriculum_baseline_ai_model="/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training"
 curriculum_lr_reduction_attempted=false
 curriculum_lr_reduction_improved=false
@@ -45,6 +47,7 @@ Options:
   --checkpoint-interval N   Save every N completed games (default: 1)
   --checkpoint-retain N     Keep newest N checkpoints; 0 keeps all (default: 0)
   --old-vs-new-games N      Deterministic checkpoint comparison games (default: 3)
+  --curriculum-gate-games N Balanced games in each curriculum opponent gate (default: old-vs-new-games)
   --evaluation-cadence N    Run expensive curriculum/evaluation checks every N games (default: 1)
   --plateau-window N        Evaluated checkpoints considered for plateau (default: 2)
   --plateau-min-delta N     Minimum old-vs-new winrate improvement (default: 0.001)
@@ -55,6 +58,8 @@ Options:
                              Required SimpleAiPlayer winrate before stage advance (default: 0.8)
   --curriculum-baseline-ai-model PATH
                              Existing trained AIPlayer model used for the second 80% curriculum gate
+  --curriculum-baseline-winrate-threshold N
+                             Required baseline AIPlayer winrate (default: SimpleAiPlayer threshold)
   --curriculum-lr-reduction-attempted
                              Record one lower learning-rate attempt before advancing
   --curriculum-lr-reduction-improved
@@ -139,6 +144,11 @@ while (($#)); do
       old_vs_new_games="$2"
       shift 2
       ;;
+    --curriculum-gate-games)
+      (($# >= 2)) || die "--curriculum-gate-games requires a value"
+      curriculum_gate_games="$2"
+      shift 2
+      ;;
     --evaluation-cadence)
       (($# >= 2)) || die "--evaluation-cadence requires a value"
       evaluation_cadence="$2"
@@ -172,6 +182,11 @@ while (($#)); do
     --curriculum-baseline-ai-model)
       (($# >= 2)) || die "--curriculum-baseline-ai-model requires a path"
       curriculum_baseline_ai_model="$2"
+      shift 2
+      ;;
+    --curriculum-baseline-winrate-threshold)
+      (($# >= 2)) || die "--curriculum-baseline-winrate-threshold requires a value"
+      curriculum_baseline_winrate_threshold="$2"
       shift 2
       ;;
     --curriculum-lr-reduction-attempted)
@@ -211,6 +226,10 @@ require_positive_integer "--epochs" "$epochs"
 require_positive_integer "--seed" "$seed"
 require_positive_integer "--checkpoint-interval" "$checkpoint_interval"
 require_positive_integer "--old-vs-new-games" "$old_vs_new_games"
+if [[ -z "$curriculum_gate_games" ]]; then
+  curriculum_gate_games="$old_vs_new_games"
+fi
+require_positive_integer "--curriculum-gate-games" "$curriculum_gate_games"
 require_positive_integer "--evaluation-cadence" "$evaluation_cadence"
 require_positive_integer "--plateau-window" "$plateau_window"
 require_positive_integer "--plateau-patience" "$plateau_patience"
@@ -218,6 +237,10 @@ require_positive_integer "--workers" "$workers"
 [[ "$checkpoint_retain" =~ ^[0-9]+$ ]] || die "--checkpoint-retain must be a non-negative integer"
 [[ "$plateau_min_delta" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--plateau-min-delta must be a non-negative number"
 [[ "$curriculum_simple_winrate_threshold" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--curriculum-simple-winrate-threshold must be a non-negative number"
+if [[ -z "$curriculum_baseline_winrate_threshold" ]]; then
+  curriculum_baseline_winrate_threshold="$curriculum_simple_winrate_threshold"
+fi
+[[ "$curriculum_baseline_winrate_threshold" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--curriculum-baseline-winrate-threshold must be a non-negative number"
 if [[ -n "$curriculum_simple_winrate" ]]; then
   [[ "$curriculum_simple_winrate" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "--curriculum-simple-winrate must be a non-negative number"
 else
@@ -284,6 +307,7 @@ runner_args=(
   --checkpoint-interval "$checkpoint_interval"
   --checkpoint-retain "$checkpoint_retain"
   --old-vs-new-games "$old_vs_new_games"
+  --curriculum-gate-games "$curriculum_gate_games"
   --evaluation-cadence "$evaluation_cadence"
   --plateau-window "$plateau_window"
   --plateau-min-delta "$plateau_min_delta"
@@ -291,6 +315,7 @@ runner_args=(
   --curriculum-simple-winrate "$curriculum_simple_winrate"
   --curriculum-simple-winrate-threshold "$curriculum_simple_winrate_threshold"
   --curriculum-baseline-ai-model "$curriculum_baseline_ai_model"
+  --curriculum-baseline-winrate-threshold "$curriculum_baseline_winrate_threshold"
   --curriculum-lr-reduction-attempted "$curriculum_lr_reduction_attempted"
   --curriculum-lr-reduction-improved "$curriculum_lr_reduction_improved"
   --workers "$workers"
