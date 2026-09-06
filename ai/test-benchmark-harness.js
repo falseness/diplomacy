@@ -14,6 +14,13 @@ function assert(condition, message) {
   }
 }
 
+const harnessSource = fs.readFileSync(path.join(__dirname, 'benchmarkHarness.js'), 'utf8');
+const cliSource = fs.readFileSync(path.join(__dirname, 'benchmark.js'), 'utf8');
+assert(!/AIPlayer\.prototype\.nextTurn\s*=/.test(harnessSource),
+  'benchmark harness replaces AIPlayer.prototype.nextTurn');
+assert(!/simulate-crash-seed/.test(cliSource),
+  'production benchmark CLI exposes report-format crash simulation');
+
 const options = {
   mapName: 'tiny-duel',
   playerA: 'SimpleAiPlayer',
@@ -64,7 +71,7 @@ assert(first.config.playerClasses.B === 'SimpleAiPlayer', 'player class B missin
 assert(first.config.checkpointIdentifier === null, 'default checkpoint identifier should be null');
 assert(first.config.codeRevision, 'code revision missing from config');
 
-for (const playerClass of Object.keys(PLAYER_CLASSES)) {
+for (const playerClass of ['SimpleAiPlayer', 'SimpleAiPlayerWithEconomy']) {
   const comparison = runBenchmark({
     mapName: 'tiny-duel',
     playerA: playerClass,
@@ -79,6 +86,29 @@ for (const playerClass of Object.keys(PLAYER_CLASSES)) {
     playerClass + ' runtime constructor was not instantiated'
   );
 }
+for (const playerClass of [
+  'SimpleAiPlayer',
+  'SimpleAiPlayerWithEconomy',
+  'AIPlayer',
+  'AIPlayerWithEconomy'
+]) {
+  assert(typeof PLAYER_CLASSES[playerClass] === 'function',
+    playerClass + ' was not loaded from the runtime player source');
+}
+
+const missingCheckpointReport = runBenchmark({
+  mapName: 'tiny-duel',
+  playerA: 'AIPlayer',
+  playerB: 'SimpleAiPlayer',
+  seed: 29,
+  repeat: 1,
+  roundLimit: 2
+});
+assert(missingCheckpointReport.summary.crashCount === 1,
+  'generic AI gameplay silently substituted a synthetic model');
+assert(/real checkpoint-backed predictFunction/.test(
+  missingCheckpointReport.crashes[0].message),
+  'generic AI failure did not direct callers to checkpoint-backed inference');
 
 const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-benchmark-'));
 const outputPath = writeResult(first, path.join(outputDirectory, 'result.json'));
@@ -97,37 +127,54 @@ const timeoutReport = runBenchmark({
 });
 assert(timeoutReport.summary.timeoutCount === 1, 'forced timeout was not reported');
 assert(timeoutReport.summary.failedSeeds.includes(901), 'timeout seed was not marked failed');
+assert(timeoutReport.summary.playerAWinRate === 0,
+  'timeout was omitted from the attempted-game win-rate denominator');
 assert(
   timeoutReport.config.checkpointIdentifier === 'task038-smoke-checkpoint',
   'checkpoint identifier was not reported'
 );
 
-const crashReport = runBenchmark({
-  mapName: 'tiny-duel',
-  playerA: 'SimpleAiPlayer',
-  playerB: 'SimpleAiPlayer',
-  seed: 777,
-  repeat: 2,
-  roundLimit: 10,
-  simulateCrashSeeds: [778]
-});
-assert(crashReport.summary.crashCount === 1, 'simulated crash was not counted');
-assert(crashReport.crashes[0].seed === 778, 'simulated crash seed missing');
-assert(crashReport.summary.failedSeeds.includes(778), 'crash seed was not marked failed');
+let rejectedGameplaySimulation = false;
+try {
+  runBenchmark(Object.assign({}, options, { simulateCrashSeeds: [431] }));
+} catch (error) {
+  rejectedGameplaySimulation = /forbidden in gameplay benchmarks/.test(error.message);
+}
+assert(rejectedGameplaySimulation,
+  'gameplay benchmark accepted a synthetic crash option');
+
+const incompleteOutput = path.join(outputDirectory, 'incomplete-failure.json');
+const failedIncomplete = spawnSync(process.execPath, [
+  path.join(__dirname, 'benchmark.js'),
+  '--player-a', 'SimpleAiPlayer',
+  '--player-b', 'SimpleAiPlayer',
+  '--map', 'tiny-duel',
+  '--seed', '901',
+  '--repeat', '1',
+  '--round-limit', '1',
+  '--min-win-rate', '0',
+  '--output', incompleteOutput
+], { encoding: 'utf8' });
+assert(failedIncomplete.status === 1,
+  'timeout/non-result was hidden by a permissive win-rate threshold');
+assert(/failed attempt/.test(failedIncomplete.stderr),
+  'timeout/non-result failure was not reported loudly');
 
 const failureOutput = path.join(outputDirectory, 'threshold-failure.json');
 const failedThreshold = spawnSync(process.execPath, [
   path.join(__dirname, 'benchmark.js'),
   '--player-a', 'SimpleAiPlayer',
-  '--player-b', 'AIPlayerWithEconomy',
+  '--player-b', 'SimpleAiPlayer',
   '--map', 'tiny-duel',
   '--seed', '7',
   '--repeat', '3',
-  '--round-limit', '30',
+  '--round-limit', '1',
   '--min-win-rate', '1',
   '--output', failureOutput
 ], { encoding: 'utf8' });
 assert(failedThreshold.status === 1, 'intentionally failing threshold did not exit with status 1');
 assert(fs.existsSync(failureOutput), 'threshold failure did not retain its structured report');
+assert(/fix the player, model, architecture, or training/.test(failedThreshold.stderr),
+  'real gameplay failure was not routed to an AI/model/training fix');
 
 console.log('Deterministic benchmark harness smoke passed');

@@ -114,7 +114,7 @@
     "test-model-predict-batching": "node ai/test-model-predict-batching.js",
     "benchmark-model-predict-batching": "node ai/benchmark-model-predict-batching.js",
     "benchmark": "node ai/benchmark.js",
-    "test-benchmark": "node ai/test-benchmark-harness.js",
+    "test-benchmark": "node ai/test-benchmark-harness.js && node ai/test-benchmark-report-format.js",
     "benchmark-trained": "node ai/benchmark-trained-model.js",
     "test-trained-benchmark": "node ai/test-trained-model-benchmark.js",
     "benchmark-gamestart-trained": "node ai/benchmark-gamestart-trained-model.js",

@@ -21,7 +21,6 @@ function usage() {
     '  --round-limit NUMBER   Maximum rounds per game (default: 40)',
     '  --min-win-rate NUMBER  Required player A win rate, from 0 to 1',
     '  --checkpoint-id TEXT   Checkpoint or candidate identifier for reports',
-    '  --simulate-crash-seed NUMBER  Simulate one crashed game for report testing',
     '  --output PATH          JSON report path',
     '  --list                 List player classes and maps',
     '  --help                 Show this help'
@@ -47,7 +46,6 @@ function parseArgs(argv) {
     '--round-limit': 'roundLimit',
     '--min-win-rate': 'minWinRate',
     '--checkpoint-id': 'checkpointIdentifier',
-    '--simulate-crash-seed': 'simulateCrashSeed',
     '--output': 'output'
   };
   for (let index = 0; index < argv.length; ++index) {
@@ -62,16 +60,13 @@ function parseArgs(argv) {
     }
     options[name] = argv[++index];
   }
-  for (const name of ['seed', 'repeat', 'roundLimit', 'minWinRate', 'simulateCrashSeed']) {
+  for (const name of ['seed', 'repeat', 'roundLimit', 'minWinRate']) {
     if (options[name] !== undefined) {
       options[name] = Number(options[name]);
       if (!Number.isFinite(options[name])) {
         throw new Error(name + ' must be numeric');
       }
     }
-  }
-  if (options.simulateCrashSeed !== undefined) {
-    options.simulateCrashSeeds = [options.simulateCrashSeed];
   }
   if (options.minWinRate !== undefined &&
       (options.minWinRate < 0 || options.minWinRate > 1)) {
@@ -97,11 +92,21 @@ function main() {
     const outputPath = writeResult(result, options.output);
     console.log(JSON.stringify(result.summary));
     console.log('Benchmark report: ' + outputPath);
+    const incompleteAttempts = result.summary.crashCount +
+      result.summary.timeoutCount + result.summary.nonResultWithoutTimeoutCount;
+    if (incompleteAttempts > 0) {
+      console.error(
+        'Benchmark has ' + incompleteAttempts +
+        ' failed attempt(s): crashes, timeouts, and non-results fail the gate'
+      );
+      process.exitCode = 1;
+    }
     if (options.minWinRate !== undefined &&
         result.summary.playerAWinRate < options.minWinRate) {
       console.error(
         'Player A win rate ' + result.summary.playerAWinRate.toFixed(3) +
-        ' is below required threshold ' + options.minWinRate.toFixed(3)
+        ' is below required threshold ' + options.minWinRate.toFixed(3) +
+        '; fix the player, model, architecture, or training rather than benchmark policy'
       );
       process.exitCode = 1;
     }

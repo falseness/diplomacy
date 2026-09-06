@@ -12,7 +12,6 @@ const repoRoot = path.resolve(__dirname, '..');
 let reusableBenchmarkContext = null;
 let compiledBenchmarkRuntimeScript = null;
 let compiledInjectedModelScript = null;
-let compiledSmokeModelScript = null;
 
 function loadPlayerClasses() {
   const context = vm.createContext({
@@ -269,8 +268,7 @@ function createRuntimeContext(seed) {
     tf: {},
     saveAs() {},
     __benchmarkInferenceCalls: 0,
-    __benchmarkInferencePositions: 0,
-    __benchmarkActivePlayerIndex: null
+    __benchmarkInferencePositions: 0
   };
   context.window = context;
   context.globalThis = context;
@@ -285,7 +283,6 @@ function resetRuntimeContext(context, seed) {
   context.__benchmarkInferenceCalls = 0;
   context.__benchmarkInferencePositions = 0;
   context.__benchmarkInferenceSource = undefined;
-  context.__benchmarkActivePlayerIndex = null;
   context.__benchmarkModelIdentifier = undefined;
   context.__benchmarkPredictFunction = undefined;
   context.ai_model = undefined;
@@ -310,9 +307,7 @@ function injectBenchmarkModel(context, options) {
     context.__benchmarkPredictFunction = function(model, xValidateArr) {
       context.__benchmarkInferenceCalls += 1;
       context.__benchmarkInferencePositions += xValidateArr.length;
-      const activePlayerIndex = Number.isFinite(Number(context.__benchmarkActivePlayerIndex))
-        ? Number(context.__benchmarkActivePlayerIndex)
-        : Number(context.whooseTurn);
+      const activePlayerIndex = Number(context.whooseTurn);
       return options.predictFunction(model, xValidateArr, {
         activePlayerIndex,
         activeSide: activePlayerIndex === 1 ? 'A' :
@@ -330,28 +325,7 @@ function injectBenchmarkModel(context, options) {
       options.inferenceSource || 'injected benchmark model';
     return;
   }
-  if (!compiledSmokeModelScript) {
-    compiledSmokeModelScript = new vm.Script(`
-    ai_model = { benchmarkSmokeModel: true }
-    predict = function(model, xValidateArr) {
-      __benchmarkInferenceCalls += 1
-      __benchmarkInferencePositions += xValidateArr.length
-      return xValidateArr.map(function(vector) {
-        let board = vector[0]
-        let score = 0
-        for (let x = 0; x < board.length; ++x) {
-          for (let y = 0; y < board[x].length; ++y) {
-            score += Number(board[x][y][0]) || 0
-            score += (Number(board[x][y][1]) || 0) * 0.1
-          }
-        }
-        return [score]
-      })
-    }
-    __benchmarkInferenceSource = 'benchmark smoke model for runtime AIPlayer decisions'
-  `, { filename: 'benchmark-smoke-model.js' });
-  }
-  compiledSmokeModelScript.runInContext(context);
+  context.__benchmarkInferenceSource = 'none';
 }
 
 function createLoadedRuntimeContext(seed, options) {
@@ -481,30 +455,19 @@ function runtimeMapScript() {
   )
   map.suddenDeathRound = configured.suddenDeathRound
   map.start(manager, false)
-  let originalAIPlayerNextTurn = AIPlayer.prototype.nextTurn
-  AIPlayer.prototype.nextTurn = function() {
-    __benchmarkActivePlayerIndex = players.indexOf(this)
-    try {
-      return originalAIPlayerNextTurn.apply(this, arguments)
-    }
-    finally {
-      __benchmarkActivePlayerIndex = null
-    }
-  }
   suddenDeathRound = map.suddenDeathRound
   whooseTurn = 0
 
-  try {
-    let turnCount = 0
-    while (turnCount < Number(benchmarkOptions.roundLimit || 40) &&
-        gameRound < suddenDeathRound &&
-        !players[1].isLost && !players[2].isLost) {
-      nextTurn()
-      ++turnCount
-    }
-    let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
-    let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
-    return {
+  let turnCount = 0
+  while (turnCount < Number(benchmarkOptions.roundLimit || 40) &&
+      gameRound < suddenDeathRound &&
+      !players[1].isLost && !players[2].isLost) {
+    nextTurn()
+    ++turnCount
+  }
+  let winnerIndex = players[1].isLost ? 2 : (players[2].isLost ? 1 : null)
+  let winnerSide = winnerIndex == 1 ? 'A' : (winnerIndex == 2 ? 'B' : null)
+  return {
       winner: winnerIndex == null ? null : players[winnerIndex].constructor.name,
       winnerSide,
       roundCount: gameRound,
@@ -535,11 +498,6 @@ function runtimeMapScript() {
           units: player.units.filter(function(unit) { return !unit.killed }).length
         }
       })
-    }
-  }
-  finally {
-    AIPlayer.prototype.nextTurn = originalAIPlayerNextTurn
-    __benchmarkActivePlayerIndex = null
   }
 })()
 `;
@@ -568,6 +526,15 @@ function runGame(options) {
   }
   validatePlayerClass(options.playerA);
   validatePlayerClass(options.playerB);
+  const modelPlayers = [options.playerA, options.playerB].filter(function(playerClass) {
+    return playerClass === 'AIPlayer' || playerClass === 'AIPlayerWithEconomy';
+  });
+  if (modelPlayers.length && typeof options.predictFunction !== 'function') {
+    throw new Error(
+      'AI gameplay benchmark requires a real checkpoint-backed predictFunction; ' +
+      'use benchmark-trained-model.js for checkpoint evaluation'
+    );
+  }
 
   const context = getBenchmarkRuntimeContext(options.seed, options);
   context.__benchmarkConfiguredMap = clone(map);
@@ -589,19 +556,17 @@ function runBenchmark(options) {
   if (!Number.isInteger(repeat) || repeat <= 0) {
     throw new Error('repeat must be a positive integer');
   }
-  const crashSeeds = new Set(
-    (options.simulateCrashSeeds || []).map(function(seed) {
-      return Number(seed);
-    })
-  );
+  if (options.simulateCrashSeeds || options.simulatedOutcomes) {
+    throw new Error(
+      'synthetic outcomes are forbidden in gameplay benchmarks; ' +
+      'use buildReportFormatTestResult() only in report-format tests'
+    );
+  }
   const games = [];
   const crashes = [];
   for (let index = 0; index < repeat; ++index) {
     const seed = baseSeed + index;
     try {
-      if (crashSeeds.has(seed)) {
-        throw new Error('simulated benchmark failure for report-format test seed ' + seed);
-      }
       games.push(runGame({
         gameMap: options.gameMap,
         mapName: options.mapName,
@@ -619,7 +584,7 @@ function runBenchmark(options) {
         playerA: options.playerA,
         playerB: options.playerB,
         message: error.message,
-        reportFormatOnlySimulation: crashSeeds.has(seed)
+        reportFormatOnlySimulation: false
       };
       crashes.push(crash);
       games.push({
@@ -631,7 +596,7 @@ function runBenchmark(options) {
         nonResult: true,
         crash: true,
         failureReason: error.message,
-        reportFormatOnlySimulation: crashSeeds.has(seed),
+        reportFormatOnlySimulation: false,
         mapName: crash.mapName,
         playerA: crash.playerA,
         playerB: crash.playerB,
@@ -677,7 +642,7 @@ function runBenchmark(options) {
       repeat,
       roundLimit: Number(options.roundLimit || 40),
       benchmarkPolicy: 'real-runtime-requested-player-classes',
-      reportFormatSimulations: crashSeeds.size,
+      reportFormatSimulations: 0,
       codeRevision: codeRevision()
     },
     summary: {
@@ -685,7 +650,7 @@ function runBenchmark(options) {
       attemptedGames: repeat,
       completedGames,
       playerAWins,
-      playerAWinRate: completedGames ? playerAWins / completedGames : 0,
+      playerAWinRate: repeat ? playerAWins / repeat : 0,
       averageGameLength,
       medianGameLength,
       timeoutCount,
@@ -694,6 +659,9 @@ function runBenchmark(options) {
       suddenDeathGames: suddenDeathCount,
       nonResultCount,
       nonResults: nonResultCount,
+      nonResultWithoutTimeoutCount: games.filter(function(game) {
+        return game.nonResult && !game.timeout && !game.crash;
+      }).length,
       crashCount: crashes.length,
       crashes: crashes.length,
       failedSeeds
@@ -702,6 +670,49 @@ function runBenchmark(options) {
     crashes,
     artifacts: {},
     games
+  };
+}
+
+// This helper never runs gameplay. It exists solely to verify serialization and
+// accounting of already-simulated report rows. Its output must not be used as an
+// AI quality measurement or benchmark gate result.
+function buildReportFormatTestResult(options, simulatedGames) {
+  options = Object.assign({}, options, { repeat: simulatedGames.length });
+  const labeledGames = simulatedGames.map(game => Object.assign({}, game, {
+    reportFormatOnlySimulation: true
+  }));
+  const playerAWins = labeledGames.filter(game => game.winnerSide === 'A').length;
+  const crashes = labeledGames.filter(game => game.crash);
+  const timeoutCount = labeledGames.filter(game => game.timeout).length;
+  const nonResultCount = labeledGames.filter(game => game.nonResult).length;
+  const failedSeeds = labeledGames
+    .filter(game => game.winnerSide !== 'A' || game.timeout || game.crash || game.nonResult)
+    .map(game => game.seed);
+  return {
+    config: {
+      playerA: options.playerA,
+      playerB: options.playerB,
+      repeat: simulatedGames.length,
+      benchmarkPolicy: 'REPORT-FORMAT-TEST-ONLY-NOT-AI-QUALITY',
+      reportFormatSimulations: simulatedGames.length
+    },
+    summary: {
+      games: simulatedGames.length,
+      attemptedGames: simulatedGames.length,
+      completedGames: labeledGames.filter(game => game.winnerSide !== null && !game.crash).length,
+      playerAWins,
+      playerAWinRate: simulatedGames.length ? playerAWins / simulatedGames.length : 0,
+      timeoutCount,
+      nonResultCount,
+      nonResultWithoutTimeoutCount: labeledGames.filter(game =>
+        game.nonResult && !game.timeout && !game.crash).length,
+      crashCount: crashes.length,
+      failedSeeds
+    },
+    failedSeeds,
+    crashes,
+    artifacts: {},
+    games: labeledGames
   };
 }
 
@@ -719,6 +730,7 @@ module.exports = {
   BENCHMARK_MAPS,
   PLAYER_CLASSES,
   benchmarkMapFromGameMap,
+  buildReportFormatTestResult,
   getBrowserScriptCacheStats,
   loadBrowserScripts: loadBenchmarkBrowserScripts,
   resetBrowserScriptCache: resetBenchmarkRuntimeCache,
