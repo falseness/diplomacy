@@ -1,13 +1,125 @@
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g clip-path="url(#clip0)">
-<path d="M28 327C62.9315 192.649 96.981 126.244 227.155 81.9584C241.401 77.1117 256.834 76.1107 271.593 79.0456C427.32 110.012 458.043 184.933 483 339L331 436H158L56.5 350.896L28 327Z" fill="#BDB9AA"/>
-<path fill-rule="evenodd" clip-rule="evenodd" d="M271.3 80.5168C256.798 77.6331 241.634 78.617 227.638 83.3784C162.743 105.456 121.98 132.984 93.0623 171.604C64.234 210.104 47.0707 259.762 29.6905 326.46L158.546 434.5H330.562L481.361 338.266C468.921 261.713 455.027 205.103 425.119 163.739C395.155 122.296 348.951 95.9577 271.3 80.5168ZM226.672 80.5383C241.169 75.6063 256.869 74.5883 271.886 77.5744C349.961 93.0997 396.983 119.705 427.551 161.981C458.048 204.161 472.004 261.74 484.481 338.76L484.638 339.734L331.438 437.5H157.454L26.3097 327.54L26.5483 326.623C44.0178 259.433 61.32 208.991 90.6608 169.806C120.044 130.563 161.393 102.746 226.672 80.5383Z" fill="black"/>
-<path d="M331 436H158C162.052 311.783 155.763 230.397 249 228.5C347.172 228.395 332.685 313.62 331 436Z" fill="#403939"/>
-<path fill-rule="evenodd" clip-rule="evenodd" d="M249.016 230C225.93 230.472 209.193 235.858 196.94 245.436C184.683 255.018 176.735 268.933 171.495 286.802C166.25 304.688 163.75 326.427 162.314 351.527C161.356 368.281 160.875 386.468 160.359 405.956C160.115 415.184 159.863 424.703 159.549 434.5H329.521C329.713 421.403 330.045 408.771 330.363 396.635C330.778 380.872 331.17 365.947 331.204 351.931C331.265 326.753 330.164 304.774 325.985 286.655C321.81 268.553 314.595 254.444 302.531 244.841C290.468 235.238 273.345 229.976 249.016 230ZM333.361 396.784C333.03 409.383 332.686 422.494 332.5 436.021L332.479 437.5H156.45L156.501 435.951C156.837 425.655 157.102 415.642 157.359 405.939C157.875 386.42 158.359 368.155 159.319 351.355C160.758 326.2 163.272 304.183 168.616 285.958C173.965 267.717 182.18 253.166 195.093 243.073C208.008 232.977 225.445 227.479 248.969 227L248.984 227L248.998 227C273.747 226.974 291.624 232.325 304.4 242.494C317.178 252.666 324.644 267.492 328.908 285.981C333.168 304.453 334.265 326.719 334.204 351.938C334.17 365.955 333.776 380.967 333.361 396.784Z" fill="black"/>
-</g>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+<title id="title">Painted miniature gold mine</title>
+<desc id="desc">Warm limestone cave entrance matching the painted miniature reference, faceted arch stones, dark recess, tiny gold nuggets and contact shadows. Transparent editable vector, 512 by 512.</desc>
 <defs>
-<clipPath id="clip0">
-<rect width="512" height="512" fill="white"/>
-</clipPath>
+<radialGradient id="ground"><stop offset="0" stop-color="#202f23" stop-opacity="0.39"/><stop offset="0.5" stop-color="#273427" stop-opacity="0.22"/><stop offset="1" stop-color="#273427" stop-opacity="0"/></radialGradient>
+<radialGradient id="contact"><stop offset="0" stop-color="#1b251b" stop-opacity="0.6"/><stop offset="0.55" stop-color="#1b251b" stop-opacity="0.3"/><stop offset="1" stop-color="#1b251b" stop-opacity="0"/></radialGradient>
+<linearGradient id="dome" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#efdab0"/><stop offset="1" stop-color="#ab9570"/></linearGradient>
+<linearGradient id="left" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#e5d4b0"/><stop offset="1" stop-color="#a99370"/></linearGradient>
+<linearGradient id="front" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#decca8"/><stop offset="1" stop-color="#a9936d"/></linearGradient>
+<linearGradient id="right" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#c5ad83"/><stop offset="1" stop-color="#796e53"/></linearGradient>
+<linearGradient id="light" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#f9e8bd"/><stop offset="1" stop-color="#d1b48a"/></linearGradient>
+<linearGradient id="arch" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#e8d1aa"/><stop offset="1" stop-color="#af956e"/></linearGradient>
+<linearGradient id="arch-right" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#d9bd8f"/><stop offset="1" stop-color="#9c805b"/></linearGradient>
+<linearGradient id="reveal" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#736246"/><stop offset="1" stop-color="#343a2b"/></linearGradient>
+<linearGradient id="cave" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#0c191a"/><stop offset="1" stop-color="#232b23"/></linearGradient>
+<linearGradient id="floor" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#777051"/><stop offset="1" stop-color="#343b2b"/></linearGradient>
+<linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#ffdc75"/><stop offset="1" stop-color="#c99437"/></linearGradient>
 </defs>
+<g id="ground-shadows">
+<ellipse cx="266" cy="427" rx="224" ry="52" fill="url(#ground)" />
+<ellipse cx="253" cy="429" rx="166" ry="23" fill="url(#contact)" />
+</g>
+<g id="limestone-mound">
+<path d="M56 389 L65 336 L89 244 L125 171 L170 122 L218 101 Q245 92 271 99 L324 114 L373 151 L408 211 L433 286 L451 368 L438 398 L403 427 L335 443 L168 444 L99 424 Z" fill="url(#dome)" />
+<path d="M56 389 L65 336 L89 244 L125 171 L170 122 L199 154 L156 223 L128 289 L119 377 L99 424 Z" fill="url(#left)" />
+<path d="M56 389 L86 360 L99 296 L117 249 L125 171 L89 244 L65 336 Z" fill="#a69a7d" />
+<path d="M170 122 L218 101 Q245 92 271 99 L248 139 L199 154 Z" fill="url(#light)" />
+<path d="M271 99 L324 114 L373 151 L330 168 L290 148 L248 139 Z" fill="#e4d0a7" />
+<path d="M373 151 L408 211 L433 286 L403 308 L373 253 L330 168 Z" fill="url(#front)" />
+<path d="M433 286 L451 368 L438 398 L403 427 L374 399 L380 352 L403 308 Z" fill="url(#right)" />
+<path d="M373 151 L376 206 L402 263 L403 308 L433 286 L408 211 Z" fill="#c4ad85" />
+<path d="M199 154 L248 139 L290 148 L330 168 L373 253 L380 352 L374 399 L335 443 L168 444 L119 377 L128 289 L156 223 Z" fill="url(#front)" />
+<path d="M125 171 L151 181 L164 179 L156 223 L128 289 L118 307 L123 267 L139 210 Z" fill="#e9d7af" opacity=".65"/>
+<path d="M79 348 L87 392 L99 424 L122 416 L113 377 L107 350 Z" fill="#978a6b" />
+<path d="M338 204 L358 216 L373 253 L367 281 L348 241 Z" fill="#e2caa0" opacity=".7"/>
+<path d="M373 321 L383 353 L375 380 L374 399 L360 416 L355 394 Z" fill="#85795d" />
+<path d="M210 127 L222 117 L240 114 L231 124 Z" fill="#f3e4c1" opacity=".55"/>
+<path d="M282 117 L299 123 L312 137 L297 133 Z" fill="#f5e4ba" opacity=".5"/>
+<path d="M96 317 L105 300 L105 328 L94 341 Z" fill="#e1cba0" opacity=".6"/>
+</g>
+<g id="recessed-entrance">
+<path d="M139 432 L140 331 Q141 249 181 206 Q209 173 247 173 Q294 173 327 216 Q359 258 360 336 L364 430 L315 442 L175 445 Z" fill="#978766" />
+<path d="M171 436 L174 325 Q178 252 207 234 Q223 222 243 223 Q276 223 296 257 Q314 288 314 340 L315 438 L272 447 L212 447 Z" fill="url(#reveal)" />
+<path d="M194 434 L196 331 Q198 275 218 254 Q231 241 248 242 Q277 245 291 279 Q304 309 303 348 L303 439 L250 446 Z" fill="url(#cave)" />
+<path d="M192 413 Q245 399 303 415 L303 439 L270 451 L201 448 L179 438 Z" fill="url(#floor)" />
+<path d="M196 331 Q198 275 218 254 Q231 241 248 242 Q269 244 280 263 Q263 250 244 258 Q209 275 205 327 L202 404 L194 427 Z" fill="#0c1919" opacity=".75"/>
+</g>
+<g id="carved-stone-arch">
+<path d="M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 L348 436 L311 439 L307 331 Q305 286 285 260 Q269 237 245 237 Q221 237 202 261 Q179 291 178 336 L176 439 L149 441 Z" fill="url(#arch)" />
+<path d="M123 423 L128 337 L179 336 L176 439 L149 441 Z" fill="url(#left)" />
+<path d="M128 337 Q130 292 140 268 L190 283 Q178 311 179 336 Z" fill="url(#arch)" />
+<path d="M140 268 Q149 237 169 211 L208 254 Q196 267 190 283 Z" fill="url(#light)" />
+<path d="M169 211 Q194 182 218 176 L229 239 Q217 243 208 254 Z" fill="#e7d5ae" />
+<path d="M218 176 Q245 164 270 177 L261 240 Q246 234 229 239 Z" fill="url(#light)" />
+<path d="M270 177 Q302 187 325 211 L282 256 Q273 245 261 240 Z" fill="#dac49a" />
+<path d="M325 211 Q346 237 354 269 L299 285 Q293 268 282 256 Z" fill="url(#arch-right)" />
+<path d="M354 269 Q363 301 365 328 L307 331 Q306 302 299 285 Z" fill="#c7b088" />
+<path d="M365 328 L371 422 L348 436 L311 439 L307 331 Z" fill="url(#arch-right)" />
+<path d="M149 441 L149 346 Q151 271 184 228 Q207 197 239 190 Q257 186 276 195 Q293 202 305 216 Q280 189 245 197 Q208 205 187 249 Q163 296 166 346 L165 440 Z" fill="#f0dcb1" opacity=".51"/>
+<path d="M261 240 Q285 253 297 280 Q309 307 311 347 L311 439 L321 436 L318 331 Q316 283 292 255 Q278 241 263 235 Z" fill="#9a8563" />
+<path d="M176 439 L178 336 Q179 291 202 261 Q220 238 245 237 L242 243 Q220 246 204 268 Q185 297 186 341 L184 436 Z" fill="#f1dcb0" opacity=".55"/>
+<path d="M129 336 L151 339 L177 336" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M140 269 L162 274 L189 284" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M169 211 L185 230 L207 254" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M218 177 L222 204 L229 238" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M270 178 L267 208 L262 239" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M325 212 L307 231 L284 255" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M353 270 L333 278 L300 286" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M365 329 L342 332 L308 331" fill="none" stroke="#9b8867" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M158 366 L161 376 L157 392" fill="none" stroke="#a79571" stroke-width="2.3" stroke-linecap="round"/>
+<path d="M285 204 L292 214 L290 224" fill="none" stroke="#b29a72" stroke-width="2" stroke-linecap="round"/>
+</g>
+<g id="entrance-details">
+<path d="M181 439 L213 431 L264 433 L290 443 L276 457 L210 460 L176 450 Z" fill="#a99a73" />
+<path d="M181 439 L213 431 L264 433 L279 442 L250 449 L206 451 L176 450 Z" fill="#c6b78c" />
+<path d="M206 451 L250 449 L279 442 L276 457 L210 460 Z" fill="#867d5b" />
+<g id="grass-0" transform="translate(393 423) scale(0.64)">
+<path d="M0 0 Q-15 -7 -18 -22 Q-4 -20 1 -5 Q-2 -22 7 -32 Q13 -19 5 -4 Q14 -20 25 -16 Q24 -4 6 1 Z" fill="#737d39" />
+<path d="M0 0 Q-15 -7 -18 -22 Q-4 -20 1 -5 L7 -32 Q13 -19 5 -4 Z" fill="#a6aa52" />
+<path d="M5 -4 Q14 -20 25 -16 Q14 -11 5 -4" fill="#bac365" />
+</g>
+<g id="grass-1" transform="translate(87 431) scale(0.52)">
+<path d="M0 0 Q-15 -7 -18 -22 Q-4 -20 1 -5 Q-2 -22 7 -32 Q13 -19 5 -4 Q14 -20 25 -16 Q24 -4 6 1 Z" fill="#737d39" />
+<path d="M0 0 Q-15 -7 -18 -22 Q-4 -20 1 -5 L7 -32 Q13 -19 5 -4 Z" fill="#a6aa52" />
+<path d="M5 -4 Q14 -20 25 -16 Q14 -11 5 -4" fill="#bac365" />
+</g>
+<ellipse cx="108" cy="450.0" rx="28.8" ry="17.2" fill="url(#contact)" />
+<g id="pebble-2" transform="translate(105 424)">
+<path d="M-23.400000000000002 10.0 L-21.599999999999998 -8.4 L-9.0 -21.200000000000003 L10.35 -19.6 L22.95 -4.8 L23.85 12.8 L7.2 21.6 L-12.15 19.6 Z" fill="#b2a07c" />
+<path d="M-23.400000000000002 10.0 L-21.599999999999998 -8.4 L-9.0 -21.200000000000003 L10.35 -19.6 L2.25 2.8000000000000003 L-11.25 8.8 Z" fill="#d9c9a2" />
+<path d="M10.35 -19.6 L22.95 -4.8 L23.85 12.8 L7.2 21.6 L2.25 2.8000000000000003 Z" fill="#83785c" />
+</g>
+<ellipse cx="144" cy="469.85" rx="26.88" ry="12.47" fill="url(#contact)" />
+<g id="pebble-3" transform="translate(141 451)">
+<path d="M-21.84 7.25 L-20.16 -6.09 L-8.4 -15.370000000000001 L9.66 -14.209999999999999 L21.42 -3.48 L22.26 9.28 L6.72 15.66 L-11.34 14.209999999999999 Z" fill="#b2a07c" />
+<path d="M-21.84 7.25 L-20.16 -6.09 L-8.4 -15.370000000000001 L9.66 -14.209999999999999 L2.1 2.0300000000000002 L-10.5 6.38 Z" fill="#d9c9a2" />
+<path d="M9.66 -14.209999999999999 L21.42 -3.48 L22.26 9.28 L6.72 15.66 L2.1 2.0300000000000002 Z" fill="#83785c" />
+</g>
+<ellipse cx="408" cy="444.6" rx="18.56" ry="10.32" fill="url(#contact)" />
+<g id="pebble-4" transform="translate(405 429)">
+<path d="M-15.08 6.0 L-13.92 -5.04 L-5.800000000000001 -12.72 L6.67 -11.76 L14.790000000000001 -2.88 L15.370000000000001 7.68 L4.64 12.96 L-7.83 11.76 Z" fill="#b2a07c" />
+<path d="M-15.08 6.0 L-13.92 -5.04 L-5.800000000000001 -12.72 L6.67 -11.76 L1.4500000000000002 1.6800000000000002 L-7.25 5.28 Z" fill="#d9c9a2" />
+<path d="M6.67 -11.76 L14.790000000000001 -2.88 L15.370000000000001 7.68 L4.64 12.96 L1.4500000000000002 1.6800000000000002 Z" fill="#83785c" />
+</g>
+<ellipse cx="442" cy="416.25" rx="14.08" ry="10.75" fill="url(#contact)" />
+<g id="pebble-5" transform="translate(439 400)">
+<path d="M-11.440000000000001 6.25 L-10.559999999999999 -5.25 L-4.4 -13.25 L5.0600000000000005 -12.25 L11.22 -3.0 L11.66 8.0 L3.52 13.5 L-5.94 12.25 Z" fill="#c2b18e" />
+<path d="M-11.440000000000001 6.25 L-10.559999999999999 -5.25 L-4.4 -13.25 L5.0600000000000005 -12.25 L1.1 1.7500000000000002 L-5.5 5.5 Z" fill="#eee0ba" />
+<path d="M5.0600000000000005 -12.25 L11.22 -3.0 L11.66 8.0 L3.52 13.5 L1.1 1.7500000000000002 Z" fill="#928063" />
+</g>
+<ellipse cx="114" cy="465.75" rx="14.08" ry="6.45" fill="url(#contact)" />
+<g id="pebble-6" transform="translate(111 456)">
+<path d="M-11.440000000000001 3.75 L-10.559999999999999 -3.15 L-4.4 -7.95 L5.0600000000000005 -7.35 L11.22 -1.7999999999999998 L11.66 4.8 L3.52 8.100000000000001 L-5.94 7.35 Z" fill="#a59b70" />
+<path d="M-11.440000000000001 3.75 L-10.559999999999999 -3.15 L-4.4 -7.95 L5.0600000000000005 -7.35 L1.1 1.05 L-5.5 3.3 Z" fill="#cabb90" />
+<path d="M5.0600000000000005 -7.35 L11.22 -1.7999999999999998 L11.66 4.8 L3.52 8.100000000000001 L1.1 1.05 Z" fill="#746e4d" />
+</g>
+<ellipse cx="322" cy="451" rx="26" ry="8" fill="url(#contact)" />
+<path d="M306 449 L311 438 L325 433 L337 441 L336 449 L322 455 Z" fill="url(#gold)" />
+<path d="M311 438 L325 433 L330 441 L317 446 L306 449 Z" fill="#f4d079" />
+<path d="M330 441 L337 441 L336 449 L322 455 L317 446 Z" fill="#b38737" />
+<path d="M343 451 L348 443 L357 445 L359 452 L350 456 Z" fill="#d9ac4d" />
+<path d="M343 451 L348 443 L355 446 L350 450 Z" fill="#f8d783" />
+<path d="M199 434 L203 429 L212 428 L216 433 L208 437 Z" fill="#d6b463" />
+</g>
 </svg>
