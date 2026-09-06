@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const tf = require('@tensorflow/tfjs-node');
 const {
   createPredictor,
@@ -27,6 +28,7 @@ function firstMapForGroup(group) {
 const CHECKPOINT =
   process.env.DIPLOMACY_ECONOMY_CHECKPOINT ||
   '/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005';
+const REPORT_PATH = process.env.DIPLOMACY_MULTIPLAYER_REPORT;
 
 function runScenario(group, seed, model, inference) {
   const mapEntry = firstMapForGroup(group);
@@ -247,7 +249,7 @@ async function main() {
       checkpoint.report.trainingEvidence.losses ?
       checkpoint.report.trainingEvidence.losses.map(loss => loss.seed) : [];
     const testSeeds = scenarios.map(scenario => scenario.seed);
-    console.log(JSON.stringify({
+    const report = {
       checkpoint: checkpoint.report,
       seeds: testSeeds,
       trainingSeeds,
@@ -266,7 +268,12 @@ async function main() {
         randomizedInference: randomInference
       },
       scenarios: realResults
-    }, null, 2));
+    };
+    if (REPORT_PATH) {
+      fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
+      fs.writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2) + '\n');
+    }
+    console.log(JSON.stringify(report, null, 2));
     console.log('AIPlayerWithEconomy multiplayer real-checkpoint inference smoke passed');
   } finally {
     checkpoint.model.setWeights(originalWeights);
