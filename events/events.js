@@ -245,8 +245,8 @@ class Events {
     mousemove(pos, realPos) {
         this.screen.changeSpeed(pos)
     }
-    moveScreen() {
-        this.screen.move()
+    moveScreen(frameDuration) {
+        this.screen.move(frameDuration)
     }
     draw(ctx) {
         this.screen.draw(ctx)

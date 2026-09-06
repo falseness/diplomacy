@@ -97,6 +97,10 @@ class MapDepth {
         this.faces = []
         this.edges = []
         this.outline = undefined
+        this.rim = undefined
+        this.underlayCache = undefined
+        this.cacheBounds = undefined
+        this.cacheRegions = []
         this.gridWidth = 0
         this.gridHeight = 0
         this.depth = 0.55 * basis.r
@@ -128,6 +132,7 @@ class MapDepth {
     createOutline() {
         if (!this.edges.length) {
             this.outline = undefined
+            this.rim = undefined
             return
         }
 
@@ -149,6 +154,12 @@ class MapDepth {
         for (let i = 0; i < orderedEdges.length; ++i)
             this.outline.lineTo(orderedEdges[i].end.x, orderedEdges[i].end.y)
         this.outline.closePath()
+
+        this.rim = new Path2D()
+        for (let i = 0; i < this.edges.length; ++i) {
+            this.rim.moveTo(this.edges[i].begin.x, this.edges[i].begin.y)
+            this.rim.lineTo(this.edges[i].end.x, this.edges[i].end.y)
+        }
     }
     rebuild(_grid) {
         this.faces = []
@@ -208,6 +219,8 @@ class MapDepth {
             top: minY - shadowPadding,
             bottom: maxY + this.depth + this.shadowOffset + shadowPadding
         }
+        this.surfaceBounds = {left: minX, right: maxX, top: minY, bottom: maxY}
+        this.createUnderlayCache()
     }
     ensureGeometry(_grid) {
         if (this.gridWidth != _grid.arr.length ||
@@ -221,17 +234,15 @@ class MapDepth {
             return ['#7d817e', '#484c4c']
         return ['#696d6b', '#383c3d']
     }
-    drawUnderlay(ctx, _grid) {
-        this.ensureGeometry(_grid)
-        if (!this.outline)
-            return
-
+    renderUnderlay(ctx, cacheScale = 1) {
         ctx.save()
         ctx.fillStyle = '#4d5150'
         ctx.shadowColor = 'rgba(4, 12, 18, 0.72)'
-        ctx.shadowBlur = this.shadowBlur
+        // Canvas shadow dimensions are device-space values and do not follow the
+        // current transform, so account for a downscaled render cache explicitly.
+        ctx.shadowBlur = this.shadowBlur * cacheScale
         ctx.shadowOffsetX = 0
-        ctx.shadowOffsetY = this.shadowOffset
+        ctx.shadowOffsetY = this.shadowOffset * cacheScale
         ctx.fill(this.outline)
         ctx.restore()
 
@@ -255,22 +266,127 @@ class MapDepth {
             ctx.stroke()
         }
     }
-    drawRim(ctx, _grid) {
+    createUnderlayCache() {
+        this.underlayCache = undefined
+        this.cacheBounds = undefined
+        this.cacheRegions = []
+        if (!this.outline)
+            return
+
+        const cacheWidth = this.bounds.right - this.bounds.left
+        const cacheHeight = this.bounds.bottom - this.bounds.top
+        if (cacheWidth <= 0 || cacheHeight <= 0)
+            return
+
+        // Keep the cache useful on high-DPI displays without allowing a large map
+        // to allocate an unbounded full-resolution canvas.
+        const maxCacheDimension = 4096
+        const maxCachePixels = 8 * 1024 * 1024
+        const cacheScale = Math.min(
+            1,
+            maxCacheDimension / cacheWidth,
+            maxCacheDimension / cacheHeight,
+            Math.sqrt(maxCachePixels / (cacheWidth * cacheHeight))
+        )
+        const rasterWidth = Math.max(1, Math.ceil(cacheWidth * cacheScale))
+        const rasterHeight = Math.max(1, Math.ceil(cacheHeight * cacheScale))
+
+        const cache = document.createElement('canvas')
+        cache.width = rasterWidth
+        cache.height = rasterHeight
+        const cacheCtx = cache.getContext('2d')
+        cacheCtx.scale(cacheScale, cacheScale)
+        cacheCtx.translate(-this.bounds.left, -this.bounds.top)
+        this.renderUnderlay(cacheCtx, cacheScale)
+
+        this.underlayCache = cache
+        this.cacheBounds = {
+            left: this.bounds.left,
+            top: this.bounds.top,
+            width: cacheWidth,
+            height: cacheHeight
+        }
+        const bandSize = basis.r + this.depth + this.shadowBlur * 2
+        const topEdge = Math.min(this.bounds.bottom, this.surfaceBounds.top + bandSize)
+        const bottomEdge = Math.max(topEdge, this.surfaceBounds.bottom - bandSize)
+        const leftEdge = Math.min(this.bounds.right, this.surfaceBounds.left + bandSize)
+        const rightEdge = Math.max(leftEdge, this.surfaceBounds.right - bandSize)
+        this.cacheRegions = [
+            {
+                left: this.bounds.left, top: this.bounds.top,
+                right: this.bounds.right, bottom: topEdge
+            },
+            {
+                left: this.bounds.left, top: bottomEdge,
+                right: this.bounds.right, bottom: this.bounds.bottom
+            },
+            {
+                left: this.bounds.left, top: topEdge,
+                right: leftEdge, bottom: bottomEdge
+            },
+            {
+                left: rightEdge, top: topEdge,
+                right: this.bounds.right, bottom: bottomEdge
+            }
+        ]
+    }
+    drawCacheRegion(ctx, region) {
+        const visibleLeft = Math.max(region.left, canvas.offset.x)
+        const visibleTop = Math.max(region.top, canvas.offset.y)
+        const visibleRight = Math.min(
+            region.right,
+            canvas.offset.x + width
+        )
+        const visibleBottom = Math.min(
+            region.bottom,
+            canvas.offset.y + height
+        )
+        if (visibleLeft >= visibleRight || visibleTop >= visibleBottom)
+            return
+
+        const sourceScaleX = this.underlayCache.width / this.cacheBounds.width
+        const sourceScaleY = this.underlayCache.height / this.cacheBounds.height
+        ctx.drawImage(
+            this.underlayCache,
+            (visibleLeft - this.cacheBounds.left) * sourceScaleX,
+            (visibleTop - this.cacheBounds.top) * sourceScaleY,
+            (visibleRight - visibleLeft) * sourceScaleX,
+            (visibleBottom - visibleTop) * sourceScaleY,
+            visibleLeft,
+            visibleTop,
+            visibleRight - visibleLeft,
+            visibleBottom - visibleTop
+        )
+    }
+    drawUnderlay(ctx, _grid) {
         this.ensureGeometry(_grid)
-        if (!this.edges.length)
+        if (!this.underlayCache)
+            return
+
+        // The solid map backing is cheap to draw as a vector and prevents seams
+        // between textured hexagons. Only the expensive shadow/faces use the cache.
+        ctx.save()
+        ctx.fillStyle = '#4d5150'
+        ctx.fill(this.outline)
+        ctx.restore()
+
+        for (let region of this.cacheRegions)
+            this.drawCacheRegion(ctx, region)
+    }
+    renderRim(ctx) {
+        if (!this.rim)
             return
 
         ctx.save()
-        ctx.beginPath()
-        for (let i = 0; i < this.edges.length; ++i) {
-            ctx.moveTo(this.edges[i].begin.x, this.edges[i].begin.y)
-            ctx.lineTo(this.edges[i].end.x, this.edges[i].end.y)
-        }
         ctx.lineJoin = 'round'
         ctx.lineCap = 'round'
         ctx.strokeStyle = 'black'
         ctx.lineWidth = basis.strokeWidth
-        ctx.stroke()
+        ctx.stroke(this.rim)
         ctx.restore()
+    }
+    drawRim(ctx, _grid) {
+        this.ensureGeometry(_grid)
+        this.renderRim(ctx)
     }
 }

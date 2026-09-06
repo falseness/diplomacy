@@ -936,12 +936,14 @@ class GameManager {
         
 	    createEvents()
     }
-	static load() {
+    static load() {
         this.clearBasisValues()
         
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
 
+        lastGameFrameTime = undefined
+        framesPerSecond = 60
     	requestAnimationFrame(gameLoop)
 	}
 	static initValues() {
@@ -965,6 +967,8 @@ class GameManager {
             startTurn()
         }
 
+        lastGameFrameTime = undefined
+        framesPerSecond = 60
         requestAnimationFrame(gameLoop)
     }
 	/*static start1() {
@@ -983,11 +987,24 @@ class GameManager {
         maps.big[1].start(this)
     }*/
 }
-function gameLoop() {
-    gameEvent.moveScreen()
+let lastGameFrameTime = undefined
+let framesPerSecond = 60
+function gameLoop(frameTime) {
+    const defaultFrameDuration = 1000 / 60
+    const actualFrameDuration = lastGameFrameTime == undefined ? defaultFrameDuration :
+        frameTime - lastGameFrameTime
+    const frameDuration = Math.min(actualFrameDuration, 100)
+    lastGameFrameTime = frameTime
+    if (actualFrameDuration > 0) {
+        const currentFps = 1000 / actualFrameDuration
+        framesPerSecond = framesPerSecond * 0.9 + currentFps * 0.1
+    }
+
+    gameEvent.moveScreen(frameDuration)
     drawAll()
     if (gameExit) {
         gameExit = false
+        lastGameFrameTime = undefined
         return
     }
     requestAnimationFrame(gameLoop)
