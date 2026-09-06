@@ -74,15 +74,15 @@ function validateCombatOnly(map, label) {
   }
 }
 
-function validateStageCMap(map, seed, progress) {
-  const label = 'seed ' + seed + ' progress ' + progress;
+function validateStageCMap(map, seed, progress, bound) {
+  const label = 'bound ' + bound + ' seed ' + seed + ' progress ' + progress;
   assert(map.combatStage === 'C', label + ' missing Stage C label');
   assert(map.combatOnly === true, label + ' is not marked combat-only');
   assert(map.suddenDeathRound >= 0, label + ' should not use negative sudden death');
   assert(map.suddenDeathRound === Math.round(progress * 10),
     label + ' suddenDeathRound does not follow the Stage C schedule');
-  assert(map.mapSize.x === 9 && map.mapSize.y === 9,
-    label + ' should use stable 9x9 bounds for flood reduction checks');
+  assert(map.mapSize.x === bound && map.mapSize.y === bound,
+    label + ' should preserve the configured bounds');
   assert(map.players.length === 3,
     label + ' should include neutral plus two non-neutral players');
   validateCombatOnly(map, label);
@@ -126,16 +126,17 @@ function validateStageCMap(map, seed, progress) {
   }
 }
 
-function startInHeadlessHarness(map, seed, progress) {
+function startInHeadlessHarness(map, seed, progress, bound) {
+  const label = 'bound ' + bound + ' seed ' + seed + ' progress ' + progress;
   const runtime = map.start();
   assert(runtime.players.length === 3,
-    'seed ' + seed + ' progress ' + progress + ' headless start lost players');
+    label + ' headless start lost players');
   assert(runtime.players[1].units.length === 1 &&
     runtime.players[2].units.length === 1,
-    'seed ' + seed + ' progress ' + progress + ' headless start lost Noob units');
+    label + ' headless start lost Noob units');
   map.advanceTurns(2);
   assert(runtime.turn === 2,
-    'seed ' + seed + ' progress ' + progress + ' headless harness did not advance');
+    label + ' headless harness did not advance');
 }
 
 const { context } = loadAiScripts();
@@ -147,32 +148,42 @@ assert(api.generateCombatStageCTrainingMap,
   'generateCombatStageCTrainingMap is not exported to the AI script context');
 
 const progressValues = [0, 0.5, 1];
-const playableCounts = [];
-const floodedCounts = [];
-const suddenDeathRounds = [];
-for (let index = 0; index < progressValues.length; index += 1) {
-  const progress = progressValues[index];
-  const seed = 71071 + index;
-  const map = api.generateCombatStageCTrainingMap({ seed, progress });
-  validateStageCMap(map, seed, progress);
-  startInHeadlessHarness(map, seed, progress);
-  playableCounts.push(map.playableCellCount);
-  floodedCounts.push(map.floodedCellCount);
-  suddenDeathRounds.push(map.suddenDeathRound);
+const summaries = [];
+for (let bound = 3; bound <= 9; bound += 1) {
+  const playableCounts = [];
+  const floodedCounts = [];
+  const suddenDeathRounds = [];
+  for (let index = 0; index < progressValues.length; index += 1) {
+    const progress = progressValues[index];
+    const seed = 71071 + bound * 10 + index;
+    const options = { seed, progress, bound };
+    const map = api.generateCombatStageCTrainingMap(options);
+    validateStageCMap(map, seed, progress, bound);
+    startInHeadlessHarness(map, seed, progress, bound);
+    playableCounts.push(map.playableCellCount);
+    floodedCounts.push(map.floodedCellCount);
+    suddenDeathRounds.push(map.suddenDeathRound);
 
-  const repeated = api.generateCombatStageCTrainingMap({ seed, progress });
-  assert(normalizeStageCMap(map) === normalizeStageCMap(repeated),
-    'Stage C map generation is not deterministic for seed ' + seed);
+    const repeated = api.generateCombatStageCTrainingMap(options);
+    assert(normalizeStageCMap(map) === normalizeStageCMap(repeated),
+      'Stage C map generation is not deterministic for bound ' + bound +
+      ' seed ' + seed);
+  }
+
+  assert(playableCounts[0] < playableCounts[1] &&
+    playableCounts[1] < playableCounts[2],
+    'Stage C progression should increase playable cells for bound ' + bound);
+  assert(floodedCounts[0] > floodedCounts[1] &&
+    floodedCounts[1] > floodedCounts[2],
+    'Stage C progression should reduce flooded cells for bound ' + bound);
+  assert(suddenDeathRounds[0] === 0 && suddenDeathRounds[1] === 5 &&
+    suddenDeathRounds[2] === 10,
+    'Stage C sudden-death schedule should progress from 0 to 10 for bound ' + bound);
+  summaries.push(bound + 'x' + bound + ':playable=' + playableCounts.join('/') +
+    ',flooded=' + floodedCounts.join('/') +
+    ',suddenDeath=' + suddenDeathRounds.join('/'));
 }
 
-assert(playableCounts[0] < playableCounts[1] &&
-  playableCounts[1] < playableCounts[2],
-  'Stage C progression should increase playable cells');
-assert(floodedCounts[0] > floodedCounts[1] &&
-  floodedCounts[1] > floodedCounts[2],
-  'Stage C progression should reduce flooded cells');
-assert(suddenDeathRounds[0] === 0 && suddenDeathRounds[1] === 5 &&
-  suddenDeathRounds[2] === 10,
-  'Stage C sudden-death schedule should progress from 0 to 10');
-
-console.log('Combat Stage C map generation smoke passed for early, middle, and final progression maps');
+console.log('Stage C full-bound progression: ' + summaries.join('; '));
+console.log('Combat Stage C map generation smoke passed for bounds=3-9 at early, middle, and final progression');
+console.log('Stage C constraints passed: scenarios=21 deterministic=true economyObjects=0 unitTypes=Noob negativeSuddenDeath=0 finalSuddenDeathRound=10');

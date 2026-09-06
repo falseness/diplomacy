@@ -4084,18 +4084,23 @@ function stageCPlayableCells(mapSize, progress) {
         x: Math.floor(mapSize.x / 2),
         y: Math.floor(mapSize.y / 2)
     }
-    let maxDistance = Math.max(mapSize.x, mapSize.y)
-    let playableRadius = Math.max(1,
-        Math.floor(2 + progress * (maxDistance - 1)))
     for (let x = 0; x < mapSize.x; ++x) {
         for (let y = 0; y < mapSize.y; ++y) {
-            if (Math.abs(x - center.x) + Math.abs(y - center.y) <=
-                    playableRadius) {
-                cells.push({x: x, y: y})
-            }
+            cells.push({x: x, y: y})
         }
     }
-    return cells
+    cells.sort((left, right) => {
+        let leftDistance = Math.abs(left.x - center.x) +
+            Math.abs(left.y - center.y)
+        let rightDistance = Math.abs(right.x - center.x) +
+            Math.abs(right.y - center.y)
+        return leftDistance - rightDistance || left.x - right.x ||
+            left.y - right.y
+    })
+    let minimumPlayable = Math.min(2, cells.length)
+    let playableCount = minimumPlayable + Math.floor(
+        clampCombatProgress(progress) * (cells.length - minimumPlayable))
+    return cells.slice(0, playableCount)
 }
 
 function generateCombatStageCTrainingMap(options) {
