@@ -304,12 +304,12 @@ function injectBenchmarkModel(context, options) {
   if (typeof options.predictFunction === 'function') {
     context.__benchmarkModelIdentifier =
       options.modelIdentifier || { benchmarkInjectedModel: true };
-    context.__benchmarkPredictFunction = function(model, xValidateArr) {
+    context.__benchmarkPredictFunction = function(model, xValidateArr,
+      activePlayerIndex) {
       context.__benchmarkInferenceCalls += 1;
       context.__benchmarkInferencePositions += xValidateArr.length;
-      const activePlayerIndex = Number(context.whooseTurn);
       return options.predictFunction(model, xValidateArr, {
-        activePlayerIndex,
+        activePlayerIndex: Number(activePlayerIndex),
         activeSide: activePlayerIndex === 1 ? 'A' :
           (activePlayerIndex === 2 ? 'B' : null)
       });
@@ -317,7 +317,12 @@ function injectBenchmarkModel(context, options) {
     if (!compiledInjectedModelScript) {
       compiledInjectedModelScript = new vm.Script(`
       ai_model = __benchmarkModelIdentifier
-      predict = __benchmarkPredictFunction
+      predict = function(model, vectorizedGrids) {
+        return __benchmarkPredictFunction(
+          model,
+          vectorizedGrids,
+          typeof whooseTurn == 'undefined' ? null : whooseTurn)
+      }
     `, { filename: 'benchmark-injected-model.js' });
     }
     compiledInjectedModelScript.runInContext(context);

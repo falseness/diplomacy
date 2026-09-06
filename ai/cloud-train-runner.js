@@ -13,9 +13,6 @@ const {
   createAlphaZeroLiteCombatModel,
   validateMetadata: validateAlphaZeroLiteCombatMetadata
 } = require('./alphazero-lite-combat');
-const {
-  finalSymmetricalCombatPredict
-} = require('./benchmark-final-symmetrical-combat-gate');
 
 const MODEL_VERSION = 2;
 const CURRICULUM_FINAL_STAGE_INDEX = 6;
@@ -486,10 +483,51 @@ function projectRuntimeVectorForModel(vectorizedGrid) {
   return { board: projected, globalValue };
 }
 
-function createRuntimeModelPredict(model) {
+function createRuntimeModelPredict(model, inferenceStats) {
+  const stats = inferenceStats || { calls: 0, positions: 0, probes: [] };
   return function runtimeModelPredict(_modelIdentifier, vectorizedGrids) {
-    return finalSymmetricalCombatPredict(model, vectorizedGrids);
+    const boards = [];
+    const globals = [];
+    for (const vectorizedGrid of vectorizedGrids) {
+      const projected = projectRuntimeVectorForModel(vectorizedGrid);
+      boards.push(projected.board);
+      globals.push([projected.globalValue]);
+    }
+    const boardTensor = tf.tensor4d(
+      boards.flat(),
+      [boards.length, 3, 3, 21]
+    );
+    const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
+    let prediction;
+    try {
+      prediction = model.predict([boardTensor, globalTensor]);
+      const values = Array.from(predictionValueTensor(prediction).dataSync());
+      stats.calls += 1;
+      stats.positions += vectorizedGrids.length;
+      if (stats.probes.length < 8) {
+        stats.probes.push(...values.slice(0, 8 - stats.probes.length));
+      }
+      return values.map((value) => [value]);
+    } finally {
+      disposePrediction(prediction);
+      boardTensor.dispose();
+      globalTensor.dispose();
+    }
   };
+}
+
+function modelValueProbe(model) {
+  const boardTensor = tf.zeros([1, 3, 3, 21]);
+  const globalTensor = tf.zeros([1, 1]);
+  let prediction;
+  try {
+    prediction = model.predict([boardTensor, globalTensor]);
+    return predictionValueTensor(prediction).dataSync()[0];
+  } finally {
+    disposePrediction(prediction);
+    boardTensor.dispose();
+    globalTensor.dispose();
+  }
 }
 
 function runtimeCombatTeacherLabel(vectorizedGrid) {
@@ -1071,22 +1109,6 @@ function readOldEpochPointer(options) {
   return JSON.parse(fs.readFileSync(pointerPath, 'utf8'));
 }
 
-async function predictionLoss(model, batch) {
-  const prediction = model.predict([batch.board, batch.global]);
-  const predictionTensor = predictionValueTensor(prediction);
-  try {
-    const predictions = Array.from(await predictionTensor.data());
-    const labels = Array.from(await batch.labels.data());
-    let loss = 0;
-    for (let index = 0; index < predictions.length; index += 1) {
-      loss += Math.pow(predictions[index] - labels[index], 2);
-    }
-    return loss / predictions.length;
-  } finally {
-    disposePrediction(prediction);
-  }
-}
-
 async function evaluateNewVsOld(options, state, newModel, oldPointer) {
   if (!oldPointer) {
     return {
@@ -1110,33 +1132,73 @@ async function evaluateNewVsOld(options, state, newModel, oldPointer) {
   );
   try {
     validateLoadedModel(oldModel);
+    const newInference = { calls: 0, positions: 0, probes: [] };
+    const oldInference = { calls: 0, positions: 0, probes: [] };
+    const newPredict = createRuntimeModelPredict(newModel, newInference);
+    const oldPredict = createRuntimeModelPredict(oldModel, oldInference);
+    const newCheckpointProbe = modelValueProbe(newModel);
+    const oldCheckpointProbe = modelValueProbe(oldModel);
     let newWins = 0;
     let oldWins = 0;
     let draws = 0;
+    const results = [];
     for (let game = 1; game <= options.oldVsNewGames; game += 1) {
-      const batch = makeBatch(state.seed + state.completedGames * 7919, game);
-      try {
-        const newLoss = await predictionLoss(newModel, batch);
-        const oldLoss = await predictionLoss(oldModel, batch);
-        const delta = oldLoss - newLoss;
-        if (Math.abs(delta) < 1e-9) {
-          draws += 1;
-        } else if (delta > 0) {
-          newWins += 1;
-        } else {
-          oldWins += 1;
-        }
-      } finally {
-        batch.board.dispose();
-        batch.global.dispose();
-        batch.policy.dispose();
-        batch.labels.dispose();
+      const seed = state.seed + state.completedGames * 7919 + game;
+      const newModelSide = game % 2 === 1 ? 'A' : 'B';
+      const result = runGame({
+        mapName: 'tiny-duel',
+        playerA: 'AIPlayer',
+        playerB: 'AIPlayer',
+        seed,
+        roundLimit: 40,
+        actionLimit: 2,
+        commandLimit: 60,
+        predictFunction(_modelIdentifier, vectorizedGrids, metadata) {
+          const oldModelSide = newModelSide === 'A' ? 'B' : 'A';
+          return metadata && metadata.activeSide === oldModelSide
+            ? oldPredict(_modelIdentifier, vectorizedGrids)
+            : newPredict(_modelIdentifier, vectorizedGrids);
+        },
+        modelIdentifier: {
+          newCheckpoint: readLatestCheckpointPointer(options).path,
+          oldCheckpoint: oldPointer.path,
+          newModelSide
+        },
+        inferenceSource: 'side-routed saved new and old TensorFlow checkpoint outputs'
+      });
+      let winner = 'draw';
+      if (result.winnerSide === newModelSide) {
+        newWins += 1;
+        winner = 'new';
+      } else if (result.winnerSide) {
+        oldWins += 1;
+        winner = 'old';
+      } else {
+        draws += 1;
       }
+      results.push({
+        game,
+        seed,
+        newModelSide,
+        winner,
+        winnerSide: result.winnerSide,
+        roundCount: result.roundCount,
+        timeout: result.timeout === true,
+        suddenDeath: result.suddenDeath === true,
+        nonResult: result.nonResult === true,
+        runtimePlayerA: result.runtimePlayerA,
+        runtimePlayerB: result.runtimePlayerB,
+        inference: result.inference
+      });
     }
-    const decidedGames = newWins + oldWins + draws;
     const checkpointPointer = readLatestCheckpointPointer(options);
+    if (newInference.calls === 0 || oldInference.calls === 0) {
+      fail('old-vs-new gameplay evaluation did not invoke both checkpoints');
+    }
     return {
       evaluated: true,
+      evaluationKind: 'deterministic-checkpoint-gameplay',
+      mapName: 'tiny-duel',
       games: options.oldVsNewGames,
       oldCheckpoint: oldPointer.path,
       oldTrainingStep: oldPointer.trainingStep,
@@ -1145,7 +1207,16 @@ async function evaluateNewVsOld(options, state, newModel, oldPointer) {
       newWins,
       oldWins,
       draws,
-      winrate: decidedGames ? newWins / decidedGames : null
+      winrate: options.oldVsNewGames ? newWins / options.oldVsNewGames : null,
+      newInference,
+      oldInference,
+      checkpointOutputControl: {
+        input: 'zero-board-and-global-tensor',
+        newValue: newCheckpointProbe,
+        oldValue: oldCheckpointProbe,
+        zeroControlValue: 0
+      },
+      results
     };
   } finally {
     oldModel.dispose();
