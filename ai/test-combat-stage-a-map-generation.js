@@ -1,4 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
+const { runGame } = require('./benchmarkHarness');
 
 function assert(condition, message) {
   if (!condition) {
@@ -101,7 +102,7 @@ function validateStageAMap(map, seed) {
   }
 }
 
-function startAndCompleteInHeadlessHarness(map, seed) {
+function startInSmokeHarness(map, seed) {
   const runtime = map.start();
   assert(runtime.players.length === 3,
     'seed ' + seed + ' headless start lost players');
@@ -111,11 +112,28 @@ function startAndCompleteInHeadlessHarness(map, seed) {
   assert(runtime.players[1].towns.length === 0 &&
     runtime.players[2].towns.length === 0,
     'seed ' + seed + ' headless start introduced towns');
-  assert(0 >= map.suddenDeathRound,
-    'seed ' + seed + ' is not complete at immediate sudden death');
-  map.advanceTurns(1);
-  assert(runtime.turn === 1,
-    'seed ' + seed + ' headless harness did not advance');
+}
+
+function completeInRealHeadlessHarness(map, seed) {
+  const result = runGame({
+    gameMap: map,
+    playerA: 'SimpleAiPlayer',
+    playerB: 'SimpleAiPlayer',
+    seed,
+    roundLimit: 1,
+    actionLimit: 1,
+    commandLimit: 1
+  });
+  assert(result.runtimePlayerA === 'SimpleAiPlayer' &&
+    result.runtimePlayerB === 'SimpleAiPlayer',
+    'seed ' + seed + ' real headless harness substituted player classes');
+  assert(result.roundCount === 0 && result.turnCount === 0,
+    'seed ' + seed + ' immediate sudden death did not terminate at game start');
+  assert(result.suddenDeath === true && result.timeout === false,
+    'seed ' + seed + ' did not complete with a real sudden-death result');
+  assert(result.winner === null && result.nonResult === true,
+    'seed ' + seed + ' immediate sudden-death non-win was misreported');
+  return result;
 }
 
 const { context } = loadAiScripts();
@@ -126,14 +144,30 @@ const api = new Function('context', `return {
 assert(api.generateCombatStageATrainingMap,
   'generateCombatStageATrainingMap is not exported to the AI script context');
 
+const headlessOutcomes = [];
 for (let seed = 69069; seed < 69079; seed += 1) {
   const map = api.generateCombatStageATrainingMap({ seed });
   validateStageAMap(map, seed);
-  startAndCompleteInHeadlessHarness(map, seed);
+  startInSmokeHarness(map, seed);
+  const result = completeInRealHeadlessHarness(map, seed);
+  headlessOutcomes.push({
+    seed,
+    suddenDeath: result.suddenDeath,
+    roundCount: result.roundCount,
+    turnCount: result.turnCount,
+    winner: result.winner,
+    nonResult: result.nonResult
+  });
 
   const repeated = api.generateCombatStageATrainingMap({ seed });
   assert(normalizeStageAMap(map) === normalizeStageAMap(repeated),
     'Stage A map generation is not deterministic for seed ' + seed);
 }
 
-console.log('Combat Stage A map generation smoke passed for 10 fixed seeds');
+console.log('Stage A real runGame outcomes: ' + JSON.stringify(headlessOutcomes));
+console.log(
+  'Combat Stage A map generation smoke passed: seeds=69069-69078 count=10 ' +
+  'mapSize=2x2 nonNeutralPlayers=2 unitsPerPlayer=1 unitTypes=Noob ' +
+  'forbiddenUnits=0 economyObjects=0 suddenDeathRound=0 ' +
+  'realHeadlessSuddenDeathCompletions=10'
+);

@@ -529,8 +529,8 @@ function runGame(options) {
   if (!map) {
     throw new Error('Unknown benchmark map "' + mapName + '"');
   }
-  if (!Number.isFinite(map.suddenDeathRound) || map.suddenDeathRound <= 0) {
-    throw new Error('Benchmark map requires a positive suddenDeathRound');
+  if (!Number.isFinite(map.suddenDeathRound) || map.suddenDeathRound < 0) {
+    throw new Error('Benchmark map requires a non-negative suddenDeathRound');
   }
   validatePlayerClass(options.playerA);
   validatePlayerClass(options.playerB);
