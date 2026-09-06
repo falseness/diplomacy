@@ -930,7 +930,10 @@ if (require.main === module) {
 }
 
 module.exports = {
+  createPredictor,
+  createRuntimeContext,
   extractGamestartMaps,
+  loadBrowserScripts,
   loadCheckpoint,
   parseArgs
 };
