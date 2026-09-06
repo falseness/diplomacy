@@ -685,7 +685,7 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
         actionLimit: __actionLimit,
         commandLimit: __commandLimit
       },
-      benchmarkPolicy: 'real gamestart map with runtime AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy',
+      benchmarkPolicy: 'unchanged runtime classes; checkpoint ranks immediate attacks within the generic economy policy',
       players: players.slice(1).map(function(player, index) {
         return {
           side: index + 1,
@@ -698,6 +698,13 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
           aiInitialNeutralTownCount: player.aiInitialNeutralTownCount,
           aiInitialNeutralObjectiveOnDirectFront:
             player.aiInitialNeutralObjectiveOnDirectFront,
+          policyActions: {
+            checkpointRankedAttackOpportunities:
+              player.aiModelRankedAttackOpportunities || 0,
+            checkpointRankedAttacks: player.aiModelRankedAttackActions || 0,
+            heuristicMovement: player.aiHeuristicMovementActions || 0,
+            heuristicEconomy: player.aiHeuristicEconomyActions || 0
+          },
           towns: player.towns.filter(function(town) { return !town.killed }).length,
           units: player.units.filter(function(unit) { return !unit.killed }).length,
           townCoords: player.towns.filter(function(town) {
@@ -808,7 +815,7 @@ async function main() {
     positions: 0,
     resizedInputs: 0,
     channelAdaptations: 0,
-    scoring: 'checkpoint-model-direct'
+    scoring: 'hybrid-generic-policy-with-checkpoint-ranked-immediate-attacks'
   };
   try {
     const mapInventory = extractGamestartMaps();
@@ -897,6 +904,24 @@ async function main() {
         skippedMultiplayerMaps: skippedMaps
       },
       summary,
+      policy: {
+        classification: 'hybrid',
+        checkpointComponent:
+          'ranks every legal immediate attack considered by AIPlayerWithEconomy',
+        heuristicComponents: [
+          'economy purchases',
+          'non-immediate movement and targeting'
+        ],
+        candidateActionTotals: games.reduce((totals, game) => {
+          const candidate = game.players.find(player =>
+            player.side === game.candidateSide);
+          if (!candidate) return totals;
+          for (const [name, count] of Object.entries(candidate.policyActions)) {
+            totals[name] = (totals[name] || 0) + count;
+          }
+          return totals;
+        }, {})
+      },
       failedGames: games.filter(game => !game.candidateWon),
       crashes,
       games

@@ -1765,6 +1765,8 @@ class AIPlayerWithEconomy extends AIPlayer {
         if (!commands.length) {
             return false
         }
+        this.aiModelRankedAttackOpportunities =
+            (this.aiModelRankedAttackOpportunities || 0) + 1
         let townCaptures = commands.filter(command =>
             this.isImmediateTownCaptureCommand(command))
         if (townCaptures.length &&
@@ -1784,7 +1786,12 @@ class AIPlayerWithEconomy extends AIPlayer {
         }
         let chances = scored.chances
         let maxIndex = selectBestModelIndex(chances)
-        return this.applyActionCommand(validCommands[maxIndex])
+        let applied = this.applyActionCommand(validCommands[maxIndex])
+        if (applied) {
+            this.aiModelRankedAttackActions =
+                (this.aiModelRankedAttackActions || 0) + 1
+        }
+        return applied
     }
     selectBestCommand() {
         return this.getBestActionCommand()
@@ -1800,6 +1807,8 @@ class AIPlayerWithEconomy extends AIPlayer {
                 if (movesBefore == unit.moves) {
                     break
                 }
+                this.aiHeuristicMovementActions =
+                    (this.aiHeuristicMovementActions || 0) + 1
                 --remainingActions
                 continue
             }
@@ -1827,6 +1836,8 @@ class AIPlayerWithEconomy extends AIPlayer {
             if (movesBefore == unit.moves) {
                 break
             }
+            this.aiHeuristicMovementActions =
+                (this.aiHeuristicMovementActions || 0) + 1
             --remainingActions
         }
         return remainingActions
@@ -1844,6 +1855,8 @@ class AIPlayerWithEconomy extends AIPlayer {
             if (!this.spendWarGold()) {
                 break
             }
+            this.aiHeuristicEconomyActions =
+                (this.aiHeuristicEconomyActions || 0) + 1
             ++purchases
         }
         return remainingActions
@@ -1877,7 +1890,35 @@ class AIPlayerWithEconomy extends AIPlayer {
         console.log('player reached hard limit')
     }
     doActions() {
-        this.doLearnedCombatOnlyActions()
+        if (!this.bestEnemyTargetForAI) {
+            this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
+        }
+        this.chosenGrids.push(vectoriseGrid())
+        this.winningChances.push(this.getWinningChance())
+        this.prioritizedTargetsForTurn = null
+        let remainingActions =
+            this.getActionLimit(AI_ECONOMY_DEFAULT_ACTION_LIMIT)
+        remainingActions = this.spendWarGoldWithinLimit(
+            remainingActions, AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT)
+        if (remainingActions > 0 && this.applyModelRankedImmediateAttack()) {
+            --remainingActions
+            this.updateUnits()
+        }
+        for (let i = 0; i < this.units.length && remainingActions > 0; ++i) {
+            if (this.units[i].killed) {
+                this.units.splice(i--, 1)
+                continue
+            }
+            if (!this.units[i].isMyTurn) {
+                continue
+            }
+            remainingActions = this.moveUnitWithEconomy(this.units[i], remainingActions)
+        }
+        this.prioritizedTargetsForTurn = null
+        this.spendWarGoldWithinLimit(
+            remainingActions, AI_ECONOMY_POST_MOVE_PURCHASE_LIMIT)
+        this.chosenGrids.push(vectoriseGrid())
+        this.winningChances.push(this.getWinningChance())
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 4)

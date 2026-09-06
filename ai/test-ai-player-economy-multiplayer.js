@@ -10,6 +10,9 @@ const {
 const {
   enumerateGamestartMapCoverage
 } = require('./gamestart-map-coverage');
+const {
+  scoreFinalEconomyVector
+} = require('./benchmark-final-symmetrical-economy-gate');
 
 function check(condition, message, details) {
   if (!condition) {
@@ -30,13 +33,14 @@ const CHECKPOINT =
   '/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005';
 const REPORT_PATH = process.env.DIPLOMACY_MULTIPLAYER_REPORT;
 
-function runScenario(group, seed, model, inference) {
+function runScenario(group, seed, model, inference, predictorOverride, turns = 1) {
   const mapEntry = firstMapForGroup(group);
-  const predictor = createPredictor(model, inference);
+  const predictor = predictorOverride || createPredictor(model, inference);
   const context = createRuntimeContext(seed, predictor, model);
   loadBrowserScripts(context);
   context.__task059MapEntry = mapEntry;
   context.__task059Seed = seed;
+  context.__task059Turns = turns;
   const vm = require('vm');
   return new vm.Script(`(() => {
     isFogOfWar = false
@@ -114,7 +118,10 @@ function runScenario(group, seed, model, inference) {
       CELL_VECTOR_INDEX.strongestOpponentGold]
     lastOpponent.gold = lastOpponentGold
     whooseTurn = 0
-    nextTurn()
+    for (let turn = 0; turn < __task059Turns &&
+        !players.slice(1).some(function(player) { return player.isLost }); ++turn) {
+      nextTurn()
+    }
     return {
       mapName: __task059MapEntry.name,
       group: ${JSON.stringify(group)},
@@ -147,6 +154,24 @@ function runScenario(group, seed, model, inference) {
         strongestGoldBefore: strongestGoldBefore,
         strongestGoldAfter: strongestGoldAfter,
         changedByLastOpponent: strongestGoldAfter > strongestGoldBefore
+      },
+      actionFingerprint: {
+        gold: candidate.gold,
+        towns: candidate.towns.filter(function(town) {
+          return !town.killed
+        }).map(function(town) {
+          return [town.coord.x, town.coord.y]
+        }),
+        units: candidate.units.filter(function(unit) {
+          return !unit.killed
+        }).map(function(unit) {
+          return [unit.constructor.name, unit.coord.x, unit.coord.y, unit.moves]
+        }),
+        policyActions: {
+          checkpointRankedAttacks: candidate.aiModelRankedAttackActions || 0,
+          heuristicMovement: candidate.aiHeuristicMovementActions || 0,
+          heuristicEconomy: candidate.aiHeuristicEconomyActions || 0
+        }
       }
     }
   })()`, { filename: 'task059-ai-economy-multiplayer.js' })
@@ -196,6 +221,19 @@ function scoresDiffer(left, right) {
   });
 }
 
+function actionFingerprintsDiffer(left, right) {
+  return JSON.stringify(left.actionFingerprint) !==
+    JSON.stringify(right.actionFingerprint);
+}
+
+function heuristicPredictor(inference) {
+  return function(_model, vectors) {
+    inference.calls += 1;
+    inference.positions += vectors.length;
+    return vectors.map(vector => [scoreFinalEconomyVector(vector)]);
+  };
+}
+
 async function main() {
   let missingCheckpointRejected = false;
   try {
@@ -222,13 +260,20 @@ async function main() {
       assertScenario(result, scenario, inference);
       realResults.push(result);
     }
+    const causalSeed = 59005;
+    const causalTurns = 40;
+    const realCausalInference = inferenceStats();
+    const realCausalResult = runScenario(
+      '1v1', causalSeed, checkpoint.model, realCausalInference, undefined, causalTurns);
+    check(realCausalResult.actionFingerprint.policyActions.checkpointRankedAttacks > 0,
+      'causal control scenario did not reach a checkpoint-ranked attack');
 
     const zeroWeights = originalWeights.map(weight => tf.zeros(weight.shape));
     checkpoint.model.setWeights(zeroWeights);
     zeroWeights.forEach(weight => weight.dispose());
     const zeroInference = inferenceStats();
     const zeroResult = runScenario(
-      '4-player', 59004, checkpoint.model, zeroInference);
+      '1v1', causalSeed, checkpoint.model, zeroInference, undefined, causalTurns);
 
     const randomWeights = originalWeights.map(function(weight, index) {
       return tf.randomNormal(weight.shape, 0, 0.05, 'float32', 59040 + index);
@@ -237,13 +282,24 @@ async function main() {
     randomWeights.forEach(weight => weight.dispose());
     const randomInference = inferenceStats();
     const randomResult = runScenario(
-      '4-player', 59004, checkpoint.model, randomInference);
+      '1v1', causalSeed, checkpoint.model, randomInference, undefined, causalTurns);
 
-    const realFourPlayer = realResults[2];
-    check(scoresDiffer(realFourPlayer.scoreFingerprint, zeroResult.scoreFingerprint),
+    checkpoint.model.setWeights(originalWeights);
+    const heuristicInference = inferenceStats();
+    const heuristicResult = runScenario(
+      '1v1', causalSeed, checkpoint.model, heuristicInference,
+      heuristicPredictor(heuristicInference), causalTurns);
+
+    check(scoresDiffer(realCausalResult.scoreFingerprint, zeroResult.scoreFingerprint),
       'real checkpoint scores did not differ from zeroed-model control');
-    check(scoresDiffer(realFourPlayer.scoreFingerprint, randomResult.scoreFingerprint),
+    check(scoresDiffer(realCausalResult.scoreFingerprint, randomResult.scoreFingerprint),
       'real checkpoint scores did not differ from randomized-model control');
+    check(actionFingerprintsDiffer(realCausalResult, zeroResult),
+      'real checkpoint actions did not differ from zeroed-model control');
+    check(actionFingerprintsDiffer(realCausalResult, randomResult),
+      'real checkpoint actions did not differ from randomized-model control');
+    check(actionFingerprintsDiffer(realCausalResult, heuristicResult),
+      'real checkpoint actions did not differ from heuristic-only control');
 
     const trainingSeeds = checkpoint.report.trainingEvidence &&
       checkpoint.report.trainingEvidence.losses ?
@@ -264,8 +320,17 @@ async function main() {
         missingCheckpointRejected,
         zeroedModelScoresDiffer: true,
         randomizedModelScoresDiffer: true,
+        zeroedModelActionsDiffer: true,
+        randomizedModelActionsDiffer: true,
+        heuristicOnlyActionsDiffer: true,
+        causalSeed,
+        causalTurns,
+        realCausalInference,
+        realCausalResult,
         zeroedInference: zeroInference,
-        randomizedInference: randomInference
+        randomizedInference: randomInference,
+        heuristicInference,
+        heuristicResult
       },
       scenarios: realResults
     };

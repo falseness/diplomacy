@@ -12,10 +12,17 @@ function assert(condition, message, details) {
   }
 }
 
-const outputPath =
-  '/mnt/storage/diplomacy/benchmarks/task062-tiny-1v1.json';
-const failureDir =
-  '/mnt/storage/diplomacy/benchmarks/task062-tiny-1v1-failures';
+const repoRoot = path.resolve(__dirname, '..');
+const checkpointPath = process.env.TASK062_CHECKPOINT ||
+  '/mnt/storage/diplomacy/checkpoints/' +
+    'task061-generated-retrain-broad-20260906/step-00000009';
+const outputPath = process.env.TASK062_OUTPUT ||
+  path.join(repoRoot, 'artifacts', 'TASK-062', 'implementation-benchmark.json');
+const failureDir = process.env.TASK062_FAILURE_DIR ||
+  path.join(repoRoot, 'artifacts', 'TASK-062', 'implementation-benchmark-failures');
+const tasksPath = process.env.TASK062_TASKS ||
+  path.join(repoRoot, 'artifacts', 'tasks.json');
+const firstSeed = Number(process.env.TASK062_SEED || 62020);
 
 function removeDirectory(directory) {
   if (!fs.existsSync(directory)) {
@@ -40,11 +47,12 @@ const command = [
   '--map-offset', '1',
   '--map-limit', '1',
   '--seeds', '1',
-  '--seed', '62000',
+  '--seed', String(firstSeed),
   '--round-limit', '1200',
+  '--checkpoint', checkpointPath,
   '--output', outputPath,
   '--failure-dir', failureDir,
-  '--no-followups'
+  '--tasks', tasksPath
 ];
 
 const run = spawnSync(process.execPath, command, {
@@ -68,11 +76,11 @@ assert(
 );
 assert(
   report.config.checkpoint ===
-    '/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005',
+    checkpointPath,
   'benchmark did not load the current selected AIPlayerWithEconomy checkpoint',
   report.config
 );
-assert(report.config.seed === 62000, 'benchmark seed is not deterministic');
+assert(report.config.seed === firstSeed, 'benchmark seed is not deterministic');
 assert(report.summary.attemptedGames === 2, 'benchmark did not cover both candidate sides');
 assert(report.summary.completedGames === 2, 'tiny games did not both complete');
 assert(report.summary.candidateWins === 2, 'AIPlayerWithEconomy did not win both tiny games');
@@ -112,6 +120,16 @@ for (const game of report.games) {
 assert(
   report.checkpoint.gameplayInference.positions > 0,
   'checkpoint-backed inference was not exercised'
+);
+assert(report.policy.classification === 'hybrid', 'benchmark did not disclose hybrid policy');
+assert(
+  report.policy.candidateActionTotals.checkpointRankedAttacks > 0,
+  'checkpoint did not rank an applied immediate attack'
+);
+assert(
+  report.policy.candidateActionTotals.heuristicMovement > 0 &&
+    report.policy.candidateActionTotals.heuristicEconomy > 0,
+  'benchmark did not quantify both generic policy components'
 );
 
 console.log(
