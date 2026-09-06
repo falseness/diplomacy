@@ -70,6 +70,14 @@ function runGroup(tempDir, playerGroup, seed, expectedMaps) {
     assert(game.roundCount < FORCED_SUDDEN_DEATH_ROUND, game.mapName + ' reached sudden death');
     assert(game.suddenDeathRound === FORCED_SUDDEN_DEATH_ROUND, game.mapName + ' had wrong sudden death round');
     assert(game.allNonNeutralPlayersUseRequiredClass, game.mapName + ' had a class mismatch');
+    assert(
+      game.allNonNeutralPlayersUseExactRequiredClass,
+      game.mapName + ' did not use the exact SimpleAiPlayerWithEconomy constructor'
+    );
+    assert(
+      game.requiredPlayerPrototypeUnchanged,
+      game.mapName + ' changed SimpleAiPlayerWithEconomy.prototype.play during the run'
+    );
     for (const player of game.players) {
       assert(player.type === 'SimpleAiPlayerWithEconomy', game.mapName + ' used ' + player.type);
     }
