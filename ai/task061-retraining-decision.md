@@ -1,19 +1,40 @@
 # TASK-061 Retraining Decision
 
-Decision: skip retraining for this iteration.
+Decision: retraining was required and performed, but TASK-061 remains blocked by the
+required tiny 1v1 gate.
 
 Evidence reviewed:
-- TASK-059 is done and verified. The focused 3-player and 4-player AIPlayerWithEconomy multiplayer inference smoke still passes with unchanged runtime player classes.
-- TASK-062 tiny 1v1 benchmark requirements were reviewed directly for TASK-061 by running: `node ai/benchmark-gamestart-trained-model.js --map-limit 1 --seeds 1 --round-limit 1200 --output /mnt/storage/diplomacy/benchmarks/task061-task062-tiny-1v1-gate-20260611.json --failure-dir /mnt/storage/diplomacy/benchmarks/task061-task062-tiny-1v1-failures-20260611 --no-followups`.
-- The TASK-062 tiny 1v1 gate completed 2/2 games with AIPlayerWithEconomy covering both candidate sides against SimpleAiPlayerWithEconomy, with 100 percent candidate win rate and zero losses, non-results, sudden-death games, timeouts, or crashes.
-- The tiny 1v1 benchmark uses real gamestart runtime play with player slots set to AIPlayerWithEconomy for the candidate side and SimpleAiPlayerWithEconomy for the opponent side; no runtime player class changes were made for this decision.
+- The TASK-059 real-checkpoint smoke passed for 1v1, 3-player, and 4-player maps.
+  It used unchanged `AIPlayerWithEconomy` candidates and
+  `SimpleAiPlayerWithEconomy` opponents and passed missing-checkpoint, zero-weight,
+  and deterministic randomized-weight controls.
+- The fresh TASK-062 run selected `tiny deathmatch #1` and seeds 62000 and 62001
+  before execution, covered both candidate sides, and counted every completed game.
+- The legacy checkpoint lost 0/2 games, so retraining was required by the ticket.
 
-Selected checkpoint for later benchmark reruns:
-- `/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005`
+Generated-map retraining performed:
+- `task061-generated-retrain-20260906` trained from scratch on seeds 61000-61005,
+  cycling through 2-, 3-, and 4-player generated town maps.
+- `task061-generated-retrain-final-20260906` and
+  `task061-generated-retrain-broad-20260906` warm-started the repository's existing
+  all-slot checkpoint and trained on new generated town maps.
+- Every run used `--map-source town`. Persisted provenance records
+  `generateTownTrainingMap`, `generated: true`, and `fixedGamestartMap: false`.
+  No `options/gamestart.js` map was training data.
+- Each run saved checkpoints, metrics, a manifest, a final model, and a benchmark
+  snapshot under `/mnt/storage/diplomacy`.
 
-Checkpoint evidence:
-- Training data source in the benchmark report is `real-runtime-self-play`.
-- Plateau evidence is present: selected game 5, selected loss 0.00004179465031484142, final loss 0.002233287785202265, with post-selection training that did not improve the selected loss.
-- Validation win-rate plateau is reported as true.
+Checkpoint result:
+- The predeclared final broad checkpoint was
+  `/mnt/storage/diplomacy/checkpoints/task061-generated-retrain-broad-20260906/step-00000012`.
+- It passed the TASK-059 multiplayer inference/model-control smoke, but the final
+  tiny gate still lost 0/2 completed games with exact class assignments, no crash,
+  no timeout, and no sudden-death non-result.
+- Therefore no checkpoint is selected as passing for later benchmark reruns.
+  Step 12 above is retained as the latest evaluated checkpoint, not as a passing
+  release candidate.
 
-Retraining was not performed because neither the TASK-059 multiplayer smoke gate nor the TASK-062 tiny 1v1 gate produced a failure. If later all-gamestart coverage finds a loss, draw, crash, timeout, or sudden-death non-result, retraining must use generated random maps only and save checkpoints, metrics, manifests, and benchmark snapshots under `/mnt/storage/diplomacy`.
+Conclusion: TASK-061 must remain pending. Marking it ready would require converting
+real losses into wins or shopping for favorable seeds/checkpoints, both prohibited
+by `artifacts/prevent_cheating.md`. Complete run logs, reports, hashes, provenance,
+controls, and failure states are retained in `artifacts/TASK-061`.

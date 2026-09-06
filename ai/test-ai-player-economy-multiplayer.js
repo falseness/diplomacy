@@ -25,6 +25,7 @@ function firstMapForGroup(group) {
 }
 
 const CHECKPOINT =
+  process.env.DIPLOMACY_ECONOMY_CHECKPOINT ||
   '/mnt/storage/diplomacy/checkpoints/task045-replay-corrected/step-00000005';
 
 function runScenario(group, seed, model, inference) {

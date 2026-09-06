@@ -353,9 +353,11 @@ async function loadCheckpoint(checkpointArgument) {
   const model = await tf.loadLayersModel('file://' + modelPath);
   const signature = modelSignature(model);
   const channelCount = signature.inputs[0] && signature.inputs[0][3];
-  if (channelCount !== 78) {
+  if (channelCount !== 78 && channelCount !== 82) {
     model.dispose();
-    throw new Error('checkpoint must use the 78-channel economy vector shape');
+    throw new Error(
+      'checkpoint must use a supported 78- or 82-channel economy vector shape'
+    );
   }
   return {
     model,

@@ -39,7 +39,8 @@ function parseArgs(argv) {
     seed: 36000,
     checkpointInterval: 1,
     playerCounts: [2, 3, 4],
-    mapSource: 'town'
+    mapSource: 'town',
+    initialCheckpoint: null
   };
   for (let index = 0; index < argv.length; index += 2) {
     const argument = argv[index];
@@ -59,6 +60,7 @@ function parseArgs(argv) {
       options.playerCounts = value.split(',').map(entry => Number(entry.trim()));
     }
     else if (name === 'map-source') options.mapSource = value;
+    else if (name === 'initial-checkpoint') options.initialCheckpoint = path.resolve(value);
     else throw new Error(`unknown argument: ${argument}`);
   }
   for (const name of ['games', 'epochs', 'seed', 'checkpointInterval']) {
@@ -75,6 +77,14 @@ function parseArgs(argv) {
   }
   if (!MAP_SOURCES.includes(options.mapSource)) {
     throw new Error('map-source must be one of ' + MAP_SOURCES.join(', '));
+  }
+  if (options.initialCheckpoint) {
+    const modelPath = path.basename(options.initialCheckpoint) === 'model.json'
+      ? options.initialCheckpoint
+      : path.join(options.initialCheckpoint, 'model.json');
+    if (!fs.existsSync(modelPath)) {
+      throw new Error(`initial checkpoint model is missing: ${modelPath}`);
+    }
   }
   options.storageDir = path.resolve(options.storageDir);
   return options;
@@ -129,10 +139,12 @@ function createModel(height, width) {
   return model;
 }
 
-function adaptBoard(board, expectedWidth, expectedHeight) {
+function adaptBoard(board, expectedWidth, expectedHeight, expectedChannels = CELL_VECTOR_SIZE) {
   const width = board.length;
   const height = board[0] ? board[0].length : 0;
-  if (width === expectedWidth && height === expectedHeight) {
+  const channels = board[0] && board[0][0] ? board[0][0].length : 0;
+  if (width === expectedWidth && height === expectedHeight &&
+      channels === expectedChannels) {
     return board;
   }
   const adapted = new Array(expectedWidth);
@@ -141,7 +153,10 @@ function adaptBoard(board, expectedWidth, expectedHeight) {
     const sourceX = Math.min(width - 1, Math.floor(x * width / expectedWidth));
     for (let y = 0; y < expectedHeight; y += 1) {
       const sourceY = Math.min(height - 1, Math.floor(y * height / expectedHeight));
-      adapted[x][y] = board[sourceX][sourceY].slice(0, CELL_VECTOR_SIZE);
+      adapted[x][y] = board[sourceX][sourceY].slice(0, expectedChannels);
+      while (adapted[x][y].length < expectedChannels) {
+        adapted[x][y].push(0);
+      }
     }
   }
   return adapted;
@@ -779,7 +794,8 @@ function writeBenchmarkSnapshot(
   finalDir,
   metrics,
   bestCheckpoint,
-  status
+  status,
+  modelShape
 ) {
   const candidate = createCandidate(options, checkpointRoot, bestCheckpoint);
   const mapGenerator = options.mapSource === 'final-symmetrical-economy'
@@ -805,7 +821,7 @@ function writeBenchmarkSnapshot(
         ? ADVANCED_9X9_STAGES
         : (options.mapSource === 'advanced-20x20-economy' ? [14] : undefined)
     },
-    cellVectorSize: CELL_VECTOR_SIZE,
+    cellVectorSize: modelShape.channels,
     completedGames: metrics.length,
     plannedGames: options.games,
     games: metrics,
@@ -835,7 +851,22 @@ async function run(options) {
   fs.mkdirSync(checkpointRoot, { recursive: true });
   fs.mkdirSync(path.dirname(finalDir), { recursive: true });
 
-  const model = createModel(ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT);
+  const initialModelPath = options.initialCheckpoint &&
+    (path.basename(options.initialCheckpoint) === 'model.json'
+      ? options.initialCheckpoint
+      : path.join(options.initialCheckpoint, 'model.json'));
+  const model = initialModelPath
+    ? await tf.loadLayersModel(`file://${initialModelPath}`)
+    : createModel(ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT);
+  if (initialModelPath) {
+    model.compile({ optimizer: tf.train.adam(0.0001), loss: 'meanSquaredError' });
+  }
+  const inputShape = model.inputs[0].shape;
+  const modelShape = {
+    width: inputShape[1],
+    height: inputShape[2],
+    channels: inputShape[3]
+  };
   const metrics = [];
   let bestCheckpoint = null;
   try {
@@ -858,13 +889,15 @@ async function run(options) {
           )
         );
       }
+      const modelBoards = batch.boards.map(board => adaptBoard(
+        board, modelShape.width, modelShape.height, modelShape.channels));
       const boardTensor = tf.tensor4d(
-        batch.boards.flat(3),
+        modelBoards.flat(3),
         [
-          batch.boards.length,
-          ECONOMY_MODEL_WIDTH,
-          ECONOMY_MODEL_HEIGHT,
-          CELL_VECTOR_SIZE
+          modelBoards.length,
+          modelShape.width,
+          modelShape.height,
+          modelShape.channels
         ]
       );
       const globalTensor = tf.tensor2d(batch.globals, [batch.globals.length, 1]);
@@ -894,7 +927,7 @@ async function run(options) {
         dataSource: 'real-runtime-self-play',
         generatedMapProvenance: batch.map.provenance,
         mapSize: batch.map.mapSize,
-        cellVectorSize: CELL_VECTOR_SIZE,
+        cellVectorSize: modelShape.channels,
         examples: batch.labels.length,
         actionCounts: batch.actionCounts,
         economyActions: batch.labels.length - (batch.actionCounts['unit-command'] || 0),
@@ -918,11 +951,12 @@ async function run(options) {
           game,
           seed: metric.seed,
           augmentedSeeds: metric.augmentedSeeds,
-          cellVectorSize: CELL_VECTOR_SIZE,
+          cellVectorSize: modelShape.channels,
           modelBoardSize: {
-            width: ECONOMY_MODEL_WIDTH,
-            height: ECONOMY_MODEL_HEIGHT
+            width: modelShape.width,
+            height: modelShape.height
           },
+          initialCheckpoint: options.initialCheckpoint,
           actionCounts: batch.actionCounts,
           dataSource: metric.dataSource,
           actionsApplied: metric.actionsApplied,
@@ -957,7 +991,8 @@ async function run(options) {
         finalDir,
         metrics,
         bestCheckpoint,
-        'running'
+        'running',
+        modelShape
       );
       if (options.onGameComplete) {
         await options.onGameComplete({ game, snapshotPath, finalDir });
@@ -978,7 +1013,8 @@ async function run(options) {
     finalDir,
     metrics,
     bestCheckpoint,
-    'complete'
+    'complete',
+    modelShape
   );
   writeJson(path.join(runDir, 'manifest.json'), {
     runId: options.runId,
