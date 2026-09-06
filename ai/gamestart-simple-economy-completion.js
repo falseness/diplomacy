@@ -341,6 +341,8 @@ function runRuntimeScenario(mapEntry, seed, options) {
       map.players[index].playerType = 'SimpleAiPlayerWithEconomy'
     }
     map.suddenDeathRound = __task055ForcedSuddenDeathRound
+    let requiredPlayerClass = SimpleAiPlayerWithEconomy
+    let requiredPlayerPlay = SimpleAiPlayerWithEconomy.prototype.play
     map.start(manager, false)
     suddenDeathRound = __task055ForcedSuddenDeathRound
     whooseTurn = 0
@@ -407,6 +409,11 @@ function runRuntimeScenario(mapEntry, seed, options) {
       allNonNeutralPlayersUseRequiredClass: runtimePlayers.every(function(player) {
         return player.type == 'SimpleAiPlayerWithEconomy'
       }),
+      allNonNeutralPlayersUseExactRequiredClass: players.slice(1).every(function(player) {
+        return player.constructor === requiredPlayerClass
+      }),
+      requiredPlayerPrototypeUnchanged:
+        SimpleAiPlayerWithEconomy.prototype.play === requiredPlayerPlay,
       players: runtimePlayers
     }
   })()`, { filename: 'task055-runtime-scenario.js' }).runInContext(context);
@@ -435,7 +442,9 @@ function summarize(games, crashes) {
     suddenDeathNonResults: games.filter(game => game.suddenDeath).length,
     crashes: crashes.length,
     requiredClassMismatches: games.filter(game =>
-      !game.allNonNeutralPlayersUseRequiredClass
+      !game.allNonNeutralPlayersUseRequiredClass ||
+      !game.allNonNeutralPlayersUseExactRequiredClass ||
+      !game.requiredPlayerPrototypeUnchanged
     ).length
   };
 }
@@ -459,7 +468,9 @@ function runHarness(options) {
           ' round=' + game.roundCount + ' timeout=' + game.timeout
         );
         if (game.winner === null || game.timeout || game.suddenDeath ||
-            !game.allNonNeutralPlayersUseRequiredClass) {
+            !game.allNonNeutralPlayersUseRequiredClass ||
+            !game.allNonNeutralPlayersUseExactRequiredClass ||
+            !game.requiredPlayerPrototypeUnchanged) {
           const failurePath = path.join(
             options.failureDir,
             safeFilePart(game.mapName) + '-seed-' + seed + '.json'
@@ -536,7 +547,9 @@ function runHarness(options) {
       game.winner === null ||
       game.timeout ||
       game.suddenDeath ||
-      !game.allNonNeutralPlayersUseRequiredClass
+      !game.allNonNeutralPlayersUseRequiredClass ||
+      !game.allNonNeutralPlayersUseExactRequiredClass ||
+      !game.requiredPlayerPrototypeUnchanged
     ),
     crashes,
     games: games.map(conciseGame)

@@ -58,6 +58,8 @@ for (const game of report.games) {
   assert(game.runtimeLoop === 'GameMap.start + nextTurn', 'real runtime loop not recorded');
   assert(game.requiredPlayerClass === 'SimpleAiPlayerWithEconomy', 'required class missing');
   assert(game.allNonNeutralPlayersUseRequiredClass, 'non-neutral player class mismatch');
+  assert(game.allNonNeutralPlayersUseExactRequiredClass, 'non-neutral constructor identity mismatch');
+  assert(game.requiredPlayerPrototypeUnchanged, 'required player play prototype changed');
   assert(game.suddenDeathRound === FORCED_SUDDEN_DEATH_ROUND, 'sudden death was not forced');
   assert(game.forcedSuddenDeathRound === FORCED_SUDDEN_DEATH_ROUND, 'forced sudden death missing');
   assert(Number.isInteger(game.variantIndex), 'variant index missing');
