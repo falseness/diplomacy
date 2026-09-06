@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="nc-normchel-title nc-normchel-desc">
-  <title id="nc-normchel-title">Swordsman</title>
-  <desc id="nc-normchel-desc">Simplified shaded swordsman. Broad steel armor, large sword and shield, matching original human proportions. Transparent background; editable vector shapes.</desc>
+  <title id="nc-normchel-title">Swordsman — classic equipment, miniature shading</title>
+  <desc id="nc-normchel-desc">Original slim tilted sword with round bronze pommel and plain curved silver shield. Simplified gray uniform, original character proportions, shared miniature face and smooth shading. Transparent 512 by 512 vector artwork.</desc>
   <defs>
     <clipPath id="nc-swordsman-legs-clip">
       <path d="M258.5 322.531C242.934 324.263 236.28 328.614 228.5 343.031V455.355C228.5 457.466 228.297 459.58 227.783 461.627C224.776 473.598 220.356 478.924 210.15 482.24C207.136 483.22 203.858 483.224 200.863 482.185C190.261 478.506 187.234 472.449 185.121 460.955C184.825 459.346 184.7 457.709 184.7 456.074V296.031H332.3V456.074C332.3 457.709 332.174 459.346 331.879 460.955C329.765 472.449 326.738 478.506 316.136 482.185C313.142 483.224 309.864 483.22 306.849 482.24C296.644 478.924 292.224 473.598 289.217 461.627C288.702 459.58 288.5 457.466 288.5 455.355V343.031C280.719 328.614 274.066 324.263 258.5 322.531Z" />
@@ -34,27 +34,27 @@
       <stop offset="1" stop-color="#ddb97b" />
     </linearGradient>
     <radialGradient id="nc-swordsman-shirt-paint" cx="78%" cy="19%" r="99%">
-      <stop stop-color="#aab6ac" />
-      <stop offset=".28" stop-color="#87968b" />
-      <stop offset=".6" stop-color="#62786b" />
-      <stop offset="1" stop-color="#3d554b" />
+      <stop stop-color="#b7bab7" />
+      <stop offset=".28" stop-color="#959b97" />
+      <stop offset=".6" stop-color="#727b75" />
+      <stop offset="1" stop-color="#4c5750" />
     </radialGradient>
     <radialGradient id="nc-swordsman-sleeve-left" cx="76%" cy="15%" r="110%">
-      <stop stop-color="#8a9a8b" />
-      <stop offset=".46" stop-color="#607766" />
-      <stop offset="1" stop-color="#3e5547" />
+      <stop stop-color="#a5aba5" />
+      <stop offset=".46" stop-color="#737e76" />
+      <stop offset="1" stop-color="#4b574f" />
     </radialGradient>
     <radialGradient id="nc-swordsman-sleeve-right" cx="57%" cy="29%" r="75%">
-      <stop stop-color="#c3cfb7" />
-      <stop offset=".27" stop-color="#a0b297" />
-      <stop offset=".6" stop-color="#7c9276" />
-      <stop offset="1" stop-color="#4d6a52" />
+      <stop stop-color="#c4c9c1" />
+      <stop offset=".27" stop-color="#a4ada3" />
+      <stop offset=".6" stop-color="#7f8a7e" />
+      <stop offset="1" stop-color="#535f53" />
     </radialGradient>
     <radialGradient id="nc-swordsman-pants-paint" cx="75%" cy="14%" r="101%">
-      <stop stop-color="#a0a087" />
-      <stop offset=".36" stop-color="#808471" />
-      <stop offset=".76" stop-color="#626c58" />
-      <stop offset="1" stop-color="#404e3f" />
+      <stop stop-color="#adafa2" />
+      <stop offset=".36" stop-color="#8b9287" />
+      <stop offset=".76" stop-color="#697568" />
+      <stop offset="1" stop-color="#475744" />
     </radialGradient>
     <radialGradient id="nc-swordsman-cloth-light">
       <stop stop-color="#ead19a" stop-opacity=".29" />
@@ -89,36 +89,35 @@
       <stop offset=".85" stop-color="#6e7443" />
       <stop offset="1" stop-color="#494d2c" />
     </linearGradient>
-    <linearGradient id="nc-swordsman-buckle-paint" x1="0" y1="0" x2="1" y2=".7">
-      <stop stop-color="#b78937" />
-      <stop offset=".25" stop-color="#d5a64b" />
-      <stop offset=".66" stop-color="#ffe08a" />
-      <stop offset="1" stop-color="#b88432" />
-    </linearGradient>
-    <radialGradient id="nc-swordsman-steel" cx="76%" cy="18%" r="96%">
-      <stop offset="0.000" stop-color="#e1e6d9" />
-      <stop offset="0.333" stop-color="#a9b8b3" />
-      <stop offset="0.667" stop-color="#7b8e88" />
-      <stop offset="1.000" stop-color="#4b615b" />
-    </radialGradient>
-    <radialGradient id="nc-swordsman-steel-dark" cx="76%" cy="18%" r="96%">
-      <stop offset="0.000" stop-color="#b8c7bd" />
-      <stop offset="0.333" stop-color="#8c9e93" />
-      <stop offset="0.667" stop-color="#5c7369" />
-      <stop offset="1.000" stop-color="#3b5148" />
-    </radialGradient>
-    <radialGradient id="nc-swordsman-dark-leather" cx="76%" cy="18%" r="96%">
-      <stop offset="0.000" stop-color="#a08156" />
-      <stop offset="0.333" stop-color="#785d3d" />
-      <stop offset="0.667" stop-color="#59432d" />
-      <stop offset="1.000" stop-color="#342b21" />
-    </radialGradient>
     <linearGradient id="nc-swordsman-gold" x1="0" y1=".3" x2="1" y2=".1">
       <stop offset="0.000" stop-color="#b4873c" />
       <stop offset="0.333" stop-color="#e0bb65" />
       <stop offset="0.667" stop-color="#f1d789" />
       <stop offset="1.000" stop-color="#87632d" />
     </linearGradient>
+    <linearGradient id="classic-sword-blade" x1="0" y1="0" x2="1" y2=".15">
+      <stop stop-color="#aab9c0" />
+      <stop offset=".45" stop-color="#e6e9e3" />
+      <stop offset=".5" stop-color="#bdc9ce" />
+      <stop offset="1" stop-color="#82959c" />
+    </linearGradient>
+    <radialGradient id="classic-shield-silver" cx="74%" cy="22%" r="89%">
+      <stop stop-color="#e2e4dd" />
+      <stop offset=".36" stop-color="#c6ccc7" />
+      <stop offset=".7" stop-color="#a5b0aa" />
+      <stop offset="1" stop-color="#788b81" />
+    </radialGradient>
+    <radialGradient id="classic-pommel" cx="70%" cy="25%" r="83%">
+      <stop stop-color="#caa05d" />
+      <stop offset=".42" stop-color="#a47736" />
+      <stop offset="1" stop-color="#735022" />
+    </radialGradient>
+    <radialGradient id="nc-swordsman-leather" cx="76%" cy="18%" r="96%">
+      <stop offset="0.000" stop-color="#ba915d" />
+      <stop offset="0.333" stop-color="#987243" />
+      <stop offset="0.667" stop-color="#725434" />
+      <stop offset="1.000" stop-color="#463625" />
+    </radialGradient>
   </defs>
   <g id="nc-unit-body">
     <g id="nc-swordsman-boots" clip-path="url(#nc-swordsman-legs-clip)">
@@ -145,18 +144,8 @@
       <path d="M239 140 Q255 137 273 141 L256 158Z" fill="#b08b48" />
     </g>
   </g>
-  <g id="nc-armor">
-    <path d="M196 146 Q258 160 321 145 L324 264 Q259 297 194 264Z" fill="url(#nc-swordsman-steel)" />
-    <path d="M258 160 Q289 158 321 145 L324 264 Q293 282 258 285Z" fill="url(#nc-swordsman-steel-dark)" />
-    <path d="M204 146 Q174 134 153 155 L140 179 Q164 194 198 185 L213 160Z" fill="url(#nc-swordsman-steel)" />
-    <path d="M309 146 Q339 134 360 155 L375 179 Q350 194 317 185 L301 160Z" fill="url(#nc-swordsman-steel)" />
-    <path d="M192 273 Q258 304 324 273 L324 290 Q258 315 192 290Z" fill="url(#nc-swordsman-steel-dark)" />
-    <path d="M188 371 Q207 359 227 371 L226 448 Q207 463 187 448Z" fill="url(#nc-swordsman-steel-dark)" />
-    <path d="M291 371 Q311 359 330 371 L329 448 Q310 463 290 448Z" fill="url(#nc-swordsman-steel-dark)" />
-  </g>
   <g id="nc-belt">
-    <path d="M182 282 Q256 291 330 282 V302 Q256 312 182 302Z" fill="url(#nc-swordsman-belt-paint)" />
-    <path d="M247 286 H265 V303 H247Z" fill="url(#nc-swordsman-buckle-paint)" />
+    <path d="M184.7 285 Q258.5 291 332.3 285 V297 Q258.5 303 184.7 297Z" fill="url(#nc-swordsman-belt-paint)" />
   </g>
   <g id="nc-unit-head" transform="translate(3 -.9695)">
     <circle id="nc-swordsman-original-head-silhouette" cx="256" cy="91" r="62.5" fill="url(#nc-swordsman-skin)" />
@@ -164,23 +153,15 @@
     <ellipse cx="277" cy="73" rx="7.2" ry="8.5" fill="#243328" />
     <path d="M242 114 H270" stroke="#6b5334" stroke-width="5" stroke-linecap="round" />
   </g>
-  <g id="nc-sword">
-    <g transform="rotate(-12 109 294)">
-      <path d="M91 244 H127 V329 Q109 341 91 329Z" fill="url(#nc-swordsman-dark-leather)" />
-      <path d="M86 72 L109 25 L132 72 V245 H86Z" fill="url(#nc-swordsman-steel)" stroke="#4a605b" stroke-width="4" stroke-linejoin="round" />
-      <path d="M109 25 L132 72 V245 H109Z" fill="#6d8780" />
-      <path d="M109 37 V242" stroke="#e6ecd9" stroke-width="5" />
-      <rect x="65" y="237" width="88" height="19" rx="8" fill="url(#nc-swordsman-gold)" />
-      <path d="M93 328 H125 L131 345 Q109 360 87 345Z" fill="url(#nc-swordsman-gold)" />
-      <ellipse cx="105" cy="290" rx="21" ry="19" fill="url(#nc-swordsman-skin)" />
-    </g>
+  <g id="classic-sword">
+    <path d="M92.936 251.933L112.505 247.802L129.028 326.077L109.459 330.208L92.936 251.933Z" fill="url(#nc-swordsman-leather)" stroke="#624c2d" stroke-width="2" stroke-linejoin="round" />
+    <path d="M144.04 330C146.77 342.936 138.497 355.636 125.561 358.367C112.625 361.098 99.9251 352.825 97.1944 339.889C94.4637 326.953 102.737 314.252 115.673 311.522C128.609 308.791 141.309 317.064 144.04 330Z" fill="url(#classic-pommel)" stroke="#624823" stroke-width="2.5" />
+    <path d="M50.5946 72.7988L58.8465 43.7121L78.1506 66.9819L116.721 249.7L102.943 252.609L89.1654 255.517L50.5946 72.7988Z" fill="url(#classic-sword-blade)" stroke="#5a6c71" stroke-width="2.5" stroke-linejoin="round" />
+    <path d="M58.8465 43.7121 L78.1506 66.9819 L116.721 249.7 L102.943 252.609Z" fill="#8e9fa5" />
+    <path d="M58.8465 43.7121 L102.943 252.609" fill="none" stroke="#eef0e8" stroke-width="3" />
+    <path d="M68.9855 256.752C68.102 252.567 70.7785 248.458 74.9637 247.575L127.32 236.523C131.505 235.639 135.614 238.316 136.498 242.501C137.381 246.686 134.705 250.795 130.519 251.679L78.163 262.731C73.9778 263.614 69.8689 260.938 68.9855 256.752Z" fill="url(#nc-swordsman-gold)" stroke="#806130" stroke-width="2" stroke-linejoin="round" />
   </g>
-  <g id="nc-shield">
-    <path d="M400 151 Q430 180 491 193 C487 278 447 329 400 354 C351 329 317 279 311 193 Q371 180 400 151Z" fill="#425a53" />
-    <path d="M400 164 Q434 190 481 200 C475 272 445 317 400 343 C357 317 327 270 321 200 Q369 189 400 164Z" fill="url(#nc-swordsman-steel)" />
-    <path d="M400 164 Q434 190 481 200 C475 272 445 317 400 343Z" fill="url(#nc-swordsman-steel-dark)" />
-    <circle cx="400" cy="238" r="32" fill="#496157" />
-    <circle cx="400" cy="234" r="29" fill="url(#nc-swordsman-gold)" />
-    <circle cx="400" cy="232" r="19" fill="url(#nc-swordsman-steel)" />
+  <g id="classic-shield">
+    <path d="M400.241 141.205C378.287 179.601 353.753 188.449 306.502 198.876C305.957 198.996 305.582 199.445 305.715 199.987C308.658 212.002 341.762 341.5 401.203 341.5C460.725 341.5 489.819 211.655 492.323 199.94C492.434 199.416 492.078 198.991 491.559 198.861C442.744 186.65 419.3 176.294 402.054 141.259C401.696 140.53 400.644 140.5 400.241 141.205Z" fill="url(#classic-shield-silver)" stroke="#6b7d73" stroke-width="3" stroke-linejoin="round" />
   </g>
 </svg>

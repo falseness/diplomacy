@@ -1,29 +1,13 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="kh-horseman-title kh-horseman-desc">
-  <title id="kh-horseman-title">Horseman</title>
-  <desc id="kh-horseman-desc">Simplified shaded horse and rider. Four clearly separated legs, broad saddle blanket and clean riding gear; no texture, fine straps, rivets or stitching. Transparent editable vectors.</desc>
+  <title id="kh-horseman-title">Horseman — simplified miniature</title>
+  <desc id="kh-horseman-desc">Horse and rider with plain green shirt, tan trousers, one-piece boots, simple saddle blanket, noseband and rein. Original horse silhouette and riding pose preserved. Smooth shading, transparent 512 by 512 canvas, editable vectors. No decorative straps, edging, cuffs, knee patches, stirrups or texture filters.</desc>
   <defs>
     <radialGradient id="kh-horseman-archer-skin" cx="72%" cy="24%" r="86%">
       <stop stop-color="#ffe1a0" />
       <stop offset=".38" stop-color="#edc88a" />
       <stop offset=".7" stop-color="#cda66c" />
       <stop offset="1" stop-color="#916c43" />
-    </radialGradient>
-    <radialGradient id="kh-horseman-archer-eye-rim" cx="66%" cy="28%" r="80%">
-      <stop stop-color="#fff0c5" />
-      <stop offset=".6" stop-color="#f1dbaa" />
-      <stop offset="1" stop-color="#c7a777" />
-    </radialGradient>
-    <radialGradient id="kh-horseman-archer-eye-paint" cx="72%" cy="22%" r="85%">
-      <stop stop-color="#2e3c2e" />
-      <stop offset=".47" stop-color="#122217" />
-      <stop offset="1" stop-color="#17251b" />
-    </radialGradient>
-    <radialGradient id="kh-horseman-leather" cx="76%" cy="18%" r="96%">
-      <stop offset="0.000" stop-color="#ba915d" />
-      <stop offset="0.333" stop-color="#987243" />
-      <stop offset="0.667" stop-color="#725434" />
-      <stop offset="1.000" stop-color="#463625" />
     </radialGradient>
     <radialGradient id="kh-horseman-dark-leather" cx="76%" cy="18%" r="96%">
       <stop offset="0.000" stop-color="#a08156" />
@@ -78,11 +62,6 @@
       <stop offset="0.667" stop-color="#68492c" />
       <stop offset="1.000" stop-color="#443220" />
     </radialGradient>
-    <radialGradient id="kh-horseman-horse-light" cx="76%" cy="18%" r="96%">
-      <stop offset="0.000" stop-color="#e2bc86" />
-      <stop offset="0.500" stop-color="#c6935b" />
-      <stop offset="1.000" stop-color="#9d6439" />
-    </radialGradient>
     <radialGradient id="kh-horseman-rider-cloth" cx="77%" cy="16%" r="99%">
       <stop stop-color="#a6bc74" />
       <stop offset=".3" stop-color="#7e9d51" />
@@ -99,12 +78,6 @@
       <stop offset=".35" stop-color="#86a558" />
       <stop offset="1" stop-color="#496e35" />
     </radialGradient>
-    <clipPath id="kh-horseman-new-shirt-clip">
-      <path d="M230 124 Q242 117 257 123 Q274 126 282 145 L269 171 Q258 192 258 214 Q228 228 192 214 L198 184 Q208 147 230 124Z" />
-    </clipPath>
-    <clipPath id="kh-horseman-new-pants-clip">
-      <path d="M195 207 Q224 217 252 214 L285 234 C298 241 297 253 288 267 L275 292 L247 282 L261 256 Q231 253 202 242 Q181 235 185 221Z" />
-    </clipPath>
   </defs>
   <g id="kh-far-legs-and-tail">
     <path d="M117 237 C65 230 39 269 40 318 C42 354 25 369 14 371 Q31 390 52 366 C70 345 62 314 77 286 Q91 263 123 262Z" fill="url(#kh-horseman-horse-hair)" />
@@ -115,10 +88,8 @@
   </g>
   <g id="kh-horse">
     <path d="M132 225 C167 210 213 213 258 222 Q297 228 322 218 C346 219 365 248 359 280 C354 315 326 334 291 335 L205 332 Q160 333 127 312 C95 292 94 247 132 225Z" fill="url(#kh-horseman-horse-body)" />
-    <path d="M123 263 Q133 244 156 242 Q181 244 191 270 Q200 299 187 329 Q152 326 127 309 C112 298 111 279 123 263Z" fill="url(#kh-horseman-horse-rear)" opacity=".4" />
     <path d="M271 225 Q307 202 328 171 Q350 139 389 126 L402 145 Q371 181 354 224 L341 271Z" fill="url(#kh-horseman-horse-hair)" />
     <path d="M277 258 Q291 219 324 187 Q355 143 390 130 Q406 122 424 132 L481 176 Q491 188 484 207 Q474 218 460 207 L436 191 L413 187 Q390 224 387 264 L384 284 Q416 299 432 322 Q451 358 458 402 L462 418 L442 423 L435 402 Q429 361 412 340 Q383 326 355 327 Q344 343 326 336 Q292 315 277 258Z" fill="url(#kh-horseman-horse-neck)" />
-    <path d="M332 215 Q358 174 392 145 Q365 179 356 222 Q350 260 366 295 Q333 282 332 248Z" fill="url(#kh-horseman-horse-light)" opacity=".35" />
     <path d="M176 300 Q203 310 199 337 L189 371 Q209 395 243 411 L262 432 L247 444 L228 426 Q191 412 169 384 Q162 375 166 361 L168 327Z" fill="url(#kh-horseman-horse-body)" />
     <path d="M238 423 L261 428 L276 445 Q254 451 237 440Z" fill="url(#kh-horseman-hoof)" />
     <path d="M439 407 L462 411 L477 434 Q457 439 440 425Z" fill="url(#kh-horseman-hoof)" />
@@ -126,49 +97,28 @@
     <path d="M395 133 Q389 114 400 101 L409 130Z" fill="url(#kh-horseman-horse-hair)" />
     <path d="M406 130 L411 101 Q425 110 421 132Z" fill="url(#kh-horseman-horse-hair)" />
     <ellipse cx="409" cy="151" rx="5" ry="6" fill="#2b2b20" />
-    <ellipse cx="477" cy="185" rx="4" ry="5" fill="#453123" />
   </g>
   <g id="kh-saddle-and-bridle">
     <path d="M160 223 Q218 215 282 232 L285 290 Q242 326 172 299Z" fill="url(#kh-horseman-blanket)" />
-    <path d="M166 229 L177 291 Q235 315 279 286" stroke="#c6c18c" stroke-width="7" stroke-linejoin="round" />
-    <path d="M197 239 L217 243 L214 335 L195 330Z" fill="url(#kh-horseman-dark-leather)" />
     <path d="M170 216 Q220 222 253 228 Q274 218 287 228 L285 245 Q265 251 248 244 Q212 240 170 235Z" fill="url(#kh-horseman-saddle)" />
-    <path d="M397 133 Q404 156 422 168 L458 191 M464 168 L451 186 Q467 199 483 201" stroke="url(#kh-horseman-dark-leather)" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" />
+    <path d="M464 168 L451 186 Q467 199 483 201" stroke="url(#kh-horseman-dark-leather)" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" />
     <path d="M459 192 C416 223 371 219 338 185" stroke="url(#kh-horseman-dark-leather)" stroke-width="6" stroke-linecap="round" />
   </g>
   <g id="kh-horseman-rider">
     <path d="M265 132 Q277 131 286 147 L303 166 L329 172 L335 182 L325 187 L291 179 Q273 166 256 151Z" fill="url(#kh-horseman-rider-cloth)" />
     <path d="M309 168 L331 173 Q343 174 344 182 Q342 190 333 188 L315 183Z" fill="url(#kh-horseman-archer-skin)" />
     <path d="M195 207 Q224 217 252 214 L285 234 C298 241 297 253 288 267 L275 292 L247 282 L261 256 Q231 253 202 242 Q181 235 185 221Z" fill="url(#kh-horseman-rider-pants)" id="kh-horseman-new-breeches" />
-    <g clip-path="url(#kh-horseman-new-pants-clip)">
-      <path d="M273 248 Q286 251 286 260 L277 276 Q268 276 261 270 L268 252Z" fill="url(#kh-horseman-leather)" />
-    </g>
     <path d="M249 277 L276 287 L257 324 Q256 329 264 331 L273 334 Q280 338 275 344 Q262 350 239 346 L228 340 Q225 337 228 327Z" fill="url(#kh-horseman-dark-leather)" id="kh-horseman-new-riding-boot" />
-    <path d="M248 277 L277 287 L273 298 L244 288Z" fill="url(#kh-horseman-leather)" />
-    <path d="M228 336 Q249 347 277 338 L277 344 Q258 352 239 347 L229 342Z" fill="#342f23" />
-    <path d="M278 241 Q274 284 247 331" fill="none" stroke="url(#kh-horseman-saddle)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" />
-    <path d="M238 331 L235 340 Q248 350 268 345 L272 335" fill="none" stroke="#424838" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
     <path d="M230 124 Q242 117 257 123 Q274 126 282 145 L269 171 Q258 192 258 214 Q228 228 192 214 L198 184 Q208 147 230 124Z" fill="url(#kh-horseman-rider-cloth)" id="kh-horseman-new-tunic" />
-    <g clip-path="url(#kh-horseman-new-shirt-clip)">
-      <path d="M230 122 L244 127 Q229 153 224 177 L214 214 L194 217 Q198 160 230 122Z" fill="url(#kh-horseman-leather)" />
-      <path d="M254 126 L269 129 L278 147 L263 170 L255 207 L239 215 Q243 166 254 126Z" fill="url(#kh-horseman-dark-leather)" />
-      <path d="M226 163 L247 169" fill="none" stroke="url(#kh-horseman-dark-leather)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
-      <path d="M191 203 Q226 215 260 204 L259 216 Q230 230 188 216Z" fill="url(#kh-horseman-dark-leather)" />
-    </g>
+    <path d="M193 205 Q225 217 259 206 L258 215 Q226 228 192 215Z" fill="#466036" />
     <path d="M244 114 L265 116 L264 132 Q255 139 241 129Z" fill="url(#kh-horseman-archer-skin)" />
-    <path d="M237 123 L250 133 L242 147 L226 130Z" fill="url(#kh-horseman-rider-sleeve)" />
-    <path d="M268 124 L258 135 L268 143 L277 132Z" fill="url(#kh-horseman-rider-cloth)" />
     <path d="M271 157 Q281 163 291 172 L327 179 Q339 177 345 184 C353 193 345 200 336 199 L285 190 Q271 185 258 174Z" fill="url(#kh-horseman-archer-skin)" id="kh-horseman-new-forearm" />
     <path d="M243 128 Q256 121 268 136 L287 160 L273 181 Q258 176 248 161 L235 143Z" fill="url(#kh-horseman-rider-sleeve)" />
-    <path d="M242 128 Q255 121 268 135 L274 146 Q257 151 243 144 L235 136Z" fill="url(#kh-horseman-leather)" />
-    <path d="M293 173 L317 177 L314 195 L289 190Z" fill="url(#kh-horseman-dark-leather)" />
     <g id="kh-horseman-new-head">
       <ellipse cx="258" cy="88" rx="39" ry="40.5" fill="url(#kh-horseman-archer-skin)" />
-      <ellipse cx="255" cy="80" rx="5.5" ry="6.1" fill="url(#kh-horseman-archer-eye-rim)" />
-      <ellipse cx="276" cy="81" rx="4.7" ry="5.6" fill="url(#kh-horseman-archer-eye-rim)" />
-      <ellipse cx="255.6" cy="80.3" rx="3.9" ry="4.8" fill="url(#kh-horseman-archer-eye-paint)" />
-      <ellipse cx="276.4" cy="81.2" rx="3.4" ry="4.4" fill="url(#kh-horseman-archer-eye-paint)" />
-      <path d="M255 106 Q265 105 274 106 L274 109 Q264 108 255 109Z" fill="#685034" />
+      <ellipse cx="255.6" cy="80.3" rx="4.3" ry="5" fill="#243328" />
+      <ellipse cx="276.4" cy="81.2" rx="3.9" ry="4.8" fill="#243328" />
+      <path d="M256 107 H273" stroke="#685034" stroke-width="3.2" stroke-linecap="round" />
     </g>
   </g>
 </svg>

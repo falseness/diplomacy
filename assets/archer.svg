@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="ar-archer-title ar-archer-desc">
-  <title id="ar-archer-title">Archer</title>
-  <desc id="ar-archer-desc">Simplified shaded archer. An oversized recurve bow, large arrow, short cape and broad leather sash distinguish the unit at small game scales. Original human proportions and hand positions. Transparent editable vectors.</desc>
+  <title id="ar-archer-title">Archer — classic equipment, miniature shading</title>
+  <desc id="ar-archer-desc">Original shorter angled wooden bow, red grip, diagonal pale bowstring and compact arrow. Simplified green shirt and trousers, original character proportions, shared miniature face and smooth shading. Transparent 512 by 512 vector artwork.</desc>
   <defs>
     <clipPath id="ar-noob-legs-clip">
       <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" />
@@ -20,11 +20,6 @@
       <stop offset=".38" stop-color="#edc88a" />
       <stop offset=".7" stop-color="#cda66c" />
       <stop offset="1" stop-color="#916c43" />
-    </radialGradient>
-    <radialGradient id="ar-noob-palm" cx="66%" cy="31%" r="80%">
-      <stop stop-color="#f7d99b" />
-      <stop offset=".5" stop-color="#deb97b" />
-      <stop offset="1" stop-color="#967142" />
     </radialGradient>
     <linearGradient id="ar-noob-left-arm" gradientUnits="userSpaceOnUse" x1="105" y1="255" x2="138" y2="268">
       <stop stop-color="#a78151" />
@@ -56,10 +51,10 @@
       <stop offset="1" stop-color="#305b2a" />
     </radialGradient>
     <radialGradient id="ar-noob-pants-paint" cx="75%" cy="14%" r="101%">
-      <stop stop-color="#b69968" />
-      <stop offset=".36" stop-color="#9e8055" />
-      <stop offset=".76" stop-color="#7b6040" />
-      <stop offset="1" stop-color="#56452f" />
+      <stop stop-color="#8eaa5c" />
+      <stop offset=".36" stop-color="#6e9245" />
+      <stop offset=".76" stop-color="#527a34" />
+      <stop offset="1" stop-color="#365d2b" />
     </radialGradient>
     <radialGradient id="ar-noob-cloth-light">
       <stop stop-color="#ead19a" stop-opacity=".29" />
@@ -94,40 +89,24 @@
       <stop offset=".85" stop-color="#6e7443" />
       <stop offset="1" stop-color="#494d2c" />
     </linearGradient>
-    <linearGradient id="ar-noob-buckle-paint" x1="0" y1="0" x2="1" y2=".7">
-      <stop stop-color="#b78937" />
-      <stop offset=".25" stop-color="#d5a64b" />
-      <stop offset=".66" stop-color="#ffe08a" />
-      <stop offset="1" stop-color="#b88432" />
+    <linearGradient id="classic-bow-wood" x1="0" y1="0" x2="1" y2=".15">
+      <stop stop-color="#4e3a1e" />
+      <stop offset=".42" stop-color="#76552a" />
+      <stop offset=".72" stop-color="#a98142" />
+      <stop offset="1" stop-color="#684b25" />
     </linearGradient>
-    <radialGradient id="ar-archer-leather" cx="74%" cy="20%" r="94%">
-      <stop stop-color="#c6a06b" />
-      <stop offset=".42" stop-color="#99713f" />
-      <stop offset="1" stop-color="#493a29" />
-    </radialGradient>
-    <radialGradient id="ar-archer-cape" cx="78%" cy="14%" r="94%">
-      <stop stop-color="#748f61" />
-      <stop offset=".42" stop-color="#476341" />
-      <stop offset="1" stop-color="#253d2d" />
-    </radialGradient>
-    <linearGradient id="ar-archer-bow" x1="0" y1="0" x2="1" y2=".1">
-      <stop stop-color="#76502b" />
-      <stop offset=".45" stop-color="#c08a43" />
-      <stop offset=".7" stop-color="#e3b76e" />
-      <stop offset="1" stop-color="#a87137" />
+    <linearGradient id="classic-red-grip" x1="0" y1="0" x2="1" y2=".1">
+      <stop stop-color="#681e1a" />
+      <stop offset=".5" stop-color="#ac3a2a" />
+      <stop offset=".75" stop-color="#c45237" />
+      <stop offset="1" stop-color="#84251d" />
     </linearGradient>
-    <linearGradient id="ar-archer-metal" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#e4e8d5" />
-      <stop offset=".45" stop-color="#b8c9ba" />
-      <stop offset="1" stop-color="#536d64" />
+    <linearGradient id="classic-arrow-metal" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#e4e8e0" />
+      <stop offset=".46" stop-color="#c0cbd0" />
+      <stop offset="1" stop-color="#82979e" />
     </linearGradient>
   </defs>
-  <g id="ar-cape-and-quiver">
-    <path d="M184 139 Q153 165 156 215 L143 359 Q185 374 225 345 L225 146Z" fill="url(#ar-archer-cape)" />
-    <path d="M318 133 L348 142 L353 254 Q335 268 318 254Z" fill="url(#ar-archer-leather)" />
-    <path d="M331 157 L337 98 M350 156 L363 91" stroke="#655333" stroke-width="7" stroke-linecap="round" />
-    <path d="M337 76 L325 94 L324 119 L337 108 L346 120 L349 94Z M365 68 L353 86 L349 112 L362 101 L372 113 L378 89Z" fill="#e6d9ae" />
-  </g>
   <g id="ar-unit-body">
     <g id="ar-noob-boots" clip-path="url(#ar-noob-legs-clip)">
       <path id="ar-noob-original-legs-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#ar-noob-boot-left)" />
@@ -153,14 +132,8 @@
       <path d="M239 140 Q255 137 273 141 L256 158Z" fill="#b08b48" />
     </g>
   </g>
-  <g id="ar-leather-gear">
-    <path d="M184 141 Q170 155 165 176 L198 198 L218 156Z" fill="url(#ar-archer-cape)" />
-    <path d="M308 139 L327 153 L209 291 L187 288Z" fill="url(#ar-archer-leather)" />
-    <path d="M183 372 H227 V462 Q224 483 207 485 Q186 482 183 462Z M286 372 H330 V462 Q327 483 310 485 Q289 482 286 462Z" fill="url(#ar-archer-leather)" />
-  </g>
   <g id="ar-belt">
-    <path d="M182 282 Q256 291 330 282 V302 Q256 312 182 302Z" fill="url(#ar-noob-belt-paint)" />
-    <path d="M247 286 H265 V303 H247Z" fill="url(#ar-noob-buckle-paint)" />
+    <path d="M182.2 285 Q256 291 329.8 285 V297 Q256 303 182.2 297Z" fill="url(#ar-noob-belt-paint)" />
   </g>
   <g id="ar-unit-head">
     <circle id="ar-noob-original-head-silhouette" cx="256" cy="91" r="62.5" fill="url(#ar-noob-skin)" />
@@ -168,21 +141,14 @@
     <ellipse cx="277" cy="73" rx="7.2" ry="8.5" fill="#243328" />
     <path d="M242 114 H270" stroke="#6b5334" stroke-width="5" stroke-linecap="round" />
   </g>
-  <g id="ar-longbow">
-    <path d="M158 88 L158 473" stroke="#423825" stroke-width="8" stroke-linecap="round" />
-    <path d="M158 88 L158 473" stroke="#ead9af" stroke-width="5" stroke-linecap="round" />
-    <path d="M158 88 C114 124 93 193 95 263 L96 320 C99 387 117 440 158 473" stroke="#513b27" stroke-width="25" stroke-linecap="round" />
-    <path d="M158 88 C114 124 93 193 95 263 L96 320 C99 387 117 440 158 473" stroke="url(#ar-archer-bow)" stroke-width="18" stroke-linecap="round" />
-    <path d="M96 277 L96 313" stroke="#5b432c" stroke-width="27" stroke-linecap="round" />
-    <ellipse cx="108" cy="295" rx="20" ry="18" fill="url(#ar-noob-palm)" />
+  <g id="classic-bow">
+    <path d="M164.792 108.575L214.954 368.251" stroke="#eee5c9" stroke-width="7" />
+    <path d="M141.818 322.811C158.923 336.377 181.803 346.392 221.468 361.938L216.905 373.581C177.554 358.157 152.865 347.533 134.048 332.609C115.01 317.509 102.378 298.349 86.0773 266.986C83.3472 261.733 82.1998 255.79 82.7786 249.898C86.2342 214.722 90.8272 192.237 102.877 171.136C114.787 150.28 133.748 131.229 164.53 102.268L173.099 111.375C142.071 140.568 124.562 158.379 113.736 177.337C103.05 196.05 98.6411 216.332 95.2237 251.121C94.8817 254.601 95.5603 258.116 97.1731 261.22C113.294 292.237 124.935 309.42 141.818 322.811Z" fill="url(#classic-bow-wood)" stroke="#4a371e" stroke-width="1.5" stroke-linejoin="round" />
+    <path d="M112.807 300.728C88.1085 269.747 84.9824 246.849 95.0286 208.632" stroke="url(#classic-red-grip)" stroke-width="13" />
   </g>
-  <g id="ar-arrow">
-    <path d="M347 347 L469 247" stroke="#57452e" stroke-width="11" stroke-linecap="round" />
-    <path d="M347 347 L469 247" stroke="#d0ac69" stroke-width="6" stroke-linecap="round" />
-    <path d="M343 332 L325 348 L347 350 L354 371 L372 352 L362 335Z" fill="#7d4d32" />
-    <path d="M343 332 L325 348 L347 350 L362 335Z" fill="#c7a16a" />
-    <path d="M446 246 L496 220 L475 272 L467 253Z" fill="url(#ar-archer-metal)" stroke="#5b7267" stroke-width="3" stroke-linejoin="round" />
-    <path d="M496 220 L475 272 L467 253Z" fill="#6d8879" />
-    <ellipse cx="405" cy="296" rx="18" ry="18" fill="url(#ar-noob-palm)" />
+  <g id="classic-arrow">
+    <path d="M353.404 297.399L364.81 301.084L367.221 304.973L369.636 308.869L367.867 320.724L347.951 333.073L349.606 321.033L347.305 317.322L345.009 313.618L333.488 309.747L353.404 297.399Z" fill="url(#classic-red-grip)" stroke="#6f251c" stroke-width="1.5" stroke-linejoin="round" />
+    <path d="M445.315 261.462L349.655 320.776L345.165 313.535L440.825 254.221L445.315 261.462Z" fill="url(#classic-bow-wood)" stroke="#4a371e" stroke-width="1.5" stroke-linejoin="round" />
+    <path d="M464.388 244.622L426.648 244.15L443.266 257.718L448.053 278.67L464.388 244.622Z" fill="url(#classic-arrow-metal)" stroke="#667d85" stroke-width="2" stroke-linejoin="round" />
   </g>
 </svg>
