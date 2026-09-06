@@ -31,13 +31,15 @@ let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + 
 for (let i = 0; i < grassHexImages.length; ++i)
     assets[grassHexImages[i]] = new Image()
 let imagesCountLoaded = 0
-let images = ['town', 'farm', 'noob', 'archer',
+let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
-        'mountain', 'lake', 'sea', 'goldmine', 'bush'].concat(grassHexImages)
+        'mountain', 'lake', 'sea', 'goldmine', 'bush']
+let images = spriteImages.concat(grassHexImages)
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         ++imagesCountLoaded
+        cachedImages[images[i]] = cacheImage(images[i])
     }
 }
 
@@ -79,9 +81,16 @@ function loadAssets() {
     assets.undo.src = "assets/undo.svg"
     
     assets.gold.src = "assets/gold.svg"
-    
-    for (let i = 0; i < images.length; ++i) {
-        assets[images[i]].src = "assets/" + images[i] + ".svg"
+
+    loadSprites()
+    for (let i = 0; i < grassHexImages.length; ++i) {
+        assets[grassHexImages[i]].src = "assets/" + grassHexImages[i] + ".svg"
+    }
+}
+function loadSprites() {
+    let spritesFolder = otherSettings.usePolishedSprites ? "sprites" : "spritesOld"
+    for (let i = 0; i < spriteImages.length; ++i) {
+        assets[spriteImages[i]].src = "assets/" + spritesFolder + "/" + spriteImages[i] + ".svg"
     }
 }
 function waitForImagesLoad() {

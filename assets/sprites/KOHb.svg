@@ -96,7 +96,10 @@
     <path d="M457 173 Q474 169 483 180 Q490 193 483 207 Q470 216 458 203 L448 190Z" fill="url(#kh-horseman-horse-muzzle)" />
     <path d="M395 133 Q389 114 400 101 L409 130Z" fill="url(#kh-horseman-horse-hair)" />
     <path d="M406 130 L411 101 Q425 110 421 132Z" fill="url(#kh-horseman-horse-hair)" />
-    <ellipse cx="409" cy="151" rx="5" ry="6" fill="#2b2b20" />
+    <g id="KOHb-horse-eye">
+      <ellipse cx="409" cy="151" rx="5" ry="6" fill="#f5ebd7" />
+      <ellipse cx="410" cy="151" rx="2.6" ry="3.8" fill="#211f18" />
+    </g>
   </g>
   <g id="kh-saddle-and-bridle">
     <path d="M160 223 Q218 215 282 232 L285 290 Q242 326 172 299Z" fill="url(#kh-horseman-blanket)" />
@@ -116,8 +119,14 @@
     <path d="M243 128 Q256 121 268 136 L287 160 L273 181 Q258 176 248 161 L235 143Z" fill="url(#kh-horseman-rider-sleeve)" />
     <g id="kh-horseman-new-head">
       <ellipse cx="258" cy="88" rx="39" ry="40.5" fill="url(#kh-horseman-archer-skin)" />
-      <ellipse cx="255.6" cy="80.3" rx="4.3" ry="5" fill="#243328" />
-      <ellipse cx="276.4" cy="81.2" rx="3.9" ry="4.8" fill="#243328" />
+      <g id="KOHb-eye-1">
+      <ellipse cx="255.6" cy="80.3" rx="5.16" ry="6" fill="#fff8e9" />
+      <circle cx="256.25" cy="80.3" r="2.69" fill="#19251f" />
+    </g>
+      <g id="KOHb-eye-2">
+      <ellipse cx="276.4" cy="81.2" rx="4.68" ry="5.76" fill="#fff8e9" />
+      <circle cx="277.05" cy="81.2" r="2.44" fill="#19251f" />
+    </g>
       <path d="M256 107 H273" stroke="#685034" stroke-width="3.2" stroke-linecap="round" />
     </g>
   </g>
