@@ -222,6 +222,10 @@ function projectedCombatLabel(boardValues, globalValue) {
   return score / 1000;
 }
 
+function modelCombatTarget(score) {
+  return score >= 0 ? score : score * 0.5;
+}
+
 function swapProjectedCombatSides(boardValues) {
   const swapped = boardValues.slice();
   const sidePairs = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11], [12, 13]];
@@ -376,8 +380,8 @@ function makeBatch(seed, game) {
     boardValues.push(...board, ...swapProjectedCombatSides(board));
     globalValues.push(globalValue, -globalValue);
     policies.push(policy, policy.slice());
-    labels.push(projectedCombatLabel(board, globalValue),
-      -projectedCombatLabel(board, globalValue));
+    labels.push(modelCombatTarget(projectedCombatLabel(board, globalValue)),
+      modelCombatTarget(-projectedCombatLabel(board, globalValue)));
   }
   const sampleCount = labels.length;
   return {
@@ -520,10 +524,10 @@ function runtimeCombatTeacherLabel(vectorizedGrid) {
   return {
     board: projected.board,
     globalValue: projected.globalValue,
-    label: projectedCombatLabel(
+    label: modelCombatTarget(projectedCombatLabel(
       projected.board,
       projected.globalValue
-    )
+    ))
   };
 }
 
@@ -814,14 +818,15 @@ async function fitRuntimeCombatTeacherBatch(
   model,
   seed,
   stageIndex,
-  workerPool
+  workerPool,
+  epochs
 ) {
   const runtimeBatch = await makeRuntimeCombatTeacherBatch(seed, stageIndex, workerPool);
   if (!runtimeBatch) {
     return null;
   }
   try {
-    return await trainRuntimeCombatBatch(model, runtimeBatch);
+    return await trainRuntimeCombatBatch(model, runtimeBatch, epochs);
   } finally {
     runtimeBatch.board.dispose();
     runtimeBatch.global.dispose();
@@ -830,12 +835,31 @@ async function fitRuntimeCombatTeacherBatch(
   }
 }
 
-function trainRuntimeCombatBatch(model, runtimeBatch) {
-  return model.fit(
+const runtimeValueTrainers = new WeakMap();
+
+function runtimeValueTrainer(model) {
+  let trainer = runtimeValueTrainers.get(model);
+  if (!trainer) {
+    trainer = tf.model({
+      inputs: model.inputs,
+      outputs: model.getLayer('combat_value').output,
+      name: 'runtime_combat_value_trainer'
+    });
+    trainer.compile({
+      optimizer: tf.train.adam(0.001),
+      loss: 'meanSquaredError'
+    });
+    runtimeValueTrainers.set(model, trainer);
+  }
+  return trainer;
+}
+
+function trainRuntimeCombatBatch(model, runtimeBatch, epochs = 1) {
+  return runtimeValueTrainer(model).fit(
     [runtimeBatch.board, runtimeBatch.global],
-    modelTargets(runtimeBatch),
+    runtimeBatch.labels,
     {
-      epochs: 1,
+      epochs,
       batchSize: 32,
       shuffle: false,
       verbose: 0
@@ -844,18 +868,9 @@ function trainRuntimeCombatBatch(model, runtimeBatch) {
 }
 
 async function pretrainCombatValueModel(model) {
-  const valueTrainer = tf.sequential({
-    layers: [tf.layers.dense({
-      units: 1,
-      useBias: false,
-      activation: 'linear',
-      inputShape: [3 * 3 * 21],
-      kernelInitializer: 'zeros'
-    })]
-  });
-  valueTrainer.compile({ optimizer: tf.train.adam(0.01), loss: 'meanSquaredError' });
   const featureCount = 3 * 3 * 21;
   const boards = [new Array(featureCount).fill(0)];
+  const globals = [[0]];
   for (let featureIndex = 0; featureIndex < featureCount; featureIndex += 1) {
     const positive = new Array(featureCount).fill(0);
     const negative = new Array(featureCount).fill(0);
@@ -865,26 +880,29 @@ async function pretrainCombatValueModel(model) {
     positive[featureIndex] = magnitude;
     negative[featureIndex] = -magnitude;
     boards.push(positive, negative);
+    globals.push([0], [0]);
   }
-  const labels = boards.map((board) => [
-    projectedCombatLabel(board, 0)
-  ]);
-  const boardTensor = tf.tensor2d(boards);
+  const labels = boards.map((board) => [projectedCombatLabel(board, 0)]);
+  const boardTensor = tf.tensor4d(boards.flat(), [boards.length, 3, 3, 21]);
+  const globalTensor = tf.tensor2d(globals);
   const labelTensor = tf.tensor2d(labels);
+  const pretrainer = tf.model({
+    inputs: model.inputs,
+    outputs: model.getLayer('value_score').output,
+    name: 'combat_score_pretrainer'
+  });
+  pretrainer.compile({ optimizer: tf.train.adam(0.01), loss: 'meanSquaredError' });
   try {
-    await valueTrainer.fit(boardTensor, labelTensor, {
-      epochs: 5000,
-      batchSize: boards.length,
-      shuffle: false,
-      verbose: 0
-    });
+    await pretrainer.fit(
+      [boardTensor, globalTensor],
+      labelTensor,
+      { epochs: 5000, batchSize: boards.length, shuffle: false, verbose: 0 }
+    );
   } finally {
     boardTensor.dispose();
+    globalTensor.dispose();
     labelTensor.dispose();
   }
-  const learnedWeights = valueTrainer.layers[0].getWeights();
-  model.getLayer('value_linear').setWeights(learnedWeights);
-  valueTrainer.dispose();
 }
 
 function replaceDirectory(source, destination) {
@@ -2028,14 +2046,6 @@ async function main() {
     };
     if (!options.resume && state.completedGames === 0) {
       await pretrainCombatValueModel(model);
-      for (let pretrain = 0; pretrain < 1; pretrain += 1) {
-        await fitRuntimeCombatTeacherBatch(
-          model,
-          state.seed + 50000 + pretrain * 173,
-          state.curriculum.currentStageIndex,
-          null
-        );
-      }
     }
     runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
     scheduleRuntimeBatchPrefetch(state.completedGames);
@@ -2111,6 +2121,7 @@ async function main() {
               ) || history;
             }
           }
+          await pretrainCombatValueModel(model);
           predictionTensor = model.predict([batch.board, batch.global]);
           prediction = Array.from(await predictionValueTensor(predictionTensor).data());
         } finally {

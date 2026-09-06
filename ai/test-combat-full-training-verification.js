@@ -113,10 +113,13 @@ async function assertModelControls(finalWeightsPath) {
   const zeroModel = createAlphaZeroLiteCombatModel({ seed: 780780 }).model;
   const randomModel = createAlphaZeroLiteCombatModel({ seed: 780781 }).model;
   try {
-    check(realModel.getLayer('value_hidden').getConfig().activation === 'relu' &&
-        realModel.getLayer('value_deep').trainable === true &&
+    check(realModel.getLayer('value_score').trainable === true &&
+        realModel.getLayer('value_nonlinear').getConfig().alpha === 0.5 &&
         realModel.getLayer('combat_value').getConfig().activation === 'linear',
       'trained checkpoint does not use the nonlinear learned value head');
+    check(!realModel.layers.some((layer) => layer.name === 'value_linear' ||
+        layer.name === 'value_combined'),
+      'trained checkpoint still contains a direct linear value bypass');
     const zeroWeights = zeroModel.getWeights().map((weight) => tf.zerosLike(weight));
     zeroModel.setWeights(zeroWeights);
     zeroWeights.forEach((weight) => weight.dispose());
@@ -232,6 +235,8 @@ function assertNoComparisonShortcut() {
   check(!runnerSource.includes('fitRuntimeCombatValueBatch') &&
       !runnerSource.includes('solveLinearSystem'),
     'cloud runner still installs a closed-form combat value head');
+  check(!runnerSource.includes("getLayer('value_linear')"),
+    'cloud runner still installs a direct linear combat score');
 }
 
 function assertPassingRun() {
@@ -322,7 +327,10 @@ function assertPassingRun() {
     'manifest does not identify the progress artifact');
   check(manifest.artifacts.finalModel === path.join('final', PASS_RUN_ID),
     'manifest does not identify the final model artifact');
-  const trainingSeeds = [128079, 128080];
+  const trainingSeeds = [];
+  for (let trainingStep = 1; trainingStep <= 15; trainingStep += 1) {
+    trainingSeeds.push(78078 + trainingStep * 1009);
+  }
   progress.filter((record) =>
     record.trainingStep % 2 === 0 || record.trainingStep === 15
   ).forEach((record) => {

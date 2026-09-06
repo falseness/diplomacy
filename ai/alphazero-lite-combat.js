@@ -119,41 +119,27 @@ function createAlphaZeroLiteCombatModel(options = {}) {
     name: metadata.outputs.policy
   }).apply(policyHidden);
 
-  const valuePool = tf.layers.flatten({
-    name: 'value_flatten'
-  }).apply(trunk);
   const valueBoardFeatures = tf.layers.flatten({
     name: 'value_board_features'
   }).apply(boardInput);
   const valueMerged = tf.layers.concatenate({
     name: 'value_context'
-  }).apply([valuePool, valueBoardFeatures, globalInput]);
-  const valueHidden = tf.layers.dense({
-    units: Math.max(64, filters * 4),
-    activation: 'relu',
-    kernelInitializer: seededInitializer('glorotUniform', seed, 201),
-    name: 'value_hidden'
-  }).apply(valueMerged);
-  const valueLinear = tf.layers.dense({
-    units: 1,
-    useBias: false,
-    kernelInitializer: seededInitializer('glorotUniform', seed, 202),
-    name: 'value_linear'
-  }).apply(valueBoardFeatures);
-  const valueDeep = tf.layers.dense({
+  }).apply([valueBoardFeatures, globalInput]);
+  const valueScore = tf.layers.dense({
     units: 1,
     activation: 'linear',
+    useBias: false,
     kernelInitializer: 'zeros',
-    biasInitializer: 'zeros',
-    name: 'value_deep'
-  }).apply(valueHidden);
-  const valueCombined = tf.layers.add({
-    name: 'value_combined'
-  }).apply([valueLinear, valueDeep]);
+    name: 'value_score'
+  }).apply(valueMerged);
+  const valueNonlinear = tf.layers.leakyReLU({
+    alpha: 0.5,
+    name: 'value_nonlinear'
+  }).apply(valueScore);
   const valueOutput = tf.layers.activation({
     activation: 'linear',
     name: metadata.outputs.value
-  }).apply(valueCombined);
+  }).apply(valueNonlinear);
 
   const model = tf.model({
     inputs: [boardInput, globalInput],
