@@ -72,6 +72,12 @@ class GameMap {
         for (let i = 0; i < this.players.length; ++i) {
             unpacker.setPlayerTimerByIndex(i, timer)
         }
+        if (!isClassicTimer) {
+            for (let i = 1; i < this.players.length; ++i) {
+                const packedTimer = JSON.parse(unpacker.getPlayerTimerByIndex(i))
+                recalculatePlayerTimer(i, packedTimer)
+            }
+        }
 
         // refactoring is needed
         for (let i = 1; i < players.length; ++i) {
