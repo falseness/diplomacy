@@ -62,6 +62,10 @@ const command = [
   '1',
   '--round-limit',
   '1',
+  '--action-limit',
+  '1',
+  '--command-limit',
+  '1',
   '--map-limit',
   '1',
   '--output',
@@ -93,7 +97,17 @@ assert(
   report.checkpoint.gameplayInference.positions > 0,
   'checkpoint-backed prediction path was not exercised'
 );
+assert(
+  report.checkpoint.gameplayInference.channelAdaptations > 0,
+  'current runtime vectors were not adapted to the historical checkpoint'
+);
 assert(report.summary.nonWins > 0, 'non-wins were not counted');
+assert(report.config.actionLimit === 1, 'action limit was not recorded');
+assert(report.config.commandLimit === 1, 'command limit was not recorded');
+assert(report.games.every(game => game.limits.actionLimit === 1),
+  'action limit was not applied to every game');
+assert(report.games.every(game => game.limits.commandLimit === 1),
+  'command limit was not applied to every game');
 assert(report.failedGames.length + report.crashes.length > 0, 'non-wins were not retained');
 assert(report.repository.commit, 'repository commit was not recorded');
 assert(report.invocation.argv.some(value =>

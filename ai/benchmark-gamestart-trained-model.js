@@ -36,6 +36,8 @@ const DEFAULT_FAILURE_DIR =
 const DEFAULT_SEEDS_PER_SIDE = 1;
 const DEFAULT_FIRST_SEED = 37002;
 const DEFAULT_ROUND_LIMIT = 1200;
+const DEFAULT_ACTION_LIMIT = 30;
+const DEFAULT_COMMAND_LIMIT = 60;
 const DEFAULT_MIN_WIN_RATE = 1;
 function usage() {
   return [
@@ -46,6 +48,8 @@ function usage() {
     '  --seeds NUMBER          Seeds per candidate side and map (default: ' + DEFAULT_SEEDS_PER_SIDE + ')',
     '  --seed NUMBER           First deterministic seed (default: ' + DEFAULT_FIRST_SEED + ')',
     '  --round-limit NUMBER    Max nextTurn calls per game (default: ' + DEFAULT_ROUND_LIMIT + ')',
+    '  --action-limit NUMBER   Max actions per AI turn (default: ' + DEFAULT_ACTION_LIMIT + ')',
+    '  --command-limit NUMBER  Max commands scored per action (default: ' + DEFAULT_COMMAND_LIMIT + ')',
     '  --map-limit NUMBER      Limit covered 1v1 maps for smoke tests',
     '  --map-offset NUMBER     Skip covered 1v1 maps before applying --map-limit',
     '  --output PATH           JSON report path',
@@ -63,6 +67,8 @@ function parseArgs(argv) {
     seeds: DEFAULT_SEEDS_PER_SIDE,
     seed: DEFAULT_FIRST_SEED,
     roundLimit: DEFAULT_ROUND_LIMIT,
+    actionLimit: DEFAULT_ACTION_LIMIT,
+    commandLimit: DEFAULT_COMMAND_LIMIT,
     output: DEFAULT_OUTPUT,
     failureDir: DEFAULT_FAILURE_DIR,
     tasksPath: path.join(repoRoot, 'tasks.json'),
@@ -76,6 +82,8 @@ function parseArgs(argv) {
     '--seeds': 'seeds',
     '--seed': 'seed',
     '--round-limit': 'roundLimit',
+    '--action-limit': 'actionLimit',
+    '--command-limit': 'commandLimit',
     '--output': 'output',
     '--failure-dir': 'failureDir',
     '--tasks': 'tasksPath',
@@ -103,6 +111,8 @@ function parseArgs(argv) {
     'seeds',
     'seed',
     'roundLimit',
+    'actionLimit',
+    'commandLimit',
     'minWinRate',
     'mapLimit',
     'mapOffset'
@@ -120,6 +130,12 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(options.roundLimit) || options.roundLimit <= 0) {
     throw new Error('round-limit must be a positive integer');
+  }
+  if (!Number.isInteger(options.actionLimit) || options.actionLimit <= 0) {
+    throw new Error('action-limit must be a positive integer');
+  }
+  if (!Number.isInteger(options.commandLimit) || options.commandLimit <= 0) {
+    throw new Error('command-limit must be a positive integer');
   }
   if (options.minWinRate < 0 || options.minWinRate > 1) {
     throw new Error('min-win-rate must be between 0 and 1');
@@ -499,10 +515,11 @@ function boardSize(board) {
   };
 }
 
-function adaptBoard(board, expectedWidth, expectedHeight) {
+function adaptBoard(board, expectedWidth, expectedHeight, expectedChannels) {
   const size = boardSize(board);
   const channels = board[0][0].length;
-  if (size.width === expectedWidth && size.height === expectedHeight) {
+  if (size.width === expectedWidth && size.height === expectedHeight &&
+      channels === expectedChannels) {
     return board;
   }
   const adapted = new Array(expectedWidth);
@@ -511,7 +528,11 @@ function adaptBoard(board, expectedWidth, expectedHeight) {
     const sourceX = Math.min(size.width - 1, Math.floor(x * size.width / expectedWidth));
     for (let y = 0; y < expectedHeight; ++y) {
       const sourceY = Math.min(size.height - 1, Math.floor(y * size.height / expectedHeight));
-      adapted[x][y] = board[sourceX][sourceY].slice(0, channels);
+      const sourceCell = board[sourceX][sourceY];
+      adapted[x][y] = sourceCell.slice(0, expectedChannels);
+      while (adapted[x][y].length < expectedChannels) {
+        adapted[x][y].push(0);
+      }
     }
   }
   return adapted;
@@ -522,6 +543,7 @@ function createPredictor(model, stats) {
   return function predictFromCheckpoint(checkpointModel, vectors) {
     const expectedWidth = inputShape[1];
     const expectedHeight = inputShape[2];
+    const expectedChannels = inputShape[3];
     const adaptedBoards = [];
     const globals = [];
     for (const vector of vectors) {
@@ -531,14 +553,18 @@ function createPredictor(model, stats) {
       if (size.width !== expectedWidth || size.height !== expectedHeight) {
         stats.resizedInputs += 1;
       }
-      adaptedBoards.push(adaptBoard(board, expectedWidth, expectedHeight));
+      if (board[0][0].length !== expectedChannels) {
+        stats.channelAdaptations += 1;
+      }
+      adaptedBoards.push(adaptBoard(
+        board, expectedWidth, expectedHeight, expectedChannels));
       globals.push([globalValue]);
     }
     stats.calls += 1;
     stats.positions += vectors.length;
     const boardTensor = tf.tensor4d(
       adaptedBoards.flat(3),
-      [adaptedBoards.length, expectedWidth, expectedHeight, 78]
+      [adaptedBoards.length, expectedWidth, expectedHeight, expectedChannels]
     );
     const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
     try {
@@ -566,10 +592,14 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
   context.__task037MapInfo = mapInfo;
   context.__candidateSide = candidateSide;
   context.__roundLimit = options.roundLimit;
+  context.__actionLimit = options.actionLimit;
+  context.__commandLimit = options.commandLimit;
   return new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = true
     gameSettings.isOnline = false
+    gameSettings.aiActionLimit = __actionLimit
+    gameSettings.aiCommandLimit = __commandLimit
     entityInterface = {change() {}, hide() {}}
     townInterface = {change() {}, hide() {}}
     barrackInterface = {change() {}, hide() {}}
@@ -648,7 +678,11 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
       terminationReason,
       exactClassAssignment,
       genuineOpponentElimination: opponentEliminated,
-      limits: { roundLimit: __roundLimit },
+      limits: {
+        roundLimit: __roundLimit,
+        actionLimit: __actionLimit,
+        commandLimit: __commandLimit
+      },
       benchmarkPolicy: 'real gamestart map with runtime AIPlayerWithEconomy vs SimpleAiPlayerWithEconomy',
       players: players.slice(1).map(function(player, index) {
         return {
@@ -771,6 +805,7 @@ async function main() {
     calls: 0,
     positions: 0,
     resizedInputs: 0,
+    channelAdaptations: 0,
     scoring: 'checkpoint-model-direct'
   };
   try {
@@ -837,6 +872,8 @@ async function main() {
         seedsPerSidePerMap: options.seeds,
         seed: options.seed,
         roundLimit: options.roundLimit,
+        actionLimit: options.actionLimit,
+        commandLimit: options.commandLimit,
         mapOffset: options.mapOffset,
         mapLimit: options.mapLimit,
         minWinRate: options.minWinRate
