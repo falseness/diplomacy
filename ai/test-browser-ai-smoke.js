@@ -170,6 +170,8 @@ function createBrowserSmokeDom() {
 
 function loadIndexScripts(dom, scriptPaths) {
   const context = dom.getInternalVMContext();
+  check(vm.runInContext('typeof require', context) == 'undefined',
+    'browser smoke unexpectedly exposed the Node.js require API');
   for (const scriptPath of scriptPaths) {
     const source = readRepoFile(scriptPath);
     new vm.Script(source, { filename: scriptPath }).runInContext(context);
@@ -285,6 +287,13 @@ async function runTinyAiGame(context) {
 
   const browser = createBrowserSmokeDom();
   const context = loadIndexScripts(browser.dom, scriptPaths);
+  const nodeOnlyApiEvidence = {
+    requireType: vm.runInContext('typeof require', context),
+    processType: vm.runInContext('typeof process', context),
+    moduleType: vm.runInContext('typeof module', context)
+  };
+  check(Object.values(nodeOnlyApiEvidence).every(type => type == 'undefined'),
+    'browser context exposed a Node-only module API', nodeOnlyApiEvidence);
   const gameEvidence = await runTinyAiGame(context);
   const modelEvidence = browser.getModelEvidence();
 
@@ -320,7 +329,11 @@ async function runTinyAiGame(context) {
 
   console.log(JSON.stringify({
     status: 'passed',
+    entrypoint: 'index.html',
     loadedScriptCount: scriptPaths.length,
+    loadedBenchmarkScripts: scriptPaths.filter(scriptPath =>
+      scriptPath.includes('benchmark')),
+    nodeOnlyApiEvidence,
     model: modelEvidence,
     game: gameEvidence
   }, null, 2));
