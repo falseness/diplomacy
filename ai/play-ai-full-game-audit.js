@@ -1,6 +1,8 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
+const childProcess = require('child_process');
 
 function check(condition, message, details) {
   if (!condition) {
@@ -22,6 +24,45 @@ const repoRoot = path.resolve(__dirname, '..');
 const artifactDir = process.env.DIPLOMACY_PLAY_AI_ARTIFACT_DIR ||
   '/mnt/storage/diplomacy/browser-play-ai';
 const maxNextTurnClicks = Number(process.env.DIPLOMACY_PLAY_AI_MAX_NEXT_TURNS || 80);
+const modelJsonPath = path.join(repoRoot, 'models/play-ai/model.json');
+const modelWeightsPath = path.join(repoRoot, 'models/play-ai/weights.bin');
+const tensorflowBrowserPath = require.resolve('@tensorflow/tfjs/dist/tf.min.js');
+
+function sha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+check(fs.existsSync(modelJsonPath), 'packaged Play AI model.json is missing');
+check(fs.existsSync(modelWeightsPath), 'packaged Play AI weights.bin is missing');
+
+const checkpoint = {
+  modelJsonPath: path.relative(repoRoot, modelJsonPath),
+  modelJsonSha256: sha256(modelJsonPath),
+  weightsPath: path.relative(repoRoot, modelWeightsPath),
+  weightsSha256: sha256(modelWeightsPath),
+  weightsBytes: fs.statSync(modelWeightsPath).size
+};
+
+const repository = {
+  commit: childProcess.execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  }).trim(),
+  dirtyStatusBeforeTest: childProcess.execFileSync(
+    'git', ['status', '--short', '--untracked-files=all'], {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    }).trim().split('\n').filter(Boolean)
+};
+
+const modelProvenance = {
+  sourceRun: '/mnt/storage/diplomacy/final/task061-generated-retrain-20260906',
+  knownTrainingSeeds: '61000-61005',
+  validationSeeds: 'not recorded by the source run; no strength claim is made',
+  browserScenario: 'fixed hand-authored Play AI map; no random test seed',
+  randomizedControlSeedBase: 83083,
+  seedIntersections: 'none: fixed browser scenario and control seed 83083 do not overlap training seeds 61000-61005'
+};
 
 function contentType(filePath) {
   const ext = path.extname(filePath);
@@ -35,10 +76,12 @@ function contentType(filePath) {
 }
 
 function serveRepo() {
+  const requests = [];
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     const decodedPath = decodeURIComponent(url.pathname);
     const relativePath = decodedPath == '/' ? 'index.html' : decodedPath.slice(1);
+    requests.push(relativePath);
     const filePath = path.resolve(repoRoot, relativePath);
     if (!filePath.startsWith(repoRoot + path.sep) && filePath != repoRoot) {
       response.writeHead(403);
@@ -61,54 +104,32 @@ function serveRepo() {
       const address = server.address();
       resolve({
         server,
+        requests,
         url: `http://127.0.0.1:${address.port}/index.html?aiModelUrl=models/play-ai/model.json`
       });
     });
   });
 }
 
-function tfStubScript() {
-  return `
+function instrumentedTensorflowScript() {
+  return fs.readFileSync(tensorflowBrowserPath, 'utf8') + `
 window.__playAiBrowserModelSource = undefined;
 window.__playAiBrowserPredictionCalls = 0;
-window.tf = {
-  async loadLayersModel(source) {
-    window.__playAiBrowserModelSource = source;
-    return {
-      inputs: [{ shape: [null, null, null, 78] }],
-      predict(inputs) {
-        window.__playAiBrowserPredictionCalls += 1;
-        const count = inputs[0].values ? inputs[0].values.length : 1;
-        return {
-          arraySync() {
-            const result = [];
-            for (let index = 0; index < count; ++index) {
-              result.push([0.1 + index / 1000]);
-            }
-            return result;
-          },
-          dispose() {}
-        };
-      }
-    };
-  },
-  tensor3d(value) {
-    return { value, dispose() {} };
-  },
-  tensor(value) {
-    return { value, dispose() {} };
-  },
-  stack(values) {
-    return { values, dispose() {} };
-  },
-  tidy(callback) {
-    return callback();
-  },
-  train: {
-    adam() {
-      return {};
-    }
-  }
+window.__playAiBrowserTensorflowVersion = window.tf.version.tfjs;
+const task083BackendReady = window.tf.setBackend('cpu').then(function() {
+  return window.tf.ready();
+});
+const task083OriginalLoadLayersModel = window.tf.loadLayersModel.bind(window.tf);
+window.tf.loadLayersModel = async function instrumentedLoadLayersModel(source) {
+  await task083BackendReady;
+  window.__playAiBrowserModelSource = source;
+  const model = await task083OriginalLoadLayersModel(source);
+  const originalPredict = model.predict.bind(model);
+  model.predict = function instrumentedPredict(inputs) {
+    window.__playAiBrowserPredictionCalls += 1;
+    return originalPredict(inputs);
+  };
+  return model;
 };
 `;
 }
@@ -118,7 +139,7 @@ async function installRoutes(page) {
     route.fulfill({
       status: 200,
       contentType: 'application/javascript',
-      body: tfStubScript()
+      body: instrumentedTensorflowScript()
     });
   });
   await page.route('**/cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js', route => {
@@ -158,6 +179,8 @@ async function hideTurnPauseOverlayAndDrawGrid(page) {
   await waitForImages(page);
   await page.evaluate(() => {
     cacheAllImages();
+    gameEvent.removeSelection();
+    gameEvent.hideAll();
     nextTurnPauseInterface.hideButDontUpdateTimer();
     drawAll();
   });
@@ -211,6 +234,12 @@ function snapshotInBrowser(args) {
     testAI: gameSettings.testAI,
     modelSource: window.__playAiBrowserModelSource,
     predictionCalls: window.__playAiBrowserPredictionCalls,
+    tensorflowVersion: window.__playAiBrowserTensorflowVersion,
+    modelName: ai_model && ai_model.name,
+    modelInputs: ai_model && ai_model.inputs.map(input => input.shape),
+    modelOutputs: ai_model && ai_model.outputs.map(output => output.name),
+    gridWidth: grid.arr.length,
+    gridHeight: grid.arr[0].length,
     playerClasses: players.map(player => player.constructor.name),
     players: players.map((player, index) => ({
       index,
@@ -238,13 +267,61 @@ async function captureTurnStart(page, label, sequence) {
 }
 
 async function clickPlayAi(page) {
-  await page.mouse.click(512, 540);
+  const center = await page.evaluate(() => {
+    const button = menu.main.buttons.find(candidate =>
+      candidate.text && candidate.text.text == 'play AI');
+    return {
+      x: button.rect.centerX / window.devicePixelRatio,
+      y: button.rect.centerY / window.devicePixelRatio
+    };
+  });
+  await page.mouse.click(center.x, center.y);
   await page.waitForFunction(() => {
     return typeof players != 'undefined' && players.length > 2 &&
       players[1].constructor.name == 'Player' &&
       players[2].constructor.name == 'AIPlayer' &&
       gameSettings.withAI === true;
   }, null, { timeout: 15000 });
+}
+
+async function runModelControls(page) {
+  return await page.evaluate(async () => {
+    const configuredSource = window.__playAiBrowserModelSource;
+    let missingRejected = false;
+    let missingError = null;
+    try {
+      await loadModel('models/play-ai/task083-missing-model.json');
+    } catch (error) {
+      missingRejected = true;
+      missingError = error.message;
+    } finally {
+      window.__playAiBrowserModelSource = configuredSource;
+    }
+
+    const input = [vectoriseGrid()];
+    const checkpointScore = predict(ai_model, input)[0][0];
+    const originalWeights = ai_model.getWeights().map(weight => weight.clone());
+    const zeroWeights = originalWeights.map(weight => tf.zerosLike(weight));
+    ai_model.setWeights(zeroWeights);
+    const zeroScore = predict(ai_model, input)[0][0];
+
+    const randomWeights = originalWeights.map((weight, index) =>
+      tf.randomNormal(weight.shape, 0, 0.05, 'float32', 83083 + index));
+    ai_model.setWeights(randomWeights);
+    const randomizedScore = predict(ai_model, input)[0][0];
+
+    ai_model.setWeights(originalWeights);
+    const restoredScore = predict(ai_model, input)[0][0];
+    zeroWeights.concat(randomWeights).concat(originalWeights).forEach(weight =>
+      weight.dispose());
+    return {
+      missingModel: { rejected: missingRejected, error: missingError },
+      zeroedWeights: { score: zeroScore },
+      randomizedWeights: { seedBase: 83083, score: randomizedScore },
+      checkpoint: { score: checkpointScore },
+      restoredCheckpoint: { score: restoredScore }
+    };
+  });
 }
 
 async function clickNextTurn(page) {
@@ -532,15 +609,6 @@ function analyzeMovement(turns, finalStatus) {
   };
 }
 
-async function enrichGridSize(page, snapshot) {
-  const gridSize = await page.evaluate(() => ({
-    gridWidth: grid.arr.length,
-    gridHeight: grid.arr[0].length
-  }));
-  snapshot.gridWidth = gridSize.gridWidth;
-  snapshot.gridHeight = gridSize.gridHeight;
-}
-
 (async function main() {
   fs.mkdirSync(artifactDir, { recursive: true });
 
@@ -557,12 +625,25 @@ async function enrichGridSize(page, snapshot) {
 
   const turns = [];
   const redActions = [];
+  let modelControls = null;
 
   try {
     await installRoutes(page);
     await page.goto(served.url, { waitUntil: 'load' });
     await waitForGameReady(page);
     await clickPlayAi(page);
+    modelControls = await runModelControls(page);
+    check(modelControls.missingModel.rejected,
+      'missing checkpoint control did not reject model loading', modelControls);
+    check(Math.abs(modelControls.checkpoint.score -
+        modelControls.restoredCheckpoint.score) < 1e-6,
+      'checkpoint weights were not restored after model controls', modelControls);
+    check(Math.abs(modelControls.checkpoint.score -
+        modelControls.zeroedWeights.score) > 1e-6,
+      'checkpoint output was indistinguishable from zeroed control', modelControls);
+    check(Math.abs(modelControls.checkpoint.score -
+        modelControls.randomizedWeights.score) > 1e-6,
+      'checkpoint output was indistinguishable from randomized control', modelControls);
 
     let sequence = 0;
     let status = await gameStatus(page);
@@ -572,7 +653,6 @@ async function enrichGridSize(page, snapshot) {
       if (status.whooseTurn == 1) {
         const redSnapshot = await captureTurnStart(
           page, `red-start-round-${status.gameRound}`, sequence++);
-        await enrichGridSize(page, redSnapshot);
         turns.push(redSnapshot);
 
         const redTurn = await automateRedTurn(page);
@@ -597,7 +677,6 @@ async function enrichGridSize(page, snapshot) {
       if (status.whooseTurn == 2) {
         const blueSnapshot = await captureTurnStart(
           page, `blue-start-round-${status.gameRound}`, sequence++);
-        await enrichGridSize(page, blueSnapshot);
         turns.push(blueSnapshot);
 
         await clickNextTurn(page);
@@ -613,7 +692,6 @@ async function enrichGridSize(page, snapshot) {
 
     const finalSnapshot = await captureTurnStart(
       page, `final-round-${status.gameRound}`, sequence++);
-    await enrichGridSize(page, finalSnapshot);
     turns.push(finalSnapshot);
 
     const audit = analyzeMovement(turns, status);
@@ -621,8 +699,33 @@ async function enrichGridSize(page, snapshot) {
     const report = {
       status: audit.passed ? 'passed' : 'failed',
       url: served.url,
+      normalEntrypoint: 'index.html',
+      menuAction: 'clicked visible play AI button',
       artifactDir,
       maxNextTurnClicks,
+      repository,
+      checkpoint: {
+        ...checkpoint,
+        requestedFiles: served.requests.filter(request =>
+          request.startsWith('models/play-ai/'))
+      },
+      modelProvenance,
+      modelRuntime: {
+        implementation: 'TensorFlow.js real LayersModel inference',
+        tensorflowVersion: turns[0] && turns[0].tensorflowVersion,
+        source: turns[0] && turns[0].modelSource,
+        predictionCalls: turns.length ? turns[turns.length - 1].predictionCalls : 0
+      },
+      modelControls,
+      comparisonPolicy: {
+        playerClasses: 'Player versus unchanged AIPlayer',
+        artificialResources: false,
+        forcedConcessions: false,
+        opponentWeakening: false,
+        sideSelection: 'fixed normal Play AI UI assignment: red human automation, blue AIPlayer',
+        resultAccounting: 'all terminal and non-terminal outcomes are reported; no winrate claim',
+        heuristicOnlyControl: 'not applicable; AIPlayer.getWinningChances uses direct predict(ai_model, vectorisedGrids) output without a fused heuristic'
+      },
       turnSnapshots: turns.map(turn => ({
         label: turn.label,
         whooseTurn: turn.whooseTurn,
@@ -642,6 +745,12 @@ async function enrichGridSize(page, snapshot) {
       'no red start-of-turn screenshot was captured', report);
     check(report.turnSnapshots.some(turn => turn.whooseTurn == 2),
       'no blue start-of-turn screenshot was captured', report);
+    check(turns[0].modelSource == 'models/play-ai/model.json' &&
+        turns[0].modelInputs[0][1] == 9 && turns[0].modelInputs[0][2] == 9 &&
+        turns[0].modelInputs[0][3] == 82,
+      'Play AI full game did not use the packaged 9x9/82-channel checkpoint', report);
+    check(turns[turns.length - 1].predictionCalls > 0,
+      'full game did not exercise real model inference', report);
     check(status.winner !== null, 'Play AI full-game run did not reach win/loss', report);
     check(audit.passed, 'Play AI movement audit found implausible movement', report);
 
