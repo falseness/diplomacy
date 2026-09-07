@@ -2,6 +2,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const childProcess = require('child_process');
 
 function check(condition, message, details) {
   if (!condition) {
@@ -41,6 +42,24 @@ const checkpoint = {
   weightsPath: path.relative(repoRoot, modelWeightsPath),
   weightsSha256: sha256(modelWeightsPath),
   weightsBytes: fs.statSync(modelWeightsPath).size
+};
+const repository = {
+  commit: childProcess.execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  }).trim(),
+  dirtyStatusBeforeTest: childProcess.execFileSync(
+    'git', ['status', '--short', '--untracked-files=all'], {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    }).trim().split('\n').filter(Boolean)
+};
+const modelProvenance = {
+  sourceRun: '/mnt/storage/diplomacy/final/task061-generated-retrain-20260906',
+  knownTrainingSeeds: '61000-61005',
+  browserScenario: 'fixed hand-authored Play AI map; no random seed',
+  randomizedControlSeedBase: 81081,
+  seedIntersections: 'none'
 };
 
 function contentType(filePath) {
@@ -384,10 +403,12 @@ async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
         modelControls.restoredCheckpoint.score) < 1e-6,
       'checkpoint weights were not restored after model controls', modelControls);
     check(Math.abs(modelControls.checkpoint.score -
-          modelControls.zeroedWeights.score) > 1e-6 ||
-        Math.abs(modelControls.checkpoint.score -
-          modelControls.randomizedWeights.score) > 1e-6,
-      'checkpoint output was indistinguishable from both weight controls',
+        modelControls.zeroedWeights.score) > 1e-6,
+      'checkpoint output was indistinguishable from the zeroed-weight control',
+      modelControls);
+    check(Math.abs(modelControls.checkpoint.score -
+        modelControls.randomizedWeights.score) > 1e-6,
+      'checkpoint output was indistinguishable from the randomized-weight control',
       modelControls);
     const redStart = await captureState(page, 'red-start', `${artifactPrefix}-red-start.png`);
 
@@ -452,7 +473,9 @@ async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
     const report = {
       status: 'passed',
       url: served.url,
+      repository,
       checkpoint,
+      modelProvenance,
       modelRuntime: {
         implementation: 'TensorFlow.js real LayersModel inference',
         tensorflowVersion: redStart.tensorflowVersion,
@@ -461,6 +484,15 @@ async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
         predictionCallsAfterBlue: blueComplete.predictionCalls
       },
       modelControls,
+      comparisonPolicy: {
+        playerClasses: 'Player versus unchanged AIPlayer',
+        artificialResources: false,
+        forcedConcessions: false,
+        opponentWeakening: false,
+        sideSelection: 'fixed normal Play AI UI assignment: red human, blue AI',
+        resultAccounting: 'not a winrate benchmark; one deterministic turn cycle',
+        heuristicOnlyControl: 'not applicable; runtime candidate scores are direct model outputs'
+      },
       mode: regressionMode ? 'regression' : 'reproduction',
       faultInjection: {
         forceRedRestore,
