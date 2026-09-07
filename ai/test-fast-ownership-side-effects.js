@@ -401,10 +401,7 @@ const result = new vm.Script(`(() => {
     assertGlobalChannelsChanged(before, after, metadata)
   }
 
-  function assertOpponentPerspective(metadata) {
-    let originalTurn = whooseTurn
-    whooseTurn = metadata.defenderPlayer
-    let defenderView = vectoriseGrid()
+  function assertOpponentPerspective(metadata, defenderView) {
     if (metadata.kind == 'town-capture') {
       assert(channel(defenderView, metadata.target, CELL_VECTOR_INDEX.townOwner) == -1,
         'captured town is not enemy-owned from opponent perspective', metadata)
@@ -414,13 +411,16 @@ const result = new vm.Script(`(() => {
           channel(defenderView, metadata.target, CELL_VECTOR_INDEX.isSuburb) == 0,
         'painted cell did not expose opponent-relative ownership change', metadata)
     }
-    whooseTurn = originalTurn
   }
 
   function runCase(metadata) {
     let initialSnapshot = snapshotGrid()
-    let initialVectorGrid = vectoriseGrid()
-    let mutableGrid = createMutableVectorGrid(initialVectorGrid)
+    let views = [metadata.attackerPlayer, metadata.defenderPlayer].map(function(player) {
+      whooseTurn = player
+      let initial = vectoriseGrid()
+      return {player: player, initial: initial, mutable: createMutableVectorGrid(initial)}
+    })
+    whooseTurn = metadata.attackerPlayer
     let unit = grid.getCell(metadata.source).unit
     assert(unit && unit.notEmpty() && unit.playerColor == metadata.attackerPlayer,
       'attacking unit not found', metadata)
@@ -436,22 +436,38 @@ const result = new vm.Script(`(() => {
 
     unit.select()
     unit.sendInstructions(grid.getCell(metadata.target))
-    let afterVectorGrid = vectoriseGrid()
-    assertConcreteSideEffects(metadata, initialVectorGrid, afterVectorGrid)
-    assertOpponentPerspective(metadata)
-
-    let applied = applyFastAction(mutableGrid, {
+    let command = {
       type: 'unit',
       whoDoCommandCoord: coordCopy(metadata.source),
       destinationCoord: coordCopy(metadata.target)
-    })
-    compareOrThrow(afterVectorGrid, mutableGrid, metadata, 'after-apply')
+    }
+    for (let view of views) {
+      whooseTurn = view.player
+      let perspectiveMetadata = Object.assign({}, metadata, {perspectivePlayer: view.player})
+      let after = vectoriseGrid()
+      if (view.player == metadata.attackerPlayer) {
+        assertConcreteSideEffects(metadata, view.initial, after)
+      }
+      else {
+        assertOpponentPerspective(metadata, after)
+        assertGlobalChannelsChanged(view.initial, after, perspectiveMetadata)
+      }
+      let applied = applyFastAction(view.mutable, command)
+      compareOrThrow(after, view.mutable, perspectiveMetadata, 'after-apply')
+      undoFastAction(view.mutable, applied)
+      compareOrThrow(view.initial, view.mutable, perspectiveMetadata, 'after-fast-undo')
+    }
 
-    undoFastAction(mutableGrid, applied)
-    compareOrThrow(initialVectorGrid, mutableGrid, metadata, 'after-fast-undo')
-
+    // Execute and undo the real command on the attacker's turn. Only vector
+    // construction and fast updates use the defender's perspective.
+    whooseTurn = metadata.attackerPlayer
     actionManager.undo()
-    compareOrThrow(initialVectorGrid, vectoriseGrid(), metadata, 'after-normal-undo')
+    for (let view of views) {
+      whooseTurn = view.player
+      compareOrThrow(view.initial, vectoriseGrid(),
+        Object.assign({}, metadata, {perspectivePlayer: view.player}), 'after-normal-undo')
+    }
+    whooseTurn = metadata.attackerPlayer
     assert(snapshotGrid() == initialSnapshot,
       'normal actionManager undo did not restore ownership grid snapshot', metadata)
   }
@@ -465,6 +481,7 @@ const result = new vm.Script(`(() => {
   }
 
   return {
+    cases: cases,
     totalCases: cases.length,
     kinds: cases.map(function(testCase) { return testCase.kind }),
     players: cases.map(function(testCase) { return testCase.attackerPlayer })
@@ -477,3 +494,15 @@ console.log(
   result.totalCases + ' capture/suburb cases across players ' +
   result.players.join(', ')
 );
+
+for (const testCase of result.cases) {
+  for (const perspectivePlayer of [testCase.attackerPlayer, testCase.defenderPlayer]) {
+    console.log(JSON.stringify({
+      status: 'PASS',
+      kind: testCase.kind,
+      attackerPlayer: testCase.attackerPlayer,
+      perspectivePlayer,
+      checks: 'full-vector ownership income suburb-income apply fast-undo normal-undo grid-restore'
+    }));
+  }
+}
