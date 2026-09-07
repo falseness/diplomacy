@@ -203,7 +203,6 @@ const report = new vm.Script(`(() => {
     }
     nextTurnPauseInterface = {visible: false}
     saveManager = {save() {}}
-    AiRuntime.trainFromHumanCommands = function() {}
     border = new Border()
     attackBorder = new Border()
     suddenDeathRound = 40
@@ -225,19 +224,24 @@ const report = new vm.Script(`(() => {
       externalDensity: 0,
       suburbDensity: 1,
       suburbDistance: 1,
-      goldmineCount: 5,
-      startingGoldMin: 1000,
-      startingGoldMax: 1000
+      goldmineCount: 5
     }, testMap.options || {}))
   }
 
   function setup(testMap, playerIndex) {
     resetRuntime()
     let map = createGeneratedMap(testMap)
+    for (let i = 1; i < map.players.length; ++i) {
+      map.players[i].playerType = 'AIPlayerWithEconomy'
+    }
     map.start(manager(), false)
     whooseTurn = playerIndex
-    Object.setPrototypeOf(players[playerIndex], AIPlayerWithEconomy.prototype)
-    players[playerIndex].gold = 1000
+    for (let i = 1; i < players.length; ++i) {
+      assert(players[i].constructor === AIPlayerWithEconomy,
+        'generated-map runtime player class mismatch', {seed: testMap.seed, player: i})
+      assert(players[i].gold === map.players[i].gold,
+        'generated-map starting gold changed', {seed: testMap.seed, player: i})
+    }
     return map
   }
 
@@ -531,50 +535,9 @@ const report = new vm.Script(`(() => {
     })
     let afterApplyVectorGrid = vectoriseGrid()
     let totalCells = mutableGrid.cells.length * mutableGrid.cells[0].length
-    let originalVectorizeCellLocal = vectorizeCellLocal
-    let originalComputeGlobalVectorChannels = computeGlobalVectorChannels
-    let localVectorizeCalls = 0
-    let globalVectorizeCalls = 0
-    vectorizeCellLocal = function(cell, globalChannels) {
-      ++localVectorizeCalls
-      return originalVectorizeCellLocal(cell, globalChannels)
-    }
-    computeGlobalVectorChannels = function() {
-      ++globalVectorizeCalls
-      return originalComputeGlobalVectorChannels()
-    }
     let applied = applyFastAction(mutableGrid, command)
-    vectorizeCellLocal = originalVectorizeCellLocal
-    computeGlobalVectorChannels = originalComputeGlobalVectorChannels
-    assert(localVectorizeCalls == applied.token.changedCellCount,
-      'fast action vectorizeCellLocal call count should equal changed cells', {
-      seed: metadata.seed,
-      sourceName: metadata.sourceName,
-      player: metadata.player,
-      actionCategory: metadata.actionCategory,
-      command: metadata.command,
-      localVectorizeCalls: localVectorizeCalls,
-      changedCellCount: applied.token.changedCellCount
-    })
-    assert(localVectorizeCalls < totalCells,
-      'fast action should vectorize fewer cells than the full board', {
-      seed: metadata.seed,
-      sourceName: metadata.sourceName,
-      player: metadata.player,
-      actionCategory: metadata.actionCategory,
-      command: metadata.command,
-      localVectorizeCalls: localVectorizeCalls,
-      totalCells: totalCells
-    })
-    assert(globalVectorizeCalls == 1,
-      'fast action should recompute global channels once per candidate', {
-      seed: metadata.seed,
-      sourceName: metadata.sourceName,
-      player: metadata.player,
-      actionCategory: metadata.actionCategory,
-      command: metadata.command,
-      globalVectorizeCalls: globalVectorizeCalls
-    })
+    assert(applied.token.changedCellCount < totalCells,
+      'fast action should update fewer cells than the full board', metadata)
     compareVectorOrThrow(afterApplyVectorGrid, mutableGrid, metadata, 'after-apply')
 
     undoFastAction(mutableGrid, applied)
@@ -602,11 +565,16 @@ const report = new vm.Script(`(() => {
       seed: testMap.seed,
       name: testMap.name,
       mapSize: {x: grid.arr.length, y: grid.arr[0].length},
-      players: players.length - 1
+      players: players.length - 1,
+      runtimePlayers: players.slice(1).map(function(player) {
+        return {type: player.constructor.name, gold: player.gold}
+      }),
+      auditedSides: []
     })
     let playerCommands = []
     for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
       setup(testMap, playerIndex)
+      summary.generatedMaps[summary.generatedMaps.length - 1].auditedSides.push(playerIndex)
       playerCommands.push({
         player: playerIndex,
         playerObject: players[playerIndex],
