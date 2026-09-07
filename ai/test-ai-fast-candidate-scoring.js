@@ -42,8 +42,8 @@ const fastScoringBody = methodBody(
   'scoreActionCommandsWithFastVectorGrid'
 );
 check((fastScoringBody.match(/vectoriseGrid\s*\(/g) || []).length === 1,
-  'fast candidate scoring should seed from exactly one vectoriseGrid call');
-check(fastScoringBody.includes('createMutableVectorGrid(baselineVectorGrid)'),
+  'scoring should only vectorise a standalone selector baseline');
+check(fastScoringBody.includes('this.candidateScoringGrid ||'),
   'fast candidate scoring does not create one mutable grid from a fresh vector');
 check(fastScoringBody.includes('applyFastAction(mutableGrid, commands[i])'),
   'fast candidate scoring does not use fast apply');
@@ -176,6 +176,7 @@ function createContext() {
       return inputs.map(input => [input[0][0][0][0]]);
     },
     actionManager: {
+      get lastAction() { return undoStack[undoStack.length - 1]; },
       undo() {
         const snapshot = undoStack.pop();
         if (!snapshot) {
@@ -431,4 +432,74 @@ for (const product of ['farm', 'barrack', 'tower']) {
     economyCategoryResult);
 }
 
+function runWholeTurnScenario(throwDuringPrediction = false) {
+  const context = createContext();
+  new vm.Script(read('ai/mutableVectorGrid.js')).runInContext(context);
+  new vm.Script(playersSource).runInContext(context);
+  context.throwDuringPrediction = throwDuringPrediction;
+  const result = new vm.Script(`
+    let player = new AIPlayer({r: 255, g: 0, b: 0}, 90)
+    player.units = [unit]
+    players = [null, player, {isNeutral: false, isLost: false, units: [], towns: []}]
+    // Two legal actions from the same unit require multiple selector calls.
+    unit.moves = 2
+    let originalSend = unit.sendInstructions
+    unit.sendInstructions = function(destination) {
+      let moves = this.moves
+      if (moves === 1 && destination.coord.y === 1) return
+      originalSend.call(this, destination)
+      this.moves = moves - 1
+    }
+    let grids = new Set()
+    let apply = applyFastAction
+    let applies = 0
+    let undoes = 0
+    let undo = undoFastAction
+    applyFastAction = function(mutable, command) {
+      grids.add(mutable)
+      ++applies
+      return apply(mutable, command)
+    }
+    undoFastAction = function(mutable, action) {
+      ++undoes
+      return undo(mutable, action)
+    }
+    let prediction = predict
+    predict = function(model, inputs) {
+      if (throwDuringPrediction) throw new Error('prediction control')
+      return prediction(model, inputs)
+    }
+    let error = null
+    try { player.doActions() } catch (caught) { error = caught.message }
+    let firstTurn = {
+      vectoriseCalls: state.vectoriseCalls,
+      gridCount: grids.size, applies, undoes,
+      normalApplications: state.normalApplications,
+      history: player.chosenGrids.map(value => value[0][0][0].slice(0, 2)),
+      cacheCleared: player.candidateScoringGrid === null, error
+    }
+    if (!throwDuringPrediction) {
+      unit.moves = 2
+      player.doActions()
+    }
+    ;({firstTurn, totalGrids: grids.size, totalVectoriseCalls: state.vectoriseCalls})
+  `).runInContext(context);
+  const turn = result.firstTurn;
+  check(turn.cacheCleared, 'turn cache leaked after exit', result);
+  if (throwDuringPrediction) {
+    check(turn.error === 'prediction control', 'exception control did not fire', result);
+  } else {
+    check(!turn.error && turn.vectoriseCalls === 1 && turn.gridCount === 1,
+      'whole turn must reuse one baseline and mutable grid', result);
+    check(turn.normalApplications === 2 && turn.applies - turn.undoes === 2,
+      'selected actions must commit normally and retain fast updates', result);
+    check(JSON.stringify(turn.history) === '[[0,0],[2,1],[2,2]]',
+      'history must preserve separate snapshots across selected actions', result);
+    check(result.totalGrids === 2 && result.totalVectoriseCalls === 2,
+      'second turn must start from a fresh grid', result);
+  }
+  console.log('Whole-turn scoring probe passed ' + JSON.stringify(result));
+}
+runWholeTurnScenario();
+runWholeTurnScenario(true);
 console.log('AI fast candidate scoring smoke passed');

@@ -311,7 +311,7 @@ async function clickNextTurn(page) {
     return {context, page};
   }
 
-  async function runTurnScenario(control, captureScreenshots) {
+  async function runTurnScenario(control, captureScreenshots, actionLimit = 1) {
     const clean = await openCleanPage();
     const page = clean.page;
     try {
@@ -331,17 +331,55 @@ async function clickNextTurn(page) {
       const afterRedBeforeBlue = await page.evaluate(blueSnapshotInBrowser);
       const modelControl = await applyModelControl(page, control);
       const controlScore = await page.evaluate(() => predict(ai_model, [vectoriseGrid()])[0][0]);
-      await page.evaluate(() => {
-        // Keep this browser smoke bounded to the first automatic model-ranked action.
-        // This does not alter action enumeration, scoring, or authoritative execution.
-        gameSettings.aiActionLimit = 1;
-      });
+      await page.evaluate(actionLimit => {
+        gameSettings.aiActionLimit = actionLimit;
+        const originalVectorise = vectoriseGrid;
+        const originalApply = applyFastAction;
+        const originalUndo = undoFastAction;
+        const grids = new Set();
+        window.scoringProbe = {fullVectors: 0, applies: 0, undoes: 0,
+          mismatches: 0, gridCount: 0};
+        vectoriseGrid = function() {
+          ++scoringProbe.fullVectors;
+          return originalVectorise();
+        };
+        applyFastAction = function(mutable, command) {
+          const token = originalApply(mutable, command);
+          grids.add(mutable);
+          ++scoringProbe.applies;
+          scoringProbe.gridCount = grids.size;
+          const comparison = compareVectorGridResults(originalVectorise(), mutable);
+          if (!comparison.equal) {
+            ++scoringProbe.mismatches;
+            if (!scoringProbe.firstMismatch) scoringProbe.firstMismatch = {
+              command, comparison, application: scoringProbe.applies};
+          }
+          return token;
+        };
+        undoFastAction = function(mutable, token) {
+          ++scoringProbe.undoes;
+          return originalUndo(mutable, token);
+        };
+        window.finishScoringProbe = function() {
+          vectoriseGrid = originalVectorise;
+          applyFastAction = originalApply;
+          undoFastAction = originalUndo;
+          scoringProbe.cacheCleared = players[2].candidateScoringGrid === null;
+          return scoringProbe;
+        };
+      }, actionLimit);
 
       await clickNextTurn(page);
       await page.waitForFunction(() => {
         return whooseTurn == 2 && players[2].winningChances.length > 0;
       }, null, { timeout: 30000 });
 
+      const scoringProbe = await page.evaluate(() => finishScoringProbe());
+      check(scoringProbe.fullVectors === 1 && scoringProbe.gridCount === 1 &&
+          scoringProbe.mismatches === 0 && scoringProbe.cacheCleared,
+        'turn must reuse one fresh-equivalent vector grid', scoringProbe);
+      check(scoringProbe.applies - scoringProbe.undoes === actionLimit,
+        'selected authoritative actions must retain their fast updates', scoringProbe);
       const afterBlue = await page.evaluate(blueSnapshotInBrowser);
       await hideTurnPauseOverlayAndDrawGrid(page);
       const finalInterfacePixel = await page.evaluate(interfaceCenterPixelInBrowser);
@@ -354,7 +392,8 @@ async function clickNextTurn(page) {
 
       return {
         control: modelControl,
-        aiActionLimit: 1,
+        aiActionLimit: actionLimit,
+        scoringProbe,
         controlScore,
         screenshots: {initialGrid: initialPath, afterBlueAiTurnGrid: finalPath},
         screenshotBytesDiffer: captureScreenshots && !initialScreenshot.equals(finalScreenshot),
@@ -378,6 +417,7 @@ async function clickNextTurn(page) {
     const real = await runTurnScenario('real', true);
     const zeroed = await runTurnScenario('zeroed', false);
     const randomized = await runTurnScenario('randomized', false);
+    const multiAction = await runTurnScenario('real', false, 2);
     const turnErrors = consoleMessages.slice();
     check(!turnErrors.some(message =>
       message.includes('unit.sendInstructions is not a function')),
@@ -465,6 +505,7 @@ async function clickNextTurn(page) {
         cwd: repoRoot, encoding: 'utf8'}).trim(),
       checkpoint,
       real,
+      multiAction,
       controls: {
         zeroed: {
           score: zeroed.controlScore,

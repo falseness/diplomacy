@@ -967,34 +967,12 @@ class AIPlayer extends Player {
         if (commands.length == 0) {
             return {commands: validCommands, chances: []}
         }
-        if (typeof createMutableVectorGrid != 'function' ||
-                typeof applyFastAction != 'function' ||
-                typeof undoFastAction != 'function') {
-            for (let i = 0; i < commands.length; ++i) {
-                let progressState = this.captureCommandProgressState(commands[i])
-                if (!applyCommand.call(this, commands[i])) {
-                    continue
-                }
-                try {
-                    if (this.commandMadeAuthoritativeProgress(progressState)) {
-                        validCommands.push(commands[i])
-                        vectorisedGrids.push(vectoriseGrid())
-                    }
-                }
-                finally {
-                    this.undoCommandSimulation(commands, progressState)
-                }
-            }
-            return {
-                commands: validCommands,
-                chances: validCommands.length == 0 ?
-                    [] : this.getWinningChances(vectorisedGrids)
-            }
-        }
-        let baselineVectorGrid = vectoriseGrid()
-        let mutableGrid = createMutableVectorGrid(baselineVectorGrid)
+        let baselineVectorGrid = this.candidateScoringGrid ? null : vectoriseGrid()
+        let mutableGrid = this.candidateScoringGrid ||
+            createMutableVectorGrid(baselineVectorGrid)
         for (let i = 0; i < commands.length; ++i) {
             let applied = null
+            let previousAction = actionManager.lastAction
             let progressState = this.captureCommandProgressState(commands[i])
             if (!applyCommand.call(this, commands[i])) {
                 continue
@@ -1012,7 +990,11 @@ class AIPlayer extends Player {
                 if (applied) {
                     undoFastAction(mutableGrid, applied)
                 }
-                this.undoCommandSimulation(commands, progressState)
+                // A rejected/no-progress command may not have started an action.
+                // In that case undo would remove the last selected real action.
+                if (actionManager.lastAction !== previousAction) {
+                    this.undoCommandSimulation(commands, progressState)
+                }
             }
         }
         return {
@@ -1068,24 +1050,39 @@ class AIPlayer extends Player {
         return [foundCommands[maxIndex], foundChances[maxIndex]]
     }
     doActions() {
-        const hardLimit = getAiActionLimit(150)
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
-        let unitsLength = this.units.length
-        for (let i = 0; i < hardLimit; ++i) {
-            let [bestCommand, chance] = this.selectBestCommand()
-            if (!bestCommand) {
-                return
+        // The cache belongs to this synchronous turn only. Standalone selectors
+        // still take a fresh snapshot, and exceptions cannot leak a stale cache.
+        this.candidateScoringGrid = createMutableVectorGrid(vectoriseGrid())
+        try {
+            const hardLimit = getAiActionLimit(150)
+            let initial = this.cloneMutableVectorGridForPrediction(
+                this.candidateScoringGrid)
+            this.chosenGrids.push(initial)
+            this.winningChances.push(this.getWinningChances([initial])[0])
+            let unitsLength = this.units.length
+            for (let i = 0; i < hardLimit; ++i) {
+                let [bestCommand, chance] = this.selectBestCommand()
+                if (!bestCommand) {
+                    return
+                }
+                if (!applyLiveAiCommandUnit(this, bestCommand)) {
+                    continue
+                }
+                // The selected action has already changed the authoritative grid.
+                // Retain its fast update for the next selection.
+                applyFastAction(this.candidateScoringGrid, bestCommand)
+                this.candidateScoringGrid.appliedFastActions.pop()
+                this.chosenGrids.push(this.cloneMutableVectorGridForPrediction(
+                    this.candidateScoringGrid))
+                this.winningChances.push(chance)
+                this.updateUnits()
+                assert(unitsLength == this.units.length)
             }
-            if (!applyLiveAiCommandUnit(this, bestCommand)) {
-                continue
-            }
-            this.chosenGrids.push(vectoriseGrid())
-            this.winningChances.push(chance)
-            this.updateUnits()
-            assert(unitsLength == this.units.length)
+            console.log('player reached hard limit')
         }
-        console.log('player reached hard limit')
+        finally {
+            this.candidateScoringGrid = null
+        }
     }
     nextTurn() {
         super.nextTurn()
