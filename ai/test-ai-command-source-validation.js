@@ -8,10 +8,19 @@ const source = fs.readFileSync(path.join(__dirname, 'players.js'), 'utf8');
 const scenarios = ['non-unit', 'duck-typed', 'empty', 'building', 'killed',
   'removed', 'moved-away', 'replaced-friendly', 'wrong-turn', 'enemy',
   'missing-destination'];
+const invalidCoords = [null, undefined, {}, {x: -1, y: 0}, {x: 2, y: 0},
+  {x: 0, y: -1}, {x: 0, y: 1}, {x: 0.5, y: 0}, {x: 0, y: 0.5},
+  {x: '0', y: 0}, {x: 0, y: '0'}, {x: NaN, y: 0}, {x: Infinity, y: 0}];
+for (const field of ['whoDoCommandCoord', 'destinationCoord']) {
+  invalidCoords.forEach((coord, index) => scenarios.push(field + ':' + index));
+}
 const results = [];
 for (const phase of ['simulation', 'execution', 'undo-reconstruction']) {
   for (const scenario of (phase === 'undo-reconstruction' ? ['valid'] : scenarios)) {
-    const context = vm.createContext({ assert, scenario, phase, console });
+    const context = vm.createContext({ assert, scenario, phase, console, invalidCoords });
+    for (const file of ['sprites/sprite.js', 'groups/spritesGroup.js', 'groups/grid.js']) {
+      vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
+    }
     vm.runInContext(`
       class Player { constructor() { this.units = [] } updateUnits() {} }
       const gameSettings = {aiActionLimit: 1};
@@ -31,7 +40,12 @@ for (const phase of ['simulation', 'execution', 'undo-reconstruction']) {
         }};
       const replacement = {...unit, getAvailableCommands() { return [] }};
       const cells = [{unit}, {unit: {coord: {x: -1, y: -1}}}];
-      const grid = {getCell(coord) { return cells[coord.x] }};
+      const grid = Object.create(Grid.prototype);
+      grid.arr = [0, 1].map(index => {
+        const row = [];
+        Object.defineProperty(row, 0, {get() { return cells[index] }});
+        return row;
+      });
       const actionManager = {undo() {
         unit.moves = 1;
         if (phase === 'undo-reconstruction') {
@@ -40,6 +54,10 @@ for (const phase of ['simulation', 'execution', 'undo-reconstruction']) {
         }
       }};
       function invalidate() {
+        if (scenario.includes(':')) {
+          const [field, index] = scenario.split(':');
+          command[field] = invalidCoords[Number(index)];
+        }
         if (scenario === 'non-unit') cells[0].unit = {};
         if (scenario === 'duck-typed') cells[0].unit = {...unit};
         if (scenario === 'empty') cells[0].unit = null;

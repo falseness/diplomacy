@@ -233,12 +233,25 @@ function getAiMoveCommands(unit) {
 // Keep object identity out of serializable command data and fast-grid metadata.
 const aiCommandSourceUnits = new WeakMap()
 
+function getAiCommandCell(coord) {
+    if (!coord || !Number.isInteger(coord.x) || !Number.isInteger(coord.y) ||
+            coord.x < 0 || coord.y < 0 ||
+            typeof grid == 'undefined' || !grid.getCell) {
+        return null
+    }
+    if (grid.arr && (!grid.arr[coord.x] ||
+            coord.y >= grid.arr[coord.x].length)) {
+        return null
+    }
+    return grid.getCell(coord) || null
+}
+
 function resolveLiveAiCommandUnit(player, command) {
     if (!command || !command.whoDoCommandCoord || !command.destinationCoord ||
             typeof grid == 'undefined' || !grid.getCell) {
         return null
     }
-    let sourceCell = grid.getCell(command.whoDoCommandCoord)
+    let sourceCell = getAiCommandCell(command.whoDoCommandCoord)
     if (!sourceCell || !sourceCell.unit) {
         return null
     }
@@ -266,7 +279,7 @@ function applyLiveAiCommandUnit(player, command) {
     if (!unit) {
         return false
     }
-    let destinationCell = grid.getCell(command.destinationCoord)
+    let destinationCell = getAiCommandCell(command.destinationCoord)
     if (!destinationCell) {
         return false
     }
@@ -908,8 +921,8 @@ class AIPlayer extends Player {
                 typeof grid == 'undefined' || !grid.getCell) {
             return null
         }
-        let source = grid.getCell(command.whoDoCommandCoord)
-        let destination = grid.getCell(command.destinationCoord)
+        let source = getAiCommandCell(command.whoDoCommandCoord)
+        let destination = getAiCommandCell(command.destinationCoord)
         return {
             sourceUnit: this.captureEntityProgressState(source && source.unit),
             destinationUnit: this.captureEntityProgressState(
@@ -939,7 +952,8 @@ class AIPlayer extends Player {
             }
             for (let command of commands) {
                 if (aiCommandSourceUnits.get(command) === state.entity) {
-                    let restored = grid.getCell({x: state.x, y: state.y}).unit
+                    let restoredCell = getAiCommandCell({x: state.x, y: state.y})
+                    let restored = restoredCell && restoredCell.unit
                     if (this.units.includes(restored)) {
                         aiCommandSourceUnits.set(command, restored)
                     }
