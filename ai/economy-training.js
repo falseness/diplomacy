@@ -28,7 +28,6 @@ const MAP_SOURCES = [
   'advanced-20x20-economy'
 ];
 const ADVANCED_9X9_STAGES = [7, 8, 9, 10, 11, 12];
-let reusableTrainingContext = null;
 
 function parseArgs(argv) {
   const options = {
@@ -280,35 +279,13 @@ function createRuntimeContext(seed) {
   return vm.createContext(context);
 }
 
-function resetRuntimeContext(context, seed) {
-  const seededMath = Object.create(Math);
-  let randomState = seed >>> 0;
-  seededMath.random = function() {
-    randomState = (randomState * 1664525 + 1013904223) >>> 0;
-    return randomState / 0x100000000;
-  };
-  context.Math = seededMath;
-  if (typeof context.__resetHarnessStorage === 'function') {
-    context.__resetHarnessStorage();
-  }
-}
-
 function getTrainingRuntimeContext(seed) {
-  if (process.env.DIPLOMACY_DISABLE_BROWSER_SCRIPT_CACHE === '1') {
-    const context = createRuntimeContext(seed);
-    loadBrowserScripts(context, { disableBrowserScriptCache: true });
-    return context;
-  }
-  if (!reusableTrainingContext) {
-    reusableTrainingContext = createRuntimeContext(seed);
-    loadBrowserScripts(reusableTrainingContext);
-  }
-  resetRuntimeContext(reusableTrainingContext, seed);
-  return reusableTrainingContext;
+  const context = createRuntimeContext(seed);
+  loadBrowserScripts(context);
+  return context;
 }
 
 function resetTrainingRuntimeCache() {
-  reusableTrainingContext = null;
   resetBrowserScriptCache();
 }
 

@@ -7,7 +7,6 @@ const scriptCache = new Map();
 const readCounts = new Map();
 const compileCounts = new Map();
 let cachedBrowserScriptSources = null;
-let cachedBrowserScriptBundle = null;
 
 function readRepoFile(relativePath) {
   const normalized = relativePath.replace(/\\/g, '/');
@@ -45,22 +44,6 @@ function compileBrowserScript(relativePath, cacheEnabled) {
   return script;
 }
 
-function compileBrowserScriptBundle() {
-  if (cachedBrowserScriptBundle) {
-    return cachedBrowserScriptBundle;
-  }
-  const parts = [];
-  for (const source of browserScriptSources()) {
-    const normalized = source.replace(/\\/g, '/');
-    parts.push('\n// ' + normalized + '\n' + readRepoFile(normalized));
-    compileCounts.set(normalized, (compileCounts.get(normalized) || 0) + 1);
-  }
-  cachedBrowserScriptBundle = new vm.Script(parts.join('\n'), {
-    filename: 'browser-script-bundle.js'
-  });
-  return cachedBrowserScriptBundle;
-}
-
 function shouldUseBrowserScriptCache(options) {
   if (process.env.DIPLOMACY_DISABLE_BROWSER_SCRIPT_CACHE === '1') {
     return false;
@@ -68,12 +51,12 @@ function shouldUseBrowserScriptCache(options) {
   return !(options && options.disableBrowserScriptCache);
 }
 
+function loadBrowserScript(context, relativePath, options) {
+  compileBrowserScript(relativePath, shouldUseBrowserScriptCache(options)).runInContext(context);
+}
+
 function loadBrowserScripts(context, options) {
   const cacheEnabled = shouldUseBrowserScriptCache(options || {});
-  if (cacheEnabled) {
-    compileBrowserScriptBundle().runInContext(context);
-    return;
-  }
   for (const source of browserScriptSources()) {
     compileBrowserScript(source, cacheEnabled).runInContext(context);
   }
@@ -84,7 +67,6 @@ function resetBrowserScriptCache() {
   readCounts.clear();
   compileCounts.clear();
   cachedBrowserScriptSources = null;
-  cachedBrowserScriptBundle = null;
 }
 
 function mapToObject(map) {
@@ -98,7 +80,7 @@ function mapToObject(map) {
 function getBrowserScriptCacheStats() {
   return {
     sources: browserScriptSources(),
-    cachedScripts: scriptCache.size + (cachedBrowserScriptBundle ? 1 : 0),
+    cachedScripts: scriptCache.size,
     readCounts: mapToObject(readCounts),
     compileCounts: mapToObject(compileCounts)
   };
@@ -106,6 +88,7 @@ function getBrowserScriptCacheStats() {
 
 module.exports = {
   getBrowserScriptCacheStats,
+  loadBrowserScript,
   loadBrowserScripts,
   resetBrowserScriptCache,
   shouldUseBrowserScriptCache

@@ -4,12 +4,12 @@ const { execSync } = require('child_process');
 const vm = require('vm');
 const {
   getBrowserScriptCacheStats,
+  loadBrowserScript,
   loadBrowserScripts,
   resetBrowserScriptCache
 } = require('./browserScriptCache');
 
 const repoRoot = path.resolve(__dirname, '..');
-let reusableBenchmarkContext = null;
 let compiledBenchmarkRuntimeScript = null;
 let compiledInjectedModelScript = null;
 
@@ -32,8 +32,7 @@ function loadPlayerClasses() {
     },
     gameSettings: { testAI: false }
   });
-  const source = fs.readFileSync(path.join(__dirname, 'players.js'), 'utf8');
-  new vm.Script(source, { filename: 'ai/players.js' }).runInContext(context);
+  loadBrowserScript(context, 'ai/players.js');
   return new vm.Script(`({
     SimpleAiPlayer,
     SimpleAiPlayerWithEconomy,
@@ -276,20 +275,6 @@ function createRuntimeContext(seed) {
   return vm.createContext(context);
 }
 
-function resetRuntimeContext(context, seed) {
-  context.Math = createSeededMath(seed);
-  if (typeof context.__resetHarnessStorage === 'function') {
-    context.__resetHarnessStorage();
-  }
-  context.__benchmarkInferenceCalls = 0;
-  context.__benchmarkInferencePositions = 0;
-  context.__benchmarkInferenceSource = undefined;
-  context.__benchmarkModelIdentifier = undefined;
-  context.__benchmarkPredictFunction = undefined;
-  context.ai_model = undefined;
-  context.predict = undefined;
-}
-
 function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
@@ -341,20 +326,11 @@ function createLoadedRuntimeContext(seed, options) {
 }
 
 function getBenchmarkRuntimeContext(seed, options) {
-  if (options && options.disableBrowserScriptCache) {
-    return createLoadedRuntimeContext(seed, options);
-  }
-  if (!reusableBenchmarkContext) {
-    reusableBenchmarkContext = createRuntimeContext(seed);
-    loadBrowserScripts(reusableBenchmarkContext, options);
-  }
-  resetRuntimeContext(reusableBenchmarkContext, seed);
-  injectBenchmarkModel(reusableBenchmarkContext, options);
-  return reusableBenchmarkContext;
+  // Only immutable scripts are shared; browser globals belong to one game.
+  return createLoadedRuntimeContext(seed, options);
 }
 
 function resetBenchmarkRuntimeCache() {
-  reusableBenchmarkContext = null;
   resetBrowserScriptCache();
 }
 
