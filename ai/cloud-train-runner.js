@@ -223,7 +223,7 @@ function projectedCombatLabel(boardValues, globalValue) {
 }
 
 function modelCombatTarget(score) {
-  return score >= 0 ? score : score * 0.5;
+  return score;
 }
 
 function swapProjectedCombatSides(boardValues) {
@@ -351,6 +351,14 @@ function makeBatch(seed, game) {
   const policies = [];
   for (let sample = 0; sample < 96; sample += 1) {
     const board = new Array(3 * 3 * 21).fill(0);
+    for (let x = 0; x < 3; x += 1) {
+      for (let y = 0; y < 3; y += 1) {
+        const offset = (x * 3 + y) * 21;
+        board[offset + 14] = x / 2;
+        board[offset + 15] = y / 2;
+        board[offset + 16] = random();
+      }
+    }
     putTown(board, 0, 1, 1, 0.7 + random() * 0.3);
     putTown(board, 2, 1, -1, 0.45 + random() * 0.55);
     const friendlyCount = 1 + Math.floor(random() * 3);
@@ -380,8 +388,9 @@ function makeBatch(seed, game) {
     boardValues.push(...board, ...swapProjectedCombatSides(board));
     globalValues.push(globalValue, -globalValue);
     policies.push(policy, policy.slice());
-    labels.push(modelCombatTarget(projectedCombatLabel(board, globalValue)),
-      modelCombatTarget(-projectedCombatLabel(board, globalValue)));
+    const demonstrationScore = projectedCombatLabel(board, globalValue);
+    labels.push(modelCombatTarget(demonstrationScore),
+      modelCombatTarget(-demonstrationScore));
   }
   const sampleCount = labels.length;
   return {
@@ -524,10 +533,8 @@ function runtimeCombatTeacherLabel(vectorizedGrid) {
   return {
     board: projected.board,
     globalValue: projected.globalValue,
-    label: modelCombatTarget(projectedCombatLabel(
-      projected.board,
-      projected.globalValue
-    ))
+    demonstrationScore: projectedCombatLabel(
+      projected.board, projected.globalValue)
   };
 }
 
@@ -535,28 +542,30 @@ function runtimeCombatTeacherGameSeed(seed, stageIndex, game) {
   return seed + stageIndex * 997 + game;
 }
 
-function collectRuntimeCombatTeacherGame(seed, stageIndex, game) {
+function collectRuntimeCombatTeacherGame(seed, stageIndex, game, rolloutPredict) {
   const examples = [];
+  let choiceSet = 0;
   const modelSide = game % 2 === 1 ? 'A' : 'B';
   const collectPredict = function collectPredict(_modelIdentifier, vectorizedGrids) {
     const labeledGrids = vectorizedGrids.map(runtimeCombatTeacherLabel);
-    const scores = labeledGrids.map((example) => example.label);
+    const scores = labeledGrids.map((example) => example.demonstrationScore);
+    const orderedScores = scores.slice().sort((left, right) => left - right);
     for (let index = 0; index < vectorizedGrids.length; index += 1) {
       const example = labeledGrids[index];
+      const rank = orderedScores.lastIndexOf(scores[index]);
       examples.push({
         board: example.board,
         globalValue: example.globalValue,
-        label: example.label,
-        policy: oneHotPolicy(actionIndexFromProjectedBoard(example.board))
-      });
-      examples.push({
-        board: swapProjectedCombatSides(example.board),
-        globalValue: -example.globalValue,
-        label: -example.label,
+        choiceSet,
+        demonstrationScore: scores[index],
+        label: rank,
         policy: oneHotPolicy(actionIndexFromProjectedBoard(example.board))
       });
     }
-    return scores.map((score) => [score]);
+    choiceSet += 1;
+    return rolloutPredict
+      ? rolloutPredict(null, vectorizedGrids)
+      : scores.map((score) => [score]);
   };
   const gameSeed = runtimeCombatTeacherGameSeed(seed, stageIndex, game);
   const result = runGame({
@@ -573,7 +582,9 @@ function collectRuntimeCombatTeacherGame(seed, stageIndex, game) {
       seed,
       stageIndex
     },
-    inferenceSource: 'runtime combat teacher labels for model training'
+    inferenceSource: rolloutPredict
+      ? 'current TensorFlow model rollout with expert-ranked candidate labels'
+      : 'expert rollout with expert-ranked candidate labels'
   });
   return {
     game,
@@ -666,11 +677,12 @@ function batchFromRuntimeTeacherGameResults(gameResults) {
   const labels = [];
   const policies = [];
   for (const result of gameResults.slice().sort((a, b) => a.game - b.game)) {
-    const stride = Math.max(1, Math.floor(result.examples.length / 256));
-    for (let exampleIndex = 0;
-      exampleIndex < result.examples.length && policies.length < result.game * 256;
-      exampleIndex += stride) {
-      const example = result.examples[exampleIndex];
+    const limit = Math.min(512, result.examples.length);
+    const stride = Math.max(1, Math.floor(result.examples.length / limit));
+    const selected = [];
+    for (let index = 0; index < result.examples.length && selected.length < limit;
+      index += stride) selected.push(result.examples[index]);
+    for (const example of selected) {
       for (let index = 0; index < example.board.length; index += 1) {
         boardValues.push(example.board[index]);
       }
@@ -692,23 +704,23 @@ function batchFromRuntimeTeacherGameResults(gameResults) {
   };
 }
 
-async function collectRuntimeCombatTeacherGames(seed, stageIndex, workerPool) {
+async function collectRuntimeCombatTeacherGames(
+  seed, stageIndex, workerPool, gameCount = 2, rolloutPredict) {
   const jobs = [];
-  for (let game = 1; game <= 2; game += 1) {
+  for (let game = 1; game <= gameCount; game += 1) {
     jobs.push({ seed, stageIndex, game });
   }
-  if (workerPool) {
+  if (workerPool && !rolloutPredict) {
     return Promise.all(jobs.map((job) => workerPool.runRuntimeTeacherGame(job)));
   }
   return jobs.map((job) => collectRuntimeCombatTeacherGame(
-    job.seed,
-    job.stageIndex,
-    job.game
-  ));
+    job.seed, job.stageIndex, job.game, rolloutPredict));
 }
 
-async function makeRuntimeCombatTeacherBatch(seed, stageIndex, workerPool) {
-  const gameResults = await collectRuntimeCombatTeacherGames(seed, stageIndex, workerPool);
+async function makeRuntimeCombatTeacherBatch(
+  seed, stageIndex, workerPool, gameCount, rolloutPredict) {
+  const gameResults = await collectRuntimeCombatTeacherGames(
+    seed, stageIndex, workerPool, gameCount, rolloutPredict);
   return batchFromRuntimeTeacherGameResults(gameResults);
 }
 
@@ -819,9 +831,12 @@ async function fitRuntimeCombatTeacherBatch(
   seed,
   stageIndex,
   workerPool,
-  epochs
+  epochs,
+  gameCount,
+  rolloutPredict
 ) {
-  const runtimeBatch = await makeRuntimeCombatTeacherBatch(seed, stageIndex, workerPool);
+  const runtimeBatch = await makeRuntimeCombatTeacherBatch(
+    seed, stageIndex, workerPool, gameCount, rolloutPredict);
   if (!runtimeBatch) {
     return null;
   }
@@ -854,7 +869,83 @@ function runtimeValueTrainer(model) {
   return trainer;
 }
 
+async function trainRuntimeCombatRanking(model, gameResults, epochs) {
+  const bestBoards = [];
+  const bestGlobals = [];
+  const otherBoards = [];
+  const otherGlobals = [];
+  for (const result of gameResults) {
+    const groups = new Map();
+    for (const example of result.examples) {
+      if (!groups.has(example.choiceSet)) groups.set(example.choiceSet, []);
+      groups.get(example.choiceSet).push(example);
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const ordered = group.slice().sort((left, right) =>
+        right.demonstrationScore - left.demonstrationScore);
+      const best = ordered[0];
+      const alternatives = ordered.slice(1);
+      const stride = Math.max(1, Math.floor(alternatives.length / 8));
+      for (let index = 0; index < alternatives.length; index += stride) {
+        bestBoards.push(...best.board);
+        bestGlobals.push(best.globalValue);
+        otherBoards.push(...alternatives[index].board);
+        otherGlobals.push(alternatives[index].globalValue);
+      }
+    }
+  }
+  const pairCount = bestGlobals.length;
+  if (!pairCount) return null;
+  const bestBoard = tf.tensor4d(bestBoards, [pairCount, 3, 3, 21]);
+  const bestGlobal = tf.tensor2d(bestGlobals, [pairCount, 1]);
+  const otherBoard = tf.tensor4d(otherBoards, [pairCount, 3, 3, 21]);
+  const otherGlobal = tf.tensor2d(otherGlobals, [pairCount, 1]);
+  const targets = tf.ones([pairCount, 1]);
+  const valueModel = tf.model({
+    inputs: model.inputs,
+    outputs: model.getLayer('combat_value').output
+  });
+  const bestBoardInput = tf.input({ shape: [3, 3, 21] });
+  const bestGlobalInput = tf.input({ shape: [1] });
+  const otherBoardInput = tf.input({ shape: [3, 3, 21] });
+  const otherGlobalInput = tf.input({ shape: [1] });
+  const bestValue = valueModel.apply([bestBoardInput, bestGlobalInput]);
+  const otherValue = valueModel.apply([otherBoardInput, otherGlobalInput]);
+  const pairedValues = tf.layers.concatenate().apply([bestValue, otherValue]);
+  const differenceLayer = tf.layers.dense({
+    units: 1,
+    useBias: false,
+    trainable: false,
+    kernelInitializer: 'zeros'
+  });
+  const difference = differenceLayer.apply(pairedValues);
+  const differenceWeights = tf.tensor2d([1, -1], [2, 1]);
+  differenceLayer.setWeights([differenceWeights]);
+  differenceWeights.dispose();
+  const probability = tf.layers.activation({ activation: 'sigmoid' }).apply(difference);
+  const ranker = tf.model({
+    inputs: [bestBoardInput, bestGlobalInput, otherBoardInput, otherGlobalInput],
+    outputs: probability
+  });
+  ranker.compile({ optimizer: tf.train.adam(0.001), loss: 'binaryCrossentropy' });
+  try {
+    return await ranker.fit(
+      [bestBoard, bestGlobal, otherBoard, otherGlobal], targets,
+      { epochs, batchSize: 128, shuffle: false, verbose: 0 });
+  } finally {
+    bestBoard.dispose();
+    bestGlobal.dispose();
+    otherBoard.dispose();
+    otherGlobal.dispose();
+    targets.dispose();
+  }
+}
+
 function trainRuntimeCombatBatch(model, runtimeBatch, epochs = 1) {
+  if (runtimeBatch.gameResults) {
+    return trainRuntimeCombatRanking(model, runtimeBatch.gameResults, epochs);
+  }
   return runtimeValueTrainer(model).fit(
     [runtimeBatch.board, runtimeBatch.global],
     runtimeBatch.labels,
@@ -867,41 +958,43 @@ function trainRuntimeCombatBatch(model, runtimeBatch, epochs = 1) {
   );
 }
 
-async function pretrainCombatValueModel(model) {
-  const featureCount = 3 * 3 * 21;
-  const boards = [new Array(featureCount).fill(0)];
-  const globals = [[0]];
-  for (let featureIndex = 0; featureIndex < featureCount; featureIndex += 1) {
-    const positive = new Array(featureCount).fill(0);
-    const negative = new Array(featureCount).fill(0);
-    positive[featureIndex] = 1;
-    const featureScore = projectedCombatLabel(positive, 0);
-    const magnitude = featureScore === 0 ? 1 : 1 / Math.abs(featureScore);
-    positive[featureIndex] = magnitude;
-    negative[featureIndex] = -magnitude;
-    boards.push(positive, negative);
-    globals.push([0], [0]);
-  }
-  const labels = boards.map((board) => [projectedCombatLabel(board, 0)]);
-  const boardTensor = tf.tensor4d(boards.flat(), [boards.length, 3, 3, 21]);
-  const globalTensor = tf.tensor2d(globals);
-  const labelTensor = tf.tensor2d(labels);
+async function pretrainCombatValueModel(model, seed) {
+  const frozenLayers = model.layers.filter((layer) =>
+    !layer.name.startsWith('value_') && layer.name !== 'combat_value');
+  frozenLayers.forEach((layer) => { layer.trainable = false; });
   const pretrainer = tf.model({
     inputs: model.inputs,
-    outputs: model.getLayer('value_score').output,
-    name: 'combat_score_pretrainer'
+    outputs: model.getLayer('combat_value').output,
+    name: 'combat_value_pretrainer'
   });
-  pretrainer.compile({ optimizer: tf.train.adam(0.01), loss: 'meanSquaredError' });
+  pretrainer.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' });
+  const batches = [];
+  let boards;
+  let globals;
+  let labels;
   try {
+    for (let datasetIndex = 0; datasetIndex < 100; datasetIndex += 1) {
+      batches.push(makeBatch(seed + datasetIndex * 7919, 0));
+    }
+    boards = tf.concat(batches.map((batch) => batch.board), 0);
+    globals = tf.concat(batches.map((batch) => batch.global), 0);
+    labels = tf.concat(batches.map((batch) => batch.labels), 0);
     await pretrainer.fit(
-      [boardTensor, globalTensor],
-      labelTensor,
-      { epochs: 5000, batchSize: boards.length, shuffle: false, verbose: 0 }
+      [boards, globals],
+      labels,
+      { epochs: 20, batchSize: 512, shuffle: false, verbose: 0 }
     );
   } finally {
-    boardTensor.dispose();
-    globalTensor.dispose();
-    labelTensor.dispose();
+    frozenLayers.forEach((layer) => { layer.trainable = true; });
+    if (boards) boards.dispose();
+    if (globals) globals.dispose();
+    if (labels) labels.dispose();
+    for (const batch of batches) {
+      batch.board.dispose();
+      batch.global.dispose();
+      batch.policy.dispose();
+      batch.labels.dispose();
+    }
   }
 }
 
@@ -2045,7 +2138,15 @@ async function main() {
       }
     };
     if (!options.resume && state.completedGames === 0) {
-      await pretrainCombatValueModel(model);
+      await pretrainCombatValueModel(model, state.seed + 424242);
+      await fitRuntimeCombatTeacherBatch(
+        model,
+        state.seed + 50000,
+        state.curriculum.currentStageIndex,
+        null,
+        20,
+        20
+      );
     }
     runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
     scheduleRuntimeBatchPrefetch(state.completedGames);
@@ -2121,7 +2222,6 @@ async function main() {
               ) || history;
             }
           }
-          await pretrainCombatValueModel(model);
           predictionTensor = model.predict([batch.board, batch.global]);
           prediction = Array.from(await predictionValueTensor(predictionTensor).data());
         } finally {
@@ -2272,9 +2372,12 @@ module.exports = {
   collectRuntimeCombatTeacherGame,
   curriculumGateDecision,
   initialCurriculumState,
+  makeBatch,
   makeRuntimeCombatTeacherBatch,
+  pretrainCombatValueModel,
   projectRuntimeVectorForModel,
   projectedCombatLabel,
+  trainRuntimeCombatBatch,
   runtimeTeacherDatasetSignature,
   verifyRuntimeTeacherWorkerInvariants,
   workerPoolDispatchProbe,

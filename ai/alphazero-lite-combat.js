@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const tf = require('@tensorflow/tfjs-node');
 
-const ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION = 'alphazero-lite-combat-v3';
+const ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION = 'alphazero-lite-combat-v4';
 const DEFAULT_BOARD_HEIGHT = 3;
 const DEFAULT_BOARD_WIDTH = 3;
 const DEFAULT_COMBAT_CHANNELS = 21;
@@ -119,27 +119,32 @@ function createAlphaZeroLiteCombatModel(options = {}) {
     name: metadata.outputs.policy
   }).apply(policyHidden);
 
-  const valueBoardFeatures = tf.layers.flatten({
-    name: 'value_board_features'
+  const valueCellFeatures = tf.layers.conv2d({
+    filters: 4,
+    kernelSize: 1,
+    padding: 'same',
+    activation: 'linear',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 200),
+    name: 'value_cell_features'
   }).apply(boardInput);
+  const valueBoardFeatures = tf.layers.globalAveragePooling2d({
+    name: 'value_board_features'
+  }).apply(valueCellFeatures);
   const valueMerged = tf.layers.concatenate({
     name: 'value_context'
   }).apply([valueBoardFeatures, globalInput]);
-  const valueScore = tf.layers.dense({
+  const valueHidden = tf.layers.dense({
+    units: 8,
+    activation: 'tanh',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 201),
+    name: 'value_hidden'
+  }).apply(valueMerged);
+  const valueOutput = tf.layers.dense({
     units: 1,
     activation: 'linear',
-    useBias: false,
-    kernelInitializer: 'zeros',
-    name: 'value_score'
-  }).apply(valueMerged);
-  const valueNonlinear = tf.layers.leakyReLU({
-    alpha: 0.5,
-    name: 'value_nonlinear'
-  }).apply(valueScore);
-  const valueOutput = tf.layers.activation({
-    activation: 'linear',
+    kernelInitializer: seededInitializer('glorotUniform', seed, 202),
     name: metadata.outputs.value
-  }).apply(valueNonlinear);
+  }).apply(valueHidden);
 
   const model = tf.model({
     inputs: [boardInput, globalInput],
