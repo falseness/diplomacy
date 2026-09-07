@@ -272,6 +272,15 @@ function collectFastActionChangedCoords(mutableGrid, command) {
             seen,
             undo.townExternalProduction[i])
     }
+    // Every live unit's nearest enemy can change after movement, a kill,
+    // production, or capture, even when that unit is far from the action.
+    for (let playerIndex = 1; playerIndex < players.length; ++playerIndex) {
+        for (let unit of players[playerIndex].units) {
+            if (!unit.killed) {
+                addFastActionCoordIfOnGrid(mutableGrid, coords, seen, unit.coord)
+            }
+        }
+    }
     addAllTownSummaryFastActionCoords(mutableGrid, coords, seen)
     return coords
 }

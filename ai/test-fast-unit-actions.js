@@ -89,6 +89,7 @@ function createRuntimeContext() {
       removeItem(key) { delete storage[key]; }
     },
     io() { return {}; },
+    reportCase(details) { console.log(JSON.stringify(details)); },
     tf: {},
     saveAs() {}
   };
@@ -209,7 +210,7 @@ const result = new vm.Script(`(() => {
     let source = sourceForCombatUnit(testCase.unitName)
     let target = {x: 5, y: 3}
     let playerOneTown = {x: 1, y: 1}
-    let playerTwoTown = testCase.targetKind == 'town' ?
+    let playerTwoTown = testCase.targetKind.startsWith('town') ?
       target : {x: 8, y: 5}
     let playerTwo = {
       rgb: {r: 40, g: 120, b: 220},
@@ -237,7 +238,7 @@ const result = new vm.Script(`(() => {
 
     if (testCase.targetKind != 'unit-damage' &&
         testCase.targetKind != 'unit-kill' &&
-        testCase.targetKind != 'town') {
+        !testCase.targetKind.startsWith('town')) {
       playerTwo.suburbs = [{
         town: playerTwoTown,
         cells: [playerTwoTown, target]
@@ -313,7 +314,20 @@ const result = new vm.Script(`(() => {
         gameExit = false
       }
     }, false)
+    if (testCase.targetKind == 'town-capture') {
+      // GameMap starts towns with a garrison; this case targets an unguarded town.
+      grid.setUnit(new Empty(), target)
+      players[2].units = players[2].units.filter(function(unit) {
+        return !sameCoord(unit.coord, target)
+      })
+      let town = grid.getBuilding(target)
+      let attacker = grid.getCell(source).unit
+      town.hit(town.hp - attacker.dmg)
+      assert(town.hp > 0 && !town.isStandable,
+        'capture fixture must require a damaging attack', testCase)
+    }
     grid.getHexagon(source).firstpaint(1)
+    grid.getHexagon(source).isSuburb = false
     if (testCase.targetKind == 'pending-wall') {
       let pending = new ExternalProduction(
         production.wall.turns,
@@ -409,6 +423,16 @@ const result = new vm.Script(`(() => {
       return
     }
     let attacker = grid.getCell(testCase.source).unit
+    if (testCase.targetKind == 'town-capture') {
+      let town = grid.getBuilding(testCase.destination)
+      assert(town.hp == 0 && town.wasHitted, 'capture attack did not exhaust town hp', testCase)
+      assert(town.playerColor == 1 && town.isRecentlyCaptured,
+        'town ownership/capture flag did not change', testCase)
+      assert(grid.getCell(testCase.destination).unit.playerColor == 1,
+        'capturing attacker did not occupy town', testCase)
+      assert(actionManager.lastAction.isBuildingCaptured,
+        'capture undo metadata missing', testCase)
+    }
     if (testCase.targetKind == 'unit-damage') {
       let target = grid.getCell(testCase.destination).unit
       assert(target.notEmpty(), 'damage combat target was unexpectedly removed', testCase)
@@ -479,12 +503,16 @@ const result = new vm.Script(`(() => {
       }
     }
     assert(isAvailable, 'combat invariant command is not legal', testCase)
+    let initialMoves = unit.moves
     unit.select()
     if (testCase.kind == 'skip') {
       unit.skipMoves()
     }
     else {
       unit.sendInstructions(grid.getCell(command.destinationCoord))
+    }
+    if (testCase.kind == 'combat') {
+      assert(unit.moves < initialMoves, 'combat did not consume moves', testCase)
     }
     assertCombatSideEffects(testCase)
     let applied = applyFastAction(mutableGrid, command)
@@ -497,6 +525,11 @@ const result = new vm.Script(`(() => {
     compareOrThrow(initialVectorGrid, vectoriseGrid(), testCase, 'after-normal-undo')
     assert(snapshotGrid() == initialSnapshot,
       'normal actionManager undo did not restore grid snapshot', testCase)
+    if (testCase.kind == 'combat') {
+      reportCase({status: 'PASS', seed: testCase.seed, attacker: testCase.unitName,
+        target: testCase.targetKind, command: command,
+        checks: 'side-effects apply fast-undo normal-undo grid-restore'})
+    }
   }
 
   function combatCase(unitName, targetKind) {
@@ -567,6 +600,24 @@ const result = new vm.Script(`(() => {
       combatCases.push(combatCase(buildingAttackers[i], buildingTargets[j]))
     }
   }
+  for (let unitName of ['noob', 'KOHb', 'normchel']) {
+    combatCases.push(combatCase(unitName, 'town-capture'))
+  }
+  // Exercise the real mismatch formatter with a deliberately different vector.
+  let diagnosticCase = combatCases[0]
+  diagnosticCase.command = {type: 'unit', whoDoCommandCoord: diagnosticCase.source,
+    destinationCoord: diagnosticCase.destination}
+  let diagnosticMessage = ''
+  try {
+    compareOrThrow([0], [1], diagnosticCase, 'negative-control')
+  } catch (error) {
+    diagnosticMessage = error.message
+  }
+  for (let field of ['seed', 'attacker', 'target', 'command', 'vectorPath']) {
+    assert(diagnosticMessage.includes('"' + field + '"'),
+      'mismatch diagnostic missing field', {field: field, message: diagnosticMessage})
+  }
+  reportCase({status: 'PASS', check: 'mismatch-diagnostics', message: diagnosticMessage})
   for (let i = 0; i < combatCases.length; ++i) {
     runCase(combatCases[i])
   }
@@ -582,7 +633,7 @@ const result = new vm.Script(`(() => {
     combatBuildingTargets: buildingTargets,
     unitTypes: Object.keys(allTypes).sort()
   }
-})()`, { filename: 'task089-fast-unit-actions.js' }).runInContext(context);
+})()`, { filename: 'task090-fast-unit-actions.js' }).runInContext(context);
 
 check(result.totalCases > 0, 'fast unit action suite produced no cases', result);
 console.log(
@@ -591,3 +642,5 @@ console.log(
   ', ' + result.combatCases + ' combat cases, and unit types ' +
   result.unitTypes.join(', ')
 );
+
+console.log(JSON.stringify(result));

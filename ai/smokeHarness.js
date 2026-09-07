@@ -199,7 +199,8 @@ function createSmokeContext() {
               }
             }
             if (playerIndex > 0) {
-              units.push({x: town.x, y: town.y, source: 'first-town-unit'});
+              units.push({x: town.x, y: town.y, coord: {x: town.x, y: town.y},
+                source: 'first-town-unit'});
             }
             return {
               coord: town,
