@@ -141,7 +141,12 @@ async function waitForGameReady(page) {
   await page.waitForFunction(() => {
     return typeof menu != 'undefined' && menu.visible &&
       typeof startAI == 'function' &&
-      typeof nextTurnButton != 'undefined';
+      typeof nextTurnButton != 'undefined' &&
+      typeof images != 'undefined' && images.length > 0 &&
+      typeof cachedImages != 'undefined' &&
+      images.every(name => assets[name].complete && assets[name].naturalWidth > 0 &&
+        cachedImages[name] instanceof HTMLCanvasElement &&
+        cachedImages[name].width > 0 && cachedImages[name].height > 0);
   }, null, { timeout: 15000 });
 }
 
@@ -292,6 +297,12 @@ function isSendInstructionsTypeError(error) {
     await installRoutes(page);
     await page.goto(served.url, { waitUntil: 'load' });
     await waitForGameReady(page);
+    const readiness = await page.evaluate(() => ({
+      imageCount: images.length,
+      cachedImageCount: images.filter(name =>
+        cachedImages[name] instanceof HTMLCanvasElement).length
+    }));
+    console.log('SPRITE_CACHE_READY: ' + JSON.stringify(readiness));
     await clickPlayAi(page);
     await hideTurnPauseOverlayAndDrawGrid(page);
     await page.evaluate(() => { gameSettings.aiActionLimit = 1; });
@@ -319,6 +330,7 @@ function isSendInstructionsTypeError(error) {
         postTurnEvidence.invalidSourceSelected && postTurnEvidence.whooseTurn === 2 :
         !sendInstructionsTypeError && !postTurnEvidence.invalidSourceSelected) ? 'passed' : 'failed',
       expectation: expectCrash ? 'pre-fix crash' : 'fixed rejection',
+      readiness,
       provenance: {
         runtimeRoot: repoRoot,
         harnessSha256: sha256(__filename),
@@ -354,6 +366,7 @@ function isSendInstructionsTypeError(error) {
     report.report = reportPath;
 
     if (expectCrash) {
+      check(pageErrors.every(isExpectedCrash), 'Unexpected browser error in crash reproduction', report);
       check(expectedError && postTurnEvidence.invalidSourceSelected &&
           postTurnEvidence.whooseTurn === 2,
         'Pre-fix reproduction did not observe the blue selectBestCommand crash', report);
@@ -367,6 +380,16 @@ function isSendInstructionsTypeError(error) {
 
     console.log(JSON.stringify(report, null, 2));
   } catch (error) {
+    fs.writeFileSync(path.join(artifactDir, 'task085-harness-failure.json'),
+      JSON.stringify({
+        status: 'failed',
+        runtimeRoot: repoRoot,
+        harnessSha256: sha256(__filename),
+        error: { message: error.message, stack: error.stack || '' },
+        pageErrors,
+        browserConsole: consoleMessages,
+        details: error.details || null
+      }, null, 2));
     console.error(error.stack || error.message);
     if (error.details) {
       console.error(JSON.stringify(error.details, null, 2));
