@@ -230,6 +230,9 @@ function getAiMoveCommands(unit) {
     return unit.getAvailableMoveCommands()
 }
 
+// Keep object identity out of serializable command data and fast-grid metadata.
+const aiCommandSourceUnits = new WeakMap()
+
 function resolveLiveAiCommandUnit(player, command) {
     if (!command || !command.whoDoCommandCoord || !command.destinationCoord ||
             typeof grid == 'undefined' || !grid.getCell) {
@@ -240,6 +243,12 @@ function resolveLiveAiCommandUnit(player, command) {
         return null
     }
     let unit = sourceCell.unit
+    if (!player.units.includes(unit) || !unit.coord ||
+            !areCoordsEqual(unit.coord, command.whoDoCommandCoord) ||
+            (aiCommandSourceUnits.has(command) &&
+                aiCommandSourceUnits.get(command) !== unit)) {
+        return null
+    }
     if (!unit || typeof unit.sendInstructions != 'function' ||
             typeof unit.select != 'function' || typeof unit.skipMoves != 'function' ||
             unit.killed || !unit.isMyTurn) {
@@ -917,6 +926,27 @@ class AIPlayer extends Player {
             this.hasEntityProgressed(snapshot.destinationUnit) ||
             this.hasEntityProgressed(snapshot.destinationBuilding)
     }
+    undoCommandSimulation(commands, snapshot) {
+        actionManager.undo()
+        if (!snapshot) {
+            return
+        }
+        // Undo reconstructs units. Rebind only identities captured before this
+        // simulation, immediately after its undo, never arbitrary live occupants.
+        for (let state of [snapshot.sourceUnit, snapshot.destinationUnit]) {
+            if (!state || state.x === null || state.y === null) {
+                continue
+            }
+            for (let command of commands) {
+                if (aiCommandSourceUnits.get(command) === state.entity) {
+                    let restored = grid.getCell({x: state.x, y: state.y}).unit
+                    if (this.units.includes(restored)) {
+                        aiCommandSourceUnits.set(command, restored)
+                    }
+                }
+            }
+        }
+    }
     scoreActionCommandsWithFastVectorGrid(commands, applyCommand) {
         let validCommands = []
         let vectorisedGrids = []
@@ -938,7 +968,7 @@ class AIPlayer extends Player {
                     }
                 }
                 finally {
-                    actionManager.undo()
+                    this.undoCommandSimulation(commands, progressState)
                 }
             }
             return {
@@ -968,7 +998,7 @@ class AIPlayer extends Player {
                 if (applied) {
                     undoFastAction(mutableGrid, applied)
                 }
-                actionManager.undo()
+                this.undoCommandSimulation(commands, progressState)
             }
         }
         return {
@@ -1000,6 +1030,12 @@ class AIPlayer extends Player {
             }
             let available = this.units[i].getAvailableCommands()
             for (let j = 0; j < available.length; ++j) {
+                if (!available[j] || typeof available[j] != 'object') {
+                    continue
+                }
+                if (!aiCommandSourceUnits.has(available[j])) {
+                    aiCommandSourceUnits.set(available[j], this.units[i])
+                }
                 commands.push(available[j])
             }
         }

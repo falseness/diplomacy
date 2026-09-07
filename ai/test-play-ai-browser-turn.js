@@ -378,6 +378,12 @@ async function clickNextTurn(page) {
     const real = await runTurnScenario('real', true);
     const zeroed = await runTurnScenario('zeroed', false);
     const randomized = await runTurnScenario('randomized', false);
+    const turnErrors = consoleMessages.slice();
+    check(!turnErrors.some(message =>
+      message.includes('unit.sendInstructions is not a function')),
+    'Play AI turn emitted unit.sendInstructions TypeError', turnErrors);
+    check(!turnErrors.some(message => message.startsWith('pageerror:')),
+      'Play AI turn emitted an unexpected browser exception', turnErrors);
 
     const missing = await openCleanPage();
     const missingErrorsStart = consoleMessages.length;
@@ -473,6 +479,8 @@ async function clickNextTurn(page) {
         heuristicOnly: 'not applicable; AIPlayer.getWinningChances calls predict(ai_model, ...) without a fused heuristic score'
       },
       legalVisibleBlueMove,
+      turnErrors,
+      noSendInstructionsTypeError: true,
       legalActionBasis: 'unchanged AIPlayer.selectBestCommand enumerated getAvailableCommands and applied the selected command through applyLiveAiCommandUnit',
       acceptance: {
         browserEntrypoint: 'PASS',
