@@ -3,6 +3,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const vm = require('vm');
 const {
+  createBrowserContext,
   getBrowserScriptCacheStats,
   loadBrowserScript,
   loadBrowserScripts,
@@ -236,8 +237,6 @@ function createRuntimeContext(seed) {
     parseInt,
     parseFloat,
     isNaN,
-    Infinity,
-    NaN,
     setTimeout,
     clearTimeout,
     requestAnimationFrame() { return 0; },
@@ -270,9 +269,7 @@ function createRuntimeContext(seed) {
     __benchmarkInferenceCalls: 0,
     __benchmarkInferencePositions: 0
   };
-  context.window = context;
-  context.globalThis = context;
-  return vm.createContext(context);
+  return createBrowserContext(context);
 }
 
 function readRepoFile(relativePath) {

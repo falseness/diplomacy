@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the original TASK-102 workload with only browser-script caching changed.
+"""Measure fresh direct VM globals against the preceding TASK-102 cache.
 
 Historical sources are necessary: later tasks changed the canonical training
 workload. No curriculum deferral, VM reuse, or model changes enter this pair.
@@ -19,6 +19,7 @@ import time
 
 BASE = 'bf9b75219aab55315aa72656b2a145ff5b193b88'
 CACHE_LOADERS = 'ecd5880bd31c0138381b9adaefdcfc7fdd63a256'
+CACHE_BASE = '8d2e35ea4a44418de778dc210f86b4d5f68cff6b'
 
 
 def digest(path):
@@ -34,15 +35,23 @@ def prepare_sources(repo, dest, env):
         source.mkdir()  # Refuse to overwrite evidence from an earlier attempt.
         with tarfile.open(fileobj=io.BytesIO(git('archive', BASE))) as archive:
             archive.extractall(source)
-        if variant == 'after':
-            for filename in ('ai/benchmarkHarness.js', 'ai/economy-training.js'):
-                (source / filename).write_bytes(git('show', CACHE_LOADERS + ':' + filename))
-            harness = source / 'ai/benchmarkHarness.js'
-            text = harness.read_text().replace('  loadBrowserScripts,\n', '  loadBrowserScript,\n  loadBrowserScripts,\n', 1)
-            bootstrap = "  const source = fs.readFileSync(path.join(__dirname, 'players.js'), 'utf8');\n  new vm.Script(source, { filename: 'ai/players.js' }).runInContext(context);"
-            assert bootstrap in text
-            harness.write_text(text.replace(bootstrap, "  loadBrowserScript(context, 'ai/players.js');"))
-            (source / 'ai/browserScriptCache.js').write_bytes((repo / 'ai/browserScriptCache.js').read_bytes())
+        for filename in ('ai/benchmarkHarness.js', 'ai/economy-training.js'):
+            text = git('show', CACHE_LOADERS + ':' + filename).decode()
+            if filename == 'ai/benchmarkHarness.js':
+                text = text.replace('  loadBrowserScripts,\n', '  loadBrowserScript,\n  loadBrowserScripts,\n', 1)
+                bootstrap = "  const source = fs.readFileSync(path.join(__dirname, 'players.js'), 'utf8');\n  new vm.Script(source, { filename: 'ai/players.js' }).runInContext(context);"
+                assert bootstrap in text
+                text = text.replace(bootstrap, "  loadBrowserScript(context, 'ai/players.js');")
+            if variant == 'after':
+                text = text.replace('  loadBrowserScripts,\n', '  createBrowserContext,\n  loadBrowserScripts,\n', 1)
+                text = text.replace('    Infinity,\n    NaN,\n', '')
+                factory = '  context.window = context;\n  context.globalThis = context;\n  return vm.createContext(context);'
+                assert text.count(factory) == 1
+                text = text.replace(factory, '  return createBrowserContext(context);')
+            (source / filename).write_text(text)
+        cache = ((repo / 'ai/browserScriptCache.js').read_bytes() if variant == 'after'
+                 else git('show', CACHE_BASE + ':ai/browserScriptCache.js'))
+        (source / 'ai/browserScriptCache.js').write_bytes(cache)
         files = [p for p in source.rglob('*') if p.is_file()]
         manifest[variant] = {str(p.relative_to(source)): digest(p) for p in files}
         (source / 'node_modules').symlink_to(repo / 'node_modules', target_is_directory=True)
@@ -52,7 +61,8 @@ def prepare_sources(repo, dest, env):
     (dest / 'source-sha256.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (dest / 'provenance.json').write_text(json.dumps({
         'host_sha': git('rev-parse', 'HEAD').decode().strip(),
-        'host_status': git('status', '--short').decode(), 'baseline': BASE,
+        'host_status': git('status', '--short').decode(), 'workload_revision': BASE,
+        'baseline': CACHE_BASE,
         'loader_revision': CACHE_LOADERS, 'changed_sources': changed,
         'node': subprocess.check_output(['node', '--version'], env=env, text=True).strip(),
         'platform': platform.platform(), 'cpu': Path('/proc/cpuinfo').read_text().split('model name')[1].splitlines()[0],

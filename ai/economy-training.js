@@ -3,6 +3,7 @@ const path = require('path');
 const vm = require('vm');
 const tf = require('@tensorflow/tfjs-node');
 const {
+  createBrowserContext,
   getBrowserScriptCacheStats,
   loadBrowserScripts,
   resetBrowserScriptCache
@@ -243,8 +244,6 @@ function createRuntimeContext(seed) {
     parseInt,
     parseFloat,
     isNaN,
-    Infinity,
-    NaN,
     setTimeout,
     clearTimeout,
     requestAnimationFrame() { return 0; },
@@ -274,9 +273,7 @@ function createRuntimeContext(seed) {
     saveAs() {},
     __scoreFinalEconomyVector: scoreFinalEconomyVector
   };
-  context.window = context;
-  context.globalThis = context;
-  return vm.createContext(context);
+  return createBrowserContext(context);
 }
 
 function getTrainingRuntimeContext(seed) {

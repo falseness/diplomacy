@@ -6,6 +6,12 @@ immutable scripts are shared. Individual scripts retain their original filename
 and script-boundary semantics. The explicit no-cache option and
 `DIPLOMACY_DISABLE_BROWSER_SCRIPT_CACHE=1` provide a comparator.
 
+On Node versions exposing `vm.constants.DONT_CONTEXTIFY`, fresh contexts use
+direct VM globals to avoid the contextified global proxy during script execution.
+Older versions retain contextified globals. Neither mode reuses mutable game
+contexts. `node ai/tests/test-browser-context.js` checks global and lexical
+isolation, browser aliases, and native constants in the selected mode.
+
 With Node 20 on PATH, run the current correctness test with a real checkpoint:
 
 ```sh
@@ -31,13 +37,15 @@ source archives, runs every pair sequentially, and returns nonzero if either
 median speed gate or historical determinism fails. It does not skip training
 measurements when the component speed gate fails.
 
-The historical baseline is `bf9b752`, the immediate parent of the first TASK-102
-commit. The after variant uses that same source tree, changes only the two
-browser loaders from `ecd5880`, routes player-class validation through that
-same cache, and copies the current cache module. A source
-manifest asserts this three-file boundary. This comparison excludes the later
+The workload source is `bf9b752`, the immediate parent of the first TASK-102
+commit. Both variants use the browser loaders from `ecd5880` and route player
+class validation through the cache. The before variant uses the preceding cache
+from `8d2e35e`; the after variant adds the direct-global context factory to both
+loaders and copies the current cache module. A source manifest asserts this
+three-file boundary. This comparison excludes the later
 TASK-102 curriculum deferral, warmed-context reuse, and subsequent model changes.
-It measures script caching in the original workload; it is not a comparison of
+It measures the context optimization over the preceding cache in the original
+workload; it is not a comparison of
 the entire modern repository against that historical revision.
 
 The component measurement uses 50 tiny-duel games, seeds 10200–10249, one round,
@@ -61,9 +69,10 @@ A failed speed gate must remain a failure even if correctness passes. Keep
 TASK-102 pending and use the existing TASK-158 tuning follow-up; workload deferral
 cannot establish a script-caching speedup.
 
-The 2026-09-07 measurement failed both speed gates: the 50-call median changed
+The earlier 2026-09-07 cache-only measurement failed both speed gates: the 50-call median changed
 from 31.671003s to 44.289850s, and the full training median changed from
 1684.785104s to 1765.029645s. All six training runs completed all 15 steps with
 identical paired game workloads. A separate ten-call profile attributed 2.46%
 of sampled code time to file reads and Script construction and 95.03% to game
-execution. TASK-102 remains pending; these results do not establish a speedup.
+execution. Those results do not establish a speedup. The direct-global attempt
+must satisfy both gates with fresh evidence before the task can be handed off.

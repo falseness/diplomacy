@@ -8,6 +8,18 @@ const readCounts = new Map();
 const compileCounts = new Map();
 let cachedBrowserScriptSources = null;
 
+function createBrowserContext(globals) {
+  // Fresh global/lexical state, without Node's global proxy when supported.
+  // Only compiled scripts are shared between games.
+  const context = vm.constants && vm.constants.DONT_CONTEXTIFY
+    ? vm.createContext(vm.constants.DONT_CONTEXTIFY)
+    : vm.createContext({});
+  Object.assign(context, globals);
+  context.window = context;
+  context.globalThis = context;
+  return context;
+}
+
 function readRepoFile(relativePath) {
   const normalized = relativePath.replace(/\\/g, '/');
   readCounts.set(normalized, (readCounts.get(normalized) || 0) + 1);
@@ -87,6 +99,7 @@ function getBrowserScriptCacheStats() {
 }
 
 module.exports = {
+  createBrowserContext,
   getBrowserScriptCacheStats,
   loadBrowserScript,
   loadBrowserScripts,
