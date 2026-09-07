@@ -104,6 +104,10 @@ class EntityInterface {
         this.destroyButton = this.createButtonInTheBottom('destroy', destroySelected)
         this.skipMovesButton = this.createButtonInTheBottom('skip moves', skipMovesOfSelected)
         this.updateSizes(false)
+
+        this.renderCache = undefined
+        this.renderCacheBounds = undefined
+        this.renderCacheDirty = true
     }
     get top() {
         return this.pos.y
@@ -131,9 +135,12 @@ class EntityInterface {
         this.skipMovesButton.canClick = entity.canSkipMoves && !gameEvent.waitingMode
         this.updateSizes(entity.canSkipMoves)
 
+        this.renderCacheDirty = true
         this.visible = true
     }
     set visible(boolean) {
+        if (boolean && !this.#visible)
+            this.renderCacheDirty = true
         this.#visible = boolean
         undoButton.selected = boolean
     }
@@ -152,9 +159,7 @@ class EntityInterface {
         this.skipMovesButton.click(pos)
         return this.isInside(pos)
     }
-    draw(ctx) {
-        if (!this.visible)
-            return
+    drawContents(ctx) {
         this.background.draw(ctx)
         if (this.img.image == 'suburb') {
             this.suburbImage.draw(ctx)
@@ -167,5 +172,52 @@ class EntityInterface {
 
         this.destroyButton.draw(ctx)
         this.skipMovesButton.draw(ctx)
+    }
+    getRenderCacheBounds() {
+        const padding = this.background.strokeWidth
+        const left = Math.max(0, Math.floor(this.background.x - padding))
+        const top = Math.max(0, Math.floor(this.background.y - padding))
+        const right = Math.min(WIDTH, Math.ceil(this.background.right + padding))
+        const bottom = Math.min(HEIGHT, Math.ceil(this.background.bottom + padding))
+        return {left, top, width: right - left, height: bottom - top}
+    }
+    createRenderCache() {
+        const bounds = this.getRenderCacheBounds()
+        if (bounds.width <= 0 || bounds.height <= 0)
+            return false
+
+        const cacheScale = Math.min(1, 1 / window.devicePixelRatio)
+        const rasterWidth = Math.max(1, Math.ceil(bounds.width * cacheScale))
+        const rasterHeight = Math.max(1, Math.ceil(bounds.height * cacheScale))
+        let cache = this.renderCache
+        if (!cache || cache.width != rasterWidth || cache.height != rasterHeight) {
+            cache = document.createElement('canvas')
+            cache.width = rasterWidth
+            cache.height = rasterHeight
+        }
+        const cacheCtx = cache.getContext('2d')
+        if (!cacheCtx)
+            return false
+
+        cacheCtx.setTransform(1, 0, 0, 1, 0, 0)
+        cacheCtx.clearRect(0, 0, cache.width, cache.height)
+        cacheCtx.scale(cacheScale, cacheScale)
+        cacheCtx.translate(-bounds.left, -bounds.top)
+        this.drawContents(cacheCtx)
+
+        this.renderCache = cache
+        this.renderCacheBounds = bounds
+        this.renderCacheDirty = false
+        return true
+    }
+    draw(ctx) {
+        if (!this.visible)
+            return
+        if ((this.renderCacheDirty || !this.renderCache) && !this.createRenderCache()) {
+            this.drawContents(ctx)
+            return
+        }
+        ctx.drawImage(this.renderCache, this.renderCacheBounds.left, this.renderCacheBounds.top,
+            this.renderCacheBounds.width, this.renderCacheBounds.height)
     }
 }

@@ -12,6 +12,7 @@ class TownInterface extends BarrackInterface {
     toggleTrainInterfaceTab() {
         this.switch.toggleSelect()
         this.trainInterfacesTab = this.switch.getSelectedText()
+        this.invalidateRenderCache()
         
         let selected = gameEvent.selected
         selected.removeSelect()
@@ -103,11 +104,11 @@ class TownInterface extends BarrackInterface {
         this.switch.setSelectedColor(color.hex)
         
         this.goldText.text = town.info.gold
+        this.invalidateRenderCache()
         this.visible = true
     }
-    draw(ctx) {
-        super.draw(ctx)
-        if (this.visible)
-            this.switch.draw(ctx)
+    drawContents(ctx) {
+        super.drawContents(ctx)
+        this.switch.draw(ctx)
     }
 }
