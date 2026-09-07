@@ -2,6 +2,7 @@
 """Archive a fresh TASK-101 timing run of the frozen, original fast-action entrypoint."""
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -17,6 +18,58 @@ RUN_ID = "task101-fast-full-real"
 
 def output(*command, cwd, env=None):
     return subprocess.check_output(command, cwd=cwd, env=env, text=True).strip()
+
+
+def instrument_teacher_outcomes(source, artifacts):
+    """Log original runGame results without changing options or error propagation."""
+    runner = source / "ai/cloud-train-runner.js"
+    original = runner.read_text()
+    start = original.index("function makeRuntimeCombatTeacherBatch(")
+    end = original.index("\nasync function fitRuntimeCombatTeacherBatch", start)
+    batch = original[start:end]
+    assert batch.count("    runGame({") == 1
+    batch = batch.replace("    runGame({", """    const scenario = {seed: seed + stageIndex * 997 + game,
+      batchSeed: seed, stageIndex, game, side: 'A', mapName: 'tiny-duel',
+      playerA: 'AIPlayer', playerB: 'SimpleAiPlayer'};
+    console.log('TEACHER_GAME_START: ' + JSON.stringify(scenario));
+    try {
+    const result = runGame({""")
+    needle = "    });\n  }\n  const sampleCount"
+    assert batch.count(needle) == 1
+    batch = batch.replace(needle, """    });
+    console.log('TEACHER_GAME_RESULT: ' + JSON.stringify({scenario,
+      ...result, crash: false, failure: result.winnerSide !== 'A'}));
+    } catch (error) {
+      console.log('TEACHER_GAME_RESULT: ' + JSON.stringify({scenario,
+        winner: null, winnerSide: null, crash: true, failure: true,
+        nonResult: true, error: String(error.stack || error)}));
+      throw error;
+    }
+  }
+  const sampleCount""")
+    instrumented = original[:start] + batch + original[end:]
+    runner.write_text(instrumented)
+    (artifacts / "teacher-logging.diff").write_text("".join(difflib.unified_diff(
+        original.splitlines(True), instrumented.splitlines(True),
+        fromfile="a/ai/cloud-train-runner.js", tofile="b/ai/cloud-train-runner.js")))
+
+
+def archive_teacher_outcomes(artifacts, revision):
+    log = artifacts / "full-real-training.log"
+    lines = log.read_text().splitlines()
+    starts = [json.loads(line.removeprefix("TEACHER_GAME_START: "))
+              for line in lines if line.startswith("TEACHER_GAME_START: ")]
+    results = [json.loads(line.removeprefix("TEACHER_GAME_RESULT: "))
+               for line in lines if line.startswith("TEACHER_GAME_RESULT: ")]
+    report = {"base_revision": revision,
+              "full_real_training_log_sha256": hashlib.sha256(log.read_bytes()).hexdigest(),
+              "source_manifest_sha256": hashlib.sha256(
+                  (artifacts / "source-sha256.json").read_bytes()).hexdigest(),
+              "attempted": len(starts), "completed_records": len(results),
+              "games": results}
+    (artifacts / "teacher-game-results.json").write_text(json.dumps(report, indent=2) + "\n")
+    assert starts == [result["scenario"] for result in results], "Unaccounted teacher attempt"
+    assert len(starts) == 38, f"Expected 38 teacher games, observed {len(starts)}"
 
 
 def main():
@@ -38,6 +91,8 @@ def main():
         dependencies.symlink_to(repo / "node_modules", target_is_directory=True)
     dirty = output("git", "status", "--porcelain", cwd=source)
     assert dirty in ("", "?? node_modules"), dirty
+    instrument_teacher_outcomes(source, artifacts)
+    dirty = output("git", "status", "--porcelain", cwd=source)
     storage = artifacts / "training"
     assert not storage.exists(), "Use a fresh artifact directory; never overwrite a timing run"
     env = os.environ.copy()
@@ -84,6 +139,7 @@ def main():
         assert all(hashlib.sha256((source / name).read_bytes()).hexdigest() == digest
                    for name, digest in hashes.items())
         log.write("POST_RUN_SOURCE_HASH_MATCH: PASS\n")
+    archive_teacher_outcomes(artifacts, revision)
     print(f"Exit {result.returncode}; elapsed {elapsed:.6f}s; {artifacts / 'full-real-training.log'}")
     raise SystemExit(result.returncode)
 
