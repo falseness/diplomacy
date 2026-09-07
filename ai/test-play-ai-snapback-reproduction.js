@@ -1,6 +1,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 
 function check(condition, message, details) {
   if (!condition) {
@@ -26,6 +27,21 @@ const regressionMode = process.argv.includes('--regression') ||
 const forceRedRestore = process.argv.includes('--force-red-restore') ||
   process.env.DIPLOMACY_PLAY_AI_FORCE_RED_RESTORE == '1';
 const artifactPrefix = regressionMode ? 'task082' : 'task080';
+const modelJsonPath = path.join(repoRoot, 'models/play-ai/model.json');
+const modelWeightsPath = path.join(repoRoot, 'models/play-ai/weights.bin');
+const tensorflowBrowserPath = require.resolve('@tensorflow/tfjs/dist/tf.min.js');
+
+function sha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+const checkpoint = {
+  modelJsonPath: path.relative(repoRoot, modelJsonPath),
+  modelJsonSha256: sha256(modelJsonPath),
+  weightsPath: path.relative(repoRoot, modelWeightsPath),
+  weightsSha256: sha256(modelWeightsPath),
+  weightsBytes: fs.statSync(modelWeightsPath).size
+};
 
 function contentType(filePath) {
   const ext = path.extname(filePath);
@@ -70,43 +86,25 @@ function serveRepo() {
   });
 }
 
-function tfStubScript() {
-  return `
+function instrumentedTensorflowScript() {
+  return fs.readFileSync(tensorflowBrowserPath, 'utf8') + `
 window.__playAiBrowserModelSource = undefined;
 window.__playAiBrowserPredictionCalls = 0;
-window.tf = {
-  async loadLayersModel(source) {
-    window.__playAiBrowserModelSource = source;
-    return {
-      inputs: [{ shape: [null, null, null, 78] }],
-      predict(inputs) {
-        window.__playAiBrowserPredictionCalls += 1;
-        const count = inputs[0].values ? inputs[0].values.length : 1;
-        return {
-          arraySync() {
-            const result = [];
-            for (let index = 0; index < count; ++index) {
-              result.push([0.1 + index / 1000]);
-            }
-            return result;
-          },
-          dispose() {}
-        };
-      }
-    };
-  },
-  tensor3d(value) {
-    return { value, dispose() {} };
-  },
-  tensor(value) {
-    return { value, dispose() {} };
-  },
-  stack(values) {
-    return { values, dispose() {} };
-  },
-  tidy(callback) {
-    return callback();
-  }
+window.__playAiBrowserTensorflowVersion = window.tf.version.tfjs;
+const playAiBackendReady = window.tf.setBackend('cpu').then(function() {
+  return window.tf.ready();
+});
+const originalLoadLayersModel = window.tf.loadLayersModel.bind(window.tf);
+window.tf.loadLayersModel = async function instrumentedLoadLayersModel(source) {
+  await playAiBackendReady;
+  window.__playAiBrowserModelSource = source;
+  const model = await originalLoadLayersModel(source);
+  const originalPredict = model.predict.bind(model);
+  model.predict = function instrumentedPredict(inputs) {
+    window.__playAiBrowserPredictionCalls += 1;
+    return originalPredict(inputs);
+  };
+  return model;
 };
 `;
 }
@@ -116,7 +114,7 @@ async function installRoutes(page) {
     route.fulfill({
       status: 200,
       contentType: 'application/javascript',
-      body: tfStubScript()
+      body: instrumentedTensorflowScript()
     });
   });
   await page.route('**/cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js', route => {
@@ -151,6 +149,7 @@ function redBlueSnapshotInBrowser(label) {
     pauseOverlayVisible: nextTurnPauseInterface.visible,
     withAI: gameSettings.withAI,
     modelSource: window.__playAiBrowserModelSource,
+    tensorflowVersion: window.__playAiBrowserTensorflowVersion,
     predictionCalls: window.__playAiBrowserPredictionCalls,
     playerClasses: players.map(player => player.constructor.name),
     redUnits: players[1].units.map((unit, index) => ({
@@ -258,6 +257,46 @@ async function clickPlayAi(page) {
   }, null, { timeout: 15000 });
 }
 
+async function runModelControls(page) {
+  return await page.evaluate(async () => {
+    const configuredSource = window.__playAiBrowserModelSource;
+    let missingRejected = false;
+    let missingError = null;
+    try {
+      await loadModel('models/play-ai/task081-missing-model.json');
+    } catch (error) {
+      missingRejected = true;
+      missingError = error.message;
+    } finally {
+      window.__playAiBrowserModelSource = configuredSource;
+    }
+
+    const input = [vectoriseGrid()];
+    const checkpointScore = predict(ai_model, input)[0][0];
+    const originalWeights = ai_model.getWeights().map(weight => weight.clone());
+    const zeroWeights = originalWeights.map(weight => tf.zerosLike(weight));
+    ai_model.setWeights(zeroWeights);
+    const zeroScore = predict(ai_model, input)[0][0];
+
+    const randomWeights = originalWeights.map((weight, index) =>
+      tf.randomNormal(weight.shape, 0, 0.05, 'float32', 81081 + index));
+    ai_model.setWeights(randomWeights);
+    const randomizedScore = predict(ai_model, input)[0][0];
+
+    ai_model.setWeights(originalWeights);
+    const restoredScore = predict(ai_model, input)[0][0];
+    zeroWeights.concat(randomWeights).concat(originalWeights).forEach(weight =>
+      weight.dispose());
+    return {
+      missingModel: { rejected: missingRejected, error: missingError },
+      zeroedWeights: { score: zeroScore },
+      randomizedWeights: { seedBase: 81081, score: randomizedScore },
+      checkpoint: { score: checkpointScore },
+      restoredCheckpoint: { score: restoredScore }
+    };
+  });
+}
+
 async function clickNextTurn(page) {
   const point = await page.evaluate(() => ({
     x: nextTurnButton.rect.centerX / window.devicePixelRatio,
@@ -268,6 +307,25 @@ async function clickNextTurn(page) {
 
 function findMovedUnit(snapshot, redMove) {
   return snapshot.redUnits.find(unit => unit.name == redMove.unitName);
+}
+
+function findBluePositionChanges(before, after) {
+  const changes = [];
+  const comparableUnits = Math.min(
+    before.blueUnits.length, after.blueUnits.length);
+  for (let index = 0; index < comparableUnits; ++index) {
+    const start = before.blueUnits[index];
+    const finish = after.blueUnits[index];
+    if (start.x != finish.x || start.y != finish.y) {
+      changes.push({
+        index,
+        name: finish.name,
+        from: { x: start.x, y: start.y },
+        to: { x: finish.x, y: finish.y }
+      });
+    }
+  }
+  return changes;
 }
 
 async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
@@ -319,6 +377,18 @@ async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
     await waitForGameReady(page);
 
     await clickPlayAi(page);
+    const modelControls = await runModelControls(page);
+    check(modelControls.missingModel.rejected,
+      'missing checkpoint control did not reject model loading', modelControls);
+    check(Math.abs(modelControls.checkpoint.score -
+        modelControls.restoredCheckpoint.score) < 1e-6,
+      'checkpoint weights were not restored after model controls', modelControls);
+    check(Math.abs(modelControls.checkpoint.score -
+          modelControls.zeroedWeights.score) > 1e-6 ||
+        Math.abs(modelControls.checkpoint.score -
+          modelControls.randomizedWeights.score) > 1e-6,
+      'checkpoint output was indistinguishable from both weight controls',
+      modelControls);
     const redStart = await captureState(page, 'red-start', `${artifactPrefix}-red-start.png`);
 
     const redMove = await applyOneLegalRedMove(page);
@@ -343,6 +413,10 @@ async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
     check(blueComplete.predictionCalls > redStart.predictionCalls,
       'blue AIPlayer did not run model-backed predictions after red clicked Next Turn',
       { redStart, blueComplete });
+    const bluePositionChanges = findBluePositionChanges(redStart, blueComplete);
+    check(bluePositionChanges.length > 0,
+      'blue AIPlayer did not take an automatic visible movement action after red clicked Next Turn',
+      { redStart: redStart.blueUnits, blueComplete: blueComplete.blueUnits });
 
     const startMovedUnit = findMovedUnit(redStart, redMove);
     const afterMovedUnit = findMovedUnit(afterRedMove, redMove);
@@ -378,6 +452,15 @@ async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
     const report = {
       status: 'passed',
       url: served.url,
+      checkpoint,
+      modelRuntime: {
+        implementation: 'TensorFlow.js real LayersModel inference',
+        tensorflowVersion: redStart.tensorflowVersion,
+        source: redStart.modelSource,
+        predictionCallsBeforeBlue: redStart.predictionCalls,
+        predictionCallsAfterBlue: blueComplete.predictionCalls
+      },
+      modelControls,
       mode: regressionMode ? 'regression' : 'reproduction',
       faultInjection: {
         forceRedRestore,
@@ -385,6 +468,10 @@ async function forceRestoreMovedRedUnit(page, redMove, startMovedUnit) {
       },
       result: snapbackDetected ? 'snapback-detected' : 'red-position-persisted',
       snapbackDetected,
+      blueAutomaticMovement: {
+        occurred: bluePositionChanges.length > 0,
+        positionChanges: bluePositionChanges
+      },
       redMove,
       trackedRedUnit: {
         start: startMovedUnit,
