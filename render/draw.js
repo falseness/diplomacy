@@ -26,81 +26,17 @@ function drawDebugFps(ctx) {
     ctx.restore()
 }
 
-let renderedProductionInterface = undefined
-let renderedEntityInterface = false
-function drawEntityInterface() {
-    if (!entityInterface.visible) {
-        entityInterfaceCanvas.style.display = 'none'
-        renderedEntityInterface = false
-        return
-    }
-
-    if (renderedEntityInterface && !entityInterface.renderCacheDirty)
-        return
-    if (!entityInterface.createRenderCache())
-        return
-
-    const bounds = entityInterface.renderCacheBounds
-    if (entityInterfaceCanvas.width != entityInterface.renderCache.width ||
-        entityInterfaceCanvas.height != entityInterface.renderCache.height) {
-        entityInterfaceCanvas.width = entityInterface.renderCache.width
-        entityInterfaceCanvas.height = entityInterface.renderCache.height
-    }
-    entityInterfaceCanvas.style.left = bounds.left / window.devicePixelRatio + 'px'
-    entityInterfaceCanvas.style.top = bounds.top / window.devicePixelRatio + 'px'
-    entityInterfaceCanvas.style.width = bounds.width / window.devicePixelRatio + 'px'
-    entityInterfaceCanvas.style.height = bounds.height / window.devicePixelRatio + 'px'
-
-    entityInterfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
-    entityInterfaceCtx.clearRect(0, 0, entityInterfaceCanvas.width,
-        entityInterfaceCanvas.height)
-    entityInterfaceCtx.drawImage(entityInterface.renderCache, 0, 0)
-    entityInterfaceCanvas.style.display = 'block'
-    renderedEntityInterface = true
-}
-function drawProductionInterface() {
-    const activeInterface = townInterface.visible ? townInterface :
-        (barrackInterface.visible ? barrackInterface : undefined)
-    if (!activeInterface) {
-        productionInterfaceCanvas.style.display = 'none'
-        renderedProductionInterface = undefined
-        return
-    }
-
-    const cacheNeedsUpdate = renderedProductionInterface != activeInterface ||
-        activeInterface.renderCacheDirty || !activeInterface.renderCache
-    if (!cacheNeedsUpdate)
-        return
-    if (!activeInterface.createRenderCache())
-        return
-
-    const bounds = activeInterface.renderCacheBounds
-    if (productionInterfaceCanvas.width != activeInterface.renderCache.width ||
-        productionInterfaceCanvas.height != activeInterface.renderCache.height) {
-        productionInterfaceCanvas.width = activeInterface.renderCache.width
-        productionInterfaceCanvas.height = activeInterface.renderCache.height
-    }
-    productionInterfaceCanvas.style.left = bounds.left / window.devicePixelRatio + 'px'
-    productionInterfaceCanvas.style.top = bounds.top / window.devicePixelRatio + 'px'
-    productionInterfaceCanvas.style.width = bounds.width / window.devicePixelRatio + 'px'
-    productionInterfaceCanvas.style.height = bounds.height / window.devicePixelRatio + 'px'
-
-    productionInterfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
-    productionInterfaceCtx.clearRect(0, 0, productionInterfaceCanvas.width,
-        productionInterfaceCanvas.height)
-    productionInterfaceCtx.drawImage(activeInterface.renderCache, 0, 0)
-    productionInterfaceCanvas.style.display = 'block'
-    renderedProductionInterface = activeInterface
-}
 function drawInterface() {
-    drawEntityInterface()
-    drawProductionInterface()
-
-    interfaceCtx.clearRect(0, 0, width, height)
+    interfaceCtx.save()
+    interfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
 
     nextTurnButton.draw(interfaceCtx)
 
     iButton.draw(interfaceCtx)
+
+    entityInterface.draw(interfaceCtx)
+    barrackInterface.draw(interfaceCtx)
+    townInterface.draw(interfaceCtx)
 
     statisticsInterface.draw(interfaceCtx)
 
@@ -113,6 +49,7 @@ function drawInterface() {
     nextTurnPauseInterface.draw(interfaceCtx)
     errorWindow.draw(interfaceCtx)
     drawDebugFps(interfaceCtx)
+    interfaceCtx.restore()
 }
 
 function drawAll() {

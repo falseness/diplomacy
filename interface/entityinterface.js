@@ -186,14 +186,11 @@ class EntityInterface {
         if (bounds.width <= 0 || bounds.height <= 0)
             return false
 
-        const cacheScale = Math.min(1, 1 / window.devicePixelRatio)
-        const rasterWidth = Math.max(1, Math.ceil(bounds.width * cacheScale))
-        const rasterHeight = Math.max(1, Math.ceil(bounds.height * cacheScale))
         let cache = this.renderCache
-        if (!cache || cache.width != rasterWidth || cache.height != rasterHeight) {
+        if (!cache || cache.width != bounds.width || cache.height != bounds.height) {
             cache = document.createElement('canvas')
-            cache.width = rasterWidth
-            cache.height = rasterHeight
+            cache.width = bounds.width
+            cache.height = bounds.height
         }
         const cacheCtx = cache.getContext('2d')
         if (!cacheCtx)
@@ -201,7 +198,6 @@ class EntityInterface {
 
         cacheCtx.setTransform(1, 0, 0, 1, 0, 0)
         cacheCtx.clearRect(0, 0, cache.width, cache.height)
-        cacheCtx.scale(cacheScale, cacheScale)
         cacheCtx.translate(-bounds.left, -bounds.top)
         this.drawContents(cacheCtx)
 
@@ -217,7 +213,7 @@ class EntityInterface {
             this.drawContents(ctx)
             return
         }
-        ctx.drawImage(this.renderCache, this.renderCacheBounds.left, this.renderCacheBounds.top,
-            this.renderCacheBounds.width, this.renderCacheBounds.height)
+        const bounds = this.renderCacheBounds
+        ctx.drawImage(this.renderCache, bounds.left, bounds.top)
     }
 }

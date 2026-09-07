@@ -20,38 +20,11 @@
             z-index: 0;
         }
         
-        #interface {
-            position: absolute;
-            left: 0;
-            top: 0;
-            z-index: 2;
-        }
-
-        #entity-interface {
-            position: absolute;
-            left: 0;
-            top: 0;
-            z-index: 1;
-            pointer-events: none;
-            display: none;
-        }
-
-        #production-interface {
-            position: absolute;
-            left: 0;
-            top: 0;
-            z-index: 3;
-            pointer-events: none;
-            display: none;
-        }
     </style>
 </head>
 
 <body id="container">
     <canvas id="canvas"></canvas>
-    <canvas id="entity-interface"></canvas>
-    <canvas id="interface"></canvas>
-    <canvas id="production-interface"></canvas>
 
     <!--<script src = "objectModels/setDefaultModel.js"></script>
         <script src = "objectModels/setObjectOffset.js"></script>
@@ -174,13 +147,7 @@
         let mainCanvas = document.getElementById('canvas')
         
         let mainCtx = mainCanvas.getContext('2d')
-        let entityInterfaceCanvas = document.getElementById('entity-interface')
-        let entityInterfaceCtx = entityInterfaceCanvas.getContext('2d')
-        let interfaceCanvas = document.getElementById('interface')
-        
-        let interfaceCtx = interfaceCanvas.getContext('2d')
-        let productionInterfaceCanvas = document.getElementById('production-interface')
-        let productionInterfaceCtx = productionInterfaceCanvas.getContext('2d')
+        let interfaceCtx = mainCtx
 
         const errorWindowCornerRadius = 0.03 * HEIGHT
 
@@ -381,11 +348,6 @@
         }
         function start() {
            
-            interfaceCanvas.width = WIDTH
-            interfaceCanvas.height = HEIGHT
-            interfaceCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
-            interfaceCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
-            
             mainCanvas.width = WIDTH
             mainCanvas.height = HEIGHT
             mainCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
