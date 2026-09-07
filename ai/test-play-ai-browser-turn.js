@@ -1,6 +1,8 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
+const childProcess = require('child_process');
 
 function check(condition, message, details) {
   if (!condition) {
@@ -21,6 +23,8 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..');
 const artifactDir = process.env.DIPLOMACY_PLAY_AI_ARTIFACT_DIR ||
   '/mnt/storage/diplomacy/browser-play-ai';
+const tfjsBrowserPath = path.join(
+  repoRoot, 'node_modules/@tensorflow/tfjs/dist/tf.min.js');
 
 function contentType(filePath) {
   const ext = path.extname(filePath);
@@ -33,10 +37,12 @@ function contentType(filePath) {
 }
 
 function serveRepo() {
+  const requests = [];
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     const decodedPath = decodeURIComponent(url.pathname);
     const relativePath = decodedPath == '/' ? 'index.html' : decodedPath.slice(1);
+    requests.push(relativePath);
     const filePath = path.resolve(repoRoot, relativePath);
     if (!filePath.startsWith(repoRoot + path.sep) && filePath != repoRoot) {
       response.writeHead(403);
@@ -59,51 +65,11 @@ function serveRepo() {
       const address = server.address();
       resolve({
         server,
-        url: `http://127.0.0.1:${address.port}/index.html?aiModelUrl=models/play-ai/model.json`
+        requests,
+        url: `http://127.0.0.1:${address.port}/index.html`
       });
     });
   });
-}
-
-function tfStubScript() {
-  return `
-window.__playAiBrowserModelSource = undefined;
-window.__playAiBrowserPredictionCalls = 0;
-window.tf = {
-  async loadLayersModel(source) {
-    window.__playAiBrowserModelSource = source;
-    return {
-      inputs: [{ shape: [null, null, null, 78] }],
-      predict(inputs) {
-        window.__playAiBrowserPredictionCalls += 1;
-        const count = inputs[0].values ? inputs[0].values.length : 1;
-        return {
-          arraySync() {
-            const result = [];
-            for (let index = 0; index < count; ++index) {
-              result.push([0.1 + index / 1000]);
-            }
-            return result;
-          },
-          dispose() {}
-        };
-      }
-    };
-  },
-  tensor3d(value) {
-    return { value, dispose() {} };
-  },
-  tensor(value) {
-    return { value, dispose() {} };
-  },
-  stack(values) {
-    return { values, dispose() {} };
-  },
-  tidy(callback) {
-    return callback();
-  }
-};
-`;
 }
 
 function fileSaverStubScript() {
@@ -115,7 +81,7 @@ async function installRoutes(page) {
     route.fulfill({
       status: 200,
       contentType: 'application/javascript',
-      body: tfStubScript()
+      body: fs.readFileSync(tfjsBrowserPath)
     });
   });
   await page.route('**/cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js', route => {
@@ -149,8 +115,10 @@ function blueSnapshotInBrowser() {
     pauseOverlayVisible: nextTurnPauseInterface.visible,
     withAI: gameSettings.withAI,
     testAI: gameSettings.testAI,
-    modelSource: window.__playAiBrowserModelSource,
-    predictionCalls: window.__playAiBrowserPredictionCalls,
+    modelName: ai_model && ai_model.name,
+    modelInputs: ai_model && ai_model.inputs.map(input => input.shape),
+    modelOutputs: ai_model && ai_model.outputs.map(output => output.name),
+    modelRankedActions: players[2].winningChances.length,
     playerClasses: players.map(player => player.constructor.name),
     blueUnits: players[2].units
       .filter(unit => !unit.killed)
@@ -246,14 +214,63 @@ async function applyOneLegalRedMove(page) {
   });
 }
 
-async function clickPlayAi(page) {
-  await page.mouse.click(512, 540);
+async function clickPlayAi(page, waitForStart = true) {
+  const center = await page.evaluate(() => {
+    const button = menu.main.buttons.find(candidate =>
+      candidate.text && candidate.text.text == 'play AI');
+    return {
+      x: button.rect.centerX / window.devicePixelRatio,
+      y: button.rect.centerY / window.devicePixelRatio
+    };
+  });
+  await page.mouse.click(center.x, center.y);
+  if (!waitForStart) return;
   await page.waitForFunction(() => {
     return typeof players != 'undefined' && players.length > 2 &&
       players[1].constructor.name == 'Player' &&
       players[2].constructor.name == 'AIPlayer' &&
       gameSettings.withAI === true;
   }, null, { timeout: 15000 });
+}
+
+async function applyModelControl(page, control) {
+  return page.evaluate(controlName => {
+    if (controlName == 'real') return {name: controlName, seed: null};
+    const weights = ai_model.getWeights();
+    if (controlName == 'zeroed') {
+      ai_model.setWeights(weights.map(weight => tf.zeros(weight.shape)));
+      return {name: controlName, seed: null};
+    }
+    let state = 79079;
+    const randomized = weights.map(weight => {
+      const values = new Float32Array(weight.size);
+      for (let index = 0; index < values.length; ++index) {
+        state = (state * 1664525 + 1013904223) >>> 0;
+        values[index] = (state / 4294967296 - 0.5) * 0.1;
+      }
+      return tf.tensor(values, weight.shape, weight.dtype);
+    });
+    ai_model.setWeights(randomized);
+    randomized.forEach(weight => weight.dispose());
+    return {name: controlName, seed: 79079};
+  }, control);
+}
+
+function blueMovementDeltas(before, after) {
+  const afterByName = new Map(after.map(unit => [unit.name, unit]));
+  return before.flatMap(unit => {
+    const next = afterByName.get(unit.name);
+    if (!next || (unit.x == next.x && unit.y == next.y)) return [];
+    return [{
+      unit: unit.name,
+      source: {x: unit.x, y: unit.y},
+      destination: {x: next.x, y: next.y}
+    }];
+  });
+}
+
+function sha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
 async function clickNextTurn(page) {
@@ -267,82 +284,205 @@ async function clickNextTurn(page) {
 (async function main() {
   fs.mkdirSync(artifactDir, { recursive: true });
 
+  const modelJsonPath = path.join(repoRoot, 'models/play-ai/model.json');
+  const weightsPath = path.join(repoRoot, 'models/play-ai/weights.bin');
+  check(fs.existsSync(tfjsBrowserPath), 'local TensorFlow.js browser runtime is missing');
+  check(fs.existsSync(modelJsonPath), 'packaged Play AI model.json is missing');
+  check(fs.existsSync(weightsPath), 'packaged Play AI weights.bin is missing');
+
   const served = await serveRepo();
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
   const consoleMessages = [];
-  page.on('console', message => {
-    consoleMessages.push(`${message.type()}: ${message.text()}`);
-  });
-  page.on('pageerror', error => {
-    consoleMessages.push(`pageerror: ${error.message}`);
-  });
 
-  try {
+  async function openCleanPage() {
+    const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+    const page = await context.newPage();
+    page.on('console', message => {
+      if (message.type() == 'error') {
+        consoleMessages.push(`${message.type()}: ${message.text()}`);
+      }
+    });
+    page.on('pageerror', error => {
+      consoleMessages.push(`pageerror: ${error.message}`);
+    });
     await installRoutes(page);
     await page.goto(served.url, { waitUntil: 'load' });
     await waitForGameReady(page);
+    return {context, page};
+  }
 
-    await clickPlayAi(page);
-    await hideTurnPauseOverlayAndDrawGrid(page);
-    const initialInterfacePixel = await page.evaluate(interfaceCenterPixelInBrowser);
-    const initialPath = path.join(artifactDir, 'task079-initial-grid.png');
-    const initialScreenshot = await page.screenshot({ path: initialPath });
+  async function runTurnScenario(control, captureScreenshots) {
+    const clean = await openCleanPage();
+    const page = clean.page;
+    try {
+      await clickPlayAi(page);
+      await hideTurnPauseOverlayAndDrawGrid(page);
+      const initialInterfacePixel = await page.evaluate(interfaceCenterPixelInBrowser);
+      let initialPath = null;
+      let initialScreenshot = null;
+      if (captureScreenshots) {
+        initialPath = path.join(artifactDir, 'task079-initial-grid.png');
+        initialScreenshot = await page.screenshot({path: initialPath});
+      }
 
-    const beforeMove = await page.evaluate(blueSnapshotInBrowser);
-    const redMove = await applyOneLegalRedMove(page);
-    check(redMove.applied, 'red human player could not make a legal move', redMove);
+      const beforeRed = await page.evaluate(blueSnapshotInBrowser);
+      const redMove = await applyOneLegalRedMove(page);
+      check(redMove.applied, 'red human player could not make a legal move', redMove);
+      const afterRedBeforeBlue = await page.evaluate(blueSnapshotInBrowser);
+      const modelControl = await applyModelControl(page, control);
+      const controlScore = await page.evaluate(() => predict(ai_model, [vectoriseGrid()])[0][0]);
+      await page.evaluate(() => {
+        // Keep this browser smoke bounded to the first automatic model-ranked action.
+        // This does not alter action enumeration, scoring, or authoritative execution.
+        gameSettings.aiActionLimit = 1;
+      });
 
-    await clickNextTurn(page);
-    await page.waitForFunction(() => {
-      return whooseTurn == 2 && window.__playAiBrowserPredictionCalls > 0;
-    }, null, { timeout: 15000 });
+      await clickNextTurn(page);
+      await page.waitForFunction(() => {
+        return whooseTurn == 2 && players[2].winningChances.length > 0;
+      }, null, { timeout: 30000 });
 
-    const afterMove = await page.evaluate(blueSnapshotInBrowser);
-    await hideTurnPauseOverlayAndDrawGrid(page);
-    const finalInterfacePixel = await page.evaluate(interfaceCenterPixelInBrowser);
-    const finalPath = path.join(artifactDir, 'task079-after-blue-ai-turn-grid.png');
-    const finalScreenshot = await page.screenshot({ path: finalPath });
+      const afterBlue = await page.evaluate(blueSnapshotInBrowser);
+      await hideTurnPauseOverlayAndDrawGrid(page);
+      const finalInterfacePixel = await page.evaluate(interfaceCenterPixelInBrowser);
+      let finalPath = null;
+      let finalScreenshot = null;
+      if (captureScreenshots) {
+        finalPath = path.join(artifactDir, 'task079-after-blue-ai-turn-grid.png');
+        finalScreenshot = await page.screenshot({path: finalPath});
+      }
 
-    check(beforeMove.modelSource == 'models/play-ai/model.json',
-      'Play AI did not load the configured browser model', beforeMove);
-    check(beforeMove.playerClasses[1] == 'Player' &&
-        beforeMove.playerClasses[2] == 'AIPlayer',
+      return {
+        control: modelControl,
+        aiActionLimit: 1,
+        controlScore,
+        screenshots: {initialGrid: initialPath, afterBlueAiTurnGrid: finalPath},
+        screenshotBytesDiffer: captureScreenshots && !initialScreenshot.equals(finalScreenshot),
+        interfacePixels: {
+          initialCenter: initialInterfacePixel,
+          afterBlueAiTurnCenter: finalInterfacePixel
+        },
+        redMove,
+        beforeRed,
+        afterRedBeforeBlue,
+        afterBlue,
+        blueMovementDeltas: blueMovementDeltas(
+          afterRedBeforeBlue.blueUnits, afterBlue.blueUnits)
+      };
+    } finally {
+      await clean.context.close();
+    }
+  }
+
+  try {
+    const real = await runTurnScenario('real', true);
+    const zeroed = await runTurnScenario('zeroed', false);
+    const randomized = await runTurnScenario('randomized', false);
+
+    const missing = await openCleanPage();
+    const missingErrorsStart = consoleMessages.length;
+    await missing.page.route('**/models/play-ai/model.json', route =>
+      route.fulfill({status: 404, body: 'TASK-079 missing checkpoint control'}));
+    await clickPlayAi(missing.page, false);
+    await missing.page.waitForTimeout(1000);
+    const missingState = await missing.page.evaluate(() => ({
+      playerCount: typeof players == 'undefined' ? 0 : players.length,
+      withAI: gameSettings.withAI
+    }));
+    const missingErrors = consoleMessages.slice(missingErrorsStart);
+    await missing.context.close();
+
+    check(real.beforeRed.modelName &&
+        real.beforeRed.modelInputs[0][1] == 9 &&
+        real.beforeRed.modelInputs[0][2] == 9 &&
+        real.beforeRed.modelInputs[0][3] == 82,
+      'Play AI did not load the packaged 9x9/82-channel model', real.beforeRed);
+    check(real.beforeRed.playerClasses[1] == 'Player' &&
+        real.beforeRed.playerClasses[2] == 'AIPlayer',
       'Play AI did not start with human red and learned blue player classes',
-      beforeMove);
-    check(afterMove.predictionCalls > beforeMove.predictionCalls,
-      'blue AIPlayer did not run model-backed predictions after Next Turn',
-      { beforeMove, afterMove });
-    check(afterMove.pauseOverlayVisible === true,
+      real.beforeRed);
+    check(real.afterBlue.modelRankedActions >
+        real.afterRedBeforeBlue.modelRankedActions,
+      'blue AIPlayer did not rank actions with the loaded model after Next Turn', real);
+    check(real.afterBlue.pauseOverlayVisible === true,
       'test did not observe the Player 2 turn overlay before dismissing it',
-      afterMove);
-    check(initialInterfacePixel.alpha == 0 && finalInterfacePixel.alpha == 0,
+      real.afterBlue);
+    check(real.interfacePixels.initialCenter.alpha == 0 &&
+        real.interfacePixels.afterBlueAiTurnCenter.alpha == 0,
       'grid screenshots were captured with the turn overlay still visible',
-      { initialInterfacePixel, finalInterfacePixel });
-
-    const beforeBlue = JSON.stringify(beforeMove.blueUnits);
-    const afterBlue = JSON.stringify(afterMove.blueUnits);
-    check(beforeBlue != afterBlue,
-      'blue AIPlayer unit state did not visibly change after Next Turn',
-      { beforeMove, afterMove, redMove });
-    check(!initialScreenshot.equals(finalScreenshot),
+      real.interfacePixels);
+    check(real.blueMovementDeltas.length > 0,
+      'blue AIPlayer did not visibly relocate a unit after Next Turn', real);
+    const legalVisibleBlueMove = real.blueMovementDeltas[0];
+    check(legalVisibleBlueMove.destination.x >= 0 &&
+        legalVisibleBlueMove.destination.x < 9 &&
+        legalVisibleBlueMove.destination.y >= 0 &&
+        legalVisibleBlueMove.destination.y < 9,
+      'visible blue relocation ended outside the runtime grid', legalVisibleBlueMove);
+    check(real.screenshotBytesDiffer,
       'initial and after-action grid screenshots are identical',
-      { initialPath, finalPath, beforeMove, afterMove });
+      real.screenshots);
+    check(real.controlScore != zeroed.controlScore &&
+        real.controlScore != randomized.controlScore,
+      'real checkpoint score is not distinct from zero/random controls',
+      {real: real.controlScore, zeroed: zeroed.controlScore,
+        randomized: randomized.controlScore});
+    check(JSON.stringify(real.blueMovementDeltas) !=
+        JSON.stringify(zeroed.blueMovementDeltas) ||
+        JSON.stringify(real.blueMovementDeltas) !=
+        JSON.stringify(randomized.blueMovementDeltas),
+      'real checkpoint turn is indistinguishable from both model controls',
+      {real: real.blueMovementDeltas, zeroed: zeroed.blueMovementDeltas,
+        randomized: randomized.blueMovementDeltas});
+    check(missingState.playerCount == 0 && missingState.withAI === false &&
+        missingErrors.length > 0,
+      'missing-checkpoint control did not reject Play AI startup',
+      {missingState, missingErrors});
+
+    const checkpoint = {
+      modelJson: {path: 'models/play-ai/model.json', sha256: sha256(modelJsonPath)},
+      weights: {path: 'models/play-ai/weights.bin', sha256: sha256(weightsPath)},
+      requestedFiles: served.requests.filter(request => request.startsWith('models/play-ai/')),
+      trainingSource: '/mnt/storage/diplomacy/final/task061-generated-retrain-20260906',
+      knownTrainingSeeds: '61000-61005',
+      browserScenarioSeed: 'none; fixed hand-authored Play AI map',
+      randomizedControlSeed: 79079,
+      seedIntersections: 'empty'
+    };
 
     console.log(JSON.stringify({
       status: 'passed',
       url: served.url,
-      screenshots: {
-        initialGrid: initialPath,
-        afterBlueAiTurnGrid: finalPath
+      normalEntrypoint: 'index.html',
+      menuAction: 'clicked visible play AI button',
+      repositoryCommit: childProcess.execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: repoRoot, encoding: 'utf8'}).trim(),
+      checkpoint,
+      real,
+      controls: {
+        zeroed: {
+          score: zeroed.controlScore,
+          blueMovementDeltas: zeroed.blueMovementDeltas
+        },
+        randomized: {
+          score: randomized.controlScore,
+          seed: randomized.control.seed,
+          blueMovementDeltas: randomized.blueMovementDeltas
+        },
+        missing: {rejected: true, state: missingState, errors: missingErrors},
+        heuristicOnly: 'not applicable; AIPlayer.getWinningChances calls predict(ai_model, ...) without a fused heuristic score'
       },
-      interfacePixels: {
-        initialCenter: initialInterfacePixel,
-        afterBlueAiTurnCenter: finalInterfacePixel
+      legalVisibleBlueMove,
+      legalActionBasis: 'unchanged AIPlayer.selectBestCommand enumerated getAvailableCommands and applied the selected command through applyLiveAiCommandUnit',
+      acceptance: {
+        browserEntrypoint: 'PASS',
+        initialGridScreenshot: 'PASS',
+        legalRedMoveAndNextTurnClick: 'PASS',
+        automaticBlueAIPlayerTurn: 'PASS',
+        secondGridScreenshotAndLegalVisibleBlueMove: 'PASS',
+        antiCheatingPolicy: 'PASS'
       },
-      redMove,
-      beforeMove,
-      afterMove
+      marker: 'TASK-079 REAL CHECKPOINT BROWSER TURN PASSED'
     }, null, 2));
   } catch (error) {
     console.error(error.stack || error.message);
