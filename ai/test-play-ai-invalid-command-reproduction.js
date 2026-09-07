@@ -18,7 +18,12 @@ check(nodeMajor >= 20,
 
 const { chromium } = require('playwright');
 
-const repoRoot = path.resolve(__dirname, '..');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
+const repoRoot = path.resolve(process.env.DIPLOMACY_PLAY_AI_RUNTIME_ROOT ||
+  path.resolve(__dirname, '..'));
+const expectCrash = process.argv.includes('--expect-crash');
+const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const artifactDir = process.env.DIPLOMACY_PLAY_AI_INVALID_COMMAND_ARTIFACT_DIR ||
   '/mnt/storage/diplomacy/browser-play-ai-invalid-command';
 
@@ -72,7 +77,7 @@ window.tf = {
   async loadLayersModel(source) {
     window.__playAiInvalidCommandModelSource = source;
     return {
-      inputs: [{ shape: [null, null, null, 78] }],
+      inputs: [{ shape: [null, null, null, CELL_VECTOR_SIZE] }],
       predict(inputs) {
         window.__playAiInvalidCommandPredictionCalls += 1;
         return {
@@ -85,6 +90,12 @@ window.tf = {
         };
       }
     };
+  },
+  tensor4d(value, shape) {
+    return { values: new Array(shape[0]).fill(null), dispose() {} };
+  },
+  tensor2d(value) {
+    return { value, dispose() {} };
   },
   tensor3d(value) {
     return { value, dispose() {} };
@@ -283,6 +294,7 @@ function isSendInstructionsTypeError(error) {
     await waitForGameReady(page);
     await clickPlayAi(page);
     await hideTurnPauseOverlayAndDrawGrid(page);
+    await page.evaluate(() => { gameSettings.aiActionLimit = 1; });
 
     const evidence = await injectInvalidBlueCommandSource(page);
     check(evidence.injected, 'could not inject invalid blue AI command source', evidence);
@@ -300,12 +312,23 @@ function isSendInstructionsTypeError(error) {
     const postTurnEvidence = await page.evaluate(() => ({
       invalidSourceSelected: Boolean(window.__playAiInvalidCommandSourceSelected),
       whooseTurn,
-      predictionCount: window.__aiPlayerPredictionCount || 0
+      predictionCount: window.__playAiInvalidCommandPredictionCalls || 0
     }));
     const report = {
-      status: sendInstructionsTypeError ? 'failed' : 'passed',
+      status: (expectCrash ? Boolean(expectedError) &&
+        postTurnEvidence.invalidSourceSelected && postTurnEvidence.whooseTurn === 2 :
+        !sendInstructionsTypeError && !postTurnEvidence.invalidSourceSelected) ? 'passed' : 'failed',
+      expectation: expectCrash ? 'pre-fix crash' : 'fixed rejection',
+      provenance: {
+        runtimeRoot: repoRoot,
+        harnessSha256: sha256(__filename),
+        harnessBaseCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: __dirname, encoding: 'utf8' }).trim(),
+        runtimePlayersSha256: sha256(path.join(repoRoot, 'ai/players.js')),
+        model: 'Synthetic deterministic predictor fixture; no checkpoint loaded or learned-model claim',
+        aiActionLimit: 1
+      },
       url: served.url,
-      reproductionCommand: 'npm run test-play-ai-invalid-command',
+      reproductionCommand: 'npm run test-play-ai-invalid-command' + (expectCrash ? ' -- --expect-crash' : ''),
       reportedStacktrace: [
         'Uncaught TypeError: unit.sendInstructions is not a function',
         '    at AIPlayer.selectBestCommand (players.js:660:26)',
@@ -321,20 +344,26 @@ function isSendInstructionsTypeError(error) {
       observedError: expectedError || null,
       evidence,
       postTurnEvidence,
-      fixedExpectation: 'Invalid command sources are skipped without calling sendInstructions.',
+      expectedBehavior: expectCrash ? 'Invalid source throws from AIPlayer.selectBestCommand.' :
+        'Invalid command sources are skipped without calling sendInstructions.',
       pageErrors,
-      browserConsole: consoleMessages.slice(-50)
+      browserConsole: consoleMessages
     };
     const reportPath = path.join(artifactDir, 'task085-invalid-command-report.json');
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
     report.report = reportPath;
 
-    check(!sendInstructionsTypeError,
-      'Play AI invalid command regression still observed unit.sendInstructions TypeError',
-      report);
-    check(postTurnEvidence.invalidSourceSelected === false,
-      'AI selected the invalid command source instead of skipping it',
-      report);
+    if (expectCrash) {
+      check(expectedError && postTurnEvidence.invalidSourceSelected &&
+          postTurnEvidence.whooseTurn === 2,
+        'Pre-fix reproduction did not observe the blue selectBestCommand crash', report);
+    } else {
+      check(!sendInstructionsTypeError,
+        'Play AI invalid command regression still observed unit.sendInstructions TypeError', report);
+      check(postTurnEvidence.invalidSourceSelected === false,
+        'AI selected the invalid command source instead of skipping it', report);
+      check(pageErrors.length === 0, 'Unexpected browser error in fixed control', report);
+    }
 
     console.log(JSON.stringify(report, null, 2));
   } catch (error) {
