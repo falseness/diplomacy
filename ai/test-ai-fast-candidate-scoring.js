@@ -432,13 +432,13 @@ for (const product of ['farm', 'barrack', 'tower']) {
     economyCategoryResult);
 }
 
-function runWholeTurnScenario(throwDuringPrediction = false) {
+function runWholeTurnScenario(throwDuringPrediction = false, className = 'AIPlayer') {
   const context = createContext();
   new vm.Script(read('ai/mutableVectorGrid.js')).runInContext(context);
   new vm.Script(playersSource).runInContext(context);
   context.throwDuringPrediction = throwDuringPrediction;
   const result = new vm.Script(`
-    let player = new AIPlayer({r: 255, g: 0, b: 0}, 90)
+    let player = new ${className}({r: 255, g: 0, b: 0}, 90)
     player.units = [unit]
     players = [null, player, {isNeutral: false, isLost: false, units: [], towns: []}]
     // Two legal actions from the same unit require multiple selector calls.
@@ -470,8 +470,9 @@ function runWholeTurnScenario(throwDuringPrediction = false) {
       return prediction(model, inputs)
     }
     let error = null
-    try { player.doActions() } catch (caught) { error = caught.message }
+    try { player.${className === 'AIPlayer' ? 'doActions' : 'doLearnedCombatOnlyActions'}() } catch (caught) { error = caught.message }
     let firstTurn = {
+      className: '${className}',
       vectoriseCalls: state.vectoriseCalls,
       gridCount: grids.size, applies, undoes,
       normalApplications: state.normalApplications,
@@ -480,7 +481,7 @@ function runWholeTurnScenario(throwDuringPrediction = false) {
     }
     if (!throwDuringPrediction) {
       unit.moves = 2
-      player.doActions()
+      player.${className === 'AIPlayer' ? 'doActions' : 'doLearnedCombatOnlyActions'}()
     }
     ;({firstTurn, totalGrids: grids.size, totalVectoriseCalls: state.vectoriseCalls})
   `).runInContext(context);
@@ -502,4 +503,6 @@ function runWholeTurnScenario(throwDuringPrediction = false) {
 }
 runWholeTurnScenario();
 runWholeTurnScenario(true);
+runWholeTurnScenario(false, 'AIPlayerWithEconomy');
+runWholeTurnScenario(true, 'AIPlayerWithEconomy');
 console.log('AI fast candidate scoring smoke passed');

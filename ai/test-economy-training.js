@@ -7,10 +7,13 @@ function check(condition, message) {
 }
 
 async function main() {
-  const storageDir = path.join('/mnt/storage/diplomacy', `task036-test-${process.pid}`);
+  const evidenceDir = process.env.ECONOMY_TRAINING_EVIDENCE_DIR;
+  const storageDir = evidenceDir ? path.resolve(evidenceDir) :
+    path.join('/mnt/storage/diplomacy', `task036-test-${process.pid}`);
   const runId = 'economy-training-test';
   let incrementalSnapshotChecked = false;
   if (fs.existsSync(storageDir)) {
+    if (evidenceDir) throw new Error('evidence directory must be new: ' + storageDir);
     fs.rmdirSync(storageDir, { recursive: true });
   }
   const result = await run({
@@ -107,8 +110,16 @@ async function main() {
       'training plateau summary was not recorded');
     check(fs.existsSync(path.join(storageDir, 'final', runId, 'model.json')),
       'final economy model missing');
+    if (evidenceDir) {
+      fs.writeFileSync(path.join(storageDir, 'smoke-result.json'),
+        JSON.stringify(result, null, 2) + '\n');
+      console.log('ECONOMY_TRAINING_EVIDENCE: ' + storageDir);
+      for (const metric of result.metrics) {
+        console.log('ECONOMY_TRAINING_GAME: ' + JSON.stringify(metric));
+      }
+    }
   } finally {
-    if (fs.existsSync(storageDir)) {
+    if (!evidenceDir && fs.existsSync(storageDir)) {
       fs.rmdirSync(storageDir, { recursive: true });
     }
   }

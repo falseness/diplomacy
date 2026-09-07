@@ -184,11 +184,11 @@ const context = vm.createContext({
     vector[0] = state.gold / 1000;
     vector[1] = state.unitMoves;
     vector[2] = state.placed.length;
-    return [vector];
+    return [[[vector]], 0];
   },
   predict(model, inputs) {
-    return inputs.map(input => [input[0][2] * 10 +
-      input[0][0] + (1 - input[0][1])]);
+    return inputs.map(input => [input[0][0][0][2] * 10 +
+      input[0][0][0][0] + (1 - input[0][0][0][1])]);
   },
   actionManager: {
     undo() {
@@ -211,6 +211,10 @@ const context = vm.createContext({
     }
   }
 });
+
+new vm.Script(read('ai/mutableVectorGrid.js'), {
+  filename: 'ai/mutableVectorGrid.js'
+}).runInContext(context);
 
 new vm.Script(read('ai/players.js'), {
   filename: 'ai/players.js'

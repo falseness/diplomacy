@@ -1835,6 +1835,7 @@ class AIPlayerWithEconomy extends AIPlayer {
         let maxIndex = selectBestModelIndex(chances)
         let applied = this.applyActionCommand(validCommands[maxIndex])
         if (applied) {
+            this.retainSelectedEconomyAction(validCommands[maxIndex])
             this.aiModelRankedAttackActions =
                 (this.aiModelRankedAttackActions || 0) + 1
         }
@@ -1916,10 +1917,47 @@ class AIPlayerWithEconomy extends AIPlayer {
             state.farms.length == 0 &&
             state.pendingFarms.length == 0
     }
+    retainSelectedEconomyAction(command) {
+        if (this.candidateScoringGrid) {
+            applyFastAction(this.candidateScoringGrid, command)
+            this.candidateScoringGrid.appliedFastActions.pop()
+        }
+    }
+    refreshEconomyScoringGrid() {
+        // Heuristic purchases/movement use several direct game entrypoints.
+        // Resynchronize at phase boundaries, outside candidate scoring, while
+        // keeping the same mutable grid throughout the turn.
+        let fresh = vectoriseGrid()
+        this.candidateScoringGrid.cells = fresh[0]
+        this.candidateScoringGrid.suddenDeathMetric = fresh[1]
+    }
+    recordEconomyScoringState() {
+        let snapshot = this.cloneMutableVectorGridForPrediction(
+            this.candidateScoringGrid)
+        this.chosenGrids.push(snapshot)
+        this.winningChances.push(this.getWinningChances([snapshot])[0])
+    }
     doLearnedCombatOnlyActions() {
+        this.candidateScoringGrid = createMutableVectorGrid(vectoriseGrid())
+        try {
+            this.runLearnedCombatOnlyActions()
+        }
+        finally {
+            this.candidateScoringGrid = null
+        }
+    }
+    doActions() {
+        this.candidateScoringGrid = createMutableVectorGrid(vectoriseGrid())
+        try {
+            this.runEconomyActions()
+        }
+        finally {
+            this.candidateScoringGrid = null
+        }
+    }
+    runLearnedCombatOnlyActions() {
         const hardLimit = this.getActionLimit(150)
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
+        this.recordEconomyScoringState()
         let unitsLength = this.units.length
         for (let i = 0; i < hardLimit; ++i) {
             let [bestCommand, chance] = this.getBestActionCommand()
@@ -1929,24 +1967,26 @@ class AIPlayerWithEconomy extends AIPlayer {
             if (!this.applyActionCommand(bestCommand)) {
                 return
             }
-            this.chosenGrids.push(vectoriseGrid())
+            this.retainSelectedEconomyAction(bestCommand)
+            this.chosenGrids.push(this.cloneMutableVectorGridForPrediction(
+                this.candidateScoringGrid))
             this.winningChances.push(chance)
             this.updateUnits()
             assert(unitsLength == this.units.length)
         }
         console.log('player reached hard limit')
     }
-    doActions() {
+    runEconomyActions() {
         if (!this.bestEnemyTargetForAI) {
             this.bestEnemyTargetForAI = new BestEnemyTargetForAI()
         }
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
+        this.recordEconomyScoringState()
         this.prioritizedTargetsForTurn = null
         let remainingActions =
             this.getActionLimit(AI_ECONOMY_DEFAULT_ACTION_LIMIT)
         remainingActions = this.spendWarGoldWithinLimit(
             remainingActions, AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT)
+        this.refreshEconomyScoringGrid()
         if (remainingActions > 0 && this.applyModelRankedImmediateAttack()) {
             --remainingActions
             this.updateUnits()
@@ -1964,8 +2004,8 @@ class AIPlayerWithEconomy extends AIPlayer {
         this.prioritizedTargetsForTurn = null
         this.spendWarGoldWithinLimit(
             remainingActions, AI_ECONOMY_POST_MOVE_PURCHASE_LIMIT)
-        this.chosenGrids.push(vectoriseGrid())
-        this.winningChances.push(this.getWinningChance())
+        this.refreshEconomyScoringGrid()
+        this.recordEconomyScoringState()
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 4)
