@@ -181,7 +181,7 @@ maps = {
              [{"x":7,"y":2},{"x":13,"y":2},{"x":7,"y":3},{"x":13,"y":3},{"x":8,"y":4},{"x":12,"y":4},{"x":6,"y":4},{"x":14,"y":4},{"x":6,"y":3},{"x":14,"y":3},{"x":8,"y":9},{"x":12,"y":9},{"x":8,"y":10},{"x":12,"y":10},{"x":8,"y":11},{"x":12,"y":11},{"x":4,"y":14},{"x":16,"y":14},{"x":3,"y":14},{"x":17,"y":14},{"x":5,"y":13},{"x":15,"y":13},{"x":2,"y":15},{"x":18,"y":15},{"x":0,"y":2},{"x":20,"y":2},{"x":1,"y":2},{"x":19,"y":2},{"x":2,"y":2},{"x":18,"y":2},{"x":3,"y":2},{"x":17,"y":2}]
         ),
         new GameMap(
-            {x: 30, y: 23},
+            {x: 26, y: 21},
             [
                 {
                     rgb: {r: 208, g: 208, b: 208},
@@ -189,20 +189,51 @@ maps = {
                 },
                 {
                     rgb: {r: 255, g: 0, b: 0},
-                    towns: [{x: 9, y: 6}]
+                    towns: [{x: 7, y: 8}]
                 },
                 {
                     rgb: {r: 98, g: 168, b: 222},
-                    towns: [{x: 20, y: 9}]
+                    towns: [{x: 17, y: 7}]
                 },
                 {
                     rgb: {r: 0, g: 179, b: 0},
-                    towns: [{x: 12, y: 16}]
+                    towns: [{x: 13, y: 15}]
                 }
             ],
-            [],
-            [],
-            []
+            [
+                // Every row is one 120-degree orbit around the three towns.
+                // Outer mines: one clearly owned, four steps from each spawn.
+                {x: 3, y: 10, income: 10}, {x: 17, y: 3, income: 10},
+                {x: 17, y: 17, income: 10},
+                // A second equally close mine gives every spawn the same economy.
+                {x: 4, y: 11, income: 10}, {x: 16, y: 4, income: 10},
+                {x: 17, y: 16, income: 10},
+                // Central triangle: every player has two 5-step approaches and one
+                // 6-step approach, so no single high-value centre hex picks a winner.
+                {x: 12, y: 10, income: 20}, {x: 13, y: 10, income: 20},
+                {x: 12, y: 11, income: 20}
+            ],
+            [
+                // Two-hex lakes define the counter-clockwise flank of each sector.
+                {x: 5, y: 12}, {x: 14, y: 4}, {x: 18, y: 15},
+                {x: 6, y: 12}, {x: 14, y: 5}, {x: 17, y: 14}
+            ],
+            [
+                // Matching mountain pairs define the clockwise flank. Obstacles
+                // start four steps out, leaving identical open building space.
+                {x: 11, y: 6}, {x: 17, y: 11}, {x: 9, y: 13},
+                {x: 12, y: 6}, {x: 17, y: 12}, {x: 8, y: 13}
+            ],
+            [
+                // Passable line-of-sight cover is repeated in exact rotational
+                // triplets: two local screens and one central screen per sector.
+                {x: 4, y: 8}, {x: 19, y: 5}, {x: 14, y: 18},
+                {x: 5, y: 8}, {x: 18, y: 6}, {x: 14, y: 17},
+                {x: 8, y: 6}, {x: 19, y: 9}, {x: 10, y: 16},
+                {x: 9, y: 6}, {x: 18, y: 10}, {x: 10, y: 15},
+                {x: 9, y: 11}, {x: 13, y: 7}, {x: 15, y: 12},
+                {x: 10, y: 11}, {x: 13, y: 8}, {x: 14, y: 12}
+            ]
         ),
         new GameMap(
             {x: 25, y: 25},
