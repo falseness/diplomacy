@@ -597,6 +597,8 @@ class Menu {
         }
     }
     draw(ctx) {
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.clearRect(0, 0, WIDTH, HEIGHT)
         this.background.draw(ctx)
         this.logo.draw(ctx)
@@ -608,6 +610,7 @@ class Menu {
         this.loadButton.draw(ctx)*/
 
         errorWindow.draw(ctx)
+        ctx.restore()
     }
 }
 
