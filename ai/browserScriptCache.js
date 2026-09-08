@@ -8,6 +8,7 @@ const scriptCache = new Map();
 const readCounts = new Map();
 const compileCounts = new Map();
 let cachedBrowserScriptSources = null;
+let compiledRandomInitializer = null;
 
 function detachBrowserResult(result) {
   // A VM object's prototype retains its realm, including the entire game.
@@ -16,7 +17,7 @@ function detachBrowserResult(result) {
   return v8.deserialize(v8.serialize(result));
 }
 
-function createBrowserContext(globals) {
+function createBrowserContext(globals, random) {
   // Fresh global/lexical state, without Node's global proxy when supported.
   // Only compiled scripts are shared between games.
   const context = vm.constants && vm.constants.DONT_CONTEXTIFY
@@ -25,6 +26,18 @@ function createBrowserContext(globals) {
   Object.assign(context, globals);
   context.window = context;
   context.globalThis = context;
+  if (random) {
+    // Keep intrinsic operations in the game's realm so V8 can optimize them.
+    // Only the seeded random source crosses the host/context boundary.
+    context.__browserRandom = random;
+    if (!compiledRandomInitializer) {
+      compiledRandomInitializer = new vm.Script(
+        'Math.random = __browserRandom; delete globalThis.__browserRandom;',
+        { filename: 'browser-seeded-random.js' }
+      );
+    }
+    compiledRandomInitializer.runInContext(context);
+  }
   return context;
 }
 

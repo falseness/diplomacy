@@ -230,22 +230,6 @@ function createRuntimeContext(seed) {
   };
   const context = {
     console: Object.assign({}, console, { log() {} }),
-    Math: seededMath,
-    Date,
-    JSON,
-    Array,
-    Object,
-    Number,
-    String,
-    Boolean,
-    Error,
-    TypeError,
-    Map,
-    Set,
-    Promise,
-    parseInt,
-    parseFloat,
-    isNaN,
     setTimeout,
     clearTimeout,
     requestAnimationFrame() { return 0; },
@@ -275,7 +259,7 @@ function createRuntimeContext(seed) {
     saveAs() {},
     __scoreFinalEconomyVector: scoreFinalEconomyVector
   };
-  return createBrowserContext(context);
+  return createBrowserContext(context, seededMath.random);
 }
 
 function getTrainingRuntimeContext(seed) {

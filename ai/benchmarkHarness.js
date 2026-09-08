@@ -222,22 +222,6 @@ function createRuntimeContext(seed) {
   const storage = {};
   const context = {
     console: Object.assign({}, console, { log() {} }),
-    Math: createSeededMath(seed),
-    Date,
-    JSON,
-    Array,
-    Object,
-    Number,
-    String,
-    Boolean,
-    Error,
-    TypeError,
-    Map,
-    Set,
-    Promise,
-    parseInt,
-    parseFloat,
-    isNaN,
     setTimeout,
     clearTimeout,
     requestAnimationFrame() { return 0; },
@@ -270,7 +254,7 @@ function createRuntimeContext(seed) {
     __benchmarkInferenceCalls: 0,
     __benchmarkInferencePositions: 0
   };
-  return createBrowserContext(context);
+  return createBrowserContext(context, createSeededMath(seed).random);
 }
 
 function readRepoFile(relativePath) {
