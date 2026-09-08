@@ -517,36 +517,15 @@ function boardSize(board) {
   };
 }
 
-function adaptBoard(board, expectedWidth, expectedHeight, expectedChannels) {
-  const size = boardSize(board);
-  const channels = board[0][0].length;
-  if (size.width === expectedWidth && size.height === expectedHeight &&
-      channels === expectedChannels) {
-    return board;
-  }
-  const adapted = new Array(expectedWidth);
-  for (let x = 0; x < expectedWidth; ++x) {
-    adapted[x] = new Array(expectedHeight);
-    const sourceX = Math.min(size.width - 1, Math.floor(x * size.width / expectedWidth));
-    for (let y = 0; y < expectedHeight; ++y) {
-      const sourceY = Math.min(size.height - 1, Math.floor(y * size.height / expectedHeight));
-      const sourceCell = board[sourceX][sourceY];
-      adapted[x][y] = sourceCell.slice(0, expectedChannels);
-      while (adapted[x][y].length < expectedChannels) {
-        adapted[x][y].push(0);
-      }
-    }
-  }
-  return adapted;
-}
-
 function createPredictor(model, stats) {
   const inputShape = model.inputs[0].shape;
   return function predictFromCheckpoint(checkpointModel, vectors) {
     const expectedWidth = inputShape[1];
     const expectedHeight = inputShape[2];
     const expectedChannels = inputShape[3];
-    const adaptedBoards = [];
+    const boardValues = new Float32Array(
+      vectors.length * expectedWidth * expectedHeight * expectedChannels);
+    let offset = 0;
     const globals = [];
     for (const vector of vectors) {
       const board = vector[0];
@@ -558,15 +537,27 @@ function createPredictor(model, stats) {
       if (board[0][0].length !== expectedChannels) {
         stats.channelAdaptations += 1;
       }
-      adaptedBoards.push(adaptBoard(
-        board, expectedWidth, expectedHeight, expectedChannels));
+      // Match nearest-cell resizing and channel truncation/zero padding directly
+      // in tensor storage, without allocating intermediate boards or flat arrays.
+      for (let x = 0; x < expectedWidth; ++x) {
+        const sourceX = Math.min(size.width - 1, Math.floor(x * size.width / expectedWidth));
+        for (let y = 0; y < expectedHeight; ++y) {
+          const sourceY = Math.min(size.height - 1, Math.floor(y * size.height / expectedHeight));
+          const cell = board[sourceX][sourceY];
+          const count = Math.min(cell.length, expectedChannels);
+          for (let channel = 0; channel < count; ++channel) {
+            boardValues[offset + channel] = cell[channel];
+          }
+          offset += expectedChannels;
+        }
+      }
       globals.push([globalValue]);
     }
     stats.calls += 1;
     stats.positions += vectors.length;
     const boardTensor = tf.tensor4d(
-      adaptedBoards.flat(3),
-      [adaptedBoards.length, expectedWidth, expectedHeight, expectedChannels]
+      boardValues,
+      [vectors.length, expectedWidth, expectedHeight, expectedChannels]
     );
     const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
     try {

@@ -335,7 +335,7 @@ function collectAllMutableVectorGridCoords(mutableGrid) {
     return coords
 }
 
-function replaceMutableCellVectorFromGrid(mutableGrid, coord, globalChannels) {
+function replaceMutableCellVectorFromGrid(mutableGrid, coord, globalChannels, expansionLookup) {
     if (!mutableGrid.cells[coord.x] || !mutableGrid.cells[coord.x][coord.y]) {
         throw new Error('fast unit action coord is outside mutable vector grid: ' +
             JSON.stringify(coord))
@@ -349,7 +349,7 @@ function replaceMutableCellVectorFromGrid(mutableGrid, coord, globalChannels) {
     }
     mutableGrid.cells[coord.x][coord.y] = vectorizeCellLocal(
         grid.getCell(coord),
-        globalChannels)
+        globalChannels, expansionLookup)
 }
 
 function mutableVectorGridGlobalChannelList() {
@@ -391,6 +391,9 @@ function refreshMutableVectorGridGlobalChannels(mutableGrid, globalChannels) {
 function applyChangedCellFastAction(mutableGrid, command) {
     let coords = collectFastActionChangedCoords(mutableGrid, command)
     let previous = []
+    // The standalone dispatcher also supports the legacy vectorizeCell API.
+    let expansionLookup = typeof createSuburbExpansionLookup == 'undefined' ?
+        undefined : createSuburbExpansionLookup()
     let previousGlobalChannels = captureMutableVectorGridGlobalChannels(mutableGrid)
     let currentGlobalChannels = typeof computeGlobalVectorChannels == 'undefined' ?
         previousGlobalChannels : computeGlobalVectorChannels()
@@ -400,7 +403,7 @@ function applyChangedCellFastAction(mutableGrid, command) {
             coord: {x: coord.x, y: coord.y},
             vector: mutableGrid.cells[coord.x][coord.y].slice()
         })
-        replaceMutableCellVectorFromGrid(mutableGrid, coord, currentGlobalChannels)
+        replaceMutableCellVectorFromGrid(mutableGrid, coord, currentGlobalChannels, expansionLookup)
     }
     refreshMutableVectorGridGlobalChannels(
         mutableGrid,

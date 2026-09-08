@@ -352,7 +352,44 @@ function isSuburbExpansionCell(cell) {
     return false
 }
 
-function vectorizeSuburb(cell, result) {
+// This lookup belongs to one vectorization pass, never to a mutable turn.
+function createSuburbExpansionLookup() {
+    let result = []
+    for (let color = 1; color < players.length; ++color) {
+        let owner = players[color]
+        if (!owner || !owner.towns) {
+            continue
+        }
+        let adjacent = new Set()
+        result[color] = adjacent
+        for (let town of owner.towns) {
+            if (!town || town.killed || town.playerColor != color || !town.suburbs) {
+                continue
+            }
+            for (let suburb of town.suburbs) {
+                if (!isLiveTownSuburb(town, suburb)) {
+                    continue
+                }
+                let neighbours = suburb.neighbours
+                for (let neighbour of neighbours || []) {
+                    adjacent.add(neighbour.x + ':' + neighbour.y)
+                }
+            }
+        }
+    }
+    return result
+}
+
+function lookupSuburbExpansionCell(cell, expansionLookup) {
+    if (!cell || !cell.hexagon || cell.hexagon.isSuburb ||
+        cell.playerColor == 0 || !cell.coord) {
+        return false
+    }
+    let adjacent = expansionLookup[cell.playerColor]
+    return !!adjacent && adjacent.has(cell.coord.x + ':' + cell.coord.y)
+}
+
+function vectorizeSuburb(cell, result, expansionLookup) {
     if (cellIsSuburb(cell)) {
         result[CELL_VECTOR_INDEX.isSuburb] = 1
         result[CELL_VECTOR_INDEX.suburbOwner] =
@@ -360,7 +397,8 @@ function vectorizeSuburb(cell, result) {
         result[CELL_VECTOR_INDEX.suburbIncome] =
             1 / SUBURB_INCOME_VECTOR_SCALE
     }
-    if (isSuburbExpansionCell(cell)) {
+    if (expansionLookup ? lookupSuburbExpansionCell(cell, expansionLookup) :
+            isSuburbExpansionCell(cell)) {
         result[CELL_VECTOR_INDEX.suburbExpansionAvailable] = 1
         result[CELL_VECTOR_INDEX.suburbExpansionOwner] =
             relativePlayerValue(cell.playerColor)
@@ -561,11 +599,11 @@ function applyGlobalVectorChannels(result, globalChannels) {
     }
 }
 
-function vectorizeCellLocal(cell, globalChannels) {
+function vectorizeCellLocal(cell, globalChannels, expansionLookup) {
     let result = new Array(CELL_VECTOR_SIZE)
     result = result.fill(0)
     applyGlobalVectorChannels(result, globalChannels)
-    vectorizeSuburb(cell, result)
+    vectorizeSuburb(cell, result, expansionLookup)
     if (!cell.building.isEmpty()) {
         result[CELL_VECTOR_INDEX.hasBuilding] = 1
         if (cell.building.isTown()) {
@@ -641,13 +679,14 @@ function vectoriseGridDebug() {
 function vectoriseGrid() {
     let result = new Array(grid.arr.length)
     let globalChannels = computeGlobalVectorChannels()
+    let expansionLookup = createSuburbExpansionLookup()
 
     for (let i = 0; i < grid.arr.length; ++i) {
         result[i] = new Array(grid.arr[i].length)
         for (let j = 0; j < grid.arr[i].length; ++j) {
             result[i][j] = vectorizeCellLocal(
                 grid.getCell({x: i, y: j}),
-                globalChannels)
+                globalChannels, expansionLookup)
         }
     }
     let suddenDeathMetric = (suddenDeathRound - gameRound - 1) * (players.length - 1) + 
