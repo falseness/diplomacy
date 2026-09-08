@@ -25,31 +25,31 @@ identity, and prints every cached/no-cache result pair. The spy includes the
 initial player-class validation load; it does not clear counters after imports. Seeds are fixed in source
 before running. These are equivalence tests, not checkpoint-strength estimates.
 
-For the original TASK-087/TASK-101 training workload, run:
+For the canonical TASK-087/TASK-101 command on the actual revisions, run:
 
 ```sh
-NODE_PATH=/usr/share/nodejs python3 ai/task102-measure-cache.py \
+NODE_PATH=/usr/share/nodejs NODE_OPTIONS=--max-old-space-size=6144 \
+  python3 ai/task102-measure-cache.py \
   --node-bin /path/to/node20/bin --artifacts artifacts/TASK-102
 ```
 
 Use a new evidence directory for each attempt. The wrapper refuses to overwrite
 source archives, runs every pair sequentially, and returns nonzero if either
-median speed gate or historical determinism fails. It does not skip training
+median speed gate or pre-change determinism fails. It does not skip training
 measurements when the component speed gate fails.
 
-The workload source is `bf9b752`, the immediate parent of the first TASK-102
-commit. Both variants use the browser loaders from `ecd5880` and route player
-class validation through the cache. The before variant uses the preceding cache
-from `8d2e35e`; the after variant adds the direct-global context factory to both
-loaders and copies the current cache module. A source manifest asserts this
-three-file boundary. This comparison excludes the later
-TASK-102 curriculum deferral, warmed-context reuse, and subsequent model changes.
-It measures the context optimization over the preceding cache in the original
-workload; it is not a comparison of
-the entire modern repository against that historical revision.
+The wrapper archives the complete actual preceding revision `8d2e35e` and
+implemented revision `6b71478`. No files are substituted from historical sources
+or the working tree. Full source manifests, exact revision IDs, and their complete
+diff bind all measurements to this pair. Earlier reconstructed historical results
+are diagnostic controls and do not satisfy the immediately preceding-state gate.
 
 The component measurement uses 50 tiny-duel games, seeds 10200–10249, one round,
-three actions and 60 commands. The separate historical equivalence run uses 20
+three actions and 60 commands. Both variants load the same real checkpoint;
+`--checkpoint PATH` overrides the persisted TASK-036 fixture. Checkpoint loading
+time is included in both measurements. Existing `NODE_OPTIONS` are preserved
+when the observational preload is added; both variants need sufficient heap
+for the full canonical workload. The separate pre-change equivalence run uses 20
 seeds, 10400–10419, with 30 rounds. Each training run uses:
 
 ```sh

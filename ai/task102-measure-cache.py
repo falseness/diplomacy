@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Measure fresh direct VM globals against the preceding TASK-102 cache.
 
-Historical sources are necessary: later tasks changed the canonical training
-workload. No curriculum deferral, VM reuse, or model changes enter this pair.
+Archive the actual preceding and implemented revisions without source substitution.
 """
 import argparse
 import hashlib
@@ -17,9 +16,8 @@ import subprocess
 import tarfile
 import time
 
-BASE = 'bf9b75219aab55315aa72656b2a145ff5b193b88'
-CACHE_LOADERS = 'ecd5880bd31c0138381b9adaefdcfc7fdd63a256'
-CACHE_BASE = '8d2e35ea4a44418de778dc210f86b4d5f68cff6b'
+BEFORE = '8d2e35ea4a44418de778dc210f86b4d5f68cff6b'
+AFTER = '6b71478984339ac390fc32f3dfc97123c57e7496'
 
 
 def digest(path):
@@ -33,37 +31,21 @@ def prepare_sources(repo, dest, env):
     for variant in ('before', 'after'):
         source = dest / (variant + '-source')
         source.mkdir()  # Refuse to overwrite evidence from an earlier attempt.
-        with tarfile.open(fileobj=io.BytesIO(git('archive', BASE))) as archive:
+        revision = BEFORE if variant == 'before' else AFTER
+        with tarfile.open(fileobj=io.BytesIO(git('archive', revision))) as archive:
             archive.extractall(source)
-        for filename in ('ai/benchmarkHarness.js', 'ai/economy-training.js'):
-            text = git('show', CACHE_LOADERS + ':' + filename).decode()
-            if filename == 'ai/benchmarkHarness.js':
-                text = text.replace('  loadBrowserScripts,\n', '  loadBrowserScript,\n  loadBrowserScripts,\n', 1)
-                bootstrap = "  const source = fs.readFileSync(path.join(__dirname, 'players.js'), 'utf8');\n  new vm.Script(source, { filename: 'ai/players.js' }).runInContext(context);"
-                assert bootstrap in text
-                text = text.replace(bootstrap, "  loadBrowserScript(context, 'ai/players.js');")
-            if variant == 'after':
-                text = text.replace('  loadBrowserScripts,\n', '  createBrowserContext,\n  loadBrowserScripts,\n', 1)
-                text = text.replace('    Infinity,\n    NaN,\n', '')
-                factory = '  context.window = context;\n  context.globalThis = context;\n  return vm.createContext(context);'
-                assert text.count(factory) == 1
-                text = text.replace(factory, '  return createBrowserContext(context);')
-            (source / filename).write_text(text)
-        cache = ((repo / 'ai/browserScriptCache.js').read_bytes() if variant == 'after'
-                 else git('show', CACHE_BASE + ':ai/browserScriptCache.js'))
-        (source / 'ai/browserScriptCache.js').write_bytes(cache)
         files = [p for p in source.rglob('*') if p.is_file()]
         manifest[variant] = {str(p.relative_to(source)): digest(p) for p in files}
         (source / 'node_modules').symlink_to(repo / 'node_modules', target_is_directory=True)
     changed = sorted(k for k in set(manifest['before']) | set(manifest['after'])
                      if manifest['before'].get(k) != manifest['after'].get(k))
-    assert changed == ['ai/benchmarkHarness.js', 'ai/browserScriptCache.js', 'ai/economy-training.js'], changed
+    # Keep the complete actual trees, including documentation and test changes.
+    (dest / 'revision.diff').write_bytes(git('diff', BEFORE, AFTER))
     (dest / 'source-sha256.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (dest / 'provenance.json').write_text(json.dumps({
         'host_sha': git('rev-parse', 'HEAD').decode().strip(),
-        'host_status': git('status', '--short').decode(), 'workload_revision': BASE,
-        'baseline': CACHE_BASE,
-        'loader_revision': CACHE_LOADERS, 'changed_sources': changed,
+        'host_status': git('status', '--short').decode(), 'before_revision': BEFORE,
+        'after_revision': AFTER, 'changed_sources': changed,
         'node': subprocess.check_output(['node', '--version'], env=env, text=True).strip(),
         'platform': platform.platform(), 'cpu': Path('/proc/cpuinfo').read_text().split('model name')[1].splitlines()[0],
         'environment': {k: v for k, v in env.items() if k == 'PATH' or k.startswith(('TF_', 'OMP_', 'DIPLOMACY_', 'CUDA', 'NODE_'))},
@@ -106,17 +88,26 @@ Module._load = function(...args) {
 """)
     driver = dest / 'run-games.cjs'
     driver.write_text("""const {runGame} = require(process.cwd() + '/ai/benchmarkHarness');
+async function main() {
+const {loadCheckpoint, createPredictor} = require(process.cwd() + '/ai/benchmark-gamestart-trained-model');
+const checkpoint = await loadCheckpoint(process.env.TASK102_CHECKPOINT);
+console.log('CHECKPOINT: '+JSON.stringify(checkpoint.report));
+const predictFunction = createPredictor(checkpoint.model, {calls:0, positions:0, resizedInputs:0, channelAdaptations:0});
 const count = Number(process.argv[2]);
 const seed = Number(process.argv[3]);
 const rounds = Number(process.argv[4]);
 for (let i = 0; i < count; i++) {
   const game = runGame({mapName:'tiny-duel', playerA:'AIPlayer', playerB:'SimpleAiPlayer',
-    seed:seed+i, roundLimit:rounds, actionLimit:3, commandLimit:60});
+    seed:seed+i, roundLimit:rounds, actionLimit:3, commandLimit:60,
+    predictFunction, modelIdentifier:checkpoint.model, inferenceSource:'TASK-102 frozen checkpoint'});
   console.log('GAME_RESULT: '+JSON.stringify({seed:seed+i, winnerSide:game.winnerSide,
     winner:game.winner, roundCount:game.roundCount,
     inferenceCalls:game.inference.calls, inferencePositions:game.inference.positions}));
 }
 console.log('GAMES_COMPLETE: '+count);
+checkpoint.model.dispose();
+}
+main().catch(error => { console.error(error.stack); process.exitCode=1; });
 """)
     return observer, driver
 
@@ -126,11 +117,11 @@ def execute(dest, env, runs, observer, label, variant, command, observe=False):
     logpath = dest / (label + '.log')
     runenv = env.copy()
     if observe:
-        runenv['NODE_OPTIONS'] = '--require=' + str(observer)
+        runenv['NODE_OPTIONS'] = (runenv.get('NODE_OPTIONS', '') + ' --require=' + str(observer)).strip()
         runenv['TASK102_OUTCOMES'] = str(dest / (label + '-outcomes.jsonl'))
     with logpath.open('w', buffering=1) as log:
         log.write('COMMAND: ' + shlex.join(command) + '\nCWD: ' + str(source) + '\n')
-        log.write('BASE_REVISION: ' + BASE + '\nVARIANT: ' + variant + '\n')
+        log.write('SOURCE_REVISION: ' + (BEFORE if variant == 'before' else AFTER) + '\nVARIANT: ' + variant + '\n')
         log.write('START_UTC: ' + time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()) + '\n')
         start = time.monotonic()
         proc = subprocess.run(command, cwd=source, env=runenv, stdout=log, stderr=subprocess.STDOUT)
@@ -146,11 +137,12 @@ def execute(dest, env, runs, observer, label, variant, command, observe=False):
 
 def compare_determinism(dest, env, runs, observer, driver):
     for variant in ('before', 'after'):
-        execute(dest, env, runs, observer, 'historical-determinism-' + variant, variant, ['node', str(driver), '20', '10400', '30'])
-    before = [s for s in (dest / 'historical-determinism-before.log').read_text().splitlines() if s.startswith('GAME_RESULT:')]
-    after = [s for s in (dest / 'historical-determinism-after.log').read_text().splitlines() if s.startswith('GAME_RESULT:')]
-    with (dest / 'historical-determinism.log').open('w') as log:
-        matched = before == after and len(before) == 20
+        execute(dest, env, runs, observer, 'pre-change-determinism-' + variant, variant, ['node', str(driver), '20', '10400', '30'])
+    before = [s for s in (dest / 'pre-change-determinism-before.log').read_text().splitlines() if s.startswith('GAME_RESULT:')]
+    after = [s for s in (dest / 'pre-change-determinism-after.log').read_text().splitlines() if s.startswith('GAME_RESULT:')]
+    with (dest / 'pre-change-determinism.log').open('w') as log:
+        matched = (before == after and len(before) == 20 and
+                   all(run['exit_code'] == 0 for run in runs))
         log.write('PRE_CHANGE_DETERMINISM: ' + ('PASS' if matched else 'FAIL') + ' 20 seeds\n')
         log.write('\n'.join(before) + '\n')
     return matched
@@ -195,6 +187,7 @@ def audit_sources(dest, manifest):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--node-bin', required=True, type=Path)
+    parser.add_argument('--checkpoint', type=Path, default=Path('/mnt/storage/diplomacy/task036-incremental-long/final/task036-long'))
     parser.add_argument('--artifacts', type=Path, default=Path('artifacts/TASK-102'))
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
@@ -202,7 +195,9 @@ def main():
     dest.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, PATH=str(args.node_bin.resolve()) + os.pathsep + os.environ['PATH'])
     env.pop('DIPLOMACY_DISABLE_BROWSER_SCRIPT_CACHE', None)
+    env['TASK102_CHECKPOINT'] = str(args.checkpoint.resolve())
     manifest = prepare_sources(repo, dest, env)
+    (dest / 'measurement-wrapper.py').write_bytes(Path(__file__).read_bytes())
     observer, driver = write_drivers(dest)
     runs = []
     passed = [compare_determinism(dest, env, runs, observer, driver)]
