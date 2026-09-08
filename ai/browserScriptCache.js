@@ -1,12 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const v8 = require('v8');
 
 const repoRoot = path.resolve(__dirname, '..');
 const scriptCache = new Map();
 const readCounts = new Map();
 const compileCounts = new Map();
 let cachedBrowserScriptSources = null;
+
+function detachBrowserResult(result) {
+  // A VM object's prototype retains its realm, including the entire game.
+  // Transfer data to host-owned objects before callers retain results or batches.
+  // V8 serialization preserves undefined, non-finite numbers and shared references.
+  return v8.deserialize(v8.serialize(result));
+}
 
 function createBrowserContext(globals) {
   // Fresh global/lexical state, without Node's global proxy when supported.
@@ -100,6 +108,7 @@ function getBrowserScriptCacheStats() {
 
 module.exports = {
   createBrowserContext,
+  detachBrowserResult,
   getBrowserScriptCacheStats,
   loadBrowserScript,
   loadBrowserScripts,

@@ -12,6 +12,13 @@ Older versions retain contextified globals. Neither mode reuses mutable game
 contexts. `node ai/tests/test-browser-context.js` checks global and lexical
 isolation, browser aliases, and native constants in the selected mode.
 
+Returned benchmark results and economy batches are copied into the host realm
+using V8 serialization. This preserves the data (including non-finite numbers)
+while removing VM prototypes that otherwise retain complete game contexts when
+training stores results. The economy driver is also compiled once per process.
+`node --expose-gc ai/tests/test-browser-result-lifetime.js` retains real results
+from both loaders and checks that all four game contexts can be collected.
+
 With Node 20 on PATH, run the current correctness test with a real checkpoint:
 
 ```sh
@@ -30,6 +37,7 @@ For the canonical TASK-087/TASK-101 command on the actual revisions, run:
 ```sh
 NODE_PATH=/usr/share/nodejs NODE_OPTIONS=--max-old-space-size=6144 \
   python3 ai/task102-measure-cache.py \
+  --before <actual-preceding-revision> --after <frozen-candidate-revision-or-tree> \
   --node-bin /path/to/node20/bin --artifacts artifacts/TASK-102
 ```
 
@@ -38,8 +46,11 @@ source archives, runs every pair sequentially, and returns nonzero if either
 median speed gate or pre-change determinism fails. It does not skip training
 measurements when the component speed gate fails.
 
-The wrapper archives the complete actual preceding revision `8d2e35e` and
-implemented revision `6b71478`. No files are substituted from historical sources
+The wrapper archives the complete actual revisions specified by `--before` and
+`--after` (the defaults retain the earlier `8d2e35e` / `6b71478` experiment).
+For the result-lifetime correction, the immediately preceding revision is
+`d2b930d`; freeze the candidate as a git tree before testing and confirm the final
+commit has that exact tree. No files are substituted from historical sources
 or the working tree. Full source manifests, exact revision IDs, and their complete
 diff bind all measurements to this pair. Earlier reconstructed historical results
 are diagnostic controls and do not satisfy the immediately preceding-state gate.

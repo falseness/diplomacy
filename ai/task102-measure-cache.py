@@ -185,11 +185,15 @@ def audit_sources(dest, manifest):
 
 
 def main():
+    global BEFORE, AFTER
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--before', default=BEFORE, help='Actual baseline git revision or tree')
+    parser.add_argument('--after', default=AFTER, help='Actual frozen candidate git revision or tree')
     parser.add_argument('--node-bin', required=True, type=Path)
     parser.add_argument('--checkpoint', type=Path, default=Path('/mnt/storage/diplomacy/task036-incremental-long/final/task036-long'))
     parser.add_argument('--artifacts', type=Path, default=Path('artifacts/TASK-102'))
     args = parser.parse_args()
+    BEFORE, AFTER = args.before, args.after
     repo = Path(__file__).resolve().parent.parent
     dest = args.artifacts.resolve()
     dest.mkdir(parents=True, exist_ok=True)

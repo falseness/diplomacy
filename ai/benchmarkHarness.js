@@ -4,6 +4,7 @@ const { execSync } = require('child_process');
 const vm = require('vm');
 const {
   createBrowserContext,
+  detachBrowserResult,
   getBrowserScriptCacheStats,
   loadBrowserScript,
   loadBrowserScripts,
@@ -528,7 +529,7 @@ function runGame(options) {
     roundLimit: options.roundLimit,
     seed: options.seed
   };
-  return benchmarkRuntimeScript().runInContext(context);
+  return detachBrowserResult(benchmarkRuntimeScript().runInContext(context));
 }
 
 function runBenchmark(options) {

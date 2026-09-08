@@ -4,6 +4,7 @@ const vm = require('vm');
 const tf = require('@tensorflow/tfjs-node');
 const {
   createBrowserContext,
+  detachBrowserResult,
   getBrowserScriptCacheStats,
   loadBrowserScripts,
   resetBrowserScriptCache
@@ -29,6 +30,7 @@ const MAP_SOURCES = [
   'advanced-20x20-economy'
 ];
 const ADVANCED_9X9_STAGES = [7, 8, 9, 10, 11, 12];
+let compiledTrainingRuntimeScript = null;
 
 function parseArgs(argv) {
   const options = {
@@ -305,7 +307,8 @@ function createTrainingBatch(
     mapSource === 'final-symmetrical-economy' ? 8 :
       (mapSource === 'advanced-9x9-economy' ? 6 :
         (mapSource === 'advanced-20x20-economy' ? 6 : 4));
-  const result = new vm.Script(`(() => {
+  if (!compiledTrainingRuntimeScript) {
+    compiledTrainingRuntimeScript = new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = false
     entityInterface = {change() {}, hide() {}}
@@ -626,7 +629,9 @@ function createTrainingBatch(
         return features
       })()
     }
-  })()`, { filename: 'economy-training-self-play.js' }).runInContext(context);
+  })()`, { filename: 'economy-training-self-play.js' });
+  }
+  const result = detachBrowserResult(compiledTrainingRuntimeScript.runInContext(context));
 
   for (const category of ACTION_CATEGORIES) {
     if (mapSource === 'town' &&
