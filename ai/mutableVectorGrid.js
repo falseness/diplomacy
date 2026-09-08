@@ -401,7 +401,9 @@ function applyChangedCellFastAction(mutableGrid, command) {
         let coord = coords[i]
         previous.push({
             coord: {x: coord.x, y: coord.y},
-            vector: mutableGrid.cells[coord.x][coord.y].slice()
+            // Replacement detaches this array before global channels refresh.
+            // Undo still copies it back, preserving independent token storage.
+            vector: mutableGrid.cells[coord.x][coord.y]
         })
         replaceMutableCellVectorFromGrid(mutableGrid, coord, currentGlobalChannels, expansionLookup)
     }
