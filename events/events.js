@@ -303,7 +303,8 @@ class Events {
             return 
             
         let coord = getCoord(realPos.x, realPos.y)
-        if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length)) {
+        if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length) ||
+            grid.arr[coord.x][coord.y].building.isMapEdge) {
             this.hideAll()
             this.selected.removeSelect()
             this.selected = new Empty()

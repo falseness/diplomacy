@@ -1,5 +1,17 @@
+function getHexagonalLayer(x, y, center) {
+    let q = x
+    let r = y - Math.floor(x / 2)
+    let s = -q - r
+    let centerS = -center.q - center.r
+    return Math.ceil(Math.max(
+        Math.abs(q - center.q),
+        Math.abs(r - center.r),
+        Math.abs(s - centerS)
+    ))
+}
+
 class GameMap {
-    constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[], suddenDeathCenter=null) {
+    constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[], mapShape={type: 'rectangular'}) {
         this.mapSize = mapSize
         this.players = _players
         this.goldmines = _goldmines
@@ -7,7 +19,11 @@ class GameMap {
         this.mountains = mountains
         this.bushes = bushes
         this.hills = hills
-        this.suddenDeathCenter = suddenDeathCenter
+        this.mapShape = mapShape
+    }
+    getMapCoord(coord) {
+        let offset = this.mapShape.offset || {x: 0, y: 0}
+        return {...coord, x: coord.x + offset.x, y: coord.y + offset.y}
     }
     createPlayers() {
         players = new Array(this.players.length)
@@ -18,13 +34,13 @@ class GameMap {
     }
     createTowns() {
         for (let i = 0; i < this.players[0].towns.length; ++i) {
-            let town_coord = this.players[0].towns[i]
+            let town_coord = this.getMapCoord(this.players[0].towns[i])
             new Town(town_coord.x, town_coord.y, false, -1)
         }
         for (let i = 1; i < this.players.length; ++i) {
             let towns = this.players[i].towns
             for (let j = 0; j < towns.length; ++j) {
-                let town_coord = towns[j]
+                let town_coord = this.getMapCoord(towns[j])
 
                 grid.arr[town_coord.x][town_coord.y].hexagon.firstpaint(i)
                 new Town(town_coord.x, town_coord.y, false, true)
@@ -33,7 +49,7 @@ class GameMap {
     }
     createGoldmines() {
         for (let i = 0; i < this.goldmines.length; ++i) {
-            let goldmine = this.goldmines[i]
+            let goldmine = this.getMapCoord(this.goldmines[i])
             new Goldmine(goldmine.x, goldmine.y, goldmine.income)
         }
     }
@@ -48,20 +64,36 @@ class GameMap {
             let nature_type = natures[i][0]
             let nature_class = natures[i][1]
             for (let j = 0; j < nature_type.length; ++j) {
-                let coord = nature_type[j]
+                let coord = this.getMapCoord(nature_type[j])
                 new (nature_class)(coord.x, coord.y)
+            }
+        }
+    }
+    createMapEdge() {
+        if (this.mapShape.type != 'hexagonal')
+            return
+
+        for (let x = 0; x < grid.arr.length; ++x) {
+            for (let y = 0; y < grid.arr[x].length; ++y) {
+                if (getHexagonalLayer(x, y, this.mapShape.center) <= this.mapShape.radius)
+                    continue
+                if (grid.arr[x][y].building.notEmpty())
+                    throw new Error('Hexagonal map edge overlaps an authored object at ' + x + ',' + y)
+                new InvisibleMountain(x, y)
             }
         }
     }
     start(_gameManager, isClassicTimer) {
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
-        gameSettings.suddenDeathCenter = this.suddenDeathCenter
+        gameSettings.mapShape = this.mapShape
 
         this.createPlayers()
         this.createTowns()
         this.createGoldmines()
         this.createNature()
+        this.createMapEdge()
+        _gameManager.updateCameraBorders()
 
         if (!isClassicTimer) {
             timer = new LongTimer()
@@ -183,7 +215,7 @@ maps = {
              [{"x":7,"y":2},{"x":13,"y":2},{"x":7,"y":3},{"x":13,"y":3},{"x":8,"y":4},{"x":12,"y":4},{"x":6,"y":4},{"x":14,"y":4},{"x":6,"y":3},{"x":14,"y":3},{"x":8,"y":9},{"x":12,"y":9},{"x":8,"y":10},{"x":12,"y":10},{"x":8,"y":11},{"x":12,"y":11},{"x":4,"y":14},{"x":16,"y":14},{"x":3,"y":14},{"x":17,"y":14},{"x":5,"y":13},{"x":15,"y":13},{"x":2,"y":15},{"x":18,"y":15},{"x":0,"y":2},{"x":20,"y":2},{"x":1,"y":2},{"x":19,"y":2},{"x":2,"y":2},{"x":18,"y":2},{"x":3,"y":2},{"x":17,"y":2}]
         ),
         new GameMap(
-            {x: 26, y: 21},
+            {x: 26, y: 26},
             [
                 {
                     rgb: {r: 208, g: 208, b: 208},
@@ -262,8 +294,13 @@ maps = {
                 {x: 9, y: 10}, {x: 14, y: 8}, {x: 14, y: 13}
             ],
             [],
-            // Fractional axial centre of the authored 120-degree rotation.
-            {q: 37 / 3, r: 13 / 3}
+            {
+                type: 'hexagonal',
+                // The rectangular backing array contains a complete radius-13 hex.
+                center: {q: 37 / 3, r: 19 / 3},
+                radius: 13,
+                offset: {x: 0, y: 2}
+            }
         ),
         new GameMap(
             {x: 25, y: 25},
@@ -1005,6 +1042,7 @@ class GameManager {
     }
     static load() {
         this.clearBasisValues()
+        actionManager.clear()
         
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
@@ -1016,8 +1054,7 @@ class GameManager {
 	static initValues() {
         whooseTurn = 0
         gameRound = 0
-        
-        //actionManager.clear()
+        actionManager.clear()
     }
     static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
         isFogOfWar = _isFogOfWar

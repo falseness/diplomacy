@@ -174,6 +174,8 @@ class MapDepth {
 
         for (let x = 0; x < this.gridWidth; ++x) {
             for (let y = 0; y < this.gridHeight; ++y) {
+                if (_grid.arr[x][y].building.isMapEdge)
+                    continue
                 const pos = _grid.arr[x][y].hexagon.calcPos()
                 const vertices = this.getVertices(pos)
                 const parity = x & 1
@@ -188,7 +190,8 @@ class MapDepth {
                         x: x + neighborhood[parity][i][0],
                         y: y + neighborhood[parity][i][1]
                     }
-                    if (!isCoordNotOnMap(neighbour, this.gridWidth, this.gridHeight))
+                    if (!isCoordNotOnMap(neighbour, this.gridWidth, this.gridHeight) &&
+                        !_grid.arr[neighbour.x][neighbour.y].building.isMapEdge)
                         continue
 
                     const edge = {

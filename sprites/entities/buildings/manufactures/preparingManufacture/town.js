@@ -123,6 +123,12 @@ class Town extends PreparingManufacture {
         }
     }
     updatePlayer() {
+        // Captures and undo/load reconstruct towns in place. Remove any prior
+        // object registered for this coordinate so exactly one player owns it.
+        for (const player of players) {
+            player.towns = player.towns.filter(town =>
+                !coordsEqually(town.coord, this.coord))
+        }
         this.player.towns.push(this)
         grid.getHexagon(this.coord).isSuburb = true
 

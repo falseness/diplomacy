@@ -335,6 +335,11 @@ class NeutralPlayer extends Player {
 
         suddenDeathCycle /= 2
 
+        if (gameSettings.mapShape && gameSettings.mapShape.type == 'hexagonal') {
+            this.radialSuddenDeath(suddenDeathCycle, gameSettings.mapShape)
+            return
+        }
+
         let arr = grid.arr
 
         if (suddenDeathCycle >= arr.length || 
@@ -356,6 +361,20 @@ class NeutralPlayer extends Player {
         let bottom = arr[0].length - suddenDeathCycle - 1
         for (let i = 0; i < arr.length; ++i) {
             this.floodCell(i, bottom)
+        }
+    }
+    radialSuddenDeath(suddenDeathCycle, mapShape) {
+        let arr = grid.arr
+        let floodedLayer = mapShape.radius - suddenDeathCycle
+        if (floodedLayer < 0)
+            return
+
+        for (let x = 0; x < arr.length; ++x) {
+            for (let y = 0; y < arr[x].length; ++y) {
+                if (!arr[x][y].building.isMapEdge &&
+                    getHexagonalLayer(x, y, mapShape.center) == floodedLayer)
+                    this.floodCell(x, y)
+            }
         }
     }
     get isGameEnded() {

@@ -131,6 +131,8 @@ class Grid extends SpritesGroup {
     drawHexagons(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
                 if (isFogOfWar && !this.fogOfWar[i][j])
                     continue
                 let cell = this.arr[i][j]
@@ -142,6 +144,8 @@ class Grid extends SpritesGroup {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
+                if (cell.building.isMapEdge)
+                    continue
                 
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
                     if (debug) {
@@ -166,6 +170,8 @@ class Grid extends SpritesGroup {
     drawTextLogic(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
                 if (isFogOfWar && !this.fogOfWar[i][j])
                     continue
                 let cell = this.arr[i][j]
@@ -176,6 +182,8 @@ class Grid extends SpritesGroup {
     drawTextInfo(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
                 if (isFogOfWar && !this.fogOfWar[i][j])
                     continue
                 let cell = this.arr[i][j]
@@ -204,7 +212,7 @@ class Grid extends SpritesGroup {
         }
     }
     isCacheableBuilding(building) {
-        return building.notEmpty() && !building.isBuildingProduction()
+        return building.notEmpty() && !building.isInvisible && !building.isBuildingProduction()
     }
     getEntityBodyImageName(entity) {
         if (entity.mirrorX && cachedImages[entity.name + 'Left'])
@@ -251,6 +259,8 @@ class Grid extends SpritesGroup {
     drawFogOfWar(ctx) {
         for (let i = 0; i < this.fogOfWar.length; ++i) {
             for (let j = 0; j < this.fogOfWar[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
                 if (!this.fogOfWar[i][j]) {
                     let hexagon = new FogOfWarHexagon(i, j)
                     hexagon.draw(ctx)
