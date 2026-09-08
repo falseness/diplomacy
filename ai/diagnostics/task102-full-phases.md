@@ -59,3 +59,9 @@ alone cannot establish a regression or external blocker. A supported interventio
 must subsequently isolate one mechanism with policy and outcomes fixed; only a
 justified production candidate triggers the original actual-predecessor
 determinism/regression and both median-of-three 10% speed gates.
+
+The completed observation experiment must not be repeated unchanged. Its targeted
+undo-vector ownership follow-up uses `--ownership-reversal`, observation on in all
+four arms, and the protocol in [task102-ownership-phases.md](task102-ownership-phases.md).
+The same auditor validates the complete semantics and phase accounting for both
+experiment types, including the exact single-expression source delta.

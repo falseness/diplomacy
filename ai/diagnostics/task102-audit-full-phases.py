@@ -8,10 +8,47 @@ import statistics
 import sys
 
 ORDER = ('off', 'on', 'on', 'off')
+OWNERSHIP_ORDER = ('control', 'reversal', 'reversal', 'control')
+UNDO_PATH = 'ai/mutableVectorGrid.js'
+UNDO_CAPTURE = 'vector: mutableGrid.cells[coord.x][coord.y]'
 EXPECTED_GAMES = 130
 EXPECTED_TEACHERS = 50
 EXPECTED_STEPS = 15
 HASH_CHUNK_BYTES = 1024 * 1024
+EARLY_LAST_STEP = 7
+BASELINE_PHASE = 'evaluation-baseline'
+
+
+def ownership_comparison(summary):
+    """Compare both adjacent pairs, preserving early/late signs and GC overlap."""
+    pairs = []
+    for control, reversal in ((summary[0], summary[1]), (summary[3], summary[2])):
+        segments = {}
+        for segment in ('all', 'early', 'late'):
+            values = []
+            for run in (control, reversal):
+                events = [event for event in run['trajectory']
+                          if event['phase'] == BASELINE_PHASE and
+                          (segment == 'all' or
+                           (segment == 'early' and 0 < event['step'] <= EARLY_LAST_STEP) or
+                           (segment == 'late' and event['step'] > EARLY_LAST_STEP))]
+                assert events, (run['index'], segment)
+                values.append(dict(events=len(events),
+                                   seconds=sum(e['exclusiveMs'] for e in events) / 1000,
+                                   gcOverlapSeconds=sum(e['gcOverlapMs'] for e in events) / 1000,
+                                   minHeapMiB=min(e['before']['heapUsed'] for e in events) / 2**20,
+                                   maxHeapMiB=max(e['after']['heapUsed'] for e in events) / 2**20))
+            assert values[0]['events'] == values[1]['events']
+            segments[segment] = dict(control=values[0], reversal=values[1],
+                reductionPercent=100 * (1 - values[1]['seconds'] / values[0]['seconds']))
+        pairs.append(dict(controlRun=control['index'], reversalRun=reversal['index'],
+                          wallReductionPercent=100 * (1 - reversal['seconds'] / control['seconds']),
+                          baseline=segments))
+    consistent = all(segment['reductionPercent'] > 0
+                     for pair in pairs for segment in pair['baseline'].values())
+    return dict(pairs=pairs, consistentBaselineImprovement=consistent,
+                interpretation='Diagnostic mechanism comparison, not acceptance. GC overlaps wall time. '
+                'All pair/segment signs retained; no host-causality or learned-strength claim.')
 
 
 def digest(path):
@@ -43,28 +80,45 @@ def gc_overlap(gc, start, end):
 
 def audit(output):
     declared = read(output / 'predeclared.json')
-    assert declared['order'] == list(ORDER)
+    ownership = declared.get('experiment') == 'ownership-reversal'
+    order = OWNERSHIP_ORDER if ownership else ORDER
+    assert declared['order'] == list(order)
     assert declared['node'] == 'v20.20.2'
     assert digest(output / 'observe.cjs') == declared['hook_sha256']
     assert digest(output / 'driver.py') == declared['driver_sha256']
     for name, sha in declared['sources'].items():
         assert digest(output / 'source' / name) == sha, name
+    if ownership:
+        assert declared['reversal_sources'].keys() == declared['sources'].keys()
+        changed = [name for name in declared['sources']
+                   if declared['sources'][name] != declared['reversal_sources'][name]]
+        assert changed == [UNDO_PATH], changed
+        original = (output / 'source' / UNDO_PATH).read_text()
+        assert original.count(UNDO_CAPTURE) == 1
+        assert (output / 'source-reversal' / UNDO_PATH).read_text() == original.replace(
+            UNDO_CAPTURE, UNDO_CAPTURE + '.slice()'), 'unexpected reversal source'
+        for name, sha in declared['reversal_sources'].items():
+            assert digest(output / 'source-reversal' / name) == sha, name
+        print('SINGLE_MECHANISM: PASS only undo capture .slice(); all arms use common observation on')
     for name, sha in declared['baseline_hashes'].items():
         assert digest(output / 'baseline-frozen' / name) == sha, name
         assert digest(Path(declared['baseline']) / name) == sha, name
     print(f'FROZEN_INPUTS: PASS {len(declared["sources"])} sources; prospective baseline bytes intact')
     runs = read(output / 'runs.json')
-    assert len(runs) == len(ORDER)
+    assert len(runs) == len(order)
+    assert read(output / 'frozen-check.json') == dict(sources='PASS', baseline='PASS', runs=len(order))
     summary, reference, manifests = [], None, {}
-    for index, (mode, run) in enumerate(zip(ORDER, runs), 1):
+    for index, (mode, run) in enumerate(zip(order, runs), 1):
         dest = output / f'run-{index}-{mode}'
-        assert run['index'] == index and run['mode'] == mode and run['exit_code'] == 0
+        assert run['index'] == index and run['mode'] == mode and run['exit_code'] == 0, f'invalid run {index}'
         assert digest(dest / 'command.log') == run['log_sha256']
         log = (dest / 'command.log').read_text()
         assert 'Completed game 15/15' in log and '\nEXIT_CODE: 0\n' in log
+        assert f'\nMODE: {mode}\n' in log
         assert json.loads(log.splitlines()[0].removeprefix('COMMAND: ')) == declared['commands'][index - 1]
         phases = read(dest / 'phases.json')
-        assert phases['mode'] == mode and phases['code'] == 0 and not phases['unfinished']
+        observation = 'on' if ownership else mode
+        assert phases['mode'] == observation and phases['code'] == 0 and not phases['unfinished']
         assert phases['counts']['teacherGames'] == EXPECTED_TEACHERS
         assert phases['counts']['step'] == EXPECTED_STEPS
         outcomes = lines(dest / 'outcomes.jsonl')
@@ -102,7 +156,7 @@ def audit(output):
         print(f'COMPLETE_SEMANTICS: PASS run {index} {mode}; 130 outcomes, 50 teacher games, {phases["counts"]["teacherExamples"]} examples, 32 loss histories, 16 model snapshots')
         del teachers
         totals, trajectory = defaultdict(float), []
-        if mode == 'on':
+        if observation == 'on':
             events = phases['events']
             for event in events:
                 assert event['end'] >= event['start'] >= 0
@@ -127,26 +181,26 @@ def audit(output):
             print(f'PHASE_RECONCILIATION: PASS run {index}; exclusive phases + residual = {run["seconds"]:.6f}s; GC is overlapping only')
         summary.append(dict(index=index, mode=mode, seconds=run['seconds'], exclusiveMs=dict(totals),
                             gcUnionMs=gc_overlap(phases['gc'], 0, phases['totalMs']), trajectory=trajectory,
-                            retention=lines(dest / 'retention.jsonl') if mode == 'on' else [],
+                            retention=lines(dest / 'retention.jsonl') if observation == 'on' else [],
                             counts=phases['counts'], scenarioCounts=dict(scenario_counts), winners=dict(winners), scenarios=scenarios))
-    off = [r['seconds'] for r in runs if r['mode'] == 'off']
-    on = [r['seconds'] for r in runs if r['mode'] == 'on']
+    off = [r['seconds'] for r in runs if r['mode'] == ('control' if ownership else 'off')]
+    on = [r['seconds'] for r in runs if r['mode'] == ('reversal' if ownership else 'on')]
     calibration = dict(offSeconds=off, onSeconds=on, onOverOffMean=statistics.mean(on) / statistics.mean(off),
-                       interpretation='Two per mode, ordered off/on/on/off. Host/lifecycle variance not isolated; no overhead subtraction or acceptance claim.')
+                       interpretation=f'Two per mode, ordered {order}. No overhead subtraction or acceptance claim.')
     (output / 'summary.json').write_text(json.dumps(dict(runs=summary, calibration=calibration), indent=2) + '\n')
     (output / 'evidence-sha256.json').write_text(json.dumps(manifests, indent=2) + '\n')
-    observed = [r for r in summary if r['mode'] == 'on']
+    observed = summary if ownership else [r for r in summary if r['mode'] == 'on']
     report = ['# Full canonical phase accounting', '',
               'Diagnostic observation comparison only; not either speed acceptance gate.', '',
-              '| Exclusive phase | Run 2 seconds | Run 3 seconds | Combined wall share |',
-              '|---|---:|---:|---:|']
+              '| Exclusive phase | ' + ' | '.join(f'Run {r["index"]} {r["mode"]} seconds' for r in observed) + ' | Combined wall share |',
+              '|---|' + '---:|' * (len(observed) + 1)]
     wall_ms = sum(r['seconds'] * 1000 for r in observed)
     phase_names = sorted(set().union(*(r['exclusiveMs'].keys() for r in observed)))
     for name in phase_names:
         values = [r['exclusiveMs'].get(name, 0) for r in observed]
-        report.append(f'| {name} | {values[0] / 1000:.6f} | {values[1] / 1000:.6f} | {sum(values) / wall_ms:.3%} |')
+        report.append(f'| {name} | ' + ' | '.join(f'{value / 1000:.6f}' for value in values) + f' | {sum(values) / wall_ms:.3%} |')
     report += ['', f'All four outer wall seconds, in order: {[r["seconds"] for r in summary]}.',
-               f'Observation on/off mean ratio: {calibration["onOverOffMean"]:.6f}; no overhead subtraction.',
+               f'{"Reversal/control" if ownership else "Observation on/off"} mean ratio: {calibration["onOverOffMean"]:.6f}; no overhead subtraction.',
                f'GC union seconds (overlapping, not additive): {[r["gcUnionMs"] / 1000 for r in observed]}.',
                '', '## Early/late phases', '',
                'Startup is step 0; early is steps 1–7; late is steps 8–15. Means divide by actual event count.', '',
@@ -175,6 +229,10 @@ def audit(output):
                '', 'PHASE_TABLE: PASS all exclusive intervals and residuals reconcile; complete retention boundaries retained.',
                'SEMANTICS: PASS all four complete workloads match; no learned-strength or holdout claim.']
     (output / 'phase-table.md').write_text('\n'.join(report) + '\n')
+    if ownership:
+        comparison = ownership_comparison(summary)
+        (output / 'ownership-comparison.json').write_text(json.dumps(comparison, indent=2) + '\n')
+        print('OWNERSHIP_COMPARISON: ' + json.dumps(comparison))
     print('OBSERVATION_CALIBRATION: ' + json.dumps(calibration))
     print('FULL_PHASE_AUDIT: PASS diagnostic coverage and semantic equality; speed acceptance remains pending')
 
