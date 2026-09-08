@@ -1,5 +1,22 @@
 # TASK-102 canonical lookup replay
 
+The prescribed experiment was completed in commit `900e25c`; its evidence is in
+`artifacts/TASK-102/lookup-replay/`. The instructions below document reproduction,
+not an outstanding experiment. The first pending task in `artifacts/tasks.json`
+remains the authority for whether another experiment is permitted.
+
+The archived scan ablation improved six of eight canonical early/late pairs but
+regressed early old/new by 8.56% and early baseline by 2.22%. Two repetitions per
+side did not establish a consistent lookup cost reversal. No production
+correction was promoted, and no new full speed cycle was triggered. The replay
+auditor can check the saved files without rerunning games. Do not repeat the
+unchanged experiment or interpret its diagnostic passes as speed acceptance.
+
+The unresolved coverage includes fitting, full-process training-data retention,
+and the original process's JIT/GC history. The external baseline's original-run
+weight hash binding is also unavailable. These are limits of the evidence, not
+proof of an external blocker or justification for another allocation prototype.
+
 `task102-prepare-lookup.py OUTPUT` freezes the current sources and selects the first
 and last archived A/B pair of each of four inference classes from
 `artifacts/TASK-102/undo-ownership/full-speed/canonical-training-after-1-outcomes.jsonl`.
