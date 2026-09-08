@@ -335,11 +335,15 @@ function isSuburbExpansionCell(cell) {
         }
         for (let j = 0; j < town.suburbs.length; ++j) {
             let suburb = town.suburbs[j]
-            if (!isLiveTownSuburb(town, suburb) || !suburb.neighbours) {
+            if (!isLiveTownSuburb(town, suburb)) {
                 continue
             }
-            for (let k = 0; k < suburb.neighbours.length; ++k) {
-                if (coordsMatch(suburb.neighbours[k], cell.coord)) {
+            let neighbours = suburb.neighbours
+            if (!neighbours) {
+                continue
+            }
+            for (let k = 0; k < neighbours.length; ++k) {
+                if (coordsMatch(neighbours[k], cell.coord)) {
                     return true
                 }
             }
