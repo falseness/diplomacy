@@ -1,0 +1,32 @@
+const assert = require('assert');
+const fs = require('fs');
+const vm = require('vm');
+const {transform} = require('../task102-snapshot-cache.cjs');
+const source = fs.readFileSync('ai/players.js', 'utf8');
+let checks = 0;
+const context = vm.createContext({Player: class {}, assert,
+  __task102SnapshotChecked: () => { checks += 1; }});
+vm.runInContext(fs.readFileSync('ai/mutableVectorGrid.js', 'utf8'), context);
+vm.runInContext(transform(source, true), context);
+vm.runInContext(`
+  const clone = AIPlayer.prototype.cloneMutableVectorGridForPrediction;
+  const mutable = {cells: [[[0, NaN, Infinity], [1, 2]]], suddenDeathMetric: 0.5};
+  const first = clone(mutable), second = clone(mutable);
+  assert(first !== second && first[0] !== second[0]);
+  assert(first[0][0][0] === second[0][0][0], 'unchanged cell reused');
+  mutable.cells[0][0][0] = -0;
+  mutable.cells[0][1].push(3);
+  const changed = clone(mutable);
+  assert(Object.is(first[0][0][0][0], 0), 'old snapshot survives global mutation');
+  assert(Object.is(changed[0][0][0][0], -0), 'negative zero preserved');
+  assert(first[0][0][1].length === 2 && changed[0][0][1].length === 3);
+  mutable.cells[0][0] = [7];
+  const replaced = clone(mutable);
+  assert(replaced[0][0][0][0] === 7 && first[0][0][0].length === 3);
+  assert.throws(() => { 'use strict'; first[0][0][0][0] = 12; }, TypeError);
+  assert(Object.is(first[0][0][0][0], 0), 'shared copy cannot be corrupted');
+`, context);
+assert.equal(checks, 4);
+assert.throws(() => transform(''), /unique prediction snapshot/);
+console.log('SNAPSHOT_CONTROLS: PASS reuse, global mutation, replacement, resize, NaN, signed zero and retained immutable values');
+console.log('API_LIMITATION: shared frozen cells reject caller writes; production adoption requires an explicit read-only prediction contract');
