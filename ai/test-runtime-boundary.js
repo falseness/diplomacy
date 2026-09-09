@@ -7,6 +7,12 @@ const sourceExtensions = new Set(['.js', '.html'])
 
 function listSourceFiles(directory, result) {
     for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+        // Task evidence contains frozen source snapshots, not runtime code.
+        // Only exclude the repository's evidence root; nested source directories
+        // named artifacts must still satisfy the runtime boundary.
+        if (directory === repoRoot && entry.isDirectory() && entry.name === 'artifacts') {
+            continue
+        }
         if (entry.isDirectory() && ignoredDirectories.has(entry.name)) {
             continue
         }
