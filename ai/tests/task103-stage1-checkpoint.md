@@ -48,3 +48,20 @@ associated with TASK-156 and archived TASK-063. The saved timeouts are unfinishe
 tests with unestablished causes. Fixing this one smoke would not resolve those
 groups. Preserve their failed evidence and task statuses; TASK-103 does not
 authorize silently weakening their assertions or declaring a partial suite green.
+
+The cadence source-contract failure can be isolated without launching training:
+
+```sh
+node ai/tests/task103-cadence-contract.cjs
+```
+
+This executes the current test's actual `assertSourceUsesInMemoryMetrics`
+function against runner sources at TASK-078 parent `e92c6f55`, change `1a70d887`,
+and the working tree, recording source hashes. The parent satisfies the contract;
+the change and working tree fail its required `cadenceSpeedMode(options) ? 1 : 8`
+expression. TASK-078 replaced the minimum synthetic epoch calculation with
+`smokeSizedRun ? 1 : state.epochs`. This is separate from TASK-103's batch-size
+change and the TASK-048 missing-predictor guard. The diagnostic does not execute
+training or establish cadence output equivalence, throughput, or global readiness.
+Do not simply update the assertion to match the new expression: resolving the
+TASK-104 contract requires deciding and validating the intended training behavior.
