@@ -100,11 +100,26 @@ def regression_entry(name, manifest):
         for filename in ('model.json', 'weights.bin', 'metadata.json'):
             assert str((checkpoint / filename).relative_to(REPO)) in entry['hashes']
         metadata = json.loads((checkpoint / 'metadata.json').read_text())
-        assert metadata['inputShapes'] == entry['input_shapes']
-        assert metadata['afterHash'] == sha(checkpoint / 'weights.bin')
-        assert metadata['trainingSeeds'] == entry['training_seeds']
+        if 'archive' in entry:
+            archive = entry['archive']
+            source = REPO / archive['repository_state']
+            provenance = REPO / archive['provenance']
+            assert archive['repository_state'] in entry['hashes']
+            assert archive['provenance'] in entry['hashes'] and provenance.is_file()
+            for filename in ('model.json', 'weights.bin', 'metadata.json'):
+                assert (sha(checkpoint / filename) + '  ' +
+                        archive['original_checkpoint'] + '/' + filename) in source.read_text().splitlines()
+            assert [metadata['inputShape']] == entry['input_shapes']
+            assert metadata['trainExamples'] > 0 and metadata['validationExamples'] > 0
+            assert entry['training_seeds'] == [metadata['trainSeed']]
+            assert {metadata['trainSeed'], metadata['validationSeed']}.issubset(archive['known_seeds'])
+            assert not set(archive['known_seeds']) & set(entry['evaluation_seeds'])
+        else:
+            assert metadata['inputShapes'] == entry['input_shapes']
+            assert metadata['afterHash'] == sha(checkpoint / 'weights.bin')
+            assert metadata['trainingSeeds'] == entry['training_seeds']
+            assert metadata['beforeHash'] != metadata['afterHash'], 'checkpoint must be trained'
         assert not set(entry['training_seeds']) & set(entry['evaluation_seeds'])
-        assert metadata['beforeHash'] != metadata['afterHash'], 'checkpoint must be trained'
     env = dict(os.environ)
     for key in SMOKE_KEYS:
         env.pop(key, None)

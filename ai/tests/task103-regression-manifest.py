@@ -75,6 +75,20 @@ def main():
             checkpoint = (REPO / binding['checkpoint']).resolve()
             fit = checkpoint.parent
             metadata = json.loads((checkpoint / 'metadata.json').read_text())
+            if 'archive' in binding:
+                entry = entries[name]
+                key = binding.get('environment_key', 'AI_MAP_SMOKE_CHECKPOINT')
+                entry.update(environment={key: str(checkpoint.relative_to(REPO))},
+                             input_shapes=[metadata['inputShape']],
+                             training_seeds=[metadata['trainSeed']],
+                             evaluation_seeds=binding['evaluation_seeds'],
+                             provenance=metadata, archive=binding['archive'])
+                files = list(checkpoint.iterdir()) + [args.bindings.resolve(),
+                    REPO / binding['archive']['repository_state'],
+                    REPO / binding['archive']['provenance']]
+                entry['hashes'] = {str(p.relative_to(REPO)): sha(p) for p in files if p.is_file()}
+                EVIDENCE.regression_entry(name, {'commands': entries})
+                continue
             report = json.loads((fit / 'fit-report.json').read_text())
             assert report['trainingEffect'] > 0 and report['zeroEffect'] > 0
             assert report['afterHash'] == sha(checkpoint / 'weights.bin')
