@@ -8,6 +8,7 @@ import statistics
 import sys
 
 ORDER = ('off', 'on', 'on', 'off')
+FACTORIAL_ORDER = ('A', 'B', 'D', 'C', 'C', 'D', 'B', 'A')
 OWNERSHIP_ORDER = ('control', 'reversal', 'reversal', 'control')
 UNDO_PATH = 'ai/mutableVectorGrid.js'
 UNDO_CAPTURE = 'vector: mutableGrid.cells[coord.x][coord.y]'
@@ -81,7 +82,8 @@ def gc_overlap(gc, start, end):
 def audit(output):
     declared = read(output / 'predeclared.json')
     ownership = declared.get('experiment') == 'ownership-reversal'
-    order = OWNERSHIP_ORDER if ownership else ORDER
+    factorial = declared.get('experiment') == 'lookup-ownership'
+    order = FACTORIAL_ORDER if factorial else (OWNERSHIP_ORDER if ownership else ORDER)
     assert declared['order'] == list(order)
     assert declared['node'] == 'v20.20.2'
     assert digest(output / 'observe.cjs') == declared['hook_sha256']
@@ -100,6 +102,12 @@ def audit(output):
         for name, sha in declared['reversal_sources'].items():
             assert digest(output / 'source-reversal' / name) == sha, name
         print('SINGLE_MECHANISM: PASS only undo capture .slice(); all arms use common observation on')
+    if factorial:
+        for arm, hashes in declared['arm_sources'].items():
+            assert hashes.keys() == declared['sources'].keys()
+            for name, sha in hashes.items():
+                assert digest(output / ('source-' + arm) / name) == sha, (arm, name)
+        assert set(declared['arm_sources']) == set('ABCD')
     for name, sha in declared['baseline_hashes'].items():
         assert digest(output / 'baseline-frozen' / name) == sha, name
         assert digest(Path(declared['baseline']) / name) == sha, name
@@ -114,10 +122,12 @@ def audit(output):
         assert digest(dest / 'command.log') == run['log_sha256']
         log = (dest / 'command.log').read_text()
         assert 'Completed game 15/15' in log and '\nEXIT_CODE: 0\n' in log
+        elapsed = [line for line in log.splitlines() if line.startswith('ELAPSED_WALL_SECONDS: ')]
+        assert len(elapsed) == 1 and abs(float(elapsed[0].split(': ')[1]) - run['seconds']) < 1e-8, 'raw elapsed drift'
         assert f'\nMODE: {mode}\n' in log
         assert json.loads(log.splitlines()[0].removeprefix('COMMAND: ')) == declared['commands'][index - 1]
         phases = read(dest / 'phases.json')
-        observation = 'on' if ownership else mode
+        observation = 'on' if ownership or factorial else mode
         assert phases['mode'] == observation and phases['code'] == 0 and not phases['unfinished']
         assert phases['counts']['teacherGames'] == EXPECTED_TEACHERS
         assert phases['counts']['step'] == EXPECTED_STEPS
@@ -183,13 +193,13 @@ def audit(output):
                             gcUnionMs=gc_overlap(phases['gc'], 0, phases['totalMs']), trajectory=trajectory,
                             retention=lines(dest / 'retention.jsonl') if observation == 'on' else [],
                             counts=phases['counts'], scenarioCounts=dict(scenario_counts), winners=dict(winners), scenarios=scenarios))
-    off = [r['seconds'] for r in runs if r['mode'] == ('control' if ownership else 'off')]
-    on = [r['seconds'] for r in runs if r['mode'] == ('reversal' if ownership else 'on')]
+    off = [r['seconds'] for r in runs if r['mode'] == ('A' if factorial else ('control' if ownership else 'off'))]
+    on = [r['seconds'] for r in runs if r['mode'] == ('B' if factorial else ('reversal' if ownership else 'on'))]
     calibration = dict(offSeconds=off, onSeconds=on, onOverOffMean=statistics.mean(on) / statistics.mean(off),
                        interpretation=f'Two per mode, ordered {order}. No overhead subtraction or acceptance claim.')
     (output / 'summary.json').write_text(json.dumps(dict(runs=summary, calibration=calibration), indent=2) + '\n')
     (output / 'evidence-sha256.json').write_text(json.dumps(manifests, indent=2) + '\n')
-    observed = summary if ownership else [r for r in summary if r['mode'] == 'on']
+    observed = summary if ownership or factorial else [r for r in summary if r['mode'] == 'on']
     report = ['# Full canonical phase accounting', '',
               'Diagnostic observation comparison only; not either speed acceptance gate.', '',
               '| Exclusive phase | ' + ' | '.join(f'Run {r["index"]} {r["mode"]} seconds' for r in observed) + ' | Combined wall share |',
@@ -199,7 +209,7 @@ def audit(output):
     for name in phase_names:
         values = [r['exclusiveMs'].get(name, 0) for r in observed]
         report.append(f'| {name} | ' + ' | '.join(f'{value / 1000:.6f}' for value in values) + f' | {sum(values) / wall_ms:.3%} |')
-    report += ['', f'All four outer wall seconds, in order: {[r["seconds"] for r in summary]}.',
+    report += ['', f'All scheduled outer wall seconds, in order: {[r["seconds"] for r in summary]}.',
                f'{"Reversal/control" if ownership else "Observation on/off"} mean ratio: {calibration["onOverOffMean"]:.6f}; no overhead subtraction.',
                f'GC union seconds (overlapping, not additive): {[r["gcUnionMs"] / 1000 for r in observed]}.',
                '', '## Early/late phases', '',
@@ -227,7 +237,7 @@ def audit(output):
     report += ['', f'Fitting wall share: {fitting_ms / wall_ms:.6%}. Even eliminating all non-fitting work '
                f'would save at most {1 - fitting_ms / wall_ms:.6%} of observed wall time (an upper bound, not a forecast).',
                '', 'PHASE_TABLE: PASS all exclusive intervals and residuals reconcile; complete retention boundaries retained.',
-               'SEMANTICS: PASS all four complete workloads match; no learned-strength or holdout claim.']
+               'SEMANTICS: PASS all scheduled complete workloads match; no learned-strength or holdout claim.']
     (output / 'phase-table.md').write_text('\n'.join(report) + '\n')
     if ownership:
         comparison = ownership_comparison(summary)
