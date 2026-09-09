@@ -80,7 +80,9 @@ def main():
             assert report['afterHash'] == sha(checkpoint / 'weights.bin')
             assert metadata['dataSha256'] == sha(fit / 'batch.json')
             entry = entries[name]
-            entry.update(environment={'AI_MAP_SMOKE_CHECKPOINT': str(checkpoint.relative_to(REPO))},
+            key = binding.get('environment_key', 'AI_MAP_SMOKE_CHECKPOINT')
+            assert key in EVIDENCE.SMOKE_KEYS
+            entry.update(environment={key: str(checkpoint.relative_to(REPO))},
                          input_shapes=metadata['inputShapes'], training_seeds=metadata['trainingSeeds'],
                          evaluation_seeds=binding['evaluation_seeds'], provenance=metadata)
             entry['hashes'] = {str(p.relative_to(REPO)): sha(p) for p in fit.rglob('*') if p.is_file()}

@@ -111,6 +111,10 @@ const command = [
   '--output', reportPath,
   '--failure-dir', failureDir
 ];
+if (process.env.AI_GAMESTART_SMOKE_CHECKPOINT) {
+  command.push('--checkpoint', process.env.AI_GAMESTART_SMOKE_CHECKPOINT);
+}
+console.log('GAMESTART_COMMAND: ' + JSON.stringify([process.execPath, ...command]));
 const run = spawnSync(process.execPath, command, {
   encoding: 'utf8',
   maxBuffer: 1024 * 1024 * 40

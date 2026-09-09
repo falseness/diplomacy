@@ -9,7 +9,7 @@ python3 ai/tests/task103-evidence.py --mode regression --manifest artifacts/TASK
 
 The manifest includes every registered `test-*` command plus `init-model` and
 `train`, in package order. `--commands NAME ...` runs a declared subset and
-records that it is not an aggregate pass. Each fresh child clears both smoke
+records that it is not an aggregate pass. Each fresh child clears all three smoke
 checkpoint variables, applies only its declared native checkpoint, and records
 its environment, prerequisite hashes, command, process budget, output and exit.
 The runner checks checkpoint hashes before and after each child. Missing,
@@ -26,3 +26,8 @@ A passing subset or an expected negative control cannot satisfy the all-AI gate.
 The canonical speed comparison is separate; for the original optimization use
 `--before d03d37a4d6d6d32b0de37e187ff29dece7bde35f --after 94a8d8e691d05a102d4e2af49938839bc4cb9465`.
 A test-only follow-up commit does not provide a new performance baseline.
+
+Game-start callers accept `AI_GAMESTART_SMOKE_CHECKPOINT`, forwarded as the
+existing `--checkpoint` argument. Additional manifest bindings select it with
+`"environment_key": "AI_GAMESTART_SMOKE_CHECKPOINT"`. Bind native dimensions and
+all evaluation seeds before running; compatibility does not establish a win.
