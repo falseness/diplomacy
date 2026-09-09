@@ -2,8 +2,21 @@ Run the configured AI regression driver with Node 20 on PATH and the frozen
 TASK-103 checkpoint captures available. Generate a new manifest file with:
 
 ```sh
-python3 ai/tests/task103-regression-manifest.py --evidence artifacts/TASK-103 --bindings artifacts/TASK-103/dispatch-integration/bindings.json --output artifacts/TASK-103/regression-manifest.json
+python3 ai/tests/task103-regression-manifest.py --evidence artifacts/TASK-103 --bindings artifacts/TASK-103/gamestart-dispatch/bindings.json --output artifacts/TASK-103/regression-manifest.json
 python3 ai/tests/task103-dispatch.py artifacts/TASK-103/regression-manifest.json
+```
+
+The game-start bindings include the existing native tiny-economy checkpoint as
+well as the remaining map callers. The earlier dispatch-integration bindings
+omit that game-start input. Neither manifest supplies a compatible open-field
+checkpoint or proves that any candidate meets the win gates.
+
+Run the aggregate below only after the prerequisite ledger is resolved, as
+TASK-103 requires. The retained durable-reports ledger still records failed
+tiny-economy and open-field gates and a failed full-combat advancement gate;
+generating a manifest does not resolve those failures.
+
+```sh
 python3 ai/tests/task103-evidence.py --mode regression --manifest artifacts/TASK-103/regression-manifest.json --artifacts artifacts/TASK-103/configured-regression
 ```
 
