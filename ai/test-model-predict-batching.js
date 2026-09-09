@@ -13,10 +13,10 @@ function check(condition, message, details) {
   throw new Error(message + suffix);
 }
 
-function loadModelApi() {
+function loadModelApi(tensorApi = tf) {
   const context = vm.createContext({
     console,
-    tf,
+    tf: tensorApi,
     CELL_VECTOR_SIZE: 3,
     gameSettings: {}
   });
@@ -26,14 +26,14 @@ function loadModelApi() {
   return context;
 }
 
-function oldPredict(model, candidates) {
+function oldPredict(model, candidates, tensorApi = tf) {
   if (candidates.length === 0) {
     return [];
   }
   return tf.tidy(() => {
     const boards = [];
     for (let index = 0; index < candidates.length; ++index) {
-      boards.push(tf.tensor3d(candidates[index][0]));
+      boards.push(tensorApi.tensor3d(candidates[index][0]));
     }
     const globals = [];
     for (let index = 0; index < candidates.length; ++index) {
@@ -59,7 +59,15 @@ function createSumModel() {
   return tf.model({ inputs: [board, globals], outputs: output });
 }
 
+const RANDOM_SEED = 103103;
+const REPEATED_CALLS = 25;
+
 function makeCandidates(batchSize) {
+  let state = RANDOM_SEED + batchSize;
+  function random() {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000 - 0.5;
+  }
   const result = [];
   for (let batch = 0; batch < batchSize; ++batch) {
     const board = [];
@@ -69,7 +77,7 @@ function makeCandidates(batchSize) {
         board[x][y] = [];
         for (let channel = 0; channel < 3; ++channel) {
           board[x][y][channel] =
-            ((batch + 1) * 17 + x * 5 + y * 3 + channel) / 1000;
+            random();
         }
       }
     }
@@ -117,6 +125,7 @@ for (const batchSize of [1, 2, 48, 200]) {
   for (let index = 0; index < expected.length; ++index) {
     maxDiff = Math.max(maxDiff, Math.abs(expected[index] - actual[index]));
   }
+  console.log(`EQUALITY: batch=${batchSize} seed=${RANDOM_SEED + batchSize} length=${actual.length} maxDiff=${maxDiff}`);
   check(maxDiff <= 1e-6,
     'batched predict changed output values', { batchSize, maxDiff });
 }
@@ -127,24 +136,51 @@ check(Array.isArray(empty) && empty.length === 0,
 check(api.predict(model, makeCandidates(1)).length === 1,
   'single-candidate predict should return exactly one value row');
 
-let tensor3dCalls = 0;
-const originalTensor3d = tf.tensor3d;
-tf.tensor3d = function spyTensor3d(...args) {
-  tensor3dCalls += 1;
-  return originalTensor3d.apply(this, args);
+console.log('EDGES: PASS empty=0 singleton=1');
+
+// tfjs exports getter-only properties: assigning tf.tensor3d silently did
+// nothing in the old test. A facade observes calls from the real VM function.
+const counts = { tensor3d: 0, tensor4d: 0, tensor2d: 0, predict: 0, readback: 0 };
+const tensorApi = { ...tf };
+for (const name of ['tensor3d', 'tensor4d', 'tensor2d']) {
+  tensorApi[name] = (...args) => {
+    counts[name] += 1;
+    return tf[name](...args);
+  };
+}
+const observedApi = loadModelApi(tensorApi);
+const observedModel = {
+  predict(inputs) {
+    counts.predict += 1;
+    const output = model.predict(inputs);
+    const originalReadback = output.arraySync;
+    output.arraySync = function(...args) {
+      counts.readback += 1;
+      return originalReadback.apply(this, args);
+    };
+    return output;
+  }
 };
 try {
+  // Negative control proves the facade detects the actual old allocation path.
+  oldPredict(model, makeCandidates(48), tensorApi);
+  check(counts.tensor3d === 48, 'allocation spy failed its old-path control', counts);
+  console.log('NEGATIVE_CONTROL: PASS old path observed 48 tensor3d calls');
+  for (const name of Object.keys(counts)) counts[name] = 0;
   const baseline = tf.memory().numTensors;
-  for (let iteration = 0; iteration < 25; ++iteration) {
-    api.predict(model, makeCandidates(48));
+  const candidates = makeCandidates(48);
+  for (let iteration = 0; iteration < REPEATED_CALLS; ++iteration) {
+    observedApi.predict(observedModel, candidates);
   }
-  check(tensor3dCalls === 0,
-    'predict() allocated tensor3d values after batching', { tensor3dCalls });
+  check(counts.tensor3d === 0 && counts.tensor4d === REPEATED_CALLS &&
+    counts.tensor2d === REPEATED_CALLS && counts.predict === REPEATED_CALLS &&
+    counts.readback === REPEATED_CALLS, 'batched call counts changed', counts);
   check(tf.memory().numTensors === baseline,
     'predict() leaked tensors', { baseline, current: tf.memory().numTensors });
+  console.log('ALLOCATION: PASS ' + JSON.stringify(counts));
+  console.log(`TENSOR_LEAK: PASS calls=${REPEATED_CALLS} baseline=${baseline} current=${tf.memory().numTensors}`);
 }
 finally {
-  tf.tensor3d = originalTensor3d;
   model.dispose();
 }
 
