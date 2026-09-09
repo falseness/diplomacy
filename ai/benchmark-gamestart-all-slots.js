@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const assert = require('assert');
 const path = require('path');
 const vm = require('vm');
 const childProcess = require('child_process');
@@ -265,67 +266,37 @@ function bindCheckpoint(context) {
   `, { filename: 'task063-checkpoint-binding.js' }).runInContext(context);
 }
 
-function boardSize(board) {
-  return {
-    width: board.length,
-    height: board[0] ? board[0].length : 0
-  };
-}
-
-function adaptBoard(board, expectedWidth, expectedHeight) {
-  const size = boardSize(board);
-  const channels = board[0][0].length;
-  if (size.width === expectedWidth && size.height === expectedHeight) {
-    return board;
-  }
-  const adapted = new Array(expectedWidth);
-  for (let x = 0; x < expectedWidth; ++x) {
-    adapted[x] = new Array(expectedHeight);
-    const sourceX = Math.min(size.width - 1, Math.floor(x * size.width / expectedWidth));
-    for (let y = 0; y < expectedHeight; ++y) {
-      const sourceY = Math.min(size.height - 1, Math.floor(y * size.height / expectedHeight));
-      adapted[x][y] = board[sourceX][sourceY].slice(0, channels);
-    }
-  }
-  return adapted;
-}
-
 function createPredictor(model, stats) {
-  const inputShape = model.inputs[0].shape;
+  const [, expectedWidth, expectedHeight, expectedChannels] = model.inputs[0].shape;
   return function predictFromCheckpoint(checkpointModel, vectors) {
-    const expectedWidth = inputShape[1];
-    const expectedHeight = inputShape[2];
-    const adaptedBoards = [];
+    assert.strictEqual(checkpointModel, model, 'predictor checkpoint identity changed');
+    if (vectors.length === 0) return [];
+    const boards = [];
     const globals = [];
-    for (const vector of vectors) {
+    for (const [index, vector] of vectors.entries()) {
       const board = vector[0];
-      const globalValue = Number(vector[1]) || 0;
-      const size = boardSize(board);
-      if (size.width !== expectedWidth || size.height !== expectedHeight) {
-        stats.resizedInputs += 1;
-      }
-      adaptedBoards.push(adaptBoard(board, expectedWidth, expectedHeight));
-      globals.push([globalValue]);
+      const actual = [board.length, board[0]?.length, board[0]?.[0]?.length];
+      const expected = [expectedWidth, expectedHeight, expectedChannels];
+      assert.deepStrictEqual(actual, expected,
+        `native checkpoint input mismatch at candidate ${index}: ` +
+        `expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`);
+      assert(board.every(column => column.length === expectedHeight &&
+        column.every(cell => cell.length === expectedChannels)),
+      `native checkpoint input is ragged at candidate ${index}`);
+      boards.push(board);
+      globals.push([Number(vector[1]) || 0]);
     }
-    stats.calls += 1;
-    stats.positions += vectors.length;
-    const boardTensor = tf.tensor4d(
-      adaptedBoards.flat(3),
-      [adaptedBoards.length, expectedWidth, expectedHeight, 78]
-    );
-    const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
-    try {
+    return tf.tidy(() => {
+      const boardTensor = tf.tensor4d(boards.flat(3),
+        [boards.length, expectedWidth, expectedHeight, expectedChannels]);
+      const globalTensor = tf.tensor2d(globals, [globals.length, 1]);
       const prediction = checkpointModel.predict([boardTensor, globalTensor]);
       const values = Array.from(prediction.dataSync());
-      if (!stats.modelProbe) {
-        stats.modelProbe = values.slice(0, 8);
-      }
-      prediction.dispose();
+      stats.calls += 1;
+      stats.positions += vectors.length;
+      if (!stats.modelProbe) stats.modelProbe = values.slice(0, 8);
       return values.map(score => [score]);
-    } finally {
-      boardTensor.dispose();
-      globalTensor.dispose();
-    }
+    });
   };
 }
 
@@ -734,6 +705,7 @@ if (require.main === module) {
 
 module.exports = {
   candidateSlots,
+  createPredictor,
   parseArgs,
   runBenchmark,
   runRuntimeScenario,
