@@ -2164,6 +2164,7 @@ async function main() {
         let labels;
         let prediction;
         let predictionTensor;
+        const completedFits = { game, syntheticEpochs: 0, runtimeTeacherEpochs: 0 };
         try {
           labels = Array.from(await batch.labels.data());
           const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
@@ -2200,12 +2201,14 @@ async function main() {
               verbose: 0
             }
           );
+          completedFits.syntheticEpochs = history.epoch.length;
           if (!cadenceSpeedMode(options) || shouldEvaluateGameNow) {
             if (runtimeBatchPromise) {
               const runtimeBatch = await runtimeBatchPromise;
               if (runtimeBatch) {
                 try {
                   history = await trainRuntimeCombatBatch(model, runtimeBatch);
+                  completedFits.runtimeTeacherEpochs = history.epoch.length;
                 } finally {
                   runtimeBatch.board.dispose();
                   runtimeBatch.global.dispose();
@@ -2214,14 +2217,19 @@ async function main() {
                 }
               }
             } else {
-              history = await fitRuntimeCombatTeacherBatch(
+              const runtimeHistory = await fitRuntimeCombatTeacherBatch(
                 model,
                 state.seed + game * 1543,
                 state.curriculum.currentStageIndex,
                 runtimeTeacherWorkerPool
-              ) || history;
+              );
+              if (runtimeHistory) {
+                history = runtimeHistory;
+                completedFits.runtimeTeacherEpochs = history.epoch.length;
+              }
             }
           }
+          console.log('Completed training fits: ' + JSON.stringify(completedFits));
           predictionTensor = model.predict([batch.board, batch.global]);
           prediction = Array.from(await predictionValueTensor(predictionTensor).data());
         } finally {

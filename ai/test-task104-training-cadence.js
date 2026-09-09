@@ -27,9 +27,7 @@ function runTraining(storageDir, runId, games, extraArgs, extraEnv = {}) {
     ...extraEnv,
     PATH: `${node20BinDir()}:${process.env.PATH || ''}`
   };
-  execFileSync(
-    'bash',
-    [
+  const command = [
       './train.sh',
       '--storage-dir', storageDir,
       '--run-id', runId,
@@ -44,9 +42,39 @@ function runTraining(storageDir, runId, games, extraArgs, extraEnv = {}) {
       '--curriculum-simple-winrate', '0.85',
       '--curriculum-lr-reduction-attempted',
       ...extraArgs
-    ],
-    { cwd: path.resolve(__dirname, '..'), env, stdio: 'pipe' }
-  );
+  ];
+  const logPath = path.join(storageDir, `${runId}.command.log`);
+  const log = fs.openSync(logPath, 'wx');
+  fs.writeSync(log, 'COMMAND: ' + JSON.stringify(['bash', ...command]) + '\n');
+  console.log('Cadence training log: ' + logPath);
+  try {
+    execFileSync(
+    'bash',
+    command,
+    { cwd: path.resolve(__dirname, '..'), env, stdio: ['ignore', log, log] }
+    );
+    fs.writeSync(log, '\nEXIT_CODE: 0\n');
+  } catch (error) {
+    fs.writeSync(log, `\nEXIT_CODE: ${error.status}\nSIGNAL: ${error.signal}\n`);
+    throw error;
+  } finally {
+    fs.closeSync(log);
+  }
+  const cadence = Number(extraArgs[extraArgs.indexOf('--evaluation-cadence') + 1]);
+  const prefix = 'Completed training fits: ';
+  const fits = fs.readFileSync(logPath, 'utf8').split('\n')
+    .filter((line) => line.startsWith(prefix))
+    .map((line) => JSON.parse(line.slice(prefix.length)));
+  check(fits.length === games, 'each training step must report completed fits', fits);
+  fits.forEach((fit, index) => {
+    const game = index + 1;
+    check(fit.game === game && fit.syntheticEpochs === 1,
+      'actual synthetic fit must honor --epochs 1 at either cadence', fit);
+    const shouldFitTeacher = cadence === 1 || game % cadence === 0 || game === games;
+    check(shouldFitTeacher ? fit.runtimeTeacherEpochs > 0 : fit.runtimeTeacherEpochs === 0,
+      'actual runtime teacher fits must follow the evaluation schedule', fit);
+  });
+  console.log('CADENCE_FITS: PASS ' + JSON.stringify({ runId, cadence, fits }));
 }
 
 function runInvariantTraining(storageDir, runId, legacyMetricLoop) {
@@ -203,8 +231,6 @@ function assertSourceUsesInMemoryMetrics() {
     'cadence=1 should enable the deterministic output-identical invariant by default');
   check(source.includes('function cadenceSpeedMode(options)'),
     'cadence K should have an explicit training-throughput mode');
-  check(source.includes('cadenceSpeedMode(options) ? 1 : 8'),
-    'cadence K should reduce synthetic fit work without changing cadence=1 behavior');
   check(source.includes('if (!cadenceSpeedMode(options) || shouldEvaluateGameNow)'),
     'cadence K should skip runtime teacher fit work on non-evaluation games');
   check(source.includes('function shouldEvaluateGame(game, totalGames, cadence)'),
@@ -247,11 +273,13 @@ function assertCadenceOneMatchesLegacy(storageDir) {
     JSON.stringify(current.gateHistory) === JSON.stringify(legacy.gateHistory),
     'cadence=1 curriculum gate history should match the legacy file-backed loop exactly'
   );
+  console.log('CADENCE_LEGACY_EQUALITY: PASS metrics, progress and gate history');
 }
 
 function main() {
-  const storageDir = path.join('/mnt/storage/diplomacy', `task104-cadence-${process.pid}`);
-  fs.rmSync(storageDir, { recursive: true, force: true });
+  const evidenceRoot = process.env.AI_CADENCE_EVIDENCE_DIR;
+  const storageDir = fs.mkdtempSync(path.join(evidenceRoot || '/mnt/storage/diplomacy', 'task104-cadence-'));
+  console.log('Cadence training storage: ' + storageDir);
   try {
     assertSourceUsesInMemoryMetrics();
     assertCadenceOneMatchesLegacy(storageDir);
@@ -264,7 +292,9 @@ function main() {
     runTraining(storageDir, cadenceTwoRunId, 5, ['--evaluation-cadence', '2']);
     assertCadenceRun(storageDir, cadenceTwoRunId, 5, 2, Math.ceil(5 / 2));
   } finally {
-    fs.rmSync(storageDir, { recursive: true, force: true });
+    if (!evidenceRoot) {
+      fs.rmSync(storageDir, { recursive: true, force: true });
+    }
   }
 
   console.log('TASK-104 training cadence smoke passed');
