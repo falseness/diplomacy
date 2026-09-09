@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const tf = require('@tensorflow/tfjs-node');
 const { createAlphaZeroLiteCombatModel } = require('./alphazero-lite-combat');
@@ -242,6 +243,52 @@ function assertNoComparisonShortcut() {
     'cloud runner still trains a raw-input scalar combat score');
 }
 
+function collectTrainingSeeds(progress) {
+  const seeds = [];
+  for (let datasetIndex = 0; datasetIndex < 100; datasetIndex += 1) {
+    seeds.push(78078 + 424242 + datasetIndex * 7919);
+  }
+  for (let teacherGame = 1; teacherGame <= 20; teacherGame += 1) {
+    seeds.push(78078 + 50000 + teacherGame);
+  }
+  progress.forEach((record) => {
+    seeds.push(78078 + record.trainingStep * 1009);
+    // Teacher fitting happens on every game, independently of evaluation cadence.
+    const stageIndex = record.nextStageEligibility.currentStageIndex;
+    const baseSeed = 78078 + record.trainingStep * 1543;
+    seeds.push(baseSeed + stageIndex * 997 + 1, baseSeed + stageIndex * 997 + 2);
+  });
+  return seeds;
+}
+
+function retainFullTrainingEvidence(progress, manifestPath) {
+  const manifest = readJson(manifestPath);
+  const finalModelPath = path.join(STORAGE_DIR, manifest.artifacts.finalModel);
+  const hashes = {};
+  for (const name of ['model.json', 'weights.bin']) {
+    const file = path.join(finalModelPath, name);
+    hashes[file] = fs.existsSync(file)
+      ? crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') : null;
+  }
+  const evidencePath = process.env.AI_CADENCE_EVIDENCE_DIR
+    ? path.join(process.env.AI_CADENCE_EVIDENCE_DIR, `full-training-${RUN_STAMP}.json`)
+    : SUMMARY_PATH.replace(/\.json$/, '-evidence.json');
+  fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
+  // Archive before assertions: failed gates and their non-wins are evidence too.
+  fs.writeFileSync(evidencePath, JSON.stringify({
+    storageDir: STORAGE_DIR,
+    reused: Boolean(process.env.TASK078_REUSE_STORAGE_DIR),
+    manifest,
+    checkpointHashes: hashes,
+    trainingSeeds: collectTrainingSeeds(progress),
+    attemptedGateSeeds: progress.flatMap((record) =>
+      (record.simpleAiPlayerWinrate.results || []).map((result) => result.seed)),
+    progress,
+    state: readJson(path.join(STORAGE_DIR, 'runs', PASS_RUN_ID, 'state.json'))
+  }, null, 2) + '\n');
+  console.log(`Full-training evidence retained: ${evidencePath}`);
+}
+
 function assertPassingRun() {
   assertNoComparisonShortcut();
   const manifestPath = path.join(STORAGE_DIR, 'runs', PASS_RUN_ID, 'manifest.json');
@@ -269,6 +316,7 @@ function assertPassingRun() {
 
   const progressPath = path.join(STORAGE_DIR, 'progress', `${PASS_RUN_ID}.jsonl`);
   const progress = readJsonLines(progressPath);
+  retainFullTrainingEvidence(progress, manifestPath);
   check(progress.length === 15, 'full training should write fifteen progress records');
   const advances = progress.filter((record) =>
     record.nextStageEligibility && record.nextStageEligibility.decision === 'advance');
@@ -330,26 +378,7 @@ function assertPassingRun() {
     'manifest does not identify the progress artifact');
   check(manifest.artifacts.finalModel === path.join('final', PASS_RUN_ID),
     'manifest does not identify the final model artifact');
-  const trainingSeeds = [];
-  for (let datasetIndex = 0; datasetIndex < 100; datasetIndex += 1) {
-    trainingSeeds.push(78078 + 424242 + datasetIndex * 7919);
-  }
-  for (let teacherGame = 1; teacherGame <= 20; teacherGame += 1) {
-    trainingSeeds.push(78078 + 50000 + teacherGame);
-  }
-  for (let trainingStep = 1; trainingStep <= 15; trainingStep += 1) {
-    trainingSeeds.push(78078 + trainingStep * 1009);
-  }
-  progress.filter((record) =>
-    record.trainingStep % 2 === 0 || record.trainingStep === 15
-  ).forEach((record) => {
-    const stageIndex = record.nextStageEligibility.currentStageIndex;
-    const baseSeed = 78078 + record.trainingStep * 1543;
-    trainingSeeds.push(
-      baseSeed + stageIndex * 997 + 1,
-      baseSeed + stageIndex * 997 + 2
-    );
-  });
+  const trainingSeeds = collectTrainingSeeds(progress);
   const finalTestSeeds = advances.flatMap((record) =>
     record.simpleAiPlayerWinrate.results.map((result) => result.seed));
   check(new Set(finalTestSeeds).size === 60,
