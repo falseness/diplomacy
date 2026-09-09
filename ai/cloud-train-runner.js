@@ -165,18 +165,9 @@ function task104DeterministicInvariantMode() {
   return process.env.DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT === '1';
 }
 
-function deterministicTrainingMode(options, state) {
-  if (task104DeterministicInvariantMode()) {
-    return true;
-  }
-  if (state && state.deterministicTraining === true) {
-    return true;
-  }
-  return options && options.evaluationCadence === 1;
-}
-
-function cadenceSpeedMode(options) {
-  return options && options.evaluationCadence > 1;
+// Determinism is an explicit test control, independent of evaluation cadence.
+function deterministicTrainingMode() {
+  return task104DeterministicInvariantMode();
 }
 
 function task104LegacyMetricLoopMode() {
@@ -184,8 +175,7 @@ function task104LegacyMetricLoopMode() {
 }
 
 function nowIso(state, label) {
-  if (!task104DeterministicInvariantMode() &&
-      !(state && state.deterministicTraining === true)) {
+  if (!task104DeterministicInvariantMode()) {
     return new Date().toISOString();
   }
   const step = state && Number.isInteger(state.completedGames)
@@ -1218,10 +1208,14 @@ function metricRecords(metricsPath) {
 }
 
 function assertMetricRecordsMatchFile(inMemoryRecords, metricsPath) {
+  if (process.env.DIPLOMACY_ASSERT_METRIC_RECORDS !== '1') {
+    return;
+  }
   const fileRecords = metricRecords(metricsPath);
   if (!sameValue(inMemoryRecords, fileRecords)) {
     fail(`in-memory metric records diverged from ${metricsPath}`);
   }
+  console.log(`METRIC_PARITY: PASS records=${inMemoryRecords.length}`);
 }
 
 function summarizeMetrics(records) {
@@ -1269,6 +1263,9 @@ function readOldEpochPointer(options) {
 }
 
 async function evaluateNewVsOld(options, state, newModel, oldPointer) {
+  if (process.env.DIPLOMACY_ASSERT_METRIC_RECORDS === '1') {
+    console.log('EVALUATION_CALL: evaluateNewVsOld game=' + state.completedGames);
+  }
   if (!oldPointer) {
     return {
       evaluated: false,
@@ -1430,6 +1427,9 @@ function initialCurriculumState() {
 }
 
 async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
+  if (process.env.DIPLOMACY_ASSERT_METRIC_RECORDS === '1') {
+    console.log('EVALUATION_CALL: evaluateCurriculumSimpleAiWinrate game=' + state.completedGames);
+  }
   const games = options.curriculumGateGames || options.oldVsNewGames;
   let modelWins = 0;
   let simpleWins = 0;
@@ -2096,8 +2096,7 @@ async function main() {
       totalGames: options.games,
       completedGames: 0,
       resumeEvents: [],
-      curriculum: initialCurriculumState(),
-      deterministicTraining: options.evaluationCadence === 1
+      curriculum: initialCurriculumState()
     };
     state.startedAt = nowIso(state, 'started');
     state.updatedAt = nowIso(state, 'updated');
@@ -2116,13 +2115,6 @@ async function main() {
       for (let candidateGame = afterCompletedGame + 1;
         candidateGame <= state.totalGames;
         candidateGame += 1) {
-        if (!shouldEvaluateGame(
-          candidateGame,
-          state.totalGames,
-          options.evaluationCadence
-        )) {
-          continue;
-        }
         const promise = makeRuntimeCombatTeacherBatch(
           state.seed + candidateGame * 1543,
           state.curriculum.currentStageIndex,
@@ -2168,16 +2160,9 @@ async function main() {
         try {
           labels = Array.from(await batch.labels.data());
           const smokeSizedRun = state.totalGames <= 1 && state.epochs <= 1;
-          const shouldEvaluateGameNow = shouldEvaluateGame(
-            game,
-            state.totalGames,
-            options.evaluationCadence
-          );
-          const syntheticEpochs = smokeSizedRun ? 1 : state.epochs;
-          const shouldFitRuntimeTeacher =
-            !cadenceSpeedMode(options) || shouldEvaluateGameNow;
+          const syntheticEpochs = smokeSizedRun ? 1 : Math.max(state.epochs, 8);
           let runtimeBatchPromise = null;
-          if (shouldFitRuntimeTeacher && options.workers > 1) {
+          if (options.workers > 1) {
             if (runtimeBatchPrefetch &&
                 runtimeBatchPrefetch.game === game &&
                 runtimeBatchPrefetch.stageIndex === state.curriculum.currentStageIndex) {
@@ -2202,31 +2187,29 @@ async function main() {
             }
           );
           completedFits.syntheticEpochs = history.epoch.length;
-          if (!cadenceSpeedMode(options) || shouldEvaluateGameNow) {
-            if (runtimeBatchPromise) {
-              const runtimeBatch = await runtimeBatchPromise;
-              if (runtimeBatch) {
-                try {
-                  history = await trainRuntimeCombatBatch(model, runtimeBatch);
-                  completedFits.runtimeTeacherEpochs = history.epoch.length;
-                } finally {
-                  runtimeBatch.board.dispose();
-                  runtimeBatch.global.dispose();
-                  runtimeBatch.policy.dispose();
-                  runtimeBatch.labels.dispose();
-                }
-              }
-            } else {
-              const runtimeHistory = await fitRuntimeCombatTeacherBatch(
-                model,
-                state.seed + game * 1543,
-                state.curriculum.currentStageIndex,
-                runtimeTeacherWorkerPool
-              );
-              if (runtimeHistory) {
-                history = runtimeHistory;
+          if (runtimeBatchPromise) {
+            const runtimeBatch = await runtimeBatchPromise;
+            if (runtimeBatch) {
+              try {
+                history = await trainRuntimeCombatBatch(model, runtimeBatch);
                 completedFits.runtimeTeacherEpochs = history.epoch.length;
+              } finally {
+                runtimeBatch.board.dispose();
+                runtimeBatch.global.dispose();
+                runtimeBatch.policy.dispose();
+                runtimeBatch.labels.dispose();
               }
+            }
+          } else {
+            const runtimeHistory = await fitRuntimeCombatTeacherBatch(
+              model,
+              state.seed + game * 1543,
+              state.curriculum.currentStageIndex,
+              runtimeTeacherWorkerPool
+            );
+            if (runtimeHistory) {
+              history = runtimeHistory;
+              completedFits.runtimeTeacherEpochs = history.epoch.length;
             }
           }
           console.log('Completed training fits: ' + JSON.stringify(completedFits));

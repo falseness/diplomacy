@@ -25,6 +25,7 @@ function runTraining(storageDir, runId, games, extraArgs, extraEnv = {}) {
   const env = {
     ...process.env,
     ...extraEnv,
+    DIPLOMACY_ASSERT_METRIC_RECORDS: '1',
     PATH: `${node20BinDir()}:${process.env.PATH || ''}`
   };
   const command = [
@@ -68,11 +69,10 @@ function runTraining(storageDir, runId, games, extraArgs, extraEnv = {}) {
   check(fits.length === games, 'each training step must report completed fits', fits);
   fits.forEach((fit, index) => {
     const game = index + 1;
-    check(fit.game === game && fit.syntheticEpochs === 1,
-      'actual synthetic fit must honor --epochs 1 at either cadence', fit);
-    const shouldFitTeacher = cadence === 1 || game % cadence === 0 || game === games;
-    check(shouldFitTeacher ? fit.runtimeTeacherEpochs > 0 : fit.runtimeTeacherEpochs === 0,
-      'actual runtime teacher fits must follow the evaluation schedule', fit);
+    check(fit.game === game && fit.syntheticEpochs === 8,
+      'synthetic training work must preserve the legacy minimum at either cadence', fit);
+    check(fit.runtimeTeacherEpochs > 0,
+      'runtime teacher fitting must run on every game regardless of evaluation cadence', fit);
   });
   console.log('CADENCE_FITS: PASS ' + JSON.stringify({ runId, cadence, fits }));
 }
@@ -225,24 +225,20 @@ function assertSourceUsesInMemoryMetrics() {
     'training cadence test should be able to exercise the legacy file-backed metric loop');
   check(source.includes('DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT'),
     'training cadence test should have deterministic invariant controls');
-  check(source.includes('function deterministicTrainingMode(options, state)'),
-    'cadence=1 fixed-seed runs should use deterministic training mode');
-  check(source.includes('return options && options.evaluationCadence === 1;'),
-    'cadence=1 should enable the deterministic output-identical invariant by default');
-  check(source.includes('function cadenceSpeedMode(options)'),
-    'cadence K should have an explicit training-throughput mode');
-  check(source.includes('if (!cadenceSpeedMode(options) || shouldEvaluateGameNow)'),
-    'cadence K should skip runtime teacher fit work on non-evaluation games');
-  check(source.includes('function shouldEvaluateGame(game, totalGames, cadence)'),
-    'cadence K runtime teacher fit should use the same evaluation schedule as gate work');
+  check(!source.includes('cadenceSpeedMode'),
+    'evaluation cadence must not change training workload');
+  check(!source.includes('deterministicTraining: options.evaluationCadence === 1'),
+    'default cadence must not change model randomness or timestamps');
+  check(source.includes("process.env.DIPLOMACY_ASSERT_METRIC_RECORDS !== '1'"),
+    'full JSONL parity reads must be opt-in test assertions');
   check(source.includes('shouldEvaluateCurriculum = true'),
     'progressRecord should default to legacy every-game curriculum evaluation');
   check(source.includes('shuffle: !deterministicTrainingMode(options, state)'),
-    'cadence=1 should use unshuffled deterministic fitting for the output-identical invariant');
+    'explicit invariant control should disable shuffle');
   check(source.includes('model = createModel(deterministicTrainingMode(options, state) ? state.seed : undefined);'),
-    'cadence=1 should seed model construction for the output-identical invariant');
+    'explicit invariant control should seed model construction');
   check(source.includes('durationMs: deterministicTrainingMode(options, state) ? 0 : Date.now() - started'),
-    'cadence=1 should not write volatile duration fields');
+    'explicit invariant control should fix duration fields');
 }
 
 function assertCadenceOneMatchesLegacy(storageDir) {
