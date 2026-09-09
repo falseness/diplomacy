@@ -375,6 +375,8 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint, 
   context.__task063CommandLimit = options.commandLimit;
   context.__task063ObserveTurn = observer && observer.turn ?
     json => observer.turn(JSON.parse(json)) : null;
+  context.__task063ObservePosition = observer && observer.position ?
+    json => observer.position(JSON.parse(json)) : null;
   return new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = true
@@ -414,7 +416,7 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint, 
       }
     }
     let map = __task063MapEntry.sourceType == 'standalone-factory' ?
-      globalThis[__task063MapEntry.sourceName]() :
+      globalThis[__task063MapEntry.sourceName](__task063MapEntry.factoryOptions) :
       maps[__task063MapEntry.groupName][__task063MapEntry.variantIndex]
     let configuredSuddenDeathRound = map.suddenDeathRound ||
       __task063MapEntry.suddenDeathRound || null
@@ -447,6 +449,12 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint, 
         !players[__task063CandidateSlot].isLost) {
       nextTurn()
       ++turnCount
+      if (__task063ObservePosition && whooseTurn == __task063CandidateSlot) {
+        __task063ObservePosition(JSON.stringify({
+          turnCount, gameRound, playerIndex: whooseTurn,
+          vector: vectoriseGrid()
+        }))
+      }
       if (__task063ObserveTurn) {
         let candidate = players[__task063CandidateSlot]
         __task063ObserveTurn(JSON.stringify({
