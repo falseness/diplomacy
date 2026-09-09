@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Capture TASK-103 checks and the original change's immediate-parent timings.
+"""Capture TASK-103 checks and explicitly source-bound immediate-parent timings.
 
 Run with Node 20 on PATH. Use a fresh artifact directory. All tests are attempted;
-failures remain failures. Historical timings do not measure later task changes.
+failures remain failures. Defaults compare HEAD to its immediate parent.
 """
 import argparse
 import hashlib
@@ -17,8 +17,6 @@ import subprocess
 import time
 
 REPO = Path(__file__).resolve().parents[2]
-BEFORE = 'd03d37a4d6d6d32b0de37e187ff29dece7bde35f'
-AFTER = '94a8d8e691d05a102d4e2af49938839bc4cb9465'
 REGRESSION_TIMEOUT = 300
 CANONICAL_TIMEOUT = 3600
 
@@ -66,7 +64,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--artifacts', required=True, type=Path)
     parser.add_argument('--mode', required=True, choices=['regression', 'canonical'])
+    parser.add_argument('--after', default='HEAD', help='Committed revision to measure (default: HEAD)')
+    parser.add_argument('--before', help='Immediate parent of --after (default: resolved --after^)')
     args = parser.parse_args()
+    after = git('rev-parse', '--verify', args.after + '^{commit}').decode().strip()
+    parent = git('rev-parse', '--verify', after + '^').decode().strip()
+    before = git('rev-parse', '--verify', (args.before or parent) + '^{commit}').decode().strip()
+    if before != parent:
+        parser.error('--before must be the immediate parent of --after')
     dest = args.artifacts.resolve()
     dest.mkdir(parents=True, exist_ok=False)
     source_names = git('ls-files', '-z').decode().split('\0')
@@ -80,9 +85,9 @@ def main():
             ['node', '--version'], text=True).strip(),
         environment={k: v for k, v in os.environ.items()
                      if k in ('PATH', 'NODE_PATH', 'NODE_OPTIONS') or k.startswith(('TF_', 'OMP_', 'DIPLOMACY_'))},
-        before=BEFORE, after=AFTER, regression_timeout=REGRESSION_TIMEOUT,
+        before=before, after=after, regression_timeout=REGRESSION_TIMEOUT,
         canonical_timeout=CANONICAL_TIMEOUT,
-        interpretation='Historical original TASK-103 change versus its immediate parent; not current HEAD training throughput.'))
+        interpretation='Explicit committed after revision versus its immediate parent; working-tree edits are not measured.'))
     save(dest / 'driver-sha256.json', {str(Path(__file__).resolve()): sha(Path(__file__))})
     runs = []
     if args.mode == 'regression':
@@ -95,12 +100,11 @@ def main():
         runs.append(execute(dest, 'predict-speed', ['npm', 'run', 'benchmark-model-predict-batching',
                                                   '--', '1000', '48', '3'], REPO, REGRESSION_TIMEOUT))
     else:
-        assert git('rev-parse', AFTER + '^').decode().strip() == BEFORE
-        (dest / 'revision.diff').write_bytes(git('diff', BEFORE, AFTER))
+        (dest / 'revision.diff').write_bytes(git('diff', before, after))
         observer = dest / 'observe-games.cjs'
         observer.write_bytes((Path(__file__).parent / 'task103-observe.cjs').read_bytes())
         manifests = {}
-        for variant, revision in [('before', BEFORE), ('after', AFTER)]:
+        for variant, revision in [('before', before), ('after', after)]:
             source = dest / (variant + '-source')
             subprocess.run(['git', 'clone', '--quiet', '--shared', '--no-checkout',
                             str(REPO), str(source)], check=True)
@@ -129,7 +133,7 @@ def main():
         reduction = 100 * (1 - medians['after'] / medians['before'])
         passed = all(r['exit_code'] == 0 for r in runs) and reduction >= 10
         with (dest / 'canonical-training-speed.log').open('w') as log:
-            log.write(f'BEFORE_REVISION: {BEFORE}\nAFTER_REVISION: {AFTER}\n')
+            log.write(f'BEFORE_REVISION: {before}\nAFTER_REVISION: {after}\n')
             for record in runs:
                 log.write(json.dumps(record) + '\n')
             log.write(f'T_BEFORE_MEDIAN_SECONDS: {medians["before"]:.6f}\n'

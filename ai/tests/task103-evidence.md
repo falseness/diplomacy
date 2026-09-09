@@ -16,8 +16,8 @@ NODE_PATH=/usr/share/nodejs NODE_OPTIONS=--max-old-space-size=6144 \
   --artifacts artifacts/TASK-103/regression-NEW
 ```
 
-After regressions finish, capture the original TASK-103 implementation against
-its immediate parent, with three runs per arm in A/B/B/A/A/B order:
+After regressions finish, capture committed HEAD against its immediate parent,
+with three runs per arm in A/B/B/A/A/B order:
 
 ```sh
 NODE_PATH=/usr/share/nodejs NODE_OPTIONS=--max-old-space-size=6144 \
@@ -35,7 +35,15 @@ two old-versus-new games and the original plateau arguments. Regression commands
 have a 300-second limit; canonical commands have a 3600-second limit. An unfinished
 command is an explicit failure, never a successful measurement.
 
-The historical comparison isolates commit `94a8d8e` from parent `d03d37a`.
+The default comparison resolves `HEAD` and `HEAD^` once before capture.
+Use `--after COMMIT` to measure another committed revision; optional
+`--before COMMIT` must resolve to its immediate parent or capture is rejected
+before creating artifacts. Working-tree edits are recorded but not measured by
+the cloned canonical runs. Freeze and commit runtime changes before capturing
+their speedup. Test-only changes cannot be credited with a runtime speedup.
+
+For an explicitly historical comparison, pass `--after 94a8d8e --before d03d37a`.
+That historical comparison isolates commit `94a8d8e` from parent `d03d37a`.
 Besides predict batching, that commit changed combat projection allocations,
 coordinate scoring allocations and fit batch size. Its timings cannot establish
 that batching alone speeds up training, or that a test-only correction speeds
