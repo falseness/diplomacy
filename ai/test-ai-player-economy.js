@@ -54,6 +54,8 @@ function makeProducer(name, x, y) {
     name,
     coord: { x, y },
     killed: false,
+    playerColor: 1,
+    isMyTurn: true,
     isBadlyDamaged: false,
     isPreparingUnit: false,
     buildings: [],
@@ -151,6 +153,11 @@ function getCell(coord) {
   return cells.get(key);
 }
 getCell(unit.coord).unit = unit;
+getCell(town.coord).building = town;
+getCell(barrack.coord).building = barrack;
+const gridSize = 4;
+const gridCells = Array.from({ length: gridSize }, (_, x) =>
+  Array.from({ length: gridSize }, (_, y) => getCell({ x, y })));
 
 const context = vm.createContext({
   console,
@@ -201,7 +208,7 @@ const context = vm.createContext({
     }
   },
   grid: {
-    arr: [[getCell(unit.coord)]],
+    arr: gridCells,
     getCell,
     getBuilding(coord) {
       if (coord.x === town.coord.x && coord.y === town.coord.y) {

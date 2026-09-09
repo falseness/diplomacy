@@ -1733,14 +1733,31 @@ class AIPlayerWithEconomy extends AIPlayer {
         return this.getUnitCommands().concat(this.getEconomyCommands())
     }
     applyEconomyCommand(command) {
-        let producer = grid.getBuilding(command.producerCoord)
-        if (!producer.notEmpty() || !producer.prepare(command.product)) {
+        let producerCell = getAiCommandCell(command.producerCoord)
+        let producer = producerCell && producerCell.building
+        let configured = Object.prototype.hasOwnProperty.call(
+            production, command.product) ? production[command.product] : null
+        if (!producer || !producer.notEmpty() || producer.killed ||
+                producer.playerColor != this.getPlayerIndex() ||
+                !producer.isMyTurn ||
+                (producer.name != 'town' && producer.name != 'barrack') ||
+                !configured || !this.getProducerProducts(producer).includes(command.product)) {
             return false
         }
-        if (!command.destinationCoord) {
+        // Validate command shape before prepare: unit preparation spends gold
+        // immediately, whereas placement preparation waits for a destination.
+        let isUnit = configured.production.isUnitProduction()
+        let cell = command.destinationCoord ?
+            getAiCommandCell(command.destinationCoord) : null
+        if ((isUnit && command.destinationCoord) || (!isUnit && !cell)) {
+            return false
+        }
+        if (!producer.prepare(command.product)) {
+            return false
+        }
+        if (isUnit) {
             return true
         }
-        let cell = grid.getCell(command.destinationCoord)
         if (!producer.activeProduction ||
             !producer.activeProduction.canCreateOnCell(cell, producer)) {
             producer.removeSelect()
