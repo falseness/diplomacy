@@ -57,3 +57,43 @@ TASK-103 remains pending: retained open-field acceptance is 3/4, tiny economy
 0/2, and full combat has five rather than six advances. The old combat replay's
 stale-vector behavior must not be restored. Resolve these boundaries before the
 complete configured suite; the original speed evidence remains historical.
+
+Measure actual model decisions over complete development games:
+
+```sh
+node ai/tests/task103-economy-runtime-coverage.cjs artifacts/TASK-103/economy-development/experiment artifacts/TASK-103/runtime-coverage-new
+```
+
+This freezes all three archived checkpoints and four disjoint development seeds
+before playing either side through the existing runtime. It saves every native
+input/prediction batch in gzip JSONL, each turn's model/heuristic action counters,
+and every outcome. Optional benchmark observers receive detached copies; a
+mutation control verifies that inputs and returned scores cannot be changed by
+the observer. `--controls-only` checks this boundary without gameplay. Default
+benchmark calls do not enable observation.
+
+The September 9 capture under `runtime-coverage` completed twelve games: all
+three arms lost all four games. Untrained/zero/trained checkpoints encountered
+122/80/88 batches with multiple candidates. The model therefore has real attack
+choices, although heuristic movement and purchases still control much of play.
+Runtime inference also records baseline/final states; singleton batches alone
+must not be counted as model decisions. Turn counters distinguish model attacks
+from these extra predictions.
+
+Comparing teacher agreement separately on each arm's own trajectory is
+confounded by those different states. Cross-evaluating all three frozen models
+on the same 215 informative multi-candidate batches gives 98/0/128 teacher-optimal
+maximum-score sets and mean normalized regret 0.461179/0.530351/0.366492.
+Exact prediction ties use average teacher regret, not an assumed chosen action.
+This diagnostic uses only the existing vector teacher, not the collector's
+additional material term. The trained checkpoint still improves teacher
+agreement on the common full-game sample, yet fails every development game.
+Neither absent model authority nor complete ranking collapse explains the losses.
+
+The map itself is fixed: new RNG seeds are disjoint, but do not make new map
+layouts or an independent final holdout. Repeated deterministic trajectories
+must not be presented as independent strength evidence. No checkpoint was
+promoted, no acceptance game was repeated, and no full suite was run while its
+prerequisite strength gates remained failed. Further fitting requires a stronger
+justification than lowering the same teacher error again; investigate the
+teacher's relationship to outcomes and the heuristic phases before training.

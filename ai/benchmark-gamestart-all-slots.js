@@ -266,7 +266,7 @@ function bindCheckpoint(context) {
   `, { filename: 'task063-checkpoint-binding.js' }).runInContext(context);
 }
 
-function createPredictor(model, stats) {
+function createPredictor(model, stats, observe = null) {
   const [, expectedWidth, expectedHeight, expectedChannels] = model.inputs[0].shape;
   return function predictFromCheckpoint(checkpointModel, vectors) {
     assert.strictEqual(checkpointModel, model, 'predictor checkpoint identity changed');
@@ -295,6 +295,10 @@ function createPredictor(model, stats) {
       stats.calls += 1;
       stats.positions += vectors.length;
       if (!stats.modelProbe) stats.modelProbe = values.slice(0, 8);
+      if (observe) {
+        // Diagnostics receive detached data and cannot alter gameplay inputs or scores.
+        observe(JSON.parse(JSON.stringify({ vectors, values })));
+      }
       return values.map(score => [score]);
     });
   };
@@ -354,8 +358,9 @@ function conciseGame(game) {
   return copy;
 }
 
-function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) {
-  const predictor = createPredictor(checkpoint.model, checkpoint.inference);
+function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint, observer = null) {
+  const predictor = createPredictor(checkpoint.model, checkpoint.inference,
+    observer && observer.prediction);
   const context = createRuntimeContext(seed, predictor, checkpoint.model);
   loadBrowserScripts(context);
   disableHeadlessBorderDrawing(context);
@@ -368,6 +373,8 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
     null : options.suddenDeathRound;
   context.__task063ActionLimit = options.actionLimit;
   context.__task063CommandLimit = options.commandLimit;
+  context.__task063ObserveTurn = observer && observer.turn ?
+    json => observer.turn(JSON.parse(json)) : null;
   return new vm.Script(`(() => {
     isFogOfWar = false
     gameSettings.testAI = true
@@ -440,6 +447,16 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint) 
         !players[__task063CandidateSlot].isLost) {
       nextTurn()
       ++turnCount
+      if (__task063ObserveTurn) {
+        let candidate = players[__task063CandidateSlot]
+        __task063ObserveTurn(JSON.stringify({
+          turnCount, gameRound, whooseTurn,
+          modelAttackOpportunities: candidate.aiModelRankedAttackOpportunities || 0,
+          modelAttackActions: candidate.aiModelRankedAttackActions || 0,
+          heuristicMovementActions: candidate.aiHeuristicMovementActions || 0,
+          heuristicEconomyActions: candidate.aiHeuristicEconomyActions || 0
+        }))
+      }
     }
     let activePlayers = activeNonNeutralPlayers()
     let winner = activePlayers.length == 1 ? players.indexOf(activePlayers[0]) : null
