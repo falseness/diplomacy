@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -142,25 +142,32 @@ for (let seed = 13800; seed < 13824; seed += 1) {
     'advanced stage 1 headless runtime did not initialize both towns', { seed });
 }
 
-const smokeMap = api.generateAdvancedEconomyStage1TrainingMap({
-  seed: 13842,
-  suddenDeathRound: 12
-});
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: 13842,
-  roundLimit: 1,
-  actionLimit: 1,
-  commandLimit: 5
-});
+async function runGameplaySmoke() {
+  const smokeMap = api.generateAdvancedEconomyStage1TrainingMap({
+    seed: 13842,
+    suddenDeathRound: 12
+  });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: 13842,
+    roundLimit: 1,
+    actionLimit: 1,
+    commandLimit: 5
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
 
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
-  'short smoke did not run AIPlayerWithEconomy', smokeResult);
-assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
-assert(!smokeResult.crash,
-  'short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
+    'short smoke did not run AIPlayerWithEconomy', smokeResult);
+  assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
+  assert(!smokeResult.crash,
+    'short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke crashed', smokeResult);
 
-console.log('Advanced economy stage 1 3x3 town-only map generation smoke passed');
+  console.log('Advanced economy stage 1 3x3 town-only map generation smoke passed');
+}
+
+runGameplaySmoke().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
+});

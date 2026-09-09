@@ -9,13 +9,16 @@ const { loadCheckpoint, createPredictor } = require('../benchmark-trained-model'
 
 // Optional stage argument extends the original stage-1 invocation unchanged.
 const STAGE = Number(process.argv[3] || 1);
-const STAGE_SHAPES = [[7, 5], [9, 7], [11, 9], [11, 9], [11, 9], [11, 9], [9, 9], [9, 9]];
+const ADVANCED = process.argv[4] === 'advanced';
+const STAGE_SHAPES = ADVANCED
+  ? [[3, 3], ...Array.from({ length: 5 }, () => [5, 5]), ...Array.from({ length: 6 }, () => [9, 9])]
+  : [[7, 5], [9, 7], [11, 9], [11, 9], [11, 9], [11, 9], [9, 9], [9, 9]];
 assert(Number.isInteger(STAGE) && STAGE >= 1 && STAGE <= STAGE_SHAPES.length);
-const MAP_SOURCE = `stage-${STAGE}-native`;
-const TRAINING_SEED = 103700 + STAGE;
-const STRUCTURAL_BASE = 11800 + (STAGE - 1) * 200;
+const MAP_SOURCE = `${ADVANCED ? 'advanced-' : ''}stage-${STAGE}-native`;
+const TRAINING_SEED = (ADVANCED ? 103800 : 103700) + STAGE;
+const STRUCTURAL_BASE = ADVANCED ? 13800 + (STAGE - 1) * 100 : 11800 + (STAGE - 1) * 200;
 // A conservative superset of every structural seed used by each existing smoke.
-const STRUCTURAL_SEEDS = Array.from({ length: 20 }, (_, index) => STRUCTURAL_BASE + index);
+const STRUCTURAL_SEEDS = Array.from({ length: ADVANCED ? [24, 32, 120, 120, 120, 140, 160, 160, 160, 180, 240, 120][STAGE - 1] : 20 }, (_, index) => STRUCTURAL_BASE + index);
 const GAMEPLAY_SEED = STRUCTURAL_BASE + 42;
 const BOARD_SHAPE = [...STAGE_SHAPES[STAGE - 1], 82]; // x, y, channel.
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -38,7 +41,11 @@ async function main() {
   fs.mkdirSync(output);
   const plan = {
     mapSource: MAP_SOURCE, trainingSeeds: [TRAINING_SEED], validationSeeds: [],
-    structuralSeeds: STRUCTURAL_SEEDS, gameplaySeeds: [GAMEPLAY_SEED],
+    structuralSeeds: STRUCTURAL_SEEDS,
+    gameplaySeeds: ADVANCED && STAGE >= 11 ? [] : [GAMEPLAY_SEED],
+    gameplaySeedSelection: ADVANCED && STAGE >= 11
+      ? 'existing smoke selects first structurally eligible seed from structuralSeeds before gameplay; actual seed logged in MAP_OUTCOME'
+      : 'fixed gameplaySeeds',
     intersections: [], epochs: 1, selection: 'only checkpoint after one fixed batch and one epoch',
     claim: 'shape and training integration only; no learned-strength claim',
     targets: 'existing runtime collector: legal post-action vector tactical score / 240000 + player material score * 0.25, min-max normalized within each decision; heuristic teacher, not terminal outcomes',
@@ -55,7 +62,7 @@ async function main() {
   console.log('DEFAULT_SHAPE: PASS 9x9x82');
   const batch = createTrainingBatch(TRAINING_SEED, [2], MAP_SOURCE);
   assert(batch.boards.length > 0);
-  assert.equal(batch.map.provenance.generator, `generateEconomyStage${STAGE}TrainingMap`);
+  assert.equal(batch.map.provenance.generator, `generate${ADVANCED ? 'Advanced' : ''}EconomyStage${STAGE}TrainingMap`);
   assert.deepStrictEqual(batch.players, ['AIPlayerWithEconomy', 'SimpleAiPlayerWithEconomy']);
   for (const board of batch.boards) {
     assert.equal(board.length, BOARD_SHAPE[0]);

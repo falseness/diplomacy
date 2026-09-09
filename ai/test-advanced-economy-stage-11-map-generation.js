@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -252,25 +252,32 @@ assert(observed.hpValues.size > 8,
 assert(smokeSeed !== null,
   'advanced stage 11 fixed-seed sample did not find a one-town-per-player benchmark smoke seed');
 
-const smokeMap = api.generateAdvancedEconomyStage11TrainingMap({
-  seed: smokeSeed,
-  suddenDeathRound: 12
-});
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: smokeSeed,
-  roundLimit: 1,
-  actionLimit: 1,
-  commandLimit: 5
-});
+async function runGameplaySmoke() {
+  const smokeMap = api.generateAdvancedEconomyStage11TrainingMap({
+    seed: smokeSeed,
+    suddenDeathRound: 12
+  });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: smokeSeed,
+    roundLimit: 1,
+    actionLimit: 1,
+    commandLimit: 5
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
 
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
-  'short economy smoke did not run AIPlayerWithEconomy', smokeResult);
-assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short economy smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
-assert(!smokeResult.crash,
-  'short advanced stage 11 economy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
+    'short economy smoke did not run AIPlayerWithEconomy', smokeResult);
+  assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'short economy smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
+  assert(!smokeResult.crash,
+    'short advanced stage 11 economy smoke crashed', smokeResult);
 
-console.log('Advanced economy stage 11 random 9x9 HP map generation smoke passed');
+  console.log('Advanced economy stage 11 random 9x9 HP map generation smoke passed');
+}
+
+runGameplaySmoke().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
+});

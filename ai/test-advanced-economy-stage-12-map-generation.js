@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -294,26 +294,33 @@ assert(observed.goldValues.size > 1 && layouts.size > 4,
 assert(smokeSeed !== null,
   'advanced stage 12 fixed-seed sample did not find a one-town-per-player benchmark smoke seed');
 
-const smokeMap = api.generateAdvancedEconomyStage12TrainingMap({
-  seed: smokeSeed,
-  suddenDeathRound: 20
-});
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: smokeSeed,
-  roundLimit: 5,
-  actionLimit: 4,
-  commandLimit: 32
-});
+async function runGameplaySmoke() {
+  const smokeMap = api.generateAdvancedEconomyStage12TrainingMap({
+    seed: smokeSeed,
+    suddenDeathRound: 20
+  });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: smokeSeed,
+    roundLimit: 5,
+    actionLimit: 4,
+    commandLimit: 32
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
 
-assert(!smokeResult.crash,
-  'short advanced stage 12 economy smoke crashed', smokeResult);
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy' &&
-    smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short advanced stage 12 smoke did not run the required economy AI classes', smokeResult);
-assert(smokeResult.turnCount > 0,
-  'short advanced stage 12 smoke game did not advance', smokeResult);
+  assert(!smokeResult.crash,
+    'short advanced stage 12 economy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy' &&
+      smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'short advanced stage 12 smoke did not run the required economy AI classes', smokeResult);
+  assert(smokeResult.turnCount > 0,
+    'short advanced stage 12 smoke game did not advance', smokeResult);
 
-console.log('Advanced economy stage 12 symmetric 9x9 random map generation smoke passed');
+  console.log('Advanced economy stage 12 symmetric 9x9 random map generation smoke passed');
+}
+
+runGameplaySmoke().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
+});

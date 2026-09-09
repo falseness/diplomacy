@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -186,25 +186,32 @@ assert(observedBarrackLayouts.size > 1,
   'advanced stage 6 fixed-seed sample did not preserve barrack placement variation',
   { observedBarrackLayouts: Array.from(observedBarrackLayouts).slice(0, 5) });
 
-const smokeMap = api.generateAdvancedEconomyStage6TrainingMap({
-  seed: 14342,
-  suddenDeathRound: 12
-});
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: 14342,
-  roundLimit: 1,
-  actionLimit: 1,
-  commandLimit: 5
-});
+async function runGameplaySmoke() {
+  const smokeMap = api.generateAdvancedEconomyStage6TrainingMap({
+    seed: 14342,
+    suddenDeathRound: 12
+  });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: 14342,
+    roundLimit: 1,
+    actionLimit: 1,
+    commandLimit: 5
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
 
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
-  'short smoke did not run AIPlayerWithEconomy', smokeResult);
-assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
-assert(!smokeResult.crash,
-  'short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
+    'short smoke did not run AIPlayerWithEconomy', smokeResult);
+  assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
+  assert(!smokeResult.crash,
+    'short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke crashed', smokeResult);
 
-console.log('Advanced economy stage 6 farm-and-barrack suburb map generation smoke passed');
+  console.log('Advanced economy stage 6 farm-and-barrack suburb map generation smoke passed');
+}
+
+runGameplaySmoke().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
+});

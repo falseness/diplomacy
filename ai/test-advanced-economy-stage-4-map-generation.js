@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -202,25 +202,32 @@ assert(observedCapturedCounts.size > 1,
   'advanced stage 4 fixed-seed sample did not exercise captured suburb count variation',
   { observedCapturedCounts: Array.from(observedCapturedCounts) });
 
-const smokeMap = api.generateAdvancedEconomyStage4TrainingMap({
-  seed: 14142,
-  suddenDeathRound: 12
-});
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: 14142,
-  roundLimit: 1,
-  actionLimit: 1,
-  commandLimit: 5
-});
+async function runGameplaySmoke() {
+  const smokeMap = api.generateAdvancedEconomyStage4TrainingMap({
+    seed: 14142,
+    suddenDeathRound: 12
+  });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: 14142,
+    roundLimit: 1,
+    actionLimit: 1,
+    commandLimit: 5
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
 
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
-  'short smoke did not run AIPlayerWithEconomy', smokeResult);
-assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
-assert(!smokeResult.crash,
-  'short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
+    'short smoke did not run AIPlayerWithEconomy', smokeResult);
+  assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
+  assert(!smokeResult.crash,
+    'short AIPlayerWithEconomy-vs-SimpleAiPlayerWithEconomy smoke crashed', smokeResult);
 
-console.log('Advanced economy stage 4 captured-suburb map generation smoke passed');
+  console.log('Advanced economy stage 4 captured-suburb map generation smoke passed');
+}
+
+runGameplaySmoke().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
+});
