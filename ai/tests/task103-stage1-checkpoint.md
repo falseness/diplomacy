@@ -27,3 +27,24 @@ and /mnt/storage/diplomacy models contain no 7x5x82 checkpoint. The available
 9x9x82 economy checkpoint was rejected with the exact shape error. Other map
 callers and the cadence, worker, game-start and unfinished regression groups
 remain dependencies; this migration alone does not establish the all-AI gate.
+
+The current `economy-training.js` CLI cannot generate this prerequisite from
+scratch: `ECONOMY_MODEL_WIDTH` and `ECONOMY_MODEL_HEIGHT` are both 9, `run()`
+uses those dimensions for a new model, and `createTrainingBatch()` adapts every
+board to those dimensions. Its supported map sources are town, final symmetrical
+economy, advanced 9x9 economy and advanced 20x20 economy; there is no stage-1
+source or board-dimension CLI option. `--initial-checkpoint` accepts an existing
+model shape but does not supply the missing checkpoint or its provenance.
+Running the default trainer again therefore does not address the missing 7x5
+prerequisite. A training integration must supply documented real training data,
+seed provenance and a frozen compatible checkpoint before this smoke can serve
+as positive integration evidence. Do not resize a saved checkpoint or relabel
+random initialization as trained to satisfy the loader.
+
+Resume the global regression only after the recorded independent prerequisites
+are resolved: TASK-118's checkpoint caller migration, TASK-104's cadence source
+contract, TASK-106's required baseline argument, and the game-start gate failures
+associated with TASK-156 and archived TASK-063. The saved timeouts are unfinished
+tests with unestablished causes. Fixing this one smoke would not resolve those
+groups. Preserve their failed evidence and task statuses; TASK-103 does not
+authorize silently weakening their assertions or declaring a partial suite green.
