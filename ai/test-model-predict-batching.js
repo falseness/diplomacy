@@ -46,17 +46,28 @@ function oldPredict(model, candidates, tensorApi = tf) {
   });
 }
 
-function createSumModel() {
+function createWeightedModel() {
   const board = tf.input({ shape: [2, 3, 3] });
   const globals = tf.input({ shape: [1] });
   const boardSum = tf.layers.flatten().apply(board);
   const boardValue = tf.layers.dense({
+    name: 'position_weights',
     units: 1,
     useBias: false,
     kernelInitializer: 'ones'
   }).apply(boardSum);
   const output = tf.layers.add().apply([boardValue, globals]);
-  return tf.model({ inputs: [board, globals], outputs: output });
+  const model = tf.model({ inputs: [board, globals], outputs: output });
+  // Distinct positional weights make channel/cell permutations observable.
+  const weightedLayer = model.getLayer('position_weights');
+  const weightShape = weightedLayer.weights[0].shape;
+  const weights = tf.tensor2d(
+    Array.from({ length: weightShape[0] }, (_, index) => (index + 1) / weightShape[0]),
+    weightShape
+  );
+  weightedLayer.setWeights([weights]);
+  weights.dispose();
+  return model;
 }
 
 const RANDOM_SEED = 103103;
@@ -114,7 +125,7 @@ check(/tf\.tensor4d\s*\(/.test(predictBody),
 check(/tf\.tensor2d\s*\(/.test(predictBody),
   'predict() should build one batched global tensor2d');
 
-const model = createSumModel();
+const model = createWeightedModel();
 for (const batchSize of [1, 2, 48, 200]) {
   const candidates = makeCandidates(batchSize);
   const expected = flatten(oldPredict(model, candidates));
@@ -128,6 +139,15 @@ for (const batchSize of [1, 2, 48, 200]) {
   console.log(`EQUALITY: batch=${batchSize} seed=${RANDOM_SEED + batchSize} length=${actual.length} maxDiff=${maxDiff}`);
   check(maxDiff <= 1e-6,
     'batched predict changed output values', { batchSize, maxDiff });
+  const reordered = candidates.map(([board, globalValue]) => [
+    board.map(column => column.map(cell => cell.slice().reverse())), globalValue
+  ]);
+  const reorderedValues = flatten(api.predict(model, reordered));
+  const reorderDiff = Math.max(...expected.map((value, index) =>
+    Math.abs(value - reorderedValues[index])));
+  check(reorderDiff > 1e-6,
+    'equality model cannot detect channel reordering', { batchSize, reorderDiff });
+  console.log(`CHANNEL_ORDER_CONTROL: PASS batch=${batchSize} rejected maxDiff=${reorderDiff}`);
 }
 
 const empty = api.predict(model, []);

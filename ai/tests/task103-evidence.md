@@ -47,3 +47,9 @@ A successful capture process is insufficient for task readiness. Audit the
 1000-call/48-candidate micro-benchmark's median reduction, the canonical speed
 gate, every regression exit, all 15-step completion manifests, source hashes and
 per-game outcome coverage. Retain pending status when any required gate fails.
+
+The equality fixture uses distinct positional weights for every board feature.
+Each required batch also reverses the input channels as a negative control and
+requires a detectable output difference. This prevents a permutation-invariant
+sum model from silently accepting a channel-order bug in the flattening loop.
+The allocation and repeated-call leak assertions use the same weighted model.
