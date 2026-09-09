@@ -16,16 +16,23 @@ function check(condition, message, details) {
   throw new Error(message + suffix);
 }
 
-function runNode(args, env) {
-  const result = spawnSync(process.execPath, args, {
+function runTraining(args, env) {
+  const command = ['./train.sh', ...args];
+  console.log('Worker training command:', JSON.stringify(['bash', ...command]));
+  const result = spawnSync('bash', command, {
     cwd: path.resolve(__dirname, '..'),
-    env: Object.assign({}, process.env, env || {}),
+    env: Object.assign({}, process.env, env || {}, {
+      PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}`
+    }),
     encoding: 'utf8',
     maxBuffer: 1024 * 1024 * 20
   });
+  process.stdout.write(result.stdout || '');
+  process.stderr.write(result.stderr || '');
+  console.log('Worker training exit:', result.status);
   if (result.status !== 0) {
     throw new Error([
-      `command failed: ${process.execPath} ${args.join(' ')}`,
+      `command failed: bash ${command.join(' ')}`,
       `status: ${result.status}`,
       result.stdout,
       result.stderr
@@ -39,6 +46,7 @@ async function main() {
   check(invariantResults.length === 10,
     'worker invariant did not compare ten seeds',
     invariantResults.map((result) => result.seed));
+  console.log('Worker invariants passed:', JSON.stringify(invariantResults));
 
   const serialSignature = await runtimeTeacherDatasetSignature(11600, 0, 1);
   const workerSignature = await runtimeTeacherDatasetSignature(11600, 0, 2);
@@ -49,6 +57,7 @@ async function main() {
       serialExamples: serialSignature.length,
       workerExamples: workerSignature.length
     });
+  console.log('Serial/worker dataset equality passed:', serialSignature.length, 'examples');
 
   const probe = await workerPoolDispatchProbe(2, [
     { seed: 12600, stageIndex: 0, game: 1 },
@@ -64,9 +73,11 @@ async function main() {
     'worker pool returned duplicate game seeds',
     probe);
 
+  console.log('Worker dispatch passed:', JSON.stringify(probe));
   const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task106-workers-'));
-  runNode([
-    'ai/cloud-train-runner.js',
+  console.log('Worker training storage:', storageDir);
+  // Use the public CLI so runner defaults and required arguments stay centralized.
+  runTraining([
     '--storage-dir', storageDir,
     '--run-id', 'task106-worker-smoke',
     '--games', '1',
@@ -82,8 +93,6 @@ async function main() {
     '--plateau-patience', '1',
     '--curriculum-simple-winrate', '1',
     '--curriculum-simple-winrate-threshold', '0.8',
-    '--curriculum-lr-reduction-attempted', 'false',
-    '--curriculum-lr-reduction-improved', 'false',
     '--workers', '2',
     '--fail-after-game', '0'
   ], {
@@ -95,6 +104,11 @@ async function main() {
   check(manifest.configuration.workers === 2,
     'worker training manifest did not record worker count',
     manifest.configuration);
+  console.log('Worker training manifest passed:', JSON.stringify({
+    path: manifestPath,
+    status: manifest.status,
+    workers: manifest.configuration.workers
+  }));
 
   console.log('TASK-106 self-play worker smoke passed');
 }

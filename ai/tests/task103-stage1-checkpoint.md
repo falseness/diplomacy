@@ -54,12 +54,23 @@ and 9x9 mismatch controls remain failures as required. Complete evidence is unde
 `artifacts/TASK-103/native-integration/`.
 
 Resume the global regression only after the recorded independent prerequisites
-are resolved: TASK-118's checkpoint caller migration, TASK-104's cadence source
-contract, TASK-106's required baseline argument, and the game-start gate failures
+are resolved: TASK-118's remaining checkpoint caller migrations, TASK-104's cadence
+contract, and the game-start gate failures
 associated with TASK-156 and archived TASK-063. The saved timeouts are unfinished
 tests with unestablished causes. Fixing this one smoke would not resolve those
 groups. Preserve their failed evidence and task statuses; TASK-103 does not
 authorize silently weakening their assertions or declaring a partial suite green.
+
+The worker smoke now invokes the public `train.sh` CLI, which supplies the required
+baseline-model argument and centralizes runner defaults. Its existing false
+learning-rate flags use the CLI's false defaults; seed, workers, assertions and
+runtime policy are unchanged. The September 9 worker integration completed all
+ten serial/worker comparisons, matched 3,971 dataset examples, dispatched four
+distinct jobs across two workers, and completed the one-step training run. Logs,
+run files and checkpoint hashes are retained under
+`artifacts/TASK-103/worker-integration/`. The smoke retains its existing mocked
+simple-opponent metric, while the measured baseline gate timed out and held curriculum
+progression. This is worker integration evidence, not a competitive gate pass.
 
 The cadence source-contract failure can be isolated without launching training:
 
