@@ -39,3 +39,29 @@ Only after a complete corpus and startup validation may this plan be frozen as
 eligible for a separately declared matched initial/outcome/zero experiment.
 This command deliberately has no training continuation. A failed preflight
 leaves TASK-103 pending and does not permit unchanged acceptance reruns.
+
+Resuming after the retained failed preflight
+
+The completed run is in `artifacts/TASK-103/diversity-preflight/run/`.
+Its `decision.json` records `eligible: false`, zero model loads/games/fits,
+and three unresolved provenance requirements in `missing-provenance.json`.
+The parent directory contains `preflight.log`; the JSON reports are inside
+`run/`, not beside that log. `maps.json` contains 44 recovered/input records;
+`physical-groups.json` groups these into eight geometry identities. Those
+counts describe the inventoried corpus, not a complete exposure history.
+
+Before a new preflight can answer a different question, recover evidence for
+all three missing requirements: the full prior exposure manifest (including
+compressed traces and external storage), inherited collector startup and
+runtime round-trip equivalence, and per-map benchmark class/slot/terminal-limit
+overrides. Bind recovered inputs to frozen source and checkpoint ancestry.
+Do not infer these facts from the absence of a map in the saved JSON scan.
+The existing diagnostic deliberately always rejects the incomplete corpus;
+rerunning it unchanged cannot establish eligibility.
+
+If those records remain unavailable, preserve the exact missing-data report
+and leave TASK-103 pending. Do not load models, collect games, fit, or rerun
+unchanged acceptance gates. Existing batching and historical speed passes do
+not replace the unresolved complete configured-suite requirement. This stop
+is required by TASK-103's experiment instructions, not evidence of an external
+service failure or a request to relax acceptance.
