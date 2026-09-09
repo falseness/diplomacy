@@ -10,41 +10,42 @@ class Border {
         return !this.lines.length
     }
     createLine(pos, side) {
-        const hexagonLine = [
-            [
-                [-basis.r / 2, -basis.r / 2 * Math.sqrt(3)],
-                [basis.r / 2, -basis.r / 2 * Math.sqrt(3)]
-            ],
-            [
-                [basis.r / 2, -basis.r / 2 * Math.sqrt(3)],
-                [basis.r, 0]
-            ],
-            [
-                [basis.r, 0],
-                [basis.r / 2, basis.r / 2 * Math.sqrt(3)]
-            ],
-            [
-                [basis.r / 2, basis.r / 2 * Math.sqrt(3)],
-                [-basis.r / 2, basis.r / 2 * Math.sqrt(3)]
-            ],
-            [
-                [-basis.r / 2, basis.r / 2 * Math.sqrt(3)],
-                [-basis.r, 0]
-            ],
-            [
-                [-basis.r, 0],
-                [-basis.r / 2, -basis.r / 2 * Math.sqrt(3)]
-            ]
-        ]
+        // Compute only the requested edge; every call still owns its endpoints.
+        // Read the live radius so resizing does not leave stale geometry.
+        const halfRadius = basis.r / 2
+        const height = halfRadius * Math.sqrt(3)
+        let beginX, beginY, endX, endY
+        switch (String(side)) {
+            case '0':
+                beginX = -halfRadius; beginY = -height
+                endX = halfRadius; endY = -height
+                break
+            case '1':
+                beginX = halfRadius; beginY = -height
+                endX = basis.r; endY = 0
+                break
+            case '2':
+                beginX = basis.r; beginY = 0
+                endX = halfRadius; endY = height
+                break
+            case '3':
+                beginX = halfRadius; beginY = height
+                endX = -halfRadius; endY = height
+                break
+            case '4':
+                beginX = -halfRadius; beginY = height
+                endX = -basis.r; endY = 0
+                break
+            case '5':
+                beginX = -basis.r; beginY = 0
+                endX = -halfRadius; endY = -height
+                break
+            default:
+                throw new TypeError('Invalid hexagon side: ' + side)
+        }
         let line = {
-            begin: {
-                x: hexagonLine[side][0][0] + pos.x,
-                y: hexagonLine[side][0][1] + pos.y
-            },
-            end: {
-                x: hexagonLine[side][1][0] + pos.x,
-                y: hexagonLine[side][1][1] + pos.y
-            }
+            begin: {x: beginX + pos.x, y: beginY + pos.y},
+            end: {x: endX + pos.x, y: endY + pos.y}
         }
         this.lines.push(line)
     }
