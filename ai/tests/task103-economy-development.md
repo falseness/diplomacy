@@ -97,3 +97,27 @@ promoted, no acceptance game was repeated, and no full suite was run while its
 prerequisite strength gates remained failed. Further fitting requires a stronger
 justification than lowering the same teacher error again; investigate the
 teacher's relationship to outcomes and the heuristic phases before training.
+
+Run the vector teacher directly as a development-only scoring control:
+
+```sh
+node ai/tests/task103-economy-teacher-gameplay.cjs artifacts/TASK-103/teacher-gameplay-new
+```
+
+The script freezes four disjoint development seeds, balanced sides, and both
+the teacher and its negation before gameplay. Its tensor adapter receives only
+the normal native board/global inputs. Runtime player classes, movement,
+purchases, budgets and outcome accounting are unchanged. This is explicitly a
+heuristic-only diagnostic, never a checkpoint to bind to acceptance. Controls
+check score equality, candidate order, sign reversal and tensor cleanup.
+
+Both arms lost all four September 9 games under `teacher-gameplay`, with no
+crashes or non-results. This does not justify another fit against the same
+teacher. It also does not prove no trained model can win: this teacher excludes
+the collector's material term and uses raw scores instead of normalized labels,
+so score magnitudes as well as rankings differ from neural inference. The fixed
+map produces repeated trajectories; four RNG seeds are not four independent
+map layouts. The remaining question is whether outcome-based supervision and
+the runtime's restricted model authority can support the unchanged gates.
+No model was trained or selected in this diagnostic, and all three acceptance
+failures remain unresolved.
