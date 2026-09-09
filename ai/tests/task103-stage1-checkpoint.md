@@ -22,24 +22,36 @@ a pass. The TASK-103 September 9 guard-isolation capture establishes that the
 unchanged smoke passed diagnostically at TASK-048 parent 015279ee and failed at
 43c6f2d before inference. That old synthetic pass is not gameplay acceptance.
 
-A compatible trained checkpoint is still required. The inspected saved artifacts
-and /mnt/storage/diplomacy models contain no 7x5x82 checkpoint. The available
-9x9x82 economy checkpoint was rejected with the exact shape error. Other map
-callers and the cadence, worker, game-start and unfinished regression groups
-remain dependencies; this migration alone does not establish the all-AI gate.
+The trainer now supports the explicit `stage-1-native` map source. It uses the
+real stage-1 generator and existing legal post-action data collector, retains
+boards in runtime `[x, y, channel]` order, and creates a 7x5x82 model. Default town
+training still adapts to 9x9. Native training rejects incompatible initial models
+instead of resizing boards. No gameplay or inference policy changes are involved.
 
-The current `economy-training.js` CLI cannot generate this prerequisite from
-scratch: `ECONOMY_MODEL_WIDTH` and `ECONOMY_MODEL_HEIGHT` are both 9, `run()`
-uses those dimensions for a new model, and `createTrainingBatch()` adapts every
-board to those dimensions. Its supported map sources are town, final symmetrical
-economy, advanced 9x9 economy and advanced 20x20 economy; there is no stage-1
-source or board-dimension CLI option. `--initial-checkpoint` accepts an existing
-model shape but does not supply the missing checkpoint or its provenance.
-Running the default trainer again therefore does not address the missing 7x5
-prerequisite. A training integration must supply documented real training data,
-seed provenance and a frozen compatible checkpoint before this smoke can serve
-as positive integration evidence. Do not resize a saved checkpoint or relabel
-random initialization as trained to satisfy the loader.
+Run the bounded integration before any longer training:
+
+```sh
+node ai/tests/stage1-native-training.cjs artifacts/TASK-103/native-fit-new
+AI_STAGE1_SMOKE_CHECKPOINT="$PWD/artifacts/TASK-103/native-fit-new/checkpoint" npm run test-economy-stage-1-map-generation
+```
+
+The output directory must not exist. The integration freezes seed 103701, one
+batch and one epoch before collecting data. It writes the complete batch and
+plan, verifies native axes and default model dimensions, then records finite
+loss, changed weight hashes and exact save/reload equality. Untrained and zeroed
+output controls establish a numerical training effect. Targets come from the
+existing heuristic teacher, normalized within each legal-action decision; they
+are not terminal outcomes. The saved checkpoint uses direct model output without
+heuristic feature fusion. Initial weights are randomly initialized and their
+actual hash is recorded; identical retraining weights are not promised.
+
+The September 9 native integration collected 253 examples and the unchanged
+smoke passed with six inference calls over thirteen positions. Its four-turn
+cutoff produced a timeout/non-result, not a win. This is a positive checkpoint
+integration only. No validation-based checkpoint selection or learned-strength
+claim is made; the fixed training seed excludes 11842 and 11800–11819. Missing
+and 9x9 mismatch controls remain failures as required. Complete evidence is under
+`artifacts/TASK-103/native-integration/`.
 
 Resume the global regression only after the recorded independent prerequisites
 are resolved: TASK-118's checkpoint caller migration, TASK-104's cadence source

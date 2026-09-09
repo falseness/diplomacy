@@ -15,6 +15,8 @@ const { scoreFinalEconomyVector } =
 const CELL_VECTOR_SIZE = 82;
 const ECONOMY_MODEL_WIDTH = 9;
 const ECONOMY_MODEL_HEIGHT = 9;
+const STAGE1_MODEL_WIDTH = 7;
+const STAGE1_MODEL_HEIGHT = 5;
 const ECONOMY_CONV_FILTERS = 16;
 const ECONOMY_HIDDEN_UNITS = 64;
 const ACTION_CATEGORIES = [
@@ -25,6 +27,7 @@ const ACTION_CATEGORIES = [
 ];
 const MAP_SOURCES = [
   'town',
+  'stage-1-native',
   'final-symmetrical-economy',
   'advanced-9x9-economy',
   'advanced-20x20-economy'
@@ -110,9 +113,9 @@ function removePath(filePath) {
   }
 }
 
-function createModel(height, width) {
+function createModel(width, height) {
   const boardInput = tf.input({
-    shape: [height, width, CELL_VECTOR_SIZE],
+    shape: [width, height, CELL_VECTOR_SIZE],
     name: 'board'
   });
   const globalInput = tf.input({ shape: [1], name: 'global_variables' });
@@ -180,7 +183,8 @@ function advancedEconomy9x9StageForSeed(seed) {
 }
 
 function isSymmetricalComparisonMapSource(mapSource) {
-  return mapSource === 'final-symmetrical-economy' ||
+  return mapSource === 'stage-1-native' ||
+    mapSource === 'final-symmetrical-economy' ||
     mapSource === 'advanced-9x9-economy' ||
     mapSource === 'advanced-20x20-economy';
 }
@@ -329,7 +333,10 @@ function createTrainingBatch(
       }
     }
     let map
-    if (__trainingMapSource == 'final-symmetrical-economy') {
+    if (__trainingMapSource == 'stage-1-native') {
+      map = generateEconomyStage1TrainingMap({ seed: __trainingSeed })
+    }
+    else if (__trainingMapSource == 'final-symmetrical-economy') {
       map = generateSymmetricalEconomy9v9AllUnitMap({
         seed: __trainingSeed,
         suddenDeathRound: 160
@@ -472,7 +479,8 @@ function createTrainingBatch(
         whooseTurn = playerIndex
         let player = players[playerIndex]
         player.nextTurn()
-        if ((__trainingMapSource == 'final-symmetrical-economy' ||
+        if ((__trainingMapSource == 'stage-1-native' ||
+            __trainingMapSource == 'final-symmetrical-economy' ||
             __trainingMapSource == 'advanced-9x9-economy' ||
             __trainingMapSource == 'advanced-20x20-economy') &&
             player.constructor.name != 'AIPlayerWithEconomy') {
@@ -531,7 +539,9 @@ function createTrainingBatch(
       playerCount: players.length - 1,
       seed: __trainingSeed,
         generatedMapProvenance: {
-        generator: __trainingMapSource == 'final-symmetrical-economy' ?
+        generator: __trainingMapSource == 'stage-1-native' ?
+          'generateEconomyStage1TrainingMap' :
+          __trainingMapSource == 'final-symmetrical-economy' ?
           'generateSymmetricalEconomy9v9AllUnitMap' :
           (__trainingMapSource == 'advanced-9x9-economy' ?
             'generateAdvancedEconomyStage' + __advanced9x9Stage + 'TrainingMap' :
@@ -540,7 +550,8 @@ function createTrainingBatch(
               'generateTownTrainingMap')),
         generated: true,
         fixedGamestartMap: __trainingMapSource == 'final-symmetrical-economy',
-        size: __trainingMapSource == 'final-symmetrical-economy' ?
+        size: __trainingMapSource == 'stage-1-native' ? 'stage-1-native-7x5' :
+          __trainingMapSource == 'final-symmetrical-economy' ?
           'symmetrical-economy-9v9' :
           (__trainingMapSource == 'advanced-9x9-economy' ?
             'advanced-economy-9x9' :
@@ -640,8 +651,8 @@ function createTrainingBatch(
       seed: result.seed,
       provenance: result.generatedMapProvenance
     },
-    boards: result.examples.map(example =>
-      adaptBoard(example.board, ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT)),
+    boards: result.examples.map(example => mapSource === 'stage-1-native'
+      ? example.board : adaptBoard(example.board, ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT)),
     globals: result.examples.map(example => example.global),
     labels: result.labels,
     actionCounts: result.actionCounts,
@@ -761,7 +772,9 @@ function writeBenchmarkSnapshot(
   modelShape
 ) {
   const candidate = createCandidate(options, checkpointRoot, bestCheckpoint);
-  const mapGenerator = options.mapSource === 'final-symmetrical-economy'
+  const mapGenerator = options.mapSource === 'stage-1-native'
+    ? 'generateEconomyStage1TrainingMap'
+    : options.mapSource === 'final-symmetrical-economy'
     ? 'generateSymmetricalEconomy9v9AllUnitMap'
     : (options.mapSource === 'advanced-9x9-economy'
       ? 'generateAdvancedEconomyStage7To12TrainingMap'
@@ -820,7 +833,9 @@ async function run(options) {
       : path.join(options.initialCheckpoint, 'model.json'));
   const model = initialModelPath
     ? await tf.loadLayersModel(`file://${initialModelPath}`)
-    : createModel(ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT);
+    : createModel(
+      options.mapSource === 'stage-1-native' ? STAGE1_MODEL_WIDTH : ECONOMY_MODEL_WIDTH,
+      options.mapSource === 'stage-1-native' ? STAGE1_MODEL_HEIGHT : ECONOMY_MODEL_HEIGHT);
   if (initialModelPath) {
     model.compile({ optimizer: tf.train.adam(0.0001), loss: 'meanSquaredError' });
   }
@@ -852,8 +867,16 @@ async function run(options) {
           )
         );
       }
-      const modelBoards = batch.boards.map(board => adaptBoard(
-        board, modelShape.width, modelShape.height, modelShape.channels));
+      const modelBoards = batch.boards.map(board => {
+        if (options.mapSource === 'stage-1-native') {
+          if (modelShape.width !== STAGE1_MODEL_WIDTH || modelShape.height !== STAGE1_MODEL_HEIGHT ||
+              modelShape.channels !== CELL_VECTOR_SIZE) {
+            throw new Error('stage-1-native requires an unmodified 7x5x82 model');
+          }
+          return board;
+        }
+        return adaptBoard(board, modelShape.width, modelShape.height, modelShape.channels);
+      });
       const boardTensor = tf.tensor4d(
         modelBoards.flat(3),
         [
@@ -993,7 +1016,9 @@ module.exports = {
     CELL_VECTOR_SIZE,
     ECONOMY_MODEL_WIDTH,
     ECONOMY_MODEL_HEIGHT,
+  createModel,
   createTrainingBatch,
+  saveCheckpoint,
   getBrowserScriptCacheStats,
   parseArgs,
   resetBrowserScriptCache: resetTrainingRuntimeCache,
