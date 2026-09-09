@@ -102,6 +102,11 @@ function timePredict(label, fn, model, candidates, calls, repeats) {
 const calls = Number(process.argv[2] || 1000);
 const batchSize = Number(process.argv[3] || 48);
 const repeats = Number(process.argv[4] || 3);
+for (const [name, value] of Object.entries({ calls, batchSize, repeats })) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive safe integer`);
+  }
+}
 const candidates = makeCandidates(batchSize);
 const api = loadModelApi();
 const model = createModel();
@@ -121,6 +126,13 @@ try {
     reduction
   };
   console.log(JSON.stringify(report, null, 2));
+  // Compare durations directly to avoid subtraction rounding at exactly 10%.
+  const passed = Number.isFinite(reduction) && before.median > 0 &&
+    after.median <= before.median * 0.9;
+  console.log(`SPEED_GATE: ${passed ? 'PASS' : 'FAIL'} required >=10 percent`);
+  if (!passed) {
+    process.exitCode = 1;
+  }
 }
 finally {
   model.dispose();

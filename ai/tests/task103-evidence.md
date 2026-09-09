@@ -43,6 +43,11 @@ up current HEAD. Current production `ai/model.js` can be compared separately to
 the historical implementation; later training changes must not be credited to
 this task. Preserve all failed runs and do not select replacements based on speed.
 
+The predict microbenchmark validates positive integer workload sizes and exits
+nonzero when its measured reduction is below 10 percent or non-finite. Its
+`SPEED_GATE` line is the component gate only; the historical allocation baseline
+does not establish a speedup over the current commit's immediate parent.
+
 A successful capture process is insufficient for task readiness. Audit the
 1000-call/48-candidate micro-benchmark's median reduction, the canonical speed
 gate, every regression exit, all 15-step completion manifests, source hashes and
