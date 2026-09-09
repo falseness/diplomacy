@@ -273,6 +273,8 @@ function assertCadenceOneMatchesLegacy(storageDir) {
 }
 
 function main() {
+  execFileSync(process.execPath, [path.join(__dirname, 'test-task104-scheduling.js')],
+    { stdio: 'inherit', env: process.env });
   const evidenceRoot = process.env.AI_CADENCE_EVIDENCE_DIR;
   const storageDir = fs.mkdtempSync(path.join(evidenceRoot || '/mnt/storage/diplomacy', 'task104-cadence-'));
   console.log('Cadence training storage: ' + storageDir);

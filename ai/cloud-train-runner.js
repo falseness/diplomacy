@@ -2023,6 +2023,7 @@ async function main() {
       : null;
     validateCheckpointMetadata(checkpoint, state, manifest);
     gameMetricRecords = metricRecords(metricsPath);
+    assertMetricRecordsMatchFile(gameMetricRecords, metricsPath);
     const latestMetricGame = gameMetricRecords.length
       ? gameMetricRecords[gameMetricRecords.length - 1].game
       : 0;
