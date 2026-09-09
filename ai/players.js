@@ -1906,6 +1906,7 @@ class AIPlayerWithEconomy extends AIPlayer {
             this.aiHeuristicEconomyActions =
                 (this.aiHeuristicEconomyActions || 0) + 1
             ++purchases
+            --remainingActions
         }
         return remainingActions
     }
