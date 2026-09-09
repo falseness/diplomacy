@@ -134,22 +134,54 @@ assert(buildingTypes.size >= 2,
   'stage 1 did not produce both tower and bastion variants across fixed seeds',
   { buildingTypes: Array.from(buildingTypes) });
 
-const smokeMap = api.generateEconomyStage1TrainingMap({ seed: 11842, suddenDeathRound: 12 });
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: 11842,
-  roundLimit: 4,
-  actionLimit: 3,
-  commandLimit: 20
+async function runGameplaySmoke() {
+  // A caller-supplied checkpoint must match this unchanged map exactly. Never
+  // restore the old harness's synthetic predictor or resize the smoke map.
+  const checkpointPath = process.env.AI_STAGE1_SMOKE_CHECKPOINT;
+  let checkpoint;
+  let checkpointOptions = {};
+  if (checkpointPath) {
+    const { loadCheckpoint, createPredictor } = require('./benchmark-trained-model');
+    checkpoint = await loadCheckpoint(checkpointPath);
+    const predict = createPredictor(checkpoint.model, checkpoint.inference);
+    checkpointOptions = {
+      checkpointIdentifier: checkpointPath,
+      predictFunction: (_model, vectors) => predict(checkpoint.model, vectors)
+    };
+    console.log('STAGE1_CHECKPOINT: ' + JSON.stringify(checkpoint.report));
+  }
+  try {
+    const smokeMap = api.generateEconomyStage1TrainingMap({ seed: 11842, suddenDeathRound: 12 });
+    const smokeResult = runGame({
+      gameMap: smokeMap,
+      playerA: 'AIPlayerWithEconomy',
+      playerB: 'SimpleAiPlayerWithEconomy',
+      seed: 11842,
+      roundLimit: 4,
+      actionLimit: 3,
+      commandLimit: 20,
+      ...checkpointOptions
+    });
+
+    assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
+      'short smoke did not run AIPlayerWithEconomy', smokeResult);
+    assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+      'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
+    assert(smokeResult.turnCount > 0 && !smokeResult.players.some((player) => player.type === undefined),
+      'short smoke game did not run with runtime players', smokeResult);
+
+    if (checkpoint) {
+      assert(checkpoint.inference.calls > 0 && checkpoint.inference.positions > 0,
+        'stage 1 checkpoint did not score runtime candidates', checkpoint.inference);
+      console.log('STAGE1_INFERENCE: ' + JSON.stringify(checkpoint.inference));
+    }
+    console.log('Economy stage 1 map generation smoke passed');
+  } finally {
+    if (checkpoint) checkpoint.model.dispose();
+  }
+}
+
+runGameplaySmoke().catch((error) => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
 });
-
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
-  'short smoke did not run AIPlayerWithEconomy', smokeResult);
-assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
-assert(smokeResult.turnCount > 0 && !smokeResult.players.some((player) => player.type === undefined),
-  'short smoke game did not run with runtime players', smokeResult);
-
-console.log('Economy stage 1 map generation smoke passed');
