@@ -11,14 +11,14 @@ const { loadCheckpoint, createPredictor } = require('../benchmark-trained-model'
 const STAGE = Number(process.argv[3] || 1);
 const ADVANCED = process.argv[4] === 'advanced';
 const STAGE_SHAPES = ADVANCED
-  ? [[3, 3], ...Array.from({ length: 5 }, () => [5, 5]), ...Array.from({ length: 6 }, () => [9, 9])]
+  ? [[3, 3], ...Array.from({ length: 5 }, () => [5, 5]), ...Array.from({ length: 6 }, () => [9, 9]), [20, 20], [20, 20]]
   : [[7, 5], [9, 7], [11, 9], [11, 9], [11, 9], [11, 9], [9, 9], [9, 9]];
 assert(Number.isInteger(STAGE) && STAGE >= 1 && STAGE <= STAGE_SHAPES.length);
 const MAP_SOURCE = `${ADVANCED ? 'advanced-' : ''}stage-${STAGE}-native`;
 const TRAINING_SEED = (ADVANCED ? 103800 : 103700) + STAGE;
 const STRUCTURAL_BASE = ADVANCED ? 13800 + (STAGE - 1) * 100 : 11800 + (STAGE - 1) * 200;
 // A conservative superset of every structural seed used by each existing smoke.
-const STRUCTURAL_SEEDS = Array.from({ length: ADVANCED ? [24, 32, 120, 120, 120, 140, 160, 160, 160, 180, 240, 120][STAGE - 1] : 20 }, (_, index) => STRUCTURAL_BASE + index);
+const STRUCTURAL_SEEDS = Array.from({ length: ADVANCED ? [24, 32, 120, 120, 120, 140, 160, 160, 160, 180, 240, 120, 280, 280][STAGE - 1] : 20 }, (_, index) => STRUCTURAL_BASE + index);
 const GAMEPLAY_SEED = STRUCTURAL_BASE + 42;
 const BOARD_SHAPE = [...STAGE_SHAPES[STAGE - 1], 82]; // x, y, channel.
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -42,6 +42,8 @@ async function main() {
   const plan = {
     mapSource: MAP_SOURCE, trainingSeeds: [TRAINING_SEED], validationSeeds: [],
     structuralSeeds: STRUCTURAL_SEEDS,
+    reconstructionSeeds: ADVANCED && STAGE === 14
+      ? Array.from({ length: 100 }, (_, index) => 154000 + index) : [],
     gameplaySeeds: ADVANCED && STAGE >= 11 ? [] : [GAMEPLAY_SEED],
     gameplaySeedSelection: ADVANCED && STAGE >= 11
       ? 'existing smoke selects first structurally eligible seed from structuralSeeds before gameplay; actual seed logged in MAP_OUTCOME'

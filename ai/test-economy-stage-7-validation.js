@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -191,69 +191,77 @@ const api = new Function('context', `return {
   generateEconomyStage7TrainingMap: context.generateEconomyStage7TrainingMap
 };`)(context);
 
-assert(typeof api.generateEconomyStage7TrainingMap === 'function',
-  'generateEconomyStage7TrainingMap must be exported');
+async function main() {
+  assert(typeof api.generateEconomyStage7TrainingMap === 'function',
+    'generateEconomyStage7TrainingMap must be exported');
 
-const seeds = [
-  13100, 13101, 13102, 13103, 13104, 13105, 13106, 13107,
-  13108, 13109, 13110, 13111, 13112, 13113, 13114, 13115
-];
-const observedUnitTypes = new Set();
-const towerHpValues = new Set();
-const bastionHpValues = new Set();
-const offsets = new Set();
+  const seeds = [
+    13100, 13101, 13102, 13103, 13104, 13105, 13106, 13107,
+    13108, 13109, 13110, 13111, 13112, 13113, 13114, 13115
+  ];
+  const observedUnitTypes = new Set();
+  const towerHpValues = new Set();
+  const bastionHpValues = new Set();
+  const offsets = new Set();
 
-for (const seed of seeds) {
-  const map = api.generateEconomyStage7TrainingMap({ seed });
-  validateStage7Map(map, seed);
+  for (const seed of seeds) {
+    const map = api.generateEconomyStage7TrainingMap({ seed });
+    validateStage7Map(map, seed);
 
-  towerHpValues.add(map.economyGenerator.hpByType.tower);
-  bastionHpValues.add(map.economyGenerator.hpByType.bastion);
-  offsets.add(map.economyGenerator.unitTypeOffset);
-  for (const unit of map.players[1].units) {
-    observedUnitTypes.add(unitTypeName(unit));
+    towerHpValues.add(map.economyGenerator.hpByType.tower);
+    bastionHpValues.add(map.economyGenerator.hpByType.bastion);
+    offsets.add(map.economyGenerator.unitTypeOffset);
+    for (const unit of map.players[1].units) {
+      observedUnitTypes.add(unitTypeName(unit));
+    }
   }
+
+  for (const type of ['Noob', 'Archer', 'KOHb', 'Normchel', 'Catapult']) {
+    assert(observedUnitTypes.has(type),
+      'stage 7 validation seed set did not cover supported unit type ' + type,
+      { seeds, observedUnitTypes: Array.from(observedUnitTypes) });
+  }
+  assert(towerHpValues.size >= 2 && bastionHpValues.size >= 2,
+    'stage 7 validation should observe defensive HP variation across seeds',
+    {
+      seeds,
+      towerHpValues: Array.from(towerHpValues),
+      bastionHpValues: Array.from(bastionHpValues)
+    });
+  assert(offsets.size >= 2,
+    'stage 7 validation should observe deterministic unit slot variation across seeds',
+    { seeds, offsets: Array.from(offsets) });
+
+  const replaySeed = seeds[7];
+  const first = api.generateEconomyStage7TrainingMap({ seed: replaySeed });
+  const second = api.generateEconomyStage7TrainingMap({ seed: replaySeed });
+  assert(normalizedMap(first) === normalizedMap(second),
+    'stage 7 validation expected deterministic replay for seed ' + replaySeed);
+
+  const smokeMap = api.generateEconomyStage7TrainingMap({ seed: 13142, suddenDeathRound: 14 });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: 13142,
+    roundLimit: 4,
+    actionLimit: 3,
+    commandLimit: 24
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
+
+  assert(!smokeResult.crash, 'stage 7 validation benchmark initialization crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
+    'stage 7 validation benchmark did not run AIPlayerWithEconomy', smokeResult);
+  assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'stage 7 validation benchmark did not run SimpleAiPlayerWithEconomy', smokeResult);
+  assert(smokeResult.turnCount > 0,
+    'stage 7 validation benchmark did not advance a runtime game', smokeResult);
+
+  console.log('Economy stage 7 validation test passed for ' + seeds.length + ' deterministic seeds');
+
 }
 
-for (const type of ['Noob', 'Archer', 'KOHb', 'Normchel', 'Catapult']) {
-  assert(observedUnitTypes.has(type),
-    'stage 7 validation seed set did not cover supported unit type ' + type,
-    { seeds, observedUnitTypes: Array.from(observedUnitTypes) });
-}
-assert(towerHpValues.size >= 2 && bastionHpValues.size >= 2,
-  'stage 7 validation should observe defensive HP variation across seeds',
-  {
-    seeds,
-    towerHpValues: Array.from(towerHpValues),
-    bastionHpValues: Array.from(bastionHpValues)
-  });
-assert(offsets.size >= 2,
-  'stage 7 validation should observe deterministic unit slot variation across seeds',
-  { seeds, offsets: Array.from(offsets) });
-
-const replaySeed = seeds[7];
-const first = api.generateEconomyStage7TrainingMap({ seed: replaySeed });
-const second = api.generateEconomyStage7TrainingMap({ seed: replaySeed });
-assert(normalizedMap(first) === normalizedMap(second),
-  'stage 7 validation expected deterministic replay for seed ' + replaySeed);
-
-const smokeMap = api.generateEconomyStage7TrainingMap({ seed: 13142, suddenDeathRound: 14 });
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: 13142,
-  roundLimit: 4,
-  actionLimit: 3,
-  commandLimit: 24
+main().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
 });
-
-assert(!smokeResult.crash, 'stage 7 validation benchmark initialization crashed', smokeResult);
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
-  'stage 7 validation benchmark did not run AIPlayerWithEconomy', smokeResult);
-assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'stage 7 validation benchmark did not run SimpleAiPlayerWithEconomy', smokeResult);
-assert(smokeResult.turnCount > 0,
-  'stage 7 validation benchmark did not advance a runtime game', smokeResult);
-
-console.log('Economy stage 7 validation test passed for ' + seeds.length + ' deterministic seeds');

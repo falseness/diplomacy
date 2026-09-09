@@ -175,6 +175,7 @@ async function runGameplaySmoke() {
         'stage 1 checkpoint did not score runtime candidates', checkpoint.inference);
       console.log('STAGE1_INFERENCE: ' + JSON.stringify(checkpoint.inference));
     }
+    console.log('MAP_OUTCOME: ' + JSON.stringify(smokeResult));
     console.log('Economy stage 1 map generation smoke passed');
   } finally {
     if (checkpoint) checkpoint.model.dispose();

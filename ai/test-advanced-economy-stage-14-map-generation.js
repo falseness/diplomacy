@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -245,117 +245,125 @@ const api = new Function('context', `return {
   generateAdvancedEconomyStage14TrainingMap: context.generateAdvancedEconomyStage14TrainingMap
 };`)(context);
 
-assert(typeof api.generateAdvancedEconomyStage14TrainingMap === 'function',
-  'generateAdvancedEconomyStage14TrainingMap must be exported to the AI script context');
+async function main() {
+  assert(typeof api.generateAdvancedEconomyStage14TrainingMap === 'function',
+    'generateAdvancedEconomyStage14TrainingMap must be exported to the AI script context');
 
-const observed = {
-  townCounts: new Set(),
-  unitTypes: new Set(),
-  hpValues: new Set(),
-  goldValues: new Set(),
-  farms: false,
-  barracks: false,
-  towers: false,
-  bastions: false,
-  capturedSuburbs: false
-};
-const layouts = new Set();
-let smokeSeed = null;
+  const observed = {
+    townCounts: new Set(),
+    unitTypes: new Set(),
+    hpValues: new Set(),
+    goldValues: new Set(),
+    farms: false,
+    barracks: false,
+    towers: false,
+    bastions: false,
+    capturedSuburbs: false
+  };
+  const layouts = new Set();
+  let smokeSeed = null;
 
-for (let seed = 15100; seed < 15380; seed += 1) {
-  const map = api.generateAdvancedEconomyStage14TrainingMap({ seed });
-  assertMirroredSetup(map, seed, observed);
-  const repeated = api.generateAdvancedEconomyStage14TrainingMap({ seed });
-  assert(normalizeMap(map) === normalizeMap(repeated),
-    'advanced stage 14 map generation is not deterministic for seed ' + seed);
-  layouts.add(normalizeMap(map));
-  if (map.economyObjects.capturedSuburbs > 0) {
-    observed.capturedSuburbs = true;
+  for (let seed = 15100; seed < 15380; seed += 1) {
+    const map = api.generateAdvancedEconomyStage14TrainingMap({ seed });
+    assertMirroredSetup(map, seed, observed);
+    const repeated = api.generateAdvancedEconomyStage14TrainingMap({ seed });
+    assert(normalizeMap(map) === normalizeMap(repeated),
+      'advanced stage 14 map generation is not deterministic for seed ' + seed);
+    layouts.add(normalizeMap(map));
+    if (map.economyObjects.capturedSuburbs > 0) {
+      observed.capturedSuburbs = true;
+    }
+
+    const runtime = map.start();
+    assert(runtime.players[1].gold === runtime.players[2].gold,
+      'advanced stage 14 runtime resources are not mirrored after start', { seed });
+    assert(runtime.players[1].towns.length === map.players[1].towns.length &&
+        runtime.players[2].towns.length === map.players[2].towns.length,
+      'advanced stage 14 runtime lost configured towns', { seed });
+    assert(runtime.players[1].units.length >= map.players[1].units.length &&
+        runtime.players[2].units.length >= map.players[2].units.length,
+      'advanced stage 14 runtime lost configured units', { seed });
+
+    if (smokeSeed === null && map.players[1].towns.length === 1) {
+      smokeSeed = seed;
+    }
   }
 
-  const runtime = map.start();
-  assert(runtime.players[1].gold === runtime.players[2].gold,
-    'advanced stage 14 runtime resources are not mirrored after start', { seed });
-  assert(runtime.players[1].towns.length === map.players[1].towns.length &&
-      runtime.players[2].towns.length === map.players[2].towns.length,
-    'advanced stage 14 runtime lost configured towns', { seed });
-  assert(runtime.players[1].units.length >= map.players[1].units.length &&
-      runtime.players[2].units.length >= map.players[2].units.length,
-    'advanced stage 14 runtime lost configured units', { seed });
-
-  if (smokeSeed === null && map.players[1].towns.length === 1) {
-    smokeSeed = seed;
+  for (let seed = 154000; seed < 154100; seed += 1) {
+    const map = api.generateAdvancedEconomyStage14TrainingMap({
+      seed,
+      suddenDeathRound: 160
+    });
+    assertMirroredSetup(map, seed, observed);
+    const runtimeSmoke = await runCheckpointSmoke({
+      gameMap: map,
+      playerA: 'AIPlayerWithEconomy',
+      playerB: 'SimpleAiPlayerWithEconomy',
+      seed,
+      roundLimit: 1,
+      actionLimit: 1,
+      commandLimit: 1
+    }, process.env.AI_MAP_SMOKE_CHECKPOINT);
+    assert(!runtimeSmoke.crash,
+      'canonical TASK-154 stage 14 map failed benchmark runtime reconstruction',
+      { seed, runtimeSmoke });
   }
-}
 
-for (let seed = 154000; seed < 154100; seed += 1) {
-  const map = api.generateAdvancedEconomyStage14TrainingMap({
-    seed,
-    suddenDeathRound: 160
+  for (const count of [0, 1, 2, 3]) {
+    assert(observed.townCounts.has(count),
+      'advanced stage 14 fixed-seed sample did not generate town count ' + count,
+      { observedTownCounts: Array.from(observed.townCounts) });
+  }
+  for (const typeName of Object.keys(unitMaxHp)) {
+    assert(observed.unitTypes.has(typeName),
+      'advanced stage 14 fixed-seed sample did not generate unit type ' + typeName,
+      { observedUnitTypes: Array.from(observed.unitTypes) });
+  }
+  for (const field of ['farms', 'barracks', 'towers', 'bastions']) {
+    assert(observed[field],
+      'advanced stage 14 fixed-seed sample did not generate ' + field);
+  }
+  assert(observed.capturedSuburbs,
+    'advanced stage 14 fixed-seed sample did not generate captured suburbs');
+  assert(observed.unitTypes.size >= 3,
+    'advanced stage 14 fixed-seed sample did not vary generated unit types',
+    { observedUnitTypes: Array.from(observed.unitTypes) });
+  assert(observed.hpValues.size > 8,
+    'advanced stage 14 fixed-seed sample did not vary configured HP values',
+    { hpValues: Array.from(observed.hpValues) });
+  assert(observed.goldValues.size > 1 && layouts.size > 4,
+    'advanced stage 14 fixed seeds did not vary fair resources or layouts',
+    { goldValues: Array.from(observed.goldValues), layoutCount: layouts.size });
+  assert(smokeSeed !== null,
+    'advanced stage 14 fixed-seed sample did not find a one-town-per-player benchmark smoke seed');
+
+  const smokeMap = api.generateAdvancedEconomyStage14TrainingMap({
+    seed: smokeSeed,
+    suddenDeathRound: 20
   });
-  assertMirroredSetup(map, seed, observed);
-  const runtimeSmoke = runGame({
-    gameMap: map,
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
     playerA: 'AIPlayerWithEconomy',
     playerB: 'SimpleAiPlayerWithEconomy',
-    seed,
-    roundLimit: 1,
-    actionLimit: 1,
-    commandLimit: 1
-  });
-  assert(!runtimeSmoke.crash,
-    'canonical TASK-154 stage 14 map failed benchmark runtime reconstruction',
-    { seed, runtimeSmoke });
+    seed: smokeSeed,
+    roundLimit: 5,
+    actionLimit: 4,
+    commandLimit: 32
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
+
+  assert(!smokeResult.crash,
+    'short advanced stage 14 economy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy' &&
+      smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'short advanced stage 14 smoke did not run the required economy AI classes', smokeResult);
+  assert(smokeResult.turnCount > 0,
+    'short advanced stage 14 smoke game did not advance', smokeResult);
+
+  console.log('Advanced economy stage 14 symmetric 20x20 random map generation smoke passed');
+
 }
 
-for (const count of [0, 1, 2, 3]) {
-  assert(observed.townCounts.has(count),
-    'advanced stage 14 fixed-seed sample did not generate town count ' + count,
-    { observedTownCounts: Array.from(observed.townCounts) });
-}
-for (const typeName of Object.keys(unitMaxHp)) {
-  assert(observed.unitTypes.has(typeName),
-    'advanced stage 14 fixed-seed sample did not generate unit type ' + typeName,
-    { observedUnitTypes: Array.from(observed.unitTypes) });
-}
-for (const field of ['farms', 'barracks', 'towers', 'bastions']) {
-  assert(observed[field],
-    'advanced stage 14 fixed-seed sample did not generate ' + field);
-}
-assert(observed.capturedSuburbs,
-  'advanced stage 14 fixed-seed sample did not generate captured suburbs');
-assert(observed.unitTypes.size >= 3,
-  'advanced stage 14 fixed-seed sample did not vary generated unit types',
-  { observedUnitTypes: Array.from(observed.unitTypes) });
-assert(observed.hpValues.size > 8,
-  'advanced stage 14 fixed-seed sample did not vary configured HP values',
-  { hpValues: Array.from(observed.hpValues) });
-assert(observed.goldValues.size > 1 && layouts.size > 4,
-  'advanced stage 14 fixed seeds did not vary fair resources or layouts',
-  { goldValues: Array.from(observed.goldValues), layoutCount: layouts.size });
-assert(smokeSeed !== null,
-  'advanced stage 14 fixed-seed sample did not find a one-town-per-player benchmark smoke seed');
-
-const smokeMap = api.generateAdvancedEconomyStage14TrainingMap({
-  seed: smokeSeed,
-  suddenDeathRound: 20
+main().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
 });
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: smokeSeed,
-  roundLimit: 5,
-  actionLimit: 4,
-  commandLimit: 32
-});
-
-assert(!smokeResult.crash,
-  'short advanced stage 14 economy smoke crashed', smokeResult);
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy' &&
-    smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short advanced stage 14 smoke did not run the required economy AI classes', smokeResult);
-assert(smokeResult.turnCount > 0,
-  'short advanced stage 14 smoke game did not advance', smokeResult);
-
-console.log('Advanced economy stage 14 symmetric 20x20 random map generation smoke passed');

@@ -17,7 +17,15 @@ import subprocess
 import time
 
 REPO = Path(__file__).resolve().parents[2]
-REGRESSION_TIMEOUT = 300
+REGRESSION_TIMEOUT = 600
+# Process budgets only: observed worker 331s and cadence 1085s, with >50% margin.
+REGRESSION_BUDGETS = {
+    'test-task106-self-play-workers': 600,
+    'test-task104-training-cadence': 1800,
+    'test-combat-full-training-verification': 3600,
+    'test-combat-old-vs-new': 3600,
+}
+SMOKE_KEYS = ('AI_STAGE1_SMOKE_CHECKPOINT', 'AI_MAP_SMOKE_CHECKPOINT')
 CANONICAL_TIMEOUT = 3600
 
 
@@ -33,11 +41,19 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
-def execute(dest, label, command, cwd, timeout, env=None):
+def execute(dest, label, command, cwd, timeout, env=None, entry=None):
     logpath = dest / (label + '.log')
     with logpath.open('w', buffering=1) as log:
         log.write('COMMAND: ' + shlex.join(command) + '\nCWD: ' + str(cwd) + '\n')
         log.write('START_UTC: ' + time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()) + '\n')
+        log.write('OUTER_TIMEOUT_SECONDS: ' + str(timeout) + '\n')
+        if env is not None:
+            log.write('CHILD_ENVIRONMENT: ' + json.dumps({
+                key: env.get(key) for key in ('PATH', 'NODE_PATH', 'NODE_OPTIONS') + SMOKE_KEYS
+            }, sort_keys=True) + '\n')
+        if entry is not None:
+            log.write('DISPATCH_ENTRY: ' + json.dumps(entry, sort_keys=True) + '\n')
+        log.flush()
         start = time.monotonic()
         process = subprocess.Popen(command, cwd=cwd, stdout=log,
                                    stderr=subprocess.STDOUT, start_new_session=True, env=env)
@@ -60,13 +76,44 @@ def execute(dest, label, command, cwd, timeout, env=None):
     return record
 
 
+def regression_entry(name, manifest):
+    entry = manifest['commands'][name]
+    assert entry['script'] == json.loads((REPO / 'package.json').read_text())['scripts'][name]
+    assert entry['timeout_seconds'] >= REGRESSION_BUDGETS.get(name, REGRESSION_TIMEOUT)
+    assert set(entry['environment']).issubset(SMOKE_KEYS)
+    assert len(entry['environment']) <= 1, 'one native checkpoint per child'
+    for filename, digest in entry['hashes'].items():
+        assert sha(REPO / filename) == digest, 'changed prerequisite: ' + filename
+    if entry['environment']:
+        checkpoint = REPO / next(iter(entry['environment'].values()))
+        for filename in ('model.json', 'weights.bin', 'metadata.json'):
+            assert str((checkpoint / filename).relative_to(REPO)) in entry['hashes']
+        metadata = json.loads((checkpoint / 'metadata.json').read_text())
+        assert metadata['inputShapes'] == entry['input_shapes']
+        assert metadata['afterHash'] == sha(checkpoint / 'weights.bin')
+        assert metadata['trainingSeeds'] == entry['training_seeds']
+        assert not set(entry['training_seeds']) & set(entry['evaluation_seeds'])
+        assert metadata['beforeHash'] != metadata['afterHash'], 'checkpoint must be trained'
+    env = dict(os.environ)
+    for key in SMOKE_KEYS:
+        env.pop(key, None)
+    env.update({key: str((REPO / value).resolve()) for key, value in entry['environment'].items()})
+    return entry, env
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--artifacts', required=True, type=Path)
     parser.add_argument('--mode', required=True, choices=['regression', 'canonical'])
     parser.add_argument('--after', default='HEAD', help='Committed revision to measure (default: HEAD)')
     parser.add_argument('--before', help='Immediate parent of --after (default: resolved --after^)')
+    parser.add_argument('--manifest', type=Path, help='Frozen per-command regression inputs')
+    parser.add_argument('--commands', nargs='+', help='Explicit subset; never an aggregate pass')
     args = parser.parse_args()
+    if args.mode == 'regression' and not args.manifest:
+        parser.error('regression requires --manifest; inherited smoke checkpoints are unsafe')
+    if args.mode != 'regression' and (args.manifest or args.commands):
+        parser.error('--manifest and --commands are regression-only')
     after = git('rev-parse', '--verify', args.after + '^{commit}').decode().strip()
     parent = git('rev-parse', '--verify', after + '^').decode().strip()
     before = git('rev-parse', '--verify', (args.before or parent) + '^{commit}').decode().strip()
@@ -74,7 +121,7 @@ def main():
         parser.error('--before must be the immediate parent of --after')
     dest = args.artifacts.resolve()
     dest.mkdir(parents=True, exist_ok=False)
-    source_names = git('ls-files', '-z').decode().split('\0')
+    source_names = git('ls-files', '--cached', '--others', '--exclude-standard', '-z').decode().split('\0')
     source_hashes = {name: sha(REPO / name) for name in source_names if name}
     save(dest / 'host-source-sha256.json', source_hashes)
     (dest / 'host.diff').write_bytes(git('diff'))
@@ -93,12 +140,22 @@ def main():
     if args.mode == 'regression':
         scripts = json.loads((REPO / 'package.json').read_text())['scripts']
         names = ['init-model', 'train'] + [name for name in scripts if name.startswith('test-')]
-        save(dest / 'planned-suites.json', {name: scripts[name] for name in names})
-        for name in names:
-            runs.append(execute(dest, name, ['npm', 'run', name], REPO, REGRESSION_TIMEOUT))
+        manifest = json.loads(args.manifest.read_text())
+        assert set(manifest['commands']) == set(names), 'manifest must cover every registered suite'
+        save(dest / 'manifest.json', manifest)
+        selected = args.commands or names
+        assert len(set(selected)) == len(selected) and set(selected).issubset(names)
+        save(dest / 'planned-suites.json', {name: scripts[name] for name in selected})
+        for name in selected:
+            entry, env = regression_entry(name, manifest)
+            runs.append(execute(dest, name, ['npm', 'run', name], REPO,
+                                entry['timeout_seconds'], env, entry))
             save(dest / 'runs.json', runs)
-        runs.append(execute(dest, 'predict-speed', ['npm', 'run', 'benchmark-model-predict-batching',
-                                                  '--', '1000', '48', '3'], REPO, REGRESSION_TIMEOUT))
+            # A command may write model output, but must not mutate its frozen inputs.
+            regression_entry(name, manifest)
+        save(dest / 'scope.json', dict(aggregate=args.commands is None,
+             required=len(names), attempted=len(selected),
+             interpretation='complete suite' if args.commands is None else 'subset only'))
     else:
         (dest / 'revision.diff').write_bytes(git('diff', before, after))
         observer = dest / 'observe-games.cjs'

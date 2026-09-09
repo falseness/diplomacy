@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -225,53 +225,61 @@ const api = new Function('context', `return {
   generateSymmetricalEconomy9v9AllUnitMap: context.generateSymmetricalEconomy9v9AllUnitMap
 };`)(context);
 
-assert(typeof api.generateSymmetricalEconomy9v9AllUnitMap === 'function',
-  'generateSymmetricalEconomy9v9AllUnitMap must be exported');
+async function main() {
+  assert(typeof api.generateSymmetricalEconomy9v9AllUnitMap === 'function',
+    'generateSymmetricalEconomy9v9AllUnitMap must be exported');
 
-const seeds = [13400, 13401, 13402, 13403, 13404, 13405, 13406, 13407];
-const observedLayouts = new Set();
+  const seeds = [13400, 13401, 13402, 13403, 13404, 13405, 13406, 13407];
+  const observedLayouts = new Set();
 
-for (const seed of seeds) {
-  const map = api.generateSymmetricalEconomy9v9AllUnitMap({ seed });
-  assertMirroredEconomy(map, seed);
-  assertNoOverlap(map, seed);
-  observedLayouts.add(normalizeMap(map));
+  for (const seed of seeds) {
+    const map = api.generateSymmetricalEconomy9v9AllUnitMap({ seed });
+    assertMirroredEconomy(map, seed);
+    assertNoOverlap(map, seed);
+    observedLayouts.add(normalizeMap(map));
 
-  const repeated = api.generateSymmetricalEconomy9v9AllUnitMap({ seed });
-  assert(normalizeMap(map) === normalizeMap(repeated),
-    'same seed did not reproduce the same symmetrical economy map', { seed });
+    const repeated = api.generateSymmetricalEconomy9v9AllUnitMap({ seed });
+    assert(normalizeMap(map) === normalizeMap(repeated),
+      'same seed did not reproduce the same symmetrical economy map', { seed });
 
-  const runtime = map.start();
-  assert(runtime.players[1].gold === runtime.players[2].gold,
-    'runtime resources are not mirrored after start', { seed });
-  const runtimePlayerOneUnits = runtime.players[1].units.filter((unit) => unit && unit.name);
-  const runtimePlayerTwoUnits = runtime.players[2].units.filter((unit) => unit && unit.name);
-  assert(runtimePlayerOneUnits.length === 5 && runtimePlayerTwoUnits.length === 5,
-    'runtime did not create all configured units', { seed });
-  assert(runtime.players[1].towers.length === 1 && runtime.players[2].towers.length === 1 &&
-      runtime.players[1].bastions.length === 1 && runtime.players[2].bastions.length === 1,
-    'runtime did not create configured defensive buildings', { seed });
+    const runtime = map.start();
+    assert(runtime.players[1].gold === runtime.players[2].gold,
+      'runtime resources are not mirrored after start', { seed });
+    const runtimePlayerOneUnits = runtime.players[1].units.filter((unit) => unit && unit.name);
+    const runtimePlayerTwoUnits = runtime.players[2].units.filter((unit) => unit && unit.name);
+    assert(runtimePlayerOneUnits.length === 5 && runtimePlayerTwoUnits.length === 5,
+      'runtime did not create all configured units', { seed });
+    assert(runtime.players[1].towers.length === 1 && runtime.players[2].towers.length === 1 &&
+        runtime.players[1].bastions.length === 1 && runtime.players[2].bastions.length === 1,
+      'runtime did not create configured defensive buildings', { seed });
+  }
+
+  assert(observedLayouts.size >= 2,
+    'deterministic seeds should still produce varied HP or unit ordering', { observedLayouts: Array.from(observedLayouts) });
+
+  const smokeMap = api.generateSymmetricalEconomy9v9AllUnitMap({ seed: 13442, suddenDeathRound: 20 });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: 13442,
+    roundLimit: 5,
+    actionLimit: 4,
+    commandLimit: 32
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
+
+  assert(!smokeResult.crash, 'short symmetrical economy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy' &&
+      smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'short smoke did not run the required economy AI classes', smokeResult);
+  assert(smokeResult.turnCount > 0,
+    'short smoke game did not advance', smokeResult);
+
+  console.log('TASK-134 symmetrical economy 9v9 map generation smoke passed');
+
 }
 
-assert(observedLayouts.size >= 2,
-  'deterministic seeds should still produce varied HP or unit ordering', { observedLayouts: Array.from(observedLayouts) });
-
-const smokeMap = api.generateSymmetricalEconomy9v9AllUnitMap({ seed: 13442, suddenDeathRound: 20 });
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: 13442,
-  roundLimit: 5,
-  actionLimit: 4,
-  commandLimit: 32
+main().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
 });
-
-assert(!smokeResult.crash, 'short symmetrical economy smoke crashed', smokeResult);
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy' &&
-    smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'short smoke did not run the required economy AI classes', smokeResult);
-assert(smokeResult.turnCount > 0,
-  'short smoke game did not advance', smokeResult);
-
-console.log('TASK-134 symmetrical economy 9v9 map generation smoke passed');

@@ -24,7 +24,7 @@ const ACTION_CATEGORIES = [
   'building-placement'
 ];
 const NATIVE_STAGE_COUNT = 8;
-const NATIVE_ADVANCED_STAGE_COUNT = 12;
+const NATIVE_ADVANCED_STAGE_COUNT = 14;
 const NATIVE_MAP_GENERATORS = Object.fromEntries(
   [...Array.from({ length: NATIVE_STAGE_COUNT }, (_, index) => [
     `stage-${index + 1}-native`, `generateEconomyStage${index + 1}TrainingMap`

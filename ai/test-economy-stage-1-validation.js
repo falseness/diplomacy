@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -103,53 +103,61 @@ const api = new Function('context', `return {
   generateEconomyStage1TrainingMap: context.generateEconomyStage1TrainingMap
 };`)(context);
 
-assert(typeof api.generateEconomyStage1TrainingMap === 'function',
-  'generateEconomyStage1TrainingMap must be exported');
+async function main() {
+  assert(typeof api.generateEconomyStage1TrainingMap === 'function',
+    'generateEconomyStage1TrainingMap must be exported');
 
-const seeds = [11900, 11901, 11902, 11903, 11904, 11905, 11906, 11907];
-const hpValues = new Set();
-const buildingTypes = new Set();
+  const seeds = [11900, 11901, 11902, 11903, 11904, 11905, 11906, 11907];
+  const hpValues = new Set();
+  const buildingTypes = new Set();
 
-for (const seed of seeds) {
-  const map = api.generateEconomyStage1TrainingMap({ seed });
-  validateStage1Map(map, seed);
-  hpValues.add(map.economyGenerator.hp);
-  buildingTypes.add(map.economyGenerator.buildingType);
+  for (const seed of seeds) {
+    const map = api.generateEconomyStage1TrainingMap({ seed });
+    validateStage1Map(map, seed);
+    hpValues.add(map.economyGenerator.hp);
+    buildingTypes.add(map.economyGenerator.buildingType);
+  }
+
+  assert(hpValues.size >= 2,
+    'stage 1 validation should observe randomized HP across fixed seeds',
+    { seeds, hpValues: Array.from(hpValues) });
+  assert(buildingTypes.has('tower') && buildingTypes.has('bastion'),
+    'stage 1 validation should observe both tower and bastion setups',
+    { seeds, buildingTypes: Array.from(buildingTypes) });
+
+  const replaySeed = seeds[3];
+  const first = api.generateEconomyStage1TrainingMap({ seed: replaySeed });
+  const second = api.generateEconomyStage1TrainingMap({ seed: replaySeed });
+  assert(normalizedMap(first) === normalizedMap(second),
+    'stage 1 validation expected deterministic replay for seed ' + replaySeed);
+
+  const harnessMap = api.generateEconomyStage1TrainingMap({
+    seed: replaySeed,
+    suddenDeathRound: 12
+  });
+  const result = await runCheckpointSmoke({
+    gameMap: harnessMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: replaySeed,
+    roundLimit: 4,
+    actionLimit: 3,
+    commandLimit: 20
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
+
+  assert(!result.crash, 'benchmark harness initialization crashed', result);
+  assert(result.runtimePlayerA === 'AIPlayerWithEconomy',
+    'benchmark harness did not instantiate AIPlayerWithEconomy', result);
+  assert(result.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'benchmark harness did not instantiate SimpleAiPlayerWithEconomy', result);
+  assert(result.turnCount > 0,
+    'benchmark harness did not advance the stage 1 validation game', result);
+
+  console.log('Economy stage 1 validation test passed');
+
 }
 
-assert(hpValues.size >= 2,
-  'stage 1 validation should observe randomized HP across fixed seeds',
-  { seeds, hpValues: Array.from(hpValues) });
-assert(buildingTypes.has('tower') && buildingTypes.has('bastion'),
-  'stage 1 validation should observe both tower and bastion setups',
-  { seeds, buildingTypes: Array.from(buildingTypes) });
-
-const replaySeed = seeds[3];
-const first = api.generateEconomyStage1TrainingMap({ seed: replaySeed });
-const second = api.generateEconomyStage1TrainingMap({ seed: replaySeed });
-assert(normalizedMap(first) === normalizedMap(second),
-  'stage 1 validation expected deterministic replay for seed ' + replaySeed);
-
-const harnessMap = api.generateEconomyStage1TrainingMap({
-  seed: replaySeed,
-  suddenDeathRound: 12
+main().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
 });
-const result = runGame({
-  gameMap: harnessMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: replaySeed,
-  roundLimit: 4,
-  actionLimit: 3,
-  commandLimit: 20
-});
-
-assert(!result.crash, 'benchmark harness initialization crashed', result);
-assert(result.runtimePlayerA === 'AIPlayerWithEconomy',
-  'benchmark harness did not instantiate AIPlayerWithEconomy', result);
-assert(result.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'benchmark harness did not instantiate SimpleAiPlayerWithEconomy', result);
-assert(result.turnCount > 0,
-  'benchmark harness did not advance the stage 1 validation game', result);
-
-console.log('Economy stage 1 validation test passed');

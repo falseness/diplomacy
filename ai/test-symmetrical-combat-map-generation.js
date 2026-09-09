@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -227,62 +227,70 @@ const api = new Function('context', `return {
   generateSymmetricalCombatStageGMap: context.generateSymmetricalCombatStageGMap
 };`)(context);
 
-assert(api.generateSymmetricalCombatStageGMap,
-  'generateSymmetricalCombatStageGMap is not exported to the AI script context');
+async function main() {
+  assert(api.generateSymmetricalCombatStageGMap,
+    'generateSymmetricalCombatStageGMap is not exported to the AI script context');
 
-const seeds = [108001, 108002, 108003, 108004];
-for (const seed of seeds) {
-  const map = api.generateSymmetricalCombatStageGMap({ seed });
-  assert(map.mapSize.x === 11 && map.mapSize.y === 9,
-    'default symmetrical combat map should use stable 11x9 bounds');
-  assert(map.players.length === 3, 'map should include neutral plus two combat players');
-  assert(map.symmetry && map.symmetry.axis === 'vertical',
-    'map should record vertical mirror metadata');
-  assertCombatOnly(map);
-  assertMirroredPlayerSetup(map, seed);
-  for (const property of ['lakes', 'mountains', 'bushes', 'hills']) {
-    assertMirroredTerrain(map, property);
+  const seeds = [108001, 108002, 108003, 108004];
+  for (const seed of seeds) {
+    const map = api.generateSymmetricalCombatStageGMap({ seed });
+    assert(map.mapSize.x === 11 && map.mapSize.y === 9,
+      'default symmetrical combat map should use stable 11x9 bounds');
+    assert(map.players.length === 3, 'map should include neutral plus two combat players');
+    assert(map.symmetry && map.symmetry.axis === 'vertical',
+      'map should record vertical mirror metadata');
+    assertCombatOnly(map);
+    assertMirroredPlayerSetup(map, seed);
+    for (const property of ['lakes', 'mountains', 'bushes', 'hills']) {
+      assertMirroredTerrain(map, property);
+    }
+    const runtime = map.start();
+    assert(runtime.players.length === 3,
+      'headless start should preserve players for seed ' + seed);
+    assertMirroredRuntimeResources(runtime, seed);
+
+    const repeated = api.generateSymmetricalCombatStageGMap({ seed });
+    assert(normalizeMap(map) === normalizeMap(repeated),
+      'same seed did not reproduce the same symmetrical combat map for seed ' + seed);
   }
-  const runtime = map.start();
-  assert(runtime.players.length === 3,
-    'headless start should preserve players for seed ' + seed);
-  assertMirroredRuntimeResources(runtime, seed);
 
-  const repeated = api.generateSymmetricalCombatStageGMap({ seed });
-  assert(normalizeMap(map) === normalizeMap(repeated),
-    'same seed did not reproduce the same symmetrical combat map for seed ' + seed);
+  expectMirrorFailure('unit HP advantage', (map) => {
+    map.players[2].units[0].hp += 1;
+  });
+  expectMirrorFailure('terrain advantage', (map) => {
+    map.mountains.push({ x: 4, y: 4 });
+  });
+  expectMirrorFailure('resource advantage', (map) => {
+    map.players[1].gold = 90;
+    map.players[2].gold = 95;
+  });
+  expectMirrorFailure('ownership advantage', (map) => {
+    map.players[2].suburbs[0].cells.pop();
+  });
+
+  const smokeMap = api.generateSymmetricalCombatStageGMap({ seed: seeds[0] });
+  const smokeGame = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayer',
+    playerB: 'SimpleAiPlayer',
+    seed: seeds[0],
+    roundLimit: 4,
+    actionLimit: 30,
+    commandLimit: 60
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
+  assert(smokeGame.runtimePlayerA === 'AIPlayer',
+    'benchmark harness did not instantiate AIPlayer');
+  assert(smokeGame.runtimePlayerB === 'SimpleAiPlayer',
+    'benchmark harness did not instantiate SimpleAiPlayer');
+  assert(!smokeGame.crash, 'benchmark harness smoke crashed');
+  assert(smokeGame.inference.calls > 0,
+    'AIPlayer benchmark smoke did not exercise inference');
+
+  console.log('TASK-109 symmetrical combat fairness smoke passed across ' + seeds.length + ' seeds');
+
 }
 
-expectMirrorFailure('unit HP advantage', (map) => {
-  map.players[2].units[0].hp += 1;
+main().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
 });
-expectMirrorFailure('terrain advantage', (map) => {
-  map.mountains.push({ x: 4, y: 4 });
-});
-expectMirrorFailure('resource advantage', (map) => {
-  map.players[1].gold = 90;
-  map.players[2].gold = 95;
-});
-expectMirrorFailure('ownership advantage', (map) => {
-  map.players[2].suburbs[0].cells.pop();
-});
-
-const smokeMap = api.generateSymmetricalCombatStageGMap({ seed: seeds[0] });
-const smokeGame = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayer',
-  playerB: 'SimpleAiPlayer',
-  seed: seeds[0],
-  roundLimit: 4,
-  actionLimit: 30,
-  commandLimit: 60
-});
-assert(smokeGame.runtimePlayerA === 'AIPlayer',
-  'benchmark harness did not instantiate AIPlayer');
-assert(smokeGame.runtimePlayerB === 'SimpleAiPlayer',
-  'benchmark harness did not instantiate SimpleAiPlayer');
-assert(!smokeGame.crash, 'benchmark harness smoke crashed');
-assert(smokeGame.inference.calls > 0,
-  'AIPlayer benchmark smoke did not exercise inference');
-
-console.log('TASK-109 symmetrical combat fairness smoke passed across ' + seeds.length + ' seeds');
