@@ -7,10 +7,17 @@ const tf = require('@tensorflow/tfjs-node');
 const { createTrainingBatch, createModel, saveCheckpoint, parseArgs } = require('../economy-training');
 const { loadCheckpoint, createPredictor } = require('../benchmark-trained-model');
 
-const TRAINING_SEED = 103701;
-const STRUCTURAL_SEEDS = Array.from({ length: 20 }, (_, index) => 11800 + index);
-const GAMEPLAY_SEED = 11842;
-const BOARD_SHAPE = [7, 5, 82]; // Runtime board axes: x, y, channel.
+// Optional stage argument extends the original stage-1 invocation unchanged.
+const STAGE = Number(process.argv[3] || 1);
+const STAGE_SHAPES = [[7, 5], [9, 7], [11, 9], [11, 9], [11, 9], [11, 9], [9, 9], [9, 9]];
+assert(Number.isInteger(STAGE) && STAGE >= 1 && STAGE <= STAGE_SHAPES.length);
+const MAP_SOURCE = `stage-${STAGE}-native`;
+const TRAINING_SEED = 103700 + STAGE;
+const STRUCTURAL_BASE = 11800 + (STAGE - 1) * 200;
+// A conservative superset of every structural seed used by each existing smoke.
+const STRUCTURAL_SEEDS = Array.from({ length: 20 }, (_, index) => STRUCTURAL_BASE + index);
+const GAMEPLAY_SEED = STRUCTURAL_BASE + 42;
+const BOARD_SHAPE = [...STAGE_SHAPES[STAGE - 1], 82]; // x, y, channel.
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function weightHash(model) {
   return tf.tidy(() => {
@@ -30,7 +37,7 @@ async function main() {
   // Refuse to overwrite any prior fit or select a checkpoint after evaluation.
   fs.mkdirSync(output);
   const plan = {
-    trainingSeeds: [TRAINING_SEED], validationSeeds: [],
+    mapSource: MAP_SOURCE, trainingSeeds: [TRAINING_SEED], validationSeeds: [],
     structuralSeeds: STRUCTURAL_SEEDS, gameplaySeeds: [GAMEPLAY_SEED],
     intersections: [], epochs: 1, selection: 'only checkpoint after one fixed batch and one epoch',
     claim: 'shape and training integration only; no learned-strength claim',
@@ -41,13 +48,14 @@ async function main() {
   fs.writeFileSync(path.join(output, 'plan.json'), JSON.stringify(plan, null, 2));
   console.log('FROZEN_PLAN: ' + JSON.stringify(plan));
   assert.equal(parseArgs([]).mapSource, 'town');
+  assert.equal(parseArgs(['--map-source', MAP_SOURCE]).mapSource, MAP_SOURCE);
   const defaultModel = createModel(9, 9);
   assert.deepStrictEqual(defaultModel.inputs.map(input => input.shape), [[null, 9, 9, 82], [null, 1]]);
   defaultModel.dispose();
   console.log('DEFAULT_SHAPE: PASS 9x9x82');
-  const batch = createTrainingBatch(TRAINING_SEED, [2], 'stage-1-native');
+  const batch = createTrainingBatch(TRAINING_SEED, [2], MAP_SOURCE);
   assert(batch.boards.length > 0);
-  assert.equal(batch.map.provenance.generator, 'generateEconomyStage1TrainingMap');
+  assert.equal(batch.map.provenance.generator, `generateEconomyStage${STAGE}TrainingMap`);
   assert.deepStrictEqual(batch.players, ['AIPlayerWithEconomy', 'SimpleAiPlayerWithEconomy']);
   for (const board of batch.boards) {
     assert.equal(board.length, BOARD_SHAPE[0]);

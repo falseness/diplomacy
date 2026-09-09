@@ -1,5 +1,5 @@
 const { loadAiScripts } = require('./smokeHarness');
-const { runGame } = require('./benchmarkHarness');
+const { runCheckpointSmoke } = require('./tests/checkpoint-smoke.cjs');
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -259,23 +259,30 @@ assert(terrainLayouts.size >= 2,
   'stage 8 terrain layout should vary across deterministic seeds',
   { seeds, terrainLayouts: Array.from(terrainLayouts) });
 
-const smokeMap = api.generateEconomyStage8TrainingMap({ seed: 13242, suddenDeathRound: 14 });
-const smokeResult = runGame({
-  gameMap: smokeMap,
-  playerA: 'AIPlayerWithEconomy',
-  playerB: 'SimpleAiPlayerWithEconomy',
-  seed: 13242,
-  roundLimit: 4,
-  actionLimit: 3,
-  commandLimit: 24
+async function runGameplaySmoke() {
+  const smokeMap = api.generateEconomyStage8TrainingMap({ seed: 13242, suddenDeathRound: 14 });
+  const smokeResult = await runCheckpointSmoke({
+    gameMap: smokeMap,
+    playerA: 'AIPlayerWithEconomy',
+    playerB: 'SimpleAiPlayerWithEconomy',
+    seed: 13242,
+    roundLimit: 4,
+    actionLimit: 3,
+    commandLimit: 24
+  }, process.env.AI_MAP_SMOKE_CHECKPOINT);
+
+  assert(!smokeResult.crash, 'stage 8 short economy smoke crashed', smokeResult);
+  assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
+    'stage 8 short smoke did not run AIPlayerWithEconomy', smokeResult);
+  assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
+    'stage 8 short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
+  assert(smokeResult.turnCount > 0,
+    'stage 8 short smoke game did not advance with runtime players', smokeResult);
+
+  console.log('Economy stage 8 map generation smoke passed');
+}
+
+runGameplaySmoke().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
 });
-
-assert(!smokeResult.crash, 'stage 8 short economy smoke crashed', smokeResult);
-assert(smokeResult.runtimePlayerA === 'AIPlayerWithEconomy',
-  'stage 8 short smoke did not run AIPlayerWithEconomy', smokeResult);
-assert(smokeResult.runtimePlayerB === 'SimpleAiPlayerWithEconomy',
-  'stage 8 short smoke did not run SimpleAiPlayerWithEconomy', smokeResult);
-assert(smokeResult.turnCount > 0,
-  'stage 8 short smoke game did not advance with runtime players', smokeResult);
-
-console.log('Economy stage 8 map generation smoke passed');

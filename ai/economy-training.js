@@ -15,8 +15,6 @@ const { scoreFinalEconomyVector } =
 const CELL_VECTOR_SIZE = 82;
 const ECONOMY_MODEL_WIDTH = 9;
 const ECONOMY_MODEL_HEIGHT = 9;
-const STAGE1_MODEL_WIDTH = 7;
-const STAGE1_MODEL_HEIGHT = 5;
 const ECONOMY_CONV_FILTERS = 16;
 const ECONOMY_HIDDEN_UNITS = 64;
 const ACTION_CATEGORIES = [
@@ -25,9 +23,15 @@ const ACTION_CATEGORIES = [
   'suburb-expansion',
   'building-placement'
 ];
+const NATIVE_STAGE_COUNT = 8;
+const NATIVE_MAP_GENERATORS = Object.fromEntries(
+  Array.from({ length: NATIVE_STAGE_COUNT }, (_, index) => [
+    `stage-${index + 1}-native`, `generateEconomyStage${index + 1}TrainingMap`
+  ])
+);
 const MAP_SOURCES = [
   'town',
-  'stage-1-native',
+  ...Object.keys(NATIVE_MAP_GENERATORS),
   'final-symmetrical-economy',
   'advanced-9x9-economy',
   'advanced-20x20-economy'
@@ -183,7 +187,7 @@ function advancedEconomy9x9StageForSeed(seed) {
 }
 
 function isSymmetricalComparisonMapSource(mapSource) {
-  return mapSource === 'stage-1-native' ||
+  return Boolean(NATIVE_MAP_GENERATORS[mapSource]) ||
     mapSource === 'final-symmetrical-economy' ||
     mapSource === 'advanced-9x9-economy' ||
     mapSource === 'advanced-20x20-economy';
@@ -288,6 +292,7 @@ function createTrainingBatch(
   context.__trainingMapSize = trainingMapSizeForSeed(seed);
   context.__trainingPlayerCount = trainingPlayerCountForSeed(seed, playerCounts);
   context.__trainingMapSource = mapSource;
+  context.__nativeMapGenerator = NATIVE_MAP_GENERATORS[mapSource] || null;
   context.__advanced9x9Stage = advancedEconomy9x9StageForSeed(seed);
   context.__actionCategories = ACTION_CATEGORIES;
   context.__trainingCandidateLimit = 48;
@@ -333,8 +338,8 @@ function createTrainingBatch(
       }
     }
     let map
-    if (__trainingMapSource == 'stage-1-native') {
-      map = generateEconomyStage1TrainingMap({ seed: __trainingSeed })
+    if (__nativeMapGenerator) {
+      map = globalThis[__nativeMapGenerator]({ seed: __trainingSeed })
     }
     else if (__trainingMapSource == 'final-symmetrical-economy') {
       map = generateSymmetricalEconomy9v9AllUnitMap({
@@ -479,7 +484,7 @@ function createTrainingBatch(
         whooseTurn = playerIndex
         let player = players[playerIndex]
         player.nextTurn()
-        if ((__trainingMapSource == 'stage-1-native' ||
+        if ((__nativeMapGenerator ||
             __trainingMapSource == 'final-symmetrical-economy' ||
             __trainingMapSource == 'advanced-9x9-economy' ||
             __trainingMapSource == 'advanced-20x20-economy') &&
@@ -539,18 +544,18 @@ function createTrainingBatch(
       playerCount: players.length - 1,
       seed: __trainingSeed,
         generatedMapProvenance: {
-        generator: __trainingMapSource == 'stage-1-native' ?
-          'generateEconomyStage1TrainingMap' :
-          __trainingMapSource == 'final-symmetrical-economy' ?
+        generator: __nativeMapGenerator ||
+          (__trainingMapSource == 'final-symmetrical-economy' ?
           'generateSymmetricalEconomy9v9AllUnitMap' :
           (__trainingMapSource == 'advanced-9x9-economy' ?
             'generateAdvancedEconomyStage' + __advanced9x9Stage + 'TrainingMap' :
             (__trainingMapSource == 'advanced-20x20-economy' ?
               'generateAdvancedEconomyStage14TrainingMap' :
-              'generateTownTrainingMap')),
+              'generateTownTrainingMap'))),
         generated: true,
         fixedGamestartMap: __trainingMapSource == 'final-symmetrical-economy',
-        size: __trainingMapSource == 'stage-1-native' ? 'stage-1-native-7x5' :
+        size: __nativeMapGenerator ?
+          __trainingMapSource + '-' + map.mapSize.x + 'x' + map.mapSize.y :
           __trainingMapSource == 'final-symmetrical-economy' ?
           'symmetrical-economy-9v9' :
           (__trainingMapSource == 'advanced-9x9-economy' ?
@@ -651,7 +656,7 @@ function createTrainingBatch(
       seed: result.seed,
       provenance: result.generatedMapProvenance
     },
-    boards: result.examples.map(example => mapSource === 'stage-1-native'
+    boards: result.examples.map(example => NATIVE_MAP_GENERATORS[mapSource]
       ? example.board : adaptBoard(example.board, ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT)),
     globals: result.examples.map(example => example.global),
     labels: result.labels,
@@ -772,15 +777,14 @@ function writeBenchmarkSnapshot(
   modelShape
 ) {
   const candidate = createCandidate(options, checkpointRoot, bestCheckpoint);
-  const mapGenerator = options.mapSource === 'stage-1-native'
-    ? 'generateEconomyStage1TrainingMap'
-    : options.mapSource === 'final-symmetrical-economy'
+  const mapGenerator = NATIVE_MAP_GENERATORS[options.mapSource] ||
+    (options.mapSource === 'final-symmetrical-economy'
     ? 'generateSymmetricalEconomy9v9AllUnitMap'
     : (options.mapSource === 'advanced-9x9-economy'
       ? 'generateAdvancedEconomyStage7To12TrainingMap'
       : (options.mapSource === 'advanced-20x20-economy'
         ? 'generateAdvancedEconomyStage14TrainingMap'
-        : 'generateTownTrainingMap'));
+        : 'generateTownTrainingMap')));
   writeJson(snapshotPath, {
     runId: options.runId,
     status,
@@ -827,6 +831,10 @@ async function run(options) {
   fs.mkdirSync(checkpointRoot, { recursive: true });
   fs.mkdirSync(path.dirname(finalDir), { recursive: true });
 
+  // Infer native axes from the actual first batch; never resize native vectors.
+  const nativeBatch = NATIVE_MAP_GENERATORS[options.mapSource]
+    ? createTrainingBatch(options.seed, options.playerCounts, options.mapSource, options.seed)
+    : null;
   const initialModelPath = options.initialCheckpoint &&
     (path.basename(options.initialCheckpoint) === 'model.json'
       ? options.initialCheckpoint
@@ -834,8 +842,8 @@ async function run(options) {
   const model = initialModelPath
     ? await tf.loadLayersModel(`file://${initialModelPath}`)
     : createModel(
-      options.mapSource === 'stage-1-native' ? STAGE1_MODEL_WIDTH : ECONOMY_MODEL_WIDTH,
-      options.mapSource === 'stage-1-native' ? STAGE1_MODEL_HEIGHT : ECONOMY_MODEL_HEIGHT);
+      nativeBatch ? nativeBatch.map.mapSize.x : ECONOMY_MODEL_WIDTH,
+      nativeBatch ? nativeBatch.map.mapSize.y : ECONOMY_MODEL_HEIGHT);
   if (initialModelPath) {
     model.compile({ optimizer: tf.train.adam(0.0001), loss: 'meanSquaredError' });
   }
@@ -850,7 +858,7 @@ async function run(options) {
   try {
     for (let game = 1; game <= options.games; game += 1) {
       const primarySeed = options.seed + game - 1;
-      let batch = createTrainingBatch(
+      let batch = game === 1 && nativeBatch ? nativeBatch : createTrainingBatch(
         primarySeed,
         options.playerCounts,
         options.mapSource,
@@ -868,10 +876,11 @@ async function run(options) {
         );
       }
       const modelBoards = batch.boards.map(board => {
-        if (options.mapSource === 'stage-1-native') {
-          if (modelShape.width !== STAGE1_MODEL_WIDTH || modelShape.height !== STAGE1_MODEL_HEIGHT ||
+        if (nativeBatch) {
+          if (modelShape.width !== batch.map.mapSize.x || modelShape.height !== batch.map.mapSize.y ||
               modelShape.channels !== CELL_VECTOR_SIZE) {
-            throw new Error('stage-1-native requires an unmodified 7x5x82 model');
+            throw new Error(options.mapSource + ' requires an unmodified ' +
+              batch.map.mapSize.x + 'x' + batch.map.mapSize.y + 'x' + CELL_VECTOR_SIZE + ' model');
           }
           return board;
         }
