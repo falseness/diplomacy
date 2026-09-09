@@ -974,10 +974,10 @@ class AIPlayer extends Player {
             let applied = null
             let previousAction = actionManager.lastAction
             let progressState = this.captureCommandProgressState(commands[i])
-            if (!applyCommand.call(this, commands[i])) {
-                continue
-            }
             try {
+                if (!applyCommand.call(this, commands[i])) {
+                    continue
+                }
                 if (!this.commandMadeAuthoritativeProgress(progressState)) {
                     continue
                 }
