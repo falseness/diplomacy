@@ -60,11 +60,28 @@ function runTrain(args) {
     ...process.env,
     PATH: `${node20BinDir()}:${process.env.PATH || ''}`
   };
-  const output = execFileSync(
-    'bash',
-    ['./train.sh', '--storage-dir', STORAGE_DIR, ...args],
-    { cwd: path.resolve(__dirname, '..'), env, encoding: 'utf8' }
+  const command = ['./train.sh', '--storage-dir', STORAGE_DIR, ...args];
+  const logPath = path.join(
+    process.env.AI_CADENCE_EVIDENCE_DIR || path.dirname(SUMMARY_PATH),
+    `full-training-command-${RUN_STAMP}.log`
   );
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const log = fs.openSync(logPath, 'wx');
+  console.log(`Full-training command log: ${logPath}`);
+  fs.writeSync(log, `COMMAND: ${JSON.stringify(['bash', ...command])}\n`);
+  try {
+    execFileSync('bash', command, {
+      cwd: path.resolve(__dirname, '..'), env, stdio: ['ignore', log, log]
+    });
+    fs.writeSync(log, '\nEXIT_CODE: 0\n');
+  } catch (error) {
+    fs.writeSync(log, `\nEXIT_CODE: ${error.status}\nSIGNAL: ${error.signal}\n`);
+    process.stdout.write(fs.readFileSync(logPath, 'utf8'));
+    throw error;
+  } finally {
+    fs.closeSync(log);
+  }
+  const output = fs.readFileSync(logPath, 'utf8');
   process.stdout.write(output);
   return output;
 }
