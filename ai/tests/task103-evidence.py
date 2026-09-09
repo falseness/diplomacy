@@ -26,6 +26,7 @@ REGRESSION_BUDGETS = {
     'test-combat-old-vs-new': 3600,
 }
 SMOKE_KEYS = ('AI_STAGE1_SMOKE_CHECKPOINT', 'AI_MAP_SMOKE_CHECKPOINT', 'AI_GAMESTART_SMOKE_CHECKPOINT')
+REPORT_KEY = 'AI_REGRESSION_REPORT_DIR'
 CANONICAL_TIMEOUT = 3600
 
 
@@ -49,7 +50,7 @@ def execute(dest, label, command, cwd, timeout, env=None, entry=None):
         log.write('OUTER_TIMEOUT_SECONDS: ' + str(timeout) + '\n')
         if env is not None:
             log.write('CHILD_ENVIRONMENT: ' + json.dumps({
-                key: env.get(key) for key in ('PATH', 'NODE_PATH', 'NODE_OPTIONS') + SMOKE_KEYS
+                key: env.get(key) for key in ('PATH', 'NODE_PATH', 'NODE_OPTIONS', REPORT_KEY) + SMOKE_KEYS
             }, sort_keys=True) + '\n')
         if entry is not None:
             log.write('DISPATCH_ENTRY: ' + json.dumps(entry, sort_keys=True) + '\n')
@@ -76,6 +77,16 @@ def execute(dest, label, command, cwd, timeout, env=None, entry=None):
     return record
 
 
+def capture_reports(dest, name, reports):
+    """Bind durable child output to its run, including failed-game reports."""
+    hashes = {str(p.relative_to(dest)): sha(p)
+              for p in sorted(reports.rglob('*')) if p.is_file()}
+    manifest_path = dest / (name + '-reports-sha256.json')
+    save(manifest_path, hashes)
+    return dict(directory=str(reports), files=len(hashes),
+                manifest=str(manifest_path), sha256=sha(manifest_path))
+
+
 def regression_entry(name, manifest):
     entry = manifest['commands'][name]
     assert entry['script'] == json.loads((REPO / 'package.json').read_text())['scripts'][name]
@@ -97,6 +108,7 @@ def regression_entry(name, manifest):
     env = dict(os.environ)
     for key in SMOKE_KEYS:
         env.pop(key, None)
+    env.pop(REPORT_KEY, None)
     env.update({key: str((REPO / value).resolve()) for key, value in entry['environment'].items()})
     return entry, env
 
@@ -148,8 +160,13 @@ def main():
         save(dest / 'planned-suites.json', {name: scripts[name] for name in selected})
         for name in selected:
             entry, env = regression_entry(name, manifest)
-            runs.append(execute(dest, name, ['npm', 'run', name], REPO,
-                                entry['timeout_seconds'], env, entry))
+            reports = dest / (name + '-reports')
+            reports.mkdir()
+            env[REPORT_KEY] = str(reports)
+            record = execute(dest, name, ['npm', 'run', name], REPO,
+                             entry['timeout_seconds'], env, entry)
+            record['reports'] = capture_reports(dest, name, reports)
+            runs.append(record)
             save(dest / 'runs.json', runs)
             # A command may write model output, but must not mutate its frozen inputs.
             regression_entry(name, manifest)

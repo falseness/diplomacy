@@ -15,12 +15,13 @@ manifest = json.loads(Path(sys.argv[1]).read_text())
 names = ['test-economy-stage-1-map-generation', 'test-economy-stage-2-map-generation']
 if manifest['commands']['test-task156-all-gamestart-benchmark']['environment']:
     names.append('test-task156-all-gamestart-benchmark')
-original = {key: os.environ.get(key) for key in driver.SMOKE_KEYS}
+original = {key: os.environ.get(key) for key in (*driver.SMOKE_KEYS, driver.REPORT_KEY)}
 try:
-    for key in driver.SMOKE_KEYS:
+    for key in original:
         os.environ[key] = '/invalid/inherited/' + key
     for name in names:
         entry, env = driver.regression_entry(name, manifest)
+        assert driver.REPORT_KEY not in env
         assert len(entry['environment']) == 1
         for key in driver.SMOKE_KEYS:
             expected = str((driver.REPO / entry['environment'][key]).resolve()) if key in entry['environment'] else None
@@ -30,6 +31,7 @@ try:
     # No native checkpoint setting may leak into a subsequent ordinary command.
     _, env = driver.regression_entry('test-model-predict-batching', manifest)
     assert all(key not in env for key in driver.SMOKE_KEYS)
+    assert driver.REPORT_KEY not in env
     print('ENVIRONMENT_ISOLATION: PASS subsequent ordinary command clears all checkpoint keys')
     name = names[0]
     def rejected(label, mutate):

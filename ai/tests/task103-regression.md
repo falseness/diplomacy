@@ -31,3 +31,10 @@ Game-start callers accept `AI_GAMESTART_SMOKE_CHECKPOINT`, forwarded as the
 existing `--checkpoint` argument. Additional manifest bindings select it with
 `"environment_key": "AI_GAMESTART_SMOKE_CHECKPOINT"`. Bind native dimensions and
 all evaluation seeds before running; compatibility does not establish a win.
+
+The runner assigns a fresh `AI_REGRESSION_REPORT_DIR` to each command, clearing
+any inherited value. Game-start wrappers write their complete reports and failure
+snapshots there and forward child output even when the benchmark exits zero but
+the wrapper's win assertion fails. Each run records a SHA-256 inventory of its
+report files, including on failure or outer timeout. Empty inventories mean no
+report files were produced; they do not establish a successful gameplay result.

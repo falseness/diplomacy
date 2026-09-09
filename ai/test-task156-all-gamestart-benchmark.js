@@ -96,7 +96,8 @@ function assertNoTask156ComparisonShortcuts() {
 
 assertNoTask156ComparisonShortcuts();
 
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task156-'));
+const temporary = fs.mkdtempSync(path.join(
+  process.env.AI_REGRESSION_REPORT_DIR || os.tmpdir(), 'diplomacy-task156-'));
 const reportPath = path.join(temporary, 'report.json');
 const failureDir = path.join(temporary, 'failures');
 const command = [
@@ -119,10 +120,8 @@ const run = spawnSync(process.execPath, command, {
   encoding: 'utf8',
   maxBuffer: 1024 * 1024 * 40
 });
-if (run.status !== 0) {
-  process.stdout.write(run.stdout || '');
-  process.stderr.write(run.stderr || '');
-}
+process.stdout.write(run.stdout || '');
+process.stderr.write(run.stderr || '');
 assert(run.status === 0, 'TASK-156 benchmark smoke failed');
 assert(fs.existsSync(reportPath), 'TASK-156 smoke report was not written');
 
