@@ -22,7 +22,7 @@ const stressMs = numericArg('--stress-ms',
   Number(process.env.FAST_INVARIANT_STRESS_MS || 0));
 const seedStart = numericArg('--seed-start',
   Number(process.env.FAST_INVARIANT_SEED_START || 98000));
-const reportPath = path.join(
+const reportPath = argValue('--report-path', null) || path.join(
   '/mnt/storage/diplomacy/benchmarks',
   argValue('--report-name',
     stressMs > 0
@@ -535,7 +535,33 @@ const report = new vm.Script(`(() => {
     })
     let afterApplyVectorGrid = vectoriseGrid()
     let totalCells = mutableGrid.cells.length * mutableGrid.cells[0].length
-    let applied = applyFastAction(mutableGrid, command)
+    let localCalls = 0
+    let globalCalls = 0
+    let originalLocal = vectorizeCellLocal
+    let originalGlobal = computeGlobalVectorChannels
+    vectorizeCellLocal = function() {
+      ++localCalls
+      return originalLocal.apply(this, arguments)
+    }
+    computeGlobalVectorChannels = function() {
+      ++globalCalls
+      return originalGlobal.apply(this, arguments)
+    }
+    let applied
+    try {
+      applied = applyFastAction(mutableGrid, command)
+    } finally {
+      vectorizeCellLocal = originalLocal
+      computeGlobalVectorChannels = originalGlobal
+    }
+    assert(localCalls === applied.token.changedCellCount,
+      'local vectorization count must equal changed-cell count', metadata)
+    assert(globalCalls === 1,
+      'global channels must be recomputed exactly once per candidate', metadata)
+    summary.instrumentation.candidates += 1
+    summary.instrumentation.localCalls += localCalls
+    summary.instrumentation.fullBoardCalls += totalCells
+    summary.instrumentation.globalCalls += globalCalls
     assert(applied.token.changedCellCount < totalCells,
       'fast action should update fewer cells than the full board', metadata)
     compareVectorOrThrow(afterApplyVectorGrid, mutableGrid, metadata, 'after-apply')
@@ -600,6 +626,7 @@ const report = new vm.Script(`(() => {
     seedStart: __fastInvariantOptions.seedStart,
     generatedMaps: [],
     commandsAudited: 0,
+    instrumentation: {candidates: 0, localCalls: 0, fullBoardCalls: 0, globalCalls: 0},
     vectorMismatches: 0,
     undoMismatches: 0,
     gridRestorationMismatches: 0,
@@ -777,6 +804,7 @@ console.log(JSON.stringify({
   seeds: report.seeds,
   generatedMapCount: report.generatedMaps.length,
   commandsAudited: report.commandsAudited,
+  instrumentation: report.instrumentation,
   vectorMismatches: report.vectorMismatches,
   undoMismatches: report.undoMismatches,
   gridRestorationMismatches: report.gridRestorationMismatches,
