@@ -794,7 +794,18 @@ async function runtimeTeacherDatasetSignature(seed, stageIndex, workerCount) {
         }));
       }
     }
-    return records.sort();
+    const batch = batchFromRuntimeTeacherGameResults(results);
+    if (batch) {
+      try {
+        for (const key of ['board', 'global', 'policy', 'labels']) {
+          records.push(JSON.stringify({ key, shape: batch[key].shape,
+            values: Array.from(await batch[key].data()) }));
+        }
+      } finally {
+        tf.dispose([batch.board, batch.global, batch.policy, batch.labels]);
+      }
+    }
+    return records;
   } finally {
     await pool.close();
   }
@@ -809,7 +820,8 @@ async function workerPoolDispatchProbe(workerCount, jobs) {
       actualWorkers: pool.workers.length || 1,
       dispatched: jobs.length,
       collected: results.length,
-      seeds: results.map((result) => result.seed).sort((a, b) => a - b)
+      seeds: results.map((result) => result.seed).sort((a, b) => a - b),
+      pendingJobs: pool.pending.size
     };
   } finally {
     await pool.close();
@@ -1008,15 +1020,6 @@ async function saveModelAtomically(model, destination) {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
   await model.save(`file://${temporary}`);
-  replaceDirectory(temporary, destination);
-}
-
-function copyDirectoryAtomically(source, destination) {
-  const temporary = `${destination}.tmp-${process.pid}`;
-  if (fs.existsSync(temporary)) {
-    fs.rmSync(temporary, { recursive: true, force: true });
-  }
-  fs.cpSync(source, temporary, { recursive: true });
   replaceDirectory(temporary, destination);
 }
 
@@ -2130,20 +2133,22 @@ async function main() {
         return;
       }
     };
-    if (!options.resume && state.completedGames === 0) {
-      await pretrainCombatValueModel(model, state.seed + 424242);
-      await fitRuntimeCombatTeacherBatch(
-        model,
-        state.seed + 50000,
-        state.curriculum.currentStageIndex,
-        null,
-        20,
-        20
-      );
-    }
-    runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
-    scheduleRuntimeBatchPrefetch(state.completedGames);
     try {
+      if (!options.resume && state.completedGames === 0) {
+        await pretrainCombatValueModel(model, state.seed + 424242);
+        runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
+        await fitRuntimeCombatTeacherBatch(
+          model,
+          state.seed + 50000,
+          state.curriculum.currentStageIndex,
+          runtimeTeacherWorkerPool,
+          20,
+          20
+        );
+      }
+      runtimeTeacherWorkerPool = runtimeTeacherWorkerPool ||
+        new RuntimeTeacherWorkerPool(options.workers);
+      scheduleRuntimeBatchPrefetch(state.completedGames);
       const invocationStart = state.completedGames;
       while (state.completedGames < state.totalGames) {
         if (options.maxGamesThisRun > 0 &&
@@ -2301,8 +2306,18 @@ async function main() {
         }
       }
     } finally {
-      if (runtimeTeacherWorkerPool) {
-        await runtimeTeacherWorkerPool.close();
+      try {
+        if (runtimeBatchPrefetch) {
+          const unusedBatch = await runtimeBatchPrefetch.promise;
+          if (unusedBatch) {
+            tf.dispose([unusedBatch.board, unusedBatch.global,
+              unusedBatch.policy, unusedBatch.labels]);
+          }
+        }
+      } finally {
+        if (runtimeTeacherWorkerPool) {
+          await runtimeTeacherWorkerPool.close();
+        }
       }
     }
 
@@ -2310,14 +2325,7 @@ async function main() {
       state.status = 'complete';
       state.completedAt = nowIso(state, 'complete');
       state.updatedAt = state.completedAt;
-      const latestPointer = readLatestCheckpointPointer(options);
-      if (options.workers > 1 &&
-          latestPointer &&
-          latestPointer.trainingStep === state.completedGames) {
-        copyDirectoryAtomically(path.join(options.storageDir, latestPointer.path), finalDir);
-      } else {
-        await saveModelAtomically(model, finalDir);
-      }
+      await saveModelAtomically(model, finalDir);
       persistRunMetadata(options, state, paths, 'complete', null, gameMetricRecords);
       console.log(`Training complete. Final model: ${finalDir}`);
     } else {

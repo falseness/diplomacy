@@ -1,5 +1,6 @@
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const {
@@ -46,7 +47,8 @@ async function main() {
   check(invariantResults.length === 10,
     'worker invariant did not compare ten seeds',
     invariantResults.map((result) => result.seed));
-  console.log('Worker invariants passed:', JSON.stringify(invariantResults));
+  console.log('Worker invariants passed:', JSON.stringify(invariantResults.map(
+    ({ examples, ...result }) => ({ ...result, examples: examples.length }))));
 
   const serialSignature = await runtimeTeacherDatasetSignature(11600, 0, 1);
   const workerSignature = await runtimeTeacherDatasetSignature(11600, 0, 2);
@@ -57,7 +59,7 @@ async function main() {
       serialExamples: serialSignature.length,
       workerExamples: workerSignature.length
     });
-  console.log('Serial/worker dataset equality passed:', serialSignature.length, 'examples');
+  console.log('Serial/worker ordered examples and trainer tensors equality passed:', serialSignature.length, 'ordered records including four tensor signatures');
 
   const probe = await workerPoolDispatchProbe(2, [
     { seed: 12600, stageIndex: 0, game: 1 },
@@ -69,15 +71,16 @@ async function main() {
   check(probe.dispatched === 4 && probe.collected === 4,
     'worker pool dropped or duplicated jobs',
     probe);
+  check(probe.pendingJobs === 0, 'pool retained completed jobs', probe);
   check(new Set(probe.seeds).size === 4,
     'worker pool returned duplicate game seeds',
     probe);
 
   console.log('Worker dispatch passed:', JSON.stringify(probe));
-  const storageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task106-workers-'));
+  const storageDir = process.env.TASK106_SMOKE_STORAGE || fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task106-workers-'));
   console.log('Worker training storage:', storageDir);
   // Use the public CLI so runner defaults and required arguments stay centralized.
-  runTraining([
+  const trainingArgs = [
     '--storage-dir', storageDir,
     '--run-id', 'task106-worker-smoke',
     '--games', '1',
@@ -93,12 +96,23 @@ async function main() {
     '--plateau-patience', '1',
     '--curriculum-simple-winrate', '1',
     '--curriculum-simple-winrate-threshold', '0.8',
-    '--workers', '2',
     '--fail-after-game', '0'
-  ], {
-    DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT: '1'
-  });
-  const manifestPath = path.join(storageDir, 'runs', 'task106-worker-smoke', 'manifest.json');
+  ];
+  const hashes = [];
+  for (const workers of [1, 2]) {
+    const workerStorage = path.join(storageDir, String(workers));
+    const args = trainingArgs.slice();
+    args[args.indexOf('--storage-dir') + 1] = workerStorage;
+    runTraining([...args, '--workers', String(workers)], {
+      DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT: '1'
+    });
+    const weights = fs.readFileSync(path.join(workerStorage, 'final',
+      'task106-worker-smoke', 'weights.bin'));
+    hashes.push(crypto.createHash('sha256').update(weights).digest('hex'));
+  }
+  check(hashes[0] === hashes[1], 'worker count changed deterministic trained weights', hashes);
+  console.log('Deterministic trainer consumption and final weights equality passed:', hashes[0]);
+  const manifestPath = path.join(storageDir, '2', 'runs', 'task106-worker-smoke', 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   check(manifest.status === 'complete', 'worker training smoke did not complete', manifest);
   check(manifest.configuration.workers === 2,
