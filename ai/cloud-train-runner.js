@@ -7,6 +7,8 @@ const {
 } = require('worker_threads');
 const tf = isMainThread ? require('@tensorflow/tfjs-node') : null;
 const { runGame } = require('./benchmarkHarness');
+const { packRuntimeTeacherResult, unpackRuntimeTeacherResult } =
+  require('./runtime-teacher-transfer');
 const {
   ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION,
   DEFAULT_ACTION_SPACE_SIZE
@@ -630,7 +632,12 @@ class RuntimeTeacherWorkerPool {
     if (message.error) {
       pending.reject(new Error(message.error));
     } else {
-      pending.resolve(message.result);
+      try {
+        pending.resolve(message.result.packedExamples
+          ? unpackRuntimeTeacherResult(message.result) : message.result);
+      } catch (error) {
+        pending.reject(error);
+      }
     }
     this.idleWorkers.push(worker);
     this.dispatch();
@@ -755,14 +762,13 @@ if (!isMainThread && parentPort) {
       return;
     }
     try {
-      parentPort.postMessage({
-        id: message.id,
-        result: collectRuntimeCombatTeacherGame(
-          message.job.seed,
-          message.job.stageIndex,
-          message.job.game
-        )
-      });
+      const result = packRuntimeTeacherResult(collectRuntimeCombatTeacherGame(
+        message.job.seed,
+        message.job.stageIndex,
+        message.job.game
+      ));
+      parentPort.postMessage({ id: message.id, result },
+        [result.packedExamples.values.buffer]);
     } catch (error) {
       parentPort.postMessage({
         id: message.id,

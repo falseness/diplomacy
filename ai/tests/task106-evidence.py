@@ -152,7 +152,30 @@ def regression(dest, manifest_path):
             save(dest / 'regression-runs.json', runs)
             helper.regression_entry(name, manifest)
         combined.write(f'ALL_AI_SUITES: {"PASS" if all(r["exit_code"] == 0 for r in runs) else "FAIL"}; attempted={len(runs)} failed={sum(r["exit_code"] != 0 for r in runs)}\n')
-    return all(r['exit_code'] == 0 for r in runs)
+    # The npm registry does not include every existing standalone AI suite.
+    # Discover these before dispatch and retain their failures in the same gate.
+    registered = '\n'.join(scripts.values())
+    standalone = [str(p.relative_to(REPO)) for p in sorted((REPO / 'ai').glob('test-*.js'))
+                  if str(p.relative_to(REPO)) not in registered]
+    save(dest / 'standalone-plan.json', standalone)
+    standalone_ledger = dest / 'standalone-runs.json'
+    extra_runs = json.loads(standalone_ledger.read_text()) if standalone_ledger.exists() else []
+    assert [r['command'] for r in extra_runs] == [['node', name] for name in standalone[:len(extra_runs)]]
+    for run in extra_runs:
+        assert sha(Path(run['log'])) == run['sha256'], 'changed standalone log: ' + run['label']
+    with (dest / 'standalone-regression.log').open('a' if extra_runs else 'w', buffering=1) as combined:
+        for filename in standalone[len(extra_runs):]:
+            run = execute(dest, 'standalone-' + Path(filename).stem,
+                          ['node', filename], REPO, helper.REGRESSION_TIMEOUT, dict(os.environ))
+            extra_runs.append(run)
+            combined.write(Path(run['log']).read_text())
+            save(standalone_ledger, extra_runs)
+        combined.write(f'STANDALONE_AI_SUITES: {"PASS" if all(r["exit_code"] == 0 for r in extra_runs) else "FAIL"}; attempted={len(extra_runs)} failed={sum(r["exit_code"] != 0 for r in extra_runs)}\n')
+    all_runs = runs + extra_runs
+    with (dest / 'step4-regression.log').open('a') as combined:
+        combined.write((dest / 'standalone-regression.log').read_text())
+        combined.write(f'ALL_AI_TEST_COVERAGE: registered={len(runs)} standalone={len(extra_runs)} total={len(all_runs)} passed={sum(r["exit_code"] == 0 for r in all_runs)} failed={sum(r["exit_code"] != 0 for r in all_runs)}; {"PASS" if all(r["exit_code"] == 0 for r in all_runs) else "FAIL"}\n')
+    return all(r['exit_code'] == 0 for r in all_runs)
 
 
 def main():

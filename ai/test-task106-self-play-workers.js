@@ -9,6 +9,7 @@ const {
   workerPoolDispatchProbe
 } = require('./cloud-train-runner');
 const { verifyWorkerLifecycle } = require('./tests/task106-worker-lifecycle.cjs');
+const { verifyRuntimeTeacherTransfer } = require('./tests/runtime-teacher-transfer.cjs');
 
 function check(condition, message, details) {
   if (condition) {
@@ -45,6 +46,7 @@ function runTraining(args, env) {
 
 async function main() {
   await verifyWorkerLifecycle();
+  await verifyRuntimeTeacherTransfer();
   const invariantResults = await verifyRuntimeTeacherWorkerInvariants(10600, 0, 2);
   check(invariantResults.length === 10,
     'worker invariant did not compare ten seeds',
