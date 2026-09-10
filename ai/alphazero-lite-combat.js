@@ -2,12 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const tf = require('@tensorflow/tfjs-node');
 
-const ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION = 'alphazero-lite-combat-v4';
+const {
+  ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION,
+  DEFAULT_ACTION_SPACE_SIZE
+} = require('./alphazero-lite-combat-config');
 const DEFAULT_BOARD_HEIGHT = 3;
 const DEFAULT_BOARD_WIDTH = 3;
 const DEFAULT_COMBAT_CHANNELS = 21;
 const DEFAULT_GLOBAL_FEATURES = 1;
-const DEFAULT_ACTION_SPACE_SIZE = 128;
 
 function createMetadata(options = {}) {
   const boardHeight = options.boardHeight || DEFAULT_BOARD_HEIGHT;

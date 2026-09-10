@@ -42,7 +42,7 @@ def freeze(dest):
                            for p in sorted(root.rglob('*')) if p.is_file()}
         (root / 'node_modules').symlink_to(REPO / 'node_modules', target_is_directory=True)
     save(dest / 'source-sha256.json', manifests)
-    (dest / 'implementation.diff').write_bytes(helper.git('diff'))
+    (dest / 'implementation.diff').write_bytes(helper.git('diff', 'HEAD'))
     baseline = Path('/mnt/storage/diplomacy/task111-combat-training-20260612131303/final/task111-combat-training')
     save(dest / 'environment.json', dict(parent=parent, status=helper.git('status', '--short').decode(),
          platform=platform.platform(), cpu=Path('/proc/cpuinfo').read_text(),
@@ -75,6 +75,8 @@ def speed(dest):
     runs = json.loads(ledger.read_text()) if ledger.exists() else []
     completed = {run['label'] for run in runs}
     assert len(completed) == len(runs), 'duplicate recorded run'
+    for run in runs:
+        assert sha(Path(run['log'])) == run['sha256'], 'changed timing log: ' + run['label']
     with (dest / 'step5-canonical-speed.log').open('a' if runs else 'w', buffering=1) as combined:
         for repeat in range(1, 4):
             order = ['before', 'after'] if repeat % 2 else ['after', 'before']
@@ -106,6 +108,7 @@ def speed(dest):
          passed=all(r['exit_code'] == 0 for r in runs) and reduction >= 10, runs=runs,
          comparison='Unmodified immediately preceding HEAD with workers=1 versus frozen current implementation with workers=2; same deterministic initialization/order, epochs, seeds, games, evaluation and final serialization.',
          projectedScaling='At most N-way teacher generation for the 20-game pretraining batch (capped at 20); cadence batches have two games (capped at 2), overlapped with serial training. End-to-end scaling remains bounded by serial TensorFlow fitting/evaluation and IPC overhead.'))
+    return all(r['exit_code'] == 0 for r in runs) and reduction >= 10
 
 
 def regression(dest, manifest_path):
@@ -116,6 +119,8 @@ def regression(dest, manifest_path):
     ledger = dest / 'regression-runs.json'
     runs = json.loads(ledger.read_text()) if ledger.exists() else []
     assert [run['label'] for run in runs] == names[:len(runs)], 'non-prefix regression ledger'
+    for run in runs:
+        assert sha(Path(run['log'])) == run['sha256'], 'changed regression log: ' + run['label']
     with (dest / 'step4-regression.log').open('a' if runs else 'w', buffering=1) as combined:
         for name in names[len(runs):]:
             entry, env = helper.regression_entry(name, manifest)
@@ -128,15 +133,26 @@ def regression(dest, manifest_path):
             entry['evidenceEnvironment'] = evidence_env
             if name == 'test-task106-self-play-workers':
                 env['TASK106_SMOKE_STORAGE'] = str(reports / 'training')
+                entry['evidenceEnvironment']['TASK106_SMOKE_STORAGE'] = env['TASK106_SMOKE_STORAGE']
                 entry['timeout_seconds'] = 1200
+            if name == 'test-economy-training':
+                env['ECONOMY_TRAINING_EVIDENCE_DIR'] = str(reports / 'training')
+                entry['evidenceEnvironment']['ECONOMY_TRAINING_EVIDENCE_DIR'] = env['ECONOMY_TRAINING_EVIDENCE_DIR']
             run = execute(dest, name, ['npm', 'run', name], REPO,
                           entry['timeout_seconds'], env, entry)
+            # This suite records its checkpoint storage outside the report directory.
+            # Copy it before hashing so failed curriculum gates retain their proof too.
+            if name == 'test-combat-full-training-verification':
+                for evidence in reports.glob('full-training-*.json'):
+                    storage = Path(json.loads(evidence.read_text())['storageDir'])
+                    shutil.copytree(storage, reports / 'training', dirs_exist_ok=True)
             run['reports'] = helper.capture_reports(dest, name, reports)
             runs.append(run)
             combined.write(Path(run['log']).read_text())
             save(dest / 'regression-runs.json', runs)
             helper.regression_entry(name, manifest)
         combined.write(f'ALL_AI_SUITES: {"PASS" if all(r["exit_code"] == 0 for r in runs) else "FAIL"}; attempted={len(runs)} failed={sum(r["exit_code"] != 0 for r in runs)}\n')
+    return all(r['exit_code'] == 0 for r in runs)
 
 
 def main():
@@ -152,11 +168,13 @@ def main():
         return
     assert_frozen(dest)
     if args.mode == 'speed':
-        speed(dest)
+        passed = speed(dest)
     else:
         assert args.manifest, 'regression requires frozen checkpoint manifest'
-        regression(dest, args.manifest)
+        passed = regression(dest, args.manifest)
     assert_frozen(dest)
+    if not passed:
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

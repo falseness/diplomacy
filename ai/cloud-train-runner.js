@@ -9,10 +9,12 @@ const tf = isMainThread ? require('@tensorflow/tfjs-node') : null;
 const { runGame } = require('./benchmarkHarness');
 const {
   ALPHAZERO_LITE_COMBAT_ARCHITECTURE_VERSION,
-  DEFAULT_ACTION_SPACE_SIZE,
+  DEFAULT_ACTION_SPACE_SIZE
+} = require('./alphazero-lite-combat-config');
+const {
   createAlphaZeroLiteCombatModel,
   validateMetadata: validateAlphaZeroLiteCombatMetadata
-} = require('./alphazero-lite-combat');
+} = isMainThread ? require('./alphazero-lite-combat') : {};
 
 const MODEL_VERSION = 3;
 const CURRICULUM_FINAL_STAGE_INDEX = 6;
@@ -589,31 +591,39 @@ function collectRuntimeCombatTeacherGame(seed, stageIndex, game, rolloutPredict)
 }
 
 class RuntimeTeacherWorkerPool {
-  constructor(workerCount) {
-    this.workerCount = Math.max(1, workerCount || 1);
+  constructor(workerCount = 1, workerFile = __filename) {
+    if (!Number.isInteger(workerCount) || workerCount < 1) {
+      fail('runtime teacher worker count must be a positive integer');
+    }
+    this.workerCount = workerCount;
     this.nextJobId = 1;
-    this.nextWorkerIndex = 0;
     this.pending = new Map();
+    this.queue = [];
+    this.idleWorkers = [];
     this.workers = [];
+    this.closed = false;
+    this.failure = null;
+    this.closePromise = null;
     if (this.workerCount <= 1) {
       return;
     }
     for (let index = 0; index < this.workerCount; index += 1) {
-      const worker = new Worker(__filename);
-      worker.on('message', (message) => this.handleMessage(message));
-      worker.on('error', (error) => this.handleWorkerFailure(worker, error));
+      const worker = new Worker(workerFile);
+      worker.on('message', (message) => this.handleMessage(worker, message));
+      worker.on('error', (error) => this.handleWorkerFailure(error));
       worker.on('exit', (code) => {
-        if (code !== 0) {
-          this.handleWorkerFailure(worker, new Error(`runtime teacher worker exited with code ${code}`));
+        if (!this.closed) {
+          this.handleWorkerFailure(new Error(`runtime teacher worker exited with code ${code}`));
         }
       });
       this.workers.push(worker);
+      this.idleWorkers.push(worker);
     }
   }
 
-  handleMessage(message) {
+  handleMessage(worker, message) {
     const pending = this.pending.get(message.id);
-    if (!pending) {
+    if (!pending || pending.worker !== worker) {
       return;
     }
     this.pending.delete(message.id);
@@ -622,42 +632,67 @@ class RuntimeTeacherWorkerPool {
     } else {
       pending.resolve(message.result);
     }
+    this.idleWorkers.push(worker);
+    this.dispatch();
   }
 
-  handleWorkerFailure(worker, error) {
-    for (const [id, pending] of this.pending.entries()) {
-      if (pending.worker === worker) {
+  rejectPending(error) {
+    for (const pending of this.pending.values()) {
+      pending.reject(error);
+    }
+    this.pending.clear();
+    this.queue = [];
+  }
+
+  handleWorkerFailure(error) {
+    this.failure = this.failure || error;
+    this.rejectPending(this.failure);
+  }
+
+  dispatch() {
+    while (!this.closed && !this.failure && this.queue.length && this.idleWorkers.length) {
+      const id = this.queue.shift();
+      const pending = this.pending.get(id);
+      const worker = this.idleWorkers.shift();
+      pending.worker = worker;
+      try {
+        worker.postMessage({ id, type: 'runtime-teacher-game', job: pending.job });
+      } catch (error) {
         this.pending.delete(id);
         pending.reject(error);
+        this.idleWorkers.push(worker);
       }
     }
   }
 
   runRuntimeTeacherGame(job) {
-    if (this.workerCount <= 1) {
-      return Promise.resolve(collectRuntimeCombatTeacherGame(
-        job.seed,
-        job.stageIndex,
-        job.game
-      ));
+    if (this.closed || this.failure) {
+      return Promise.reject(this.failure || new Error('runtime teacher worker pool is closed'));
     }
-    const worker = this.workers[this.nextWorkerIndex % this.workers.length];
-    this.nextWorkerIndex += 1;
+    if (this.workerCount <= 1) {
+      return Promise.resolve().then(() => collectRuntimeCombatTeacherGame(
+        job.seed, job.stageIndex, job.game));
+    }
     const id = this.nextJobId;
     this.nextJobId += 1;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, worker });
-      worker.postMessage({
-        id,
-        type: 'runtime-teacher-game',
-        job
-      });
+      this.pending.set(id, { resolve, reject, job, worker: null });
+      this.queue.push(id);
+      this.dispatch();
     });
   }
 
-  async close() {
-    await Promise.all(this.workers.map((worker) => worker.terminate()));
-    this.workers = [];
+  close() {
+    if (!this.closePromise) {
+      this.closed = true;
+      this.rejectPending(new Error('runtime teacher worker pool is closed'));
+      this.closePromise = Promise.all(this.workers.map((worker) => worker.terminate()))
+        .then(() => {
+          this.workers = [];
+          this.idleWorkers = [];
+        });
+    }
+    return this.closePromise;
   }
 }
 
@@ -2366,6 +2401,7 @@ if (require.main === module && isMainThread) {
 }
 
 module.exports = {
+  RuntimeTeacherWorkerPool,
   createRuntimeModelPredict,
   evaluateCurriculumSimpleAiWinrate,
   evaluateCurriculumBaselineAiWinrate,
