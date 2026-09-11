@@ -99,4 +99,12 @@ diagnostic.paths = Module._nodeModulePaths(path.dirname(fixture));
 console.log(options['original-dependencies'] ?
   'DEPENDENCY CONTROL: original fixture (includes its existing vector stub); unchanged 75-case scenario matrix and assertions' :
   'DEPENDENCY CONTROL: real vectorizeContent/mutableVectorGrid, native Grid/Cell/Hexagon/Empty; unchanged 75-case scenario matrix and assertions');
-diagnostic._compile(source, fixture);
+try {
+  diagnostic._compile(source, fixture);
+} catch (error) {
+  // Keep the original exception and nonzero exit. This diagnostic is a gate,
+  // not an expected-failure test: reproducing a known fault is still a failure.
+  console.error('TASK-106 FIXTURE PREREQUISITE: FAIL');
+  console.error('STOP: investigate the fixture/runtime contract before heap, aggregate, or performance runs.');
+  throw error;
+}
