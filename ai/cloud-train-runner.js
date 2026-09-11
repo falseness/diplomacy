@@ -1651,7 +1651,7 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
   }
 
   const concurrency = typeof options.curriculumPredictFunction === 'function'
-    ? 0 : (options.baselineEvaluationConcurrency || 0);
+    ? 0 : (options.baselineEvaluationPool ? 2 : (options.baselineEvaluationConcurrency || 0));
   const baselineModel = concurrency ? null : await tf.loadLayersModel(`file://${modelPath}`);
   const currentPredict = typeof options.curriculumPredictFunction === 'function'
     ? options.curriculumPredictFunction
@@ -1663,9 +1663,14 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
   let draws = 0;
   const gameResults = [];
   try {
+    // A programmatic caller may retain a two-process evaluator across training
+    // boundaries. The caller owns close() in finally; custom callbacks stay serial.
     const isolatedResults = concurrency
-      ? await require('./baseline-evaluation-process').evaluateInProcesses(
-        { ...options, curriculumBaselineAiModelPath: baselinePath }, state, model, concurrency, options.baselineEvaluationObserver)
+      ? options.baselineEvaluationPool
+        ? (await options.baselineEvaluationPool.evaluate(
+          { ...options, curriculumBaselineAiModelPath: baselinePath }, state, model, concurrency)).results
+        : await require('./baseline-evaluation-process').evaluateInProcesses(
+          { ...options, curriculumBaselineAiModelPath: baselinePath }, state, model, concurrency, options.baselineEvaluationObserver)
       : null;
     for (let game = 1; game <= games; game += 1) {
       const result = isolatedResults ? isolatedResults[game - 1]
