@@ -10,6 +10,7 @@ const {
 } = require('./cloud-train-runner');
 const { verifyWorkerLifecycle } = require('./tests/task106-worker-lifecycle.cjs');
 const { verifyRuntimeTeacherTransfer } = require('./tests/runtime-teacher-transfer.cjs');
+const { verifyPretrainingOverlap } = require('../tests/task106-pretraining-overlap.cjs');
 
 function check(condition, message, details) {
   if (condition) {
@@ -107,9 +108,15 @@ async function main() {
     const workerStorage = path.join(storageDir, String(workers));
     const args = trainingArgs.slice();
     args[args.indexOf('--storage-dir') + 1] = workerStorage;
+    fs.mkdirSync(workerStorage, { recursive: true });
+    const eventsPath = path.join(workerStorage, 'training-events.jsonl');
+    const observerPath = path.resolve(__dirname, '../tests/task106-training-observer.cjs');
     runTraining([...args, '--workers', String(workers)], {
-      DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT: '1'
+      DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT: '1',
+      TASK106_TRAINING_EVENTS: eventsPath,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --require=${observerPath}`
     });
+    verifyPretrainingOverlap(eventsPath, workers, 106);
     const weights = fs.readFileSync(path.join(workerStorage, 'final',
       'task106-worker-smoke', 'weights.bin'));
     hashes.push(crypto.createHash('sha256').update(weights).digest('hex'));

@@ -66,11 +66,7 @@ def assert_frozen(dest):
 
 def speed(dest):
     observer = dest / 'observe-games.cjs'
-    source = Path(__file__).with_name('task103-observe.cjs').read_text()
-    # Worker isolates have separate counters. Qualify only the observer's event ID.
-    source = source.replace('const id = ++sequence;',
-                            'const id = require("worker_threads").threadId + ":" + (++sequence);')
-    observer.write_text(source)
+    observer.write_text((REPO / 'tests/task106-training-observer.cjs').read_text())
     ledger = dest / 'speed-runs.json'
     runs = json.loads(ledger.read_text()) if ledger.exists() else []
     completed = {run['label'] for run in runs}
@@ -91,7 +87,7 @@ def speed(dest):
                            '--workers', '1' if variant == 'before' else '2']
                 env = dict(os.environ)
                 env['NODE_OPTIONS'] = env.get('NODE_OPTIONS', '') + ' --require=' + str(observer)
-                env['TASK103_OUTCOMES'] = str(dest / (label + '-outcomes.jsonl'))
+                env['TASK106_TRAINING_EVENTS'] = str(dest / (label + '-outcomes.jsonl'))
                 control = {'DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT': '1'}
                 env.update(control)
                 run = execute(dest, label, command, dest / (variant + '-source'),

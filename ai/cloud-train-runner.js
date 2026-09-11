@@ -880,6 +880,10 @@ async function fitRuntimeCombatTeacherBatch(
 ) {
   const runtimeBatch = await makeRuntimeCombatTeacherBatch(
     seed, stageIndex, workerPool, gameCount, rolloutPredict);
+  return fitCollectedRuntimeCombatBatch(model, runtimeBatch, epochs);
+}
+
+async function fitCollectedRuntimeCombatBatch(model, runtimeBatch, epochs) {
   if (!runtimeBatch) {
     return null;
   }
@@ -891,6 +895,19 @@ async function fitRuntimeCombatTeacherBatch(
     runtimeBatch.policy.dispose();
     runtimeBatch.labels.dispose();
   }
+}
+
+async function pretrainRuntimeCombatModel(model, seed, stageIndex, workerPool) {
+  // Keep worker results as ordinary data until the main-thread fit finishes.
+  const pendingGames = workerPool.workerCount > 1
+    ? collectRuntimeCombatTeacherGames(seed + 50000, stageIndex, workerPool, 20)
+    : null;
+  if (pendingGames) pendingGames.catch(() => {});
+  await pretrainCombatValueModel(model, seed + 424242);
+  const runtimeBatch = pendingGames
+    ? batchFromRuntimeTeacherGameResults(await pendingGames)
+    : await makeRuntimeCombatTeacherBatch(seed + 50000, stageIndex, workerPool, 20);
+  return fitCollectedRuntimeCombatBatch(model, runtimeBatch, 20);
 }
 
 const runtimeValueTrainers = new WeakMap();
@@ -2176,15 +2193,12 @@ async function main() {
     };
     try {
       if (!options.resume && state.completedGames === 0) {
-        await pretrainCombatValueModel(model, state.seed + 424242);
         runtimeTeacherWorkerPool = new RuntimeTeacherWorkerPool(options.workers);
-        await fitRuntimeCombatTeacherBatch(
+        await pretrainRuntimeCombatModel(
           model,
-          state.seed + 50000,
+          state.seed,
           state.curriculum.currentStageIndex,
-          runtimeTeacherWorkerPool,
-          20,
-          20
+          runtimeTeacherWorkerPool
         );
       }
       runtimeTeacherWorkerPool = runtimeTeacherWorkerPool ||
