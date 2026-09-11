@@ -3,15 +3,9 @@ const os = require('os');
 const crypto = require('crypto');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const {
-  runtimeTeacherDatasetSignature,
-  verifyRuntimeTeacherWorkerInvariants,
-  workerPoolDispatchProbe
-} = require('./cloud-train-runner');
-const { verifyWorkerLifecycle } = require('./tests/task106-worker-lifecycle.cjs');
-const { verifyRuntimeTeacherTransfer } = require('./tests/runtime-teacher-transfer.cjs');
 const { verifyPretrainingOverlap } = require('../tests/task106-pretraining-overlap.cjs');
-const { verifyTeacherRanks } = require('../tests/task106-teacher-ranks.cjs');
+
+const INVARIANT_PHASE = '--worker-invariants';
 
 function check(condition, message, details) {
   if (condition) {
@@ -46,7 +40,15 @@ function runTraining(args, env) {
   return result;
 }
 
-async function main() {
+async function verifyInvariants() {
+  const {
+    runtimeTeacherDatasetSignature,
+    verifyRuntimeTeacherWorkerInvariants,
+    workerPoolDispatchProbe
+  } = require('./cloud-train-runner');
+  const { verifyWorkerLifecycle } = require('./tests/task106-worker-lifecycle.cjs');
+  const { verifyRuntimeTeacherTransfer } = require('./tests/runtime-teacher-transfer.cjs');
+  const { verifyTeacherRanks } = require('../tests/task106-teacher-ranks.cjs');
   await verifyWorkerLifecycle();
   await verifyRuntimeTeacherTransfer();
   const invariantResults = await verifyRuntimeTeacherWorkerInvariants(10600, 0, 2);
@@ -84,6 +86,26 @@ async function main() {
     probe);
 
   console.log('Worker dispatch passed:', JSON.stringify(probe));
+  console.log('Worker invariant process resources:', JSON.stringify({
+    memory: process.memoryUsage(), usage: process.resourceUsage()
+  }));
+}
+
+async function main() {
+  // Exit the invariant runtime before starting training: its VM heaps, collected
+  // examples and TensorFlow allocator must not compete with either training arm.
+  // Waiting for process exit also catches leaked workers that keep it alive.
+  const command = [__filename, INVARIANT_PHASE];
+  console.log('Worker invariant command:', JSON.stringify([process.execPath, ...command]));
+  const result = spawnSync(process.execPath, command, { stdio: 'inherit' });
+  console.log('Worker invariant process exit:', result.status, 'signal:', result.signal);
+  check(!result.error && result.status === 0,
+    'worker invariant process failed', { status: result.status, signal: result.signal,
+      error: result.error && result.error.message });
+  console.log('Worker invariant process reaped before training');
+  console.log('Worker training coordinator resources:', JSON.stringify({
+    memory: process.memoryUsage(), usage: process.resourceUsage()
+  }));
   const storageDir = process.env.TASK106_SMOKE_STORAGE || fs.mkdtempSync(path.join(os.tmpdir(), 'diplomacy-task106-workers-'));
   console.log('Worker training storage:', storageDir);
   // Use the public CLI so runner defaults and required arguments stay centralized.
@@ -140,7 +162,7 @@ async function main() {
   console.log('TASK-106 self-play worker smoke passed');
 }
 
-main().catch((error) => {
+(process.argv[2] === INVARIANT_PHASE ? verifyInvariants() : main()).catch((error) => {
   console.error(error.stack || error.message);
   process.exitCode = 1;
 });
