@@ -17,6 +17,8 @@ import subprocess
 import tarfile
 
 REPO = Path(__file__).resolve().parents[2]
+# Matched TASK-106 heap control: default V8 OOMs; 6144 MiB completes all 3 games.
+ECONOMY_HEAP_MIB = 6144
 helper = SourceFileLoader('task103_evidence', str(Path(__file__).with_name('task103-evidence.py'))).load_module()
 sha, save, execute = helper.sha, helper.save, helper.execute
 
@@ -132,6 +134,9 @@ def regression(dest, manifest_path):
                 entry['evidenceEnvironment']['TASK106_SMOKE_STORAGE'] = env['TASK106_SMOKE_STORAGE']
                 entry['timeout_seconds'] = 1200
             if name == 'test-economy-training':
+                env['NODE_OPTIONS'] = (env.get('NODE_OPTIONS', '') +
+                                       f' --max-old-space-size={ECONOMY_HEAP_MIB}').strip()
+                entry['evidenceEnvironment']['NODE_OPTIONS'] = env['NODE_OPTIONS']
                 env['ECONOMY_TRAINING_EVIDENCE_DIR'] = str(reports / 'training')
                 entry['evidenceEnvironment']['ECONOMY_TRAINING_EVIDENCE_DIR'] = env['ECONOMY_TRAINING_EVIDENCE_DIR']
             run = execute(dest, name, ['npm', 'run', name], REPO,

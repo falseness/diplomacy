@@ -7,12 +7,15 @@ const Module = require('module');
 const root = path.resolve(__dirname, '../..');
 const fixture = path.join(root, 'ai/test-ai-command-source-validation.js');
 const options = require('util').parseArgs({options: {
+  'undo-only': {type: 'boolean', default: false},
+  'real-action-manager': {type: 'boolean', default: false},
   'players-source': {type: 'string', default: path.join(root, 'ai/players.js')},
   'original-dependencies': {type: 'boolean', default: false},
   'trace-contract': {type: 'boolean', default: false},
   'inventory-contract': {type: 'boolean', default: false}
 }}).values;
-let source = fs.readFileSync(fixture, 'utf8');
+// Preserve the pre-migration diagnostic, including its failing original inputs.
+let source = fs.readFileSync(path.join(__dirname, 'fixtures/task086-original-source-validation.js'), 'utf8');
 function replaceOnce(before, after) {
   assert.strictEqual(source.split(before).length, 2, 'unique fixture anchor');
   source = source.replace(before, () => after);
@@ -58,6 +61,47 @@ if (!options['original-dependencies']) {
         assert(initialVectors[0].every(row => row.length === 1 &&
           row[0].length === CELL_VECTOR_SIZE && row[0].every(Number.isFinite)));
         console.log('INITIAL NATIVE GRID: PASS; 2 cells, 82 finite channels each');`);
+}
+if (options['undo-only']) {
+  replaceOnce("['simulation', 'execution', 'undo-reconstruction']", "['undo-reconstruction']");
+}
+if (options['real-action-manager']) {
+  assert(!options['original-dependencies']);
+  // Use the actual stack, snapshots, undo dispatch, pop and list restoration.
+  replaceOnce('const actionManager = {undo() {\n        unit.moves = 1;\n        if (phase === \'undo-reconstruction\') {\n          cells[0].unit = {...unit};\n          player.units = [cells[0].unit];\n        }\n      }};', `
+      const actionManager = new ActionManager();
+      const gameEvent = {selected: new Empty(), hideAll() {}, removeSelection() {}};
+      const nextTurnButton = {}, otherSettings = {moveCameraToUndoTarget: false};
+      const unpacker = {fullUnpackUnit(snapshot) {
+        const restored = {...snapshot};
+        cells[0].unit = restored;
+        return restored;
+      }};`);
+  replaceOnce('sendInstructions() { sends++; this.moves = 0 },', `sendInstructions() {
+        actionManager.startAction('unit');
+        actionManager.lastAction.units.push({...this});
+        sends++; this.moves = 0;
+      },`);
+  replaceOnce('isEmpty: Sprite.prototype.isEmpty,',
+    'isEmpty: Sprite.prototype.isEmpty, notEmpty: Sprite.prototype.notEmpty,');
+  replaceOnce('vm.runInContext(`\n      class Player',
+    `vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'options/actionManager.js'), 'utf8'), context);
+    vm.runInContext(\`\n      class Player`);
+  replaceOnce('const players = [null, player];', `const players = [null, player];
+      actionManager.startAction('unit');
+      const priorAction = actionManager.lastAction;
+      const priorUnits = player.units.slice();
+      const rejected = {...command, destinationCoord: {x: -1, y: 0}};
+      const rejectedScores = player.scoreActionCommandsWithFastVectorGrid([rejected],
+        function(candidate) { return applyLiveAiCommandUnit(this, candidate); });
+      assert.strictEqual(rejectedScores.commands.length, 0);
+      assert.strictEqual(actionManager.lastAction, priorAction);
+      assert.strictEqual(actionManager.arr.length, 1);
+      assert.deepStrictEqual(player.units, priorUnits);
+      assert.strictEqual(unit.moves, 1);
+      assert.strictEqual(sends, 0);
+      assert.strictEqual(selects, 0);
+      console.log('REJECTED PRIOR ACTION PRESERVED: PASS');`);
 }
 if (options['trace-contract']) {
   assert(!options['original-dependencies'], 'contract tracing requires real dependencies');
@@ -111,7 +155,8 @@ if (options['inventory-contract']) {
     }`);
   replaceOnce("console.log(JSON.stringify({status: 'passed', scenarios: results,",
     `console.log('CONTRACT INVENTORY:', JSON.stringify(results));
-    assert.strictEqual(results.length, 75, 'all original fixture cases attempted');
+    assert.strictEqual(results.length, ${options['undo-only'] ? 1 : 75},
+      'all selected original fixture cases attempted');
     console.log('CONTRACT INVENTORY COUNTS: attempted=' + results.length +
       ' passed=' + (results.length - failures.length) + ' failed=' + failures.length);
     if (failures.length) {
@@ -124,8 +169,8 @@ const diagnostic = new Module(fixture, module);
 diagnostic.filename = fixture;
 diagnostic.paths = Module._nodeModulePaths(path.dirname(fixture));
 console.log(options['original-dependencies'] ?
-  'DEPENDENCY CONTROL: original fixture (includes its existing vector stub); unchanged 75-case scenario matrix and assertions' :
-  'DEPENDENCY CONTROL: real vectorizeContent/mutableVectorGrid, native Grid/Cell/Hexagon/Empty; unchanged 75-case scenario matrix and assertions');
+  'DEPENDENCY CONTROL: original fixture (includes its existing vector stub); original scenario assertions; undo-only selects one case' :
+  'DEPENDENCY CONTROL: real vectorizeContent/mutableVectorGrid, native Grid/Cell/Hexagon/Empty; original scenario assertions; undo-only selects one case');
 try {
   diagnostic._compile(source, fixture);
 } catch (error) {
