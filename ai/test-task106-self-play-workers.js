@@ -11,6 +11,7 @@ const {
 const { verifyWorkerLifecycle } = require('./tests/task106-worker-lifecycle.cjs');
 const { verifyRuntimeTeacherTransfer } = require('./tests/runtime-teacher-transfer.cjs');
 const { verifyPretrainingOverlap } = require('../tests/task106-pretraining-overlap.cjs');
+const { verifyTeacherRanks } = require('../tests/task106-teacher-ranks.cjs');
 
 function check(condition, message, details) {
   if (condition) {
@@ -49,6 +50,7 @@ async function main() {
   await verifyWorkerLifecycle();
   await verifyRuntimeTeacherTransfer();
   const invariantResults = await verifyRuntimeTeacherWorkerInvariants(10600, 0, 2);
+  verifyTeacherRanks(invariantResults);
   check(invariantResults.length === 10,
     'worker invariant did not compare ten seeds',
     invariantResults.map((result) => result.seed));

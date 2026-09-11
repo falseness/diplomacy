@@ -544,9 +544,10 @@ function collectRuntimeCombatTeacherGame(seed, stageIndex, game, rolloutPredict)
     const labeledGrids = vectorizedGrids.map(runtimeCombatTeacherLabel);
     const scores = labeledGrids.map((example) => example.demonstrationScore);
     const orderedScores = scores.slice().sort((left, right) => left - right);
+    const scoreRanks = new Map(orderedScores.map((score, index) => [score, index]));
     for (let index = 0; index < vectorizedGrids.length; index += 1) {
       const example = labeledGrids[index];
-      const rank = orderedScores.lastIndexOf(scores[index]);
+      const rank = Number.isNaN(scores[index]) ? -1 : scoreRanks.get(scores[index]);
       examples.push({
         board: example.board,
         globalValue: example.globalValue,
