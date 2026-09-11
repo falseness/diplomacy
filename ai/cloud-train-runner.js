@@ -1577,33 +1577,8 @@ async function evaluateCurriculumSimpleAiWinrate(options, state, model) {
   };
 }
 
-async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
-  const baselinePath = options.curriculumBaselineAiModelPath ||
-    DEFAULT_BASELINE_AI_MODEL_PATH;
-  const modelPath = path.join(baselinePath, 'model.json');
-  if (!fs.existsSync(modelPath)) {
-    return {
-      value: null,
-      evaluated: false,
-      games: 0,
-      source: 'measured-model-vs-baseline-AIPlayer-benchmark',
-      baselineModelPath: baselinePath,
-      reason: 'baseline AIPlayer model checkpoint is missing'
-    };
-  }
-
-  const baselineModel = await tf.loadLayersModel(`file://${modelPath}`);
-  const currentPredict = typeof options.curriculumPredictFunction === 'function'
-    ? options.curriculumPredictFunction
-    : createRuntimeModelPredict(model);
-  const baselinePredict = createRuntimeModelPredict(baselineModel);
-  const games = options.curriculumGateGames || options.oldVsNewGames;
-  let modelWins = 0;
-  let baselineWins = 0;
-  let draws = 0;
-  const gameResults = [];
-  try {
-    for (let game = 1; game <= games; game += 1) {
+function runCurriculumBaselineGame(options, state, game, currentPredict, baselinePredict) {
+  const baselinePath = options.curriculumBaselineAiModelPath || DEFAULT_BASELINE_AI_MODEL_PATH;
       const modelSide = game % 2 === 1 ? 'A' : 'B';
       const baselineAiPlayerSide = modelSide === 'A' ? 'B' : 'A';
       const seed = state.seed + state.completedGames * 4129 +
@@ -1633,15 +1608,12 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
       });
       let winner = 'draw';
       if (result.winnerSide === modelSide) {
-        modelWins += 1;
         winner = 'model';
       } else if (result.winnerSide === baselineAiPlayerSide) {
-        baselineWins += 1;
         winner = 'baseline-AIPlayer';
       } else {
-        draws += 1;
       }
-      gameResults.push({
+      return {
         game,
         seed,
         modelSide,
@@ -1660,10 +1632,51 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
           stage: state.curriculum.currentStage,
           source: 'benchmarkHarness fixed combat map'
         }
-      });
+      };
+}
+
+async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
+  const baselinePath = options.curriculumBaselineAiModelPath ||
+    DEFAULT_BASELINE_AI_MODEL_PATH;
+  const modelPath = path.join(baselinePath, 'model.json');
+  if (!fs.existsSync(modelPath)) {
+    return {
+      value: null,
+      evaluated: false,
+      games: 0,
+      source: 'measured-model-vs-baseline-AIPlayer-benchmark',
+      baselineModelPath: baselinePath,
+      reason: 'baseline AIPlayer model checkpoint is missing'
+    };
+  }
+
+  const concurrency = typeof options.curriculumPredictFunction === 'function'
+    ? 0 : (options.baselineEvaluationConcurrency || 0);
+  const baselineModel = concurrency ? null : await tf.loadLayersModel(`file://${modelPath}`);
+  const currentPredict = typeof options.curriculumPredictFunction === 'function'
+    ? options.curriculumPredictFunction
+    : createRuntimeModelPredict(model);
+  const baselinePredict = baselineModel ? createRuntimeModelPredict(baselineModel) : null;
+  const games = options.curriculumGateGames || options.oldVsNewGames;
+  let modelWins = 0;
+  let baselineWins = 0;
+  let draws = 0;
+  const gameResults = [];
+  try {
+    const isolatedResults = concurrency
+      ? await require('./baseline-evaluation-process').evaluateInProcesses(
+        { ...options, curriculumBaselineAiModelPath: baselinePath }, state, model, concurrency, options.baselineEvaluationObserver)
+      : null;
+    for (let game = 1; game <= games; game += 1) {
+      const result = isolatedResults ? isolatedResults[game - 1]
+        : runCurriculumBaselineGame(options, state, game, currentPredict, baselinePredict);
+      gameResults.push(result);
+      if (result.winner === 'model') modelWins += 1;
+      else if (result.winner === 'baseline-AIPlayer') baselineWins += 1;
+      else draws += 1;
     }
   } finally {
-    baselineModel.dispose();
+    if (baselineModel) baselineModel.dispose();
   }
   return {
     value: games ? modelWins / games : null,
@@ -2422,6 +2435,7 @@ if (require.main === module && isMainThread) {
 }
 
 module.exports = {
+  runCurriculumBaselineGame,
   RuntimeTeacherWorkerPool,
   createRuntimeModelPredict,
   evaluateCurriculumSimpleAiWinrate,
