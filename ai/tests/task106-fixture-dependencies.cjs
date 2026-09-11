@@ -9,7 +9,8 @@ const fixture = path.join(root, 'ai/test-ai-command-source-validation.js');
 const options = require('util').parseArgs({options: {
   'players-source': {type: 'string', default: path.join(root, 'ai/players.js')},
   'original-dependencies': {type: 'boolean', default: false},
-  'trace-contract': {type: 'boolean', default: false}
+  'trace-contract': {type: 'boolean', default: false},
+  'inventory-contract': {type: 'boolean', default: false}
 }}).values;
 let source = fs.readFileSync(fixture, 'utf8');
 function replaceOnce(before, after) {
@@ -91,6 +92,32 @@ if (options['trace-contract']) {
         }
       };
     \`, context);`);
+}
+if (options['inventory-contract']) {
+  // Each fixture case owns a fresh VM. Collect independent failures to expose
+  // the contract's scope, but retain all assertions and fail the entire gate.
+  replaceOnce('const results = [];', 'const results = []; const failures = [];');
+  const contextAnchor = options['original-dependencies'] ?
+    'const context = vm.createContext(' :
+    "console.log('SCENARIO:', phase, scenario); const context = vm.createContext(";
+  replaceOnce(contextAnchor, 'try { ' + contextAnchor);
+  replaceOnce("results.push({phase, scenario, status: 'PASS'});",
+    `results.push({phase, scenario, status: 'PASS'});
+    } catch (error) {
+      const failure = {phase, scenario, status: 'FAIL',
+        error: error.name + ': ' + error.message, stack: error.stack};
+      results.push(failure);
+      failures.push(error);
+    }`);
+  replaceOnce("console.log(JSON.stringify({status: 'passed', scenarios: results,",
+    `console.log('CONTRACT INVENTORY:', JSON.stringify(results));
+    assert.strictEqual(results.length, 75, 'all original fixture cases attempted');
+    console.log('CONTRACT INVENTORY COUNTS: attempted=' + results.length +
+      ' passed=' + (results.length - failures.length) + ' failed=' + failures.length);
+    if (failures.length) {
+      throw new AggregateError(failures, 'fixture contract failures; prerequisite remains failed');
+    }
+    console.log(JSON.stringify({status: 'passed', scenarios: results,`);
 }
 // Compile at the original filename so all relative dependency paths are unchanged.
 const diagnostic = new Module(fixture, module);
