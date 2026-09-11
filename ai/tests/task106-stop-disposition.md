@@ -33,3 +33,10 @@ Iteration 18 confirmed the same stop condition against predecessor
 hashes still match. Its audit is in `artifacts/TASK-106/iteration-18`.
 This repeat audit authorizes no benchmark retry and establishes no new speed
 result. The first pending task remains blocked by its failed opportunity gate.
+
+An autonomous retry must respect this stop condition even though TASK-106 is
+still the first pending entry. Rechecking the same evidence is not a new
+implementation experiment and cannot advance readiness. Do not repeat the
+completed experiment or full gates without a distinct, evidence-supported
+candidate; do not skip ahead to another task. Preserve pending until the
+opportunity prerequisite and remaining acceptance gates actually pass.
