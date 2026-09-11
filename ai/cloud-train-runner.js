@@ -69,6 +69,10 @@ function parseArgs(argv) {
       options.evaluateLatest = true;
       continue;
     }
+    if (arg === '--reusable-baseline-evaluation') {
+      options.reusableBaselineEvaluation = true;
+      continue;
+    }
     if (!arg.startsWith('--') || i + 1 >= argv.length) {
       fail(`invalid runner argument: ${arg}`);
     }
@@ -1651,7 +1655,12 @@ async function evaluateCurriculumBaselineAiWinrate(options, state, model) {
   }
 
   const concurrency = typeof options.curriculumPredictFunction === 'function'
-    ? 0 : (options.baselineEvaluationPool ? 2 : (options.baselineEvaluationConcurrency || 0));
+    ? 0 : (options.baselineEvaluationPool || options.reusableBaselineEvaluation
+      ? 2 : (options.baselineEvaluationConcurrency || 0));
+  if (options.reusableBaselineEvaluation && concurrency && !options.baselineEvaluationPool) {
+    const { ReusableBaselineEvaluator } = require('./reusable-baseline-evaluation');
+    options.baselineEvaluationPool = new ReusableBaselineEvaluator();
+  }
   const baselineModel = concurrency ? null : await tf.loadLayersModel(`file://${modelPath}`);
   const currentPredict = typeof options.curriculumPredictFunction === 'function'
     ? options.curriculumPredictFunction
@@ -1985,6 +1994,7 @@ function manifestValue(options, state, paths, status, errorMessage) {
       curriculumBaselineWinrateThreshold: options.curriculumBaselineWinrateThreshold,
       evaluationCadence: options.evaluationCadence,
       workers: options.workers,
+      reusableBaselineEvaluation: Boolean(options.reusableBaselineEvaluation),
     },
     progress: {
       completedGames: state.completedGames,
@@ -2186,6 +2196,9 @@ async function main() {
   }
 
   try {
+    if (options.reusableBaselineEvaluation && options.curriculumGateGames !== 2) {
+      fail('--reusable-baseline-evaluation requires --curriculum-gate-games 2');
+    }
     compileModel(model);
     let runtimeTeacherWorkerPool = null;
     let runtimeBatchPrefetch = null;
@@ -2395,6 +2408,11 @@ async function main() {
       }
     }
 
+    if (options.baselineEvaluationPool) {
+      const pool = options.baselineEvaluationPool;
+      options.baselineEvaluationPool = null;
+      await pool.close();
+    }
     if (state.completedGames === state.totalGames) {
       state.status = 'complete';
       state.completedAt = nowIso(state, 'complete');
@@ -2428,7 +2446,11 @@ async function main() {
     persistRunMetadata(options, state, paths, 'failed', error.message, gameMetricRecords);
     throw error;
   } finally {
-    model.dispose();
+    try {
+      if (options.baselineEvaluationPool) await options.baselineEvaluationPool.close();
+    } finally {
+      model.dispose();
+    }
   }
 }
 

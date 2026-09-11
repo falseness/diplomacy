@@ -9,7 +9,7 @@ let sequence = 0;
 
 function record(event) {
   fs.appendFileSync(process.env.TASK106_TRAINING_EVENTS, JSON.stringify({
-    ...event, threadId, monotonicNs: process.hrtime.bigint().toString()
+    ...event, pid: process.pid, threadId, monotonicNs: process.hrtime.bigint().toString()
   }) + '\n');
 }
 

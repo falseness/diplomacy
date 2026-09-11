@@ -28,6 +28,7 @@ curriculum_lr_reduction_improved=false
 evaluate_latest=false
 fail_after_game=0
 workers=1
+reusable_baseline_evaluation=false
 
 usage() {
   cat <<'EOF'
@@ -67,6 +68,7 @@ Options:
   --evaluate-latest         Load and evaluate the latest complete checkpoint
   --fail-after-game N       Force a failure after game N for recovery testing
   --workers N               Runtime self-play workers for training batch generation (default: 1)
+  --reusable-baseline-evaluation  Opt in to reusable two-process baseline evaluation (requires gate games 2)
   -h, --help                Show this help
 
 Examples:
@@ -211,6 +213,10 @@ while (($#)); do
       workers="$2"
       shift 2
       ;;
+    --reusable-baseline-evaluation)
+      reusable_baseline_evaluation=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -230,6 +236,9 @@ if [[ -z "$curriculum_gate_games" ]]; then
   curriculum_gate_games="$old_vs_new_games"
 fi
 require_positive_integer "--curriculum-gate-games" "$curriculum_gate_games"
+if [[ "$reusable_baseline_evaluation" == true && "$curriculum_gate_games" != 2 ]]; then
+  die "--reusable-baseline-evaluation requires --curriculum-gate-games 2"
+fi
 require_positive_integer "--evaluation-cadence" "$evaluation_cadence"
 require_positive_integer "--plateau-window" "$plateau_window"
 require_positive_integer "--plateau-patience" "$plateau_patience"
@@ -323,6 +332,9 @@ runner_args=(
 )
 if [[ "$resume" == true ]]; then
   runner_args+=(--resume)
+fi
+if [[ "$reusable_baseline_evaluation" == true ]]; then
+  runner_args+=(--reusable-baseline-evaluation)
 fi
 if [[ "$evaluate_latest" == true ]]; then
   runner_args+=(--evaluate-latest)
