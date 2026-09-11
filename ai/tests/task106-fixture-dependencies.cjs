@@ -8,7 +8,8 @@ const root = path.resolve(__dirname, '../..');
 const fixture = path.join(root, 'ai/test-ai-command-source-validation.js');
 const options = require('util').parseArgs({options: {
   'players-source': {type: 'string', default: path.join(root, 'ai/players.js')},
-  'original-dependencies': {type: 'boolean', default: false}
+  'original-dependencies': {type: 'boolean', default: false},
+  'trace-contract': {type: 'boolean', default: false}
 }}).values;
 let source = fs.readFileSync(fixture, 'utf8');
 function replaceOnce(before, after) {
@@ -56,6 +57,40 @@ if (!options['original-dependencies']) {
         assert(initialVectors[0].every(row => row.length === 1 &&
           row[0].length === CELL_VECTOR_SIZE && row[0].every(Number.isFinite)));
         console.log('INITIAL NATIVE GRID: PASS; 2 cells, 82 finite channels each');`);
+}
+if (options['trace-contract']) {
+  assert(!options['original-dependencies'], 'contract tracing requires real dependencies');
+  // Observe the real functions without replacing invalid values, swallowing
+  // exceptions, or changing any scenario/assertion. The resolver probe is a
+  // read-only observation, not an extra command application.
+  replaceOnce("vm.runInContext(source, context, {filename: 'ai/players.js'});",
+    `vm.runInContext(source, context, {filename: 'ai/players.js'});
+    vm.runInContext(\`
+      let contractApplications = 0;
+      const originalInvalidate = invalidate;
+      invalidate = function() {
+        const result = originalInvalidate();
+        console.log('CONTRACT INVALIDATED:', phase, scenario,
+          'resolverRejects=' + (resolveLiveAiCommandUnit(player, command) === null));
+        return result;
+      };
+      const originalApply = applyLiveAiCommandUnit;
+      applyLiveAiCommandUnit = function(...args) {
+        contractApplications++;
+        return originalApply.apply(this, args);
+      };
+      const originalVectorise = vectoriseGrid;
+      vectoriseGrid = function(...args) {
+        try {
+          return originalVectorise.apply(this, args);
+        } catch (error) {
+          console.log('CONTRACT VECTOR FAILURE:', phase, scenario,
+            'commandApplications=' + contractApplications,
+            error.name + ': ' + error.message);
+          throw error;
+        }
+      };
+    \`, context);`);
 }
 // Compile at the original filename so all relative dependency paths are unchanged.
 const diagnostic = new Module(fixture, module);
