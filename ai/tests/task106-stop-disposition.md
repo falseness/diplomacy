@@ -27,3 +27,9 @@ repeat unchanged measurements, or enable concurrency by default.
 
 The fresh audit and test-step disposition are in
 `artifacts/TASK-106/iteration-17`. These artifacts are intentionally uncommitted.
+
+Iteration 18 confirmed the same stop condition against predecessor
+`af31676854a004a611d8cf6739fd9951bbc84a15`; the preserved source and input
+hashes still match. Its audit is in `artifacts/TASK-106/iteration-18`.
+This repeat audit authorizes no benchmark retry and establishes no new speed
+result. The first pending task remains blocked by its failed opportunity gate.
