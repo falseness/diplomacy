@@ -30,6 +30,10 @@ class BarrackInterface {
         
         this.makeTrainInterfaces()
         this.updateSizes()
+
+        this.renderCache = undefined
+        this.renderCacheBounds = undefined
+        this.renderCacheDirty = true
     }
     updateSizes() {
         let maximumTrainInterfacesCount = 0
@@ -183,9 +187,12 @@ class BarrackInterface {
 
         this.changeUnitTab(barrack)
         this.goldText.text = barrack.info.gold
+        this.invalidateRenderCache()
         this.visible = true
     }
     set visible(boolean) {
+        if (boolean && !this.#visible)
+            this.invalidateRenderCache()
         this.#visible = boolean
         /*if (mobilePhone)
             nextTurnButton.canClick = !boolean*/
@@ -213,16 +220,59 @@ class BarrackInterface {
     isInside(point) {
         return this.background.isInside(point)
     }
-    draw(ctx) {
-        if (!this.visible)
-            return
-
+    invalidateRenderCache() {
+        this.renderCacheDirty = true
+    }
+    drawContents(ctx) {
         this.background.draw(ctx)
         this.gold.draw(ctx)
         this.goldText.draw(ctx)
         for (let i in this.trainInterfaces[this.trainInterfacesTab]) {
             this.trainInterfaces[this.trainInterfacesTab][i].draw(ctx)
         }
+    }
+    getRenderCacheBounds() {
+        const padding = this.background.strokeWidth
+        const left = Math.max(0, Math.floor(this.background.x - padding))
+        const top = Math.max(0, Math.floor(this.background.y - padding))
+        const right = Math.min(WIDTH, Math.ceil(this.background.right + padding))
+        const bottom = Math.min(HEIGHT, Math.ceil(this.background.bottom + padding))
+        return {left, top, width: right - left, height: bottom - top}
+    }
+    createRenderCache() {
+        const bounds = this.getRenderCacheBounds()
+        if (bounds.width <= 0 || bounds.height <= 0)
+            return false
+
+        let cache = this.renderCache
+        if (!cache || cache.width != bounds.width || cache.height != bounds.height) {
+            cache = document.createElement('canvas')
+            cache.width = bounds.width
+            cache.height = bounds.height
+        }
+        const cacheCtx = cache.getContext('2d')
+        if (!cacheCtx)
+            return false
+
+        cacheCtx.setTransform(1, 0, 0, 1, 0, 0)
+        cacheCtx.clearRect(0, 0, cache.width, cache.height)
+        cacheCtx.translate(-bounds.left, -bounds.top)
+        this.drawContents(cacheCtx)
+
+        this.renderCache = cache
+        this.renderCacheBounds = bounds
+        this.renderCacheDirty = false
+        return true
+    }
+    draw(ctx) {
+        if (!this.visible)
+            return
+        if ((this.renderCacheDirty || !this.renderCache) && !this.createRenderCache()) {
+            this.drawContents(ctx)
+            return
+        }
+        const bounds = this.renderCacheBounds
+        ctx.drawImage(this.renderCache, bounds.left, bounds.top)
     }
 }
 

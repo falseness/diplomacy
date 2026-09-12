@@ -1,0 +1,217 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 1254 1254" role="img" aria-labelledby="title description">
+  <title id="title">Barrack — single-tent training camp</title>
+  <desc id="description">Cream A-frame tent with an open entrance, a wooden practice dummy and round shield on the left, and a rack holding two swords with a leaning shield on the right. Three-quarter miniature, neutral colors, upper-left lighting, and a transparent background. Editable vector paths and gradients only; no embedded raster images.</desc>
+  <defs>
+    <linearGradient id="canvas-side" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#decea2" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#b7ac86" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#887f60" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="canvas-front" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#fff0bb" stop-opacity="1"/>
+      <stop offset="48%" stop-color="#eddbab" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#b3a77f" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="left-flap" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#fff2c5" stop-opacity="1"/>
+      <stop offset="48%" stop-color="#eedbab" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#afa37b" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="right-flap" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#fff0bf" stop-opacity="1"/>
+      <stop offset="46%" stop-color="#f1dfad" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#b3a47c" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="canvas-fold" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#e7d49e" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#a99a6e" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="entrance-shadow" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#28382a" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#38442f" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#50533b" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="canvas-hem" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#aaa27b" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#726e51" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="timber-front" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#b69762" stop-opacity="1"/>
+      <stop offset="42%" stop-color="#9b7949" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#765b32" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="timber-side" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#8d7245" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#59482b" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="timber-top" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#dcc08b" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ac8955" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="rail-front" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#b9945e" stop-opacity="1"/>
+      <stop offset="50%" stop-color="#9b7744" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#75572e" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="shield-rim" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#ead9b2" stop-opacity="1"/>
+      <stop offset="30%" stop-color="#c4b58f" stop-opacity="1"/>
+      <stop offset="70%" stop-color="#93886a" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#786f53" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="shield-wood" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#b09c79" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#978566" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#75674c" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#f2e8ca" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#c9c6a7" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#8b8d73" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="sword-guard" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#f2e6c2" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#b0ac8d" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#73755b" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="sword-grip" x1="0%" y1="0%" x2="100%" y2="90%">
+      <stop offset="0%" stop-color="#a99e72" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#55583d" stop-opacity="1"/>
+    </linearGradient>
+    <radialGradient id="shield-boss" cx="30%" cy="23%" r="77%">
+      <stop offset="0%" stop-color="#ddd5b7" stop-opacity="1"/>
+      <stop offset="30%" stop-color="#b5b499" stop-opacity="1"/>
+      <stop offset="66%" stop-color="#858976" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#515743" stop-opacity="1"/>
+    </radialGradient>
+    <radialGradient id="ground-shadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#27392d" stop-opacity="0.39"/>
+      <stop offset="50%" stop-color="#27392d" stop-opacity="0.24"/>
+      <stop offset="78%" stop-color="#27392d" stop-opacity="0.11"/>
+      <stop offset="100%" stop-color="#27392d" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="dummy-shield-face-clip">
+      <ellipse cx="0" cy="0" rx="68" ry="94" fill="white"/>
+    </clipPath>
+    <clipPath id="leaning-shield-face-clip">
+      <ellipse cx="0" cy="0" rx="78" ry="111" fill="white"/>
+    </clipPath>
+  </defs>
+  <g id="contact-shadows">
+    <ellipse cx="612" cy="981" rx="479" ry="54" fill="url(#ground-shadow)"/>
+    <ellipse cx="178" cy="988" rx="153" ry="39" fill="url(#ground-shadow)"/>
+    <ellipse cx="1025" cy="1056" rx="202" ry="56" fill="url(#ground-shadow)"/>
+  </g>
+  <g id="tent">
+    <path d="M199 909 L513 263 L725 153 L1041 832 L1020 924 L832 1002 Q750 1010 673 989 L314 962 Z" fill="url(#canvas-side)" stroke="#4e5038" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M513 263 L725 153 L1041 832 L1020 924 L832 1002 Z" fill="url(#canvas-side)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M513 263 L832 1002 Q750 1010 673 989 L314 962 L199 909 Z" fill="url(#canvas-front)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M513 331 Q482 527 317 958 L675 988 Q587 696 513 331 Z" fill="url(#entrance-shadow)"/>
+    <path d="M318 951 L650 916 L675 984 Z" fill="#596047" opacity=".32"/>
+    <path d="M316 958 L674 986" fill="none" opacity=".7" stroke="#a29466" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M513 266 Q528 333 494 440 Q418 699 315 961 L201 910 Q353 589 513 266 Z" fill="url(#left-flap)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M513 276 Q498 360 473 420 L221 884 L201 910 Q353 589 513 276 Z" fill="#ffefbc" opacity=".83"/>
+    <path d="M493 424 Q441 615 315 956 L273 941 Q363 721 493 424 Z" fill="url(#canvas-fold)" opacity=".8"/>
+    <path d="M211 882 L335 913 L315 961 L199 935 L201 910 Z" fill="url(#canvas-hem)"/>
+    <path d="M215 883 L332 912" fill="none" opacity=".9" stroke="#f6e7bb" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M216 869 Q362 573 508 284" fill="none" opacity=".85" stroke="#fff4cb" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M513 268 Q558 481 671 988 Q747 1007 832 1002 Q670 634 513 268 Z" fill="url(#right-flap)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M514 282 Q554 456 602 660 L790 927 L805 977 Q692 716 514 282 Z" fill="#fff0c0" opacity=".62"/>
+    <path d="M530 370 Q640 626 832 1001 L804 997 Q679 690 530 370 Z" fill="url(#canvas-fold)" opacity=".42"/>
+    <path d="M657 934 Q731 932 797 917 L831 1002 Q752 1007 672 989 Z" fill="url(#canvas-hem)" opacity=".82"/>
+    <path d="M514 318 Q570 592 677 985 Q749 1001 822 998" fill="none" opacity=".76" stroke="#f8e8b7" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M799 914 L1026 818 L1041 832 L1020 924 L832 1002 Z" fill="url(#canvas-hem)" opacity=".75"/>
+    <path d="M513 263 L832 1002" fill="none" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M520 261 L724 157 L1038 832" fill="none" opacity=".86" stroke="#f5e0a9" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M513 263 L725 153" fill="none" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M511 260 L498 233 Q494 224 502 224 Q508 224 511 233 L521 254 Z" fill="url(#timber-front)" stroke="#645533" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M718 151 L731 133 Q737 126 740 134 Q740 139 733 147 L725 158 Z" fill="url(#timber-front)" stroke="#645533" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="practice-dummy">
+    <path d="M150 521 L187 510 L227 519 L219 948 L195 978 L146 969 Z" fill="url(#timber-front)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M187 531 L227 519 L219 948 L195 978 L185 968 Z" fill="url(#timber-side)"/>
+    <path d="M150 521 L187 510 L227 519 L187 532 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M155 535 L151 901" fill="none" opacity=".66" stroke="#d2af78" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M43 610 L63 597 L330 636 L329 683 L307 697 L43 648 Z" fill="url(#timber-side)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M43 610 L306 649 L307 697 L43 648 Z" fill="url(#rail-front)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M43 610 L63 597 L330 636 L306 649 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M51 614 L304 653" fill="none" opacity=".68" stroke="#e1c18a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M48 636 L307 681 L307 697 L43 648 Z" fill="#71552f" opacity=".4"/>
+    <path d="M143 904 L188 910 L236 902 L283 966 L247 981 L195 973 L144 937 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M146 907 L147 967 L93 997 L57 987 L59 954 Z" fill="url(#timber-front)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M60 954 L94 964 L93 997 L57 987 Z" fill="url(#timber-side)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M61 954 L143 906 L150 914 L96 964 Z" fill="url(#timber-top)"/>
+    <path d="M148 908 L187 916 L188 982 L147 973 Z" fill="url(#timber-front)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M188 917 L208 910 L209 976 L188 982 Z" fill="url(#timber-side)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M210 910 L239 902 L287 968 L291 1003 L248 1012 L213 1003 Z" fill="url(#timber-side)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M210 910 L250 977 L248 1012 L213 1003 Z" fill="url(#timber-front)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M213 910 L239 902 L287 968 L250 977 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M216 917 L249 974" fill="none" opacity=".76" stroke="#dbc08b" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <g id="dummy-shield" transform="translate(161 714) rotate(-3)">
+      <ellipse cx="7" cy="4" rx="80" ry="107" fill="#514e35" stroke="#4e5038" stroke-width="5"/>
+      <ellipse cx="0" cy="0" rx="80" ry="107" fill="url(#shield-rim)" stroke="#4e5038" stroke-width="5"/>
+      <ellipse cx="0" cy="0" rx="69" ry="95" fill="url(#shield-wood)" stroke="#8b7f60" stroke-width="2"/>
+      <g id="dummy-shield-planks" clip-path="url(#dummy-shield-face-clip)">
+        <path d="M-34.4 -107 L-24.8 107 M17.6 -107 L30.4 107" fill="none" opacity=".36" stroke="#75664c" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M-5.6000000000000005 -107 L4.0 107" fill="none" opacity=".22" stroke="#c2ad83" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      </g>
+      <path d="M-63.2 -53.5 Q-40.0 -109.14 12.8 -98.44" fill="none" opacity=".85" stroke="#fff0cb" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+      <ellipse cx="2" cy="2" rx="29.6" ry="36.38" fill="#4d5039"/>
+      <ellipse cx="-1" cy="-2" rx="27.200000000000003" ry="33.17" fill="url(#shield-boss)" stroke="#64694f" stroke-width="3"/>
+      <ellipse cx="-9.6" cy="-13.91" rx="11.200000000000001" ry="12.305" fill="#e6dfc3" opacity=".79"/>
+    </g>
+  </g>
+  <g id="weapon-rack">
+    <path d="M1136 774 L1166 767 L1216 1018 L1194 1034 L1166 1026 L1122 818 Z" fill="url(#timber-side)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M1157 808 L1200 1016 L1193 1029 L1167 1024 L1124 820 Z" fill="#6a542e" opacity=".55"/>
+    <path d="M888 771 L905 754 L1171 786 L1172 817 L1150 833 L887 806 Z" fill="url(#rail-front)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M888 771 L905 754 L1171 786 L1150 798 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M893 778 L1153 810" fill="none" opacity=".55" stroke="#c6a16a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M897 762 L916 751 L950 758 L905 1033 L876 1047 L846 1041 Z" fill="url(#timber-side)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M897 762 L928 769 L876 1047 L846 1041 Z" fill="url(#timber-front)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M897 762 L916 751 L950 758 L928 769 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M900 772 L852 1033" fill="none" opacity=".7" stroke="#c3a16a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M1125 762 L1146 749 L1169 754 L1135 1075 L1109 1087 L1079 1080 Z" fill="url(#timber-side)" stroke="#4e5038" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M1125 762 L1148 769 L1109 1087 L1079 1080 Z" fill="url(#timber-front)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M1125 762 L1146 749 L1169 754 L1148 769 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M1128 776 L1087 1073" fill="none" opacity=".65" stroke="#bc9860" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M900 950 L920 940 L1174 974 L1174 1003 L1144 1018 L896 981 Z" fill="url(#rail-front)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M900 950 L920 940 L1174 974 L1149 985 Z" fill="url(#timber-top)" stroke="#4e5038" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="left-training-sword" transform="translate(974 751) rotate(10)">
+    <path d="M-12 -75 L12 -75 L12 -13 L-12 -13 Z" fill="url(#sword-grip)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M-6 -66 L-5 -21" fill="none" opacity=".43" stroke="#c7b98c" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <ellipse cx="0" cy="-82" rx="22" ry="22" fill="url(#shield-boss)" stroke="#4e5038" stroke-width="5"/>
+    <ellipse cx="-7" cy="-89" rx="8" ry="8" fill="#e6dec2" opacity=".85"/>
+    <path d="M-21 4 L22 4 L19 157 L0 188 L-21 158 Z" fill="url(#steel)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M0 8 L21 8 L19 157 L0 188 Z" fill="#8f947d" opacity=".77"/>
+    <path d="M-15 10 L-15 155 L0 182 L-5 154 L-4 9 Z" fill="#f1e8c9" opacity=".83"/>
+    <path d="M-38 -15 Q0 -24 38 -13 L39 3 Q0 -2 -38 6 Z" fill="url(#sword-guard)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M-31 -12 Q0 -18 32 -9" fill="none" opacity=".87" stroke="#eee4c5" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="right-training-sword" transform="translate(1076 751) rotate(8)">
+    <path d="M-12 -75 L12 -75 L12 -13 L-12 -13 Z" fill="url(#sword-grip)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M-6 -66 L-5 -21" fill="none" opacity=".43" stroke="#c7b98c" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <ellipse cx="0" cy="-82" rx="22" ry="22" fill="url(#shield-boss)" stroke="#4e5038" stroke-width="5"/>
+    <ellipse cx="-7" cy="-89" rx="8" ry="8" fill="#e6dec2" opacity=".85"/>
+    <path d="M-21 4 L22 4 L19 157 L0 188 L-21 158 Z" fill="url(#steel)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M0 8 L21 8 L19 157 L0 188 Z" fill="#8f947d" opacity=".77"/>
+    <path d="M-15 10 L-15 155 L0 182 L-5 154 L-4 9 Z" fill="#f1e8c9" opacity=".83"/>
+    <path d="M-38 -15 Q0 -24 38 -13 L39 3 Q0 -2 -38 6 Z" fill="url(#sword-guard)" stroke="#4e5038" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M-31 -12 Q0 -18 32 -9" fill="none" opacity=".87" stroke="#eee4c5" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="leaning-shield" transform="translate(1030 961) rotate(18)">
+    <ellipse cx="7" cy="4" rx="90" ry="124" fill="#514e35" stroke="#4e5038" stroke-width="5"/>
+    <ellipse cx="0" cy="0" rx="90" ry="124" fill="url(#shield-rim)" stroke="#4e5038" stroke-width="5"/>
+    <ellipse cx="0" cy="0" rx="79" ry="112" fill="url(#shield-wood)" stroke="#8b7f60" stroke-width="2"/>
+    <g id="leaning-shield-planks" clip-path="url(#leaning-shield-face-clip)">
+      <path d="M-38.7 -124 L-27.9 124 M19.8 -124 L34.2 124" fill="none" opacity=".36" stroke="#75664c" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M-6.300000000000001 -124 L4.5 124" fill="none" opacity=".22" stroke="#c2ad83" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <path d="M-71.10000000000001 -62.0 Q-45.0 -126.48 14.4 -114.08" fill="none" opacity=".85" stroke="#fff0cb" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <ellipse cx="2" cy="2" rx="33.3" ry="42.160000000000004" fill="#4d5039"/>
+    <ellipse cx="-1" cy="-2" rx="30.6" ry="38.44" fill="url(#shield-boss)" stroke="#64694f" stroke-width="3"/>
+    <ellipse cx="-10.799999999999999" cy="-16.12" rx="12.600000000000001" ry="14.26" fill="#e6dfc3" opacity=".79"/>
+  </g>
+</svg>

@@ -27,30 +27,37 @@ let assets = {
     goldmine: new Image(),
     bush: new Image()
 }
+let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
+for (let i = 0; i < grassHexImages.length; ++i)
+    assets[grassHexImages[i]] = new Image()
 let imagesCountLoaded = 0
-let images = ['town', 'farm', 'noob', 'archer',
+let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
         'mountain', 'lake', 'sea', 'goldmine', 'bush']
+let images = spriteImages.concat(grassHexImages)
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         ++imagesCountLoaded
+        cachedImages[images[i]] = cacheImage(images[i])
     }
 }
 
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
+    let width = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.width * 2 : assets.size
+    let height = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.height * 2 : assets.size
     
-    tmpCanvas.width = assets.size
-    tmpCanvas.height = assets.size
+    tmpCanvas.width = width
+    tmpCanvas.height = height
 
     let tmpCtx = tmpCanvas.getContext('2d')
 
     let pos = {
-        x: assets.size / 2,
-        y: assets.size / 2
+        x: width / 2,
+        y: height / 2
     }
-    drawImage(tmpCtx, image, pos)
+    drawImage(tmpCtx, image, pos, width, height)
 
     return tmpCanvas
 }
@@ -74,9 +81,16 @@ function loadAssets() {
     assets.undo.src = "assets/undo.svg"
     
     assets.gold.src = "assets/gold.svg"
-    
-    for (let i = 0; i < images.length; ++i) {
-        assets[images[i]].src = "assets/" + images[i] + ".svg"
+
+    loadSprites()
+    for (let i = 0; i < grassHexImages.length; ++i) {
+        assets[grassHexImages[i]].src = "assets/" + grassHexImages[i] + ".svg"
+    }
+}
+function loadSprites() {
+    let spritesFolder = otherSettings.usePolishedSprites ? "sprites" : "spritesOld"
+    for (let i = 0; i < spriteImages.length; ++i) {
+        assets[spriteImages[i]].src = "assets/" + spritesFolder + "/" + spriteImages[i] + ".svg"
     }
 }
 function waitForImagesLoad() {

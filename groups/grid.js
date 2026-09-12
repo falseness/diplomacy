@@ -29,6 +29,16 @@ class Grid extends SpritesGroup {
     constructor(x, y, size) {
         super(x, y)
 
+        this.surfaceCache = undefined
+        this.surfaceCacheBounds = undefined
+        this.surfaceCacheScale = 0
+        this.surfaceCacheState = undefined
+        this.surfaceCacheBuildings = undefined
+        this.surfaceCacheUnits = undefined
+        this.surfaceCacheBuildingImages = undefined
+        this.surfaceCacheUnitImages = undefined
+        this.surfaceCacheRevision = 0
+
         if (size) 
             this.fill(size.x, size.y)
     }
@@ -148,6 +158,8 @@ class Grid extends SpritesGroup {
     drawHexagons(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
                 if (isFogOfWar && !this.fogOfWar[i][j])
                     continue
                 let cell = this.arr[i][j]
@@ -159,6 +171,8 @@ class Grid extends SpritesGroup {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 let cell = this.arr[i][j]
+                if (cell.building.isMapEdge)
+                    continue
                 
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
                     if (debug) {
@@ -173,7 +187,7 @@ class Grid extends SpritesGroup {
                 else if (debug) {
                     cell.coordText.draw(ctx)
                 }
-                else {
+                else if (cell.infoText.text != '') {
                     cell.infoText.draw(ctx)
                 }
                 cell.infoText.text = ''
@@ -184,6 +198,32 @@ class Grid extends SpritesGroup {
         for (let i = 0; i < this.chanceOfWinning.length; ++i) {
             for (let j = 0; j < this.chanceOfWinning[i].length; ++j) {
                 this.chanceOfWinning[i][j].draw(ctx)
+            }
+        }
+    }
+    drawTextLogic(ctx) {
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
+                let cell = this.arr[i][j]
+                cell.logicText.draw(ctx)
+            }
+        }
+    }
+    drawTextInfo(ctx) {
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
+                let cell = this.arr[i][j]
+                if (cell.infoText.text != '')
+                    cell.infoText.draw(ctx)
+                cell.infoText.text = ''
             }
         }
     }
@@ -205,9 +245,56 @@ class Grid extends SpritesGroup {
             tmpBuildings[i].drawBars(ctx)
         }
     }
+    isCacheableBuilding(building) {
+        return building.notEmpty() && !building.isInvisible && !building.isBuildingProduction()
+    }
+    getEntityBodyImageName(entity) {
+        if (entity.mirrorX && cachedImages[entity.name + 'Left'])
+            return entity.name + 'Left'
+        return entity.name
+    }
+    drawEntityBody(ctx, entity) {
+        drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(entity)], entity.pos)
+    }
+    drawEntityBodies(ctx) {
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
+                const cell = this.arr[i][j]
+                if (this.isCacheableBuilding(cell.building))
+                    this.drawEntityBody(ctx, cell.building)
+                if (cell.unit.notEmpty())
+                    this.drawEntityBody(ctx, cell.unit)
+            }
+        }
+    }
+    drawEntityOverlays(ctx) {
+        const buildingBars = []
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
+                const cell = this.arr[i][j]
+                const building = cell.building
+                if (building.isBuildingProduction())
+                    building.draw(ctx)
+                else if (building.isPreparingManufacture)
+                    building.unitProduction.draw(ctx)
+                if (building.hasBar)
+                    buildingBars.push(building)
+                if (cell.unit.notEmpty())
+                    cell.unit.drawBars(ctx)
+            }
+        }
+        for (let i = 0; i < buildingBars.length; ++i)
+            buildingBars[i].drawBars(ctx)
+    }
     drawFogOfWar(ctx) {
         for (let i = 0; i < this.fogOfWar.length; ++i) {
             for (let j = 0; j < this.fogOfWar[i].length; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
                 if (!this.fogOfWar[i][j]) {
                     let hexagon = new FogOfWarHexagon(i, j)
                     hexagon.draw(ctx)
@@ -215,13 +302,184 @@ class Grid extends SpritesGroup {
             }
         }
     }
-    draw(ctx) {
-        this.drawHexagons(ctx)
+    getSurfaceStateValue(x, y) {
+        const hexagon = this.arr[x][y].hexagon
+        const fogVisible = !isFogOfWar || this.fogOfWar[x][y] ? 1 : 0
+        return ((hexagon.playerColor + 1) << 2) |
+            (hexagon.isSuburb ? 2 : 0) | fogVisible
+    }
+    surfaceStateMatches() {
+        if (!this.surfaceCacheState ||
+            !this.surfaceCacheBuildings ||
+            !this.surfaceCacheUnits ||
+            !this.surfaceCacheBuildingImages ||
+            !this.surfaceCacheUnitImages ||
+            this.surfaceCacheState.length != this.arr.length * this.arr[0].length ||
+            this.surfaceCacheBuildings.length != this.surfaceCacheState.length ||
+            this.surfaceCacheUnits.length != this.surfaceCacheState.length ||
+            this.surfaceCacheBuildingImages.length != this.surfaceCacheState.length ||
+            this.surfaceCacheUnitImages.length != this.surfaceCacheState.length)
+            return false
 
+        let index = 0
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                const cell = this.arr[i][j]
+                const building = this.isCacheableBuilding(cell.building) ?
+                    cell.building : undefined
+                const unit = cell.unit.notEmpty() ? cell.unit : undefined
+                if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j) ||
+                    this.surfaceCacheBuildings[index] != building ||
+                    this.surfaceCacheUnits[index] != unit ||
+                    this.surfaceCacheBuildingImages[index] != (building ?
+                        cachedImages[this.getEntityBodyImageName(building)] : undefined) ||
+                    this.surfaceCacheUnitImages[index] != (unit ?
+                        cachedImages[this.getEntityBodyImageName(unit)] : undefined))
+                    return false
+                ++index
+            }
+        }
+        return true
+    }
+    captureSurfaceState() {
+        const state = new Uint16Array(this.arr.length * this.arr[0].length)
+        const buildings = new Array(state.length)
+        const units = new Array(state.length)
+        const buildingImages = new Array(state.length)
+        const unitImages = new Array(state.length)
+        let index = 0
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                const cell = this.arr[i][j]
+                const building = this.isCacheableBuilding(cell.building) ?
+                    cell.building : undefined
+                const unit = cell.unit.notEmpty() ? cell.unit : undefined
+                state[index] = this.getSurfaceStateValue(i, j)
+                buildings[index] = building
+                units[index] = unit
+                buildingImages[index] = building ?
+                    cachedImages[this.getEntityBodyImageName(building)] : undefined
+                unitImages[index] = unit ?
+                    cachedImages[this.getEntityBodyImageName(unit)] : undefined
+                ++index
+            }
+        }
+        this.surfaceCacheState = state
+        this.surfaceCacheBuildings = buildings
+        this.surfaceCacheUnits = units
+        this.surfaceCacheBuildingImages = buildingImages
+        this.surfaceCacheUnitImages = unitImages
+    }
+    getSurfaceCacheGeometry() {
+        const cacheWidth = mapDepth.bounds.right - mapDepth.bounds.left
+        const cacheHeight = mapDepth.bounds.bottom - mapDepth.bounds.top
+        const maxCacheDimension = 4096
+        const maxCachePixels = 12 * 1024 * 1024
+        const scale = Math.min(
+            1,
+            maxCacheDimension / cacheWidth,
+            maxCacheDimension / cacheHeight,
+            Math.sqrt(maxCachePixels / (cacheWidth * cacheHeight))
+        )
+        return {cacheWidth, cacheHeight, scale}
+    }
+    createSurfaceCache() {
+        mapDepth.ensureGeometry(this)
+        const geometry = this.getSurfaceCacheGeometry()
+        if (geometry.cacheWidth <= 0 || geometry.cacheHeight <= 0)
+            return false
+
+        const rasterWidth = Math.max(1, Math.ceil(geometry.cacheWidth * geometry.scale))
+        const rasterHeight = Math.max(1, Math.ceil(geometry.cacheHeight * geometry.scale))
+        let cache = this.surfaceCache
+        if (!cache || cache.width != rasterWidth || cache.height != rasterHeight) {
+            cache = document.createElement('canvas')
+            cache.width = rasterWidth
+            cache.height = rasterHeight
+        }
+        const cacheCtx = cache.getContext('2d')
+        if (!cacheCtx)
+            return false
+
+        cacheCtx.setTransform(1, 0, 0, 1, 0, 0)
+        cacheCtx.clearRect(0, 0, cache.width, cache.height)
+        cacheCtx.scale(geometry.scale, geometry.scale)
+        cacheCtx.translate(-mapDepth.bounds.left, -mapDepth.bounds.top)
+        mapDepth.renderUnderlay(cacheCtx, geometry.scale)
+        this.drawHexagons(cacheCtx)
+        if (isFogOfWar)
+            this.drawFogOfWar(cacheCtx)
+        mapDepth.renderRim(cacheCtx)
+        this.drawEntityBodies(cacheCtx)
+
+        this.surfaceCache = cache
+        this.surfaceCacheScale = geometry.scale
+        this.surfaceCacheBounds = {
+            left: mapDepth.bounds.left,
+            top: mapDepth.bounds.top,
+            width: geometry.cacheWidth,
+            height: geometry.cacheHeight
+        }
+        this.captureSurfaceState()
+        ++this.surfaceCacheRevision
+        return true
+    }
+    canUseSurfaceCache() {
+        mapDepth.ensureGeometry(this)
+        const cacheScale = this.surfaceCache ? this.surfaceCacheScale :
+            this.getSurfaceCacheGeometry().scale
+        return canvas.scale <= cacheScale
+    }
+    drawSurfaceCache(ctx) {
+        if ((!this.surfaceCache || !this.surfaceStateMatches()) &&
+            !this.createSurfaceCache())
+            return false
+
+        const visibleLeft = Math.max(this.surfaceCacheBounds.left, canvas.offset.x)
+        const visibleTop = Math.max(this.surfaceCacheBounds.top, canvas.offset.y)
+        const visibleRight = Math.min(
+            this.surfaceCacheBounds.left + this.surfaceCacheBounds.width,
+            canvas.offset.x + width
+        )
+        const visibleBottom = Math.min(
+            this.surfaceCacheBounds.top + this.surfaceCacheBounds.height,
+            canvas.offset.y + height
+        )
+        if (visibleLeft >= visibleRight || visibleTop >= visibleBottom)
+            return true
+
+        const sourceScaleX = this.surfaceCache.width / this.surfaceCacheBounds.width
+        const sourceScaleY = this.surfaceCache.height / this.surfaceCacheBounds.height
+        ctx.drawImage(
+            this.surfaceCache,
+            (visibleLeft - this.surfaceCacheBounds.left) * sourceScaleX,
+            (visibleTop - this.surfaceCacheBounds.top) * sourceScaleY,
+            (visibleRight - visibleLeft) * sourceScaleX,
+            (visibleBottom - visibleTop) * sourceScaleY,
+            visibleLeft,
+            visibleTop,
+            visibleRight - visibleLeft,
+            visibleBottom - visibleTop
+        )
+        return true
+    }
+    drawMapSurface(ctx) {
+        if (this.canUseSurfaceCache() && this.drawSurfaceCache(ctx))
+            return true
+
+        mapDepth.drawUnderlay(ctx, this)
+        this.drawHexagons(ctx)
         if (isFogOfWar)
             this.drawFogOfWar(ctx)
-
-        this.drawOther(ctx)
+        mapDepth.drawRim(ctx, this)
+        return false
+    }
+    draw(ctx) {
+        const cachedScene = this.drawMapSurface(ctx)
+        if (cachedScene)
+            this.drawEntityOverlays(ctx)
+        else
+            this.drawOther(ctx)
 
         if (gameSettings.interface.drawChanceOfWinningText) {
             this.drawChanceOfWinningText(ctx)

@@ -10,7 +10,7 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background-color: #808080;
+            background-color: #182a34;
         }
 
         #canvas {
@@ -20,18 +20,11 @@
             z-index: 0;
         }
 
-        #interface {
-            position: absolute;
-            left: 0;
-            top: 0;
-            z-index: 1;
-        }
     </style>
 </head>
 
 <body id="container">
     <canvas id="canvas"></canvas>
-    <canvas id="interface"></canvas>
 
     <!--<script src = "objectModels/setDefaultModel.js"></script>
         <script src = "objectModels/setObjectOffset.js"></script>
@@ -176,9 +169,7 @@
         let mainCanvas = document.getElementById('canvas')
 
         let mainCtx = mainCanvas.getContext('2d')
-        let interfaceCanvas = document.getElementById('interface')
-
-        let interfaceCtx = interfaceCanvas.getContext('2d')
+        let interfaceCtx = mainCtx
 
         const errorWindowCornerRadius = 0.03 * HEIGHT
 
@@ -199,6 +190,7 @@
             statisticsInterface, nextTurnPauseInterface)
         let border = new Border()
         let attackBorder = new Border()
+        let mapDepth = new MapDepth()
 
         let saveManager = new SaveManager()
 
@@ -380,18 +372,13 @@
         }
         function start() {
 
-            interfaceCanvas.width = WIDTH
-            interfaceCanvas.height = HEIGHT
-            interfaceCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
-            interfaceCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
-
             mainCanvas.width = WIDTH
             mainCanvas.height = HEIGHT
             mainCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
             mainCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
 
-            loadAssets()
             loadOtherSettings()
+            loadAssets()
 
             //menu.start()
             requestAnimationFrame(waitForImagesLoad)

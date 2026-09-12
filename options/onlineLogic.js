@@ -3,6 +3,7 @@ let SendNextTurn
 
 function unfreezeGame() {
     gameEvent.waitingMode = false
+    timer.updateLastPause()
     nextTurnButton.highlightButton = false
     undoButton.enableClick()
     nextTurnButton.enableClick()
@@ -23,21 +24,17 @@ class OnlineLogic {
 }
 
 function SetupServerCommunicationLogic(password) {
-    const socket = io('wss://playdiplomacy.online:8080')
+    const socket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
 
         game = JSON.parse(game)
-        game.timers[game.whooseTurn] = new Timer()
         game = JSON.stringify(game)
         loadFromJson(game)
-        timer.setNextTurnTime()
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
-        // we do not call players[whooseTurn].nextTurn() here
-        // since we call startTurn in the beginning of the game
         gameEvent.screen.moveToPlayer(players[whooseTurn])
 
     });
@@ -45,16 +42,13 @@ function SetupServerCommunicationLogic(password) {
 
         console.log(`playYourTurn`)
         game = JSON.parse(game)
-        game.timers[game.whooseTurn] = new Timer()
         game = JSON.stringify(game)
         loadFromJson(game)
         GameManager.updateCameraBorders()
-        timer.setNextTurnTime()
         nextTurnPauseInterface.visible = true
 
         unfreezeGame()
 
-        players[whooseTurn].nextTurn()
         gameEvent.screen.moveToPlayer(players[whooseTurn])
 
     });
@@ -82,12 +76,13 @@ function SetupServerCommunicationLogic(password) {
     }))
     SendNextTurn = () => {
         console.log('SendNextTurn')
+        console.trace('SendNextTurn called')
+        const gameObject = getGameObject()
         socket.emit('nextTurn', JSON.stringify({
             'password': password,
-            'game': getGameObject(),
+            'game': gameObject,
             // whoseTurn currently means the only index of CURRENT player on client
             'whooseTurn': whooseTurn
         }))
     }
 }
-

@@ -1,0 +1,137 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Wall — low crenellated barrier</title>
+  <desc id="desc">A long low wall with four oversized crenels and no doors, windows or towers. Its shallow rectangular silhouette remains distinct from both fortifications at small sizes. Pure vector artwork, transparent background, shared lower anchor at y=458, light from upper left. No embedded images, textures, fonts or external resources. Stronger warm stone contours and more contrasting side planes clarify the existing edges without adding decorative detail.</desc>
+  <defs>
+    <linearGradient id="front" x1="0" y1="0" x2="0.65" y2="1">
+      <stop stop-color="#e3d4af" />
+      <stop offset=".5" stop-color="#d2c197" />
+      <stop offset="1" stop-color="#baaa83" />
+    </linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="1" y2=".85">
+      <stop stop-color="#9e8e6d" />
+      <stop offset="1" stop-color="#776a51" />
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2=".65" y2="1">
+      <stop stop-color="#fff0cc" />
+      <stop offset="1" stop-color="#e3cfa3" />
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#f2e3bd" />
+      <stop offset="1" stop-color="#d4c097" />
+    </linearGradient>
+    <linearGradient id="recess" x1="0" y1="0" x2="1" y2=".8">
+      <stop stop-color="#302f28" />
+      <stop offset="1" stop-color="#56503d" />
+    </linearGradient>
+    <linearGradient id="gate" x1="0" y1="0" x2="1" y2=".35">
+      <stop stop-color="#b68a54" />
+      <stop offset=".6" stop-color="#93683f" />
+      <stop offset="1" stop-color="#725136" />
+    </linearGradient>
+    <radialGradient id="shadow">
+      <stop stop-color="#373429" stop-opacity=".22" />
+      <stop offset=".6" stop-color="#373429" stop-opacity=".10" />
+      <stop offset="1" stop-color="#373429" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <g id="ground-shadow">
+    <ellipse cx="255" cy="460" rx="235" ry="15" fill="url(#shadow)" />
+  </g>
+  <g id="outer-contour" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+    <polygon points="427.00,458.00 469.60,429.60 469.60,324.60 427.00,353.00" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="34.00,458.00 427.00,458.00 427.00,353.00 34.00,353.00" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="34.00,353.00 427.00,353.00 469.60,324.60 76.60,324.60" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="34.00,357.00 38.00,353.00 423.00,353.00 427.00,357.00" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="34.00,458.00 38.00,454.00 38.00,357.00 34.00,357.00" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="34.00,458.00 427.00,458.00 423.00,454.00 38.00,454.00" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="427.00,357.00 469.60,328.60 469.60,324.60 427.00,353.00" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="34.00,405.50 427.00,405.50 427.00,402.10 34.00,402.10" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="34.00,407.50 427.00,407.50 427.00,405.50 34.00,405.50" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="427.00,405.50 469.60,377.10 469.60,373.70 427.00,402.10" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="238.36,454.00 241.36,454.00 241.36,409.50 238.36,409.50" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="429.20,361.20 475.40,330.40 475.40,313.40 429.20,344.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,361.20 429.20,361.20 429.20,344.20 28.20,344.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,344.20 429.20,344.20 475.40,313.40 74.40,313.40" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,347.20 31.20,344.20 426.20,344.20 429.20,347.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,361.20 31.20,358.20 31.20,347.20 28.20,347.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,361.20 429.20,361.20 426.20,358.20 31.20,358.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="429.20,347.20 475.40,316.40 475.40,313.40 429.20,344.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="102.20,344.20 148.40,313.40 148.40,273.40 102.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,344.20 102.20,344.20 102.20,304.20 28.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,304.20 102.20,304.20 148.40,273.40 74.40,273.40" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,308.20 32.20,304.20 98.20,304.20 102.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,344.20 32.20,340.20 32.20,308.20 28.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="28.20,344.20 102.20,344.20 98.20,340.20 32.20,340.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="102.20,308.20 148.40,277.40 148.40,273.40 102.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="211.20,344.20 257.40,313.40 257.40,273.40 211.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="137.20,344.20 211.20,344.20 211.20,304.20 137.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="137.20,304.20 211.20,304.20 257.40,273.40 183.40,273.40" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="137.20,308.20 141.20,304.20 207.20,304.20 211.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="137.20,344.20 141.20,340.20 141.20,308.20 137.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="137.20,344.20 211.20,344.20 207.20,340.20 141.20,340.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="211.20,308.20 257.40,277.40 257.40,273.40 211.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="320.20,344.20 366.40,313.40 366.40,273.40 320.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="246.20,344.20 320.20,344.20 320.20,304.20 246.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="246.20,304.20 320.20,304.20 366.40,273.40 292.40,273.40" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="246.20,308.20 250.20,304.20 316.20,304.20 320.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="246.20,344.20 250.20,340.20 250.20,308.20 246.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="246.20,344.20 320.20,344.20 316.20,340.20 250.20,340.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="320.20,308.20 366.40,277.40 366.40,273.40 320.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="429.20,344.20 475.40,313.40 475.40,273.40 429.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="355.20,344.20 429.20,344.20 429.20,304.20 355.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="355.20,304.20 429.20,304.20 475.40,273.40 401.40,273.40" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="355.20,308.20 359.20,304.20 425.20,304.20 429.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="355.20,344.20 359.20,340.20 359.20,308.20 355.20,308.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="355.20,344.20 429.20,344.20 425.20,340.20 359.20,340.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+    <polygon points="429.20,308.20 475.40,277.40 475.40,273.40 429.20,304.20" fill="#756449" stroke="#756449" stroke-width="5" stroke-opacity="1" />
+  </g>
+  <g id="building" stroke-linejoin="round" stroke-linecap="round">
+    <polygon points="427.00,458.00 469.60,429.60 469.60,324.60 427.00,353.00" fill="url(#side)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="34.00,458.00 427.00,458.00 427.00,353.00 34.00,353.00" fill="url(#front)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="34.00,353.00 427.00,353.00 469.60,324.60 76.60,324.60" fill="url(#top)" stroke="#8c7755" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="34.00,357.00 38.00,353.00 423.00,353.00 427.00,357.00" fill="url(#edge)" />
+    <polygon points="34.00,458.00 38.00,454.00 38.00,357.00 34.00,357.00" fill="#f3e5c2" opacity=".30" />
+    <polygon points="34.00,458.00 427.00,458.00 423.00,454.00 38.00,454.00" fill="#786a4f" opacity=".17" />
+    <polygon points="427.00,357.00 469.60,328.60 469.60,324.60 427.00,353.00" fill="#d7c59a" opacity=".40" />
+    <polygon points="34.00,405.50 427.00,405.50 427.00,402.10 34.00,402.10" fill="#897a5a" opacity=".52" />
+    <polygon points="34.00,407.50 427.00,407.50 427.00,405.50 34.00,405.50" fill="#f3e6bf" opacity=".46" />
+    <polygon points="427.00,405.50 469.60,377.10 469.60,373.70 427.00,402.10" fill="#6c624d" opacity=".32" />
+    <polygon points="238.36,454.00 241.36,454.00 241.36,409.50 238.36,409.50" fill="#978667" opacity=".33" />
+    <polygon points="429.20,361.20 475.40,330.40 475.40,313.40 429.20,344.20" fill="url(#side)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="28.20,361.20 429.20,361.20 429.20,344.20 28.20,344.20" fill="url(#front)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="28.20,344.20 429.20,344.20 475.40,313.40 74.40,313.40" fill="url(#top)" stroke="#8c7755" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="28.20,347.20 31.20,344.20 426.20,344.20 429.20,347.20" fill="url(#edge)" />
+    <polygon points="28.20,361.20 31.20,358.20 31.20,347.20 28.20,347.20" fill="#f3e5c2" opacity=".30" />
+    <polygon points="28.20,361.20 429.20,361.20 426.20,358.20 31.20,358.20" fill="#786a4f" opacity=".17" />
+    <polygon points="429.20,347.20 475.40,316.40 475.40,313.40 429.20,344.20" fill="#d7c59a" opacity=".40" />
+    <polygon points="102.20,344.20 148.40,313.40 148.40,273.40 102.20,304.20" fill="url(#side)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="28.20,344.20 102.20,344.20 102.20,304.20 28.20,304.20" fill="url(#front)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="28.20,304.20 102.20,304.20 148.40,273.40 74.40,273.40" fill="url(#top)" stroke="#8c7755" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="28.20,308.20 32.20,304.20 98.20,304.20 102.20,308.20" fill="url(#edge)" />
+    <polygon points="28.20,344.20 32.20,340.20 32.20,308.20 28.20,308.20" fill="#f3e5c2" opacity=".30" />
+    <polygon points="28.20,344.20 102.20,344.20 98.20,340.20 32.20,340.20" fill="#786a4f" opacity=".17" />
+    <polygon points="102.20,308.20 148.40,277.40 148.40,273.40 102.20,304.20" fill="#d7c59a" opacity=".40" />
+    <polygon points="211.20,344.20 257.40,313.40 257.40,273.40 211.20,304.20" fill="url(#side)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="137.20,344.20 211.20,344.20 211.20,304.20 137.20,304.20" fill="url(#front)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="137.20,304.20 211.20,304.20 257.40,273.40 183.40,273.40" fill="url(#top)" stroke="#8c7755" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="137.20,308.20 141.20,304.20 207.20,304.20 211.20,308.20" fill="url(#edge)" />
+    <polygon points="137.20,344.20 141.20,340.20 141.20,308.20 137.20,308.20" fill="#f3e5c2" opacity=".30" />
+    <polygon points="137.20,344.20 211.20,344.20 207.20,340.20 141.20,340.20" fill="#786a4f" opacity=".17" />
+    <polygon points="211.20,308.20 257.40,277.40 257.40,273.40 211.20,304.20" fill="#d7c59a" opacity=".40" />
+    <polygon points="320.20,344.20 366.40,313.40 366.40,273.40 320.20,304.20" fill="url(#side)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="246.20,344.20 320.20,344.20 320.20,304.20 246.20,304.20" fill="url(#front)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="246.20,304.20 320.20,304.20 366.40,273.40 292.40,273.40" fill="url(#top)" stroke="#8c7755" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="246.20,308.20 250.20,304.20 316.20,304.20 320.20,308.20" fill="url(#edge)" />
+    <polygon points="246.20,344.20 250.20,340.20 250.20,308.20 246.20,308.20" fill="#f3e5c2" opacity=".30" />
+    <polygon points="246.20,344.20 320.20,344.20 316.20,340.20 250.20,340.20" fill="#786a4f" opacity=".17" />
+    <polygon points="320.20,308.20 366.40,277.40 366.40,273.40 320.20,304.20" fill="#d7c59a" opacity=".40" />
+    <polygon points="429.20,344.20 475.40,313.40 475.40,273.40 429.20,304.20" fill="url(#side)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="355.20,344.20 429.20,344.20 429.20,304.20 355.20,304.20" fill="url(#front)" stroke="#79684c" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="355.20,304.20 429.20,304.20 475.40,273.40 401.40,273.40" fill="url(#top)" stroke="#8c7755" stroke-width="2.5" stroke-opacity=".80" />
+    <polygon points="355.20,308.20 359.20,304.20 425.20,304.20 429.20,308.20" fill="url(#edge)" />
+    <polygon points="355.20,344.20 359.20,340.20 359.20,308.20 355.20,308.20" fill="#f3e5c2" opacity=".30" />
+    <polygon points="355.20,344.20 429.20,344.20 425.20,340.20 359.20,340.20" fill="#786a4f" opacity=".17" />
+    <polygon points="429.20,308.20 475.40,277.40 475.40,273.40 429.20,304.20" fill="#d7c59a" opacity=".40" />
+  </g>
+</svg>

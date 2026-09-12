@@ -59,12 +59,13 @@ class Screen {
         canvas.offset.y = Math.min(canvas.offset.y, this.getScreenBottom())
         canvas.offset.y = Math.max(canvas.offset.y, this.getScreenTop())
     }
-    move() {
+    move(frameDuration = 1000 / 60) {
         let old_value_x = canvas.offset.x
         let old_value_y = canvas.offset.y
+        const distanceRatio = frameDuration / (1000 / 60)
         
-        canvas.offset.x -= this.speedX
-        canvas.offset.y -= this.speedY
+        canvas.offset.x -= this.speedX * distanceRatio
+        canvas.offset.y -= this.speedY * distanceRatio
         
         this.correctCanvas()
 

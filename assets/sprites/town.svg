@@ -1,0 +1,251 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="town-title town-desc">
+  <title id="town-title">Town — painted miniature, repaired building joints</title>
+  <desc id="town-desc">Stone town hall with clock tower, solid battlements, brown gabled roof, warm windows and arched wooden entrance. Three-quarter view with upper-left lighting. Roof edges, battlement recesses, and wall corners meet continuously. Transparent, editable 512 by 512 vector sprite; no embedded bitmap or external resources.</desc>
+  <defs>
+    <radialGradient id="town-paint-ground-shadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#26372d" stop-opacity="0.3"/>
+      <stop offset="58%" stop-color="#26372d" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#26372d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="town-paint-stone-front" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#f1e8ce" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#d8cfb6" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#b1aa91" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="town-paint-stone-side" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#b9b69a" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#838970" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="town-paint-stone-top" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#fff2d2" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#c9c4a7" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="town-paint-roof-front" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#d5a56b" stop-opacity="1"/>
+      <stop offset="45%" stop-color="#b78351" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#91653f" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="town-paint-roof-side" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#b17e4e" stop-opacity="1"/>
+      <stop offset="50%" stop-color="#8a603d" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#6d5135" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="town-paint-door" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#bc9160" stop-opacity="1"/>
+      <stop offset="50%" stop-color="#956e46" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#654a31" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="town-paint-clock-rim" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#f0db9e" stop-opacity="1"/>
+      <stop offset="50%" stop-color="#c2aa73" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#8b7f57" stop-opacity="1"/>
+    </linearGradient>
+    <radialGradient id="town-paint-clock-face" cx="32%" cy="23%" r="80%">
+      <stop offset="0%" stop-color="#fffbea" stop-opacity="1"/>
+      <stop offset="65%" stop-color="#f5e8c6" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#d6c49d" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="town-paint-window" x1="0%" y1="0%" x2="100%" y2="75%">
+      <stop offset="0%" stop-color="#fff4ad" stop-opacity="1"/>
+      <stop offset="50%" stop-color="#f1d373" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#cb9e4a" stop-opacity="1"/>
+    </linearGradient>
+    <clipPath id="town-clip-front-masonry">
+      <path d="M101 337 L319 346 L319 466 L127 457 Q101 454 101 435 Z" fill="white"/>
+    </clipPath>
+    <clipPath id="town-clip-side-masonry">
+      <path d="M319 346 L419 297 L419 420 Q414 434 397 440 L319 466 Z" fill="white"/>
+    </clipPath>
+    <clipPath id="town-clip-roof-slope">
+      <path d="M221 203 L316 178 L446 289 L331 346 Z" fill="white"/>
+    </clipPath>
+  </defs>
+  <g id="town-shadow">
+    <ellipse cx="277" cy="466" rx="191" ry="27" fill="url(#town-paint-ground-shadow)"/>
+  </g>
+  <g id="town-tower">
+    <path d="M305 72 L350 51 L350 291 L305 321 Z" fill="url(#town-paint-stone-side)" stroke="#555541" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M199 72 L305 72 L305 321 L199 311 Z" fill="url(#town-paint-stone-front)" stroke="#555541" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M199 72 L244 51 L350 51 L305 72 Z" fill="url(#town-paint-stone-top)" stroke="#555541" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M305 85 L313 81 L313 302 L305 306 Z" fill="#767f6d" opacity=".22"/>
+    <rect x="203" y="82" width="8" height="179" rx="1" fill="#fff5d9" opacity=".32"/>
+    <path d="M315 134 L337 123 L337 162 L315 173 Z" fill="#757b63" stroke="#555541" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M321 138 L332 133 L332 157 L321 163 Z" fill="#424f41"/>
+    <path d="M309 246 L346 228" fill="none" stroke="#6f7a63" stroke-width="2" stroke-linecap="round" opacity=".34"/>
+  </g>
+  <g id="town-battlements">
+    <path d="M187 56 L225 40 L353 40 L353 72 L315 88 L187 88 Z" fill="url(#town-paint-stone-side)"/>
+    <path d="M187 56 L225 40 L353 40 L315 56 Z" fill="url(#town-paint-stone-top)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M315 56 L353 40 L353 72 L315 88 Z" fill="url(#town-paint-stone-side)" stroke="#555541" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M214 31 L252 15 L252 40 L214 56 Z" fill="url(#town-paint-stone-side)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M187 31 L225 15 L252 15 L214 31 Z" fill="url(#town-paint-stone-top)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M263 31 L301 15 L301 40 L263 56 Z" fill="url(#town-paint-stone-side)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M237 31 L275 15 L301 15 L263 31 Z" fill="url(#town-paint-stone-top)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M315 31 L353 15 L353 40 L315 56 Z" fill="url(#town-paint-stone-side)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M286 31 L324 15 L353 15 L315 31 Z" fill="url(#town-paint-stone-top)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M187 31 L214 31 L214 56 L237 56 L237 31 L263 31 L263 56 L286 56 L286 31 L315 31 L315 88 L187 88 Z" fill="url(#town-paint-stone-front)" stroke="#555541" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M188 76 H314 V87 H188 Z" fill="#aaa991"/>
+    <path d="M315 76 L352 60.42 L352 71.42 L315 87 Z" fill="#90947b"/>
+    <path d="M190 73 H313 L350 57.42" fill="none" opacity=".8" stroke="#fff2d1" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M190 36 H210" fill="none" stroke="#fff7df" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M240 36 H259 M289 36 H311" fill="none" opacity=".55" stroke="#fff7df" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-clock">
+    <ellipse cx="255" cy="147" rx="39" ry="42" fill="#a29a7a" opacity=".5"/>
+    <ellipse cx="252" cy="143" rx="38" ry="41" fill="url(#town-paint-clock-rim)" stroke="#858369" stroke-width="2"/>
+    <ellipse cx="252" cy="142" rx="31" ry="34" fill="url(#town-paint-clock-face)" stroke="#b5a179" stroke-width="1.6"/>
+  </g>
+  <path d="M252.0 116.0 L252.0 111.0" fill="none" stroke="#7a755b" stroke-width="2" stroke-linecap="round"/>
+  <path d="M265.5 116.89 L266.5 115.15" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M275.38 127.5 L277.11 126.5" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M276.0 142.0 L281.0 142.0" fill="none" stroke="#7a755b" stroke-width="2" stroke-linecap="round"/>
+  <path d="M275.38 156.5 L277.11 157.5" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M265.5 167.11 L266.5 168.85" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M252.0 168.0 L252.0 173.0" fill="none" stroke="#7a755b" stroke-width="2" stroke-linecap="round"/>
+  <path d="M238.5 167.11 L237.5 168.85" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M228.62 156.5 L226.89 157.5" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M228.0 142.0 L223.0 142.0" fill="none" stroke="#7a755b" stroke-width="2" stroke-linecap="round"/>
+  <path d="M228.62 127.5 L226.89 126.5" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M238.5 116.89 L237.5 115.15" fill="none" stroke="#7a755b" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M252 119 L252 144 L264 162" fill="none" stroke="#3f4b40" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="252" cy="143" rx="4" ry="4" fill="#3f4b40"/>
+  <g id="town-walls">
+    <path d="M101 337 L319 346 L419 297 L419 420 Q414 434 397 440 L319 466 L127 457 Q101 454 101 435 Z" fill="url(#town-paint-stone-side)"/>
+    <path d="M319 346 L419 297 L419 420 Q414 434 397 440 L319 466 Z" fill="url(#town-paint-stone-side)" stroke="#555541" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M101 337 L319 346 L319 466 L127 457 Q101 454 101 435 Z" fill="url(#town-paint-stone-front)" stroke="#555541" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-front-stonework" clip-path="url(#town-clip-front-masonry)">
+    <path d="M101 349 L319 362" fill="none" opacity=".7" stroke="#9d9e86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M109 349.477 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M112 352.656 L143 354.505 v10 L112 362.656 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M152 352.041 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M195 354.606 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M238 357.170 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M241 360.349 L272 362.197 v10 L241 370.349 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M281 359.734 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M101 367 L319 380" fill="none" opacity=".7" stroke="#9d9e86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M130 368.729 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M173 371.294 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M216 373.858 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M219 377.037 L250 378.885 v10 L219 387.037 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M259 376.422 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M302 378.986 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M101 385 L319 398" fill="none" opacity=".7" stroke="#9d9e86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M109 385.477 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M152 388.041 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M155 391.220 L186 393.069 v10 L155 401.220 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M195 390.606 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M238 393.170 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M281 395.734 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M284 398.913 L315 400.761 v10 L284 408.913 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M101 403 L319 416" fill="none" opacity=".7" stroke="#9d9e86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M130 404.729 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M133 407.908 L164 409.757 v10 L133 417.908 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M173 407.294 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M216 409.858 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M259 412.422 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M262 415.601 L293 417.450 v10 L262 425.601 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M302 414.986 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M101 421 L319 434" fill="none" opacity=".7" stroke="#9d9e86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M109 421.477 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M152 424.041 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M195 426.606 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M198 429.784 L229 431.633 v10 L198 439.784 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M238 429.170 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M281 431.734 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M101 439 L319 452" fill="none" opacity=".7" stroke="#9d9e86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M130 440.729 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M173 443.294 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M176 446.472 L207 448.321 v10 L176 456.472 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M216 445.858 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M259 448.422 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M302 450.986 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M305 454.165 L317 454.881 v10 L305 464.165 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M101 457 L319 470" fill="none" opacity=".7" stroke="#9d9e86" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M109 457.477 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M112 460.656 L143 462.505 v10 L112 470.656 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M152 460.041 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M195 462.606 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M238 465.170 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M241 468.349 L272 470.197 v10 L241 478.349 Z" fill="#fff1d0" opacity=".18"/>
+    <path d="M281 467.734 v18" fill="none" opacity=".6" stroke="#939b82" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-side-stonework" clip-path="url(#town-clip-side-masonry)">
+    <path d="M319 344 L419 300" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M332 338.280 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M366 323.320 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M400 308.360 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M319 362 L419 318" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M349 348.800 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M383 333.840 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M417 318.880 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M319 380 L419 336" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M332 374.280 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M366 359.320 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M400 344.360 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M319 398 L419 354" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M349 384.800 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M383 369.840 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M417 354.880 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M319 416 L419 372" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M332 410.280 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M366 395.320 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M400 380.360 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M319 434 L419 390" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M349 420.800 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M383 405.840 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M417 390.880 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M319 452 L419 408" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M332 446.280 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M366 431.320 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M400 416.360 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M319 470 L419 426" fill="none" opacity=".65" stroke="#737f68" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M349 456.800 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M383 441.840 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M417 426.880 v18" fill="none" opacity=".6" stroke="#6f7c66" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-roof">
+    <path d="M80 335 L221 203 L316 178 L446 289 L446 300 L331 357 L80 346 Z" fill="#6a553a" stroke="#555541" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M221 203 L316 178 L446 289 L331 346 Z" fill="url(#town-paint-roof-side)" stroke="#555541" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M80 335 L221 203 L331 346 Z" fill="url(#town-paint-roof-front)" stroke="#555541" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M80 335 L331 346 L331 357 L80 346 Z" fill="#88643f" stroke="#555541" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M331 346 L446 289 L446 300 L331 357 Z" fill="#584a33" stroke="#555541" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M86 333 L221 207 L327 341" fill="none" stroke="#e5b778" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M221 203 L316 178 L445 289" fill="none" stroke="#dab07a" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M225 211 L323 340" fill="none" opacity=".35" stroke="#eed19a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-roof-courses" clip-path="url(#town-clip-roof-slope)">
+    <path d="M249.80 236.62 L344.80 205.34" fill="none" opacity=".35" stroke="#5c4b33" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M249.80 234.62 L344.80 203.34" fill="none" opacity=".27" stroke="#dfad72" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M277.30 272.37 L377.30 233.09" fill="none" opacity=".35" stroke="#5c4b33" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M277.30 270.37 L377.30 231.09" fill="none" opacity=".27" stroke="#dfad72" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M304.80 308.12 L409.80 260.84" fill="none" opacity=".35" stroke="#5c4b33" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M304.80 306.12 L409.80 258.84" fill="none" opacity=".27" stroke="#dfad72" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-window">
+    <rect x="196" y="273" width="48" height="43" rx="8" fill="#6a583b"/>
+    <rect x="199" y="274" width="43" height="38" rx="6" fill="url(#town-paint-window)"/>
+    <path d="M199 307 V281 Q199 275 205 275 H235" fill="none" stroke="#fae5a4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M220 276 L220 310" fill="none" stroke="#735e38" stroke-width="3" stroke-linecap="round"/>
+    <path d="M201 293 L241 295" fill="none" stroke="#735e38" stroke-width="3" stroke-linecap="round"/>
+    <path d="M194 313 L245 316" fill="none" stroke="#e3bc79" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-entrance">
+    <path d="M202 463 L202 405 Q202 378 226 378 Q250 379 251 407 L251 466 Z" fill="#96957b" stroke="#555541" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M207 464 L207 408 Q207 385 226 385 Q245 386 245 408 L245 467 Z" fill="url(#town-paint-door)" stroke="#69563b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M219 392 L219 463" fill="none" stroke="#d0ac73" stroke-width="1.6" stroke-linecap="round" opacity=".45"/>
+    <path d="M232 393 L232 463" fill="none" stroke="#694d33" stroke-width="1.6" stroke-linecap="round"/>
+    <ellipse cx="236" cy="426" rx="3.8" ry="4.1" fill="#3d4335"/>
+    <ellipse cx="235" cy="424" rx="1.2" ry="1.2" fill="#cdb777"/>
+    <path d="M197 462 L252 466 L259 475 L259 480 L190 477 L190 472 Z" fill="url(#town-paint-stone-top)" stroke="#555541" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M190 472 L259 475 L259 480 L190 477 Z" fill="#989b7f"/>
+    <path d="M190 472 L259 475" fill="none" stroke="#b6b497" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g id="town-side-window">
+    <path d="M363 357 L388 347 L388 378 L363 389 Z" fill="#68775f" stroke="#555541" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M367 359 L384 352 L384 375 L367 382 Z" fill="#c9bc81"/>
+    <path d="M375 357 L375 379" fill="none" stroke="#5b6a54" stroke-width="2" stroke-linecap="round"/>
+    <path d="M366 371 L385 363" fill="none" stroke="#5b6a54" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

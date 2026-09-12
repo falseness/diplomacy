@@ -12,3 +12,19 @@ class Mountain extends StaticNature {
         return true
     }
 }
+
+// Rectangular storage remains intact while these cells carve out a hex map.
+class InvisibleMountain extends Mountain {
+    constructor(x, y) {
+        super(x, y)
+        this.name = 'invisibleMountain'
+    }
+    get isInvisible() {
+        return true
+    }
+    get isMapEdge() {
+        return true
+    }
+    draw() {}
+    select() {}
+}

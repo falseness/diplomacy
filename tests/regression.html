@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Diplomacy regression suite</title>
+    <style>
+        body { font: 15px system-ui, sans-serif; margin: 24px; color: #17232b; }
+        iframe { position: fixed; left: -2000px; top: 0; width: 1024px; height: 768px; border: 0; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccd3d7; padding: 7px 10px; text-align: left; }
+        .pass { color: #08752c; }
+        .fail { color: #b00020; }
+    </style>
+</head>
+<body>
+    <h1>Diplomacy regression suite</h1>
+    <p id="summary">Running...</p>
+    <table><thead><tr><th>Result</th><th>Test</th><th>Details</th></tr></thead><tbody id="results"></tbody></table>
+    <iframe id="game" src="../__game.html"></iframe>
+    <script>
+        const frame = document.getElementById('game')
+        frame.addEventListener('load', () => setTimeout(async () => {
+            let report
+            try {
+                const suite = await fetch('regression-suite.js').then(response => response.text())
+                report = await frame.contentWindow.eval(suite)
+            }
+            catch (error) {
+                report = {passed: 0, failed: 1, results: [{name: 'suite bootstrap', passed: false, details: error.stack || String(error)}]}
+            }
+
+            document.getElementById('summary').textContent = `${report.passed} passed, ${report.failed} failed`
+            document.getElementById('summary').className = report.failed ? 'fail' : 'pass'
+            const rows = document.getElementById('results')
+            for (const result of report.results) {
+                const row = document.createElement('tr')
+                row.innerHTML = `<td class="${result.passed ? 'pass' : 'fail'}">${result.passed ? 'PASS' : 'FAIL'}</td><td></td><td></td>`
+                row.children[1].textContent = result.name
+                row.children[2].textContent = result.details || ''
+                rows.appendChild(row)
+            }
+
+            document.body.dataset.complete = 'true'
+            document.body.dataset.failed = String(report.failed)
+            try {
+                await fetch('/__results', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(report)})
+            }
+            catch (_) {}
+        }, 1200))
+    </script>
+</body>
+</html>

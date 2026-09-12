@@ -1,5 +1,17 @@
+function getHexagonalLayer(x, y, center) {
+    let q = x
+    let r = y - Math.floor(x / 2)
+    let s = -q - r
+    let centerS = -center.q - center.r
+    return Math.ceil(Math.max(
+        Math.abs(q - center.q),
+        Math.abs(r - center.r),
+        Math.abs(s - centerS)
+    ))
+}
+
 class GameMap {
-    constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[]) {
+    constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[], mapShape={type: 'rectangular'}) {
         this.mapSize = mapSize
         this.players = _players
         this.goldmines = _goldmines
@@ -7,6 +19,11 @@ class GameMap {
         this.mountains = mountains
         this.bushes = bushes
         this.hills = hills
+        this.mapShape = mapShape
+    }
+    getMapCoord(coord) {
+        let offset = this.mapShape.offset || {x: 0, y: 0}
+        return {...coord, x: coord.x + offset.x, y: coord.y + offset.y}
     }
     getPlayerType(playerSettings) {
         if (playerSettings.playerType == 'simple-ai' ||
@@ -60,7 +77,7 @@ class GameMap {
     }
     createTowns() {
         for (let i = 0; i < this.players[0].towns.length; ++i) {
-            let town_coord = this.players[0].towns[i]
+            let town_coord = this.getMapCoord(this.players[0].towns[i])
             let town = new Town(town_coord.x, town_coord.y, false, -1)
             if ('hp' in town_coord) {
                 assert(0 < town_coord.hp && town_coord.hp <= town.hp)
@@ -70,7 +87,7 @@ class GameMap {
         for (let i = 1; i < this.players.length; ++i) {
             let towns = this.players[i].towns
             for (let j = 0; j < towns.length; ++j) {
-                let town_coord = towns[j]
+                let town_coord = this.getMapCoord(towns[j])
 
                 grid.arr[town_coord.x][town_coord.y].hexagon.firstpaint(i)
                 let town = new Town(town_coord.x, town_coord.y, false, true)
@@ -204,7 +221,7 @@ class GameMap {
     }
     createGoldmines() {
         for (let i = 0; i < this.goldmines.length; ++i) {
-            let goldmine = this.goldmines[i]
+            let goldmine = this.getMapCoord(this.goldmines[i])
             let owner = goldmine.owner === undefined ? 0 : goldmine.owner
             assert(owner >= 0 && owner < this.players.length)
             grid.arr[goldmine.x][goldmine.y].hexagon.firstpaint(owner)
@@ -222,14 +239,29 @@ class GameMap {
             let nature_type = natures[i][0]
             let nature_class = natures[i][1]
             for (let j = 0; j < nature_type.length; ++j) {
-                let coord = nature_type[j]
+                let coord = this.getMapCoord(nature_type[j])
                 new (nature_class)(coord.x, coord.y)
+            }
+        }
+    }
+    createMapEdge() {
+        if (this.mapShape.type != 'hexagonal')
+            return
+
+        for (let x = 0; x < grid.arr.length; ++x) {
+            for (let y = 0; y < grid.arr[x].length; ++y) {
+                if (getHexagonalLayer(x, y, this.mapShape.center) <= this.mapShape.radius)
+                    continue
+                if (grid.arr[x][y].building.notEmpty())
+                    throw new Error('Hexagonal map edge overlaps an authored object at ' + x + ',' + y)
+                new InvisibleMountain(x, y)
             }
         }
     }
     start(_gameManager, isClassicTimer) {
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
+        gameSettings.mapShape = this.mapShape
 
         this.createPlayers()
         this.createTowns()
@@ -239,6 +271,8 @@ class GameMap {
         this.createConfiguredExternalBuildings()
         this.createGoldmines()
         this.createNature()
+        this.createMapEdge()
+        _gameManager.updateCameraBorders()
 
         if (!isClassicTimer) {
             timer = new LongTimer()
@@ -250,6 +284,12 @@ class GameMap {
         }
         for (let i = 0; i < this.players.length; ++i) {
             unpacker.setPlayerTimerByIndex(i, timer)
+        }
+        if (!isClassicTimer) {
+            for (let i = 1; i < this.players.length; ++i) {
+                const packedTimer = JSON.parse(unpacker.getPlayerTimerByIndex(i))
+                recalculatePlayerTimer(i, packedTimer)
+            }
         }
 
         // refactoring is needed
@@ -385,28 +425,92 @@ maps = {
              [{"x":7,"y":2},{"x":13,"y":2},{"x":7,"y":3},{"x":13,"y":3},{"x":8,"y":4},{"x":12,"y":4},{"x":6,"y":4},{"x":14,"y":4},{"x":6,"y":3},{"x":14,"y":3},{"x":8,"y":9},{"x":12,"y":9},{"x":8,"y":10},{"x":12,"y":10},{"x":8,"y":11},{"x":12,"y":11},{"x":4,"y":14},{"x":16,"y":14},{"x":3,"y":14},{"x":17,"y":14},{"x":5,"y":13},{"x":15,"y":13},{"x":2,"y":15},{"x":18,"y":15},{"x":0,"y":2},{"x":20,"y":2},{"x":1,"y":2},{"x":19,"y":2},{"x":2,"y":2},{"x":18,"y":2},{"x":3,"y":2},{"x":17,"y":2}]
         ),
         new GameMap(
-            {x: 30, y: 23},
+            {x: 26, y: 26},
             [
                 {
                     rgb: {r: 208, g: 208, b: 208},
-                    towns: []
+                    // One shared objective between each pair of player sectors.
+                    towns: [{x: 11, y: 4}, {x: 19, y: 12}, {x: 7, y: 14}]
                 },
                 {
                     rgb: {r: 255, g: 0, b: 0},
-                    towns: [{x: 9, y: 6}]
+                    towns: [{x: 5, y: 7}]
                 },
                 {
                     rgb: {r: 98, g: 168, b: 222},
-                    towns: [{x: 20, y: 9}]
+                    towns: [{x: 19, y: 6}]
                 },
                 {
                     rgb: {r: 0, g: 179, b: 0},
-                    towns: [{x: 12, y: 16}]
+                    towns: [{x: 13, y: 17}]
                 }
             ],
+            [
+                // Every row is one 120-degree orbit around the three towns.
+                {x: 1, y: 11, income: 10}, {x: 17, y: 1, income: 10},
+                {x: 19, y: 18, income: 10},
+                {x: 4, y: 13, income: 10}, {x: 14, y: 3, income: 10},
+                {x: 19, y: 15, income: 10},
+                {x: 12, y: 10, income: 20}, {x: 13, y: 10, income: 20},
+                {x: 12, y: 11, income: 20},
+                {x: 7, y: 2, income: 15}, {x: 23, y: 10, income: 15},
+                {x: 7, y: 18, income: 15}
+            ],
+            [
+                {x: 5, y: 12}, {x: 14, y: 4}, {x: 18, y: 15},
+                {x: 6, y: 12}, {x: 14, y: 5}, {x: 17, y: 14},
+                {x: 3, y: 14}, {x: 13, y: 1}, {x: 21, y: 15},
+                {x: 4, y: 14}, {x: 13, y: 2}, {x: 20, y: 15},
+                {x: 5, y: 15}, {x: 11, y: 2}, {x: 21, y: 13},
+                {x: 6, y: 15}, {x: 11, y: 3}, {x: 20, y: 13},
+                // Shoreline triplets decorate all three equivalent map edges.
+                {x: 5, y: 1}, {x: 25, y: 9}, {x: 7, y: 20},
+                {x: 6, y: 1}, {x: 25, y: 10}, {x: 6, y: 20}
+            ],
+            [
+                {x: 11, y: 6}, {x: 17, y: 11}, {x: 9, y: 13},
+                {x: 12, y: 6}, {x: 17, y: 12}, {x: 8, y: 13},
+                {x: 6, y: 3}, {x: 23, y: 9}, {x: 8, y: 19},
+                {x: 7, y: 3}, {x: 22, y: 10}, {x: 8, y: 18},
+                {x: 9, y: 5}, {x: 19, y: 10}, {x: 9, y: 15},
+                {x: 10, y: 5}, {x: 19, y: 11}, {x: 8, y: 15},
+                // Border ridges are complete rotational orbits, not isolated walls.
+                {x: 0, y: 12}, {x: 17, y: 0}, {x: 20, y: 19},
+                {x: 4, y: 19}, {x: 8, y: 0}, {x: 25, y: 12}
+            ],
+            [
+                {x: 8, y: 6}, {x: 19, y: 9}, {x: 10, y: 16},
+                {x: 9, y: 6}, {x: 18, y: 10}, {x: 10, y: 15},
+                {x: 7, y: 10}, {x: 15, y: 6}, {x: 15, y: 14},
+                {x: 8, y: 10}, {x: 15, y: 7}, {x: 14, y: 14},
+                {x: 5, y: 5}, {x: 21, y: 7}, {x: 11, y: 18},
+                {x: 6, y: 5}, {x: 21, y: 8}, {x: 10, y: 18},
+                {x: 9, y: 17}, {x: 7, y: 4}, {x: 21, y: 9},
+                {x: 10, y: 17}, {x: 7, y: 5}, {x: 20, y: 9},
+                {x: 2, y: 6}, {x: 22, y: 5}, {x: 13, y: 20},
+                {x: 3, y: 6}, {x: 21, y: 5}, {x: 13, y: 19},
+                {x: 2, y: 12}, {x: 16, y: 2}, {x: 19, y: 17},
+                {x: 3, y: 12}, {x: 15, y: 2}, {x: 19, y: 16},
+                // Edge vegetation fills empty margins without closing approaches.
+                {x: 0, y: 10}, {x: 19, y: 1}, {x: 18, y: 20},
+                {x: 0, y: 11}, {x: 18, y: 1}, {x: 19, y: 19},
+                {x: 5, y: 19}, {x: 7, y: 0}, {x: 25, y: 11},
+                // Passable central grove surrounding the shared mine cluster.
+                {x: 10, y: 9}, {x: 15, y: 9}, {x: 12, y: 13},
+                {x: 10, y: 10}, {x: 14, y: 9}, {x: 13, y: 12},
+                {x: 11, y: 9}, {x: 14, y: 10}, {x: 12, y: 12},
+                {x: 11, y: 8}, {x: 15, y: 10}, {x: 11, y: 12},
+                {x: 9, y: 9}, {x: 15, y: 8}, {x: 13, y: 13},
+                {x: 9, y: 10}, {x: 14, y: 8}, {x: 14, y: 13}
+            ],
             [],
-            [],
-            []
+            {
+                type: 'hexagonal',
+                // The rectangular backing array contains a complete radius-13 hex.
+                center: {q: 37 / 3, r: 19 / 3},
+                radius: 13,
+                offset: {x: 0, y: 2}
+            }
         ),
         new GameMap(
             {x: 25, y: 25},
@@ -1114,12 +1218,13 @@ class GameManager {
         this.clearBasisValues()
     }
     static updateCameraBorders() {
+        mapDepth.rebuild(grid)
         let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
         mapBorder = {
-	        left: 0,
-	        right: grid.right,
-	        top: 0,
-	        bottom: grid.bottom,
+	        left: mapDepth.bounds.left,
+	        right: mapDepth.bounds.right,
+	        top: mapDepth.bounds.top,
+	        bottom: mapDepth.bounds.bottom,
 	        scale: {
 	            min: 1 / grid_min_size * 5, //0.275,
 	            max: 1
@@ -1145,19 +1250,21 @@ class GameManager {
 
 	    createEvents()
     }
-	static load() {
+    static load() {
         this.clearBasisValues()
+        actionManager.clear()
 
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
 
+        lastGameFrameTime = undefined
+        framesPerSecond = 60
     	requestAnimationFrame(gameLoop)
 	}
 	static initValues() {
         whooseTurn = 0
         gameRound = 0
-
-        //actionManager.clear()
+        actionManager.clear()
     }
     static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
         isFogOfWar = _isFogOfWar
@@ -1174,6 +1281,8 @@ class GameManager {
             startTurn()
         }
 
+        lastGameFrameTime = undefined
+        framesPerSecond = 60
         requestAnimationFrame(gameLoop)
     }
 
@@ -1193,11 +1302,24 @@ class GameManager {
         maps.big[1].start(this)
     }*/
 }
-function gameLoop() {
-    gameEvent.moveScreen()
+let lastGameFrameTime = undefined
+let framesPerSecond = 60
+function gameLoop(frameTime) {
+    const defaultFrameDuration = 1000 / 60
+    const actualFrameDuration = lastGameFrameTime == undefined ? defaultFrameDuration :
+        frameTime - lastGameFrameTime
+    const frameDuration = Math.min(actualFrameDuration, 100)
+    lastGameFrameTime = frameTime
+    if (actualFrameDuration > 0) {
+        const currentFps = 1000 / actualFrameDuration
+        framesPerSecond = framesPerSecond * 0.9 + currentFps * 0.1
+    }
+
+    gameEvent.moveScreen(frameDuration)
     drawAll()
     if (gameExit) {
         gameExit = false
+        lastGameFrameTime = undefined
         return
     }
     requestAnimationFrame(gameLoop)

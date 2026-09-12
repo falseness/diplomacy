@@ -135,6 +135,8 @@ const result = new vm.Script(`(() => {
   attackBorder = new Border()
 
   let testManager = {
+    // This fixture exercises economy state without rendering a camera.
+    updateCameraBorders() {},
     clearValues() {
       external = []
       externalProduction = []
