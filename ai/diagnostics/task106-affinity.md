@@ -1,5 +1,32 @@
 # TASK-106 evaluator placement control
 
+## Completed experiment: rejected
+
+The prescribed control completed in iteration 27 at diagnostic commit
+`1fdf29acddd3de6fa2788ba8cd68feb58bfae793`, against frozen production
+`47edf0406fc5f3a016ee948ba3b729646682a86c`. All four cold samples passed
+39-game, 10-fit, weight, curriculum, lifecycle and 15-thread parity. Shared
+placement averaged 706.2386326827109 seconds; disjoint placement averaged
+733.2174904383719 seconds: reduction -3.820076742783016%, below the 10% gate.
+These are screening means, not canonical medians. The automatic-thread
+iteration-26 control was invalid because it changed numeric work; it is not
+an alternative successful configuration.
+
+Do not execute the command below as the next task step: it documents the
+completed experiment. Retained results and limitations are in
+`artifacts/TASK-106/iteration-27/decision.md`, with raw samples, `audit.log`,
+`diagnostic-controls.log` and `commit-binding.log` beside it. Pinning with
+these fixed thread settings is rejected as a supported speed improvement;
+this does not isolate every scheduling or memory explanation.
+
+TASK-106 remains pending. Full regression and canonical timing gates were
+not reached. A distinct candidate needs measured support and a new complete
+screen against its actual predecessor; neither historical savings nor this
+documentation correction establishes acceptance. Do not repeat the control,
+create another audit-only experiment, change thresholds, or skip to TASK-159.
+
+## Historical invocation and control design
+
 `task106-affinity.py <new-evidence-directory> --fixed-native-threads=2` freezes production revision
 47edf0406fc5f3a016ee948ba3b729646682a86c and the iteration-25 inputs, then runs
 four cold four-step CLI samples: shared, disjoint, reversed disjoint, shared.
