@@ -101,6 +101,19 @@ def main():
         assert len(launch) == 2 and {e['pid'] for e in launch} == set(pids)
         expected = {}
         initialized_counts = [max(len(e['threads']) for e in tf if e['pid'] == pid) for pid in pids]
+        if 'evaluatorThreads' in plan:
+            initialized = [e for e in placement if e['event'] == 'after-tensorflow']
+            assert {e['pid'] for e in initialized} == set(pids)
+            for event in initialized:
+                assert event['intra'] == event['inter'] == '2'
+                assert '--v8-pool-size=4' in event['execArgv']
+                mask = sample['mapping'][int(event['index'])]
+                for thread in event['threads']:
+                    status = dict(line.split(':', 1) for line in thread['status'].splitlines())
+                    assert cpu_set(status['Cpus_allowed_list'].strip()) == cpu_set(mask)
+            initialized_counts = [max(len(e['threads']) for e in initialized if e['pid'] == pid) for pid in pids]
+            assert initialized_counts == [plan['evaluatorThreads']['expectedInitialized']] * 2
+            print(f'FIXED THREAD CONFIG: PASS {directory.name} intra=2 inter=2 v8=4 initialized={initialized_counts}')
         native_threads.append(initialized_counts)
         for event in launch:
             mask = sample['mapping'][int(event['index'])]

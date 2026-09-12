@@ -1,9 +1,9 @@
 # TASK-106 evaluator placement control
 
-`task106-affinity.py <new-evidence-directory>` freezes production revision
+`task106-affinity.py <new-evidence-directory> --fixed-native-threads=2` freezes production revision
 47edf0406fc5f3a016ee948ba3b729646682a86c and the iteration-25 inputs, then runs
 four cold four-step CLI samples: shared, disjoint, reversed disjoint, shared.
-It refuses an existing plan or a different revision. This is the bounded
+It refuses an existing plan or production changes since that revision; diagnostic-only changes are allowed. This is the bounded
 placement experiment prescribed by TASK-106, not a general training option.
 Do not rerun a rejected unchanged experiment.
 
@@ -28,8 +28,12 @@ prefix to exercise this guard without rerunning training. A valid diagnostic scr
 resources.jsonl retains one-second per-process and per-thread /proc snapshots:
 CPU ticks, context switches, minor/major faults, RSS and actual allowed CPUs.
 These are sampled counters, not exact lifetime totals; short-lived threads and
-last subsecond activity can be missed. Native thread environment is unchanged,
-but any automatic native behavior in response to affinity is part of the
-observed treatment. Two balanced pairs do not isolate shared-host variation,
+last subsecond activity can be missed. Parent/teacher native settings are unchanged. Both evaluator arms explicitly
+use TF_NUM_INTRAOP_THREADS=2, TF_NUM_INTEROP_THREADS=2 and --v8-pool-size=4,
+set before Node/TF initialization. A startup matrix verifies 15 initialized
+threads under each CPU mask; the real-run auditor requires the same count
+and checks the settings and every observed mask. This repairs iteration26's
+invalid 15-versus-13 automatic thread control, without assuming numerical
+equality: any drift from the complete iteration25 reference still stops runs. Two balanced pairs do not isolate shared-host variation,
 native implementation choices or memory effects. Keep every outcome and sample,
 and do not sum overlapping phases or claim many-core scaling from this control.

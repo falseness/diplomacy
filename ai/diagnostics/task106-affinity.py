@@ -24,11 +24,16 @@ def child():
     cpus = {int(x) for x in os.environ['TASK106_CHILD_CPUS'].split(',')}
     os.sched_setaffinity(0, cpus)
     assert os.sched_getaffinity(0) == cpus
+    # Equal explicit pools avoid affinity-dependent automatic TF thread counts.
+    assert os.environ['TASK106_FIXED_NATIVE_THREADS'] == '2'
+    os.environ['TF_NUM_INTRAOP_THREADS'] = '2'
+    os.environ['TF_NUM_INTEROP_THREADS'] = '2'
     with open(os.environ['TASK106_AFFINITY_EVENTS'], 'a') as log:
         log.write(json.dumps(dict(event='before-node', pid=os.getpid(),
             index=os.environ['TASK106_CHILD_INDEX'], affinity=sorted(cpus),
             ns=str(time.monotonic_ns()))) + '\n')
-    os.execv(os.environ['TASK106_CHILD_NODE'], [os.environ['TASK106_CHILD_NODE'], *sys.argv[1:]])
+    os.execv(os.environ['TASK106_CHILD_NODE'],
+             [os.environ['TASK106_CHILD_NODE'], '--v8-pool-size=4', *sys.argv[1:]])
 
 
 def observe(pids):
@@ -59,10 +64,13 @@ def main():
     root = Path(__file__).resolve().parents[2]
     dest = Path(sys.argv[1]).resolve()
     dest.mkdir(exist_ok=True)
+    assert sys.argv[2:] == ['--fixed-native-threads=2'], 'automatic-thread control was rejected; explicit control required'
     assert not (dest / 'plan.json').exists(), 'immutable experiment already started'
     node = Path('/root/.npm/_npx/ebaba8b9e55fd0a9/node_modules/node/bin/node')
-    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
-    assert revision == '47edf0406fc5f3a016ee948ba3b729646682a86c'
+    revision = '47edf0406fc5f3a016ee948ba3b729646682a86c'
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+    changed = subprocess.check_output(['git', 'diff', '--name-only', revision], cwd=root, text=True).splitlines()
+    assert all(p.startswith('ai/diagnostics/') for p in changed), 'production changed since frozen reference'
     old = json.loads((root / 'artifacts/TASK-106/iteration-25/plan.json').read_text())
     for file, digest in old['checkpoints'].items():
         assert sha(root / file) == digest, file
@@ -71,7 +79,9 @@ def main():
     assert os.sched_getaffinity(0) == {0, 1}
     order = [('shared', ['0,1', '0,1']), ('disjoint', ['0', '1']),
              ('disjoint', ['1', '0']), ('shared', ['0,1', '0,1'])]
-    save(dest / 'plan.json', dict(revision=revision, order=order, inputs=old,
+    save(dest / 'plan.json', dict(revision=revision, harnessHead=head, order=order, inputs=old,
+        evaluatorThreads=dict(intra=2, inter=2, v8=4, expectedInitialized=15),
+        hypothesis='CPU placement with fixed native pools; iteration26 automatic pools invalidated control',
         threshold=10, metric='complete cold subprocess wall time through exit; means of two samples per arm',
         node=str(node), cpus=[0, 1], heapMiB=6144, retries=0,
         nativeThreadEnvironment={k:v for k,v in os.environ.items() if k.startswith(('TF_', 'OMP_', 'MKL_', 'OPENBLAS_'))}))
@@ -119,6 +129,7 @@ def main():
             DIPLOMACY_TASK104_DETERMINISTIC_INVARIANT='1',
             TASK106_TRAINING_EVENTS=str(sample / 'events.jsonl'), TASK106_POOL_EVENTS=str(sample / 'pool.jsonl'),
             TASK106_AFFINITY_EVENTS=str(sample / 'affinity.jsonl'), TASK106_AFFINITY_MAPPING=json.dumps(mapping),
+            TASK106_FIXED_NATIVE_THREADS='2',
             TASK106_AFFINITY_LAUNCHER=str(source / 'ai/diagnostics/task106-affinity.py'))
         print('SAMPLE START', i+1, arm, mapping, flush=True)
         with (sample / 'command.log').open('w') as log, (sample / 'resources.jsonl').open('w') as resources:

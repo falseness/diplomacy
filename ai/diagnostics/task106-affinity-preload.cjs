@@ -27,6 +27,14 @@ Module._load = function(request, ...args) {
       threads: fs.readdirSync('/proc/self/task').map(tid => ({ tid,
         status: fs.readFileSync(`/proc/self/task/${tid}/status`, 'utf8') })) });
   }
-  return load.call(this, request, ...args);
+  const exports = load.call(this, request, ...args);
+  if (request === '@tensorflow/tfjs-node' && process.env.TASK106_CHILD_CPUS) {
+    record({ event: 'after-tensorflow', index: process.env.TASK106_CHILD_INDEX,
+      intra: process.env.TF_NUM_INTRAOP_THREADS, inter: process.env.TF_NUM_INTEROP_THREADS,
+      execArgv: process.execArgv,
+      threads: fs.readdirSync('/proc/self/task').map(tid => ({ tid,
+        status: fs.readFileSync(`/proc/self/task/${tid}/status`, 'utf8') })) });
+  }
+  return exports;
 };
 require('../tests/task106-reusable-cli.cjs');
