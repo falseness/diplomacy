@@ -9,6 +9,12 @@ class DemonPortal extends Building {
         if (isCoordNotOnMap({x, y}, grid.arr.length, grid.arr[0].length) ||
                 !grid.getBuilding({x, y}).isEmpty())
             throw new Error('portal requires empty building cell')
+        const occupant = grid.getUnit({x, y})
+        if (!occupant.isEmpty() && !players[slot].units.includes(occupant))
+            throw new Error('portal requires empty or demon-occupied unit cell')
+        // Setup and deserialization share ownership bookkeeping, without adding
+        // a player action to the undo stack. The building cell is still empty.
+        grid.getHexagon({x, y}).repaint(slot, false)
         super(x, y, 'demonPortal')
         Object.defineProperty(this, 'ownerSlot', {value: slot})
         external.push(this)
@@ -23,7 +29,7 @@ class DemonPortal extends Building {
         result.info.owner = 'DEMONS'
         return result
     }
-    isObstacle(playerColor) { return playerColor === this.playerColor }
+    isObstacle(playerColor) { return false }
     toJSON() {
         const result = {...super.toJSON(), ownerSlot: this.ownerSlot}
         if (Object.prototype.hasOwnProperty.call(this, 'id')) result.id = this.id

@@ -28,7 +28,7 @@ function placeCoopWave(wave) {
             !cell.unit.isEmpty()) continue
         // Establish coordinate ownership before Unit registers with its player.
         // Only a validated portal can reach this boundary, never a human asset.
-        cell.hexagon.sudoPaint(coop.demonSlot)
+        cell.hexagon.repaint(coop.demonSlot, false)
         new constructors[type](x, y)
         spawned.push({type, x, y})
     }

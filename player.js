@@ -378,7 +378,8 @@ class DemonPlayer extends Player {
         this.economyEnabled = false
     }
     canEnterBuilding(building) {
-        return building.isEmpty()
+        return building.isEmpty() || (building.isDemonPortal &&
+            !building.killed && building.playerColor === players.indexOf(this))
     }
     get gold() { return 0 }
     set gold(value) {} // Combat rewards and restored balances cannot fund demons.
