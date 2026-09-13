@@ -5,7 +5,7 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
-function run(eliminated = false) {
+function run(eliminated = false, auditUndo = null) {
   const c = defaultFixture(); c.coop = true; c.size = {x:15,y:9};
   c.actors[0].towns = []; c.actors[1].units = [{x:5,y:3,hp:2}];
   c.actors[2].towns = [{x:1,y:7}]; c.actors[3].units = [{x:4,y:3,hp:2}];
@@ -37,9 +37,10 @@ function run(eliminated = false) {
     {income:{town:4,suburb:1},salary:{noob:1}});
   const turns = createTurnLedger([1,2]);
   let round=0, prefix=1, hits=0, incomeSerial=0;
-  function check(label) {
+  function check(label, skipUndoAudit = false) {
     entities.check(label+'-entities'); economy.check(label+'-economy');
     turns.check(label+'-turn',f.evaluate('({round:gameRound,terminal:gameExit,events:trace})'),round,false,prefix);
+    if (auditUndo && !skipUndoAudit) auditUndo(f,label, suffix => check(label+suffix,true));
   }
   f.context.afterIncome = owner => {
     if (!(eliminated && owner===2)) {
@@ -116,6 +117,7 @@ function run(eliminated = false) {
   f.compare('terminal-no-advance',f.evaluate('({round:gameRound,trace,gold:players.map(p=>p.gold)})'),before);
   console.log(`PASS local-round eliminated=${eliminated} completed=2 waves=2 demon_phases=2 combat_actions=2 reentrant_callbacks=ignored`);
 }
+if (require.main === module) {
 run(false); run(true);
 console.log('INAPPLICABLE online committed convergence: local offline rounds have no online committed revisions. Entity helper checks serialization at every action/phase/round. No purchases or production occur; income and salary events are independently declared.');
 if(!process.argv.includes('--fault')) {
@@ -125,3 +127,6 @@ if(!process.argv.includes('--fault')) {
   assert.match(child.stderr,/exactly one wave phase/);
   console.log('PASS rejects-duplicate-phase expected_exit=1 observed_exit=1');
 }
+
+}
+module.exports = {run};
