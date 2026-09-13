@@ -367,12 +367,22 @@ class Player {
         return result
     }
 }
-// A distinct controller owns demon units; scheduling/combat rules are separate
-// from this state representation. Existing Player economy hooks honor this flag.
+// Demon phases refresh units only; portal/terminal rules decide their lifetime.
 class DemonPlayer extends Player {
     constructor(color) {
         super(color, 0)
         this.economyEnabled = false
+    }
+    get gold() { return 0 }
+    set gold(value) {} // Combat rewards and restored balances cannot fund demons.
+    get income() { return 0 }
+    get armySalary() { return 0 }
+    get goldminesIncome() { return 0 }
+    get isLost() { return false }
+    correctGoldminesIncome() {}
+    nextTurn() {
+        this.updateUnits()
+        for (const unit of this.units) unit.nextTurn()
     }
 }
 class NeutralPlayer extends Player {

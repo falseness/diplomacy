@@ -38,6 +38,7 @@ class PreparingManufacture extends Manufacture {
         }
     }
 	startUnitPreparing(what) {
+        if (this.player.role === 'DEMONS') return false
         this.addThisUndo()
 
         this.minusGold(production[what].cost)
@@ -47,6 +48,7 @@ class PreparingManufacture extends Manufacture {
             production[what].class, what)
     }
     prepare(what) {
+        if (this.player.role === 'DEMONS') return false
         if (this.gold < production[what].cost ||
             this.isPreparingUnit)
             return false
@@ -65,6 +67,7 @@ class PreparingManufacture extends Manufacture {
         return building
     }
 	unitPreparingLogic() {
+        if (this.player.role === 'DEMONS') return false
         if (!this.isPreparingUnit)
             return
         

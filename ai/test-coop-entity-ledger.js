@@ -55,7 +55,7 @@ function createEntityLedger(fixture, initial, report = console.log) {
     const wanted = expected();
     const observed = fixture.evaluate(`(() => {
       const row = entity => ({id: ledgerObjects.get(entity) || '<unregistered>',
-        kind: entity.isUnit ? 'unit' : entity.isDemonPortal ? 'portal' : entity.isNature ? 'nature' : entity.isExternal ? 'building' : 'town', name: entity.name, owner: entity.playerColor,
+        kind: entity.isUnit ? 'unit' : entity.isDemonPortal ? 'portal' : entity.name === 'goldmine' ? 'goldmine' : entity.isNature ? 'nature' : entity.isExternal ? 'building' : 'town', name: entity.name, owner: entity.playerColor,
         x: entity.coord.x, y: entity.coord.y});
       const live = [...ledgerObjects.keys()].filter(e => !e.killed);
       const map = [], ownership = [], problems = [];
@@ -84,6 +84,10 @@ function createEntityLedger(fixture, initial, report = console.log) {
       for (const entity of external.filter(e => !e.killed && !e.isDemonPortal)) {
         ownership.push(row(entity));
         if (grid.getBuilding(entity.coord) !== entity) problems.push('external reference');
+      }
+      for (const entity of goldmines.filter(e => !e.killed)) {
+        ownership.push(row(entity));
+        if (grid.getBuilding(entity.coord) !== entity) problems.push('goldmine reference');
       }
       for (const entity of nature.filter(e => !e.killed)) {
         ownership.push(row(entity));
