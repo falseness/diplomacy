@@ -380,6 +380,13 @@ class DemonPlayer extends Player {
     get goldminesIncome() { return 0 }
     get isLost() { return false }
     correctGoldminesIncome() {}
+    play() {
+        // Reuse the combat-only controller without replacing demon ownership or
+        // invoking a normal player's economy/turn hooks.
+        if (!this.combatAI) this.combatAI = new SimpleAiPlayer(this.color, 0)
+        this.combatAI.units = this.units
+        this.combatAI.play()
+    }
     nextTurn() {
         this.updateUnits()
         for (const unit of this.units) unit.nextTurn()

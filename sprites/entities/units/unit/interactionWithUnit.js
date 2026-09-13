@@ -455,8 +455,8 @@ class BestEnemyTargetForAI extends Way {
             for (let j = 0; j < grid_arr[i].length; ++j) {
                 let cell = grid_arr[i][j]
                 let is_building_target = cell.building.notEmpty() &&
-                    cell.building.playerColor != myPlayerColor &&
-                    !cell.building.isExternal && !cell.building.isNature
+                    !players[myPlayerColor].isAlliedWith(cell.building.player) &&
+                    (!cell.building.isExternal || cell.building.isDemonPortal) && !cell.building.isNature
                 if (is_building_target &&
                     this.distance[i][j] < minDistance) {
                     minDistance = this.distance[i][j]
@@ -471,7 +471,7 @@ class BestEnemyTargetForAI extends Way {
             for (let j = 0; j < grid_arr[i].length; ++j) {
                 let cell = grid_arr[i][j]
                 let is_unit_target = cell.unit.notEmpty() &&
-                    cell.unit.playerColor != myPlayerColor
+                    !players[myPlayerColor].isAlliedWith(cell.unit.player)
                 if (is_unit_target &&
                     this.distance[i][j] < minDistance) {
                     minDistance = this.distance[i][j]

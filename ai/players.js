@@ -320,14 +320,13 @@ class SimpleAiPlayer extends Player {
                 }
                 continue
             }
-            let playerIndex = typeof players == 'undefined' ? unit.playerColor :
-                players.indexOf(this)
+            let playerIndex = unit.playerColor
             if (cell.unit && cell.unit.notEmpty && cell.unit.notEmpty() &&
-                    cell.unit.playerColor != playerIndex) {
+                    !players[playerIndex].isAlliedWith(cell.unit.player)) {
                 return command
             }
             if (cell.building && cell.building.notEmpty && cell.building.notEmpty() &&
-                    cell.building.playerColor != playerIndex) {
+                    !players[playerIndex].isAlliedWith(cell.building.player)) {
                 return command
             }
         }
