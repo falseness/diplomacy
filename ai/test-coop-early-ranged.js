@@ -7,8 +7,10 @@ const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 // Independent literal expectations: class, key, health, movement, damage, range.
 const cases = [['Spitter','spitter',2,2,1,2], ['EmberArcher','emberArcher',4,3,2,3]];
-function run(fault) {
-  for (const [klass,name,hp,speed,damage,range] of cases) {
+const DEMON_NAMES = {"spitter": "Spitter", "emberArcher": "Ember Archer", "hexcaster": "Hexcaster"};
+const DEMON_ROLES = {"spitter": "fragile short-range attacker", "emberArcher": "mobile ranged attacker", "hexcaster": "slow stronger ranged attacker"};
+function run(fault, testCases = cases, summary) {
+  for (const [klass,name,hp,speed,damage,range] of testCases) {
     for (const mode of ['inside','at','outside','obstruction','restrictions','movement','durability']) {
       const distance = mode === 'outside' ? range+1 : mode === 'inside' ? 1 : range;
       const vx = mode === 'durability' ? 6 : 5;
@@ -55,10 +57,10 @@ function run(fault) {
       if (fault === 'health') f.evaluate('demon.hp--');
       f.compare(prefix+'-exact-config-and-identity', f.evaluate(`({name:demon.name,className:demon.constructor.name,
         hp:demon.hp,maxHP:demon.maxHP,speed:demon.speed,moves:demon.moves,damage:demon.dmg,range:demon.range,
-        salary:demon.salary,owner:demon.playerColor,role:demon.player.role,
+        combatConfig:DEMON_TYPES[demon.name],healSpeed:demon.constructor.healSpeed,salary:demon.salary,owner:demon.playerColor,role:demon.player.role,
         registered:getClass(demon.name)===demon.constructor,archerRules:demon.interaction instanceof InteractionWithArcher,
         wire:demon.toJSON()})`),
-        {name,className:klass,hp,maxHP:hp,speed,moves:speed,damage,range,salary:0,owner:3,role:'DEMONS',
+        {name,className:klass,hp,maxHP:hp,speed,moves:speed,damage,range,combatConfig:{name:DEMON_NAMES[name],role:DEMON_ROLES[name],health:hp,damage,movement:speed,melee:true,ranged:true,range},healSpeed:0,salary:0,owner:3,role:'DEMONS',
           registered:true,archerRules:true,wire:{name,coord:{x:5,y:3},hp,wasHitted:false,moves:speed}});
       check('initial');
       // As in the browser, select/recompute commands before submitting instructions.
@@ -111,10 +113,12 @@ function run(fault) {
             beyond:moves.some(c=>c.destinationCoord.x===5&&c.destinationCoord.y===${4+speed}),
             enemy:moves.some(c=>c.destinationCoord.x===${vx}&&c.destinationCoord.y===${vy})})`,
           {atLimit:true,beyond:false,enemy:false});
+        action('reject-over-limit',command(5,4+speed)+'({coord:demon.coord,moves:demon.moves})',
+          {coord:{x:5,y:3},moves:speed});
         // Horizontal hex paths are less obvious; use a clear vertical lane at x=6 after a first step.
         action('move-one',command(6,3)+'({coord:demon.coord,moves:demon.moves})',
           {coord:{x:6,y:3},moves:speed-1},[{type:'move',id:'demon',destination:{x:6,y:3}}]);
-        action('move-remaining',command(6,3+speed-1)+'({coord:demon.coord,moves:demon.moves})',
+        if (speed > 1) action('move-remaining',command(6,3+speed-1)+'({coord:demon.coord,moves:demon.moves})',
           {coord:{x:6,y:3+speed-1},moves:0},[{type:'move',id:'demon',destination:{x:6,y:3+speed-1}}]);
         action('reject-exhausted-move',command(6,3+speed)+'({coord:demon.coord,moves:demon.moves})',
           {coord:{x:6,y:3+speed-1},moves:0});
@@ -133,7 +137,7 @@ function run(fault) {
   }
   console.log('INAPPLICABLE completed round/wave/demon phase counts: isolated fixture commands; human order and round 0 checked after every action. No round advancement.');
   console.log('INAPPLICABLE online convergence: offline fixtures have no online committed revisions.');
-  console.log('PASS co-op early ranged types=2 health=2,4 movement=2,3 damage=1,2 ranges=2,3 boundary=inside,at,outside obstruction=mountain target_restrictions=ally,self,empty,static-nature persistence=4 incoming_lethal=2,4');
+  console.log(summary || 'PASS co-op early ranged types=2 health=2,4 movement=2,3 damage=1,2 ranges=2,3 boundary=inside,at,outside obstruction=mountain target_restrictions=ally,self,empty,static-nature persistence=4 incoming_lethal=2,4');
 }
 if (require.main === module) {
   if (process.argv[2]==='--fault') run(process.argv[3]);
@@ -146,3 +150,5 @@ if (require.main === module) {
     console.log('PASS rejects-health-corruption expected_exit=1 observed_exit='+child.status);
   }
 }
+
+module.exports = {run};

@@ -7,8 +7,10 @@ const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 // Literal expectations deliberately independent of DEMON_TYPES and runtime deltas.
 const cases = [['Brute', 'brute', 10, 1, 3], ['Bulwark', 'bulwark', 16, 1, 2]];
-function run(fault) {
-  for (const [klass, name, hp, speed, damage] of cases) {
+const DEMON_NAMES = {"brute": "Brute", "bulwark": "Bulwark", "ravager": "Ravager", "demonLord": "Demon Lord"};
+const DEMON_ROLES = {"brute": "slow high-health melee", "bulwark": "very durable slow melee", "ravager": "fast strong late-game melee", "demonLord": "durable powerful late-game melee"};
+function run(fault, testCases = cases, summary) {
+  for (const [klass, name, hp, speed, damage] of testCases) {
     for (const mode of ['combat', 'movement', 'durability']) {
       const config = defaultFixture();
       config.coop = true;
@@ -46,9 +48,9 @@ function run(fault) {
       if (fault === 'health') f.evaluate('demon.hp--');
       f.compare(prefix+'-exact-config-and-identity', f.evaluate(`({name:demon.name, className:demon.constructor.name,
         hp:demon.hp, maxHP:demon.maxHP, speed:demon.speed, moves:demon.moves, damage:demon.dmg,
-        salary:demon.salary, owner:demon.playerColor, role:demon.player.role,
+        combatConfig:DEMON_TYPES[demon.name],healSpeed:demon.constructor.healSpeed,salary:demon.salary, owner:demon.playerColor, role:demon.player.role,
         registered:getClass(demon.name) === demon.constructor, wire:demon.toJSON()})`),
-      {name,className:klass,hp,maxHP:hp,speed,moves:speed,damage,salary:0,owner:3,role:'DEMONS',registered:true,
+      {name,className:klass,hp,maxHP:hp,speed,moves:speed,damage,combatConfig:{name:DEMON_NAMES[name],role:DEMON_ROLES[name],health:hp,damage,movement:speed,melee:true,ranged:false,range:1},healSpeed:0,salary:0,owner:3,role:'DEMONS',registered:true,
         wire:{name,coord:{x:5,y:3},hp,wasHitted:false,moves:speed}});
       check('initial');
       // Execute individual demon commands in an explicit fixture phase and restore
@@ -110,7 +112,7 @@ function run(fault) {
   }
   console.log('INAPPLICABLE completed round/wave/demon phase counts: isolated commands in a fixture demon phase; no round advancement. Human cursor and round 0 checked after every action.');
   console.log('INAPPLICABLE online convergence: offline fixtures have no online committed revisions.');
-  console.log('PASS co-op heavy melee types=2 movement_limits=1,1 health=10,16 damage=3,2 outgoing_lethal=2 incoming_lethal=2 incoming_nonlethal=24 persistence=2');
+  console.log(summary || 'PASS co-op heavy melee types=2 movement_limits=1,1 health=10,16 damage=3,2 outgoing_lethal=2 incoming_lethal=2 incoming_nonlethal=24 persistence=2');
 }
 if (require.main === module) {
   if (process.argv[2] === '--fault') run(process.argv[3]);
@@ -123,3 +125,5 @@ if (require.main === module) {
     console.log('PASS rejects-health-corruption expected_exit=1 observed_exit='+child.status);
   }
 }
+
+module.exports = {run};
