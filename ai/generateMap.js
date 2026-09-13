@@ -75,9 +75,71 @@ function generateCoopGame(playerCount, options = {}) {
     // One portal per initial human, using the remaining disjoint pool. Town
     // neighborhoods and every terrain/resource cell have already been excluded.
     map.portals = take()
+    repairCoopConnectivity(map)
     // Stored inside co-op metadata so existing save/load retains replay inputs.
     map.coop.generation = {version: 1, playerCount, seed, options: {seed}}
     return map
+}
+
+// Check long-term melee access without treating hostile towns/portals as
+// shortcuts. Humans must reach each target from an adjacent walkable cell;
+// allied town centers remain obstacles, as in Way.isCellImpassable.
+function coopRoutesConnected(map) {
+    const key = c => `${c.x},${c.y}`
+    const targets = [...map.portals, ...map.players[0].towns, ...map.goldmines]
+    const terminal = new Set([...map.portals, ...map.players[0].towns].map(key))
+    const terrain = [...map.lakes, ...map.mountains]
+    return map.players.slice(1, 1 + map.coop.initialHumanCount).every((player, index) => {
+        const start = player.towns[0]
+        const blocked = new Set([...terrain, ...map.players.slice(1).flatMap((p, i) =>
+            i === index ? [] : p.towns)].map(key))
+        const visited = new Set([key(start)])
+        const queue = [start]
+        for (let head = 0; head < queue.length; head++) {
+            const c = queue[head]
+            if (terminal.has(key(c))) continue
+            for (const [dx, dy] of neighborhood[c.x & 1]) {
+                const next = {x:c.x + dx, y:c.y + dy}, id = key(next)
+                if (next.x < 0 || next.y < 0 || next.x >= map.mapSize.x ||
+                    next.y >= map.mapSize.y || blocked.has(id) || visited.has(id)) continue
+                visited.add(id)
+                queue.push(next)
+            }
+        }
+        return targets.every(c => visited.has(key(c)))
+    })
+}
+
+// Finite deterministic repair: remove at most B blockers, then try at most
+// B * width * height placements. Keep every category/count, and fail explicitly
+// if the supplied layout cannot accommodate them. No random retries or draws.
+function repairCoopConnectivity(map) {
+    const removed = []
+    for (const kind of ['lakes', 'mountains']) {
+        while (!coopRoutesConnected(map) && map[kind].length) {
+            removed.push({kind, coord:map[kind].pop()})
+        }
+    }
+    if (!coopRoutesConnected(map)) throw new Error('Co-op connectivity repair failed: fixed targets block routes')
+    const towns = map.players.flatMap(p => p.towns)
+    for (const {kind, coord} of removed) {
+        let placed = false
+        for (let x = 0; x < map.mapSize.x && !placed; x++) {
+            for (let y = 0; y < map.mapSize.y && !placed; y++) {
+                const candidate = {x, y}
+                const occupied = [...map.lakes, ...map.mountains, ...map.bushes,
+                    ...map.hills, ...map.goldmines, ...map.portals]
+                if (towns.some(t => Math.abs(t.x-x) <= 1 && Math.abs(t.y-y) <= 1) ||
+                    occupied.some(c => areCoordsEqual(c, candidate))) continue
+                map[kind].push(candidate)
+                if (coopRoutesConnected(map)) placed = true
+                else map[kind].pop()
+            }
+        }
+        if (!placed) throw new Error(`Co-op connectivity repair failed: no safe ${kind} placement for ${coord.x},${coord.y}`)
+    }
+    return {status:'connected', relocated:removed.length,
+        placementLimit:removed.length * map.mapSize.x * map.mapSize.y}
 }
 
 function randomIntWithRng(rng, min, max) {
