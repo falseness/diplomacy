@@ -48,7 +48,8 @@ class EarlyMeleeDemon extends Unit {
         }
         return result
     }
-    static visualTypes = ['imp', 'clawling', 'hound', 'brute', 'bulwark']
+    static visualTypes = ['imp', 'clawling', 'hound', 'brute', 'bulwark',
+        'spitter', 'emberArcher', 'hexcaster', 'ravager', 'demonLord']
     // Normalized silhouettes are shared by map units and selection portraits.
     static drawSymbol(ctx, type, x, y, size) {
         ctx.save()
@@ -91,6 +92,46 @@ class EarlyMeleeDemon extends Unit {
             ctx.moveTo(0,-.17); ctx.lineTo(0,.27)
             ctx.moveTo(-.24,-.02); ctx.lineTo(.24,-.02)
             ctx.stroke()
+        } else if (type === 'spitter') { // Crouched acid beast and a detached projectile.
+            ctx.fillStyle = '#285c32'
+            polygon([[-.4,.27],[-.3,-.05],[-.17,-.19],[.02,-.2],[.12,-.07],
+                [.28,-.05],[.28,.07],[.08,.09],[.17,.28],[-.02,.28],[-.09,.13],[-.22,.28]])
+            ctx.fillStyle = '#b8f35d'
+            polygon([[.32,-.06],[.45,-.16],[.43,.02],[.36,.06]])
+        } else if (type === 'emberArcher') { // Hood, tall bow and flaming arrow.
+            ctx.fillStyle = '#783019'
+            polygon([[-.31,-.12],[-.2,-.36],[-.06,-.12],[-.12,.02],[.03,.31],[-.36,.31],[-.26,.02]])
+            ctx.strokeStyle = '#ffb34f'
+            ctx.beginPath()
+            ctx.moveTo(.13,-.35); ctx.quadraticCurveTo(.48,0,.13,.35)
+            ctx.lineTo(.13,-.35)
+            ctx.moveTo(-.14,0); ctx.lineTo(.4,0); ctx.stroke()
+            ctx.fillStyle = '#ffb34f'
+            polygon([[.3,-.06],[.47,0],[.3,.06]])
+        } else if (type === 'hexcaster') { // Floating robe, staff and violet spell diamond.
+            ctx.fillStyle = '#652f91'
+            polygon([[-.26,-.19],[-.14,-.37],[-.02,-.19],[-.08,-.02],
+                [.06,.28],[-.08,.22],[-.18,.32],[-.34,.25],[-.23,-.02]])
+            ctx.strokeStyle = '#d6a4ff'
+            ctx.lineWidth = .04
+            ctx.beginPath(); ctx.moveTo(.22,-.2); ctx.lineTo(.22,.32); ctx.stroke()
+            ctx.fillStyle = '#c585ff'
+            polygon([[.22,-.4],[.34,-.27],[.22,-.14],[.1,-.27]])
+        } else if (type === 'ravager') { // Armored berserker with two long serrated blades.
+            ctx.fillStyle = '#802431'
+            polygon([[-.16,-.35],[0,-.24],[.16,-.35],[.12,-.1],[.22,.05],
+                [.17,.34],[.03,.34],[0,.16],[-.03,.34],[-.17,.34],[-.22,.05],[-.12,-.1]])
+            ctx.fillStyle = '#e38886'
+            polygon([[-.2,.15],[-.43,-.27],[-.28,-.2],[-.32,-.4],[-.12,-.02]])
+            polygon([[.2,.15],[.43,-.27],[.28,-.2],[.32,-.4],[.12,-.02]])
+        } else if (type === 'demonLord') { // Winged mantle and gold crown mark the final tier.
+            ctx.fillStyle = '#4c1640'
+            polygon([[-.1,-.12],[-.44,-.34],[-.38,.17],[-.24,.04],[-.31,.33],
+                [0,.23],[.31,.33],[.24,.04],[.38,.17],[.44,-.34],[.1,-.12]])
+            ctx.fillStyle = '#b93e51'
+            polygon([[-.13,-.17],[.13,-.17],[.1,.06],[.19,.35],[-.19,.35],[-.1,.06]])
+            ctx.fillStyle = '#ffd46b'
+            polygon([[-.18,-.4],[-.07,-.3],[0,-.45],[.07,-.3],[.18,-.4],[.13,-.19],[-.13,-.19]])
         }
         ctx.restore()
     }
