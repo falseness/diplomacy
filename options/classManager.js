@@ -5,6 +5,8 @@ function getClass(name) {
         hound: Hound,
         brute: Brute,
         bulwark: Bulwark,
+        spitter: Spitter,
+        emberArcher: EmberArcher,
         suburb: Suburb,
         noob: Noob, 
         archer: Archer, 
