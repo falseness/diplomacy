@@ -7,42 +7,32 @@ function placeCoopWave(wave) {
     const constructors = {imp: Imp, clawling: Clawling, hound: Hound,
         brute: Brute, bulwark: Bulwark, spitter: Spitter,
         emberArcher: EmberArcher, hexcaster: Hexcaster, ravager: Ravager, demonLord: DemonLord}
-    if (!wave || !Array.isArray(wave.types) || wave.types.some(type =>
-        !Object.prototype.hasOwnProperty.call(constructors, type)))
-        throw new RangeError('Invalid wave types')
-    const {min, max} = COOP_WAVE_CONFIG.spawnRadius
-    const candidates = new Map()
-    const portals = external.filter(portal => portal.isDemonPortal && !portal.killed &&
-        portal.hp > 0 && portal.playerColor === coop.demonSlot &&
-        grid.getBuilding(portal.coord) === portal)
-    for (const portal of portals) {
-        // Traverse geometric neighbours even across obstacles: proximity is hex
-        // distance, not movement-path distance. Check terrain only at destinations.
-        const queue = [{coord: portal.coord, distance: 0}]
-        const seen = new Set([`${portal.coord.x},${portal.coord.y}`])
-        for (let i = 0; i < queue.length; i++) {
-            const {coord, distance} = queue[i]
-            const cell = grid.getCell(coord)
-            if (distance >= min && cell.unit.isEmpty() && cell.building.isEmpty())
-                candidates.set(`${coord.x},${coord.y}`, coord)
-            if (distance === max) continue
-            for (const next of cell.hexagon.neighbours) {
-                const key = `${next.x},${next.y}`
-                if (seen.has(key) || !grid.arr[next.x] || !grid.arr[next.x][next.y]) continue
-                seen.add(key)
-                queue.push({coord: next, distance: distance + 1})
-            }
-        }
-    }
-    const positions = [...candidates.values()].sort((a, b) => a.x - b.x || a.y - b.y)
+    const seen = new Set()
+    if (!wave || !Array.isArray(wave.selections) || wave.selections.some(entry => {
+        if (!entry || !Number.isInteger(entry.x) || !Number.isInteger(entry.y) ||
+            !Object.prototype.hasOwnProperty.call(constructors, entry.type)) return true
+        const key = `${entry.x},${entry.y}`
+        if (seen.has(key)) return true
+        seen.add(key)
+        return false
+    })) throw new RangeError('Invalid wave selections')
     const spawned = []
-    for (let i = 0; i < Math.min(wave.types.length, positions.length); i++) {
-        const {x, y} = positions[i]
-        const type = wave.types[i]
+    for (const {x, y, type} of wave.selections) {
+        if (isCoordNotOnMap({x, y}, grid.arr.length, grid.arr[0].length)) continue
+        const cell = grid.getCell({x, y})
+        const portal = cell.building
+        // Revalidate selections at construction time: a stale selection must
+        // never replace a unit, a removed portal, or flooded terrain.
+        if (!portal.isDemonPortal || portal.killed || portal.hp <= 0 ||
+            portal.playerColor !== coop.demonSlot || !external.includes(portal) ||
+            !cell.unit.isEmpty()) continue
+        // Establish coordinate ownership before Unit registers with its player.
+        // Only a validated portal can reach this boundary, never a human asset.
+        cell.hexagon.sudoPaint(coop.demonSlot)
         new constructors[type](x, y)
         spawned.push({type, x, y})
     }
-    return {spawned, skipped: wave.types.length - spawned.length}
+    return {spawned, skipped: wave.selections.length - spawned.length}
 }
 
 function spawnCoopWave(round, seed = 0) {

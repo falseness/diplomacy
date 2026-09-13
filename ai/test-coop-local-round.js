@@ -18,20 +18,10 @@ function run(eliminated = false, auditUndo = null) {
     {id:'target',kind:'unit',name:'noob',owner:1,x:5,y:3},
     {id:'attacker',kind:'unit',name:'noob',owner:3,x:4,y:3}
   ];
-  // A remote portal with exactly one vacant radius cell. Its spawned units
-  // cannot affect the one-action combat budget, consumed by the first demon.
+  // The first two rounds are the spawn warmup. The third-round fixture below
+  // verifies that the portal's new unit receives the immediate combat phase.
   f.evaluate('new DemonPortal(12,4); undefined');
   initial.push({id:'portal',kind:'portal',name:'demonPortal',owner:3,x:12,y:4});
-  function distance(x,y) {
-    const z=y-(x-(x&1))/2, pz=4-6;
-    return (Math.abs(x-12)+Math.abs(z-pz)+Math.abs(x+z-12-pz))/2;
-  }
-  for(let x=0;x<15;x++) for(let y=0;y<9;y++) {
-    if(distance(x,y)>=1 && distance(x,y)<=2 && !(x===10&&y===3)) {
-      f.evaluate(`new Mountain(${x},${y}); undefined`);
-      initial.push({id:`m${x}-${y}`,kind:'nature',name:'mountain',owner:0,x,y});
-    }
-  }
   const entities = createEntityLedger(f,initial);
   const economy = createEconomyLedger(f,c.actors.map(({role,gold})=>({role,gold})),
     {income:{town:4,suburb:1},salary:{noob:1}});
@@ -52,12 +42,7 @@ function run(eliminated = false, auditUndo = null) {
     check('human-refresh-'+owner);
   };
   f.context.afterWave = result => {
-    f.compare('wave-result-'+round,JSON.parse(JSON.stringify(result)),round===0 ?
-      {spawned:[{type:'imp',x:10,y:3}],skipped:3} : {spawned:[],skipped:4});
-    if(round===0) {
-      entities.record({type:'spawn',entity:{id:'spawn',kind:'unit',name:'imp',owner:3,x:10,y:3}});
-      entities.bind('spawn','grid.getUnit({x:10,y:3})');
-    }
+    f.compare('wave-result-'+round,JSON.parse(JSON.stringify(result)),{spawned:[],skipped:0});
     prefix++; check('wave-'+round);
   };
   f.context.demonStarted = () => {prefix++; check('demon-start-'+round);};
@@ -117,8 +102,31 @@ function run(eliminated = false, auditUndo = null) {
   f.compare('terminal-no-advance',f.evaluate('({round:gameRound,trace,gold:players.map(p=>p.gold)})'),before);
   console.log(`PASS local-round eliminated=${eliminated} completed=2 waves=2 demon_phases=2 combat_actions=2 reentrant_callbacks=ignored`);
 }
+function spawnedPhase() {
+  const c=defaultFixture(); c.coop=true; c.size={x:15,y:9};
+  c.actors[0].towns=[]; c.actors[1].units=[{x:5,y:4,hp:2}];
+  c.actors[2].towns=[{x:1,y:7}]; c.actors[3].units=[];
+  const f=createFixture(c);
+  f.evaluate(`new DemonPortal(6,4); gameRound=2; whooseTurn=3;
+    gameSettings.aiActionLimit=1;
+    gameSettings.coop.localPhase={stage:'wave',round:3}; undefined`);
+  f.compare('spawn-phase-before',f.evaluate('({count:players[3].units.length,hp:grid.getUnit({x:5,y:4}).hp})'),{count:0,hp:2});
+  f.evaluate('advanceCoopLocalPhase()');
+  f.compare('spawn-phase-exact-coordinate',f.evaluate(`({stage:gameSettings.coop.localPhase.stage,
+    units:players[3].units.map(u=>({x:u.coord.x,y:u.coord.y,name:u.name}))})`),
+    {stage:'demon',units:[{x:6,y:4,name:'imp'}]});
+  f.evaluate('advanceCoopLocalPhase()');
+  f.compare('spawn-phase-immediate-combat',f.evaluate(`({stage:gameSettings.coop.localPhase.stage,
+    count:players[3].units.length,hp:grid.getUnit({x:5,y:4}).hp,
+    moves:grid.getUnit({x:6,y:4}).moves,gold:players[3].gold})`),
+    {stage:'complete',count:1,hp:1,moves:0,gold:0});
+  const before=f.evaluate('JSON.stringify({grid,players,external,gameSettings})');
+  f.evaluate('advanceCoopLocalPhase(); advanceCoopLocalPhase()');
+  f.compare('spawn-phase-repeated-controller-noop',f.evaluate('JSON.stringify({grid,players,external,gameSettings})'),before);
+  console.log('PASS spawned-demon immediate-normal-phase combat=1 repeated-controller=noop');
+}
 if (require.main === module) {
-run(false); run(true);
+run(false); run(true); spawnedPhase();
 console.log('INAPPLICABLE online committed convergence: local offline rounds have no online committed revisions. Entity helper checks serialization at every action/phase/round. No purchases or production occur; income and salary events are independently declared.');
 if(!process.argv.includes('--fault')) {
   const child=spawnSync(process.execPath,[__filename,'--fault'],{encoding:'utf8',maxBuffer:32*1024*1024});
