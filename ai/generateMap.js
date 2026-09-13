@@ -28,6 +28,33 @@ function createSeededRandom(seed) {
     }
 }
 
+// Pure generation API: callers explicitly start the returned GameMap. Counts
+// match both menu limits and exclude the neutral slot and demon controller.
+function generateCoopGame(playerCount, options = {}) {
+    if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 4) {
+        throw new RangeError('Co-op playerCount must be an integer from 2 to 4 humans')
+    }
+    if (!options || typeof options !== 'object' || Array.isArray(options) ||
+        Object.keys(options).some(key => key !== 'seed')) {
+        throw new TypeError('Co-op options must contain only an optional seed')
+    }
+    const seed = options.seed === undefined ? 1 : options.seed
+    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+        throw new RangeError('Co-op seed must be an unsigned 32-bit integer')
+    }
+    const rng = createSeededRandom(seed)
+    const roster = [{rgb: {r: 208, g: 208, b: 208}, towns: [], units: [], gold: 0}]
+    for (let i = 0; i < playerCount; i++) {
+        roster.push({rgb: trainingPlayerColor(i + 1), gold: 100, units: [],
+            towns: [{x: 3 + i * 6, y: randomIntWithRng(rng, 2, 6)}]})
+    }
+    const map = new GameMap({x: playerCount * 6 + 1, y: 9}, roster,
+        [], [], [], [], [], {type: 'rectangular'}, {})
+    // Stored inside co-op metadata so existing save/load retains replay inputs.
+    map.coop.generation = {version: 1, playerCount, seed, options: {seed}}
+    return map
+}
+
 function randomIntWithRng(rng, min, max) {
     return Math.floor(rng() * (max - min + 1)) + min
 }
