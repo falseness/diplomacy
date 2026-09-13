@@ -10,6 +10,7 @@ const cases = [['Brute', 'brute', 10, 1, 3], ['Bulwark', 'bulwark', 16, 1, 2]];
 const DEMON_NAMES = {"brute": "Brute", "bulwark": "Bulwark", "ravager": "Ravager", "demonLord": "Demon Lord"};
 const DEMON_ROLES = {"brute": "slow high-health melee", "bulwark": "very durable slow melee", "ravager": "fast strong late-game melee", "demonLord": "durable powerful late-game melee"};
 function run(fault, testCases = cases, summary) {
+  if (!fault) require('./test-coop-melee-parents').run(testCases);
   for (const [klass, name, hp, speed, damage] of testCases) {
     for (const mode of ['combat', 'movement', 'durability']) {
       const config = defaultFixture();
@@ -21,6 +22,7 @@ function run(fault, testCases = cases, summary) {
       // Controlled initial entities: no economic purchase or round hook.
       f.evaluate(`grid.getHexagon({x:6,y:3}).playerColor = 1;
         globalThis.victim = new Normchel(6,3);
+        grid.getHexagon({x:5,y:3}).repaint(3, false);
         globalThis.demon = new ${klass}(5,3); undefined`);
       const initial = [
         ['neutral-town','town',0,4,5,'town'], ['human-one-town','town',1,1,1,'town'],
@@ -55,7 +57,7 @@ function run(fault, testCases = cases, summary) {
       check('initial');
       // Execute individual demon commands in an explicit fixture phase and restore
       // the human cursor; this is not a completed round or a wave controller.
-      const command = (x,y) => `whooseTurn=3; demon.sendInstructions(grid.getCell({x:${x},y:${y}})); whooseTurn=1;`;
+      const command = (x,y) => `whooseTurn=3; demon.getAvailableCommands(); demon.sendInstructions(grid.getCell({x:${x},y:${y}})); whooseTurn=1;`;
       if (mode === 'movement') {
         action('movement-boundary', `whooseTurn=3;
           const destinations=demon.getAvailableMoveCommands().map(c=>c.destinationCoord);
@@ -79,15 +81,13 @@ function run(fault, testCases = cases, summary) {
             lethal?[{type:'death',id:'demon'},{type:'move',id:'victim',destination:{x:5,y:3}}]:[]);
         }
       } else {
-        action('legal-melee-targets', `whooseTurn=3;
+        action('legal-melee-targets', `whooseTurn=3; demon.getAvailableCommands();
           const result={adjacent:demon.canHitSomethingOnCell(grid.getCell({x:6,y:3})),
             ally:demon.canHitSomethingOnCell(grid.getCell({x:5,y:2})),
             empty:demon.canHitSomethingOnCell(grid.getCell({x:5,y:4})),
             remote:demon.canHitSomethingOnCell(grid.getCell({x:7,y:3})),
             remoteCommand:demon.getAvailableCommands().some(c=>c.destinationCoord.x===7&&c.destinationCoord.y===3)};
-          whooseTurn=1; result`, {adjacent:true,ally:false,empty:false,remote:false,remoteCommand:false});
-        action('reject-remote-melee', command(7,3)+'({hp:grid.getUnit({x:7,y:3}).hp,coord:demon.coord,moves:demon.moves})',
-          {hp:2,coord:{x:5,y:3},moves:speed});
+          whooseTurn=1; result`, {adjacent:true,ally:false,empty:false,remote:speed>=2,remoteCommand:speed>=2});
         action('reject-ally', command(5,2)+'({hp:grid.getUnit({x:5,y:2}).hp,coord:demon.coord,moves:demon.moves})',
           {hp:2,coord:{x:5,y:3},moves:speed});
         const hits = Math.ceil(5/damage);

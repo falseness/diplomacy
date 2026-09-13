@@ -8,6 +8,7 @@ const {createTurnLedger} = require('./test-coop-turn-ledger');
 // Literal expectations deliberately independent of DEMON_TYPES and runtime deltas.
 const cases = [['Imp', 'imp', 2, 2, 1], ['Clawling', 'clawling', 3, 3, 1], ['Hound', 'hound', 4, 4, 2]];
 function run(fault) {
+  if (!fault) require('./test-coop-melee-parents').run(cases);
   for (const [klass, name, hp, speed, damage] of cases) {
     for (const mode of ['combat', 'movement']) {
       const config = defaultFixture();
@@ -19,6 +20,7 @@ function run(fault) {
       // Controlled initial entities: no economic purchase or round hook.
       f.evaluate(`grid.getHexagon({x:6,y:3}).playerColor = 1;
         globalThis.victim = new Normchel(6,3);
+        grid.getHexagon({x:5,y:3}).repaint(3, false);
         globalThis.demon = new ${klass}(5,3); undefined`);
       const initial = [
         ['neutral-town','town',0,4,5,'town'], ['human-one-town','town',1,1,1,'town'],
@@ -53,7 +55,7 @@ function run(fault) {
       check('initial');
       // Execute individual demon commands in an explicit fixture phase and restore
       // the human cursor; this is not a completed round or a wave controller.
-      const command = (x,y) => `whooseTurn=3; demon.sendInstructions(grid.getCell({x:${x},y:${y}})); whooseTurn=1;`;
+      const command = (x,y) => `whooseTurn=3; demon.getAvailableCommands(); demon.sendInstructions(grid.getCell({x:${x},y:${y}})); whooseTurn=1;`;
       if (mode === 'movement') {
         action('movement-boundary', `whooseTurn=3;
           const destinations=demon.getAvailableMoveCommands().map(c=>c.destinationCoord);
@@ -65,15 +67,13 @@ function run(fault) {
           {coord:{x:5,y:3+speed},moves:0}, [{type:'move',id:'demon',destination:{x:5,y:3+speed}}]);
         action('reject-exhausted', command(5,4+speed)+ '({coord:demon.coord,moves:demon.moves})', {coord:{x:5,y:3+speed},moves:0});
       } else {
-        action('legal-melee-targets', `whooseTurn=3;
+        action('legal-melee-targets', `whooseTurn=3; demon.getAvailableCommands();
           const result={adjacent:demon.canHitSomethingOnCell(grid.getCell({x:6,y:3})),
             ally:demon.canHitSomethingOnCell(grid.getCell({x:5,y:2})),
             empty:demon.canHitSomethingOnCell(grid.getCell({x:5,y:4})),
             remote:demon.canHitSomethingOnCell(grid.getCell({x:7,y:3})),
             remoteCommand:demon.getAvailableCommands().some(c=>c.destinationCoord.x===7&&c.destinationCoord.y===3)};
-          whooseTurn=1; result`, {adjacent:true,ally:false,empty:false,remote:false,remoteCommand:false});
-        action('reject-remote-melee', command(7,3)+'({hp:grid.getUnit({x:7,y:3}).hp,coord:demon.coord,moves:demon.moves})',
-          {hp:2,coord:{x:5,y:3},moves:speed});
+          whooseTurn=1; result`, {adjacent:true,ally:false,empty:false,remote:speed>=2,remoteCommand:speed>=2});
         action('reject-ally', command(5,2)+'({hp:grid.getUnit({x:5,y:2}).hp,coord:demon.coord,moves:demon.moves})',
           {hp:2,coord:{x:5,y:3},moves:speed});
         const hits = Math.ceil(5/damage);

@@ -3,11 +3,7 @@ class Hexcaster extends EarlyRangedDemon {
     static type = 'hexcaster'
     constructor(x, y) { super(x, y, 'hexcaster') }
 }
-class Ravager extends EarlyMeleeDemon {
-    static type = 'ravager'
-    constructor(x, y) { super(x, y, 'ravager') }
-}
-class DemonLord extends EarlyMeleeDemon {
-    static type = 'demonLord'
-    constructor(x, y) { super(x, y, 'demonLord') }
-}
+class Ravager extends KOHb {}
+registerMeleeDemon(Ravager, 'ravager', 'KOHb')
+class DemonLord extends Normchel {}
+registerMeleeDemon(DemonLord, 'demonLord', 'normchel')

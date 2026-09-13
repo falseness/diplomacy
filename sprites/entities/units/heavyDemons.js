@@ -1,9 +1,4 @@
-// Heavy variants share the configured stats, ownership and melee rules.
-class Brute extends EarlyMeleeDemon {
-    static type = 'brute'
-    constructor(x, y) { super(x, y, 'brute') }
-}
-class Bulwark extends EarlyMeleeDemon {
-    static type = 'bulwark'
-    constructor(x, y) { super(x, y, 'bulwark') }
-}
+class Brute extends Normchel {}
+registerMeleeDemon(Brute, 'brute', 'normchel')
+class Bulwark extends Normchel {}
+registerMeleeDemon(Bulwark, 'bulwark', 'normchel')

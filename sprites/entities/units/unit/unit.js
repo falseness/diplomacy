@@ -1,7 +1,7 @@
 class Unit extends Entity {
     static visionRange = 3
     constructor(x, y, name) {
-        super(x, y, name)
+        super(x, y, new.target.type || name)
         //this.moves = speed
         grid.setUnit(this, this.coord)
         this.player.units.push(this)

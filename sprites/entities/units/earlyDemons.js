@@ -1,29 +1,4 @@
-// Demons move with the standard path finder, but attack only adjacent cells.
-class DemonMeleeInteraction extends InterationWithUnit {
-    outsideMeleeReach(cell, unit) {
-        return (this.cellHasEnemyUnit(cell, unit) || this.cellHasEnemyBuilding(cell, unit)) &&
-            !unit.neighbours.some(coord => coordsEqually(coord, cell.coord))
-    }
-    getAvailableMoveCommandDestinations(unit) {
-        return super.getAvailableMoveCommandDestinations(unit)
-            .filter(coord => !this.outsideMeleeReach(grid.getCell(coord), unit))
-    }
-    getAvailableCommandDestinations(unit) {
-        return this.getAvailableMoveCommandDestinations(unit)
-    }
-    canHitSomethingOnCell(cell, unit) {
-        this.getAvailableCommandDestinations(unit)
-        return !this.outsideMeleeReach(cell, unit) && super.canHitSomethingOnCell(cell, unit)
-    }
-    sendInstructions(cell, unit) {
-        // Recompute legality so direct commands cannot use a stale selection.
-        const legal = this.getAvailableCommandDestinations(unit)
-            .some(coord => coordsEqually(coord, cell.coord))
-        if (!legal) return true
-        return super.sendInstructions(cell, unit)
-    }
-}
-
+// Legacy base retained only for ranged variants until TASK-078.
 class EarlyMeleeDemon extends Unit {
     static get maxHP() { return DEMON_TYPES[this.type].health }
     static get dmg() { return DEMON_TYPES[this.type].damage }
@@ -36,7 +11,6 @@ class EarlyMeleeDemon extends Unit {
             throw new Error('demon unit requires demon ownership')
         super(x, y, name)
         Object.defineProperty(this, 'ownerSlot', {value: slot})
-        this.interaction = new DemonMeleeInteraction(this.speed)
     }
     // Unit registers ownership during super(), before ownerSlot is assigned.
     get playerColor() { return this.ownerSlot === undefined ? gameSettings.coop.demonSlot : this.ownerSlot }
@@ -48,8 +22,7 @@ class EarlyMeleeDemon extends Unit {
         }
         return result
     }
-    static visualTypes = ['imp', 'clawling', 'hound', 'brute', 'bulwark',
-        'spitter', 'emberArcher', 'hexcaster', 'ravager', 'demonLord']
+    static visualTypes = ['spitter', 'emberArcher', 'hexcaster']
     // Normalized silhouettes are shared by map units and selection portraits.
     static drawSymbol(ctx, type, x, y, size) {
         ctx.save()
@@ -65,34 +38,7 @@ class EarlyMeleeDemon extends Unit {
             ctx.fill()
             ctx.stroke()
         }
-        if (type === 'imp') { // Small horned head, triangular body and pointed tail.
-            polygon([[-.23,-.33],[-.06,-.23],[.06,-.23],[.23,-.33],[.17,-.04],
-                [.09,.03],[.21,.28],[-.21,.28],[-.09,.03],[-.17,-.04]])
-            polygon([[.17,.21],[.33,.1],[.28,.02],[.4,.08],[.33,.27],[.2,.29]])
-        } else if (type === 'clawling') { // Six splayed limbs and paired oversized claws.
-            polygon([[-.12,-.19],[-.31,-.37],[-.39,-.18],[-.25,-.08],[-.1,.01],
-                [-.37,.08],[-.39,.17],[-.12,.11],[-.31,.29],[-.24,.34],[0,.18],
-                [.24,.34],[.31,.29],[.12,.11],[.39,.17],[.37,.08],[.1,.01],
-                [.25,-.08],[.39,-.18],[.31,-.37],[.12,-.19]])
-        } else if (type === 'hound') { // Long quadruped profile, muzzle, ears and four legs.
-            polygon([[-.35,-.06],[-.43,-.24],[-.27,-.15],[.13,-.15],[.18,-.34],
-                [.27,-.23],[.35,-.32],[.36,-.13],[.44,-.06],[.4,.04],[.25,.05],
-                [.3,.27],[.19,.27],[.13,.08],[-.12,.08],[-.1,.27],[-.21,.27],
-                [-.26,.1],[-.31,.27],[-.4,.27]])
-        } else if (type === 'brute') { // Broad shoulders, square fists and compact head.
-            polygon([[-.12,-.34],[.12,-.34],[.15,-.19],[.32,-.16],[.4,.18],
-                [.23,.21],[.19,.01],[.16,.33],[.02,.33],[0,.17],[-.02,.33],
-                [-.16,.33],[-.19,.01],[-.23,.21],[-.4,.18],[-.32,-.16],[-.15,-.19]])
-        } else if (type === 'bulwark') { // Tower shield, peaked helmet and central metal brace.
-            polygon([[-.14,-.24],[0,-.4],[.14,-.24]])
-            polygon([[-.33,-.2],[.33,-.2],[.3,.19],[0,.39],[-.3,.19]])
-            ctx.strokeStyle = '#ffcb68'
-            ctx.lineWidth = .055
-            ctx.beginPath()
-            ctx.moveTo(0,-.17); ctx.lineTo(0,.27)
-            ctx.moveTo(-.24,-.02); ctx.lineTo(.24,-.02)
-            ctx.stroke()
-        } else if (type === 'spitter') { // Crouched acid beast and a detached projectile.
+        if (type === 'spitter') { // Crouched acid beast and a detached projectile.
             ctx.fillStyle = '#285c32'
             polygon([[-.4,.27],[-.3,-.05],[-.17,-.19],[.02,-.2],[.12,-.07],
                 [.28,-.05],[.28,.07],[.08,.09],[.17,.28],[-.02,.28],[-.09,.13],[-.22,.28]])
@@ -117,21 +63,6 @@ class EarlyMeleeDemon extends Unit {
             ctx.beginPath(); ctx.moveTo(.22,-.2); ctx.lineTo(.22,.32); ctx.stroke()
             ctx.fillStyle = '#c585ff'
             polygon([[.22,-.4],[.34,-.27],[.22,-.14],[.1,-.27]])
-        } else if (type === 'ravager') { // Armored berserker with two long serrated blades.
-            ctx.fillStyle = '#802431'
-            polygon([[-.16,-.35],[0,-.24],[.16,-.35],[.12,-.1],[.22,.05],
-                [.17,.34],[.03,.34],[0,.16],[-.03,.34],[-.17,.34],[-.22,.05],[-.12,-.1]])
-            ctx.fillStyle = '#e38886'
-            polygon([[-.2,.15],[-.43,-.27],[-.28,-.2],[-.32,-.4],[-.12,-.02]])
-            polygon([[.2,.15],[.43,-.27],[.28,-.2],[.32,-.4],[.12,-.02]])
-        } else if (type === 'demonLord') { // Winged mantle and gold crown mark the final tier.
-            ctx.fillStyle = '#4c1640'
-            polygon([[-.1,-.12],[-.44,-.34],[-.38,.17],[-.24,.04],[-.31,.33],
-                [0,.23],[.31,.33],[.24,.04],[.38,.17],[.44,-.34],[.1,-.12]])
-            ctx.fillStyle = '#b93e51'
-            polygon([[-.13,-.17],[.13,-.17],[.1,.06],[.19,.35],[-.19,.35],[-.1,.06]])
-            ctx.fillStyle = '#ffd46b'
-            polygon([[-.18,-.4],[-.07,-.3],[0,-.45],[.07,-.3],[.18,-.4],[.13,-.19],[-.13,-.19]])
         }
         ctx.restore()
     }
@@ -168,15 +99,19 @@ class EarlyMeleeDemon extends Unit {
         this.drawBars(ctx)
     }
 }
-class Imp extends EarlyMeleeDemon {
-    static type = 'imp'
-    constructor(x, y) { super(x, y, 'imp') }
+// Keep identity and asset aliases separate from inherited unit behavior.
+function registerMeleeDemon(UnitClass, type, asset) {
+    UnitClass.type = type
+    for (const [stat, key] of [['maxHP', 'health'], ['dmg', 'damage'], ['speed', 'movement']])
+        Object.defineProperty(UnitClass, stat, {get() { return DEMON_TYPES[type][key] }})
+    Object.assign(UnitClass, {healSpeed: 0, salary: 0})
+    // Resolve aliases lazily so image loading and cache resizing remain standard.
+    for (const registry of [assets, cachedImages])
+        Object.defineProperty(registry, type, {get() { return registry[asset] }})
 }
-class Clawling extends EarlyMeleeDemon {
-    static type = 'clawling'
-    constructor(x, y) { super(x, y, 'clawling') }
-}
-class Hound extends EarlyMeleeDemon {
-    static type = 'hound'
-    constructor(x, y) { super(x, y, 'hound') }
-}
+class Imp extends Noob {}
+registerMeleeDemon(Imp, 'imp', 'noob')
+class Clawling extends Noob {}
+registerMeleeDemon(Clawling, 'clawling', 'noob')
+class Hound extends KOHb {}
+registerMeleeDemon(Hound, 'hound', 'KOHb')
