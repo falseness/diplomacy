@@ -3,6 +3,8 @@ function getClass(name) {
         imp: Imp,
         clawling: Clawling,
         hound: Hound,
+        brute: Brute,
+        bulwark: Bulwark,
         suburb: Suburb,
         noob: Noob, 
         archer: Archer, 

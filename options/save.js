@@ -17,6 +17,8 @@ class JsonUnpackManager {
             imp: Imp,
             clawling: Clawling,
             hound: Hound,
+            brute: Brute,
+            bulwark: Bulwark,
             noob: Noob,
             archer: Archer,
             KOHb: KOHb,
