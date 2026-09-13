@@ -487,7 +487,23 @@ class NeutralPlayer extends Player {
             }
         }
     }
+    get coopResult() {
+        if (!gameSettings.coop) return null
+        const humansGone = players.filter(p => p.role === 'HUMAN').every(p => p.isLost)
+        const portalsRemain = external.some(p => p.isDemonPortal && !p.killed && p.hp > 0)
+        const demonsRemain = players.some(p => p.role === 'DEMONS' &&
+            p.units.some(u => !u.killed && u.hp > 0))
+        const enemiesGone = !portalsRemain && !demonsRemain
+        if (humansGone && enemiesGone) return 'draw'
+        if (humansGone) return 'defeat'
+        if (enemiesGone) return 'victory'
+        return null
+    }
     get isGameEnded() {
+        if (gameSettings.coop) {
+            gameSettings.coop.result = this.coopResult
+            return gameSettings.coop.result !== null
+        }
         /*let loosedCount = 0
         for (let i = 1; i < players.length; ++i) {
             loosedCount += players[i].isLost

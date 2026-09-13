@@ -49,7 +49,6 @@ let coopLocalTransitionActive = false
 function offlineNextTurn() {
     if (!gameSettings.coop || gameSettings.isOnline) return advanceOfflineTurn()
     if (coopLocalTransitionActive || gameExit) return
-    if (!players.some(p => p.role === 'HUMAN' && !p.isLost)) return
     coopLocalTransitionActive = true
     try {
         advanceOfflineTurn()
@@ -60,6 +59,13 @@ function offlineNextTurn() {
 
 function advanceOfflineTurn() {
     if (gameExit) {
+        return
+    }
+
+    // Resolve the whole committed action/phase before deciding a shared result;
+    // individual deaths must not preempt simultaneous elimination (e.g. flood).
+    if (gameSettings.coop && players[0].isGameEnded) {
+        menuBack()
         return
     }
 
