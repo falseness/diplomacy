@@ -384,6 +384,30 @@ class OnlineSettingsTree {
             {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start',
             _menu.setTree, _menu.startGame, true, _menu)
 
+        const modeRect = Menu.getButtonRect({x: WIDTH * 0.02, y: HEIGHT * 0.04})
+        modeRect.width = WIDTH * 0.23
+        modeRect.height = HEIGHT * 0.08
+        const modeText = Menu.getButtonText('Competitive')
+        modeText.fontSize = WIDTH * 0.03
+        this.modeButton = new MenuButton(modeRect, modeText, this.toggleMode, undefined, true, this)
+        this.playersText.fontSize = WIDTH * 0.032
+        this.isCoop = false
+        this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
+        this.updateButtonsList()
+    }
+    toggleMode() {
+        this.isCoop = !this.isCoop
+        if (this.isCoop && !this.coopSliders) {
+            const settings = new CoopSettingsTree(menu)
+            this.coopSliders = {players: settings.playersSlider, map: settings.mapSlider}
+        }
+        const sliders = this.isCoop ? this.coopSliders : this.competitiveSliders
+        this.playersSlider = sliders.players
+        this.mapSlider = sliders.map
+        this.playersText.text = this.isCoop ? 'humans' : 'players'
+        this.mapText.text = this.isCoop ? 'seed' : 'map'
+        this.modeButton.text.text = this.isCoop ? 'Co-op' : 'Competitive'
+        this.modeButton.selectedText.text = this.modeButton.text.text
         this.updateButtonsList()
     }
     initializePasswordsButtons(firstY, intervalY) {
@@ -415,7 +439,7 @@ class OnlineSettingsTree {
         }
     }
     updateButtonsList() {
-        this.buttons = [this.backButton, this.playButton,
+        this.buttons = [this.backButton, this.playButton, this.modeButton,
             this.fogOfWarCheckBox/*, this.timerCheckBox*/, this.playersSlider, this.mapSlider]
         this.buttons = this.buttons.concat(this.passwordButtons)
     }
@@ -435,6 +459,7 @@ class OnlineSettingsTree {
         this.backButton.removeSelect()
     }*/
     get selectedMap() {
+        if (this.isCoop) return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value})
         let map = maps[this.mapSlider.realValue][this.playersSlider.value]
         return map
     }
@@ -448,18 +473,16 @@ class OnlineSettingsTree {
     }
     click(pos) {
         let ok = false
-        for (let i = 0; i < this.buttons.length; ++i) {
-            ok |= this.buttons[i].click(pos)
-        }
-        if (this.buttons[this.buttons.length - 1].click(pos)) {
-            // map slider click
-            this.playersSlider.update()
-            ok = true
+        for (const button of this.buttons) {
+            const clicked = button.click(pos)
+            if (clicked && button === this.mapSlider) this.playersSlider.update()
+            ok ||= clicked
         }
         return ok
     }
     draw(ctx) {
         this.playersText.draw(ctx)
+        this.mapText.draw(ctx)
         this.passwordText.draw(ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)

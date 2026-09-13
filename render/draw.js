@@ -63,6 +63,15 @@ function drawInterface() {
     iButton.draw(interfaceCtx)
 
     drawCoopStatus(interfaceCtx)
+    const lobbyText = onlineLobbyText()
+    if (lobbyText) {
+        interfaceCtx.save()
+        interfaceCtx.font = Math.min(20 * window.devicePixelRatio, WIDTH / 30) + 'px Arial'
+        interfaceCtx.textAlign = 'center'
+        interfaceCtx.fillStyle = 'black'
+        interfaceCtx.fillText(lobbyText, WIDTH / 2, HEIGHT * 0.25)
+        interfaceCtx.restore()
+    }
 
     entityInterface.draw(interfaceCtx)
     barrackInterface.draw(interfaceCtx)

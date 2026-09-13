@@ -1,3 +1,14 @@
+let onlineLobby = null
+let onlineSocket = null
+
+function onlineLobbyText() {
+    if (!gameSettings.isOnline || !onlineLobby) return ''
+    const mode = onlineLobby.mode === 'coop' ? 'Co-op' : 'Competitive'
+    if (onlineLobby.occupiedHumans === null) return mode + ' — finding human players…'
+    return mode + ' — Humans: ' + onlineLobby.occupiedHumans + '/' + onlineLobby.humanCapacity +
+        (onlineLobby.occupiedHumans === onlineLobby.humanCapacity ? ' — Full' : ' — Waiting for players')
+}
+
 let SendNextTurn
 
 
@@ -24,7 +35,13 @@ class OnlineLogic {
 }
 
 function SetupServerCommunicationLogic(password) {
-    const socket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
+    if (onlineSocket) onlineSocket.disconnect()
+    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
+    onlineLobby = {mode: gameSettings.coop ? 'coop' : 'competitive', occupiedHumans: null}
+    socket.on('lobbyStatus', status => {
+        if (socket !== onlineSocket) return
+        onlineLobby = status
+    })
 
     socket.on('gameStarted', game => {
         console.log('gameStarted')
