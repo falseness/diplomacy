@@ -288,6 +288,13 @@ class GameMap {
         this.createGoldmines()
         this.createNature()
         this.createMapEdge()
+        if (this.coop) {
+            for (const placement of this.portals || []) {
+                const coord = this.getMapCoord(placement)
+                assert(grid.getUnit(coord).isEmpty())
+                new DemonPortal(coord.x, coord.y)
+            }
+        }
         _gameManager.updateCameraBorders()
 
         if (!isClassicTimer) {

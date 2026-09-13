@@ -77,7 +77,7 @@ function run() {
     options.seed=9; a.coop.generation.options.seed=7;
     return [a.coop.generation.seed,options.seed,generateCoopGame(2,{seed:42}).coop.generation.options.seed];
   })()`),[42,9,42]);
-  console.log('INAPPLICABLE: no combat actions or completed rounds; no income/expense events; no online committed revisions in generation/start/save-load fixtures. Shared initial entity, economy and turn ledgers checked after every start and restore. Portals and connectivity belong to subsequent tasks.');
+  console.log('INAPPLICABLE: no combat actions or completed rounds; no income/expense events; no online committed revisions in generation/start/save-load fixtures. Shared initial entity, economy and turn ledgers checked after every start and restore. Connectivity belongs to a subsequent task.');
   const probe=spawnSync(process.execPath,[__filename,'--corrupt'],{encoding:'utf8'});
   assert.equal(probe.status,1); assert.match(probe.stderr,/humans-2-seed-0-exact-generation/);
   console.log('PASS corruption-probe expected_exit=1 observed_exit='+probe.status+' marker=humans-2-seed-0-exact-generation');

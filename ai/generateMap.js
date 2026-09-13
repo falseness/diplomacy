@@ -72,6 +72,9 @@ function generateCoopGame(playerCount, options = {}) {
     const mines = take().map(coord => ({...coord, owner: 0, income: 20}))
     const map = new GameMap(mapSize, roster,
         mines, take(), take(), take(), [], {type: 'rectangular'}, {})
+    // One portal per initial human, using the remaining disjoint pool. Town
+    // neighborhoods and every terrain/resource cell have already been excluded.
+    map.portals = take()
     // Stored inside co-op metadata so existing save/load retains replay inputs.
     map.coop.generation = {version: 1, playerCount, seed, options: {seed}}
     return map

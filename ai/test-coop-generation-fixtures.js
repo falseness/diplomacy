@@ -43,9 +43,11 @@ function addTerrain(map, count, seed) {
   }
   for(const [i,key] of ['goldmines','lakes','mountains','bushes'].entries())
     map[key]=cells.slice(i*count,(i+1)*count).map(c=>key==='goldmines'?{...c,owner:0,income:20}:c);
+  map.portals = cells.slice(4*count,5*count);
 }
 function initialEntities(map) {
   return [
+    ...map.portals.map((c,i)=>({...c,id:`portal-${i}`,kind:'portal',name:'demonPortal',owner:map.coop.demonSlot})),
     ...map.players.flatMap((p,owner)=>p.towns.flatMap((t,i)=>[
       {...t,id:`town-${owner}-${i}`,kind:'town',name:'town',owner},
       ...(owner ? [{...t,id:`unit-${owner}-${i}`,kind:'unit',name:'noob',owner}] : [])])),
