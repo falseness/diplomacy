@@ -125,7 +125,7 @@ class EntityInterface {
     change(entity, color) {
         this.background.color = color.hex
         this.img.image = entity.name
-        this.entity.name.text = entity.name
+        this.entity.name.text = entity.displayName || entity.name
         if (entity.isDescriptionInfo) 
             this.entity.info.text = entity.info
         else
@@ -161,7 +161,11 @@ class EntityInterface {
     }
     drawContents(ctx) {
         this.background.draw(ctx)
-        if (this.img.image == 'suburb') {
+        if (this.img.image == 'demonPortal') {
+            DemonPortal.drawSymbol(ctx, this.img.x, this.img.y,
+                this.img.width, this.background.color)
+        }
+        else if (this.img.image == 'suburb') {
             this.suburbImage.draw(ctx)
         }
         else {

@@ -17,6 +17,12 @@ class DemonPortal extends Building {
     get isDemonPortal() { return true }
     get isExternal() { return true }
     get canBeDestroyed() { return false }
+    get info() {
+        const result = super.info
+        result.displayName = 'Demon Portal'
+        result.info.owner = 'DEMONS'
+        return result
+    }
     isObstacle(playerColor) { return playerColor === this.playerColor }
     toJSON() {
         const result = {...super.toJSON(), ownerSlot: this.ownerSlot}
@@ -26,7 +32,10 @@ class DemonPortal extends Building {
     hit(damage) {
         if (this.killed) return true
         if (!Number.isFinite(damage) || damage < 0) throw new RangeError('invalid portal damage')
-        return super.hit(damage)
+        const destroyed = super.hit(damage)
+        if (!destroyed && gameEvent.selected === this)
+            entityInterface.change(this.info, this.player.fullColor)
+        return destroyed
     }
     kill() {
         if (this.killed) return
@@ -39,13 +48,20 @@ class DemonPortal extends Building {
         this.updateHPBar()
     }
     draw(ctx) {
-        const x = this.pos.x + assets.size / 2, y = this.pos.y + assets.size / 2
+        if (this.killed) return
+        DemonPortal.drawSymbol(ctx, this.pos.x + assets.size / 2,
+            this.pos.y + assets.size / 2, assets.size, this.player.fullColor.hex)
+    }
+    drawBars(ctx) {
+        if (!this.killed) this.hpBar.draw(ctx)
+    }
+    static drawSymbol(ctx, x, y, size, color) {
         ctx.save()
         ctx.fillStyle = '#210d31'
-        ctx.strokeStyle = this.player.fullColor
-        ctx.lineWidth = 4
+        ctx.strokeStyle = color
+        ctx.lineWidth = size * 0.06
         ctx.beginPath()
-        ctx.ellipse(x, y, assets.size * 0.25, assets.size * 0.38, 0, 0, Math.PI * 2)
+        ctx.ellipse(x, y, size * 0.25, size * 0.38, 0, 0, Math.PI * 2)
         ctx.fill()
         ctx.stroke()
         ctx.restore()

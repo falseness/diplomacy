@@ -254,6 +254,10 @@ class Grid extends SpritesGroup {
         return entity.name
     }
     drawEntityBody(ctx, entity) {
+        if (entity.isDemonPortal) {
+            entity.draw(ctx)
+            return
+        }
         drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(entity)], entity.pos)
     }
     drawEntityBodies(ctx) {
