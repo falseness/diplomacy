@@ -143,10 +143,56 @@ function generateCoopGame(playerCount, options = {}) {
     map.portals = take()
     repairCoopConnectivity(map)
     enforceCoopStartBalance(map)
+    placeCoopPortals(map, size)
+    repairCoopConnectivity(map)
     growCoopTerrain(map, rng)
     // Stored inside co-op metadata so existing save/load retains replay inputs.
     map.coop.generation = {version: 2, playerCount, seed, size, options: {seed, size}}
     return map
+}
+
+// Offset-column hex coordinates converted to axial coordinates. Distances count
+// edges on the empty hex grid, independently of terrain/path detours.
+function coopPortalDistance(a, b) {
+    const dq = a.x - b.x
+    const dr = (a.y - Math.floor(a.x / 2)) - (b.y - Math.floor(b.x / 2))
+    return Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr))
+}
+
+function placeCoopPortals(map, size) {
+    const rules = {tiny: [1, 6], normal: [2, 10], big: [3, 14]}[size]
+    if (!rules) throw new Error('Co-op portal placement requires a known size')
+    const humans = map.players.slice(1, 1 + map.coop.initialHumanCount)
+    const towns = map.players.flatMap(p => p.towns)
+    const key = c => `${c.x},${c.y}`
+    const occupied = new Set([...towns, ...map.goldmines, ...map.lakes,
+        ...map.mountains, ...map.bushes, ...map.hills,
+        ...map.players.flatMap(p => p.suburbs || [])].map(key))
+    const candidates = []
+    for (let x=0; x<map.mapSize.x; x++) for (let y=0; y<map.mapSize.y; y++) {
+        const c = {x,y}
+        if (!occupied.has(key(c)) &&
+            !towns.some(t => Math.abs(t.x-x)<=1 && Math.abs(t.y-y)<=1) &&
+            humans.every(p => coopPortalDistance(p.towns[0], c) >= rules[1])) candidates.push(c)
+    }
+    const portals = []
+    // Allocate a portal to each starting lane before adding the next tier.
+    // A finite scan preserves exact counts or reports an explicit failure.
+    for (let tier=0; tier<rules[0]; tier++) for (const human of humans) {
+        const ideal = {x:human.towns[0].x, y:map.mapSize.y-1}
+        candidates.sort((a,b) => coopPortalDistance(a,ideal)-coopPortalDistance(b,ideal) || b.y-a.y || a.x-b.x)
+        const index = candidates.findIndex(c => {
+            const proposed = new Set([...portals, c].map(key))
+            return [...portals, c].every(p => neighborhood[p.x & 1].some(([dx,dy]) => {
+                const n = {x:p.x+dx,y:p.y+dy}
+                return n.x>=0 && n.y>=0 && n.x<map.mapSize.x && n.y<map.mapSize.y &&
+                    !occupied.has(key(n)) && !proposed.has(key(n))
+            }))
+        })
+        if (index<0) throw new Error(`Co-op portal placement failed: size=${size} humans=${humans.length} wanted=${humans.length*rules[0]} placed=${portals.length}`)
+        portals.push(candidates.splice(index,1)[0])
+    }
+    map.portals = portals
 }
 
 // Authored references in options/gamestart.js use short lake bands and groves

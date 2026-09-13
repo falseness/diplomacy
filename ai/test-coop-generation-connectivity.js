@@ -11,7 +11,7 @@ for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for
   const label=`${size}-humans-${count}-seed-${seed}`;
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}})`);
   const map=f.evaluate('JSON.parse(JSON.stringify(generated))');
-  const expected=Array.from({length:count},()=>Array(count*3).fill(true)),observed=routes(map);
+  const expected=Array.from({length:count},()=>Array(count*({tiny:1,normal:2,big:3}[size]+2)).fill(true)),observed=routes(map);
   assert.deepEqual(observed,expected,label);
   const row={scenario:label,expected,observed};
   if(seed===0) {

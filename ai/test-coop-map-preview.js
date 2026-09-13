@@ -46,7 +46,7 @@ const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
         preview.width=1100;preview.height=1050;preview.style.cssText='position:fixed;left:0;top:0;z-index:9999;width:1100px;height:1050px';
         const ctx=preview.getContext('2d');ctx.fillStyle='#182329';ctx.fillRect(0,0,1100,1050);
         ctx.fillStyle='white';ctx.font='25px sans-serif';
-        ctx.fillText(config.reference?'Authored reference: '+config.reference:`Co-op ${config.size} | 4 humans | seed ${config.seed}`,30,38);
+        ctx.fillText(config.reference?'Authored reference: '+config.reference:`Co-op ${config.size} | 4 humans | seed ${config.seed} | ${map.portals.length} portals`,30,38);
         ctx.font='17px sans-serif';ctx.fillText(`Grid ${map.mapSize.x} × ${map.mapSize.y} | Mountains ${map.mountains.length} | Lakes ${map.lakes.length} | Bushes ${map.bushes.length}`,30,68);
         const cache=grid.surfaceCache,scale=Math.min(1040/cache.width,930/cache.height),w=cache.width*scale,h=cache.height*scale;
         ctx.drawImage(cache,(1100-w)/2,90+(930-h)/2,w,h);
