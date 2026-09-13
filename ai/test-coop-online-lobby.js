@@ -4,12 +4,12 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const {chromium} = require('playwright');
-const {expectedMap,initialEntities} = require('./test-coop-generation-fixtures');
-const {createEntityLedger} = require('./test-coop-entity-ledger');
-const {createEconomyLedger} = require('./test-coop-economy-ledger');
-const {createTurnLedger} = require('./test-coop-turn-ledger');
+const {expectedMap} = require('./test-coop-generation-fixtures');
 const root = path.resolve(__dirname, '..');
-const out = process.env.COOP_LOBBY_EVIDENCE_DIR || path.join(root, 'artifacts/TASK-039');
+const outputIndex = process.argv.indexOf('--output-dir');
+const out = outputIndex < 0 ? (process.env.COOP_LOBBY_EVIDENCE_DIR || path.join(root, 'artifacts/TASK-083')) : path.resolve(process.argv[outputIndex + 1]);
+const {checkSizeLayout} = require('./test-coop-size-controls');
+const sizeFor = count => ({2:'tiny',3:'normal',4:'big'}[count]);
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -18,35 +18,7 @@ const compare = (label, observed, expected) => {
 
 const serverRoot = path.resolve(root, '../diplomacy_server');
 const {createRequire} = require('module');
-const serverRequire = createRequire(path.join(serverRoot, 'package.json'));
-const runtime = serverRequire('./server/loadGameCode');
-const {getMatchmakingKey} = serverRequire('./server/matchmakingKey');
-const slots = serverRequire('./server/matchmakingSlots');
-const {getPlayersParallelOrder} = serverRequire('./server/getPlayersParallelOrder');
-const {getLobbyStatus,joinLobby} = serverRequire('./server/lobbyStatus');
-const source = fs.readFileSync(path.join(serverRoot,'server/index.js'),'utf8');
-const section = (start,end) => source.slice(source.indexOf(start),source.indexOf(end));
-function harness() {
-    const games=[],users=[],active=new Set(),initialBoards=new Map();
-    const matches=(row,q)=>Object.entries(q).every(([key,value])=>row[key]===value);
-    const collection=rows=>({
-        async findOne(q){return structuredClone(rows.find(r=>matches(r,q))||null)},
-        find(){return {sort(){return {async *[Symbol.asyncIterator](){for(const row of [...rows].reverse())yield structuredClone(row)}}}}},
-        async insertOne(row){rows.push({_id:crypto.randomUUID(),...structuredClone(row)})},
-        async deleteOne(q){const i=rows.findIndex(r=>matches(r,q));if(i>=0)rows.splice(i,1)},
-        async updateOne(q,u){Object.assign(rows.find(r=>matches(r,q)),structuredClone(u.$set))}
-    });
-    const dependencies={assert,crypto,getMatchmakingKey,...slots,getPlayersParallelOrder,
-        db:{collection:name=>collection(name==='games'?games:users)},GameStatus:{JUST_STARTED:'started',IN_PROGRESS:'joined'},
-        getActiveSocketCount:(_,user)=>active.has(user)?1:0};
-    // Real production creation, scheduling, stale-slot selection and matchmaking;
-    // only persistence and socket presence are replaced with isolated memory stores.
-    const code=section('function playerHasSubmittedTurn(', 'async function loadGameWithCurrentRound(')+
-        section('async function getOrCreateGame(', 'function advanceAutomatedComponent(');
-    const automated=source.slice(source.indexOf('function advanceAutomatedComponent('),source.indexOf('\nfunction ',source.indexOf('function advanceAutomatedComponent(')+10));
-    const api=new Function(...Object.keys(dependencies),code+automated+'\nreturn {getOrCreateGame,findLowestEligibleStalePlayerIndex};')(...Object.values(dependencies));
-    return {...api,games,users,active};
-}
+const serverRequire = createRequire(path.join(serverRoot, 'server/package.json'));
 (async () => {
   const started = Date.now();
   let stage = 'server startup';
@@ -74,20 +46,12 @@ function harness() {
     });
   });
   const io = serverRequire('socket.io')(server);
-  const h = harness(), requests = [], protocolErrors = [];
-  let queue = Promise.resolve();
+  // TASK-083 checks the actual client request over Socket.IO. Server validation,
+  // matching and gameplay belong to TASK-088; the prior integration fixture is
+  // preserved in test-coop-online-matchmaking.js.
+  const requests = [];
   io.on('connection', socket => socket.on('startGameOrConnect', body => {
-    queue = queue.then(async () => {
-      const request = JSON.parse(body);
-      requests.push(request);
-      const [id,slot] = await h.getOrCreateGame(request.password,request.game);
-      h.active.add(request.password);
-      const game = h.games.find(g=>g.gameID===id);
-      joinLobby(socket,io,id,game);
-      // Exercise the production client receive handler with the stored initial
-      // board. Gameplay/turn preparation is outside this lobby-only fixture.
-      socket.emit('waitYouTurn',JSON.stringify({...game.rounds[0][0].parallelTurnResult,whooseTurn:slot,coopCommit:{gameID:id,revision:0}}));
-    }).catch(error=>{protocolErrors.push(error.stack);console.error(error);});
+    requests.push(JSON.parse(body));
   }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser;
@@ -108,7 +72,7 @@ function harness() {
       await page.route('https://**/*', async route => {
         if(route.request().url().includes('socket.io')) {
           return route.fulfill({contentType:'application/javascript',body:fs.readFileSync(
-            path.join(path.dirname(serverRequire.resolve('socket.io/package.json')),'client-dist/socket.io.js'))});
+            path.join(path.dirname(serverRequire.resolve('socket.io')),'../client-dist/socket.io.js'))});
         }
         return route.fulfill({contentType:'application/javascript',body:route.request().url().includes('FileSaver')?'window.saveAs=()=>{}':'window.tf={}'});
       });
@@ -141,12 +105,21 @@ function harness() {
       await click('menu.main.buttons[1]');
       if(coop) {
         await click('menu.online.modeButton');
+        compare('new-size-default-'+password,await page.evaluate(()=>menu.online.sizeSlider.realValue),'Normal');
+        const size=sizeFor(count);
+        if(size!=='normal')await click('menu.online.sizeSlider.'+(size==='tiny'?'leftButton':'rightButton'));
         await click('menu.online.playersSlider.leftButton');
         for(let i=2;i<count;i++)await click('menu.online.playersSlider.rightButton');
         if(count===4)await click('menu.online.playersSlider.rightButton');
         // Switching modes and returning retains each mode's controls.
         await click('menu.online.modeButton');
         await click('menu.online.modeButton');
+      }
+      await click('menu.online.backButton');
+      await click('menu.main.buttons[1]');
+      if(coop) {
+        compare('retained-size-'+password,await page.evaluate(()=>menu.online.sizeSlider.realValue.toLowerCase()),sizeFor(count));
+        await checkSizeLayout(page,'online',compare);
       }
       for(const digit of password)await click(`menu.online.passwordButtons[${digit}]`);
       const mode=coop?'coop':'competitive';
@@ -155,7 +128,11 @@ function harness() {
         password:menu.online.currentPassword})));
       await click('menu.online.playButton');
       await click('menu.startGame.buttons[0].movingForm.elements[0].rect');
-      await page.waitForFunction(()=>onlineLobby?.occupiedHumans>0 && !menu.visible && gameEvent.waitingMode);
+      await page.waitForFunction(()=>!menu.visible);
+      await new Promise((resolve,reject)=>{
+        const timeout=setTimeout(()=>{clearInterval(poll);reject(new Error('request capture deadline'));},10000);
+        const poll=setInterval(()=>{if(requests.some(r=>r.password===password)){clearInterval(poll);clearTimeout(timeout);resolve();}},10);
+      });
       await page.evaluate(()=>{window.requestAnimationFrame=()=>0;});
       const req=requests.find(r=>r.password===password);
       assert.ok(req,'browser request received');
@@ -164,77 +141,36 @@ function harness() {
         mode:req.game.gameSettings.coop?'coop':'competitive',slots:req.game.gameSettings.coop?.humanSlots || [1,2]},
         {online:true,count,mode,slots:Array.from({length:count},(_,i)=>i+1)});
       if(coop) {
-        compare('creation-seed-'+password,req.game.gameSettings.coop.generation,expectedMap(count,1).coop.generation);
+        compare('requested-size-'+password,req.game.gameSettings.coop.generation.size,sizeFor(count));
+        compare('requested-grid-'+password,[req.game.grid.length,...new Set(req.game.grid.map(c=>c.length))],Array(2).fill({tiny:15,normal:25,big:39}[sizeFor(count)]));
+        compare('creation-seed-'+password,req.game.gameSettings.coop.generation,expectedMap(count,1,sizeFor(count)).coop.generation);
         compare('creation-roles-'+password,await page.evaluate(()=>players.map(p=>p.role)),['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS']);
-        await checkInvariants(page,count,password);
       }
       return page;
     }
-    async function checkInvariants(target,count,label) {
-      await target.evaluate(count=>{window.fixtureConfig={actors:[{role:'neutral'},...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};},count);
-      const f={context:{},evaluate(source){if(!this.results.has(source))throw {browserRead:source};return this.results.get(source);}};
-      async function shared(fn) {
-        f.results=new Map();
-        for(;;)try{return fn();}catch(error){
-          if(!error.browserRead)throw error;
-          f.results.set(error.browserRead,await target.evaluate(({source,context})=>{
-            Object.assign(window,context);return (0,eval)(source);
-          },{source:error.browserRead,context:f.context}));
-        }
-      }
-      const entities=await shared(()=>createEntityLedger(f,initialEntities(expectedMap(count,1))));
-      await shared(()=>entities.check(label+'-entities'));
-      const economy=createEconomyLedger(f,[{role:'neutral',gold:0},...Array.from({length:count},()=>({role:'human',gold:100})),{role:'demon',gold:0}],{});
-      await shared(()=>economy.check(label+'-economy'));
-      createTurnLedger(Array.from({length:count},(_,i)=>i+1)).check(label+'-turns',
-        await target.evaluate(()=>({round:gameRound,terminal:gameExit,events:[]})),0,false,0);
-    }
     for(const count of [2,3,4]) {
-      console.log('browser_stage=human-count-'+count);
-      const peers=[];
-      for(let joined=1;joined<=count;joined++) {
-        peers.push(await launch(count,`${count}${joined}`));
-        for(const [index,peer] of peers.entries()) {
-          page=peer;
-          await page.waitForFunction(n=>onlineLobby.occupiedHumans===n,joined);
-          const status={mode:'coop',humanCapacity:count,occupiedHumans:joined};
-          await capture(`lobby-${count}-${joined}-peer-${index+1}`,{status,
-            text:`Co-op — Humans: ${joined}/${count} — ${joined===count?'Full':'Waiting for players'}`},
-            await page.evaluate(()=>({status:onlineLobby,text:onlineLobbyText()})));
-          await checkInvariants(page,count,`lobby-${count}-${joined}-${index+1}`);
-        }
-      }
-      const fullGame=h.games.find(g=>g.playerIndexToUserIndex.includes(`${count}1`));
-      // Even a corrupt occupied controller cannot change human occupancy.
-      compare('full-human-only-'+count,getLobbyStatus({...fullGame,
-        playerIndexToUserIndex:fullGame.playerIndexToUserIndex.map((v,i)=>i===count+1?'controller':v)}),
-        {mode:'coop',humanCapacity:count,occupiedHumans:count});
-      const overflow=await launch(count,`${count}9`);
-      compare('full-lobby-overflow-'+count,await overflow.evaluate(()=>onlineLobby),
-        {mode:'coop',humanCapacity:count,occupiedHumans:1});
-      for(const peer of peers)compare('full-lobby-stays-full-'+count,await peer.evaluate(()=>onlineLobby.occupiedHumans),count);
-      if(count===2) {
-        const competitive=await launch(2,'88',false);
-        await capture('competitive-lobby',{status:{mode:'competitive',humanCapacity:2,occupiedHumans:1},text:'Competitive — Humans: 1/2 — Waiting for players'},
-          await competitive.evaluate(()=>({status:onlineLobby,text:onlineLobbyText()})));
-        compare('mode-isolation',h.games.length,3);
-        await competitive.close();
-      }
-      await overflow.close();
-      for(const peer of peers)await peer.close();
+      const peer=await launch(count,`${count}1`);
+      await peer.close();
     }
-    compare('server-handler-wiring',source.includes('joinLobby(socket, io, gameID, game)'),true);
-    const calls=[];
-    const testSocket={data:{lobbyRoom:'lobby_old'},leave:r=>calls.push(['leave',r]),join:r=>calls.push(['join',r])};
-    const testIo={to:r=>({emit:(name,status)=>calls.push(['emit',r,name,status])})};
-    joinLobby(testSocket,testIo,'new',h.games[0]);
-    compare('room-switch',calls,[['leave','lobby_old'],['join','lobby_new'],
-      ['emit','lobby_new','lobbyStatus',{mode:'coop',humanCapacity:2,occupiedHumans:2}]]);
-    compare('protocol-errors',protocolErrors,[]);
+    const competitive=await launch(2,'88',false);
+    compare('competitive-request-no-coop',!!requests.find(r=>r.password==='88').game.gameSettings.coop,false);
+    await competitive.close();
+    page = await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:1});
+    await prepare(page);
+    await click('menu.main.buttons[1]');
+    await click('menu.online.modeButton');
+    await click('menu.online.sizeSlider.leftButton');
+    for(const size of ['tiny','normal','big']) {
+      await checkSizeLayout(page,'online',compare);
+      await capture('online-mobile-'+size,size,await page.evaluate(()=>menu.online.sizeSlider.realValue.toLowerCase()));
+      await click('menu.online.sizeSlider.rightButton');
+    }
+    await page.close();
     compare('browser-console-errors',errors,[]);
-    fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
-    console.log('INAPPLICABLE committed revision convergence: matchmaking has no revision protocol. Stored initial boards use real client deserialization and shared entity/economy/turn invariants after every lobby operation. No gameplay actions, completed rounds, wave/demon phases, income, salaries, purchases, production or undo occur; initial phase prefix is empty. Test transport serves initial waiting snapshots; full gameplay server handlers are outside this lobby fixture.');
-    console.log(`PASS online-lobby humans=2,3,4 full-lobbies=3 overflow=3 competitive-isolation=passed checkpoints=${checkpoints.length}`);
+    fs.writeFileSync(path.join(out,'online-browser-checkpoints.json'),JSON.stringify({engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
+    fs.writeFileSync(path.join(out,'online-requests.json'),JSON.stringify(requests,null,2)+'\n');
+    console.log('INAPPLICABLE server acceptance/matching/authoritative gameplay: TASK-088. Actual client generation, serialization and Socket.IO submission are exercised here.');
+    console.log(`PASS online-lobby sizes=tiny,normal,big requests=4 competitive=passed checkpoints=${checkpoints.length}`);
   } finally {
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser)await browser.close();

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
+const {checkSizeLayout} = require('./test-coop-size-controls');
 const {chromium} = require('playwright');
 const {expectedMap,initialEntities} = require('./test-coop-generation-fixtures');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
@@ -10,7 +11,7 @@ const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
 const outputIndex = process.argv.indexOf('--output-dir');
-const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-081') : path.resolve(process.argv[outputIndex + 1]);
+const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-083') : path.resolve(process.argv[outputIndex + 1]);
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -29,7 +30,7 @@ const compare = (label, observed, expected) => {
   const deadline = setTimeout(() => {
     console.error(`FAIL browser deadline stage=${stage} elapsed_ms=${Date.now()-started}`);
     process.exit(1);
-  }, 120000);
+  }, 360000);
   deadline.unref();
   fs.mkdirSync(path.join(out, 'screenshots'), {recursive:true});
   const server = http.createServer((req, res) => {
@@ -79,12 +80,12 @@ const compare = (label, observed, expected) => {
       checkpoints.push({checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
-    for (const count of [1,4]) {
+    for (const size of ['tiny','normal','big']) for (const count of [1,4]) {
+      console.log('SCENARIO local size='+size+' humans='+count);
+      await page.setViewportSize(count===1?{width:390,height:844}:{width:1280,height:900});
       progress('co-op-'+count);
-      if(count===4) {
-        await page.reload({waitUntil:'load'});
-        await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
-      }
+      await page.reload({waitUntil:'load'});
+      await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
       await page.evaluate(()=>{
         window.generationCalls=[]; window.startCalls=[];
         const generate=generateCoopGame, start=GameManager.start;
@@ -102,7 +103,9 @@ const compare = (label, observed, expected) => {
       await click('menu.play.modeButton');
       compare('hotseat-mode-'+count, await page.evaluate(()=>({label:menu.play.modeButton.text.text,
         onlineLabel:menu.online.modeButton.text.text,buttons:menu.play.buttons.length,
-        unique:new Set(menu.play.buttons).size})), {label:'Co-op',onlineLabel:'Competitive',buttons:7,unique:7});
+        unique:new Set(menu.play.buttons).size})), {label:'Co-op',onlineLabel:'Competitive',buttons:8,unique:8});
+      compare('new-size-default-'+size,await page.evaluate(()=>menu.play.sizeSlider.realValue),'Normal');
+      if(size!=='normal') await click('menu.play.sizeSlider.'+(size==='tiny'?'leftButton':'rightButton'));
       // Lower bound cannot decrement below one; upper bound cannot exceed four.
       await click('menu.play.playersSlider.leftButton');
       if(count===4) for(let i=0;i<3;i++) await click('menu.play.playersSlider.rightButton');
@@ -136,8 +139,9 @@ const compare = (label, observed, expected) => {
       await click('menu.play.backButton');
       compare('hotseat-back-main-'+count,await page.evaluate(()=>menu.selectedTree===menu.main),true);
       await click('menu.main.buttons[0]');
-      await capture('settings-'+count,{humans:count,seed,fog:enabled,timer:enabled},
-        await page.evaluate(()=>({humans:menu.play.playersSlider.value,seed:menu.play.mapSlider.value,
+      await checkSizeLayout(page,'play',compare);
+      await capture('local-'+size+'-settings-'+count,{humans:count,seed,size,fog:enabled,timer:enabled},
+        await page.evaluate(()=>({humans:menu.play.playersSlider.value,seed:menu.play.mapSlider.value,size:menu.play.sizeSlider.realValue.toLowerCase(),
           fog:menu.play.isFogOfWar,timer:menu.play.isDynamicTimer})));
       // Exercise slot Back and return: co-op settings and options survive.
       await click('menu.play.playButton');
@@ -147,8 +151,9 @@ const compare = (label, observed, expected) => {
       await click('menu.startGame.buttons[0].movingForm.elements['+(count===1?0:1)+'].rect');
       compare('selected-slot-'+count,await page.evaluate(()=>gameSlot),count===1?0:1);
       await page.waitForFunction(()=>!menu.visible && whooseTurn===1);
-      const expected=expectedMap(count,seed);
-      compare('generateCoopGame-'+count,await page.evaluate(()=>generationCalls),[{count,options:{seed},map:expected}]);
+      const expected=expectedMap(count,seed,size);
+      compare('generateCoopGame-'+count,await page.evaluate(()=>generationCalls),[{count,options:{seed,size},map:expected}]);
+      compare('actual-grid-'+size+'-'+count,await page.evaluate(()=>[grid.arr.length,...new Set(grid.arr.map(c=>c.length))]),Array(2).fill({tiny:15,normal:25,big:39}[size]));
       compare('launch-options-'+count,await page.evaluate(()=>startCalls),[{fog:enabled,timer:enabled,online:false}]);
       await page.evaluate(count=>{window.fixtureConfig={actors:[{role:'neutral'},
         ...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};},count);
@@ -184,7 +189,7 @@ const compare = (label, observed, expected) => {
       const turns=createTurnLedger(Array.from({length:count},(_,i)=>i+1));
       turns.check('launched-'+count+'-turn',await page.evaluate(()=>({round:gameRound,terminal:gameExit,
         events:[{type:'human',round:gameRound,player:whooseTurn}]})),0);
-      await capture('launched-'+count,{coop:{...expected.coop,result:null},roles:['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS'],
+      await capture('local-'+size+'-launched-'+count,{coop:{...expected.coop,result:null},roles:['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS'],
         fog:enabled,timer:enabled?'Timer':'LongTimer',online:false,round:0,human:1,menu:false},
         await page.evaluate(()=>({coop:gameSettings.coop,roles:players.map(p=>p.role),fog:isFogOfWar,
           timer:timer.constructor.name,online:gameSettings.isOnline,round:gameRound,human:whooseTurn,menu:menu.visible})));
@@ -205,6 +210,7 @@ const compare = (label, observed, expected) => {
         coop:gameSettings.coop,roles:players.map(p=>p.role),gold:players.map(p=>p.gold),slot:gameSlot})),before);
     }
     progress('competitive-menu-reload');
+    await page.setViewportSize({width:1280,height:900});
     await page.reload({waitUntil:'load'});
     await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
     await capture('main-menu',{labels:['hot seat','play online','play AI','settings','load game'],visible:true},
@@ -221,10 +227,10 @@ const compare = (label, observed, expected) => {
     await capture('competitive-launch',{coop:false,roles:['NEUTRAL','HUMAN','HUMAN'],online:false},
       await page.evaluate(()=>({coop:!!gameSettings.coop,roles:players.map(p=>p.role),online:gameSettings.isOnline})));
     compare('browser-console-errors',errors,[]);
-    fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
+    fs.writeFileSync(path.join(out,'local-browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed rounds: local launch only; first human income/salary and round 0 checked. Menu clicks do not mutate game entities. Competitive launch is a menu regression outside co-op ledgers.');
-    console.log('PASS co-op local menu minimum=1 maximum=4 generation_calls=2 checkpoints='+checkpoints.length+' competitive_launch=passed');
+    console.log('PASS co-op local menu minimum=1 maximum=4 sizes=tiny,normal,big generation_calls=6 checkpoints='+checkpoints.length+' competitive_launch=passed');
   } finally {
     progress('cleanup');
     console.log('browser_console_errors='+JSON.stringify(errors));

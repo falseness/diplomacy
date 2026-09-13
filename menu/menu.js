@@ -250,10 +250,12 @@ class GameSettingsTree {
     }
     click(pos) {
         let ok = false
-        for (let i = 0; i < this.buttons.length - 1; ++i) {
-            ok |= this.buttons[i].click(pos)
+        // Mode changes replace the list during a click. Visit the original list once.
+        const buttons = this.buttons
+        for (let i = 0; i < buttons.length - 1; ++i) {
+            ok |= buttons[i].click(pos)
         }
-        if (this.buttons[this.buttons.length - 1].click(pos)) {
+        if (buttons[buttons.length - 1].click(pos)) {
             // map slider click
             this.playersSlider.update()
             ok = true
@@ -263,6 +265,7 @@ class GameSettingsTree {
     draw(ctx) {
         this.playersText.draw(ctx)
         this.mapText.draw(ctx)
+        if (this.isCoop) new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', 'black', 'left').draw(ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)
         }
@@ -271,6 +274,15 @@ class GameSettingsTree {
 
         this.mapSlider.draw(ctx)*/
     }
+}
+
+// Keep size on its own row above the existing player/seed/options controls.
+function createCoopSizeSlider() {
+    const side = Math.min(HEIGHT * 0.08, WIDTH * 0.1)
+    return new MenuSlider(() => 0, () => 2, value => ['Tiny', 'Normal', 'Big'][value],
+        undefined, 1, WIDTH * 0.18,
+        new Text(WIDTH * 0.6, HEIGHT * 0.18, WIDTH * 0.04, 'Normal', 'black'),
+        {width: side, height: side})
 }
 
 // Local co-op uses the same fog/timer controls and save-slot flow as hot seat.
@@ -290,9 +302,21 @@ class CoopSettingsTree extends GameSettingsTree {
         this.mapSlider.textByValue = value => value
         this.mapSlider.value = 1
         this.mapSlider.update()
+        this.sizeSlider = createCoopSizeSlider()
+        // Width-bound arrows keep portrait controls clear of labels and values.
+        for (const slider of [this.playersSlider, this.mapSlider]) {
+            slider.text.color = 'black'
+            for (const button of [slider.leftButton, slider.rightButton]) {
+                button.rect.width = button.rect.height = Math.min(HEIGHT * 0.1, WIDTH * 0.09)
+                button.img.width = button.img.height = button.rect.width
+            }
+        }
+        this.playersSlider.marginX = WIDTH * 0.1
+        this.playersSlider.trim()
+        this.mapSlider.trim()
     }
     get selectedMap() {
-        return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value})
+        return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
     }
 }
 
@@ -303,8 +327,9 @@ class HotseatSettingsTree extends GameSettingsTree {
         this.isCoop = false
         this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
         const coop = new CoopSettingsTree(_menu)
-        this.coopSliders = {players: coop.playersSlider, map: coop.mapSlider}
+        this.coopSliders = {players: coop.playersSlider, map: coop.mapSlider, size: coop.sizeSlider}
         this.competitivePlayersX = this.playersText.x
+        this.competitiveMapX = this.mapText.x
         const rect = Menu.getButtonRect({x: WIDTH * 0.02, y: HEIGHT * 0.04})
         rect.width = WIDTH * 0.23
         rect.height = HEIGHT * 0.08
@@ -317,22 +342,25 @@ class HotseatSettingsTree extends GameSettingsTree {
         super.updateButtonsList()
         // Keep the map slider last for GameSettingsTree.click's player refresh.
         if (this.modeButton) this.buttons.splice(2, 0, this.modeButton)
+        if (this.isCoop) this.buttons.splice(2, 0, this.sizeSlider)
     }
     toggleMode() {
         this.isCoop = !this.isCoop
         const sliders = this.isCoop ? this.coopSliders : this.competitiveSliders
         this.playersSlider = sliders.players
         this.mapSlider = sliders.map
+        this.sizeSlider = sliders.size
         this.playersText.text = this.isCoop ? 'humans' : 'players'
-        this.playersText.x = this.isCoop ? this.mapText.x : this.competitivePlayersX
+        this.playersText.x = this.isCoop ? WIDTH * 0.12 : this.competitivePlayersX
         this.mapText.text = this.isCoop ? 'seed' : 'map'
+        this.mapText.x = this.isCoop ? WIDTH * 0.12 : this.competitiveMapX
         this.modeButton.text.text = this.isCoop ? 'Co-op' : 'Competitive'
         this.modeButton.selectedText.text = this.modeButton.text.text
         this.updateButtonsList()
     }
     get selectedMap() {
         return this.isCoop
-            ? generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value})
+            ? generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
             : super.selectedMap
     }
 }
@@ -430,6 +458,8 @@ class OnlineSettingsTree {
         const modeText = Menu.getButtonText('Competitive')
         modeText.fontSize = WIDTH * 0.03
         this.modeButton = new MenuButton(modeRect, modeText, this.toggleMode, undefined, true, this)
+        this.competitiveMapX = this.mapText.x
+        this.competitivePlayersX = this.playersText.x
         this.playersText.fontSize = WIDTH * 0.032
         this.isCoop = false
         this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
@@ -439,13 +469,19 @@ class OnlineSettingsTree {
         this.isCoop = !this.isCoop
         if (this.isCoop && !this.coopSliders) {
             const settings = new CoopSettingsTree(menu, 2)
-            this.coopSliders = {players: settings.playersSlider, map: settings.mapSlider}
+            settings.playersSlider.text.x = WIDTH * 0.72
+            settings.playersSlider.trim()
+            this.coopSliders = {players: settings.playersSlider, map: settings.mapSlider, size: settings.sizeSlider}
         }
         const sliders = this.isCoop ? this.coopSliders : this.competitiveSliders
         this.playersSlider = sliders.players
         this.mapSlider = sliders.map
+        this.sizeSlider = sliders.size
         this.playersText.text = this.isCoop ? 'humans' : 'players'
+        this.playersText.x = this.isCoop ? WIDTH * 0.4 : this.competitivePlayersX
+        this.passwordText.fontSize = WIDTH * (this.isCoop ? 0.032 : 0.04)
         this.mapText.text = this.isCoop ? 'seed' : 'map'
+        this.mapText.x = this.isCoop ? WIDTH * 0.12 : this.competitiveMapX
         this.modeButton.text.text = this.isCoop ? 'Co-op' : 'Competitive'
         this.modeButton.selectedText.text = this.modeButton.text.text
         this.updateButtonsList()
@@ -481,6 +517,7 @@ class OnlineSettingsTree {
     updateButtonsList() {
         this.buttons = [this.backButton, this.playButton, this.modeButton,
             this.fogOfWarCheckBox/*, this.timerCheckBox*/, this.playersSlider, this.mapSlider]
+        if (this.isCoop) this.buttons.push(this.sizeSlider)
         this.buttons = this.buttons.concat(this.passwordButtons)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
@@ -499,7 +536,7 @@ class OnlineSettingsTree {
         this.backButton.removeSelect()
     }*/
     get selectedMap() {
-        if (this.isCoop) return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value})
+        if (this.isCoop) return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
         let map = maps[this.mapSlider.realValue][this.playersSlider.value]
         return map
     }
@@ -523,6 +560,7 @@ class OnlineSettingsTree {
     draw(ctx) {
         this.playersText.draw(ctx)
         this.mapText.draw(ctx)
+        if (this.isCoop) new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', 'black', 'left').draw(ctx)
         this.passwordText.draw(ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)
@@ -699,7 +737,8 @@ class Menu {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.clearRect(0, 0, WIDTH, HEIGHT)
         this.background.draw(ctx)
-        this.logo.draw(ctx)
+        // Co-op uses the header space for its size selector.
+        if (!this.selectedTree.isCoop) this.logo.draw(ctx)
         this.alphaText.draw(ctx)
         this.selectedTree.draw(ctx)
         if (this.selectedTree === this.main) drawCoopStatus(ctx, true)
