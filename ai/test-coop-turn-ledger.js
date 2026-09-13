@@ -28,8 +28,15 @@ function createTurnLedger(humans, report = console.log) {
     }
     return events;
   }
-  function check(label, observed, completedRounds, terminal = false) {
-    const wanted = expected(completedRounds, terminal);
+  function check(label, observed, completedRounds, terminal = false, partialLength) {
+    // During a synchronous transition, validate the exact prefix of the same
+    // independent schedule used for completed rounds.
+    if (partialLength !== undefined) {
+      assert.ok(Number.isInteger(partialLength) && partialLength >= expected(completedRounds).length - 1 &&
+        partialLength < expected(completedRounds + 1).length, 'valid partial phase prefix');
+    }
+    const wanted = partialLength === undefined ? expected(completedRounds, terminal) :
+      expected(completedRounds + 1, terminal).slice(0, partialLength);
     report(JSON.stringify({scenario: label, roster, eliminations: [...eliminations],
       expected: {round: completedRounds, terminal, events: wanted}, observed}));
     assert.equal(observed.round, completedRounds, 'valid round progression');

@@ -43,7 +43,22 @@ function natureNextTurn() {
 
 
 
+// Keep callbacks from advancing the human schedule while an automatic phase
+// (or its save/UI callbacks) is still being processed.
+let coopLocalTransitionActive = false
 function offlineNextTurn() {
+    if (!gameSettings.coop || gameSettings.isOnline) return advanceOfflineTurn()
+    if (coopLocalTransitionActive || gameExit) return
+    if (!players.some(p => p.role === 'HUMAN' && !p.isLost)) return
+    coopLocalTransitionActive = true
+    try {
+        advanceOfflineTurn()
+    } finally {
+        coopLocalTransitionActive = false
+    }
+}
+
+function advanceOfflineTurn() {
     if (gameExit) {
         return
     }
@@ -57,12 +72,24 @@ function offlineNextTurn() {
 
     externalNextTurn() 
     natureNextTurn()
+    const localDemon = !gameSettings.isOnline && gameSettings.coop &&
+        whooseTurn === gameSettings.coop.demonSlot
+    if (localDemon) {
+        // The neutral slot advances gameRound after this phase. Wave numbering
+        // starts at one for the first completed human round.
+        spawnCoopWave(gameRound + 1)
+        players[whooseTurn].nextTurn()
+        players[whooseTurn].play()
+        advanceOfflineTurn()
+        return
+    }
     players[whooseTurn].nextTurn()
     if (players[whooseTurn].isLost) {
         AiRuntime.trainFromHumanCommands()
     }
     if (players[whooseTurn].isNeutral || players[whooseTurn].isLost) {
-        nextTurn()
+        if (coopLocalTransitionActive) advanceOfflineTurn()
+        else nextTurn()
         return
     }
     if (isFogOfWar) {
