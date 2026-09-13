@@ -64,7 +64,7 @@ function run() {
       return {message, unchanged:before===JSON.stringify(getGameObject())};
     })()`),{message:'Co-op playerCount must be an integer from 1 to 4 humans',unchanged:true});
   }
-  for (const options of ['null','[]','{size:"tiny"}','{seed:-1}','{seed:4294967296}',
+  for (const options of ['null','[]','{unknown:true}','{seed:-1}','{seed:4294967296}',
     '{seed:1.5}','{seed:"42"}','{seed:NaN}','{seed:Infinity}']) {
     f.compare('reject-options-'+options,f.evaluate(`(() => {
       const before=JSON.stringify(getGameObject()); let rejected=false;

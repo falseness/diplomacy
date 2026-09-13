@@ -66,18 +66,26 @@ function coopStartsBalanced(map) {
         [0, 1, 2].every(k => within(metrics.map(m => m.paths[k]), COOP_START_BALANCE.pathDisparity))
 }
 
+const COOP_MAP_SIZES = Object.freeze({tiny: 15, normal: 25, big: 39})
+
+// Placement interfaces take actual dimensions; later terrain/portal rules can
+// refine these lanes without assuming a fixed map or changing competitive APIs.
+function coopStartColumn(mapSize, count, index) {
+    return Math.max(2, Math.min(mapSize.x - 3, Math.floor((index + 0.5) * (mapSize.x - 1) / count)))
+}
+
 // The fallback preserves the seeded starts, category counts and resource values.
-// Each six-column human lane gets open vertical access to a mine and portal;
+// Each human lane gets open vertical access to a mine and portal;
 // blockers sit outside reserved town neighborhoods. This terminates without random retries.
 function enforceCoopStartBalance(map) {
     if (coopStartsBalanced(map)) return
     for (let i = 0; i < map.coop.initialHumanCount; i++) {
-        const x = 3 + i * 6
+        const x = map.players[i + 1].towns[0].x
         Object.assign(map.goldmines[i], {x, y:0})
-        map.portals[i] = {x, y:8}
+        map.portals[i] = {x, y:map.mapSize.y - 1}
         map.lakes[i] = {x:x-2, y:0}
-        map.mountains[i] = {x:x-1, y:8}
-        map.bushes[i] = {x:x-2, y:4}
+        map.mountains[i] = {x:x-1, y:map.mapSize.y - 1}
+        map.bushes[i] = {x:x-1, y:map.mapSize.y - 5}
     }
     if (!coopStartsBalanced(map)) throw new Error('Co-op starting balance bound cannot be satisfied')
 }
@@ -89,22 +97,26 @@ function generateCoopGame(playerCount, options = {}) {
         throw new RangeError('Co-op playerCount must be an integer from 1 to 4 humans')
     }
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
-        Object.keys(options).some(key => key !== 'seed')) {
-        throw new TypeError('Co-op options must contain only an optional seed')
+        Object.keys(options).some(key => key !== 'seed' && key !== 'size')) {
+        throw new TypeError('Co-op options must contain only optional seed and size')
     }
     const seed = options.seed === undefined ? 1 : options.seed
     if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
         throw new RangeError('Co-op seed must be an unsigned 32-bit integer')
     }
+    const size = options.size === undefined ? 'normal' : options.size
+    if (typeof size !== 'string' || !Object.prototype.hasOwnProperty.call(COOP_MAP_SIZES, size)) {
+        throw new RangeError('Co-op size must be tiny, normal or big')
+    }
+    const mapSize = {x: COOP_MAP_SIZES[size], y: COOP_MAP_SIZES[size]}
     const rng = createSeededRandom(seed)
     const roster = [{rgb: {r: 208, g: 208, b: 208}, towns: [], units: [], gold: 0}]
     for (let i = 0; i < playerCount; i++) {
         roster.push({rgb: trainingPlayerColor(i + 1), gold: 100, units: [],
-            towns: [{x: 3 + i * 6, y: randomIntWithRng(rng, 2, 6)}]})
+            towns: [{x: coopStartColumn(mapSize, playerCount, i), y: randomIntWithRng(rng, 2, 6)}]})
     }
-    const mapSize = {x: playerCount * 6 + 1, y: 9}
     for (let i = 0; i < playerCount; i++) {
-        roster[0].towns.push({x: 6 + i * 6, y: 7})
+        roster[0].towns.push({x: coopStartColumn(mapSize, playerCount, i), y: mapSize.y - 3})
     }
     // Reserve town centers and their surrounding cells before placing any
     // resources or blockers. A finite shuffled pool guarantees disjoint,
@@ -132,7 +144,7 @@ function generateCoopGame(playerCount, options = {}) {
     repairCoopConnectivity(map)
     enforceCoopStartBalance(map)
     // Stored inside co-op metadata so existing save/load retains replay inputs.
-    map.coop.generation = {version: 1, playerCount, seed, options: {seed}}
+    map.coop.generation = {version: 2, playerCount, seed, size, options: {seed, size}}
     return map
 }
 
