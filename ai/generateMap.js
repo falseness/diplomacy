@@ -143,9 +143,77 @@ function generateCoopGame(playerCount, options = {}) {
     map.portals = take()
     repairCoopConnectivity(map)
     enforceCoopStartBalance(map)
+    growCoopTerrain(map, rng)
     // Stored inside co-op metadata so existing save/load retains replay inputs.
     map.coop.generation = {version: 2, playerCount, seed, size, options: {seed, size}}
     return map
+}
+
+// Authored references in options/gamestart.js use short lake bands and groves
+// (open field), plus adjoining mountain cells. Grow similar hex formations,
+// reserving actual approach paths before placing blockers. The earlier balance
+// repair chooses resources; this stage never moves a town, suburb or objective.
+function growCoopTerrain(map, rng) {
+    const key = c => `${c.x},${c.y}`
+    const towns = map.players.flatMap(p => p.towns)
+    const targets = [...map.portals, ...map.players[0].towns, ...map.goldmines]
+    const terminal = new Set([...map.portals, ...map.players[0].towns].map(key))
+    const reserved = new Set([...targets, ...map.hills,
+        ...map.players.flatMap(p => p.suburbs || [])].map(key))
+    const inside = c => c.x >= 0 && c.y >= 0 && c.x < map.mapSize.x && c.y < map.mapSize.y
+    const neighbours = c => neighborhood[c.x & 1].map(([dx, dy]) => ({x:c.x+dx, y:c.y+dy})).filter(inside)
+    for (const town of towns) for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++)
+        reserved.add(key({x:town.x+dx, y:town.y+dy}))
+    const fixed = new Set(reserved)
+    // Preserve shortest paths through the already balanced layout, including
+    // attack endpoints. Other human towns and hostile targets are not transit.
+    for (const human of map.players.slice(1, 1 + map.coop.initialHumanCount)) {
+        const blocked = new Set([...map.lakes, ...map.mountains,
+            ...map.players.slice(1).filter(p => p !== human).flatMap(p => p.towns)].map(key))
+        const start = human.towns[0], queue = [start], parent = new Map([[key(start), null]])
+        for (let i=0; i<queue.length; i++) {
+            const c = queue[i]
+            if (terminal.has(key(c))) continue
+            for (const n of neighbours(c)) if (!blocked.has(key(n)) && !parent.has(key(n))) {
+                parent.set(key(n), c); queue.push(n)
+            }
+        }
+        for (const target of targets) {
+            if (!parent.has(key(target))) throw new Error('Co-op terrain requires connected objectives')
+            for (let c=target; c; c=parent.get(key(c))) reserved.add(key(c))
+        }
+    }
+    const free = new Map()
+    for (let x=0; x<map.mapSize.x; x++) for (let y=0; y<map.mapSize.y; y++) {
+        const c = {x,y}; if (!reserved.has(key(c))) free.set(key(c), c)
+    }
+    // Finite pool growth: select a seeded origin and repeatedly attach a hex.
+    // Small components give lakes/groves compact shapes and mountains ridges;
+    // a new origin is needed only after the desired patch size or a dead end.
+    for (const [kind, density] of [['mountains',0.08], ['lakes',0.06], ['bushes',0.10]]) {
+        // Bushes are walkable, so groves may cross the reserved approaches.
+        if (kind === 'bushes') for (const id of reserved) if (!fixed.has(id)) {
+            const [x,y] = id.split(',').map(Number)
+            free.set(id, {x,y})
+        }
+        const wanted = Math.round(map.mapSize.x * map.mapSize.y * density)
+        map[kind] = []
+        while (map[kind].length < wanted) {
+            const candidates = [...free.values()]
+            if (!candidates.length) throw new Error(`Co-op terrain has no space for ${kind}`)
+            const joined = candidates.filter(c => neighbours(c).some(n => free.has(key(n))))
+            const origins = joined.length ? joined : candidates
+            const patch = [origins[randomIntWithRng(rng, 0, origins.length-1)]]
+            const limit = Math.min(wanted-map[kind].length, randomIntWithRng(rng, 4, 9))
+            for (let i=0; i<limit; i++) {
+                const c = patch[patch.length-1]
+                free.delete(key(c)); map[kind].push(c)
+                const edge = [...new Map(patch.flatMap(neighbours).filter(n => free.has(key(n))).map(n => [key(n),n])).values()]
+                if (!edge.length) break
+                patch.push(edge[randomIntWithRng(rng, 0, edge.length-1)])
+            }
+        }
+    }
 }
 
 // Check long-term melee access without treating hostile towns/portals as
