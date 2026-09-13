@@ -48,8 +48,30 @@ function generateCoopGame(playerCount, options = {}) {
         roster.push({rgb: trainingPlayerColor(i + 1), gold: 100, units: [],
             towns: [{x: 3 + i * 6, y: randomIntWithRng(rng, 2, 6)}]})
     }
-    const map = new GameMap({x: playerCount * 6 + 1, y: 9}, roster,
-        [], [], [], [], [], {type: 'rectangular'}, {})
+    const mapSize = {x: playerCount * 6 + 1, y: 9}
+    for (let i = 0; i < playerCount; i++) {
+        roster[0].towns.push({x: 6 + i * 6, y: 7})
+    }
+    // Reserve town centers and their surrounding cells before placing any
+    // resources or blockers. A finite shuffled pool guarantees disjoint,
+    // in-bounds placements without probabilistic retry failures.
+    const towns = roster.flatMap(player => player.towns)
+    const available = []
+    for (let x = 0; x < mapSize.x; x++) {
+        for (let y = 0; y < mapSize.y; y++) {
+            if (!towns.some(t => Math.abs(t.x - x) <= 1 && Math.abs(t.y - y) <= 1)) {
+                available.push({x, y})
+            }
+        }
+    }
+    for (let i = available.length - 1; i > 0; i--) {
+        const j = randomIntWithRng(rng, 0, i)
+        ;[available[i], available[j]] = [available[j], available[i]]
+    }
+    const take = () => available.splice(0, playerCount)
+    const mines = take().map(coord => ({...coord, owner: 0, income: 20}))
+    const map = new GameMap(mapSize, roster,
+        mines, take(), take(), take(), [], {type: 'rectangular'}, {})
     // Stored inside co-op metadata so existing save/load retains replay inputs.
     map.coop.generation = {version: 1, playerCount, seed, options: {seed}}
     return map
