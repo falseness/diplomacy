@@ -57,12 +57,12 @@ function run() {
   }
   f.compare('default-seed', f.evaluate('JSON.parse(JSON.stringify(generateCoopGame(2)))'),expectedMap(2,1));
   f.compare('different-seeds-vary-layout',f.evaluate('JSON.stringify(generateCoopGame(4,{seed:1}).players) !== JSON.stringify(generateCoopGame(4,{seed:42}).players)'),true);
-  for (const input of ['undefined','null','0','1','5','-1','2.5','"2"','NaN','Infinity']) {
+  for (const input of ['undefined','null','0','5','-1','2.5','"2"','NaN','Infinity']) {
     f.compare('reject-count-'+input,f.evaluate(`(() => {
       const before=JSON.stringify(getGameObject()); let message='';
       try { generateCoopGame(${input}); } catch(e) {message=e.message;}
       return {message, unchanged:before===JSON.stringify(getGameObject())};
-    })()`),{message:'Co-op playerCount must be an integer from 2 to 4 humans',unchanged:true});
+    })()`),{message:'Co-op playerCount must be an integer from 1 to 4 humans',unchanged:true});
   }
   for (const options of ['null','[]','{size:"tiny"}','{seed:-1}','{seed:4294967296}',
     '{seed:1.5}','{seed:"42"}','{seed:NaN}','{seed:Infinity}']) {

@@ -5,7 +5,7 @@ const COOP_WAVE_CONFIG = Object.freeze({
   // Inclusive hex-distance bounds from a portal. Terrain, occupancy and map
   // bounds must also be checked by the spawning controller; distance 0 is illegal.
   spawnRadius: Object.freeze({min: 1, max: 2}),
-  minInitialHumans: 2,
+  minInitialHumans: 1,
   maxInitialHumans: 4,
   baseStrength: 4,
   strengthPerRound: 2,

@@ -83,10 +83,10 @@ function enforceCoopStartBalance(map) {
 }
 
 // Pure generation API: callers explicitly start the returned GameMap. Counts
-// match both menu limits and exclude the neutral slot and demon controller.
+// cover local menu limits and exclude the neutral slot and demon controller.
 function generateCoopGame(playerCount, options = {}) {
-    if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 4) {
-        throw new RangeError('Co-op playerCount must be an integer from 2 to 4 humans')
+    if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > 4) {
+        throw new RangeError('Co-op playerCount must be an integer from 1 to 4 humans')
     }
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
         Object.keys(options).some(key => key !== 'seed')) {

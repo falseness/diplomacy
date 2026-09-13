@@ -105,6 +105,7 @@ function runTests() {
     {coop: null, allied: false, teams: [0, 1, 2, 3], controller: false});
   legacy.check('legacy-initial');
   runCount(2);
+  runCount(3);
   runCount(4);
   // Restarting a legacy map must clear prior co-op metadata in the same runtime.
   f.evaluate(`gameSettings.coop = {humanSlots: [1,2], humanTeam: 'HUMANS', demonSlot: 3};
@@ -117,7 +118,7 @@ function runTests() {
   process.stdout.write(child.stdout); process.stderr.write(child.stderr);
   assert.equal(child.status, 1); assert.match(child.stderr, /AssertionError/); assert.match(child.stderr, /human 1 balance/);
   console.log(`PASS rejects-corrupt-human-balance expected_exit=1 observed_exit=${child.status}`);
-  console.log('PASS co-op metadata counts=2,4');
+  console.log('PASS co-op metadata counts=2,3,4');
 }
 if (require.main === module) {
   if (process.argv.includes('--fault')) {

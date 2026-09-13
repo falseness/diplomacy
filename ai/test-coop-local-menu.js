@@ -9,7 +9,8 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
-const out = path.join(root, 'artifacts/TASK-035');
+const outputIndex = process.argv.indexOf('--output-dir');
+const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-035') : path.resolve(process.argv[outputIndex + 1]);
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -78,7 +79,7 @@ const compare = (label, observed, expected) => {
       checkpoints.push({checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
-    for (const count of [2,4]) {
+    for (const count of [1,4]) {
       progress('co-op-'+count);
       if(count===4) {
         await page.reload({waitUntil:'load'});
@@ -98,7 +99,7 @@ const compare = (label, observed, expected) => {
         };
       });
       await click('menu.main.buttons[1]');
-      // Lower bound cannot decrement below two; upper bound cannot exceed four.
+      // Lower bound cannot decrement below one; upper bound cannot exceed four.
       await click('menu.coop.playersSlider.leftButton');
       if(count===4) for(let i=0;i<3;i++) await click('menu.coop.playersSlider.rightButton');
       if(count===4) {
@@ -112,7 +113,7 @@ const compare = (label, observed, expected) => {
         const right=label.x+mainCtx.measureText(label.text).width; mainCtx.restore();
         return right < menu.coop.playersSlider.leftButton.x;
       }),true);
-      const seed=count===2?1:2, enabled=count===4;
+      const seed=count===1?1:2, enabled=count===4;
       await capture('settings-'+count,{humans:count,seed,fog:enabled,timer:enabled},
         await page.evaluate(()=>({humans:menu.coop.playersSlider.value,seed:menu.coop.mapSlider.value,
           fog:menu.coop.isFogOfWar,timer:menu.coop.isDynamicTimer})));
@@ -182,7 +183,7 @@ const compare = (label, observed, expected) => {
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed rounds: local launch only; first human income/salary and round 0 checked. Menu clicks do not mutate game entities. Competitive launch is a menu regression outside co-op ledgers.');
-    console.log('PASS co-op local menu minimum=2 maximum=4 generation_calls=2 checkpoints=6 competitive_launch=passed');
+    console.log('PASS co-op local menu minimum=1 maximum=4 generation_calls=2 checkpoints=6 competitive_launch=passed');
   } finally {
     progress('cleanup');
     console.log('browser_console_errors='+JSON.stringify(errors));

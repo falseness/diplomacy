@@ -42,7 +42,7 @@ function deeplyFrozen(value) {
 }
 function checkConfig(a, runtime) {
   compare(`${runtime}-literal-configuration`, plain(a.COOP_WAVE_CONFIG), {
-    portalHealth: 30, spawnRadius: {min: 1, max: 2}, minInitialHumans: 2,
+    portalHealth: 30, spawnRadius: {min: 1, max: 2}, minInitialHumans: 1,
     maxInitialHumans: 4, baseStrength: 4, strengthPerRound: 2, referenceHumanCount: 2,
     escalations: [{round: 5, bonus: 4}, {round: 9, bonus: 8}, {round: 13, bonus: 12}],
     types: expectedTypes
@@ -78,7 +78,7 @@ function checkInvalid(a, runtime) {
     assert.throws(() => a.getCoopWaveStrength(round, 2), {name: 'RangeError'});
     assert.throws(() => a.getUnlockedCoopDemonTypes(round), {name: 'RangeError'});
   }
-  for (const humans of [0, 1, 5, 2.5, NaN, Infinity, '2', null, undefined]) {
+  for (const humans of [0, 5, 2.5, NaN, Infinity, '2', null, undefined]) {
     assert.throws(() => a.getCoopWaveStrength(0, humans), {name: 'RangeError'});
     assert.throws(() => a.getCoopWaveStrength(5, humans), {name: 'RangeError'});
   }

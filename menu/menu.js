@@ -275,12 +275,12 @@ class GameSettingsTree {
 
 // Local co-op uses the same fog/timer controls and save-slot flow as hot seat.
 class CoopSettingsTree extends GameSettingsTree {
-    constructor(_menu) {
+    constructor(_menu, minimumHumans = 1) {
         super(_menu)
         this.playersText.text = 'humans'
         this.playersText.x = this.mapText.x
         this.mapText.text = 'seed'
-        this.playersSlider.minimumValue = () => 2
+        this.playersSlider.minimumValue = () => minimumHumans
         this.playersSlider.maximumValue = () => 4
         this.playersSlider.textByValue = value => value
         this.playersSlider.value = 2
@@ -398,7 +398,7 @@ class OnlineSettingsTree {
     toggleMode() {
         this.isCoop = !this.isCoop
         if (this.isCoop && !this.coopSliders) {
-            const settings = new CoopSettingsTree(menu)
+            const settings = new CoopSettingsTree(menu, 2)
             this.coopSliders = {players: settings.playersSlider, map: settings.mapSlider}
         }
         const sliders = this.isCoop ? this.coopSliders : this.competitiveSliders
