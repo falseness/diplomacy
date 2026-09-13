@@ -8,6 +8,7 @@ function assert(condition, label) {
   if (!condition) {
     throw new Error(label);
   }
+  console.log(JSON.stringify({ suite: path.basename(__filename), assertion: label, expected: true, observed: Boolean(condition), result: "PASS" }));
 }
 
 const context = vm.createContext({

@@ -12,6 +12,7 @@ function check(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+  console.log(JSON.stringify({ suite: path.basename(__filename), assertion: message, expected: true, observed: Boolean(condition), result: "PASS" }));
 }
 
 const state = {

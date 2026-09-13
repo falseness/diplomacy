@@ -47,6 +47,8 @@ for (const file of files) {
     }
 }
 
+console.log(JSON.stringify({ assertion: 'AI definitions remain inside ai/', checkedFiles: files.length, checkedPatterns: forbiddenDefinitions.length, expectedViolations: 0, observedViolations: 0, result: 'PASS' }))
+
 const index = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8')
 const requiredOrder = [
     'ai/generateMap.js',
@@ -64,6 +66,7 @@ for (const script of requiredOrder) {
     if (scriptIndex <= previousIndex) {
         throw new Error(`Browser AI load order is invalid at ${script}`)
     }
+    console.log(JSON.stringify({ assertion: 'Browser AI load order: ' + script, expected: 'index > ' + previousIndex, observed: scriptIndex, result: 'PASS' }))
     previousIndex = scriptIndex
 }
 
