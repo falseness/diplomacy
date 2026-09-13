@@ -1,5 +1,6 @@
 let onlineLobby = null
 let onlineSocket = null
+let onlineCommit = null
 
 function onlineLobbyText() {
     if (!gameSettings.isOnline || !onlineLobby) return ''
@@ -37,6 +38,21 @@ class OnlineLogic {
 function SetupServerCommunicationLogic(password) {
     if (onlineSocket) onlineSocket.disconnect()
     const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
+    onlineCommit = null
+    function receiveBoard(body) {
+        if (socket !== onlineSocket) return false
+        const board = typeof body === 'string' ? JSON.parse(body) : body
+        const commit = board.coopCommit
+        if (board.gameSettings?.coop) {
+            if (!commit || !Number.isSafeInteger(commit.revision) || commit.revision < 0 ||
+                    typeof commit.gameID !== 'string') return false
+            if (onlineCommit && (commit.gameID !== onlineCommit.gameID ||
+                    commit.revision <= onlineCommit.revision)) return false
+        }
+        loadFromJson(JSON.stringify(board))
+        onlineCommit = commit || null
+        return true
+    }
     onlineLobby = {mode: gameSettings.coop ? 'coop' : 'competitive', occupiedHumans: null}
     socket.on('lobbyStatus', status => {
         if (socket !== onlineSocket) return
@@ -46,9 +62,7 @@ function SetupServerCommunicationLogic(password) {
     socket.on('gameStarted', game => {
         console.log('gameStarted')
 
-        game = JSON.parse(game)
-        game = JSON.stringify(game)
-        loadFromJson(game)
+        if (!receiveBoard(game)) return
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
@@ -58,9 +72,7 @@ function SetupServerCommunicationLogic(password) {
     socket.on('playYourTurn', game => {
 
         console.log(`playYourTurn`)
-        game = JSON.parse(game)
-        game = JSON.stringify(game)
-        loadFromJson(game)
+        if (!receiveBoard(game)) return
         GameManager.updateCameraBorders()
         nextTurnPauseInterface.visible = true
 
@@ -73,7 +85,7 @@ function SetupServerCommunicationLogic(password) {
         console.log(`waitYouTurn`)
 
         // let dict = JSON.parse(gameAndTurnIndex)
-        loadFromJson(game)
+        if (!receiveBoard(game)) return
 
         if (isFogOfWar) {
             players[whooseTurn].changeFogOfWarByVision()
@@ -87,10 +99,16 @@ function SetupServerCommunicationLogic(password) {
         timer.pause()
     });
 
-    socket.emit('startGameOrConnect', JSON.stringify({
+    const requestCurrentGame = () => socket.emit('startGameOrConnect', JSON.stringify({
         'password': password,
         'game': getGameObject()
     }))
+    socket.on('connect', () => {
+        if (socket !== onlineSocket) return
+        onlineCommit = null
+        requestCurrentGame()
+    })
+    if (socket.connected) requestCurrentGame()
     SendNextTurn = () => {
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')

@@ -9,7 +9,7 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
-const out = path.join(root, 'artifacts/TASK-039');
+const out = process.env.COOP_LOBBY_EVIDENCE_DIR || path.join(root, 'artifacts/TASK-039');
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -86,7 +86,7 @@ function harness() {
       joinLobby(socket,io,id,game);
       // Exercise the production client receive handler with the stored initial
       // board. Gameplay/turn preparation is outside this lobby-only fixture.
-      socket.emit('waitYouTurn',JSON.stringify({...game.rounds[0][0].parallelTurnResult,whooseTurn:slot}));
+      socket.emit('waitYouTurn',JSON.stringify({...game.rounds[0][0].parallelTurnResult,whooseTurn:slot,coopCommit:{gameID:id,revision:0}}));
     }).catch(error=>{protocolErrors.push(error.stack);console.error(error);});
   }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
