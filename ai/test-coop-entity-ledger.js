@@ -34,6 +34,9 @@ function createEntityLedger(fixture, initial, report = console.log) {
       } else if (event.type === 'move') {
         assert.ok(live.has(event.id), 'move of absent entity');
         Object.assign(live.get(event.id), event.destination);
+      } else if (event.type === 'capture') {
+        assert.ok(live.has(event.id), 'capture of absent entity');
+        live.get(event.id).owner = event.owner;
       } else throw new Error('unknown ledger event');
     }
     return sorted(live.values());
@@ -52,7 +55,7 @@ function createEntityLedger(fixture, initial, report = console.log) {
     const wanted = expected();
     const observed = fixture.evaluate(`(() => {
       const row = entity => ({id: ledgerObjects.get(entity) || '<unregistered>',
-        kind: entity.isUnit ? 'unit' : entity.isDemonPortal ? 'portal' : entity.isNature ? 'nature' : 'town', name: entity.name, owner: entity.playerColor,
+        kind: entity.isUnit ? 'unit' : entity.isDemonPortal ? 'portal' : entity.isNature ? 'nature' : entity.isExternal ? 'building' : 'town', name: entity.name, owner: entity.playerColor,
         x: entity.coord.x, y: entity.coord.y});
       const live = [...ledgerObjects.keys()].filter(e => !e.killed);
       const map = [], ownership = [], problems = [];
@@ -77,6 +80,10 @@ function createEntityLedger(fixture, initial, report = console.log) {
         ownership.push(row(entity));
         if (entity.killed || entity.player.role !== 'DEMONS' || grid.getBuilding(entity.coord) !== entity)
           problems.push('portal ownership reference');
+      }
+      for (const entity of external.filter(e => !e.killed && !e.isDemonPortal)) {
+        ownership.push(row(entity));
+        if (grid.getBuilding(entity.coord) !== entity) problems.push('external reference');
       }
       for (const entity of nature.filter(e => !e.killed)) {
         ownership.push(row(entity));

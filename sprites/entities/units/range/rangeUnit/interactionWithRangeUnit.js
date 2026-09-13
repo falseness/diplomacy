@@ -27,7 +27,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
     }
     cellHasEnemyUnit(cell, rangeUnit) {
         return cell.unit.notEmpty() &&
-            cell.unit.playerColor != rangeUnit.playerColor
+            !rangeUnit.player.isAlliedWith(cell.unit.player)
     }
     cantRangeInteract(coord, rangeUnit) {
         return this.rangeWay.getDistance(coord) > this.range ||
@@ -67,7 +67,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
     }
     cellHasEnemyBuildingProduction(cell, rangeUnit) {
         return (cell.building.isBuildingProduction() &&
-            cell.building.playerColor != rangeUnit.playerColor)
+            !rangeUnit.player.isAlliedWith(cell.building.player))
     }
     cellHasAttackableBuilding(cell, rangeUnit) {
         return this.cellHasEnemyBuilding(cell, rangeUnit) && !cell.building.isStaticNature && cell.building.isHitable

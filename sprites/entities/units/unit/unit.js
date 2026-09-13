@@ -95,11 +95,15 @@ class Unit extends Entity {
 
         return this.interaction.needInstructions()
     }
+    cellHasTeammate(cell) {
+        return [cell.unit, cell.building].some(entity => entity.notEmpty() &&
+            entity.playerColor !== this.playerColor && this.player.isAlliedWith(entity.player))
+    }
     canHitSomethingOnCell(cell) {
-        return this.interaction.canHitSomethingOnCell(cell, this)
+        return !this.cellHasTeammate(cell) && this.interaction.canHitSomethingOnCell(cell, this)
     }
     sendInstructions(cell) {
-        if (!this.isMyTurn)
+        if (!this.isMyTurn || this.cellHasTeammate(cell))
             return true
         
         let noNeedInstructionsEnough = this.interaction.sendInstructions(cell, this)
@@ -169,13 +173,15 @@ class Unit extends Entity {
         assert(this.isMyTurn)
         let coords = this.interaction.getAvailableMoveCommandDestinations(this)
 
-        return this.createCommandsFromDestinations(coords)
+        return this.createCommandsFromDestinations(
+            coords.filter(coord => !this.cellHasTeammate(grid.getCell(coord))))
     }
     getAvailableCommands() {
         assert(this.isMyTurn)
         let coords = this.interaction.getAvailableCommandDestinations(this)
 
-        return this.createCommandsFromDestinations(coords)
+        return this.createCommandsFromDestinations(
+            coords.filter(coord => !this.cellHasTeammate(grid.getCell(coord))))
     }
     draw(ctx) {
         this.drawBars(ctx)

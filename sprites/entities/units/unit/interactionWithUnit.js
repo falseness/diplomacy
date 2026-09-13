@@ -205,11 +205,11 @@ class InterationWithUnit {
     }
     cellHasEnemyBuilding(cell, unit) {
         return (cell.building.notEmpty() &&
-            cell.building.playerColor != unit.playerColor && !cell.building.isPassable)
+            !unit.player.isAlliedWith(cell.building.player) && !cell.building.isPassable)
     }
     cellHasEnemyUnit(cell, unit) {
         return cell.unit.notEmpty() &&
-            cell.unit.playerColor != unit.playerColor
+            !unit.player.isAlliedWith(cell.unit.player)
     }
 
     markIgnoredBuilding(cell) {
@@ -275,7 +275,12 @@ class Way {
         let cell = arr[neighbour.x][neighbour.y]
         let ourUnit = cell.unit.notEmpty() && cell.unit.playerColor == player &&
             !coordsEqually(neighbour, v0)
-        let buildingObstacle = cell.building.isObstacle(player)
+        // Teammate buildings cannot be captured, including by an intermediate path step.
+        let teammateBuilding = cell.building.notEmpty() && cell.building.playerColor != player &&
+            players[player].isAlliedWith(cell.building.player)
+        let teammateUnit = cell.unit.notEmpty() && cell.unit.playerColor != player &&
+            players[player].isAlliedWith(cell.unit.player)
+        let buildingObstacle = cell.building.isObstacle(player) || teammateBuilding || teammateUnit
         let fogged = isFogOfWar && !grid.fogOfWar[neighbour.x][neighbour.y]
         return (ourUnit || buildingObstacle || fogged)
     }
