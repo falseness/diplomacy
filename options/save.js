@@ -14,6 +14,9 @@ class SaveManager {
 class JsonUnpackManager {
     constructor() {
         this.unitClass = {
+            imp: Imp,
+            clawling: Clawling,
+            hound: Hound,
             noob: Noob,
             archer: Archer,
             KOHb: KOHb,

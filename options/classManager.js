@@ -1,5 +1,8 @@
 function getClass(name) {
     const classes = {
+        imp: Imp,
+        clawling: Clawling,
+        hound: Hound,
         suburb: Suburb,
         noob: Noob, 
         archer: Archer, 
