@@ -9,16 +9,16 @@ const demonTypes = require('./demon-config');
 
 // Independent design snapshot; none of these expectations read production values.
 const expectedTypes = {
-  imp: {weight: 1, unlockRound: 1},
-  clawling: {weight: 2, unlockRound: 2},
-  hound: {weight: 3, unlockRound: 3},
-  brute: {weight: 5, unlockRound: 4},
-  bulwark: {weight: 7, unlockRound: 6},
-  spitter: {weight: 2, unlockRound: 3},
-  emberArcher: {weight: 4, unlockRound: 5},
-  hexcaster: {weight: 6, unlockRound: 7},
-  ravager: {weight: 8, unlockRound: 9},
-  demonLord: {weight: 12, unlockRound: 12}
+  imp: {weight: 1, unlockRound: 3},
+  clawling: {weight: 2, unlockRound: 4},
+  hound: {weight: 3, unlockRound: 5},
+  brute: {weight: 5, unlockRound: 6},
+  bulwark: {weight: 7, unlockRound: 8},
+  spitter: {weight: 2, unlockRound: 5},
+  emberArcher: {weight: 4, unlockRound: 7},
+  hexcaster: {weight: 6, unlockRound: 9},
+  ravager: {weight: 8, unlockRound: 11},
+  demonLord: {weight: 12, unlockRound: 14}
 };
 // Hand calculated from 2 initial strength points per human, +1 per elapsed
 // round, and an additional +2 per human at each of rounds 5, 9 and 13.
@@ -28,7 +28,7 @@ const strengths = [
   [4, 10, 15, 20], [5, 16, 24, 32], [6, 18, 27, 36], [7, 20, 30, 40],
   [8, 22, 33, 44], [9, 28, 42, 56], [10, 30, 45, 60], [11, 32, 48, 64],
   [12, 34, 51, 68], [13, 40, 60, 80], [14, 42, 63, 84],
-  [17, 48, 72, 96], [100, 214, 321, 428]
+  [15, 44, 66, 88], [17, 48, 72, 96], [100, 214, 321, 428]
 ];
 function compare(scenario, observed, expected) {
   console.log(JSON.stringify({scenario, expected, observed}));
@@ -64,13 +64,13 @@ function checkProgression(a, runtime) {
     }
   }
   // Explicitly enumerate before/at/after every declared unlock and escalation.
-  for (const boundary of [1, 2, 3, 4, 5, 6, 7, 9, 12, 13]) {
+  for (const boundary of [3, 4, 5, 6, 7, 8, 9, 11, 14]) {
     compare(`${runtime}-boundary-${boundary}-coverage`,
       [boundary - 1, boundary, boundary + 1].every(r => strengths.some(row => row[0] === r)), true);
   }
-  const first = a.getUnlockedCoopDemonTypes(13);
+  const first = a.getUnlockedCoopDemonTypes(14);
   first.length = 0;
-  compare(`${runtime}-unlocks-detached`, plain(a.getUnlockedCoopDemonTypes(13)), Object.keys(expectedTypes));
+  compare(`${runtime}-unlocks-detached`, plain(a.getUnlockedCoopDemonTypes(14)), Object.keys(expectedTypes));
 }
 function checkInvalid(a, runtime) {
   // Error names work across VM realms, unlike instanceof against Node's class.
@@ -115,7 +115,7 @@ function runTests() {
   console.log('INAPPLICABLE entity/economy invariants: pure configuration queries; no game actions, live-entity changes, IDs, occupied unit positions, map/ownership/serialization references, human income/expenses or demon gold/assets.');
   console.log('INAPPLICABLE turn/round/phase invariants: round numbers are function inputs; no game round or action executes, so shared invariant helpers have no checkpoints.');
   console.log('INAPPLICABLE committed-client convergence: no online games or committed revisions; both runtimes checked against independent literals.');
-  console.log('PASS co-op wave config types=10 humans=2,3,4 boundaries=10 strength_checks=102 fault_probes=2');
+  console.log('PASS co-op wave config types=10 humans=2,3,4 boundaries=9 strength_checks=108 fault_probes=2');
 }
 if (require.main === module) {
   const fault = process.argv.indexOf('--fault');

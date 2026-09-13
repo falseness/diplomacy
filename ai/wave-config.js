@@ -1,8 +1,5 @@
-// Waves use completed round numbers: round 0 is setup, round 1 is the first wave.
-// Strength is a spawn budget; each type's positive weight is its budget cost.
-// Scale by the INITIAL human count (2–4), never by surviving humans or portals.
-// For r >= 1: strength = (4 + 2*(r-1) + latest escalation bonus) * humans/2.
-// After the last escalation the same linear growth continues indefinitely.
+// Completed rounds 0–2 have no eligible types; round 3 starts with imps.
+// Weights control per-portal selection, never spawn counts.
 const COOP_WAVE_CONFIG = Object.freeze({
   portalHealth: 30,
   // Inclusive hex-distance bounds from a portal. Terrain, occupancy and map
@@ -19,16 +16,16 @@ const COOP_WAVE_CONFIG = Object.freeze({
     Object.freeze({round: 13, bonus: 12})
   ]),
   types: Object.freeze({
-    imp: Object.freeze({weight: 1, unlockRound: 1}),
-    clawling: Object.freeze({weight: 2, unlockRound: 2}),
-    hound: Object.freeze({weight: 3, unlockRound: 3}),
-    brute: Object.freeze({weight: 5, unlockRound: 4}),
-    bulwark: Object.freeze({weight: 7, unlockRound: 6}),
-    spitter: Object.freeze({weight: 2, unlockRound: 3}),
-    emberArcher: Object.freeze({weight: 4, unlockRound: 5}),
-    hexcaster: Object.freeze({weight: 6, unlockRound: 7}),
-    ravager: Object.freeze({weight: 8, unlockRound: 9}),
-    demonLord: Object.freeze({weight: 12, unlockRound: 12})
+    imp: Object.freeze({weight: 1, unlockRound: 3}),
+    clawling: Object.freeze({weight: 2, unlockRound: 4}),
+    hound: Object.freeze({weight: 3, unlockRound: 5}),
+    brute: Object.freeze({weight: 5, unlockRound: 6}),
+    bulwark: Object.freeze({weight: 7, unlockRound: 8}),
+    spitter: Object.freeze({weight: 2, unlockRound: 5}),
+    emberArcher: Object.freeze({weight: 4, unlockRound: 7}),
+    hexcaster: Object.freeze({weight: 6, unlockRound: 9}),
+    ravager: Object.freeze({weight: 8, unlockRound: 11}),
+    demonLord: Object.freeze({weight: 12, unlockRound: 14})
   })
 });
 
@@ -36,6 +33,7 @@ function validateCoopWaveRound(round) {
   if (!Number.isSafeInteger(round) || round < 0) throw new RangeError('Invalid wave round');
 }
 
+// Legacy projection API retained for existing balance reports; not used by generation.
 function getCoopWaveStrength(round, initialHumanCount) {
   validateCoopWaveRound(round);
   const c = COOP_WAVE_CONFIG;
