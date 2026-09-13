@@ -372,6 +372,7 @@ class Town extends PreparingManufacture {
         this.activeProduction.choose(this)
     }
     prepare(what) {
+        if (!Object.prototype.hasOwnProperty.call(production, what)) return false
         if (this.isBadlyDamaged)
             return false
         // bug: unit production with prepare time == 0 cant be prepared

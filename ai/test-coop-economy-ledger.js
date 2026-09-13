@@ -44,7 +44,7 @@ function createEconomyLedger(fixture, initial, rules, report = console.log) {
     const observed = fixture.evaluate(`(() => {
       const assets = [];
       const add = (entity, source) => {
-        if (entity && !entity.killed && !entity.isEmpty() &&
+        if (entity && !entity.killed && !entity.isEmpty() && !(entity instanceof DemonPortal) &&
             fixtureConfig.actors[entity.playerColor] &&
             fixtureConfig.actors[entity.playerColor].role === 'demon')
           assets.push({source, name: entity.name, coord: entity.coord});

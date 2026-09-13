@@ -46,13 +46,13 @@ function createEntityLedger(fixture, initial, report = console.log) {
   // Binding is explicit: unrecorded runtime births must not enter expectations.
   function bind(id, expression) {
     fixture.context.ledgerBindingId = id;
-    fixture.evaluate(`ledgerObjects.set(${expression}, ledgerBindingId)`);
+    fixture.evaluate(`ledgerObjects.set(${expression}, ledgerBindingId); undefined`);
   }
   function check(label) {
     const wanted = expected();
     const observed = fixture.evaluate(`(() => {
       const row = entity => ({id: ledgerObjects.get(entity) || '<unregistered>',
-        kind: entity.isUnit ? 'unit' : 'town', name: entity.name, owner: entity.playerColor,
+        kind: entity.isUnit ? 'unit' : entity.isDemonPortal ? 'portal' : 'town', name: entity.name, owner: entity.playerColor,
         x: entity.coord.x, y: entity.coord.y});
       const live = [...ledgerObjects.keys()].filter(e => !e.killed);
       const map = [], ownership = [], problems = [];
@@ -73,10 +73,17 @@ function createEntityLedger(fixture, initial, report = console.log) {
             problems.push('ownership reference');
         }
       }
+      for (const entity of external.filter(e => e.isDemonPortal)) {
+        ownership.push(row(entity));
+        if (entity.killed || entity.player.role !== 'DEMONS' || grid.getBuilding(entity.coord) !== entity)
+          problems.push('portal ownership reference');
+      }
+      const portals = JSON.parse(JSON.stringify(external)).filter(e => e.name === 'demonPortal')
+        .map(e => ({owner: e.ownerSlot, x: e.coord.x, y: e.coord.y, name: e.name}));
       // Capture raw references BEFORE toJSON, which cleans ownership arrays.
       const serialized = JSON.parse(JSON.stringify(players)).flatMap((p, owner) =>
         p.units.map(u => ({owner, x: u.coord.x, y: u.coord.y, name: u.name})));
-      return {live: live.map(row), map, ownership, serialized, problems};
+      return {live: live.map(row), map, ownership, serialized, portals, problems};
     })()`);
     report(JSON.stringify({scenario: label, initial: baseline, events, expected: wanted, observed}));
     assert.equal(new Set(observed.live.map(e => e.id)).size, observed.live.length, 'unique IDs');
@@ -90,6 +97,8 @@ function createEntityLedger(fixture, initial, report = console.log) {
     const wireSort = rows => rows.sort((a, b) => a.owner - b.owner || a.x - b.x || a.y - b.y);
     assert.deepStrictEqual(wireSort(observed.serialized), wireSort(wanted.filter(e => e.kind === 'unit')
       .map(e => ({owner: e.owner, x: e.x, y: e.y, name: e.name}))), 'serialized live-unit lists');
+    assert.deepStrictEqual(wireSort(observed.portals), wireSort(wanted.filter(e => e.kind === 'portal')
+      .map(e => ({owner: e.owner, x: e.x, y: e.y, name: e.name}))), 'serialized live-portal lists');
     report(`PASS ${label} expected_live=${wanted.length} observed_live=${observed.live.length}`);
     return observed;
   }

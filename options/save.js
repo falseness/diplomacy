@@ -21,6 +21,7 @@ class JsonUnpackManager {
             catapult: Catapult
         }
         this.buildingClass = {
+            demonPortal: DemonPortal,
             farm: Farm,
             barrack: Barrack,
             wall: Wall, 
