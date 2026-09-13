@@ -28,6 +28,60 @@ function createSeededRandom(seed) {
     }
 }
 
+// Absolute differences across humans. Distances count hex edges to the nearest
+// target of each category, including the final interaction edge. Every target
+// must also be reachable; hostile buildings cannot be used as transit cells.
+const COOP_START_BALANCE = Object.freeze({assetDisparity: 0, pathDisparity: 4})
+
+function coopStartBalanceMetrics(map) {
+    const key = c => `${c.x},${c.y}`
+    const groups = [map.goldmines, map.players[0].towns, map.portals]
+    const terminal = new Set([...groups[1], ...groups[2]].map(key))
+    return map.players.slice(1, 1 + map.coop.initialHumanCount).map((p, index) => {
+        const blocked = new Set([...map.lakes, ...map.mountains,
+            ...map.players.slice(1).flatMap((other, i) => i === index ? [] : other.towns)].map(key))
+        const start = p.towns[0], distances = new Map(), queue = []
+        if (start && !blocked.has(key(start))) { distances.set(key(start), 0); queue.push(start) }
+        for (let head = 0; head < queue.length; head++) {
+            const c = queue[head]
+            if (terminal.has(key(c))) continue
+            for (const [dx, dy] of neighborhood[c.x & 1]) {
+                const n = {x:c.x+dx, y:c.y+dy}, id = key(n)
+                if (n.x < 0 || n.y < 0 || n.x >= map.mapSize.x || n.y >= map.mapSize.y ||
+                    blocked.has(id) || distances.has(id)) continue
+                distances.set(id, distances.get(key(c)) + 1); queue.push(n)
+            }
+        }
+        return {gold:p.gold, towns:p.towns.length, units:p.units.length + p.towns.length,
+            paths:groups.map(group => group.length && group.every(c => distances.has(key(c)))
+                ? Math.min(...group.map(c => distances.get(key(c)))) : Infinity)}
+    })
+}
+
+function coopStartsBalanced(map) {
+    const metrics = coopStartBalanceMetrics(map)
+    const within = (values, limit) => values.every(Number.isFinite) &&
+        Math.max(...values) - Math.min(...values) <= limit
+    return ['gold', 'towns', 'units'].every(k => within(metrics.map(m => m[k]), COOP_START_BALANCE.assetDisparity)) &&
+        [0, 1, 2].every(k => within(metrics.map(m => m.paths[k]), COOP_START_BALANCE.pathDisparity))
+}
+
+// The fallback preserves the seeded starts, category counts and resource values.
+// Each six-column human lane gets open vertical access to a mine and portal;
+// blockers sit outside reserved town neighborhoods. This terminates without random retries.
+function enforceCoopStartBalance(map) {
+    if (coopStartsBalanced(map)) return
+    for (let i = 0; i < map.coop.initialHumanCount; i++) {
+        const x = 3 + i * 6
+        Object.assign(map.goldmines[i], {x, y:0})
+        map.portals[i] = {x, y:8}
+        map.lakes[i] = {x:x-2, y:0}
+        map.mountains[i] = {x:x-1, y:8}
+        map.bushes[i] = {x:x-2, y:4}
+    }
+    if (!coopStartsBalanced(map)) throw new Error('Co-op starting balance bound cannot be satisfied')
+}
+
 // Pure generation API: callers explicitly start the returned GameMap. Counts
 // match both menu limits and exclude the neutral slot and demon controller.
 function generateCoopGame(playerCount, options = {}) {
@@ -76,6 +130,7 @@ function generateCoopGame(playerCount, options = {}) {
     // neighborhoods and every terrain/resource cell have already been excluded.
     map.portals = take()
     repairCoopConnectivity(map)
+    enforceCoopStartBalance(map)
     // Stored inside co-op metadata so existing save/load retains replay inputs.
     map.coop.generation = {version: 1, playerCount, seed, options: {seed}}
     return map

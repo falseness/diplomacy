@@ -19,6 +19,15 @@ function expectedMap(count, seed) {
       humanTeam:'HUMANS',demonSlot:count+1,
       generation:{version:1,playerCount:count,seed,options:{seed}}}};
   addTerrain(map, count, seed);
+  // Independent evaluator uses literal task bounds, never production helpers.
+  const {evaluateBalance, balanced} = require('./test-coop-balance-evaluator');
+  if (!balanced(evaluateBalance(map))) {
+    map.goldmines = starts.map(t=>({x:t.x,y:0,owner:0,income:20}));
+    map.portals = starts.map(t=>({x:t.x,y:8}));
+    map.lakes = starts.map(t=>({x:t.x-2,y:0}));
+    map.mountains = starts.map(t=>({x:t.x-1,y:8}));
+    map.bushes = starts.map(t=>({x:t.x-2,y:4}));
+  }
   return map;
 }
 
