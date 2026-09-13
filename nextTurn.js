@@ -51,10 +51,33 @@ function offlineNextTurn() {
     if (coopLocalTransitionActive || gameExit) return
     coopLocalTransitionActive = true
     try {
-        advanceOfflineTurn()
+        if (gameSettings.coop.localPhase) finishCoopLocalPhase()
+        else advanceOfflineTurn()
     } finally {
         coopLocalTransitionActive = false
     }
+}
+
+// Each boundary is saved with gameSettings. Random wave progression is the
+// saved generation seed/version plus this round, not a process-local RNG.
+function advanceCoopLocalPhase() {
+    const phase = gameSettings.coop.localPhase
+    if (phase.stage === 'wave') {
+        spawnCoopWave(phase.round)
+        phase.stage = 'demon'
+    } else if (phase.stage === 'demon') {
+        players[whooseTurn].nextTurn()
+        players[whooseTurn].play()
+        phase.stage = 'complete'
+    } else if (phase.stage !== 'complete') {
+        throw new Error('Invalid saved co-op local phase')
+    }
+}
+
+function finishCoopLocalPhase() {
+    while (gameSettings.coop.localPhase.stage !== 'complete') advanceCoopLocalPhase()
+    delete gameSettings.coop.localPhase
+    advanceOfflineTurn()
 }
 
 function advanceOfflineTurn() {
@@ -83,10 +106,8 @@ function advanceOfflineTurn() {
     if (localDemon) {
         // The neutral slot advances gameRound after this phase. Wave numbering
         // starts at one for the first completed human round.
-        spawnCoopWave(gameRound + 1)
-        players[whooseTurn].nextTurn()
-        players[whooseTurn].play()
-        advanceOfflineTurn()
+        gameSettings.coop.localPhase = {round: gameRound + 1, stage: 'wave'}
+        finishCoopLocalPhase()
         return
     }
     players[whooseTurn].nextTurn()
