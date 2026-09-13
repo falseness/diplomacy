@@ -25,7 +25,8 @@ class ActionManager {
             townExternal: [],
             townExternalProduction: [],
             buildingProductions: [],
-            playerEntityLists: this.snapshotPlayerEntityLists()
+            playerEntityLists: this.snapshotPlayerEntityLists(),
+            externalOrder: external.map(entity => ({...entity.coord}))
         })
     }
     get lastAction() {
@@ -344,6 +345,16 @@ class ActionManager {
             }
         }
         this.restorePlayerEntityLists(undo.playerEntityLists)
+        // Portals remove themselves immediately on death, so there is no
+        // tombstone index for undoBuilding to reuse. Restore ordering without
+        // recreating any unrelated external entities.
+        if (undo.externalOrder) {
+            const rank = entity => {
+                const index = undo.externalOrder.findIndex(coord => coordsEqually(coord, entity.coord))
+                return index === -1 ? undo.externalOrder.length : index
+            }
+            external.sort((a, b) => rank(a) - rank(b))
+        }
         gameEvent.selected = grid.getUnit(undo.units[0].coord)
         nextTurnButton.highlightButton = false
     }

@@ -80,6 +80,7 @@ class JsonUnpackManager {
         }
 
         let building = new _building(packedBuilding.coord.x, packedBuilding.coord.y)
+        if (Object.prototype.hasOwnProperty.call(packedBuilding, 'id')) building.id = packedBuilding.id
 
         building.hp = packedBuilding.hp
         building.wasHitted = packedBuilding.wasHitted

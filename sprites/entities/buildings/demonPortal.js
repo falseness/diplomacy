@@ -18,7 +18,11 @@ class DemonPortal extends Building {
     get isExternal() { return true }
     get canBeDestroyed() { return false }
     isObstacle(playerColor) { return playerColor === this.playerColor }
-    toJSON() { return {...super.toJSON(), ownerSlot: this.ownerSlot} }
+    toJSON() {
+        const result = {...super.toJSON(), ownerSlot: this.ownerSlot}
+        if (Object.prototype.hasOwnProperty.call(this, 'id')) result.id = this.id
+        return result
+    }
     hit(damage) {
         if (this.killed) return true
         if (!Number.isFinite(damage) || damage < 0) throw new RangeError('invalid portal damage')
