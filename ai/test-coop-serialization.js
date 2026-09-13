@@ -1,3 +1,4 @@
+const {assertDemonTileOwnership} = require('./test-coop-demon-ownership-assertions');
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
 const {createFixture} = require('./test-coop-harness');
@@ -27,6 +28,7 @@ function setup(count, coop = true) {
   const economy = createEconomyLedger(f, config.actors.map(({role,gold}) => ({role,gold})), {});
   const turns = createTurnLedger(Array.from({length:count}, (_,i) => i+1));
   function check(label) {
+    assertDemonTileOwnership(f, label);
     entities.check(label+'-entities');
     economy.check(label+'-economy');
     turns.check(label+'-turn', f.evaluate(`({round:gameRound,terminal:gameExit,
@@ -50,7 +52,8 @@ function runCoop(count, fault) {
   check(prefix+'-initial');
   for (const [i, [name, className, hp]] of demons.entries()) {
     const row = {id:`demon-${name}`,kind:'unit',name,owner:count+1,x:1+i*2,y:4};
-    f.evaluate(`globalThis.born = new ${className}(${row.x},4); born.id = '${row.id}';
+    f.evaluate(`grid.getHexagon({x:${row.x},y:4}).repaint(${count+1},false);
+      globalThis.born = new ${className}(${row.x},4); born.id = '${row.id}';
       born.hp = ${hp}; born.moves = 0; born.wasHitted = true; born.updateHPBar(); undefined`);
     s.entities.record({type:'spawn',entity:row}); s.entities.bind(row.id, 'born');
     expectedUnits.push({id:row.id,name,className,owner:count+1,x:row.x,y:4,hp,moves:0,wasHitted:true});

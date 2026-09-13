@@ -1,3 +1,4 @@
+const {assertDemonTileOwnership} = require('./test-coop-demon-ownership-assertions');
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
 const {createFixture, defaultFixture} = require('./test-coop-harness');
@@ -23,13 +24,13 @@ function run(c, fault) {
     {id:'human-sentinel',kind:'unit',name:'noob',owner:1,x:1,y:1},
     {id:'other-human',kind:'unit',name:'noob',owner:2,x:11,y:9}
   ];
-  f.evaluate(`grid.getHexagon({x:5,y:3}).playerColor=${c.owner===3?0:1}; new ${c.actor}(5,3);
+  f.evaluate(`grid.getHexagon({x:5,y:3}).playerColor=${c.owner}; new ${c.actor}(5,3);
     grid.getHexagon({x:1,y:1}).playerColor=1; new Noob(1,1);
     grid.getHexagon({x:11,y:9}).playerColor=2; new Noob(11,9); undefined`);
   if (!c.move) {
     rows.push({id:'victim',kind:'unit',name:c.victimKey,owner:c.victimOwner,x:5,y:3+c.distance});
-    // Demons deliberately stand on human land: ownership is not territory.
-    f.evaluate(`grid.getHexagon({x:5,y:${3+c.distance}}).playerColor=1;
+    // Revised co-op fixtures start demons on their own territory.
+    f.evaluate(`grid.getHexagon({x:5,y:${3+c.distance}}).playerColor=${c.victimOwner};
       new ${c.victim}(5,${3+c.distance}); undefined`);
   }
   f.context.initialRows = rows;
@@ -40,6 +41,7 @@ function run(c, fault) {
   const economy = createEconomyLedger(f,config.actors.map(({role,gold})=>({role,gold})),{});
   const turns = createTurnLedger([1,2]);
   function check(label) {
+    assertDemonTileOwnership(f, label);
     entities.check(c.name+'-'+label+'-entities');
     economy.check(c.name+'-'+label+'-economy');
     turns.check(c.name+'-'+label+'-turn',f.evaluate('({round:gameRound,terminal:gameExit,events:turnEvents})'),0);
