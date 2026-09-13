@@ -17,6 +17,19 @@ const compare = (label, observed, expected) => {
 };
 
 (async () => {
+  const started = Date.now();
+  let stage = 'server startup';
+  const progress = label => {
+    stage = label;
+    console.log(`browser_stage=${label} elapsed_ms=${Date.now()-started}`);
+  };
+  // Bound the whole run, including evaluation and cleanup, which Playwright's
+  // per-operation timeouts do not cover. A hung browser must fail with context.
+  const deadline = setTimeout(() => {
+    console.error(`FAIL browser deadline stage=${stage} elapsed_ms=${Date.now()-started}`);
+    process.exit(1);
+  }, 120000);
+  deadline.unref();
   fs.mkdirSync(path.join(out, 'screenshots'), {recursive:true});
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, 'http://localhost').pathname;
@@ -36,6 +49,8 @@ const compare = (label, observed, expected) => {
     browser = await chromium.launch({headless:true});
     console.log('browser_engine=chromium browser_version='+browser.version());
     const page = await browser.newPage({viewport:{width:1280,height:900},deviceScaleFactor:1});
+    page.setDefaultTimeout(15000);
+    page.setDefaultNavigationTimeout(15000);
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => {if(m.type()==='error') errors.push(m.text());});
     // This offline render fixture uses no networking, downloads or learned AI.
@@ -64,6 +79,7 @@ const compare = (label, observed, expected) => {
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
     for (const count of [2,4]) {
+      progress('co-op-'+count);
       if(count===4) {
         await page.reload({waitUntil:'load'});
         await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
@@ -149,12 +165,14 @@ const compare = (label, observed, expected) => {
         await page.evaluate(()=>({coop:gameSettings.coop,roles:players.map(p=>p.role),fog:isFogOfWar,
           timer:timer.constructor.name,online:gameSettings.isOnline,round:gameRound,human:whooseTurn,menu:menu.visible})));
     }
+    progress('competitive-menu-reload');
     await page.reload({waitUntil:'load'});
     await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
     await capture('main-menu',{labels:['hot seat','local co-op','play online','play AI','settings','load game'],visible:true},
       await page.evaluate(()=>({labels:menu.main.buttons.map(b=>b.text.text),
         visible:menu.main.buttons.every(b=>b.y>=0 && b.bottom<=HEIGHT)})));
     await click('menu.main.buttons[0]');
+    progress('competitive-launch');
     await click('menu.play.playButton');
     await click('menu.startGame.buttons[0].movingForm.elements[0].rect');
     await page.waitForFunction(()=>!menu.visible && whooseTurn===1);
@@ -166,8 +184,11 @@ const compare = (label, observed, expected) => {
     console.log('INAPPLICABLE online convergence and completed rounds: local launch only; first human income/salary and round 0 checked. Menu clicks do not mutate game entities. Competitive launch is a menu regression outside co-op ledgers.');
     console.log('PASS co-op local menu minimum=2 maximum=4 generation_calls=2 checkpoints=6 competitive_launch=passed');
   } finally {
+    progress('cleanup');
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser) await browser.close();
     await new Promise(resolve=>server.close(resolve));
+    clearTimeout(deadline);
+    console.log('browser_run_elapsed_ms='+(Date.now()-started));
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});
