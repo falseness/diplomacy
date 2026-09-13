@@ -9,7 +9,8 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
-const out = path.join(root, 'artifacts/TASK-033');
+const outputIndex = process.argv.indexOf('--output-dir');
+const out = path.resolve(root, outputIndex < 0 ? 'artifacts/TASK-033' : process.argv[outputIndex+1], 'early');
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -55,6 +56,7 @@ const compare = (label, observed, expected) => {
       nextTurnPauseInterface.hideButDontUpdateTimer();
       timer.pauseAndSaveTime();
       otherSettings.alwaysDisplayHPBar=false;
+      for (let x=2;x<=6;x++) for(let y=3;y<=4;y++) grid.getHexagon({x,y}).repaint(3,false);
       window.demons=[new Imp(2,3),new Clawling(3,3),new Hound(4,3),new Brute(5,3),new Bulwark(6,3)];
       gameEvent.screen.moveTo({x:demons[2].pos.x+assets.size/2,y:demons[2].pos.y+assets.size/2+130});
       gameEvent.removeSelection();
@@ -97,7 +99,7 @@ const compare = (label, observed, expected) => {
       turns.check(label+'-turn',await page.evaluate(()=>({round:gameRound,terminal:gameExit,
         events:[{type:'human',round:gameRound,player:whooseTurn}]})),0);
       const observed=await page.evaluate(()=>({units:demons.map(d=>({type:d.name,
-        configured: d.constructor.type, label:d.info.displayName, owner:d.info.info.owner,
+        configured: d.constructor.type, label:d.info.displayName, owner:d.player.role,
         x:d.coord.x,y:d.coord.y,live:grid.getUnit(d.coord)===d})),
         selected:entityInterface.visible ? entityInterface.entity.name.text : null}));
       const expected={units:types.map((type,i)=>({type,configured:type,label:names[i],owner:'DEMONS',
@@ -106,59 +108,42 @@ const compare = (label, observed, expected) => {
       const screenshot=path.join(out,'screenshots',label+'.png');
       const bytes=await page.screenshot({path:screenshot});
       const sha256=crypto.createHash('sha256').update(bytes).digest('hex');
-      checkpoints.push({checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
+      const panel=await page.evaluate(()=>({visible:entityInterface.visible,title:entityInterface.entity.name.text,text:entityInterface.entity.info.text,image:entityInterface.img.image}));
+      checkpoints.push({panel,checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
-    // Observe production drawing calls and compare against literal type/name mapping.
-    // Also render symbols without labels in real browser canvases: name-only
-    // differentiation or a missing renderer fails the pixel checks.
-    const mapping=await page.evaluate(()=>{
-      const calls=[],labels=[], original=EarlyMeleeDemon.drawSymbol;
-      EarlyMeleeDemon.drawSymbol=function(ctx,type,...args){calls.push(type);return original.call(this,ctx,type,...args);};
-      try {
-        for(const d of demons){
-          const canvas=document.createElement('canvas');canvas.width=canvas.height=160;
-          const ctx=canvas.getContext('2d');
-          ctx.fillText=text=>labels.push(text);
-          d.draw(ctx);
-        }
-      } finally {EarlyMeleeDemon.drawSymbol=original;}
-      return {calls,labels};
-    });
-    compare('production-renderer-type-and-label-mapping',mapping,{calls:types,labels:names});
-    const symbols=await page.evaluate(()=>demons.map(d=>{
-      const canvas=document.createElement('canvas');canvas.width=canvas.height=160;
-      const ctx=canvas.getContext('2d');
-      EarlyMeleeDemon.drawSymbol(ctx,d.name,80,80,150);
-      const pixels=ctx.getImageData(0,0,160,160).data;
-      return {type:d.name,ink:pixels.filter((v,i)=>i%4===3&&v>0).length,png:canvas.toDataURL()};
-    }));
-    for (const symbol of symbols) {
-      compare(symbol.type+'-nonempty-symbol',symbol.ink>1000,true);
-      console.log('symbol_pixels type='+symbol.type+' ink='+symbol.ink);
-    }
-    compare('distinct-silhouettes-without-labels',new Set(symbols.map(s=>s.png)).size,5);
+    const parentAssets=['noob','noob','KOHb','normchel','normchel','archer','archer','archer','KOHb','normchel'].slice(0,types.length);
+    const mapping=await page.evaluate(parentAssets=>demons.map((d,i)=>{
+      const asset=parentAssets[i], calls=[];
+      const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;
+      const ctx=canvas.getContext('2d'), original=ctx.drawImage.bind(ctx);
+      ctx.drawImage=(image,...args)=>{calls.push(image); original(image,...args)};
+      d.draw(ctx);
+      const direct=calls.includes(cachedImages[asset]); calls.length=0;
+      grid.drawEntityBody(ctx,d);
+      return {type:d.name,direct,grid:calls.includes(cachedImages[asset]),
+        alias:assets[d.name]===assets[asset],loaded:assets[asset].complete&&assets[asset].naturalWidth>0,
+        cached:cachedImages[d.name]===cachedImages[asset]};
+    }),parentAssets);
+    compare('production-parent-assets',mapping,types.map(type=>({type,direct:true,grid:true,alias:true,loaded:true,cached:true})));
     await check('all-five');
     for(let i=0;i<types.length;i++) {
-      const portrait=await page.evaluate(i=>{
-        const calls=[], original=EarlyMeleeDemon.drawSymbol;
-        EarlyMeleeDemon.drawSymbol=function(ctx,type,...args){calls.push(type);return original.call(this,ctx,type,...args);};
-        try {
-          gameEvent.selectSomethingOnCell(grid.getCell(demons[i].coord));
-          const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;
-          entityInterface.drawContents(canvas.getContext('2d'));
-        } finally {EarlyMeleeDemon.drawSymbol=original;}
-        drawAll();
-        return calls;
-      },i);
-      compare(types[i]+'-selection-portrait-mapping',portrait,[types[i]]);
+      const portrait=await page.evaluate(({i,asset})=>{
+        gameEvent.selectSomethingOnCell(grid.getCell(demons[i].coord));
+        const calls=[],canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;
+        const ctx=canvas.getContext('2d'),original=ctx.drawImage.bind(ctx);
+        ctx.drawImage=(image,...args)=>{calls.push(image);original(image,...args)};
+        entityInterface.drawContents(ctx);drawAll();
+        return {key:entityInterface.img.image,parentImage:calls.includes(assets[asset])};
+      },{i,asset:parentAssets[i]});
+      compare(types[i]+'-selection-portrait-mapping',portrait,{key:types[i],parentImage:true});
       await check('selected-'+types[i],names[i]);
     }
     compare('browser-console-errors',errors,[]);
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed round/phase counts: offline rendering/selection fixture, no round advancement; unchanged round 0 and human 1 checked at all six checkpoints. No income or expense events.');
-    console.log('PASS co-op early render types=5 distinct_symbols=5 checkpoints=6 invariant_checkpoints=6');
+    console.log('PASS co-op early render types=5 parent_assets=5 checkpoints=6 invariant_checkpoints=6');
   } finally {
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser) await browser.close();

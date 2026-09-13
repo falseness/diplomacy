@@ -17,11 +17,11 @@ function run(cases) {
     }
     const f = setup();
     f.compare(name+'-normal-inheritance', f.evaluate(`({parent:Object.getPrototypeOf(${klass}.prototype)===${parent}.prototype,
-      oldBase:subject instanceof EarlyMeleeDemon, interaction:subject.interaction.constructor.name,
+      interaction:subject.interaction.constructor.name,
       draw:subject.draw===${parent}.prototype.draw, instructions:subject.sendInstructions===${parent}.prototype.sendInstructions,
       prototypeKeys:Object.getOwnPropertyNames(${klass}.prototype), name:subject.name,
       owner:subject.playerColor, registry:players[3].units.includes(subject), registered:getClass(subject.name)===${klass}})`),
-    {parent:true,oldBase:false,interaction:parent==='KOHb'?'MirroringInteraction':'InterationWithUnit',draw:true,
+    {parent:true,interaction:parent==='KOHb'?'MirroringInteraction':'InterationWithUnit',draw:true,
       instructions:true,prototypeKeys:['constructor'],name,owner:3,registry:true,registered:true});
     f.compare(name+'-existing-assets', f.evaluate(`(() => {
       cacheAllImages(); const calls=[]; const ctx=new Proxy({drawImage(image){calls.push(image)}},
@@ -31,9 +31,8 @@ function run(cases) {
       const refreshed=cachedImages[subject.name]===cachedImages['${asset}'] && before!==cachedImages[subject.name];
       calls.length=0; subject.mirrorX=true; subject.draw(ctx);
       const left=calls.includes(cachedImages['${parent==='KOHb'?'KOHbLeft':asset}']);
-      return {right,left,refreshed,portrait:assets[subject.name]===assets['${asset}'],
-        customPortrait:EarlyMeleeDemon.visualTypes.includes(subject.name)};
-    })()`), {right:true,left:true,refreshed:true,portrait:true,customPortrait:false});
+      return {right,left,refreshed,portrait:assets[subject.name]===assets['${asset}']};
+    })()`), {right:true,left:true,refreshed:true,portrait:true});
     for (const scenario of ['portal-exit-left','nonlethal-move-attack','lethal-move-attack']) {
       const observations=[];
       for (const normal of [true,false]) {

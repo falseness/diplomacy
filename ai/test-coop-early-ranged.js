@@ -21,7 +21,7 @@ function run(fault, testCases = cases, summary) {
       config.actors[1].units = [];
       config.actors[3].units = [{x:3,y:2,hp:2}];
       const f = createFixture(config);
-      f.evaluate(`grid.getHexagon({x:${vx},y:${vy}}).playerColor=1;
+      f.evaluate(`grid.getHexagon({x:5,y:3}).repaint(3,false); grid.getHexagon({x:${vx},y:${vy}}).playerColor=1;
         globalThis.victim=new Normchel(${vx},${vy}); globalThis.demon=new ${klass}(5,3); undefined`);
       const initial = [
         ['neutral-town','town',0,4,5,'town'], ['human-one-town','town',1,1,1,'town'],
@@ -58,10 +58,10 @@ function run(fault, testCases = cases, summary) {
       f.compare(prefix+'-exact-config-and-identity', f.evaluate(`({name:demon.name,className:demon.constructor.name,
         hp:demon.hp,maxHP:demon.maxHP,speed:demon.speed,moves:demon.moves,damage:demon.dmg,range:demon.range,
         combatConfig:DEMON_TYPES[demon.name],healSpeed:demon.constructor.healSpeed,salary:demon.salary,owner:demon.playerColor,role:demon.player.role,
-        registered:getClass(demon.name)===demon.constructor,archerRules:demon.interaction instanceof InteractionWithArcher,
+        parent:Object.getPrototypeOf(demon.constructor.prototype)===Archer.prototype,draw:demon.draw===Archer.prototype.draw,prototypeKeys:Object.getOwnPropertyNames(demon.constructor.prototype),registered:getClass(demon.name)===demon.constructor,archerRules:demon.interaction instanceof InteractionWithArcher,
         wire:demon.toJSON()})`),
         {name,className:klass,hp,maxHP:hp,speed,moves:speed,damage,range,combatConfig:{name:DEMON_NAMES[name],role:DEMON_ROLES[name],health:hp,damage,movement:speed,melee:true,ranged:true,range},healSpeed:0,salary:0,owner:3,role:'DEMONS',
-          registered:true,archerRules:true,wire:{name,coord:{x:5,y:3},hp,wasHitted:false,moves:speed}});
+          parent:true,draw:true,prototypeKeys:['constructor'],registered:true,archerRules:true,wire:{name,coord:{x:5,y:3},hp,wasHitted:false,moves:speed}});
       check('initial');
       // As in the browser, select/recompute commands before submitting instructions.
       // Isolated fixture phases preserve the human cursor and do not complete a round.

@@ -76,6 +76,8 @@ class Unit extends Entity {
     }
     get info() {
         let unit = super.info
+        if (this.constructor.type)
+            unit.displayName = DEMON_TYPES[this.constructor.type].name
         unit.info.dmg = this.dmg
 
         unit.canSkipMoves = this.isMyTurn && this.moves != 0

@@ -258,10 +258,6 @@ class Grid extends SpritesGroup {
             entity.draw(ctx)
             return
         }
-        if (entity instanceof EarlyMeleeDemon && EarlyMeleeDemon.visualTypes.includes(entity.name)) {
-            entity.drawBody(ctx)
-            return
-        }
         drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(entity)], entity.pos)
     }
     drawEntityBodies(ctx) {

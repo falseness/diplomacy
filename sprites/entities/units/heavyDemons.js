@@ -1,4 +1,4 @@
 class Brute extends Normchel {}
-registerMeleeDemon(Brute, 'brute', 'normchel')
+registerDemonVariant(Brute, 'brute', 'normchel')
 class Bulwark extends Normchel {}
-registerMeleeDemon(Bulwark, 'bulwark', 'normchel')
+registerDemonVariant(Bulwark, 'bulwark', 'normchel')

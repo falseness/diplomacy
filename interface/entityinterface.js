@@ -165,9 +165,6 @@ class EntityInterface {
             DemonPortal.drawSymbol(ctx, this.img.x, this.img.y,
                 this.img.width, this.background.color)
         }
-        else if (EarlyMeleeDemon.visualTypes.includes(this.img.image)) {
-            EarlyMeleeDemon.drawSymbol(ctx, this.img.image, this.img.x, this.img.y, this.img.width)
-        }
         else if (this.img.image == 'suburb') {
             this.suburbImage.draw(ctx)
         }
