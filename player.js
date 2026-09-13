@@ -1,6 +1,7 @@
 class Player {
     constructor(color, gold = 1000) {
         this.gold = gold
+        this.economyEnabled = true
         this.towns = []
         this.units = []
         this.goldmines = []
@@ -36,6 +37,9 @@ class Player {
     isAlliedWith(other) {
         return this === other || Boolean(gameSettings.coop && this.role === 'HUMAN' &&
             other.role === 'HUMAN' && this.team === other.team)
+    }
+    canEnterBuilding(building) {
+        return true
     }
     updateUnits() {
         for (let i = 0; i < this.units.length; ++i) {
@@ -372,6 +376,9 @@ class DemonPlayer extends Player {
     constructor(color) {
         super(color, 0)
         this.economyEnabled = false
+    }
+    canEnterBuilding(building) {
+        return building.isEmpty()
     }
     get gold() { return 0 }
     set gold(value) {} // Combat rewards and restored balances cannot fund demons.

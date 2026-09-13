@@ -57,6 +57,56 @@ function run(fault) {
       s.check(`production-${prototype}-${method}`);
     }
   }
+  // Exercise real production instances with existing queues, not only borrowed methods.
+  {
+    const {f}=setup();
+    f.evaluate(`globalThis.producers=[grid.getBuilding({x:1,y:1}),new Barrack(3,1,grid.getBuilding({x:1,y:1}))];
+      grid.getHexagon({x:3,y:1}).playerColor=1;
+      for (const producer of producers) {
+        producer.startUnitPreparing('noob');
+        Object.defineProperty(producer,'player',{get:()=>players[3]});
+      } undefined`);
+    f.evaluate("players[1].updateTowns(); undefined");
+    const before=f.snapshot();
+    const queued=[1,1];
+    const undoBefore=f.evaluate('JSON.stringify(actionManager.arr)');
+    f.compare('human-production-costs',f.evaluate('players[1].gold'),60);
+    for (const index of [0,1]) {
+      for (const method of ['prepare','startUnitPreparing','unitPreparingLogic',
+        ...index===0?['startBuildingPreparing','buildingPreparingLogic']:[]]) {
+        f.evaluate(`producers[${index}].${method}('noob'); undefined`);
+        f.compare(`real-producer-${index}-${method}-unchanged`,f.snapshot(),before);
+        f.compare(`real-producer-${index}-${method}-undo`,
+          f.evaluate("JSON.stringify(actionManager.arr)"),undoBefore);
+        f.compare(`real-producer-${index}-${method}-queue`,
+          f.evaluate('producers.map(p=>p.unitProduction.turns)'),queued);
+      }
+    }
+    f.compare('real-producers-no-building-queue',f.evaluate('producers[0].buildingProduction.length'),0);
+  }
+  // A one-cell-wide corridor makes the economic building an unavoidable transit step.
+  for (const kind of ['town','goldmine']) {
+    const {f}=setup();
+    f.evaluate(`for(let x=0;x<9;x++) for(let y=0;y<7;y++) {
+      if(y!==3 || x<3 || x>5) grid.setBuilding(new Sea(x,y),{x,y});
+    }
+    grid.getHexagon({x:3,y:3}).playerColor=3;
+    globalThis.walker=new Noob(3,3);
+    grid.getHexagon({x:4,y:3}).playerColor=0;
+    globalThis.blocker=new ${kind==='town'?'Town(4,3,true)':'Goldmine(4,3,50)'};
+    ${kind==='town'?'blocker.hp=0;':''}
+    whooseTurn=3; walker.select(); undefined`);
+    f.compare(`${kind}-destination-cost`,f.evaluate('walker.interaction.way.getDistance({x:4,y:3})'),2);
+    f.compare(`${kind}-transit-cost`,f.evaluate('walker.interaction.way.getDistance({x:5,y:3})'),3);
+    f.compare(`${kind}-no-transit-command`,f.evaluate(`walker.getAvailableCommands().some(c=>
+      c.destinationCoord.x===5 && c.destinationCoord.y===3)`),false);
+    f.evaluate('walker.sendInstructions(grid.getCell({x:5,y:3})); undefined');
+    f.compare(`${kind}-transit-rejected`,f.evaluate('walker.coord'),{x:3,y:3});
+    f.evaluate('walker.select(); walker.sendInstructions(grid.getCell({x:4,y:3})); undefined');
+    f.compare(`${kind}-destination-no-capture`,f.evaluate(`({coord:walker.coord,owner:blocker.playerColor,
+      gold:players[3].gold,towns:players[3].towns.length})`),
+      {coord:{x:3,y:3},owner:0,gold:0,towns:0});
+  }
   let count=0;
   for (const [kind,hp] of [['town',10],['town',1],['town',0],['goldmine',null]]) {
     for (const owner of [0,1]) for (const ranged of [false,true]) {

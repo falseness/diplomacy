@@ -363,7 +363,7 @@ class Town extends PreparingManufacture {
         return false
     }
     startBuildingPreparing(what) {
-        if (this.player.role === 'DEMONS') return false
+        if (this.player.economyEnabled === false) return false
         //this.minusGold(production[what].cost)
         // production will minus gold town
         this.activeProduction = new production[what].production(
@@ -373,7 +373,7 @@ class Town extends PreparingManufacture {
         this.activeProduction.choose(this)
     }
     prepare(what) {
-        if (this.player.role === 'DEMONS') return false
+        if (this.player.economyEnabled === false) return false
         if (!Object.prototype.hasOwnProperty.call(production, what)) return false
         if (this.isBadlyDamaged)
             return false
@@ -389,7 +389,7 @@ class Town extends PreparingManufacture {
         return true
     }
     buildingPreparingLogic() {
-        if (this.player.role === 'DEMONS') return false
+        if (this.player.economyEnabled === false) return false
         for (let i = 0; i < this.buildingProduction.length; ++i) {
             if (this.buildingProduction[i].killed) {
                 this.buildingProduction.splice(i--, 1)

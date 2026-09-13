@@ -232,7 +232,7 @@ class InterationWithUnit {
         return false
     }
     cantStandOnCell(cell, unit) {
-        return (unit.player.role === 'DEMONS' && cell.building.notEmpty()) ||
+        return !unit.player.canEnterBuilding(cell.building) ||
             (this.cellHasEnemyBuilding(cell, unit) && !cell.building.isStandable) ||
             cell.unit.notEmpty()
     }
@@ -307,7 +307,7 @@ class Way {
         return sortedHexagonNeighbours
     }
     cellHasEnemyEntity(cell, player) {
-        return (players[player].role === 'DEMONS' && cell.building.notEmpty()) ||
+        return !players[player].canEnterBuilding(cell.building) ||
             (!cell.building.isPassable && cell.building.playerColor != player) ||
             (cell.unit.notEmpty() && cell.unit.playerColor != player)
     }

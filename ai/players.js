@@ -1675,7 +1675,7 @@ class AIPlayerWithEconomy extends AIPlayer {
         return 'building-placement'
     }
     getEconomyCommands() {
-        if (this.role === 'DEMONS') return []
+        if (this.economyEnabled === false) return []
         let commands = []
         let producers = this.towns.slice()
         for (let i = 0; i < this.towns.length; ++i) {
@@ -1733,7 +1733,7 @@ class AIPlayerWithEconomy extends AIPlayer {
         return this.getUnitCommands().concat(this.getEconomyCommands())
     }
     applyEconomyCommand(command) {
-        if (this.role === 'DEMONS') return false
+        if (this.economyEnabled === false) return false
         let producerCell = getAiCommandCell(command.producerCoord)
         let producer = producerCell && producerCell.building
         let configured = Object.prototype.hasOwnProperty.call(
