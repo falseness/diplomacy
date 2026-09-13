@@ -9,7 +9,9 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
-const out = path.join(root, 'artifacts/TASK-032');
+const outputIndex = process.argv.indexOf('--output-dir');
+const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-032') :
+  path.resolve(root, process.argv[outputIndex+1], 'portal');
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -102,7 +104,7 @@ const compare = (label, observed, expected) => {
         cached:grid.surfaceCacheBuildings.includes(portal)}));
       const expected={hp,owner:3,role:'DEMONS',killed:hp===0,live:hp ? 1 : 0,empty:hp===0,
         selected:hp>0,visible:hp>0,title:hp?'Demon Portal':null,
-        info:hp?`hp: ${hp} / 30\nowner: DEMONS`:null,green:hp,cached:hp>0};
+        info:hp?`hp: ${hp} / 30`:null,green:hp,cached:hp>0};
       compare(label+'-asserted-state',observed,expected);
       const screenshot=path.join(out,'screenshots',label+'.png');
       const bytes=await page.screenshot({path:screenshot});

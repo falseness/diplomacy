@@ -26,7 +26,6 @@ class DemonPortal extends Building {
     get info() {
         const result = super.info
         result.displayName = 'Demon Portal'
-        result.info.owner = 'DEMONS'
         return result
     }
     isObstacle(playerColor) { return false }
