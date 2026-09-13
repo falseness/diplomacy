@@ -62,6 +62,7 @@ class JsonUnpackManager {
             return empty
         }
         let unit = new _unit(packedUnit.coord.x, packedUnit.coord.y)
+        if (Object.prototype.hasOwnProperty.call(packedUnit, 'id')) unit.id = packedUnit.id
         unit.hp = packedUnit.hp
         unit.wasHitted = packedUnit.wasHitted
         unit.moves = packedUnit.moves

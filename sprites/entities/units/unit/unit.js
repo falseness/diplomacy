@@ -66,6 +66,9 @@ class Unit extends Entity {
     toJSON() {
         let res = super.toJSON()
         res.moves = this.moves
+        // Older saves have no IDs; retain their wire format while preserving
+        // identities supplied by a scenario or multiplayer controller.
+        if (this.id !== undefined) res.id = this.id
         return res
     }
     get isMovesOver() {
