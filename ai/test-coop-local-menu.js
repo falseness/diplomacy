@@ -10,7 +10,7 @@ const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
 const outputIndex = process.argv.indexOf('--output-dir');
-const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-035') : path.resolve(process.argv[outputIndex + 1]);
+const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-081') : path.resolve(process.argv[outputIndex + 1]);
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -98,31 +98,54 @@ const compare = (label, observed, expected) => {
           return start.call(this,map,fog,timer,online,password);
         };
       });
-      await click('menu.main.buttons[1]');
+      await click('menu.main.buttons[0]');
+      await click('menu.play.modeButton');
+      compare('hotseat-mode-'+count, await page.evaluate(()=>({label:menu.play.modeButton.text.text,
+        onlineLabel:menu.online.modeButton.text.text,buttons:menu.play.buttons.length,
+        unique:new Set(menu.play.buttons).size})), {label:'Co-op',onlineLabel:'Competitive',buttons:7,unique:7});
       // Lower bound cannot decrement below one; upper bound cannot exceed four.
-      await click('menu.coop.playersSlider.leftButton');
-      if(count===4) for(let i=0;i<3;i++) await click('menu.coop.playersSlider.rightButton');
+      await click('menu.play.playersSlider.leftButton');
+      if(count===4) for(let i=0;i<3;i++) await click('menu.play.playersSlider.rightButton');
       if(count===4) {
-        await click('menu.coop.mapSlider.rightButton');
-        await click('menu.coop.fogOfWarCheckBox');
-        await click('menu.coop.timerCheckBox');
+        await click('menu.play.mapSlider.rightButton');
+        await click('menu.play.fogOfWarCheckBox');
+        await click('menu.play.timerCheckBox');
       }
       compare('human-label-spacing-'+count,await page.evaluate(()=> {
-        const label=menu.coop.playersText; mainCtx.save();
+        const label=menu.play.playersText; mainCtx.save();
         mainCtx.font=label.fontSize+'px Arial';
         const right=label.x+mainCtx.measureText(label.text).width; mainCtx.restore();
-        return right < menu.coop.playersSlider.leftButton.x;
+        return right < menu.play.playersSlider.leftButton.x;
       }),true);
+      await click(count===1?'menu.play.playersSlider.leftButton':'menu.play.playersSlider.rightButton');
       const seed=count===1?1:2, enabled=count===4;
+      // Separate map/player selections survive repeated mode changes and Back.
+      for(let toggle=0;toggle<2;toggle++) {
+        await click('menu.play.modeButton');
+        compare('competitive-restored-'+count+'-'+toggle,await page.evaluate(()=>({
+          players:menu.play.playersSlider.value,map:menu.play.mapSlider.value,
+          sameMap:menu.play.selectedMap===maps[menu.play.mapSlider.realValue][0],
+          fog:menu.play.isFogOfWar,timer:menu.play.isDynamicTimer})),
+          {players:0,map:0,sameMap:true,fog:enabled,timer:enabled});
+        await click('menu.play.playersSlider.rightButton');
+        await click('menu.play.playersSlider.leftButton');
+        await click('menu.play.mapSlider.rightButton');
+        await click('menu.play.mapSlider.leftButton');
+        await click('menu.play.modeButton');
+      }
+      await click('menu.play.backButton');
+      compare('hotseat-back-main-'+count,await page.evaluate(()=>menu.selectedTree===menu.main),true);
+      await click('menu.main.buttons[0]');
       await capture('settings-'+count,{humans:count,seed,fog:enabled,timer:enabled},
-        await page.evaluate(()=>({humans:menu.coop.playersSlider.value,seed:menu.coop.mapSlider.value,
-          fog:menu.coop.isFogOfWar,timer:menu.coop.isDynamicTimer})));
+        await page.evaluate(()=>({humans:menu.play.playersSlider.value,seed:menu.play.mapSlider.value,
+          fog:menu.play.isFogOfWar,timer:menu.play.isDynamicTimer})));
       // Exercise slot Back and return: co-op settings and options survive.
-      await click('menu.coop.playButton');
-      await click('menu.startCoopGame.buttons[1]');
-      compare('slot-back-'+count,await page.evaluate(()=>menu.selectedTree===menu.coop),true);
-      await click('menu.coop.playButton');
-      await click('menu.startCoopGame.buttons[0].movingForm.elements[0].rect');
+      await click('menu.play.playButton');
+      await click('menu.startGame.buttons[1]');
+      compare('slot-back-'+count,await page.evaluate(()=>menu.selectedTree===menu.play),true);
+      await click('menu.play.playButton');
+      await click('menu.startGame.buttons[0].movingForm.elements['+(count===1?0:1)+'].rect');
+      compare('selected-slot-'+count,await page.evaluate(()=>gameSlot),count===1?0:1);
       await page.waitForFunction(()=>!menu.visible && whooseTurn===1);
       const expected=expectedMap(count,seed);
       compare('generateCoopGame-'+count,await page.evaluate(()=>generationCalls),[{count,options:{seed},map:expected}]);
@@ -165,14 +188,32 @@ const compare = (label, observed, expected) => {
         fog:enabled,timer:enabled?'Timer':'LongTimer',online:false,round:0,human:1,menu:false},
         await page.evaluate(()=>({coop:gameSettings.coop,roles:players.map(p=>p.role),fog:isFogOfWar,
           timer:timer.constructor.name,online:gameSettings.isOnline,round:gameRound,human:whooseTurn,menu:menu.visible})));
+      // Cancel another setup, then resume the saved game through its selected slot.
+      const before=await page.evaluate(()=>({round:gameRound,human:whooseTurn,coop:gameSettings.coop,
+        roles:players.map(p=>p.role),gold:players.map(p=>p.gold),slot:gameSlot}));
+      await page.evaluate(()=>menuBack());
+      await click('menu.main.buttons[0]');
+      await click('menu.play.modeButton');
+      await click('menu.play.playButton');
+      await click('menu.startGame.buttons[1]');
+      await click('menu.play.backButton');
+      compare('cancel-no-launch-'+count,await page.evaluate(()=>startCalls.length),1);
+      await click('menu.main.buttons[4]');
+      await click('menu.load.buttons[0].movingForm.elements['+(count===1?0:1)+'].rect');
+      await page.waitForFunction(()=>!menu.visible);
+      compare('resume-saved-mode-'+count,await page.evaluate(()=>({round:gameRound,human:whooseTurn,
+        coop:gameSettings.coop,roles:players.map(p=>p.role),gold:players.map(p=>p.gold),slot:gameSlot})),before);
     }
     progress('competitive-menu-reload');
     await page.reload({waitUntil:'load'});
     await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
-    await capture('main-menu',{labels:['hot seat','local co-op','play online','play AI','settings','load game'],visible:true},
+    await capture('main-menu',{labels:['hot seat','play online','play AI','settings','load game'],visible:true},
       await page.evaluate(()=>({labels:menu.main.buttons.map(b=>b.text.text),
         visible:menu.main.buttons.every(b=>b.y>=0 && b.bottom<=HEIGHT)})));
     await click('menu.main.buttons[0]');
+    await capture('competitive-settings',{mode:'Competitive',players:'2',map:0,fog:false,timer:false},
+      await page.evaluate(()=>({mode:menu.play.modeButton.text.text,players:menu.play.playersSlider.realValue,
+        map:menu.play.mapSlider.value,fog:menu.play.isFogOfWar,timer:menu.play.isDynamicTimer})));
     progress('competitive-launch');
     await click('menu.play.playButton');
     await click('menu.startGame.buttons[0].movingForm.elements[0].rect');
@@ -183,7 +224,7 @@ const compare = (label, observed, expected) => {
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed rounds: local launch only; first human income/salary and round 0 checked. Menu clicks do not mutate game entities. Competitive launch is a menu regression outside co-op ledgers.');
-    console.log('PASS co-op local menu minimum=1 maximum=4 generation_calls=2 checkpoints=6 competitive_launch=passed');
+    console.log('PASS co-op local menu minimum=1 maximum=4 generation_calls=2 checkpoints='+checkpoints.length+' competitive_launch=passed');
   } finally {
     progress('cleanup');
     console.log('browser_console_errors='+JSON.stringify(errors));

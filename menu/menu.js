@@ -290,10 +290,50 @@ class CoopSettingsTree extends GameSettingsTree {
         this.mapSlider.textByValue = value => value
         this.mapSlider.value = 1
         this.mapSlider.update()
-        this.playButton.parameters = _menu.startCoopGame
     }
     get selectedMap() {
         return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value})
+    }
+}
+
+// Keep each mode's map/player selection while sharing the Hotseat options.
+class HotseatSettingsTree extends GameSettingsTree {
+    constructor(_menu) {
+        super(_menu)
+        this.isCoop = false
+        this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
+        const coop = new CoopSettingsTree(_menu)
+        this.coopSliders = {players: coop.playersSlider, map: coop.mapSlider}
+        this.competitivePlayersX = this.playersText.x
+        const rect = Menu.getButtonRect({x: WIDTH * 0.02, y: HEIGHT * 0.04})
+        rect.width = WIDTH * 0.23
+        rect.height = HEIGHT * 0.08
+        const text = Menu.getButtonText('Competitive')
+        text.fontSize = WIDTH * 0.03
+        this.modeButton = new MenuButton(rect, text, this.toggleMode, undefined, true, this)
+        this.updateButtonsList()
+    }
+    updateButtonsList() {
+        super.updateButtonsList()
+        // Keep the map slider last for GameSettingsTree.click's player refresh.
+        if (this.modeButton) this.buttons.splice(2, 0, this.modeButton)
+    }
+    toggleMode() {
+        this.isCoop = !this.isCoop
+        const sliders = this.isCoop ? this.coopSliders : this.competitiveSliders
+        this.playersSlider = sliders.players
+        this.mapSlider = sliders.map
+        this.playersText.text = this.isCoop ? 'humans' : 'players'
+        this.playersText.x = this.isCoop ? this.mapText.x : this.competitivePlayersX
+        this.mapText.text = this.isCoop ? 'seed' : 'map'
+        this.modeButton.text.text = this.isCoop ? 'Co-op' : 'Competitive'
+        this.modeButton.selectedText.text = this.modeButton.text.text
+        this.updateButtonsList()
+    }
+    get selectedMap() {
+        return this.isCoop
+            ? generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value})
+            : super.selectedMap
     }
 }
 
@@ -542,11 +582,7 @@ class Menu {
             new SlotManager(slotsCount, startPos.y, start)
         ], this)
 
-        this.startCoopGame = new Tree([
-            new SlotManager(slotsCount, startPos.y, start)
-        ], this)
-        this.coop = new CoopSettingsTree(this)
-        this.play = new GameSettingsTree(this)
+        this.play = new HotseatSettingsTree(this)
 
         this.online = new OnlineSettingsTree(this)
 
@@ -559,8 +595,6 @@ class Menu {
         this.main = new Tree([
             this.constructor.getButton(startPos, 'hot seat',
                 this.setTree, this.play, true, this),
-            this.constructor.getButton(startPos, 'local co-op',
-                this.setTree, this.coop, true, this),
             this.constructor.getButton(startPos, 'play online',
                 this.setTree, this.online, true, this),
             this.constructor.getButton(startPos, 'play AI',
@@ -571,12 +605,10 @@ class Menu {
                 this.setTree, this.load, true, this),
         ], this)
 
-        // Six entries fit in the visible area on both desktop and mobile.
+        // Main entries fit in the visible area on both desktop and mobile.
         this.main.buttons.forEach((button, index) => {
             button.pos = {x: startPos.x, y: HEIGHT * (0.27 + index * 0.12)}
         })
-        this.coop.setParent(this.main, this)
-        this.startCoopGame.setParent(this.coop, this)
         this.play.setParent(this.main, this)
         this.online.setParent(this.main, this)
         this.settings.setParent(this.main, this)
@@ -628,7 +660,6 @@ class Menu {
         // slot manager:
         this.load.buttons[0].update()
         this.startGame.buttons[0].update()
-        this.startCoopGame.buttons[0].update()
     }
     back() {
         gameExit = true

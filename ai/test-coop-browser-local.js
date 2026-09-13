@@ -9,7 +9,8 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
-const out = path.join(root, 'artifacts/TASK-054');
+const outputIndex = process.argv.indexOf('--output-dir');
+const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-054') : path.resolve(process.argv[outputIndex + 1]);
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -125,9 +126,10 @@ const compare = (label, observed, expected) => {
       checkpoints.at(-1).balanceExpectations=economy.expected();
       checkpoints.at(-1).details=extra;
     }
-    await click('menu.main.buttons[1]');
-    await click('menu.coop.playButton');
-    await click('menu.startCoopGame.buttons[0].movingForm.elements[0].rect');
+    await click('menu.main.buttons[0]');
+    await click('menu.play.modeButton');
+    await click('menu.play.playButton');
+    await click('menu.startGame.buttons[0].movingForm.elements[0].rect');
     await page.waitForFunction(()=>!menu.visible&&whooseTurn===1);
     await page.evaluate(()=>{window.trace=[{type:'human',round:0,player:1}]});
     entities=await shared(()=>createEntityLedger(f,initialEntities(expectedMap(2,1))));
@@ -225,7 +227,7 @@ const compare = (label, observed, expected) => {
     await page.reload({waitUntil:'load'});
     console.log('reload-state='+JSON.stringify(await page.evaluate(()=>({menu:menu.visible,loaded:imagesCountLoaded,total:images.length}))));
     await page.waitForFunction(()=>menu.visible&&imagesCountLoaded===images.length);
-    await click('menu.main.buttons[5]');
+    await click('menu.main.buttons[4]');
     await click('menu.load.buttons[0].movingForm.elements[0].rect');
     await page.waitForFunction(()=>!menu.visible);
     await page.evaluate(trace=>{

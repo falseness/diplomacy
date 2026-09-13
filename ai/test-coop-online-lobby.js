@@ -138,7 +138,7 @@ function harness() {
     async function launch(count, password, coop=true) {
       page = await browser.newPage({viewport:{width:1280,height:900},deviceScaleFactor:1});
       await prepare(page);
-      await click('menu.main.buttons[2]');
+      await click('menu.main.buttons[1]');
       if(coop) {
         await click('menu.online.modeButton');
         await click('menu.online.playersSlider.leftButton');
