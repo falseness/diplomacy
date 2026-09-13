@@ -160,7 +160,9 @@ function createFixture(config = defaultFixture(), report = console.log) {
     attackBorder = new Border()
     const configured = fixtureConfig.actors.map(actor => ({...actor,
       units: actor.units.map(unit => ({...unit, type: Noob}))}))
-    new GameMap(fixtureConfig.size, configured, [], [], []).start({
+    new GameMap(fixtureConfig.size, fixtureConfig.coop ? configured.slice(0, -1) : configured,
+      [], [], [], [], [], {type: 'rectangular'},
+      fixtureConfig.coop ? {units: configured[configured.length - 1].units} : null).start({
       updateCameraBorders() {},
       clearValues() {
         external = []; externalProduction = []; nature = []; goldmines = []

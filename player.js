@@ -22,6 +22,21 @@ class Player {
         }
         return undefined
     }
+    get role() {
+        if (this instanceof NeutralPlayer) return 'NEUTRAL'
+        if (gameSettings.coop && players.indexOf(this) === gameSettings.coop.demonSlot)
+            return 'DEMONS'
+        return 'HUMAN'
+    }
+    get team() {
+        if (gameSettings.coop && gameSettings.coop.humanSlots.includes(players.indexOf(this)))
+            return gameSettings.coop.humanTeam
+        return this.role === 'DEMONS' ? 'DEMONS' : players.indexOf(this)
+    }
+    isAlliedWith(other) {
+        return this === other || Boolean(gameSettings.coop && this.role === 'HUMAN' &&
+            other.role === 'HUMAN' && this.team === other.team)
+    }
     updateUnits() {
         for (let i = 0; i < this.units.length; ++i) {
             if (this.units[i].killed) {
@@ -350,6 +365,14 @@ class Player {
         }
 
         return result
+    }
+}
+// A distinct controller owns demon units; scheduling/combat rules are separate
+// from this state representation. Existing Player economy hooks honor this flag.
+class DemonPlayer extends Player {
+    constructor(color) {
+        super(color, 0)
+        this.economyEnabled = false
     }
 }
 class NeutralPlayer extends Player {

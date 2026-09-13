@@ -11,7 +11,7 @@ function getHexagonalLayer(x, y, center) {
 }
 
 class GameMap {
-    constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[], mapShape={type: 'rectangular'}) {
+    constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[], mapShape={type: 'rectangular'}, coop=null) {
         this.mapSize = mapSize
         this.players = _players
         this.goldmines = _goldmines
@@ -20,6 +20,19 @@ class GameMap {
         this.bushes = bushes
         this.hills = hills
         this.mapShape = mapShape
+        // Input slots remain neutral + humans. The controller is appended outside
+        // that roster so it never replaces a human, even at the interface limit.
+        this.coop = coop ? {
+            initialHumanCount: _players.length - 1,
+            humanSlots: _players.slice(1).map((_, i) => i + 1),
+            humanTeam: 'HUMANS', demonSlot: _players.length
+        } : null
+        if (coop) {
+            this.players = [..._players, {
+                rgb: {r: 160, g: 40, b: 180}, units: coop.units || [],
+                towns: [], gold: 0, economyEnabled: false
+            }]
+        }
     }
     getMapCoord(coord) {
         let offset = this.mapShape.offset || {x: 0, y: 0}
@@ -50,7 +63,8 @@ class GameMap {
         players[0] = new NeutralPlayer(this.players[0].rgb, 0)
 
         for (let i = 1; i < this.players.length; ++i) {
-            let playerType = this.getPlayerType(this.players[i])
+            let playerType = this.coop && i === this.coop.demonSlot ?
+                DemonPlayer : this.getPlayerType(this.players[i])
             let economyEnabled = this.players[i].economyEnabled !== false
             let configuredGold = economyEnabled ? this.players[i].gold : 0
             players[i] = configuredGold === undefined ?
@@ -262,6 +276,8 @@ class GameMap {
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
         gameSettings.mapShape = this.mapShape
+        if (this.coop) gameSettings.coop = JSON.parse(JSON.stringify(this.coop))
+        else delete gameSettings.coop
 
         this.createPlayers()
         this.createTowns()
