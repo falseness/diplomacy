@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="lord-title lord-desc">
+  <title id="lord-title">Demon Lord — crowned sovereign in obsidian armor</title>
+  <desc id="lord-desc">A horn-crowned demon with a crimson mantle, broad gold-edged black plate, a red breastplate jewel and a heavy notched sword. Normchel's exact planted legs and 62.5-radius head preserve the shared miniature scale. Smooth upper-right lighting, transparent canvas and individually editable vector shapes.</desc>
+  <defs>
+    <radialGradient id="lord-plate" cx="78%" cy="19%" r="99%"><stop stop-color="#85878a"/><stop offset=".35" stop-color="#55555f"/><stop offset=".7" stop-color="#35313f"/><stop offset="1" stop-color="#211e2c"/></radialGradient>
+    <radialGradient id="lord-mantle" cx="78%" cy="19%" r="99%"><stop stop-color="#c85b68"/><stop offset=".38" stop-color="#983544"/><stop offset="1" stop-color="#481d35"/></radialGradient>
+    <radialGradient id="lord-skin" cx="74%" cy="22%" r="89%"><stop stop-color="#e9957b"/><stop offset=".38" stop-color="#be6059"/><stop offset=".72" stop-color="#904048"/><stop offset="1" stop-color="#55273a"/></radialGradient>
+    <linearGradient id="lord-gold" x1="0%" y1="80%" x2="100%" y2="15%"><stop stop-color="#796039"/><stop offset=".42" stop-color="#ba934f"/><stop offset=".76" stop-color="#edd08a"/><stop offset="1" stop-color="#fae6ae"/></linearGradient>
+    <linearGradient id="lord-blade" x1="0%" y1="30%" x2="100%" y2="0%"><stop stop-color="#4c5260"/><stop offset=".48" stop-color="#a7acb0"/><stop offset=".5" stop-color="#69717c"/><stop offset="1" stop-color="#d7d7cc"/></linearGradient>
+  </defs>
+  <g id="lord-mantle-shape">
+    <path d="M178 135 Q258 111 339 135 L405 413 L354 400 L342 446 L298 421 L258 453 L216 423 L170 445 L160 403 L110 418Z" fill="url(#lord-mantle)"/>
+    <path d="M181 170 L148 401 L173 391 L180 423 L213 404 L231 205 M331 170 L367 397 L344 389 L335 423 L302 404 L283 205" fill="#381b2d" opacity=".4"/>
+  </g>
+  <!-- Exact Normchel planted legs and original foot baseline. -->
+  <path id="lord-parent-legs" d="M258.5 322.531C242.934 324.263 236.28 328.614 228.5 343.031V455.355C228.5 457.466 228.297 459.58 227.783 461.627C224.776 473.598 220.356 478.924 210.15 482.24C207.136 483.22 203.858 483.224 200.863 482.185C190.261 478.506 187.234 472.449 185.121 460.955C184.825 459.346 184.7 457.709 184.7 456.074V296.031H332.3V456.074C332.3 457.709 332.174 459.346 331.879 460.955C329.765 472.449 326.738 478.506 316.136 482.185C313.142 483.224 309.864 483.22 306.849 482.24C296.644 478.924 292.224 473.598 289.217 461.627C288.702 459.58 288.5 457.466 288.5 455.355V343.031C280.719 328.614 274.066 324.263 258.5 322.531Z" fill="url(#lord-plate)"/>
+  <g id="lord-greaves" fill="url(#lord-plate)" stroke="url(#lord-gold)" stroke-width="5" stroke-linejoin="round">
+    <path d="M188 367 L207 351 L225 367 L223 444 L207 464 L188 446Z"/>
+    <path d="M292 367 L311 351 L329 367 L329 446 L311 464 L292 444Z"/>
+  </g>
+  <g id="lord-arms" fill="url(#lord-plate)">
+    <path d="M183 147 Q151 130 126 164 L93 261 L92 313 Q104 335 132 318 L148 269 L198 191Z M334 147 Q366 130 391 164 L425 261 L428 315 Q414 337 385 318 L369 269 L319 191Z"/>
+    <path d="M97 257 L144 269 L137 307 L89 296Z M420 257 L374 269 L381 307 L430 296Z" stroke="url(#lord-gold)" stroke-width="6"/>
+  </g>
+  <g id="lord-cuirass" stroke-linejoin="round">
+    <path d="M184 143 Q259 125 334 143 L343 222 L329 293 L188 293 L174 222Z" fill="url(#lord-plate)" stroke="url(#lord-gold)" stroke-width="7"/>
+    <path d="M192 165 L258 197 L325 165 L317 227 L258 260 L200 227Z" fill="url(#lord-plate)"/>
+    <path d="M193 170 L258 205 L324 170 M258 205 V262" stroke="url(#lord-gold)" stroke-width="7"/>
+    <path d="M258 184 L278 206 L258 235 L238 206Z" fill="url(#lord-gold)"/>
+    <path d="M258 195 L268 207 L258 223 L248 207Z" fill="#c54d59"/>
+    <path d="M188 280 Q259 295 329 280 L339 344 L284 361 L259 338 L232 361 L179 344Z" fill="url(#lord-plate)" stroke="url(#lord-gold)" stroke-width="6"/>
+    <path d="M246 295 L272 295 L285 374 L259 395 L231 374Z" fill="url(#lord-mantle)" stroke="url(#lord-gold)" stroke-width="5"/>
+  </g>
+  <g id="lord-pauldrons" fill="url(#lord-plate)" stroke="url(#lord-gold)" stroke-width="6" stroke-linejoin="round">
+    <path d="M190 139 L145 113 L104 134 L84 191 L143 216 L185 192 L206 160Z"/>
+    <path d="M327 139 L372 113 L413 134 L433 191 L374 216 L332 192 L311 160Z"/>
+    <path d="M108 143 L101 102 L132 125 M143 121 L151 90 L169 130 M409 143 L416 102 L385 125 M374 121 L366 90 L348 130" fill="url(#lord-gold)" stroke-width="3"/>
+  </g>
+  <g id="lord-head">
+    <circle cx="259" cy="91" r="62.5" fill="url(#lord-skin)"/>
+    <path d="M211 71 Q168 68 174 29 Q143 46 157 78 Q168 104 205 108Z M307 71 Q350 68 344 29 Q375 46 361 78 Q350 104 313 108Z" fill="url(#lord-gold)"/>
+    <path d="M201 65 L194 32 L228 47 L259 27 L289 47 L323 32 L316 65 Q259 48 201 65Z" fill="url(#lord-gold)" stroke="#81603a" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M259 35 L268 46 L259 57 L250 46Z" fill="url(#lord-mantle)"/>
+    <path d="M215 79 L247 88 L241 102 L221 96Z M271 88 L303 79 L297 96 L277 102Z" fill="#ffe5a0"/>
+    <path d="M233 88 V96 M285 88 V96" stroke="#402333" stroke-width="6"/>
+    <path d="M214 73 L247 82 M271 82 L304 73" stroke="#602d3c" stroke-width="7" stroke-linecap="round"/>
+    <path d="M232 122 Q259 137 286 122" stroke="#492332" stroke-width="6" stroke-linecap="round"/>
+    <path d="M235 123 L244 138 L250 128 M269 128 L275 138 L283 123" fill="#f5dbab"/>
+    <path d="M247 145 L259 160 L271 145" fill="url(#lord-plate)"/>
+  </g>
+  <g id="lord-heavy-sword" stroke-linejoin="round">
+    <path d="M53 66 L76 40 L102 73 L110 131 L98 126 L122 235 L86 244 L58 140 L68 133Z" fill="url(#lord-blade)" stroke="#3c3746" stroke-width="4"/>
+    <path d="M76 40 L101 238" stroke="#ebe4ce" stroke-width="4"/>
+    <path d="M65 243 L90 228 L115 224 L141 232 L133 248 L111 243 L111 315 L92 318 L90 249 L71 259Z" fill="url(#lord-gold)" stroke="#77593a" stroke-width="3"/>
+    <path d="M97 254 L109 252 L117 303 L99 306Z" fill="#4c2d3e"/>
+    <circle cx="108" cy="320" r="15" fill="url(#lord-gold)"/>
+  </g>
+  <g id="lord-gauntlets" fill="url(#lord-plate)" stroke="#2d2835" stroke-width="3">
+    <path d="M97 279 Q114 269 129 282 L139 299 Q143 315 127 323 L110 321 L107 303 L98 306Z"/>
+    <path d="M389 291 Q408 281 426 294 L438 325 L423 344 L394 337 L383 316Z"/>
+    <path d="M399 311 L405 330 M413 308 L420 329" stroke="url(#lord-gold)" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>
