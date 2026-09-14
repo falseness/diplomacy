@@ -69,7 +69,7 @@ for (const size of ['tiny','normal','big']) {
     gameSettings.coop.humanSlots=[1];
     globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);`);
   compare(`${size}-saved-replay-inputs`,f.evaluate('gameSettings.coop.generation'),
-    {version:3,playerCount:2,seed:0,size,options:{seed:0,size}});
+    {version:4,playerCount:2,seed:0,size,options:{seed:0,size}});
   compare(`${size}-saved-initial-count`,f.evaluate('getCoopMapScalingFromMetadata(gameSettings.coop)'),getCoopMapScaling(2,size));
   compare(`${size}-exact-save-load`,f.evaluate('JSON.stringify(getGameObject())===saved'),true);
 }

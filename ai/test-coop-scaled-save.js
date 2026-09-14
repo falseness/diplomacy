@@ -8,8 +8,13 @@ function run(){
   const label=`scaled-save-H${count}-${size}`;
   e(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:0});generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);whooseTurn=1;actionManager.clear();
     gameSettings.coop.waveGeneration={version:1,seed:42,lastRound:3};gameSettings.coop.localPhase={round:3,stage:'complete'};gameRound=3;globalThis.before=JSON.stringify(getGameObject());loadFromJson(before)`);
-  check(label+'-metadata','gameSettings.coop.generation',{version:3,playerCount:count,seed:0,size,options:{seed:0,size}});
-  check(label+'-dimensions-counts',`({side:grid.arr.length,height:grid.arr[0].length,initial:gameSettings.coop.initialHumanCount,portals:external.filter(p=>p.isDemonPortal).length,humans:players.filter(p=>p.role==='HUMAN').length})`,{side,height:side,initial:count,portals:count*multiplier,humans:count});
+  check(label+'-metadata','gameSettings.coop.generation',{version:4,playerCount:count,seed:0,size,options:{seed:0,size}});
+  // Divided Valley terrain counts vary with the planned ridge; resources do not.
+  check(label+'-dimensions-counts',`({side:grid.arr.length,height:grid.arr[0].length,initial:gameSettings.coop.initialHumanCount,portals:external.filter(p=>p.isDemonPortal).length,humans:players.filter(p=>p.role==='HUMAN').length,
+    neutralTowns:players[0].towns.length,goldmines:goldmines.length,humanTowns:players.slice(1,${count+1}).map(p=>p.towns.length),
+    terrain:['mountain','lake','bush'].every(n=>nature.some(t=>t.name===n)),stored:[generated.mountains.length+generated.lakes.length+generated.bushes.length,nature.length]})`,
+    {side,height:side,initial:count,portals:count*multiplier,humans:count,neutralTowns:count*multiplier,goldmines:count*multiplier,
+     humanTowns:Array(count).fill(1),terrain:true,stored:e('[generated.mountains.length+generated.lakes.length+generated.bushes.length,generated.mountains.length+generated.lakes.length+generated.bushes.length]')});
   check(label+'-all-registries-and-markers-exact','JSON.stringify(getGameObject())===before',true);
   if(count>1){e(`players[${count}].units.slice().forEach(u=>u.kill());players[${count}].towns.slice().forEach(t=>t.destroy());globalThis.afterDeath=JSON.stringify(getGameObject());loadFromJson(afterDeath)`);
    check(label+'-eliminated-initial-versus-surviving',`({initial:gameSettings.coop.initialHumanCount,surviving:players.filter(p=>p.role==='HUMAN'&&!p.isLost).length,side:grid.arr.length,portals:external.filter(p=>p.isDemonPortal).length,exact:JSON.stringify(getGameObject())===afterDeath})`,{initial:count,surviving:count-1,side,portals:count*multiplier,exact:true});}
