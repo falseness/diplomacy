@@ -25,7 +25,7 @@ class DemonPortal extends Building {
     get canBeDestroyed() { return false }
     get info() {
         const result = super.info
-        result.displayName = 'Demon Portal'
+        result.displayName = 'demon portal'
         return result
     }
     isObstacle(playerColor) { return false }

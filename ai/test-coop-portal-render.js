@@ -89,7 +89,7 @@ const compare = (label, observed, expected) => {
       ['human-one-garrison','unit',1,1,1],['human-two-garrison','unit',2,7,1],
       ['demon-unit','unit',3,7,5],['portal','portal',3,3,2]].map(([id,kind,owner,x,y])=>
         ({id,kind,owner,x,y,name:kind==='unit'?'noob':kind==='portal'?'demonPortal':'town'}));
-    const entities=await shared(()=>createEntityLedger(f,initial));
+    let entities=await shared(()=>createEntityLedger(f,initial));
     const economy=createEconomyLedger(f,config.actors.map(({role,gold})=>({role,gold})),{});
     const turns=createTurnLedger([1,2]);
     async function check(label,hp) {
@@ -105,7 +105,7 @@ const compare = (label, observed, expected) => {
         green:portal.hpBar.rects.filter(r=>r.color===portal.hpBar.healthColor).length,
         cached:grid.surfaceCacheBuildings.includes(portal)}));
       const expected={hp,owner:3,role:'DEMONS',killed:hp===0,live:hp ? 1 : 0,empty:hp===0,
-        selected:hp>0,visible:hp>0,title:hp?'Demon Portal':null,
+        selected:hp>0,visible:hp>0,title:hp?'demon portal':null,
         info:hp?`hp: ${hp} / 30`:null,green:Math.floor(hp/10)+hp%10,cached:hp>0};
       compare(label+'-asserted-state',observed,expected);
       const screenshot=path.join(out,'screenshots',label+'.png');
@@ -124,11 +124,26 @@ const compare = (label, observed, expected) => {
     console.log('ACTION portal.hit(13): selected portal damage; no economic event');
     await page.evaluate(()=>{portal.hit(13);drawAll();});
     await check('damaged',17);
+    const saved = await page.evaluate(() => JSON.stringify(getGameObject()));
+    console.log('ACTION save/load selected damaged portal through getGameObject/loadFromJson');
+    await page.evaluate(saved => {
+      loadFromJson(saved);
+      window.portal=external.find(e=>e.isDemonPortal);
+      nextTurnPauseInterface.hideButDontUpdateTimer(); timer.pauseAndSaveTime();
+      gameEvent.removeSelection();
+      gameEvent.selectSomethingOnCell(grid.getCell(portal.coord));
+      drawAll();
+    }, saved);
+    compare('portal-save-load-state', await page.evaluate(() => JSON.stringify(getGameObject())), saved);
+    // Rebind fixture-only IDs to reconstructed objects using the declared ledger.
+    const reloadedEntities=entities.expected();
+    entities=await shared(()=>createEntityLedger(f,reloadedEntities));
+    await check('reloaded',17);
     console.log('ACTION portal.hit(17): selected portal destruction; declared portal death');
     await page.evaluate(()=>{portal.hit(17);drawAll();});
     entities.record({type:'death',id:'portal'});
     await check('destroyed',0);
-    compare('distinct-browser-captures',new Set(checkpoints.map(c=>c.sha256)).size,3);
+    compare('distinct-browser-captures',new Set(checkpoints.filter(c=>c.checkpoint!=='reloaded').map(c=>c.sha256)).size,3);
     // Separate render-only fixture after the damage/economy ledger completes.
     await page.evaluate(() => {
       window.portal=new DemonPortal(3,2);
@@ -155,7 +170,7 @@ const compare = (label, observed, expected) => {
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed round/phase counts: offline damage/selection fixture, no round advancement; unchanged round 0 and human 1 checked at every checkpoint. No income or expense events.');
-    console.log('PASS co-op portal render checkpoints=4 invariant_checkpoints=3');
+    console.log('PASS co-op portal render checkpoints=5 invariant_checkpoints=4');
   } finally {
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser) await browser.close();

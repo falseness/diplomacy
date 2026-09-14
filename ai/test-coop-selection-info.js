@@ -72,8 +72,8 @@ const compare = (label, observed, expected) => {
     ].map(([type,title,hp,dmg],i)=>({type,title,i,owner:3,role:'DEMONS',
       lines:[title,`hp: ${hp} / ${hp}`,`dmg: ${dmg}`]}));
     await page.evaluate(()=>{window.portal=new DemonPortal(3,2);});
-    cases.push({type:'portal',title:'Demon Portal',owner:3,role:'DEMONS',
-      lines:['Demon Portal','hp: 30 / 30']});
+    cases.push({type:'portal',title:'demon portal',owner:3,role:'DEMONS',
+      lines:['demon portal','hp: 30 / 30']});
     cases.push({type:'human',title:'noob',owner:1,role:'HUMAN',
       lines:['noob','hp: 2 / 2','dmg: 1','moves: 2 / 2','salary: 1','skip moves']});
     cases.push({type:'human-zero',title:'noob',owner:1,role:'HUMAN',
