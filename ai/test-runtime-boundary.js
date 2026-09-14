@@ -51,6 +51,7 @@ console.log(JSON.stringify({ assertion: 'AI definitions remain inside ai/', chec
 
 const index = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8')
 const requiredOrder = [
+    'ai/coop-map-scaling.js',
     'ai/generateMap.js',
     'ai/vectorizeContent.js',
     'ai/model.js',

@@ -66,7 +66,10 @@ function coopStartsBalanced(map) {
         [0, 1, 2].every(k => within(metrics.map(m => m.paths[k]), COOP_START_BALANCE.pathDisparity))
 }
 
-const COOP_MAP_SIZES = Object.freeze({tiny: 15, normal: 25, big: 39})
+// Version-2 placement still uses the four-human reference dimensions until
+// formula-sized placement/repair is integrated. Preset values live in one place.
+const COOP_MAP_SIZES = Object.freeze(Object.fromEntries(
+    ['tiny', 'normal', 'big'].map(size => [size, getCoopMapScaling(4, size).side])))
 
 // Placement interfaces take actual dimensions; later terrain/portal rules can
 // refine these lanes without assuming a fixed map or changing competitive APIs.

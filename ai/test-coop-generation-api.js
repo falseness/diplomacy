@@ -16,11 +16,33 @@ function run() {
   assert.equal((menu.match(/^        let getKeyPlayers = function\(value\) \{ return value \+ 2 \}/gm)||[]).length,2);
   for (const count of [2,3,4]) for (const seed of [0,1,42,4294967295]) {
     const label = `humans-${count}-seed-${seed}`;
-    const expected = expectedMap(count,seed);
+    const expectedCoop = {initialHumanCount:count, humanSlots:Array.from({length:count},(_,i)=>i+1),
+      humanTeam:'HUMANS', demonSlot:count+1,
+      generation:{version:2,playerCount:count,seed,size:'normal',options:{seed,size:'normal'}}};
     f.evaluate(`globalThis.beforeGeneration = JSON.stringify(getGameObject());
       globalThis.generated = generateCoopGame(${count}, {seed:${seed}});`);
-    if (process.argv.includes('--corrupt')) expected.coop.initialHumanCount++;
-    f.compare(label+'-exact-generation', f.evaluate('JSON.parse(JSON.stringify(generated))'), expected);
+    if (process.argv.includes('--corrupt')) expectedCoop.initialHumanCount++;
+    f.compare(label+'-generation-metadata', f.evaluate('generated.coop'), expectedCoop);
+    // Version-2 generation has clustered terrain and tiered portals. The old
+    // hand-copied fixture predates those changes. Assert its public contract
+    // independently, then track these validated placements across start/load.
+    const expected = f.evaluate('JSON.parse(JSON.stringify(generated))');
+    f.compare(label+'-dimensions-counts-assets', {
+      dimensions:expected.mapSize,
+      counts:[expected.players[0].towns.length,expected.goldmines.length,expected.portals.length,
+        expected.mountains.length,expected.lakes.length,expected.bushes.length],
+      assets:expected.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length]),
+      controller:expected.players[count+1]
+    }, {dimensions:{x:25,y:25},counts:[count,count,2*count,50,38,63],
+      assets:Array.from({length:count},()=>[100,1,0]),
+      controller:{rgb:{r:160,g:40,b:180},units:[],towns:[],gold:0,economyEnabled:false}});
+    f.compare(label+'-independent-starting-roster',expected.players,expectedMap(count,seed).players);
+    const objects = [...expected.players.flatMap(p=>p.towns),...expected.goldmines,
+      ...expected.portals,...expected.mountains,...expected.lakes,...expected.bushes];
+    f.compare(label+'-placements-valid', {
+      unique:new Set(objects.map(c=>`${c.x},${c.y}`)).size===objects.length,
+      inBounds:objects.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<25&&c.y<25)
+    }, {unique:true,inBounds:true});
     f.compare(label+'-active-game-unchanged', f.evaluate('JSON.stringify(getGameObject()) === beforeGeneration'), true);
     f.compare(label+'-repeat', f.evaluate(`JSON.stringify(generated) === JSON.stringify(generateCoopGame(${count}, {seed:${seed}}))`), true);
     f.compare(label+'-replay', f.evaluate('JSON.stringify(generated) === JSON.stringify(generateCoopGame(generated.coop.generation.playerCount, generated.coop.generation.options))'), true);
@@ -42,7 +64,7 @@ function run() {
       economy.check(label+suffix+'-economy');
       turn.check(label+suffix+'-turn',f.evaluate(`({round:gameRound,terminal:gameExit,
         events:[{type:'human',round:gameRound,player:whooseTurn}]})`),0);
-      f.compare(label+suffix+'-metadata',f.evaluate('gameSettings.coop'),expected.coop);
+      f.compare(label+suffix+'-metadata',f.evaluate('gameSettings.coop'),{...expectedCoop,balanceVersion:2});
       f.compare(label+suffix+'-roles',f.evaluate('players.map(p=>p.role)'),
         ['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS']);
     }
@@ -55,7 +77,7 @@ function run() {
     f.evaluate('for (const [e] of ledgerObjects) if ((e.isUnit ? grid.getUnit(e.coord) : grid.getBuilding(e.coord)) !== e) ledgerObjects.delete(e);');
     check('-restored');
   }
-  f.compare('default-seed', f.evaluate('JSON.parse(JSON.stringify(generateCoopGame(2)))'),expectedMap(2,1));
+  f.compare('default-seed', f.evaluate('JSON.stringify(generateCoopGame(2)) === JSON.stringify(generateCoopGame(2,{seed:1,size:"normal"}))'),true);
   f.compare('different-seeds-vary-layout',f.evaluate('JSON.stringify(generateCoopGame(4,{seed:1}).players) !== JSON.stringify(generateCoopGame(4,{seed:42}).players)'),true);
   for (const input of ['undefined','null','0','5','-1','2.5','"2"','NaN','Infinity']) {
     f.compare('reject-count-'+input,f.evaluate(`(() => {
@@ -79,8 +101,11 @@ function run() {
   })()`),[42,9,42]);
   console.log('INAPPLICABLE: no combat actions or completed rounds; no income/expense events; no online committed revisions in generation/start/save-load fixtures. Shared initial entity, economy and turn ledgers checked after every start and restore. Connectivity belongs to a subsequent task.');
   const probe=spawnSync(process.execPath,[__filename,'--corrupt'],{encoding:'utf8'});
-  assert.equal(probe.status,1); assert.match(probe.stderr,/humans-2-seed-0-exact-generation/);
-  console.log('PASS corruption-probe expected_exit=1 observed_exit='+probe.status+' marker=humans-2-seed-0-exact-generation');
+  console.log('BEGIN deliberate corruption probe');
+  process.stdout.write(probe.stdout); process.stderr.write(probe.stderr);
+  console.log('END deliberate corruption probe actual_exit_status='+probe.status);
+  assert.equal(probe.status,1); assert.match(probe.stderr,/humans-2-seed-0-generation-metadata/);
+  console.log('PASS corruption-probe expected_exit=1 observed_exit='+probe.status+' marker=humans-2-seed-0-generation-metadata');
   console.log('PASS co-op generation API scenarios=12 counts=2,3,4 seeds=0,1,42,4294967295');
 }
 run();

@@ -373,6 +373,7 @@ function createSmokeContext() {
 function loadAiScripts() {
   const context = createSmokeContext();
   const scripts = [
+    'ai/coop-map-scaling.js',
     'ai/generateMap.js',
     'ai/vectorizeContent.js',
     'ai/mutableVectorGrid.js',
