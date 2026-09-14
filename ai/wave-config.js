@@ -1,4 +1,4 @@
-// Completed rounds 0–2 have no eligible types; round 3 starts with imps.
+// Version 1: completed rounds 0–2 have no eligible types; round 3 starts with imps.
 // Weights control per-portal selection, never spawn counts.
 const COOP_WAVE_CONFIG = Object.freeze({
   portalHealth: 30,
@@ -55,8 +55,13 @@ function getCoopWaveConfig(version = 1) {
   return version === 2 ? TUNED_COOP_WAVE_CONFIG : COOP_WAVE_CONFIG;
 }
 const TUNED_COOP_WAVE_CONFIG = Object.freeze({...COOP_WAVE_CONFIG,
-  types: Object.freeze(Object.fromEntries(Object.entries(COOP_WAVE_CONFIG.types).map(([id, rule]) =>
-    [id, Object.freeze({...rule, unlockRound: rule.unlockRound + (id === 'imp' ? 0 : 32)})])))
+  // Version 2 eligibility is explicit; retain the original type order and weights
+  // so seeded weighted selection continues to use the same algorithm.
+  types: Object.freeze(Object.fromEntries(Object.entries({
+    imp: 1, clawling: 3, hound: 6, brute: 10, bulwark: 20,
+    spitter: 6, emberArcher: 15, hexcaster: 24, ravager: 30, demonLord: 35
+  }).map(([id, unlockRound]) =>
+    [id, Object.freeze({...COOP_WAVE_CONFIG.types[id], unlockRound})])))
 });
 function getUnlockedCoopDemonTypes(round, version = 1) {
   validateCoopWaveRound(round);

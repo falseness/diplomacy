@@ -3,6 +3,11 @@ const assert = require('node:assert/strict');
 const {spawnSync} = require('node:child_process');
 const {createFixture, defaultFixture} = require('./test-coop-harness');
 const selected = require('./coop-balance-selected.json');
+// Literal schedules: selected.json is historical tuning data, not live unlocks.
+const schedules = {
+  1: {imp:3,clawling:4,hound:5,brute:6,bulwark:8,spitter:5,emberArcher:7,hexcaster:9,ravager:11,demonLord:14},
+  2: {imp:1,clawling:3,hound:6,brute:10,bulwark:20,spitter:6,emberArcher:15,hexcaster:24,ravager:30,demonLord:35}
+};
 const copy = x => JSON.parse(JSON.stringify(x));
 const probe = `(() => {
  const specimens=[Imp,Clawling,Hound,Brute,Bulwark,Spitter,EmberArcher,Hexcaster,Ravager,DemonLord].map(C=>{
@@ -29,7 +34,7 @@ if (process.argv.includes('--server')) {
   console.log('BALANCE_RESULTS='+JSON.stringify(results));
 } else {
   const inputs=[], results=[];
-  const rounds=[...new Set([0,1,2,...Object.values(selected.types).flatMap(t=>[t.unlockRound-1,t.unlockRound,t.unlockRound+1])])].sort((a,b)=>a-b);
+  const rounds=[...new Set([0,1,2,...Object.values(schedules).flatMap(s=>Object.values(s).flatMap(r=>[r-1,r,r+1])).concat(40)])].sort((a,b)=>a-b);
   for (const version of [1,2]) for(const humans of (process.argv.includes('--expanded') ? Array.from({length:12},(_,i)=>i+1) : [1,2,3,4])) for(const [preset,side] of [['tiny',15],['normal',25],['big',39]]) {
     const c=defaultFixture(); c.coop=true; c.size=process.argv.includes('--expanded') && version===2 ? require('./coop-map-scaling').getCoopMapScaling(humans,preset).mapSize : {x:side,y:side};
     c.actors=[c.actors[0],...Array.from({length:humans},(_,i)=>({...copy(c.actors[1]),units:[{x:1+i%6*2,y:1+Math.floor(i/6)*2,hp:2}],towns:[]})),{role:'demon',gold:0,economyEnabled:false,units:[],towns:[]}];
@@ -42,23 +47,22 @@ if (process.argv.includes('--server')) {
       f.context.initial=initial; f.evaluate(`loadFromJson(initial); gameRound=${round};`);
       inputs.push(f.evaluate('JSON.parse(JSON.stringify(getGameObject()))'));
       const local=f.evaluate(probe); results.push(local);
-      const expectedTypes=Object.keys(selected.types).filter(id=>(selected.types[id].unlockRound - (version===1 && id!=='imp' ? 32 : 0))<=round);
+      const expectedTypes=Object.keys(schedules[version]).filter(id=>schedules[version][id]<=round);
       assert.deepEqual(local.types,expectedTypes);
       assert.deepEqual(local.weights,Object.fromEntries(Object.entries(selected.types).map(([id,t])=>[id,t.weight])));
       if(version===2) {
-        assert.deepEqual(local.types,Object.keys(selected.types).filter(id=>selected.types[id].unlockRound<=round));
         assert.deepEqual(local.specimens,local.stats);
         assert.deepEqual(local.stats,Object.values(selected.types).map(t=>[t.health,t.damage,t.movement,t.range,t.salary,t.healSpeed]));
         for(const u of local.state.players[humans+1].units) {
           assert.equal(u.hp,selected.types[u.name].health);
         }
       }
-      assert.equal(local.wave.spawned.length,round<3?0:1);
+      assert.equal(local.wave.spawned.length,round<schedules[version].imp?0:1);
       const saved=JSON.stringify(local.state); f.context.saved=saved;
       f.evaluate('loadFromJson(saved)');
       assert.deepEqual(f.evaluate('JSON.parse(JSON.stringify(getGameObject()))'),local.state);
       assert.equal(f.evaluate(`spawnCoopWave(${round},999).spawned.length`),0);
-      if(round>=3) {
+      if(round>=schedules[version].imp) {
         f.evaluate('grid.getUnit({x:10,y:10}).kill()');
         assert.equal(f.evaluate(`spawnCoopWave(${round+1},999).spawned.length`),1);
       }
