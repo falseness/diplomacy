@@ -62,12 +62,13 @@ const compare = (label, observed, expected) => {
     }, config);
 
     // Independent expected panel lines: enemy moves and attack range were never
-    // selection rows. Preserve the complete existing health/damage/salary panel.
+    // selection rows. Literal TASK-108 version-2 stats; do not derive expectations
+    // from the rendered object or the production stat table.
     const cases = [
-      ['imp','Imp',2,1], ['clawling','Clawling',3,1], ['hound','Hound',4,2],
-      ['brute','Brute',10,3], ['bulwark','Bulwark',16,2], ['spitter','Spitter',2,1],
-      ['emberArcher','Ember Archer',4,2], ['hexcaster','Hexcaster',5,4],
-      ['ravager','Ravager',8,5], ['demonLord','Demon Lord',20,6]
+      ['imp','Imp',1,1], ['clawling','Clawling',2,1], ['hound','Hound',2,1],
+      ['brute','Brute',5,2], ['bulwark','Bulwark',8,1], ['spitter','Spitter',1,1],
+      ['emberArcher','Ember Archer',2,1], ['hexcaster','Hexcaster',3,2],
+      ['ravager','Ravager',4,3], ['demonLord','Demon Lord',10,3]
     ].map(([type,title,hp,dmg],i)=>({type,title,i,owner:3,role:'DEMONS',
       lines:[title,`hp: ${hp} / ${hp}`,`dmg: ${dmg}`,'salary: 0']}));
     await page.evaluate(()=>{window.portal=new DemonPortal(3,2);});
