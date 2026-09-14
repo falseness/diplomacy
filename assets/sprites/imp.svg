@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="imp-title imp-desc">
+  <title id="imp-title">Imp — horned demon miniature</title>
+  <desc id="imp-desc">A small crimson imp with ivory horns, pointed ears, amber eyes, clawed hands, cloven hooves and a curling arrow-tipped tail. Noob/Normchel miniature proportions with rounded limbs, a compact torso and smooth volume shading. Ivory horns and an exposed arrow-tail silhouette distinguish this unarmed melee demon at board scale. Transparent vector artwork.</desc>
+  <defs>
+    <radialGradient id="imp-skin" cx="74%" cy="22%" r="89%">
+      <stop stop-color="#eea079"/>
+      <stop offset=".34" stop-color="#cf695b"/>
+      <stop offset=".7" stop-color="#a13f48"/>
+      <stop offset="1" stop-color="#632b3b"/>
+    </radialGradient>
+    <radialGradient id="imp-body" cx="76%" cy="18%" r="98%">
+      <stop stop-color="#dd8469"/>
+      <stop offset=".4" stop-color="#bc5351"/>
+      <stop offset="1" stop-color="#6c2b3e"/>
+    </radialGradient>
+    <linearGradient id="imp-limb" x1="0%" y1="0%" x2="100%" y2="25%">
+      <stop stop-color="#763044"/>
+      <stop offset=".48" stop-color="#c65d57"/>
+      <stop offset=".76" stop-color="#df826a"/>
+      <stop offset="1" stop-color="#99404a"/>
+    </linearGradient>
+    <linearGradient id="imp-horn" x1="0%" y1="80%" x2="100%" y2="15%">
+      <stop stop-color="#80634d"/>
+      <stop offset=".42" stop-color="#c1a67a"/>
+      <stop offset=".74" stop-color="#f3dfac"/>
+      <stop offset="1" stop-color="#fff0c8"/>
+    </linearGradient>
+    <radialGradient id="imp-hoof" cx="73%" cy="22%" r="91%">
+      <stop stop-color="#817875"/>
+      <stop offset=".42" stop-color="#575052"/>
+      <stop offset="1" stop-color="#292731"/>
+    </radialGradient>
+    <radialGradient id="imp-cloth" cx="76%" cy="18%" r="96%">
+      <stop stop-color="#9b8160"/>
+      <stop offset=".45" stop-color="#705642"/>
+      <stop offset="1" stop-color="#403139"/>
+    </radialGradient>
+    <linearGradient id="imp-gold" x1="0%" y1="0%" x2="100%" y2="25%">
+      <stop stop-color="#947039"/>
+      <stop offset=".65" stop-color="#e7c780"/>
+      <stop offset="1" stop-color="#b28a47"/>
+    </linearGradient>
+  </defs>
+  <!-- The curled tail sits behind the body, keeping its tip readable at map scale. -->
+  <g id="imp-tail">
+    <path d="M299 319 C350 344 396 407 440 370 C466 348 451 309 435 286" stroke="#682c3c" stroke-width="21" stroke-linecap="round"/>
+    <path d="M300 317 C354 342 397 400 437 366 C459 347 446 311 434 288" stroke="#b75354" stroke-width="13" stroke-linecap="round"/>
+    <path d="M307 317 C356 344 399 391 433 365" stroke="#dc826c" stroke-width="4" stroke-linecap="round"/>
+    <path d="M414 303 L422 245 L463 286 L441 284 L435 308Z" fill="url(#imp-skin)"/>
+  </g>
+  <g id="imp-legs">
+    <path d="M193 306 Q219 299 245 322 L223 386 L219 445 Q204 461 183 444 L183 384Z" fill="url(#imp-limb)"/>
+    <path d="M267 322 Q292 300 319 306 L330 384 L329 444 Q308 461 293 445 L289 386Z" fill="url(#imp-limb)"/>
+    <path d="M183 423 Q201 431 220 423 L225 457 Q224 474 208 476 H172 Q165 464 173 450Z" fill="url(#imp-hoof)"/>
+    <path d="M292 423 Q311 431 330 423 L340 450 Q348 464 341 476 H305 Q289 474 287 457Z" fill="url(#imp-hoof)"/>
+    <path d="M199 451 L196 475 M313 451 L316 475" stroke="#26252b" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g id="imp-arms">
+    <path d="M203 177 Q177 167 157 196 L121 252 L101 298 Q97 313 109 322 Q118 328 127 318 L146 283 L177 243 L207 208Z" fill="url(#imp-limb)"/>
+    <path d="M307 177 Q333 167 353 196 L388 252 L410 298 Q415 313 403 322 Q392 328 384 318 L365 283 L334 243 L304 208Z" fill="url(#imp-limb)"/>
+    <path d="M109 287 Q91 295 89 312 L88 331 Q91 338 97 331 L107 315 L105 340 Q109 348 115 339 L122 318 L124 335 Q130 341 134 331 L137 307Z" fill="url(#imp-skin)"/>
+    <path d="M400 287 Q418 295 420 312 L421 331 Q418 338 412 331 L402 315 L404 340 Q400 348 394 339 L387 318 L385 335 Q379 341 375 331 L372 307Z" fill="url(#imp-skin)"/>
+    <g fill="url(#imp-horn)">
+      <path d="M88 326 L96 328 L87 343Z M105 335 L114 338 L103 352Z M124 331 L132 331 L127 343Z"/>
+      <path d="M413 328 L421 326 L422 343Z M395 338 L404 335 L406 352Z M377 331 L385 331 L382 343Z"/>
+    </g>
+  </g>
+  <g id="imp-torso">
+    <path d="M213 163 Q255 150 299 163 Q319 182 307 226 L294 254 L321 308 Q257 335 190 308 L215 254 L201 222 Q190 186 213 163Z" fill="url(#imp-body)"/>
+    <path d="M227 202 Q254 216 283 200 Q282 241 270 262 Q254 271 239 260 Q226 235 227 202Z" fill="#e59272" opacity=".24"/>
+    <path d="M252 267 Q256 270 261 267" stroke="#873a44" stroke-width="4" stroke-linecap="round"/>
+    <path d="M197 292 Q255 308 314 292 L324 338 L300 332 L286 351 L263 336 L243 354 L222 335 L188 342Z" fill="url(#imp-cloth)"/>
+    <path d="M198 287 Q256 300 313 287 L317 303 Q256 318 194 303Z" fill="#46383b"/>
+    <rect x="245" y="296" width="24" height="20" rx="4" fill="url(#imp-gold)"/>
+    <rect x="251" y="301" width="12" height="10" rx="1" fill="#4e3b38"/>
+  </g>
+  <g id="imp-head">
+    <path d="M205 104 L159 83 Q164 127 200 140Z" fill="url(#imp-skin)"/>
+    <path d="M306 104 L353 83 Q347 127 312 140Z" fill="url(#imp-skin)"/>
+    <path d="M194 113 L172 99 L194 128Z M318 113 L339 99 L318 128Z" fill="#843949"/>
+    <path d="M195 96 Q192 59 210 39 Q214 63 237 77Z" fill="url(#imp-horn)"/>
+    <path d="M275 77 Q299 61 302 39 Q322 59 316 97Z" fill="url(#imp-horn)"/>
+    <path d="M194 114 Q190 76 227 71 Q256 63 287 72 Q321 79 319 116 L313 145 Q303 173 257 188 Q212 173 200 147Z" fill="url(#imp-skin)"/>
+    <path d="M211 108 Q224 101 240 115 Q225 130 214 120Z" fill="#ffe6a0"/>
+    <path d="M272 115 Q287 101 301 108 L298 120 Q286 130 272 115Z" fill="#ffe6a0"/>
+    <ellipse cx="227" cy="115" rx="3.8" ry="7.5" fill="#302830"/>
+    <ellipse cx="286" cy="115" rx="3.8" ry="7.5" fill="#302830"/>
+    <path d="M210 103 L239 112 M273 112 L302 103" stroke="#803640" stroke-width="5" stroke-linecap="round"/>
+    <path d="M256 118 L248 137 Q256 141 264 136" fill="#a44648"/>
+    <path d="M233 153 Q255 166 280 150" stroke="#67313a" stroke-width="5" stroke-linecap="round"/>
+    <path d="M235 154 L245 158 L239 168Z M267 158 L277 153 L273 166Z" fill="url(#imp-horn)"/>
+  </g>
+</svg>
