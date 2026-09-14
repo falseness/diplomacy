@@ -1,7 +1,7 @@
 const assert = require('assert').strict;
 const vm = require('vm');
 const { spawnSync } = require('child_process');
-const { loadBrowserScripts, detachBrowserResult } = require('./browserScriptCache');
+const { loadBrowserScripts, detachBrowserResult, createBrowserContext } = require('./browserScriptCache');
 
 function createCanvasContext() {
   return new Proxy({
@@ -38,7 +38,7 @@ function createCanvas() {
   };
 }
 
-function createRuntimeContext() {
+function createRuntimeContext(options = {}) {
   const storage = {};
   const context = {
     console: Object.assign({}, console, { log() {} }),
@@ -86,6 +86,16 @@ function createRuntimeContext() {
   };
   context.window = context;
   context.globalThis = context;
+  if (options.nativeIntrinsics) {
+    // Large workloads need browser-like intrinsic operations in their own realm.
+    // Cross-realm host constructors and Node's global proxy distort AI timings.
+    for (const key of ['Math', 'Date', 'JSON', 'Array', 'Object', 'Number',
+      'String', 'Boolean', 'Error', 'TypeError', 'Map', 'Set', 'Promise',
+      'parseInt', 'parseFloat', 'isNaN', 'Infinity', 'NaN']) delete context[key];
+    delete context.window;
+    delete context.globalThis;
+    return createBrowserContext(context);
+  }
   return vm.createContext(context);
 }
 
@@ -137,10 +147,10 @@ function validateFixture(config) {
   }
 }
 
-function createFixture(config = defaultFixture(), report = console.log) {
+function createFixture(config = defaultFixture(), report = console.log, options = {}) {
   config = clone(config);
   validateFixture(config);
-  const context = createRuntimeContext();
+  const context = createRuntimeContext(options);
   loadBrowserScripts(context);
   function evaluate(source) {
     return detachBrowserResult(new vm.Script(source, {
