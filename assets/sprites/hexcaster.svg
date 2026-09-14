@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="hexcaster-title hexcaster-desc">
+  <title id="hexcaster-title">Hexcaster — fork-staff demon miniature</title>
+  <desc id="hexcaster-desc">An ivory-faced horned demon in a midnight-blue split robe holds a tall forked staff and a floating golden hex spell. Archer's leg silhouette, head scale and foot baseline preserve the shared miniature proportions. Rounded vector shading is lit from the upper right. Editable shapes on a transparent 512 by 512 canvas.</desc>
+  <defs>
+    <radialGradient id="hex-cloth" cx="78%" cy="19%" r="99%">
+      <stop stop-color="#667a9a"/><stop offset=".35" stop-color="#3e5375"/><stop offset=".72" stop-color="#293854"/><stop offset="1" stop-color="#1c253d"/>
+    </radialGradient>
+    <radialGradient id="hex-skin" cx="72%" cy="24%" r="86%">
+      <stop stop-color="#f2e6c2"/><stop offset=".4" stop-color="#c8c5ac"/><stop offset=".75" stop-color="#929d98"/><stop offset="1" stop-color="#586979"/>
+    </radialGradient>
+    <linearGradient id="hex-boots" x1="0%" y1="0%" x2="100%" y2="15%">
+      <stop stop-color="#202b3a"/><stop offset=".7" stop-color="#586575"/><stop offset="1" stop-color="#303e50"/>
+    </linearGradient>
+    <linearGradient id="hex-gold" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop stop-color="#81643b"/><stop offset=".55" stop-color="#c8a668"/><stop offset="1" stop-color="#f2d99b"/>
+    </linearGradient>
+    <radialGradient id="hex-spell-paint" cx="72%" cy="22%" r="85%">
+      <stop stop-color="#fff3bb"/><stop offset=".5" stop-color="#e8c579"/><stop offset="1" stop-color="#b18444"/>
+    </radialGradient>
+  </defs>
+  <!-- Exact Archer leg outline keeps the miniature stance and foot baseline. -->
+  <path id="hex-parent-legs" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#hex-boots)"/>
+  <g id="hex-robe">
+    <path d="M196 135 Q256 124 316 135 Q342 144 354 170 L390 251 L352 284 L329 236 L352 428 L284 444 L256 358 L228 444 L161 428 L182 236 L157 289 L112 267 L151 175 Q164 143 196 135Z" fill="url(#hex-cloth)"/>
+    <path d="M203 152 L226 204 L232 311 L212 413 L180 420 L204 286Z" fill="#24324c"/>
+    <path d="M309 151 L286 202 L280 311 L300 415 L331 421 L307 286Z" fill="#60718a" opacity=".45"/>
+    <path d="M194 144 L256 190 L318 144 L293 216 L256 240 L218 216Z" fill="#1d2a43"/>
+    <path d="M197 150 L256 197 L315 150 M256 199 V329 L224 433 M256 329 L289 433 M165 425 L224 437 M290 437 L348 426" stroke="url(#hex-gold)" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M181 286 Q256 301 331 286 L333 304 Q256 319 179 304Z" fill="#1b273c"/>
+    <path d="M256 283 L269 292 V307 L256 315 L243 307 V292Z" fill="url(#hex-gold)"/>
+  </g>
+  <g id="hex-staff">
+    <path d="M112 457 L112 151" stroke="#293246" stroke-width="18" stroke-linecap="round"/>
+    <path d="M116 451 V153" stroke="url(#hex-gold)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M112 160 Q64 141 65 99 L76 54 L87 100 L80 111 Q85 133 112 139 Q139 133 144 111 L137 100 L148 54 L159 99 Q160 141 112 160Z" fill="url(#hex-gold)"/>
+    <path d="M112 65 L128 90 L112 116 L96 90Z" fill="url(#hex-spell-paint)"/>
+    <path d="M97 175 H128 M97 188 H128" stroke="#bda16c" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g id="hex-hands" fill="url(#hex-skin)">
+    <path d="M127 256 Q109 252 99 266 L97 290 Q103 312 120 302 L132 281 L147 278 L153 267Z"/>
+    <path d="M355 268 Q368 284 383 277 L404 256 L431 249 Q445 253 439 264 L420 272 L429 281 Q433 291 421 293 L398 289 L378 310 Q360 321 346 302 L339 287Z"/>
+  </g>
+  <g id="hex-head">
+    <path d="M213 63 Q169 53 169 24 Q189 39 220 39Z M299 63 Q343 53 343 24 Q323 39 292 39Z" fill="url(#hex-gold)"/>
+    <circle cx="256" cy="91" r="62.5" fill="url(#hex-skin)"/>
+    <path d="M203 68 L244 79 L241 94 L218 90Z M309 68 L268 79 L271 94 L294 90Z" fill="#26354d"/>
+    <path d="M218 78 L235 83 L232 88 L220 85Z M294 78 L277 83 L280 88 L292 85Z" fill="#f5d997"/>
+    <path d="M256 77 L250 108 L263 108Z" fill="#82918e"/>
+    <path d="M237 119 Q256 128 275 119" stroke="#425264" stroke-width="5" stroke-linecap="round"/>
+    <path d="M239 120 L247 134 L250 123 M273 120 L265 134 L262 123" fill="#f5e8c6"/>
+    <path d="M256 43 L263 53 L256 64 L249 53Z" fill="url(#hex-gold)"/>
+  </g>
+  <!-- Large open hex ring reads as a spell even at 32px; no blur or raster. -->
+  <g id="hex-floating-spell" stroke-linejoin="round">
+    <path d="M422 139 L453 157 V193 L422 211 L391 193 V157Z" stroke="#6e5739" stroke-width="14"/>
+    <path d="M422 139 L453 157 V193 L422 211 L391 193 V157Z" stroke="url(#hex-spell-paint)" stroke-width="9"/>
+    <path d="M422 157 L435 175 L422 193 L409 175Z" fill="url(#hex-spell-paint)"/>
+    <path d="M422 115 V124 M422 226 V235 M370 150 L378 155 M466 199 L474 204" stroke="#e9cc88" stroke-width="6" stroke-linecap="round"/>
+  </g>
+</svg>
