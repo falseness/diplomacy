@@ -5,34 +5,6 @@ function drawMain() {
     grid.draw(mainCtx)
 }
 
-// Read the saved shared result only: drawing must never resolve a game while
-// an action (such as simultaneous flooding) is still in progress.
-function drawCoopStatus(ctx, terminal = false) {
-    if (!gameSettings.coop) return
-    const result = gameSettings.coop.result
-    if (terminal && !result) return
-    const outcomes = {
-        victory: 'Shared victory — all humans win',
-        defeat: 'Shared defeat — all humans lose',
-        draw: 'Shared draw — both sides eliminated'
-    }
-    const lines = terminal ? [outcomes[result], 'Round ' + gameRound] :
-        ['Co-op: destroy all portals and demons', 'Round ' + gameRound]
-    const size = Math.min(22 * window.devicePixelRatio, WIDTH / 27)
-    ctx.save()
-    ctx.font = size + 'px Arial'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    const padding = size * 0.5
-    const w = Math.max(...lines.map(line => ctx.measureText(line).width)) + padding * 2
-    const y = terminal ? HEIGHT * 0.02 : HEIGHT * 0.12
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
-    ctx.fillRect((WIDTH - w) / 2, y, w, size * 3)
-    ctx.fillStyle = 'white'
-    lines.forEach((line, i) => ctx.fillText(line, WIDTH / 2, y + padding + i * size * 1.2))
-    ctx.restore()
-}
-
 function drawDebugFps(ctx) {
     if (!debug)
         return
@@ -62,7 +34,6 @@ function drawInterface() {
 
     iButton.draw(interfaceCtx)
 
-    drawCoopStatus(interfaceCtx)
     const lobbyText = onlineLobbyText()
     if (lobbyText) {
         interfaceCtx.save()

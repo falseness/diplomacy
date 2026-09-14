@@ -8,7 +8,10 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
-const out = path.join(root, 'artifacts/TASK-036');
+const outputIndex = process.argv.indexOf('--output-dir');
+if (outputIndex !== -1 && (!process.argv[outputIndex + 1] || process.argv[outputIndex + 1].startsWith('--')))
+  throw new Error('--output-dir requires a directory');
+const out = path.resolve(root, outputIndex === -1 ? 'artifacts/TASK-128' : process.argv[outputIndex + 1]);
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -135,7 +138,8 @@ const compare = (label, observed, expected) => {
       economy=createEconomyLedger(f,[{role:'neutral',gold:0},{role:'human',gold:100},
         {role:'human',gold:100},...(competitive?[]:[{role:'demon',gold:0}])],
         {income:{town:4,suburb:1},salary:{noob:1}});
-      income(1);
+      // Competitive hotseat defers opening economy; co-op refreshes immediately.
+      if (!competitive) income(1);
       turns=createTurnLedger([1,2]);
       await check('launch');
     }
@@ -160,7 +164,7 @@ const compare = (label, observed, expected) => {
       entities.record({type:'death',id});
       await check('remove-'+id);
     }
-    async function screenshot(label,lines,result=null,terminal=false) {
+    async function screenshot(label,result=null,terminal=false) {
       const observed=await page.evaluate(()=>{
         nextTurnPauseInterface.hideButDontUpdateTimer();timer.pauseAndSaveTime();
         painted=[];if(menu.visible) menu.draw(interfaceCtx);else drawAll();
@@ -168,25 +172,24 @@ const compare = (label, observed, expected) => {
           round:gameRound,result:(gameSettings.coop && gameSettings.coop.result)||null,terminal:menu.visible,menu:menu.visible,
           lost:players.slice(1,3).map(p=>p.isLost)};
       });
-      const expected={lines,round,result,terminal,menu:terminal,
+      const expected={lines:[],round,result,terminal,menu:terminal,
         lost:label.includes('defeat')||label.includes('draw')?[true,true]:
           label.includes('eliminated')||label.includes('survivor')||label.includes('victory')?[false,true]:[false,false]};
       await capture(label,expected,observed);
     }
-    const objective=['Co-op: destroy all portals and demons','Round 0'];
     progress('objective and survivor round');
     await launch();
-    await screenshot('objective',objective);
+    await screenshot('objective');
     await remove('u2');await remove('t2');turns.eliminate(2,0);
-    await screenshot('eliminated-human-continues',objective);
+    await screenshot('eliminated-human-continues');
     await page.evaluate(()=>nextTurn());round=1;income(1);
     await check('survivor-round');
-    await screenshot('survivor-round',['Co-op: destroy all portals and demons','Round 1']);
+    await screenshot('survivor-round');
     await remove('p');
-    await screenshot('survivor-demons-remain',['Co-op: destroy all portals and demons','Round 1']);
+    await screenshot('survivor-demons-remain');
     await remove('d');
     await page.evaluate(()=>nextTurn());await check('shared-victory',true);
-    await screenshot('shared-victory',['Shared victory — all humans win','Round 1'],'victory',true);
+    await screenshot('shared-victory','victory',true);
     for(const outcome of ['defeat','draw']) {
       // Reload so test instrumentation never accumulates between games.
       await page.reload({waitUntil:'load'});
@@ -196,15 +199,14 @@ const compare = (label, observed, expected) => {
       progress('shared-'+outcome);await launch();
       for(const id of ['u1','t1','u2','t2',...(outcome==='draw'?['p','d']:[])]) await remove(id);
       await page.evaluate(()=>nextTurn());await check('shared-'+outcome,true);
-      await screenshot('shared-'+outcome,[outcome==='defeat'?'Shared defeat — all humans lose':
-        'Shared draw — both sides eliminated','Round 0'],outcome,true);
+      await screenshot('shared-'+outcome,outcome,true);
     }
     await page.reload({waitUntil:'load'});
     await page.waitForFunction(()=>menu.visible&&imagesCountLoaded===images.length);
     await page.evaluate(()=>{window.painted=[];const fill=CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText=function(t,...args){painted.push(String(t));return fill.call(this,t,...args)}});
     progress('competitive regression');await launch(true);
-    await screenshot('competitive-playing',[]);
+    await screenshot('competitive-playing');
     for(const id of ['u1','t1','u2','t2']) await remove(id);
     // Existing competitive termination occurs on the neutral turn.
     await page.evaluate(()=>nextTurn());round=1;
@@ -216,7 +218,7 @@ const compare = (label, observed, expected) => {
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence: offline browser fixtures have no committed revisions. Blocked portals spawn zero units; trapped demon performs no combat. Purchases/production are absent; real human income/salary and every removal and co-op round are checked. Competitive neutral termination uses existing non-co-op scheduling outside the co-op phase ledger.');
-    console.log('PASS co-op objective UI objective round survivor victory defeat draw competitive checkpoints=9');
+    console.log('PASS co-op panels absent opening eliminated survivor remaining-demons victory defeat draw competitive checkpoints=9');
   } finally {
     progress('cleanup');
     console.log('browser_console_errors='+JSON.stringify(errors));

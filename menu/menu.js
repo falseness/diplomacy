@@ -753,7 +753,6 @@ class Menu {
         if (!this.selectedTree.isCoop) this.logo.draw(ctx)
         this.alphaText.draw(ctx)
         this.selectedTree.draw(ctx)
-        if (this.selectedTree === this.main) drawCoopStatus(ctx, true)
         /*this.playButton1.draw(ctx)
         this.playButton2.draw(ctx)
         this.playButton3.draw(ctx)
