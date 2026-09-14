@@ -16,6 +16,6 @@ class KOHb extends Unit {
     }
     draw(ctx) {
         this.drawBars(ctx)
-        drawCachedImage(ctx, cachedImages[this.mirrorX ? 'KOHbLeft' : this.name], this.pos)
+        drawCachedImage(ctx, cachedImages[this.mirrorX ? this.name + 'Left' : this.name], this.pos)
     }
 }

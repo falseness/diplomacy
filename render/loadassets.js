@@ -27,6 +27,10 @@ let assets = {
     goldmine: new Image(),
     bush: new Image()
 }
+// Demon artwork is shared by both ordinary sprite themes.
+const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark',
+    'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord']
+for (const name of demonSpriteImages) assets[name] = new Image()
 let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
 for (let i = 0; i < grassHexImages.length; ++i)
     assets[grassHexImages[i]] = new Image()
@@ -34,7 +38,7 @@ let imagesCountLoaded = 0
 let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
-        'mountain', 'lake', 'sea', 'goldmine', 'bush']
+        'mountain', 'lake', 'sea', 'goldmine', 'bush'].concat(demonSpriteImages)
 let images = spriteImages.concat(grassHexImages)
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
@@ -90,7 +94,8 @@ function loadAssets() {
 function loadSprites() {
     let spritesFolder = otherSettings.usePolishedSprites ? "sprites" : "spritesOld"
     for (let i = 0; i < spriteImages.length; ++i) {
-        assets[spriteImages[i]].src = "assets/" + spritesFolder + "/" + spriteImages[i] + ".svg"
+        const folder = demonSpriteImages.includes(spriteImages[i]) ? "sprites" : spritesFolder
+        assets[spriteImages[i]].src = "assets/" + folder + "/" + spriteImages[i] + ".svg"
     }
 }
 function waitForImagesLoad() {

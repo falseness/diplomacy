@@ -16,6 +16,20 @@ function option(name, fallback) {
   assert(process.argv[i + 1] && !process.argv[i + 1].startsWith('--'), `value required for ${name}`);
   return process.argv[i + 1];
 }
+if (process.argv.includes('--all')) {
+  const {spawnSync} = require('node:child_process');
+  for (const type of Object.keys(parents)) {
+    const args = [__filename, '--type', type, '--output-dir',
+      path.join(option('--output-dir', 'artifacts/TASK-102'), 'svg', type)];
+    console.log('command='+JSON.stringify([process.execPath,...args]));
+    const result = spawnSync(process.execPath, args, {stdio:'inherit'});
+    console.log(`child_type=${type} exit_status=${result.status}`);
+    if (result.error) console.error(result.error);
+    if (result.status !== 0) process.exit(1);
+  }
+  console.log('PASS all ten demon SVGs validated');
+  process.exit(0);
+}
 const type = option('--type', 'imp');
 assert(Object.hasOwn(parents, type), 'known demon type required');
 const out = path.resolve(root, option('--output-dir', 'artifacts/TASK-092'));

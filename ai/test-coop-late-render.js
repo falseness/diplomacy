@@ -37,6 +37,8 @@ const compare = (label, observed, expected) => {
     browser = await chromium.launch({headless:true});
     console.log('browser_engine=chromium browser_version='+browser.version());
     const page = await browser.newPage({viewport:{width:1280,height:900},deviceScaleFactor:1});
+    page.on('requestfailed', req => errors.push(req.url()+': '+req.failure().errorText));
+    page.on('response', res => {if(res.status()>=400) errors.push(res.url()+': '+res.status());});
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => {if(m.type()==='error') errors.push(m.text());});
     // This offline render fixture uses no networking, downloads or learned AI.
@@ -89,7 +91,7 @@ const compare = (label, observed, expected) => {
       ['demon-unit','unit',3,7,5]].map(([id,kind,owner,x,y])=>
         ({id,kind,owner,x,y,name:kind==='unit'?'noob':kind==='portal'?'demonPortal':'town'}));
     ['imp','clawling','hound','brute','bulwark','spitter','emberArcher','hexcaster','ravager','demonLord'].forEach((name,i)=>initial.push({id:name,kind:'unit',owner:3,x:i%5+2,y:3+Math.floor(i/5),name}));
-    const entities=await shared(()=>createEntityLedger(f,initial));
+    let entities=await shared(()=>createEntityLedger(f,initial));
     const economy=createEconomyLedger(f,config.actors.map(({role,gold})=>({role,gold})),{});
     const turns=createTurnLedger([1,2]);
     const types=['imp','clawling','hound','brute','bulwark','spitter','emberArcher','hexcaster','ravager','demonLord'];
@@ -113,7 +115,7 @@ const compare = (label, observed, expected) => {
       checkpoints.push({panel,checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
-    const parentAssets=['noob','noob','KOHb','normchel','normchel','archer','archer','archer','KOHb','normchel'].slice(0,types.length);
+    const parentAssets=types;
     const mapping=await page.evaluate(parentAssets=>demons.map((d,i)=>{
       const asset=parentAssets[i], calls=[];
       const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;
@@ -126,7 +128,7 @@ const compare = (label, observed, expected) => {
         alias:assets[d.name]===assets[asset],loaded:assets[asset].complete&&assets[asset].naturalWidth>0,
         cached:cachedImages[d.name]===cachedImages[asset]};
     }),parentAssets);
-    compare('production-parent-assets',mapping,types.map(type=>({type,direct:true,grid:true,alias:true,loaded:true,cached:true})));
+    compare('production-demon-assets',mapping,types.map(type=>({type,direct:true,grid:true,alias:true,loaded:true,cached:true})));
     await check('all-ten');
     for(let i=0;i<types.length;i++) {
       const portrait=await page.evaluate(({i,asset})=>{
@@ -140,11 +142,54 @@ const compare = (label, observed, expected) => {
       compare(types[i]+'-selection-portrait-mapping',portrait,{key:types[i],parentImage:true});
       await check('selected-'+types[i],names[i]);
     }
+    // Rebuild real caches after a viewport resize, then reconstruct every unit
+    // through production serialization. Recheck both draw paths and portraits.
+    await page.setViewportSize({width:900,height:760});
+    await page.evaluate(()=>{cacheAllImages(); drawAll();});
+    await page.evaluate(()=>gameEvent.removeSelection());
+    await check('resized');
+    const saved = await page.evaluate(()=>JSON.stringify(getGameObject()));
+    await page.evaluate(saved=>{
+      loadFromJson(saved);
+      window.demons=[['imp',2,3],['clawling',3,3],['hound',4,3],['brute',5,3],['bulwark',6,3],
+        ['spitter',2,4],['emberArcher',3,4],['hexcaster',4,4],['ravager',5,4],['demonLord',6,4]]
+        .map(([,x,y])=>grid.getUnit({x,y}));
+      gameEvent.removeSelection(); timer.pauseAndSaveTime();
+    },saved);
+    entities=await shared(()=>createEntityLedger(f,initial));
+    await check('save-loaded');
+    const expectedCacheWidth=await page.evaluate(()=>Math.trunc(assets.size));
+    for (const mirror of [false,true]) {
+      const observed=await page.evaluate(({types,mirror})=>demons.map((d,i)=>{
+        d.mirrorX=mirror;
+        const key=types[i]+(mirror && ['hound','ravager'].includes(types[i]) ? 'Left' : '');
+        const calls=[], canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;
+        const ctx=canvas.getContext('2d'), draw=ctx.drawImage.bind(ctx);
+        ctx.drawImage=(image,...args)=>{calls.push(image);draw(image,...args)};
+        d.draw(ctx); const direct=calls.includes(cachedImages[key]);calls.length=0;
+        grid.drawEntityBody(ctx,d);const gridImage=calls.includes(cachedImages[key]);calls.length=0;
+        gameEvent.selectSomethingOnCell(grid.getCell(d.coord));entityInterface.drawContents(ctx);
+        return {type:d.name,key,direct,gridImage,portrait:calls.includes(assets[types[i]]),
+          loaded:assets[key].complete && assets[key].naturalWidth>0,
+          source:new URL(assets[key].src).pathname,cacheWidth:cachedImages[key].width,
+          interaction:d.interaction.constructor.name};
+      }),{types,mirror});
+      compare('restored-resized-direction-'+mirror,observed,types.map((type,i)=>({type,
+        key:type+(mirror && ['hound','ravager'].includes(type) ? 'Left' : ''),
+        direct:true,gridImage:true,portrait:true,loaded:true,
+        source:'/assets/sprites/'+type+(mirror && ['hound','ravager'].includes(type) ? 'Left' : '')+'.svg',
+        cacheWidth:expectedCacheWidth,
+        interaction:['InterationWithUnit','InterationWithUnit','MirroringInteraction','InterationWithUnit','InterationWithUnit',
+          'InteractionWithArcher','InteractionWithArcher','InteractionWithArcher','MirroringInteraction','InterationWithUnit'][i]})));
+      assert(observed[0].cacheWidth>0);
+      await page.evaluate(()=>{gameEvent.removeSelection();drawAll();});
+      await check('direction-'+mirror);
+    }
     compare('browser-console-errors',errors,[]);
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
-    console.log('INAPPLICABLE online convergence and completed round/phase counts: offline rendering/selection fixture, no round advancement; unchanged round 0 and human 1 checked at all eleven checkpoints. No income or expense events.');
-    console.log('PASS co-op late render types=10 parent_assets=10 checkpoints=11 invariant_checkpoints=11');
+    console.log('INAPPLICABLE online convergence and completed round/phase counts: offline rendering/selection fixture, no round advancement; unchanged round 0 and human 1 checked at all fifteen checkpoints. No income or expense events.');
+    console.log('PASS co-op late render types=10 demon_assets=10 checkpoints=15 invariant_checkpoints=15');
   } finally {
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser) await browser.close();

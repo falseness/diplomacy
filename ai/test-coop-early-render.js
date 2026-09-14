@@ -112,7 +112,7 @@ const compare = (label, observed, expected) => {
       checkpoints.push({panel,checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
-    const parentAssets=['noob','noob','KOHb','normchel','normchel','archer','archer','archer','KOHb','normchel'].slice(0,types.length);
+    const parentAssets=types;
     const mapping=await page.evaluate(parentAssets=>demons.map((d,i)=>{
       const asset=parentAssets[i], calls=[];
       const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=900;
@@ -125,7 +125,7 @@ const compare = (label, observed, expected) => {
         alias:assets[d.name]===assets[asset],loaded:assets[asset].complete&&assets[asset].naturalWidth>0,
         cached:cachedImages[d.name]===cachedImages[asset]};
     }),parentAssets);
-    compare('production-parent-assets',mapping,types.map(type=>({type,direct:true,grid:true,alias:true,loaded:true,cached:true})));
+    compare('production-demon-assets',mapping,types.map(type=>({type,direct:true,grid:true,alias:true,loaded:true,cached:true})));
     await check('all-five');
     for(let i=0;i<types.length;i++) {
       const portrait=await page.evaluate(({i,asset})=>{
@@ -143,7 +143,7 @@ const compare = (label, observed, expected) => {
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed round/phase counts: offline rendering/selection fixture, no round advancement; unchanged round 0 and human 1 checked at all six checkpoints. No income or expense events.');
-    console.log('PASS co-op early render types=5 parent_assets=5 checkpoints=6 invariant_checkpoints=6');
+    console.log('PASS co-op early render types=5 demon_assets=5 checkpoints=6 invariant_checkpoints=6');
   } finally {
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser) await browser.close();
