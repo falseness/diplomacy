@@ -618,7 +618,190 @@ function placeValleyPortals(plan, layout) {
     }
 }
 
+const VALLEY_TERRAIN_KINDS = Object.freeze({mountains: 1, lakes: 2, bushes: 3})
+const VALLEY_CLUSTER_FAILURES = 32
+
+// Terrain after placeValleyPortals. The planned ridge becomes a mountain
+// formation unchanged; extra mountains (half grown from existing mountains),
+// lakes and bushes are seeded connected clusters outside objects, town 3x3s,
+// reservations, passages, laterals and passage mouths. Area targets are soft:
+// a blocking cluster is kept only if the passable cells stay connected, every
+// objective stays reached through each advance passage alone and nearest
+// mine/neutral-town/portal spreads stay within the access disparity in both
+// path models; growth stops after repeated rejections.
+function placeValleyTerrain(plan, layout) {
+    const {side, humans, grid, counts} = plan
+    const random = createValleyRandom((plan.seed ^ 0x27d4eb2f) >>> 0)
+    const pick = n => Math.floor(random() * n)
+    const cell = id => ({x: id % side, y: Math.floor(id / side)})
+    const idOf = c => c.y*side+c.x
+    const around = id => valleyNeighbours(cell(id), side).map(idOf)
+    const towns = layout.players.slice(1).map(p => p.towns[0]), townIds = towns.map(idOf)
+    const neutralIds = layout.players[0].towns.map(idOf), mineIds = layout.goldmines.map(idOf)
+    const portalIds = layout.portals.map(idOf), approachIds = layout.portalApproaches.flatMap(a => a.cells.map(idOf))
+    const objects = [...townIds, ...neutralIds, ...mineIds, ...portalIds]
+    const kind = new Uint8Array(side * side), forbidden = new Uint8Array(side * side)
+    const ridge = plan.masks.ridge.map(idOf)
+    for (const id of ridge) kind[id] = VALLEY_TERRAIN_KINDS.mountains
+    for (const id of [...objects, ...layout.reserved.map(idOf)]) forbidden[id] = 1
+    for (const t of layout.players.flatMap(p => p.towns)) for (const o of VALLEY_OFFSETS3) forbidden[(t.y+o.y)*side + t.x+o.x] = 1
+    grid.forEach((line, y) => { for (let x = 0; x < side; x++) if ('lrbf'.includes(line[x])) forbidden[y*side+x] = 1 })
+    // Passage mouths keep the forward basin and the allied side open at both fronts.
+    const {leftPassage, rightPassage} = plan.endpoints
+    for (const c of [...leftPassage.entrance, ...leftPassage.exit, ...rightPassage.entrance, ...rightPassage.exit])
+        for (const n of around(idOf(c))) forbidden[n] = 1
+    const interior = ch => {
+        const list = []
+        for (let y = plan.rows.exitRow + 1; y < plan.rows.entranceRow; y++)
+            for (let x = 0; x < side; x++) if (grid[y][x] === ch) list.push(y*side+x)
+        return list
+    }
+    const closures = [interior('r'), interior('l')]
+    const area = side * side, targets = [...neutralIds, ...mineIds, ...portalIds, ...approachIds]
+    // Typed-array adjacency and scratch buffers: every blocking cluster reruns a
+    // BFS per human for both closures and both path models.
+    const adjacency = new Int32Array(area * 6).fill(-1)
+    for (let id = 0; id < area; id++) around(id).forEach((n, k) => { adjacency[id*6+k] = n })
+    const blocked = new Uint8Array(area), queue = new Int32Array(area), distances = towns.map(() => new Int32Array(area))
+    // Same semantics as valleyDistances from one origin: blocked cells are never
+    // entered, endpoint cells are entered but never expanded.
+    const fill = (origin, distance, endpoints) => {
+        distance.fill(-1); distance[origin] = 0; queue[0] = origin
+        let tail = 1
+        for (let head = 0; head < tail; head++) {
+            const c = queue[head]
+            if (head > 0 && endpoints[c]) continue
+            for (let k = c*6; k < c*6+6; k++) {
+                const n = adjacency[k]
+                if (n < 0 || blocked[n] || distance[n] >= 0) continue
+                distance[n] = distance[c] + 1; queue[tail++] = n
+            }
+        }
+        return distance
+    }
+    // Cells outside solid (and inside the optional region) form one component
+    // that every listed object touches.
+    const connected = (solid, region, touching) => {
+        const seen = new Uint8Array(area)
+        let total = 0, tail = 0
+        for (let id = 0; id < area; id++) {
+            if (solid[id] || (region && !region[id])) continue
+            total++
+            if (!tail) { queue[tail++] = id; seen[id] = 1 }
+        }
+        for (let head = 0; head < tail; head++) for (let k = queue[head]*6; k < queue[head]*6+6; k++) {
+            const n = adjacency[k]
+            if (n >= 0 && !seen[n] && !solid[n] && (!region || region[n])) { seen[n] = 1; queue[tail++] = n }
+        }
+        const touches = id => { for (let k = id*6; k < id*6+6; k++) if (adjacency[k] >= 0 && seen[adjacency[k]]) return true; return false }
+        return tail === total && touching.every(touches)
+    }
+    const withMines = new Uint8Array(area), walkMines = new Uint8Array(area)
+    for (const id of [...neutralIds, ...portalIds]) withMines[id] = walkMines[id] = 1
+    for (const id of mineIds) withMines[id] = 1
+    // Forward basin: forward, forward-lateral and portal-region cells stay one
+    // walkable component (mines walkable) that every neutral town and portal touches.
+    const basin = new Uint8Array(area)
+    grid.forEach((line, y) => { for (let x = 0; x < side; x++) if ('FfWE'.includes(line[x])) basin[y*side+x] = 1 })
+    const nearestSpread = group => {
+        let lo = Infinity, hi = -Infinity
+        for (const d of distances) {
+            let best = Infinity
+            for (const id of group) if (d[id] >= 0 && d[id] < best) best = d[id]
+            if (best === Infinity) return Infinity
+            lo = Math.min(lo, best); hi = Math.max(hi, best)
+        }
+        return hi - lo
+    }
+    const accepts = () => {
+        const solid = new Uint8Array(area), basinSolid = new Uint8Array(area)
+        for (let id = 0; id < area; id++) if (kind[id] === 1 || kind[id] === 2) solid[id] = basinSolid[id] = 1
+        for (const id of [...townIds, ...neutralIds, ...portalIds]) basinSolid[id] = 1
+        for (const id of objects) solid[id] = 1
+        if (!connected(solid, null, objects) || !connected(basinSolid, basin, [...neutralIds, ...portalIds])) return false
+        // Terrain and all human towns block; each BFS starts from its own town.
+        for (let id = 0; id < area; id++) blocked[id] = kind[id] === 1 || kind[id] === 2 ? 1 : 0
+        for (const id of townIds) blocked[id] = 1
+        for (const closed of closures) {
+            for (const id of closed) blocked[id] = 1
+            const reached = townIds.every((t, i) => { const d = fill(t, distances[i], withMines); return targets.every(id => d[id] >= 0) })
+            for (const id of closed) blocked[id] = 0
+            if (!reached) return false
+        }
+        return [withMines, walkMines].every(endpoints => {
+            townIds.forEach((t, i) => fill(t, distances[i], endpoints))
+            return [mineIds, neutralIds, portalIds].every(group => nearestSpread(group) <= VALLEY_ACCESS_DISPARITY)
+        })
+    }
+    if (!accepts()) throw new Error(`Divided Valley ridge breaks access: size=${plan.size} humans=${humans} seed=${plan.seed}`)
+    const open = id => !forbidden[id] && !kind[id]
+    const tally = k => kind.reduce((sum, v) => sum + (v === k), 0)
+    const frontierOf = k => {
+        const list = new Set()
+        for (let id = 0; id < side*side; id++) if (kind[id] === k) for (const n of around(id)) if (open(n)) list.add(n)
+        return [...list]
+    }
+    const report = {}
+    const grow = (name, attachShare) => {
+        const k = VALLEY_TERRAIN_KINDS[name], target = counts[name], blocking = name !== 'bushes'
+        let placed = tally(k), failures = 0, accepted = 0, rejected = 0
+        while (placed < target && failures < VALLEY_CLUSTER_FAILURES) {
+            const remaining = target - placed, frontier = frontierOf(k)
+            // Small remainders extend a cluster so every cell keeps a same-kind neighbour.
+            const attach = frontier.length > 0 && (remaining < 3 || random() < attachShare)
+            let seed
+            if (attach) seed = frontier[pick(frontier.length)]
+            else {
+                const free = []
+                for (let id = 0; id < side*side; id++) if (open(id)) free.push(id)
+                if (!free.length) break
+                seed = free[pick(free.length)]
+            }
+            const size = attach && remaining < 3 ? remaining : Math.min(remaining, 3 + pick(4))
+            const cluster = [seed]
+            kind[seed] = k
+            while (cluster.length < size) {
+                const next = [...new Set(cluster.flatMap(around))].filter(open)
+                if (!next.length) break
+                const id = next[pick(next.length)]
+                kind[id] = k; cluster.push(id)
+            }
+            if ((!attach && cluster.length < 2) || (blocking && !accepts())) {
+                for (const id of cluster) kind[id] = 0
+                failures++; rejected++
+                continue
+            }
+            placed += cluster.length; accepted++; failures = 0
+        }
+        report[name] = {target, achieved: placed, deviation: placed - target, acceptedClusters: accepted, rejectedClusters: rejected}
+    }
+    grow('mountains', 0.5)
+    grow('lakes', 0.25)
+    grow('bushes', 0.25)
+    const cellsOf = k => {
+        const list = []
+        for (let id = 0; id < side*side; id++) if (kind[id] === k) list.push(cell(id))
+        return list
+    }
+    for (const name of Object.keys(report)) Object.assign(report[name], {density: report[name].achieved / area,
+        targetDensity: report[name].target / area, densityDeviation: (report[name].achieved - report[name].target) / area})
+    report.mountains.ridgeCells = ridge.length
+    return {
+        ...layout,
+        stages: [...layout.stages, 'ridge', 'mountains', 'lakes', 'bushes'],
+        players: layout.players.map(p => ({...p, towns: p.towns.map(t => ({...t}))})),
+        reserved: layout.reserved.map(c => ({...c})),
+        goldmines: layout.goldmines.map(m => ({...m})),
+        assignments: layout.assignments.map(a => ({...a, mine: {...a.mine}})),
+        portals: layout.portals.map(c => ({...c})),
+        portalApproaches: layout.portalApproaches.map(a => ({...a, portal: {...a.portal}, cells: a.cells.map(c => ({...c}))})),
+        mountains: cellsOf(VALLEY_TERRAIN_KINDS.mountains), lakes: cellsOf(VALLEY_TERRAIN_KINDS.lakes),
+        bushes: cellsOf(VALLEY_TERRAIN_KINDS.bushes), hills: [],
+        terrain: {softTargets: true, area, ...report}
+    }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {planDividedValley, placeValleyStarts, placeValleyExpansions, placeValleyPortals, valleyRowPlans, clearValleyPlanCache, createValleyRandom,
-        VALLEY_LEGEND, VALLEY_PORTAL_DISTANCE}
+    module.exports = {planDividedValley, placeValleyStarts, placeValleyExpansions, placeValleyPortals, placeValleyTerrain, valleyRowPlans,
+        clearValleyPlanCache, createValleyRandom, VALLEY_LEGEND, VALLEY_PORTAL_DISTANCE}
 }
