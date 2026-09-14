@@ -417,13 +417,14 @@ class SuburbProduction extends BuildingProduction {
 
         this.create(coord, town)
         this.choose(town)
-        if (isFogOfWar)
+        if (isFogOfWar && !gameSettings.coop)
             grid.visionWay.changeFogOfWarByVision(coord, grid.fogOfWar, SUBURBSVISIONRANGE)
         return this.availableHexagons.length && town.gold >= this.cost
     }
     create(coord, town) {
         grid.getHexagon(coord).isSuburb = true
         town.suburbs.push(grid.arr[coord.x][coord.y].hexagon)
+        refreshCoopVision()
     }
     choose(town) {
         grid.cleanLogicText()

@@ -173,14 +173,21 @@ class Player {
     }
     changeFogOfWarByVision() {
         grid.clearFogOfWarArr()
-        for (let i = 0; i < this.units.length; ++i) {
-            let unit = this.units[i]
+        const shared = gameSettings.coop && this.role === 'HUMAN'
+        const viewers = shared ? players.filter(player =>
+            player.role === 'HUMAN' && this.isAlliedWith(player)) : [this]
+        for (const viewer of viewers) viewer.accumulateVision(shared)
+    }
+    accumulateVision(currentAssetsOnly = false) {
+        for (const unit of this.units) {
+            if (currentAssetsOnly && (unit.killed || unit.player !== this)) continue
             unit.changeFogOfWarByVision()
         }
-        for (let cycle = 0; cycle < this.towns.length; ++cycle) {
-            for (let i = 0; i < this.towns[cycle].suburbs.length; ++i) {
-                let coord = this.towns[cycle].suburbs[i].coord
-                grid.visionWay.changeFogOfWarByVision(coord, grid.fogOfWar, SUBURBSVISIONRANGE)
+        for (const town of this.towns) {
+            if (currentAssetsOnly && (town.killed || town.player !== this)) continue
+            for (const suburb of town.suburbs) {
+                if (currentAssetsOnly && (!suburb.isSuburb || suburb.player !== this)) continue
+                grid.visionWay.changeFogOfWarByVision(suburb.coord, grid.fogOfWar, SUBURBSVISIONRANGE)
             }
         }
     }
@@ -526,4 +533,12 @@ class NeutralPlayer extends Player {
     get isNeutral() {
         return true
     }
+}
+
+// During automatic phases the displayed mask still belongs to the human team.
+// Construction/load can call mutation hooks before the fog machinery exists.
+function refreshCoopVision() {
+    if (!isFogOfWar || !gameSettings.coop || !grid.visionWay) return
+    const viewer = players[gameSettings.coop.humanSlots[0]]
+    if (viewer) viewer.changeFogOfWarByVision()
 }

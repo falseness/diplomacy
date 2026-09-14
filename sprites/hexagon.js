@@ -53,8 +53,10 @@ class Hexagon extends Sprite {
             if (recordUndo) actionManager.lastAction.externalProduction = building.toUndoJSON()
             building.kill()
         }
-        if (!this.isSuburb)
+        if (!this.isSuburb) {
+            refreshCoopVision()
             return
+        }
 
         this.isSuburb = false
         
@@ -66,6 +68,7 @@ class Hexagon extends Sprite {
             }
             building.kill()
         }
+        refreshCoopVision()
     }
     draw(ctx) {
         let pos = this.pos

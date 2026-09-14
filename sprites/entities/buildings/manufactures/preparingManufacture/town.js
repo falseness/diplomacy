@@ -143,6 +143,7 @@ class Town extends PreparingManufacture {
         // first suburb must be town suburb
 
         this.updateSuburbsAndBuildings()
+        refreshCoopVision()
     }
     get isHitable() {
         return this.hp

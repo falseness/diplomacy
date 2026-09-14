@@ -442,6 +442,7 @@ class ActionManager {
         }
 
         func[this.lastAction.type].call(this)
+        refreshCoopVision()
 
         if (otherSettings.moveCameraToUndoTarget)
             this.__moveCameraToUndoTarget()

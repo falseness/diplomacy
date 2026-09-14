@@ -22,6 +22,7 @@ class Unit extends Entity {
             movesBarW, movesBarH)
 
         this.trimBars()
+        refreshCoopVision()
     }
     static get description() {
         let res = super.description
@@ -119,6 +120,7 @@ class Unit extends Entity {
         grid.setUnit(new Empty(), this.coord)
 
         this.killed = true
+        refreshCoopVision()
     }
     get isUnit() {
         return true

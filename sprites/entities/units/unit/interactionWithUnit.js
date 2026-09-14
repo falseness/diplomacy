@@ -114,8 +114,8 @@ class InterationWithUnit {
         let killUnit = hitUnit && killEnemy
         this.paintHexagons(coord, arr, unit, killUnit)
         this.changeCoord(coord, unit, killUnit)
-        if (isFogOfWar)
-            unit.changeFogOfWarByVision()
+        if (gameSettings.coop) refreshCoopVision()
+        else if (isFogOfWar) unit.changeFogOfWarByVision()
     }
     paintHexagons(original_coord, arr, unit, isKillUnit) {
         let coord = Object.assign({}, original_coord)

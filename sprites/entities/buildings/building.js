@@ -49,6 +49,7 @@ class Building extends Entity {
         grid.setBuilding(new Empty(), this.coord)
 
         this.killed = true
+        refreshCoopVision()
     }
     changeBorder() {
         border.newBrokenLine()
