@@ -4,15 +4,14 @@ const {createFixture} = require('./test-coop-harness');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
-const {expectedMap, initialEntities} = require('./test-coop-generation-fixtures');
+const {initialEntities} = require('./test-coop-generation-fixtures');
 
 const fault = process.argv[2];
 const f = createFixture(undefined, line => {
   if (!line.includes('"scenario":"fixture-initial-state"')) console.log(line);
 });
-for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4]) for (const seed of [0,1,31]) {
+for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4,5,6,7,8,9,10,11,12]) for (const seed of [0,1,31]) {
   const label = `starts-${size}-humans-${count}-seed-${seed}`;
-  const fixed = expectedMap(count,seed,size);
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}});`);
   if (fault === '--missing') f.evaluate('generated.portals=[]');
   if (fault === '--overlap') f.evaluate('generated.portals[0]={...generated.players[1].towns[0]}');
@@ -20,8 +19,8 @@ for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4]) for (
   const {audit}=require('./test-coop-terrain-audit');
   assert.equal(actual.portals.length,count*({tiny:1,normal:2,big:3}[size]),'required-categories');
   audit(actual,label+' legal-placement');
-  assert.deepEqual(actual.players,fixed.players,'independent starting roster');
-  assert.equal(actual.goldmines.length,count);
+  assert(actual.players.slice(1,count+1).every(p=>p.gold===100&&p.towns.length===1&&p.units.length===0),'equal starting roster');
+  assert.equal(actual.goldmines.length,count*{tiny:1,normal:2,big:3}[size]);
   assert(actual.goldmines.every(m=>m.owner===0&&m.income===20));
   const expected=actual; // Coordinates audited above; runtime values below are literal expectations.
   console.log(JSON.stringify({scenario:'seed-indexed-placement',count,seed,
@@ -59,8 +58,8 @@ for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4]) for (
     f.compare(label+stage+'-serialized-mines',f.evaluate('JSON.parse(JSON.stringify(goldmines))'),
       expected.goldmines.map(c=>({name:'goldmine',coord:{x:c.x,y:c.y},income:20})));
     f.compare(label+stage+'-town-owners',f.evaluate('players.map(p=>p.towns.map(t=>t.playerColor))'),
-      [Array(count).fill(0),...Array.from({length:count},(_,i)=>[i+1]),[]]);
-    f.compare(label+stage+'-metadata',f.evaluate('gameSettings.coop'),expected.coop);
+      [Array(count*{tiny:1,normal:2,big:3}[size]).fill(0),...Array.from({length:count},(_,i)=>[i+1]),[]]);
+    f.compare(label+stage+'-metadata',f.evaluate('gameSettings.coop'),{...expected.coop,balanceVersion:2});
   }
   check('-started');
   f.evaluate('globalThis.startsSave=JSON.stringify(getGameObject());loadFromJson(startsSave)');
@@ -76,4 +75,4 @@ for(const [arg,marker] of [['--missing','required-categories'],['--overlap','leg
   assert.equal(child.status,1); assert.match(child.stderr,/AssertionError/); assert.ok(child.stderr.includes(marker));
   console.log(`PASS corruption-probe ${arg} expected_exit=1 observed_exit=${child.status} marker=${marker}`);
 }
-console.log('PASS co-op generation starts scenarios=36 counts=1,2,3,4 sizes=tiny,normal,big seeds=0,1,31');
+console.log('PASS co-op generation starts scenarios=108 counts=1..12 sizes=tiny,normal,big seeds=0,1,31');

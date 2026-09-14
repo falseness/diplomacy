@@ -66,43 +66,37 @@ function coopStartsBalanced(map) {
         [0, 1, 2].every(k => within(metrics.map(m => m.paths[k]), COOP_START_BALANCE.pathDisparity))
 }
 
-// Version-2 placement still uses the four-human reference dimensions until
-// formula-sized placement/repair is integrated. Preset values live in one place.
 const COOP_MAP_SIZES = Object.freeze(Object.fromEntries(
     ['tiny', 'normal', 'big'].map(size => [size, getCoopMapScaling(4, size).side])))
 
-// Placement interfaces take actual dimensions; later terrain/portal rules can
-// refine these lanes without assuming a fixed map or changing competitive APIs.
-function coopStartColumn(mapSize, count, index) {
-    return Math.max(2, Math.min(mapSize.x - 3, Math.floor((index + 0.5) * (mapSize.x - 1) / count)))
-}
-
-// Transactional fallback: preserve dimensions, roster and resource values, rebuild
-// complete portal/terrain categories, and publish only a balanced candidate.
-// Eight seeded attempts bound terrain growth; every inner placement scans finite pools.
+// Transactional, dimension-aware rebuild. Fixed towns and starting assets never
+// move during repair; each attempt uses finite placement pools and terrain growth.
 function enforceCoopStartBalance(map, force = false) {
-    if (!force && coopStartsBalanced(map)) return {status:'balanced', iterations:0, iterationLimit:8}
+    const fail = detail => { throw new Error('Co-op starting balance bound cannot be satisfied: ' + detail) }
     const size = map.coop.generation && map.coop.generation.size
     const humans = map.players.slice(1, 1 + map.coop.initialHumanCount)
-    const fail = detail => { throw new Error('Co-op starting balance bound cannot be satisfied: ' + detail) }
-    if (!size || map.mapSize.x !== COOP_MAP_SIZES[size] || map.mapSize.y !== COOP_MAP_SIZES[size] ||
-        map.goldmines.length !== humans.length) fail('invalid dimensions or resource count')
-    if (['gold','towns','units'].some(k => humans.some(p =>
-        (k === 'gold' ? p[k] : p[k].length) !== (k === 'gold' ? humans[0][k] : humans[0][k].length))))
+    const scaling = getCoopMapScaling(humans.length, size)
+    if (map.mapSize.x !== scaling.side || map.mapSize.y !== scaling.side ||
+        map.goldmines.length !== scaling.counts.goldmines ||
+        map.players[0].towns.length !== scaling.counts.neutralTowns) fail('invalid dimensions or resource count')
+    if (humans.some(p => p.gold !== 100 || p.towns.length !== 1 || p.units.length !== 0))
         fail('unequal starting assets')
+    const towns = map.players.flatMap(p => p.towns)
+    if (towns.some(t => !Number.isInteger(t.x) || !Number.isInteger(t.y) ||
+        t.x < 2 || t.y < 2 || t.x >= scaling.side-2 || t.y >= scaling.side-2) ||
+        towns.some((t,i) => towns.slice(i+1).some(u => Math.abs(t.x-u.x)<3 && Math.abs(t.y-u.y)<3)))
+        fail('invalid fixed towns')
+    if (!force && coopStartsBalanced(map)) return {status:'balanced', iterations:0, iterationLimit:8}
     let diagnostic = 'path disparity'
     for (let iteration=1; iteration<=8; iteration++) {
         const candidate = JSON.parse(JSON.stringify(map))
-        candidate.goldmines = map.goldmines.map((mine,i) => ({...mine,x:humans[i].towns[0].x,y:0}))
         candidate.lakes=[]; candidate.mountains=[]; candidate.bushes=[]; candidate.portals=[]
         try {
             placeCoopPortals(candidate, size, iteration - 1)
-            // Terrain preserves shortest paths, so reject impossible open-board
-            // disparities before spending work growing a full terrain set.
             if (!coopStartsBalanced(candidate)) continue
             growCoopTerrain(candidate, createSeededRandom((map.coop.generation.seed + iteration - 1) >>> 0))
             if (!coopStartsBalanced(candidate)) continue
-            for (const kind of ['goldmines','portals','lakes','mountains','bushes']) map[kind]=candidate[kind]
+            for (const kind of ['portals','lakes','mountains','bushes']) map[kind]=candidate[kind]
             return {status:'balanced', iterations:iteration, iterationLimit:8}
         } catch (error) { diagnostic=error.message }
     }
@@ -130,23 +124,29 @@ function generateCoopGame(playerCount, options = {}) {
     const scaling = getCoopMapScaling(playerCount, size)
     const mapSize = scaling.mapSize
     const rng = createSeededRandom(seed)
-    // A two-dimensional lattice keeps town neighborhoods separate at every H.
-    // Shuffle the finite pool to distribute both human and neutral settlements.
+    // Fill dimension-derived rows, keeping human settlements on one frontier.
+    // Neutral objectives occupy subsequent rows. Shuffle human identities only;
+    // distance constraints apply to every starting town regardless of its owner.
     const sites = []
-    for (let x=2; x<mapSize.x-2; x+=3) for (let y=2; y<mapSize.y-2; y+=3) sites.push({x,y})
-    for (let i=sites.length-1; i>0; i--) {
-        const j = randomIntWithRng(rng, 0, i)
-        ;[sites[i], sites[j]] = [sites[j], sites[i]]
-    }
+    for (let y=2; y<mapSize.y-2; y+=3) for (let x=2; x<mapSize.x-2; x+=3) sites.push({x,y})
     if (sites.length < playerCount + scaling.counts.neutralTowns) {
         throw new Error('Co-op town placement has insufficient sites')
     }
-    const roster = [{rgb: {r: 208, g: 208, b: 208}, towns: [], units: [], gold: 0}]
+    const columns = Math.floor((mapSize.x - 5) / 3) + 1
+    const starts = sites.splice(0, playerCount)
+    const neutralTowns = Array.from({length:scaling.counts.neutralTowns}, (_,i) => ({
+        x:2 + 3 * ((i % playerCount) % columns),
+        y:2 + 3 * (Math.ceil(playerCount / columns) * (1 + Math.floor(i / playerCount)) + Math.floor((i % playerCount) / columns))
+    }))
+    for (let i=starts.length-1; i>0; i--) {
+        const j = randomIntWithRng(rng, 0, i)
+        ;[starts[i], starts[j]] = [starts[j], starts[i]]
+    }
+    const roster = [{rgb: {r: 208, g: 208, b: 208}, towns: neutralTowns, units: [], gold: 0}]
     for (let i=0; i<playerCount; i++) {
         roster.push({rgb: trainingPlayerColor(i+1), gold: scaling.startingAssets.gold,
-            units: [], towns: [sites.pop()]})
+            units: [], towns: [starts[i]]})
     }
-    roster[0].towns = sites.splice(0, scaling.counts.neutralTowns)
     // Reserve town centers and their surrounding cells before placing any
     // resources or blockers. A finite shuffled pool guarantees disjoint,
     // in-bounds placements without probabilistic retry failures.
@@ -163,13 +163,15 @@ function generateCoopGame(playerCount, options = {}) {
         const j = randomIntWithRng(rng, 0, i)
         ;[available[i], available[j]] = [available[j], available[i]]
     }
-    const mines = available.splice(0, scaling.counts.goldmines).map(coord => ({...coord, owner: 0, income: 20}))
+    const mines = []
+    for (let i=0; i<scaling.counts.goldmines; i++) {
+        const start = starts[i % playerCount]
+        available.sort((a,b) => coopPortalDistance(a,start)-coopPortalDistance(b,start) || a.y-b.y || a.x-b.x)
+        mines.push({...available.shift(), owner:0, income:20})
+    }
     const map = new GameMap(mapSize, roster, mines, [], [], [], [], {type: 'rectangular'}, {})
-    map.portals = available.splice(0, scaling.counts.portals)
-    // Reserve connected approaches while growing exact area-derived terrain.
-    // Distance-constrained placement and balance repair are a separate stage.
-    growCoopTerrain(map, rng)
     map.coop.generation = {version: 3, playerCount, seed, size, options: {seed, size}}
+    enforceCoopStartBalance(map, true)
     return map
 }
 
@@ -203,8 +205,7 @@ function placeCoopPortals(map, size, balanceRows = false) {
     for (let tier=0; tier<rules[0]; tier++) for (const human of humans) {
         // Fallback targets a common travel distance instead of the bottom edge,
         // whose detours around neutral towns can add a parity-dependent edge.
-        const ideal = {x:human.towns[0].x, y:balanceRows
-            ? Math.min(map.mapSize.y-1, human.towns[0].y+rules[1]+balanceRows) : map.mapSize.y-1}
+        const ideal = {x:human.towns[0].x, y:Math.min(map.mapSize.y-1, human.towns[0].y+rules[1]+balanceRows)}
         candidates.sort((a,b) => coopPortalDistance(a,ideal)-coopPortalDistance(b,ideal) || b.y-a.y || a.x-b.x)
         const index = candidates.findIndex(c => {
             const proposed = new Set([...portals, c].map(key))
@@ -253,6 +254,23 @@ function growCoopTerrain(map, rng) {
     for (const target of [...targets, ...towns]) {
         if (!parent.has(key(target))) throw new Error('Co-op terrain requires connected objectives')
         for (let c=target; c; c=parent.get(key(c))) reserved.add(key(c))
+    }
+    // Keep each human's nearest-category shortest route open, preserving the
+    // pre-terrain four-edge bound while the shared tree serves all objectives.
+    for (const human of map.players.slice(1, 1 + map.coop.initialHumanCount)) {
+        const root = human.towns[0], queue = [root], parent = new Map([[key(root), null]])
+        for (let i=0; i<queue.length; i++) {
+            const c = queue[i]
+            if (i && endpoints.has(key(c))) continue
+            for (const n of neighbours(c)) if (!parent.has(key(n))) {
+                parent.set(key(n), c); queue.push(n)
+            }
+        }
+        for (const group of [map.portals, map.players[0].towns, map.goldmines]) {
+            const ids = new Set(group.map(key)), target = queue.find(c => ids.has(key(c)))
+            if (!target) throw new Error('Co-op terrain requires reachable nearest objectives')
+            for (let c=target; c; c=parent.get(key(c))) reserved.add(key(c))
+        }
     }
     const free = new Map()
     for (let x=0; x<map.mapSize.x; x++) for (let y=0; y<map.mapSize.y; y++) {

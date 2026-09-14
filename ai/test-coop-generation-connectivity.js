@@ -5,16 +5,17 @@ const {createFixture}=require('./test-coop-harness');
 const {routes}=require('./test-coop-terrain-audit');
 const f=createFixture(undefined,()=>{}),rows=[];
 const index=process.argv.indexOf('--output-dir');
-const out=path.resolve(index<0?'artifacts/TASK-084':process.argv[index+1]);
+const out=path.resolve(index<0?'artifacts/TASK-122':process.argv[index+1]);
 fs.mkdirSync(out,{recursive:true});
-for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for(let seed=0;seed<32;seed++) {
+for(const size of ['tiny','normal','big']) for(let count=1;count<=12;count++) for(let seed=0;seed<32;seed++) {
   const label=`${size}-humans-${count}-seed-${seed}`;
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}})`);
   const map=f.evaluate('JSON.parse(JSON.stringify(generated))');
-  const expected=Array.from({length:count},()=>Array(count*({tiny:1,normal:2,big:3}[size]+2)).fill(true)),observed=routes(map);
+  const expected=Array.from({length:count},()=>Array(count*3*{tiny:1,normal:2,big:3}[size]).fill(true)),observed=routes(map);
   assert.deepEqual(observed,expected,label);
   const row={scenario:label,expected,observed};
   if(seed===0) {
+    f.context.fixtureConfig={actors:[{role:'neutral'},...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};
     f.evaluate('generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders(){}},false)');
     row.runtimeObserved=f.evaluate(`(() => {
       const targets=[...generated.portals,...generated.players[0].towns,...generated.goldmines];
@@ -47,4 +48,4 @@ assert(routes(repaired).flat().every(Boolean));
 console.log(JSON.stringify({scenario:'isolated-start-repair',expected:{connected:true,densityBounds:true},observed:{connected:true,densityBounds:true},repair}));
 console.log('PASS isolated-start-repair');
 fs.writeFileSync(path.join(out,'connectivity-matrix.json'),JSON.stringify(rows,null,2)+'\n');
-console.log('PASS connectivity matrix=384 sizes=tiny,normal,big humans=1..4 seeds=0..31 runtime_Way=12 isolated_repair=passed');
+console.log('PASS connectivity matrix=1152 sizes=tiny,normal,big humans=1..12 seeds=0..31 runtime_Way=36 isolated_repair=passed');

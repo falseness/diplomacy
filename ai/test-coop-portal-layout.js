@@ -4,7 +4,7 @@ const path = require('path');
 const {createFixture} = require('./test-coop-harness');
 const {routes, neighbours} = require('./test-coop-terrain-audit');
 const index = process.argv.indexOf('--output-dir');
-const out = path.resolve(index < 0 ? 'artifacts/TASK-085' : process.argv[index+1]);
+const out = path.resolve(index < 0 ? 'artifacts/TASK-122' : process.argv[index+1]);
 fs.mkdirSync(out, {recursive:true});
 const f = createFixture(undefined, ()=>{}), rows = [];
 const key = c => `${c.x},${c.y}`;
@@ -37,13 +37,14 @@ function check(map, size, count) {
 }
 module.exports={check};
 if(require.main===module) {
-for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for(let seed=0;seed<32;seed++) {
+for(const size of ['tiny','normal','big']) for(let count=1;count<=12;count++) for(let seed=0;seed<32;seed++) {
   const scenario=`${size}-humans-${count}-seed-${seed}`;
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}})`);
   const map=f.evaluate('JSON.parse(JSON.stringify(generated))');
   const row={scenario,...check(map,size,count)};
   assert.deepEqual(f.evaluate(`JSON.parse(JSON.stringify(generateCoopGame(${count},{size:'${size}',seed:${seed}})))`),map,'determinism '+scenario);
   if(seed===0) {
+    f.context.fixtureConfig={actors:[{role:'neutral'},...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};
     f.evaluate('generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders(){}},false)');
     row.runtimeExits=f.evaluate(`generated.portals.map(p=>grid.getHexagon(p).neighbours.some(n=>
       !isCoordNotOnMap(n,grid.arr.length,grid.arr[0].length) &&
@@ -72,6 +73,6 @@ f.evaluate("globalThis.impossible=generateCoopGame(1,{size:'tiny',seed:0});impos
 assert.throws(()=>f.evaluate("placeCoopPortals(impossible,'tiny')"),/Co-op portal placement failed/);
 console.log('PASS impossible placement fails explicitly');
 fs.writeFileSync(path.join(out,'portal-layout-matrix.json'),JSON.stringify(rows,null,2)+'\n');
-console.log('PASS portal-layout matrix=384 sizes=tiny,normal,big humans=1..4 seeds=0..31 counts=H*1/2/3 distance=6/10/14 deterministic=true routes=true exits=true elimination=12 corruption_probes=4');
+console.log('PASS portal-layout matrix=1152 sizes=tiny,normal,big humans=1..12 seeds=0..31 counts=H*1/2/3 distance=6/10/14 deterministic=true routes=true exits=true elimination=36 corruption_probes=4');
 
 }
