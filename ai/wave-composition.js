@@ -1,14 +1,14 @@
 // Each portal has its own unsigned LCG stream. Coordinates are mixed in x/y
 // order, so collection order, other portals and human count cannot affect it.
-function composeCoopWave(seed, round, initialHumanCount, portals = []) {
+function composeCoopWave(seed, round, initialHumanCount, portals = [], balanceVersion = 1) {
     if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff)
         throw new RangeError('Invalid wave seed')
     const rules = typeof module !== 'undefined' && module.exports ? require('./wave-config') :
-        {COOP_WAVE_CONFIG, getUnlockedCoopDemonTypes}
-    const config = rules.COOP_WAVE_CONFIG
+        {getCoopWaveConfig, getUnlockedCoopDemonTypes}
+    const config = rules.getCoopWaveConfig(balanceVersion)
     if (!Number.isInteger(initialHumanCount) || initialHumanCount < config.minInitialHumans ||
         initialHumanCount > config.maxInitialHumans) throw new RangeError('Invalid initial human count')
-    const unlocked = rules.getUnlockedCoopDemonTypes(round)
+    const unlocked = rules.getUnlockedCoopDemonTypes(round, balanceVersion)
     const seen = new Set()
     if (!Array.isArray(portals)) throw new RangeError('Invalid wave portals')
     for (const portal of portals) {
@@ -46,7 +46,7 @@ function generateCoopWave(round, seed = 0) {
         portal.hp > 0 && portal.playerColor === coop.demonSlot &&
         grid.getBuilding(portal.coord) === portal && grid.getUnit(portal.coord).isEmpty())
         .map(portal => ({x: portal.coord.x, y: portal.coord.y}))
-    const wave = composeCoopWave(saved.seed, round, coop.initialHumanCount, portals)
+    const wave = composeCoopWave(saved.seed, round, coop.initialHumanCount, portals, coop.balanceVersion ?? 1)
     coop.waveGeneration = {version: 1, seed: saved.seed, lastRound: round}
     return wave
 }

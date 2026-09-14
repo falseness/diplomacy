@@ -279,7 +279,7 @@ class GameMap {
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
         gameSettings.mapShape = this.mapShape
-        if (this.coop) gameSettings.coop = JSON.parse(JSON.stringify(this.coop))
+        if (this.coop) gameSettings.coop = {...JSON.parse(JSON.stringify(this.coop)), balanceVersion: 2}
         else delete gameSettings.coop
 
         this.createPlayers()

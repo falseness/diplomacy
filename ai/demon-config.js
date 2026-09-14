@@ -14,4 +14,27 @@ const DEMON_TYPES = Object.freeze({
   demonLord: Object.freeze({name: 'Demon Lord', role: 'durable powerful late-game melee', health: 20, damage: 6, movement: 2, melee: true, ranged: false, range: 1})
 });
 
+// Version 1 (including unversioned saves) is the original table above.
+const TUNED_DEMON_TYPES = Object.freeze(Object.fromEntries(Object.entries(
+{
+  imp: {"health": 1, "damage": 1, "movement": 1, "range": 1},
+  clawling: {"health": 2, "damage": 1, "movement": 2, "range": 1},
+  hound: {"health": 2, "damage": 1, "movement": 2, "range": 1},
+  brute: {"health": 5, "damage": 2, "movement": 1, "range": 1},
+  bulwark: {"health": 8, "damage": 1, "movement": 1, "range": 1},
+  spitter: {"health": 1, "damage": 1, "movement": 1, "range": 1},
+  emberArcher: {"health": 2, "damage": 1, "movement": 2, "range": 2},
+  hexcaster: {"health": 3, "damage": 2, "movement": 1, "range": 2},
+  ravager: {"health": 4, "damage": 3, "movement": 2, "range": 1},
+  demonLord: {"health": 10, "damage": 3, "movement": 1, "range": 1}
+}
+).map(([id, stats]) => [id, Object.freeze({...DEMON_TYPES[id], ...stats})])));
+function getDemonTypes(version = 1) {
+  if (version !== 1 && version !== 2) throw new RangeError('Unsupported demon balance version');
+  return version === 2 ? TUNED_DEMON_TYPES : DEMON_TYPES;
+}
+function currentDemonTypes() {
+  return getDemonTypes(typeof gameSettings === 'undefined' ? 1 : gameSettings.coop?.balanceVersion ?? 1);
+}
+
 if (typeof module !== 'undefined' && module.exports) module.exports = DEMON_TYPES;

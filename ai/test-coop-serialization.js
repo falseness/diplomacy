@@ -21,7 +21,7 @@ function setup(count, coop = true) {
     ...(coop ? [{role:'demon',rgb:{r:160,g:40,b:180},gold:0,economyEnabled:false,towns:[],units:[]}] : [])
   ]};
   const f = createFixture(config);
-  f.evaluate('globalThis.turnEvents = [];');
+  f.evaluate('if (gameSettings.coop) delete gameSettings.coop.balanceVersion; globalThis.turnEvents = [];');
   const initial = Array.from({length:count}, (_, i) =>
     ({id:`human-${i+1}`,kind:'unit',name:'noob',owner:i+1,x:1+i*2,y:1}));
   let entities = createEntityLedger(f, initial);

@@ -94,3 +94,4 @@ if (require.main === module) {
     }
   } else runTests();
 }
+if (!process.argv.includes('--fault')) require('./test-coop-fixed-balance');

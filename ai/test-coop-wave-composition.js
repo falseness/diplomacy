@@ -54,13 +54,13 @@ function run(fault) {
   compare('pure-repeated-selection',composeCoopWave(42,14,2,frozen),expectedWave(14));
   compare('no-portals',composeCoopWave(42,14,4,[]),{round:14,types:[],selections:[]});
   for(const seed of [-1,1.5,4294967296,NaN,'42']) assert.throws(()=>composeCoopWave(seed,3,2,portals),RangeError);
-  for(const [r,h] of [[-1,2],[1.5,2],[3,1],[3,5]]) assert.throws(()=>composeCoopWave(42,r,h,portals),RangeError);
+  for(const [r,h] of [[-1,2],[1.5,2],[3,0],[3,5]]) assert.throws(()=>composeCoopWave(42,r,h,portals),RangeError);
   for(const p of [null,[null],[{x:-1,y:2}],[{x:1,y:0.5}],[{x:4294967296,y:0}],[portals[0],portals[0]]])
     assert.throws(()=>composeCoopWave(42,3,2,p),RangeError);
   console.log('PASS invalid-inputs expected=RangeError observed=RangeError cases=15');
   const c=defaultFixture(); c.coop=true; c.size={x:15,y:9};
   const f=createFixture(c);
-  f.evaluate('new DemonPortal(9,2); new DemonPortal(12,6); undefined');
+  f.evaluate('delete gameSettings.coop.balanceVersion; new DemonPortal(9,2); new DemonPortal(12,6); undefined');
   const before=f.evaluate('JSON.stringify(getGameObject())');
   for(const round of [0,1,2,3,5,14]) compare('browser-saved-seed-round-'+round,f.evaluate(`generateCoopWave(${round},42)`),expectedWave(round));
   compare('selection-does-not-change-live-state',f.evaluate(`(()=>{const state=JSON.parse(JSON.stringify(getGameObject()));delete state.gameSettings.coop.waveGeneration;return JSON.stringify(state)})()`),before);

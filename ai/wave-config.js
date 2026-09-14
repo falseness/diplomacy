@@ -50,12 +50,20 @@ function getCoopWaveStrength(round, initialHumanCount) {
   return strength;
 }
 
-function getUnlockedCoopDemonTypes(round) {
+function getCoopWaveConfig(version = 1) {
+  if (version !== 1 && version !== 2) throw new RangeError('Unsupported demon balance version');
+  return version === 2 ? TUNED_COOP_WAVE_CONFIG : COOP_WAVE_CONFIG;
+}
+const TUNED_COOP_WAVE_CONFIG = Object.freeze({...COOP_WAVE_CONFIG,
+  types: Object.freeze(Object.fromEntries(Object.entries(COOP_WAVE_CONFIG.types).map(([id, rule]) =>
+    [id, Object.freeze({...rule, unlockRound: rule.unlockRound + (id === 'imp' ? 0 : 32)})])))
+});
+function getUnlockedCoopDemonTypes(round, version = 1) {
   validateCoopWaveRound(round);
-  return Object.keys(COOP_WAVE_CONFIG.types).filter(id =>
-    round >= COOP_WAVE_CONFIG.types[id].unlockRound);
+  const config = getCoopWaveConfig(version);
+  return Object.keys(config.types).filter(id => round >= config.types[id].unlockRound);
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {COOP_WAVE_CONFIG, getCoopWaveStrength, getUnlockedCoopDemonTypes};
+  module.exports = {getCoopWaveConfig, COOP_WAVE_CONFIG, getCoopWaveStrength, getUnlockedCoopDemonTypes};
 }

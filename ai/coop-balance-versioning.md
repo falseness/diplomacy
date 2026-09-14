@@ -1,0 +1,11 @@
+# Fixed demon balance versions
+
+New `GameMap.start` co-op games record `gameSettings.coop.balanceVersion: 2` before constructing units. Version 2 installs the TASK-107 `scale-0.5-delay-32` proposal: the ten combat stat rows in `TUNED_DEMON_TYPES`, original weights, round-3 Imp unlock, and 32-round delays for every other type. No runtime wealth, survivor count, or online/local distinction enters selection.
+
+A missing balance version or explicit version 1 selects the original stats and unlocks. Loading preserves the missing field; it does not migrate seeds, regenerate maps, reset phase markers, or upgrade existing units. Unknown versions fail during unpacking before unit construction. `waveGeneration.version: 1` remains the seeded selection algorithm version, independently of the combat balance version. Existing pure offline configuration APIs default to version 1 so historical valuation/projection tools still reproduce their original baseline; runtime callers explicitly select the saved balance version.
+
+Browser constructors and the authoritative server use the same stat getters and wave files. The server's existing `loadGameCode` already loads these files verbatim. Ordinary unit classes are unchanged.
+
+`node ai/test-coop-demon-config.js` includes both legacy table checks and the versioned local/server comparison against `coop-balance-selected.json`. The latter constructs every demon class, checks every unlock boundary across H1–4 and all presets, compares complete server/local spawned states, and checks exact save/load plus occupied/unblocked portals.
+
+For the sibling server regressions, run `node ai/test-coop-balance-server-adapter.js`. This invokes the required `node --test tests/coop/authority.test.js tests/coop/phase-idempotence.test.js` from the server directory. The reversible adapter makes old injured-Imp fixtures explicitly unversioned and updates the wave/restart fixture to version 2. It archives both exact fixture versions under `COOP_EVIDENCE_DIR` (default `artifacts/TASK-108`) and restores original bytes in `finally`. Production server files are unchanged. The focused protocol test covers version-2 reconnect, persisted markers, no replay, round-3 spawning, occupancy, destruction, and no backlog.

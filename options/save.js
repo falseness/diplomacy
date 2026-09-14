@@ -230,6 +230,8 @@ class JsonUnpackManager {
             gameSettings = JSON.parse(jsonGameSettings)
         }
 
+        if (gameSettings.coop) getDemonTypes(gameSettings.coop.balanceVersion ?? 1)
+
         let gridSize = {
             x: packedGrid.length,
             y: packedGrid[0].length
