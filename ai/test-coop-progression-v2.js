@@ -1,10 +1,19 @@
 'use strict';
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const outputIndex = process.argv.indexOf('--output-dir');
+const outputDir = path.resolve(outputIndex === -1 ? path.join(__dirname, '../artifacts/TASK-130') : process.argv[outputIndex + 1]);
+const checkpoints = [];
+fs.mkdirSync(outputDir, {recursive:true});
 const {getCoopWaveConfig, getUnlockedCoopDemonTypes} = require('./wave-config');
 const {createFixture, defaultFixture} = require('./test-coop-harness');
 
 function compare(name, observed, expected) {
   console.log(`${name} expected=${JSON.stringify(expected)} observed=${JSON.stringify(observed)}`);
+  // Freeze evidence at assertion time; later fixture mutations must not rewrite it.
+  checkpoints.push(JSON.parse(JSON.stringify({name, expected, observed})));
+  fs.writeFileSync(path.join(outputDir, 'checkpoints.json'), JSON.stringify(checkpoints, null, 2) + '\n');
   assert.deepEqual(observed, expected, name);
   console.log(`PASS ${name}`);
 }
@@ -38,7 +47,7 @@ for (const [round, names] of boundaries) {
 }
 const config = defaultFixture(); config.coop = true;
 const fixture = createFixture(config);
-compare('new-game-balance-version', fixture.evaluate('gameSettings.coop.balanceVersion'), 2);
+compare('initial-new-game-balance-version', fixture.evaluate('gameSettings.coop.balanceVersion'), 2);
 for (const mode of ['new-game', 'loaded-v2']) {
   if (mode === 'loaded-v2') fixture.evaluate('loadFromJson(JSON.stringify(getGameObject()))');
   compare(`${mode}-balance-version`, fixture.evaluate('gameSettings.coop.balanceVersion'), 2);
@@ -49,3 +58,5 @@ for (const mode of ['new-game', 'loaded-v2']) {
   compare(`${mode}-weights`, fixture.evaluate('Object.fromEntries(Object.entries(getCoopWaveConfig(gameSettings.coop.balanceVersion).types).map(([id,r])=>[id,r.weight]))'), weights);
 }
 console.log('PASS progression-v2 boundaries=19 contexts=3 types=10 round0=empty all-eligible=35,40 stats=unchanged weights=unchanged');
+
+require('./test-coop-progression-local')(compare);

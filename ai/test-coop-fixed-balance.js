@@ -43,7 +43,8 @@ if (process.argv.includes('--server')) {
     f.evaluate(`gameSettings.coop.size='${preset}'; ${version===1?'delete gameSettings.coop.balanceVersion;':''} new DemonPortal(10,10);`);
     if(process.argv.includes('--expanded') && version===2) f.evaluate(`gameSettings.coop.generation={version:3,playerCount:${humans},seed:42,size:'${preset}',options:{seed:42,size:'${preset}'}}; undefined`);
     const initial=f.evaluate('JSON.stringify(getGameObject())');
-    for (const round of rounds) {
+    // Version 2 checks every completed round through 40, not just boundaries.
+    for (const round of (version === 2 ? Array.from({length:41},(_,i)=>i) : rounds)) {
       f.context.initial=initial; f.evaluate(`loadFromJson(initial); gameRound=${round};`);
       inputs.push(f.evaluate('JSON.parse(JSON.stringify(getGameObject()))'));
       const local=f.evaluate(probe); results.push(local);
