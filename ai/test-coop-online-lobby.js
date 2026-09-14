@@ -4,12 +4,11 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const {chromium} = require('playwright');
-const {expectedMap} = require('./test-coop-generation-fixtures');
 const root = path.resolve(__dirname, '..');
 const outputIndex = process.argv.indexOf('--output-dir');
 const out = outputIndex < 0 ? (process.env.COOP_LOBBY_EVIDENCE_DIR || path.join(root, 'artifacts/TASK-083')) : path.resolve(process.argv[outputIndex + 1]);
 const {checkSizeLayout} = require('./test-coop-size-controls');
-const sizeFor = count => ({2:'tiny',3:'normal',4:'big'}[count]);
+const sizeFor = count => ({2:'tiny',5:'normal',12:'big'}[count]);
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -110,7 +109,7 @@ const serverRequire = createRequire(path.join(serverRoot, 'server/package.json')
         if(size!=='normal')await click('menu.online.sizeSlider.'+(size==='tiny'?'leftButton':'rightButton'));
         await click('menu.online.playersSlider.leftButton');
         for(let i=2;i<count;i++)await click('menu.online.playersSlider.rightButton');
-        if(count===4)await click('menu.online.playersSlider.rightButton');
+        if(count===12)await click('menu.online.playersSlider.rightButton');
         // Switching modes and returning retains each mode's controls.
         await click('menu.online.modeButton');
         await click('menu.online.modeButton');
@@ -142,13 +141,18 @@ const serverRequire = createRequire(path.join(serverRoot, 'server/package.json')
         {online:true,count,mode,slots:Array.from({length:count},(_,i)=>i+1)});
       if(coop) {
         compare('requested-size-'+password,req.game.gameSettings.coop.generation.size,sizeFor(count));
-        compare('requested-grid-'+password,[req.game.grid.length,...new Set(req.game.grid.map(c=>c.length))],Array(2).fill({tiny:15,normal:25,big:39}[sizeFor(count)]));
-        compare('creation-seed-'+password,req.game.gameSettings.coop.generation,expectedMap(count,1,sizeFor(count)).coop.generation);
+        compare('requested-grid-'+password,[req.game.grid.length,...new Set(req.game.grid.map(c=>c.length))],Array(2).fill(Math.max({tiny:11,normal:15,big:21}[sizeFor(count)],Math.ceil({tiny:15,normal:25,big:39}[sizeFor(count)]*Math.sqrt(count/4)))));
+        compare('creation-seed-'+password,req.game.gameSettings.coop.generation,{version:3,playerCount:count,seed:1,size:sizeFor(count),options:{seed:1,size:sizeFor(count)}});
         compare('creation-roles-'+password,await page.evaluate(()=>players.map(p=>p.role)),['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS']);
+      }
+      if(coop && count===12) {
+        await page.evaluate(()=>statisticsInterface.show());
+        await capture('online-roster-12',{roles:['NEUTRAL',...Array(12).fill('HUMAN'),'DEMONS'],inside:true},
+          await page.evaluate(()=>({roles:players.map(p=>p.role),inside:statisticsInterface.playersInfo.every(p=>p.rect.bottom<=HEIGHT)})));
       }
       return page;
     }
-    for(const count of [2,3,4]) {
+    for(const count of [2,5,12]) {
       const peer=await launch(count,`${count}1`);
       await peer.close();
     }
@@ -159,6 +163,7 @@ const serverRequire = createRequire(path.join(serverRoot, 'server/package.json')
     await prepare(page);
     await click('menu.main.buttons[1]');
     await click('menu.online.modeButton');
+    for(let i=2;i<12;i++)await click('menu.online.playersSlider.rightButton');
     await click('menu.online.sizeSlider.leftButton');
     for(const size of ['tiny','normal','big']) {
       await checkSizeLayout(page,'online',compare);

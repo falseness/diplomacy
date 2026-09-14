@@ -6,7 +6,6 @@ const crypto = require('crypto');
 const {checkSizeLayout} = require('./test-coop-size-controls');
 const {chromium} = require('playwright');
 const {initialEntities} = require('./test-coop-generation-fixtures');
-const {checkGeneratedMap} = require('./test-coop-current-generation');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
@@ -81,9 +80,9 @@ const compare = (label, observed, expected) => {
       checkpoints.push({checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
-    for (const size of ['tiny','normal','big']) for (const count of [1,4]) {
+    for (const size of ['tiny','normal','big']) for (const count of [1,4,12]) {
       console.log('SCENARIO local size='+size+' humans='+count);
-      await page.setViewportSize(count===1?{width:390,height:844}:{width:1280,height:900});
+      await page.setViewportSize(count!==4?{width:390,height:844}:{width:1280,height:900});
       progress('co-op-'+count);
       await page.reload({waitUntil:'load'});
       await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
@@ -107,9 +106,9 @@ const compare = (label, observed, expected) => {
         unique:new Set(menu.play.buttons).size})), {label:'Co-op',onlineLabel:'Competitive',buttons:8,unique:8});
       compare('new-size-default-'+size,await page.evaluate(()=>menu.play.sizeSlider.realValue),'Normal');
       if(size!=='normal') await click('menu.play.sizeSlider.'+(size==='tiny'?'leftButton':'rightButton'));
-      // Lower bound cannot decrement below one; upper bound cannot exceed four.
+      // Lower bound cannot decrement below one; upper bound cannot exceed twelve.
       await click('menu.play.playersSlider.leftButton');
-      if(count===4) for(let i=0;i<3;i++) await click('menu.play.playersSlider.rightButton');
+      if(count>1) for(let i=1;i<count;i++) await click('menu.play.playersSlider.rightButton');
       if(count===4) {
         await click('menu.play.mapSlider.rightButton');
         await click('menu.play.fogOfWarCheckBox');
@@ -121,8 +120,8 @@ const compare = (label, observed, expected) => {
         const right=label.x+mainCtx.measureText(label.text).width; mainCtx.restore();
         return right < menu.play.playersSlider.leftButton.x;
       }),true);
-      await click(count===1?'menu.play.playersSlider.leftButton':'menu.play.playersSlider.rightButton');
-      const seed=count===1?1:2, enabled=count===4;
+      if(count===1 || count===12) await click(count===1?'menu.play.playersSlider.leftButton':'menu.play.playersSlider.rightButton');
+      const seed=count===4?2:1, enabled=count===4;
       // Separate map/player selections survive repeated mode changes and Back.
       for(let toggle=0;toggle<2;toggle++) {
         await click('menu.play.modeButton');
@@ -153,9 +152,9 @@ const compare = (label, observed, expected) => {
       compare('selected-slot-'+count,await page.evaluate(()=>gameSlot),count===1?0:1);
       await page.waitForFunction(()=>!menu.visible && whooseTurn===1);
       const expected=await page.evaluate(()=>generationCalls[0].map);
-      checkGeneratedMap(expected,count,seed,size);
+      compare('generated-metadata-'+count,expected.coop.generation,{version:3,playerCount:count,seed,size,options:{seed,size}});
       compare('generateCoopGame-'+count,await page.evaluate(()=>generationCalls),[{count,options:{seed,size},map:expected}]);
-      compare('actual-grid-'+size+'-'+count,await page.evaluate(()=>[grid.arr.length,...new Set(grid.arr.map(c=>c.length))]),Array(2).fill({tiny:15,normal:25,big:39}[size]));
+      compare('actual-grid-'+size+'-'+count,await page.evaluate(()=>[grid.arr.length,...new Set(grid.arr.map(c=>c.length))]),Array(2).fill(Math.max({tiny:11,normal:15,big:21}[size],Math.ceil({tiny:15,normal:25,big:39}[size]*Math.sqrt(count/4)))));
       compare('launch-options-'+count,await page.evaluate(()=>startCalls),[{fog:enabled,timer:enabled,online:false}]);
       await page.evaluate(count=>{window.fixtureConfig={actors:[{role:'neutral'},
         ...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};},count);
@@ -195,6 +194,14 @@ const compare = (label, observed, expected) => {
         fog:enabled,timer:enabled?'Timer':'LongTimer',online:false,round:0,human:1,menu:false},
         await page.evaluate(()=>({coop:gameSettings.coop,roles:players.map(p=>p.role),fog:isFogOfWar,
           timer:timer.constructor.name,online:gameSettings.isOnline,round:gameRound,human:whooseTurn,menu:menu.visible})));
+      if(count===12) {
+        await page.evaluate(()=>statisticsInterface.show());
+        const roster=await page.evaluate(()=>({labels:statisticsInterface.playersInfo.map(p=>p.textPlayer.text),
+          inside:statisticsInterface.playersInfo.every(p=>p.rect.x>=0&&p.rect.right<=WIDTH&&p.rect.bottom<=HEIGHT),
+          readable:statisticsInterface.playersInfo.every(p=>p.textPlayer.fontSize>=15&&p.text.fontSize>=12&&p.text.right<=p.rect.right&&p.textPlayer.right<=p.rect.right)}));
+        await capture('local-'+size+'-roster-12',{labels:Array.from({length:13},(_,i)=>'Player '+(i+1)),inside:true,readable:true},roster);
+        await page.evaluate(()=>statisticsInterface.hide());
+      }
       // Cancel another setup, then resume the saved game through its selected slot.
       const before=await page.evaluate(()=>({round:gameRound,human:whooseTurn,coop:gameSettings.coop,
         roles:players.map(p=>p.role),gold:players.map(p=>p.gold),slot:gameSlot}));
@@ -232,7 +239,7 @@ const compare = (label, observed, expected) => {
     fs.writeFileSync(path.join(out,'local-browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed rounds: local launch only; first human income/salary and round 0 checked. Menu clicks do not mutate game entities. Competitive launch is a menu regression outside co-op ledgers.');
-    console.log('PASS co-op local menu minimum=1 maximum=4 sizes=tiny,normal,big generation_calls=6 checkpoints='+checkpoints.length+' competitive_launch=passed');
+    console.log('PASS co-op local menu minimum=1 maximum=12 sizes=tiny,normal,big generation_calls=9 checkpoints='+checkpoints.length+' competitive_launch=passed');
   } finally {
     progress('cleanup');
     console.log('browser_console_errors='+JSON.stringify(errors));

@@ -1,0 +1,164 @@
+diff --git a/server/loadGameCode.js b/server/loadGameCode.js
+index 8a243a7..c45c870 100644
+--- a/server/loadGameCode.js
++++ b/server/loadGameCode.js
+@@ -173,6 +173,7 @@ const scriptOrder = [
+     'options/classManager.js',
+     'options/timer.js',
+     'options/otherSettings.js',
++    'ai/coop-map-scaling.js',
+     'ai/generateMap.js',
+     'render/loadassets.js',
+     'render/image.js',
+diff --git a/server/matchmakingSlots.js b/server/matchmakingSlots.js
+index cb9931f..3dcecb9 100644
+--- a/server/matchmakingSlots.js
++++ b/server/matchmakingSlots.js
+@@ -7,7 +7,7 @@ function getHumanSlots(game, legacySlotCount) {
+         return Array.from({length: Math.max(0, count - 1)}, (_, index) => index + 1)
+     }
+     const count = coop.initialHumanCount
+-    assert([2, 3, 4].includes(count), 'Unsupported online co-op human count')
++    assert(Number.isInteger(count) && count >= 2 && count <= 12, 'Unsupported online co-op human count')
+     const slots = Array.from({length: count}, (_, index) => index + 1)
+     assert.deepStrictEqual(coop.humanSlots, slots, 'Invalid co-op human slots')
+     assert.strictEqual(coop.demonSlot, count + 1, 'Invalid co-op demon slot')
+@@ -31,6 +31,18 @@ function normalizeNewCoopSettings(game) {
+     if (generation.options?.size !== undefined) {
+         assert.strictEqual(generation.options.size, size, 'Conflicting co-op map size')
+     }
++    getHumanSlots(game)
++    if (['version', 'playerCount', 'seed', 'options'].some(key => generation[key] !== undefined)) {
++        assert([1, 2, 3].includes(generation.version), 'Unsupported co-op generation version')
++        assert.strictEqual(generation.playerCount, coop.initialHumanCount, 'Conflicting co-op generation count')
++        assert(Number.isInteger(generation.seed) && generation.seed >= 0 && generation.seed <= 0xffffffff, 'Invalid co-op generation seed')
++        if (generation.options?.seed !== undefined)
++            assert.strictEqual(generation.options.seed, generation.seed, 'Conflicting co-op generation seed')
++        if (generation.version === 3) {
++            const {mapSize} = require('../../diplomacy/ai/coop-map-scaling').getCoopMapScaling(coop.initialHumanCount, size)
++            assert(game.grid.length === mapSize.x && game.grid.every(column => column.length === mapSize.y), 'Invalid co-op scaled dimensions')
++        }
++    }
+     coop.generation = {...generation, size}
+     if (generation.options) coop.generation.options = {...generation.options, size}
+ }
+diff --git a/tests/coop/browser-online.test.js b/tests/coop/browser-online.test.js
+index ea5ccc7..7fcf2b7 100644
+--- a/tests/coop/browser-online.test.js
++++ b/tests/coop/browser-online.test.js
+@@ -86,6 +86,7 @@ test('browser preset requests, peer maps and reconnect retain committed metadata
+         async function click(page,expression){const pos=await page.evaluate(expression=>{const c=(0,eval)(expression),r=c.rect||c;return {x:r.centerX,y:r.centerY}},expression);await page.mouse.click(pos.x,pos.y)}
+         const roomIDs=[];
+         for(const [preset,size] of ['tiny','normal','big'].entries()) {
++            const count=[2,5,12][preset];
+             const pages=[];
+             for(let index=0;index<2;index++) {
+                 const context=await browser.newContext({viewport:{width:1280,height:900}});
+@@ -96,11 +97,12 @@ test('browser preset requests, peer maps and reconnect retain committed metadata
+                 await page.goto(host.endpoint,{waitUntil:'load'});await page.waitForFunction(()=>menu.visible&&imagesCountLoaded===images.length);
+                 await page.evaluate(()=>{Date.now=()=>1700000000000;AiRuntime.trainFromHumanCommands=()=>{}});
+                 await click(page,'menu.main.buttons[1]');await click(page,'menu.online.modeButton');await click(page,'menu.online.playersSlider.leftButton');
++                for(let i=2;i<count;i++)await click(page,'menu.online.playersSlider.rightButton');
+                 if(size==='tiny')await click(page,'menu.online.sizeSlider.leftButton');
+                 if(size==='big')await click(page,'menu.online.sizeSlider.rightButton');
+                 const password=String(881+2*preset+index);
+                 for(const digit of password)await click(page,`menu.online.passwordButtons[${digit}]`);
+-                compare(size+'-UI-'+index,await page.evaluate(()=>({size:menu.online.sizeSlider.realValue.toLowerCase(),humans:menu.online.playersSlider.value})),{size,humans:2});
++                compare(size+'-UI-'+index,await page.evaluate(()=>({size:menu.online.sizeSlider.realValue.toLowerCase(),humans:menu.online.playersSlider.value})),{size,humans:count});
+                 await page.screenshot({path:path.join(out,'screenshots',size+'-setup-'+index+'.png')});
+                 await click(page,'menu.online.playButton');await click(page,'menu.startGame.buttons[0].movingForm.elements[0].rect');
+                 await page.waitForFunction(()=>onlineCommit?.revision===0&&!menu.visible);
+@@ -110,8 +112,8 @@ test('browser preset requests, peer maps and reconnect retain committed metadata
+             await pages[0].waitForFunction(()=>onlineLobby.occupiedHumans===2);
+             async function snapshot(page){return page.evaluate(()=>({generation:gameSettings.coop.generation,grid:JSON.parse(JSON.stringify(getGameObject().grid)),commit:onlineCommit}))}
+             const snapshots=await Promise.all(pages.map(snapshot));
+-            const expected={version:2,playerCount:2,seed:1,size,options:{seed:1,size}};
+-            const side={tiny:15,normal:25,big:39}[size];
++            const expected={version:3,playerCount:count,seed:1,size,options:{seed:1,size}};
++            const side=Math.max({tiny:11,normal:15,big:21}[size],Math.ceil({tiny:15,normal:25,big:39}[size]*Math.sqrt(count/4)));
+             for(const [index,page] of pages.entries()) {
+                 compare(size+'-metadata-'+index,snapshots[index].generation,expected);
+                 compare(size+'-dimensions-'+index,[snapshots[index].grid.length,...new Set(snapshots[index].grid.map(r=>r.length))],[side,side]);
+@@ -125,7 +127,7 @@ test('browser preset requests, peer maps and reconnect retain committed metadata
+             // local grid proves the committed response restores the stored board.
+             await pages[0].evaluate(()=>{onlineSocket.disconnect();window.originalTile=grid.arr[0][0].hexagon.playerColor;grid.arr[0][0].hexagon.playerColor=originalTile===1?2:1;});
+             await pages[0].evaluate(()=>onlineSocket.connect());
+-            await pages[0].waitForFunction(()=>onlineSocket.connected&&grid.arr[0][0].hexagon.playerColor===originalTile);
++            await pages[0].waitForFunction(()=>onlineSocket.connected&&grid.arr[0][0].hexagon.playerColor===originalTile, null, {polling:100});
+             compare(size+'-reconnect-exact',await snapshot(pages[0]),snapshots[0]);
+             fs.writeFileSync(path.join(out,size+'-snapshots.json'),JSON.stringify({expected,peers:snapshots,reconnected:await snapshot(pages[0])},null,2)+'\n');
+             console.log('PASS preset='+size+' peers=2 reconnect=exact dimensions='+side+'x'+side);
+diff --git a/tests/coop/matchmaking.test.js b/tests/coop/matchmaking.test.js
+index 75c97e8..f9ad8ec 100644
+--- a/tests/coop/matchmaking.test.js
++++ b/tests/coop/matchmaking.test.js
+@@ -27,7 +27,7 @@ function configuration(count) {
+     evaluate(`isFogOfWar=false; entityInterface={change(){},hide(){}}; townInterface={change(){},hide(){}};
+         gameEvent={selected:new Empty(),removeSelection(){this.selected=new Empty()},screen:{moveTo(){},moveToPlayer(){},stop(){}}};
+         border=new Border(); attackBorder=new Border();
+-        new GameMap({x:23,y:9},fixtureConfig.actors.slice(0,-1),[],[],[],[],[],{type:'rectangular'},{}).start({updateCameraBorders(){},clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false}},false);
++        new GameMap({x:65,y:9},fixtureConfig.actors.slice(0,-1),[],[],[],[],[],{type:'rectangular'},{}).start({updateCameraBorders(){},clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false}},false);
+         new DemonPortal(20,7); whooseTurn=0; gameSettings.isOnline=true; gameSettings.coop.result=null; gameSettings.coop.generation={size:'normal'}; actionManager.clear();`);
+     return evaluate('getGameObject()');
+ }
+@@ -76,7 +76,7 @@ function checkBoard(label,game,count,config,checkSlots=true) {
+     compare(label+'-neutral-slot',game.playerIndexToUserIndex[0],null);
+     if(checkSlots)compare(label+'-demon-slot',game.playerIndexToUserIndex[count+1],null);
+ }
+-for(const count of [2,3,4]) test(`co-op ${count} humans: creation, compatible peers, full lobby and stale assignments`,async()=>{
++for(const count of [2,5,12]) test(`co-op ${count} humans: creation, compatible peers, full lobby and stale assignments`,async()=>{
+     const config=configuration(count),h=harness();
+     const [id,slot,status]=await h.match('host',config);
+     compare(`create-${count}`,[slot,status,h.games[0].playerIndexToUserIndex.length],[1,'started',count+2]);
+@@ -131,19 +131,19 @@ test('mode compatibility isolates identical layouts in both directions and prese
+     compare('legacy-competitive-key',getMatchmakingKey(legacy),getMatchmakingKey(competitive));
+ });
+ test('invalid co-op counts and controller layouts are rejected before persistence',async()=>{
+-    for(const [label,edit] of [['one-human',c=>c.gameSettings.coop.initialHumanCount=1],['five-humans',c=>c.gameSettings.coop.initialHumanCount=5],['neutral-human',c=>c.gameSettings.coop.humanSlots=[0,1]],['demon-human',c=>c.gameSettings.coop.demonSlot=2],['missing-controller',c=>c.players.pop()]]) {
++    for(const [label,edit] of [['one-human',c=>c.gameSettings.coop.initialHumanCount=1],['thirteen-humans',c=>c.gameSettings.coop.initialHumanCount=13],['neutral-human',c=>c.gameSettings.coop.humanSlots=[0,1]],['demon-human',c=>c.gameSettings.coop.demonSlot=2],['missing-controller',c=>c.players.pop()]]) {
+         const config=configuration(2);edit(config);const h=harness();
+         await assert.rejects(h.match('invalid',config),/co-op|Co-op/);
+         compare(label+'-no-records',[h.games.length,h.users.length],[0,0]);
+     }
+     console.log('INAPPLICABLE committed revision convergence: matchmaking has no revision protocol; stored initial boards compared exactly after lobby operations. No human gameplay actions or completed rounds, waves, demon phases, purchases, production, income or salaries occur; shared entity/economy/turn checks cover every successful matchmaking operation and initial human schedule; neutral/round/roster assertions cover lobby scheduling.');
+-    console.log('PASS matchmaking counts=2,3,4 mode-isolation=both full-lobbies=3 stale-assignments=3 invalid-layouts=5');
++    console.log('PASS matchmaking counts=2,5,12 mode-isolation=both full-lobbies=3 stale-assignments=3 invalid-layouts=5');
+ });
+
+ test('size validation, default, compatibility and legacy reconnect preserve stored grids',async()=>{
+     const h=harness(), base=configuration(2), ids=[];
+     for(const size of ['tiny','normal','big']) {
+-        const board=structuredClone(base);board.gameSettings.coop.generation={version:2,seed:42,size,options:{seed:42,size}};
++        const board=structuredClone(base);board.gameSettings.coop.generation={version:2,playerCount:2,seed:42,size,options:{seed:42,size}};
+         const created=await h.match('host-'+size,board);ids.push(created[0]);
+         compare(size+'-compatible-peer',await h.match('peer-'+size,board),[created[0],2,'joined']);
+     }
+@@ -163,3 +163,28 @@ test('size validation, default, compatibility and legacy reconnect preserve stor
+     compare('legacy-reconnect-stored-map-exact',defaults.games[0].rounds[0][0].parallelTurnResult,before);
+     console.log('PASS size-validation presets=tiny,normal,big default=normal separated=3 invalid=6 legacy-map=unchanged');
+ });
++
++ test('scaled metadata rejects forgeries and incompatible counts stay separate',async()=>{
++    const base=configuration(2);
++    const h=harness();
++    const a=await h.match('two',base), b=await h.match('five',configuration(5));
++    compare('incompatible-count-rooms-separated',a[0]!==b[0],true);
++    for(const [label,edit] of [
++        ['fractional-count',c=>c.gameSettings.coop.initialHumanCount=2.5],
++        ['oversized-count',c=>c.gameSettings.coop.initialHumanCount=13],
++        ['generation-count',c=>c.gameSettings.coop.generation.playerCount=12],
++        ['generation-seed',c=>c.gameSettings.coop.generation.seed=-1],
++        ['generation-version',c=>c.gameSettings.coop.generation.version=99],
++        ['missing-version',c=>delete c.gameSettings.coop.generation.version],
++        ['option-seed',c=>c.gameSettings.coop.generation.options.seed=2],
++        ['option-size',c=>c.gameSettings.coop.generation.options.size='big'],
++        ['scaled-dimensions',c=>c.gameSettings.coop.generation.version=3]
++    ]) {
++        const bad=structuredClone(base);
++        bad.gameSettings.coop.generation={version:2,playerCount:2,seed:1,size:'normal',options:{seed:1,size:'normal'}};
++        edit(bad);const isolated=harness();
++        await assert.rejects(isolated.match('forged',bad),/co-op|Co-op/);
++        compare('forged-'+label+'-rejected-before-persistence',[isolated.games.length,isolated.users.length],[0,0]);
++    }
++    console.log('PASS scaled-metadata forgeries=9 incompatible-counts=separated');
++ });

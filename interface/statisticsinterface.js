@@ -59,6 +59,19 @@ class StatisticsInterface {
         this.suddenDeathText.pos.x = this.pos.x + this.width - this.roundtextMarginX
     }
     updateSizes() {
+        this.playersCountInRow = 4
+        this.playerInfoWidth = WIDTH * 0.76 / 4
+        this.playerInfoMarginY = HEIGHT * 0.6 * 0.2
+        this.playerInfoHeight = HEIGHT * 0.6 * 0.4
+        this.roundtext.fontSize = this.suddenDeathText.fontSize = WIDTH * 0.76 * 0.05
+        if (gameSettings.coop) {
+            this.playersCountInRow = WIDTH < 600 ? 3 : 4
+            this.playerInfoWidth = WIDTH * 0.9 / this.playersCountInRow
+            this.playerInfoMarginY = HEIGHT * 0.09
+            this.playerInfoHeight = Math.min(HEIGHT * 0.2,
+                HEIGHT * 0.72 / Math.ceil((players.length - 1) / this.playersCountInRow))
+            this.roundtext.fontSize = this.suddenDeathText.fontSize = Math.max(15, WIDTH * 0.025)
+        }
         this.width = this.maxWidth
         this.pos.x = this.centerX - this.width / 2
         this.updateBigTextSizes()
@@ -73,7 +86,7 @@ class StatisticsInterface {
         let w = this.playerInfoWidth
         let h = this.playerInfoHeight
         let textMargin = h * 0.13
-        let textIndent = w * 0.15
+        let textIndent = w * (gameSettings.coop ? 0.06 : 0.15)
 
         this.playersInfo = []
 
@@ -101,6 +114,12 @@ class StatisticsInterface {
                 text: new Text(x + textIndent, y + textMargin * 2.5, 
                     h * 0.15, text, players[i].hexColor, 'left')
             })
+            if (gameSettings.coop) {
+                const info = this.playersInfo[this.playersInfo.length - 1]
+                for (const label of [info.textPlayer, info.text]) {
+                    if (label.width > w * 0.88) label.fontSize *= w * 0.88 / label.width
+                }
+            }
         }
     }
     drawPlayersInfo(ctx) {

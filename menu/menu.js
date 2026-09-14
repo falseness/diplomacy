@@ -265,7 +265,7 @@ class GameSettingsTree {
     draw(ctx) {
         this.playersText.draw(ctx)
         this.mapText.draw(ctx)
-        if (this.isCoop) new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', 'black', 'left').draw(ctx)
+        if (this.isCoop) drawCoopDimensions(this, ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)
         }
@@ -274,6 +274,14 @@ class GameSettingsTree {
 
         this.mapSlider.draw(ctx)*/
     }
+}
+
+function drawCoopDimensions(settings, ctx) {
+    const {mapSize} = getCoopMapScaling(settings.playersSlider.value, settings.sizeSlider.realValue.toLowerCase())
+    new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', 'black', 'left').draw(ctx)
+    settings.dimensionsText = new Text(WIDTH * 0.6, HEIGHT * 0.23,
+        Math.max(15, WIDTH * 0.022), `${mapSize.x}×${mapSize.y}`, 'black')
+    settings.dimensionsText.draw(ctx)
 }
 
 // Keep size on its own row above the existing player/seed/options controls.
@@ -564,7 +572,7 @@ class OnlineSettingsTree {
     draw(ctx) {
         this.playersText.draw(ctx)
         this.mapText.draw(ctx)
-        if (this.isCoop) new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', 'black', 'left').draw(ctx)
+        if (this.isCoop) drawCoopDimensions(this, ctx)
         this.passwordText.draw(ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)
