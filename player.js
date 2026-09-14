@@ -38,6 +38,10 @@ class Player {
         return this === other || Boolean(gameSettings.coop && this.role === 'HUMAN' &&
             other.role === 'HUMAN' && this.team === other.team)
     }
+    ignoresCell(cell) {
+        return this.role === 'DEMONS' && cell.building.notEmpty() &&
+            cell.building.isTown() && cell.building.player.role === 'NEUTRAL'
+    }
     canEnterBuilding(building) {
         return true
     }

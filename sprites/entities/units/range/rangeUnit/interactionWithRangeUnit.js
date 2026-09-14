@@ -26,7 +26,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         attackBorder.visible = false
     }
     cellHasEnemyUnit(cell, rangeUnit) {
-        return cell.unit.notEmpty() &&
+        return !rangeUnit.player.ignoresCell(cell) && cell.unit.notEmpty() &&
             !rangeUnit.player.isAlliedWith(cell.unit.player)
     }
     cantRangeInteract(coord, rangeUnit) {
@@ -73,10 +73,11 @@ class InteractionWithRangeUnit extends InterationWithUnit {
         return this.cellHasEnemyBuilding(cell, rangeUnit) && !cell.building.isStaticNature && cell.building.isHitable
     }
     canHitSomethingOnCell(cell, rangeUnit) {
-        return !this.cantRangeInteract(cell.coord, rangeUnit) &&
+        return !rangeUnit.player.ignoresCell(cell) && !this.cantRangeInteract(cell.coord, rangeUnit) &&
             (this.cellHasAttackableBuilding(cell, rangeUnit) || this.cellHasEnemyUnit(cell, rangeUnit))
     }
     sendInstructions(cell, rangeUnit) {
+        if (rangeUnit.player.ignoresCell(cell)) return true
         let coord = cell.coord
 
         if (cell.building.isStaticNature) {
@@ -148,7 +149,7 @@ class InteractionWithRangeUnit extends InterationWithUnit {
                 result.push(attack_coords[i])
             }
         }
-        return result
+        return result.filter(coord => !rangeUnit.player.ignoresCell(grid.getCell(coord)))
     }
 }
 class RangeWay extends Way {

@@ -71,10 +71,10 @@ function run(fault) {
   const {f,entities,check}=setup({x:7,y:5,hp:2},[[],[]],{x:3,y:2});
   check('movement-initial');
   f.compare('human-targets-portal-over-allied-town',f.evaluate('new BestEnemyTargetForAI().calculateBestEnemyTarget({x:2,y:2},grid.arr,1)'),{x:3,y:2});
-  f.compare('demon-targets-neutral-economic-building',f.evaluate('new BestEnemyTargetForAI().calculateBestEnemyTarget({x:7,y:5},grid.arr,3)'),{x:4,y:5});
+  f.compare('demon-targets-human-town-over-neutral',f.evaluate('new BestEnemyTargetForAI().calculateBestEnemyTarget({x:7,y:5},grid.arr,3)'),{x:7,y:1});
   // A one-action budget isolates a deterministic legal step towards that target.
   f.context.afterMove=()=>{
-    entities.record({type:'move',id:'demon',destination:{x:6,y:6}});
+    entities.record({type:'move',id:'demon',destination:{x:7,y:4}});
     check('after-ai-movement');
   };
   f.evaluate(`globalThis.trace=[]; gameSettings.aiActionLimit=1;
@@ -86,7 +86,7 @@ function run(fault) {
       original.call(this,cell); whooseTurn=1; afterMove(); whooseTurn=3;
     };
     whooseTurn=3; players[3].play(); whooseTurn=1; undefined`);
-  f.compare('legal-movement-only',f.evaluate('trace'),[{type:'move',destination:{x:6,y:6},legal:true}]);
+  f.compare('legal-movement-only',f.evaluate('trace'),[{type:'move',destination:{x:7,y:4},legal:true}]);
   check('movement-completed');
   console.log('INAPPLICABLE completed rounds/phase counts: isolated combat play does not advance dispatcher; shared turn ledger checks human 1 at round 0 after every action.');
   console.log('INAPPLICABLE online convergence: offline fixtures have no committed online revisions.');

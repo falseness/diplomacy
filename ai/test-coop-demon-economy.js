@@ -96,7 +96,7 @@ function run(fault) {
     globalThis.blocker=new ${kind==='town'?'Town(4,3,true)':'Goldmine(4,3,50)'};
     ${kind==='town'?'blocker.hp=0;':''}
     whooseTurn=3; walker.select(); undefined`);
-    f.compare(`${kind}-destination-cost`,f.evaluate('walker.interaction.way.getDistance({x:4,y:3})'),2);
+    f.compare(`${kind}-destination-cost`,f.evaluate('walker.interaction.way.getDistance({x:4,y:3})'),kind==='town'?3:2);
     f.compare(`${kind}-transit-cost`,f.evaluate('walker.interaction.way.getDistance({x:5,y:3})'),3);
     f.compare(`${kind}-no-transit-command`,f.evaluate(`walker.getAvailableCommands().some(c=>
       c.destinationCoord.x===5 && c.destinationCoord.y===3)`),false);
@@ -127,8 +127,8 @@ function run(fault) {
       }
       f.compare(label+'-ownership-and-combat',f.evaluate(`({owner:target.playerColor,hp:${hp===null?'null':'target.hp'},
         attacker:attacker.coord,gold:players.map(p=>p.gold),demonTowns:players[3].towns.length})`),
-        {owner:razed?3:owner,hp:hp===null?null:Math.max(0,hp-(ranged?2:1)),attacker:{x:razed?6:5,y:3},gold:[0,100,75,0],demonTowns:0});
-      f.compare(label+'-path-no-economic-transit',f.evaluate('attacker.interaction.way.getDistance({x:6,y:3})'),ranged?3:2);
+        {owner:razed?3:owner,hp:hp===null?null:owner===0?hp:Math.max(0,hp-(ranged?2:1)),attacker:{x:razed?6:5,y:3},gold:[0,100,75,0],demonTowns:0});
+      f.compare(label+'-path-no-economic-transit',f.evaluate('attacker.interaction.way.getDistance({x:6,y:3})'),ranged||kind==='town'&&owner===0?3:2);
       s.check(label+'-after-command'); count++;
     }
   }

@@ -79,10 +79,15 @@ class InterationWithUnit {
             this.addKillBuildingUndo(cellBuilding)
     }
     canHitSomethingOnCell(cell, unit) {
-        return !this.cantInteract(cell.coord, unit) &&
+        return !unit.player.ignoresCell(cell) && !this.cantInteract(cell.coord, unit) &&
             (this.cellHasEnemyBuilding(cell, unit) || this.cellHasEnemyUnit(cell, unit))
     }
     sendInstructions(cell, unit) {
+        if (unit.player.ignoresCell(cell)) return true
+        // Rebuild demon movement before execution: a stored path may now cross
+        // a neutral town after ownership or board state changed.
+        if (unit.player.role === 'DEMONS')
+            this.way.create(unit.coord, this.moves, grid.arr, unit.playerColor, border)
         let coord = cell.coord
         if (this.cantInteract(coord, unit)) {
             this.removeSelect()
@@ -214,11 +219,11 @@ class InterationWithUnit {
         this.addKillUnitUndo(unit)
     }
     cellHasEnemyBuilding(cell, unit) {
-        return (cell.building.notEmpty() &&
+        return (!unit.player.ignoresCell(cell) && cell.building.notEmpty() &&
             !unit.player.isAlliedWith(cell.building.player) && !cell.building.isPassable)
     }
     cellHasEnemyUnit(cell, unit) {
-        return cell.unit.notEmpty() &&
+        return !unit.player.ignoresCell(cell) && cell.unit.notEmpty() &&
             !unit.player.isAlliedWith(cell.unit.player)
     }
 
@@ -293,7 +298,7 @@ class Way {
             players[player].isAlliedWith(cell.unit.player)
         let buildingObstacle = cell.building.isObstacle(player) || teammateBuilding || teammateUnit
         let fogged = isFogOfWar && !grid.fogOfWar[neighbour.x][neighbour.y]
-        return (ourUnit || buildingObstacle || fogged)
+        return (players[player].ignoresCell(cell) || ourUnit || buildingObstacle || fogged)
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {
         // if hexagon has the same color, he will be processed later
@@ -447,7 +452,8 @@ class InfluenceFieldWay {
 class BestEnemyTargetForAI extends Way {
     isCellImpassable(neighbour, v0, arr, player) {
         let cell = arr[neighbour.x][neighbour.y]
-        return cell.building.isStaticNature && cell.building.isObstacle(player)
+        return players[player].ignoresCell(cell) ||
+            (cell.building.isStaticNature && cell.building.isObstacle(player))
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         Q.push(coord)
@@ -464,7 +470,7 @@ class BestEnemyTargetForAI extends Way {
         for (let i = 0; i < grid_arr.length; ++i) {
             for (let j = 0; j < grid_arr[i].length; ++j) {
                 let cell = grid_arr[i][j]
-                let is_building_target = cell.building.notEmpty() &&
+                let is_building_target = !players[myPlayerColor].ignoresCell(cell) && cell.building.notEmpty() &&
                     !players[myPlayerColor].isAlliedWith(cell.building.player) &&
                     (!cell.building.isExternal || cell.building.isDemonPortal) && !cell.building.isNature
                 if (is_building_target &&
@@ -480,7 +486,7 @@ class BestEnemyTargetForAI extends Way {
         for (let i = 0; i < grid_arr.length; ++i) {
             for (let j = 0; j < grid_arr[i].length; ++j) {
                 let cell = grid_arr[i][j]
-                let is_unit_target = cell.unit.notEmpty() &&
+                let is_unit_target = !players[myPlayerColor].ignoresCell(cell) && cell.unit.notEmpty() &&
                     !players[myPlayerColor].isAlliedWith(cell.unit.player)
                 if (is_unit_target &&
                     this.distance[i][j] < minDistance) {
