@@ -6,8 +6,8 @@ const selected = require('./coop-balance-selected.json');
 const copy = x => JSON.parse(JSON.stringify(x));
 const probe = `(() => {
  const specimens=[Imp,Clawling,Hound,Brute,Bulwark,Spitter,EmberArcher,Hexcaster,Ravager,DemonLord].map(C=>{
-   grid.getHexagon({x:12,y:12}).repaint(gameSettings.coop.demonSlot,false);
-   const u=new C(12,12); const row=[u.hp,u.dmg,u.speed,u.range || 1,u.constructor.salary,u.constructor.healSpeed];
+   grid.getHexagon({x:grid.arr.length-2,y:grid.arr[0].length-2}).repaint(gameSettings.coop.demonSlot,false);
+   const u=new C(grid.arr.length-2,grid.arr[0].length-2); const row=[u.hp,u.dmg,u.speed,u.range || 1,u.constructor.salary,u.constructor.healSpeed];
    u.kill(); return row;
  });
  return {specimens,weights:Object.fromEntries(Object.entries(getCoopWaveConfig(gameSettings.coop.balanceVersion ?? 1).types).map(([id,t])=>[id,t.weight])),types:getUnlockedCoopDemonTypes(gameRound,gameSettings.coop.balanceVersion ?? 1),
@@ -30,12 +30,13 @@ if (process.argv.includes('--server')) {
 } else {
   const inputs=[], results=[];
   const rounds=[...new Set([0,1,2,...Object.values(selected.types).flatMap(t=>[t.unlockRound-1,t.unlockRound,t.unlockRound+1])])].sort((a,b)=>a-b);
-  for (const version of [1,2]) for(const humans of [1,2,3,4]) for(const [preset,side] of [['tiny',15],['normal',25],['big',39]]) {
-    const c=defaultFixture(); c.coop=true; c.size={x:side,y:side};
-    c.actors=[c.actors[0],...Array.from({length:humans},(_,i)=>({...copy(c.actors[1]),units:[{x:1+i*2,y:1,hp:2}],towns:[]})),{role:'demon',gold:0,economyEnabled:false,units:[],towns:[]}];
+  for (const version of [1,2]) for(const humans of (process.argv.includes('--expanded') ? Array.from({length:12},(_,i)=>i+1) : [1,2,3,4])) for(const [preset,side] of [['tiny',15],['normal',25],['big',39]]) {
+    const c=defaultFixture(); c.coop=true; c.size=process.argv.includes('--expanded') && version===2 ? require('./coop-map-scaling').getCoopMapScaling(humans,preset).mapSize : {x:side,y:side};
+    c.actors=[c.actors[0],...Array.from({length:humans},(_,i)=>({...copy(c.actors[1]),units:[{x:1+i%6*2,y:1+Math.floor(i/6)*2,hp:2}],towns:[]})),{role:'demon',gold:0,economyEnabled:false,units:[],towns:[]}];
     const f=createFixture(c);
     assert.equal(f.evaluate('gameSettings.coop.balanceVersion'),2);
     f.evaluate(`gameSettings.coop.size='${preset}'; ${version===1?'delete gameSettings.coop.balanceVersion;':''} new DemonPortal(10,10);`);
+    if(process.argv.includes('--expanded') && version===2) f.evaluate(`gameSettings.coop.generation={version:3,playerCount:${humans},seed:42,size:'${preset}',options:{seed:42,size:'${preset}'}}; undefined`);
     const initial=f.evaluate('JSON.stringify(getGameObject())');
     for (const round of rounds) {
       f.context.initial=initial; f.evaluate(`loadFromJson(initial); gameRound=${round};`);
@@ -72,5 +73,5 @@ if (process.argv.includes('--server')) {
   const f=createFixture(defaultFixture());
   assert.deepEqual(f.evaluate('[Noob,Normchel,KOHb,Archer,Catapult].map(C=>[C.maxHP,C.dmg,C.speed])'),[[2,1,2],[5,1,2],[3,1,4],[1,2,2],[1,0,2]]);
   assert.throws(()=>f.evaluate('getDemonTypes(999)'),{name:'RangeError'});
-  console.log(`PASS fixed-balance local-server-identical cases=${results.length} versions=legacy-unversioned,2 types=10 presets=3 counts=1,2,3,4 all-unlock-boundaries=true actual-unit-hp=true save-map-phase=identical no-backlog=true human-competitive=unchanged unknown-version=rejected server_exit=${child.status}`);
+  console.log(`PASS fixed-balance local-server-identical cases=${results.length} versions=legacy-unversioned,2 types=10 presets=3 counts=${process.argv.includes('--expanded')?'1..12':'1,2,3,4'} all-unlock-boundaries=true actual-unit-hp=true save-map-phase=identical no-backlog=true human-competitive=unchanged unknown-version=rejected server_exit=${child.status}`);
 }

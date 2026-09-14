@@ -4,6 +4,7 @@ const fs = require('fs'), path = require('path'), assert = require('assert').str
 const crypto = require('crypto');
 const {createFixture} = require('./test-coop-harness');
 const {neighbours} = require('./test-coop-terrain-audit');
+const {getCoopMapScaling} = require('./coop-map-scaling');
 const {buildReport} = require('./coop-army-valuation');
 const key = c => `${c.x},${c.y}`;
 const POLICIES = {
@@ -59,8 +60,8 @@ function calibrate(map) {
       if(c.x>=0&&c.y>=0&&c.x<map.mapSize.x&&c.y<map.mapSize.y&&!occupied.has(key(c))&&!reserved.has(key(c))) ring.set(key(c),c);
     const sites=[...ring.values()].sort((a,b)=>a.x-b.x||a.y-b.y).slice(0,6);
     sites.forEach(c=>reserved.add(key(c)));
-    return {human:i+1,start:t,startingGold:map.players[i+1].gold,mine:mines[i],town:towns[i],sites,
-      initialFarmSites:neighbours(t).filter(c=>!occupied.has(key(c))).length};
+    return {availableObjectives:{towns:map.players[0].towns.length,mines:map.goldmines.length}, policyObjectiveLimit:1, human:i+1,start:t,startingGold:map.players[i+1].gold,mine:mines[i],town:towns[i],sites,
+      initialFarmSites:neighbours(t).filter(c=>c.x>=0&&c.y>=0&&c.x<map.mapSize.x&&c.y<map.mapSize.y&&!occupied.has(key(c))).length};
   });
 }
 function project(access, policyName, rounds, rules, options={}) {
@@ -148,15 +149,19 @@ function main() {
   const seeds=get('--seeds','0:31').split(':').map(Number), rounds=Number(get('--rounds','40'));
   assert(seeds.length===2&&seeds.every(Number.isInteger)&&seeds[0]>=0&&seeds[1]>=seeds[0]&&seeds[1]<=31);
   assert(Number.isInteger(rounds)&&rounds>=0&&rounds<=40);
-  const out=path.resolve(get('--output-dir','artifacts/TASK-106'));fs.mkdirSync(out,{recursive:true});
+  const out=path.resolve(get('--output-dir','artifacts/TASK-126'));fs.mkdirSync(out,{recursive:true});
   const f=createFixture(undefined,()=>{}),rules=readRules(f), index=[], accessRows=[];
   const stream=fs.openSync(path.join(out,'ledgers.jsonl'),'w');
   try {
-    for(const size of ['tiny','normal','big']) for(let humans=1;humans<=4;humans++) for(let seed=seeds[0];seed<=seeds[1];seed++) {
+    for(const size of ['tiny','normal','big']) for(let humans=1;humans<=12;humans++) for(let seed=seeds[0];seed<=seeds[1];seed++) {
       const started=Date.now();const map=f.evaluate(`JSON.parse(JSON.stringify(generateCoopGame(${humans},{size:'${size}',seed:${seed}})))`);
+      const scaling=getCoopMapScaling(humans,size);
+      assert.deepEqual(map.mapSize,scaling.mapSize,'formula-derived dimensions');
+      const observed={humanTowns:map.players.slice(1,-1).reduce((n,p)=>n+p.towns.length,0),neutralTowns:map.players[0].towns.length,goldmines:map.goldmines.length,portals:map.portals.length,mountains:map.mountains.length,lakes:map.lakes.length,bushes:map.bushes.length};
+      assert.deepEqual(observed,scaling.counts,'formula-derived object counts');
       const access=calibrate(map); const id=`${size}-H${humans}-seed${seed}`;
       assert(access.every(a=>a.startingGold===100),'starting gold');
-      accessRows.push({id,size,humans,seed,mapHash:crypto.createHash('sha256').update(JSON.stringify(map)).digest('hex'),access});
+      accessRows.push({id,size,humans,seed,scaling,observedCounts:observed,mapHash:crypto.createHash('sha256').update(JSON.stringify(map)).digest('hex'),access});
       for(const policy of Object.keys(POLICIES)) {
         const projections=access.map(a=>project(a,policy,rounds,rules));
         for(const projection of projections) fs.writeSync(stream,JSON.stringify({id,...projection})+'\n');
@@ -166,15 +171,17 @@ function main() {
     }
   } finally {fs.closeSync(stream);}
   fs.writeFileSync(path.join(out,'access.json'),JSON.stringify(accessRows,null,2)+'\n');
-  fs.writeFileSync(path.join(out,'projection.json'),JSON.stringify({model:'offline-economy-v1',targetPolicy:'typical',rules,policies:POLICIES,scenarios:index},null,2)+'\n');
+  fs.writeFileSync(path.join(out,'projection.json'),JSON.stringify({model:'offline-economy-v2-scaled',targetPolicy:'typical',rules,policies:POLICIES,scenarios:index},null,2)+'\n');
   const summary=[];
-  for(const size of ['tiny','normal','big'])for(let h=1;h<=4;h++)for(const policy of Object.keys(POLICIES)) {
+  for(const size of ['tiny','normal','big'])for(let h=1;h<=12;h++)for(const policy of Object.keys(POLICIES)) {
     const rows=index.filter(r=>r.size===size&&r.humans===h&&r.policy===policy),vs=rows.map(r=>r.armyValueByRound[rounds]);
     const accesses=accessRows.filter(r=>r.size===size&&r.humans===h).flatMap(r=>r.access);
     const range=k=>{const v=accesses.map(a=>a[k].distance);return `${Math.min(...v)}–${Math.max(...v)}`;};
     summary.push(`| ${size} | ${h} | ${policy} | ${range('mine')} | ${range('town')} | ${Math.min(...vs)} | ${(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(2)} | ${Math.max(...vs)} |`);
   }
-  fs.writeFileSync(path.join(out,'report.md'),`# Offline human production projection\n\nTypical is the future tuning target. Initial army is one Noob (20) per human plus 100 gold. Army value = 20 + completed recruit values; spending and unspent gold are never army value. No casualties by default; explicit casualty events reduce future salary only.\n\nAll 3 sizes, H1–4, seeds ${seeds.join('–')}, rounds 0–${rounds}. Policy constants and every individual income, investment, salary, queue, completion and gold balance are in projection.json and ledgers.jsonl. Access.json retains unique objective assignments, actual map hashes, independent BFS edge distances and distinct second-ring sites. Assignment is greedy in human order, so reports retain actual per-human variation rather than assuming equal access.\n\nTiming: round 0 allows spending but no income. Later turns credit pre-completion town (4), suburb (1 each), farm (4), and mine (20) income, then charge living-unit salary, complete queues/builds, acquire assets and spend. Mines first pay at max(21, capture+1). Farms cost 32, complete next turn and first pay the following turn. One queue per town; Noob costs 20 and trains one turn; Archer costs 40 and trains two. Default policies recruit Noobs only, a transparent valuation anchor. No barracks or higher-tier production investment is assumed. Reserve and sustainable salary cap can idle queues; queues are not inferred from available gold.\n\nPolicy assumptions: travel at the declared 1 or 2 edges/round, departure delays 4/2/1. Initial scout claims assigned mine. A separate four-recruit expedition departs after assembling, then travels and spends 12/8/6 additional turns on neutral-town assault, capture and recovery. These are declared scenario allowances, not simulated victories; healing, enemy interference, casualties and path congestion can invalidate acquisition forecasts. Neutral town adds only its central suburb and one queue, earns income next turn. No neutral town or mine is allocated twice. Farm limits 2/5/8 use empty initial-ring sites plus purchased second-ring sites. One expansion per declared interval includes a land-claim allowance; each adjacent second-ring suburb costs 3, earns next turn. Empty sites exclude all nature/buildings and overlap. Existing six starting suburbs earn income even if not farmable. Expansion claims and garrison evacuation are assumed feasible with available recruits; actual long-game action replay is not claimed.\n\nRepresentative real-engine comparisons in tests.log cover spending, salary ordering, two-turn training, blocked output, farm completion/income and round-20/21 mine opening. These validate local accounting rules, not the speculative conquest schedule. Economic projections are offline fixed policies, never adaptive difficulty.\n\n| Size | Humans | Policy | Mine edges range | Town edges range | Final value min | Mean | Max |\n|---|---:|---|---:|---:|---:|---:|---:|\n${summary.join('\n')}\n`);
+  fs.writeFileSync(path.join(out,'economy-report.md'),`# Offline human production projection\n\nTypical is the future tuning target. Initial army is one Noob (20) per human plus 100 gold. Army value = 20 + completed recruit values; spending and unspent gold are never army value. No casualties by default; explicit casualty events reduce future salary only.\n\nAll 3 sizes, H1–12, seeds ${seeds.join('–')}, rounds 0–${rounds}. Policy constants and every individual income, investment, salary, queue, completion and gold balance are in projection.json and ledgers.jsonl. Access.json retains unique objective assignments, actual map hashes, independent BFS edge distances and distinct second-ring sites. Scaled dimensions and every object count are checked against the area formula for each generated map. Before: fixed sides 15/25/39 and H1–4; after: max(minimum, ceil(baseSide * sqrt(H/4))) and H1–12. The original scenario policies deliberately attempt one unique mine and one unique neutral town per human, even when Normal/Big provide two/three; surplus objectives are retained in access records but confer no unearned income or production. Each assigned distance and empty farm/expansion site is recalculated, never extrapolated from H4. Assignment is greedy in human order, so reports retain actual per-human variation rather than assuming equal access.\n\nTiming: round 0 allows spending but no income. Later turns credit pre-completion town (4), suburb (1 each), farm (4), and mine (20) income, then charge living-unit salary, complete queues/builds, acquire assets and spend. Mines first pay at max(21, capture+1). Farms cost 32, complete next turn and first pay the following turn. One queue per town; Noob costs 20 and trains one turn; Archer costs 40 and trains two. Default policies recruit Noobs only, a transparent valuation anchor. No barracks or higher-tier production investment is assumed. Reserve and sustainable salary cap can idle queues; queues are not inferred from available gold.\n\nPolicy assumptions: travel at the declared 1 or 2 edges/round, departure delays 4/2/1. Initial scout claims assigned mine. A separate four-recruit expedition departs after assembling, then travels and spends 12/8/6 additional turns on neutral-town assault, capture and recovery. These are declared scenario allowances, not simulated victories; healing, enemy interference, casualties and path congestion can invalidate acquisition forecasts. Neutral town adds only its central suburb and one queue, earns income next turn. No neutral town or mine is allocated twice. Farm limits 2/5/8 use empty initial-ring sites plus purchased second-ring sites. One expansion per declared interval includes a land-claim allowance; each adjacent second-ring suburb costs 3, earns next turn. Empty sites exclude all nature/buildings and overlap. Existing six starting suburbs earn income even if not farmable. Expansion claims and garrison evacuation are assumed feasible with available recruits; actual long-game action replay is not claimed.\n\nRepresentative real-engine comparisons in tests.log cover spending, salary ordering, two-turn training, blocked output, farm completion/income and round-20/21 mine opening. These validate local accounting rules, not the speculative conquest schedule. Economic projections are offline fixed policies, never adaptive difficulty.\n\n| Size | Humans | Policy | Mine edges range | Town edges range | Final value min | Mean | Max |\n|---|---:|---|---:|---:|---:|---:|---:|\n${summary.join('\n')}\n`);
+  const sourceFiles=require('child_process').execFileSync('git',['ls-files','*.js','index.html'],{cwd:path.resolve(__dirname,'..'),encoding:'utf8'}).trim().split('\n');
+  fs.writeFileSync(path.join(out,'projection-source-identity.json'),JSON.stringify({sha256:Object.fromEntries(sourceFiles.map(file=>[file,crypto.createHash('sha256').update(fs.readFileSync(path.resolve(__dirname,'..',file))).digest('hex')]))},null,2)+'\n');
   console.log(`PASS economy projection maps=${accessRows.length} policy_scenarios=${index.length} individual_ledgers=${accessRows.reduce((s,r)=>s+r.humans*3,0)} target=typical rounds=0..${rounds}`);
 }
 if(require.main===module)main();

@@ -63,3 +63,22 @@ f.evaluate('grid.getHexagon({x:0,y:1}).playerColor=1;new Goldmine(0,1,20);gameRo
 compare('mine-round20-zero','players[1].gold',98);
 f.evaluate('gameRound=21;players[1].nextTurn()');compare('mine-round21-income20','players[1].gold',130);
 console.log('PASS economy projection tests rules=validated policies=3 corruption_probes=5 actual_action_ledger=14');
+
+// Expansion capacity is geometry-limited, even with unlimited starting cash.
+const rich=copy(access); rich.startingGold=100000; rich.initialFarmSites=0;
+rich.sites=[{x:2,y:3}];
+const constrained=project(rich,'expansion',40,rules);
+assert.equal(constrained.events.filter(e=>e.type==='invest'&&e.kind==='suburb').length,1);
+assert.equal(constrained.events.filter(e=>e.type==='invest'&&e.kind==='farm').length,1);
+assert(constrained.ledger.every(r=>r.capacity<=2));
+console.log('PASS independent-expansion-capacity expected_suburbs=1 observed=1 expected_farms=1 observed=1 max_town_queues=2');
+// Distinct objectives and sites: additional resources never become free income.
+for(const size of ['tiny','normal','big']) for(const humans of [1,4,12]) {
+  const generated=f.evaluate(`JSON.parse(JSON.stringify(generateCoopGame(${humans},{size:'${size}',seed:0})))`);
+  const assignments=calibrate(generated);
+  for(const kind of ['town','mine']) assert.equal(new Set(assignments.map(a=>JSON.stringify(a[kind].target))).size,humans);
+  const sites=assignments.flatMap(a=>a.sites.map(c=>`${c.x},${c.y}`));
+  assert.equal(new Set(sites).size,sites.length);
+  for(const a of assignments) for(const policy of ['conservative','typical','expansion']) audit(project(a,policy,40,rules),rules);
+  console.log(`PASS scaled-access size=${size} humans=${humans} objectives=unique sites=unique ledgers=solvent capacity=audited`);
+}

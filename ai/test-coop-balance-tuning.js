@@ -50,7 +50,7 @@ async function main() {
   const i=process.argv.indexOf('--audit');if(i<0)return;
   const dir=process.argv[i+1],read=f=>JSON.parse(fs.readFileSync(path.join(dir,f),'utf8'));
   const maps=read('maps.json'),human=read('human-projection.json'),cs=read('candidates.json'),chosen=read('selected-config.json'),summary=read('summary.json');
-  const hs=new Map(human.scenarios.map(s=>[s.id+'/'+s.policy,s]));assert.equal(maps.length,384);assert.equal(hs.size,1152);
+  const hs=new Map(human.scenarios.map(s=>[s.id+'/'+s.policy,s]));assert.equal(maps.length,1152);assert.equal(hs.size,3456);
   let best=Infinity,bestId;
   for(const candidate of cs) {
     let sum=0,count=0;
@@ -61,7 +61,7 @@ async function main() {
         if(r>=3){sum+=Math.abs(cumulative/(1.4*hs.get(m.id+'/typical').armyValueByRound[r])-1);count++;}
       }
     }
-    close(sum/count,candidate.meanAbsoluteRelativeDeviation);assert.equal(count,14592);assert.equal(candidate.terms,count);
+    close(sum/count,candidate.meanAbsoluteRelativeDeviation);assert.equal(count,43776);assert.equal(candidate.terms,count);
     if(sum/count<best){best=sum/count;bestId=candidate.config.id;}
   }
   assert.equal(chosen.id,bestId);assert(best<cs[0].meanAbsoluteRelativeDeviation);
@@ -85,8 +85,8 @@ async function main() {
     if(!totals.has(sk))totals.set(sk,{sum:0,n:0,ratios:Array(41).fill(0),curves:0});const t=totals.get(sk);t.curves++;
     s.rows.forEach((r,i)=>{t.ratios[i]+=r.ratio;if(i>=3){t.sum+=Math.abs(r.relativeDeviation);t.n++;}});curves++;
   }
-  assert.equal(curves,6912);assert.equal(summary.length,54);
+  assert.equal(curves,20736);assert.equal(summary.length,54);
   for(const s of summary){const t=totals.get([s.name,s.sensitivity,s.policy,s.size].join('/'));assert(t);close(s.meanAbsoluteRelativeDeviation,t.sum/t.n);assert.equal(s.terms,t.n);s.meanRatios.forEach((v,r)=>close(v,t.ratios[r]/t.curves));}
-  console.log(`PASS independent artifact audit maps=384 policies=3 candidates=36 terms_per_candidate=14592 curves=${curves} round_records=${curves*41} summary_rows=54 selected=${bestId} all_values_ratios_counts=matched`);
+  console.log(`PASS independent artifact audit maps=1152 policies=3 candidates=36 terms_per_candidate=43776 curves=${curves} round_records=${curves*41} summary_rows=54 selected=${bestId} all_values_ratios_counts=matched`);
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
