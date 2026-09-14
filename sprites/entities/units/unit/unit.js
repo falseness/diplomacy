@@ -86,7 +86,8 @@ class Unit extends Entity {
         if (this.isMyTurn) {
             unit.info.moves = this.moves + ' / ' + this.speed    
         }
-        unit.info.salary = this.salary
+        if (this.player.showsUnitSalary)
+            unit.info.salary = this.salary
         return unit
     }
     select() {

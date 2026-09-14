@@ -7,7 +7,7 @@ const {chromium} = require('playwright');
 const {defaultFixture} = require('./test-coop-harness');
 const root = path.resolve(__dirname, '..');
 const outputIndex = process.argv.indexOf('--output-dir');
-const out = path.resolve(root, outputIndex < 0 ? 'artifacts/TASK-079' : process.argv[outputIndex+1], 'selection');
+const out = path.resolve(root, outputIndex < 0 ? 'artifacts/TASK-112' : process.argv[outputIndex+1], 'selection');
 const compare = (label, observed, expected) => {
   console.log(JSON.stringify({scenario:label, expected, observed}));
   assert.deepEqual(observed, expected, label);
@@ -70,43 +70,66 @@ const compare = (label, observed, expected) => {
       ['emberArcher','Ember Archer',2,1], ['hexcaster','Hexcaster',3,2],
       ['ravager','Ravager',4,3], ['demonLord','Demon Lord',10,3]
     ].map(([type,title,hp,dmg],i)=>({type,title,i,owner:3,role:'DEMONS',
-      lines:[title,`hp: ${hp} / ${hp}`,`dmg: ${dmg}`,'salary: 0']}));
+      lines:[title,`hp: ${hp} / ${hp}`,`dmg: ${dmg}`]}));
     await page.evaluate(()=>{window.portal=new DemonPortal(3,2);});
     cases.push({type:'portal',title:'Demon Portal',owner:3,role:'DEMONS',
       lines:['Demon Portal','hp: 30 / 30']});
     cases.push({type:'human',title:'noob',owner:1,role:'HUMAN',
       lines:['noob','hp: 2 / 2','dmg: 1','moves: 2 / 2','salary: 1','skip moves']});
-    for (const scenario of cases) {
-      const observed = await page.evaluate(({type,i})=>{
-        const selected=type==='portal' ? portal : type==='human' ? grid.getUnit({x:2,y:2}) : demons[i];
-        gameEvent.selectSomethingOnCell(grid.getCell(selected.coord));
-        // Capture text sent to the actual visible panel's canvas render cache,
-        // forwarding every draw unchanged. This inspects rendering, not just info.
-        const lines=[], original=CanvasRenderingContext2D.prototype.fillText;
-        CanvasRenderingContext2D.prototype.fillText=function(text,...args) {
-          lines.push(String(text));return original.call(this,text,...args);
-        };
-        try { entityInterface.renderCacheDirty=true; entityInterface.createRenderCache(); }
-        finally { CanvasRenderingContext2D.prototype.fillText=original; }
-        drawAll();
-        return {visible:entityInterface.visible,selected:gameEvent.selected===selected,
-          title:entityInterface.entity.name.text,lines,owner:selected.playerColor,
-          role:selected.player.role,registered:type==='portal' ? external.includes(selected) : selected.player.units.includes(selected)};
-      },scenario);
-      const expected={visible:true,selected:true,title:scenario.title,lines:scenario.lines,
-        owner:scenario.owner,role:scenario.role,registered:true};
-      compare(scenario.type+'-rendered-panel',observed,expected);
-      compare(scenario.type+'-no-owner-row',observed.lines.some(line=>/owner|^demons?$/i.test(line)),false);
-      const screenshot=path.join(out,'screenshots',scenario.type+'.png');
-      const bytes=await page.screenshot({path:screenshot});
-      const sha256=crypto.createHash('sha256').update(bytes).digest('hex');
-      checkpoints.push({scenario:scenario.type,screenshot,sha256,expected,observed});
-      console.log(`PASS screenshot ${scenario.type} path=${screenshot} sha256=${sha256}`);
+    cases.push({type:'human-zero',title:'noob',owner:1,role:'HUMAN',
+      lines:['noob','hp: 2 / 2','dmg: 1','moves: 2 / 2','salary: 0','skip moves']});
+    const before = await page.evaluate(()=>JSON.stringify(getGameObject()));
+    for (const phase of ['before', 'reloaded']) {
+      if (phase === 'reloaded') await page.evaluate(saved=>{
+        loadFromJson(saved);
+        window.demons=players[3].units.filter(u=>u.constructor.type);
+        window.portal=external.find(e=>e.isDemonPortal);
+        nextTurnPauseInterface.hideButDontUpdateTimer(); timer.pauseAndSaveTime();
+      },before);
+      compare(phase+'-serialized-state',await page.evaluate(()=>JSON.stringify(getGameObject())),before);
+      compare(phase+'-demon-salaries',await page.evaluate(()=>demons.map(u=>u.salary)),Array(10).fill(0));
+      for (const scenario of cases) {
+        const observed = await page.evaluate(({type,i})=>{
+          const selected=type==='portal' ? portal : type.startsWith('human') ? grid.getUnit({x:2,y:2}) : demons[i];
+          // Fixture-only own getter exercises a zero-salary human without changing class rules.
+          if (type==='human-zero') Object.defineProperty(selected,'salary',{value:0,configurable:true});
+          gameEvent.selectSomethingOnCell(grid.getCell(selected.coord));
+          // Capture text sent to the actual visible panel's canvas render cache,
+          // forwarding every draw unchanged. This inspects rendering, not just info.
+          const lines=[], original=CanvasRenderingContext2D.prototype.fillText;
+          CanvasRenderingContext2D.prototype.fillText=function(text,...args) {
+            lines.push(String(text));return original.call(this,text,...args);
+          };
+          try { entityInterface.renderCacheDirty=true; entityInterface.createRenderCache(); }
+          finally { CanvasRenderingContext2D.prototype.fillText=original; }
+          drawAll();
+          const panelInfo=selected.info.info;
+          if (type==='human-zero') delete selected.salary;
+          return {panelInfo,visible:entityInterface.visible,selected:gameEvent.selected===selected,
+            title:entityInterface.entity.name.text,lines,owner:selected.playerColor,
+            role:selected.player.role,registered:type==='portal' ? external.includes(selected) : selected.player.units.includes(selected)};
+        },scenario);
+        const panelInfo={hp:scenario.lines[1].slice(4)};
+        if (scenario.type!=='portal') panelInfo.dmg=Number(scenario.lines[2].slice(5));
+        if (scenario.type.startsWith('human')) {
+          panelInfo.moves='2 / 2'; panelInfo.salary=scenario.type==='human-zero'?0:1;
+        }
+        const expected={panelInfo,visible:true,selected:true,title:scenario.title,lines:scenario.lines,
+          owner:scenario.owner,role:scenario.role,registered:true};
+        compare(phase+'-'+scenario.type+'-rendered-panel',observed,expected);
+        compare(phase+'-'+scenario.type+'-no-owner-row',observed.lines.some(line=>/owner|^demons?$/i.test(line)),false);
+        const screenshot=path.join(out,'screenshots',phase+'-'+scenario.type+'.png');
+        const bytes=await page.screenshot({path:screenshot});
+        const sha256=crypto.createHash('sha256').update(bytes).digest('hex');
+        checkpoints.push({phase,scenario:scenario.type,screenshot,sha256,expected,observed});
+        console.log(`PASS screenshot ${scenario.type} path=${screenshot} sha256=${sha256}`);
+      }
+      compare(phase+'-selection-preserves-state',await page.evaluate(()=>JSON.stringify(getGameObject())),before);
     }
     compare('browser-console-errors',errors,[]);
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
-    console.log('PASS co-op selection info demon_types=10 portals=1 human_controls=1 rendered_panels=12 ownership_preserved=12');
+    console.log('PASS co-op selection info demon_types=10 portals=1 human_controls=2 phases=2 rendered_panels=26 ownership_preserved=26');
   } finally {
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser) await browser.close();

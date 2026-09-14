@@ -29,6 +29,9 @@ class Player {
             return 'DEMONS'
         return 'HUMAN'
     }
+    get showsUnitSalary() {
+        return this.role !== 'DEMONS'
+    }
     get team() {
         if (gameSettings.coop && gameSettings.coop.humanSlots.includes(players.indexOf(this)))
             return gameSettings.coop.humanTeam
