@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="ravager-title ravager-desc">
+<title id="ravager-title">Ravager — charging armored beast, left-facing</title>
+<desc id="ravager-desc">Left-facing heavy demon quadruped with KOHb's staggered running legs, a hunched burgundy carapace, ivory dorsal blades, broad lowered jaw and a forward siege horn. Smooth upper-right miniature lighting; editable vectors on transparent canvas. No rider or tack.</desc>
+<defs>
+<radialGradient id="ravager-body" cx="65%" cy="24%" r="84%"><stop stop-color="#b66c7c"/><stop offset=".4" stop-color="#874358"/><stop offset="1" stop-color="#422638"/></radialGradient>
+<radialGradient id="ravager-neck" cx="83%" cy="15%" r="105%"><stop stop-color="#d09197"/><stop offset=".4" stop-color="#99566a"/><stop offset="1" stop-color="#502c40"/></radialGradient>
+<radialGradient id="ravager-rear" cx="76%" cy="18%" r="96%"><stop stop-color="#815469"/><stop offset="1" stop-color="#362637"/></radialGradient>
+<radialGradient id="ravager-paw" cx="76%" cy="18%" r="96%"><stop stop-color="#7a717d"/><stop offset="1" stop-color="#2c2835"/></radialGradient>
+<linearGradient id="ravager-ivory" x1="0%" y1="80%" x2="100%" y2="15%"><stop stop-color="#958476"/><stop offset=".5" stop-color="#dac8a5"/><stop offset="1" stop-color="#fff0ce"/></linearGradient>
+</defs>
+<g transform="translate(512 0) scale(-1 1)">
+<g id="ravager-tail"><path d="M132 258 Q68 290 41 248 L27 224 Q60 250 115 229Z" fill="url(#ravager-body)"/></g>
+  <g id="ravager-far-legs">
+    <path d="M142 298 Q159 326 148 359 L141 382 L180 451 L194 468 L179 479 L163 465 L118 391 Q110 379 118 359 L120 314Z" fill="url(#ravager-rear)" />
+    <path d="M175 460 L195 459 L216 480 Q196 488 174 482Z" fill="url(#ravager-paw)" />
+    <path d="M327 291 Q350 321 374 338 Q385 346 382 360 L377 375 L335 401 L314 391 L354 364 L349 354 L310 333Z" fill="url(#ravager-rear)" />
+    <path d="M316 381 L337 393 L321 408 Q307 410 298 397Z" fill="url(#ravager-paw)" />
+  </g>
+
+<g id="ravager-torso-and-near-hind-leg"><path d="M132 225 C167 210 213 213 258 222 Q297 228 322 218 C346 219 365 248 359 280 C354 315 326 334 291 335 L205 332 Q160 333 127 312 C95 292 94 247 132 225Z" fill="url(#ravager-body)" />
+
+<path d="M176 300 Q203 310 199 337 L189 371 Q209 395 243 411 L262 432 L247 444 L228 426 Q191 412 169 384 Q162 375 166 361 L168 327Z" fill="url(#ravager-body)" />
+
+<path d="M238 423 L261 428 L276 445 Q254 451 237 440Z" fill="url(#ravager-paw)" />
+    </g>
+<g id="ravager-shoulder-and-near-foreleg">
+<path d="M270 252 Q291 204 330 183 Q350 173 365 191 Q387 223 382 275 Q416 299 432 322 Q451 358 458 402 L462 418 L442 423 L435 402 Q429 361 412 340 Q383 326 355 327 Q344 343 326 336 Q292 315 270 252Z" fill="url(#ravager-neck)"/>
+<path d="M439 407 L462 411 L477 434 Q457 439 440 425Z" fill="url(#ravager-paw)"/>
+</g>
+<g id="ravager-dorsal-blades" fill="url(#ravager-ivory)">
+<path d="M123 203 L109 142 L164 180Z M170 176 L179 95 L221 162Z M229 161 L256 69 L283 171Z M290 171 L336 98 L333 202Z"/>
+</g>
+<g id="ravager-carapace">
+<path d="M102 258 Q91 197 159 170 Q234 133 296 163 Q348 178 370 236 L354 289 Q270 267 205 307 Q144 298 102 258Z" fill="url(#ravager-body)"/>
+<path d="M151 180 Q177 229 173 289 M223 157 Q251 206 245 284 M292 166 Q313 214 307 275" stroke="#492c3e" stroke-width="10"/>
+<path d="M119 227 Q137 191 153 189 M188 175 Q211 165 222 169 M257 171 L285 180" stroke="#c58895" stroke-width="7" stroke-linecap="round"/>
+</g>
+<g id="ravager-lowered-head">
+<path d="M325 207 L317 158 L367 195Z" fill="url(#ravager-rear)"/>
+<path d="M311 231 Q329 189 375 203 L409 238 L464 254 Q484 274 472 308 Q451 334 410 324 L364 302 Q326 305 307 276Z" fill="url(#ravager-neck)"/>
+<!-- A single forward horn and deep jaw distinguish this charger from Hound. -->
+<path d="M407 256 Q448 223 454 151 Q482 202 454 270Z" fill="url(#ravager-ivory)"/>
+<path d="M336 230 L378 239 L350 251Z" fill="#fff1aa"/>
+<path d="M355 239 L356 247" stroke="#352535" stroke-width="6"/>
+<path d="M333 225 L379 237" stroke="#492c3e" stroke-width="8" stroke-linecap="round"/>
+<path d="M376 285 Q420 308 465 293 L458 312 Q414 325 380 304Z" fill="#352535"/>
+<path d="M393 295 L409 299 L400 316Z M435 303 L451 300 L445 317Z" fill="url(#ravager-ivory)"/>
+<ellipse cx="465" cy="279" rx="6" ry="9" fill="#492c3e"/>
+</g>
+<g id="ravager-claws" fill="url(#ravager-ivory)"><path d="M180 474 L190 474 L192 485Z M197 476 L207 478 L211 485Z M246 438 L255 438 L260 447Z M452 423 L461 421 L468 434Z M314 398 L322 400 L317 408Z"/></g>
+</g>
+</svg>
