@@ -57,6 +57,13 @@ function validate(source) {
   const source = fs.readFileSync(path.join(root, assetPath), 'utf8');
   console.log(JSON.stringify({asset:assetPath, sha256:hash(source), xml:validate(source)}));
   console.log('PASS XML viewBox metadata unique IDs resolved references vector-only');
+  const directional = ['hound','ravager'].includes(type) &&
+    fs.existsSync(path.join(root, `assets/sprites/${type}Left.svg`));
+  if (directional) {
+    const left = fs.readFileSync(path.join(root, `assets/sprites/${type}Left.svg`), 'utf8');
+    console.log(JSON.stringify({asset:`assets/sprites/${type}Left.svg`,sha256:hash(left),xml:validate(left)}));
+    console.log('PASS directional XML viewBox metadata unique IDs resolved references vector-only');
+  }
   for (const [name, corrupt] of [
     ['malformed XML', source.replace('</svg>', '')],
     ['wrong viewBox', source.replace('0 0 512 512', '0 0 256 256')],
@@ -68,7 +75,7 @@ function validate(source) {
     assert.throws(() => validate(corrupt), undefined, name);
     console.log(`PASS deliberate corruption rejected: ${name} (in-process expected assertion)`);
   }
-  const names = [...new Set([...parents[type], type, ...Object.keys(parents).filter(n =>
+  const names = [...new Set([...parents[type], type, ...(directional ? [type+'Left'] : []), ...Object.keys(parents).filter(n =>
     n !== type && fs.existsSync(path.join(root, 'assets/sprites', n+'.svg')))])];
   const files = Object.fromEntries(names.map(n => [`/${n}.svg`, fs.readFileSync(path.join(root,'assets/sprites',n+'.svg'))]));
   const requests = [], errors = [];
@@ -113,11 +120,29 @@ function validate(source) {
       compare(`${size}px transparent margins`,pixels.edge,0);
       compare(`${size}px visible miniature occupancy 10–85%`,pixels.ink/pixels.total>0.1 && pixels.ink/pixels.total<0.85,true);
     }
-    await capture('comparison.png', '<div style="display:flex;background:#bbcbb0">'+names.map(n=>
+    await capture('comparison.png', '<div style="display:flex;flex-wrap:wrap;background:#bbcbb0">'+names.map(n=>
       `<div style="text-align:center">${n}<br><img width="256" height="256" src="${base}/${n}.svg"></div>`).join('')+'</div>');
     await capture('board-scales.png', [32,48,64].map(size=>`<div style="padding:20px;background:#bbcbb0">${size}px `+names.map(n=>
       `<span style="display:inline-block;margin:10px;text-align:center">${n}<br><img width="${size}" height="${size}" src="${base}/${n}.svg"></span>`).join('')+'</div>').join(''));
-    if (['hound','ravager'].includes(type)) await capture('mirror.png', `<div style="background:#bbcbb0">Original / mirrored<br><img width="256" src="${base}/${type}.svg"><img style="transform:scaleX(-1)" width="256" src="${base}/${type}.svg"></div>`);
+    if (['hound','ravager'].includes(type)) {
+      await capture('mirror.png', [256,32,48,64].map(size => `<div style="background:#bbcbb0;padding:12px">${size}px original / horizontal mirror${directional ? ' / directional asset' : ''}<br><img width="${size}" src="${base}/${type}.svg"><img style="transform:scaleX(-1)" width="${size}" src="${base}/${type}.svg">${directional ? `<img width="${size}" src="${base}/${type}Left.svg">` : ''}</div>`).join(''));
+      if (directional) {
+        const mirrorMatches = await page.evaluate(async ({base,type}) => {
+          const images = await Promise.all([type,type+'Left'].map(async name => {
+            const img = new Image(); img.crossOrigin='anonymous'; img.src=`${base}/${name}.svg`;
+            await img.decode(); return img;
+          }));
+          const pixels = images.map((img,i) => {
+            const c=document.createElement('canvas'); c.width=c.height=512;
+            const ctx=c.getContext('2d');
+            if (!i) {ctx.translate(512,0);ctx.scale(-1,1);}
+            ctx.drawImage(img,0,0); return ctx.getImageData(0,0,512,512).data;
+          });
+          return pixels[0].every((value,i) => value===pixels[1][i]);
+        }, {base,type});
+        compare('directional asset equals horizontal mirror at 512px',mirrorMatches,true);
+      }
+    }
     compare('browser console/page/network errors', errors, []);
     compare('missing assets', requests.filter(r=>r.status!==200), []);
     fs.writeFileSync(path.join(out,'browser-report.json'), JSON.stringify({type,assetPath,sha256:hash(source),browser:browser.version(),parents:parents[type],compared:names,screenshots,errors,requests},null,2)+'\n');

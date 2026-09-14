@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="hound-title hound-desc">
+<title id="hound-title">Hound — running horned quadruped, left-facing</title>
+<desc id="hound-desc">Left-facing charcoal demon hound in KOHb's running pose, with the same torso and hind-leg geometry, four staggered legs, a low canine muzzle, swept ivory horns, amber eye and pointed tail. Smooth miniature shading matches the existing units. No rider or tack. Editable vectors on transparent canvas.</desc>
+<defs>
+<radialGradient id="hound-body" cx="65%" cy="24%" r="84%"><stop stop-color="#90938d"/><stop offset=".33" stop-color="#626b68"/><stop offset=".67" stop-color="#424c4e"/><stop offset="1" stop-color="#282e37"/></radialGradient>
+<radialGradient id="hound-neck" cx="83%" cy="15%" r="105%"><stop stop-color="#a4a39a"/><stop offset=".33" stop-color="#747e78"/><stop offset=".67" stop-color="#4e5c59"/><stop offset="1" stop-color="#303b40"/></radialGradient>
+<radialGradient id="hound-rear" cx="76%" cy="18%" r="96%"><stop stop-color="#67716c"/><stop offset=".5" stop-color="#424d4b"/><stop offset="1" stop-color="#252d36"/></radialGradient>
+<radialGradient id="hound-paw" cx="76%" cy="18%" r="96%"><stop stop-color="#868880"/><stop offset=".5" stop-color="#555f5b"/><stop offset="1" stop-color="#2b3438"/></radialGradient>
+<linearGradient id="hound-ivory" x1="0%" y1="80%" x2="100%" y2="15%"><stop stop-color="#857159"/><stop offset=".4" stop-color="#c5b18b"/><stop offset=".75" stop-color="#f2e4bc"/><stop offset="1" stop-color="#fff4d3"/></linearGradient>
+</defs>
+<g transform="translate(512 0) scale(-1 1)">
+<g id="hound-tail">
+<path d="M122 245 C72 254 52 219 57 174 Q61 143 42 123" stroke="#303b40" stroke-width="23" stroke-linecap="round"/>
+<path d="M119 239 C77 246 60 217 64 178 Q69 146 43 124" stroke="#717a73" stroke-width="9" stroke-linecap="round"/>
+<path d="M28 99 L75 120 L51 129 L34 153Z" fill="url(#hound-body)"/>
+</g>
+  <g id="hound-far-legs">
+    <path d="M142 298 Q159 326 148 359 L141 382 L180 451 L194 468 L179 479 L163 465 L118 391 Q110 379 118 359 L120 314Z" fill="url(#hound-rear)" />
+    <path d="M175 460 L195 459 L216 480 Q196 488 174 482Z" fill="url(#hound-paw)" />
+    <path d="M327 291 Q350 321 374 338 Q385 346 382 360 L377 375 L335 401 L314 391 L354 364 L349 354 L310 333Z" fill="url(#hound-rear)" />
+    <path d="M316 381 L337 393 L321 408 Q307 410 298 397Z" fill="url(#hound-paw)" />
+  </g>
+
+<g id="hound-torso-and-near-hind-leg"><path d="M132 225 C167 210 213 213 258 222 Q297 228 322 218 C346 219 365 248 359 280 C354 315 326 334 291 335 L205 332 Q160 333 127 312 C95 292 94 247 132 225Z" fill="url(#hound-body)" />
+
+<path d="M176 300 Q203 310 199 337 L189 371 Q209 395 243 411 L262 432 L247 444 L228 426 Q191 412 169 384 Q162 375 166 361 L168 327Z" fill="url(#hound-body)" />
+
+<path d="M238 423 L261 428 L276 445 Q254 451 237 440Z" fill="url(#hound-paw)" />
+    </g>
+<g id="hound-shoulder-and-near-foreleg">
+<path d="M270 252 Q291 204 330 183 Q350 173 365 191 Q387 223 382 275 Q416 299 432 322 Q451 358 458 402 L462 418 L442 423 L435 402 Q429 361 412 340 Q383 326 355 327 Q344 343 326 336 Q292 315 270 252Z" fill="url(#hound-neck)"/>
+<path d="M439 407 L462 411 L477 434 Q457 439 440 425Z" fill="url(#hound-paw)"/>
+</g>
+<g id="hound-back-ridge" fill="url(#hound-body)">
+<path d="M139 225 L145 197 L171 216 L191 185 L214 216 L241 192 L255 223 L283 202 L289 239Z"/>
+</g>
+<g id="hound-head">
+<!-- Swept horns occupy the former rider space without copying a horse head. -->
+<path d="M340 174 Q294 144 300 83 Q313 118 365 139Z" fill="url(#hound-ivory)"/>
+<path d="M356 169 L365 112 L397 160Z" fill="url(#hound-rear)"/>
+<path d="M327 177 Q346 143 391 156 L415 183 L471 208 Q487 215 480 232 L460 244 L401 232 Q383 267 355 253 L325 230 L338 213 L313 218Z" fill="url(#hound-neck)"/>
+<path d="M347 170 Q299 128 323 60 Q320 102 375 137Z" fill="url(#hound-ivory)"/>
+<path d="M385 184 L413 193 L392 202 L381 197Z" fill="#ffe3a0"/>
+<path d="M396 190 L396 198" stroke="#282d32" stroke-width="5"/>
+<path d="M380 181 L411 190" stroke="#303b40" stroke-width="6" stroke-linecap="round"/>
+<path d="M459 204 L478 211 Q489 220 477 230 L462 226Z" fill="#242c33"/>
+<path d="M412 220 Q435 239 462 234" stroke="#252d34" stroke-width="7" stroke-linecap="round"/>
+<path d="M417 223 L432 230 L423 247Z M446 235 L459 234 L451 246Z" fill="url(#hound-ivory)"/>
+</g>
+<g id="hound-toes" stroke="#283137" stroke-width="3" stroke-linecap="round"><path d="M185 469 L191 480 M249 434 L254 443 M312 395 L319 399 M450 421 L458 432"/></g>
+</g>
+</svg>
