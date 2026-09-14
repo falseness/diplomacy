@@ -6,14 +6,14 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
-// Literal combat expectations, independent of runtime statistics and outcomes.
+// Literal balance-version-2 combat expectations, independent of runtime outcomes.
 const cases = [
   {name:'human-movement', actor:'Normchel', key:'normchel', owner:1, hp:5, speed:2, move:true},
-  {name:'demon-movement', actor:'Hound', key:'hound', owner:3, hp:4, speed:4, move:true},
-  {name:'human-melee', actor:'Normchel', key:'normchel', owner:1, hp:5, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:10, damage:1, distance:1},
-  {name:'human-ranged', actor:'Archer', key:'archer', owner:1, hp:1, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:10, damage:2, distance:2},
-  {name:'demon-melee', actor:'Clawling', key:'clawling', owner:3, hp:3, speed:3, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:1, distance:1},
-  {name:'demon-ranged', actor:'EmberArcher', key:'emberArcher', owner:3, hp:4, speed:3, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:2, distance:3}
+  {name:'demon-movement', actor:'Hound', key:'hound', owner:3, hp:2, speed:2, move:true},
+  {name:'human-melee', actor:'Normchel', key:'normchel', owner:1, hp:5, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:5, damage:1, distance:1},
+  {name:'human-ranged', actor:'Archer', key:'archer', owner:1, hp:1, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:5, damage:2, distance:2},
+  {name:'demon-melee', actor:'Clawling', key:'clawling', owner:3, hp:2, speed:2, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:1, distance:1},
+  {name:'demon-ranged', actor:'EmberArcher', key:'emberArcher', owner:3, hp:2, speed:2, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:1, distance:2}
 ];
 function run(c, fault) {
   const config = defaultFixture(); config.coop = true; config.size = {x:13,y:11};
