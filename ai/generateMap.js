@@ -112,8 +112,8 @@ function enforceCoopStartBalance(map, force = false) {
 // Pure generation API: callers explicitly start the returned GameMap. Counts
 // cover local menu limits and exclude the neutral slot and demon controller.
 function generateCoopGame(playerCount, options = {}) {
-    if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > 4) {
-        throw new RangeError('Co-op playerCount must be an integer from 1 to 4 humans')
+    if (!Number.isInteger(playerCount) || playerCount < 1 || playerCount > 12) {
+        throw new RangeError('Co-op playerCount must be an integer from 1 to 12 humans')
     }
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
         Object.keys(options).some(key => key !== 'seed' && key !== 'size')) {
@@ -127,16 +127,26 @@ function generateCoopGame(playerCount, options = {}) {
     if (typeof size !== 'string' || !Object.prototype.hasOwnProperty.call(COOP_MAP_SIZES, size)) {
         throw new RangeError('Co-op size must be tiny, normal or big')
     }
-    const mapSize = {x: COOP_MAP_SIZES[size], y: COOP_MAP_SIZES[size]}
+    const scaling = getCoopMapScaling(playerCount, size)
+    const mapSize = scaling.mapSize
     const rng = createSeededRandom(seed)
+    // A two-dimensional lattice keeps town neighborhoods separate at every H.
+    // Shuffle the finite pool to distribute both human and neutral settlements.
+    const sites = []
+    for (let x=2; x<mapSize.x-2; x+=3) for (let y=2; y<mapSize.y-2; y+=3) sites.push({x,y})
+    for (let i=sites.length-1; i>0; i--) {
+        const j = randomIntWithRng(rng, 0, i)
+        ;[sites[i], sites[j]] = [sites[j], sites[i]]
+    }
+    if (sites.length < playerCount + scaling.counts.neutralTowns) {
+        throw new Error('Co-op town placement has insufficient sites')
+    }
     const roster = [{rgb: {r: 208, g: 208, b: 208}, towns: [], units: [], gold: 0}]
-    for (let i = 0; i < playerCount; i++) {
-        roster.push({rgb: trainingPlayerColor(i + 1), gold: 100, units: [],
-            towns: [{x: coopStartColumn(mapSize, playerCount, i), y: randomIntWithRng(rng, 2, 6)}]})
+    for (let i=0; i<playerCount; i++) {
+        roster.push({rgb: trainingPlayerColor(i+1), gold: scaling.startingAssets.gold,
+            units: [], towns: [sites.pop()]})
     }
-    for (let i = 0; i < playerCount; i++) {
-        roster[0].towns.push({x: coopStartColumn(mapSize, playerCount, i), y: mapSize.y - 3})
-    }
+    roster[0].towns = sites.splice(0, scaling.counts.neutralTowns)
     // Reserve town centers and their surrounding cells before placing any
     // resources or blockers. A finite shuffled pool guarantees disjoint,
     // in-bounds placements without probabilistic retry failures.
@@ -153,20 +163,13 @@ function generateCoopGame(playerCount, options = {}) {
         const j = randomIntWithRng(rng, 0, i)
         ;[available[i], available[j]] = [available[j], available[i]]
     }
-    const take = () => available.splice(0, playerCount)
-    const mines = take().map(coord => ({...coord, owner: 0, income: 20}))
-    const map = new GameMap(mapSize, roster,
-        mines, take(), take(), take(), [], {type: 'rectangular'}, {})
-    // One portal per initial human, using the remaining disjoint pool. Town
-    // neighborhoods and every terrain/resource cell have already been excluded.
-    map.portals = take()
-    repairCoopConnectivity(map)
-    placeCoopPortals(map, size)
-    repairCoopConnectivity(map)
+    const mines = available.splice(0, scaling.counts.goldmines).map(coord => ({...coord, owner: 0, income: 20}))
+    const map = new GameMap(mapSize, roster, mines, [], [], [], [], {type: 'rectangular'}, {})
+    map.portals = available.splice(0, scaling.counts.portals)
+    // Reserve connected approaches while growing exact area-derived terrain.
+    // Distance-constrained placement and balance repair are a separate stage.
     growCoopTerrain(map, rng)
-    // Stored inside co-op metadata so existing save/load retains replay inputs.
-    map.coop.generation = {version: 2, playerCount, seed, size, options: {seed, size}}
-    enforceCoopStartBalance(map)
+    map.coop.generation = {version: 3, playerCount, seed, size, options: {seed, size}}
     return map
 }
 
@@ -233,23 +236,23 @@ function growCoopTerrain(map, rng) {
     for (const town of towns) for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++)
         reserved.add(key({x:town.x+dx, y:town.y+dy}))
     const fixed = new Set(reserved)
-    // Preserve shortest paths through the already balanced layout, including
-    // attack endpoints. Other human towns and hostile targets are not transit.
-    for (const human of map.players.slice(1, 1 + map.coop.initialHumanCount)) {
-        const blocked = new Set([...map.lakes, ...map.mountains,
-            ...map.players.slice(1).filter(p => p !== human).flatMap(p => p.towns)].map(key))
-        const start = human.towns[0], queue = [start], parent = new Map([[key(start), null]])
-        for (let i=0; i<queue.length; i++) {
-            const c = queue[i]
-            if (terminal.has(key(c))) continue
-            for (const n of neighbours(c)) if (!blocked.has(key(n)) && !parent.has(key(n))) {
-                parent.set(key(n), c); queue.push(n)
-            }
+    // A shared approach tree avoids reserving H times every shortest route,
+    // which can consume all terrain space on densely populated Tiny maps.
+    // Town neighborhoods are already clear, so branches at the root can walk
+    // around its occupied center; other towns remain interaction endpoints.
+    const start = map.players[1].towns[0]
+    const endpoints = new Set([...map.portals, ...towns].map(key))
+    const queue = [start], parent = new Map([[key(start), null]])
+    for (let i=0; i<queue.length; i++) {
+        const c = queue[i]
+        if (i > 0 && endpoints.has(key(c))) continue
+        for (const n of neighbours(c)) if (!parent.has(key(n))) {
+            parent.set(key(n), c); queue.push(n)
         }
-        for (const target of targets) {
-            if (!parent.has(key(target))) throw new Error('Co-op terrain requires connected objectives')
-            for (let c=target; c; c=parent.get(key(c))) reserved.add(key(c))
-        }
+    }
+    for (const target of [...targets, ...towns]) {
+        if (!parent.has(key(target))) throw new Error('Co-op terrain requires connected objectives')
+        for (let c=target; c; c=parent.get(key(c))) reserved.add(key(c))
     }
     const free = new Map()
     for (let x=0; x<map.mapSize.x; x++) for (let y=0; y<map.mapSize.y; y++) {

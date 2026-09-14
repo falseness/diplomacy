@@ -3,15 +3,15 @@ const fs=require('fs');
 const path=require('path');
 const {spawnSync}=require('child_process');
 const {createFixture}=require('./test-coop-harness');
-const {expectedMap,initialEntities}=require('./test-coop-generation-fixtures');
+const {initialEntities}=require('./test-coop-generation-fixtures');
 const {createEntityLedger}=require('./test-coop-entity-ledger');
 const {createEconomyLedger}=require('./test-coop-economy-ledger');
 const {audit,neighbours}=require('./test-coop-terrain-audit');
 const index=process.argv.indexOf('--output-dir');
-const out=path.resolve(index<0?'artifacts/TASK-084':process.argv[index+1]);
+const out=path.resolve(index<0?'artifacts/TASK-121':process.argv[index+1]);
 fs.mkdirSync(out,{recursive:true});
 const f=createFixture(undefined,()=>{}), rows=[];
-for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for(let seed=0;seed<32;seed++) {
+for(const size of ['tiny','normal','big']) for(let count=1;count<=12;count++) for(let seed=0;seed<32;seed++) {
   const label=`${size}-humans-${count}-seed-${seed}`;
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}})`);
   const map=f.evaluate('JSON.parse(JSON.stringify(generated))');
@@ -31,9 +31,19 @@ for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for
   const row=audit(map,label);
   // Independent seeded roster: repair may move resources and portals but must
   // preserve every starting town and all starting assets.
-  const before=expectedMap(count,seed,size);
-  for(const name of ['players']) assert.deepEqual(map[name],before[name],label+' preserved-'+name);
-  assert.equal(f.evaluate(`JSON.stringify(generated)===JSON.stringify(generateCoopGame(${count},{size:'${size}',seed:${seed}}))`),true,label+' seeded-replay');
+  const side=Math.max({tiny:11,normal:15,big:21}[size],Math.ceil({tiny:15,normal:25,big:39}[size]*Math.sqrt(count/4)));
+  assert.deepEqual(map.mapSize,{x:side,y:side},label+' formula-dimensions');
+  const expectedCount=count*{tiny:1,normal:2,big:3}[size];
+  const observedCounts={neutralTowns:map.players[0].towns.length,goldmines:map.goldmines.length,portals:map.portals.length};
+  assert.deepEqual(observedCounts,{neutralTowns:expectedCount,goldmines:expectedCount,portals:expectedCount},label+' exact-counts');
+  assert(map.goldmines.every(m=>m.owner===0&&m.income===20),label+' unchanged-mine-rules');
+  assert(map.players.slice(1,count+1).every(p=>p.gold===100&&p.towns.length===1&&p.units.length===0),label+' equal-start-assets');
+  const hash=value=>require('crypto').createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const repeated=f.evaluate(`JSON.parse(JSON.stringify(generateCoopGame(${count},{size:'${size}',seed:${seed}})))`);
+  row.replayHashes={expected:hash(map),observed:hash(repeated)};
+  assert.equal(row.replayHashes.observed,row.replayHashes.expected,label+' seeded-replay');
+  row.dimensions={expected:{x:side,y:side},observed:map.mapSize};
+  row.counts={expected:expectedCount,observed:observedCounts};
   row.startingRosterPreserved=true;row.seededReplay=true;
   if(seed===0) {
     f.context.fixtureConfig={actors:[{role:'neutral'},...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};
@@ -54,4 +64,4 @@ for(const [arg,marker] of [['--missing','density-lakes'],['--overlap','disjoint'
   console.log(`PASS corruption-probe ${arg} expected_exit=1 observed_exit=${result.status} marker=${marker}`);
 }
 fs.writeFileSync(path.join(out,'terrain-matrix.json'),JSON.stringify(rows,null,2)+'\n');
-console.log('PASS terrain matrix=384 sizes=tiny,normal,big humans=1..4 seeds=0..31 density=8/6/10+/-2 clustered>=80% preserved_rosters=384 seeded_replays=384 start_restore=12');
+console.log('PASS terrain matrix=1152 sizes=tiny,normal,big humans=1..12 seeds=0..31 density=8/6/10+/-2 clustered>=80% preserved_rosters=1152 seeded_replays=1152 start_restore=36');

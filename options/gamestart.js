@@ -12,8 +12,8 @@ function getHexagonalLayer(x, y, center) {
 
 class GameMap {
     constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[], mapShape={type: 'rectangular'}, coop=null) {
-        if (coop && (_players.length < 2 || _players.length > 5)) {
-            throw new RangeError('Co-op requires 1 to 4 humans plus a neutral slot')
+        if (coop && (_players.length < 2 || _players.length > 13)) {
+            throw new RangeError('Co-op requires 1 to 12 humans plus a neutral slot')
         }
         this.mapSize = mapSize
         this.players = _players

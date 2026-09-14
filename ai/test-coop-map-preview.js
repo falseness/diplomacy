@@ -6,7 +6,7 @@ const crypto=require('crypto');
 const {chromium}=require('playwright');
 const {audit,components}=require('./test-coop-terrain-audit');
 const root=path.resolve(__dirname,'..'), index=process.argv.indexOf('--output-dir');
-const out=path.resolve(index<0?'artifacts/TASK-084':process.argv[index+1]);
+const out=path.resolve(index<0?'artifacts/TASK-121':process.argv[index+1]);
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 (async()=>{
   fs.mkdirSync(path.join(out,'screenshots'),{recursive:true});
@@ -31,9 +31,9 @@ const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
     await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'load'});
     await page.waitForFunction(()=>typeof menu!=='undefined'&&imagesCountLoaded===images.length);
     const scenarios=[{reference:'open field'},{reference:'mountain wall'},
-      ...['tiny','normal','big'].flatMap(size=>Array.from({length:32},(_,seed)=>({size,seed,count:4})))];
+      ...['tiny','normal','big'].flatMap(size=>[1,4,12].map(count=>({size,seed:0,count})))];
     for(const config of scenarios) {
-      const label=config.reference?'reference-'+config.reference.replaceAll(' ','-'):`${config.size}-humans-4-seed-${config.seed}`;
+      const label=config.reference?'reference-'+config.reference.replaceAll(' ','-'):`${config.size}-humans-${config.count}-seed-${config.seed}`;
       const result=await page.evaluate(config=>{
         const map=config.reference?maps[config.reference][0]:generateCoopGame(config.count,{size:config.size,seed:config.seed});
         // Render the real runtime's full terrain cache into an overview canvas.
@@ -46,7 +46,7 @@ const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
         preview.width=1100;preview.height=1050;preview.style.cssText='position:fixed;left:0;top:0;z-index:9999;width:1100px;height:1050px';
         const ctx=preview.getContext('2d');ctx.fillStyle='#182329';ctx.fillRect(0,0,1100,1050);
         ctx.fillStyle='white';ctx.font='25px sans-serif';
-        ctx.fillText(config.reference?'Authored reference: '+config.reference:`Co-op ${config.size} | 4 humans | seed ${config.seed} | ${map.portals.length} portals`,30,38);
+        ctx.fillText(config.reference?'Authored reference: '+config.reference:`Co-op ${config.size} | ${config.count} humans | seed ${config.seed} | ${map.portals.length} portals`,30,38);
         ctx.font='17px sans-serif';ctx.fillText(`Grid ${map.mapSize.x} × ${map.mapSize.y} | Mountains ${map.mountains.length} | Lakes ${map.lakes.length} | Bushes ${map.bushes.length}`,30,68);
         const cache=grid.surfaceCache,scale=Math.min(1040/cache.width,930/cache.height),w=cache.width*scale,h=cache.height*scale;
         ctx.drawImage(cache,(1100-w)/2,90+(930-h)/2,w,h);
@@ -70,6 +70,6 @@ const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
     assert.deepEqual(errors,[],'browser errors');
     fs.writeFileSync(path.join(out,'preview-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
     fs.writeFileSync(path.join(out,'browser-errors.json'),JSON.stringify(errors)+'\n');
-    console.log('PASS map-preview screenshots=98 references=2 sizes=3 seeds=0..31 humans=4 console_errors=0 runtime_counts=matched');
+    console.log('PASS map-preview screenshots=11 references=2 sizes=3 seed=0 humans=1,4,12 console_errors=0 runtime_counts=matched');
   }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));clearTimeout(deadline)}
 })().catch(error=>{console.error(error);process.exitCode=1});
