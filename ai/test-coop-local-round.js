@@ -127,6 +127,7 @@ function spawnedPhase() {
 }
 if (require.main === module) {
 run(false); run(true); spawnedPhase();
+if(!process.argv.includes('--fault')) require('./test-coop-expanded-recovery').run();
 console.log('INAPPLICABLE online committed convergence: local offline rounds have no online committed revisions. Entity helper checks serialization at every action/phase/round. No purchases or production occur; income and salary events are independently declared.');
 if(!process.argv.includes('--fault')) {
   const child=spawnSync(process.execPath,[__filename,'--fault'],{encoding:'utf8',maxBuffer:32*1024*1024});

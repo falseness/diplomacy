@@ -14,7 +14,7 @@ const demons = [
   ['ravager', 'Ravager', 7], ['demonLord', 'DemonLord', 19]
 ];
 function setup(count, coop = true) {
-  const config = {coop, size: {x:23, y:9}, actors: [
+  const config = {coop, size: {x:27, y:9}, actors: [
     {role:'neutral', rgb:{r:100,g:100,b:100}, gold:0, towns:[], units:[]},
     ...Array.from({length:count}, (_, i) => ({role:'human', rgb:{r:200-i*30,g:30+i*30,b:40},
       gold:101+i*37, towns:[], units:[{x:1+i*2,y:1,hp:2}]})),
@@ -128,7 +128,7 @@ function runLegacy() {
 }
 if (process.argv[2] === '--fault') runCoop(2,process.argv[3]);
 else {
-  runCoop(2); runCoop(4); runLegacy();
+  for (const count of [1,2,4,5,6,7,8,9,10,11,12]) runCoop(count); runLegacy(); require('./test-coop-scaled-save').run();
   console.log('INAPPLICABLE online transport: matching fixture revisions compare full saved/restored and independent peer state; no network commits occur. No rounds advance: human order/round remain 1/0 with zero completed phases. No income, salary, purchases or production occur; independent balances and zero demon assets checked after each mutation/load. IDs are optional existing identities; ID-less legacy units stay ID-less.');
   for (const fault of ['id','health','portal']) {
     const child = spawnSync(process.execPath,[__filename,'--fault',fault],{encoding:'utf8',maxBuffer:16*1024*1024});
@@ -137,5 +137,5 @@ else {
     assert.match(child.stderr,/coop-2-roundtrip-1-identity/);
     console.log(`PASS rejects-${fault}-corruption expected_exit=1 observed_exit=${child.status}`);
   }
-  console.log('PASS co-op serialization counts=2,4 types=10 legacy=2 fault_probes=3');
+  console.log('PASS co-op serialization counts=1,2,4,5,6,7,8,9,10,11,12 types=10 legacy=2 fault_probes=3');
 }
