@@ -297,7 +297,9 @@ class Way {
         let teammateUnit = cell.unit.notEmpty() && cell.unit.playerColor != player &&
             players[player].isAlliedWith(cell.unit.player)
         let buildingObstacle = cell.building.isObstacle(player) || teammateBuilding || teammateUnit
-        let fogged = isFogOfWar && !grid.fogOfWar[neighbour.x][neighbour.y]
+        // Co-op fog contains human sight only; automatic demons do not use it.
+        let fogged = isFogOfWar && players[player].role !== 'DEMONS' &&
+            !grid.fogOfWar[neighbour.x][neighbour.y]
         return (players[player].ignoresCell(cell) || ourUnit || buildingObstacle || fogged)
     }
     sortNeighbours(v0, v, neighbours, arr, player, bord) {

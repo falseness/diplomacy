@@ -402,7 +402,8 @@ class DemonPlayer extends Player {
         this.economyEnabled = false
     }
     canEnterBuilding(building) {
-        return building.isEmpty() || this.shouldRazeBuilding(building) || (building.isDemonPortal &&
+        return building.isEmpty() || (building.isNature && building.isPassable) ||
+            this.shouldRazeBuilding(building) || (building.isDemonPortal &&
             !building.killed && building.playerColor === players.indexOf(this))
     }
     shouldRazeBuilding(building) {
