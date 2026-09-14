@@ -422,11 +422,13 @@ function placeValleyExpansions(plan, starts) {
         throw new Error(`Divided Valley has no fair neutral town layout: size=${plan.size} humans=${humans} seed=${plan.seed}`)
     for (const t of neutral) for (const o of VALLEY_OFFSETS3) reserved.add((t.y+o.y)*side + t.x+o.x)
     const nearbyDistance = Math.max(...starts.assignments.map(a => a.distance))
+    // Cells touching a portal region stay free for portal approaches.
+    const portalEdge = id => valleyNeighbours(cell(id), side).some(n => 'WE'.includes(grid[n.y][n.x]))
     for (let k = humans; k < counts.goldmines; k++) {
         const d = fields(), candidates = []
         for (let id = 0; id < side*side; id++) {
             const c = cell(id)
-            if (grid[c.y][c.x] !== 'F' || reserved.has(id) || mineIds.has(id)) continue
+            if (grid[c.y][c.x] !== 'F' || reserved.has(id) || mineIds.has(id) || portalEdge(id)) continue
             const nearest = Math.min(...d.map(di => di[id] < 0 ? Infinity : di[id]))
             if (Number.isFinite(nearest) && nearest > nearbyDistance) candidates.push(id)
         }
@@ -453,7 +455,170 @@ function placeValleyExpansions(plan, starts) {
     }
 }
 
+const VALLEY_PORTAL_FRONTS = Object.freeze({west: 'W', east: 'E'})
+
+// Portals after placeValleyExpansions. The H x multiplier portals form two
+// shared front groups, one in each top-corner portal region (sizes differ by at
+// most one; a single portal takes the west region), never one lane per human.
+// Every portal keeps the size's minimum empty-hex distance from every human
+// town and two free adjacent approach cells of its own that every human reaches
+// through either advance passage. Nearest-portal path spread stays within the
+// access disparity both with mines as endpoints and with mines walkable.
+function placeValleyPortals(plan, layout) {
+    const {side, humans, grid, counts} = plan
+    const shuffle = valleyShuffler(plan.seed ^ 0xc2b2ae35)
+    const cell = id => ({x: id % side, y: Math.floor(id / side)})
+    const idOf = c => c.y*side+c.x
+    const towns = layout.players.slice(1).map(p => p.towns[0]), townIds = towns.map(idOf)
+    const neutralIds = layout.players[0].towns.map(idOf), mineIds = layout.goldmines.map(idOf)
+    const occupied = new Set([...townIds, ...neutralIds, ...mineIds]), reserved = new Set(layout.reserved.map(idOf))
+    const terrain = []
+    grid.forEach((line, y) => { for (let x = 0; x < side; x++) if (line[x] === 'M') terrain.push(y*side+x) })
+    const quota = {west: Math.ceil(counts.portals / 2), east: Math.floor(counts.portals / 2)}
+    const hex = valleyDistances(side, towns, new Set(), new Set())
+    const interior = ch => {
+        const list = []
+        for (let y = plan.rows.exitRow + 1; y < plan.rows.entranceRow; y++)
+            for (let x = 0; x < side; x++) if (grid[y][x] === ch) list.push(y*side+x)
+        return list
+    }
+    const closures = {leftOnly: interior('r'), rightOnly: interior('l')}
+    const portals = [], fronts = []
+    // Mines are endpoints in the game model and walkable in the TASK-134 contract.
+    const fieldSets = (closed = []) => {
+        const withMines = new Set([...neutralIds, ...mineIds, ...portals]), walkMines = new Set([...neutralIds, ...portals])
+        return [withMines, walkMines].map(endpoints => towns.map((t, i) =>
+            valleyDistances(side, t, new Set([...terrain, ...townIds.filter((_, j) => j !== i), ...closed]), endpoints)))
+    }
+    const spread = values => Math.max(...values) - Math.min(...values)
+    const nearest = (model, ids) => model.map(di => Math.min(...ids.map(id => di[id] < 0 ? Infinity : di[id])))
+    // Two distinct approach cells per portal (bipartite matching), each free and
+    // reached by every human in both path models.
+    const approaches = sets => {
+        const portalIds = new Set(portals)
+        const options = portals.map(id => valleyNeighbours(cell(id), side).map(idOf).filter(n =>
+            !occupied.has(n) && !portalIds.has(n) && sets.every(model => model.every(di => di[n] >= 0))))
+        const owner = new Map()
+        const augment = (slot, seen) => {
+            for (const n of options[slot >> 1]) {
+                if (seen.has(n)) continue
+                seen.add(n)
+                if (!owner.has(n) || augment(owner.get(n), seen)) { owner.set(n, slot); return true }
+            }
+            return false
+        }
+        for (let slot = 0; slot < 2 * portals.length; slot++) if (!augment(slot, new Set())) return null
+        const result = portals.map(() => [])
+        for (const [n, slot] of owner) result[slot >> 1].push(n)
+        return result.map(list => list.sort((a, b) => a - b))
+    }
+    const connected = () => valleyPassableConnected(side, new Set([...terrain, ...occupied, ...portals]), [...occupied, ...portals])
+    const regionSites = front => {
+        const ch = VALLEY_PORTAL_FRONTS[front], list = []
+        grid.forEach((line, y) => { for (let x = 0; x < side; x++) if (line[x] === ch) list.push(y*side+x) })
+        return list.filter(id => hex[id] >= plan.portalDistance && !occupied.has(id) && !reserved.has(id))
+    }
+    const sites = {west: regionSites('west'), east: regionSites('east')}
+    const latticeIds = new Set([...plan.capacity.portalSlots.west, ...plan.capacity.portalSlots.east].map(idOf))
+    // Portals sit in far corners, so path fields without portal endpoints rank
+    // candidates; the finished layout is re-measured exactly.
+    const base = fieldSets()
+    const nextSpread = (current, id) => {
+        const next = base.map((model, m) => model.map((di, i) => di[id] < 0 ? Infinity : Math.min(current[m][i], di[id])))
+        return next.every(values => values.every(Number.isFinite)) ? Math.max(...next.map(spread)) : Infinity
+    }
+    // Anchor pairs (one portal per front, or the single west portal) fix the
+    // nearest-portal spread; the remaining portals fill each group without
+    // widening it past the disparity limit.
+    const anchors = new Map()
+    const none = base.map(model => model.map(() => Infinity))
+    for (const w of sites.west) {
+        const afterWest = base.map((model, m) => model.map((di, i) => di[w] < 0 ? Infinity : di[w]))
+        for (const e of quota.east ? sites.east : [null]) {
+            const s = e === null ? nextSpread(none, w) : nextSpread(afterWest, e)
+            if (s > VALLEY_ACCESS_DISPARITY) continue
+            const tier = Math.max(VALLEY_NEUTRAL_TARGET, s)
+            if (!anchors.has(tier)) anchors.set(tier, [])
+            anchors.get(tier).push(e === null ? [w] : [w, e])
+        }
+    }
+    const failures = {anchors: 0, fill: 0, exact: 0}
+    let assigned = null
+    const placeFrom = (anchor, preferLattice) => {
+        portals.length = 0; fronts.length = 0
+        const placed = {west: 0, east: 0}
+        for (const id of anchor) {
+            const front = grid[Math.floor(id / side)][id % side] === 'W' ? 'west' : 'east'
+            portals.push(id); fronts.push(front); placed[front]++
+        }
+        if (!connected() || !approaches(base)) return false
+        while (portals.length < counts.portals) {
+            const current = base.map(model => nearest(model, portals)), tiers = new Map()
+            for (const front of ['west', 'east']) {
+                if (placed[front] >= quota[front]) continue
+                for (const id of sites[front]) {
+                    if (portals.includes(id)) continue
+                    const s = nextSpread(current, id)
+                    if (s > VALLEY_ACCESS_DISPARITY) continue
+                    const tier = Math.max(VALLEY_NEUTRAL_TARGET, s) * 2 + (preferLattice && !latticeIds.has(id))
+                    if (!tiers.has(tier)) tiers.set(tier, [])
+                    tiers.get(tier).push({id, front})
+                }
+            }
+            let done = false
+            search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
+                for (const choice of shuffle(tiers.get(tier))) {
+                    portals.push(choice.id)
+                    if (connected() && approaches(base)) { fronts.push(choice.front); placed[choice.front]++; done = true; break search }
+                    portals.pop()
+                }
+            }
+            if (!done) { failures.fill++; return false }
+        }
+        const sets = fieldSets()
+        assigned = sets.every(model => spread(nearest(model, portals)) <= VALLEY_ACCESS_DISPARITY) ? approaches(sets) : null
+        // Each advance passage alone must carry every human to every approach cell.
+        const ok = assigned && [closures.leftOnly, closures.rightOnly].every(closed => fieldSets(closed).every(model =>
+            model.every(di => assigned.flat().every(n => di[n] >= 0))))
+        if (!ok) failures.exact++
+        return ok
+    }
+    let found = false
+    search: for (const tier of [...anchors.keys()].sort((a, b) => a - b)) {
+        const ranked = shuffle(anchors.get(tier).slice())
+        const lattice = ranked.filter(a => a.every(id => latticeIds.has(id)))
+        // Two free-fill and two lattice-fill attempts per tier.
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const preferLattice = attempt % 2 === 1
+            const anchor = (preferLattice ? lattice : ranked)[Math.floor(attempt / 2)]
+            if (!anchor) continue
+            failures.anchors++
+            if (placeFrom(anchor, preferLattice)) { found = true; break search }
+        }
+    }
+    if (!found)
+        throw new Error(`Divided Valley has no fair portal layout: size=${plan.size} humans=${humans} seed=${plan.seed} ` +
+            `anchorTiers=${[...anchors.keys()].sort((a, b) => a - b).join('/')} tried=${failures.anchors} fill=${failures.fill} exact=${failures.exact}`)
+    const sets = fieldSets()
+    const approachCells = assigned.flat()
+    return {
+        ...layout,
+        stages: [...layout.stages, 'portals', 'reserve-portal-approaches'],
+        players: layout.players.map(p => ({...p, towns: p.towns.map(t => ({...t}))})),
+        reserved: [...new Set([...reserved, ...approachCells])].sort((a, b) => a - b).map(cell),
+        goldmines: layout.goldmines.map(m => ({...m})),
+        assignments: layout.assignments.map(a => ({...a, mine: {...a.mine}})),
+        expansions: {...layout.expansions},
+        portals: portals.map(cell),
+        portalGroups: Object.fromEntries(['west', 'east'].map(front =>
+            [front, portals.map((_, i) => i).filter(i => fronts[i] === front)])),
+        portalApproaches: portals.map((id, i) => ({portal: cell(id), front: fronts[i], cells: assigned[i].map(cell)})),
+        portalAccess: {minimumHexDistance: Math.min(...portals.map(id => hex[id])), required: plan.portalDistance,
+            nearestWithMineEndpoints: nearest(sets[0], portals), nearestWithWalkableMines: nearest(sets[1], portals)}
+    }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {planDividedValley, placeValleyStarts, placeValleyExpansions, valleyRowPlans, clearValleyPlanCache, createValleyRandom,
+    module.exports = {planDividedValley, placeValleyStarts, placeValleyExpansions, placeValleyPortals, valleyRowPlans, clearValleyPlanCache, createValleyRandom,
         VALLEY_LEGEND, VALLEY_PORTAL_DISTANCE}
 }
