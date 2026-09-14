@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="brute-title brute-desc">
+  <title id="brute-title">Brute — broad-shouldered tusked demon</title>
+  <desc id="brute-desc">A heavy ochre demon with a thick neck, broad rounded shoulders, oversized closed fists and two upward ivory tusks. Normchel's planted leg silhouette and head scale anchor the shared miniature proportions; a wider bare torso and dark iron wrist bands distinguish this brawler. Smooth directional volume shading, editable vector shapes and a transparent 512 by 512 canvas.</desc>
+  <defs>
+    <radialGradient id="brute-skin" cx="74%" cy="22%" r="89%">
+      <stop stop-color="#e7ba7c"/><stop offset=".38" stop-color="#c18a51"/><stop offset=".72" stop-color="#966039"/><stop offset="1" stop-color="#593c30"/>
+    </radialGradient>
+    <radialGradient id="brute-body" cx="78%" cy="19%" r="99%">
+      <stop stop-color="#dbae6e"/><stop offset=".3" stop-color="#b58048"/><stop offset=".65" stop-color="#915932"/><stop offset="1" stop-color="#59382c"/>
+    </radialGradient>
+    <linearGradient id="brute-limb" x1="0%" y1="0%" x2="100%" y2="25%">
+      <stop stop-color="#6d442e"/><stop offset=".42" stop-color="#b17a43"/><stop offset=".75" stop-color="#d9a669"/><stop offset="1" stop-color="#95603a"/>
+    </linearGradient>
+    <radialGradient id="brute-iron" cx="74%" cy="22%" r="89%">
+      <stop stop-color="#97968a"/><stop offset=".4" stop-color="#696c64"/><stop offset="1" stop-color="#303b39"/>
+    </radialGradient>
+    <radialGradient id="brute-cloth" cx="78%" cy="19%" r="99%">
+      <stop stop-color="#858471"/><stop offset=".4" stop-color="#5c6051"/><stop offset="1" stop-color="#303d34"/>
+    </radialGradient>
+    <linearGradient id="brute-ivory" x1="0%" y1="80%" x2="100%" y2="15%">
+      <stop stop-color="#8d744e"/><stop offset=".42" stop-color="#ccb486"/><stop offset=".74" stop-color="#f3e1b6"/><stop offset="1" stop-color="#fff1ce"/>
+    </linearGradient>
+  </defs>
+  <!-- Normchel's exact planted leg silhouette is retained beneath new greaves. -->
+  <g id="brute-legs">
+    <path id="brute-parent-legs" d="M258.5 322.531C242.934 324.263 236.28 328.614 228.5 343.031V455.355C228.5 457.466 228.297 459.58 227.783 461.627C224.776 473.598 220.356 478.924 210.15 482.24C207.136 483.22 203.858 483.224 200.863 482.185C190.261 478.506 187.234 472.449 185.121 460.955C184.825 459.346 184.7 457.709 184.7 456.074V296.031H332.3V456.074C332.3 457.709 332.174 459.346 331.879 460.955C329.765 472.449 326.738 478.506 316.136 482.185C313.142 483.224 309.864 483.22 306.849 482.24C296.644 478.924 292.224 473.598 289.217 461.627C288.702 459.58 288.5 457.466 288.5 455.355V343.031C280.719 328.614 274.066 324.263 258.5 322.531Z" fill="url(#brute-limb)"/>
+    <path d="M184.7 397 Q206 405 228.5 397 V455 Q228 480 207 483 Q185 479 184.7 456Z M288.5 397 Q310 405 332.3 397 V456 Q332 479 310 483 Q289 480 288.5 455Z" fill="url(#brute-iron)"/>
+    <path d="M193 411 V451 M298 411 V451" stroke="#b1aa87" stroke-opacity=".4" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g id="brute-arms">
+    <path d="M200 137 Q151 118 127 155 Q99 194 90 241 L79 282 Q96 308 130 295 L151 251 L190 203Z" fill="url(#brute-limb)"/>
+    <path d="M317 137 Q366 118 390 155 Q418 194 427 241 L438 282 Q421 308 387 295 L366 251 L327 203Z" fill="url(#brute-limb)"/>
+    <path d="M87 257 L143 272 L135 300 Q104 311 77 288Z M430 257 L374 272 L382 300 Q413 311 440 288Z" fill="url(#brute-iron)"/>
+    <path d="M82 285 Q63 284 60 310 L58 343 Q62 367 91 370 L120 365 Q137 357 133 338 L138 320 Q136 301 119 297Z" fill="url(#brute-skin)"/>
+    <path d="M435 285 Q454 284 457 310 L459 343 Q455 367 426 370 L397 365 Q380 357 384 338 L379 320 Q381 301 398 297Z" fill="url(#brute-skin)"/>
+    <path d="M76 322 L75 347 M92 325 L92 352 M440 322 L441 347 M424 325 L424 352" stroke="#785036" stroke-width="4" stroke-linecap="round"/>
+    <path d="M121 307 Q101 306 105 324 L122 335 M396 307 Q416 306 412 324 L395 335" stroke="#785036" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g id="brute-torso">
+    <path d="M199 134 Q258 120 318 134 Q351 150 343 193 L324 248 L332.3 300 Q258 322 184.7 300 L193 248 L174 193 Q166 150 199 134Z" fill="url(#brute-body)"/>
+    <path d="M191 172 Q221 157 250 175 L250 207 Q220 218 197 203Z M267 175 Q296 157 326 172 L320 203 Q297 218 267 207Z" fill="#e8bb7a" opacity=".24"/>
+    <path d="M257 181 V211 M229 242 Q258 250 287 242" stroke="#805332" stroke-opacity=".55" stroke-width="5" stroke-linecap="round"/>
+    <path d="M184.7 287 Q258 301 332.3 287 V347 L294 337 L273 356 L255 339 L228 355 L212 337 L184.7 346Z" fill="url(#brute-cloth)"/>
+    <path d="M184.7 286 Q258 299 332.3 286 V304 Q258 317 184.7 304Z" fill="#39423a"/>
+    <rect x="246" y="296" width="25" height="21" rx="3" fill="url(#brute-iron)"/>
+  </g>
+  <g id="brute-head">
+    <path d="M224 118 H292 L301 152 Q259 175 216 152Z" fill="url(#brute-body)"/>
+    <circle cx="259" cy="91" r="62.5" fill="url(#brute-skin)"/>
+    <path d="M207 97 Q259 113 311 97 L307 131 Q291 157 259 158 Q226 157 211 132Z" fill="url(#brute-skin)"/>
+    <path d="M217 75 L246 81 L239 94 L221 91Z M272 81 L301 75 L297 91 L279 94Z" fill="#ffe7b0"/>
+    <path d="M231 82 V90 M287 82 V90" stroke="#332f29" stroke-width="6" stroke-linecap="round"/>
+    <path d="M214 70 L246 77 M272 77 L304 70" stroke="#715035" stroke-width="8" stroke-linecap="round"/>
+    <path d="M253 90 L247 110 Q259 116 271 110 L265 90Z" fill="#a36c3e"/>
+    <path d="M229 128 Q259 142 289 128" stroke="#563e30" stroke-width="6" stroke-linecap="round"/>
+    <path d="M227 136 Q213 126 216 103 Q225 118 241 133Z M277 133 Q293 118 302 103 Q305 126 291 136Z" fill="url(#brute-ivory)"/>
+  </g>
+</svg>
