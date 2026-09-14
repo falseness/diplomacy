@@ -95,7 +95,7 @@ const compare = (label, observed, expected) => {
     const economy=createEconomyLedger(f,config.actors.map(({role,gold})=>({role,gold})),{});
     const turns=createTurnLedger([1,2]);
     const types=['imp','clawling','hound','brute','bulwark','spitter','emberArcher','hexcaster','ravager','demonLord'];
-    const names=['Imp','Clawling','Hound','Brute','Bulwark','Spitter','Ember Archer','Hexcaster','Ravager','Demon Lord'];
+    const names=['imp','clawling','hound','brute','bulwark','spitter','ember archer','hexcaster','ravager','demon lord'];
     async function check(label, selected=null) {
       await shared(()=>entities.check(label+'-entities'));
       await shared(()=>economy.check(label+'-economy'));

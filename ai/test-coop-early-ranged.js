@@ -7,7 +7,7 @@ const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 // Independent literal expectations: class, key, health, movement, damage, range.
 const cases = [['Spitter','spitter',2,2,1,2], ['EmberArcher','emberArcher',4,3,2,3]];
-const DEMON_NAMES = {"spitter": "Spitter", "emberArcher": "Ember Archer", "hexcaster": "Hexcaster"};
+const DEMON_NAMES = {"spitter": "spitter", "emberArcher": "ember archer", "hexcaster": "hexcaster"};
 const DEMON_ROLES = {"spitter": "fragile short-range attacker", "emberArcher": "mobile ranged attacker", "hexcaster": "slow stronger ranged attacker"};
 function run(fault, testCases = cases, summary) {
   for (const [klass,name,hp,speed,damage,range] of testCases) {

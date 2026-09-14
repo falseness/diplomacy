@@ -8,16 +8,16 @@ const config = require('./demon-config');
 
 // Independent design snapshot: never generate this data from the production table.
 const expectedRows = [
-  ['imp', 'Imp', 'fragile basic melee', 2, 1, 2, true, false, 1],
-  ['clawling', 'Clawling', 'quick light melee', 3, 1, 3, true, false, 1],
-  ['hound', 'Hound', 'fast melee pursuit', 4, 2, 4, true, false, 1],
-  ['brute', 'Brute', 'slow high-health melee', 10, 3, 1, true, false, 1],
-  ['bulwark', 'Bulwark', 'very durable slow melee', 16, 2, 1, true, false, 1],
-  ['spitter', 'Spitter', 'fragile short-range attacker', 2, 1, 2, true, true, 2],
-  ['emberArcher', 'Ember Archer', 'mobile ranged attacker', 4, 2, 3, true, true, 3],
-  ['hexcaster', 'Hexcaster', 'slow stronger ranged attacker', 5, 4, 1, true, true, 3],
-  ['ravager', 'Ravager', 'fast strong late-game melee', 8, 5, 4, true, false, 1],
-  ['demonLord', 'Demon Lord', 'durable powerful late-game melee', 20, 6, 2, true, false, 1]
+  ['imp', 'imp', 'fragile basic melee', 2, 1, 2, true, false, 1],
+  ['clawling', 'clawling', 'quick light melee', 3, 1, 3, true, false, 1],
+  ['hound', 'hound', 'fast melee pursuit', 4, 2, 4, true, false, 1],
+  ['brute', 'brute', 'slow high-health melee', 10, 3, 1, true, false, 1],
+  ['bulwark', 'bulwark', 'very durable slow melee', 16, 2, 1, true, false, 1],
+  ['spitter', 'spitter', 'fragile short-range attacker', 2, 1, 2, true, true, 2],
+  ['emberArcher', 'ember archer', 'mobile ranged attacker', 4, 2, 3, true, true, 3],
+  ['hexcaster', 'hexcaster', 'slow stronger ranged attacker', 5, 4, 1, true, true, 3],
+  ['ravager', 'ravager', 'fast strong late-game melee', 8, 5, 4, true, false, 1],
+  ['demonLord', 'demon lord', 'durable powerful late-game melee', 20, 6, 2, true, false, 1]
 ];
 function compare(scenario, observed, expected) {
   console.log(JSON.stringify({scenario, expected, observed}));

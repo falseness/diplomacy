@@ -7,7 +7,7 @@ const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 // Literal expectations deliberately independent of DEMON_TYPES and runtime deltas.
 const cases = [['Brute', 'brute', 10, 1, 3], ['Bulwark', 'bulwark', 16, 1, 2]];
-const DEMON_NAMES = {"brute": "Brute", "bulwark": "Bulwark", "ravager": "Ravager", "demonLord": "Demon Lord"};
+const DEMON_NAMES = {"brute": "brute", "bulwark": "bulwark", "ravager": "ravager", "demonLord": "demon lord"};
 const DEMON_ROLES = {"brute": "slow high-health melee", "bulwark": "very durable slow melee", "ravager": "fast strong late-game melee", "demonLord": "durable powerful late-game melee"};
 function run(fault, testCases = cases, summary) {
   if (!fault) require('./test-coop-melee-parents').run(testCases);
