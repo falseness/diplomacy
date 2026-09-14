@@ -61,7 +61,7 @@ class GameMap {
         }
         return Player
     }
-    createPlayers() {
+    createPlayers(competitiveHotseat = false) {
         players = new Array(this.players.length)
         players[0] = new NeutralPlayer(this.players[0].rgb, 0)
 
@@ -70,6 +70,10 @@ class GameMap {
                 DemonPlayer : this.getPlayerType(this.players[i])
             let economyEnabled = this.players[i].economyEnabled !== false
             let configuredGold = economyEnabled ? this.players[i].gold : 0
+            if (competitiveHotseat && playerType === Player) {
+                if (configuredGold === undefined) configuredGold = 100
+                gameSettings.pendingHotseatOpeningEconomy.push(i)
+            }
             players[i] = configuredGold === undefined ?
                 new playerType(this.players[i].rgb) :
                 new playerType(this.players[i].rgb, configuredGold)
@@ -275,14 +279,17 @@ class GameMap {
             }
         }
     }
-    start(_gameManager, isClassicTimer) {
+    start(_gameManager, isClassicTimer, competitiveHotseat = false) {
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
         gameSettings.mapShape = this.mapShape
         if (this.coop) gameSettings.coop = {...JSON.parse(JSON.stringify(this.coop)), balanceVersion: 2}
         else delete gameSettings.coop
 
-        this.createPlayers()
+        // Store unplayed opening slots with the save, including round-zero saves.
+        delete gameSettings.pendingHotseatOpeningEconomy
+        if (competitiveHotseat && !this.coop) gameSettings.pendingHotseatOpeningEconomy = []
+        this.createPlayers(competitiveHotseat && !this.coop)
         this.createTowns()
         this.createConfiguredSuburbs()
         this.createConfiguredBarracks()
@@ -1296,7 +1303,7 @@ class GameManager {
         isFogOfWar = _isFogOfWar
         gameSettings.isOnline = isOnline
         unsafeVariablePassword = password
-        map.start(this, isClassicTimer)
+        map.start(this, isClassicTimer, !isOnline)
         this.initValues()
 
         if (isOnline) {

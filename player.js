@@ -202,8 +202,15 @@ class Player {
         }
     }
     nextTurn() {
-        this.gold += this.income
-        this.correctGoldminesIncome()
+        const openingSlots = gameSettings.pendingHotseatOpeningEconomy
+        const openingIndex = !gameSettings.isOnline && !gameSettings.coop && openingSlots ?
+            openingSlots.indexOf(players.indexOf(this)) : -1
+        if (openingIndex >= 0) {
+            openingSlots.splice(openingIndex, 1)
+        } else {
+            this.gold += this.income
+            this.correctGoldminesIncome()
+        }
 
 
         if (this.isLost) {

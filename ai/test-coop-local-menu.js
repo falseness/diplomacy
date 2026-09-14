@@ -191,7 +191,7 @@ const compare = (label, observed, expected) => {
       const turns=createTurnLedger(Array.from({length:count},(_,i)=>i+1));
       turns.check('launched-'+count+'-turn',await page.evaluate(()=>({round:gameRound,terminal:gameExit,
         events:[{type:'human',round:gameRound,player:whooseTurn}]})),0);
-      await capture('local-'+size+'-launched-'+count,{coop:{...expected.coop,result:null},roles:['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS'],
+      await capture('local-'+size+'-launched-'+count,{coop:{...expected.coop,balanceVersion:2,result:null},roles:['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS'],
         fog:enabled,timer:enabled?'Timer':'LongTimer',online:false,round:0,human:1,menu:false},
         await page.evaluate(()=>({coop:gameSettings.coop,roles:players.map(p=>p.role),fog:isFogOfWar,
           timer:timer.constructor.name,online:gameSettings.isOnline,round:gameRound,human:whooseTurn,menu:menu.visible})));
