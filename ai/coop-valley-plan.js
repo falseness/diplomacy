@@ -95,6 +95,9 @@ function valleyRowPlans(humans, size) {
             decorativeRoom: area - ridgeCells.max - reservedMax - 2 * width * depth -
                 9 * (humans + counts.neutralTowns) - counts.goldmines,
             decorativeNeed: terrainBudget - ridgeCells.min + counts.bushes}
+        // Starting towns need rows to fan out around the passage entrances at
+        // similar path distances; a shallow allied strip cannot hold them.
+        if (side - 2 - alliedTop < (humans <= 2 ? 2 : Math.ceil(humans / 2) + 2)) continue
         if (alliedSites < humans || forwardSites < counts.neutralTowns ||
             slots.west.length < need.west || slots.east.length < need.east ||
             capacity.alliedMineRoom < humans || capacity.forwardMineRoom < counts.goldmines - humans ||
@@ -199,14 +202,15 @@ function planDividedValley(humans, size = 'normal', seed = 1) {
 const VALLEY_NEUTRAL_RGB = Object.freeze({r: 208, g: 208, b: 208})
 const valleyChebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 
-// Edge distances from one start. Blocked cells are never entered; endpoint
-// cells (buildings used by interaction) are entered but never expanded.
+// Edge distances from one start (or several). Blocked cells are never entered;
+// endpoint cells (buildings used by interaction) are entered but never expanded.
 function valleyDistances(side, start, blocked, endpoints) {
-    const distance = new Int32Array(side * side).fill(-1), queue = [start]
-    distance[start.y*side+start.x] = 0
+    const distance = new Int32Array(side * side).fill(-1), queue = [].concat(start)
+    for (const s of queue) distance[s.y*side+s.x] = 0
+    const origins = queue.length
     for (let i = 0; i < queue.length; i++) {
         const c = queue[i]
-        if (i && endpoints.has(c.y*side+c.x)) continue
+        if (i >= origins && endpoints.has(c.y*side+c.x)) continue
         for (const n of valleyNeighbours(c, side)) {
             const id = n.y*side+n.x
             if (distance[id] >= 0 || blocked.has(id)) continue
@@ -216,49 +220,78 @@ function valleyDistances(side, start, blocked, endpoints) {
     return distance
 }
 
-// Starting towns and one nearby unowned mine per human inside a plan's allied
-// territory. Towns come from the front-most lattice rows that hold every human,
-// then take a seeded one-cell jitter; their 3x3 neighbourhoods are reserved
-// before any mine. Other humans' towns and the ridge block paths, mines are
-// endpoints, and a mine is rejected if it would cut any free cell off.
-function placeValleyStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
-    if (typeof colorOf !== 'function') throw new TypeError('Divided Valley starts require coopPlayerColor')
-    const {side, humans, grid} = plan, alliedTop = plan.rows.alliedTop
-    const assets = valleyScaling(humans, plan.size).startingAssets
-    const rng = createValleyRandom((plan.seed ^ 0x9e3779b9) >>> 0)
+const VALLEY_OFFSETS3 = Object.freeze([-1, 0, 1].flatMap(dy => [-1, 0, 1].map(dx => Object.freeze({x: dx, y: dy}))))
+
+function valleyShuffler(seed) {
+    const rng = createValleyRandom(seed >>> 0)
     const pickIndex = length => Math.floor(rng() * length)
-    const shuffle = list => {
+    return list => {
         for (let i = list.length - 1; i > 0; i--) {
             const j = pickIndex(i + 1)
             ;[list[i], list[j]] = [list[j], list[i]]
         }
         return list
     }
-    const lattice = plan.capacity.alliedSites
-    let bandBottom = alliedTop
-    for (const y of [...new Set(lattice.map(s => s.y))].sort((a, b) => a - b)) {
-        bandBottom = y
-        if (lattice.filter(s => s.y <= y).length >= humans) break
+}
+
+// Town centers with the two-cell edge margin whose 3x3 neighbourhood stays in
+// the given regions.
+function valleyTownCenters(plan, centers, neighbourhood) {
+    const {side, grid} = plan, list = []
+    for (let y = 2; y <= side - 3; y++) for (let x = 2; x <= side - 3; x++)
+        if (centers.includes(grid[y][x]) && VALLEY_OFFSETS3.every(o => neighbourhood.includes(grid[y+o.y][x+o.x])))
+            list.push({x, y})
+    return list
+}
+
+// Starting towns and one nearby unowned mine per human inside a plan's allied
+// territory. Every forward objective is reached through a passage entrance, so
+// towns are drawn from allied centers whose entrance distance lies in the
+// narrowest window (then nearest band) that fits every human; the window is
+// re-measured with the other towns blocking. Their 3x3 neighbourhoods are
+// reserved before any mine. Other humans' towns and the ridge block paths,
+// mines are endpoints, and a mine is rejected if it would cut any free cell off.
+function placeValleyStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
+    if (typeof colorOf !== 'function') throw new TypeError('Divided Valley starts require coopPlayerColor')
+    const {side, humans, grid} = plan, alliedTop = plan.rows.alliedTop
+    const assets = valleyScaling(humans, plan.size).startingAssets
+    const shuffle = valleyShuffler(plan.seed ^ 0x9e3779b9)
+    const offsets = VALLEY_OFFSETS3, terrain = []
+    grid.forEach((line, y) => { for (let x = 0; x < side; x++) if (line[x] === 'M') terrain.push(y*side+x) })
+    const entrances = [...plan.endpoints.leftPassage.entrance, ...plan.endpoints.rightPassage.entrance]
+    const entranceIds = entrances.map(c => c.y*side+c.x), none = new Set()
+    const toEntrance = valleyDistances(side, entrances, new Set(terrain), none)
+    const centers = valleyTownCenters(plan, 'A', 'Ablr').filter(t => t.y >= alliedTop && toEntrance[t.y*side+t.x] > 0)
+    const entranceDistance = (t, others) => {
+        const d = valleyDistances(side, t, new Set([...terrain, ...others.map(u => u.y*side+u.x)]), none)
+        return Math.min(...entranceIds.map(id => d[id] < 0 ? Infinity : d[id]))
     }
-    const band = lattice.filter(s => s.y <= bandBottom)
-    if (band.length < humans) throw new Error(`Divided Valley has no allied town sites: size=${plan.size} humans=${humans}`)
-    const towns = shuffle(band.slice()).slice(0, humans)
-    const offsets = []
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) offsets.push({x: dx, y: dy})
-    const siteOk = (t, self) => t.x >= 2 && t.x <= side - 3 && t.y >= alliedTop && t.y <= side - 3 &&
-        grid[t.y][t.x] === 'A' && offsets.every(o => 'Ablr'.includes(grid[t.y+o.y][t.x+o.x])) &&
-        towns.every((u, j) => j === self || valleyChebyshev(t, u) >= 3)
-    // The unmoved center always stays valid, so each jitter step terminates.
-    for (let pass = 0; pass < 2; pass++) for (let i = 0; i < humans; i++) {
-        for (const o of shuffle(offsets.slice())) {
-            const t = {x: towns[i].x + o.x, y: towns[i].y + o.y}
-            if (siteOk(t, i)) { towns[i] = t; break }
+    let towns = null, band = null
+    const maxD = Math.max(...centers.map(t => toEntrance[t.y*side+t.x]))
+    search: for (const window of [1, 2, 3]) {
+        for (let lo = 1; lo <= maxD; lo++) {
+            const pool = centers.filter(t => toEntrance[t.y*side+t.x] >= lo && toEntrance[t.y*side+t.x] <= lo + window)
+            if (pool.length < humans) continue
+            for (let attempt = 0; attempt < 8; attempt++) {
+                const picked = []
+                for (const t of shuffle(pool.slice())) {
+                    if (picked.every(u => valleyChebyshev(t, u) >= 3)) picked.push(t)
+                    if (picked.length === humans) break
+                }
+                if (picked.length < humans) continue
+                const measured = picked.map((t, i) => entranceDistance(t, picked.filter((_, j) => j !== i)))
+                if (Math.max(...measured) - Math.min(...measured) <= window) {
+                    towns = picked
+                    band = {entranceDistance: [lo, lo + window], window, measured, candidates: pool.length}
+                    break search
+                }
+            }
         }
     }
+    if (!towns) throw new Error(`Divided Valley has no allied town sites: size=${plan.size} humans=${humans}`)
     const reserved = new Set()
     for (const t of towns) for (const o of offsets) reserved.add((t.y+o.y)*side + t.x+o.x)
-    const townIds = towns.map(t => t.y*side+t.x), terrain = []
-    grid.forEach((line, y) => { for (let x = 0; x < side; x++) if (line[x] === 'M') terrain.push(y*side+x) })
+    const townIds = towns.map(t => t.y*side+t.x)
     const blockedFor = townIds.map((_, i) => new Set([...terrain, ...townIds.filter((_, j) => j !== i)]))
     const open = []
     for (let id = 0; id < side*side; id++) if (!blockedFor[0].has(id) && id !== townIds[0]) open.push(id)
@@ -289,7 +322,7 @@ function placeValleyStarts(plan, colorOf = typeof coopPlayerColor === 'function'
     return {
         version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize,
         stages: ['towns', 'reserve-neighbourhoods', 'nearby-mines'],
-        band: {rows: [alliedTop, bandBottom], latticeSites: band.length},
+        band: {rows: [Math.min(...towns.map(t => t.y)), Math.max(...towns.map(t => t.y))], ...band},
         players: [{slot: 0, rgb: {...VALLEY_NEUTRAL_RGB}, towns: [], units: [], gold: 0},
             ...towns.map((t, i) => ({slot: i + 1, rgb: colorOf(i + 1), gold: assets.gold, units: [], towns: [t]}))],
         reserved: [...reserved].sort((a, b) => a - b).map(cell),
@@ -298,7 +331,129 @@ function placeValleyStarts(plan, colorOf = typeof coopPlayerColor === 'function'
     }
 }
 
+// True when the cells outside solid obstacles form one component and every
+// listed object (town or mine) touches it, so no object or free cell is cut off.
+function valleyPassableConnected(side, solid, objects) {
+    const seen = new Uint8Array(side * side), queue = []
+    let open = 0
+    for (let id = 0; id < side*side; id++) if (!solid.has(id)) {
+        open++
+        if (!queue.length) { queue.push(id); seen[id] = 1 }
+    }
+    for (let i = 0; i < queue.length; i++) {
+        const x = queue[i] % side
+        for (const n of valleyNeighbours({x, y: (queue[i] - x) / side}, side)) {
+            const id = n.y*side+n.x
+            if (!seen[id] && !solid.has(id)) { seen[id] = 1; queue.push(id) }
+        }
+    }
+    return queue.length === open && objects.every(id => {
+        const x = id % side
+        return valleyNeighbours({x, y: (id - x) / side}, side).some(n => seen[n.y*side+n.x])
+    })
+}
+
+const VALLEY_ACCESS_DISPARITY = 4
+const VALLEY_NEUTRAL_TARGET = 2
+
+// Neutral towns and the remaining (forward) mines after placeValleyStarts.
+// Neutral towns go to forward-territory centers chosen greedily so the spread
+// of each human's nearest neutral-town path stays small; forward mines go to
+// free forward cells farther from every human than any human's nearest mine.
+// Other humans' towns and the ridge block paths; neutral towns and mines are
+// endpoints. Counts, owners and incomes are unchanged from the scaling targets.
+function placeValleyExpansions(plan, starts) {
+    const {side, humans, grid, counts} = plan
+    const shuffle = valleyShuffler(plan.seed ^ 0x85ebca6b)
+    const cell = id => ({x: id % side, y: Math.floor(id / side)})
+    const idOf = c => c.y*side+c.x
+    const towns = starts.players.slice(1).map(p => p.towns[0]), townIds = towns.map(idOf)
+    const terrain = []
+    grid.forEach((line, y) => { for (let x = 0; x < side; x++) if (line[x] === 'M') terrain.push(y*side+x) })
+    const neutral = [], mineIds = new Set(starts.goldmines.map(idOf)), forwardMines = []
+    const reserved = new Set(starts.reserved.map(idOf))
+    const blockedFor = townIds.map((_, i) => new Set([...terrain, ...townIds.filter((_, j) => j !== i)]))
+    const fields = () => {
+        const endpoints = new Set([...mineIds, ...neutral.map(idOf)])
+        return towns.map((t, i) => valleyDistances(side, t, blockedFor[i], endpoints))
+    }
+    const connected = () => valleyPassableConnected(side, new Set([...terrain, ...townIds, ...neutral.map(idOf), ...mineIds]),
+        [...townIds, ...neutral.map(idOf), ...mineIds])
+    const spread = values => Math.max(...values) - Math.min(...values)
+    const nearestNeutral = d => d.map(di => Math.min(...neutral.map(t => di[idOf(t)] < 0 ? Infinity : di[idOf(t)])))
+    const neutralDisparity = () => spread(nearestNeutral(fields()))
+    // One greedy pass over a site list; false when sites run out or the final
+    // access spread is too wide.
+    const placeNeutral = sites => {
+        neutral.length = 0
+        const near = new Uint8Array(side * side)
+        const claim = t => {
+            for (let y = Math.max(0, t.y-2); y <= Math.min(side-1, t.y+2); y++)
+                for (let x = Math.max(0, t.x-2); x <= Math.min(side-1, t.x+2); x++) near[y*side+x] = 1
+        }
+        towns.forEach(claim)
+        const usable = sites.filter(s => !VALLEY_OFFSETS3.some(o => mineIds.has((s.y+o.y)*side + s.x+o.x)))
+        for (let k = 0; k < counts.neutralTowns; k++) {
+            const d = fields(), current = nearestNeutral(d), tiers = new Map()
+            for (const s of usable) {
+                if (near[idOf(s)]) continue
+                const next = d.map((di, i) => di[idOf(s)] < 0 ? Infinity : Math.min(current[i], di[idOf(s)]))
+                if (!next.every(Number.isFinite)) continue
+                const tier = Math.max(VALLEY_NEUTRAL_TARGET, spread(next))
+                if (!tiers.has(tier)) tiers.set(tier, [])
+                tiers.get(tier).push(s)
+            }
+            let placed = false
+            search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
+                for (const s of shuffle(tiers.get(tier))) {
+                    neutral.push(s)
+                    if (connected()) { claim(s); placed = true; break search }
+                    neutral.pop()
+                }
+            }
+            if (!placed) return false
+        }
+        return neutralDisparity() <= VALLEY_ACCESS_DISPARITY
+    }
+    // Free centers first; the planner's Chebyshev-3 lattice always holds the
+    // full count, so it is the fallback when free picks pack badly.
+    const free = valleyTownCenters(plan, 'F', 'Fflr'), lattice = plan.capacity.forwardSites
+    if (![free, free, free, lattice, lattice, lattice].some(placeNeutral))
+        throw new Error(`Divided Valley has no fair neutral town layout: size=${plan.size} humans=${humans} seed=${plan.seed}`)
+    for (const t of neutral) for (const o of VALLEY_OFFSETS3) reserved.add((t.y+o.y)*side + t.x+o.x)
+    const nearbyDistance = Math.max(...starts.assignments.map(a => a.distance))
+    for (let k = humans; k < counts.goldmines; k++) {
+        const d = fields(), candidates = []
+        for (let id = 0; id < side*side; id++) {
+            const c = cell(id)
+            if (grid[c.y][c.x] !== 'F' || reserved.has(id) || mineIds.has(id)) continue
+            const nearest = Math.min(...d.map(di => di[id] < 0 ? Infinity : di[id]))
+            if (Number.isFinite(nearest) && nearest > nearbyDistance) candidates.push(id)
+        }
+        let placed = false
+        for (const id of shuffle(candidates)) {
+            mineIds.add(id)
+            if (connected() && neutralDisparity() <= VALLEY_ACCESS_DISPARITY) { forwardMines.push(id); placed = true; break }
+            mineIds.delete(id)
+        }
+        if (!placed) throw new Error(`Divided Valley has no forward mine site: size=${plan.size} humans=${humans} mine=${k+1}`)
+    }
+    const mine = id => ({...cell(id), owner: 0, income: 20})
+    return {
+        version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize,
+        stages: [...starts.stages, 'neutral-towns', 'reserve-neutral-neighbourhoods', 'forward-mines'],
+        band: starts.band,
+        players: [{...starts.players[0], towns: neutral.map(t => ({...t}))},
+            ...starts.players.slice(1).map(p => ({...p, towns: p.towns.map(t => ({...t}))}))],
+        reserved: [...reserved].sort((a, b) => a - b).map(cell),
+        goldmines: [...starts.goldmines.map(m => ({...m})), ...forwardMines.map(mine)],
+        assignments: starts.assignments.map(a => ({...a, mine: {...a.mine}})),
+        expansions: {nearbyMines: starts.goldmines.map(m => ({x: m.x, y: m.y})), forwardMines: forwardMines.map(cell),
+            neutralTowns: neutral.map(t => ({...t})), nearbyMineDistanceMax: nearbyDistance}
+    }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {planDividedValley, placeValleyStarts, valleyRowPlans, clearValleyPlanCache, createValleyRandom,
+    module.exports = {planDividedValley, placeValleyStarts, placeValleyExpansions, valleyRowPlans, clearValleyPlanCache, createValleyRandom,
         VALLEY_LEGEND, VALLEY_PORTAL_DISTANCE}
 }
