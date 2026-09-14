@@ -6,11 +6,11 @@ const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger, committedSnapshot, compareCommitted} = require('./test-coop-turn-ledger');
 
 function config(count, coop = true) {
-  return {coop, size: {x: 21, y: 11}, actors: [
+  return {coop, size: {x: Math.max(21, count * 5 + 4), y: 11}, actors: [
     {role: 'neutral', rgb: {r: 100, g: 100, b: 100}, gold: 0,
       towns: [{x: 10, y: 8}], units: []},
     ...Array.from({length: count}, (_, i) => ({role: 'human',
-      rgb: {r: 220 - i * 40, g: 40 + i * 40, b: 40}, gold: 100 + i * 25,
+      rgb: {r: 220 - i * 15, g: 40 + i * 15, b: 40}, gold: 100 + i * 25,
       towns: [{x: 1 + i * 5, y: 1}], units: []})),
     {role: 'demon', rgb: {r: 160, g: 40, b: 180}, gold: 0,
       economyEnabled: false, towns: [], units: [{x: 19, y: 8, hp: 2}]}
@@ -53,7 +53,7 @@ function metadata(f) {
 function runCount(count) {
   const c = config(count), clients = [setup(c), setup(c)];
   const expected = {coop: {initialHumanCount: count,
-    humanSlots: Array.from({length: count}, (_, i) => i + 1), humanTeam: 'HUMANS', demonSlot: count + 1},
+    humanSlots: Array.from({length: count}, (_, i) => i + 1), humanTeam: 'HUMANS', demonSlot: count + 1, balanceVersion: 2},
     roles: ['NEUTRAL', ...Array(count).fill('HUMAN'), 'DEMONS'],
     teams: [0, ...Array(count).fill('HUMANS'), 'DEMONS'], allied: true,
     neutralAllied: false, demonAllied: false, separateController: true, neutral: true,
@@ -104,9 +104,7 @@ function runTests() {
     controller: players[3] instanceof DemonPlayer})`),
     {coop: null, allied: false, teams: [0, 1, 2, 3], controller: false});
   legacy.check('legacy-initial');
-  runCount(2);
-  runCount(3);
-  runCount(4);
+  for (const count of [2,3,4,5,8,12]) runCount(count);
   // Restarting a legacy map must clear prior co-op metadata in the same runtime.
   f.evaluate(`gameSettings.coop = {humanSlots: [1,2], humanTeam: 'HUMANS', demonSlot: 3};
     maps['open field'][0].start({clearValues() {external=[]; externalProduction=[]; nature=[]; goldmines=[]; gameRound=0; gameExit=false}, updateCameraBorders() {}}, false);`);
@@ -118,7 +116,7 @@ function runTests() {
   process.stdout.write(child.stdout); process.stderr.write(child.stderr);
   assert.equal(child.status, 1); assert.match(child.stderr, /AssertionError/); assert.match(child.stderr, /human 1 balance/);
   console.log(`PASS rejects-corrupt-human-balance expected_exit=1 observed_exit=${child.status}`);
-  console.log('PASS co-op metadata counts=2,3,4');
+  console.log('PASS co-op metadata counts=2,3,4,5,8,12');
 }
 if (require.main === module) {
   if (process.argv.includes('--fault')) {

@@ -15,6 +15,9 @@ const probe = `(() => {
  [C.maxHP,C.dmg,C.speed,C.range || 1,C.salary,C.healSpeed]),
  wave:spawnCoopWave(gameRound,42), state:JSON.parse(JSON.stringify(getGameObject()))};})()`;
 if (process.argv.includes('--server')) {
+  // The sibling loader predates the shared scaling script; supply its pure API
+  // in this fixture without editing sibling production files.
+  Object.assign(global, require('./coop-map-scaling'));
   require('../../diplomacy_server/server/loadGameCode');
   const vm = require('node:vm');
   const inputs = JSON.parse(require('node:fs').readFileSync(0,'utf8'));

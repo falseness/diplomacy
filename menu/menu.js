@@ -293,7 +293,7 @@ class CoopSettingsTree extends GameSettingsTree {
         this.playersText.x = this.mapText.x
         this.mapText.text = 'seed'
         this.playersSlider.minimumValue = () => minimumHumans
-        this.playersSlider.maximumValue = () => 4
+        this.playersSlider.maximumValue = () => 12
         this.playersSlider.textByValue = value => value
         this.playersSlider.value = 2
         this.playersSlider.update()
@@ -536,7 +536,11 @@ class OnlineSettingsTree {
         this.backButton.removeSelect()
     }*/
     get selectedMap() {
-        if (this.isCoop) return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
+        if (this.isCoop) {
+            if (!Number.isInteger(this.playersSlider.value) || this.playersSlider.value < 2 || this.playersSlider.value > 12)
+                throw new RangeError('Online co-op requires 2 to 12 humans')
+            return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
+        }
         let map = maps[this.mapSlider.realValue][this.playersSlider.value]
         return map
     }

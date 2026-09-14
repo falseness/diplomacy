@@ -1,5 +1,7 @@
 const colors = [{r:255,g:0,b:0}, {r:98,g:168,b:222},
-  {r:60,g:190,b:100}, {r:230,g:170,b:40}];
+  {r:60,g:190,b:100}, {r:230,g:170,b:40},
+  {r:0,g:110,b:120}, {r:245,g:120,b:180}, {r:100,g:70,b:210}, {r:135,g:80,b:35},
+  {r:170,g:200,b:40}, {r:20,g:55,b:125}, {r:255,g:110,b:0}, {r:80,g:80,b:80}];
 // Independent integer arithmetic for the specified LCG, including seed zero.
 function towns(count, seed, size = 'normal') {
   const side = {tiny:15,normal:25,big:39}[size];

@@ -144,7 +144,7 @@ function generateCoopGame(playerCount, options = {}) {
     }
     const roster = [{rgb: {r: 208, g: 208, b: 208}, towns: neutralTowns, units: [], gold: 0}]
     for (let i=0; i<playerCount; i++) {
-        roster.push({rgb: trainingPlayerColor(i+1), gold: scaling.startingAssets.gold,
+        roster.push({rgb: coopPlayerColor(i+1), gold: scaling.startingAssets.gold,
             units: [], towns: [starts[i]]})
     }
     // Reserve town centers and their surrounding cells before placing any
@@ -824,6 +824,27 @@ function generateGoldmineScenarios(rng, mapSize, used, count, incomeMin, incomeM
         })
     }
     return goldmines
+}
+
+// Co-op ownership is the numeric slot, independent of this display palette.
+function coopPlayerColor(playerIndex) {
+    const colors = [
+        {r: 255, g: 0, b: 0},
+        {r: 98, g: 168, b: 222},
+        {r: 60, g: 190, b: 100},
+        {r: 230, g: 170, b: 40},
+        {r: 0, g: 110, b: 120},
+        {r: 245, g: 120, b: 180},
+        {r: 100, g: 70, b: 210},
+        {r: 135, g: 80, b: 35},
+        {r: 170, g: 200, b: 40},
+        {r: 20, g: 55, b: 125},
+        {r: 255, g: 110, b: 0},
+        {r: 80, g: 80, b: 80}
+    ]
+    if (!Number.isInteger(playerIndex) || playerIndex < 1 || playerIndex > colors.length)
+        throw new RangeError('Co-op human slot must be an integer from 1 to 12')
+    return colors[playerIndex - 1]
 }
 
 function trainingPlayerColor(playerIndex) {
