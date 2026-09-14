@@ -201,6 +201,29 @@ class JsonUnpackManager {
                 packedNature[i].coord.x, packedNature[i].coord.y)
         }
     }
+    normalizePortalTiles(packedExternal, packedPlayers) {
+        for (const portal of packedExternal) {
+            if (portal.name !== 'demonPortal') continue
+            const slot = gameSettings.coop && gameSettings.coop.demonSlot
+            if (!Number.isInteger(slot) || !players[slot] || players[slot].role !== 'DEMONS' ||
+                    (portal.ownerSlot !== undefined && portal.ownerSlot !== slot))
+                throw new Error('portal requires demon ownership')
+            const {x, y} = portal.coord
+            if (isCoordNotOnMap({x, y}, grid.arr.length, grid.arr[0].length) ||
+                    !grid.getBuilding({x, y}).isEmpty())
+                throw new Error('portal requires empty building cell')
+            // The serialized registry is the ownership evidence before units
+            // exist. Never repaint a genuine human occupant into a demon.
+            for (let i = 0; i < packedPlayers.length; ++i) {
+                if (i !== slot && packedPlayers[i].units.some(unit =>
+                        unit.name !== 'Empty' && unit.coord.x === x && unit.coord.y === y))
+                    throw new Error('portal requires empty or demon-occupied unit cell')
+            }
+            // Match portal setup's suburb bookkeeping without recording undo.
+            // Ordinary unit constructors will now register to the correct tile owner.
+            grid.getHexagon({x, y}).repaint(slot, false)
+        }
+    }
     unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, 
             jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound, jsonIsFogOfWar, jsonGameSettings) {
         let packedTimer = JSON.parse(jsonTimer)
@@ -262,6 +285,9 @@ class JsonUnpackManager {
                 let packedTown = packedPlayers[i].towns[j]
                 this.unpackTown(packedTown)
             }
+        }
+        this.normalizePortalTiles(packedExternal, packedPlayers)
+        for (let i = 0; i < packedPlayers.length; ++i) {
             for (let j = 0; j < packedPlayers[i].units.length; ++j) {
                 let packedUnit = packedPlayers[i].units[j]
                 this.unpackUnit(packedUnit, this.unitClass[packedUnit.name])

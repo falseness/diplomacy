@@ -173,6 +173,7 @@ if (require.main === module) {
   else {
     run();
     runOwnershipAndMovement();
+    require('./test-coop-portal-load').run();
     for (const [fault, marker] of [['health', 'demon-ownership-visible-health'], ['ownership', 'ownership live entities']]) {
       const child = spawnSync(process.execPath, [__filename, '--fault', fault], {encoding:'utf8'});
       process.stdout.write(child.stdout);
