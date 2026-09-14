@@ -196,7 +196,109 @@ function planDividedValley(humans, size = 'normal', seed = 1) {
     }
 }
 
+const VALLEY_NEUTRAL_RGB = Object.freeze({r: 208, g: 208, b: 208})
+const valleyChebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+
+// Edge distances from one start. Blocked cells are never entered; endpoint
+// cells (buildings used by interaction) are entered but never expanded.
+function valleyDistances(side, start, blocked, endpoints) {
+    const distance = new Int32Array(side * side).fill(-1), queue = [start]
+    distance[start.y*side+start.x] = 0
+    for (let i = 0; i < queue.length; i++) {
+        const c = queue[i]
+        if (i && endpoints.has(c.y*side+c.x)) continue
+        for (const n of valleyNeighbours(c, side)) {
+            const id = n.y*side+n.x
+            if (distance[id] >= 0 || blocked.has(id)) continue
+            distance[id] = distance[c.y*side+c.x] + 1; queue.push(n)
+        }
+    }
+    return distance
+}
+
+// Starting towns and one nearby unowned mine per human inside a plan's allied
+// territory. Towns come from the front-most lattice rows that hold every human,
+// then take a seeded one-cell jitter; their 3x3 neighbourhoods are reserved
+// before any mine. Other humans' towns and the ridge block paths, mines are
+// endpoints, and a mine is rejected if it would cut any free cell off.
+function placeValleyStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
+    if (typeof colorOf !== 'function') throw new TypeError('Divided Valley starts require coopPlayerColor')
+    const {side, humans, grid} = plan, alliedTop = plan.rows.alliedTop
+    const assets = valleyScaling(humans, plan.size).startingAssets
+    const rng = createValleyRandom((plan.seed ^ 0x9e3779b9) >>> 0)
+    const pickIndex = length => Math.floor(rng() * length)
+    const shuffle = list => {
+        for (let i = list.length - 1; i > 0; i--) {
+            const j = pickIndex(i + 1)
+            ;[list[i], list[j]] = [list[j], list[i]]
+        }
+        return list
+    }
+    const lattice = plan.capacity.alliedSites
+    let bandBottom = alliedTop
+    for (const y of [...new Set(lattice.map(s => s.y))].sort((a, b) => a - b)) {
+        bandBottom = y
+        if (lattice.filter(s => s.y <= y).length >= humans) break
+    }
+    const band = lattice.filter(s => s.y <= bandBottom)
+    if (band.length < humans) throw new Error(`Divided Valley has no allied town sites: size=${plan.size} humans=${humans}`)
+    const towns = shuffle(band.slice()).slice(0, humans)
+    const offsets = []
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) offsets.push({x: dx, y: dy})
+    const siteOk = (t, self) => t.x >= 2 && t.x <= side - 3 && t.y >= alliedTop && t.y <= side - 3 &&
+        grid[t.y][t.x] === 'A' && offsets.every(o => 'Ablr'.includes(grid[t.y+o.y][t.x+o.x])) &&
+        towns.every((u, j) => j === self || valleyChebyshev(t, u) >= 3)
+    // The unmoved center always stays valid, so each jitter step terminates.
+    for (let pass = 0; pass < 2; pass++) for (let i = 0; i < humans; i++) {
+        for (const o of shuffle(offsets.slice())) {
+            const t = {x: towns[i].x + o.x, y: towns[i].y + o.y}
+            if (siteOk(t, i)) { towns[i] = t; break }
+        }
+    }
+    const reserved = new Set()
+    for (const t of towns) for (const o of offsets) reserved.add((t.y+o.y)*side + t.x+o.x)
+    const townIds = towns.map(t => t.y*side+t.x), terrain = []
+    grid.forEach((line, y) => { for (let x = 0; x < side; x++) if (line[x] === 'M') terrain.push(y*side+x) })
+    const blockedFor = townIds.map((_, i) => new Set([...terrain, ...townIds.filter((_, j) => j !== i)]))
+    const open = []
+    for (let id = 0; id < side*side; id++) if (!blockedFor[0].has(id) && id !== townIds[0]) open.push(id)
+    const mineIds = new Set(), assigned = new Array(humans)
+    const fields = () => towns.map((t, i) => valleyDistances(side, t, blockedFor[i], mineIds))
+    const connected = () => fields().every(d => open.every(id => d[id] >= 0))
+    for (const i of shuffle([...Array(humans).keys()])) {
+        const d = fields(), tiers = new Map()
+        for (let id = 0; id < side*side; id++) {
+            const x = id % side, y = (id - x) / side
+            if (grid[y][x] !== 'A' || reserved.has(id) || mineIds.has(id) || d[i][id] < 0) continue
+            const own = d[i][id], fair = d.every((other, j) => j === i || other[id] < 0 || other[id] >= own)
+            const tier = (fair ? 0 : 100000) + own
+            if (!tiers.has(tier)) tiers.set(tier, [])
+            tiers.get(tier).push(id)
+        }
+        // Nearest cells where this human is (jointly) closest come first.
+        search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
+            for (const id of shuffle(tiers.get(tier))) {
+                mineIds.add(id)
+                if (connected()) { assigned[i] = {id, distance: tier % 100000}; break search }
+                mineIds.delete(id)
+            }
+        }
+        if (!assigned[i]) throw new Error(`Divided Valley has no nearby mine: size=${plan.size} humans=${humans} slot=${i+1}`)
+    }
+    const cell = id => ({x: id % side, y: Math.floor(id / side)})
+    return {
+        version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize,
+        stages: ['towns', 'reserve-neighbourhoods', 'nearby-mines'],
+        band: {rows: [alliedTop, bandBottom], latticeSites: band.length},
+        players: [{slot: 0, rgb: {...VALLEY_NEUTRAL_RGB}, towns: [], units: [], gold: 0},
+            ...towns.map((t, i) => ({slot: i + 1, rgb: colorOf(i + 1), gold: assets.gold, units: [], towns: [t]}))],
+        reserved: [...reserved].sort((a, b) => a - b).map(cell),
+        goldmines: assigned.map(a => ({...cell(a.id), owner: 0, income: 20})),
+        assignments: assigned.map((a, i) => ({slot: i + 1, mine: cell(a.id), distance: a.distance}))
+    }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {planDividedValley, valleyRowPlans, clearValleyPlanCache, createValleyRandom,
+    module.exports = {planDividedValley, placeValleyStarts, valleyRowPlans, clearValleyPlanCache, createValleyRandom,
         VALLEY_LEGEND, VALLEY_PORTAL_DISTANCE}
 }
