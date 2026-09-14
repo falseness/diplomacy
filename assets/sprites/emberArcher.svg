@@ -1,0 +1,179 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="ea-archer-title ea-archer-desc">
+  <title id="ea-archer-title">Ember Archer — cinder bow demon miniature</title>
+  <desc id="ea-archer-desc">Archer's original stance, limbs and angled bow, reworked as a charcoal-clad demon with copper skin, swept cinder horns, glowing eyes and ember seams. A flame-tipped arrow and molten bow edges identify the ranged fire variant at miniature scale. Upper-right lighting; editable vector shapes on a transparent 512 by 512 canvas.</desc>
+  <defs>
+    <clipPath id="ea-noob-legs-clip">
+      <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" />
+    </clipPath>
+    <clipPath id="ea-noob-pants-clip">
+      <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z" />
+    </clipPath>
+    <clipPath id="ea-noob-arms-clip">
+      <path d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z" />
+    </clipPath>
+    <clipPath id="ea-noob-shirt-clip">
+      <path d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z" />
+    </clipPath>
+    <radialGradient id="ea-noob-skin" cx="72%" cy="24%" r="86%">
+      <stop stop-color="#f6ba70" />
+      <stop offset=".38" stop-color="#d88749" />
+      <stop offset=".7" stop-color="#ac542f" />
+      <stop offset="1" stop-color="#683227" />
+    </radialGradient>
+    <linearGradient id="ea-noob-left-arm" gradientUnits="userSpaceOnUse" x1="105" y1="255" x2="138" y2="268">
+      <stop stop-color="#713329" />
+      <stop offset=".4" stop-color="#b65e36" />
+      <stop offset=".69" stop-color="#e09350" />
+      <stop offset="1" stop-color="#8f432c" />
+    </linearGradient>
+    <linearGradient id="ea-noob-right-arm" gradientUnits="userSpaceOnUse" x1="373" y1="269" x2="409" y2="251">
+      <stop stop-color="#763528" />
+      <stop offset=".4" stop-color="#ba6438" />
+      <stop offset=".76" stop-color="#f1b568" />
+      <stop offset="1" stop-color="#c57842" />
+    </linearGradient>
+    <radialGradient id="ea-noob-shirt-paint" cx="78%" cy="19%" r="99%">
+      <stop stop-color="#777775" />
+      <stop offset=".28" stop-color="#555659" />
+      <stop offset=".6" stop-color="#383a40" />
+      <stop offset="1" stop-color="#24262d" />
+    </radialGradient>
+    <radialGradient id="ea-noob-sleeve-left" cx="76%" cy="15%" r="110%">
+      <stop stop-color="#606165" />
+      <stop offset=".46" stop-color="#404249" />
+      <stop offset="1" stop-color="#272930" />
+    </radialGradient>
+    <radialGradient id="ea-noob-sleeve-right" cx="57%" cy="29%" r="75%">
+      <stop stop-color="#92908a" />
+      <stop offset=".27" stop-color="#6a6b6c" />
+      <stop offset=".6" stop-color="#494b51" />
+      <stop offset="1" stop-color="#2c2e35" />
+    </radialGradient>
+    <radialGradient id="ea-noob-pants-paint" cx="75%" cy="14%" r="101%">
+      <stop stop-color="#686166" />
+      <stop offset=".36" stop-color="#4e484e" />
+      <stop offset=".76" stop-color="#38343c" />
+      <stop offset="1" stop-color="#25252d" />
+    </radialGradient>
+    <radialGradient id="ea-noob-cloth-light">
+      <stop stop-color="#ead19a" stop-opacity=".29" />
+      <stop offset=".55" stop-color="#dfc187" stop-opacity=".15" />
+      <stop offset="1" stop-color="#d7b780" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ea-noob-boot-left" gradientUnits="userSpaceOnUse" x1="181" y1="440" x2="228" y2="445">
+      <stop stop-color="#28252a" />
+      <stop offset=".35" stop-color="#484047" />
+      <stop offset=".68" stop-color="#63525a" />
+      <stop offset="1" stop-color="#342e35" />
+    </linearGradient>
+    <linearGradient id="ea-noob-boot-right" gradientUnits="userSpaceOnUse" x1="284" y1="440" x2="332" y2="445">
+      <stop stop-color="#27242b" />
+      <stop offset=".35" stop-color="#463c45" />
+      <stop offset=".74" stop-color="#75616a" />
+      <stop offset="1" stop-color="#423640" />
+    </linearGradient>
+    <linearGradient id="ea-noob-sole-shadow" gradientUnits="userSpaceOnUse" x1="0" y1="462" x2="0" y2="485">
+      <stop stop-color="#493a24" stop-opacity="0" />
+      <stop offset=".64" stop-color="#493a24" stop-opacity=".14" />
+      <stop offset="1" stop-color="#493a24" stop-opacity=".66" />
+    </linearGradient>
+    <radialGradient id="ea-noob-boot-toe" cx="64%" cy="33%" r="68%">
+      <stop stop-color="#968078" stop-opacity=".75" />
+      <stop offset=".44" stop-color="#746269" stop-opacity=".4" />
+      <stop offset="1" stop-color="#58484e" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ea-noob-belt-paint" x1="0" y1="0" x2="1" y2=".3">
+      <stop stop-color="#302a28" />
+      <stop offset=".57" stop-color="#4b3930" />
+      <stop offset=".85" stop-color="#866144" />
+      <stop offset="1" stop-color="#45352f" />
+    </linearGradient>
+    <linearGradient id="ember-bow-wood" x1="0" y1="0" x2="1" y2=".15">
+      <stop stop-color="#4e3a1e" />
+      <stop offset=".42" stop-color="#76552a" />
+      <stop offset=".72" stop-color="#a98142" />
+      <stop offset="1" stop-color="#684b25" />
+    </linearGradient>
+    <linearGradient id="ember-red-grip" x1="0" y1="0" x2="1" y2=".1">
+      <stop stop-color="#681e1a" />
+      <stop offset=".5" stop-color="#ac3a2a" />
+      <stop offset=".75" stop-color="#c45237" />
+      <stop offset="1" stop-color="#84251d" />
+    </linearGradient>
+    <linearGradient id="ember-arrow-metal" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#e4e8e0" />
+      <stop offset=".46" stop-color="#c0cbd0" />
+      <stop offset="1" stop-color="#82979e" />
+    </linearGradient>
+    <radialGradient id="ember-fire" cx="72%" cy="26%" r="88%">
+      <stop stop-color="#fff2af"/><stop offset=".35" stop-color="#ffd16b"/><stop offset=".68" stop-color="#ef8635"/><stop offset="1" stop-color="#a83e27"/>
+    </radialGradient>
+    <linearGradient id="ember-horn" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop stop-color="#4a302e"/><stop offset=".55" stop-color="#9e5134"/><stop offset="1" stop-color="#f3b25f"/>
+    </linearGradient>
+  </defs>
+  <g id="ea-unit-body">
+    <g id="ea-noob-boots" clip-path="url(#ea-noob-legs-clip)">
+      <path id="ea-noob-original-legs-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#ea-noob-boot-left)" />
+      <path d="M255 295 H332 V486 H255Z" fill="url(#ea-noob-boot-right)" />
+      <ellipse cx="205" cy="465" rx="25" ry="23" fill="url(#ea-noob-boot-toe)" />
+      <ellipse cx="309" cy="465" rx="25" ry="23" fill="url(#ea-noob-boot-toe)" />
+      <path d="M180 452 H334 V486 H180Z" fill="url(#ea-noob-sole-shadow)" />
+    </g>
+    <g id="ea-noob-pants" clip-path="url(#ea-noob-pants-clip)">
+      <path id="ea-noob-original-pants-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#ea-noob-pants-paint)" />
+      <ellipse cx="209" cy="365" rx="30" ry="66" fill="url(#ea-noob-cloth-light)" />
+      <ellipse cx="315" cy="365" rx="29" ry="66" fill="url(#ea-noob-cloth-light)" />
+    </g>
+    <g id="ea-noob-arms" clip-path="url(#ea-noob-arms-clip)">
+      <path id="ea-noob-original-arms-silhouette" d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z" fill="url(#ea-noob-left-arm)" />
+      <path d="M256 130 H428 V320 H256Z" fill="url(#ea-noob-right-arm)" />
+    </g>
+    <g id="ea-noob-shirt" clip-path="url(#ea-noob-shirt-clip)">
+      <path id="ea-noob-original-shirt-silhouette" d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z" fill="url(#ea-noob-shirt-paint)" />
+      <path d="M195 135 C175 145 169 158 158 180 L125 231 L110 227 L134 184 L159 149 Q174 133 195 135Z" fill="url(#ea-noob-sleeve-left)" />
+      <path d="M315 134 Q340 130 358 155 Q380 181 401 223 L363 245 Q343 201 331 182 Q327 151 315 134Z" fill="url(#ea-noob-sleeve-right)" />
+      <path d="M230 138 Q255 129 281 138 L256 164Z" fill="#28252d" />
+      <path d="M239 140 Q255 137 273 141 L256 158Z" fill="#e18a40" />
+    </g>
+  </g>
+  <g id="ea-belt">
+    <path d="M182.2 285 Q256 291 329.8 285 V297 Q256 303 182.2 297Z" fill="url(#ea-noob-belt-paint)" />
+  </g>
+  <!-- Broad ember seams survive reduction while the original pose stays intact. -->
+  <g id="ember-clothing-seams" stroke="#e99a49" stroke-width="7" stroke-linejoin="round">
+    <path d="M201 164 L213 197 L202 219 L222 252 M305 159 L292 188 L308 214 L294 242"/>
+    <path d="M202 334 L213 365 L202 390 M308 342 L298 367 L310 394" stroke-width="6"/>
+  </g>
+  <g id="ea-unit-head">
+    <circle id="ea-noob-original-head-silhouette" cx="256" cy="91" r="62.5" fill="url(#ea-noob-skin)" />
+    <g id="ember-horns" fill="url(#ember-horn)">
+      <path d="M206 62 Q177 49 185 21 Q198 40 221 36 L230 53Z"/>
+      <path d="M285 49 L293 35 Q315 38 329 19 Q334 47 307 63Z"/>
+    </g>
+    <path d="M219 69 L248 77 L246 91 L223 87Z M264 77 L294 68 L290 87 L266 91Z" fill="#482b29"/>
+    <path d="M226 77 L243 81 L240 87 L228 84Z M270 81 L287 76 L284 84 L272 87Z" fill="#ffe49b"/>
+    <path d="M242 113 Q257 121 272 111" stroke="#653329" stroke-width="5" stroke-linecap="round"/>
+    <path d="M244 114 L247 125 L253 118 M263 118 L267 124 L271 113" fill="#f6d596"/>
+  </g>
+  <g id="ember-bow">
+    <path d="M164.792 108.575L214.954 368.251" stroke="#eee5c9" stroke-width="7" />
+    <path d="M141.818 322.811C158.923 336.377 181.803 346.392 221.468 361.938L216.905 373.581C177.554 358.157 152.865 347.533 134.048 332.609C115.01 317.509 102.378 298.349 86.0773 266.986C83.3472 261.733 82.1998 255.79 82.7786 249.898C86.2342 214.722 90.8272 192.237 102.877 171.136C114.787 150.28 133.748 131.229 164.53 102.268L173.099 111.375C142.071 140.568 124.562 158.379 113.736 177.337C103.05 196.05 98.6411 216.332 95.2237 251.121C94.8817 254.601 95.5603 258.116 97.1731 261.22C113.294 292.237 124.935 309.42 141.818 322.811Z" fill="url(#ember-bow-wood)" stroke="#4a371e" stroke-width="1.5" stroke-linejoin="round" />
+    <path d="M112.807 300.728C88.1085 269.747 84.9824 246.849 95.0286 208.632" stroke="url(#ember-red-grip)" stroke-width="13" />
+  </g>
+  <g id="ember-arrow">
+    <path d="M353.404 297.399L364.81 301.084L367.221 304.973L369.636 308.869L367.867 320.724L347.951 333.073L349.606 321.033L347.305 317.322L345.009 313.618L333.488 309.747L353.404 297.399Z" fill="url(#ember-red-grip)" stroke="#6f251c" stroke-width="1.5" stroke-linejoin="round" />
+    <path d="M445.315 261.462L349.655 320.776L345.165 313.535L440.825 254.221L445.315 261.462Z" fill="url(#ember-bow-wood)" stroke="#4a371e" stroke-width="1.5" stroke-linejoin="round" />
+    <path d="M464.388 244.622L426.648 244.15L443.266 257.718L448.053 278.67L464.388 244.622Z" fill="url(#ember-arrow-metal)" stroke="#667d85" stroke-width="2" stroke-linejoin="round" />
+  </g>
+  <g id="ember-bow-heat" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M163 112 Q122 152 110 176 Q99 196 96 211 M114 303 Q151 340 213 363" stroke="#eb9845" stroke-width="6"/>
+    <path d="M147 128 L150 141 M123 154 L128 165 M139 326 L138 339 M168 343 L166 356" stroke="#ffda7a" stroke-width="5"/>
+  </g>
+  <g id="ember-arrow-flame">
+    <path d="M434 278 Q407 262 421 240 Q426 251 432 249 Q426 230 448 218 Q443 231 453 235 Q466 228 478 210 Q488 244 468 262 Q469 274 453 282 L452 269Z" fill="url(#ember-fire)"/>
+    <path d="M446 265 Q437 252 450 242 L452 253 L467 235 Q468 253 455 266Z" fill="#ffe7a0"/>
+    <path d="M430 209 L433 198 L438 206 L435 215Z M475 192 L478 182 L482 190 L479 198Z" fill="#efae55"/>
+  </g>
+</svg>
