@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="clawling-title clawling-desc">
+  <title id="clawling-title">Clawling — oversized ivory claws</title>
+  <desc id="clawling-desc">A violet demon with two oversized three-taloned hands, a round bald head, amber eyes, a dark waist wrap and broad feet. Noob head, shoulder, torso and leg proportions with smooth miniature volume shading inspired by Noob and Normchel. Separated curved ivory claws define the silhouette at board scale; no horns, weapons or tail. Editable vector shapes on a transparent background.</desc>
+  <defs>
+    <radialGradient id="clawling-skin" cx="74%" cy="22%" r="89%">
+      <stop stop-color="#c7a3cb"/>
+      <stop offset=".38" stop-color="#a073ae"/>
+      <stop offset=".72" stop-color="#755083"/>
+      <stop offset="1" stop-color="#493451"/>
+    </radialGradient>
+    <radialGradient id="clawling-body" cx="78%" cy="19%" r="99%">
+      <stop stop-color="#b892c2"/>
+      <stop offset=".3" stop-color="#91649f"/>
+      <stop offset=".65" stop-color="#694575"/>
+      <stop offset="1" stop-color="#422f4d"/>
+    </radialGradient>
+    <linearGradient id="clawling-limb" x1="0%" y1="0%" x2="100%" y2="25%">
+      <stop stop-color="#51375e"/>
+      <stop offset=".42" stop-color="#92669f"/>
+      <stop offset=".75" stop-color="#bb94c5"/>
+      <stop offset="1" stop-color="#72517e"/>
+    </linearGradient>
+    <linearGradient id="clawling-ivory" x1="0%" y1="65%" x2="100%" y2="15%">
+      <stop stop-color="#857159"/>
+      <stop offset=".38" stop-color="#c5b18b"/>
+      <stop offset=".7" stop-color="#f2e4bc"/>
+      <stop offset="1" stop-color="#fff4d3"/>
+    </linearGradient>
+    <radialGradient id="clawling-wrap" cx="76%" cy="18%" r="96%">
+      <stop stop-color="#827467"/>
+      <stop offset=".45" stop-color="#5e4e49"/>
+      <stop offset="1" stop-color="#342d37"/>
+    </radialGradient>
+    <linearGradient id="clawling-feet" x1="0%" y1="0%" x2="100%" y2="20%">
+      <stop stop-color="#39303f"/>
+      <stop offset=".65" stop-color="#79667f"/>
+      <stop offset="1" stop-color="#4d3e58"/>
+    </linearGradient>
+  </defs>
+  <!-- Noob's original leg silhouette and 62.5-radius head retain the shared scale. -->
+  <g id="clawling-legs">
+    <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#clawling-limb)"/>
+    <path d="M182 422 Q204 432 226 422 L229 460 Q229 480 208 484 H177 Q172 471 182 455Z M286 422 Q309 432 330 422 V455 Q340 471 335 484 H304 Q283 480 283 460Z" fill="url(#clawling-feet)"/>
+  </g>
+  <g id="clawling-body-and-arms">
+    <path d="M182.2 297V184.5C155.019 228.883 138.885 253.505 127.524 297.559Q111 323 88.476 290.336C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135H315.749C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 423.524 290.336Q401 323 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297Z" fill="url(#clawling-limb)"/>
+    <path d="M196 135H316Q335 152 330 185V297Q256 314 182 297V185Q177 152 196 135Z" fill="url(#clawling-body)"/>
+    <path d="M217 166 Q256 181 295 166 L287 228 Q256 248 225 228Z" fill="#caa0cc" opacity=".23"/>
+    <path d="M182 285 Q256 298 330 285 L335 331 L309 322 L286 343 L256 328 L228 343 L204 322 L177 331Z" fill="url(#clawling-wrap)"/>
+    <path d="M182 282 Q256 291 330 282 V301 Q256 311 182 301Z" fill="#403343"/>
+  </g>
+  <!-- Three individually editable, widely separated blades on each hand. -->
+  <g id="clawling-left-hand">
+    <path d="M89 270 Q106 257 127 276 L146 300 Q148 319 130 329 L85 324 Q63 307 74 287Z" fill="url(#clawling-skin)"/>
+    <g fill="url(#clawling-ivory)">
+      <path id="clawling-left-outer-claw" d="M77 299 Q90 294 97 310 Q78 343 66 372 Q46 343 61 316Z"/>
+      <path id="clawling-left-middle-claw" d="M103 310 Q116 303 122 321 Q109 356 100 396 Q79 365 90 337Z"/>
+      <path id="clawling-left-inner-claw" d="M130 310 Q144 304 148 321 Q140 350 141 375 Q120 359 119 340Z"/>
+    </g>
+  </g>
+  <g id="clawling-right-hand">
+    <path d="M423 270 Q406 257 385 276 L366 300 Q364 319 382 329 L427 324 Q449 307 438 287Z" fill="url(#clawling-skin)"/>
+    <g fill="url(#clawling-ivory)">
+      <path id="clawling-right-outer-claw" d="M435 299 Q422 294 415 310 Q434 343 446 372 Q466 343 451 316Z"/>
+      <path id="clawling-right-middle-claw" d="M409 310 Q396 303 390 321 Q403 356 412 396 Q433 365 422 337Z"/>
+      <path id="clawling-right-inner-claw" d="M382 310 Q368 304 364 321 Q372 350 371 375 Q392 359 393 340Z"/>
+    </g>
+  </g>
+  <g id="clawling-head">
+    <circle cx="256" cy="91" r="62.5" fill="url(#clawling-skin)"/>
+    <path d="M212 76 L242 85 Q231 102 216 92Z M270 85 L300 76 L296 92 Q281 102 270 85Z" fill="#ffe5a1"/>
+    <path d="M229 84 V94 M283 84 V94" stroke="#302734" stroke-width="6" stroke-linecap="round"/>
+    <path d="M212 72 L242 81 M270 81 L300 72" stroke="#57375e" stroke-width="6" stroke-linecap="round"/>
+    <path d="M256 87 L249 107 L263 107" fill="#78517e"/>
+    <path d="M234 120 Q256 129 278 120" stroke="#49334f" stroke-width="5" stroke-linecap="round"/>
+    <path d="M238 122 L247 125 L242 135Z M265 125 L274 122 L270 135Z" fill="url(#clawling-ivory)"/>
+  </g>
+</svg>
