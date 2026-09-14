@@ -876,6 +876,9 @@ class AIPlayer extends Player {
         return this.getWinningChances([vectoriseGrid()])[0]
     }
     getWinningChances(vectorisedGrids) {
+        if (ai_model == null) {
+            throw new Error('AI model is not ready; await loadModel() before model-dependent play')
+        }
         let predictions = predict(ai_model, vectorisedGrids)
         let result = []
         for (let i = 0; i < predictions.length; ++i) {

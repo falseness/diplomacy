@@ -37,3 +37,11 @@ If no URL is configured, `loadModel()` keeps the legacy IndexedDB fallback
 `indexeddb://diplomacy_weights750`. Browser model loading must not use
 `file://`, `fs`, `path`, `process`, `tfjs-node`, or npm-only entrypoints; cloud
 training and benchmarks remain responsible for Node-only checkpoint paths.
+
+Human command recording only collects the vectorized board; it does not run
+inference for logging. Absent, loading, or failed models do not block human play.
+Model-dependent `startAI()` and `playAndTrain()` await `loadModel()` before
+starting play; a load rejection propagates to the caller. There is no heuristic
+fallback for learned-model players. Calling `AIPlayer.getWinningChances()` before
+a model is available throws an explicit readiness error. Once a model is assigned,
+inference and its shape/runtime failures propagate normally.

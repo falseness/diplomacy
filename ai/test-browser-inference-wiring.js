@@ -60,6 +60,40 @@ function createBrowserLikeContext(aiModelUrl) {
   return context;
 }
 
+async function checkStartupReadiness() {
+  const assert = require('assert').strict;
+  for (const method of ['startAI', 'playAndTrain']) {
+    let resolveLoad, rejectLoad;
+    const calls = [];
+    const context = vm.createContext({
+      console, gameSettings: {},
+      GameManager: {initValues() {calls.push('init');}},
+      loadModel: () => new Promise((resolve, reject) => {resolveLoad=resolve; rejectLoad=reject;}),
+      generateBrowserPlayAiCombatMap: () => ({start() {calls.push('map');}}),
+      startTurn: () => calls.push('turn'),
+      gameLoop() {}, requestAnimationFrame: () => calls.push('frame')
+    });
+    vm.runInContext(readRepoFile('ai/gameManagerTraining.js'), context);
+    const failed = context.GameManager[method]();
+    assert.deepEqual(calls, []);
+    const failure = new Error('deliberate model load rejection');
+    rejectLoad(failure);
+    await assert.rejects(failed, error => error === failure);
+    assert.deepEqual(calls, []);
+    console.log('PASS ' + method + ' loading/failed expected starts=0 observed starts=' + calls.length);
+    if (method === 'startAI') {
+      const ready = context.GameManager.startAI();
+      assert.deepEqual(calls, []);
+      const model = {predict() {}};
+      resolveLoad(model);
+      await ready;
+      assert.equal(context.ai_model, model);
+      assert.deepEqual(calls, ['map','init','turn','frame']);
+      console.log('PASS startAI ready expected=map,init,turn,frame observed=' + calls.join(','));
+    }
+  }
+}
+
 (async function main() {
   const configured = createBrowserLikeContext('models/economy/model.json');
   const configuredResult = await runLoadModelSmoke(configured);
@@ -89,6 +123,7 @@ function createBrowserLikeContext(aiModelUrl) {
   }
   check(rejectedFileUrl, 'browser model loading accepted a file:// checkpoint');
 
+  await checkStartupReadiness();
   console.log('Browser AI inference wiring smoke passed');
 })().catch(error => {
   console.error(error);

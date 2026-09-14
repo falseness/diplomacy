@@ -1,14 +1,13 @@
-// Browser diagnosis only: production model, command logger and event dispatch are unmodified.
+// Browser regression using production model, command recording and event dispatch.
 const assert = require('assert').strict;
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const {chromium} = require('playwright');
 const root = path.resolve(__dirname, '..');
-const marker = "Cannot read properties of undefined (reading 'predict')";
 async function run({regression = false} = {}) {
   const arg = process.argv.indexOf('--output-dir');
-  const out = path.resolve(arg < 0 ? path.join(root, 'artifacts/TASK-103') : process.argv[arg + 1]);
+  const out = path.resolve(arg < 0 ? path.join(root, 'artifacts/TASK-104') : process.argv[arg + 1]);
   fs.mkdirSync(out, {recursive:true});
   const prefix = regression ? 'regression' : 'browser';
   const traces = [], cases = [], network = [];
@@ -79,6 +78,14 @@ async function run({regression = false} = {}) {
           }, {fog,action});
           for(let repeat=0;repeat<(regression?1:2);repeat++) {
             if(repeat) {
+              const restored = await page.evaluate(() => {
+                const coord={...actor.coord}, victimCoord=victim?{...victim.coord}:null;
+                const before={actor:actor.toJSON(),victim:victim?victim.toJSON():null,turn:whooseTurn,round:gameRound,fog:isFogOfWar};
+                loadFromJson(JSON.stringify(getGameObject()));
+                actor=grid.getUnit(coord); victim=victimCoord?grid.getUnit(victimCoord):null;
+                return {before,after:{actor:actor.toJSON(),victim:victim?victim.toJSON():null,turn:whooseTurn,round:gameRound,fog:isFogOfWar}};
+              });
+              compare(`${state}/${fog}/${action}/save-load`,restored.after,restored.before);
               const turns=await page.evaluate(() => {
                 const turns=[];
                 for(let i=0;i<2;i++) {nextTurn(); turns.push(whooseTurn); nextTurnPauseInterface.hideButDontUpdateTimer(); timer.pauseAndSaveTime();}
@@ -108,19 +115,39 @@ async function run({regression = false} = {}) {
             cases.push(row); console.log(JSON.stringify(row));
             compare(`${state}/${fog}/${action}/${repeat}/action-applied`,action==='archer-ranged'?after.victim.hp:after.actor.coord,action==='archer-ranged'?(repeat?1:3):destination);
             compare(`${state}/${fog}/${action}/${repeat}/recorded`,after.commands,before.commands+1);
-            if(regression) compare('valid human action completes without exception',actionErrors,[]);
-            else {
-              compare(`${state}/${fog}/${action}/${repeat}/exception-count`,actionErrors.length,state==='ready'?0:1);
-              if(state!=='ready') {
-                assert.equal(actionErrors[0].message,marker);
-                for(const frame of ['ai/model.js','recordHumanCommand','sendInstructions','click']) assert.ok(actionErrors[0].stack.includes(frame),frame);
-                console.log('PASS confirmed predict -> recordHumanCommand -> sendInstructions -> click');
-              }
-            }
+            compare(`${state}/${fog}/${action}/${repeat}/unhandled-errors`,actionErrors,[]);
           }
         }
       }
-      compare(`${state}/all-page-errors`,errors.length,state==='ready'?0:12);
+      if(!regression) {
+        const inference = await page.evaluate(() => {
+          const bot=new AIPlayer({r:1,g:2,b:3});
+          const input=vectoriseGrid();
+          if(ai_model===undefined) {
+            try {bot.getWinningChances([input]); return {unexpected:'success'};}
+            catch(e) {return {error:e.message};}
+          }
+          const direct=predict(ai_model,[input]).map(row=>row[0]);
+          const actual=bot.getWinningChances([input]);
+          const model=ai_model;
+          let shapeError, runtimeError;
+          try {bot.getWinningChances([input,[input[0].slice(1),input[1]]]);}
+          catch(e) {shapeError=e.message;}
+          try {
+            ai_model={predict(){throw new Error('deliberate inference runtime failure');}};
+            bot.getWinningChances([input]);
+          } catch(e) {runtimeError=e.message;}
+          finally {ai_model=model;}
+          return {direct,actual,finite:actual.length===1 && Number.isFinite(actual[0]),shapeError,runtimeError};
+        });
+        if(state==='ready') {
+          compare('ready AI scores equal direct model inference',inference.actual,inference.direct);
+          compare('ready AI finite score',inference.finite,true);
+          compare('EXPECTED corruption probe: shape failure propagates',inference.shapeError,'predict() requires every candidate board to have the same shape');
+          compare('EXPECTED corruption probe: runtime failure propagates',inference.runtimeError,'deliberate inference runtime failure');
+        } else compare(`${state}/AI explicit readiness failure`,inference,{error:'AI model is not ready; await loadModel() before model-dependent play'});
+      }
+      compare(`${state}/all-page-errors`,errors,[]);
       if(state==='loading') {assert.ok(heldRoute,'model request held in flight'); await heldRoute.abort();}
       await page.close();
     }
