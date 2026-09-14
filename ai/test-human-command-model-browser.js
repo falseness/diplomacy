@@ -60,7 +60,7 @@ async function run({regression = false} = {}) {
       }, state);
       console.log('tensorflow_version=' + await page.evaluate(() => tf.version.tfjs));
       for (const fog of regression ? [false] : [false,true]) {
-        for (const action of regression ? ['archer-move'] : ['archer-move','archer-ranged','ordinary-move']) {
+        for (const action of regression ? ['archer-move'] : ['archer-move','archer-ranged','ordinary-move','ordinary-attack']) {
           await page.evaluate(({fog,action}) => {
             isFogOfWar=fog; gameSettings.isOnline=false; gameSettings.coop=null;
             const actors=[{rgb:{r:100,g:100,b:100},towns:[],gold:0},
@@ -69,8 +69,9 @@ async function run({regression = false} = {}) {
             new GameMap({x:9,y:7},actors,[],[],[],[],[],{type:'rectangular'},null).start(GameManager,false);
             whooseTurn=1; humanCommands=[]; actionManager.clear();
             grid.getHexagon({x:4,y:3}).playerColor=1;
-            window.actor=action === 'ordinary-move' ? new Normchel(4,3) : new Archer(4,3);
+            window.actor=action.startsWith('ordinary-') ? new Normchel(4,3) : new Archer(4,3);
             window.victim=null;
+            if(action === 'ordinary-attack') {grid.getHexagon({x:4,y:4}).playerColor=2; victim=new Normchel(4,4);}
             if(action === 'archer-ranged') {grid.getHexagon({x:4,y:5}).playerColor=2; victim=new Normchel(4,5);}
             if(fog) players[1].changeFogOfWarByVision();
             nextTurnPauseInterface.hideButDontUpdateTimer(); timer.pauseAndSaveTime();
@@ -94,7 +95,7 @@ async function run({regression = false} = {}) {
               compare(`${state}/${fog}/${action}/turn-order`,turns,[2,1]);
             }
             const source=await page.evaluate(()=>({...actor.coord}));
-            const destination=action === 'archer-ranged' ? {x:4,y:5} : {x:4,y:repeat?3:4};
+            const destination=action === 'ordinary-attack' ? {x:4,y:4} : action === 'archer-ranged' ? {x:4,y:5} : {x:4,y:repeat?3:4};
             const snapshot=()=>page.evaluate(()=>({modelState,modelDefined:ai_model!==undefined,fog:isFogOfWar,turn:whooseTurn,round:gameRound,
               actor:actor.toJSON(),victim:victim?victim.toJSON():null,commands:humanCommands.length,undoDepth:actionManager.arr.length,selected:gameEvent.selected.name}));
             async function clickCell(coord) {
@@ -111,9 +112,26 @@ async function run({regression = false} = {}) {
             compare(`${state}/${fog}/${action}/${repeat}/model-state`, {state:before.modelState,defined:before.modelDefined}, {state,defined:state==='ready'});
             await clickCell(destination);
             const after=await snapshot(), actionErrors=errors.slice(start);
-            const row={state,fog,action,repeat,mode:'local competitive hotseat',map:'fixed 9x7; towns (1,1)/(7,1); actor (4,3); ranged target (4,5)',seed:'none; explicitly authored map',source,destination,before,after,errors:actionErrors};
+            const row={state,fog,action,repeat,mode:'local competitive hotseat',map:'fixed 9x7; towns (1,1)/(7,1); actor (4,3); ranged target (4,5)' + (action==='ordinary-attack'?'; ordinary attack target (4,4)':''),seed:'none; explicitly authored map',source,destination,before,after,errors:actionErrors};
             cases.push(row); console.log(JSON.stringify(row));
-            compare(`${state}/${fog}/${action}/${repeat}/action-applied`,action==='archer-ranged'?after.victim.hp:after.actor.coord,action==='archer-ranged'?(repeat?1:3):destination);
+            if(action === 'ordinary-attack') {
+              // Literal fixture expectations: each adjacent Normchel attack deals one
+              // damage, consumes the turn's moves, and leaves both surviving units in place.
+              const combat = value => ({actor:value.actor, victim:value.victim});
+              const expectedBefore = {
+                actor:{name:'normchel',coord:{x:4,y:3},hp:5,wasHitted:false,moves:2},
+                victim:{name:'normchel',coord:{x:4,y:4},hp:repeat?4:5,wasHitted:false,moves:2}
+              };
+              const expectedAfter = {
+                actor:{name:'normchel',coord:{x:4,y:3},hp:5,wasHitted:false,moves:0},
+                victim:{name:'normchel',coord:{x:4,y:4},hp:repeat?3:4,wasHitted:true,moves:2}
+              };
+              row.combat = {expectedBefore,observedBefore:combat(before),expectedAfter,observedAfter:combat(after)};
+              compare(`${state}/${fog}/${action}/${repeat}/combat-before`,row.combat.observedBefore,expectedBefore);
+              compare(`${state}/${fog}/${action}/${repeat}/combat-after`,row.combat.observedAfter,expectedAfter);
+            } else {
+              compare(`${state}/${fog}/${action}/${repeat}/action-applied`,action==='archer-ranged'?after.victim.hp:after.actor.coord,action==='archer-ranged'?(repeat?1:3):destination);
+            }
             compare(`${state}/${fog}/${action}/${repeat}/recorded`,after.commands,before.commands+1);
             compare(`${state}/${fog}/${action}/${repeat}/unhandled-errors`,actionErrors,[]);
           }
