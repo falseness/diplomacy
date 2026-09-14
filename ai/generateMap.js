@@ -87,6 +87,7 @@ function enforceCoopStartBalance(map, force = false) {
         towns.some((t,i) => towns.slice(i+1).some(u => Math.abs(t.x-u.x)<3 && Math.abs(t.y-u.y)<3)))
         fail('invalid fixed towns')
     if (!force && coopStartsBalanced(map)) return {status:'balanced', iterations:0, iterationLimit:8}
+    if (map.coop.generation.version === 4) return repairCoopValley(map, fail)
     let diagnostic = 'path disparity'
     for (let iteration=1; iteration<=8; iteration++) {
         const candidate = JSON.parse(JSON.stringify(map))
@@ -121,58 +122,89 @@ function generateCoopGame(playerCount, options = {}) {
     if (typeof size !== 'string' || !Object.prototype.hasOwnProperty.call(COOP_MAP_SIZES, size)) {
         throw new RangeError('Co-op size must be tiny, normal or big')
     }
-    const scaling = getCoopMapScaling(playerCount, size)
-    const mapSize = scaling.mapSize
-    const rng = createSeededRandom(seed)
-    // Fill dimension-derived rows, keeping human settlements on one frontier.
-    // Neutral objectives occupy subsequent rows. Shuffle human identities only;
-    // distance constraints apply to every starting town regardless of its owner.
-    const sites = []
-    for (let y=2; y<mapSize.y-2; y+=3) for (let x=2; x<mapSize.x-2; x+=3) sites.push({x,y})
-    if (sites.length < playerCount + scaling.counts.neutralTowns) {
-        throw new Error('Co-op town placement has insufficient sites')
-    }
-    const columns = Math.floor((mapSize.x - 5) / 3) + 1
-    const starts = sites.splice(0, playerCount)
-    const neutralTowns = Array.from({length:scaling.counts.neutralTowns}, (_,i) => ({
-        x:2 + 3 * ((i % playerCount) % columns),
-        y:2 + 3 * (Math.ceil(playerCount / columns) * (1 + Math.floor(i / playerCount)) + Math.floor((i % playerCount) / columns))
-    }))
-    for (let i=starts.length-1; i>0; i--) {
-        const j = randomIntWithRng(rng, 0, i)
-        ;[starts[i], starts[j]] = [starts[j], starts[i]]
-    }
-    const roster = [{rgb: {r: 208, g: 208, b: 208}, towns: neutralTowns, units: [], gold: 0}]
-    for (let i=0; i<playerCount; i++) {
-        roster.push({rgb: coopPlayerColor(i+1), gold: scaling.startingAssets.gold,
-            units: [], towns: [starts[i]]})
-    }
-    // Reserve town centers and their surrounding cells before placing any
-    // resources or blockers. A finite shuffled pool guarantees disjoint,
-    // in-bounds placements without probabilistic retry failures.
-    const towns = roster.flatMap(player => player.towns)
-    const available = []
-    for (let x = 0; x < mapSize.x; x++) {
-        for (let y = 0; y < mapSize.y; y++) {
-            if (!towns.some(t => Math.abs(t.x - x) <= 1 && Math.abs(t.y - y) <= 1)) {
-                available.push({x, y})
-            }
+    const failures = []
+    for (let attempt = 0; attempt < COOP_VALLEY_ATTEMPTS; attempt++) {
+        try {
+            return buildCoopValleyCandidate(playerCount, size, seed, attempt)
+        } catch (error) {
+            failures.push(error)
         }
     }
-    for (let i = available.length - 1; i > 0; i--) {
-        const j = randomIntWithRng(rng, 0, i)
-        ;[available[i], available[j]] = [available[j], available[i]]
+    const last = failures[failures.length - 1]
+    throw new Error(`Co-op Divided Valley generation failed: size=${size} playerCount=${playerCount} seed=${seed} ` +
+        `attempts=${failures.length}/${COOP_VALLEY_ATTEMPTS} constraint=${last.constraint} ` +
+        `failures=${failures.map(f => f.attempt + ':' + f.constraint).join(',')} detail=${last.message}`)
+}
+
+// Divided Valley candidates (ai/coop-valley-plan.js). Attempt 0 uses the seed
+// itself; later attempts use distinct derived seeds, so the at most eight full
+// candidates are deterministic. Every stage keeps finite pools and throws on
+// exhaustion; no partial map, row layout or relaxed bound is ever returned.
+const COOP_VALLEY_ATTEMPTS = 8
+
+function coopValleyAttemptSeed(seed, attempt) {
+    return attempt ? (seed ^ Math.imul(attempt, 0x9e3779b9)) >>> 0 : seed
+}
+
+// A complete version-4 map detached from the active runtime, or an error
+// tagged with the attempt and failed constraint (stage).
+function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
+    let constraint = 'region-plan'
+    try {
+        const plan = planDividedValley(playerCount, size, coopValleyAttemptSeed(seed, attempt))
+        constraint = 'starting-towns'
+        const starts = placeValleyStarts(plan, coopPlayerColor)
+        constraint = 'neutral-expansions'
+        const expansions = placeValleyExpansions(plan, starts)
+        constraint = 'portal-groups'
+        const portals = placeValleyPortals(plan, expansions)
+        constraint = 'terrain-formations'
+        const layout = placeValleyTerrain(plan, portals)
+        const copy = c => ({x: c.x, y: c.y})
+        const roster = [{rgb: {...layout.players[0].rgb}, towns: layout.players[0].towns.map(copy), units: [], gold: 0},
+            ...layout.players.slice(1).map(p => ({rgb: {...p.rgb}, gold: p.gold, units: [], towns: p.towns.map(copy)}))]
+        const map = new GameMap({x: plan.side, y: plan.side}, roster,
+            layout.goldmines.map(m => ({...copy(m), owner: m.owner, income: m.income})),
+            layout.lakes.map(copy), layout.mountains.map(copy), layout.bushes.map(copy), [], {type: 'rectangular'}, {})
+        map.coop.generation = {version: 4, playerCount, seed, size, options: {seed, size}}
+        map.portals = layout.portals.map(copy)
+        constraint = 'starting-balance'
+        if (!coopStartsBalanced(map)) throw new Error('starting assets or nearest objective paths exceed the balance bound')
+        constraint = 'route-connectivity'
+        if (!coopRoutesConnected(map)) throw new Error('an objective is unreachable')
+        return map
+    } catch (error) {
+        const tagged = new Error(error && error.message || String(error))
+        tagged.constraint = constraint
+        tagged.attempt = attempt
+        throw tagged
     }
-    const mines = []
-    for (let i=0; i<scaling.counts.goldmines; i++) {
-        const start = starts[i % playerCount]
-        available.sort((a,b) => coopPortalDistance(a,start)-coopPortalDistance(b,start) || a.y-b.y || a.x-b.x)
-        mines.push({...available.shift(), owner:0, income:20})
+}
+
+// Version-4 repair never moves towns, resources or assets. It replays the same
+// deterministic candidates and restores portals and terrain (with them the
+// ridge, passages and laterals) only from a balanced, connected candidate whose
+// fixed objects match exactly; otherwise the map is left untouched.
+function repairCoopValley(map, fail) {
+    const {playerCount, seed, size} = map.coop.generation
+    const fixed = m => JSON.stringify([m.mapSize, m.players.slice(0, 1 + m.coop.initialHumanCount), m.goldmines])
+    const failures = []
+    for (let attempt = 0; attempt < COOP_VALLEY_ATTEMPTS; attempt++) {
+        let candidate
+        try {
+            candidate = buildCoopValleyCandidate(playerCount, size, seed, attempt)
+        } catch (error) {
+            failures.push(attempt + ':' + error.constraint)
+            continue
+        }
+        if (fixed(candidate) !== fixed(map)) {
+            failures.push(attempt + ':fixed-objects')
+            continue
+        }
+        for (const kind of ['portals', 'lakes', 'mountains', 'bushes', 'hills']) map[kind] = candidate[kind]
+        return {status:'balanced', strategy:'valley-replay', iterations:attempt + 1, iterationLimit:COOP_VALLEY_ATTEMPTS}
     }
-    const map = new GameMap(mapSize, roster, mines, [], [], [], [], {type: 'rectangular'}, {})
-    map.coop.generation = {version: 3, playerCount, seed, size, options: {seed, size}}
-    enforceCoopStartBalance(map, true)
-    return map
+    fail(`version=4 attempts=${COOP_VALLEY_ATTEMPTS} failures=${failures.join(',')}`)
 }
 
 // Offset-column hex coordinates converted to axial coordinates. Distances count

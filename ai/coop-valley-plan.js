@@ -1,6 +1,7 @@
 // Seeded Divided Valley region/route planner for new co-op maps. It plans
 // territory, passages, cross-connections and placement capacity only; later
-// placement stages consume the plan. Not yet called by generateCoopGame.
+// placement stages consume the plan. generateCoopGame (ai/generateMap.js)
+// runs every stage for version-4 co-op maps.
 const valleyScaling = typeof getCoopMapScaling === 'function' ? getCoopMapScaling
     : require('./coop-map-scaling.js').getCoopMapScaling
 
