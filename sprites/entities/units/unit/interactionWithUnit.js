@@ -125,6 +125,16 @@ class InterationWithUnit {
         if (capturedBuilding.isStandable)
             capturedBuildingColor = capturedBuilding.playerColor
 
+        // Entry has already passed HP and defender clearance. Destroy before
+        // repainting so a razed town is never registered as a demon asset.
+        if (capturedBuildingColor != -1 && unit.player.shouldRazeBuilding(capturedBuilding)) {
+            const owner = capturedBuilding.player
+            capturedBuilding.destroy()
+            owner.updateTowns()
+            grid.getHexagon(original_coord).isSuburb = false
+            capturedBuildingColor = -1
+        }
+
         while (!(coord.x == unit.coord.x && coord.y == unit.coord.y)) {
             let hexagon = arr[coord.x][coord.y].hexagon
             hexagon.repaint(unit.playerColor)

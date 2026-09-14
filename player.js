@@ -41,6 +41,9 @@ class Player {
     canEnterBuilding(building) {
         return true
     }
+    shouldRazeBuilding(building) {
+        return false
+    }
     updateUnits() {
         for (let i = 0; i < this.units.length; ++i) {
             if (this.units[i].killed) {
@@ -385,8 +388,12 @@ class DemonPlayer extends Player {
         this.economyEnabled = false
     }
     canEnterBuilding(building) {
-        return building.isEmpty() || (building.isDemonPortal &&
+        return building.isEmpty() || this.shouldRazeBuilding(building) || (building.isDemonPortal &&
             !building.killed && building.playerColor === players.indexOf(this))
+    }
+    shouldRazeBuilding(building) {
+        return building.notEmpty() && building.isTown() && !building.killed &&
+            building.player.role === 'HUMAN'
     }
     get gold() { return 0 }
     set gold(value) {} // Combat rewards and restored balances cannot fund demons.
