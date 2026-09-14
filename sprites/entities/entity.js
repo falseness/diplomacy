@@ -8,7 +8,7 @@ class Entity extends Sprite {
         this.hpBarMarginY = basis.r * 1.4
         
         if (this.hasBar) {
-            this.hpBar = new Bar(
+            this.hpBar = new HealthBar(
                 {x: this.pos.x + assets.size / 2, 
                 y: this.pos.y + assets.size / 2 + this.hpBarMarginY}, 
                 this.maxHP)

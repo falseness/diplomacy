@@ -66,6 +66,7 @@ function createRuntimeContext() {
     cancelAnimationFrame() {},
     Image: class Image {},
     navigator: { userAgent: 'node' },
+    devicePixelRatio: 1,
     innerWidth: 800,
     innerHeight: 600,
     document: {

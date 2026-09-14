@@ -104,7 +104,7 @@ const compare = (label, observed, expected) => {
         cached:grid.surfaceCacheBuildings.includes(portal)}));
       const expected={hp,owner:3,role:'DEMONS',killed:hp===0,live:hp ? 1 : 0,empty:hp===0,
         selected:hp>0,visible:hp>0,title:hp?'Demon Portal':null,
-        info:hp?`hp: ${hp} / 30`:null,green:hp,cached:hp>0};
+        info:hp?`hp: ${hp} / 30`:null,green:Math.floor(hp/10)+hp%10,cached:hp>0};
       compare(label+'-asserted-state',observed,expected);
       const screenshot=path.join(out,'screenshots',label+'.png');
       const bytes=await page.screenshot({path:screenshot});
