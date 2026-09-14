@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="bulwark-title bulwark-desc">
+  <title id="bulwark-title">Bulwark — horned armored shield guardian</title>
+  <desc id="bulwark-desc">A compact demon enclosed in blue iron plate, with curled ivory helmet horns, an amber visor and a broad bronze-rimmed tower shield held forward. Normchel's planted legs and head scale preserve shared miniature proportions. Rounded volume shading, individually editable vector armor and a transparent 512 by 512 canvas.</desc>
+  <defs>
+    <radialGradient id="bulwark-plate" cx="76%" cy="20%" r="94%">
+      <stop stop-color="#9faeb1"/><stop offset=".36" stop-color="#71878e"/><stop offset=".72" stop-color="#465b66"/><stop offset="1" stop-color="#28373f"/>
+    </radialGradient>
+    <radialGradient id="bulwark-shield" cx="77%" cy="18%" r="98%">
+      <stop stop-color="#82979e"/><stop offset=".4" stop-color="#526b77"/><stop offset="1" stop-color="#243943"/>
+    </radialGradient>
+    <linearGradient id="bulwark-bronze" x1="0%" y1="80%" x2="100%" y2="15%">
+      <stop stop-color="#695335"/><stop offset=".45" stop-color="#af9059"/><stop offset=".78" stop-color="#d8bd82"/><stop offset="1" stop-color="#e8d6a8"/>
+    </linearGradient>
+    <linearGradient id="bulwark-horn" x1="0%" y1="90%" x2="100%" y2="10%">
+      <stop stop-color="#8e7d5d"/><stop offset=".5" stop-color="#ccbf9a"/><stop offset="1" stop-color="#f1e5c5"/>
+    </linearGradient>
+  </defs>
+  <!-- Exact Normchel leg geometry keeps the original head-to-foot scale. -->
+  <g id="bulwark-legs">
+    <path id="bulwark-parent-legs" d="M258.5 322.531C242.934 324.263 236.28 328.614 228.5 343.031V455.355C228.5 457.466 228.297 459.58 227.783 461.627C224.776 473.598 220.356 478.924 210.15 482.24C207.136 483.22 203.858 483.224 200.863 482.185C190.261 478.506 187.234 472.449 185.121 460.955C184.825 459.346 184.7 457.709 184.7 456.074V296.031H332.3V456.074C332.3 457.709 332.174 459.346 331.879 460.955C329.765 472.449 326.738 478.506 316.136 482.185C313.142 483.224 309.864 483.22 306.849 482.24C296.644 478.924 292.224 473.598 289.217 461.627C288.702 459.58 288.5 457.466 288.5 455.355V343.031C280.719 328.614 274.066 324.263 258.5 322.531Z" fill="#303d43"/>
+    <path d="M185 362 Q206 348 228 362 V452 Q228 478 207 483 Q185 479 185 456Z M289 362 Q310 348 332 362 V456 Q332 479 310 483 Q289 478 289 452Z" fill="url(#bulwark-plate)"/>
+    <path d="M189 375 Q207 384 225 375 M293 375 Q310 384 328 375" stroke="#af9b6e" stroke-width="7"/>
+    <path d="M194 398 V449 M298 398 V449" stroke="#adbabb" stroke-opacity=".42" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g id="bulwark-body">
+    <path d="M182 144 Q258 123 335 144 L348 285 L332 332 Q258 350 184 332 L168 285Z" fill="url(#bulwark-plate)"/>
+    <path d="M179 274 Q258 291 338 274 L337 306 Q258 322 180 306Z" fill="#29383d"/>
+    <path d="M180 304 L251 317 L241 354 L180 341Z M266 317 L336 304 L337 341 L276 354Z" fill="url(#bulwark-plate)"/>
+    <path d="M183 155 Q149 133 127 159 Q104 194 103 239 L91 288 Q105 315 141 302 L156 248 L191 204Z M330 155 Q364 133 386 159 Q409 194 410 239 L422 288 Q408 315 372 302 L357 248 L322 204Z" fill="url(#bulwark-plate)"/>
+    <path d="M179 134 Q143 127 121 156 L110 192 Q150 209 191 186 L200 152Z M338 134 Q374 127 396 156 L407 192 Q367 209 326 186 L317 152Z" fill="url(#bulwark-plate)" stroke="#394951" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M118 190 Q151 203 187 184 M330 184 Q366 203 400 190" stroke="url(#bulwark-bronze)" stroke-width="8"/>
+    <path d="M99 265 L150 279 L142 321 Q137 343 112 341 Q87 336 88 315Z" fill="url(#bulwark-plate)"/>
+    <path d="M103 299 L100 321 M118 302 L115 326 M133 305 L130 328" stroke="#293b43" stroke-width="4" stroke-linecap="round"/>
+    <path d="M201 156 Q258 178 316 156 L310 226 Q258 250 207 226Z" fill="url(#bulwark-plate)"/>
+    <path d="M213 173 L258 194 L303 173 M258 194 V229" stroke="#bbab81" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <g id="bulwark-helmet">
+    <path d="M212 66 Q173 53 180 18 Q144 44 161 77 Q175 98 204 99Z M306 66 Q345 53 338 18 Q374 44 357 77 Q343 98 314 99Z" fill="url(#bulwark-horn)"/>
+    <circle cx="259" cy="91" r="62.5" fill="url(#bulwark-plate)"/>
+    <path d="M201 78 Q259 95 317 78 L308 125 Q289 153 259 156 Q229 153 210 125Z" fill="url(#bulwark-shield)"/>
+    <path d="M211 81 L248 92 L246 108 L216 99Z M270 92 L307 81 L302 99 L272 108Z" fill="#202d33"/>
+    <path d="M218 88 L241 95 L239 100 L220 95Z M277 95 L300 88 L298 95 L279 100Z" fill="#f3cb79"/>
+    <path d="M252 31 Q259 28 266 31 L269 119 L259 135 L249 119Z" fill="url(#bulwark-bronze)"/>
+    <path d="M230 117 L240 132 M288 117 L278 132" stroke="#1f3038" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <g id="bulwark-tower-shield">
+    <path d="M275 194 Q365 161 452 194 L446 347 Q432 395 364 430 Q296 395 282 347Z" fill="url(#bulwark-bronze)" stroke="#4e5146" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M290 205 Q365 177 437 205 L431 344 Q418 382 364 412 Q310 382 297 344Z" fill="url(#bulwark-shield)"/>
+    <path d="M364 187 Q408 188 437 205 L431 344 Q418 382 364 412Z" fill="#b1c0bb" opacity=".12"/>
+    <path d="M358 190 H370 V405 L364 412 L358 405Z" fill="url(#bulwark-bronze)"/>
+    <path d="M337 272 L364 252 L391 272 L384 309 L364 327 L344 309Z" fill="url(#bulwark-bronze)"/>
+    <path d="M350 278 L364 267 L378 278 L374 301 L364 311 L354 301Z" fill="url(#bulwark-plate)"/>
+    <g fill="#e2cea0">
+      <circle cx="286" cy="201" r="4"/><circle cx="442" cy="201" r="4"/>
+      <circle cx="291" cy="294" r="4"/><circle cx="437" cy="294" r="4"/>
+      <circle cx="320" cy="382" r="4"/><circle cx="408" cy="382" r="4"/>
+    </g>
+  </g>
+</svg>
