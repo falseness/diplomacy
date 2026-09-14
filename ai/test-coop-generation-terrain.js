@@ -29,12 +29,12 @@ for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for
     assert.equal(map.bushes.length,wanted,'probe preserves density');
   }
   const row=audit(map,label);
-  // The old independently calculated fixture is used ONLY for fixed objects:
-  // new terrain must preserve the exact already-balanced town/resource layout.
+  // Independent seeded roster: repair may move resources and portals but must
+  // preserve every starting town and all starting assets.
   const before=expectedMap(count,seed,size);
-  for(const name of ['players','portals','goldmines']) assert.deepEqual(map[name],before[name],label+' preserved-'+name);
+  for(const name of ['players']) assert.deepEqual(map[name],before[name],label+' preserved-'+name);
   assert.equal(f.evaluate(`JSON.stringify(generated)===JSON.stringify(generateCoopGame(${count},{size:'${size}',seed:${seed}}))`),true,label+' seeded-replay');
-  row.fixedObjectsPreserved=true;row.seededReplay=true;
+  row.startingRosterPreserved=true;row.seededReplay=true;
   if(seed===0) {
     f.context.fixtureConfig={actors:[{role:'neutral'},...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};
     f.evaluate(`generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders(){}},false);whooseTurn=1;actionManager.clear()`);
@@ -54,4 +54,4 @@ for(const [arg,marker] of [['--missing','density-lakes'],['--overlap','disjoint'
   console.log(`PASS corruption-probe ${arg} expected_exit=1 observed_exit=${result.status} marker=${marker}`);
 }
 fs.writeFileSync(path.join(out,'terrain-matrix.json'),JSON.stringify(rows,null,2)+'\n');
-console.log('PASS terrain matrix=384 sizes=tiny,normal,big humans=1..4 seeds=0..31 density=8/6/10+/-2 clustered>=80% preserved_objects=384 seeded_replays=384 start_restore=12');
+console.log('PASS terrain matrix=384 sizes=tiny,normal,big humans=1..4 seeds=0..31 density=8/6/10+/-2 clustered>=80% preserved_rosters=384 seeded_replays=384 start_restore=12');

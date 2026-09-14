@@ -35,6 +35,8 @@ function check(map, size, count) {
   assert(exits.every(row=>row.length>0),'usable portal exits');
   return {expected:{portalCount:count*multiplier,minimumHexDistance:minimum,allRoutes:true,allExits:true},observed:{unique:true,inBounds:true,outsideStartingSuburbs:true,portalCount:map.portals.length,minimumHexDistance:Math.min(...matrix.flat()),distanceMatrix:matrix,attackRoutes,exits},portals:map.portals,starts:map.players.slice(1,count+1).map(p=>p.towns[0])};
 }
+module.exports={check};
+if(require.main===module) {
 for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for(let seed=0;seed<32;seed++) {
   const scenario=`${size}-humans-${count}-seed-${seed}`;
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}})`);
@@ -71,3 +73,5 @@ assert.throws(()=>f.evaluate("placeCoopPortals(impossible,'tiny')"),/Co-op porta
 console.log('PASS impossible placement fails explicitly');
 fs.writeFileSync(path.join(out,'portal-layout-matrix.json'),JSON.stringify(rows,null,2)+'\n');
 console.log('PASS portal-layout matrix=384 sizes=tiny,normal,big humans=1..4 seeds=0..31 counts=H*1/2/3 distance=6/10/14 deterministic=true routes=true exits=true elimination=12 corruption_probes=4');
+
+}

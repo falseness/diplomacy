@@ -37,13 +37,14 @@ for(const size of ['tiny','normal','big']) for(let count=1;count<=4;count++) for
 }
 // Deliberately isolated endpoint: independent traversal must detect it, and
 // finite production repair must reconnect without deleting terrain/resources.
-f.evaluate("globalThis.generated=generateCoopGame(1,{size:'tiny',seed:0});generated.portals=[{x:0,y:0}];generated.lakes=[{x:0,y:1},{x:1,y:0}];generated.mountains=[];generated.bushes=[]");
-assert.equal(routes(f.evaluate('JSON.parse(JSON.stringify(generated))'))[0][0],false);
+f.evaluate("globalThis.generated=generateCoopGame(1,{size:'tiny',seed:0});generated.lakes.push(...neighborhood[generated.players[1].towns[0].x&1].map(([dx,dy])=>({x:generated.players[1].towns[0].x+dx,y:generated.players[1].towns[0].y+dy})))");
+assert.equal(routes(f.evaluate('JSON.parse(JSON.stringify(generated))')).flat().every(Boolean),false);
 const repair=f.evaluate('repairCoopConnectivity(generated)');
 assert.equal(repair.status,'connected');
 const repaired=f.evaluate('JSON.parse(JSON.stringify(generated))');
-assert.equal(repaired.lakes.length,2);assert(routes(repaired).flat().every(Boolean));
-console.log(JSON.stringify({scenario:'isolated-portal-repair',expected:{connected:true,lakes:2},observed:{connected:routes(repaired).flat().every(Boolean),lakes:repaired.lakes.length},repair}));
-console.log('PASS isolated-portal-repair');
+require('./test-coop-terrain-audit').audit(repaired,'isolated-start-repair');
+assert(routes(repaired).flat().every(Boolean));
+console.log(JSON.stringify({scenario:'isolated-start-repair',expected:{connected:true,densityBounds:true},observed:{connected:true,densityBounds:true},repair}));
+console.log('PASS isolated-start-repair');
 fs.writeFileSync(path.join(out,'connectivity-matrix.json'),JSON.stringify(rows,null,2)+'\n');
 console.log('PASS connectivity matrix=384 sizes=tiny,normal,big humans=1..4 seeds=0..31 runtime_Way=12 isolated_repair=passed');

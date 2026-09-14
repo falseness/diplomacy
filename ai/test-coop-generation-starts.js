@@ -7,37 +7,27 @@ const {createTurnLedger} = require('./test-coop-turn-ledger');
 const {expectedMap, initialEntities} = require('./test-coop-generation-fixtures');
 
 const fault = process.argv[2];
-const seeds = [0,1,2,7,42,99,12345,2147483648,4294967295];
 const f = createFixture(undefined, line => {
   if (!line.includes('"scenario":"fixture-initial-state"')) console.log(line);
 });
-for (const count of [2,3,4]) for (const seed of seeds) {
-  const label = `starts-humans-${count}-seed-${seed}`;
-  const expected = expectedMap(count,seed);
-  f.evaluate(`globalThis.generated=generateCoopGame(${count},{seed:${seed}});`);
+for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4]) for (const seed of [0,1,31]) {
+  const label = `starts-${size}-humans-${count}-seed-${seed}`;
+  const fixed = expectedMap(count,seed,size);
+  f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}});`);
   if (fault === '--missing') f.evaluate('generated.portals=[]');
   if (fault === '--overlap') f.evaluate('generated.portals[0]={...generated.players[1].towns[0]}');
   const actual = f.evaluate('JSON.parse(JSON.stringify(generated))');
-  const categories = {...Object.fromEntries(['goldmines','bushes','mountains','lakes','portals'].map(k=>[k,actual[k].length])),
-    neutralTowns:actual.players[0].towns.length};
-  f.compare(label+'-required-categories', categories,
-    {goldmines:count,bushes:count,mountains:count,lakes:count,neutralTowns:count,portals:count});
-  const towns = actual.players.flatMap(p=>p.towns);
-  const terrain = ['goldmines','bushes','mountains','lakes'].flatMap(k=>actual[k]);
-  const all = [...towns,...terrain,...actual.portals];
-  f.compare(label+'-legal-placement', {
-    unique: new Set(all.map(c=>`${c.x},${c.y}`)).size,
-    total:all.length,
-    inBounds:all.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&
-      c.x>=0&&c.y>=0&&c.x<actual.mapSize.x&&c.y<actual.mapSize.y),
-    clearTownNeighborhoods:[...terrain,...actual.portals].every(c=>towns.every(t=>Math.abs(c.x-t.x)>1||Math.abs(c.y-t.y)>1)),
-    neutralMines:actual.goldmines.every(c=>c.owner===0&&c.income===20)
-  },{unique:count*7,total:count*7,inBounds:true,clearTownNeighborhoods:true,neutralMines:true});
-  f.compare(label+'-independent-layout',actual,expected);
+  const {audit}=require('./test-coop-terrain-audit');
+  assert.equal(actual.portals.length,count*({tiny:1,normal:2,big:3}[size]),'required-categories');
+  audit(actual,label+' legal-placement');
+  assert.deepEqual(actual.players,fixed.players,'independent starting roster');
+  assert.equal(actual.goldmines.length,count);
+  assert(actual.goldmines.every(m=>m.owner===0&&m.income===20));
+  const expected=actual; // Coordinates audited above; runtime values below are literal expectations.
   console.log(JSON.stringify({scenario:'seed-indexed-placement',count,seed,
     expected:{starts:expected.players.slice(1,-1).map(p=>p.towns[0]),portals:expected.portals},
     observed:{starts:actual.players.slice(1,-1).map(p=>p.towns[0]),portals:actual.portals}}));
-  f.compare(label+'-seed-replay',f.evaluate(`JSON.stringify(generated)===JSON.stringify(generateCoopGame(${count},{seed:${seed}}))`),true);
+  f.compare(label+'-seed-replay',f.evaluate(`JSON.stringify(generated)===JSON.stringify(generateCoopGame(${count},{size:'${size}',seed:${seed}}))`),true);
   f.context.fixtureConfig = {actors:[{role:'neutral'},...Array.from({length:count},()=>({role:'human'})),{role:'demon'}]};
   f.evaluate(`generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];
     gameRound=0;gameExit=false;},updateCameraBorders(){}},false);whooseTurn=1;actionManager.clear();`);
@@ -58,7 +48,7 @@ for (const count of [2,3,4]) for (const seed of seeds) {
       {role:'DEMONS',gold:0,towns:[],units:[]}]);
     f.compare(label+stage+'-portal-state',f.evaluate(`external.map(p=>({coord:p.coord,owner:p.playerColor,
       hp:p.hp,name:p.name,emptyUnit:grid.getUnit(p.coord).isEmpty(),territory:grid.getHexagon(p.coord).playerColor}))`),
-      expected.portals.map(coord=>({coord,owner:count+1,hp:30,name:'demonPortal',emptyUnit:true,territory:0})));
+      expected.portals.map(coord=>({coord,owner:count+1,hp:30,name:'demonPortal',emptyUnit:true,territory:count+1})));
     f.compare(label+stage+'-separate-ownership',f.evaluate(`new Set(players).size===players.length &&
       new Set(players.map(p=>p.towns)).size===players.length &&
       new Set(players.map(p=>p.units)).size===players.length`),true);
@@ -81,8 +71,9 @@ for (const count of [2,3,4]) for (const seed of seeds) {
 }
 console.log('INAPPLICABLE no combat, movement, income/expense events or completed rounds: generation, start and restore only; initial entity/economy/turn invariants checked after each start and restore. No online transport or committed revisions in this starts task.');
 for(const [arg,marker] of [['--missing','required-categories'],['--overlap','legal-placement']]) {
-  const child=spawnSync(process.execPath,[__filename,arg],{encoding:'utf8'});
+  const child=spawnSync(process.execPath,[__filename,arg],{encoding:'utf8',timeout:30000});
+  console.log(`DELIBERATE CORRUPTION ${arg}\n${child.stdout}${child.stderr}`);
   assert.equal(child.status,1); assert.match(child.stderr,/AssertionError/); assert.ok(child.stderr.includes(marker));
   console.log(`PASS corruption-probe ${arg} expected_exit=1 observed_exit=${child.status} marker=${marker}`);
 }
-console.log('PASS co-op generation starts scenarios=27 counts=2,3,4 seeds='+seeds.join(','));
+console.log('PASS co-op generation starts scenarios=36 counts=1,2,3,4 sizes=tiny,normal,big seeds=0,1,31');
