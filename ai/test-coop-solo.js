@@ -1,8 +1,9 @@
 const assert = require('assert').strict;
 const {createFixture} = require('./test-coop-harness');
-const {expectedMap, initialEntities} = require('./test-coop-generation-fixtures');
+const {initialEntities} = require('./test-coop-generation-fixtures');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {getHumanSlots} = require('../../diplomacy_server/server/matchmakingSlots');
+const {checkGeneratedMap} = require('./test-coop-current-generation');
 const {composeCoopWave} = require('./wave-composition');
 
 function generated(count) {
@@ -21,14 +22,15 @@ function generated(count) {
     globalThis.demonPhases=0; const play=DemonPlayer.prototype.play;
     DemonPlayer.prototype.play=function(){demonPhases++;offlineNextTurn();play.call(this)};
     globalThis.ends=0; menuBack=()=>{ends++;gameSettings.coop.result=players[0].coopResult;gameExit=true}; undefined`);
-  f.compare(`generated-${count}`,f.evaluate('JSON.parse(JSON.stringify(generated))'),expectedMap(count,42));
-  createEntityLedger(f,initialEntities(expectedMap(count,42))).check(`generated-${count}-entities`);
+  const map=f.evaluate('JSON.parse(JSON.stringify(generated))');
+  checkGeneratedMap(map,count,42);
+  createEntityLedger(f,initialEntities(map)).check(`generated-${count}-entities`);
   f.compare(`roster-${count}`, f.evaluate('players.map(p=>p.role)'),['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS']);
   return f;
 }
 const f=generated(1);
 f.compare('local-online-settings',f.evaluate(`(()=>{const m=new Menu(); globalThis.menu=m;
-  m.online.toggleMode(); return [m.coop.playersSlider.minimumValue(),m.coop.playersSlider.maximumValue(),m.online.playersSlider.minimumValue(),m.online.playersSlider.maximumValue()]})()`),[1,4,2,4]);
+  m.play.toggleMode(); m.online.toggleMode(); return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.online.playersSlider.minimumValue(),m.online.playersSlider.maximumValue()]})()`),[1,4,2,4]);
 for(const count of [0,1.5,5]) {
   f.compare(`reject-local-${count}`,f.evaluate(`(()=>{try{generateCoopGame(${count});return false}catch(e){return /integer from 1 to 4/.test(e.message)}})()`),true);
 }
@@ -40,14 +42,17 @@ for(const count of [2,3,4]) {
   const peer=generated(count);
   const slots=Array.from({length:count},(_,i)=>i+1);
   f.compare(`online-valid-${count}`,getHumanSlots(peer.evaluate('JSON.parse(JSON.stringify(getGameObject()))')),slots);
-  for(let i=0;i<count;i++) peer.evaluate('nextTurn()');
-  peer.compare(`local-round-${count}`,peer.evaluate('({round:gameRound,turn:whooseTurn,demonPhases,phases})'),{round:1,turn:1,demonPhases:1,phases:[{round:1,spawned:0}]});
+  for(let round=1;round<=3;round++) {
+    for(let i=0;i<count;i++) peer.evaluate('nextTurn()');
+    peer.compare(`local-round-${count}-${round}`,peer.evaluate('({round:gameRound,turn:whooseTurn,demonPhases,phases})'),
+      {round,turn:1,demonPhases:round,phases:Array.from({length:round},(_,i)=>({round:i+1,spawned:i===2?count*2:0}))});
+  }
 }
 for(let round=1;round<=3;round++) {
   // Third round is dispatched by the actual timer expiration path.
   f.evaluate(round===3?'timer.lastPause=Date.now()-timer.time-1; timer.check()':'nextTurn()');
   f.compare(`solo-round-${round}`,f.evaluate('({round:gameRound,turn:whooseTurn,demonPhases,phases,gold:players[2].gold,units:players[2].units.map(u=>u.name)})'),
-    {round,turn:1,demonPhases:round,phases:Array.from({length:round},(_,i)=>({round:i+1,spawned:i===2?1:0})),gold:0,units:round===3?['imp']:[]});
+    {round,turn:1,demonPhases:round,phases:Array.from({length:round},(_,i)=>({round:i+1,spawned:i===2?2:0})),gold:0,units:round===3?['imp','imp']:[]});
   f.compare(`solo-timer-${round}`,f.evaluate('timer.time'),(12+10+Math.floor((100+round*10)/3))*1000);
   f.evaluate('globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);');
   f.compare(`solo-save-load-${round}`,f.evaluate('JSON.stringify(getGameObject())===saved'),true);
