@@ -38,6 +38,8 @@ const compare = (label, observed, expected) => {
     browser = await chromium.launch({headless:true});
     console.log('browser_engine=chromium browser_version='+browser.version());
     const page = await browser.newPage({viewport:{width:1280,height:900},deviceScaleFactor:1});
+    page.on('requestfailed', r => errors.push(r.url()+': '+r.failure().errorText));
+    page.on('response', r => {if(r.status()>=400) errors.push(r.url()+': '+r.status());});
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', m => {if(m.type()==='error') errors.push(m.text());});
     // This offline render fixture uses no networking, downloads or learned AI.
@@ -112,6 +114,12 @@ const compare = (label, observed, expected) => {
       checkpoints.push({checkpoint:label,screenshot,sha256,expected,observed,assertions:'passed'});
       console.log(`PASS browser-checkpoint ${label} screenshot=${screenshot} sha256=${sha256}`);
     }
+    compare('portal SVG loaded and cached', await page.evaluate(() => ({
+      loaded:assets.demonPortal.complete && assets.demonPortal.naturalWidth===512,
+      source:new URL(assets.demonPortal.src).pathname,
+      cache:cachedImages.demonPortal.width>0,
+      portrait:entityInterface.img.image
+    })), {loaded:true,source:'/assets/sprites/demonPortal.svg',cache:true,portrait:'demonPortal'});
     await check('undamaged',30);
     console.log('ACTION portal.hit(13): selected portal damage; no economic event');
     await page.evaluate(()=>{portal.hit(13);drawAll();});
@@ -121,11 +129,33 @@ const compare = (label, observed, expected) => {
     entities.record({type:'death',id:'portal'});
     await check('destroyed',0);
     compare('distinct-browser-captures',new Set(checkpoints.map(c=>c.sha256)).size,3);
+    // Separate render-only fixture after the damage/economy ledger completes.
+    await page.evaluate(() => {
+      window.portal=new DemonPortal(3,2);
+      window.portalImp=new Imp(3,2);
+      portal.hit(13);
+      gameEvent.selected=portal;
+      entityInterface.change(portal.info,portal.player.fullColor);
+      entityInterface.visible=true;
+      otherSettings.alwaysDisplayHPBar=true;
+      drawAll();
+    });
+    const occupied=await page.evaluate(() => ({unit:grid.getUnit(portal.coord).name,
+      owner:portalImp.playerColor, hp:portal.hp, selected:gameEvent.selected===portal,
+      info:entityInterface.entity.info.text, cached:grid.surfaceCacheBuildings.includes(portal)}));
+    const occupiedExpected={unit:'imp',owner:3,hp:17,selected:true,info:'hp: 17 / 30',cached:true};
+    compare('damaged portal with demon overlay',occupied,occupiedExpected);
+    const occupiedPath=path.join(out,'screenshots','demon-on-portal.png');
+    const occupiedBytes=await page.screenshot({path:occupiedPath});
+    checkpoints.push({checkpoint:'demon-on-portal',screenshot:occupiedPath,
+      sha256:crypto.createHash('sha256').update(occupiedBytes).digest('hex'),
+      expected:occupiedExpected,observed:occupied,assertions:'passed'});
+    console.log('PASS browser-checkpoint demon-on-portal screenshot='+occupiedPath);
     compare('browser-console-errors',errors,[]);
     fs.writeFileSync(path.join(out,'browser-checkpoints.json'),JSON.stringify({
       engine:'chromium',version:browser.version(),consoleErrors:errors,checkpoints},null,2)+'\n');
     console.log('INAPPLICABLE online convergence and completed round/phase counts: offline damage/selection fixture, no round advancement; unchanged round 0 and human 1 checked at every checkpoint. No income or expense events.');
-    console.log('PASS co-op portal render checkpoints=3 invariant_checkpoints=3');
+    console.log('PASS co-op portal render checkpoints=4 invariant_checkpoints=3');
   } finally {
     console.log('browser_console_errors='+JSON.stringify(errors));
     if(browser) await browser.close();

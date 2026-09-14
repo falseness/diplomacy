@@ -54,21 +54,9 @@ class DemonPortal extends Building {
     }
     draw(ctx) {
         if (this.killed) return
-        DemonPortal.drawSymbol(ctx, this.pos.x + assets.size / 2,
-            this.pos.y + assets.size / 2, assets.size, this.player.fullColor.hex)
+        super.draw(ctx)
     }
     drawBars(ctx) {
         if (!this.killed) this.hpBar.draw(ctx)
-    }
-    static drawSymbol(ctx, x, y, size, color) {
-        ctx.save()
-        ctx.fillStyle = '#210d31'
-        ctx.strokeStyle = color
-        ctx.lineWidth = size * 0.06
-        ctx.beginPath()
-        ctx.ellipse(x, y, size * 0.25, size * 0.38, 0, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.stroke()
-        ctx.restore()
     }
 }

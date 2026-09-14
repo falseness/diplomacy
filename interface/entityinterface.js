@@ -161,11 +161,7 @@ class EntityInterface {
     }
     drawContents(ctx) {
         this.background.draw(ctx)
-        if (this.img.image == 'demonPortal') {
-            DemonPortal.drawSymbol(ctx, this.img.x, this.img.y,
-                this.img.width, this.background.color)
-        }
-        else if (this.img.image == 'suburb') {
+        if (this.img.image == 'suburb') {
             this.suburbImage.draw(ctx)
         }
         else {

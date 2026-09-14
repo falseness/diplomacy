@@ -44,15 +44,22 @@ function run(fault) {
   if (fault === 'ownership') f.evaluate('external.push(portal)');
   check('spawn');
   action('portal-draw-and-health-bar', `(() => {
-    let ellipses = 0, bars = 0;
-    const ctx = {save(){}, restore(){}, beginPath(){}, ellipse(){ellipses++}, fill(){}, stroke(){}};
+    let images = 0, bars = 0;
+    const previousCache = cachedImages.demonPortal;
+    const sentinel = {}; cachedImages.demonPortal = sentinel;
+    const ctx = {drawImage(image,x,y) {
+      if (image !== sentinel || x !== portal.pos.x || y !== portal.pos.y)
+        throw new Error("portal must draw its cached SVG at its map position");
+      images++;
+    }};
     const previous = otherSettings.alwaysDisplayHPBar;
     portal.hpBar.draw = () => bars++;
     otherSettings.alwaysDisplayHPBar = true;
     portal.draw(ctx); portal.drawBars(ctx);
     delete portal.hpBar.draw; otherSettings.alwaysDisplayHPBar = previous;
-    return {ellipses, bars};
-  })()`, {ellipses:1, bars:1});
+    cachedImages.demonPortal = previousCache;
+    return {images, bars};
+  })()`, {images:1, bars:1});
   action('non-coop-creation-rejected', `(() => {
     const coop = gameSettings.coop;
     try {gameSettings.coop = null; new DemonPortal(3,3)}
@@ -134,10 +141,13 @@ function runOwnershipAndMovement() {
     f.evaluate('walker.select(); walker.sendInstructions(grid.getCell({x:4,y:3})); undefined');
     f.compare(label+'-leave-portal', f.evaluate(`({coord:walker.coord,moves:walker.moves,
       tile:tile.playerColor,owner:portal.playerColor,suburb:tile.isSuburb,hp:portal.hp})`),
-      {coord:{x:4,y:3},moves:1,tile:3,owner:3,suburb:false,hp:30});
+      {coord:{x:4,y:3},moves:0,tile:3,owner:3,suburb:false,hp:30});
     f.evaluate('actionManager.undo(); globalThis.walker=grid.getUnit({x:3,y:3}); undefined');
     f.compare(label+'-undo-exact', f.evaluate('JSON.stringify(getGameObject())'), before);
-    f.evaluate('walker.select(); walker.sendInstructions(grid.getCell({x:4,y:3})); walker.select(); walker.sendInstructions(grid.getCell({x:3,y:3})); undefined');
+    // The opening Imp now has one move: replenish explicitly for the return
+    // leg of this ownership fixture without advancing a round or demon phase.
+    console.log('FIXTURE replenish opening Imp movement between leave and return');
+    f.evaluate('walker.select(); walker.sendInstructions(grid.getCell({x:4,y:3})); walker.moves=walker.speed; walker.select(); walker.sendInstructions(grid.getCell({x:3,y:3})); undefined');
     f.compare(label+'-enter-own-portal', f.evaluate(`({coord:walker.coord,moves:walker.moves,
       tile:tile.playerColor,owner:portal.playerColor,hp:portal.hp,gold:players[3].gold})`),
       {coord:{x:3,y:3},moves:0,tile:3,owner:3,hp:30,gold:0});

@@ -29,7 +29,7 @@ let assets = {
 }
 // Demon artwork is shared by both ordinary sprite themes.
 const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark',
-    'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord']
+    'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'demonPortal']
 for (const name of demonSpriteImages) assets[name] = new Image()
 let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
 for (let i = 0; i < grassHexImages.length; ++i)
