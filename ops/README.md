@@ -51,3 +51,21 @@ Do not execute a switch during preparation. The local TASK-065 release manifest,
 deployment and rollback wrapper scripts, checksums, prerequisite audit, staging
 logs and final audit are the handoff. Successful activation still needs the real
 protocol gameplay checks assigned to subsequent tasks.
+
+Co-op repair verification (TASK-086)
+==================================
+
+From the repository root, run `python3 ops/verify_coop_repairs.py`. This executes
+all five required Node suites sequentially and writes their complete output,
+literal commands, runtime version, elapsed seconds and actual process exit
+statuses to `artifacts/TASK-086/verification.log` and individual suite logs.
+Use `--node`, `--output-dir` or `--timeout` to override the defaults.
+
+Each suite has a 1200-second deadline: the starts suite can exceed 60 seconds
+on this machine. A timeout is recorded as an unavailable process exit and a
+separate watchdog status, and makes the runner fail. Every suite is attempted
+even if an earlier one fails. Deliberate corruption children must fail as asserted
+by their parent suites; the five parent processes must each exit zero.
+Previous suite logs and matrices are moved to a timestamped local directory
+before the run; verifier logs remain in place. Audit the new matrices, source
+identities and final PASS markers before handoff. Never commit evidence files.
