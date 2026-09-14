@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="spitter-title spitter-desc">
+  <title id="spitter-title">Spitter — acid-spitting demon miniature</title>
+  <desc id="spitter-desc">A teal, amphibious biped braces on Archer-proportioned legs, aiming its long open snout to the right. A swollen golden throat sac and a detached lime spit glob mark its ranged attack. Small dorsal fins, folded grasping arms and webbed toes distinguish it from armed humans and melee demons. Rounded volumes with upper-right lighting; editable vector artwork on a transparent background.</desc>
+  <defs>
+    <radialGradient id="spitter-skin" cx="76%" cy="22%" r="94%">
+      <stop stop-color="#94c7b1"/><stop offset=".36" stop-color="#559e90"/><stop offset=".73" stop-color="#34776f"/><stop offset="1" stop-color="#254b50"/>
+    </radialGradient>
+    <linearGradient id="spitter-limb" x1="0%" y1="0%" x2="100%" y2="20%">
+      <stop stop-color="#29565b"/><stop offset=".48" stop-color="#4a9186"/><stop offset=".77" stop-color="#7db8a2"/><stop offset="1" stop-color="#396e69"/>
+    </linearGradient>
+    <radialGradient id="spitter-sac" cx="73%" cy="22%" r="92%">
+      <stop stop-color="#e9dc96"/><stop offset=".4" stop-color="#c0b869"/><stop offset="1" stop-color="#767447"/>
+    </radialGradient>
+    <radialGradient id="spitter-acid" cx="70%" cy="22%" r="84%">
+      <stop stop-color="#eff6b0"/><stop offset=".4" stop-color="#cadb6e"/><stop offset="1" stop-color="#839e3e"/>
+    </radialGradient>
+    <linearGradient id="spitter-fin" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop stop-color="#31545a"/><stop offset="1" stop-color="#91aa83"/>
+    </linearGradient>
+  </defs>
+  <!-- Archer's exact leg silhouette preserves the shared stance and foot baseline. -->
+  <g id="spitter-legs">
+    <path id="spitter-parent-legs" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#spitter-limb)"/>
+    <path d="M183 443 Q204 452 225 443 L226 466 Q222 484 204 484 Q184 480 183 464Z M287 443 Q308 452 329 443 L329 465 Q326 482 309 484 Q289 481 287 466Z" fill="#345758"/>
+    <path d="M196 462 V478 M211 463 V479 M300 463 V479 M316 462 V477" stroke="#9daf88" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g id="spitter-back-fins" fill="url(#spitter-fin)">
+    <path d="M197 185 L164 150 L171 205Z M176 219 L142 202 L155 251Z M172 264 L137 259 L163 295Z"/>
+  </g>
+  <g id="spitter-body">
+    <path d="M214 151 Q263 131 300 162 Q328 192 316 249 L334 312 Q310 343 258 337 Q209 342 175 318 Q160 279 170 230 Q173 180 214 151Z" fill="url(#spitter-skin)"/>
+    <path d="M228 193 Q270 170 297 199 Q314 237 291 306 Q260 326 224 304 Q202 252 228 193Z" fill="url(#spitter-sac)"/>
+    <path d="M230 250 Q261 263 296 247 M229 273 Q259 284 290 270 M235 295 Q259 304 282 291" stroke="#82894e" stroke-width="4" stroke-linecap="round" opacity=".6"/>
+  </g>
+  <g id="spitter-folded-arms" fill="url(#spitter-limb)">
+    <path d="M190 193 Q166 184 154 208 L125 271 Q119 291 138 304 Q153 313 169 298 L214 251 L198 231 L158 268 L203 217Z"/>
+    <path d="M307 192 Q326 185 338 210 L364 256 L397 223 Q410 216 419 226 Q426 236 416 247 L373 290 Q355 303 341 284 L307 235Z"/>
+    <path d="M192 237 Q199 218 218 216 L245 216 Q256 222 245 227 L223 230 L245 234 Q253 241 241 245 L219 242 L234 251 Q239 260 228 259 L206 252Z"/>
+    <path d="M392 229 L395 208 Q400 199 405 209 L406 220 L418 204 Q427 200 425 211 L416 230 L429 222 Q440 223 432 233 L414 244Z"/>
+  </g>
+  <g id="spitter-head">
+    <path d="M201 92 L178 57 L214 69 L219 32 L244 60 L264 35 L278 67Z" fill="url(#spitter-fin)"/>
+    <path d="M228 131 Q266 115 304 133 Q327 159 310 187 Q288 213 248 190 Q221 177 228 131Z" fill="url(#spitter-sac)"/>
+    <path d="M195 106 Q185 61 224 52 Q267 40 295 72 Q309 89 301 108 L350 112 L354 143 Q323 159 280 143 Q256 164 226 148 Q202 139 195 106Z" fill="url(#spitter-skin)"/>
+    <path d="M284 102 Q318 113 355 109 L366 119 L361 145 Q326 153 288 134Z" fill="url(#spitter-limb)"/>
+    <ellipse cx="357" cy="127" rx="16" ry="23" fill="#6ca58a"/>
+    <ellipse cx="360" cy="127" rx="10" ry="16" fill="#243f43"/>
+    <path d="M355 136 Q361 132 367 135 L363 143 L357 143Z" fill="#bbc86b"/>
+    <path d="M249 82 Q264 68 282 80 L281 95 Q265 104 252 95Z" fill="#ede4a5"/>
+    <ellipse cx="271" cy="88" rx="4" ry="9" fill="#273b3b"/>
+    <path d="M249 80 L281 75" stroke="#315956" stroke-width="6" stroke-linecap="round"/>
+    <ellipse cx="222" cy="104" rx="10" ry="15" fill="#639b88"/>
+  </g>
+  <!-- Detached projectile and open snout give a readable ranged silhouette. -->
+  <g id="spitter-projectile">
+    <path d="M406 125 Q432 111 450 107 Q475 107 478 127 Q478 146 457 148 Q438 148 406 125Z" fill="url(#spitter-acid)"/>
+    <ellipse cx="460" cy="119" rx="8" ry="4" fill="#f2f1ba"/>
+    <ellipse cx="389" cy="127" rx="7" ry="5" fill="#c5d67b"/>
+    <circle cx="411" cy="151" r="5" fill="#acbe67"/>
+  </g>
+</svg>
