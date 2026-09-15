@@ -7,7 +7,9 @@
 //     persistence (no gameSettings key). Its menu Load throws after replacing
 //     gameSettings with {isOnline:false}; the next new co-op game then crashes on
 //     its first frame and later zoom changes scale on a frozen board.
-//   default: regression mode, fails when the target failure is observed
+//     Both modes then dismiss the card, zoom out and capture the legacy board.
+//   default: regression mode, fails when the target failure is observed or the
+//     legacy game's animation frames stop while its scale changes
 //   --expect-reproduction: diagnostic, succeeds only when the target failure and
 //     a real scale change are observed in the same game and no unrelated page
 //     error happened
@@ -263,6 +265,9 @@ function check(checkpoint, observed, expected) {
       await page.waitForTimeout(500);
       await shot('legacy-before-input');
       const hashBefore = await boardHash();
+      // The next-turn card covers the shared canvas, so its pixels stay equal
+      // while frames run; the animation loop's frame time shows whether they do.
+      const frameBefore = await page.evaluate(() => lastGameFrameTime);
       await wheel('legacy-out', 400, 12, true);
       await wheel('legacy-in', -400, 16, true);
       await page.waitForTimeout(300);
@@ -270,6 +275,8 @@ function check(checkpoint, observed, expected) {
       entry.legacyFinal = await snapshot();
       entry.legacyScaleChanges = scaleChanges('legacy-new-game');
       entry.legacyBoard = {hashBefore, hashAfter, frozen: hashBefore === hashAfter};
+      entry.legacyFrames = {before: frameBefore, after: await page.evaluate(() => lastGameFrameTime)};
+      entry.legacyFrames.continued = entry.legacyFrames.after > entry.legacyFrames.before;
       entry.reproduced = targetSeen('legacy-new-game');
       if (entry.reproduced) {
         const first = entry.errors.find(error => error.target && error.phase === 'legacy-new-game');
@@ -283,6 +290,15 @@ function check(checkpoint, observed, expected) {
         await shot('failure-state');
       }
       else await shot('legacy-final');
+      // Dismiss the card and zoom out so the capture shows the board itself.
+      entry.phase = 'legacy-board';
+      await page.mouse.click(640, 450);
+      action('click', {control: 'dismiss next-turn pause', x: 640, y: 450});
+      await wheel('legacy-board-out', 400, 4, true);
+      await page.waitForTimeout(300);
+      entry.legacyBoardView = {...await snapshot(), frameTime: await page.evaluate(() => lastGameFrameTime),
+        pauseVisible: await page.evaluate(() => nextTurnPauseInterface.visible), scaleChanges: scaleChanges('legacy-board')};
+      await shot('legacy-board-after-zoom');
       check(`${size}-legacy-new-game-real-scale-change`, entry.legacyScaleChanges > 0, true);
       if (expectReproduction) {
         check(`${size}-legacy-load-leaves-settings-without-interface`,
@@ -291,6 +307,11 @@ function check(checkpoint, observed, expected) {
         check(`${size}-legacy-new-game-settings-without-interface`, entry.legacyLaunched.interfacePresent, false);
         check(`${size}-legacy-new-game-target-failure`, entry.reproduced, true);
         check(`${size}-legacy-board-frozen-while-scale-changes`, entry.legacyBoard.frozen, true);
+      } else {
+        check(`${size}-legacy-frames-continue-while-scale-changes`, entry.legacyFrames.continued, true);
+        check(`${size}-legacy-board-view-after-zoom`, {pauseVisible: entry.legacyBoardView.pauseVisible,
+          scaleChanged: entry.legacyBoardView.scaleChanges > 0, framesContinued: entry.legacyBoardView.frameTime > entry.legacyFrames.after},
+          {pauseVisible: false, scaleChanged: true, framesContinued: true});
       }
       console.log(`CASE size=${size} humans=${humans} reproduced=${entry.reproduced} freshScaleChanges=${entry.scaleChanges} ` +
         `legacyScaleChanges=${entry.legacyScaleChanges} errors=${entry.errors.length} map=${entry.legacyLaunched.mapSize.join('x')} ` +

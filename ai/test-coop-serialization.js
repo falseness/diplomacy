@@ -120,7 +120,7 @@ function runLegacy() {
   delete saved.gameSettings;
   f.evaluate("gameSettings.coop = {humanSlots:[1,2],humanTeam:'HUMANS',demonSlot:3};");
   s.reload(JSON.stringify(saved)); check('legacy-no-settings');
-  f.compare('legacy-default-settings',f.evaluate('gameSettings'),{isOnline:false});
+  f.compare('legacy-default-settings',f.evaluate('gameSettings'),{isOnline:false,interface:{drawChanceOfWinningText:false}});
   f.compare('legacy-no-settings-unchanged',f.evaluate(`(() => {const g=JSON.parse(JSON.stringify(getGameObject()));delete g.gameSettings;return g})()`),saved);
   f.compare('legacy-competitive-identity',f.evaluate(`({roles:players.map(p=>p.role),teams:players.map(p=>p.team),
     allied:players[1].isAlliedWith(players[2]),demon:players.some(p=>p instanceof DemonPlayer)})`),

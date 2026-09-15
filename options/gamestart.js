@@ -282,6 +282,7 @@ class GameMap {
     start(_gameManager, isClassicTimer, competitiveHotseat = false) {
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
+        normalizeInterfaceSettings(gameSettings)
         gameSettings.mapShape = this.mapShape
         if (this.coop) gameSettings.coop = {...JSON.parse(JSON.stringify(this.coop)), balanceVersion: 2}
         else delete gameSettings.coop

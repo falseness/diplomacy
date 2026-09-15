@@ -252,6 +252,8 @@ class JsonUnpackManager {
         else {
             gameSettings = JSON.parse(jsonGameSettings)
         }
+        // Before any restore step that can throw, so later frames still draw.
+        normalizeInterfaceSettings(gameSettings)
 
         if (gameSettings.coop) getDemonTypes(gameSettings.coop.balanceVersion ?? 1)
 

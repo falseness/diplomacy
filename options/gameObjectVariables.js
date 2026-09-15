@@ -20,6 +20,15 @@ let gameSettings = {
         drawChanceOfWinning: false
     }
 }
+// Rendering and input read gameSettings.interface every frame. Settings from
+// older saves, received boards or a failed restore may omit it or the flag.
+function normalizeInterfaceSettings(settings) {
+    if (!settings.interface || typeof settings.interface !== 'object')
+        settings.interface = {}
+    if (settings.interface.drawChanceOfWinningText === undefined)
+        settings.interface.drawChanceOfWinningText = false
+    return settings
+}
 let unsafeVariablePassword = 'error'
 
 let whooseTurn
