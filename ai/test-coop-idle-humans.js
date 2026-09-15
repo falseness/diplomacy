@@ -1,5 +1,7 @@
 'use strict';
-// Each generated game runs in an isolated process with a hard wall-clock limit.
+// Each generated game runs in an isolated process bounded by its own CPU time
+// (the host is shared, so wall time measures contention); the parent only
+// keeps a wall-clock hang guard.
 // Observers delegate to the original methods; only presentation/persistence and
 // training side effects are stubbed. No gameplay state is edited after startup.
 const assert = require('node:assert/strict');
@@ -10,12 +12,25 @@ const {createFixture} = require('./test-coop-harness');
 const arg = process.argv.indexOf('--output-dir');
 const out = path.resolve(arg < 0 ? 'artifacts/TASK-146' : process.argv[arg + 1]);
 const fault = process.argv.includes('--fault-noop-demons');
+const cpuFault = process.argv.includes('--fault-cpu-bound');
+const cpuBoundSeconds = cpuFault ? 1 : 120, hangSeconds = 900;
 fs.mkdirSync(out, {recursive:true});
 const write = (file, data) => fs.writeFileSync(path.join(out,file), JSON.stringify(data,null,2)+'\n');
 const cases = fault ? [{size:'tiny',humans:2,mapSeed:0,fog:false}] :
+  cpuFault ? [{size:'tiny',humans:1,mapSeed:0,fog:false}] :
   ['tiny','normal','big'].flatMap(size=>[1,2,4].flatMap(humans=>[0,1].flatMap(mapSeed=>
     [false,true].map(fog=>({size,humans,mapSeed,fog})))));
 for (const c of cases) c.id=`${c.size}-H${c.humans}-seed${c.mapSeed}-fog${Number(c.fog)}`;
+// process.cpuUsage and uptime count from process start, so boot and generation are included.
+function usage() {
+  const {user,system}=process.cpuUsage(), cpuSeconds=(user+system)/1e6, wallSeconds=process.uptime();
+  return {cpuSeconds,wallSeconds,cpuShare:cpuSeconds/wallSeconds};
+}
+function priority() {
+  let autogroup=null;
+  try { autogroup=fs.readFileSync('/proc/self/autogroup','utf8').trim(); } catch {}
+  return {autogroup,nice:require('node:os').getPriority()};
+}
 
 function installObservers() {
   gameEvent.nextTurn=()=>{};
@@ -115,11 +130,15 @@ function terminalAssertion(final) {
 }
 
 function runCase(c) {
-  const row={...c,waveSeed:0,timeoutSeconds:120,status:'running',rounds:[],journal:`${c.id}-journal.jsonl`};
+  const row={...c,waveSeed:0,cpuBoundSeconds,hangSeconds,priority:priority(),status:'running',rounds:[],journal:`${c.id}-journal.jsonl`};
   const events=[];
   const journal=path.join(out,row.journal);
   fs.writeFileSync(journal,'');
   const save=()=>write(`${c.id}.json`,row);
+  const cpuBound=()=>{
+    Object.assign(row,usage());
+    assert(row.cpuSeconds<=cpuBoundSeconds,`case-cpu-bound: ${c.id} used ${row.cpuSeconds.toFixed(1)} CPU-s > ${cpuBoundSeconds} (wall ${row.wallSeconds.toFixed(1)} s, round ${row.final?.round})`);
+  };
   save();
   const f=createFixture(undefined,()=>{}, {nativeIntrinsics:true});
   f.context.emit=event=>{
@@ -154,6 +173,7 @@ function runCase(c) {
         f.context.emit({type:'human-end-turn',round,owner:active.owner});
         f.evaluate('nextTurn(); undefined');
         row.final=f.evaluate('observe()');
+        cpuBound();
       } while(row.final.round===round&&!row.final.terminal);
       assert.equal(row.final.threshold,40);
       const roundEvents=events.slice(start);
@@ -163,17 +183,17 @@ function runCase(c) {
           {version:1,seed:0,spawnSeeds:[0]},'unchanged wave rules');
       const actions={demon:roundEvents.filter(e=>e.type==='action-end').length,
         damage:roundEvents.filter(e=>e.type==='damage').length,removals:roundEvents.filter(e=>e.type==='removal').length};
-      row.rounds.push({completedFrom:round,turns,actions,spawns:roundEvents.filter(e=>e.type==='spawn'),...row.final});
+      row.rounds.push({completedFrom:round,turns,actions,spawns:roundEvents.filter(e=>e.type==='spawn'),...usage(),...row.final});
       save();
-      console.log(`ROUND ${c.id} round=${row.final.round} turns=${turns} humans=${row.final.humans.reduce((n,p)=>n+p.units.length+p.towns.length,0)} demons=${row.final.demons.length} portals=${row.final.portals.length} result=${row.final.result}`);
+      console.log(`ROUND ${c.id} round=${row.final.round} turns=${turns} humans=${row.final.humans.reduce((n,p)=>n+p.units.length+p.towns.length,0)} demons=${row.final.demons.length} portals=${row.final.portals.length} result=${row.final.result} cpuSeconds=${row.cpuSeconds.toFixed(1)} wallSeconds=${row.wallSeconds.toFixed(1)}`);
     }
     terminalAssertion(row.final);
     row.status='passed';
-    console.log(`PASS idle-humans ${c.id} round=${row.final.round} result=defeat combatRemovals=${row.final.removals.length} threshold=40`);
+    console.log(`PASS idle-humans ${c.id} round=${row.final.round} result=defeat combatRemovals=${row.final.removals.length} threshold=40 cpuSeconds=${row.cpuSeconds.toFixed(1)} wallSeconds=${row.wallSeconds.toFixed(1)}`);
   } catch(error) {
     row.status='failed'; row.error=error.stack;
     console.error(error.stack); process.exitCode=1;
-  } finally {save();}
+  } finally {Object.assign(row,usage()); save();}
 }
 const childIndex=process.argv.indexOf('--case');
 if(childIndex>=0) {
@@ -181,17 +201,23 @@ if(childIndex>=0) {
   assert(c,'unknown case'); runCase(c);
 } else {
   const results=[];
+  console.log(`PRIORITY parent ${JSON.stringify(priority())}`);
   for(const c of cases) {
     const args=[__filename,'--output-dir',out,'--case',c.id];
     if(fault)args.push('--fault-noop-demons');
+    if(cpuFault)args.push('--fault-cpu-bound');
     const started=Date.now();
-    const child=spawnSync(process.execPath,args,{encoding:'utf8',timeout:120000,maxBuffer:64*1024*1024});
+    const child=spawnSync(process.execPath,args,{encoding:'utf8',timeout:hangSeconds*1000,maxBuffer:64*1024*1024});
     process.stdout.write(child.stdout||''); process.stderr.write(child.stderr||'');
     const file=path.join(out,`${c.id}.json`);
     const row=fs.existsSync(file)?JSON.parse(fs.readFileSync(file)):{...c,status:'failed'};
     row.exitStatus=child.status;row.signal=child.signal;row.elapsedSeconds=(Date.now()-started)/1000;
     if(child.error||child.status!==0) {row.status='failed';row.processError=child.error&&child.error.message;}
-    console.log(`CASE_EXIT ${c.id} status=${child.status} signal=${child.signal} elapsed=${row.elapsedSeconds}`);
+    if(child.signal) {
+      row.error=`case-hang: ${c.id} exceeded the ${hangSeconds} s wall-clock hang guard (signal ${child.signal})`;
+      console.error(`AssertionError [ERR_ASSERTION]: ${row.error}`);
+    }
+    console.log(`CASE_EXIT ${c.id} status=${child.status} signal=${child.signal} elapsed=${row.elapsedSeconds} cpuSeconds=${row.cpuSeconds} wallSeconds=${row.wallSeconds} cpuShare=${row.cpuShare} autogroup=${JSON.stringify(row.priority?.autogroup)}`);
     results.push(row);write('checkpoints.json',results);
   }
   const passed=results.filter(r=>r.status==='passed').length;

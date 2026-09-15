@@ -472,7 +472,7 @@ class BestEnemyTargetForAI extends Way {
         for (let i = 0; i < grid_arr.length; ++i) {
             for (let j = 0; j < grid_arr[i].length; ++j) {
                 let cell = grid_arr[i][j]
-                let is_building_target = !players[myPlayerColor].ignoresCell(cell) && cell.building.notEmpty() &&
+                let is_building_target = !players[myPlayerColor].ignoresObjective(cell) && cell.building.notEmpty() &&
                     !players[myPlayerColor].isAlliedWith(cell.building.player) &&
                     (!cell.building.isExternal || cell.building.isDemonPortal) && !cell.building.isNature
                 if (is_building_target &&

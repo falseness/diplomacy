@@ -45,6 +45,12 @@ class Player {
         return this.role === 'DEMONS' && cell.building.notEmpty() &&
             cell.building.isTown() && cell.building.player.role === 'NEUTRAL'
     }
+    // Demons can neither hit nor capture neutral goldmines, so they are no objectives.
+    // Kept apart from ignoresCell, which also decides passability.
+    ignoresObjective(cell) {
+        return this.ignoresCell(cell) || (this.role === 'DEMONS' && cell.building.notEmpty() &&
+            cell.building.name === 'goldmine' && cell.building.player.role === 'NEUTRAL')
+    }
     canEnterBuilding(building) {
         return true
     }
