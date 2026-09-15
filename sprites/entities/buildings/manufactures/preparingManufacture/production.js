@@ -51,16 +51,7 @@ class Production {
         return !this.turns
     }
     draw(ctx) {
-        drawCachedImageWithOpacity(ctx, cachedImages[this.name], this.pos)
-        if (!this.coord) {
-            return
-        }
-        const kAllProductionStrokeWidth = CoordText.defaultFontSize / 5
-        // we set text here and after each draw of cell it sets to empty text
-        // a bit stupid, but we dont have destructors in js so...
-        let cell = grid.getCell(this.coord) 
-        cell.infoText = new CoordText(this.coord.x, this.coord.y, this.turns,
-            cell.hexColor, CoordText.defaultFontSize, 'white', kAllProductionStrokeWidth)
+        drawProductionPreview(ctx, this.name, this.pos, this.coord, this.turns)
     }
 }
 class UnitProduction extends Production {
