@@ -8,6 +8,13 @@ const schedules = {
   1: {imp:3,clawling:4,hound:5,brute:6,bulwark:8,spitter:5,emberArcher:7,hexcaster:9,ravager:11,demonLord:14},
   2: {imp:1,clawling:3,hound:6,brute:10,bulwark:20,spitter:6,emberArcher:15,hexcaster:24,ravager:30,demonLord:35}
 };
+// Explicit current version-2 stats [health,damage,movement,range,salary,healSpeed]
+// (c10 table); selected.json keeps the historical stats and live weights.
+const tunedStats = {
+  imp:[3,2,3,1,0,0], clawling:[4,2,4,1,0,0], hound:[6,3,5,1,0,0], brute:[12,4,2,1,0,0],
+  bulwark:[20,4,2,1,0,0], spitter:[3,2,3,3,0,0], emberArcher:[5,3,3,4,0,0],
+  hexcaster:[6,5,2,4,0,0], ravager:[10,6,4,1,0,0], demonLord:[24,8,3,1,0,0]
+};
 const copy = x => JSON.parse(JSON.stringify(x));
 const probe = `(() => {
  const specimens=[Imp,Clawling,Hound,Brute,Bulwark,Spitter,EmberArcher,Hexcaster,Ravager,DemonLord].map(C=>{
@@ -53,9 +60,9 @@ if (process.argv.includes('--server')) {
       assert.deepEqual(local.weights,Object.fromEntries(Object.entries(selected.types).map(([id,t])=>[id,t.weight])));
       if(version===2) {
         assert.deepEqual(local.specimens,local.stats);
-        assert.deepEqual(local.stats,Object.values(selected.types).map(t=>[t.health,t.damage,t.movement,t.range,t.salary,t.healSpeed]));
+        assert.deepEqual(local.stats,Object.keys(selected.types).map(id=>tunedStats[id]));
         for(const u of local.state.players[humans+1].units) {
-          assert.equal(u.hp,selected.types[u.name].health);
+          assert.equal(u.hp,tunedStats[u.name][0]);
         }
       }
       assert.equal(local.wave.spawned.length,round<schedules[version].imp?0:1);
