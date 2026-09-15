@@ -77,9 +77,9 @@ const COOP_TYPED_WAVE_SCHEDULE = Object.freeze({
   waveInterval: 4,
   categories: Object.freeze(Object.fromEntries(Object.entries({
     normal: [[4, 'imp'], [8, 'clawling'], [12, 'hound']],
-    ranged: [[8, 'spitter'], [16, 'emberArcher'], [24, 'hexcaster']],
-    heavy: [[12, 'brute'], [20, 'bulwark']],
-    highTier: [[32, 'ravager'], [36, 'demonLord']]
+    ranged: [[8, 'spitter'], [12, 'emberArcher'], [16, 'hexcaster']],
+    heavy: [[8, 'brute'], [12, 'bulwark']],
+    highTier: [[12, 'ravager'], [16, 'demonLord']]
   }).map(([category, steps]) => [category,
     Object.freeze(steps.map(([round, type]) => Object.freeze({round, type})))])))
 });

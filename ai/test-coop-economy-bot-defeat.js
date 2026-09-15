@@ -10,11 +10,13 @@
 // usage:
 //   node ai/test-coop-economy-bot-defeat.js --output-dir DIR [--size tiny|normal|big]
 //        [--humans 1,2,4] [--seeds 0,1] [--max-rounds 100] [--case-timeout-ms 600000]
-//        [--calibrate]
+//        [--case-hang-ms 3600000] [--calibrate] [--fault-cpu-bound]
 //   node ai/test-coop-economy-bot-defeat.js --self-test --output-dir DIR
 // Gate mode exits 0 only if every case is a real combat terminal defeat by the
 // completed max round. Calibrate mode keeps every outcome and exits 0 unless an
 // infrastructure failure (exception, timeout, integrity violation) occurred.
+// --case-timeout-ms bounds each case child's own CPU time (the host is shared, so
+// wall time measures contention); --case-hang-ms is only a parent wall-clock hang guard.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -25,6 +27,8 @@ const ROOT = path.resolve(__dirname, '..');
 const SIZES = ['tiny', 'normal', 'big'];
 const MAX_ROUNDS_LIMIT = 100;
 const DEFAULT_TIMEOUT_MS = 600000;
+const DEFAULT_HANG_MS = 3600000;
+const FAULT_CPU_BOUND_MS = 1000;
 const POLICY = 'SimpleAiPlayerWithEconomy';
 const OUTCOMES = ['combat-defeat', 'non-combat-defeat', 'victory', 'draw', 'survival', 'late-terminal'];
 const INFRASTRUCTURE = ['timeout', 'exception', 'integrity-failure', 'incomplete'];
@@ -36,7 +40,7 @@ const FAULTS = {
   'assigned-result': {round: 2, marker: 'result-from-evaluator',
     description: 'the harness assigns gameSettings.coop.result = defeat and ends the game'},
   'combat-cheat': {round: 2, marker: 'removal-cause', description: 'human units and towns are removed directly, outside any action'},
-  'stall-after-round': {round: 2, marker: 'case-timeout', description: 'the child blocks forever after completing round 2'},
+  'stall-after-round': {round: 2, marker: 'case-hang', description: 'the child blocks forever (no CPU use) after completing round 2'},
   'throw-in-turn': {round: 2, marker: 'case-exception', description: 'the child throws after completing round 2'}
 };
 
@@ -49,6 +53,17 @@ class UsageError extends Error {}
 class IntegrityFailure extends Error {
   constructor(name, detail) { super(`${name}: ${detail}`); this.checkpoint = name; }
 }
+class CpuBoundExceeded extends Error {}
+// process.cpuUsage and uptime count from process start, so boot and generation are included.
+function usage() {
+  const {user, system} = process.cpuUsage(), cpuSeconds = (user + system) / 1e6, wallSeconds = process.uptime();
+  return {cpuSeconds, wallSeconds, cpuShare: cpuSeconds / wallSeconds};
+}
+function priority() {
+  let autogroup = null;
+  try { autogroup = fs.readFileSync('/proc/self/autogroup', 'utf8').trim(); } catch (error) { /* not Linux */ }
+  return {autogroup, nice: require('os').getPriority()};
+}
 
 function parseList(text, name) {
   if (typeof text !== 'string' || !/^\d+(,\d+)*$/.test(text)) throw new UsageError(`invalid ${name}: ${text}`);
@@ -58,9 +73,9 @@ function parseList(text, name) {
 }
 
 function parseArgs(argv) {
-  const known = new Set(['--size', '--humans', '--seeds', '--max-rounds', '--case-timeout-ms', '--output-dir',
-    '--self-test', '--calibrate', '--fault', '--child']);
-  const flags = new Set(['--self-test', '--calibrate']);
+  const known = new Set(['--size', '--humans', '--seeds', '--max-rounds', '--case-timeout-ms', '--case-hang-ms', '--output-dir',
+    '--self-test', '--calibrate', '--fault', '--fault-cpu-bound', '--child']);
+  const flags = new Set(['--self-test', '--calibrate', '--fault-cpu-bound']);
   const values = {};
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i];
@@ -78,8 +93,9 @@ function parseArgs(argv) {
     seeds: parseList(values['--seeds'] === undefined ? '0' : values['--seeds'], '--seeds'),
     maxRounds: values['--max-rounds'] === undefined ? MAX_ROUNDS_LIMIT : Number(values['--max-rounds']),
     caseTimeoutMs: values['--case-timeout-ms'] === undefined ? DEFAULT_TIMEOUT_MS : Number(values['--case-timeout-ms']),
+    caseHangMs: values['--case-hang-ms'] === undefined ? DEFAULT_HANG_MS : Number(values['--case-hang-ms']),
     outputDir: values['--output-dir'], selfTest: !!values['--self-test'], calibrate: !!values['--calibrate'],
-    fault: values['--fault'] === undefined ? null : values['--fault']
+    fault: values['--fault'] === undefined ? null : values['--fault'], faultCpuBound: !!values['--fault-cpu-bound']
   };
   if (!args.outputDir) throw new UsageError('--output-dir DIR is required');
   if (!sizes.length || sizes.some(size => !SIZES.includes(size))) throw new UsageError(`invalid --size: ${args.size}`);
@@ -89,9 +105,10 @@ function parseArgs(argv) {
   if (!Number.isInteger(args.maxRounds) || args.maxRounds < 1 || args.maxRounds > MAX_ROUNDS_LIMIT)
     throw new UsageError(`invalid --max-rounds: integer 1..${MAX_ROUNDS_LIMIT}`);
   if (!Number.isInteger(args.caseTimeoutMs) || args.caseTimeoutMs < 1) throw new UsageError('invalid --case-timeout-ms');
+  if (!Number.isInteger(args.caseHangMs) || args.caseHangMs < 1) throw new UsageError('invalid --case-hang-ms');
   if (args.selfTest && args.calibrate) throw new UsageError('--self-test and --calibrate are exclusive');
   if (args.fault !== null && !FAULTS[args.fault]) throw new UsageError(`unknown --fault: ${args.fault}`);
-  if (args.fault !== null && args.selfTest) throw new UsageError('--fault is only for negative-control parents');
+  if ((args.fault !== null || args.faultCpuBound) && args.selfTest) throw new UsageError('--fault is only for negative-control parents');
   return args;
 }
 
@@ -99,7 +116,9 @@ function parseArgs(argv) {
 function classifyOutcome(s) {
   const result = (classification, reason) => ({classification, reason, gatePass: classification === 'combat-defeat',
     infrastructure: INFRASTRUCTURE.includes(classification)});
-  if (s.status === 'timeout') return result('timeout', `case-timeout after ${s.elapsedMs} ms at ${JSON.stringify(s.lastPhase)}`);
+  if (s.status === 'timeout') return result('timeout', s.timeoutKind === 'case-cpu-bound' ?
+    `case-cpu-bound: ${s.cpuSeconds} CPU-s > ${s.cpuBoundSeconds} (wall ${s.wallSeconds} s) at ${JSON.stringify(s.lastPhase)}` :
+    `${s.timeoutKind || 'case-timeout'} after ${s.elapsedMs} ms at ${JSON.stringify(s.lastPhase)}`);
   if (s.status === 'exception') return result('exception', `case-exception: ${s.error}`);
   if (s.integrityFailures && s.integrityFailures.length)
     return result('integrity-failure', s.integrityFailures.map(f => f.checkpoint).join(','));
@@ -235,6 +254,23 @@ function installInstrumentation() {
   };
   const demonPlay = DemonPlayer.prototype.play;
   DemonPlayer.prototype.play = function(...args) { return within({kind: 'demon-play', role: 'DEMONS'}, () => demonPlay.apply(this, args)); };
+  // Kind of objective the demon AI chose (mirrors the building-first selection); counted, not changed.
+  globalThis.__targetKinds = {};
+  const bestTarget = BestEnemyTargetForAI.prototype.calculateBestEnemyTarget;
+  BestEnemyTargetForAI.prototype.calculateBestEnemyTarget = function(v0, arr, color) {
+    const coord = bestTarget.call(this, v0, arr, color);
+    const player = players[color];
+    if (player.role === 'DEMONS') {
+      const cell = coord && arr[coord.x][coord.y];
+      const b = cell && cell.building;
+      const building = b && !player.ignoresObjective(cell) && b.notEmpty() && !player.isAlliedWith(b.player) &&
+        (!b.isExternal || b.isDemonPortal) && !b.isNature;
+      const kind = !cell ? 'none' : building ? `building:${b.name}:${b.player.role}${b.player.isLost ? ':lost-owner' : ''}` :
+        `unit:${cell.unit.notEmpty() ? cell.unit.name + ':' + cell.unit.player.role : 'unknown'}`;
+      __targetKinds[kind] = (__targetKinds[kind] || 0) + 1;
+    }
+    return coord;
+  };
   let prepareDepth = 0;
   for (const proto of [PreparingManufacture.prototype, Town.prototype]) {
     const prepare = proto.prepare;
@@ -304,16 +340,27 @@ function runChild(spec) {
   fs.mkdirSync(path.dirname(journalFile), {recursive: true});
   fs.writeFileSync(journalFile, '');
   const started = Date.now();
+  const cpuBoundSeconds = spec.cpuBoundMs / 1000;
   const record = {id: spec.id, spec, status: 'running', runtime: {node: process.version, v8: process.versions.v8,
-    platform: `${process.platform}-${process.arch}`, pid: process.pid, browser: null}, rounds: [], births: [],
-    integrityFailures: [], counters: {}};
+    platform: `${process.platform}-${process.arch}`, pid: process.pid, browser: null}, priority: priority(), cpuBoundSeconds,
+    rounds: [], births: [], integrityFailures: [], counters: {}};
   const save = () => writeJson(recordFile, record);
   const progress = (stage, obs) => writeJson(progressFile, {stage, round: obs ? obs.round : null, turn: obs ? obs.turn : null,
-    localPhase: obs ? obs.localPhase : null, elapsedMs: Date.now() - started});
+    localPhase: obs ? obs.localPhase : null, elapsedMs: Date.now() - started, ...usage()});
+  let lastStage = 'boot';
+  const cpuBound = () => {
+    const u = usage();
+    if (u.cpuSeconds > cpuBoundSeconds) {
+      record.lastPhase = {stage: lastStage, round: obs ? obs.round : null, turn: obs ? obs.turn : null};
+      throw new CpuBoundExceeded(`case-cpu-bound: ${spec.id} used ${u.cpuSeconds.toFixed(1)} CPU-s > ${cpuBoundSeconds} ` +
+        `(wall ${u.wallSeconds.toFixed(1)} s) at ${JSON.stringify(record.lastPhase)}`);
+    }
+  };
   const counters = record.counters = {nextTurnCalls: 0, humanTurns: 0, botPlays: 0, economyPrepares: 0, economyPreparesOk: 0,
     economyPlacements: 0, economyGoldSpent: 0, humanUnitActions: 0, demonUnitActions: 0, illegalActions: 0,
     humanFoggedDestinations: 0, damage: {}, removals: {}, humanRemovalCauses: {}, waves: 0, spawned: {}, spawnedByCategory: {},
-    humanBirths: 0, demonBirths: 0, resultSets: 0, resultEvaluations: 0, economyRefreshes: 0};
+    humanBirths: 0, demonBirths: 0, resultSets: 0, resultEvaluations: 0, economyRefreshes: 0, demonDamageOnHumans: 0,
+    demonTargetKinds: {}};
   const bump = (map, key, n = 1) => { map[key] = (map[key] || 0) + n; };
   let lastHumanRemoval = null;
   const fail = (name, detail) => { throw new IntegrityFailure(name, detail); };
@@ -330,6 +377,8 @@ function runChild(spec) {
     ev(`globalThis.generated = generateCoopGame(${spec.humans}, {size: '${spec.size}', seed: ${spec.seed}}); undefined`);
     record.generation = JSON.parse(ev('JSON.stringify(generated.coop.generation)'));
     record.generatedMapSha256 = sha(ev('JSON.stringify(generated)'));
+    lastStage = 'generated';
+    cpuBound();
     // The only setup change: each human roster slot names the existing policy class.
     record.roster = JSON.parse(ev(`JSON.stringify(generated.players.map((p, i) => {
       if (i >= 1 && i <= generated.coop.humanSlots.length) p.playerType = '${POLICY}'
@@ -366,7 +415,10 @@ function runChild(spec) {
     }
     progress('started', obs);
     save();
-    let roundTurns = 0, roundStartedAt = Date.now(), roundStart = {...counters};
+    lastStage = 'started';
+    cpuBound();
+    let roundTurns = 0, roundStartedAt = Date.now(), roundStart = {...counters}, roundUsage = usage();
+    let roundTargetKinds = {};
     const faultRound = spec.fault ? FAULTS[spec.fault].round : null;
     let faultApplied = false;
     const turn = () => {
@@ -379,6 +431,8 @@ function runChild(spec) {
       const events = JSON.parse(ev('JSON.stringify(__events.splice(0))'));
       const advances = JSON.parse(ev('JSON.stringify(__advances)'));
       const plays = JSON.parse(ev('JSON.stringify(__plays)'));
+      const targetKinds = JSON.parse(ev('(k => (__targetKinds = {}, JSON.stringify(k)))(__targetKinds)'));
+      for (const [kind, n] of Object.entries(targetKinds)) { bump(counters.demonTargetKinds, kind, n); bump(roundTargetKinds, kind, n); }
       counters.resultEvaluations = ev('__resultEvaluations');
       const births = [];
       for (const asset of assetsOf(obs)) {
@@ -410,6 +464,7 @@ function runChild(spec) {
           case 'bot-play': counters.botPlays++; break;
           case 'damage':
             bump(counters.damage, `${e.cause}:${e.actorRole}->${e.target.role}`);
+            if (e.actorRole === 'DEMONS' && e.target.role === 'HUMAN') counters.demonDamageOnHumans += e.damage;
             if (e.cause !== 'unit-action' || e.legal !== true) fail('combat-integrity', `damage outside a legal unit action ${JSON.stringify(e)}`);
             break;
           case 'removal':
@@ -464,17 +519,25 @@ function runChild(spec) {
           units: h.units.length, towns: h.towns.length, buildings: h.buildings.length,
           unitKinds: h.units.reduce((m, u) => (m[u.kind] = (m[u.kind] || 0) + 1, m), {})}));
         const delta = {};
-        for (const key of ['botPlays', 'economyPreparesOk', 'economyPlacements', 'humanUnitActions', 'demonUnitActions', 'humanBirths', 'demonBirths'])
+        for (const key of ['botPlays', 'economyPreparesOk', 'economyPlacements', 'humanUnitActions', 'demonUnitActions', 'humanBirths',
+          'demonBirths', 'demonDamageOnHumans'])
           delta[key] = counters[key] - roundStart[key];
+        delta.demonTargetKinds = roundTargetKinds;
+        const now = usage();
         record.rounds.push({fromRound: before.round, round: obs.round, terminal: obs.terminal, result: obs.result, turns: roundTurns,
-          elapsedMs: Date.now() - roundStartedAt, humans: summary(obs),
+          elapsedMs: Date.now() - roundStartedAt, cpuSeconds: now.cpuSeconds, wallSeconds: now.wallSeconds, cpuShare: now.cpuShare,
+          roundCpuSeconds: now.cpuSeconds - roundUsage.cpuSeconds, roundWallSeconds: now.wallSeconds - roundUsage.wallSeconds,
+          roundCpuShare: (now.cpuSeconds - roundUsage.cpuSeconds) / Math.max(1e-9, now.wallSeconds - roundUsage.wallSeconds),
+          humans: summary(obs),
           demons: obs.demons.reduce((m, u) => (m[u.kind] = (m[u.kind] || 0) + 1, m), {}),
           portals: obs.portals.reduce((m, p) => (m[p.category] = (m[p.category] || 0) + 1, m), {}), delta});
-        roundTurns = 0; roundStartedAt = Date.now(); roundStart = {...counters};
+        roundTurns = 0; roundStartedAt = Date.now(); roundStart = {...counters}; roundUsage = now; roundTargetKinds = {};
         record.last = obs;
         save();
-        console.log(`ROUND ${spec.id} round=${obs.round} humanAssets=${obs.humans.reduce((n, h) => n + h.units.length + h.towns.length, 0)} demons=${obs.demons.length} portals=${obs.portals.length} result=${obs.result} elapsedMs=${Date.now() - started}`);
+        console.log(`ROUND ${spec.id} round=${obs.round} humanAssets=${obs.humans.reduce((n, h) => n + h.units.length + h.towns.length, 0)} demons=${obs.demons.length} portals=${obs.portals.length} result=${obs.result} elapsedMs=${Date.now() - started} cpuSeconds=${now.cpuSeconds.toFixed(1)} cpuShare=${now.cpuShare.toFixed(2)} demonDamageOnHumans=${delta.demonDamageOnHumans}`);
       }
+      lastStage = obs.terminal ? 'terminal' : 'human-turn';
+      cpuBound();
     };
     const applyFault = () => {
       faultApplied = true;
@@ -511,6 +574,10 @@ function runChild(spec) {
     if (error instanceof IntegrityFailure) {
       record.status = 'completed';
       record.integrityFailures.push({checkpoint: error.checkpoint, message: error.message});
+    } else if (error instanceof CpuBoundExceeded) {
+      record.status = 'timeout';
+      record.timeoutKind = 'case-cpu-bound';
+      record.error = error.message;
     } else {
       record.status = 'exception';
       record.error = error && error.stack || String(error);
@@ -519,7 +586,10 @@ function runChild(spec) {
     console.error(error && error.stack || error);
   }
   const final = record.final || record.initial;
+  Object.assign(record, usage());
   record.summary = {status: record.status, error: record.error || null, integrityFailures: record.integrityFailures,
+    timeoutKind: record.timeoutKind || null, lastPhase: record.lastPhase || null, elapsedMs: Date.now() - started,
+    cpuSeconds: record.cpuSeconds, wallSeconds: record.wallSeconds, cpuShare: record.cpuShare, cpuBoundSeconds,
     terminal: !!(final && final.terminal), result: final ? final.result : null, completedRound: final ? final.round : null,
     maxRounds: spec.maxRounds,
     resultFromEvaluator: !!(final && final.terminalEvent && counters.resultEvaluations > 0 &&
@@ -532,23 +602,25 @@ function runChild(spec) {
   save();
   progress(record.status, final);
   console.log(`CHILD_RESULT ${spec.id} status=${record.status} classification=${record.classification.classification} ` +
-    `round=${record.summary.completedRound} result=${record.summary.result} failures=${record.integrityFailures.map(x => x.checkpoint).join(',') || 'none'}`);
+    `round=${record.summary.completedRound} result=${record.summary.result} failures=${record.integrityFailures.map(x => x.checkpoint).join(',') || 'none'} ` +
+    `cpuSeconds=${record.cpuSeconds.toFixed(2)} wallSeconds=${record.wallSeconds.toFixed(2)} cpuShare=${record.cpuShare.toFixed(3)}`);
   process.exitCode = record.status === 'completed' && !record.integrityFailures.length ? 0 : 1;
 }
 
 // ---------------------------------------------------------------- parent
-function caseSpec(outputDir, size, humans, seed, fog, maxRounds, fault) {
+function caseSpec(outputDir, size, humans, seed, fog, maxRounds, fault, cpuBoundMs = DEFAULT_TIMEOUT_MS) {
   const id = `${size}-H${humans}-seed${seed}-fog${fog ? 1 : 0}`;
-  return {id, size, humans, seed, fog, maxRounds, fault: fault || null, outputDir: path.resolve(outputDir),
+  return {id, size, humans, seed, fog, maxRounds, fault: fault || null, cpuBoundMs, outputDir: path.resolve(outputDir),
     rngSeed: parseInt(sha(`economy-bot-defeat:${id}`).slice(0, 8), 16),
     record: `cases/${id}.json`, progress: `cases/${id}.progress.json`, journal: `journals/${id}.jsonl`,
     snapshots: {initial: `snapshots/${id}-initial.json`, final: `snapshots/${id}-final.json`}};
 }
 
-function runCaseProcess(spec, timeoutMs) {
+// The case child enforces spec.cpuBoundMs on its own CPU time; hangMs is only a wall-clock hang guard.
+function runCaseProcess(spec, hangMs) {
   const args = [__filename, '--child', Buffer.from(JSON.stringify(spec)).toString('base64')];
   const started = Date.now();
-  const child = spawnSync(process.execPath, args, {cwd: ROOT, encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL',
+  const child = spawnSync(process.execPath, args, {cwd: ROOT, encoding: 'utf8', timeout: hangMs, killSignal: 'SIGKILL',
     maxBuffer: 256 * 1024 * 1024});
   const elapsedMs = Date.now() - started;
   process.stdout.write(child.stdout || '');
@@ -558,14 +630,19 @@ function runCaseProcess(spec, timeoutMs) {
   const lastPhase = read(spec.progress);
   const timedOut = !!(child.error && child.error.code === 'ETIMEDOUT');
   let summary;
-  if (timedOut) summary = {status: 'timeout', elapsedMs, lastPhase};
+  if (timedOut) summary = {status: 'timeout', timeoutKind: 'case-hang', elapsedMs, lastPhase,
+    cpuSeconds: lastPhase ? lastPhase.cpuSeconds : null, wallSeconds: lastPhase ? lastPhase.wallSeconds : null,
+    cpuShare: lastPhase ? lastPhase.cpuShare : null, cpuBoundSeconds: spec.cpuBoundMs / 1000};
   else if (!record || !record.summary) summary = {status: 'exception', error: `child exit ${child.status} signal ${child.signal} without a record`};
   else summary = {...record.summary, status: record.summary.status === 'completed' && child.status !== 0 && !record.integrityFailures.length ?
     'exception' : record.summary.status};
   const classification = classifyOutcome(summary);
   return {id: spec.id, spec, command: [process.execPath, __filename, '--child', '<base64 case spec>'], cwd: ROOT,
-    exitStatus: child.status, signal: child.signal, timedOut, elapsedMs, timeoutMs, lastPhase, summary, ...classification,
-    failures: summary.integrityFailures ? summary.integrityFailures.map(x => x.checkpoint) : [],
+    exitStatus: child.status, signal: child.signal, timedOut, elapsedMs, hangMs, cpuBoundMs: spec.cpuBoundMs,
+    lastPhase: summary.lastPhase || lastPhase, cpuSeconds: summary.cpuSeconds ?? null, wallSeconds: summary.wallSeconds ?? null,
+    cpuShare: summary.cpuShare ?? null, priority: record ? record.priority : null, summary, ...classification,
+    failures: [...(summary.status === 'timeout' ? [summary.timeoutKind] : []),
+      ...(summary.integrityFailures ? summary.integrityFailures.map(x => x.checkpoint) : [])],
     policy: record && record.configuration ? {slots: record.configuration.slots.filter(s => record.configuration.humanSlots.includes(s.slot)),
       botPlays: record.counters.botPlays, humanTurns: record.counters.humanTurns} : null,
     counters: record ? record.counters : null, recordFile: spec.record, journal: spec.journal, snapshots: spec.snapshots};
@@ -616,18 +693,22 @@ function runGate(args) {
   const mode = args.calibrate ? 'calibrate' : 'gate';
   const specs = [];
   for (const size of args.sizes) for (const humans of args.humans) for (const seed of args.seeds)
-    specs.push(caseSpec(out, size, humans, seed, false, args.maxRounds, args.fault));
+    specs.push(caseSpec(out, size, humans, seed, false, args.maxRounds, args.fault, args.faultCpuBound ? FAULT_CPU_BOUND_MS : args.caseTimeoutMs));
   const manifest = {mode, argv: process.argv.slice(2), cwd: ROOT, runtime: {node: process.version, v8: process.versions.v8, browser: null},
     size: args.size, sizes: args.sizes, humans: args.humans, seeds: args.seeds, fog: false, maxRounds: args.maxRounds, caseTimeoutMs: args.caseTimeoutMs,
-    fault: args.fault, policy: POLICY, startedAt: new Date().toISOString(), cases: []};
+    caseBound: 'case-child CPU time (process.cpuUsage user+system, including boot and generation), checked after every turn',
+    cpuBoundMs: args.faultCpuBound ? FAULT_CPU_BOUND_MS : args.caseTimeoutMs, caseHangMs: args.caseHangMs, faultCpuBound: args.faultCpuBound,
+    fault: args.fault, policy: POLICY, priority: priority(), startedAt: new Date().toISOString(), cases: []};
+  console.log(`PRIORITY parent ${JSON.stringify(manifest.priority)}`);
   const identitiesBefore = sourceIdentities();
   for (const spec of specs) {
-    const row = runCaseProcess(spec, args.caseTimeoutMs);
+    const row = runCaseProcess(spec, args.caseHangMs);
     manifest.cases.push(row);
     writeJson(path.join(out, 'case-manifest.json'), manifest);
     console.log(`CASE_RESULT ${row.id} classification=${row.classification} gate=${row.gatePass ? 'pass' : 'fail'} ` +
       `infrastructure=${row.infrastructure} exit=${row.exitStatus} signal=${row.signal} elapsedMs=${row.elapsedMs} ` +
       `round=${row.summary.completedRound ?? null} result=${row.summary.result ?? null} failures=${row.failures.join(',') || 'none'} ` +
+      `cpuSeconds=${row.cpuSeconds} wallSeconds=${row.wallSeconds} cpuShare=${row.cpuShare} autogroup=${JSON.stringify(row.priority && row.priority.autogroup)} ` +
       `lastPhase=${JSON.stringify(row.lastPhase)} reason=${row.reason}`);
   }
   manifest.finishedAt = new Date().toISOString();
@@ -688,6 +769,10 @@ function runSelfTest(args) {
       {classification: 'survival', gatePass: false, infrastructure: false}],
     ['timeout', {status: 'timeout', elapsedMs: 600000, lastPhase: {stage: 'human-turn', round: 61}},
       {classification: 'timeout', gatePass: false, infrastructure: true}],
+    ['cpu-bound', {status: 'timeout', timeoutKind: 'case-cpu-bound', cpuSeconds: 600.4, cpuBoundSeconds: 600, wallSeconds: 1400,
+      lastPhase: {stage: 'human-turn', round: 22}}, {classification: 'timeout', gatePass: false, infrastructure: true}],
+    ['case-hang', {status: 'timeout', timeoutKind: 'case-hang', elapsedMs: 3600000, lastPhase: {stage: 'human-turn', round: 2}},
+      {classification: 'timeout', gatePass: false, infrastructure: true}],
     ['exception', {status: 'exception', error: 'TypeError: boom'}, {classification: 'exception', gatePass: false, infrastructure: true}],
     ['flood-defeat', {...combat, humanRemovalCauses: {'unit-action': 2, flood: 1}, lastHumanRemovalCause: 'flood'},
       {classification: 'non-combat-defeat', gatePass: false, infrastructure: false}],
@@ -709,12 +794,15 @@ function runSelfTest(args) {
   // 2. CLI fixtures.
   const cli = [
     ['defaults', ['--output-dir', 'x'], {size: 'tiny', sizes: ['tiny'], humans: [1], seeds: [0], maxRounds: 100, caseTimeoutMs: 600000,
-      selfTest: false, calibrate: false}],
+      caseHangMs: 3600000, faultCpuBound: false, selfTest: false, calibrate: false}],
     ['explicit', ['--size', 'big', '--humans', '1,2,4,10,12', '--seeds', '0,9', '--max-rounds', '100', '--case-timeout-ms', '600000',
-      '--output-dir', 'x', '--calibrate'], {size: 'big', sizes: ['big'], humans: [1, 2, 4, 10, 12], seeds: [0, 9], maxRounds: 100,
-      caseTimeoutMs: 600000, selfTest: false, calibrate: true}],
+      '--case-hang-ms', '7200000', '--output-dir', 'x', '--calibrate'], {size: 'big', sizes: ['big'], humans: [1, 2, 4, 10, 12], seeds: [0, 9],
+      maxRounds: 100, caseTimeoutMs: 600000, caseHangMs: 7200000, faultCpuBound: false, selfTest: false, calibrate: true}],
     ['size-list', ['--size', 'tiny,normal,big', '--output-dir', 'x'], {size: 'tiny,normal,big', sizes: ['tiny', 'normal', 'big'],
-      humans: [1], seeds: [0], maxRounds: 100, caseTimeoutMs: 600000, selfTest: false, calibrate: false}],
+      humans: [1], seeds: [0], maxRounds: 100, caseTimeoutMs: 600000, caseHangMs: 3600000, faultCpuBound: false, selfTest: false, calibrate: false}],
+    ['fault-cpu-bound', ['--output-dir', 'x', '--fault-cpu-bound'], {size: 'tiny', sizes: ['tiny'], humans: [1], seeds: [0], maxRounds: 100,
+      caseTimeoutMs: 600000, caseHangMs: 3600000, faultCpuBound: true, selfTest: false, calibrate: false}],
+    ['bad-hang', ['--case-hang-ms', '0', '--output-dir', 'x'], 'invalid --case-hang-ms'],
     ['bad-size', ['--size', 'huge', '--output-dir', 'x'], 'invalid --size: huge'],
     ['bad-size-in-list', ['--size', 'tiny,huge', '--output-dir', 'x'], 'invalid --size: tiny,huge'],
     ['duplicate-size', ['--size', 'tiny,tiny', '--output-dir', 'x'], 'duplicate value in --size: tiny,tiny'],
@@ -727,7 +815,8 @@ function runSelfTest(args) {
     try {
       const parsed = parseArgs(argv);
       observed = {size: parsed.size, sizes: parsed.sizes, humans: parsed.humans, seeds: parsed.seeds, maxRounds: parsed.maxRounds,
-        caseTimeoutMs: parsed.caseTimeoutMs, selfTest: parsed.selfTest, calibrate: parsed.calibrate};
+        caseTimeoutMs: parsed.caseTimeoutMs, caseHangMs: parsed.caseHangMs, faultCpuBound: parsed.faultCpuBound, selfTest: parsed.selfTest,
+        calibrate: parsed.calibrate};
     } catch (error) { observed = error.message; }
     report.cliFixtures.push(check('cli', name, observed, expected, {argv}));
   }
@@ -736,7 +825,7 @@ function runSelfTest(args) {
   const manifest = {mode: 'self-test', cwd: ROOT, runtime: report.runtime, policy: POLICY, cases: []};
   const smokeSpecs = [caseSpec(out, 'tiny', 1, 0, false, MAX_ROUNDS_LIMIT), caseSpec(out, 'tiny', 2, 0, true, MAX_ROUNDS_LIMIT)];
   for (const spec of smokeSpecs) {
-    const row = runCaseProcess(spec, DEFAULT_TIMEOUT_MS);
+    const row = runCaseProcess(spec, DEFAULT_HANG_MS);
     manifest.cases.push(row);
     writeJson(path.join(out, 'case-manifest.json'), manifest);
     const record = JSON.parse(fs.readFileSync(path.join(out, spec.record), 'utf8'));
@@ -773,6 +862,12 @@ function runSelfTest(args) {
     sc('snapshots-retained', [spec.snapshots.initial, spec.snapshots.final].map(file => fs.existsSync(path.join(out, file)) &&
       JSON.parse(fs.readFileSync(path.join(out, file), 'utf8')).gameSettings.coop.generation.version === 4), [true, true]);
     if (spec.fog) sc('fog-human-actions-visible', c.humanUnitActions > 0 && c.humanFoggedDestinations === 0, true);
+    const finite = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+    sc('cpu-bound-usage-recorded', {bound: record.cpuBoundSeconds, perCase: [row.cpuSeconds, row.wallSeconds, row.cpuShare].every(finite),
+      withinBound: row.cpuSeconds <= 600, perRound: record.rounds.length > 0 && record.rounds.every(r => [r.cpuSeconds, r.wallSeconds, r.cpuShare].every(finite)),
+      priority: !!record.priority && 'autogroup' in record.priority && 'nice' in record.priority},
+    {bound: 600, perCase: true, withinBound: true, perRound: true, priority: true});
+    sc('demon-targets-observed', Object.values(c.demonTargetKinds).reduce((n, k) => n + k, 0) > 0 && c.demonDamageOnHumans > 0, true);
     report.smoke.push(smoke);
   }
 
@@ -789,9 +884,15 @@ function runSelfTest(args) {
       expect: m => m.cases[0].classification === 'integrity-failure' && m.cases[0].failures.includes(FAULTS[fault].marker),
       marker: new RegExp(`failures=${FAULTS[fault].marker}`)})),
     {name: 'negative-fault-stall-after-round', kind: 'negative',
-      args: ['--size', 'tiny', '--humans', '1', '--seeds', '0', '--case-timeout-ms', '20000', '--fault', 'stall-after-round'], exit: 1,
+      args: ['--size', 'tiny', '--humans', '1', '--seeds', '0', '--case-hang-ms', '20000', '--fault', 'stall-after-round'], exit: 1,
       expect: m => m.cases[0].classification === 'timeout' && m.cases[0].lastPhase && m.cases[0].lastPhase.round === 2 &&
-        m.cases[0].signal === 'SIGKILL', marker: /classification=timeout gate=fail/},
+        m.cases[0].signal === 'SIGKILL' && isDeepStrictEqual(m.cases[0].failures, ['case-hang']),
+      marker: /classification=timeout gate=fail .*failures=case-hang /},
+    {name: 'negative-fault-cpu-bound', kind: 'negative', args: ['--size', 'tiny', '--humans', '1', '--seeds', '0', '--fault-cpu-bound'], exit: 1,
+      expect: m => m.cpuBoundMs === 1000 && m.caseTimeoutMs === 600000 && m.cases[0].classification === 'timeout' &&
+        isDeepStrictEqual(m.cases[0].failures, ['case-cpu-bound']) && m.cases[0].signal === null && m.cases[0].exitStatus === 1 &&
+        m.cases[0].cpuSeconds > 1 && m.gateClaimed === false,
+      marker: /classification=timeout gate=fail .*failures=case-cpu-bound .*reason=case-cpu-bound: /},
     {name: 'negative-fault-throw-in-turn', kind: 'negative', args: ['--size', 'tiny', '--humans', '1', '--seeds', '0', '--fault', 'throw-in-turn'],
       exit: 1, expect: m => m.cases[0].classification === 'exception', marker: /fault throw-in-turn: injected child exception/},
     {name: 'negative-calibrate-infrastructure-failure', kind: 'negative',

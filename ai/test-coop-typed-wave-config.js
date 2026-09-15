@@ -18,36 +18,36 @@ const CATEGORIES = ['normal', 'ranged', 'heavy', 'highTier'];
 const WAVE_ROUNDS = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100];
 const _ = null;
 const SCHEDULE_AT_WAVES = {
-  //       4      8           12       16             20             24           28-100
+  //       4      8           12       16           20-100
   normal: ['imp', 'clawling', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound',
     'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound',
     'hound', 'hound'],
-  ranged: [_, 'spitter', 'spitter', 'emberArcher', 'emberArcher', 'hexcaster', 'hexcaster', 'hexcaster',
+  ranged: [_, 'spitter', 'emberArcher', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster',
     'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster',
     'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster',
     'hexcaster'],
-  heavy: [_, _, 'brute', 'brute', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark',
+  heavy: [_, 'brute', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark',
     'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark',
     'bulwark', 'bulwark', 'bulwark', 'bulwark'],
-  highTier: [_, _, _, _, _, _, _, 'ravager', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord',
+  highTier: [_, _, 'ravager', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord',
     'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord',
-    'demonLord', 'demonLord', 'demonLord', 'demonLord']
+    'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord']
 };
-const TRANSITIONS = {normal: [4, 8, 12], ranged: [8, 16, 24], heavy: [12, 20], highTier: [32, 36]};
+const TRANSITIONS = {normal: [4, 8, 12], ranged: [8, 12, 16], heavy: [8, 12], highTier: [12, 16]};
 // [completedRound, nextRound, type, roundsRemaining]; before/at/after every transition.
 const NEXT = {
   normal: [[0, 4, 'imp', 4], [3, 4, 'imp', 1], [4, 8, 'clawling', 4], [5, 8, 'clawling', 3], [7, 8, 'clawling', 1],
     [8, 12, 'hound', 4], [9, 12, 'hound', 3], [11, 12, 'hound', 1], [12, 16, 'hound', 4], [13, 16, 'hound', 3],
     [99, 100, 'hound', 1], [100, 104, 'hound', 4], [1000, 1004, 'hound', 4]],
   ranged: [[0, 8, 'spitter', 8], [3, 8, 'spitter', 5], [4, 8, 'spitter', 4], [5, 8, 'spitter', 3],
-    [7, 8, 'spitter', 1], [8, 12, 'spitter', 4], [9, 12, 'spitter', 3], [15, 16, 'emberArcher', 1],
-    [16, 20, 'emberArcher', 4], [17, 20, 'emberArcher', 3], [23, 24, 'hexcaster', 1], [24, 28, 'hexcaster', 4],
-    [25, 28, 'hexcaster', 3], [100, 104, 'hexcaster', 4]],
-  heavy: [[0, 12, 'brute', 12], [4, 12, 'brute', 8], [11, 12, 'brute', 1], [12, 16, 'brute', 4],
-    [13, 16, 'brute', 3], [19, 20, 'bulwark', 1], [20, 24, 'bulwark', 4], [21, 24, 'bulwark', 3],
+    [7, 8, 'spitter', 1], [8, 12, 'emberArcher', 4], [9, 12, 'emberArcher', 3], [11, 12, 'emberArcher', 1],
+    [12, 16, 'hexcaster', 4], [13, 16, 'hexcaster', 3], [15, 16, 'hexcaster', 1], [16, 20, 'hexcaster', 4],
+    [17, 20, 'hexcaster', 3], [100, 104, 'hexcaster', 4]],
+  heavy: [[0, 8, 'brute', 8], [4, 8, 'brute', 4], [7, 8, 'brute', 1], [8, 12, 'bulwark', 4],
+    [9, 12, 'bulwark', 3], [11, 12, 'bulwark', 1], [12, 16, 'bulwark', 4], [13, 16, 'bulwark', 3],
     [100, 104, 'bulwark', 4]],
-  highTier: [[0, 32, 'ravager', 32], [28, 32, 'ravager', 4], [31, 32, 'ravager', 1], [32, 36, 'demonLord', 4],
-    [33, 36, 'demonLord', 3], [35, 36, 'demonLord', 1], [36, 40, 'demonLord', 4], [37, 40, 'demonLord', 3],
+  highTier: [[0, 12, 'ravager', 12], [8, 12, 'ravager', 4], [11, 12, 'ravager', 1], [12, 16, 'demonLord', 4],
+    [13, 16, 'demonLord', 3], [15, 16, 'demonLord', 1], [16, 20, 'demonLord', 4], [17, 20, 'demonLord', 3],
     [100, 104, 'demonLord', 4]]
 };
 const DEMON_TYPE_IDS = ['imp', 'clawling', 'hound', 'brute', 'bulwark', 'spitter', 'emberArcher', 'hexcaster',
@@ -82,9 +82,9 @@ function checkSchedule(a, runtime, record) {
   compare(`${runtime}-categories`, a.COOP_PORTAL_CATEGORIES, CATEGORIES);
   compare(`${runtime}-literal-transitions`, a.COOP_TYPED_WAVE_SCHEDULE, {waveInterval: 4, categories: {
     normal: [{round: 4, type: 'imp'}, {round: 8, type: 'clawling'}, {round: 12, type: 'hound'}],
-    ranged: [{round: 8, type: 'spitter'}, {round: 16, type: 'emberArcher'}, {round: 24, type: 'hexcaster'}],
-    heavy: [{round: 12, type: 'brute'}, {round: 20, type: 'bulwark'}],
-    highTier: [{round: 32, type: 'ravager'}, {round: 36, type: 'demonLord'}]}});
+    ranged: [{round: 8, type: 'spitter'}, {round: 12, type: 'emberArcher'}, {round: 16, type: 'hexcaster'}],
+    heavy: [{round: 8, type: 'brute'}, {round: 12, type: 'bulwark'}],
+    highTier: [{round: 12, type: 'ravager'}, {round: 16, type: 'demonLord'}]}});
   const table = {};
   for (const category of CATEGORIES) {
     const observed = [];

@@ -1,11 +1,16 @@
-// Demons must not pick a neutral goldmine (non-hittable, non-capturable) as objective.
-// --fault-old-objectives restores the previous predicate and must fail.
+// Demons must not pick any goldmine (non-hittable, non-capturable, whatever its owner) as objective.
+// --fault-old-objectives restores the original predicate and must fail.
+// --fault-neutral-only-objectives restores the neutral-only predicate and must fail on owned mines.
 const {createFixture, defaultFixture} = require('./test-coop-harness');
 const fault = process.argv.includes('--fault-old-objectives');
+const neutralOnlyFault = process.argv.includes('--fault-neutral-only-objectives');
 function fixture(coop=true) {
   const config=defaultFixture(); config.coop=coop;
   const f=createFixture(config);
   if(fault) f.evaluate('Player.prototype.ignoresObjective=Player.prototype.ignoresCell; undefined');
+  if(neutralOnlyFault) f.evaluate(`Player.prototype.ignoresObjective=function(cell) {
+    return this.ignoresCell(cell) || (this.role === 'DEMONS' && cell.building.notEmpty() &&
+      cell.building.name === 'goldmine' && cell.building.player.role === 'NEUTRAL')}; undefined`);
   return f;
 }
 const target = (coord,color) => `new BestEnemyTargetForAI().calculateBestEnemyTarget(${JSON.stringify(coord)},grid.arr,${color})`;
@@ -30,9 +35,26 @@ const target = (coord,color) => `new BestEnemyTargetForAI().calculateBestEnemyTa
   f.compare('neutral-goldmine-only-objective',f.evaluate(target({x:7,y:5},3)),null);
 }
 {
+  const f=fixture();
+  // Mine owned by the human whose town lies behind it: still never an objective.
+  f.evaluate(`grid.getHexagon({x:7,y:4}).playerColor=2; globalThis.mine=new Goldmine(7,4,50); undefined`);
+  f.compare('mine-is-human-owned',f.evaluate('mine.player.role'),'HUMAN');
+  f.compare('demon-targets-human-town-over-nearer-human-goldmine',f.evaluate(target({x:7,y:5},3)),{x:7,y:1});
+  f.compare('pathing-unchanged-human-mine-not-ignored-cell',f.evaluate('players[3].ignoresCell(grid.getCell({x:7,y:4}))'),false);
+  f.compare('human-objectives-unchanged-for-human-mine',
+    f.evaluate('players[1].ignoresObjective(grid.getCell({x:7,y:4}))===players[1].ignoresCell(grid.getCell({x:7,y:4}))'),true);
+}
+{
+  const f=fixture();
+  // Mine of an eliminated human: the demon goes for the surviving human town instead.
+  f.evaluate(`grid.getHexagon({x:7,y:4}).playerColor=2; new Goldmine(7,4,50);
+    for(const t of [...players[2].towns]) t.destroy(); for(const u of [...players[2].units]) u.kill(); undefined`);
+  f.compare('demon-targets-surviving-town-over-eliminated-owner-goldmine',f.evaluate(target({x:7,y:5},3)),{x:1,y:1});
+}
+{
   const f=fixture(false);
   // Without co-op no player is DEMONS; the mine stays the nearest objective.
   f.evaluate(`grid.getHexagon({x:7,y:4}).playerColor=0; new Goldmine(7,4,50); undefined`);
   f.compare('non-coop-ai-targets-neutral-goldmine',f.evaluate(target({x:7,y:5},3)),{x:7,y:4});
 }
-console.log('PASS demon-neutral-goldmines human_town_over_mine=1 corridor=1 neutral_only=1 human_control=1 non_coop_control=1');
+console.log('PASS demon-neutral-goldmines human_town_over_mine=1 corridor=1 neutral_only=1 human_control=1 non_coop_control=1 human_owned_mine=1 eliminated_owner_mine=1');

@@ -56,9 +56,9 @@ if (fs.existsSync(path.join(out, 'checkpoints.json'))) {
 const CATEGORIES = ['normal', 'ranged', 'heavy', 'highTier'];
 const STEPS = {
   normal: [[4, 'imp'], [8, 'clawling'], [12, 'hound']],
-  ranged: [[8, 'spitter'], [16, 'emberArcher'], [24, 'hexcaster']],
-  heavy: [[12, 'brute'], [20, 'bulwark']],
-  highTier: [[32, 'ravager'], [36, 'demonLord']]
+  ranged: [[8, 'spitter'], [12, 'emberArcher'], [16, 'hexcaster']],
+  heavy: [[8, 'brute'], [12, 'bulwark']],
+  highTier: [[12, 'ravager'], [16, 'demonLord']]
 };
 const NAMES = {imp: 'imp', clawling: 'clawling', hound: 'hound', brute: 'brute', bulwark: 'bulwark', spitter: 'spitter',
   emberArcher: 'ember archer', hexcaster: 'hexcaster', ravager: 'ravager', demonLord: 'demon lord'};
@@ -470,14 +470,14 @@ function installPage({game, fault}) {
       await observe('wave-8-post-damaged-ranged');
       await shot('wave-8-post-damaged-ranged', P.ranged, {portrait: true});
     }});
-    // Heavy's first activation is blocked: next attempt, not a backlog.
+    // Heavy's bulwark upgrade wave is blocked: next attempt, not a backlog.
     await wave(12, {block: ['heavy'], afterPre: () => shot('wave-12-pre-blocked-heavy', P.heavy),
       afterPost: () => shot('wave-12-post-blocked-heavy-next-attempt', P.heavy)});
     await select('heavy');
     await wave(16, {afterPost: async () => {
       const heavy = comparisons.filter(r => r.round === 16 && r.category === 'heavy')[0];
       check('wave-16-no-backlog-heavy', {spawned: heavy.spawned, totalSpawnedThisWave: comparisons.filter(r => r.round === 16).flatMap(r => r.spawned).length},
-        {spawned: ['brute'], totalSpawnedThisWave: 3});
+        {spawned: ['bulwark'], totalSpawnedThisWave: 4});
       await shot('wave-16-post-heavy-once-ranged-upgraded', P.heavy, {portrait: true, full: true});
     }});
 
@@ -530,7 +530,7 @@ function installPage({game, fault}) {
     await select('highTier');
     await wave(24);
     await wave(28);
-    // Zoom: High Tier just before first activation at normal and reduced zoom.
+    // Zoom: selected High Tier portal before a wave at normal and reduced zoom.
     await wave(32, {afterPre: async () => {
       await shot('wave-32-pre-high-tier-zoom-normal', P.highTier, {portrait: true, full: true});
       const reduced = Math.max(started.minScale, started.scale * 0.5);

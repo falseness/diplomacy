@@ -39,9 +39,9 @@ const FAULTS = {
 // Independent literal oracle (not read from ai/wave-config.js).
 const LITERAL_STEPS = {
   normal: [[4, 'imp'], [8, 'clawling'], [12, 'hound']],
-  ranged: [[8, 'spitter'], [16, 'emberArcher'], [24, 'hexcaster']],
-  heavy: [[12, 'brute'], [20, 'bulwark']],
-  highTier: [[32, 'ravager'], [36, 'demonLord']]
+  ranged: [[8, 'spitter'], [12, 'emberArcher'], [16, 'hexcaster']],
+  heavy: [[8, 'brute'], [12, 'bulwark']],
+  highTier: [[12, 'ravager'], [16, 'demonLord']]
 };
 function literalType(category, round) {
   if (round === 0 || round % 4 !== 0) return null;
@@ -51,11 +51,11 @@ function literalType(category, round) {
 }
 // Literal spawn counts per completed round (missing rounds expect 0).
 // H10: wave 16 loses one destroyed + one human-blocked normal and heavy portal
-// (ranged/highTier demon-blocked: ranged is producing, highTier is not yet);
+// plus the demon-blocked ranged and highTier portals (both already producing);
 // wave 24 blocks every surviving portal; two portals stay destroyed afterwards.
 const LITERAL_COUNTS = {
-  h1: {4: 1, 8: 2, 12: 3, 16: 3, 20: 3, 24: 3, 28: 3, 32: 4, 36: 4, 40: 4},
-  h10: {4: 10, 8: 20, 12: 30, 16: 25, 20: 28, 24: 0, 28: 28, 32: 38, 36: 38, 40: 38}
+  h1: {4: 1, 8: 3, 12: 4, 16: 4, 20: 4, 24: 4, 28: 4, 32: 4, 36: 4, 40: 4},
+  h10: {4: 10, 8: 30, 12: 40, 16: 34, 20: 38, 24: 0, 28: 38, 32: 38, 36: 38, 40: 38}
 };
 
 function parseArgs(argv) {
