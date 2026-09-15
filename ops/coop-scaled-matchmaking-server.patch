@@ -1,17 +1,18 @@
 diff --git a/server/loadGameCode.js b/server/loadGameCode.js
-index 8a243a7..c45c870 100644
+index 8a243a7..f68abef 100644
 --- a/server/loadGameCode.js
 +++ b/server/loadGameCode.js
-@@ -173,6 +173,7 @@ const scriptOrder = [
+@@ -173,6 +173,8 @@ const scriptOrder = [
      'options/classManager.js',
      'options/timer.js',
      'options/otherSettings.js',
 +    'ai/coop-map-scaling.js',
++    'ai/coop-valley-plan.js',
      'ai/generateMap.js',
      'render/loadassets.js',
      'render/image.js',
 diff --git a/server/matchmakingSlots.js b/server/matchmakingSlots.js
-index cb9931f..dc4051b 100644
+index cb9931f..949f63f 100644
 --- a/server/matchmakingSlots.js
 +++ b/server/matchmakingSlots.js
 @@ -7,7 +7,7 @@ function getHumanSlots(game, legacySlotCount) {
@@ -28,9 +29,9 @@ index cb9931f..dc4051b 100644
          assert.strictEqual(generation.options.size, size, 'Conflicting co-op map size')
      }
 +    getHumanSlots(game)
-+    // New games must use the current generator. Legacy metadata is accepted
++    // New games must use the current (Divided Valley) generator. Legacy metadata is accepted
 +    // only by the stored-game reconnect path, which runs before this function.
-+    assert.strictEqual(generation.version, 3, 'Unsupported co-op generation version')
++    assert.strictEqual(generation.version, 4, 'Unsupported co-op generation version')
 +    assert.strictEqual(generation.playerCount, coop.initialHumanCount, 'Conflicting co-op generation count')
 +    assert(Number.isInteger(generation.seed) && generation.seed >= 0 && generation.seed <= 0xffffffff, 'Invalid co-op generation seed')
 +    if (generation.options?.seed !== undefined)
@@ -42,7 +43,7 @@ index cb9931f..dc4051b 100644
      if (generation.options) coop.generation.options = {...generation.options, size}
  }
 diff --git a/tests/coop/browser-online.test.js b/tests/coop/browser-online.test.js
-index ea5ccc7..7fcf2b7 100644
+index ea5ccc7..cc56828 100644
 --- a/tests/coop/browser-online.test.js
 +++ b/tests/coop/browser-online.test.js
 @@ -86,6 +86,7 @@ test('browser preset requests, peer maps and reconnect retain committed metadata
@@ -73,7 +74,7 @@ index ea5ccc7..7fcf2b7 100644
              const snapshots=await Promise.all(pages.map(snapshot));
 -            const expected={version:2,playerCount:2,seed:1,size,options:{seed:1,size}};
 -            const side={tiny:15,normal:25,big:39}[size];
-+            const expected={version:3,playerCount:count,seed:1,size,options:{seed:1,size}};
++            const expected={version:4,playerCount:count,seed:1,size,options:{seed:1,size}};
 +            const side=Math.max({tiny:11,normal:15,big:21}[size],Math.ceil({tiny:15,normal:25,big:39}[size]*Math.sqrt(count/4)));
              for(const [index,page] of pages.entries()) {
                  compare(size+'-metadata-'+index,snapshots[index].generation,expected);
@@ -88,7 +89,7 @@ index ea5ccc7..7fcf2b7 100644
              fs.writeFileSync(path.join(out,size+'-snapshots.json'),JSON.stringify({expected,peers:snapshots,reconnected:await snapshot(pages[0])},null,2)+'\n');
              console.log('PASS preset='+size+' peers=2 reconnect=exact dimensions='+side+'x'+side);
 diff --git a/tests/coop/matchmaking.test.js b/tests/coop/matchmaking.test.js
-index 75c97e8..744825c 100644
+index 75c97e8..bd3377f 100644
 --- a/tests/coop/matchmaking.test.js
 +++ b/tests/coop/matchmaking.test.js
 @@ -20,16 +20,19 @@ function compare(label,observed,expected) {
@@ -111,7 +112,7 @@ index 75c97e8..744825c 100644
 +        new GameMap({x:fixtureSide,y:fixtureSide},fixtureConfig.actors.slice(0,-1),[],[],[],[],[],{type:'rectangular'},{}).start({updateCameraBorders(){},clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false}},false);
 +        new DemonPortal(2,7); whooseTurn=0; gameSettings.isOnline=true; gameSettings.coop.result=null; gameSettings.coop.generation={size:'normal'}; actionManager.clear();`);
 +    const board = evaluate('getGameObject()');
-+    board.gameSettings.coop.generation={version:3,playerCount:count,seed:42,size,options:{seed:42,size}};
++    board.gameSettings.coop.generation={version:4,playerCount:count,seed:42,size,options:{seed:42,size}};
 +    return board;
  }
  function harness() {
@@ -168,7 +169,7 @@ index 75c97e8..744825c 100644
      const defaults=harness();const created=await defaults.match('default',omitted);
      compare('omitted-new-size-default',defaults.games[0].rounds[0][0].parallelTurnResult.gameSettings.coop.generation.size,'normal');
      compare('default-normal-compatible',await defaults.match('normal',base),[created[0],2,'joined']);
-@@ -163,3 +166,54 @@ test('size validation, default, compatibility and legacy reconnect preserve stor
+@@ -163,3 +166,55 @@ test('size validation, default, compatibility and legacy reconnect preserve stor
      compare('legacy-reconnect-stored-map-exact',defaults.games[0].rounds[0][0].parallelTurnResult,before);
      console.log('PASS size-validation presets=tiny,normal,big default=normal separated=3 invalid=6 legacy-map=unchanged');
  });
@@ -191,27 +192,28 @@ index 75c97e8..744825c 100644
 +        ['missing-generation',c=>delete c.gameSettings.coop.generation],
 +        ['downgraded-version-1',c=>c.gameSettings.coop.generation.version=1],
 +        ['downgraded-version-2',c=>c.gameSettings.coop.generation.version=2],
++        ['downgraded-version-3',c=>c.gameSettings.coop.generation.version=3],
 +        ['missing-count',c=>delete c.gameSettings.coop.generation.playerCount],
 +        ['missing-seed',c=>delete c.gameSettings.coop.generation.seed]
 +    ]) {
 +        const bad=structuredClone(base);
-+        bad.gameSettings.coop.generation={version:3,playerCount:2,seed:1,size:'normal',options:{seed:1,size:'normal'}};
++        bad.gameSettings.coop.generation={version:4,playerCount:2,seed:1,size:'normal',options:{seed:1,size:'normal'}};
 +        edit(bad);const isolated=harness();
 +        await assert.rejects(isolated.match('forged',bad),/co-op|Co-op/);
 +        compare('forged-'+label+'-rejected-before-persistence',[isolated.games.length,isolated.users.length],[0,0]);
 +    }
-+    console.log('PASS scaled-metadata forgeries=14 incompatible-counts=separated');
++    console.log('PASS scaled-metadata forgeries=15 incompatible-counts=separated');
 + });
 +
 + test('H12 tiny forged grids cannot bypass validation and old saved games reconnect',async()=>{
-+    for(const version of [undefined,1,2,3]) {
++    for(const version of [undefined,1,2,3,4]) {
 +        const bad=configuration(12);bad.grid=[[bad.grid[0][0]]];
 +        if(version===undefined)delete bad.gameSettings.coop.generation;
 +        else bad.gameSettings.coop.generation.version=version;
 +        const h=harness();await assert.rejects(h.getOrCreateGame('forged',bad),/co-op/);
 +        compare('H12-1x1-generation-'+version+'-rejected',[h.games.length,h.users.length],[0,0]);
 +    }
-+    for(const version of [undefined,1,2]) {
++    for(const version of [undefined,1,2,3]) {
 +        const h=harness(),config=configuration(12);
 +        const created=await h.match('saved',config);
 +        const saved=h.games[0].rounds[0][0].parallelTurnResult;
@@ -221,5 +223,5 @@ index 75c97e8..744825c 100644
 +        compare('legacy-'+version+'-reconnect',await h.getOrCreateGame('saved',null),[created[0],1,'joined']);
 +        compare('legacy-'+version+'-stored-map-preserved',h.games[0].rounds[0][0].parallelTurnResult,before);
 +    }
-+    console.log('PASS metadata-bypass H12-1x1-rejections=4 legacy-reconnects=3');
++    console.log('PASS metadata-bypass H12-1x1-rejections=5 legacy-reconnects=4');
 + });
