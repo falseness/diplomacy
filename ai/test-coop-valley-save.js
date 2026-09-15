@@ -25,6 +25,11 @@ const SOURCES = ['ai/test-coop-valley-save.js', 'ai/test-coop-scaled-save.js', '
 const PHASES = ['demon', 'complete', 'human'];
 const MATRIX = {humans: [1, 4, 12], sizes: ['tiny', 'normal', 'big']};
 const WAVE = {seed: 42, round: 3};
+// Version-4 maps use the seedless typed schedule: completed round 4 is the first
+// wave and only normal portals produce. Stored version-2/3 maps keep seeded waves.
+const waveFor = stored => stored.coop.generation.version === 4 ?
+  {round: 4, spawned: stored.portals.filter(p => p.category === 'normal').length, waveGeneration: null, typedWaves: {lastRound: 4}} :
+  {round: WAVE.round, spawned: stored.portals.length, waveGeneration: {version: 1, seed: WAVE.seed, lastRound: WAVE.round}, typedWaves: null};
 const ENTRY_POINTS = ['generateCoopGame', 'buildCoopValleyCandidate', 'planDividedValley', 'placeValleyStarts',
   'enforceCoopStartBalance', 'repairCoopValley', 'placeCoopPortals', 'growCoopTerrain', 'repairCoopConnectivity',
   'spawnCoopWave', 'generateCoopWave', 'placeCoopWave'];
@@ -68,6 +73,7 @@ const LIVE_LAYOUT = `(() => {
 const IDENTITIES = `players.map((p, slot) => ({slot, class:p.constructor.name, role:p.role, rgb:{...p.color},
   economyEnabled:p.economyEnabled, isLost:!!p.isLost, gold:p.gold}))`;
 const MARKERS = `({round:gameRound, turn:whooseTurn, waveGeneration:gameSettings.coop.waveGeneration || null,
+  typedWaves:gameSettings.coop.typedWaves || null,
   localPhase:gameSettings.coop.localPhase || null, balanceVersion:gameSettings.coop.balanceVersion,
   initialHumanCount:gameSettings.coop.initialHumanCount, demonSlot:gameSettings.coop.demonSlot})`;
 
@@ -131,22 +137,23 @@ function prepare(entry) {
     saves[phase] = {json: f.evaluate('JSON.stringify(getGameObject())'), identities: f.evaluate(IDENTITIES),
       markers: f.evaluate(MARKERS), live: f.evaluate(LIVE_LAYOUT)};
   };
+  const w = waveFor(stored);
   const wave = f.evaluate(`(() => {
     stored.start(${MANAGER}, false); actionManager.clear()
-    gameRound = ${WAVE.round - 1}; whooseTurn = ${demonSlot}
-    gameSettings.coop.waveGeneration = {version:1, seed:${WAVE.seed}, lastRound:${WAVE.round - 1}}
-    gameSettings.coop.localPhase = {round:${WAVE.round}, stage:'wave'}
+    gameRound = ${w.round - 1}; whooseTurn = ${demonSlot}
+    if (${!w.typedWaves}) gameSettings.coop.waveGeneration = {version:1, seed:${WAVE.seed}, lastRound:${WAVE.round - 1}}
+    gameSettings.coop.localPhase = {round:${w.round}, stage:'wave'}
     const before = players[${demonSlot}].units.length
     advanceCoopLocalPhase()
     return {spawned:players[${demonSlot}].units.length - before, stage:gameSettings.coop.localPhase.stage}
   })()`);
-  assert.deepEqual(wave, {spawned: stored.portals.length, stage: 'demon'}, entry.id + '-wave-spawned');
+  assert.deepEqual(wave, {spawned: w.spawned, stage: 'demon'}, entry.id + '-wave-spawned');
   capture('demon');
   // The demon AI move is outside persistence; the dispatcher still refreshes the controller.
   f.evaluate(`(() => { const d = players[${demonSlot}]; d.play = () => {}
     try { advanceCoopLocalPhase() } finally { delete d.play } })()`);
   capture('complete');
-  f.evaluate(`delete gameSettings.coop.localPhase; gameRound = ${WAVE.round}; whooseTurn = 1; actionManager.clear(); undefined`);
+  f.evaluate(`delete gameSettings.coop.localPhase; gameRound = ${w.round}; whooseTurn = 1; actionManager.clear(); undefined`);
   capture('human');
   const distinguishing = {
     mapSize: [stored.mapSize, regenerated.mapSize],
@@ -157,13 +164,14 @@ function prepare(entry) {
 }
 
 const EXPECTED_MARKERS = {
-  demon: demonSlot => ({round: WAVE.round - 1, turn: demonSlot, localPhase: {round: WAVE.round, stage: 'demon'}}),
-  complete: demonSlot => ({round: WAVE.round - 1, turn: demonSlot, localPhase: {round: WAVE.round, stage: 'complete'}}),
-  human: () => ({round: WAVE.round, turn: 1, localPhase: null})
+  demon: (demonSlot, w) => ({round: w.round - 1, turn: demonSlot, localPhase: {round: w.round, stage: 'demon'}}),
+  complete: (demonSlot, w) => ({round: w.round - 1, turn: demonSlot, localPhase: {round: w.round, stage: 'complete'}}),
+  human: (demonSlot, w) => ({round: w.round, turn: 1, localPhase: null})
 };
 
 function restore(entry, prepared, phase) {
   const {stored, saves} = prepared, save = saves[phase], h = stored.coop.initialHumanCount, demonSlot = stored.coop.demonSlot;
+  const w = waveFor(stored);
   const id = `${entry.id}-${phase}`, checks = [];
   const check = (name, observed, expected) => {
     const pass = isDeepStrictEqual(observed, expected);
@@ -200,15 +208,15 @@ function restore(entry, prepared, phase) {
     check('generation-inputs', g.evaluate('gameSettings.coop.generation'), stored.coop.generation);
     check('player-identities', g.evaluate(IDENTITIES), save.identities);
     const markers = g.evaluate(MARKERS);
-    check('round-wave-phase-markers', markers, {...EXPECTED_MARKERS[phase](demonSlot),
-      waveGeneration: {version: 1, seed: WAVE.seed, lastRound: WAVE.round}, localPhase: EXPECTED_MARKERS[phase](demonSlot).localPhase,
+    check('round-wave-phase-markers', markers, {...EXPECTED_MARKERS[phase](demonSlot, w),
+      waveGeneration: w.waveGeneration, typedWaves: w.typedWaves, localPhase: EXPECTED_MARKERS[phase](demonSlot, w).localPhase,
       balanceVersion: 2, initialHumanCount: h, demonSlot});
     check('round-wave-phase-markers-unchanged', markers, save.markers);
     const live = g.evaluate(LIVE_LAYOUT);
     check('exact-grid-object-placements', placements(live), expectedLayout(stored));
     check('units-no-duplicates', {units: live.units, gridUnits: live.gridUnits, gridBuildings: live.gridBuildings},
       {units: save.live.units, gridUnits: save.live.gridUnits, gridBuildings: save.live.gridBuildings});
-    check('demon-wave-count', live.units[demonSlot].length, stored.portals.length);
+    check('demon-wave-count', live.units[demonSlot].length, w.spawned);
     check('not-current-regeneration', {equal: JSON.stringify(placements(live)) === JSON.stringify(prepared.regeneratedLayout)},
       {equal: stored.coop.generation.version === 4});
     const terrain = auditTerrain(stored, live);
@@ -221,11 +229,11 @@ function restore(entry, prepared, phase) {
       try { if (gameSettings.coop.localPhase) advanceCoopLocalPhase() } finally { delete d.play }
       return {stage:gameSettings.coop.localPhase ? gameSettings.coop.localPhase.stage : null, played,
         demonUnits:d.units.filter(u => !u.killed).length, calls:entryCalls,
-        wave:gameSettings.coop.waveGeneration}
+        wave:gameSettings.coop.waveGeneration || null, typedWaves:gameSettings.coop.typedWaves || null}
     })()`);
     check('resume-without-duplicate-spawn', resumed, {stage: phase === 'human' ? null : 'complete', played: phase === 'demon' ? 1 : 0,
-      demonUnits: stored.portals.length, calls: Object.fromEntries([...ENTRY_POINTS, 'GameMap.start'].map(n => [n, 0])),
-      wave: {version: 1, seed: WAVE.seed, lastRound: WAVE.round}});
+      demonUnits: w.spawned, calls: Object.fromEntries([...ENTRY_POINTS, 'GameMap.start'].map(n => [n, 0])),
+      wave: w.waveGeneration, typedWaves: w.typedWaves});
   } finally {
     record.elapsedMs = Date.now() - t0;
   }

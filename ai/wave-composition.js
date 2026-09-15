@@ -40,13 +40,26 @@ function composeCoopWave(seed, round, initialHumanCount, portals = [], balanceVe
 function generateCoopWave(round, seed = 0) {
     const coop = gameSettings.coop
     if (!coop) throw new Error('Wave generation requires co-op')
-    const saved = coop.waveGeneration || {version: 1, seed, lastRound: 0}
-    if (saved.version !== 1) throw new RangeError('Unsupported wave generation version')
+    // Destroyed portals leave external; occupied portals skip this round only.
     const portals = external.filter(portal => portal.isDemonPortal && !portal.killed &&
         portal.hp > 0 && portal.playerColor === coop.demonSlot &&
         grid.getBuilding(portal.coord) === portal && grid.getUnit(portal.coord).isEmpty())
-        .map(portal => ({x: portal.coord.x, y: portal.coord.y}))
-    const wave = composeCoopWave(saved.seed, round, coop.initialHumanCount, portals, coop.balanceVersion ?? 1)
+        .map(portal => ({x: portal.coord.x, y: portal.coord.y, category: portal.category}))
+    // Version-4 maps have typed portals: every portal produces together on the
+    // shared four-round schedule. The dispatcher completes each round once, so a
+    // repeated or stale round is a no-op and a skipped portal accrues no backlog.
+    if (coop.generation && coop.generation.version === 4) {
+        isCoopTypedWaveRound(round)
+        const last = coop.typedWaves ? coop.typedWaves.lastRound : 0
+        if (round <= last) return {round, types: [], selections: []}
+        const wave = composeTypedCoopWave(round, portals)
+        coop.typedWaves = {lastRound: round}
+        return wave
+    }
+    const saved = coop.waveGeneration || {version: 1, seed, lastRound: 0}
+    if (saved.version !== 1) throw new RangeError('Unsupported wave generation version')
+    const wave = composeCoopWave(saved.seed, round, coop.initialHumanCount,
+        portals.map(({x, y}) => ({x, y})), coop.balanceVersion ?? 1)
     coop.waveGeneration = {version: 1, seed: saved.seed, lastRound: round}
     return wave
 }
