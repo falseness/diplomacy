@@ -12,7 +12,7 @@ index 8a243a7..f68abef 100644
      'render/loadassets.js',
      'render/image.js',
 diff --git a/server/matchmakingSlots.js b/server/matchmakingSlots.js
-index cb9931f..949f63f 100644
+index cb9931f..0afc9b4 100644
 --- a/server/matchmakingSlots.js
 +++ b/server/matchmakingSlots.js
 @@ -7,7 +7,7 @@ function getHumanSlots(game, legacySlotCount) {
@@ -24,7 +24,7 @@ index cb9931f..949f63f 100644
      const slots = Array.from({length: count}, (_, index) => index + 1)
      assert.deepStrictEqual(coop.humanSlots, slots, 'Invalid co-op human slots')
      assert.strictEqual(coop.demonSlot, count + 1, 'Invalid co-op demon slot')
-@@ -31,6 +31,17 @@ function normalizeNewCoopSettings(game) {
+@@ -31,6 +31,27 @@ function normalizeNewCoopSettings(game) {
      if (generation.options?.size !== undefined) {
          assert.strictEqual(generation.options.size, size, 'Conflicting co-op map size')
      }
@@ -36,9 +36,19 @@ index cb9931f..949f63f 100644
 +    assert(Number.isInteger(generation.seed) && generation.seed >= 0 && generation.seed <= 0xffffffff, 'Invalid co-op generation seed')
 +    if (generation.options?.seed !== undefined)
 +        assert.strictEqual(generation.options.seed, generation.seed, 'Conflicting co-op generation seed')
-+    const {mapSize} = require('../../diplomacy/ai/coop-map-scaling').getCoopMapScaling(coop.initialHumanCount, size)
++    const {mapSize, counts} = require('../../diplomacy/ai/coop-map-scaling').getCoopMapScaling(coop.initialHumanCount, size)
 +    assert(Array.isArray(game.grid) && game.grid.length === mapSize.x &&
 +        game.grid.every(column => Array.isArray(column) && column.length === mapSize.y), 'Invalid co-op scaled dimensions')
++    // Four typed portals per initial human, H of each shared category, so the
++    // authoritative waves and every client use the same portal identities.
++    const {COOP_PORTAL_CATEGORIES} = require('../../diplomacy/ai/wave-config')
++    const portals = (Array.isArray(game.external) ? game.external : []).filter(row => row?.name === 'demonPortal')
++    assert(portals.length === counts.portals &&
++        new Set(portals.map(row => `${row.coord?.x},${row.coord?.y}`)).size === portals.length &&
++        portals.every(row => row.ownerSlot === coop.demonSlot && COOP_PORTAL_CATEGORIES.includes(row.category)) &&
++        COOP_PORTAL_CATEGORIES.every(category =>
++            portals.filter(row => row.category === category).length === counts.portalCategories[category]),
++        'Invalid co-op typed portals')
      coop.generation = {...generation, size}
      if (generation.options) coop.generation.options = {...generation.options, size}
  }
@@ -89,16 +99,17 @@ index ea5ccc7..cc56828 100644
              fs.writeFileSync(path.join(out,size+'-snapshots.json'),JSON.stringify({expected,peers:snapshots,reconnected:await snapshot(pages[0])},null,2)+'\n');
              console.log('PASS preset='+size+' peers=2 reconnect=exact dimensions='+side+'x'+side);
 diff --git a/tests/coop/matchmaking.test.js b/tests/coop/matchmaking.test.js
-index 75c97e8..bd3377f 100644
+index 75c97e8..b75dd71 100644
 --- a/tests/coop/matchmaking.test.js
 +++ b/tests/coop/matchmaking.test.js
-@@ -20,16 +20,19 @@ function compare(label,observed,expected) {
+@@ -20,16 +20,20 @@ function compare(label,observed,expected) {
      console.log(JSON.stringify({scenario:label,expected,observed}));
      assert.deepEqual(observed,expected,label); console.log('PASS '+label);
  }
 -function configuration(count) {
 +function configuration(count, size = 'normal') {
 +    global.fixtureSide = require(path.join(runtime.gameDir,'ai/coop-map-scaling')).getCoopMapScaling(count,size).side;
++    global.fixtureCount = count;
      global.fixtureConfig={actors:[{role:'neutral',rgb:{r:100,g:100,b:100},gold:0,towns:[],units:[]},
          ...Array.from({length:count},(_,i)=>({role:'human',rgb:{r:40+i*40,g:80,b:160},gold:100+i,
 -            towns:[],units:[{x:2+i*5,y:3}]})),{role:'demon',gold:0}]};
@@ -110,25 +121,26 @@ index 75c97e8..bd3377f 100644
 -        new DemonPortal(20,7); whooseTurn=0; gameSettings.isOnline=true; gameSettings.coop.result=null; gameSettings.coop.generation={size:'normal'}; actionManager.clear();`);
 -    return evaluate('getGameObject()');
 +        new GameMap({x:fixtureSide,y:fixtureSide},fixtureConfig.actors.slice(0,-1),[],[],[],[],[],{type:'rectangular'},{}).start({updateCameraBorders(){},clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false}},false);
-+        new DemonPortal(2,7); whooseTurn=0; gameSettings.isOnline=true; gameSettings.coop.result=null; gameSettings.coop.generation={size:'normal'}; actionManager.clear();`);
++        for(let i=0;i<4*fixtureCount;i++)new DemonPortal(i%fixtureSide,7+Math.floor(i/fixtureSide),COOP_PORTAL_CATEGORIES[i%4]); whooseTurn=0; gameSettings.isOnline=true; gameSettings.coop.result=null; gameSettings.coop.generation={size:'normal'}; actionManager.clear();`);
 +    const board = evaluate('getGameObject()');
 +    board.gameSettings.coop.generation={version:4,playerCount:count,seed:42,size,options:{seed:42,size}};
 +    return board;
  }
  function harness() {
      const games=[],users=[],active=new Set(),initialBoards=new Map();
-@@ -62,8 +65,8 @@ function checkBoard(label,game,count,config,checkSlots=true) {
+@@ -62,8 +66,9 @@ function checkBoard(label,game,count,config,checkSlots=true) {
      global.fixtureConfig={actors:[{role:'neutral',gold:0},...Array.from({length:count},(_,i)=>({role:'human',gold:100+i})),{role:'demon',gold:0}]};
      global.matchBoard=game.rounds[0][0].parallelTurnResult;
      evaluate('loadFromJson(JSON.stringify(matchBoard));');
 -    const entities=Array.from({length:count},(_,i)=>({id:`human-${i+1}`,kind:'unit',name:'noob',owner:i+1,x:2+i*5,y:3}));
 -    entities.push({id:'portal',kind:'portal',name:'demonPortal',owner:count+1,x:20,y:7});
 +    const entities=Array.from({length:count},(_,i)=>({id:`human-${i+1}`,kind:'unit',name:'noob',owner:i+1,x:2+i,y:3}));
-+    entities.push({id:'portal',kind:'portal',name:'demonPortal',owner:count+1,x:2,y:7});
++    const side=config.grid.length;
++    for(let i=0;i<4*count;i++)entities.push({id:'portal-'+i,kind:'portal',name:'demonPortal',owner:count+1,x:i%side,y:7+Math.floor(i/side)});
      createEntityLedger(fixture,entities).check(label+'-entities');
      createEconomyLedger(fixture,global.fixtureConfig.actors,{}).check(label+'-economy');
      const digest=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
-@@ -76,7 +79,7 @@ function checkBoard(label,game,count,config,checkSlots=true) {
+@@ -76,7 +81,7 @@ function checkBoard(label,game,count,config,checkSlots=true) {
      compare(label+'-neutral-slot',game.playerIndexToUserIndex[0],null);
      if(checkSlots)compare(label+'-demon-slot',game.playerIndexToUserIndex[count+1],null);
  }
@@ -137,7 +149,7 @@ index 75c97e8..bd3377f 100644
      const config=configuration(count),h=harness();
      const [id,slot,status]=await h.match('host',config);
      compare(`create-${count}`,[slot,status,h.games[0].playerIndexToUserIndex.length],[1,'started',count+2]);
-@@ -131,19 +134,19 @@ test('mode compatibility isolates identical layouts in both directions and prese
+@@ -131,19 +136,19 @@ test('mode compatibility isolates identical layouts in both directions and prese
      compare('legacy-competitive-key',getMatchmakingKey(legacy),getMatchmakingKey(competitive));
  });
  test('invalid co-op counts and controller layouts are rejected before persistence',async()=>{
@@ -160,7 +172,7 @@ index 75c97e8..bd3377f 100644
          const created=await h.match('host-'+size,board);ids.push(created[0]);
          compare(size+'-compatible-peer',await h.match('peer-'+size,board),[created[0],2,'joined']);
      }
-@@ -153,7 +156,7 @@ test('size validation, default, compatibility and legacy reconnect preserve stor
+@@ -153,7 +158,7 @@ test('size validation, default, compatibility and legacy reconnect preserve stor
          const isolated=harness();await assert.rejects(isolated.match('invalid',bad),/co-op map size/);
          compare('invalid-size-'+JSON.stringify(size),[isolated.games.length,isolated.users.length],[0,0]);
      }
@@ -169,7 +181,7 @@ index 75c97e8..bd3377f 100644
      const defaults=harness();const created=await defaults.match('default',omitted);
      compare('omitted-new-size-default',defaults.games[0].rounds[0][0].parallelTurnResult.gameSettings.coop.generation.size,'normal');
      compare('default-normal-compatible',await defaults.match('normal',base),[created[0],2,'joined']);
-@@ -163,3 +166,55 @@ test('size validation, default, compatibility and legacy reconnect preserve stor
+@@ -163,3 +168,58 @@ test('size validation, default, compatibility and legacy reconnect preserve stor
      compare('legacy-reconnect-stored-map-exact',defaults.games[0].rounds[0][0].parallelTurnResult,before);
      console.log('PASS size-validation presets=tiny,normal,big default=normal separated=3 invalid=6 legacy-map=unchanged');
  });
@@ -194,7 +206,10 @@ index 75c97e8..bd3377f 100644
 +        ['downgraded-version-2',c=>c.gameSettings.coop.generation.version=2],
 +        ['downgraded-version-3',c=>c.gameSettings.coop.generation.version=3],
 +        ['missing-count',c=>delete c.gameSettings.coop.generation.playerCount],
-+        ['missing-seed',c=>delete c.gameSettings.coop.generation.seed]
++        ['missing-seed',c=>delete c.gameSettings.coop.generation.seed],
++        ['portal-category-distribution',c=>c.external.find(e=>e.name==='demonPortal'&&e.category==='normal').category='highTier'],
++        ['portal-missing-category',c=>delete c.external.find(e=>e.name==='demonPortal').category],
++        ['portal-count',c=>c.external.splice(c.external.findIndex(e=>e.name==='demonPortal'),1)]
 +    ]) {
 +        const bad=structuredClone(base);
 +        bad.gameSettings.coop.generation={version:4,playerCount:2,seed:1,size:'normal',options:{seed:1,size:'normal'}};
@@ -202,7 +217,7 @@ index 75c97e8..bd3377f 100644
 +        await assert.rejects(isolated.match('forged',bad),/co-op|Co-op/);
 +        compare('forged-'+label+'-rejected-before-persistence',[isolated.games.length,isolated.users.length],[0,0]);
 +    }
-+    console.log('PASS scaled-metadata forgeries=15 incompatible-counts=separated');
++    console.log('PASS scaled-metadata forgeries=18 incompatible-counts=separated');
 + });
 +
 + test('H12 tiny forged grids cannot bypass validation and old saved games reconnect',async()=>{

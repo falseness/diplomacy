@@ -5,8 +5,8 @@ one commit, the companion server implementation and tests are tracked here as
     python3 ops/apply_coop_scaled_matchmaking.py
 
 The installer checks the patch before applying and recognizes an already applied
-patch. A checkout carrying the previous (version-3, TASK-124) revision is upgraded
-by reversing that revision first. It preserves unrelated edits and does not commit
+patch. A checkout carrying an earlier revision (version-3 TASK-124 `67bd75e`, or
+untyped-portal version-4 TASK-142 `9f9802e`) is upgraded by reversing that revision first. It preserves unrelated edits and does not commit
 or deploy the server. The patch updates the shared script loader (including
 `ai/coop-valley-plan.js` before `ai/generateMap.js`), H2–12 validation, generation
 metadata checks and both required server fixtures. Every new co-op request must
@@ -24,6 +24,15 @@ verifies the current revision reversibly with:
 It materializes the sibling HEAD files plus this patch, runs the server matchmaking
 suite and a local/server Divided Valley parity, reconnect and checkpoint-resume
 program, and restores the original sibling bytes on success or ordinary failure.
+
+TASK-155 adds typed portal validation for new version-4 requests: the board must
+carry exactly 4H demon-owned portals on distinct cells, H of each shared category
+from `ai/wave-config.js` (`Invalid co-op typed portals` otherwise). The matchmaking
+fixture builds typed portals and rejects three portal forgeries. Typed four-round
+waves through the authoritative server (socket.io peers, duplicate submissions,
+client demon commands, reconnect, restart and phase resume) are verified reversibly with:
+
+    /usr/local/bin/node20 ai/test-coop-typed-wave-server.js --output-dir artifacts/TASK-155
 
 Run the server checks with Node 20 from the sibling repository:
 
