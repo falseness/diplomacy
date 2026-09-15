@@ -8,7 +8,7 @@ const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 const {createFixture} = require('./test-coop-harness');
 const arg = process.argv.indexOf('--output-dir');
-const out = path.resolve(arg < 0 ? 'artifacts/TASK-133' : process.argv[arg + 1]);
+const out = path.resolve(arg < 0 ? 'artifacts/TASK-146' : process.argv[arg + 1]);
 const fault = process.argv.includes('--fault-noop-demons');
 fs.mkdirSync(out, {recursive:true});
 const write = (file, data) => fs.writeFileSync(path.join(out,file), JSON.stringify(data,null,2)+'\n');
@@ -129,11 +129,18 @@ function runCase(c) {
   try {
     f.evaluate(`globalThis.generated=generateCoopGame(${c.humans},{size:'${c.size}',seed:${c.mapSeed}}); undefined`);
     row.generated=f.evaluate('JSON.parse(JSON.stringify(generated))');
+    row.generationIdentity={...row.generated.coop.generation,
+      mapSha256:require('node:crypto').createHash('sha256').update(JSON.stringify(row.generated)).digest('hex')};
     f.evaluate(`isFogOfWar=${c.fog}; generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);
       whooseTurn=0; actionManager.clear();
       (${installObservers.toString()})(); nextTurn(); undefined`);
     if(fault) f.evaluate('players[gameSettings.coop.demonSlot].combatAI={play(){}}; undefined');
     row.configuration=f.evaluate('({coop:gameSettings.coop,suddenDeathRound,isFogOfWar,aiActionLimit:gameSettings.aiActionLimit})');
+    // New co-op games use Divided Valley (generation version 4); progression,
+    // wave rules and the flooding threshold stay at their current versions.
+    const generation={version:4,playerCount:c.humans,seed:c.mapSeed,size:c.size,options:{seed:c.mapSeed,size:c.size}};
+    assert.deepEqual(row.generated.coop.generation,generation,'version-4 generated initial map');
+    assert.deepEqual(row.configuration.coop.generation,generation,'version-4 started game');
     assert.equal(row.configuration.coop.balanceVersion,2);
     assert.equal(row.configuration.suddenDeathRound,40);
     row.initial=f.evaluate('observe()'); row.final=row.initial; save();
@@ -150,7 +157,13 @@ function runCase(c) {
       } while(row.final.round===round&&!row.final.terminal);
       assert.equal(row.final.threshold,40);
       const roundEvents=events.slice(start);
-      row.rounds.push({completedFrom:round,turns,spawns:roundEvents.filter(e=>e.type==='spawn'),...row.final});
+      if(row.final.waveGeneration||roundEvents.some(e=>e.type==='spawn'))
+        assert.deepEqual({version:row.final.waveGeneration?.version,seed:row.final.waveGeneration?.seed,
+          spawnSeeds:[...new Set(roundEvents.filter(e=>e.type==='spawn').map(e=>e.waveSeed).concat(0))]},
+          {version:1,seed:0,spawnSeeds:[0]},'unchanged wave rules');
+      const actions={demon:roundEvents.filter(e=>e.type==='action-end').length,
+        damage:roundEvents.filter(e=>e.type==='damage').length,removals:roundEvents.filter(e=>e.type==='removal').length};
+      row.rounds.push({completedFrom:round,turns,actions,spawns:roundEvents.filter(e=>e.type==='spawn'),...row.final});
       save();
       console.log(`ROUND ${c.id} round=${row.final.round} turns=${turns} humans=${row.final.humans.reduce((n,p)=>n+p.units.length+p.towns.length,0)} demons=${row.final.demons.length} portals=${row.final.portals.length} result=${row.final.result}`);
     }
