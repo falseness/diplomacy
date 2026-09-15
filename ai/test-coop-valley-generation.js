@@ -223,6 +223,8 @@ function startCase(f, size) {
   })()`);
 }
 
+module.exports = {RECORDER, generateCase, audit, ATTEMPT_LIMIT};
+
 if (require.main === module) {
   const arg = n => { const i = process.argv.indexOf(n); return i<0 ? undefined : process.argv[i+1]; };
   const out = path.resolve(arg('--output-dir') || 'artifacts/TASK-140'), fault = arg('--fault');

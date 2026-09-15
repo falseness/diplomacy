@@ -179,6 +179,8 @@ function runCase(size, humans, seed, fault) {
   return {p, starts, layout, faulted, layoutSha256, repeatSha256, m, checks:Object.fromEntries(checks), failed, rejectedBy:failed[0]||null};
 }
 
+module.exports = {runCase, measure, FAULTS};
+
 if (require.main === module) {
   const arg = n => { const i = process.argv.indexOf(n); return i<0 ? undefined : process.argv[i+1]; };
   const out = path.resolve(arg('--output-dir') || 'artifacts/TASK-137'), fault = arg('--fault');

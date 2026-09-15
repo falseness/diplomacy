@@ -134,6 +134,8 @@ function variation(size, humans, fault) {
   return {size, humans, seeds:VARIATION_SEEDS.length, distinctPassageRidgeMasks:distinct, pass:distinct>=2, masks};
 }
 
+module.exports = {checkPlan, passageRidgeMask};
+
 if (require.main === module) {
   const arg = n => { const i = process.argv.indexOf(n); return i<0 ? undefined : process.argv[i+1]; };
   const out = path.resolve(arg('--output-dir') || 'artifacts/TASK-135'), fault = arg('--fault');
