@@ -34,12 +34,31 @@ class DemonPortal extends Building {
         if (this.category === undefined) return 'demonPortal'
         return 'demonPortal' + this.category[0].toUpperCase() + this.category.slice(1)
     }
+    // Next scheduled wave production from the same pure lookup spawning uses
+    // (ai/wave-config.js). It depends only on category and completed rounds, so
+    // a blocked portal shows its next attempt and never a queued backlog. A
+    // committed wave (typedWaves.lastRound) counts as completed before gameRound
+    // advances. Null for destroyed, uncategorized or untyped-generation portals.
+    get nextProduction() {
+        const coop = gameSettings.coop
+        if (this.killed || this.category === undefined || !coop ||
+                !coop.generation || coop.generation.version !== 4)
+            return null
+        const completed = Math.max(gameRound, coop.typedWaves ? coop.typedWaves.lastRound : 0)
+        return getCoopNextScheduledProduction(this.category, completed)
+    }
     get info() {
         const result = super.info
         result.displayName = 'demon portal'
         result.image = this.imageName
+        const next = this.nextProduction
+        if (next) {
+            result.info.category = DemonPortal.categoryLabels[this.category]
+            addProductionPreviewInfo(result.info, DEMON_TYPES[next.type].name, next.roundsRemaining)
+        }
         return result
     }
+    static categoryLabels = {normal: 'normal', ranged: 'ranged', heavy: 'heavy', highTier: 'high tier'}
     isObstacle(playerColor) { return false }
     toJSON() {
         const result = {...super.toJSON(), ownerSlot: this.ownerSlot}
@@ -68,6 +87,18 @@ class DemonPortal extends Building {
     draw(ctx) {
         if (this.killed) return
         drawCachedImage(ctx, cachedImages[this.imageName], this.pos)
+    }
+    // Overlay pass only (never the surface cache): translucent upcoming demon
+    // and its rounds remaining. Also keeps the selected portal's information
+    // current across rounds and schedule upgrades without reselection.
+    drawNextProduction(ctx) {
+        const next = this.nextProduction
+        if (!next) return
+        drawProductionPreview(ctx, next.type, this.pos, this.coord, next.roundsRemaining)
+        if (gameEvent.selected !== this) return
+        const info = this.info
+        if (entityInterface.entity.info.text !== join(info.info, ': ', '\n'))
+            entityInterface.change(info, this.player.fullColor)
     }
     drawBars(ctx) {
         if (!this.killed) this.hpBar.draw(ctx)

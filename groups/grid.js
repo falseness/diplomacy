@@ -239,6 +239,8 @@ class Grid extends SpritesGroup {
                 if (cell.building.hasBar)
                     tmpBuildings.push(cell.building)
                 cell.unit.draw(ctx)
+                if (cell.building.isDemonPortal)
+                    cell.building.drawNextProduction(ctx)
             }
         }
         for (let i = 0; i < tmpBuildings.length; ++i) {
@@ -287,6 +289,8 @@ class Grid extends SpritesGroup {
                     building.draw(ctx)
                 else if (building.isPreparingManufacture)
                     building.unitProduction.draw(ctx)
+                else if (building.isDemonPortal)
+                    building.drawNextProduction(ctx)
                 if (building.hasBar)
                     buildingBars.push(building)
                 if (cell.unit.notEmpty())

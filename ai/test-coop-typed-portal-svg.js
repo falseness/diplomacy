@@ -52,6 +52,9 @@ const MOTIFS = {normal: 'normal-claw-motif', ranged: 'ranged-arrow-motif', heavy
 const BASE = 'demonPortal';
 const HP = {normal: 30, ranged: 17, heavy: 8, highTier: 3}; // after hits of 0/13/22/27 on 30 max
 const DAMAGE = {normal: 0, ranged: 13, heavy: 22, highTier: 27};
+// Next-production portrait lines at round 0 (TASK-158): category, train, turns.
+const NEXT_AT_ROUND_0 = {normal: ['normal', 'train: imp', 'turns: 4'], ranged: ['ranged', 'train: spitter', 'turns: 8'],
+  heavy: ['heavy', 'train: brute', 'turns: 12'], highTier: ['high tier', 'train: ravager', 'turns: 32']};
 // Silhouettes are compared as binarized alpha masks at 128 px, so colour cannot contribute.
 const SILHOUETTE_SIZE = 128, MAX_SILHOUETTE_IOU = 0.95;
 const GAME = {humans: 1, seed: 0, size: 'tiny'};
@@ -348,7 +351,8 @@ function runNegativeControls() {
       check(`map-rendered-bounds:${c}`, runtime.renderedInk > 0, true);
       const {ownerColor, background, ...portrait} = runtime.portrait;
       check(`portrait-asset:${c}`, {...portrait, backgroundIsOwnerColor: background === ownerColor},
-        {image: expectedAsset, drawn: [`asset:${expectedAsset}`], visible: true, title: 'demon portal', info: `hp: ${hp} / 30`,
+        {image: expectedAsset, drawn: [`asset:${expectedAsset}`], visible: true, title: 'demon portal',
+          info: `hp: ${hp} / 30\ncategory: ${NEXT_AT_ROUND_0[c].join('\n')}`,
           backgroundIsOwnerColor: true}, {background, ownerColor});
       check(`health-bar:${c}`, runtime.health, {hp, killed: false, barsDrawn: true, green: Math.floor(hp / 10) + hp % 10});
       check(`ownership-tint:${c}`, runtime.tint, {hexOwner: slot, portalOwner: slot, demonSlot: slot, role: 'DEMONS'});
