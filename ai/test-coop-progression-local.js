@@ -8,8 +8,9 @@ const unlocks = {imp:1,clawling:3,hound:6,brute:10,bulwark:20,spitter:6,
   emberArcher:15,hexcaster:24,ravager:30,demonLord:35};
 const weights = {imp:1,clawling:2,hound:3,brute:5,bulwark:7,spitter:2,
   emberArcher:4,hexcaster:6,ravager:8,demonLord:12};
-const health = {imp:1,clawling:2,hound:2,brute:5,bulwark:8,spitter:1,
-  emberArcher:2,hexcaster:3,ravager:4,demonLord:10};
+// Explicit tuned (version 2) health, the only balance version this fixture runs.
+const health = {imp:3,clawling:4,hound:6,brute:12,bulwark:20,spitter:3,
+  emberArcher:5,hexcaster:6,ravager:10,demonLord:24};
 const portals = [{x:9,y:2},{x:12,y:6}];
 const seed = 6; // Fixed fixture: (9,2) constructs Demon Lord at round 35.
 function oracle(round, available = portals) {
