@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+<title id="title">Normal demon portal: imp gate with short hooked horns and claw-rent rift</title>
+<desc id="desc">Obsidian arch from the base demon portal. Short hooked horns, a spiked keystone and three claw slashes through a crimson rift mark the normal category (imp, clawling, hound). Transparent editable vector, 512 by 512.</desc>
+<defs>
+<radialGradient id="ground"><stop offset="0" stop-color="#17151b" stop-opacity="0.39"/><stop offset="0.5" stop-color="#1b181f" stop-opacity="0.22"/><stop offset="1" stop-color="#1b181f" stop-opacity="0"/></radialGradient>
+<radialGradient id="contact"><stop offset="0" stop-color="#131115" stop-opacity="0.6"/><stop offset="0.55" stop-color="#131115" stop-opacity="0.3"/><stop offset="1" stop-color="#131115" stop-opacity="0"/></radialGradient>
+<linearGradient id="dome" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#857697"/><stop offset="1" stop-color="#5a5067"/></linearGradient>
+<linearGradient id="left" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#817394"/><stop offset="1" stop-color="#5a5066"/></linearGradient>
+<linearGradient id="front" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#7c6f8e"/><stop offset="1" stop-color="#594f66"/></linearGradient>
+<linearGradient id="right" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#695d78"/><stop offset="1" stop-color="#423a4b"/></linearGradient>
+<linearGradient id="light" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#8c7da0"/><stop offset="1" stop-color="#6e627e"/></linearGradient>
+<linearGradient id="arch" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#807292"/><stop offset="1" stop-color="#5b5168"/></linearGradient>
+<linearGradient id="arch-right" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#736683"/><stop offset="1" stop-color="#4e465a"/></linearGradient>
+<linearGradient id="reveal" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#3b3443"/><stop offset="1" stop-color="#201c24"/></linearGradient>
+<linearGradient id="cave" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#0d0b0f"/><stop offset="1" stop-color="#17151b"/></linearGradient>
+<linearGradient id="floor" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#413a4a"/><stop offset="1" stop-color="#201c24"/></linearGradient>
+<linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#7c6e8e"/><stop offset="1" stop-color="#554b60"/></linearGradient>
+<radialGradient id="rift"><stop offset="0" stop-color="#fff2bd"/><stop offset=".28" stop-color="#ffbd70"/><stop offset=".65" stop-color="#fb375d"/><stop offset="1" stop-color="#651437"/></radialGradient>
+<linearGradient id="horn"><stop stop-color="#cbbbd8"/><stop offset=".5" stop-color="#6f597e"/><stop offset="1" stop-color="#30233e"/></linearGradient>
+</defs>
+<g id="ground-shadows">
+<ellipse cx="266" cy="427" rx="224" ry="52" fill="url(#ground)" />
+<ellipse cx="253" cy="429" rx="166" ry="23" fill="url(#contact)" />
+</g>
+<g id="obsidian-mound">
+<path d="M56 389 L65 336 L89 244 L125 171 L170 122 L218 101 Q245 92 271 99 L324 114 L373 151 L408 211 L433 286 L451 368 L438 398 L403 427 L335 443 L168 444 L99 424 Z" fill="url(#dome)" />
+<path d="M56 389 L65 336 L89 244 L125 171 L170 122 L199 154 L156 223 L128 289 L119 377 L99 424 Z" fill="url(#left)" />
+<path d="M56 389 L86 360 L99 296 L117 249 L125 171 L89 244 L65 336 Z" fill="#5d536a" />
+<path d="M170 122 L218 101 Q245 92 271 99 L248 139 L199 154 Z" fill="url(#light)" />
+<path d="M271 99 L324 114 L373 151 L330 168 L290 148 L248 139 Z" fill="#7e7090" />
+<path d="M373 151 L408 211 L433 286 L403 308 L373 253 L330 168 Z" fill="url(#front)" />
+<path d="M433 286 L451 368 L438 398 L403 427 L374 399 L380 352 L403 308 Z" fill="url(#right)" />
+<path d="M373 151 L376 206 L402 263 L403 308 L433 286 L408 211 Z" fill="#695d78" />
+<path d="M199 154 L248 139 L290 148 L330 168 L373 253 L380 352 L374 399 L335 443 L168 444 L119 377 L128 289 L156 223 Z" fill="url(#front)" />
+<path d="M125 171 L151 181 L164 179 L156 223 L128 289 L118 307 L123 267 L139 210 Z" fill="#837495" opacity=".65"/>
+<path d="M79 348 L87 392 L99 424 L122 416 L113 377 L107 350 Z" fill="#534a5f" />
+<path d="M338 204 L358 216 L373 253 L367 281 L348 241 Z" fill="#7b6e8d" opacity=".7"/>
+<path d="M373 321 L383 353 L375 380 L374 399 L360 416 L355 394 Z" fill="#494053" />
+<path d="M210 127 L222 117 L240 114 L231 124 Z" fill="#8b7c9f" opacity=".55"/>
+<path d="M282 117 L299 123 L312 137 L297 133 Z" fill="#8a7b9e" opacity=".5"/>
+<path d="M96 317 L105 300 L105 328 L94 341 Z" fill="#7b6e8d" opacity=".6"/>
+</g>
+<g id="recessed-entrance">
+<path d="M160 438 L164 328 Q168 214 245 208 Q324 219 329 335 L331 439 Z" fill="#381329"/>
+<path d="M178 437 L179 336 Q180 279 203 259 Q222 235 245 237 Q269 237 285 260 Q307 285 307 331 L311 439 Q245 457 178 437Z" fill="url(#rift)"/>
+</g>
+<g id="carved-stone-arch">
+<path d="M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 L348 436 L311 439 L307 331 Q305 286 285 260 Q269 237 245 237 Q221 237 202 261 Q179 291 178 336 L176 439 L149 441 Z" fill="url(#arch)" />
+<path d="M123 423 L128 337 L179 336 L176 439 L149 441 Z" fill="url(#left)" />
+<path d="M128 337 Q130 292 140 268 L190 283 Q178 311 179 336 Z" fill="url(#arch)" />
+<path d="M140 268 Q149 237 169 211 L208 254 Q196 267 190 283 Z" fill="url(#light)" />
+<path d="M169 211 Q194 182 218 176 L229 239 Q217 243 208 254 Z" fill="#827394" />
+<path d="M218 176 Q245 164 270 177 L261 240 Q246 234 229 239 Z" fill="url(#light)" />
+<path d="M270 177 Q302 187 325 211 L282 256 Q273 245 261 240 Z" fill="#776a88" />
+<path d="M325 211 Q346 237 354 269 L299 285 Q293 268 282 256 Z" fill="url(#arch-right)" />
+<path d="M354 269 Q363 301 365 328 L307 331 Q306 302 299 285 Z" fill="#6b5f7a" />
+<path d="M365 328 L371 422 L348 436 L311 439 L307 331 Z" fill="url(#arch-right)" />
+<path d="M149 441 L149 346 Q151 271 184 228 Q207 197 239 190 Q257 186 276 195 Q293 202 305 216 Q280 189 245 197 Q208 205 187 249 Q163 296 166 346 L165 440 Z" fill="#867798" opacity=".51"/>
+<path d="M261 240 Q285 253 297 280 Q309 307 311 347 L311 439 L321 436 L318 331 Q316 283 292 255 Q278 241 263 235 Z" fill="#51485c" />
+<path d="M176 439 L178 336 Q179 291 202 261 Q220 238 245 237 L242 243 Q220 246 204 268 Q185 297 186 341 L184 436 Z" fill="#867798" opacity=".55"/>
+<path d="M129 336 L151 339 L177 336" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M140 269 L162 274 L189 284" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M169 211 L185 230 L207 254" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M218 177 L222 204 L229 238" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M270 178 L267 208 L262 239" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M325 212 L307 231 L284 255" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M353 270 L333 278 L300 286" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M365 329 L342 332 L308 331" fill="none" stroke="#52495e" stroke-opacity=".66" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M158 366 L161 376 L157 392" fill="none" stroke="#5a5066" stroke-width="2.3" stroke-linecap="round"/>
+<path d="M285 204 L292 214 L290 224" fill="none" stroke="#5d536b" stroke-width="2" stroke-linecap="round"/>
+</g>
+<g id="entrance-details">
+<path d="M181 439 L213 431 L264 433 L290 443 L276 457 L210 460 L176 450 Z" fill="#5c5169" />
+<path d="M181 439 L213 431 L264 433 L279 442 L250 449 L206 451 L176 450 Z" fill="#6d617d" />
+<path d="M206 451 L250 449 L279 442 L276 457 L210 460 Z" fill="#494154" />
+</g>
+<g id="horns" fill="url(#horn)">
+<path d="M178 162 Q128 146 128 96 Q150 124 206 114 Z"/>
+<path d="M292 116 Q346 116 362 94 Q370 142 322 172 Z"/>
+</g>
+<g id="runes" fill="none" stroke="#ff879d" stroke-width="8" stroke-linejoin="round">
+<path d="M237 195 L247 184 L257 195 L247 218 Z"/>
+<path d="M148 309 L164 319 L149 329 M329 311 L345 321 L331 334"/>
+</g>
+<g id="normal-claw-motif">
+<path d="M146 176 L120 150 L112 176 L92 170 L118 214 Z" fill="#5d536a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
+<path d="M346 176 L372 150 L380 176 L400 170 L374 214 Z" fill="#5d536a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
+<path d="M196 112 L200 58 L222 104 L236 44 L252 98 L268 50 L278 104 L300 66 L298 118 Q248 94 196 112 Z" fill="url(#horn)" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
+<path d="M58 342 L30 318 L44 360 L24 372 L62 392 Z" fill="#5d536a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
+<path d="M448 342 L480 316 L468 360 L490 370 L446 394 Z" fill="#4e465a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
+<g fill="none" stroke="#fff5cd" stroke-width="11" stroke-linecap="round">
+<path d="M212 292 Q222 350 226 414"/>
+<path d="M243 276 Q250 342 250 424"/>
+<path d="M275 292 Q272 350 268 414"/>
+</g>
+</g>
+<path d="M193 442 Q250 426 309 443 L294 451 Q249 440 206 453Z" fill="#ff5575" opacity=".65"/>
+</svg>

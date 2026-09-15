@@ -28,9 +28,16 @@ class DemonPortal extends Building {
     get isDemonPortal() { return true }
     get isExternal() { return true }
     get canBeDestroyed() { return false }
+    // Each category has its own artwork (assets/sprites/demonPortal<Category>.svg);
+    // the entity name stays 'demonPortal' for saves and ledgers.
+    get imageName() {
+        if (this.category === undefined) return 'demonPortal'
+        return 'demonPortal' + this.category[0].toUpperCase() + this.category.slice(1)
+    }
     get info() {
         const result = super.info
         result.displayName = 'demon portal'
+        result.image = this.imageName
         return result
     }
     isObstacle(playerColor) { return false }
@@ -60,7 +67,7 @@ class DemonPortal extends Building {
     }
     draw(ctx) {
         if (this.killed) return
-        super.draw(ctx)
+        drawCachedImage(ctx, cachedImages[this.imageName], this.pos)
     }
     drawBars(ctx) {
         if (!this.killed) this.hpBar.draw(ctx)

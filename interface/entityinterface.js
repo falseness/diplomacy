@@ -124,7 +124,7 @@ class EntityInterface {
     }
     change(entity, color) {
         this.background.color = color.hex
-        this.img.image = entity.name
+        this.img.image = entity.image || entity.name
         this.entity.name.text = entity.displayName || entity.name
         if (entity.isDescriptionInfo) 
             this.entity.info.text = entity.info

@@ -249,6 +249,8 @@ class Grid extends SpritesGroup {
         return building.notEmpty() && !building.isInvisible && !building.isBuildingProduction()
     }
     getEntityBodyImageName(entity) {
+        if (entity.isDemonPortal)
+            return entity.imageName
         if (entity.mirrorX && cachedImages[entity.name + 'Left'])
             return entity.name + 'Left'
         return entity.name
