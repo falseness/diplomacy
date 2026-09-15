@@ -5,7 +5,12 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
-const {expectedMap, initialEntities} = require('./test-coop-generation-fixtures');
+const {initialEntities} = require('./test-coop-generation-fixtures');
+// Literal version-4 contract, independent of production scaling helpers.
+const colors = [{r:255,g:0,b:0},{r:98,g:168,b:222},{r:60,g:190,b:100},{r:230,g:170,b:40}];
+const sideFor = count => Math.max(15, Math.ceil(25*Math.sqrt(count/4)));
+// Divided Valley terrain follows 8/6/10% density within 2 points of area.
+const terrainWithin = (actual, area, percent) => Math.abs(actual - Math.round(area*percent/100)) <= area*0.02;
 function run() {
   const f = createFixture(undefined, line => {
     if (!line.includes('\"scenario\":\"fixture-initial-state\"')) console.log(line);
@@ -18,30 +23,35 @@ function run() {
     const label = `humans-${count}-seed-${seed}`;
     const expectedCoop = {initialHumanCount:count, humanSlots:Array.from({length:count},(_,i)=>i+1),
       humanTeam:'HUMANS', demonSlot:count+1,
-      generation:{version:2,playerCount:count,seed,size:'normal',options:{seed,size:'normal'}}};
+      generation:{version:4,playerCount:count,seed,size:'normal',options:{seed,size:'normal'}}};
     f.evaluate(`globalThis.beforeGeneration = JSON.stringify(getGameObject());
       globalThis.generated = generateCoopGame(${count}, {seed:${seed}});`);
     if (process.argv.includes('--corrupt')) expectedCoop.initialHumanCount++;
     f.compare(label+'-generation-metadata', f.evaluate('generated.coop'), expectedCoop);
-    // Version-2 generation has clustered terrain and tiered portals. The old
-    // hand-copied fixture predates those changes. Assert its public contract
-    // independently, then track these validated placements across start/load.
+    // Version-4 Divided Valley places resources exactly and terrain around
+    // density targets. Assert its public contract independently, then track
+    // these validated placements across start/load.
     const expected = f.evaluate('JSON.parse(JSON.stringify(generated))');
+    const side = sideFor(count), area = side*side;
     f.compare(label+'-dimensions-counts-assets', {
       dimensions:expected.mapSize,
-      counts:[expected.players[0].towns.length,expected.goldmines.length,expected.portals.length,
-        expected.mountains.length,expected.lakes.length,expected.bushes.length],
+      counts:[expected.players[0].towns.length,expected.goldmines.length,expected.portals.length],
+      terrain:[terrainWithin(expected.mountains.length,area,8),terrainWithin(expected.lakes.length,area,6),
+        terrainWithin(expected.bushes.length,area,10),expected.hills.length],
       assets:expected.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length]),
       controller:expected.players[count+1]
-    }, {dimensions:{x:25,y:25},counts:[count,count,2*count,50,38,63],
+    }, {dimensions:{x:side,y:side},counts:[2*count,2*count,2*count],terrain:[true,true,true,0],
       assets:Array.from({length:count},()=>[100,1,0]),
       controller:{rgb:{r:160,g:40,b:180},units:[],towns:[],gold:0,economyEnabled:false}});
-    f.compare(label+'-independent-starting-roster',expected.players,expectedMap(count,seed).players);
+    f.compare(label+'-independent-starting-roster',expected.players.map(p=>({...p,towns:p.towns.length})),[
+      {rgb:{r:208,g:208,b:208},towns:2*count,units:[],gold:0},
+      ...colors.slice(0,count).map(rgb=>({rgb,gold:100,units:[],towns:1})),
+      {rgb:{r:160,g:40,b:180},units:[],towns:0,gold:0,economyEnabled:false}]);
     const objects = [...expected.players.flatMap(p=>p.towns),...expected.goldmines,
       ...expected.portals,...expected.mountains,...expected.lakes,...expected.bushes];
     f.compare(label+'-placements-valid', {
       unique:new Set(objects.map(c=>`${c.x},${c.y}`)).size===objects.length,
-      inBounds:objects.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<25&&c.y<25)
+      inBounds:objects.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<side&&c.y<side)
     }, {unique:true,inBounds:true});
     f.compare(label+'-active-game-unchanged', f.evaluate('JSON.stringify(getGameObject()) === beforeGeneration'), true);
     f.compare(label+'-repeat', f.evaluate(`JSON.stringify(generated) === JSON.stringify(generateCoopGame(${count}, {seed:${seed}}))`), true);
@@ -79,12 +89,12 @@ function run() {
   }
   f.compare('default-seed', f.evaluate('JSON.stringify(generateCoopGame(2)) === JSON.stringify(generateCoopGame(2,{seed:1,size:"normal"}))'),true);
   f.compare('different-seeds-vary-layout',f.evaluate('JSON.stringify(generateCoopGame(4,{seed:1}).players) !== JSON.stringify(generateCoopGame(4,{seed:42}).players)'),true);
-  for (const input of ['undefined','null','0','5','-1','2.5','"2"','NaN','Infinity']) {
+  for (const input of ['undefined','null','0','13','-1','2.5','"2"','NaN','Infinity']) {
     f.compare('reject-count-'+input,f.evaluate(`(() => {
       const before=JSON.stringify(getGameObject()); let message='';
       try { generateCoopGame(${input}); } catch(e) {message=e.message;}
       return {message, unchanged:before===JSON.stringify(getGameObject())};
-    })()`),{message:'Co-op playerCount must be an integer from 1 to 4 humans',unchanged:true});
+    })()`),{message:'Co-op playerCount must be an integer from 1 to 12 humans',unchanged:true});
   }
   for (const options of ['null','[]','{unknown:true}','{seed:-1}','{seed:4294967296}',
     '{seed:1.5}','{seed:"42"}','{seed:NaN}','{seed:Infinity}']) {

@@ -142,7 +142,7 @@ const serverRequire = createRequire(path.join(serverRoot, 'server/package.json')
       if(coop) {
         compare('requested-size-'+password,req.game.gameSettings.coop.generation.size,sizeFor(count));
         compare('requested-grid-'+password,[req.game.grid.length,...new Set(req.game.grid.map(c=>c.length))],Array(2).fill(Math.max({tiny:11,normal:15,big:21}[sizeFor(count)],Math.ceil({tiny:15,normal:25,big:39}[sizeFor(count)]*Math.sqrt(count/4)))));
-        compare('creation-seed-'+password,req.game.gameSettings.coop.generation,{version:3,playerCount:count,seed:1,size:sizeFor(count),options:{seed:1,size:sizeFor(count)}});
+        compare('creation-seed-'+password,req.game.gameSettings.coop.generation,{version:4,playerCount:count,seed:1,size:sizeFor(count),options:{seed:1,size:sizeFor(count)}});
         compare('creation-roles-'+password,await page.evaluate(()=>players.map(p=>p.role)),['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS']);
       }
       if(coop && count===12) {

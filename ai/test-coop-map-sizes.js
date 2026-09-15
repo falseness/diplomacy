@@ -4,6 +4,9 @@ const {createFixture} = require('./test-coop-harness');
 
 // Literal public contract, independent of production preset/placement helpers.
 const dimensions = {tiny:15, normal:25, big:39};
+const minimum = {tiny:11, normal:15, big:21}, multiplier = {tiny:1, normal:2, big:3};
+// Divided Valley terrain follows 8/6/10% density within 2 points of area.
+const terrainWithin = (actual, area, percent) => Math.abs(actual - Math.round(area*percent/100)) <= area*0.02;
 const f = createFixture(undefined, () => {});
 function compare(label, observed, expected) {
   assert.deepEqual(observed, expected, label);
@@ -11,29 +14,31 @@ function compare(label, observed, expected) {
   console.log('PASS '+label);
 }
 const hash = value => require('crypto').createHash('sha256').update(JSON.stringify(value)).digest('hex');
-for (const [size, side] of Object.entries(dimensions)) {
+for (const [size, base] of Object.entries(dimensions)) {
   for (let count=1; count<=4; count++) for (let seed=0; seed<32; seed++) {
     const label = `${size}-humans-${count}-seed-${seed}`;
+    const side = Math.max(minimum[size], Math.ceil(base*Math.sqrt(count/4))), area = side*side, resources = count*multiplier[size];
     f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}});`);
     const map = f.evaluate('JSON.parse(JSON.stringify(generated))');
     if (process.argv.includes('--corrupt')) map.mapSize.x++;
     compare(label+'-dimensions', map.mapSize, {x:side,y:side});
     compare(label+'-metadata', map.coop.generation,
-      {version:2,playerCount:count,seed,size,options:{seed,size}});
+      {version:4,playerCount:count,seed,size,options:{seed,size}});
     compare(label+'-deterministic-replay', f.evaluate(`JSON.stringify(generated) === JSON.stringify(generateCoopGame(${count}, {size:'${size}',seed:${seed}})) && JSON.stringify(generated) === JSON.stringify(generateCoopGame(generated.coop.generation.playerCount, generated.coop.generation.options))`), true);
     const towns = map.players.flatMap(p=>p.towns);
     const objects = [...towns,...map.goldmines,...map.portals,...map.lakes,...map.mountains,...map.bushes,...map.hills];
     compare(label+'-in-bounds-disjoint', {
       inBounds:objects.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<side&&c.y<side),
       unique:new Set(objects.map(c=>`${c.x},${c.y}`)).size,
-      counts:[towns.length,map.goldmines.length,map.portals.length,map.lakes.length,map.mountains.length,map.bushes.length],
+      counts:[towns.length,map.goldmines.length,map.portals.length],
+      terrain:[terrainWithin(map.lakes.length,area,6),terrainWithin(map.mountains.length,area,8),terrainWithin(map.bushes.length,area,10),map.hills.length],
       reserved:objects.slice(towns.length).every(c=>towns.every(t=>Math.abs(c.x-t.x)>1||Math.abs(c.y-t.y)>1)),
       starts:map.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length])
-    }, {inBounds:true,unique:7*count,counts:[2*count,count,count,count,count,count],reserved:true,
+    }, {inBounds:true,unique:objects.length,counts:[count+resources,resources,resources],terrain:[true,true,true,0],reserved:true,
       starts:Array.from({length:count},()=>[100,1,0])});
     f.evaluate(`generated.start({clearValues() {external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders() {}}, false); whooseTurn=1;actionManager.clear();globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);`);
     compare(label+'-saved-metadata', f.evaluate('gameSettings.coop.generation'),
-      {version:2,playerCount:count,seed,size,options:{seed,size}});
+      {version:4,playerCount:count,seed,size,options:{seed,size}});
     compare(label+'-runtime-dimensions', f.evaluate('[grid.arr.length, ...new Set(grid.arr.map(column=>column.length))]'), [side,side]);
     compare(label+'-exact-save-load',f.evaluate('JSON.stringify(getGameObject()) === saved'),true);
     console.log(JSON.stringify({scenario:label+'-placements',towns,portals:map.portals,mapHash:hash(map),savedHash:hash(f.evaluate('JSON.parse(saved)'))}));

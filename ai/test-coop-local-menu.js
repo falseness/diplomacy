@@ -27,10 +27,11 @@ const compare = (label, observed, expected) => {
   };
   // Bound the whole run, including evaluation and cleanup, which Playwright's
   // per-operation timeouts do not cover. A hung browser must fail with context.
+  // Divided Valley generation of big 12-human maps takes tens of seconds.
   const deadline = setTimeout(() => {
     console.error(`FAIL browser deadline stage=${stage} elapsed_ms=${Date.now()-started}`);
     process.exit(1);
-  }, 360000);
+  }, 900000);
   deadline.unref();
   fs.mkdirSync(path.join(out, 'screenshots'), {recursive:true});
   const server = http.createServer((req, res) => {
@@ -60,7 +61,8 @@ const compare = (label, observed, expected) => {
       body:route.request().url().includes('socket.io') ? 'window.io=()=>({on(){},emit(){}})' :
         route.request().url().includes('FileSaver') ? 'window.saveAs=()=>{}' : 'window.tf={}'}));
     await page.goto(`http://127.0.0.1:${server.address().port}/`, {waitUntil:'load'});
-    await page.waitForFunction(() => typeof menu !== 'undefined' && menu.visible && imagesCountLoaded === images.length);
+    // Page and image loads can exceed the 15 s operation default on a loaded host.
+    await page.waitForFunction(() => typeof menu !== 'undefined' && menu.visible && imagesCountLoaded === images.length, undefined, {timeout:60000});
     async function click(expression) {
       const pos=await page.evaluate(expression => {
         const control=(0,eval)(expression), rect=control.rect || control;
@@ -85,7 +87,7 @@ const compare = (label, observed, expected) => {
       await page.setViewportSize(count!==4?{width:390,height:844}:{width:1280,height:900});
       progress('co-op-'+count);
       await page.reload({waitUntil:'load'});
-      await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
+      await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length, undefined, {timeout:60000});
       await page.evaluate(()=>{
         window.generationCalls=[]; window.startCalls=[];
         const generate=generateCoopGame, start=GameManager.start;
@@ -152,7 +154,7 @@ const compare = (label, observed, expected) => {
       compare('selected-slot-'+count,await page.evaluate(()=>gameSlot),count===1?0:1);
       await page.waitForFunction(()=>!menu.visible && whooseTurn===1);
       const expected=await page.evaluate(()=>generationCalls[0].map);
-      compare('generated-metadata-'+count,expected.coop.generation,{version:3,playerCount:count,seed,size,options:{seed,size}});
+      compare('generated-metadata-'+count,expected.coop.generation,{version:4,playerCount:count,seed,size,options:{seed,size}});
       compare('generateCoopGame-'+count,await page.evaluate(()=>generationCalls),[{count,options:{seed,size},map:expected}]);
       compare('actual-grid-'+size+'-'+count,await page.evaluate(()=>[grid.arr.length,...new Set(grid.arr.map(c=>c.length))]),Array(2).fill(Math.max({tiny:11,normal:15,big:21}[size],Math.ceil({tiny:15,normal:25,big:39}[size]*Math.sqrt(count/4)))));
       compare('launch-options-'+count,await page.evaluate(()=>startCalls),[{fog:enabled,timer:enabled,online:false}]);
@@ -221,7 +223,7 @@ const compare = (label, observed, expected) => {
     progress('competitive-menu-reload');
     await page.setViewportSize({width:1280,height:900});
     await page.reload({waitUntil:'load'});
-    await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length);
+    await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length, undefined, {timeout:60000});
     await capture('main-menu',{labels:['hot seat','play online','play AI','settings','load game'],visible:true},
       await page.evaluate(()=>({labels:menu.main.buttons.map(b=>b.text.text),
         visible:menu.main.buttons.every(b=>b.y>=0 && b.bottom<=HEIGHT)})));
