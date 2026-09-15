@@ -22,9 +22,9 @@ const TUNED_DEMON_TYPES = Object.freeze(Object.fromEntries(Object.entries(
   hound: {"health": 6, "damage": 3, "movement": 5, "range": 1},
   brute: {"health": 12, "damage": 4, "movement": 2, "range": 1},
   bulwark: {"health": 20, "damage": 4, "movement": 2, "range": 1},
-  spitter: {"health": 3, "damage": 2, "movement": 3, "range": 3},
-  emberArcher: {"health": 5, "damage": 3, "movement": 3, "range": 4},
-  hexcaster: {"health": 6, "damage": 5, "movement": 2, "range": 4},
+  spitter: {"health": 3, "damage": 2, "movement": 3, "range": 4},
+  emberArcher: {"health": 5, "damage": 3, "movement": 3, "range": 5},
+  hexcaster: {"health": 6, "damage": 5, "movement": 2, "range": 6},
   ravager: {"health": 10, "damage": 6, "movement": 4, "range": 1},
   demonLord: {"health": 24, "damage": 8, "movement": 3, "range": 1}
 }
