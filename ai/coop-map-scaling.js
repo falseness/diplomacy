@@ -5,6 +5,9 @@ const COOP_SCALING_PRESETS = Object.freeze({
     normal: Object.freeze({baseSide: 25, minSide: 15, objectsPerHuman: 2}),
     big: Object.freeze({baseSide: 39, minSide: 21, objectsPerHuman: 3})
 })
+// One typed portal of each category per initial human on every size. Matches
+// COOP_PORTAL_CATEGORIES (ai/wave-config.js), which the server does not load.
+const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['normal', 'ranged', 'heavy', 'highTier'])
 
 function getCoopMapScaling(initialHumanCount, size = 'normal') {
     if (!Number.isInteger(initialHumanCount) || initialHumanCount < 1 || initialHumanCount > 12) {
@@ -17,9 +20,11 @@ function getCoopMapScaling(initialHumanCount, size = 'normal') {
     const side = Math.max(preset.minSide, Math.ceil(preset.baseSide * Math.sqrt(initialHumanCount / 4)))
     const area = side * side
     const objects = initialHumanCount * preset.objectsPerHuman
+    const portalCategories = Object.fromEntries(COOP_PORTAL_CATEGORY_ORDER.map(category => [category, initialHumanCount]))
     return {size, initialHumanCount, side, mapSize: {x: side, y: side}, area,
         counts: {humanTowns: initialHumanCount, neutralTowns: objects,
-            goldmines: objects, portals: objects, mountains: Math.round(area * 0.08),
+            goldmines: objects, portals: COOP_PORTAL_CATEGORY_ORDER.length * initialHumanCount,
+            portalCategories, mountains: Math.round(area * 0.08),
             lakes: Math.round(area * 0.06), bushes: Math.round(area * 0.10)},
         startingAssets: {gold: 100, towns: 1, units: 1}}
 }
@@ -38,5 +43,5 @@ function getCoopMapScalingFromMetadata(coop) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {getCoopMapScaling, getCoopMapScalingFromMetadata}
+    module.exports = {getCoopMapScaling, getCoopMapScalingFromMetadata, COOP_PORTAL_CATEGORY_ORDER}
 }

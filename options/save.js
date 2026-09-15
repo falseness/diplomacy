@@ -79,7 +79,9 @@ class JsonUnpackManager {
             return empty
         }
 
-        let building = new _building(packedBuilding.coord.x, packedBuilding.coord.y)
+        let building = packedBuilding.name == 'demonPortal'
+            ? new _building(packedBuilding.coord.x, packedBuilding.coord.y, packedBuilding.category)
+            : new _building(packedBuilding.coord.x, packedBuilding.coord.y)
         if (Object.prototype.hasOwnProperty.call(packedBuilding, 'id')) building.id = packedBuilding.id
 
         building.hp = packedBuilding.hp

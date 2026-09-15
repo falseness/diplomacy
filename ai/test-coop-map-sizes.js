@@ -34,7 +34,8 @@ for (const [size, base] of Object.entries(dimensions)) {
       terrain:[terrainWithin(map.lakes.length,area,6),terrainWithin(map.mountains.length,area,8),terrainWithin(map.bushes.length,area,10),map.hills.length],
       reserved:objects.slice(towns.length).every(c=>towns.every(t=>Math.abs(c.x-t.x)>1||Math.abs(c.y-t.y)>1)),
       starts:map.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length])
-    }, {inBounds:true,unique:objects.length,counts:[count+resources,resources,resources],terrain:[true,true,true,0],reserved:true,
+    // TASK-151: four typed portals per human; towns and goldmines keep the size multiplier.
+    }, {inBounds:true,unique:objects.length,counts:[count+resources,resources,4*count],terrain:[true,true,true,0],reserved:true,
       starts:Array.from({length:count},()=>[100,1,0])});
     f.evaluate(`generated.start({clearValues() {external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders() {}}, false); whooseTurn=1;actionManager.clear();globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);`);
     compare(label+'-saved-metadata', f.evaluate('gameSettings.coop.generation'),

@@ -2,10 +2,14 @@
 class DemonPortal extends Building {
     static get maxHP() { return COOP_WAVE_CONFIG.portalHealth }
     static healSpeed = 0
-    constructor(x, y) {
+    // Generated maps give every portal a category (ai/wave-config.js); portals
+    // from older saves and authored fixtures have none.
+    constructor(x, y, category) {
         const slot = gameSettings.coop && gameSettings.coop.demonSlot
         if (!Number.isInteger(slot) || !players[slot] || players[slot].role !== 'DEMONS')
             throw new Error('portal requires demon ownership')
+        if (category !== undefined && !COOP_PORTAL_CATEGORIES.includes(category))
+            throw new RangeError('invalid portal category')
         if (isCoordNotOnMap({x, y}, grid.arr.length, grid.arr[0].length) ||
                 !grid.getBuilding({x, y}).isEmpty())
             throw new Error('portal requires empty building cell')
@@ -17,6 +21,7 @@ class DemonPortal extends Building {
         grid.getHexagon({x, y}).repaint(slot, false)
         super(x, y, 'demonPortal')
         Object.defineProperty(this, 'ownerSlot', {value: slot})
+        if (category !== undefined) Object.defineProperty(this, 'category', {value: category})
         external.push(this)
     }
     get playerColor() { return this.ownerSlot }
@@ -31,6 +36,7 @@ class DemonPortal extends Building {
     isObstacle(playerColor) { return false }
     toJSON() {
         const result = {...super.toJSON(), ownerSlot: this.ownerSlot}
+        if (this.category !== undefined) result.category = this.category
         if (Object.prototype.hasOwnProperty.call(this, 'id')) result.id = this.id
         return result
     }

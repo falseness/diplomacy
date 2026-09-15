@@ -4,6 +4,8 @@
 // runs every stage for version-4 co-op maps.
 const valleyScaling = typeof getCoopMapScaling === 'function' ? getCoopMapScaling
     : require('./coop-map-scaling.js').getCoopMapScaling
+const valleyPortalCategories = typeof COOP_PORTAL_CATEGORY_ORDER !== 'undefined' ? COOP_PORTAL_CATEGORY_ORDER
+    : require('./coop-map-scaling.js').COOP_PORTAL_CATEGORY_ORDER
 
 const VALLEY_PORTAL_DISTANCE = Object.freeze({tiny: 6, normal: 10, big: 14})
 // Grid legend, rows are y (humans at the bottom, portals at the top).
@@ -50,11 +52,16 @@ function valleyAlliedDistanceField(side, alliedTop) {
 
 const valleyCount3 = (lo, hi) => hi < lo ? 0 : Math.floor((hi - lo) / 3) + 1
 
+// Axial (q - r) mod 3 lattice (odd columns sit lower): lattice cells never touch
+// and every other cell touches three of them, so each slot can keep two
+// exclusive approach cells while the remaining cells stay connected.
+const valleyPortalLattice = (x, y) => ((x - y + (x - (x & 1)) / 2) % 3 + 3) % 3 === 0
+
 function valleyPortalSlots(side, depth, width, field, distance) {
     const slots = x0 => {
         const cells = []
-        for (let y = 0; y < depth; y += 2) for (let x = x0; x < x0 + width; x += 2)
-            if (field[y*side+x] >= distance) cells.push({x, y})
+        for (let y = 0; y < depth; y++) for (let x = x0; x < x0 + width; x++)
+            if (valleyPortalLattice(x, y) && (!field || field[y*side+x] >= distance)) cells.push({x, y})
         return cells
     }
     return {west: slots(0), east: slots(side - width)}
@@ -70,13 +77,15 @@ function valleyRowPlans(humans, size) {
     const distance = VALLEY_PORTAL_DISTANCE[size], area = side * side
     const need = {west: Math.ceil(counts.portals / 2), east: Math.floor(counts.portals / 2)}
     const terrainBudget = counts.mountains + counts.lakes
-    const maxWidth = Math.floor(side / 2) - 2, fields = new Map(), plans = []
-    const depthOptions = []
-    for (let depth = 1; depth <= Math.floor(side / 3) && depthOptions.length < 2; depth++) {
-        const minWidth = 2 * Math.ceil(need.west / Math.ceil(depth / 2)) - 1
-        if (minWidth <= maxWidth) depthOptions.push({depth, minWidth})
-    }
-    for (const {depth, minWidth} of depthOptions)
+    // Fronts stay in separate halves; the shallowest two depths that yield any
+    // feasible plan form the pool.
+    const maxWidth = Math.floor(side / 2), fields = new Map(), plans = [], nearMisses = []
+    let depthsUsed = 0
+    for (let depth = 1; depth <= Math.floor(side / 3) && depthsUsed < 2; depth++) {
+    let minWidth = 1
+    while (minWidth <= maxWidth && Object.entries(valleyPortalSlots(side, depth, minWidth, null, 0))
+        .some(([front, cells]) => cells.length < need[front])) minWidth++
+    const before = plans.length
     for (let width = minWidth; width <= Math.min(maxWidth, minWidth + 4); width += 2)
     for (const thickness of [1, 2])
     for (let ridge = depth + 1; ridge + thickness + 2 <= side - 3; ridge++) {
@@ -96,14 +105,33 @@ function valleyRowPlans(humans, size) {
             decorativeRoom: area - ridgeCells.max - reservedMax - 2 * width * depth -
                 9 * (humans + counts.neutralTowns) - counts.goldmines,
             decorativeNeed: terrainBudget - ridgeCells.min + counts.bushes}
-        // Starting towns need rows to fan out around the passage entrances at
-        // similar path distances; a shallow allied strip cannot hold them.
-        if (side - 2 - alliedTop < (humans <= 2 ? 2 : Math.ceil(humans / 2) + 2)) continue
-        if (alliedSites < humans || forwardSites < counts.neutralTowns ||
-            slots.west.length < need.west || slots.east.length < need.east ||
-            capacity.alliedMineRoom < humans || capacity.forwardMineRoom < counts.goldmines - humans ||
-            ridgeCells.max > terrainBudget || capacity.decorativeRoom < capacity.decorativeNeed) continue
-        plans.push({depth, width, thickness, ridge, capacity})
+        if (alliedSites < humans || slots.west.length < need.west || slots.east.length < need.east ||
+            capacity.alliedMineRoom < humans || ridgeCells.max > terrainBudget) continue
+        // Capacity estimates. Starting towns need rows to fan out around the
+        // passage entrances at similar path distances (a shallow allied strip
+        // cannot hold them); forward sites, mine room and decorative room are
+        // approximate. Strict plans meet every estimate.
+        const estimateMisses = [side - 2 - alliedTop < (humans <= 2 ? 2 : Math.ceil(humans / 2) + 2),
+            forwardSites < counts.neutralTowns, capacity.forwardMineRoom < counts.goldmines - humans,
+            capacity.decorativeRoom < capacity.decorativeNeed].filter(Boolean).length
+        const estimateDeficits = [Math.max(0, counts.neutralTowns - forwardSites),
+            Math.max(0, counts.goldmines - humans - capacity.forwardMineRoom),
+            Math.max(0, capacity.decorativeNeed - capacity.decorativeRoom)]
+        const entry = {depth, width, thickness, ridge, capacity: {...capacity, estimateMisses, estimateDeficits}}
+        if (estimateMisses) nearMisses.push(entry)
+        else plans.push(entry)
+    }
+    if (plans.length > before) depthsUsed++
+    }
+    // Four typed portals per human can leave a small map with no strict plan.
+    // The fallback keeps the plans with the smallest shortfall in forward town
+    // sites, then forward mine room, then decorative room, the order in which
+    // later stages consume them. Every later stage still measures its
+    // placements exactly and throws rather than relax a bound.
+    if (!plans.length && nearMisses.length) {
+        const order = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0 }
+        const best = nearMisses.map(p => p.capacity.estimateDeficits).sort(order)[0]
+        plans.push(...nearMisses.filter(p => order(p.capacity.estimateDeficits, best) === 0))
     }
     const pool = {size, humans, side, counts, portalDistance: distance, portalNeed: need, terrainBudget, plans}
     valleyPoolCache.set(id, pool)
@@ -124,7 +152,9 @@ function planDividedValley(humans, size = 'normal', seed = 1) {
     const pickIndex = length => Math.floor(rng() * length)
     const rowIndex = pickIndex(pool.plans.length), row = pool.plans[rowIndex]
     const {depth, width, thickness, ridge} = row
-    const widths = [2, 3].filter(w => thickness * (side - 2 * w) <= pool.terrainBudget)
+    // Fallback plans keep the narrower passage, leaving room for terrain.
+    const widths = [2, 3].filter(w => thickness * (side - 2 * w) <= pool.terrainBudget &&
+        (w === 2 || !row.capacity.estimateMisses))
     const passageWidth = widths[pickIndex(widths.length)]
     // Left passage lies in the west half; the right one uses the mirrored range.
     const half = Math.floor(side / 2), leftRange = [1, half - 1 - passageWidth]
@@ -602,6 +632,16 @@ function placeValleyPortals(plan, layout) {
             `anchorTiers=${[...anchors.keys()].sort((a, b) => a - b).join('/')} tried=${failures.anchors} fill=${failures.fill} exact=${failures.exact}`)
     const sets = fieldSets()
     const approachCells = assigned.flat()
+    // Categories rotate through each front in row order, the east front offset by
+    // two, so every category has exactly H portals split across both fronts.
+    const categories = new Array(portals.length)
+    for (const [front, offset] of [['west', 0], ['east', 2]]) {
+        const group = portals.map((_, i) => i).filter(i => fronts[i] === front).sort((a, b) => portals[a] - portals[b])
+        group.forEach((i, j) => { categories[i] = valleyPortalCategories[(j + offset) % valleyPortalCategories.length] })
+    }
+    const categoryCounts = Object.fromEntries(valleyPortalCategories.map(c => [c, categories.filter(k => k === c).length]))
+    if (valleyPortalCategories.some(c => categoryCounts[c] !== counts.portalCategories[c]))
+        throw new Error(`Divided Valley portal categories do not match: size=${plan.size} humans=${humans} seed=${plan.seed}`)
     return {
         ...layout,
         stages: [...layout.stages, 'portals', 'reserve-portal-approaches'],
@@ -610,7 +650,8 @@ function placeValleyPortals(plan, layout) {
         goldmines: layout.goldmines.map(m => ({...m})),
         assignments: layout.assignments.map(a => ({...a, mine: {...a.mine}})),
         expansions: {...layout.expansions},
-        portals: portals.map(cell),
+        portals: portals.map((id, i) => ({...cell(id), category: categories[i]})),
+        portalCategories: categoryCounts,
         portalGroups: Object.fromEntries(['west', 'east'].map(front =>
             [front, portals.map((_, i) => i).filter(i => fronts[i] === front)])),
         portalApproaches: portals.map((id, i) => ({portal: cell(id), front: fronts[i], cells: assigned[i].map(cell)})),

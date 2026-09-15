@@ -167,7 +167,9 @@ function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
             layout.goldmines.map(m => ({...copy(m), owner: m.owner, income: m.income})),
             layout.lakes.map(copy), layout.mountains.map(copy), layout.bushes.map(copy), [], {type: 'rectangular'}, {})
         map.coop.generation = {version: 4, playerCount, seed, size, options: {seed, size}}
-        map.portals = layout.portals.map(copy)
+        map.portals = layout.portals.map(p => ({...copy(p), category: p.category}))
+        constraint = 'portal-categories'
+        validateCoopTypedPortals(map)
         constraint = 'starting-balance'
         if (!coopStartsBalanced(map)) throw new Error('starting assets or nearest objective paths exceed the balance bound')
         constraint = 'route-connectivity'
@@ -179,6 +181,29 @@ function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
         tagged.attempt = attempt
         throw tagged
     }
+}
+
+// Version-4 generated metadata: four portals per initial human on distinct
+// in-bounds cells, exactly one of each category (ai/wave-config.js) per human.
+function validateCoopTypedPortals(map) {
+    const coop = map.coop, generation = coop && coop.generation
+    if (!generation || generation.version !== 4) throw new Error('Co-op typed portals require version-4 generation metadata')
+    const counts = getCoopMapScaling(coop.initialHumanCount, generation.size).counts
+    const portals = Array.isArray(map.portals) ? map.portals : []
+    const observed = Object.fromEntries(COOP_PORTAL_CATEGORY_ORDER.map(category => [category, 0]))
+    const cells = new Set()
+    for (const p of portals) {
+        if (!p || !Number.isInteger(p.x) || !Number.isInteger(p.y) || p.x < 0 || p.y < 0 ||
+            p.x >= map.mapSize.x || p.y >= map.mapSize.y || cells.has(p.x + ',' + p.y) ||
+            !Object.prototype.hasOwnProperty.call(observed, p.category))
+            throw new Error('Co-op typed portals require distinct in-bounds cells with a known category')
+        cells.add(p.x + ',' + p.y)
+        observed[p.category]++
+    }
+    if (portals.length !== counts.portals ||
+        COOP_PORTAL_CATEGORY_ORDER.some(category => observed[category] !== counts.portalCategories[category]))
+        throw new Error(`Co-op typed portals expected ${counts.portals} (${JSON.stringify(counts.portalCategories)}), ` +
+            `observed ${portals.length} (${JSON.stringify(observed)})`)
 }
 
 // Version-4 repair never moves towns, resources or assets. It replays the same

@@ -280,6 +280,9 @@ class GameMap {
         }
     }
     start(_gameManager, isClassicTimer, competitiveHotseat = false) {
+        // Local and online co-op both start generated maps here; stored
+        // pre-valley (version 2/3) maps keep their untyped portals.
+        if (this.coop && this.coop.generation && this.coop.generation.version === 4) validateCoopTypedPortals(this)
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
         normalizeInterfaceSettings(gameSettings)
@@ -303,7 +306,7 @@ class GameMap {
             for (const placement of this.portals || []) {
                 const coord = this.getMapCoord(placement)
                 assert(grid.getUnit(coord).isEmpty())
-                new DemonPortal(coord.x, coord.y)
+                new DemonPortal(coord.x, coord.y, placement.category)
             }
         }
         _gameManager.updateCameraBorders()

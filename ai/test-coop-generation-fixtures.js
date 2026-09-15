@@ -60,7 +60,8 @@ function addTerrain(map, count, seed) {
 }
 function initialEntities(map) {
   return [
-    ...map.portals.map((c,i)=>({...c,id:`portal-${i}`,kind:'portal',name:'demonPortal',owner:map.coop.demonSlot})),
+    // Typed portals also carry a category (TASK-151); the ledger tracks position and owner.
+    ...map.portals.map((c,i)=>({x:c.x,y:c.y,id:`portal-${i}`,kind:'portal',name:'demonPortal',owner:map.coop.demonSlot})),
     ...map.players.flatMap((p,owner)=>p.towns.flatMap((t,i)=>[
       {...t,id:`town-${owner}-${i}`,kind:'town',name:'town',owner},
       ...(owner ? [{...t,id:`unit-${owner}-${i}`,kind:'unit',name:'noob',owner}] : [])])),

@@ -23,8 +23,10 @@ for (const [size, table] of Object.entries(sides)) {
   for (let h=1;h<=12;h++) {
     const side=table[h-1], area=side*side;
     // Independent integer rounding, with no sqrt or production constants.
+    // TASK-151: one portal of each of the four categories per human on every size.
     const expected={size,initialHumanCount:h,side,mapSize:{x:side,y:side},area,
-      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*multiplier,portals:h*multiplier,
+      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*multiplier,portals:4*h,
+        portalCategories:{normal:h,ranged:h,heavy:h,highTier:h},
         mountains:Math.floor((area*8+50)/100),lakes:Math.floor((area*6+50)/100),bushes:Math.floor((area*10+50)/100)},
       startingAssets:{gold:100,towns:1,units:1}};
     if (process.argv.includes('--corrupt')) expected.side++;

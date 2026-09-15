@@ -40,7 +40,7 @@ function run() {
         terrainWithin(expected.bushes.length,area,10),expected.hills.length],
       assets:expected.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length]),
       controller:expected.players[count+1]
-    }, {dimensions:{x:side,y:side},counts:[2*count,2*count,2*count],terrain:[true,true,true,0],
+    }, {dimensions:{x:side,y:side},counts:[2*count,2*count,4*count],terrain:[true,true,true,0],
       assets:Array.from({length:count},()=>[100,1,0]),
       controller:{rgb:{r:160,g:40,b:180},units:[],towns:[],gold:0,economyEnabled:false}});
     f.compare(label+'-independent-starting-roster',expected.players.map(p=>({...p,towns:p.towns.length})),[

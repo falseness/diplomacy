@@ -43,7 +43,8 @@ function bfs(map, starts, {blocked=new Set(), endpoints=new Set(), allowed=null}
 function expectedFor(map) {
   const rule = RULES[map.size], h = map.coop.initialHumanCount;
   const side = Math.max(rule.minSide, Math.ceil(rule.baseSide*Math.sqrt(h/4)));
-  return {side, humanTowns:h, neutralTowns:h*rule.objects, goldmines:h*rule.objects, portals:h*rule.objects,
+  // TASK-151 supersedes H x multiplier portals: four typed portals per human on every size.
+  return {side, humanTowns:h, neutralTowns:h*rule.objects, goldmines:h*rule.objects, portals:4*h,
     portalDistance:rule.portalDistance};
 }
 // Transit for one human: terrain and allied towns block; hostile (neutral)
@@ -220,9 +221,10 @@ function parseFixture(spec) {
 }
 const LABELS = {regionsConnected:true, passagesValid:true, portalsApproachable:true, fair:true};
 const FIXTURES = [
+  // Four typed portals per human (TASK-151): eight portals for two humans.
   {name:'tiny-H2-valley', size:'tiny', humans:2, claimedLabels:LABELS, rows:[
-    '..P.....P..',
-    '...........',
+    'P.P.P.P.P.P',
+    '....PP.....',
     '..N.....N..',
     '...........',
     'M..MLLM..MM',
@@ -235,8 +237,8 @@ const FIXTURES = [
     passages:[{name:'west-advance',kind:'advance',x:[1,2],y:[3,6]},{name:'east-advance',kind:'advance',x:[7,8],y:[3,6]}],
     laterals:[{name:'rear-lateral',side:'rear',x:[1,8],y:[6,6]},{name:'forward-lateral',side:'forward',x:[1,8],y:[3,3]}]},
   {name:'normal-H2-valley', size:'normal', humans:2, claimedLabels:LABELS, rows:[
-    '......P.......P...',
-    '.P.......P........',
+    '...P..P....P..P...',
+    '.P.....P.P.....P..',
     '..................',
     '..N.......N.......',
     '......N.......N...',

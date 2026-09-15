@@ -11,7 +11,7 @@ const {getCoopMapScaling} = require('./coop-map-scaling.js');
 const ROOT = path.join(__dirname, '..');
 const key = c => `${c.x},${c.y}`;
 const SIZES = ['tiny','normal','big'], HUMANS = Array.from({length:12},(_,i)=>i+1);
-const SEEDS = [0,1,31,4294967295], MULTIPLIER = {tiny:1, normal:2, big:3};
+const SEEDS = [0,1,31,4294967295], MULTIPLIER = {tiny:1, normal:2, big:3}, PORTALS_PER_HUMAN = 4;
 const SOURCES = ['ai/coop-valley-plan.js','ai/test-coop-valley-portals.js','ai/test-coop-valley-contract.js','ai/coop-map-scaling.js','ai/generateMap.js',
   'ai/test-coop-valley-expansions.js','ai/test-coop-valley-starts.js','ai/test-coop-valley-regions.js'];
 const DISPARITY = 4, MIN_APPROACH = 2;
@@ -92,12 +92,13 @@ function applyFault(p, layout, fault) {
 function measure(p, layout, before) {
   const side = p.side, mapInfo = {mapSize:p.mapSize}, rule = RULES[p.size].portalDistance, mult = MULTIPLIER[p.size];
   const humans = layout.players.slice(1), towns = humans.map(h=>h.towns[0]), neutral = layout.players[0].towns;
-  const mines = layout.goldmines, portals = layout.portals, total = p.humans*mult, scaling = getCoopMapScaling(p.humans,p.size);
+  // TASK-151 supersedes the H x multiplier total: four typed portals per human on every size.
+  const mines = layout.goldmines, portals = layout.portals, total = p.humans*PORTALS_PER_HUMAN, scaling = getCoopMapScaling(p.humans,p.size);
   const inBounds = c => Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<side&&c.y<side;
   const region = c => p.grid[c.y]?.[c.x];
   const allTowns = [...towns,...neutral];
   const objectKeys = new Set([...allTowns,...mines].map(key)), portalKeys = new Set(portals.map(key));
-  const counts = {expected:{portals:total, multiplier:mult, scalingPortals:scaling.counts.portals},
+  const counts = {expected:{portals:total, portalsPerHuman:PORTALS_PER_HUMAN, resourceMultiplier:mult, scalingPortals:scaling.counts.portals},
     observed:{portals:portals.length, distinct:portalKeys.size, outOfBounds:portals.filter(c=>!inBounds(c)).map(key)}};
 
   const hexFields = towns.map(t=>bfs(mapInfo,[t]));
@@ -168,7 +169,7 @@ function measure(p, layout, before) {
       return {front:name==='leftOnly'?'left-advance':'right-advance', closedPassageInterior:closures[name].length, approachCell:cell?key(cell):null,
         steps:walk?walk.length-1:null, valid, viaOwnPassage:viaOwn, viaOtherPassage:viaOther, route:walk};
     });
-    witnessOk = portals.length===1&&witnesses.every(w=>w.valid&&w.viaOwnPassage&&!w.viaOtherPassage);
+    witnessOk = portals.length===PORTALS_PER_HUMAN&&witnesses.every(w=>w.valid&&w.viaOwnPassage&&!w.viaOtherPassage);
   }
 
   // Earlier stages: objects unchanged, reservations kept, every free cell and
@@ -200,22 +201,34 @@ function measure(p, layout, before) {
   return {comparisons, checks};
 }
 
+// Production (ai/generateMap.js) retries a failed candidate with up to eight
+// derived seeds, a bound TASK-151 keeps; denser typed-portal layouts can need
+// a later attempt. The first attempt whose starts, expansions and portal
+// stages succeed is measured; every attempt is recorded.
+const ATTEMPT_LIMIT = 8;
+const attemptSeed = (seed, attempt) => attempt ? (seed ^ Math.imul(attempt, 0x9e3779b9)) >>> 0 : seed;
 function runCase(size, humans, seed, fault) {
   let p, before, layout, again;
-  try {
-    p = plan.planDividedValley(humans,size,seed);
-    before = plan.placeValleyExpansions(p,plan.placeValleyStarts(p,coopPlayerColor));
-    layout = plan.placeValleyPortals(p,before);
-    again = plan.placeValleyPortals(p,before);
-  } catch (error) {
-    return {p, error:String(error&&error.stack||error), faulted:false, checks:{generation:false}, failed:['generation'], rejectedBy:'generation'};
+  const attempts = [];
+  for (let attempt = 0; attempt < ATTEMPT_LIMIT && !layout; attempt++) {
+    try {
+      p = plan.planDividedValley(humans,size,attemptSeed(seed,attempt));
+      before = plan.placeValleyExpansions(p,plan.placeValleyStarts(p,coopPlayerColor));
+      layout = plan.placeValleyPortals(p,before);
+      again = plan.placeValleyPortals(p,before);
+      attempts.push({attempt, seed:p.seed, ok:true});
+    } catch (error) {
+      attempts.push({attempt, seed:attemptSeed(seed,attempt), ok:false, error:String(error&&error.message||error)});
+    }
   }
+  if (!layout)
+    return {p, attempts, error:attempts.map(a=>`${a.attempt}:${a.error}`).join(' | '), faulted:false, checks:{generation:false}, failed:['generation'], rejectedBy:'generation'};
   const layoutSha256 = sha(JSON.stringify(layout)), repeatSha256 = sha(JSON.stringify(again));
   const faulted = fault ? applyFault(p,layout,fault) : false;
   const m = measure(p,layout,before);
   const checks = [...m.checks, ['deterministic-repeat', layoutSha256===repeatSha256]];
   const failed = checks.filter(([,ok])=>!ok).map(([n])=>n);
-  return {p, before, layout, faulted, layoutSha256, repeatSha256, m, checks:Object.fromEntries(checks), failed, rejectedBy:failed[0]||null};
+  return {p, attempts, before, layout, faulted, layoutSha256, repeatSha256, m, checks:Object.fromEntries(checks), failed, rejectedBy:failed[0]||null};
 }
 
 module.exports = {runCase, measure, FAULTS};
@@ -257,7 +270,7 @@ if (require.main === module) {
       singlePassageReach:c.fronts, soloTinyWitnesses:c.witnesses});
   }
   const failedCases = matrix.filter(m=>m.failed.length).length, ok = matrix.filter(m=>m.constraints);
-  const expectedPortals = matrix.reduce((s,m)=>s+m.humans*MULTIPLIER[m.size],0);
+  const expectedPortals = matrix.reduce((s,m)=>s+m.humans*PORTALS_PER_HUMAN,0);
   const solo = ok.filter(m=>m.size==='tiny'&&m.humans===1);
   const summary = {matrixCases:matrix.length, failedCases, generationErrors:matrix.filter(m=>m.error).length,
     portals:ok.reduce((s,m)=>s+m.constraints.counts.observed.portals,0), expectedPortals,
@@ -270,7 +283,7 @@ if (require.main === module) {
     soloTiny:solo.map(m=>({seed:m.seed, portals:m.constraints.counts.observed.portals, groups:m.constraints.groups.sizes, witnesses:m.constraints.witnesses}))};
   fs.writeFileSync(path.join(out,'checkpoints.json'), JSON.stringify({mode:fault?'fault':'positive', fault:fault||null,
     intendedAssertion:fault?FAULTS[fault]:null, sizes:SIZES, humans:HUMANS, seeds:SEEDS,
-    rules:{multiplier:MULTIPLIER, portalTotal:'humans x multiplier', groupSplit:'total>=2: west/east portal regions, sizes differ by <=1; total=1: one portal in a top portal region',
+    rules:{portalsPerHuman:PORTALS_PER_HUMAN, portalTotal:'4 x humans (TASK-151 supersedes humans x multiplier and solo-Tiny one portal)', groupSplit:'west/east portal regions, sizes differ by <=1',
       minimumHexDistance:Object.fromEntries(SIZES.map(s=>[s,RULES[s].portalDistance])), hexDistance:'empty-map hex edges from every human town',
       nearestPortalDisparity:DISPARITY, pathModels:MODELS, pathObstacles:'ridge and other human towns block',
       approachCellsPerPortal:`>=${MIN_APPROACH} free adjacent cells reached by every human; emitted cells exclusive per portal and reserved`,
