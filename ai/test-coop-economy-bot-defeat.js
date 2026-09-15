@@ -70,8 +70,10 @@ function parseArgs(argv) {
     values[name] = argv[++i];
   }
   if (values['--child'] !== undefined) return {child: JSON.parse(Buffer.from(values['--child'], 'base64').toString('utf8'))};
+  const sizeText = values['--size'] === undefined ? 'tiny' : values['--size'];
+  const sizes = typeof sizeText === 'string' ? sizeText.split(',') : [];
   const args = {
-    size: values['--size'] === undefined ? 'tiny' : values['--size'],
+    size: sizeText, sizes,
     humans: parseList(values['--humans'] === undefined ? '1' : values['--humans'], '--humans'),
     seeds: parseList(values['--seeds'] === undefined ? '0' : values['--seeds'], '--seeds'),
     maxRounds: values['--max-rounds'] === undefined ? MAX_ROUNDS_LIMIT : Number(values['--max-rounds']),
@@ -80,7 +82,8 @@ function parseArgs(argv) {
     fault: values['--fault'] === undefined ? null : values['--fault']
   };
   if (!args.outputDir) throw new UsageError('--output-dir DIR is required');
-  if (!SIZES.includes(args.size)) throw new UsageError(`invalid --size: ${args.size}`);
+  if (!sizes.length || sizes.some(size => !SIZES.includes(size))) throw new UsageError(`invalid --size: ${args.size}`);
+  if (new Set(sizes).size !== sizes.length) throw new UsageError(`duplicate value in --size: ${args.size}`);
   if (args.humans.some(h => h < 1 || h > 12)) throw new UsageError('invalid --humans: each count must be 1..12');
   if (args.seeds.some(s => s > 0xffffffff)) throw new UsageError('invalid --seeds: unsigned 32-bit integers');
   if (!Number.isInteger(args.maxRounds) || args.maxRounds < 1 || args.maxRounds > MAX_ROUNDS_LIMIT)
@@ -342,6 +345,7 @@ function runChild(spec) {
     record.configuration = JSON.parse(ev(`JSON.stringify({generation: gameSettings.coop.generation, humanSlots: gameSettings.coop.humanSlots,
       demonSlot: gameSettings.coop.demonSlot, balanceVersion: gameSettings.coop.balanceVersion, suddenDeathRound, isFogOfWar,
       aiActionLimit: gameSettings.aiActionLimit ?? null, isOnline: gameSettings.isOnline,
+      rules: {demonTypes: currentDemonTypes(), typedWaveSchedule: COOP_TYPED_WAVE_SCHEDULE},
       slots: players.map((p, i) => ({slot: i, class: p.constructor.name, role: p.role, gold: p.gold, economyMode: p.economyMode ?? null,
         ownOverrides: ['play', 'nextTurn', 'playCombatActions', 'spendWarGold', 'spendEconomyGold', 'unitDoMoves']
           .filter(name => Object.prototype.hasOwnProperty.call(p, name))}))})`));
@@ -611,10 +615,10 @@ function runGate(args) {
   fs.mkdirSync(out, {recursive: true});
   const mode = args.calibrate ? 'calibrate' : 'gate';
   const specs = [];
-  for (const humans of args.humans) for (const seed of args.seeds)
-    specs.push(caseSpec(out, args.size, humans, seed, false, args.maxRounds, args.fault));
+  for (const size of args.sizes) for (const humans of args.humans) for (const seed of args.seeds)
+    specs.push(caseSpec(out, size, humans, seed, false, args.maxRounds, args.fault));
   const manifest = {mode, argv: process.argv.slice(2), cwd: ROOT, runtime: {node: process.version, v8: process.versions.v8, browser: null},
-    size: args.size, humans: args.humans, seeds: args.seeds, fog: false, maxRounds: args.maxRounds, caseTimeoutMs: args.caseTimeoutMs,
+    size: args.size, sizes: args.sizes, humans: args.humans, seeds: args.seeds, fog: false, maxRounds: args.maxRounds, caseTimeoutMs: args.caseTimeoutMs,
     fault: args.fault, policy: POLICY, startedAt: new Date().toISOString(), cases: []};
   const identitiesBefore = sourceIdentities();
   for (const spec of specs) {
@@ -704,11 +708,16 @@ function runSelfTest(args) {
 
   // 2. CLI fixtures.
   const cli = [
-    ['defaults', ['--output-dir', 'x'], {size: 'tiny', humans: [1], seeds: [0], maxRounds: 100, caseTimeoutMs: 600000, selfTest: false, calibrate: false}],
+    ['defaults', ['--output-dir', 'x'], {size: 'tiny', sizes: ['tiny'], humans: [1], seeds: [0], maxRounds: 100, caseTimeoutMs: 600000,
+      selfTest: false, calibrate: false}],
     ['explicit', ['--size', 'big', '--humans', '1,2,4,10,12', '--seeds', '0,9', '--max-rounds', '100', '--case-timeout-ms', '600000',
-      '--output-dir', 'x', '--calibrate'], {size: 'big', humans: [1, 2, 4, 10, 12], seeds: [0, 9], maxRounds: 100, caseTimeoutMs: 600000,
-      selfTest: false, calibrate: true}],
+      '--output-dir', 'x', '--calibrate'], {size: 'big', sizes: ['big'], humans: [1, 2, 4, 10, 12], seeds: [0, 9], maxRounds: 100,
+      caseTimeoutMs: 600000, selfTest: false, calibrate: true}],
+    ['size-list', ['--size', 'tiny,normal,big', '--output-dir', 'x'], {size: 'tiny,normal,big', sizes: ['tiny', 'normal', 'big'],
+      humans: [1], seeds: [0], maxRounds: 100, caseTimeoutMs: 600000, selfTest: false, calibrate: false}],
     ['bad-size', ['--size', 'huge', '--output-dir', 'x'], 'invalid --size: huge'],
+    ['bad-size-in-list', ['--size', 'tiny,huge', '--output-dir', 'x'], 'invalid --size: tiny,huge'],
+    ['duplicate-size', ['--size', 'tiny,tiny', '--output-dir', 'x'], 'duplicate value in --size: tiny,tiny'],
     ['bad-humans', ['--humans', '13', '--output-dir', 'x'], 'invalid --humans: each count must be 1..12'],
     ['too-many-rounds', ['--max-rounds', '101', '--output-dir', 'x'], 'invalid --max-rounds: integer 1..100'],
     ['missing-output', ['--size', 'tiny'], '--output-dir DIR is required']
@@ -717,7 +726,7 @@ function runSelfTest(args) {
     let observed;
     try {
       const parsed = parseArgs(argv);
-      observed = {size: parsed.size, humans: parsed.humans, seeds: parsed.seeds, maxRounds: parsed.maxRounds,
+      observed = {size: parsed.size, sizes: parsed.sizes, humans: parsed.humans, seeds: parsed.seeds, maxRounds: parsed.maxRounds,
         caseTimeoutMs: parsed.caseTimeoutMs, selfTest: parsed.selfTest, calibrate: parsed.calibrate};
     } catch (error) { observed = error.message; }
     report.cliFixtures.push(check('cli', name, observed, expected, {argv}));
