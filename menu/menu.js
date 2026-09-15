@@ -305,7 +305,8 @@ class CoopSettingsTree extends GameSettingsTree {
         this.playersSlider.textByValue = value => value
         this.playersSlider.value = 2
         this.playersSlider.update()
-        this.mapSlider.minimumValue = () => 1
+        // generateCoopGame accepts seed 0, so the menu can select it too.
+        this.mapSlider.minimumValue = () => 0
         this.mapSlider.maximumValue = () => 999
         this.mapSlider.textByValue = value => value
         this.mapSlider.value = 1
