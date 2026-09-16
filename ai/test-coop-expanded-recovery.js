@@ -14,7 +14,9 @@ function run() {
  for(const count of [1,4,5,6,7,8,9,10,11,12]) {
   const f=createFixture(configuration(count),()=>{}),e=s=>f.evaluate(s),slots=Array.from({length:count},(_,i)=>i+1);
   const check=(name,code,expected)=>{const observed=e(code);console.log(JSON.stringify({name:`H${count}-${name}`,expected,observed}));assert.deepEqual(observed,expected,name);console.log(`PASS H${count}-${name}`)};
-  e(`new DemonPortal(50,10); gameSettings.coop.waveGeneration={version:1,seed:42,lastRound:0};
+  // A legacy save predates balanceVersion (version-1 unlocks, first imp at round 3);
+  // current new games record version 2, whose rules are covered by progression-v2.
+  e(`delete gameSettings.coop.balanceVersion; new DemonPortal(50,10); gameSettings.coop.waveGeneration={version:1,seed:42,lastRound:0};
     isFogOfWar=true;Noob.visionRange=1;grid.visionUsed=[];grid.visionDistance=[];
     grid.fullInitArr(53,13,grid.visionUsed,0);grid.fullInitArr(53,13,grid.visionDistance,0);grid.newVisionUsedValue=0;grid.visionWay=new VisionWay();
     players[1].changeFogOfWarByVision();

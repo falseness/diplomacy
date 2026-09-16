@@ -51,17 +51,18 @@ const FAULTS = {
 };
 const FIXED_NOW = 1700000000000;
 const LAST_ROUND = 12;
-// Independent literal schedule: category -> demon type at wave rounds 4, 8, 12.
-const LITERAL_WAVES = {4: {normal: 'imp'}, 8: {normal: 'clawling', ranged: 'spitter'},
-  12: {normal: 'hound', ranged: 'spitter', heavy: 'brute'}};
+// Independent literal schedule: category -> demon type at wave rounds 4, 8, 12
+// (installed c20 progression: ranged starts at 12, heavy at 20, highTier at 24).
+const LITERAL_WAVES = {4: {normal: 'imp'}, 8: {normal: 'clawling'},
+  12: {normal: 'hound', ranged: 'spitter'}};
 // Independent literal next production after completed rounds 4, 8 and 12.
 const LITERAL_NEXT = {
-  4: {normal: {round: 8, type: 'clawling', roundsRemaining: 4}, ranged: {round: 8, type: 'spitter', roundsRemaining: 4},
-    heavy: {round: 12, type: 'brute', roundsRemaining: 8}, highTier: {round: 32, type: 'ravager', roundsRemaining: 28}},
+  4: {normal: {round: 8, type: 'clawling', roundsRemaining: 4}, ranged: {round: 12, type: 'spitter', roundsRemaining: 8},
+    heavy: {round: 20, type: 'brute', roundsRemaining: 16}, highTier: {round: 24, type: 'ravager', roundsRemaining: 20}},
   8: {normal: {round: 12, type: 'hound', roundsRemaining: 4}, ranged: {round: 12, type: 'spitter', roundsRemaining: 4},
-    heavy: {round: 12, type: 'brute', roundsRemaining: 4}, highTier: {round: 32, type: 'ravager', roundsRemaining: 24}},
+    heavy: {round: 20, type: 'brute', roundsRemaining: 12}, highTier: {round: 24, type: 'ravager', roundsRemaining: 16}},
   12: {normal: {round: 16, type: 'hound', roundsRemaining: 4}, ranged: {round: 16, type: 'emberArcher', roundsRemaining: 4},
-    heavy: {round: 16, type: 'brute', roundsRemaining: 4}, highTier: {round: 32, type: 'ravager', roundsRemaining: 20}}
+    heavy: {round: 20, type: 'brute', roundsRemaining: 8}, highTier: {round: 24, type: 'ravager', roundsRemaining: 12}}
 };
 const SOURCES = ['ai/test-coop-typed-wave-server.js', 'ops/coop-scaled-matchmaking-server.patch', 'ops/apply_coop_scaled_matchmaking.py',
   'ops/coop-scaled-matchmaking.md', 'ai/wave-config.js', 'ai/wave-composition.js', 'ai/wave-placement.js', 'ai/generateMap.js',
@@ -391,7 +392,9 @@ async function serverChild() {
     const destroyedBy = wave => [...(wave > 4 ? plan.destroy[4] : []), ...(wave > 8 ? plan.destroy[8] : [])];
     const expectedSpawn = wave => portals.filter(p => LITERAL_WAVES[wave]?.[p.category] && !destroyedBy(wave).some(d => same(d, p)) &&
       !(wave === 8 && same(p, plan.occupied))).map(p => ({type: LITERAL_WAVES[wave][p.category], x: p.x, y: p.y}));
-    const literalCount = {4: humans, 8: 2 * humans - 2, 12: 3 * humans - 2};
+    // Round 8: normal portals minus the occupied one. Round 12: normal plus ranged
+    // portals minus the destroyed ranged one (heavy portals first produce at 20).
+    const literalCount = {4: humans, 8: humans - 1, 12: 2 * humans - 1};
 
     // ---- forged typed-portal creation requests: rejected before persistence
     const gate = await launch(`${id}-creation-gate`, {games: [], users: []});

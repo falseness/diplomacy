@@ -18,9 +18,10 @@ function run(eliminated = false, auditUndo = null) {
     {id:'target',kind:'unit',name:'noob',owner:1,x:5,y:3},
     {id:'attacker',kind:'unit',name:'noob',owner:3,x:4,y:3}
   ];
-  // The first two rounds are the spawn warmup. The third-round fixture below
+  // Current maps use typed portals whose first production is round 4, so the
+  // two completed rounds here spawn nothing. The third-round fixture below
   // verifies that the portal's new unit receives the immediate combat phase.
-  f.evaluate('new DemonPortal(12,4); undefined');
+  f.evaluate(`gameSettings.coop.generation={version:4}; new DemonPortal(12,4,'normal'); undefined`);
   initial.push({id:'portal',kind:'portal',name:'demonPortal',owner:3,x:12,y:4});
   const entities = createEntityLedger(f,initial);
   const economy = createEconomyLedger(f,c.actors.map(({role,gold})=>({role,gold})),
@@ -116,14 +117,17 @@ function spawnedPhase() {
     units:players[3].units.map(u=>({x:u.coord.x,y:u.coord.y,name:u.name}))})`),
     {stage:'demon',units:[{x:6,y:4,name:'imp'}]});
   f.evaluate('advanceCoopLocalPhase()');
+  // Installed version-2 imps deal 3 damage: the 2-HP human dies and the imp
+  // advances onto its cell, spending the immediate phase's moves.
   f.compare('spawn-phase-immediate-combat',f.evaluate(`({stage:gameSettings.coop.localPhase.stage,
-    count:players[3].units.length,hp:grid.getUnit({x:5,y:4}).hp,
-    moves:grid.getUnit({x:6,y:4}).moves,gold:players[3].gold})`),
-    {stage:'complete',count:1,hp:1,moves:0,gold:0});
+    count:players[3].units.length,human:players[1].units[0].killed,
+    imp:{x:players[3].units[0].coord.x,y:players[3].units[0].coord.y,moves:players[3].units[0].moves},
+    gold:players[3].gold})`),
+    {stage:'complete',count:1,human:true,imp:{x:5,y:4,moves:0},gold:0});
   const before=f.evaluate('JSON.stringify({grid,players,external,gameSettings})');
   f.evaluate('advanceCoopLocalPhase(); advanceCoopLocalPhase()');
   f.compare('spawn-phase-repeated-controller-noop',f.evaluate('JSON.stringify({grid,players,external,gameSettings})'),before);
-  console.log('PASS spawned-demon immediate-normal-phase combat=1 repeated-controller=noop');
+  console.log('PASS spawned-demon immediate-normal-phase kill=1 repeated-controller=noop');
 }
 if (require.main === module) {
 run(false); run(true); spawnedPhase();
