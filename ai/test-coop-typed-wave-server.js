@@ -108,6 +108,8 @@ function adapter() {
     process.exit(2);
   }
   fs.mkdirSync(outDir, {recursive: true});
+  // Never rewrite sibling files while the reliability runner or another adapter uses them.
+  require(path.resolve(SIBLING, 'tests/reliability/helpers/sibling-lock.js')).acquire('ai/test-coop-typed-wave-server.js');
   const t0 = Date.now();
   console.log(`ADAPTER cwd=${process.cwd()} node=${process.version} server=${SIBLING} fault=${fault || 'none'} scenarios=${scenarioIds.join(',')} output=${outDir}`);
   const originals = SIBLING_FILES.map(f => fs.readFileSync(path.join(SIBLING, f)));

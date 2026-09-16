@@ -7,6 +7,8 @@ const dir=path.resolve(__dirname,'../../diplomacy_server');
 const arg=process.argv.indexOf('--output-dir');
 const out=path.resolve(arg<0?'artifacts/TASK-125/server':process.argv[arg+1]);
 fs.mkdirSync(out,{recursive:true});
+// Never rewrite sibling fixtures while the reliability runner or another adapter uses them.
+require(path.resolve(__dirname,'../../diplomacy_server/tests/reliability/helpers/sibling-lock.js')).acquire('ai/test-coop-expanded-server-adapter.js');
 const files=['phase-idempotence.test.js','shared-vision.test.js','browser-reconnect.test.js','helpers/browser-local-server.js'];
 const originals=files.map(f=>fs.readFileSync(path.join(dir,'tests/coop',f),'utf8'));
 function replace(s,a,b){assert(s.includes(a),'missing adaptation anchor: '+a);return s.replace(a,b)}

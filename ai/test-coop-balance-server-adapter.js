@@ -9,6 +9,8 @@ const assert = require('node:assert/strict');
 const dir=path.resolve(__dirname,'../../diplomacy_server');
 const out=path.resolve(process.env.COOP_EVIDENCE_DIR || 'artifacts/TASK-108');
 fs.mkdirSync(out,{recursive:true});
+// Never rewrite sibling fixtures while the reliability runner or another adapter uses them.
+require(path.resolve(__dirname,'../../diplomacy_server/tests/reliability/helpers/sibling-lock.js')).acquire('ai/test-coop-balance-server-adapter.js');
 const files=['authority.test.js','phase-idempotence.test.js'];
 const originals=files.map(file=>fs.readFileSync(path.join(dir,'tests/coop',file)));
 function replace(s,from,to) {assert.equal(s.split(from).length,2,from);return s.replace(from,to)}
