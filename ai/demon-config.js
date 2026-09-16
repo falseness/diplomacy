@@ -17,16 +17,16 @@ const DEMON_TYPES = Object.freeze({
 // Version 1 (including unversioned saves) is the original table above.
 const TUNED_DEMON_TYPES = Object.freeze(Object.fromEntries(Object.entries(
 {
-  imp: {"health": 3, "damage": 2, "movement": 3, "range": 1},
-  clawling: {"health": 4, "damage": 2, "movement": 4, "range": 1},
-  hound: {"health": 6, "damage": 3, "movement": 5, "range": 1},
-  brute: {"health": 12, "damage": 4, "movement": 2, "range": 1},
-  bulwark: {"health": 20, "damage": 4, "movement": 2, "range": 1},
-  spitter: {"health": 3, "damage": 2, "movement": 3, "range": 4},
-  emberArcher: {"health": 5, "damage": 3, "movement": 3, "range": 5},
-  hexcaster: {"health": 6, "damage": 5, "movement": 2, "range": 6},
-  ravager: {"health": 10, "damage": 6, "movement": 4, "range": 1},
-  demonLord: {"health": 24, "damage": 8, "movement": 3, "range": 1}
+  imp: {"health": 3, "damage": 3, "movement": 4, "range": 1},
+  clawling: {"health": 4, "damage": 3, "movement": 5, "range": 1},
+  hound: {"health": 6, "damage": 5, "movement": 6, "range": 1},
+  brute: {"health": 12, "damage": 10, "movement": 3, "range": 1},
+  bulwark: {"health": 20, "damage": 10, "movement": 3, "range": 1},
+  spitter: {"health": 3, "damage": 3, "movement": 4, "range": 4},
+  emberArcher: {"health": 5, "damage": 5, "movement": 4, "range": 5},
+  hexcaster: {"health": 6, "damage": 10, "movement": 3, "range": 6},
+  ravager: {"health": 10, "damage": 12, "movement": 5, "range": 1},
+  demonLord: {"health": 24, "damage": 16, "movement": 4, "range": 1}
 }
 ).map(([id, stats]) => [id, Object.freeze({...DEMON_TYPES[id], ...stats})])));
 function getDemonTypes(version = 1) {

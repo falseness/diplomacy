@@ -9,11 +9,12 @@ const schedules = {
   2: {imp:1,clawling:3,hound:6,brute:10,bulwark:20,spitter:6,emberArcher:15,hexcaster:24,ravager:30,demonLord:35}
 };
 // Explicit current version-2 stats [health,damage,movement,range,salary,healSpeed]
-// (c10 table with ranged reach 4/5/6); selected.json keeps the historical stats and live weights.
+// (c20 table: ranged reach 4/5/6, movement +1 and the raised damage column); selected.json keeps
+// the historical stats and live weights.
 const tunedStats = {
-  imp:[3,2,3,1,0,0], clawling:[4,2,4,1,0,0], hound:[6,3,5,1,0,0], brute:[12,4,2,1,0,0],
-  bulwark:[20,4,2,1,0,0], spitter:[3,2,3,4,0,0], emberArcher:[5,3,3,5,0,0],
-  hexcaster:[6,5,2,6,0,0], ravager:[10,6,4,1,0,0], demonLord:[24,8,3,1,0,0]
+  imp:[3,3,4,1,0,0], clawling:[4,3,5,1,0,0], hound:[6,5,6,1,0,0], brute:[12,10,3,1,0,0],
+  bulwark:[20,10,3,1,0,0], spitter:[3,3,4,4,0,0], emberArcher:[5,5,4,5,0,0],
+  hexcaster:[6,10,3,6,0,0], ravager:[10,12,5,1,0,0], demonLord:[24,16,4,1,0,0]
 };
 const copy = x => JSON.parse(JSON.stringify(x));
 const probe = `(() => {

@@ -31,9 +31,9 @@ const PORTAL_HP = 30;
 // Independent literal oracle (not read from ai/wave-config.js).
 const LITERAL_STEPS = {
   normal: [[4, 'imp'], [8, 'clawling'], [12, 'hound']],
-  ranged: [[8, 'spitter'], [12, 'emberArcher'], [16, 'hexcaster']],
-  heavy: [[8, 'brute'], [12, 'bulwark']],
-  highTier: [[12, 'ravager'], [16, 'demonLord']]
+  ranged: [[12, 'spitter'], [16, 'emberArcher'], [20, 'hexcaster']],
+  heavy: [[20, 'brute'], [24, 'bulwark']],
+  highTier: [[24, 'ravager'], [28, 'demonLord']]
 };
 function literalType(category, round) {
   if (round === 0 || round % 4 !== 0) return null;
@@ -55,12 +55,12 @@ const PLANS = {
   solo: {humans: 1, terminal: 'victory',
     mutations: {3: [['damage', 'highTier', 0, 7], ['damage', 'normal', 0, 2]], 8: [['block', 'ranged', 0]],
       13: [['destroy', 'heavy', 0]], 32: [['block', 'normal', 0]]},
-    counts: {4: 1, 8: 2, 12: 4, 16: 3, 20: 3, 24: 3, 28: 3, 32: 2, 36: 3}},
+    counts: {4: 1, 8: 1, 12: 2, 16: 2, 20: 2, 24: 3, 28: 3, 32: 2, 36: 3}},
   h10: {humans: 10, terminal: 'defeat',
     mutations: {3: [['destroy', 'normal', 0], ['damage', 'heavy', 2, 11], ['damage', 'highTier', 3, 29]],
       4: [['block', 'normal', 1]], 8: [['block', 'ranged', 0], ['block', 'ranged', 1]], 11: [['destroy', 'heavy', 0]],
       12: [['block', 'heavy', 1]], 31: [['destroy', 'ranged', 2]], 32: [['block', 'highTier', 0], ['block', 'highTier', 1]]},
-    counts: {4: 8, 8: 27, 12: 37, 16: 38, 20: 38, 24: 38, 28: 38, 32: 35, 36: 37}}
+    counts: {4: 8, 8: 9, 12: 19, 16: 19, 20: 28, 24: 38, 28: 38, 32: 35, 36: 37}}
 };
 // Human points are the turn-start save (saveManager.save); phase points are the
 // dispatcher boundary before the stage runs ('complete' is recorded after it).

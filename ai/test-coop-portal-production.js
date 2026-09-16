@@ -39,7 +39,7 @@ const fault = option('--fault');
 const FAULTS = {
   'gameround-only-lookup': {marker: 'wave-4-post:preview-info',
     description: 'preview ignores the committed typedWaves marker and uses gameRound only, so it does not advance after the wave'},
-  'queued-backlog': {marker: 'wave-12-post:preview-info',
+  'queued-backlog': {marker: 'wave-16-post:preview-info',
     description: 'a portal skipped while blocked keeps showing the missed production as a queued backlog'},
   'alpha-not-restored': {marker: 'r0-initial:draw-state',
     description: 'the shared preview draw leaves ctx.globalAlpha at the preview opacity'},
@@ -56,9 +56,9 @@ if (fs.existsSync(path.join(out, 'checkpoints.json'))) {
 const CATEGORIES = ['normal', 'ranged', 'heavy', 'highTier'];
 const STEPS = {
   normal: [[4, 'imp'], [8, 'clawling'], [12, 'hound']],
-  ranged: [[8, 'spitter'], [12, 'emberArcher'], [16, 'hexcaster']],
-  heavy: [[8, 'brute'], [12, 'bulwark']],
-  highTier: [[12, 'ravager'], [16, 'demonLord']]
+  ranged: [[12, 'spitter'], [16, 'emberArcher'], [20, 'hexcaster']],
+  heavy: [[20, 'brute'], [24, 'bulwark']],
+  highTier: [[24, 'ravager'], [28, 'demonLord']]
 };
 const NAMES = {imp: 'imp', clawling: 'clawling', hound: 'hound', brute: 'brute', bulwark: 'bulwark', spitter: 'spitter',
   emberArcher: 'ember archer', hexcaster: 'hexcaster', ravager: 'ravager', demonLord: 'demon lord'};
@@ -459,7 +459,7 @@ function installPage({game, fault}) {
     // Normal: before upgrade (imp at 4) and after upgrade (clawling at 8), selected throughout.
     await wave(4, {afterPre: () => shot('wave-4-pre-normal-imp', P.normal, {portrait: true}),
       afterPost: () => shot('wave-4-post-normal-upgraded-clawling', P.normal, {portrait: true})});
-    // Ranged activates at 8; then damage refreshes the selected ranged portal.
+    // Ranged is still silent at 8 (it activates at 12); damage refreshes the selected ranged portal.
     await wave(8, {afterPost: async () => {
       await select('ranged');
       const hit = await page.evaluate(coord => { const p = grid.getBuilding(coord), c0 = PP.changes, next = JSON.stringify(p.nextProduction);
@@ -470,16 +470,12 @@ function installPage({game, fault}) {
       await observe('wave-8-post-damaged-ranged');
       await shot('wave-8-post-damaged-ranged', P.ranged, {portrait: true});
     }});
-    // Heavy's bulwark upgrade wave is blocked: next attempt, not a backlog.
-    await wave(12, {block: ['heavy'], afterPre: () => shot('wave-12-pre-blocked-heavy', P.heavy),
-      afterPost: () => shot('wave-12-post-blocked-heavy-next-attempt', P.heavy)});
+    // Ranged activates at 12, so its emberArcher upgrade wave at 16 is the first one that can be
+    // blocked: the blocked portal makes a next attempt at 20, it does not carry a backlog.
+    await wave(12);
+    await wave(16, {block: ['ranged'], afterPre: () => shot('wave-16-pre-blocked-ranged', P.ranged),
+      afterPost: () => shot('wave-16-post-blocked-ranged-next-attempt', P.ranged)});
     await select('heavy');
-    await wave(16, {afterPost: async () => {
-      const heavy = comparisons.filter(r => r.round === 16 && r.category === 'heavy')[0];
-      check('wave-16-no-backlog-heavy', {spawned: heavy.spawned, totalSpawnedThisWave: comparisons.filter(r => r.round === 16).flatMap(r => r.spawned).length},
-        {spawned: ['bulwark'], totalSpawnedThisWave: 4});
-      await shot('wave-16-post-heavy-once-ranged-upgraded', P.heavy, {portrait: true, full: true});
-    }});
 
     // Current-format save/load at the pre-wave and committed-wave boundaries of round 20.
     let savedPre, savedPost, spawned20;
@@ -487,6 +483,10 @@ function installPage({game, fault}) {
       afterPost: async () => {
         savedPost = await page.evaluate(() => JSON.stringify(getGameObject()));
         spawned20 = comparisons.filter(r => r.round === 20).map(r => ({category: r.category, spawned: r.spawned}));
+        const ranged = comparisons.filter(r => r.round === 20 && r.category === 'ranged')[0];
+        check('wave-20-no-backlog-ranged', {spawned: ranged.spawned, totalSpawnedThisWave: comparisons.filter(r => r.round === 20).flatMap(r => r.spawned).length},
+          {spawned: ['hexcaster'], totalSpawnedThisWave: 3});
+        await shot('wave-20-post-ranged-once-heavy-activated', P.heavy, {portrait: true, full: true});
       }});
     const after20 = {...S, alive: new Set(S.alive), hp: {...S.hp}};
     const load = async (label, saved) => {

@@ -39,9 +39,9 @@ const FAULTS = {
 // Independent literal oracle (not read from ai/wave-config.js).
 const LITERAL_STEPS = {
   normal: [[4, 'imp'], [8, 'clawling'], [12, 'hound']],
-  ranged: [[8, 'spitter'], [12, 'emberArcher'], [16, 'hexcaster']],
-  heavy: [[8, 'brute'], [12, 'bulwark']],
-  highTier: [[12, 'ravager'], [16, 'demonLord']]
+  ranged: [[12, 'spitter'], [16, 'emberArcher'], [20, 'hexcaster']],
+  heavy: [[20, 'brute'], [24, 'bulwark']],
+  highTier: [[24, 'ravager'], [28, 'demonLord']]
 };
 function literalType(category, round) {
   if (round === 0 || round % 4 !== 0) return null;
@@ -49,13 +49,17 @@ function literalType(category, round) {
   for (const [from, name] of LITERAL_STEPS[category]) if (round >= from) type = name;
   return type;
 }
-// Literal spawn counts per completed round (missing rounds expect 0).
-// H10: wave 16 loses one destroyed + one human-blocked normal and heavy portal
-// plus the demon-blocked ranged and highTier portals (both already producing);
-// wave 24 blocks every surviving portal; two portals stay destroyed afterwards.
+// Literal spawn counts per completed round (missing rounds expect 0). Only categories
+// whose first step has been reached produce: normal from 4, ranged from 12, heavy from 20,
+// highTier from 24, so H1 produces 1, 1, 2, 2, 3 and then 4 demons per wave.
+// H10: at wave 16 only the normal and ranged portals produce, and that wave loses the
+// destroyed normal portal, the human-blocked normal portal and the demon-blocked ranged
+// portal (the destroyed/blocked heavy and highTier portals are not producing yet);
+// wave 20 adds heavy and is short the two destroyed portals; wave 24 blocks every
+// surviving portal; two portals stay destroyed afterwards.
 const LITERAL_COUNTS = {
-  h1: {4: 1, 8: 3, 12: 4, 16: 4, 20: 4, 24: 4, 28: 4, 32: 4, 36: 4, 40: 4},
-  h10: {4: 10, 8: 30, 12: 40, 16: 34, 20: 38, 24: 0, 28: 38, 32: 38, 36: 38, 40: 38}
+  h1: {4: 1, 8: 1, 12: 2, 16: 2, 20: 3, 24: 4, 28: 4, 32: 4, 36: 4, 40: 4},
+  h10: {4: 10, 8: 10, 12: 20, 16: 17, 20: 28, 24: 0, 28: 38, 32: 38, 36: 38, 40: 38}
 };
 
 function parseArgs(argv) {

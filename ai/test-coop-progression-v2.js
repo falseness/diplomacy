@@ -38,9 +38,9 @@ const weights = {imp:1, clawling:2, hound:3, brute:5, bulwark:7,
 // health, damage, movement, range, salary, healing: independent installed v2 rows.
 // Explicit tuned table (imp..demonLord), kept literal so a rules change has to be
 // restated here rather than silently tracking ai/demon-config.js.
-const stats = [[3,2,3,1,0,0], [4,2,4,1,0,0], [6,3,5,1,0,0],
-  [12,4,2,1,0,0], [20,4,2,1,0,0], [3,2,3,4,0,0], [5,3,3,5,0,0],
-  [6,5,2,6,0,0], [10,6,4,1,0,0], [24,8,3,1,0,0]];
+const stats = [[3,3,4,1,0,0], [4,3,5,1,0,0], [6,5,6,1,0,0],
+  [12,10,3,1,0,0], [20,10,3,1,0,0], [3,3,4,4,0,0], [5,5,4,5,0,0],
+  [6,10,3,6,0,0], [10,12,5,1,0,0], [24,16,4,1,0,0]];
 const rules = getCoopWaveConfig(2).types;
 compare('v2-exact-schedule', Object.fromEntries(Object.entries(rules).map(([id,r])=>[id,r.unlockRound])), schedule);
 compare('v2-weights', Object.fromEntries(Object.entries(rules).map(([id,r])=>[id,r.weight])), weights);
