@@ -4,6 +4,7 @@
 function lifecycleRecorder(secret, domain, hashFactory, limit = 200000) {
     const digestor = hashFactory(secret, domain), objects = new WeakMap(), bindings = new WeakMap(), sessions = new WeakMap();
     const rows = [], open = new Map(), pending = new Map(), counts = {}, stack = [], order = new Map();
+    const requests = new WeakMap();
     let serial = 0, seq = 0, call = 0, errors = 0, overflow = false, active = true;
     const id = o => {
         if (!o || !['object', 'function'].includes(typeof o)) return null;
@@ -35,6 +36,21 @@ function lifecycleRecorder(secret, domain, hashFactory, limit = 200000) {
     function enter(hook, c = {}, packet = null, parent = null, async = false, why) {
         try {
             const token = {call: ++call, hook, ...context(c), parent: parent?.call || bindings.get(packet)?.call || stack.at(-1)?.call || null, async, reason: reason(why)};
+            if (c.request) {
+                if (hook === 'request-create') {
+                    // Request.create runs inside the actual polling write. No
+                    // payload matching, current-Manager lookup or close inference.
+                    const write = c.request.method === 'POST' ? stack.findLast(t => t.hook === 'polling-write') : null;
+                    requests.set(c.request, {operation: write?.call || null});
+                }
+                const request = requests.get(c.request);
+                token.request = id(c.request);
+                token.operation = request?.operation || null;
+                token.terminal = hook !== 'request-create' && !!c.request.xhr;
+                if (token.terminal && ['request-error', 'request-abort'].includes(hook) && token.operation) {
+                    if (!pending.delete(token.operation + ':write')) errors++;
+                }
+            }
             if (hook === 'polling-write') { pending.set(token.call + ':encode', true); pending.set(token.call + ':write', true); }
             if (hook === 'polling-encode-complete' && !pending.delete(token.parent + ':encode')) errors++;
             if (hook === 'polling-write-complete' && !pending.delete(token.parent + ':write')) errors++;
@@ -106,6 +122,44 @@ function validate(trace, expected) {
     const counts = {};
     for (const row of trace.rows.filter(r => r.kind === 'entry')) counts[row.hook] = (counts[row.hook] || 0) + 1;
     if (JSON.stringify(counts) !== JSON.stringify(trace.counts)) gaps.push('hook count mismatch');
+    const entriesByCall = new Map(trace.rows.filter(r => r.kind === 'entry').map(r => [r.call, r]));
+    const sameBinding = (a, b) => a && b && a.engine === b.engine && (!a.transport || a.transport === b.transport) && (!a.session || a.session === b.session);
+    const requests = new Map(), terminals = new Map(), completions = new Map();
+    for (const row of trace.rows.filter(r => r.kind === 'entry')) {
+        if (row.hook === 'polling-write-complete') {
+            const write = entriesByCall.get(row.parent);
+            if (write?.hook !== 'polling-write' || !sameBinding(write, row)) gaps.push('misbound polling completion');
+            completions.set(row.parent, (completions.get(row.parent) || 0) + 1);
+        }
+        if (row.hook === 'request-create') {
+            if (!row.request || requests.has(row.request)) gaps.push('duplicate/missing request identity');
+            requests.set(row.request, row);
+            if (row.operation) {
+                const write = entriesByCall.get(row.operation);
+                if (write?.hook !== 'polling-write' || !sameBinding(write, row)) gaps.push('misbound request operation');
+            }
+        }
+        if (['request-success', 'request-error', 'request-abort'].includes(row.hook) && row.terminal) {
+            const request = requests.get(row.request);
+            if (!sameBinding(request, row) || request.operation !== row.operation || terminals.has(row.request)) gaps.push('misbound/duplicate request terminal');
+            terminals.set(row.request, row);
+        }
+    }
+    // Only enforce Request coverage when these opt-in hooks were installed;
+    // legacy captures retain their original accounting contract.
+    if (trace.installed.includes('request-create')) {
+        for (const request of requests.values()) {
+            const terminal = terminals.get(request.request);
+            if (!terminal && (!request.operation || !(trace.pendingAsync || []).includes(request.operation + ':write'))) gaps.push('missing request terminal');
+            if (terminal && request.operation) {
+                const completed = completions.get(request.operation) || 0;
+                if (completed !== (terminal.hook === 'request-success' ? 1 : 0)) gaps.push('request terminal/completion mismatch');
+            }
+        }
+        for (const write of entriesByCall.values()) {
+            if (write.hook === 'polling-write' && [...requests.values()].filter(r => r.operation === write.call).length !== 1) gaps.push('missing/duplicate write request');
+        }
+    }
     return [...new Set(gaps)];
 }
 module.exports = {lifecycleRecorder, validate};

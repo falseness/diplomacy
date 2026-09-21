@@ -30,7 +30,7 @@ function transform(source, specs, points = []) {
     return {text, manifest};
 }
 const E = '{engine:this,transport:this.transport}', S = '{socket:this}', M = '{manager:this}', T = '{engine:this.socket,transport:this}';
-const expectedClient = ['manager-close','manager-reconnect','manager-reconnect-result','manager-error','encoding','application-emit','socket-packet','buffer-drain','application-packet','engine-open','engine-close','engine-error','heartbeat','engine-packet','engine-packet-create','upgrade','transport-send','transport-close','transport-error','polling-wire','polling-write','polling-encode-complete','polling-write-complete','websocket-write','websocket-encode-complete','websocket-send','websocket-send-error','websocket-close'];
+const expectedClient = ['manager-close','manager-reconnect','manager-reconnect-result','manager-error','encoding','application-emit','socket-packet','buffer-drain','application-packet','engine-open','engine-close','engine-error','heartbeat','engine-packet','engine-packet-create','upgrade','transport-send','transport-close','transport-error','polling-wire','polling-write','polling-encode-complete','polling-write-complete','request-create','request-success','request-error','request-abort','websocket-write','websocket-encode-complete','websocket-send','websocket-send-error','websocket-close'];
 const expectedServer = ['server-wire','dispatch-binding','handler-invocation-end','opening-wait-emission','server-engine-decode','server-engine-error','server-engine-close','server-upgrade','server-decoder','server-socket-event','server-dispatch','handler-invocation','handler-receipt','queue-entry','queue-execution','game-queue-entry','game-queue-execution','assignment','opening-emission'];
 function client(source) {
     // Select module spans in the pinned development bundle so duplicate method
@@ -68,6 +68,12 @@ function client(source) {
             ['polling-encode-complete','parser.encodePayload(packets, function (data) {','{engine:_this.socket,transport:_this}','null','__v2_polling_write'],
             ['polling-write-complete','_this.doWrite(data, function () {','{engine:_this.socket,transport:_this}','null','__v2_polling_write'],
         ], [['polling-wire','_this.doWrite(data, function () {',`String(data).split('\\x1e').forEach((part,index)=>${R}.wire('polling-wire',{engine:_this.socket,transport:_this},_this,'sent',part,index,${R}.parent(packets[index])));`,true]]],
+        ['./node_modules/engine.io-client/lib/transports/polling-xhr.js', [
+            ['request-create','value: function create() {','{request:this,engine:this.opts.socket}'],
+            ['request-success','value: function onSuccess() {','{request:this,engine:this.opts.socket}'],
+            ['request-error','value: function onError(err) {','{request:this,engine:this.opts.socket}'],
+            ['request-abort','value: function abort() {','{request:this,engine:this.opts.socket}'],
+        ], []],
         ['./node_modules/engine.io-client/lib/transports/websocket.js', [
             ['websocket-write','value: function write(packets) {',T],
             ['websocket-encode-complete','parser.encodePacket(packet, self.supportsBinary, function (data) {','{engine:self.socket,transport:self}','packet'],
