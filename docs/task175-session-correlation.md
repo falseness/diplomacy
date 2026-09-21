@@ -1,4 +1,27 @@
-# TASK-175: session correlation design review
+# TASK-175: session correlation
+
+The authorized diagnostic was implemented and executed once on 2026-09-21 by
+`ai/test-task175-session-correlation.js`. Offline recording checks passed 34/34;
+the OFF/ON/ON/OFF H12 samples each passed the unchanged 34 checks (136/136).
+All child exits were 0. The diagnostic parent exited 1, INCONCLUSIVE, because
+neither instrumented wave failed. Both ON traces were complete and showed one
+session, join and opening emission per page. No repair or final gate is justified.
+Do not repeat this batch. TASK-175 remains pending. Local evidence and the exact
+missing provenance are recorded in `artifacts/TASK-175/callback-20260921T015209Z/handoff.md`.
+
+The helpers under `ai/diagnostics/task175/` are imported only by this opt-in
+diagnostic. Production and ordinary gate paths are unchanged. `offline.js` checks
+source-body preservation, callback semantics, object/session binding, redaction,
+overflow/error handling, cleanup and default-off behavior without live services.
+The live driver pins immutable baseline commits and dependency/CDN bytes, refuses
+existing output directories and preserves all four outcomes. Its intentional
+inconclusive exit must never be interpreted as a passing acceptance gate.
+
+The original design review below is retained as history. Its unresolved
+authorization boundary was superseded by the revised TASK-175 diagnostic
+contract; its proposed experiment is now complete, not a next action.
+
+## Historical design review
 
 Status: design only, not an executable experiment or a transport repair. The
 156/156 paired recovery replay rejects permanent liveness failure in its synthetic
