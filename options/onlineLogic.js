@@ -39,7 +39,11 @@ function SetupServerCommunicationLogic(password) {
     if (onlineSocket) onlineSocket.disconnect()
     const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
     onlineCommit = null
-    function receiveBoard(body) {
+    // Competitive scheduling gives each player one active turn per round.
+    // A waiting connection may become active in that same round when its
+    // component predecessor finishes. Reconnect deliberately reloads authority.
+    let competitiveDelivery = null
+    function receiveBoard(body, active) {
         if (socket !== onlineSocket) return false
         const board = typeof body === 'string' ? JSON.parse(body) : body
         const commit = board.coopCommit
@@ -49,7 +53,14 @@ function SetupServerCommunicationLogic(password) {
             if (onlineCommit && (commit.gameID !== onlineCommit.gameID ||
                     commit.revision <= onlineCommit.revision)) return false
         }
+        if (!board.gameSettings?.coop) {
+            if (!Number.isSafeInteger(board.gameRound) || board.gameRound < 0) return false
+            if (competitiveDelivery && (board.gameRound < competitiveDelivery.round ||
+                    (board.gameRound === competitiveDelivery.round &&
+                        (competitiveDelivery.active || !active)))) return false
+        }
         loadFromJson(JSON.stringify(board))
+        if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
         onlineCommit = commit || null
         return true
     }
@@ -62,7 +73,7 @@ function SetupServerCommunicationLogic(password) {
     socket.on('gameStarted', game => {
         console.log('gameStarted')
 
-        if (!receiveBoard(game)) return
+        if (!receiveBoard(game, true)) return
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
@@ -72,7 +83,7 @@ function SetupServerCommunicationLogic(password) {
     socket.on('playYourTurn', game => {
 
         console.log(`playYourTurn`)
-        if (!receiveBoard(game)) return
+        if (!receiveBoard(game, true)) return
         GameManager.updateCameraBorders()
         nextTurnPauseInterface.visible = true
 
@@ -85,13 +96,14 @@ function SetupServerCommunicationLogic(password) {
         console.log(`waitYouTurn`)
 
         // let dict = JSON.parse(gameAndTurnIndex)
-        if (!receiveBoard(game)) return
+        if (!receiveBoard(game, false)) return
 
         if (isFogOfWar) {
             players[whooseTurn].changeFogOfWarByVision()
         }
 
         gameEvent.waitingMode = true
+        nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         undoButton.disableClick()
         nextTurnPauseInterface.visible = false
         nextTurnButton.highlightButton = false
@@ -106,6 +118,7 @@ function SetupServerCommunicationLogic(password) {
     socket.on('connect', () => {
         if (socket !== onlineSocket) return
         onlineCommit = null
+        competitiveDelivery = null
         requestCurrentGame()
     })
     if (socket.connected) requestCurrentGame()
