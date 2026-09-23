@@ -35,6 +35,37 @@ class OnlineLogic {
     }
 }
 
+// Rebase disjoint local actions on a newer same-turn co-op view. Components
+// cannot act on one another's influence area. Coordinate-keyed entity lists
+// still need merging when both components insert/remove external entities.
+function rebaseOnlineValue(base, local, remote) {
+    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+    if (equal(base, local)) return remote
+    if (equal(base, remote) || equal(local, remote)) return local
+    if (Array.isArray(base) && Array.isArray(local) && Array.isArray(remote)) {
+        const coord = value => value && (value.coord ||
+            (Number.isInteger(value.x) && Number.isInteger(value.y) ? value : null))
+        if ([...base, ...local, ...remote].every(value => coord(value))) {
+            const key = value => coord(value).x + ':' + coord(value).y
+            const keyed = list => Object.fromEntries(list.map(value => [key(value), value]))
+            const merged = rebaseOnlineValue(keyed(base), keyed(local), keyed(remote))
+            return Object.values(merged)
+        }
+        if (base.length === local.length && base.length === remote.length)
+            return base.map((value, i) => rebaseOnlineValue(value, local[i], remote[i]))
+    } else if (base && local && remote && typeof base === 'object' &&
+            typeof local === 'object' && typeof remote === 'object') {
+        const merged = {}
+        for (const key of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)])) {
+            const value = rebaseOnlineValue(base[key], local[key], remote[key])
+            if (value !== undefined) merged[key] = value
+        }
+        return merged
+    }
+    // Shared fields changed by authority (for example a terminal result) win.
+    return remote
+}
+
 function SetupServerCommunicationLogic(password) {
     if (onlineSocket) onlineSocket.disconnect()
     const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
@@ -43,6 +74,7 @@ function SetupServerCommunicationLogic(password) {
     // A waiting connection may become active in that same round when its
     // component predecessor finishes. Reconnect deliberately reloads authority.
     let competitiveDelivery = null
+    let acceptedBoard = null
     function receiveBoard(body, active) {
         if (socket !== onlineSocket) return false
         const board = typeof body === 'string' ? JSON.parse(body) : body
@@ -59,10 +91,51 @@ function SetupServerCommunicationLogic(password) {
                     (board.gameRound === competitiveDelivery.round &&
                         (competitiveDelivery.active || !active)))) return false
         }
-        loadFromJson(JSON.stringify(board))
+        const continuing = !!(board.gameSettings?.coop && acceptedBoard && active &&
+            !gameEvent.waitingMode && board.gameRound === acceptedBoard.gameRound &&
+            board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
+        let restored = board
+        let undo, selected, runningTimer
+        if (continuing) {
+            const local = JSON.parse(JSON.stringify(getGameObject()))
+            restored = {...board}
+            for (const key of ['grid', 'players', 'external', 'externalProduction', 'nature', 'goldmines'])
+                restored[key] = rebaseOnlineValue(acceptedBoard[key], local[key], board[key])
+            // The current turn's clock and undo scope continue across peer commits.
+            restored.timers = board.timers.map((value, index) =>
+                index === whooseTurn ? local.timers[index] : value)
+            runningTimer = timer
+            selected = gameEvent.selected.notEmpty() ? {
+                coord: {...gameEvent.selected.coord}, unit: !!gameEvent.selected.isUnit
+            } : null
+            undo = actionManager.arr
+            const lists = packed => packed.players.map(player => ({
+                units: player.units.map(unit => ({...unit.coord})),
+                towns: player.towns.map(town => ({...town.coord}))
+            }))
+            for (const action of undo) {
+                action.playerEntityLists = rebaseOnlineValue(lists(acceptedBoard), action.playerEntityLists, lists(board))
+                action.externalOrder = rebaseOnlineValue(acceptedBoard.external.map(e => e.coord),
+                    action.externalOrder, board.external.map(e => e.coord))
+            }
+        }
+        loadFromJson(JSON.stringify(restored))
+        acceptedBoard = board
+        if (continuing) {
+            timer = runningTimer
+            actionManager.arr = undo
+            gameEvent.removeSelection()
+            if (selected) {
+                const entity = selected.unit ? grid.getUnit(selected.coord) : grid.getBuilding(selected.coord)
+                if (entity.notEmpty()) {
+                    entity.select()
+                    gameEvent.selected = entity
+                }
+            }
+        }
         if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
         onlineCommit = commit || null
-        return true
+        return continuing ? 'continued' : true
     }
     onlineLobby = {mode: gameSettings.coop ? 'coop' : 'competitive', occupiedHumans: null}
     socket.on('lobbyStatus', status => {
@@ -73,7 +146,8 @@ function SetupServerCommunicationLogic(password) {
     socket.on('gameStarted', game => {
         console.log('gameStarted')
 
-        if (!receiveBoard(game, true)) return
+        const delivery = receiveBoard(game, true)
+        if (!delivery || delivery === 'continued') return
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
@@ -83,7 +157,8 @@ function SetupServerCommunicationLogic(password) {
     socket.on('playYourTurn', game => {
 
         console.log(`playYourTurn`)
-        if (!receiveBoard(game, true)) return
+        const delivery = receiveBoard(game, true)
+        if (!delivery || delivery === 'continued') return
         GameManager.updateCameraBorders()
         nextTurnPauseInterface.visible = true
 
@@ -119,6 +194,7 @@ function SetupServerCommunicationLogic(password) {
         if (socket !== onlineSocket) return
         onlineCommit = null
         competitiveDelivery = null
+        acceptedBoard = null
         requestCurrentGame()
     })
     if (socket.connected) requestCurrentGame()
