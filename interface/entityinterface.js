@@ -103,6 +103,9 @@ class EntityInterface {
         
         this.destroyButton = this.createButtonInTheBottom('destroy', destroySelected)
         this.skipMovesButton = this.createButtonInTheBottom('skip moves', skipMovesOfSelected)
+        this.portalStatsButton = this.createButtonInTheBottom('stats', () => this.refreshPortal(this.portal, true))
+        this.portalBackButton = this.createButtonInTheBottom('back', () => this.refreshPortal(this.portal, false))
+        this.portalStatsButton.canClick = this.portalBackButton.canClick = false
         this.updateSizes(false)
 
         this.renderCache = undefined
@@ -122,7 +125,32 @@ class EntityInterface {
         this.background.width = this.width
         
     }
-    change(entity, color) {
+    refreshPortal(portal, description = this.portalDescription) {
+        if (!portal || portal.killed) { this.visible = false; return }
+        const next = portal.nextProduction
+        description = Boolean(description && next)
+        let info = portal.info
+        if (description) {
+            const type = new JsonUnpackManager().unitClass[next.type]
+            info = type.description
+            // Only combat fields: keep the description and navigation within the panel.
+            info = {name: next.type, displayName: DEMON_TYPES[next.type].name,
+                image: next.type, info: {hp: info.info.hp, dmg: type.dmg,
+                    movement: info.info.speed, range: type.range || 1,
+                    ...(next.type === 'bombard' ? {'building dmg': type.buildingDMG,
+                        target: 'enemy buildings only'} : {})}}
+        }
+        const text = join(info.info, ': ', '\n')
+        if (this.portal === portal && this.portalDescription === description &&
+                this.visible && this.entity.name.text === (info.displayName || info.name) &&
+                this.entity.info.text === text) return
+        this.change(info, portal.player.fullColor, portal, description)
+    }
+    change(entity, color, portal = null, description = false) {
+        this.portal = portal
+        this.portalDescription = description
+        this.portalStatsButton.canClick = Boolean(portal && portal.nextProduction && !description)
+        this.portalBackButton.canClick = Boolean(portal && description)
         this.background.color = color.hex
         this.img.image = entity.image || entity.name
         this.entity.name.text = entity.displayName || entity.name
@@ -141,6 +169,7 @@ class EntityInterface {
     set visible(boolean) {
         if (boolean && !this.#visible)
             this.renderCacheDirty = true
+        if (!boolean) { this.portal = null; this.portalDescription = false }
         this.#visible = boolean
         undoButton.selected = boolean
     }
@@ -156,6 +185,8 @@ class EntityInterface {
         
         
         this.destroyButton.click(pos)
+        if (this.portalStatsButton.click(pos)) return true
+        if (this.portalBackButton.click(pos)) return true
         this.skipMovesButton.click(pos)
         return this.isInside(pos)
     }
@@ -172,6 +203,8 @@ class EntityInterface {
 
         this.destroyButton.draw(ctx)
         this.skipMovesButton.draw(ctx)
+        this.portalStatsButton.draw(ctx)
+        this.portalBackButton.draw(ctx)
     }
     getRenderCacheBounds() {
         const padding = this.background.strokeWidth

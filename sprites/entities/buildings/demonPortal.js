@@ -58,6 +58,14 @@ class DemonPortal extends Building {
         }
         return result
     }
+    select(isNeedToChangeBorder = true) {
+        super.select(isNeedToChangeBorder)
+        entityInterface.refreshPortal(this, false)
+    }
+    removeSelect() {
+        super.removeSelect()
+        entityInterface.visible = false
+    }
     isObstacle(playerColor) { return false }
     toJSON() {
         const result = {...super.toJSON(), ownerSlot: this.ownerSlot}
@@ -70,7 +78,7 @@ class DemonPortal extends Building {
         if (!Number.isFinite(damage) || damage < 0) throw new RangeError('invalid portal damage')
         const destroyed = super.hit(damage)
         if (!destroyed && gameEvent.selected === this)
-            entityInterface.change(this.info, this.player.fullColor)
+            entityInterface.refreshPortal(this)
         return destroyed
     }
     kill() {
@@ -95,9 +103,7 @@ class DemonPortal extends Building {
         if (!next) return
         drawProductionPreview(ctx, next.type, this.pos, this.coord, next.roundsRemaining)
         if (gameEvent.selected !== this) return
-        const info = this.info
-        if (entityInterface.entity.info.text !== join(info.info, ': ', '\n'))
-            entityInterface.change(info, this.player.fullColor)
+        entityInterface.refreshPortal(this)
     }
     drawBars(ctx) {
         if (!this.killed) this.hpBar.draw(ctx)
