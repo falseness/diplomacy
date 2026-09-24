@@ -227,12 +227,20 @@ class Grid extends SpritesGroup {
             }
         }
     }
+    // Public landmarks reveal only their artwork, never an occupying unit or
+    // overlays. Fog/vision state remains authoritative for everything else.
+    drawFogLandmark(ctx, building) {
+        if (building.name === 'goldmine' || (building.isDemonPortal && !building.killed))
+            drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(building)], building.pos)
+    }
     drawOther(ctx) {
         let tmpBuildings = []
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
-                if (isFogOfWar && !this.fogOfWar[i][j])
+                if (isFogOfWar && !this.fogOfWar[i][j]) {
+                    this.drawFogLandmark(ctx, this.arr[i][j].building)
                     continue
+                }
                 let cell = this.arr[i][j]
 
                 cell.building.draw(ctx)
@@ -267,8 +275,10 @@ class Grid extends SpritesGroup {
     drawEntityBodies(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
-                if (isFogOfWar && !this.fogOfWar[i][j])
+                if (isFogOfWar && !this.fogOfWar[i][j]) {
+                    this.drawFogLandmark(ctx, this.arr[i][j].building)
                     continue
+                }
                 const cell = this.arr[i][j]
                 if (this.isCacheableBuilding(cell.building))
                     this.drawEntityBody(ctx, cell.building)
