@@ -30,15 +30,18 @@ const commands = [];
 const command = (program,args) => {
   assert.ok(Date.now()<stopAt, 'cumulative stop-work deadline');
   log(`COMMAND ${program} ${args.join(' ')}\nCWD=${ROOT}`);
-  const r = spawnSync(program,args,{cwd:ROOT,encoding:'utf8',maxBuffer:32*1024*1024,
-    env:{...process.env,TASK242_STOP_AT:String(stopAt),TASK246_STOP_AT:String(stopAt),TASK238_STOP_AT:String(stopAt),TASK244_STOP_AT:String(stopAt),COOP_EVIDENCE_DIR:path.join(out,"movement")},timeout:Math.max(1,stopAt-Date.now()),killSignal:'SIGKILL'});
+  const journal=path.join(out,`owned-${commands.length}.jsonl`);
+  const r = spawnSync(process.execPath,[path.join(__dirname,'task245-supervisor.js'),journal,String(stopAt),program,...args],{cwd:ROOT,encoding:'utf8',maxBuffer:32*1024*1024,
+    env:{...process.env,TASK242_STOP_AT:String(stopAt),TASK246_STOP_AT:String(stopAt),TASK238_STOP_AT:String(stopAt),TASK244_STOP_AT:String(stopAt),COOP_EVIDENCE_DIR:path.join(out,"movement")}});
   log(r.stdout || ''); log(r.stderr || ''); log(`ACTUAL_EXIT_STATUS=${r.status}`);
-  commands.push({program,args,cwd:ROOT,exit:r.status,signal:r.signal,error:r.error?.message || null});
+  const supervision=JSON.parse(fs.readFileSync(journal+'.cleanup.json','utf8'));
+  commands.push({program,args,cwd:ROOT,exit:r.status,signal:r.signal,error:r.error?.message || null,supervision});
   assert.equal(r.status,0); return r.stdout;
 };
 const snapshot = () => sourceSnapshot();
 const browserCases=['browser-fog-upgraded'];
 const fixtureCommands = [
+ ['supervisor-cleanup','test-task245-supervisor.js','PASS forced-timeout failure=true detached-processes-stopped=true owned-directories-removed=true sentinel-preserved=true'],
  ["compact-health-bars", "test-compact-health-bars.js", "PASS compact-health-bars literal_cases=15 transitions=5 healing=2 load=1 undo=1"],
  ["coop-demon-ai", "test-coop-demon-ai.js", "PASS rejects-economic-trace-corruption expected_exit=1 observed_exit=1"],
  ["coop-demon-tile-ownership", "test-coop-demon-tile-ownership.js", "PASS rejects-registry-corruption expected_exit=1 observed_exit=1 unit=imp coord=(4,3)"],
@@ -154,7 +157,7 @@ try {
   assert.ok(Date.now()<stopAt); passed=true;
 } catch(e) {log(e.stack);}
 finally {
-  const cleanup=commands.every(c=>c.signal===null && c.error===null) && browserCases.every(id=>{const f=path.join(out,id,'cleanup.json');if(!fs.existsSync(f))return false;const c=JSON.parse(fs.readFileSync(f));return c.browserClosed&&c.clientClosed&&c.cleanup?.processes.every(p=>!p.aliveAfter)&&c.cleanup.directories.every(d=>!d.existsAfter);});
+  const cleanup=commands.every(c=>c.signal===null && c.error===null && c.supervision.cleanup && !c.supervision.timedOut) && browserCases.every(id=>{const f=path.join(out,id,'cleanup.json');if(!fs.existsSync(f))return false;const c=JSON.parse(fs.readFileSync(f));return c.browserClosed&&c.clientClosed&&c.cleanup?.processes.every(p=>!p.aliveAfter)&&c.cleanup.directories.every(d=>!d.existsAfter);});
   log(`${cleanup?'PASS':'FAIL'} owned-process-cleanup synchronous-children-reaped=${commands.length} browser-and-network-services-reaped`);
   if(passed&&cleanup){
     for(const f of ['verification-plan.json','source-identities.json','checkpoints.json','selection-observations.json','removal-inventory.json','remaining-references-rg.txt','save-load-checkpoints.json','obsolete-rejection-payloads.json','local.json','coverage.json','integrated-source.json'])

@@ -23,9 +23,13 @@ async function main(){
   const dir=path.join(out,c.id);fs.mkdirSync(path.join(dir,'screenshots'),{recursive:true});
   const errors=[],secrets=Array.from({length:2},()=>String(crypto.randomInt(100000000,999999999)));
   let browser,client;const sockets=[];let cleanup;
+  let cancel;
+  const cancelled=new Promise((_,reject)=>{cancel=()=>reject(new Error('supervisor cancelled browser journey'));});
+  cancelled.catch(()=>{});
+  if(process.env.TASK245_OWNERSHIP)process.once('SIGTERM',cancel);
   try{
    assert(Number(process.env.TASK242_STOP_AT)-Date.now()>300000,'reserve service cleanup budget');
-   const result=await withServices({evidenceDir:dir,bounds:{scenarioMs:240000}},async service=>{
+   const result=await withServices({evidenceDir:dir,bounds:{scenarioMs:240000}},async service=>Promise.race([cancelled,(async()=>{
     client=await startClientServer(undefined,{emptyFavicon:true});
     const spki=crypto.createHash('sha256').update(new crypto.X509Certificate(service.certificate.pem).publicKey.export({type:'spki',format:'der'})).digest('base64');
     browser=await chromium.launch({headless:true,args:[`--ignore-certificate-errors-spki-list=${spki}`]});
@@ -82,10 +86,11 @@ async function main(){
     check(c.id+'/server-errors',fs.readFileSync(path.join(service.logDir,'server.log'),'utf8').split('\n').filter(l=>/Error handling|Unhandled|TypeError|ReferenceError|RangeError/.test(l)),[]);
     write(c.id+'/served-sources.json',Object.fromEntries(client.served));
     for(const s of sockets)await s.close();await browser.close();browser=null;await client.close();client=null;
-   });
+   })()]));
    cleanup=result.cleanup;
   }catch(e){cleanup=e.cleanup;throw e;}
   finally{
+   process.removeListener('SIGTERM',cancel);
    for(const s of sockets)await s.close();if(browser)await browser.close();if(client)await client.close();
    write(c.id+'/browser-errors.json',errors);write(c.id+'/cleanup.json',{browserClosed:true,clientClosed:true,cleanup});
    // Service logs may contain authentication tokens. Retain full logs with only
