@@ -231,9 +231,9 @@ function installedRules() {
   const {COOP_TYPED_WAVE_SCHEDULE} = require('./wave-config');
   const context = {};
   vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'ai/demon-config.js'), 'utf8') +
-    '\nthis.stats = {v1: getDemonTypes(1), v2: getDemonTypes(2)};', context);
+    '\nthis.stats = DEMON_TYPES;', context);
   return {waveInterval: COOP_TYPED_WAVE_SCHEDULE.waveInterval, categories: JSON.parse(JSON.stringify(
-    COOP_TYPED_WAVE_SCHEDULE.categories)), balanceVersion: 2, stats: JSON.parse(JSON.stringify(context.stats.v2))};
+    COOP_TYPED_WAVE_SCHEDULE.categories)), balanceVersion: 2, stats: JSON.parse(JSON.stringify(context.stats))};
 }
 
 async function main() {

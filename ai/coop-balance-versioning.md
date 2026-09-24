@@ -1,6 +1,6 @@
-# Fixed demon balance versions
+# Demon wave progression versions
 
-New `GameMap.start` co-op games record `gameSettings.coop.balanceVersion: 2` before constructing units. Version 2 retains the ten TASK-107 combat stat rows in `TUNED_DEMON_TYPES` and original weights, with the explicit unlock schedule below. TASK-129 replaces the former delay formula directly for both new and loaded version-2 games, without a new balance version or save migration. No runtime wealth, survivor count, or online/local distinction enters selection.
+Combat stats have one authoritative current table, `DEMON_TYPES` in `ai/demon-config.js`, used by browser and server constructors regardless of saved metadata. There is no combat balance selector or legacy combat fallback. New `GameMap.start` co-op games still record `gameSettings.coop.balanceVersion: 2` for wave progression. TASK-129 defines the version-2 unlock schedule below; wave versions and weights are independent of combat stats.
 
 | Type | Completed round eligible |
 |---|---:|

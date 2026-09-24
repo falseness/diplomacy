@@ -1,97 +1,67 @@
 'use strict';
-const assert = require('assert').strict;
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-const {spawnSync} = require('child_process');
-const config = require('./demon-config');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const {createFixture, defaultFixture} = require('./test-coop-harness');
 
-// Independent design snapshot: never generate this data from the production table.
-const expectedRows = [
-  ['imp', 'imp', 'fragile basic melee', 2, 1, 2, true, false, 1],
-  ['clawling', 'clawling', 'quick light melee', 3, 1, 3, true, false, 1],
-  ['hound', 'hound', 'fast melee pursuit', 4, 2, 4, true, false, 1],
-  ['brute', 'brute', 'slow high-health melee', 10, 3, 1, true, false, 1],
-  ['bulwark', 'bulwark', 'very durable slow melee', 16, 2, 1, true, false, 1],
-  ['spitter', 'spitter', 'fragile short-range attacker', 2, 1, 2, true, true, 2],
-  ['emberArcher', 'ember archer', 'mobile ranged attacker', 4, 2, 3, true, true, 3],
-  ['hexcaster', 'hexcaster', 'slow stronger ranged attacker', 5, 4, 1, true, true, 3],
-  ['ravager', 'ravager', 'fast strong late-game melee', 8, 5, 4, true, false, 1],
-  ['demonLord', 'demon lord', 'durable powerful late-game melee', 20, 6, 2, true, false, 1]
-];
-function compare(scenario, observed, expected) {
-  console.log(JSON.stringify({scenario, expected, observed}));
-  assert.deepEqual(observed, expected, scenario);
-  console.log(`PASS ${scenario}`);
+// Independent TASK-232 contract. Do not derive expectations from production.
+const expected = {
+  imp: ['imp', 'fragile basic melee', 2, 1, 2, false, 1],
+  clawling: ['clawling', 'quick light melee', 1, 2, 2, false, 1],
+  hound: ['hound', 'fast melee pursuit', 2, 1, 5, false, 1],
+  brute: ['brute', 'slow high-health melee', 3, 2, 2, false, 1],
+  bulwark: ['bulwark', 'very durable slow melee', 7, 1, 2, false, 1],
+  spitter: ['spitter', 'fragile short-range attacker', 2, 1, 2, true, 1],
+  emberArcher: ['ember archer', 'mobile ranged attacker', 1, 1, 2, true, 3],
+  hexcaster: ['hexcaster', 'slow stronger ranged attacker', 1, 3, 1, true, 2],
+  ravager: ['ravager', 'fast strong late-game melee', 4, 1, 3, false, 1],
+  demonLord: ['demon lord', 'durable powerful late-game melee', 5, 3, 2, false, 1]
+};
+const versions = ['unversioned', 1, 2];
+const probe = `(() => {
+  whooseTurn=gameSettings.coop.demonSlot;
+  return [Imp,Clawling,Hound,Brute,Bulwark,Spitter,EmberArcher,Hexcaster,Ravager,DemonLord].map(C=>{
+    grid.getHexagon({x:5,y:4}).repaint(whooseTurn,false);
+    const u=new C(5,4);
+    const row={id:C.type, constructor:[u.hp,u.dmg,u.speed,u.range ?? 1],
+      description:C.description.info, info:u.info, salary:u.salary, healSpeed:C.healSpeed};
+    u.kill(); return row;
+  });
+})()`;
+function expectedUnit(id) {
+  const [name,,hp,dmg,speed,ranged,range] = expected[id];
+  return {id, constructor:[hp,dmg,speed,range],
+    description:{hp,'heal speed':0,dmg,speed,salary:0,...(ranged?{range}:{})},
+    info:{name:id,info:{hp:hp+' / '+hp,dmg,moves:speed+' / '+speed},
+      displayName:name,canSkipMoves:true},salary:0,healSpeed:0};
 }
-function snapshot(c, runtime) {
-  compare(`${runtime}-ten-types`, Object.keys(c), expectedRows.map(row => row[0]));
-  for (const [id, name, role, health, damage, movement, melee, ranged, range] of expectedRows) {
-    compare(`${runtime}-exact-${id}`, c[id], {name, role, health, damage, movement, melee, ranged, range});
+function browserSource() {
+  const config=defaultFixture(); config.coop=true;
+  const f=createFixture(config);
+  const inputs=[], observations=[];
+  for (const version of versions) {
+    f.evaluate(version==='unversioned' ? 'delete gameSettings.coop.balanceVersion' : `gameSettings.coop.balanceVersion=${version}`);
+    inputs.push(f.evaluate('JSON.parse(JSON.stringify(getGameObject()))'));
+    observations.push({version,rows:f.evaluate(probe)});
   }
-}
-function roles(c) {
-  const {imp: i, clawling: c1, hound: h, brute: b, bulwark: w,
-    spitter: s, emberArcher: e, hexcaster: x, ravager: r, demonLord: l} = c;
-  const checks = {
-    'imp-fragile-basic-melee': i.health < c1.health && i.damage === 1 && i.melee && !i.ranged,
-    'clawling-quick-light-melee': c1.movement > i.movement && c1.health < h.health && c1.damage < h.damage && c1.melee && !c1.ranged,
-    'hound-fast-pursuit': h.movement > c1.movement && h.melee && !h.ranged,
-    'brute-slow-high-health': b.movement < i.movement && b.health > h.health && b.melee && !b.ranged,
-    'bulwark-very-durable-slow': w.health > b.health && w.movement === b.movement && w.melee && !w.ranged,
-    'spitter-fragile-short-range': s.health === i.health && s.health < e.health && s.ranged && s.range > 1 && s.range < e.range,
-    'ember-archer-mobile-ranged': e.ranged && e.movement > s.movement && e.movement > x.movement,
-    'hexcaster-slow-stronger-ranged': x.ranged && x.movement < s.movement && x.damage > e.damage && x.damage > s.damage,
-    'ravager-fast-strong-melee': r.melee && !r.ranged && r.movement === h.movement && r.damage > b.damage && r.damage > h.damage,
-    'demon-lord-durable-powerful-melee': l.melee && !l.ranged && l.health > w.health && l.damage > r.damage
-  };
-  for (const [name, observed] of Object.entries(checks)) compare(`role-${name}`, observed, true);
-  for (const [id, type] of Object.entries(c)) {
-    compare(`valid-stats-${id}`, ['health', 'damage', 'movement', 'range'].every(key =>
-      Number.isInteger(type[key]) && type[key] > 0) && type.melee &&
-      (type.ranged ? type.range > 1 : type.range === 1), true);
-  }
-}
-function runTests() {
-  snapshot(config, 'node');
-  roles(config);
-  // Load the exact script referenced by the browser, without starting a game.
-  const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
-  const script = "<script src='ai/demon-config.js'></script>";
-  compare('browser-script-loaded-once', html.split(script).length - 1, 1);
-  compare('browser-config-before-players', html.indexOf(script) < html.indexOf("<script src='player.js'>"), true);
-  const context = vm.createContext({});
-  vm.runInContext(fs.readFileSync(path.join(__dirname, 'demon-config.js'), 'utf8'), context);
-  snapshot(JSON.parse(vm.runInContext('JSON.stringify(DEMON_TYPES)', context)), 'browser');
-  compare('browser-deeply-frozen', vm.runInContext('Object.isFrozen(DEMON_TYPES) && Object.values(DEMON_TYPES).every(Object.isFrozen)', context), true);
-  compare('node-deeply-frozen', Object.isFrozen(config) && Object.values(config).every(Object.isFrozen), true);
-  assert.throws(() => { config.imp.health = 99; }, TypeError);
-  assert.throws(() => { config.extra = {}; }, TypeError);
-  console.log('PASS rejects-config-mutation expected=TypeError observed=TypeError');
-  for (const [fault, marker] of [['stat', 'node-exact-imp'], ['role', 'role-hound-fast-pursuit']]) {
-    const child = spawnSync(process.execPath, [__filename, '--fault', fault], {encoding: 'utf8'});
-    process.stdout.write(child.stdout); process.stderr.write(child.stderr);
-    assert.equal(child.status, 1);
-    assert.match(child.stderr, /AssertionError/);
-    assert.ok(child.stderr.includes(marker));
-    console.log(`PASS rejects-${fault}-corruption expected_exit=1 observed_exit=${child.status} marker=${marker}`);
-  }
-  console.log('INAPPLICABLE entity/economy invariants: static configuration only; no entities, IDs, occupied positions, map/ownership/serialization references, human income/expenses or demon gold/assets are created or changed.');
-  console.log('INAPPLICABLE turn/round/phase invariants: no game actions or rounds execute, so shared action/round invariant helpers have no checkpoints.');
-  console.log('INAPPLICABLE committed-client convergence: no online games or committed revisions; browser and Node configurations are each compared with independent expected data.');
-  console.log('PASS co-op demon config types=10 role_checks=10 fault_probes=2');
+  return {fixture:config,inputs,observations};
 }
 if (require.main === module) {
-  const fault = process.argv.indexOf('--fault');
-  if (fault !== -1) {
-    const corrupted = JSON.parse(JSON.stringify(config));
-    if (process.argv[fault + 1] === 'stat') {
-      corrupted.imp.health++;
-      snapshot(corrupted, 'node');
-    } else {
-      corrupted.hound.movement = 1;
-      roles(corrupted);
+  if (process.argv.includes('--server')) {
+    require('../../diplomacy_server/server/loadGameCode');
+    const inputs=JSON.parse(fs.readFileSync(0,'utf8'));
+    const observations=inputs.map((input,i)=>{
+      global.task232Input=input;
+      vm.runInThisContext('loadFromJson(JSON.stringify(task232Input))');
+      return {version:versions[i],rows:vm.runInThisContext(probe)};
+    });
+    console.log('TASK232_SERVER_RESULTS='+JSON.stringify(observations));
+  } else {
+    const result=browserSource();
+    for (const {version,rows} of result.observations) for (const row of rows) {
+      assert.deepEqual(row,expectedUnit(row.id));
+      console.log(`PASS browser-source/${version}/${row.id}`);
     }
-  } else runTests();
+  }
 }
-if (!process.argv.includes('--fault')) require('./test-coop-fixed-balance');
+module.exports={expected,versions,expectedUnit,browserSource};

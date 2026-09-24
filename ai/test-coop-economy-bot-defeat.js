@@ -394,7 +394,7 @@ function runChild(spec) {
     record.configuration = JSON.parse(ev(`JSON.stringify({generation: gameSettings.coop.generation, humanSlots: gameSettings.coop.humanSlots,
       demonSlot: gameSettings.coop.demonSlot, balanceVersion: gameSettings.coop.balanceVersion, suddenDeathRound, isFogOfWar,
       aiActionLimit: gameSettings.aiActionLimit ?? null, isOnline: gameSettings.isOnline,
-      rules: {demonTypes: currentDemonTypes(), typedWaveSchedule: COOP_TYPED_WAVE_SCHEDULE},
+      rules: {demonTypes: DEMON_TYPES, typedWaveSchedule: COOP_TYPED_WAVE_SCHEDULE},
       slots: players.map((p, i) => ({slot: i, class: p.constructor.name, role: p.role, gold: p.gold, economyMode: p.economyMode ?? null,
         ownOverrides: ['play', 'nextTurn', 'playCombatActions', 'spendWarGold', 'spendEconomyGold', 'unitDoMoves']
           .filter(name => Object.prototype.hasOwnProperty.call(p, name))}))})`));

@@ -257,8 +257,6 @@ class JsonUnpackManager {
         // Before any restore step that can throw, so later frames still draw.
         normalizeInterfaceSettings(gameSettings)
 
-        if (gameSettings.coop) getDemonTypes(gameSettings.coop.balanceVersion ?? 1)
-
         let gridSize = {
             x: packedGrid.length,
             y: packedGrid[0].length
