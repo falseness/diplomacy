@@ -11,46 +11,36 @@ const vm = require('vm');
 const {spawnSync, execSync} = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const SOURCES = ['ai/wave-config.js', 'ai/wave-composition.js', 'ai/wave-placement.js', 'ai/demon-config.js',
-  'index.html', 'ai/test-coop-typed-wave-config.js'];
+  'index.html', 'sprites/entities/buildings/demonPortal.js', 'ai/test-coop-typed-wave-config.js'];
 
 // Independent design literals; none of these read production values.
-const CATEGORIES = ['normal', 'ranged', 'heavy', 'highTier'];
-const WAVE_ROUNDS = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100];
-const _ = null;
-const SCHEDULE_AT_WAVES = {
-  //       4      8           12       16           20       24          28-100
-  normal: ['imp', 'clawling', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound',
-    'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound', 'hound',
-    'hound', 'hound', 'hound', 'hound'],
-  ranged: [_, _, 'spitter', 'emberArcher', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster',
-    'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster',
-    'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster', 'hexcaster'],
-  heavy: [_, _, _, _, 'brute', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark',
-    'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark', 'bulwark',
-    'bulwark', 'bulwark', 'bulwark', 'bulwark'],
-  highTier: [_, _, _, _, _, 'ravager', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord',
-    'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord',
-    'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord', 'demonLord']
+const CATEGORIES = ['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos'];
+const WAVE_ROUNDS = Array.from({length: 25}, (_, i) => (i + 1) * 4);
+// Independent specification literals, never imported from production.
+const EXPECTED_STEPS = {
+  melee: [[4, 'imp'], [8, 'clawling'], [16, 'brute']],
+  ranged: [[4, 'spitter'], [12, 'emberArcher'], [20, 'hexcaster']],
+  siege: [[16, 'bombard']], heavy: [[20, 'bulwark']],
+  support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']]
 };
-const TRANSITIONS = {normal: [4, 8, 12], ranged: [12, 16, 20], heavy: [20, 24], highTier: [24, 28]};
-// [completedRound, nextRound, type, roundsRemaining]; before/at/after every transition.
-const NEXT = {
-  normal: [[0, 4, 'imp', 4], [3, 4, 'imp', 1], [4, 8, 'clawling', 4], [5, 8, 'clawling', 3], [7, 8, 'clawling', 1],
-    [8, 12, 'hound', 4], [9, 12, 'hound', 3], [11, 12, 'hound', 1], [12, 16, 'hound', 4], [13, 16, 'hound', 3],
-    [99, 100, 'hound', 1], [100, 104, 'hound', 4], [1000, 1004, 'hound', 4]],
-  ranged: [[0, 12, 'spitter', 12], [3, 12, 'spitter', 9], [4, 12, 'spitter', 8], [8, 12, 'spitter', 4],
-    [11, 12, 'spitter', 1], [12, 16, 'emberArcher', 4], [13, 16, 'emberArcher', 3], [15, 16, 'emberArcher', 1],
-    [16, 20, 'hexcaster', 4], [17, 20, 'hexcaster', 3], [19, 20, 'hexcaster', 1], [20, 24, 'hexcaster', 4],
-    [21, 24, 'hexcaster', 3], [100, 104, 'hexcaster', 4]],
-  heavy: [[0, 20, 'brute', 20], [4, 20, 'brute', 16], [16, 20, 'brute', 4], [19, 20, 'brute', 1],
-    [20, 24, 'bulwark', 4], [21, 24, 'bulwark', 3], [23, 24, 'bulwark', 1], [24, 28, 'bulwark', 4],
-    [25, 28, 'bulwark', 3], [100, 104, 'bulwark', 4]],
-  highTier: [[0, 24, 'ravager', 24], [8, 24, 'ravager', 16], [20, 24, 'ravager', 4], [23, 24, 'ravager', 1],
-    [24, 28, 'demonLord', 4], [25, 28, 'demonLord', 3], [27, 28, 'demonLord', 1], [28, 32, 'demonLord', 4],
-    [29, 32, 'demonLord', 3], [100, 104, 'demonLord', 4]]
-};
+function literalType(category, round) {
+  if (!round || round % 4) return null;
+  const step = EXPECTED_STEPS[category].filter(([unlock]) => unlock <= round).pop();
+  return step ? step[1] : null;
+}
+function literalNext(category, completed) {
+  let round = completed + 1;
+  while (!literalType(category, round)) round++;
+  return {round, type: literalType(category, round), roundsRemaining: round - completed};
+}
+const SCHEDULE_AT_WAVES = Object.fromEntries(CATEGORIES.map(c => [c, WAVE_ROUNDS.map(r => literalType(c, r))]));
+const TRANSITIONS = Object.fromEntries(CATEGORIES.map(c => [c, EXPECTED_STEPS[c].map(([r]) => r)]));
+const NEXT = Object.fromEntries(CATEGORIES.map(c => [c,
+  [...new Set([0, 100, 1000, ...TRANSITIONS[c].flatMap(r => [r - 1, r, r + 1])])].sort((a,b)=>a-b).map(completed => {
+    const n = literalNext(c, completed); return [completed, n.round, n.type, n.roundsRemaining];
+  })]));
 const DEMON_TYPE_IDS = ['imp', 'clawling', 'hound', 'brute', 'bulwark', 'spitter', 'emberArcher', 'hexcaster',
-  'ravager', 'demonLord'];
+  'ravager', 'demonLord', 'bombard'];
 
 const checkpoints = [];
 function compare(id, observed, expected) {
@@ -79,11 +69,8 @@ function lcg(seed) {
 
 function checkSchedule(a, runtime, record) {
   compare(`${runtime}-categories`, a.COOP_PORTAL_CATEGORIES, CATEGORIES);
-  compare(`${runtime}-literal-transitions`, a.COOP_TYPED_WAVE_SCHEDULE, {waveInterval: 4, categories: {
-    normal: [{round: 4, type: 'imp'}, {round: 8, type: 'clawling'}, {round: 12, type: 'hound'}],
-    ranged: [{round: 12, type: 'spitter'}, {round: 16, type: 'emberArcher'}, {round: 20, type: 'hexcaster'}],
-    heavy: [{round: 20, type: 'brute'}, {round: 24, type: 'bulwark'}],
-    highTier: [{round: 24, type: 'ravager'}, {round: 28, type: 'demonLord'}]}});
+  compare(`${runtime}-literal-transitions`, a.COOP_TYPED_WAVE_SCHEDULE, {waveInterval: 4,
+    categories: Object.fromEntries(CATEGORIES.map(c => [c, EXPECTED_STEPS[c].map(([round, type]) => ({round, type}))]))});
   const table = {};
   for (const category of CATEGORIES) {
     const observed = [];
@@ -100,9 +87,9 @@ function checkSchedule(a, runtime, record) {
   compare(`${runtime}-wave-rounds-0-100`, waveFlags.map((flag, round) => flag ? round : null).filter(r => r !== null),
     WAVE_ROUNDS);
   // Indefinite repetition of the strongest reached type, far past the table.
-  for (const [round, expected] of [[101, [null, null, null, null]], [104, ['hound', 'hexcaster', 'bulwark', 'demonLord']],
-    [4000, ['hound', 'hexcaster', 'bulwark', 'demonLord']], [4002, [null, null, null, null]],
-    [Number.MAX_SAFE_INTEGER - 3, ['hound', 'hexcaster', 'bulwark', 'demonLord']]])
+  for (const [round, expected] of [[101, [null, null, null, null, null, null]], [104, ['brute', 'hexcaster', 'bombard', 'bulwark', 'hound', 'demonLord']],
+    [4000, ['brute', 'hexcaster', 'bombard', 'bulwark', 'hound', 'demonLord']], [4002, [null, null, null, null, null, null]],
+    [Number.MAX_SAFE_INTEGER - 3, ['brute', 'hexcaster', 'bombard', 'bulwark', 'hound', 'demonLord']]])
     compare(`${runtime}-repeat-round-${round}`, CATEGORIES.map(c => a.getCoopScheduledDemonType(c, round)), expected);
   for (const category of CATEGORIES) {
     for (const [completed, round, type, roundsRemaining] of NEXT[category])
@@ -126,11 +113,11 @@ function portalSet(seed, humans) {
   const random = lcg(seed);
   const used = new Set();
   const portals = [];
-  for (let i = 0; i < 4 * humans; i++) {
+  for (let i = 0; i < 6 * humans; i++) {
     let x, y;
     do { x = Math.floor(random() * 62); y = Math.floor(random() * 62); } while (used.has(`${x},${y}`));
     used.add(`${x},${y}`);
-    portals.push({x, y, category: CATEGORIES[i % 4]});
+    portals.push({x, y, category: CATEGORIES[i % 6]});
   }
   return portals.sort((p, q) => p.x - q.x || p.y - q.y);
 }
@@ -197,18 +184,18 @@ function checkComposition(a, runtime, record) {
 
 function checkInvalid(a, runtime) {
   const badRounds = [-1, 1.5, NaN, Infinity, '4', null, undefined, Number.MAX_SAFE_INTEGER + 1];
-  const badCategories = ['Normal', '', null, undefined, 1, 'toString', '__proto__', 'high_tier'];
+  const badCategories = ['normal', 'highTier', 'Normal', '', null, undefined, 1, 'toString', '__proto__', 'high_tier'];
   const observed = {
-    typeRound: badRounds.map(r => throwsName(() => a.getCoopScheduledDemonType('normal', r))),
-    nextRound: badRounds.map(r => throwsName(() => a.getCoopNextScheduledProduction('normal', r))),
+    typeRound: badRounds.map(r => throwsName(() => a.getCoopScheduledDemonType('melee', r))),
+    nextRound: badRounds.map(r => throwsName(() => a.getCoopNextScheduledProduction('melee', r))),
     waveRound: badRounds.map(r => throwsName(() => a.isCoopTypedWaveRound(r))),
     composeRound: badRounds.map(r => throwsName(() => a.composeTypedCoopWave(r, []))),
     typeCategory: badCategories.map(c => throwsName(() => a.getCoopScheduledDemonType(c, 4))),
     typeCategoryOffWave: badCategories.map(c => throwsName(() => a.getCoopScheduledDemonType(c, 3))),
     nextCategory: badCategories.map(c => throwsName(() => a.getCoopNextScheduledProduction(c, 0))),
-    nextOverflow: throwsName(() => a.getCoopNextScheduledProduction('normal', Number.MAX_SAFE_INTEGER)),
-    composePortals: [null, 'portals', [{x: 1, y: 1, category: 'normal'}, {x: 1, y: 1, category: 'heavy'}],
-      [{x: -1, y: 0, category: 'normal'}], [{x: 0.5, y: 0, category: 'normal'}], [null],
+    nextOverflow: throwsName(() => a.getCoopNextScheduledProduction('melee', Number.MAX_SAFE_INTEGER)),
+    composePortals: [null, 'portals', [{x: 1, y: 1, category: 'melee'}, {x: 1, y: 1, category: 'heavy'}],
+      [{x: -1, y: 0, category: 'melee'}], [{x: 0.5, y: 0, category: 'melee'}], [null],
       [{x: 0, y: 0}], [{x: 0, y: 0, category: 'boss'}]].map(p => throwsName(() => a.composeTypedCoopWave(8, p)))
   };
   const r = name => badRounds.map(() => name);
@@ -218,14 +205,14 @@ function checkInvalid(a, runtime) {
     typeCategoryOffWave: c('RangeError'), nextCategory: c('RangeError'), nextOverflow: 'RangeError',
     composePortals: Array(8).fill('RangeError')});
   const mutations = [() => { a.COOP_TYPED_WAVE_SCHEDULE.waveInterval = 2; },
-    () => { a.COOP_TYPED_WAVE_SCHEDULE.categories.normal[0].round = 0; },
+    () => { a.COOP_TYPED_WAVE_SCHEDULE.categories.melee[0].round = 0; },
     () => { a.COOP_TYPED_WAVE_SCHEDULE.categories.heavy.push({round: 4, type: 'imp'}); },
     () => { a.COOP_TYPED_WAVE_SCHEDULE.categories.boss = []; },
     () => { a.COOP_PORTAL_CATEGORIES.push('boss'); }];
   compare(`${runtime}-rejects-mutation`, mutations.map(m => throwsName(m)), Array(5).fill('TypeError'));
-  const next = a.getCoopNextScheduledProduction('normal', 0);
+  const next = a.getCoopNextScheduledProduction('melee', 0);
   next.type = 'demonLord';
-  compare(`${runtime}-next-result-detached`, a.getCoopNextScheduledProduction('normal', 0),
+  compare(`${runtime}-next-result-detached`, a.getCoopNextScheduledProduction('melee', 0),
     {round: 4, type: 'imp', roundsRemaining: 4});
 }
 
@@ -240,6 +227,42 @@ function loadBrowserRealm() {
   return vm.runInContext(`({COOP_TYPED_WAVE_SCHEDULE, COOP_PORTAL_CATEGORIES, isCoopTypedWaveRound,
     getCoopScheduledDemonType, getCoopNextScheduledProduction, composeTypedCoopWave})`, context);
 }
+// Execute the production availability adapter and portal lookup getter in a
+// source realm. This fixture tests schedule callers, not network or rendering.
+function checkCallers() {
+  const context = vm.createContext({});
+  for (const src of ['ai/wave-config.js', 'ai/wave-composition.js'])
+    vm.runInContext(fs.readFileSync(path.join(ROOT, src), 'utf8'), context);
+  vm.runInContext(`class Building {}; const gameSettings = {coop: {demonSlot: 3, generation: {version: 4}}};
+    let gameRound = 0;
+    const external = COOP_PORTAL_CATEGORIES.map((category, x) => ({category, coord: {x,y:0},
+      hp:30, killed:false, isDemonPortal:true, playerColor:3}));
+    let blocked = false;
+    const grid = {getBuilding: c => external[c.x], getUnit: () => ({isEmpty: () => !blocked})};`, context);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'sprites/entities/buildings/demonPortal.js'), 'utf8'), context);
+  for (const round of [4, 8, 12, 16, 20, 24, 28, 32, 36, 100]) {
+    const expected = CATEGORIES.map((c,x) => ({x,y:0,type:literalType(c,round)})).filter(x=>x.type);
+    const observed = vm.runInContext(`gameSettings.coop.typedWaves = {lastRound:0};
+      generateCoopWave(${round})`, context);
+    compare(`caller-available-${round}`, observed, {round,types:expected.map(x=>x.type),selections:expected});
+    compare(`caller-no-duplicate-${round}`, vm.runInContext(`generateCoopWave(${round})`, context),
+      {round,types:[],selections:[]});
+  }
+  for (const state of ['blocked = true', 'blocked = false; external.forEach(p => p.killed = true)',
+    'external.forEach(p => {p.killed = false; p.hp = 0})']) {
+    compare(`caller-unavailable-${state}`, vm.runInContext(`${state}; gameSettings.coop.typedWaves={lastRound:0}; generateCoopWave(28)`, context),
+      {round:28,types:[],selections:[]});
+  }
+  compare('caller-unblock-no-backlog', vm.runInContext(`external.forEach(p => p.hp = 30); generateCoopWave(32)`, context),
+    {round:32, types:['brute','hexcaster','bombard','bulwark','hound','demonLord'],
+      selections:CATEGORIES.map((c,x)=>({x,y:0,type:literalType(c,32)}))});
+  for (const category of CATEGORIES) for (const [gameRound, committed] of [[0,0],[3,4],[15,16],[28,24]]) {
+    const observed = vm.runInContext(`gameRound=${gameRound}; gameSettings.coop.typedWaves={lastRound:${committed}};
+      Object.getOwnPropertyDescriptor(DemonPortal.prototype, 'nextProduction').get.call({category:'${category}',killed:false})`, context);
+    compare(`caller-preview-${category}-${gameRound}-${committed}`, observed, literalNext(category,Math.max(gameRound,committed)));
+  }
+}
+
 function nodeApi() {
   return {...require('./wave-config'), composeTypedCoopWave: require('./wave-composition').composeTypedCoopWave};
 }
@@ -256,7 +279,7 @@ function runFault(fault) {
   const a = nodeApi();
   if (fault === 'late-imp') {
     const original = a.getCoopScheduledDemonType;
-    a.getCoopScheduledDemonType = (c, r) => c === 'normal' && r === 4 ? null : original(c, r);
+    a.getCoopScheduledDemonType = (c, r) => c === 'melee' && r === 4 ? null : original(c, r);
     checkSchedule(a, 'node');
   } else if (fault === 'order-dependent') {
     const original = a.composeTypedCoopWave;
@@ -291,19 +314,20 @@ function run(outputDir) {
   compare('node-browser-schedule-identical', CATEGORIES.map(c => Array.from({length: 101}, (x, r) =>
     runtimes[1][1].getCoopScheduledDemonType(c, r))), CATEGORIES.map(c => record.schedule[c]));
   checkTypeRegistry(runtimes[0][1]);
+  checkCallers();
   const negative = [];
-  for (const [fault, marker] of [['late-imp', 'MISMATCH node-schedule-normal-rounds-0-100'],
+  for (const [fault, marker] of [['late-imp', 'MISMATCH node-schedule-melee-rounds-0-100'],
     ['order-dependent', 'MISMATCH node-seed-order-H1-round-4-seed-0-reversed'],
-    ['next-at-wave', 'MISMATCH node-next-normal-4 ']]) {
-    const child = spawnSync(process.execPath, [__filename, '--fault', fault], {encoding: 'utf8'});
-    process.stdout.write(child.stdout.split('\n').filter(l => l.startsWith('MISMATCH')).join('\n') + '\n');
+    ['next-at-wave', 'MISMATCH node-next-melee-4 ']]) {
+    const child = spawnSync(process.execPath, [__filename, '--fault', fault], {encoding: 'utf8', timeout: Math.max(1, Number(process.env.TASK235_STOP_AT || Date.now() + 60000) - Date.now())});
+    process.stdout.write(child.stdout || ''); process.stderr.write(child.stderr || '');
     const observed = {exit: child.status, marker: child.stdout.includes(marker)};
     console.log(`NEGATIVE ${fault} exit=${child.status} marker=${JSON.stringify(marker)} found=${observed.marker}`);
     negative.push({fault, marker, exit: child.status});
     compare(`negative-control-${fault}`, observed, {exit: 1, marker: true});
   }
   compare('sources-unchanged-during-run', identities(), before);
-  const schedule = {waveInterval: 4, categories: CATEGORIES, rounds: '0..100 (index = absolute completed round)',
+  const schedule = {assertions: checkpoints.filter(c => /schedule|next-|invalid|repeat|transitions/.test(c.id)), waveInterval: 4, categories: CATEGORIES, rounds: '0..100 (index = absolute completed round)',
     transitions: runtimes[0][1].COOP_TYPED_WAVE_SCHEDULE.categories, typeByRound: record.schedule,
     nextProduction: Object.fromEntries(CATEGORIES.map(c => [c, Array.from({length: 101}, (x, r) =>
       ({completedRound: r, ...runtimes[0][1].getCoopNextScheduledProduction(c, r)}))]))};
@@ -315,7 +339,7 @@ function run(outputDir) {
     node: process.version, files: before}, null, 1) + '\n');
   fs.writeFileSync(path.join(outputDir, 'checkpoints.json'), JSON.stringify({total: checkpoints.length,
     passed: checkpoints.filter(c => c.pass).length, negativeControls: negative, checkpoints}, null, 1) + '\n');
-  console.log(`PASS co-op typed wave config categories=4 rounds=0..100 runtimes=node,browser checkpoints=${checkpoints.length} negative_controls=${negative.length}`);
+  console.log(`PASS co-op typed wave config categories=6 rounds=0..100 runtimes=node,script-vm checkpoints=${checkpoints.length} negative_controls=${negative.length}`);
 }
 
 if (require.main === module) {

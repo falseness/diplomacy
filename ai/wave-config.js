@@ -76,10 +76,12 @@ function getUnlockedCoopDemonTypes(round, version = 1) {
 const COOP_TYPED_WAVE_SCHEDULE = Object.freeze({
   waveInterval: 4,
   categories: Object.freeze(Object.fromEntries(Object.entries({
-    normal: [[4, 'imp'], [8, 'clawling'], [12, 'hound']],
-    ranged: [[8, 'spitter'], [16, 'emberArcher'], [24, 'hexcaster']],
-    heavy: [[20, 'bulwark'], [24, 'brute']],
-    highTier: [[24, 'ravager'], [28, 'demonLord']]
+    melee: [[4, 'imp'], [8, 'clawling'], [16, 'brute']],
+    ranged: [[4, 'spitter'], [12, 'emberArcher'], [20, 'hexcaster']],
+    siege: [[16, 'bombard']],
+    heavy: [[20, 'bulwark']],
+    support: [[16, 'ravager'], [24, 'hound']],
+    chaos: [[28, 'demonLord']]
   }).map(([category, steps]) => [category,
     Object.freeze(steps.map(([round, type]) => Object.freeze({round, type})))])))
 });
