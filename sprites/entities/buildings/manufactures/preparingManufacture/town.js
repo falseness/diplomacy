@@ -100,7 +100,9 @@ class Town extends PreparingManufacture {
                 this.suburbs.splice(i--, 1)
                 continue
             }
-            else if (cell.building.canBeDestroyed) {
+            // Mines are independent map assets, not town dependencies. Keep
+            // them on the grid when their suburb transfers to the capturer.
+            else if (cell.building.canBeDestroyed && cell.building.name !== 'goldmine') {
                 if (cell.building.isManufacture) {
                     if (coordsEqually(cell.hexagon.coord, this.coord)) { // town cell
                         this.suburbs[i].sudoPaint(this.playerColor)
