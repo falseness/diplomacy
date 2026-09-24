@@ -67,8 +67,56 @@ function rebaseOnlineValue(base, local, remote) {
 }
 
 function SetupServerCommunicationLogic(password) {
-    if (onlineSocket) onlineSocket.disconnect()
-    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080')
+    if (onlineSocket) { const previous = onlineSocket; onlineSocket = null; previous.disconnect() }
+    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080', {forceNew: true, reconnection: false, timeout: 10000})
+    document.getElementById('online-recovery')?.remove()
+    let failed = false
+    const fail = message => {
+        if (socket !== onlineSocket || failed) return
+        failed = true
+        onlineLobby = null
+        gameEvent.waitingMode = true
+        nextTurnButton.disableClick()
+        undoButton.disableClick()
+        nextTurnPauseInterface.visible = false
+        if (typeof timer !== 'undefined' && timer) timer.pause()
+        const panel = document.createElement('div')
+        panel.id = 'online-recovery'
+        panel.setAttribute('role', 'alertdialog')
+        panel.setAttribute('aria-label', 'Online connection problem')
+        panel.style.cssText = 'position:fixed;inset:30% 10% auto;z-index:10000;padding:24px;background:white;color:black;text-align:center;border:2px solid #444;font:20px sans-serif'
+        const text = document.createElement('p')
+        text.textContent = message + ' Retry to reload the saved turn, or go back to the menu.'
+        panel.append(text)
+        const button = (label, action) => {
+            const b = document.createElement('button')
+            b.textContent = label
+            b.style.cssText = 'padding:12px 24px;margin:8px;font:inherit'
+            b.onclick = event => { event.stopPropagation(); action() }
+            panel.append(b)
+            return b
+        }
+        const retry = button('Retry', () => {
+            panel.remove()
+            SetupServerCommunicationLogic(password)
+        })
+        button('Back to menu', () => {
+            onlineSocket = null
+            socket.disconnect()
+            panel.remove()
+            gameExit = true
+            menu.visible = true
+            menu.start()
+            menu.setTree(menu.main)
+        })
+        document.body.append(panel)
+        retry.focus()
+    }
+    // The shipped Socket.IO 3.0 client reports transport startup errors on its manager.
+    socket.io.on('error', () => fail(socket.connected ? 'Connection lost.' : 'Could not connect. Check your connection.'))
+    socket.on('connect_error', () => fail('Could not connect. Check your connection.'))
+    socket.on('disconnect', () => fail('Connection lost.'))
+    socket.on('error', () => fail('The server rejected the action.'))
     onlineCommit = null
     // Competitive scheduling gives each player one active turn per round.
     // A waiting connection may become active in that same round when its
@@ -76,7 +124,7 @@ function SetupServerCommunicationLogic(password) {
     let competitiveDelivery = null
     let acceptedBoard = null
     function receiveBoard(body, active) {
-        if (socket !== onlineSocket) return false
+        if (socket !== onlineSocket || failed) return false
         const board = typeof body === 'string' ? JSON.parse(body) : body
         const commit = board.coopCommit
         if (board.gameSettings?.coop) {
@@ -199,6 +247,7 @@ function SetupServerCommunicationLogic(password) {
     })
     if (socket.connected) requestCurrentGame()
     SendNextTurn = () => {
+        if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')
         const gameObject = getGameObject()
