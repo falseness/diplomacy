@@ -323,7 +323,8 @@ class Events {
             return
         }
         
-        if (coordsEqually(this.selected.coord, coord)) {
+        const hidden = isFogOfWar && !grid.fogOfWar[coord.x][coord.y]
+        if (!hidden && coordsEqually(this.selected.coord, coord)) {
             this.selected.removeSelect()
             if (this.selected.isUnit) {
                 this.selected = grid.arr[this.selected.coord.x][this.selected.coord.y].building
@@ -345,10 +346,17 @@ class Events {
             this.sendInstructions(coord)
             return
         }
-        if (isFogOfWar && !grid.fogOfWar[coord.x][coord.y]) {
+        if (hidden) {
             this.hideAll()
             this.selected.removeSelect()
             this.selected = new Empty()
+            // Public landmarks may be inspected without consulting the hidden
+            // occupant. Keep this after the normal instruction/legality path.
+            const building = grid.arr[coord.x][coord.y].building
+            if (!building.killed && (building.name === 'goldmine' || building.isDemonPortal)) {
+                building.select()
+                this.selected = building
+            }
 
             return
         }
