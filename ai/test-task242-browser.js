@@ -14,9 +14,12 @@ const project=b=>({side:[b.grid.length,b.grid[0].length],fog:b.isFogOfWar,initia
  portals:b.external.filter(e=>e.name==='demonPortal').map(e=>({x:e.coord.x,y:e.coord.y,category:e.category})).sort((a,b)=>a.x-b.x||a.y-b.y)});
 if(require.main===module)main().catch(e=>{console.error(e);process.exitCode=1;});
 async function main(){
+ const selected=process.argv[3];
+ const selectedCases=selected?cases.filter(c=>c.id===selected):cases;
+ assert(selectedCases.length>0,'unknown browser case');
  const out=process.argv[2],write=(n,v)=>fs.writeFileSync(path.join(out,n),JSON.stringify(v,null,2)+'\n'),checks=[],rows=[];
  const check=(id,observed,expected)=>{const pass=JSON.stringify(observed)===JSON.stringify(expected);checks.push({id,observed,expected,pass});write('browser-checkpoints.json',{checkpoints:checks});assert.deepEqual(observed,expected,id);console.log('PASS '+id+' '+JSON.stringify({observed,expected}));};
- for(const c of cases){
+ for(const c of selectedCases){
   const dir=path.join(out,c.id);fs.mkdirSync(path.join(dir,'screenshots'),{recursive:true});
   const errors=[],secrets=Array.from({length:2},()=>String(crypto.randomInt(100000000,999999999)));
   let browser,client;const sockets=[];let cleanup;
@@ -34,6 +37,8 @@ async function main(){
     const spec={...currentCoopFixtureSpec({label:c.id,humans:2,size:'tiny',seed:1,portals,
      purpose:'TASK-242 authored initial inspection fixture, Tiny/H2/seed1', terrain:{goldmines:[{x:4,y:11,income:50},{x:5,y:11,income:50}]}, demons:[{x:3,y:9,type:'bulwark'},{x:5,y:11,type:'bulwark'},{x:6,y:11,type:'bulwark'}],
      players:[{rgb:{r:100,g:100,b:100},gold:0,towns:[]},{rgb:{r:255,g:0,b:0},gold:100,towns:[{x:2,y:3}],units:[{x:1,y:4,type:'noob'},{x:2,y:4,type:'noob'},{x:4,y:4,type:'noob'},{x:6,y:4,type:'noob'}]},{rgb:{r:0,g:0,b:255},gold:100,towns:[{x:8,y:3}]}]}),side:14};
+    // Node-only authoring UI stub; the real browser still loads shipped UI.
+    global.townInterface ??= {change() {}, hide() {}};
     const board=buildCurrentCoopBoardInVm(spec);board.isFogOfWar=c.fog;
     // Author occupied portal in the serialized initial fixture before admission.
     board.players[board.gameSettings.coop.demonSlot].units.find(u=>u.coord.x===3&&u.coord.y===9).coord.y=8;
@@ -90,5 +95,5 @@ async function main(){
   assert(cleanup.processes.every(p=>!p.aliveAfter)&&cleanup.directories.every(d=>!d.existsAfter));
   check(c.id+'/cleanup',true,true);
  }
- write('selection-observations.json',{rows,pass:true});write('browser-results.json',{cases:cases.map(c=>c.id),rows,pass:true});console.log('PASS browser-network journeys=3 contexts=6 fog=off,on joins=sequential,simultaneous persistence=pass cleanup=pass');
+ write('selection-observations.json',{rows,pass:true});write('browser-results.json',{cases:selectedCases.map(c=>c.id),rows,pass:true});console.log(`PASS browser-network journeys=${selectedCases.length} contexts=${2*selectedCases.length} persistence=pass cleanup=pass`);
 }

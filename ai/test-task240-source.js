@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {createFixture}=require('./test-coop-harness');
-const cases=['source/schedule-upgrades','source/committed-wave','source/blocked','source/removal','source/legacy','source/all-category-upgrades','source/inspection-no-mutation'];
+const cases=['source/schedule-upgrades','source/committed-wave','source/blocked','source/removal','source/current-reselection','source/all-category-upgrades','source/inspection-no-mutation'];
 module.exports={cases};
 if(require.main===module){
  const f=createFixture(undefined,()=>{}),checks=[];
@@ -48,6 +48,6 @@ if(require.main===module){
  name:entityInterface.entity.name.text,description:entityInterface.portalDescription,nextRound:portal240.nextProduction.round,unchanged:before===inspectionSnapshot240()}
  })()`),{emptyCells:0,name:'clawling',description:true,nextRound:8,unchanged:true});
  check(cases[3],f.evaluate(`(() => {gameEvent.removeSelection=()=>{gameEvent.selected.removeSelect();gameEvent.selected=new Empty()};portal240.kill();return [entityInterface.visible,entityInterface.portalDescription,gameEvent.selected.isEmpty(),external.includes(portal240)]})()`),[false,false,true,false]);
- check(cases[4],f.evaluate(`(() => {const p=external.find(e=>e.isDemonPortal);gameSettings.coop.generation.version=3;p.select(false);return [entityInterface.portalStatsButton.canClick,entityInterface.portalBackButton.canClick,entityInterface.entity.name.text]})()`),[false,false,'demon portal']);
+ check(cases[4],f.evaluate(`(() => {const p=external.find(e=>e.isDemonPortal);p.select(false);return [entityInterface.portalStatsButton.canClick,entityInterface.portalBackButton.canClick,entityInterface.entity.name.text]})()`),[true,false,'demon portal']);
  fs.writeFileSync(path.join(process.argv[2],'source-checkpoints.json'),JSON.stringify({checkpoints:checks,pass:true},null,2)+'\n');
 }

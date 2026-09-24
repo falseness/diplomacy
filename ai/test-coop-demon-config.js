@@ -17,7 +17,9 @@ const expected = {
   ravager: ['ravager', 'fast strong late-game melee', 4, 1, 3, false, 1],
   demonLord: ['demon lord', 'durable powerful late-game melee', 5, 3, 2, false, 1]
 };
-const versions = ['unversioned', 1, 2];
+// Current saves require balanceVersion 2; obsolete formats are rejection cases
+// in TASK-243/244, not alternate accepted combat configurations.
+const versions = [2];
 const probe = `(() => {
   whooseTurn=gameSettings.coop.demonSlot;
   return [Imp,Clawling,Hound,Brute,Bulwark,Spitter,EmberArcher,Hexcaster,Ravager,DemonLord].map(C=>{
@@ -40,7 +42,7 @@ function browserSource() {
   const f=createFixture(config);
   const inputs=[], observations=[];
   for (const version of versions) {
-    f.evaluate(version==='unversioned' ? 'delete gameSettings.coop.balanceVersion' : `gameSettings.coop.balanceVersion=${version}`);
+    f.evaluate(`gameSettings.coop.balanceVersion=${version}`);
     inputs.push(f.evaluate('JSON.parse(JSON.stringify(getGameObject()))'));
     observations.push({version,rows:f.evaluate(probe)});
   }
