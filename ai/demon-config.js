@@ -1,7 +1,8 @@
 // Combat values are in hit points, damage per hit, and hexes per turn/attack.
-// Melee range is one adjacent hex. Ranged types also retain melee capability,
-// matching the existing RangeUnit mechanics. Keep runtime state off this table.
+// Melee range is one adjacent hex. Ranged demons retain melee capability
+// except the building-only bombard. Keep runtime state off this table.
 const DEMON_TYPES = Object.freeze({
+  bombard: Object.freeze({name: 'bombard', role: 'building-only siege at range 2', health: 4, damage: 0, movement: 2, melee: false, ranged: true, range: 2}),
   imp: Object.freeze({name: 'imp', role: 'fragile basic melee', health: 2, damage: 1, movement: 2, melee: true, ranged: false, range: 1}),
   clawling: Object.freeze({name: 'clawling', role: 'quick light melee', health: 1, damage: 2, movement: 2, melee: true, ranged: false, range: 1}),
   hound: Object.freeze({name: 'hound', role: 'fast melee pursuit', health: 2, damage: 1, movement: 5, melee: true, ranged: false, range: 1}),

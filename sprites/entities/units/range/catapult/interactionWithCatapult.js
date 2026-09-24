@@ -97,3 +97,34 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
 		this.mirrorInteraction.move(coord, cell, arr, unit)
 	}
 }
+
+class InteractionWithBombard extends InteractionWithCatapult {
+    constructor(speed, range) {
+        super(speed, range)
+        // Empty-cell movement must never path through a defender or building.
+        this.way = this.mirrorInteraction.way = new RangeUnitMoveWay()
+    }
+    isBlindArea(coord) {
+        return this.rangeWay.getDistance(coord) < Bombard.minimumRange
+    }
+    hitUnit() {} // No melee, ranged or counterattack damage to units.
+    canHitSomethingOnCell(cell, unit) {
+        return this.moves > 0 && !unit.player.ignoresCell(cell) &&
+            !this.cantRangeInteract(cell.coord, unit) && !this.isBlindArea(cell.coord) &&
+            (this.cellHasAttackableBuilding(cell, unit) ||
+                this.cellHasEnemyBuildingProduction(cell, unit))
+    }
+    sendInstructions(cell, unit) {
+        if (!this.moves || unit.player.ignoresCell(cell)) return true
+        if (this.canHitSomethingOnCell(cell, unit))
+            return this.buildingAttack(cell, unit)
+        // Reject occupied and enemy-building destinations before movement can
+        // invoke the inherited melee/capture path, including zero-HP towns.
+        if (cell.unit.notEmpty() || this.cellHasEnemyBuilding(cell, unit) ||
+                this.cellHasEnemyBuildingProduction(cell, unit)) {
+            this.removeSelect()
+            return true
+        }
+        return InterationWithUnit.prototype.sendInstructions.call(this, cell, unit)
+    }
+}

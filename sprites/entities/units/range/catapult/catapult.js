@@ -34,3 +34,28 @@ class Catapult extends RangeUnit {
         drawCachedImage(ctx, cachedImages[this.mirrorX ? 'catapultLeft' : this.name], this.pos)
     }
 }
+// Siege demons share the catapult art and building damage/undo mechanics.
+class Bombard extends Catapult {
+    static range = 2
+    static minimumRange = 2
+    constructor(x, y) {
+        super(x, y)
+        this.interaction = new InteractionWithBombard(this.speed, this.range)
+    }
+    static get description() {
+        const res = super.description
+        res.info.target = 'enemy buildings only'
+        return res
+    }
+    get info() {
+        const res = super.info
+        res.info.range = '2 - 2'
+        res.info.target = 'enemy buildings only'
+        return res
+    }
+    draw(ctx) {
+        this.drawBars(ctx)
+        drawCachedImage(ctx, cachedImages[this.mirrorX ? 'catapultLeft' : 'catapult'], this.pos)
+    }
+}
+registerDemonVariant(Bombard, 'bombard', 'catapult')
