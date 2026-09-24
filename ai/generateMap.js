@@ -185,8 +185,8 @@ function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
     }
 }
 
-// Version-4 generated metadata: six portals per initial human on distinct
-// in-bounds cells, exactly one of each category (ai/wave-config.js) per human.
+// Version-4 generated metadata: ten portals per initial human on distinct
+// in-bounds cells: three melee/ranged and one each siege/heavy/support/chaos.
 function validateCoopTypedPortals(map) {
     const coop = map.coop, generation = coop && coop.generation
     if (!generation || generation.version !== 4) throw new Error('Co-op typed portals require version-4 generation metadata')

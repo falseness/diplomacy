@@ -489,7 +489,7 @@ function placeValleyExpansions(plan, starts) {
 
 const VALLEY_PORTAL_FRONTS = Object.freeze({west: 'W', east: 'E'})
 
-// Portals after placeValleyExpansions. The six portals per initial human form
+// Portals after placeValleyExpansions. The ten portals per initial human form
 // two equally sized shared fronts, one in each top-corner portal region.
 // Every portal keeps the size's minimum empty-hex distance from every human
 // town and two free adjacent approach cells of its own that every human reaches
@@ -632,12 +632,20 @@ function placeValleyPortals(plan, layout) {
             `anchorTiers=${[...anchors.keys()].sort((a, b) => a - b).join('/')} tried=${failures.anchors} fill=${failures.fill} exact=${failures.exact}`)
     const sets = fieldSets()
     const approachCells = assigned.flat()
-    // Categories rotate through each front in row order, the east front offset by
-    // half the category count, so every category has exactly H portals split across both fronts.
+    // Interleave each category's quota, then divide the resulting sequence
+    // between the two equal fronts. Placement geometry is category-independent.
+    const perHuman = []
+    for (let round = 0; perHuman.length < counts.portals / humans; round++) {
+        for (const category of valleyPortalCategories) {
+            if (round < counts.portalCategories[category] / humans) perHuman.push(category)
+        }
+    }
+    const sequence = Array.from({length: humans}, () => perHuman).flat()
     const categories = new Array(portals.length)
-    for (const [front, offset] of [['west', 0], ['east', valleyPortalCategories.length / 2]]) {
+    let next = 0
+    for (const front of ['west', 'east']) {
         const group = portals.map((_, i) => i).filter(i => fronts[i] === front).sort((a, b) => portals[a] - portals[b])
-        group.forEach((i, j) => { categories[i] = valleyPortalCategories[(j + offset) % valleyPortalCategories.length] })
+        group.forEach(i => { categories[i] = sequence[next++] })
     }
     const categoryCounts = Object.fromEntries(valleyPortalCategories.map(c => [c, categories.filter(k => k === c).length]))
     if (valleyPortalCategories.some(c => categoryCounts[c] !== counts.portalCategories[c]))
