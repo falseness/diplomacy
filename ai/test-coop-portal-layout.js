@@ -70,7 +70,7 @@ for(const [name,mutate] of [
   assert.throws(()=>check(copy,'tiny',1)); console.log('PASS expected corruption rejection '+name);
 }
 f.evaluate("globalThis.impossible=generateCoopGame(1,{size:'tiny',seed:0});impossible.mapSize={x:2,y:2}");
-assert.throws(()=>f.evaluate("placeCoopPortals(impossible,'tiny')"),/Co-op portal placement failed/);
+assert.throws(()=>f.evaluate("validateCoopTypedPortals(impossible)"),/Co-op typed portals/);
 console.log('PASS impossible placement fails explicitly');
 fs.writeFileSync(path.join(out,'portal-layout-matrix.json'),JSON.stringify(rows,null,2)+'\n');
 console.log('PASS portal-layout matrix=1152 sizes=tiny,normal,big humans=1..12 seeds=0..31 counts=H*1/2/3 distance=6/10/14 deterministic=true routes=true exits=true elimination=36 corruption_probes=4');

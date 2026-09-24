@@ -6,7 +6,7 @@ const http = require('http');
 const crypto = require('crypto');
 const {createFixture} = require('./test-coop-harness');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
-const {getCoopWaveStrength, getCoopWaveConfig} = require('./wave-config');
+
 const root = path.resolve(__dirname, '..');
 const option = process.argv.indexOf('--output-dir');
 const out = path.resolve(root, option < 0 ? 'artifacts/TASK-123' : process.argv[option + 1]);
@@ -55,8 +55,6 @@ async function run() {
     // Deliberately duplicate display colors: numeric ownership must stay separate.
     f.evaluate('players.slice(1,-1).forEach(p=>p.color={r:255,g:0,b:0})');
     compare('ownership-independent-of-color-'+count,f.evaluate('players.slice(1,-1).map(p=>p.units[0].playerColor)'),slots);
-    for(const version of [1,2]) compare('wave-limit-'+version+'-'+count,getCoopWaveConfig(version).maxInitialHumans,12);
-    compare('wave-strength-'+count,getCoopWaveStrength(1,count),2*count);
   }
   const f=createFixture(undefined,()=>{});
   compare('unique-palette',new Set(palette.map(String)).size,12);
@@ -65,7 +63,6 @@ async function run() {
     return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.online.playersSlider.minimumValue(),m.online.playersSlider.maximumValue()]})()`),[1,12,2,12]);
   for(const n of [0,1.5,13]) {
     assert.throws(()=>f.evaluate(`generateCoopGame(${n})`),{name:'RangeError'});
-    assert.throws(()=>getCoopWaveStrength(1,n),RangeError);
     assert.throws(()=>f.evaluate(`coopPlayerColor(${n})`),{name:'RangeError'});
     console.log(`PASS invalid-local-wave-palette-${n} expected=RangeError observed=RangeError`);
   }

@@ -35,6 +35,6 @@ function placeCoopWave(wave) {
     return {spawned, skipped: wave.selections.length - spawned.length}
 }
 
-function spawnCoopWave(round, seed = 0) {
-    return placeCoopWave(generateCoopWave(round, seed))
+function spawnCoopWave(round) {
+    return placeCoopWave(generateCoopWave(round))
 }

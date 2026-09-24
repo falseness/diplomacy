@@ -76,8 +76,8 @@ function enforceCoopStartBalance(map, force = false) {
     const size = map.coop.generation && map.coop.generation.size
     const humans = map.players.slice(1, 1 + map.coop.initialHumanCount)
     const scaling = getCoopMapScaling(map.coop.initialHumanCount, size)
-    const side = map.coop.generation.version === 4
-        ? valleyRowPlans(map.coop.initialHumanCount, size).side : scaling.side
+    if (map.coop.generation.version !== 4) fail('unsupported generation version')
+    const side = valleyRowPlans(map.coop.initialHumanCount, size).side
     if (map.mapSize.x !== side || map.mapSize.y !== side ||
         map.goldmines.length !== scaling.counts.goldmines ||
         map.players[0].towns.length !== scaling.counts.neutralTowns) fail('invalid dimensions or resource count')
@@ -89,21 +89,7 @@ function enforceCoopStartBalance(map, force = false) {
         towns.some((t,i) => towns.slice(i+1).some(u => Math.abs(t.x-u.x)<3 && Math.abs(t.y-u.y)<3)))
         fail('invalid fixed towns')
     if (!force && coopStartsBalanced(map)) return {status:'balanced', iterations:0, iterationLimit:8}
-    if (map.coop.generation.version === 4) return repairCoopValley(map, fail)
-    let diagnostic = 'path disparity'
-    for (let iteration=1; iteration<=8; iteration++) {
-        const candidate = JSON.parse(JSON.stringify(map))
-        candidate.lakes=[]; candidate.mountains=[]; candidate.bushes=[]; candidate.portals=[]
-        try {
-            placeCoopPortals(candidate, size, iteration - 1)
-            if (!coopStartsBalanced(candidate)) continue
-            growCoopTerrain(candidate, createSeededRandom((map.coop.generation.seed + iteration - 1) >>> 0))
-            if (!coopStartsBalanced(candidate)) continue
-            for (const kind of ['portals','lakes','mountains','bushes']) map[kind]=candidate[kind]
-            return {status:'balanced', iterations:iteration, iterationLimit:8}
-        } catch (error) { diagnostic=error.message }
-    }
-    fail('attempts=8 last=' + diagnostic)
+    return repairCoopValley(map, fail)
 }
 
 // Pure generation API: callers explicitly start the returned GameMap. Counts
@@ -242,128 +228,6 @@ function coopPortalDistance(a, b) {
     return Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr))
 }
 
-function placeCoopPortals(map, size, balanceRows = false) {
-    const rules = {tiny: [1, 6], normal: [2, 10], big: [3, 14]}[size]
-    if (!rules) throw new Error('Co-op portal placement requires a known size')
-    const humans = map.players.slice(1, 1 + map.coop.initialHumanCount)
-    const towns = map.players.flatMap(p => p.towns)
-    const key = c => `${c.x},${c.y}`
-    const occupied = new Set([...towns, ...map.goldmines, ...map.lakes,
-        ...map.mountains, ...map.bushes, ...map.hills,
-        ...map.players.flatMap(p => p.suburbs || [])].map(key))
-    const candidates = []
-    for (let x=0; x<map.mapSize.x; x++) for (let y=0; y<map.mapSize.y; y++) {
-        const c = {x,y}
-        if (!occupied.has(key(c)) &&
-            !towns.some(t => Math.abs(t.x-x)<=1 && Math.abs(t.y-y)<=1) &&
-            humans.every(p => coopPortalDistance(p.towns[0], c) >= rules[1])) candidates.push(c)
-    }
-    const portals = []
-    // Allocate a portal to each starting lane before adding the next tier.
-    // A finite scan preserves exact counts or reports an explicit failure.
-    for (let tier=0; tier<rules[0]; tier++) for (const human of humans) {
-        // Fallback targets a common travel distance instead of the bottom edge,
-        // whose detours around neutral towns can add a parity-dependent edge.
-        const ideal = {x:human.towns[0].x, y:Math.min(map.mapSize.y-1, human.towns[0].y+rules[1]+balanceRows)}
-        candidates.sort((a,b) => coopPortalDistance(a,ideal)-coopPortalDistance(b,ideal) || b.y-a.y || a.x-b.x)
-        const index = candidates.findIndex(c => {
-            const proposed = new Set([...portals, c].map(key))
-            return [...portals, c].every(p => neighborhood[p.x & 1].some(([dx,dy]) => {
-                const n = {x:p.x+dx,y:p.y+dy}
-                return n.x>=0 && n.y>=0 && n.x<map.mapSize.x && n.y<map.mapSize.y &&
-                    !occupied.has(key(n)) && !proposed.has(key(n))
-            }))
-        })
-        if (index<0) throw new Error(`Co-op portal placement failed: size=${size} humans=${humans.length} wanted=${humans.length*rules[0]} placed=${portals.length}`)
-        portals.push(candidates.splice(index,1)[0])
-    }
-    map.portals = portals
-}
-
-// Authored references in options/gamestart.js use short lake bands and groves
-// (open field), plus adjoining mountain cells. Grow similar hex formations,
-// reserving actual approach paths before placing blockers. The earlier balance
-// repair chooses resources; this stage never moves a town, suburb or objective.
-function growCoopTerrain(map, rng) {
-    const key = c => `${c.x},${c.y}`
-    const towns = map.players.flatMap(p => p.towns)
-    const targets = [...map.portals, ...map.players[0].towns, ...map.goldmines]
-    const terminal = new Set([...map.portals, ...map.players[0].towns].map(key))
-    const reserved = new Set([...targets, ...map.hills,
-        ...map.players.flatMap(p => p.suburbs || [])].map(key))
-    const inside = c => c.x >= 0 && c.y >= 0 && c.x < map.mapSize.x && c.y < map.mapSize.y
-    const neighbours = c => neighborhood[c.x & 1].map(([dx, dy]) => ({x:c.x+dx, y:c.y+dy})).filter(inside)
-    for (const town of towns) for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++)
-        reserved.add(key({x:town.x+dx, y:town.y+dy}))
-    const fixed = new Set(reserved)
-    // A shared approach tree avoids reserving H times every shortest route,
-    // which can consume all terrain space on densely populated Tiny maps.
-    // Town neighborhoods are already clear, so branches at the root can walk
-    // around its occupied center; other towns remain interaction endpoints.
-    const start = map.players[1].towns[0]
-    const endpoints = new Set([...map.portals, ...towns].map(key))
-    const queue = [start], parent = new Map([[key(start), null]])
-    for (let i=0; i<queue.length; i++) {
-        const c = queue[i]
-        if (i > 0 && endpoints.has(key(c))) continue
-        for (const n of neighbours(c)) if (!parent.has(key(n))) {
-            parent.set(key(n), c); queue.push(n)
-        }
-    }
-    for (const target of [...targets, ...towns]) {
-        if (!parent.has(key(target))) throw new Error('Co-op terrain requires connected objectives')
-        for (let c=target; c; c=parent.get(key(c))) reserved.add(key(c))
-    }
-    // Keep each human's nearest-category shortest route open, preserving the
-    // pre-terrain four-edge bound while the shared tree serves all objectives.
-    for (const human of map.players.slice(1, 1 + map.coop.initialHumanCount)) {
-        const root = human.towns[0], queue = [root], parent = new Map([[key(root), null]])
-        for (let i=0; i<queue.length; i++) {
-            const c = queue[i]
-            if (i && endpoints.has(key(c))) continue
-            for (const n of neighbours(c)) if (!parent.has(key(n))) {
-                parent.set(key(n), c); queue.push(n)
-            }
-        }
-        for (const group of [map.portals, map.players[0].towns, map.goldmines]) {
-            const ids = new Set(group.map(key)), target = queue.find(c => ids.has(key(c)))
-            if (!target) throw new Error('Co-op terrain requires reachable nearest objectives')
-            for (let c=target; c; c=parent.get(key(c))) reserved.add(key(c))
-        }
-    }
-    const free = new Map()
-    for (let x=0; x<map.mapSize.x; x++) for (let y=0; y<map.mapSize.y; y++) {
-        const c = {x,y}; if (!reserved.has(key(c))) free.set(key(c), c)
-    }
-    // Finite pool growth: select a seeded origin and repeatedly attach a hex.
-    // Small components give lakes/groves compact shapes and mountains ridges;
-    // a new origin is needed only after the desired patch size or a dead end.
-    for (const [kind, density] of [['mountains',0.08], ['lakes',0.06], ['bushes',0.10]]) {
-        // Bushes are walkable, so groves may cross the reserved approaches.
-        if (kind === 'bushes') for (const id of reserved) if (!fixed.has(id)) {
-            const [x,y] = id.split(',').map(Number)
-            free.set(id, {x,y})
-        }
-        const wanted = Math.round(map.mapSize.x * map.mapSize.y * density)
-        map[kind] = []
-        while (map[kind].length < wanted) {
-            const candidates = [...free.values()]
-            if (!candidates.length) throw new Error(`Co-op terrain has no space for ${kind}`)
-            const joined = candidates.filter(c => neighbours(c).some(n => free.has(key(n))))
-            const origins = joined.length ? joined : candidates
-            const patch = [origins[randomIntWithRng(rng, 0, origins.length-1)]]
-            const limit = Math.min(wanted-map[kind].length, randomIntWithRng(rng, 4, 9))
-            for (let i=0; i<limit; i++) {
-                const c = patch[patch.length-1]
-                free.delete(key(c)); map[kind].push(c)
-                const edge = [...new Map(patch.flatMap(neighbours).filter(n => free.has(key(n))).map(n => [key(n),n])).values()]
-                if (!edge.length) break
-                patch.push(edge[randomIntWithRng(rng, 0, edge.length-1)])
-            }
-        }
-    }
-}
-
 // Check long-term melee access without treating hostile towns/portals as
 // shortcuts. Humans must reach each target from an adjacent walkable cell;
 // allied town centers remain obstacles, as in Way.isCellImpassable.
@@ -393,40 +257,16 @@ function coopRoutesConnected(map) {
     })
 }
 
-// Finite deterministic repair: remove at most B blockers, then try at most
-// B * width * height placements. Keep every category/count, and fail explicitly
-// if the supplied layout cannot accommodate them. No random retries or draws.
+// Current deterministic replay repair preserves fixed assets and categories.
+// Obsolete generation metadata is rejected rather than relocated or migrated.
 function repairCoopConnectivity(map) {
     if (map.coop.generation && !coopRoutesConnected(map)) {
         const result = enforceCoopStartBalance(map, true)
         return {...result, status:'connected', strategy:'rebuild', placementLimit:8 * map.mapSize.x * map.mapSize.y}
     }
-    const removed = []
-    for (const kind of ['lakes', 'mountains']) {
-        while (!coopRoutesConnected(map) && map[kind].length) {
-            removed.push({kind, coord:map[kind].pop()})
-        }
-    }
-    if (!coopRoutesConnected(map)) throw new Error('Co-op connectivity repair failed: fixed targets block routes')
-    const towns = map.players.flatMap(p => p.towns)
-    for (const {kind, coord} of removed) {
-        let placed = false
-        for (let x = 0; x < map.mapSize.x && !placed; x++) {
-            for (let y = 0; y < map.mapSize.y && !placed; y++) {
-                const candidate = {x, y}
-                const occupied = [...map.lakes, ...map.mountains, ...map.bushes,
-                    ...map.hills, ...map.goldmines, ...map.portals]
-                if (towns.some(t => Math.abs(t.x-x) <= 1 && Math.abs(t.y-y) <= 1) ||
-                    occupied.some(c => areCoordsEqual(c, candidate))) continue
-                map[kind].push(candidate)
-                if (coopRoutesConnected(map)) placed = true
-                else map[kind].pop()
-            }
-        }
-        if (!placed) throw new Error(`Co-op connectivity repair failed: no safe ${kind} placement for ${coord.x},${coord.y}`)
-    }
-    return {status:'connected', relocated:removed.length,
-        placementLimit:removed.length * map.mapSize.x * map.mapSize.y}
+    if (!map.coop.generation || map.coop.generation.version !== 4)
+        throw new Error('Unsupported co-op generation version')
+    return {status:'connected', relocated:0, placementLimit:0}
 }
 
 function randomIntWithRng(rng, min, max) {

@@ -300,7 +300,7 @@ function runCase(c) {
       emit({type: 'start', ...observe()})
       startTurn()
     })()`);
-    const config = f.evaluate(`({firstWaveRound: getCoopWaveConfig(gameSettings.coop.balanceVersion).types.imp.unlockRound,
+    const config = f.evaluate(`({firstWaveRound: COOP_TYPED_WAVE_SCHEDULE.categories.melee[0].round,
       demonSlot: gameSettings.coop.demonSlot, humanSlots: gameSettings.coop.humanSlots, balanceVersion: gameSettings.coop.balanceVersion,
       combatController: players[gameSettings.coop.demonSlot].constructor.name, suddenDeathRound})`);
     row.configuration = config;

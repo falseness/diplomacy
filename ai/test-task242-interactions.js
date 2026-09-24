@@ -13,6 +13,23 @@ for(const j of journeys.filter(j=>j!=="browser-clear"))for(const phase of ['gain
 module.exports={cases,exercise};
 async function exercise(p,c,out,check){
  const rows=[];
+ // A fixed millisecond key hold can end between rendered frames on a busy
+ // host. Use the same real keyboard controls, bounded by observed movement.
+ const originalPan=p.pan;
+ p.pan=async(dx,dy,before)=>{
+  const keys=[];
+  if(dx)keys.push(dx>0?'ArrowRight':'ArrowLeft');
+  if(dy)keys.push(dy>0?'ArrowDown':'ArrowUp');
+  p.trace({action:'key-hold-until-movement',keys,before});
+  await p.page.mouse.move(p.page.viewportSize().width/2,p.page.viewportSize().height/2);
+  for(const key of keys)await p.page.keyboard.down(key);
+  try{
+   await p.page.waitForFunction(({before,dx,dy})=>(!dx||canvas.offset.x!==before.x)&&(!dy||canvas.offset.y!==before.y),
+    {before,dx,dy},{timeout:5000});
+  }finally{for(const key of keys)await p.page.keyboard.up(key);}
+  const after=await p.observe(()=>({...canvas.offset}));
+  p.trace({action:'camera-movement-observed',before,after});
+ };
  // Entity panels begin at y=540; the shared driver's general board zone
  // extends below that. Pan with actual keys before issuing each single click.
  const tapCell=async(coord,label,until)=>{
@@ -74,5 +91,6 @@ async function exercise(p,c,out,check){
    const shot=await p.screenshot(phase);rows.push({id:c.id+'/'+phase+'/selection',screenshot:c.id+'/screenshots/'+shot.file,before,after});
   }
  }
+ p.pan=originalPan;
  return rows;
 }

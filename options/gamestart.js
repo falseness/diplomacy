@@ -280,9 +280,8 @@ class GameMap {
         }
     }
     start(_gameManager, isClassicTimer, competitiveHotseat = false) {
-        // Local and online co-op both start generated maps here; stored
-        // pre-valley (version 2/3) maps keep their untyped portals.
-        if (this.coop && this.coop.generation && this.coop.generation.version === 4) validateCoopTypedPortals(this)
+        // Local and online co-op accept only current typed maps.
+        if (this.coop) validateCoopTypedPortals(this)
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
         normalizeInterfaceSettings(gameSettings)

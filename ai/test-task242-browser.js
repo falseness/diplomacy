@@ -54,8 +54,14 @@ async function main(){
     const inputs={write:s=>{const r=JSON.parse(s);delete r.until;fs.appendFileSync(path.join(dir,'input-trace.jsonl'),JSON.stringify(r)+'\n');}};
     for(let i=0;i<2;i++){
      const p=await BrowserPlayer.open(browser,{name:'p'+i,input:'mouse',endpoint:service.endpoint,clientUrl:client.url,errors,events,inputs,screenshotDir:path.join(dir,'screenshots')});ps.push(p);
-     await reconnect(p,{password:secrets[i],coop:true,fog:c.fog});
+     // Simultaneous admission need not preserve request order. Drive the
+     // authored player-1 scout with the credential actually assigned slot 1.
+     const credentialIndex=joined.findIndex(board=>board.whooseTurn===i+1);
+     assert(credentialIndex>=0,'assigned browser slot');
+     await reconnect(p,{password:secrets[credentialIndex],coop:true,fog:c.fog});
      await p.page.waitForFunction(()=>onlineSocket.connected&&!menu.visible&&whooseTurn>0,null,{timeout:60000});
+     assert.equal(await p.observe(()=>whooseTurn),i+1,'reconnected assigned slot');
+     console.log(`PASS ${c.id}/browser-slot-${i} expected=${i+1} observed=${i+1} credentialIndex=${credentialIndex}`);
      if(await p.observe(()=>nextTurnPauseInterface.visible))await p.tap({x:640,y:450},'dismiss overlay','!nextTurnPauseInterface.visible');
      const actual=await p.observe(()=>({grid:grid.arr.map(col=>col.map(cell=>cell.hexagon.playerColor)),isFogOfWar,gameSettings:{coop:gameSettings.coop},external:external.map(e=>({name:e.name,coord:{...e.coord},category:e.category}))}));
      check(c.id+'/browser-board-'+i,project(actual),want);

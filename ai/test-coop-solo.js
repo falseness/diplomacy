@@ -4,7 +4,7 @@ const {initialEntities} = require('./test-coop-generation-fixtures');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {getHumanSlots} = require('../../diplomacy_server/server/matchmakingSlots');
 const {checkGeneratedMap} = require('./test-coop-current-generation');
-const {composeCoopWave} = require('./wave-composition');
+const {composeTypedCoopWave} = require('./wave-composition');
 
 function generated(count) {
   const f = createFixture(undefined, line => {
@@ -57,7 +57,7 @@ for(let round=1;round<=3;round++) {
   f.evaluate('globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);');
   f.compare(`solo-save-load-${round}`,f.evaluate('JSON.stringify(getGameObject())===saved'),true);
 }
-f.compare('solo-fixed-portal-count-independent-of-strength',composeCoopWave(42,3,1,[{x:1,y:1},{x:2,y:2}]).types,['imp','imp']);
+f.compare('solo-fixed-portal-count-independent-of-strength',composeTypedCoopWave(4,[{x:1,y:1,category:'melee'},{x:2,y:2,category:'melee'}]).types,['imp','imp']);
 for(const result of ['victory','defeat']) {
   const g=generated(1);
   g.evaluate(result==='victory'?'for(const p of external.filter(e=>e.name==="demonPortal")) p.kill();':'for(const u of [...players[1].units])u.kill();for(const t of [...players[1].towns])t.destroy();');

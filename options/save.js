@@ -204,12 +204,12 @@ class JsonUnpackManager {
                 packedNature[i].coord.x, packedNature[i].coord.y)
         }
     }
-    normalizePortalTiles(packedExternal, packedPlayers) {
+    validatePortalTiles(packedExternal, packedPlayers) {
         for (const portal of packedExternal) {
             if (portal.name !== 'demonPortal') continue
             const slot = gameSettings.coop && gameSettings.coop.demonSlot
             if (!Number.isInteger(slot) || !players[slot] || players[slot].role !== 'DEMONS' ||
-                    (portal.ownerSlot !== undefined && portal.ownerSlot !== slot))
+                    portal.ownerSlot !== slot)
                 throw new Error('portal requires demon ownership')
             const {x, y} = portal.coord
             if (isCoordNotOnMap({x, y}, grid.arr.length, grid.arr[0].length) ||
@@ -222,13 +222,29 @@ class JsonUnpackManager {
                         unit.name !== 'Empty' && unit.coord.x === x && unit.coord.y === y))
                     throw new Error('portal requires empty or demon-occupied unit cell')
             }
-            // Match portal setup's suburb bookkeeping without recording undo.
-            // Ordinary unit constructors will now register to the correct tile owner.
-            grid.getHexagon({x, y}).repaint(slot, false)
+            if (grid.getHexagon({x, y}).playerColor !== slot)
+                throw new Error('Invalid saved portal ownership')
         }
     }
     unpackAll(jsonGrid, jsonPlayers, jsonExternal, jsonExternalProduction, 
             jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound, jsonIsFogOfWar, jsonGameSettings) {
+        // Reject obsolete co-op saves before mutating the active board or timers.
+        const settings = jsonGameSettings == null ? null : JSON.parse(jsonGameSettings)
+        if (settings && settings.coop) {
+            const coop = settings.coop
+            getCoopMapScalingFromMetadata(coop)
+            if (coop.balanceVersion !== 2 || coop.waveGeneration !== undefined)
+                throw new Error('Unsupported co-op wave metadata')
+            const savedGrid = JSON.parse(jsonGrid)
+            for (const portal of JSON.parse(jsonExternal)) {
+                if (portal.name !== 'demonPortal') continue
+                if (!COOP_PORTAL_CATEGORIES.includes(portal.category))
+                    throw new Error('Invalid saved portal category')
+                if (portal.ownerSlot !== coop.demonSlot ||
+                        savedGrid[portal.coord.x]?.[portal.coord.y] !== coop.demonSlot)
+                    throw new Error('Invalid saved portal ownership')
+            }
+        }
         let packedTimer = JSON.parse(jsonTimer)
         if (packedTimer.type == 'long') {
             timer = new LongTimer(packedTimer.time)
@@ -289,7 +305,7 @@ class JsonUnpackManager {
                 this.unpackTown(packedTown)
             }
         }
-        this.normalizePortalTiles(packedExternal, packedPlayers)
+        this.validatePortalTiles(packedExternal, packedPlayers)
         for (let i = 0; i < packedPlayers.length; ++i) {
             for (let j = 0; j < packedPlayers[i].units.length; ++j) {
                 let packedUnit = packedPlayers[i].units[j]

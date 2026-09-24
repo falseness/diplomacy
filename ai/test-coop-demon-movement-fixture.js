@@ -26,7 +26,7 @@ module.exports = function run(kind) {
       if(x!==7) new Mountain(x,y);
       ${kind==='bush' ? 'new Bush(7,9);' : ''}
       new DemonPortal(7,10);
-      gameRound=getCoopWaveConfig(gameSettings.coop.balanceVersion).types.imp.unlockRound;
+      gameRound=COOP_TYPED_WAVE_SCHEDULE.categories.melee[0].round;
       globalThis.wave=spawnCoopWave(gameRound,42);
       globalThis.imp=players[3].units[0];
       isFogOfWar=${fog};

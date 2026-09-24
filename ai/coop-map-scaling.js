@@ -1,5 +1,4 @@
-// Shared targets for formula-based co-op generation. Placement consumes these
-// in the generator integration task; legacy version-2 grids are never resized.
+// Shared baseline targets for current co-op generation. Valley capacity may enlarge the side.
 const COOP_SCALING_PRESETS = Object.freeze({
     tiny: Object.freeze({baseSide: 15, minSide: 11, objectsPerHuman: 1}),
     normal: Object.freeze({baseSide: 25, minSide: 15, objectsPerHuman: 2}),
@@ -31,10 +30,10 @@ function getCoopMapScaling(initialHumanCount, size = 'normal') {
 
 // Reuse the original roster and replay inputs retained by GameMap/save-load.
 // Never infer H from live players, humanSlots, towns or surviving units. These
-// are current scaling targets, not a description of a legacy stored grid.
+// are current scaling targets, not a measurement of the stored grid.
 function getCoopMapScalingFromMetadata(coop) {
     const generation = coop && coop.generation
-    if (!generation || !Number.isInteger(generation.version) || generation.version < 1 ||
+    if (!generation || generation.version !== 4 ||
         !Number.isInteger(generation.seed) || generation.seed < 0 || generation.seed > 0xffffffff ||
         generation.playerCount !== coop.initialHumanCount || generation.size === undefined) {
         throw new RangeError('Co-op scaling requires original generation metadata')

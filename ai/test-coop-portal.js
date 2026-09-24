@@ -125,11 +125,8 @@ function runOwnershipAndMovement() {
       {tile:3,owner:3,suburb:false,counted:0,undo:0,economicAssets:0});
     const emptySave = JSON.parse(f.evaluate('JSON.stringify(getGameObject())'));
     emptySave.grid[3][3] = 1;
-    const normalizedEmpty = JSON.parse(JSON.stringify(emptySave)); normalizedEmpty.grid[3][3] = 3;
     f.context.emptyPortalSave = JSON.stringify(emptySave);
-    f.evaluate('loadFromJson(emptyPortalSave); globalThis.tile=grid.getHexagon({x:3,y:3}); globalThis.portal=grid.getBuilding({x:3,y:3}); undefined');
-    f.compare(label+'-empty-legacy-load-normalizes-only-tile',
-      JSON.parse(f.evaluate('JSON.stringify(getGameObject())')), normalizedEmpty);
+    assert.throws(()=>f.evaluate('loadFromJson(emptyPortalSave)'), /Invalid saved portal ownership/);
     f.compare(label+'-spawn', f.evaluate(`spawnCoopWave(3,0).spawned`),
       [{type:'imp',x:3,y:3}]);
     f.evaluate(`globalThis.walker=grid.getUnit({x:3,y:3}); whooseTurn=3; undefined`);
@@ -151,20 +148,16 @@ function runOwnershipAndMovement() {
     f.compare(label+'-enter-own-portal', f.evaluate(`({coord:walker.coord,moves:walker.moves,
       tile:tile.playerColor,owner:portal.playerColor,hp:portal.hp,gold:players[3].gold})`),
       {coord:{x:3,y:3},moves:0,tile:3,owner:3,hp:30,gold:0});
-    // An older save has a human-colored portal tile. Only that grid entry may change.
     const packed = JSON.parse(f.evaluate('JSON.stringify(getGameObject())'));
     packed.grid[3][3] = 1;
-    const expected = JSON.parse(JSON.stringify(packed)); expected.grid[3][3] = 3;
     f.context.savedPortal = JSON.stringify(packed);
-    f.evaluate('loadFromJson(savedPortal); undefined');
-    f.compare(label+'-legacy-load-normalizes-only-tile',
-      JSON.parse(f.evaluate('JSON.stringify(getGameObject())')), expected);
+    assert.throws(()=>f.evaluate('loadFromJson(savedPortal)'), /Invalid saved portal ownership/);
     f.compare(label+'-loaded-registry', f.evaluate(`({tile:grid.getHexagon({x:3,y:3}).playerColor,
       owner:grid.getBuilding({x:3,y:3}).playerColor,unit:grid.getUnit({x:3,y:3}).playerColor,
       registered:players[3].units.includes(grid.getUnit({x:3,y:3})),
       size:[grid.arr.length,grid.arr[0].length]})`),
       {tile:3,owner:3,unit:3,registered:true,size:[9,7]});
-    console.log('PASS '+label+' setup spawn leave enter undo legacy-load ownership=3 suburb=false');
+    console.log('PASS '+label+' setup spawn leave enter undo obsolete-load-rejected ownership=3 suburb=false');
   }
 }
 
