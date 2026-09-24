@@ -27,6 +27,9 @@ let assets = {
     goldmine: new Image(),
     bush: new Image()
 }
+// Selection panels use raw images; board layers use cached canvases below.
+assets.bombard = assets.catapult
+assets.bombardLeft = assets.catapultLeft
 // Demon artwork is shared by both ordinary sprite themes.
 const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark',
     'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'demonPortal',
@@ -72,6 +75,12 @@ function cacheAllImages() {
     }
 }
 let cachedImages = {}
+// Bombard reuses siege art in body caches and production previews as well as
+// its direct draw method. Getters follow cache rebuilds and sprite theme changes.
+Object.defineProperties(cachedImages, {
+    bombard: {get() { return this.catapult }},
+    bombardLeft: {get() { return this.catapultLeft }}
+})
 
 
 function loadAssets() {

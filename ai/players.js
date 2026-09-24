@@ -351,6 +351,7 @@ class SimpleAiPlayer extends Player {
                 getAiMoveCommands(unit).slice(0, getAiCommandLimit(Infinity)),
                 unit.coord, grid.arr, unit.playerColor)
             if (!command) {
+                if (unit instanceof Bombard) unit.skipMoves()
                 break
             }
             assert(command.whoDoCommandCoord.x == unit.coord.x &&

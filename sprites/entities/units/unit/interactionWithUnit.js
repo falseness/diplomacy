@@ -474,7 +474,8 @@ class BestEnemyTargetForAI extends Way {
                 let cell = grid_arr[i][j]
                 let is_building_target = !players[myPlayerColor].ignoresObjective(cell) && cell.building.notEmpty() &&
                     !players[myPlayerColor].isAlliedWith(cell.building.player) &&
-                    (!cell.building.isExternal || cell.building.isDemonPortal) && !cell.building.isNature
+                    (!cell.building.isExternal || cell.building.isDemonPortal ||
+                        grid_arr[v0.x][v0.y].unit instanceof Bombard) && !cell.building.isNature
                 if (is_building_target &&
                     this.distance[i][j] < minDistance) {
                     minDistance = this.distance[i][j]
@@ -485,6 +486,8 @@ class BestEnemyTargetForAI extends Way {
         if (minDistance != this.constructor.unreachableDistance) {
             return resultCoord
         }
+        // Building-only siege must not pursue an enemy it can never damage.
+        if (grid_arr[v0.x][v0.y].unit instanceof Bombard) return null
         for (let i = 0; i < grid_arr.length; ++i) {
             for (let j = 0; j < grid_arr[i].length; ++j) {
                 let cell = grid_arr[i][j]

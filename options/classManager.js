@@ -10,6 +10,7 @@ function getClass(name) {
         hexcaster: Hexcaster,
         ravager: Ravager,
         demonLord: DemonLord,
+        bombard: Bombard,
         suburb: Suburb,
         noob: Noob, 
         archer: Archer, 

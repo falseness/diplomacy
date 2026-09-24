@@ -4,7 +4,7 @@ function placeCoopWave(wave) {
     const coop = gameSettings.coop
     if (!coop || players[coop.demonSlot].role !== 'DEMONS')
         throw new Error('Wave placement requires co-op')
-    const constructors = {imp: Imp, clawling: Clawling, hound: Hound,
+    const constructors = {bombard: Bombard, imp: Imp, clawling: Clawling, hound: Hound,
         brute: Brute, bulwark: Bulwark, spitter: Spitter,
         emberArcher: EmberArcher, hexcaster: Hexcaster, ravager: Ravager, demonLord: DemonLord}
     const seen = new Set()
