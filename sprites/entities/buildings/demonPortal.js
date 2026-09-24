@@ -32,7 +32,10 @@ class DemonPortal extends Building {
     // the entity name stays 'demonPortal' for saves and ledgers.
     get imageName() {
         if (this.category === undefined) return 'demonPortal'
-        return 'demonPortal' + this.category[0].toUpperCase() + this.category.slice(1)
+        const name = 'demonPortal' + this.category[0].toUpperCase() + this.category.slice(1)
+        // Newly generated categories remain renderable before dedicated artwork
+        // is registered; use the existing portal image for missing variants.
+        return typeof assets !== 'undefined' && !assets[name] ? 'demonPortal' : name
     }
     // Next scheduled wave production from the same pure lookup spawning uses
     // (ai/wave-config.js). It depends only on category and completed rounds, so
