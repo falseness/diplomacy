@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
-<title id="title">Heavy demon portal: ram-horned bastion with barred molten rift</title>
-<desc id="desc">Obsidian arch from the base demon portal. Broad curled ram horns, stone buttresses, a shield keystone and iron bars across a molten orange rift mark the heavy category (bulwark). Transparent editable vector, 512 by 512.</desc>
+<title id="title">Chaos demon portal: crowned gate with floating shards and eye rift</title>
+<desc id="desc">Obsidian arch from the base demon portal. A five-spiked gold crown, two floating obsidian shards and a slit-pupil eye in a violet-gold rift mark the chaos category (demon lord). Transparent editable vector, 512 by 512.</desc>
 <defs>
 <radialGradient id="ground"><stop offset="0" stop-color="#17151b" stop-opacity="0.39"/><stop offset="0.5" stop-color="#1b181f" stop-opacity="0.22"/><stop offset="1" stop-color="#1b181f" stop-opacity="0"/></radialGradient>
 <radialGradient id="contact"><stop offset="0" stop-color="#131115" stop-opacity="0.6"/><stop offset="0.55" stop-color="#131115" stop-opacity="0.3"/><stop offset="1" stop-color="#131115" stop-opacity="0"/></radialGradient>
@@ -15,8 +15,9 @@
 <linearGradient id="cave" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#0d0b0f"/><stop offset="1" stop-color="#17151b"/></linearGradient>
 <linearGradient id="floor" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#413a4a"/><stop offset="1" stop-color="#201c24"/></linearGradient>
 <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#7c6e8e"/><stop offset="1" stop-color="#554b60"/></linearGradient>
-<radialGradient id="rift"><stop offset="0" stop-color="#fff0c8"/><stop offset=".28" stop-color="#ff9a3c"/><stop offset=".65" stop-color="#d24a14"/><stop offset="1" stop-color="#5a1a0a"/></radialGradient>
+<radialGradient id="rift"><stop offset="0" stop-color="#ffffff"/><stop offset=".28" stop-color="#ffe27a"/><stop offset=".65" stop-color="#c04bff"/><stop offset="1" stop-color="#3a0c5e"/></radialGradient>
 <linearGradient id="horn"><stop stop-color="#cbbbd8"/><stop offset=".5" stop-color="#6f597e"/><stop offset="1" stop-color="#30233e"/></linearGradient>
+<linearGradient id="crown" x1="0%" y1="0%" x2="0%" y2="100%"><stop stop-color="#fff0b0"/><stop offset=".55" stop-color="#d4a02c"/><stop offset="1" stop-color="#6b4a12"/></linearGradient>
 </defs>
 <g id="ground-shadows">
 <ellipse cx="266" cy="427" rx="224" ry="52" fill="url(#ground)" />
@@ -74,22 +75,19 @@
 <path d="M181 439 L213 431 L264 433 L279 442 L250 449 L206 451 L176 450 Z" fill="#6d617d" />
 <path d="M206 451 L250 449 L279 442 L276 457 L210 460 Z" fill="#494154" />
 </g>
-<g id="horns" fill="url(#horn)" stroke="#30233e" stroke-width="4" stroke-linejoin="round">
-<path d="M166 152 Q70 108 36 196 Q22 280 96 290 Q66 256 76 218 Q96 170 178 198 Z"/>
-<path d="M346 152 Q442 108 476 196 Q490 280 416 290 Q446 256 436 218 Q416 170 334 198 Z"/>
+<g id="horns" fill="url(#crown)" stroke="#30233e" stroke-width="5" stroke-linejoin="round">
+<path d="M150 158 L126 36 L186 104 L212 16 L246 92 L280 16 L306 104 L366 36 L342 158 Q246 118 150 158 Z"/>
 </g>
-<g id="runes" fill="none" stroke="#ffab66" stroke-width="8" stroke-linejoin="round">
+<g id="runes" fill="none" stroke="#e7a6ff" stroke-width="8" stroke-linejoin="round">
 <path d="M148 309 L164 319 L149 329 M329 311 L345 321 L331 334"/>
 </g>
-<g id="heavy-bastion-motif">
-<path d="M34 404 L60 322 L122 334 L116 440 Z" fill="#5d536a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
-<path d="M478 404 L452 322 L390 334 L396 440 Z" fill="#4e465a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
-<g fill="none" stroke="#3a3040" stroke-width="12" stroke-linecap="round">
-<path d="M206 270 L206 438 M236 244 L236 446 M266 246 L266 446 M294 280 L294 440"/>
-<path d="M184 336 L306 336" stroke-width="15"/>
-</g>
-<path d="M246 146 L282 158 L278 196 Q264 222 246 232 Q228 222 214 196 L210 158 Z" fill="#8c7da0" stroke="#30233e" stroke-width="6" stroke-linejoin="round"/>
-<path d="M246 164 L246 214 M226 182 L266 182" stroke="#ffb46a" stroke-width="7" stroke-linecap="round"/>
+<g id="chaos-crown-motif">
+<circle cx="246" cy="112" r="13" fill="#c04bff" stroke="#fff0b0" stroke-width="4"/>
+<path d="M50 190 L76 118 L98 188 L74 222 Z" fill="url(#horn)" stroke="#ffe27a" stroke-width="4" stroke-linejoin="round"/>
+<path d="M414 188 L436 118 L462 190 L438 222 Z" fill="url(#horn)" stroke="#ffe27a" stroke-width="4" stroke-linejoin="round"/>
+<path d="M190 344 Q246 286 302 344 Q246 402 190 344 Z" fill="#2a0a3e" stroke="#fff6d8" stroke-width="6"/>
+<circle cx="246" cy="344" r="22" fill="#ffe27a"/>
+<ellipse cx="246" cy="344" rx="6" ry="19" fill="#1a0626"/>
 </g>
 <path d="M193 442 Q250 426 309 443 L294 451 Q249 440 206 453Z" fill="#ff5575" opacity=".65"/>
 </svg>

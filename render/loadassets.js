@@ -32,8 +32,9 @@ assets.bombard = assets.catapult
 assets.bombardLeft = assets.catapultLeft
 // Demon artwork is shared by both ordinary sprite themes.
 const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark',
-    'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'demonPortal',
-    'demonPortalNormal', 'demonPortalRanged', 'demonPortalHeavy', 'demonPortalHighTier']
+    'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord',
+    'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
+    'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos']
 for (const name of demonSpriteImages) assets[name] = new Image()
 let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
 for (let i = 0; i < grassHexImages.length; ++i)

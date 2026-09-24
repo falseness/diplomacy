@@ -31,11 +31,8 @@ class DemonPortal extends Building {
     // Each category has its own artwork (assets/sprites/demonPortal<Category>.svg);
     // the entity name stays 'demonPortal' for saves and ledgers.
     get imageName() {
-        if (this.category === undefined) return 'demonPortal'
-        const name = 'demonPortal' + this.category[0].toUpperCase() + this.category.slice(1)
-        // Newly generated categories remain renderable before dedicated artwork
-        // is registered; use the existing portal image for missing variants.
-        return typeof assets !== 'undefined' && !assets[name] ? 'demonPortal' : name
+        const category = this.category || 'melee'
+        return 'demonPortal' + category[0].toUpperCase() + category.slice(1)
     }
     // Next scheduled wave production from the same pure lookup spawning uses
     // (ai/wave-config.js). It depends only on category and completed rounds, so
@@ -54,14 +51,13 @@ class DemonPortal extends Building {
         const result = super.info
         result.displayName = 'demon portal'
         result.image = this.imageName
+        if (this.category !== undefined) result.info.category = this.category
         const next = this.nextProduction
         if (next) {
-            result.info.category = DemonPortal.categoryLabels[this.category]
             addProductionPreviewInfo(result.info, DEMON_TYPES[next.type].name, next.roundsRemaining)
         }
         return result
     }
-    static categoryLabels = {normal: 'normal', ranged: 'ranged', heavy: 'heavy', highTier: 'high tier'}
     isObstacle(playerColor) { return false }
     toJSON() {
         const result = {...super.toJSON(), ownerSlot: this.ownerSlot}

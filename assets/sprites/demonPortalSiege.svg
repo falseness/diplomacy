@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
-<title id="title">Normal demon portal: imp gate with short hooked horns and claw-rent rift</title>
-<desc id="desc">Obsidian arch from the base demon portal. Short hooked horns, a spiked keystone and three claw slashes through a crimson rift mark the normal category (imp, clawling, hound). Transparent editable vector, 512 by 512.</desc>
+<title id="title">Siege demon portal: bombard gate with cannon and stone battlements</title>
+<desc id="desc">Derived from the existing obsidian demon portal. Distinct siege silhouette and central symbol; transparent 512 by 512 artwork.</desc>
 <defs>
 <radialGradient id="ground"><stop offset="0" stop-color="#17151b" stop-opacity="0.39"/><stop offset="0.5" stop-color="#1b181f" stop-opacity="0.22"/><stop offset="1" stop-color="#1b181f" stop-opacity="0"/></radialGradient>
 <radialGradient id="contact"><stop offset="0" stop-color="#131115" stop-opacity="0.6"/><stop offset="0.55" stop-color="#131115" stop-opacity="0.3"/><stop offset="1" stop-color="#131115" stop-opacity="0"/></radialGradient>
@@ -15,7 +15,7 @@
 <linearGradient id="cave" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#0d0b0f"/><stop offset="1" stop-color="#17151b"/></linearGradient>
 <linearGradient id="floor" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#413a4a"/><stop offset="1" stop-color="#201c24"/></linearGradient>
 <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#7c6e8e"/><stop offset="1" stop-color="#554b60"/></linearGradient>
-<radialGradient id="rift"><stop offset="0" stop-color="#fff2bd"/><stop offset=".28" stop-color="#ffbd70"/><stop offset=".65" stop-color="#fb375d"/><stop offset="1" stop-color="#651437"/></radialGradient>
+<radialGradient id="rift"><stop stop-color="#fff4c4"/><stop offset=".28" stop-color="#ffc960"/><stop offset=".65" stop-color="#ed852d"/><stop offset="1" stop-color="#6e3018"/></radialGradient>
 <linearGradient id="horn"><stop stop-color="#cbbbd8"/><stop offset=".5" stop-color="#6f597e"/><stop offset="1" stop-color="#30233e"/></linearGradient>
 </defs>
 <g id="ground-shadows">
@@ -43,6 +43,7 @@
 <g id="recessed-entrance">
 <path d="M160 438 L164 328 Q168 214 245 208 Q324 219 329 335 L331 439 Z" fill="#381329"/>
 <path d="M178 437 L179 336 Q180 279 203 259 Q222 235 245 237 Q269 237 285 260 Q307 285 307 331 L311 439 Q245 457 178 437Z" fill="url(#rift)"/>
+<path d="M246 258 L226 305 L249 325 L221 365 L247 353 L233 429 L275 346 L252 321 L268 289 Z" fill="#fff5cd"/>
 </g>
 <g id="carved-stone-arch">
 <path d="M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 L348 436 L311 439 L307 331 Q305 286 285 260 Q269 237 245 237 Q221 237 202 261 Q179 291 178 336 L176 439 L149 441 Z" fill="url(#arch)" />
@@ -74,25 +75,18 @@
 <path d="M181 439 L213 431 L264 433 L279 442 L250 449 L206 451 L176 450 Z" fill="#6d617d" />
 <path d="M206 451 L250 449 L279 442 L276 457 L210 460 Z" fill="#494154" />
 </g>
-<g id="horns" fill="url(#horn)">
-<path d="M178 162 Q128 146 128 96 Q150 124 206 114 Z"/>
-<path d="M292 116 Q346 116 362 94 Q370 142 322 172 Z"/>
-</g>
+
 <g id="runes" fill="none" stroke="#ff879d" stroke-width="8" stroke-linejoin="round">
 <path d="M237 195 L247 184 L257 195 L247 218 Z"/>
 <path d="M148 309 L164 319 L149 329 M329 311 L345 321 L331 334"/>
 </g>
-<g id="normal-claw-motif">
-<path d="M146 176 L120 150 L112 176 L92 170 L118 214 Z" fill="#5d536a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
-<path d="M346 176 L372 150 L380 176 L400 170 L374 214 Z" fill="#5d536a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
-<path d="M196 112 L200 58 L222 104 L236 44 L252 98 L268 50 L278 104 L300 66 L298 118 Q248 94 196 112 Z" fill="url(#horn)" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
-<path d="M58 342 L30 318 L44 360 L24 372 L62 392 Z" fill="#5d536a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
-<path d="M448 342 L480 316 L468 360 L490 370 L446 394 Z" fill="#4e465a" stroke="#30233e" stroke-width="4" stroke-linejoin="round"/>
-<g fill="none" stroke="#fff5cd" stroke-width="11" stroke-linecap="round">
-<path d="M212 292 Q222 350 226 414"/>
-<path d="M243 276 Q250 342 250 424"/>
-<path d="M275 292 Q272 350 268 414"/>
-</g>
-</g>
 <path d="M193 442 Q250 426 309 443 L294 451 Q249 440 206 453Z" fill="#ff5575" opacity=".65"/>
+<g id="siege-bombard-motif" stroke="#30233e" stroke-width="7" stroke-linejoin="round">
+<path d="M68 216 V82 H104 V116 H138 V62 H176 V118 H210 V82 H248 V162 H68Z M320 162 V82 H356 V118 H390 V62 H428 V116 H460 V82 H490 V216Z" fill="#a58a70"/>
+<path d="M184 372 L280 286 L315 321 L230 404Z" fill="#3a2921" stroke="#ffdb85"/>
+<ellipse cx="296" cy="302" rx="29" ry="22" transform="rotate(45 296 302)" fill="#140d0a" stroke="#ffdb85"/>
+<circle cx="212" cy="408" r="26" fill="#6e3018" stroke="#ffdb85"/>
+<path d="M324 269 Q354 208 408 239" fill="none" stroke="#fff4c4" stroke-dasharray="12 9"/>
+<circle cx="415" cy="246" r="15" fill="#fff4c4"/>
+</g>
 </svg>
