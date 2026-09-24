@@ -75,15 +75,17 @@ function enforceCoopStartBalance(map, force = false) {
     const fail = detail => { throw new Error('Co-op starting balance bound cannot be satisfied: ' + detail) }
     const size = map.coop.generation && map.coop.generation.size
     const humans = map.players.slice(1, 1 + map.coop.initialHumanCount)
-    const scaling = getCoopMapScaling(humans.length, size)
-    if (map.mapSize.x !== scaling.side || map.mapSize.y !== scaling.side ||
+    const scaling = getCoopMapScaling(map.coop.initialHumanCount, size)
+    const side = map.coop.generation.version === 4
+        ? valleyRowPlans(map.coop.initialHumanCount, size).side : scaling.side
+    if (map.mapSize.x !== side || map.mapSize.y !== side ||
         map.goldmines.length !== scaling.counts.goldmines ||
         map.players[0].towns.length !== scaling.counts.neutralTowns) fail('invalid dimensions or resource count')
     if (humans.some(p => p.gold !== 100 || p.towns.length !== 1 || p.units.length !== 0))
         fail('unequal starting assets')
     const towns = map.players.flatMap(p => p.towns)
     if (towns.some(t => !Number.isInteger(t.x) || !Number.isInteger(t.y) ||
-        t.x < 2 || t.y < 2 || t.x >= scaling.side-2 || t.y >= scaling.side-2) ||
+        t.x < 2 || t.y < 2 || t.x >= side-2 || t.y >= side-2) ||
         towns.some((t,i) => towns.slice(i+1).some(u => Math.abs(t.x-u.x)<3 && Math.abs(t.y-u.y)<3)))
         fail('invalid fixed towns')
     if (!force && coopStartsBalanced(map)) return {status:'balanced', iterations:0, iterationLimit:8}
@@ -183,7 +185,7 @@ function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
     }
 }
 
-// Version-4 generated metadata: four portals per initial human on distinct
+// Version-4 generated metadata: six portals per initial human on distinct
 // in-bounds cells, exactly one of each category (ai/wave-config.js) per human.
 function validateCoopTypedPortals(map) {
     const coop = map.coop, generation = coop && coop.generation

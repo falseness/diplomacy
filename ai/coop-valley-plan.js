@@ -70,16 +70,17 @@ function valleyPortalSlots(side, depth, width, field, distance) {
 // Finite row-structure pool for one size/count: ridge row and thickness,
 // portal region depth/width. Each entry is checked against exact entity
 // counts, town clearances and portal distance before any seed is applied.
-function valleyRowPlans(humans, size) {
-    const id = `${size}:${humans}`
+function valleyRowPlansAtSide(humans, size, side) {
+    const id = `${size}:${humans}:${side}`
     if (valleyPoolCache.has(id)) return valleyPoolCache.get(id)
-    const scaling = valleyScaling(humans, size), side = scaling.side, counts = scaling.counts
+    const scaling = valleyScaling(humans, size), counts = {...scaling.counts,
+        mountains: Math.round(side * side * 0.08), lakes: Math.round(side * side * 0.06), bushes: Math.round(side * side * 0.10)}
     const distance = VALLEY_PORTAL_DISTANCE[size], area = side * side
     const need = {west: Math.ceil(counts.portals / 2), east: Math.floor(counts.portals / 2)}
     const terrainBudget = counts.mountains + counts.lakes
     // Fronts stay in separate halves; the shallowest two depths that yield any
     // feasible plan form the pool.
-    const maxWidth = Math.floor(side / 2), fields = new Map(), plans = [], nearMisses = []
+    const maxWidth = Math.floor(side / 2), fields = new Map(), plans = []
     let depthsUsed = 0
     for (let depth = 1; depth <= Math.floor(side / 3) && depthsUsed < 2; depth++) {
     let minWidth = 1
@@ -118,24 +119,24 @@ function valleyRowPlans(humans, size) {
             Math.max(0, counts.goldmines - humans - capacity.forwardMineRoom),
             Math.max(0, capacity.decorativeNeed - capacity.decorativeRoom)]
         const entry = {depth, width, thickness, ridge, capacity: {...capacity, estimateMisses, estimateDeficits}}
-        if (estimateMisses) nearMisses.push(entry)
-        else plans.push(entry)
+        if (!estimateMisses) plans.push(entry)
     }
     if (plans.length > before) depthsUsed++
-    }
-    // Four typed portals per human can leave a small map with no strict plan.
-    // The fallback keeps the plans with the smallest shortfall in forward town
-    // sites, then forward mine room, then decorative room, the order in which
-    // later stages consume them. Every later stage still measures its
-    // placements exactly and throws rather than relax a bound.
-    if (!plans.length && nearMisses.length) {
-        const order = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0 }
-        const best = nearMisses.map(p => p.capacity.estimateDeficits).sort(order)[0]
-        plans.push(...nearMisses.filter(p => order(p.capacity.estimateDeficits, best) === 0))
     }
     const pool = {size, humans, side, counts, portalDistance: distance, portalNeed: need, terrainBudget, plans}
     valleyPoolCache.set(id, pool)
     return pool
+}
+
+// Capacity is resolved before any seeded choice. Never consume randomness or
+// weaken quotas to fit: the first side with a strict row plan wins.
+function valleyRowPlans(humans, size) {
+    let side = valleyScaling(humans, size).side
+    while (true) {
+        const pool = valleyRowPlansAtSide(humans, size, side)
+        if (pool.plans.length) return pool
+        side++
+    }
 }
 
 function clearValleyPlanCache() {
@@ -152,7 +153,7 @@ function planDividedValley(humans, size = 'normal', seed = 1) {
     const pickIndex = length => Math.floor(rng() * length)
     const rowIndex = pickIndex(pool.plans.length), row = pool.plans[rowIndex]
     const {depth, width, thickness, ridge} = row
-    // Fallback plans keep the narrower passage, leaving room for terrain.
+    // Passage widths retain the planned terrain budget.
     const widths = [2, 3].filter(w => thickness * (side - 2 * w) <= pool.terrainBudget &&
         (w === 2 || !row.capacity.estimateMisses))
     const passageWidth = widths[pickIndex(widths.length)]
@@ -488,9 +489,8 @@ function placeValleyExpansions(plan, starts) {
 
 const VALLEY_PORTAL_FRONTS = Object.freeze({west: 'W', east: 'E'})
 
-// Portals after placeValleyExpansions. The H x multiplier portals form two
-// shared front groups, one in each top-corner portal region (sizes differ by at
-// most one; a single portal takes the west region), never one lane per human.
+// Portals after placeValleyExpansions. The six portals per initial human form
+// two equally sized shared fronts, one in each top-corner portal region.
 // Every portal keeps the size's minimum empty-hex distance from every human
 // town and two free adjacent approach cells of its own that every human reaches
 // through either advance passage. Nearest-portal path spread stays within the
@@ -633,9 +633,9 @@ function placeValleyPortals(plan, layout) {
     const sets = fieldSets()
     const approachCells = assigned.flat()
     // Categories rotate through each front in row order, the east front offset by
-    // two, so every category has exactly H portals split across both fronts.
+    // half the category count, so every category has exactly H portals split across both fronts.
     const categories = new Array(portals.length)
-    for (const [front, offset] of [['west', 0], ['east', 2]]) {
+    for (const [front, offset] of [['west', 0], ['east', valleyPortalCategories.length / 2]]) {
         const group = portals.map((_, i) => i).filter(i => fronts[i] === front).sort((a, b) => portals[a] - portals[b])
         group.forEach((i, j) => { categories[i] = valleyPortalCategories[(j + offset) % valleyPortalCategories.length] })
     }
@@ -844,6 +844,6 @@ function placeValleyTerrain(plan, layout) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {planDividedValley, placeValleyStarts, placeValleyExpansions, placeValleyPortals, placeValleyTerrain, valleyRowPlans,
+    module.exports = {planDividedValley, placeValleyStarts, placeValleyExpansions, placeValleyPortals, placeValleyTerrain, valleyRowPlans, valleyRowPlansAtSide,
         clearValleyPlanCache, createValleyRandom, VALLEY_LEGEND, VALLEY_PORTAL_DISTANCE}
 }

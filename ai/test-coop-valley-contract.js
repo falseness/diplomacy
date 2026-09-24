@@ -195,8 +195,10 @@ const ASSERTIONS = [
 ];
 
 // Contract order is fixed; a map is rejected by its first failing assertion.
-function verifyValley(map) {
-  const e = expectedFor(map), results = [];
+// Callers may supply independently declared current quotas/dimensions; defaults
+// preserve the authored four-category legacy contract fixtures.
+function verifyValley(map, expected = expectedFor(map)) {
+  const e = expected, results = [];
   for (const [name,check] of ASSERTIONS) {
     let r; try { r = check(map,e); } catch (error) { r = {pass:false, error:error.message}; }
     results.push({name,...r});

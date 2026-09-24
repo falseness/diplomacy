@@ -7,7 +7,7 @@ const COOP_SCALING_PRESETS = Object.freeze({
 })
 // One typed portal of each category per initial human on every size. Matches
 // COOP_PORTAL_CATEGORIES (ai/wave-config.js), which the server does not load.
-const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['normal', 'ranged', 'heavy', 'highTier'])
+const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos'])
 
 function getCoopMapScaling(initialHumanCount, size = 'normal') {
     if (!Number.isInteger(initialHumanCount) || initialHumanCount < 1 || initialHumanCount > 12) {
