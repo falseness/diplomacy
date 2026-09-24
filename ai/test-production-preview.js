@@ -399,7 +399,7 @@ function runPortalStage(check, drawLedger, ledgerRows) {
   config.coop = true;
   const f = createFixture(config, () => {});
   installCanvas(f);
-  f.evaluate('portal = new DemonPortal(6, 5, "normal"); undefined');
+  f.evaluate('portal = new DemonPortal(6, 5, "melee"); undefined');
   check('portal-no-manufacture-inheritance', f.evaluate(`({
     manufacture: portal instanceof Manufacture, preparing: portal instanceof PreparingManufacture,
     isPreparingManufacture: portal.isPreparingManufacture, isManufacture: portal.isManufacture,

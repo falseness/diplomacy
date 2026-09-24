@@ -23,10 +23,10 @@ for (const [size, table] of Object.entries(sides)) {
   for (let h=1;h<=12;h++) {
     const side=table[h-1], area=side*side;
     // Independent integer rounding, with no sqrt or production constants.
-    // TASK-151: one portal of each of the four categories per human on every size.
+    // Three melee/ranged and one siege/heavy/support/chaos portal per human.
     const expected={size,initialHumanCount:h,side,mapSize:{x:side,y:side},area,
-      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*multiplier,portals:4*h,
-        portalCategories:{normal:h,ranged:h,heavy:h,highTier:h},
+      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*multiplier,portals:10*h,
+        portalCategories:{melee:3*h,ranged:3*h,siege:h,heavy:h,support:h,chaos:h},
         mountains:Math.floor((area*8+50)/100),lakes:Math.floor((area*6+50)/100),bushes:Math.floor((area*10+50)/100)},
       startingAssets:{gold:100,towns:1,units:1}};
     if (process.argv.includes('--corrupt')) expected.side++;
@@ -40,7 +40,7 @@ for (const [size, table] of Object.entries(sides)) {
     previousArea=actual.area;
     compare(`${size}-H${h}-browser-shared-source`,f.evaluate(`getCoopMapScaling(${h},'${size}')`),expected);
     const coop={initialHumanCount:h,humanSlots:[],survivingHumanCount:0,
-      generation:{version:3,playerCount:h,seed:4294967295,size,options:{seed:4294967295,size}}};
+      generation:{version:4,playerCount:h,seed:4294967295,size,options:{seed:4294967295,size}}};
     const snapshot=JSON.stringify(coop);
     compare(`${size}-H${h}-initial-roster-only`,getCoopMapScalingFromMetadata(coop),expected);
     compare(`${size}-H${h}-pure-metadata`,JSON.stringify(coop),snapshot);
@@ -59,7 +59,7 @@ for (const size of [null,false,0,[],{},'', 'Tiny','Normal','medium','huge','cons
 }
 for (const coop of [null,{}, {initialHumanCount:2,generation:{}},
   ...[{seed:-1},{seed:1.5},{seed:4294967296},{version:0},{version:1.5},{playerCount:1},{size:undefined}]
-    .map(change=>({initialHumanCount:2,generation:{version:3,seed:1,playerCount:2,size:'normal',...change}}))]) {
+    .map(change=>({initialHumanCount:2,generation:{version:4,seed:1,playerCount:2,size:'normal',...change}}))]) {
   assert.throws(()=>getCoopMapScalingFromMetadata(coop),/original generation metadata/);
 }
 console.log('PASS invalid-generation-metadata rejected=10');

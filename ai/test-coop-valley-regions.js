@@ -105,7 +105,7 @@ function checkPlan(p, fault) {
   // TASK-151: with four typed portals per human a small map can have no plan
   // meeting every capacity estimate; the planner then keeps explicit fallback
   // plans (capacity.estimateMisses > 0). Their count-dependent probe checks are
-  // measured on every generated map by ai/test-coop-typed-portals.js instead.
+  // measured on every generated map by ai/test-task236-verification.js instead.
   const fallback = p.capacity.estimateMisses > 0;
   const deferred = fallback ? [...DEFERRED, 'counts', 'placements-disjoint-in-bounds', 'town-clearances'] : DEFERRED;
   const required = contractResult.results.filter(r=>!deferred.includes(r.name));

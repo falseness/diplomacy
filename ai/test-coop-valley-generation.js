@@ -287,7 +287,7 @@ if (require.main === module) {
       runtime:'JSON.stringify(getGameObject()) identical before/after each generation, replay and fault call; options objects unchanged',
       repair:'version-4 forced repair replays the deterministic candidates and restores portals/terrain only from a candidate whose map size, roster and goldmines match exactly; failure leaves input byte-identical',
       impossiblePlacement:'fault replaces every allied territory cell of each plan with ridge, so starting-town placement is impossible in every attempt',
-      balanceAndWaves:'starting a generated map keeps gameSettings.coop.balanceVersion=2 and no waveGeneration until the first wave (version 1)'},
+      balanceAndWaves:'starting a generated map keeps gameSettings.coop.balanceVersion=2 and no obsolete waveGeneration; typedWaves records completed rounds'},
     assertionOrder:matrix[0]?Object.keys(matrix[0].checks):[], summary, callers, starts, matrix},null,1)+'\n');
   if (mapsOut.length) fs.writeFileSync(path.join(out,'maps.json'), '{"note":"serialized generateCoopGame output per case; sha256 is of JSON.stringify(map)",\n"cases":[\n'+
     mapsOut.map(m=>JSON.stringify(m)).join(',\n')+'\n]}\n');

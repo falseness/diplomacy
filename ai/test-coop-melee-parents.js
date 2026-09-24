@@ -10,7 +10,7 @@ function run(cases) {
     function setup(normal = false) {
       const config = defaultFixture(); config.coop = true; config.size = {x:15,y:15};
       const f = createFixture(config);
-      f.evaluate(`new DemonPortal(5,3);
+      f.evaluate(`new DemonPortal(5,3,"melee");
         ${normal ? `Object.assign(${parent}, {maxHP:${hp},speed:${speed},dmg:${damage},healSpeed:0,salary:0});` : ''}
         globalThis.subject = new ${normal ? parent : klass}(5,3); whooseTurn=3; undefined`);
       return f;

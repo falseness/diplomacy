@@ -19,9 +19,9 @@ function run(eliminated = false, auditUndo = null) {
     {id:'attacker',kind:'unit',name:'noob',owner:3,x:4,y:3}
   ];
   // Current maps use typed portals whose first production is round 4, so the
-  // two completed rounds here spawn nothing. The third-round fixture below
+  // two completed rounds here spawn nothing. The round-four fixture below
   // verifies that the portal's new unit receives the immediate combat phase.
-  f.evaluate(`gameSettings.coop.generation={version:4}; new DemonPortal(12,4,'normal'); undefined`);
+  f.evaluate(`new DemonPortal(12,4,"melee"); undefined`);
   initial.push({id:'portal',kind:'portal',name:'demonPortal',owner:3,x:12,y:4});
   const entities = createEntityLedger(f,initial);
   const economy = createEconomyLedger(f,c.actors.map(({role,gold})=>({role,gold})),
@@ -108,26 +108,25 @@ function spawnedPhase() {
   c.actors[0].towns=[]; c.actors[1].units=[{x:5,y:4,hp:2}];
   c.actors[2].towns=[{x:1,y:7}]; c.actors[3].units=[];
   const f=createFixture(c);
-  f.evaluate(`new DemonPortal(6,4); gameRound=2; whooseTurn=3;
+  f.evaluate(`new DemonPortal(6,4,"melee"); gameRound=3; whooseTurn=3;
     gameSettings.aiActionLimit=1;
-    gameSettings.coop.localPhase={stage:'wave',round:3}; undefined`);
+    gameSettings.coop.localPhase={stage:'wave',round:4}; undefined`);
   f.compare('spawn-phase-before',f.evaluate('({count:players[3].units.length,hp:grid.getUnit({x:5,y:4}).hp})'),{count:0,hp:2});
   f.evaluate('advanceCoopLocalPhase()');
   f.compare('spawn-phase-exact-coordinate',f.evaluate(`({stage:gameSettings.coop.localPhase.stage,
     units:players[3].units.map(u=>({x:u.coord.x,y:u.coord.y,name:u.name}))})`),
     {stage:'demon',units:[{x:6,y:4,name:'imp'}]});
   f.evaluate('advanceCoopLocalPhase()');
-  // Installed version-2 imps deal 3 damage: the 2-HP human dies and the imp
-  // advances onto its cell, spending the immediate phase's moves.
+  // Current weak imps deal one damage; the human survives the immediate phase.
   f.compare('spawn-phase-immediate-combat',f.evaluate(`({stage:gameSettings.coop.localPhase.stage,
     count:players[3].units.length,human:players[1].units[0].killed,
     imp:{x:players[3].units[0].coord.x,y:players[3].units[0].coord.y,moves:players[3].units[0].moves},
     gold:players[3].gold})`),
-    {stage:'complete',count:1,human:true,imp:{x:5,y:4,moves:0},gold:0});
+    {stage:'complete',count:1,human:false,imp:{x:6,y:4,moves:0},gold:0});
   const before=f.evaluate('JSON.stringify({grid,players,external,gameSettings})');
   f.evaluate('advanceCoopLocalPhase(); advanceCoopLocalPhase()');
   f.compare('spawn-phase-repeated-controller-noop',f.evaluate('JSON.stringify({grid,players,external,gameSettings})'),before);
-  console.log('PASS spawned-demon immediate-normal-phase kill=1 repeated-controller=noop');
+  console.log('PASS spawned-demon immediate-normal-phase damage=1 repeated-controller=noop');
 }
 if (require.main === module) {
 run(false); run(true); spawnedPhase();

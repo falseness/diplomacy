@@ -21,7 +21,7 @@ function run(evaluate,input){
   rows.push({target,trace:evaluate('trace'),observed:evaluate('({hp:victim.hp,coord:actor.coord,moves:actor.moves})')});
  }
  reset();
- const factory=evaluate(`(() => {grid.getHexagon({x:2,y:4}).firstpaint(3);new DemonPortal(2,4);const result=placeCoopWave({selections:[{type:'bombard',x:2,y:4}]});return {result,className:grid.getUnit({x:2,y:4}).constructor.name};})()`);
+ const factory=evaluate(`(() => {grid.getHexagon({x:2,y:4}).firstpaint(3);new DemonPortal(2,4,"melee");const result=placeCoopWave({selections:[{type:'bombard',x:2,y:4}]});return {result,className:grid.getUnit({x:2,y:4}).constructor.name};})()`);
  return {roundtrip:{before,after,saved},rows,factory};
 }
 if(require.main===module){

@@ -4,7 +4,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const {chromium} = require('playwright');
-const {defaultFixture} = require('./test-coop-harness');
+const {defaultFixture, prepareMechanicsMap} = require('./test-coop-harness');
 const {checkBar,readBar} = require('./test-compact-health-bars');
 const root = path.resolve(__dirname, '..');
 const outputIndex = process.argv.indexOf('--output-dir');
@@ -44,17 +44,20 @@ const out = outputIndex < 0 ? path.join(root, 'artifacts/TASK-115') :
       await page.goto(`http://127.0.0.1:${server.address().port}/`, {waitUntil:'load'});
       await page.waitForFunction(() => typeof menu !== 'undefined' && menu.visible && imagesCountLoaded === images.length);
       const config = defaultFixture(); config.coop=true;
+      await page.evaluate("globalThis.prepareMechanicsMap = " + prepareMechanicsMap.toString());
       await page.evaluate(config => {
         window.fixtureConfig=config;
         isFogOfWar=false; gameSettings.isOnline=false;
         const configured=config.actors.map(a=>({...a, units:a.units.map(u=>({...u,type:Noob}))}));
-        new GameMap(config.size, configured.slice(0,-1), [],[],[],[],[],{type:'rectangular'},
-          {units:configured[3].units}).start(GameManager,false);
+        const map = new GameMap(config.size, configured.slice(0,-1), [],[],[],[],[],{type:'rectangular'},
+          {units:configured[3].units});
+        prepareMechanicsMap(map,config,configured); map.start(GameManager,false);
+        for(const p of external.slice()) {p.kill();grid.getHexagon(p.coord).firstpaint(0)}
         whooseTurn=1; actionManager.clear();
         nextTurnPauseInterface.hideButDontUpdateTimer();
         timer.pauseAndSaveTime();
         otherSettings.alwaysDisplayHPBar=false;
-        window.portal=new DemonPortal(3,2);
+        window.portal=new DemonPortal(3,2,"melee");
         gameEvent.screen.moveTo({x:portal.pos.x+assets.size/2,y:portal.pos.y+assets.size/2+130});
         gameEvent.selectSomethingOnCell(grid.getCell({x:3,y:2}));
         drawAll();

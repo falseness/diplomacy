@@ -22,7 +22,7 @@ function setup(demon, humans, portal) {
   ];
   humans.forEach((units,i)=>units.forEach((u,j)=>initial.push({id:`human${i+1}-${j}`,kind:'unit',owner:i+1,x:u.x,y:u.y,name:'noob'})));
   f.evaluate('players[3].units[1].moves=0');
-  f.evaluate(`globalThis.portal = new DemonPortal(${portal.x},${portal.y}); undefined`);
+  f.evaluate(`globalThis.portal = new DemonPortal(${portal.x},${portal.y},"melee"); undefined`);
   initial.push({id:'portal',kind:'portal',owner:3,...portal,name:'demonPortal'});
   const entities = createEntityLedger(f,initial);
   const economy = createEconomyLedger(f,config.actors.map(({role,gold})=>({role,gold})),{});

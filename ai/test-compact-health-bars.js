@@ -39,7 +39,7 @@ function main() {
     f.evaluate('bar.pos={x:411,y:203};');
     checkBar(`reposition-${hp}/${max}`,f.evaluate(`${readBar}(bar)`),hp,max,counts);
   }
-  f.evaluate('globalThis.portal=new DemonPortal(3,2);');
+  f.evaluate('globalThis.portal=new DemonPortal(3,2,"melee");');
   let before=30;
   for(const hp of [30,27,20,9,0]) {
     f.evaluate(`portal.hit(${before-hp});`); before=hp;

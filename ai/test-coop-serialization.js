@@ -8,10 +8,10 @@ const {createTurnLedger, committedSnapshot, compareCommitted} = require('./test-
 
 // Independent literal fixture, including damaged health for every demon class.
 const demons = [
-  ['imp', 'Imp', 1], ['clawling', 'Clawling', 2], ['hound', 'Hound', 3],
-  ['brute', 'Brute', 9], ['bulwark', 'Bulwark', 15], ['spitter', 'Spitter', 1],
-  ['emberArcher', 'EmberArcher', 3], ['hexcaster', 'Hexcaster', 4],
-  ['ravager', 'Ravager', 7], ['demonLord', 'DemonLord', 19]
+  ['imp', 'Imp', 1], ['clawling', 'Clawling', 1], ['hound', 'Hound', 1],
+  ['brute', 'Brute', 2], ['bulwark', 'Bulwark', 6], ['spitter', 'Spitter', 1],
+  ['emberArcher', 'EmberArcher', 1], ['hexcaster', 'Hexcaster', 1],
+  ['ravager', 'Ravager', 3], ['demonLord', 'DemonLord', 4]
 ];
 function setup(count, coop = true) {
   const config = {coop, size: {x:27, y:9}, actors: [
@@ -21,7 +21,7 @@ function setup(count, coop = true) {
     ...(coop ? [{role:'demon',rgb:{r:160,g:40,b:180},gold:0,economyEnabled:false,towns:[],units:[]}] : [])
   ]};
   const f = createFixture(config);
-  f.evaluate('if (gameSettings.coop) delete gameSettings.coop.balanceVersion; globalThis.turnEvents = [];');
+  f.evaluate('globalThis.turnEvents = [];');
   const initial = Array.from({length:count}, (_, i) =>
     ({id:`human-${i+1}`,kind:'unit',name:'noob',owner:i+1,x:1+i*2,y:1}));
   let entities = createEntityLedger(f, initial);
@@ -60,7 +60,7 @@ function runCoop(count, fault) {
     check(prefix+'-spawn-'+name);
   }
   for (const [x,hp] of [[5,17],[15,1]]) {
-    f.evaluate(`globalThis.born = new DemonPortal(${x},7); born.hit(${30-hp}); undefined`);
+    f.evaluate(`globalThis.born = new DemonPortal(${x},7,"melee"); born.hit(${30-hp}); undefined`);
     const row = {id:`portal-${x}`,kind:'portal',name:'demonPortal',owner:count+1,x,y:7};
     s.entities.record({type:'spawn',entity:row}); s.entities.bind(row.id,'born');
     check(prefix+'-portal-'+x);
@@ -73,7 +73,7 @@ function runCoop(count, fault) {
       units:players.flatMap(p=>p.units.map(u=>({id:u.id,name:u.name,className:u.constructor.name,
         owner:u.playerColor,x:u.coord.x,y:u.coord.y,hp:u.hp,moves:u.moves,wasHitted:u.wasHitted}))),
       portals:external.map(p=>({name:p.name,owner:p.playerColor,x:p.coord.x,y:p.coord.y,hp:p.hp,wasHitted:p.wasHitted}))})`),
-    {coop:{initialHumanCount:count,humanSlots:Array.from({length:count},(_,i)=>i+1),humanTeam:'HUMANS',demonSlot:count+1},
+    {coop:{initialHumanCount:count,humanSlots:Array.from({length:count},(_,i)=>i+1),humanTeam:'HUMANS',demonSlot:count+1,balanceVersion:2,generation:{version:4,playerCount:count,seed:1,size:'tiny',options:{seed:1,size:'tiny'},testFixture:{generated:false,kind:'declared-mechanics-fixture'}}},
       roles:['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS'], teams:[0,...Array(count).fill('HUMANS'),'DEMONS'],
       neutral:true,demon:true,gold:[0,...Array.from({length:count},(_,i)=>101+i*37),0], units:expectedUnits,
       portals:[{name:'demonPortal',owner:count+1,x:5,y:7,hp:17,wasHitted:true},

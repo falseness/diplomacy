@@ -25,9 +25,9 @@ module.exports = function run(kind) {
     e(`for(let x=0;x<15;x++) for(let y=4;y<12;y++)
       if(x!==7) new Mountain(x,y);
       ${kind==='bush' ? 'new Bush(7,9);' : ''}
-      new DemonPortal(7,10);
+      new DemonPortal(7,10,"melee");
       gameRound=COOP_TYPED_WAVE_SCHEDULE.categories.melee[0].round;
-      globalThis.wave=spawnCoopWave(gameRound,42);
+      globalThis.wave=spawnCoopWave(gameRound);
       globalThis.imp=players[3].units[0];
       isFogOfWar=${fog};
       grid.visionUsed=[];grid.visionDistance=[];
@@ -36,7 +36,7 @@ module.exports = function run(kind) {
       players[1].changeFogOfWarByVision(); undefined`);
     const label=fog?'fog-on':'fog-off';
     check(label+'-production-spawn',e('({wave,imp:imp instanceof Imp,coord:imp.coord,moves:imp.moves})'),
-      {wave:{spawned:[{type:'imp',x:7,y:10}],skipped:0},imp:true,coord:{x:7,y:10},moves:1});
+      {wave:{spawned:[{type:'imp',x:7,y:10}],skipped:0},imp:true,coord:{x:7,y:10},moves:2});
     if(fog) check(label+'-unseen-start-and-path',e('[grid.fogOfWar[7][10],grid.fogOfWar[7][9],grid.fogOfWar[7][8]]'),[0,0,0]);
     const vision=e('grid.fogOfWar');
     e(`globalThis.actions=[]; const send=imp.sendInstructions;
@@ -47,12 +47,14 @@ module.exports = function run(kind) {
     const observation={run:process.env.COOP_TEST_RUN || 'corrected',name:`${kind}-${label}-action-observation`,observed:e('actions')};
     rows.push(observation); fs.writeFileSync(file,JSON.stringify(rows,null,2)+'\n');
     console.log(JSON.stringify(observation));
-    check(label+'-immediate-entry',e('({coord:imp.coord,moves:imp.moves})'),{coord:{x:7,y:9},moves:0});
+    check(label+'-immediate-entry',e('({coord:imp.coord,moves:imp.moves})'),{coord:{x:7,y:8},moves:0});
     e('players[3].nextTurn(); players[3].play(); undefined');
-    check(label+'-next-turn-pursuit',e('({coord:imp.coord,moves:imp.moves})'),{coord:{x:7,y:8},moves:0});
+    check(label+'-next-turn-pursuit',e('({coord:imp.coord,moves:imp.moves})'),{coord:{x:7,y:6},moves:0});
     check(label+'-exact-actions',e('actions'),[
-      {before:{coord:{x:7,y:10},moves:1},destination:{x:7,y:9},after:{coord:{x:7,y:9},moves:0}},
-      {before:{coord:{x:7,y:9},moves:1},destination:{x:7,y:8},after:{coord:{x:7,y:8},moves:0}}]);
+      {before:{coord:{x:7,y:10},moves:2},destination:{x:7,y:9},after:{coord:{x:7,y:9},moves:1}},
+      {before:{coord:{x:7,y:9},moves:1},destination:{x:7,y:8},after:{coord:{x:7,y:8},moves:0}},
+      {before:{coord:{x:7,y:8},moves:2},destination:{x:7,y:7},after:{coord:{x:7,y:7},moves:1}},
+      {before:{coord:{x:7,y:7},moves:1},destination:{x:7,y:6},after:{coord:{x:7,y:6},moves:0}}]);
     check(label+'-real-combat-controller',e('players[3].combatAI instanceof SimpleAiPlayer'),true);
     if(fog) {
       check(label+'-human-visibility-unchanged',e('grid.fogOfWar'),vision);

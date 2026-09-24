@@ -32,7 +32,7 @@ function run(c, fault=false) {
     queue.sendInstructions({x:7,y:4},target);target.buildingProduction.push(queue);grid.setBuilding(queue,queue.coord);
     ${c.defender===null?'':`new Noob(6,3).hp=${c.defender};`}
     ${c.survivor?'grid.getHexagon({x:6,y:4}).firstpaint(1);new Noob(6,4);':''}
-    new Goldmine(1,5,50); new DemonPortal(8,5);
+    new Goldmine(1,5,50); new DemonPortal(8,5,"melee");
     gameSettings.isOnline=false;actionManager.clear(); undefined`);
   const expectedRows = [
     ['unit','noob',3,5,3], ['building','town',1,6,3],

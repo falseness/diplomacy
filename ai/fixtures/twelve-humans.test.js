@@ -78,7 +78,7 @@ async function launch(board, savedGame) {
 test('twelve humans Big: authoritative peer and persisted reconnect convergence',{timeout:60000},async()=>{
  const {createFixture}=require(path.join(runtime.gameDir,'ai/test-coop-harness'));
  const f=createFixture(undefined,()=>{});
- f.evaluate(`globalThis.generated=generateCoopGame(12,{size:'big',seed:0});generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);whooseTurn=0;gameSettings.isOnline=true;gameSettings.coop.waveGeneration={version:1,seed:0,lastRound:0};`);
+ f.evaluate(`globalThis.generated=generateCoopGame(12,{size:'big',seed:0});generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);whooseTurn=0;gameSettings.isOnline=true;gameSettings.coop.typedWaves={lastRound:0};`);
  const board=f.evaluate('JSON.parse(JSON.stringify(getGameObject()))');
  compare('Big-dimensions-roster-portals',f.evaluate('[grid.arr.length,grid.arr[0].length,gameSettings.coop.initialHumanCount,external.filter(p=>p.isDemonPortal).length]'),[68,68,12,36]);
  let h=await launch(board);

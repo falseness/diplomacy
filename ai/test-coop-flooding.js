@@ -19,7 +19,7 @@ function run(terminal = false, reverse = false) {
   rows.forEach(([,owner,x,y]) => c.actors[owner].units.push({x,y,hp:2}));
   const f = createFixture(c);
   const initial = rows.map(([id,owner,x,y])=>({id,owner,x,y,kind:'unit',name:'noob'}));
-  f.evaluate('new DemonPortal(0,0); undefined');
+  f.evaluate('new DemonPortal(0,0,"melee"); undefined');
   initial.push({id:'portal',owner:3,x:0,y:0,kind:'portal',name:'demonPortal'});
   // Block every radius-1/2 destination at this corner until the portal floods.
   // The oversized square is deliberate: this fixture is about flooding, not
@@ -46,10 +46,10 @@ function run(terminal = false, reverse = false) {
     economy.record({id:`salary-${serial++}`,owner,type:'salary',rule:'noob',count});
     check(`refresh-${owner}-${serial}`);
   };
-  // Seed-0 reference weight sequences for rounds 1..5, calculated with an
+  // No typed wave before round 4; the portal floods at round 2. An
   // independent integer oracle: 1111, 1122, 2231, 325, 3454.
   f.context.wave = result => {
-    f.compare(`${name}-wave-${round+1}`,JSON.parse(JSON.stringify(result)),{spawned:[],skipped:[4,4,4,3,4][round]});
+    f.compare(`${name}-wave-${round+1}`,JSON.parse(JSON.stringify(result)),{spawned:[],skipped:0});
     prefix++;check(`wave-${round+1}`);
   };
   f.context.demon = () => {prefix++;check(`demon-${round+1}`);};
@@ -119,7 +119,7 @@ function run(terminal = false, reverse = false) {
     f.compare(`${name}-terminal-idempotent`,f.evaluate('nextTurn(); nextTurn(); ({ends,round:gameRound,result:gameSettings.coop.result})'),
       {ends:1,round:2,result:'draw'});check('terminal-idempotent');
   } else {
-    f.compare('flooded-portal-no-spawn',f.evaluate('placeCoopWave({types:["imp","brute","demonLord"]})'),{spawned:[],skipped:3});
+    f.compare('flooded-portal-no-spawn',f.evaluate('placeCoopWave({selections:[{type:"imp",x:0,y:0},{type:"brute",x:0,y:1},{type:"demonLord",x:0,y:2}]})'),{spawned:[],skipped:3});
     check('post-flood-spawn');
     f.compare('both-sides-casualties',f.evaluate('players.map(p=>p.units.filter(u=>!u.killed).length)'),[0,1,1,1]);
     f.compare('portal-removed',f.evaluate('external.filter(p=>p.isDemonPortal).length'),0);

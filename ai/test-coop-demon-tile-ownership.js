@@ -16,7 +16,7 @@ function run(fault) {
     unitEmpty:grid.getUnit({x:3,y:3}).isEmpty(),demonUnits:players[3].units.length})`);
   f.compare('human-suburb-before-portal', land(),
     {owner:1,suburb:true,counted:1,unitEmpty:true,demonUnits:0});
-  f.evaluate('new DemonPortal(3,3); undefined');
+  f.evaluate('new DemonPortal(3,3,"melee"); undefined');
   f.compare('ownership-corrected-before-demon-exists', land(),
     {owner:3,suburb:false,counted:0,unitEmpty:true,demonUnits:0});
   // Simulate stale terrain at an existing portal to exercise the independent
@@ -61,7 +61,7 @@ function run(fault) {
   f.compare('load-exact-save',f.evaluate('JSON.stringify(getGameObject())'),before);
   // A human town cannot be replaced by a portal or accepted as a spawn site.
   f.compare('reject-human-economic-building-portal',f.evaluate(`(() => {
-    try {new DemonPortal(1,1)} catch(e) {return e.message}
+    try {new DemonPortal(1,1,"melee")} catch(e) {return e.message}
   })()`),'portal requires empty building cell');
   f.compare('reject-human-economic-building-spawn',f.evaluate('placeCoopWave({selections:[{type:"imp",x:1,y:1}]})'),
     {spawned:[],skipped:1});

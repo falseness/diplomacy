@@ -70,7 +70,7 @@ for (const [label, hp, defenderHP, ranged, expectedHP, expectedDefender, razed] 
   const config=defaultFixture(); config.coop=true;
   const f=createFixture(config);
   f.evaluate(`grid.getHexagon({x:5,y:3}).playerColor=3; globalThis.attacker=new Noob(5,3);
-    globalThis.portal=new DemonPortal(6,3); whooseTurn=3;
+    globalThis.portal=new DemonPortal(6,3,"melee"); whooseTurn=3;
     attacker.select(); attacker.sendInstructions(grid.getCell({x:6,y:3})); undefined`);
   f.compare('own-portal-entry-preserved',f.evaluate(`({position:attacker.coord,moves:attacker.moves,
     hp:portal.hp,killed:portal.killed,owner:portal.playerColor})`),

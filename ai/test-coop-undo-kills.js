@@ -25,11 +25,12 @@ function run(c, fault) {
   // Injured targets and a previously dead unrelated demon are fixture state.
   // Create target before the sentinel to test external-list order restoration.
   f.evaluate(`grid.getHexagon({x:5,y:3}).playerColor=1; new ${c.actor}(5,3);
-    grid.getHexagon({x:5,y:${y}}).playerColor=1; new ${c.target}(5,${y});
+    grid.getHexagon({x:5,y:${y}}).playerColor=3; new ${c.target}(5,${y}${c.kind==='portal'?',"melee"':''});
     grid.${getter}({x:5,y:${y}}).hp=${c.damage};
     grid.${getter}({x:5,y:${y}}).wasHitted=true;
     grid.getHexagon({x:11,y:9}).playerColor=2; new Noob(11,9);
-    new Hound(9,8); new DemonPortal(9,2);
+    grid.getHexagon({x:9,y:8}).firstpaint(3); grid.getHexagon({x:1,y:8}).firstpaint(3);
+    new Hound(9,8); new DemonPortal(9,2,"melee");
     globalThis.unrelatedDead=new Imp(1,8); unrelatedDead.id='already-dead'; unrelatedDead.kill();
     gameSettings.isOnline=false; undefined`);
   f.context.rows=rows;

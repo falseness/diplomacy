@@ -21,7 +21,7 @@ function scenario(name, removals, expected, flood = false) {
     ['t1','town',1,1,1],['h1','unit',1,1,1],['t2','town',2,7,1],
     ['h2','unit',2,7,1],['d','unit',3,7,5],['p','portal',3,4,4]
   ];
-  f.evaluate(`new DemonPortal(${flood?'0,6':'4,4'}); undefined`);
+  f.evaluate(`new DemonPortal(${flood?'0,6':'4,4'},"melee"); undefined`);
   const initial = rows.map(([id,kind,owner,x,y]) => ({id,kind,owner,x,y,
     name:kind==='unit'?'noob':kind==='portal'?'demonPortal':'town'}));
   const entities = createEntityLedger(f,initial);

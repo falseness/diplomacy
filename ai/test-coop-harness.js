@@ -1,3 +1,16 @@
+function prepareMechanicsMap(map, fixtureConfig, configured) {
+    if (map.coop) {
+      const humans = configured.length - 2
+      map.coop.generation = {version:4, playerCount:humans, seed:1, size:"tiny",
+        options:{seed:1,size:"tiny"}, testFixture:{generated:false, kind:"declared-mechanics-fixture"}}
+      const categories = ["melee","melee","melee","ranged","ranged","ranged","siege","heavy","support","chaos"]
+      map.portals = []
+      for(let x=0;x<fixtureConfig.size.x;x++) for(let y=0;y<fixtureConfig.size.y;y++) {
+        if(configured.some(a=>a.units.some(u=>u.x===x&&u.y===y) || a.towns.some(t=>Math.abs(t.x-x)<=1&&Math.abs(t.y-y)<=2))) continue
+        if(map.portals.length < humans*10) map.portals.push({x,y,category:categories[map.portals.length%10]})
+      }
+    }
+}
 const assert = require('assert').strict;
 const vm = require('vm');
 const { spawnSync } = require('child_process');
@@ -158,6 +171,7 @@ function createFixture(config = defaultFixture(), report = console.log, options 
     }).runInContext(context));
   }
   context.fixtureConfig = config;
+  evaluate("globalThis.prepareMechanicsMap = " + prepareMechanicsMap.toString() + "; undefined");
   evaluate(`(() => {
     isFogOfWar = false
     entityInterface = {change() {}, hide() {}}
@@ -171,15 +185,19 @@ function createFixture(config = defaultFixture(), report = console.log, options 
     attackBorder = new Border()
     const configured = fixtureConfig.actors.map(actor => ({...actor,
       units: actor.units.map(unit => ({...unit, type: Noob}))}))
-    new GameMap(fixtureConfig.size, fixtureConfig.coop ? configured.slice(0, -1) : configured,
+    const map = new GameMap(fixtureConfig.size, fixtureConfig.coop ? configured.slice(0, -1) : configured,
       [], [], [], [], [], {type: 'rectangular'},
-      fixtureConfig.coop ? {units: configured[configured.length - 1].units} : null).start({
+      fixtureConfig.coop ? {units: configured[configured.length - 1].units} : null)
+    prepareMechanicsMap(map, fixtureConfig, configured)
+    map.start({
       updateCameraBorders() {},
       clearValues() {
         external = []; externalProduction = []; nature = []; goldmines = []
         gameRound = 0; gameExit = false
       }
     }, false)
+    // Declared mechanics setup: remove starter objectives before adding scenario portals.
+    if(map.coop) for(const p of external.slice()) {p.kill(); grid.getHexagon(p.coord).firstpaint(0)}
     whooseTurn = 1
     otherSettings.moveCameraToUndoTarget = false
     actionManager.clear()
@@ -280,3 +298,5 @@ if (require.main === module) {
   }
 }
 module.exports = {createFixture, defaultFixture, validateFixture};
+
+module.exports.prepareMechanicsMap = prepareMechanicsMap;
