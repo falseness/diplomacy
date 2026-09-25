@@ -54,3 +54,29 @@ expected/observed checkpoints and cleanup receipts. Negative scenarios are passi
 controls only when the parent observes their exact expected failure. The complete
 arm is still diagnostic and cannot authorize production staging. All output must
 remain local and uncommitted.
+
+### Offline producer/constructor comparison
+
+`compare_release_receipts.js SAVED_DIRECTORY FRESH_OUTPUT_DIRECTORY SERVER_REPO
+ABSOLUTE_DEADLINE_MS` is an explicit diagnostic, run with `/usr/local/bin/node20`.
+It copies saved helper receipts and archives without executing their contents,
+checks archive claims against their bytes, and invokes the actual final constructor
+with direct receipts and an explicit normalized variant under one deadline.
+The normalized variant derives package/rollback proof references and a layout
+binding. It does not invent issuer provenance, service execution or health checks.
+Independent contract probes expose failures hidden behind the constructor's first
+rejection. Both variants must reject; diagnostic exit zero never grants readiness.
+
+The saved inputs must include `candidate/paired-package.json`,
+`candidate/candidate-manifest.json`, `candidate/candidate.tar.gz`,
+`candidate/runtime-dependencies.tar.gz`, `rollback/retained-installation.json`,
+`rollback/prior-installation.tar.gz`, `prepared-smoke-inputs.json`,
+`layout-rehearsal.json` and `layout-dry-run.log`. Outputs contain frozen hashes,
+source closure, the exact command/runtime, individual contract results and
+`fullTaskPass:false`. A clearly marked synthetic prerequisite is confined to
+this diagnostic directory. No production runner imports this script.
+
+This comparison does not complete the production acquisition, issuer, executable
+service rehearsal, operations wiring or authenticated final consumer. Those
+remain required together with finalized current TASK-225 proof before TASK-226
+can pass. The production fail-closed guards remain in force.
