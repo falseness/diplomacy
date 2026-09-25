@@ -34,7 +34,7 @@ class Catapult extends RangeUnit {
         drawCachedImage(ctx, cachedImages[this.mirrorX ? 'catapultLeft' : this.name], this.pos)
     }
 }
-// Siege demons share the catapult art and building damage/undo mechanics.
+// Siege demons inherit building damage/undo mechanics and use their own artwork.
 class Bombard extends Catapult {
     static range = 2
     static minimumRange = 2
@@ -55,7 +55,7 @@ class Bombard extends Catapult {
     }
     draw(ctx) {
         this.drawBars(ctx)
-        drawCachedImage(ctx, cachedImages[this.mirrorX ? 'catapultLeft' : 'catapult'], this.pos)
+        drawCachedImage(ctx, cachedImages[this.mirrorX ? 'bombardLeft' : 'bombard'], this.pos)
     }
 }
 registerDemonVariant(Bombard, 'bombard', 'catapult')

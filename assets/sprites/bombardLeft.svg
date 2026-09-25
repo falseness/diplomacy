@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="bombard-title bombard-desc">
+  <title id="bombard-title">Demonic bombard, left-facing</title>
+  <desc id="bombard-desc">A squat horned siege cannon facing left, with an obsidian barrel, glowing furnace mouth, ivory tusks and armored wheels. Editable vectors on a transparent canvas.</desc>
+  <defs>
+    <linearGradient id="iron" x1="0" y1="1" x2=".8" y2="0" gradientUnits="objectBoundingBox"><stop stop-color="#252333"/><stop offset=".55" stop-color="#505365"/><stop offset="1" stop-color="#92939d"/></linearGradient>
+    <linearGradient id="red" x1="0" y1="1" x2=".7" y2="0"><stop stop-color="#422534"/><stop offset=".55" stop-color="#81404e"/><stop offset="1" stop-color="#ba7176"/></linearGradient>
+    <linearGradient id="bone" x1="0" y1="1" x2=".8" y2="0"><stop stop-color="#87715d"/><stop offset=".5" stop-color="#d3bc95"/><stop offset="1" stop-color="#fff0cf"/></linearGradient>
+    <linearGradient id="brass" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#695040"/><stop offset=".5" stop-color="#b68a59"/><stop offset="1" stop-color="#e8c78b"/></linearGradient>
+    <radialGradient id="fire"><stop stop-color="#fff5b1"/><stop offset=".4" stop-color="#ffb94f"/><stop offset=".75" stop-color="#eb5f37"/><stop offset="1" stop-color="#762939"/></radialGradient>
+  </defs>
+  <g transform="translate(512 0) scale(-1 1)" id="bombard-art" stroke="#2c2534" stroke-width="5" stroke-linejoin="round">
+    <!-- Far wheel and low, heavily armored carriage. -->
+    <circle cx="349" cy="365" r="70" fill="url(#iron)"/>
+    <circle cx="349" cy="365" r="44" fill="#302b3b" stroke="#ac845a" stroke-width="10"/>
+    <path d="M77 331 L124 287 L360 295 L401 349 L370 391 L111 393Z" fill="url(#red)"/>
+    <path d="M101 346 L370 352 L357 379 L111 378Z" fill="url(#brass)"/>
+    <path d="M96 322 L62 291 L65 345 L111 361 M328 313 L356 263 L373 329" fill="url(#bone)"/>
+    <!-- Recoil saddle and rear furnace. -->
+    <path d="M164 311 L183 235 L281 223 L326 323Z" fill="url(#iron)"/>
+    <path d="M111 288 Q69 253 87 207 Q104 168 158 169 L219 228 L199 290Z" fill="url(#red)"/>
+    <path d="M105 212 L133 201 L155 252 L126 265Z" fill="url(#fire)"/>
+    <path d="M112 209 L135 260 M124 205 L146 255" stroke="#352837" stroke-width="9"/>
+    <!-- Barrel rises toward a broad, unmistakable cannon mouth. -->
+    <path d="M153 184 L342 112 Q386 119 412 164 L402 239 L213 303 Q165 279 148 236 Q139 207 153 184Z" fill="url(#iron)"/>
+    <path d="M164 190 L341 127" stroke="#c4b7ab" stroke-opacity=".55" stroke-width="9" stroke-linecap="round"/>
+    <path d="M204 164 Q193 222 247 291 L272 282 Q223 216 231 154Z" fill="url(#brass)"/>
+    <path d="M291 132 Q279 191 329 263 L351 255 Q310 188 316 122Z" fill="url(#red)"/>
+    <!-- Swept horns form the demon silhouette above the barrel. -->
+    <path d="M280 154 Q246 130 254 96 Q259 71 283 56 Q268 94 305 114 L318 136Z" fill="url(#bone)"/>
+    <path d="M348 119 Q362 87 344 64 Q385 73 389 109 L380 137Z" fill="url(#bone)"/>
+    <!-- Armored demon face wrapped around an incandescent bore. -->
+    <path d="M345 112 L399 121 L440 162 L453 214 L426 259 L377 268 L341 231 L325 169Z" fill="url(#iron)"/>
+    <path d="M349 126 L389 136 L375 158 L342 162Z M402 143 L431 168 L433 190 L400 174Z" fill="#2d2330"/>
+    <path d="M350 140 L376 144 L369 151 L349 153Z M406 155 L424 172 L424 180 L405 169Z" fill="#ffbc62" stroke="none"/>
+    <ellipse cx="392" cy="207" rx="39" ry="47" transform="rotate(-23 392 207)" fill="url(#brass)"/>
+    <ellipse cx="392" cy="207" rx="29" ry="36" transform="rotate(-23 392 207)" fill="#30202c" stroke="#713d3d"/>
+    <ellipse cx="392" cy="210" rx="21" ry="27" transform="rotate(-23 392 210)" fill="url(#fire)" stroke="none"/>
+    <path d="M379 229 Q373 212 386 198 Q387 212 397 213 Q406 213 403 199 Q418 221 398 232Z" fill="#ffe49a" stroke="none"/>
+    <path d="M351 204 Q331 242 358 274 Q353 248 374 239Z M426 220 Q449 247 433 279 Q432 251 411 247Z" fill="url(#bone)"/>
+    <!-- Large foreground wheel, bronze hub and forged radial spokes. -->
+    <circle cx="184" cy="386" r="89" fill="url(#iron)"/>
+    <circle cx="184" cy="386" r="69" fill="#332b3b" stroke="url(#brass)" stroke-width="11"/>
+    <path d="M184 324 V448 M122 386 H246 M140 342 L228 430 M140 430 L228 342" stroke="#776876" stroke-width="14"/>
+    <circle cx="184" cy="386" r="30" fill="url(#brass)"/>
+    <path d="M184 362 L199 386 L184 410 L169 386Z" fill="url(#fire)"/>
+    <g fill="#d6b987" stroke="none"><circle cx="184" cy="310" r="5"/><circle cx="260" cy="386" r="5"/><circle cx="184" cy="462" r="5"/><circle cx="108" cy="386" r="5"/><circle cx="221" cy="197" r="4"/><circle cx="244" cy="262" r="4"/><circle cx="322" cy="175" r="4"/></g>
+  </g>
+</svg>
