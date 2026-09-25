@@ -43,10 +43,47 @@ class ConcurrentArchiveTests(unittest.TestCase):
 
     def test_real_archive_positive(self):
         result = review(self.root)
-        self.assertEqual(len(result['checks']), 556)
+        self.assertEqual(len(result['checks']), 612)
         self.assertFalse(result['fullAuditReady'])
         self.assertEqual(result['criterionClosures'], [])
         self.assertIn('G09', result['gaps'])
+        self.assertIn('TASK-209/AC2', result['gaps'])
+        self.assertEqual(result['rawTenIdentityScope'], dict(tenProjectedEvents=211,
+            tenInboundPackets=0, tenFullBoards=0, tenIndependentRecipients=0))
+
+    def test_intermediate_wrong_nonmoving_player_income(self):
+        self.change('coop-ten-move-1-persisted.json', lambda d:
+            d['rounds'][-1][1]['turns'][0]['gameObject']['players'][7].update(gold=999))
+        with self.assertRaisesRegex(ValueError, 'ten-intermediate/1/submitted-board'):
+            review(self.root)
+
+    def test_intermediate_wrong_second_movement(self):
+        self.change('coop-ten-move-2-persisted.json', lambda d:
+            d['rounds'][-1][1]['turns'][0]['gameObject']['players'][1]['units'][0]['coord'].update(y=5))
+        with self.assertRaisesRegex(ValueError, 'ten-intermediate/2/submitted-board'):
+            review(self.root)
+
+    def test_intermediate_swapped_prepared_identity(self):
+        self.change('coop-ten-move-1-persisted.json', lambda d:
+            d['rounds'][-1][7]['turns'][0]['preparedTurnState'].update(playerIndex=8))
+        with self.assertRaisesRegex(ValueError, 'ten-intermediate/1/prepared-slot/7'):
+            review(self.root)
+
+    def test_intermediate_prepared_double_income(self):
+        self.change('coop-ten-move-2-persisted.json', lambda d:
+            d['rounds'][-1][7]['turns'][0]['preparedTurnState']['player'].update(gold=430))
+        with self.assertRaisesRegex(ValueError, 'ten-intermediate/2/prepared-player/7'):
+            review(self.root)
+
+    def test_intermediate_wrong_revision(self):
+        self.change('coop-ten-move-2-persisted.json', lambda d: d.update(coopRevision=12))
+        with self.assertRaisesRegex(ValueError, 'ten-intermediate/2/revision'):
+            review(self.root)
+
+    def test_missing_intermediate_document(self):
+        (self.root/'coop-ten-move-1-persisted.json').unlink()
+        with self.assertRaises(FileNotFoundError):
+            review(self.root)
 
     def test_double_income_with_matching_expected(self):
         self.corrupt_board(lambda b: b['players'][1].update(gold=218))

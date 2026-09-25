@@ -193,6 +193,31 @@ def review(directory):
               [(x['round'], x['boundary'], x['units']) for x in ai])
     check('separate-coop-game-ids', 2, len(set(identities.values())))
     for r in [1, 2]:
+        # These are the original ten-identity documents, not the later H2
+        # supplement. Inspect the submitted whole board, not just its mover.
+        doc = bind('coop-ten-move-'+str(r)+'-persisted.json')
+        prefix = 'ten-intermediate/'+str(r)
+        check(prefix+'/game', identities['coop-ten'], doc['gameID'])
+        check(prefix+'/revision', (r-1)*10+1, doc['coopRevision'])
+        check(prefix+'/rounds', r, len(doc['rounds']))
+        components = doc['rounds'][-1]
+        check(prefix+'/components', 11, len(components))
+        turns = [t for c in components for t in c['turns']]
+        check(prefix+'/slots', list(range(11)), [t['playerIndex'] for t in turns])
+        check(prefix+'/submitted', [0, 1], [t['playerIndex'] for t in turns if t.get('gameObject')])
+        check(prefix+'/next-turn-index', [1, 1]+[0]*9, [c['nextTurnIndex'] for c in components])
+        expected = board('coop-ten', r-1, True)
+        expected['players'][1]['units'][0]['coord']['y'] = 5 if r == 1 else 6
+        expected['players'][1]['units'][0]['moves'] = 1
+        check(prefix+'/submitted-board', expected, project(turns[1]['gameObject']))
+        for slot in range(1, 11):
+            prepared = turns[slot]['preparedTurnState']
+            check(prefix+'/prepared-slot/'+str(slot), slot, prepared['playerIndex'])
+            # Prepared player state precedes the movement submission.
+            initial = board('coop-ten', r-1, r == 2)
+            prepared_board = dict(turns[1]['gameObject'], players=[prepared['player']])
+            check(prefix+'/prepared-player/'+str(slot), initial['players'][slot],
+                  project(prepared_board)['players'][0])
         accepted = [e for e in trace if e['event'] == 'movement-accepted-persisted-isolated' and e['round'] == r-1]
         check('movement-raw-count/'+str(r), 1, len(accepted))
         check('movement-raw-isolation/'+str(r), True, accepted[0]['concurrentGameUnchanged'])
@@ -241,6 +266,17 @@ def review(directory):
         if name != 'verification.log':
             check('empty/'+name, '', (root/name).read_text())
     identity = bind('source-identities.json')['after']
+    wire_path = root/'wire.jsonl'
+    proofs['wire.jsonl'] = digest(wire_path)
+    wire = [json.loads(line) for line in wire_path.read_text().splitlines()]
+    ten_events = [e for e in trace if e['id'] == 'coop-ten' and
+                  e['event'] in ['gameStarted', 'playYourTurn', 'waitYouTurn']]
+    ten_packets = [e for e in wire if e['id'] == 'coop-ten' and e['direction'] == 'received']
+    # slot in this old trace is copied from the payload's whooseTurn. It is
+    # not an independent socket-recipient identity and cannot detect swaps.
+    raw_scope = dict(tenProjectedEvents=len(ten_events), tenInboundPackets=len(ten_packets),
+                     tenFullBoards=sum('fullBoard' in e for e in ten_events),
+                     tenIndependentRecipients=sum('recipient' in e for e in ten_events))
     differences = []
     for role, record in identity.items():
         for name, expected in record['files'].items():
@@ -257,7 +293,15 @@ def review(directory):
                 claims={'browserContexts': 4, 'browserGames': 2, 'protocolHumans': 10,
                         'naturalCombat': False, 'longDemonPhase': False,
                         'threeGamesAdvancingConcurrently': False},
-                gaps={'G09': 'No interleaved advancement of two co-op matches plus competitive control; '
+                rawTenIdentityScope=raw_scope,
+                gaps={'TASK-209/AC2': 'Original ten-identity inbound packets and independent recipient '
+                      'bindings are absent: wire.jsonl captures browsers only; game-isolation.jsonl '
+                      'retains projected boards and payload-derived slot only. Capture sanitized full '
+                      'onAny bodies with a stable peer identity and bind that identity to the persisted '
+                      'playerIndexToUserIndex mapping, including reconnect. Review all inbound revisions '
+                      'and both intermediate documents in that new bounded provider invocation. '
+                      'The H2 review-36 supplement cannot fill this ten-identity boundary.',
+                      'G09': 'No interleaved advancement of two co-op matches plus competitive control; '
                       'coop-browser stops after round 2 before coop-ten advances. The single enclosed imp '
                       'does not establish a long busy demon phase across database awaits.',
                       'TASK-209/AC7': 'Plan declares seed/tiny/fog split, but no explicit simultaneous join-mode '
