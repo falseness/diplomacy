@@ -45,13 +45,20 @@ function run(fault) {
       const rejected = coop && owner===2;
       // Legacy ranged commands mark a ruined town but do not move/capture it.
       const capture = !rejected && !ranged && kind==='town' && health===0;
-      f.evaluate('attacker.select(); attacker.getAvailableCommands(); undefined');
+      f.evaluate('attackBorder.visible = false; attacker.select(); attacker.getAvailableCommands(); undefined');
       f.compare(label+'-targeting', f.evaluate(`({canHit:!!attacker.canHitSomethingOnCell(grid.getCell({x:6,y:3})),
         listed:attacker.getAvailableCommands().some(c=>c.destinationCoord.x===6&&c.destinationCoord.y===3)})`),
         {canHit:!rejected && !(ranged && health===0),listed:!rejected});
       check('initial');
       const before = f.snapshot();
       const undoBefore = f.evaluate('actionManager.arr.length');
+      if (rejected) {
+        // The fixture panel is a stub; expose it as a selected panel would be.
+        f.evaluate('entityInterface.visible = true');
+        f.compare(label+'-selection-visible', f.evaluate(`({movement:border.visible,
+          attack:!!attackBorder.visible,panel:entityInterface.visible})`),
+          {movement:true,attack:ranged,panel:true});
+      }
       console.log(JSON.stringify({scenario:label,submitted:'attacker.sendInstructions(grid.getCell({x:6,y:3}))'}));
       f.evaluate('attacker.sendInstructions(grid.getCell({x:6,y:3})); undefined');
       if (fault==='health' && rejected) f.evaluate('target.hp--');
@@ -66,6 +73,9 @@ function run(fault) {
           targetCoord:{x:6,y:3},attackerCoord:{x:capture?6:5,y:3},attackerHP:ranged?1:2,
           moves:rejected?2:0,gold:[0,100,75,0]});
       if (rejected) {
+        f.compare(label+'-selection-cleared', f.evaluate(`({movement:border.visible,
+          attack:!!attackBorder.visible,panel:entityInterface.visible})`),
+          {movement:false,attack:false,panel:false});
         f.compare(label+'-unchanged-full-state', f.snapshot(), before);
         f.compare(label+'-no-undo-added', f.evaluate('actionManager.arr.length'), undoBefore);
         // Even a path ending beyond a damaged allied town must not capture it.

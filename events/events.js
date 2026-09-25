@@ -3,7 +3,7 @@ function createEvents() {
     
     if (!mobilePhone) {
         document.addEventListener('mousemove', mousemove)
-        document.addEventListener('mousewheel', mousewheel)
+        document.addEventListener('wheel', mousewheel)
 
         document.addEventListener('keydown', keydown)
         document.addEventListener('keyup', keyup)
@@ -65,7 +65,7 @@ function mousemove(event) {
 
 function mousewheel(event) {
     let pos = getEventPos(event)
-    gameEvent.mousewheel(pos, event.wheelDelta)
+    gameEvent.mousewheel(pos, event.wheelDelta ?? -event.deltaY)
 }
 class Events {
     constructor(_barrackInterface, _townInterface, _entityInterface, 
@@ -496,3 +496,28 @@ class EventsMapCreation {
         this.selected = false
     }
 }*/
+
+// WebKit can suppress the compatibility click when a canvas changes during a
+// touch. Handle a stationary single-finger tap directly, and suppress the later
+// compatibility click so Chromium does not activate the same control twice.
+if (mobilePhone) {
+    let tapStart = null
+    document.addEventListener('touchstart', event => {
+        tapStart = event.target.tagName === 'CANVAS' && event.touches.length === 1
+            ? {x: event.touches[0].clientX, y: event.touches[0].clientY} : null
+    }, {passive: true})
+    document.addEventListener('touchmove', event => {
+        if (tapStart && (event.touches.length !== 1 ||
+            Math.hypot(event.touches[0].clientX - tapStart.x,
+                event.touches[0].clientY - tapStart.y) > 10)) tapStart = null
+    }, {passive: true})
+    document.addEventListener('touchcancel', () => { tapStart = null }, {passive: true})
+    document.addEventListener('touchend', event => {
+        const activate = tapStart && event.touches.length === 0
+        tapStart = null
+        if (!activate || typeof menu === 'undefined' || !menu) return
+        event.preventDefault()
+        if (menu.visible) menuClick(event)
+        else click(event)
+    }, {passive: false})
+}

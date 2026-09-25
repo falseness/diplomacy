@@ -68,7 +68,7 @@ function rebaseOnlineValue(base, local, remote) {
 
 function SetupServerCommunicationLogic(password) {
     if (onlineSocket) { const previous = onlineSocket; onlineSocket = null; previous.disconnect() }
-    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080', {forceNew: true, reconnection: false, timeout: 10000})
+    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080', {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
     document.getElementById('online-recovery')?.remove()
     let failed = false
     const fail = message => {
@@ -167,6 +167,10 @@ function SetupServerCommunicationLogic(password) {
                     action.externalOrder, board.external.map(e => e.coord))
             }
         }
+        // Clear references and panels while their old board still exists.
+        // A received board may remove a selected entity or hide its cell.
+        gameEvent.removeSelection()
+        gameEvent.hideAll()
         loadFromJson(JSON.stringify(restored))
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
@@ -177,7 +181,8 @@ function SetupServerCommunicationLogic(password) {
             gameEvent.removeSelection()
             if (selected) {
                 const entity = selected.unit ? grid.getUnit(selected.coord) : grid.getBuilding(selected.coord)
-                if (entity.notEmpty()) {
+                if (entity.notEmpty() && (!isFogOfWar ||
+                        grid.fogOfWar[selected.coord.x][selected.coord.y])) {
                     entity.select()
                     gameEvent.selected = entity
                 }
@@ -241,6 +246,11 @@ function SetupServerCommunicationLogic(password) {
     }))
     socket.on('connect', () => {
         if (socket !== onlineSocket) return
+        // A transport reconnect keeps this socket and its listeners. Resume
+        // only from the saved turn requested below; local uncommitted actions
+        // must not survive an ambiguous disconnect.
+        failed = false
+        document.getElementById('online-recovery')?.remove()
         onlineCommit = null
         competitiveDelivery = null
         acceptedBoard = null

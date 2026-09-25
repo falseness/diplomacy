@@ -45,4 +45,7 @@ function loadFromJson(game_string) {
         JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
         JSON.stringify(game.timers[game.whooseTurn]), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
         JSON.stringify(game.isFogOfWar), 'gameSettings' in game ? JSON.stringify(game.gameSettings) : null)
+    // An authoritative online co-op snapshot starts a new undo scope.
+    // Stale/equal network deliveries are rejected before reaching this loader.
+    if (gameSettings.isOnline && gameSettings.coop) actionManager.clear()
 }
