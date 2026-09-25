@@ -69,3 +69,31 @@ explicit report). Controls delete/substitute original and regression proof,
 omit cases, and reject false coverage promotion. A negative TAP line must never
 satisfy a positive marker. `validate()` rechecks report bindings; `build()`
 recomputes the independent observations. Neither replaces actual consumer review.
+
+Resolving the two AC2 subclauses
+-------------------------------
+
+`review_fast_map_repair.py HISTORY RETAINED_RECORDS CURRENT_SOURCE OUTPUT`
+reconstructs the transient browser-online edit from the saved baseline. Both
+reconstructed files must match the original repro-05/repro-06 source hashes.
+The retained edit records are checked against the original session records,
+without executing their contents. The repair replaced the temporary
+`expectedMap(...)` call with literal dimensions; it did not restore an export.
+
+`task225-readiness-preload.js` instruments only the menu/assets readiness wait
+in the unchanged browser-reconnect suite, forcing the original 15000ms bound
+and recording monotonic elapsed time. Set `TASK225_READINESS_LOG` to a fresh
+JSONL path and run the suite with Node's `--require` under the existing owned
+process supervisor. This remains a controlled browser fixture with memory
+persistence. It does not resolve AC4 or TASK-225 AC6.
+
+`prepare_fast_regressions.py BASELINE PROBE OUTPUT` validates the original
+linkage review, map repair provenance, eight readiness waits, eleven unchanged
+gameplay checkpoints, literal successful command, raw log and owned cleanup.
+It adds later proof to a fresh copy of the selected archive and prepares AC2
+for actual consumer review. Original archives and source files stay unchanged;
+the separate readiness run is explicitly not part of the original parent run.
+The TASK-230 clause retains its independently consumed remote proof.
+
+Run `python3 -m unittest discover -s ops -p test_fast_regression_supplements.py -v`
+for the retained real-proof controls. The review-30 artifact inputs are required.
