@@ -4,6 +4,18 @@ const {spawn} = require('node:child_process');
 const {supervise} = require('./task245-supervisor');
 (async () => {
   const out = process.argv[2] || path.join(process.env.COOP_EVIDENCE_DIR, 'supervisor'); fs.mkdirSync(out, {recursive:true});
+  // A process can disappear after readdir('/proc') but before its stat read.
+  // Exercise the actual scanner and keep permission/other I/O failures visible.
+  const source = fs.readFileSync(path.join(__dirname, 'task245-supervisor.js'), 'utf8');
+  const vanished = code => require('node:vm').runInNewContext(source + ';state(123)', {
+    require: name => name === 'node:fs' ? {
+      readFileSync() { throw Object.assign(new Error(code), {code}); }
+    } : require(name), module: {exports:{}}, process
+  });
+  assert.equal(vanished('ENOENT'), null);
+  assert.equal(vanished('ESRCH'), null);
+  assert.throws(() => vanished('EACCES'), {code:'EACCES'});
+  console.log('PASS disappearing-process ENOENT=absent ESRCH=absent EACCES=propagated');
   const sentinel = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)']);
   const sentinelDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task245-sentinel-'));
   try {

@@ -9,7 +9,8 @@ function run(out){
   const noClick={click:()=>false};let selected=0,sent=0;
   const b={...building,select(){selected++;}};
   const cell={building:b,get unit(){throw Error('hidden occupant accessed');}};
-  const env={Empty,grid:{arr:[[cell]],fogOfWar:[[0]]},isFogOfWar:true,
+  // This source-only click fixture models desktop input; touch listeners need a DOM.
+  const env={Empty,mobilePhone:false,grid:{arr:[[cell]],fogOfWar:[[0]]},isFogOfWar:true,
    getCoord:()=>({x:0,y:0}),isCoordNotOnMap:()=>false,coordsEqually:()=>true,
    undoButton:noClick,backToMenuButton:noClick,nextTurnButton:noClick,iButton:noClick};
   const Events=vm.runInNewContext(code+';Events',env);

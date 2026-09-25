@@ -1,3 +1,50 @@
+# TASK-225 archive review continuation
+
+The network/browser tier-consumer repairs documented in the historical notes
+below are complete. Continue from the latest explicitly selected crosswalk in
+`artifacts/tasks.json`; do not repeat those experiments or run the complete gate
+while required prior targets remain.
+
+`review_removal_archive.py` independently checks TASK-244's 22 local-fixture
+cases: literal obsolete mutations, unchanged persistence snapshots, ownership,
+every committed revision/recipient, projected income, stored rounds, wave counts,
+reconnect, all required commands and cleanup. Loopback HTTP with in-memory
+persistence stays `local-fixture`; it proves neither HTTPS/MongoDB durability nor
+browser behavior. `prepare_removal_review.py` makes a later byte-identical index
+and binds original checkpoints through the actual clause consumer. The literal
+TASK-244/AC4 `.test.js` entry-path clause remains unresolved because TASK-245
+renamed that entry to `.js` to keep it out of automatic discovery.
+
+`review_integrated_archive.py` reviews TASK-245's 40 generated-twice inputs,
+446 selected cases and 30-command execution ledger. It recomputes full valley
+contracts and dimensions using non-production oracles, plus a separate Python
+hex BFS for endpoint reachability, approach counts and portal fairness.
+`prepare_integrated_review.py` binds matrix and accounting clauses. It does not
+promote browser/network tiers or close TASK-245/AC2 and AC5.
+
+Both preparers require new output directories and preserve original archives.
+A prepared crosswalk or reader PASS is insufficient: select it explicitly with
+`EVIDENCE_AUDIT_REVIEWS` and check actual `evidence-reviews.inventory` dispositions,
+source validity, exact target deltas, and all eight pending self checks. The
+remaining-provider plan and failed attempts stay local under TASK-225.
+
+```sh
+TASK225_REMOVAL_ARCHIVE=/absolute/real/TASK-244/archive \
+  python3 -m unittest discover -s ops -p test_review_removal_archive.py -v
+TASK225_INTEGRATED_ARCHIVE=/absolute/real/TASK-245/archive \
+  python3 -m unittest discover -s ops -p test_review_integrated_archive.py -v
+```
+
+These tests use copied real archives or raw map coordinates. Their explicit
+archive variables are required; skipped tests are not verification evidence.
+
+The desktop source-click VM now declares `mobilePhone:false`, matching its
+existing non-DOM fixture. This repairs a reproduced global-initialization error
+without removing hidden-occupant, selection, instruction-priority or rejection
+assertions. It does not test touch listeners.
+
+## Historical review notes
+
 # TASK-225 prerequisite archive review
 
 The later `review-14/reviewed-crosswalk.json` preserves review-13's dispositions

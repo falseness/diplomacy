@@ -6,7 +6,7 @@ const {spawn} = require('node:child_process');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const state = pid => {
   try { const fields = fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ').at(-1).split(' '); return {start: fields[19], live: fields[0] !== 'Z', parent: Number(fields[1]), group: Number(fields[2])}; }
-  catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+  catch (e) { if (e.code === 'ENOENT' || e.code === 'ESRCH') return null; throw e; }
 };
 async function supervise({program, args, journal, stopAt, graceMs = 10000}) {
   fs.writeFileSync(journal, '', {flag: 'wx'});
