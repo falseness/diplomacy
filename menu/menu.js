@@ -714,6 +714,12 @@ class Menu {
     }
     back() {
         gameExit = true
+        if (onlineSocket) {
+            const previous = onlineSocket
+            onlineSocket = null
+            previous.disconnect()
+            onlineLobby = null
+        }
 
         nextTurnPauseInterface.backToMenu()
         saveManager.save() //some bugs or not

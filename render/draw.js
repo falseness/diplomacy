@@ -57,6 +57,18 @@ function drawInterface() {
     timer.draw(interfaceCtx)
 
     nextTurnPauseInterface.draw(interfaceCtx)
+    const outcome = gameSettings.coop && gameSettings.coop.result
+    if (outcome) {
+        const labels = {victory: 'Victory — humans win', defeat: 'Defeat — demons win', draw: 'Draw — all sides eliminated'}
+        interfaceCtx.save()
+        interfaceCtx.font = Math.min(28 * window.devicePixelRatio, WIDTH / 24) + 'px Arial'
+        interfaceCtx.textAlign = 'center'
+        interfaceCtx.fillStyle = 'white'
+        interfaceCtx.fillRect(WIDTH * 0.1, HEIGHT * 0.31, WIDTH * 0.8, HEIGHT * 0.09)
+        interfaceCtx.fillStyle = 'black'
+        interfaceCtx.fillText(labels[outcome] || outcome, WIDTH / 2, HEIGHT * 0.37)
+        interfaceCtx.restore()
+    }
     errorWindow.draw(interfaceCtx)
     drawDebugFps(interfaceCtx)
     interfaceCtx.restore()
