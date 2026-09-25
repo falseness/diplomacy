@@ -1,0 +1,90 @@
+diff --git a/tests/reliability/helpers/release-final-output.js b/tests/reliability/helpers/release-final-output.js
+index 48fa520..d1b7ca4 100644
+--- a/tests/reliability/helpers/release-final-output.js
++++ b/tests/reliability/helpers/release-final-output.js
+@@ -41,15 +41,15 @@ function validateShape({outputDir,binding,now=Date.now()}) {
+     for(const c of dry.commands) assert(log.split('\n').includes(`PASS ${c.id} ACTUAL_EXIT=0`),'missing-service-log:'+c.id);
+     return {schemaPass:true,releaseReady:false,diagnosticOnly:true};
+ }
+-function inspectFinalOutputs({outputDir,prerequisite,stopAt}) {
++function inspectFinalOutputs({outputDir,prerequisite,stopAt,config,invocation}) {
+     try {
+         assert(Date.now()<stopAt,'finalization-deadline');
+         assert(prerequisite?.ready===true,'prerequisite-not-ready');
+         for(const name of FILES) assert(fs.existsSync(path.join(outputDir,name)),'missing-final-output:'+name);
+-        // A self-declared issuer, hash, or successful child is not an authenticated
+-        // host observation. Until acquisition/verification is integrated, refuse
+-        // all production readiness, including structurally complete fixture packs.
+-        throw Error('authenticated-final-evidence-verifier-unavailable');
++        const client=require('./evidence-audit').client;
++        const auth=require(path.join(client,'ops/release_authenticated'));
++        return auth.verify({outputDir,prerequisite,stopAt,config:config||auth.loadProductionConfig(),
++            invocation,serverDir:path.resolve(__dirname,'../../..')});
+     } catch(e) {return {pass:false,releaseReady:false,reason:e.message.split('\n')[0]};}
+ }
+ module.exports={FILES,validateShape,inspectFinalOutputs};
+diff --git a/tests/reliability/helpers/release-preparation-gate.js b/tests/reliability/helpers/release-preparation-gate.js
+index 98cf402..d8cf8c6 100644
+--- a/tests/reliability/helpers/release-preparation-gate.js
++++ b/tests/reliability/helpers/release-preparation-gate.js
+@@ -2,9 +2,10 @@
+ const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+ const {inspect}=require('./release-prerequisite');
+ const {inspectFinalOutputs}=require('./release-final-output');
++const crypto=require('node:crypto');
+ const {STAGES,continuePreparation}=require('./release-continuation');
+ const write=(dir,name,value)=>fs.writeFileSync(path.join(dir,name),JSON.stringify(value,null,2)+'\n');
+-async function worker({outputDir,invocation,startedMs}) {
++async function worker({outputDir,invocation,startedMs,invocationId}) {
+     const plan={scope:'production prerequisite plus complete preparation stages',estimateMs:2700000,stopWorkMs:3300000,budgetMs:3600000,
+         cases:[{id:'complete-current-TASK-225-proof',tier:'read-only archived evidence audit'},...STAGES.map(id=>({id,tier:'local preparation; production adapters required'}))],
+         commands:[invocation],candidateDirectory:path.join(outputDir,'candidate'),
+@@ -13,13 +14,19 @@ async function worker({outputDir,invocation,startedMs}) {
+     // No CLI/env collaborator injection. Synthetic controls use their own worker.
+     const prerequisite=inspect(process.env.RELEASE_PREREQUISITE_DIR);
+     write(outputDir,'prerequisite.json',prerequisite);
+-    // Production adapters are not yet implemented. Preflight must reject the
+-    // missing complete adapter before any real candidate is staged. In contrast,
+-    // the shared continuation is fully executable by isolated diagnostic adapters.
+-    const result=await continuePreparation({prerequisite,operations:{},outputDir,stopAt:startedMs+3300000});
++    const client=require('./evidence-audit').client;
++    let prepared,result;
++    try {
++        assert(prerequisite.ready,'prerequisite-not-ready');
++        prepared=require(path.join(client,'ops/release_production')).prepare({outputDir,stopAt:startedMs+3300000});
++        write(outputDir,'source-identities.json',JSON.parse(fs.readFileSync(prepared.config.sources)));
++        result=await continuePreparation({prerequisite,operations:prepared.operations,outputDir,stopAt:startedMs+3300000});
++        if(result.pass) require(path.join(client,'ops/release_authenticated')).finalize({outputDir,config:prepared.config,
++            invocation:invocationId,stopAt:startedMs+3300000,serverDir:path.resolve(__dirname,'../../..')});
++    } catch(e) { result={pass:false,stages:[],reason:e.message.split('\n')[0]}; }
+     const cases=[{id:plan.cases[0].id,expected:true,observed:prerequisite.ready,pass:prerequisite.ready},
+         ...STAGES.map(id=>({id,expected:true,observed:result.stages.some(s=>s.id===id&&s.pass),pass:result.stages.some(s=>s.id===id&&s.pass)}))];
+-    const finalization=inspectFinalOutputs({outputDir,prerequisite,stopAt:startedMs+3300000});
++    const finalization=inspectFinalOutputs({outputDir,prerequisite,stopAt:startedMs+3300000,config:prepared?.config,invocation:invocationId});
+     write(outputDir,'final-output-validation.json',finalization);
+     const pass=result.pass&&cases.every(c=>c.pass)&&finalization.pass===true;
+     const exit=pass?0:1;
+@@ -27,12 +34,13 @@ async function worker({outputDir,invocation,startedMs}) {
+     write(outputDir,'coverage-results.json',{...result,pass,finalization,cases,missing:cases.filter(c=>!c.pass).map(c=>c.id)});
+     write(outputDir,'cleanup.json',{cleanup:true,ownedProcesses:[],remoteActions:[],stagedCandidates:[]});
+     write(outputDir,'verification-budget.json',{startedAt:new Date(startedMs).toISOString(),finishedAt:new Date().toISOString(),elapsedMs:Date.now()-startedMs,stopWorkMs:3300000,budgetMs:3600000,pass,cleanup:true,timedOut:Date.now()>=startedMs+3300000,invocationExit:exit});
+-    const log=`COMMAND ${invocation.argv.join(' ')}\nCWD=${invocation.cwd}\nNODE=${process.version}\nBROWSER=not launched\n${pass?'PASS':'FAIL'} ${result.reason||'complete-preparation-stages'}\nUNRESOLVED=${prerequisite.unresolved.length}\nREMOTE_ACTIONS=0 READY_MANIFEST=absent\nACTUAL_EXIT=${exit}\n`;
++    const log=`COMMAND ${invocation.argv.join(' ')}\nCWD=${invocation.cwd}\nNODE=${process.version}\nBROWSER=not launched\n${pass?'PASS':'FAIL'} ${result.reason||'complete-preparation-stages'}\nUNRESOLVED=${prerequisite.unresolved.length}\nREMOTE_ACTIONS=0 RELEASE_READY=false PROVISIONAL_MANIFEST=${fs.existsSync(path.join(outputDir,'release-manifest.json'))}\nACTUAL_EXIT=${exit}\n`;
+     fs.writeFileSync(path.join(outputDir,'verification.log'),log);console.log(log);return exit;
+ }
+ // Used by the production runner and separate diagnostic entry point. Success
+ // requires BOTH the child's complete coverage and actual supervised exit/cleanup.
+ async function supervise(options, program, requireFinalOutputs) {
++    options={...options,invocationId:options.invocationId||crypto.randomUUID()};
+     const {outputDir,startedMs}=options;
+     assert(!fs.existsSync(outputDir)||fs.readdirSync(outputDir).length===0,'fresh release evidence directory required');
+     fs.mkdirSync(outputDir,{recursive:true});
+@@ -44,7 +52,7 @@ async function supervise(options, program, requireFinalOutputs) {
+     const complete=Array.isArray(coverage.cases)&&coverage.cases.length===expected.length&&expected.every((id,i)=>coverage.cases[i].id===id&&coverage.cases[i].pass===true);
+     // Re-read authoritative prerequisite and outputs; never trust child claims.
+     const finalization=requireFinalOutputs
+-        ? inspectFinalOutputs({outputDir,prerequisite:inspect(process.env.RELEASE_PREREQUISITE_DIR),stopAt:startedMs+3300000})
++        ? inspectFinalOutputs({outputDir,prerequisite:inspect(process.env.RELEASE_PREREQUISITE_DIR),stopAt:startedMs+3300000,invocation:options.invocationId})
+         : {pass:true,diagnosticOnly:true,releaseReady:false};
+     write(outputDir,'supervisor-final-output-validation.json',finalization);
+     const pass=finalization.pass===true&&prior.pass===true&&prior.invocationExit===0&&coverage.pass===true&&complete&&receipt.status===0&&receipt.exit===0&&receipt.cleanup===true&&!receipt.timedOut&&Date.now()-startedMs<=3600000;

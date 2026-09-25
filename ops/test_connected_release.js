@@ -1,0 +1,48 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const {spawnSync}=require('node:child_process');
+const auth=require('./release_authenticated');
+const {createServiceAdapter}=require('./release_service_adapter');
+async function main(){
+ const o=JSON.parse(fs.readFileSync(process.argv[2])),{outputDir,config,stopAt,serverDir}=o;
+ const closure=[...fs.readdirSync(__dirname).filter(n=>/^(release_|test_connected_|extract_release_probe)/.test(n)&&/\.(js|py)$/.test(n)).map(n=>path.join(__dirname,n)),...['release-preparation-gate.js','release-final-output.js','release-final-construction.js','services.js'].map(n=>path.join(serverDir,'tests/reliability/helpers',n))];
+ const hash=f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+ const initial=Object.fromEntries(closure.map(f=>[f,hash(f)]));
+ const checks=[],check=(id,expected,observed)=>{assert.deepEqual(observed,expected,id);checks.push({id,expected,observed,pass:true});console.log('PASS '+id+' '+(id==='source-closure-unchanged'?'all matched':JSON.stringify(observed)));};
+ const keys=crypto.generateKeyPairSync('ed25519');config.publicKey=keys.publicKey.export({type:'spki',format:'pem'});
+ config.privateKeyFile=path.join(o.privateRoot,'signer.pem');fs.writeFileSync(config.privateKeyFile,keys.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
+ const credentials=['competitive','coop'].flatMap(mode=>[0,1].map(()=>({password:crypto.randomBytes(32).toString('hex'),run:'diagnostic-'+mode+'-'+o.startedMs})));
+ config.credentialsFile=path.join(o.privateRoot,'credentials.json');fs.writeFileSync(config.credentialsFile,JSON.stringify(credentials),{mode:0o600});
+ config.allowlistFile=path.join(o.privateRoot,'allowlist.json');fs.writeFileSync(config.allowlistFile,JSON.stringify(credentials.map(c=>({userId:crypto.createHash('sha256').update(c.password).digest('hex'),run:c.run,expiresAt:stopAt+60000}))),{mode:0o600});
+ const prerequisite={ready:true,diagnosticOnly:true,fullTaskPass:false};auth.write(outputDir,'prerequisite.json',prerequisite);
+ const service=createServiceAdapter(config);
+ const operations=require('./release_operations').createOperations({config,...service,rehearseService:service.rehearse});
+ const result=await require(path.join(serverDir,'tests/reliability/helpers/release-continuation')).continuePreparation({prerequisite,operations,outputDir,stopAt});
+ if(!result.pass)throw Error(JSON.stringify(result));
+ const invocation=crypto.randomUUID(),params={outputDir,config,invocation,stopAt,serverDir,prerequisite};
+ auth.write(outputDir,'diagnostic-trust.json',{config:{scope:config.scope,host:config.host,machineId:config.machineId,publicKey:config.publicKey,observationSha256:config.observationSha256},invocation,stopAt});
+ check('connected-local-finalization',true,auth.finalize(params).pass);
+ const final=require(path.join(serverDir,'tests/reliability/helpers/release-final-output'));
+ check('worker-authenticated-finalization',true,final.inspectFinalOutputs(params).pass);
+ // Independent process consumes trusted inputs from outside the evidence tree.
+ const verifier=path.join(o.privateRoot,'verifier.json');fs.writeFileSync(verifier,JSON.stringify(params),{mode:0o600});
+ const supervisor=()=>{const r=spawnSync(process.execPath,[path.join(__dirname,'test_connected_verifier.js'),verifier],{env:process.env,encoding:'utf8',timeout:Math.max(1,stopAt-Date.now())});console.log(r.stdout,r.stderr,'SUPERVISOR_ACTUAL_EXIT='+r.status);return r.status;};
+ check('supervisor-authenticated-finalization',0,supervisor());
+ const envelopeFile=path.join(outputDir,'authenticated-final.json'),original=fs.readFileSync(envelopeFile);
+ const envelope=JSON.parse(original);envelope.signature=Buffer.alloc(64).toString('base64');fs.writeFileSync(envelopeFile,JSON.stringify(envelope));
+ check('forged-signature-worker','invalid-final-signature',final.inspectFinalOutputs(params).reason);
+ check('forged-signature-supervisor',1,supervisor());fs.writeFileSync(envelopeFile,original);
+ const copied={...params,invocation:crypto.randomUUID()};
+ check('copied-invocation-worker','copied-final-invocation',final.inspectFinalOutputs(copied).reason);
+ fs.writeFileSync(verifier,JSON.stringify(copied));check('copied-invocation-supervisor',1,supervisor());fs.writeFileSync(verifier,JSON.stringify(params));
+ check('restored-authenticated-finalization',0,supervisor());
+ check('sentinel-cleanup','preserve unrelated bytes',fs.readFileSync(o.sentinel,'utf8'));
+ check('same-deadline',true,Date.now()<stopAt);
+ check('source-closure-unchanged',initial,Object.fromEntries(closure.map(f=>[f,hash(f)])));
+ auth.write(outputDir,'source-identities.json',{files:initial});
+ auth.write(outputDir,'checkpoints.json',{diagnosticPass:true,fullTaskPass:false,checkpoints:checks});
+ auth.write(outputDir,'coverage-results.json',{diagnosticPass:true,fullTaskPass:false,releaseReady:false,cases:checks});
+ const obs=auth.read(outputDir,'host-provisioning.json');auth.write(outputDir,'cleanup.json',{cleanup:Object.values(obs.services).every(s=>s.cleanup.processes.every(p=>!p.aliveAfter)),services:Object.fromEntries(Object.entries(obs.services).map(([k,v])=>[k,v.cleanup]))});
+ console.log('DIAGNOSTIC_PASS=true FULL_TASK_PASS=false RELEASE_READY=false');
+}
+main().catch(e=>{console.error(e.stack);process.exitCode=1;});

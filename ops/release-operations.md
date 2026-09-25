@@ -14,8 +14,8 @@ hashes and run/expiry metadata into its intermediate smoke input; issuer secrets
 are excluded. The caller owns authentication of both the observation collector and
 smoke issuer. Never provide untrusted command arguments as `observerArgv`.
 
-This is **not release readiness**. The production gate remains fail-closed and is
-not wired to these operations yet. Its TASK-225 prerequisite must pass, and it
+The intermediate operations alone are **not release readiness**. The connected
+production gate described below remains fail-closed without authenticated inputs. Its TASK-225 prerequisite must pass, and it
 still needs authenticated current-host acquisition, real identity issuance,
 a current executable service deployment/rollback adapter,
 and final release/rollback manifest validation. `guarded-plan.json` describes
@@ -76,7 +76,66 @@ source closure, the exact command/runtime, individual contract results and
 `fullTaskPass:false`. A clearly marked synthetic prerequisite is confined to
 this diagnostic directory. No production runner imports this script.
 
-This comparison does not complete the production acquisition, issuer, executable
-service rehearsal, operations wiring or authenticated final consumer. Those
-remain required together with finalized current TASK-225 proof before TASK-226
-can pass. The production fail-closed guards remain in force.
+This historical comparison did not complete production integration. The connected
+implementation below supersedes that missing implementation, while finalized
+current TASK-225 proof and trusted production inputs still gate real readiness. The production fail-closed guards remain in force.
+
+### Connected authenticated preparation
+
+`release_production.js` now supplies the real operation factory to the server
+worker. `release_service_adapter.js` extracts the hash-bound candidate/runtime
+and retained rollback archives into an owned temporary tree. Each archived Node
+runtime starts its archived server with the existing isolated HTTPS/MongoDB
+launcher. A separate health process verifies TLS, Engine.IO, four password
+admissions, persisted allowlist namespaces, revocation and scoped cleanup. These
+are provisioning checks, not evidence of browser gameplay milestones. Both
+service wrappers must actually exit zero, and all owned processes must stop.
+
+`release_authenticated.js` normalizes proofs from archive bytes, invokes the
+existing constructor and signs the final proof closure with Ed25519. The shared
+final consumer verifies the separately supplied public key, invocation ID,
+canonical output directory, prerequisite bytes, host pins, expiry, archive hashes,
+actual health/provisioning observations and cleanup. Worker and supervisor use
+this consumer; a schema, boolean or copied signed receipt alone cannot pass.
+Final documents remain provisional (`releaseReady:false`); activation is TASK-227.
+
+Production runs require `RELEASE_TRUSTED_CONFIG` pointing to an operator-owned
+0600 JSON file. Required fields are `scope:"production"`, `host`, `machineId`,
+`publicKey` (PEM), `privateKeyFile`, `credentialsFile`, `allowlistFile`, `client`,
+`server`, `sources`, `runtime`, `dependencies`, `runtimeReceipt`, `rollbackRoots`
+(client/server/runtime/web/config), `observationFile`, `observationSha256`, and
+`service`. Paths are host-local. The host and machine ID must match this machine;
+run acquisition/retention there. Production builds the existing systemd observer
+command itself. It does not accept a caller-selected observer command.
+`observationFile` must be the current pinned observation of that service.
+`RELEASE_PREREQUISITE_DIR` must name a finalized current TASK-225 evidence tree.
+Missing configuration reports field names, never credential values.
+
+Private credential JSON is four `{password,run}` entries: the first pair for
+competitive smoke, the second for co-op. Private allowlist JSON follows
+`server/smoke-isolation.md`, with hashed IDs, matching runs and expiry beyond the
+invocation deadline. Private key, credential and allowlist files must also be
+operator-owned 0600 regular files. This contract assumes the operator and host
+are trusted; signatures authenticate observed receipts, not an untrusted host.
+
+The server wiring changes are carried in `release-connected-server.patch`, scoped
+only to the two release helpers in the sibling repository. Apply with
+`git -C /root/diplomacy_server apply /root/diplomacy/ops/release-connected-server.patch`
+when those changes are not already present. This keeps the task's client and
+server integration in one reviewable client commit without including unrelated
+staged server work.
+
+Run only the separate diagnostic harness for generated local trust:
+
+```
+NODE_PATH=/opt/diplomacy/node_modules python3 ops/test_connected_release.py artifacts/TASK-226/<fresh-directory>
+```
+
+It copies current source bytes into private fixture repositories, uses the real
+Node/dependency bytes and an observed owned process for rollback provenance,
+and runs the connected factory, constructor and final consumer. The prerequisite
+and host service attribution remain explicit diagnostic fixtures. Forged
+signatures and copied invocation IDs must fail in both consumers. One cumulative
+ten-minute deadline includes setup, services, negative controls, audit and
+cleanup. `diagnosticPass` never sets `fullTaskPass` or `releaseReady`. There is no
+production CLI or environment option to select its synthetic prerequisite.

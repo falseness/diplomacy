@@ -11,7 +11,7 @@ const hash = file => createHash('sha256').update(fs.readFileSync(file)).digest('
 const write = (root, name, value) => fs.writeFileSync(path.join(root, name), JSON.stringify(value, null, 2) + '\n', {flag:'wx'});
 const read = (root, name) => JSON.parse(fs.readFileSync(path.join(root, name)));
 
-function createOperations({config, issueSmoke, validateSmoke}) {
+function createOperations({config, issueSmoke, validateSmoke, rehearseService}) {
     // Complete preflight occurs before any archive or candidate is created.
     for (const key of ['client','server','sources','runtime','dependencies','runtimeReceipt','observationFile']) {
         assert(typeof config?.[key] === 'string' && path.isAbsolute(config[key]) && fs.existsSync(config[key]), 'missing-operation-input:' + key);
@@ -94,7 +94,8 @@ function createOperations({config, issueSmoke, validateSmoke}) {
                 databaseActions:[]};
             write(context.outputDir, 'guarded-plan.json', plan);
             fs.writeFileSync(path.join(context.outputDir, 'archive-guard.log'), 'PASS candidate/runtime/rollback archive hashes and readback\nACTIVATION=false RELEASE_READY=false\n', {flag:'wx'});
-            return receipt(context.outputDir, ['guarded-plan.json','archive-guard.log','layout-dry-run.log','layout-rehearsal.json'],
+            const serviceProofs = rehearseService ? await rehearseService(context) : [];
+            return receipt(context.outputDir, ['guarded-plan.json','archive-guard.log','layout-dry-run.log','layout-rehearsal.json', ...serviceProofs],
                 [check('no-activation', false, plan.activation), check('rehearsal-cleanup', true, rehearsal.cleanup)]);
         },
         'authenticated-smoke-inputs': async context => {
@@ -115,6 +116,7 @@ function createOperations({config, issueSmoke, validateSmoke}) {
             // Allowlist projection only: credentials and unrecognized fields are
             // never serialized to evidence, even if an issuer includes secrets.
             write(context.outputDir, 'prepared-smoke-inputs.json', {releaseReady:false, binding,
+                ...(rehearseService ? {issuer:{id:smoke.issuer.id,verified:smoke.issuer.verified}} : {}),
                 expiresAt:smoke.expiresAt, cases:smoke.cases.map(({mode,seed,map,userIds,milestones,run}) => ({mode,seed,map,userIds,milestones,run})), cleanupEvent:'cleanupSmokeRun'});
             audit(context.outputDir);
             return receipt(context.outputDir, ['prepared-smoke-inputs.json'], [check('two-isolated-smoke-cases', 2, smoke.cases.length)]);
