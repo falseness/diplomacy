@@ -168,6 +168,8 @@ function SetupServerCommunicationLogic(password) {
             }
         }
         loadFromJson(JSON.stringify(restored))
+        // Waiting and newly joined recipients need bounds for the received map too.
+        GameManager.updateCameraBorders()
         acceptedBoard = board
         if (continuing) {
             timer = runningTimer
@@ -207,7 +209,6 @@ function SetupServerCommunicationLogic(password) {
         console.log(`playYourTurn`)
         const delivery = receiveBoard(game, true)
         if (!delivery || delivery === 'continued') return
-        GameManager.updateCameraBorders()
         nextTurnPauseInterface.visible = true
 
         unfreezeGame()
