@@ -34,3 +34,22 @@ supplement and actual consumer comparison, including its required corruption
 controls. This reader deliberately does not accept a newly invented payload
 schema or close criteria. TASK-244's path reconciliation and remaining providers
 also remain prerequisites to the complete TASK-225 audit.
+
+The bounded producer now writes `received-boards.jsonl` via the browser driver's
+raw transport callback. It captures both reload recipients without changing the
+page and redacts credentials before persistence. A separate diagnostic compares
+every board field with the initial MongoDB board plus saved slot-one preparation:
+
+```sh
+python3 ops/review_received_boards.py <journey-directory> --output <new-report>
+TASK225_RECEIVED_ARCHIVE=<journey-directory> PYTHONDONTWRITEBYTECODE=1 \
+  python3 -m unittest discover -s ops -p test_review_received_boards.py -v
+```
+
+This diagnostic requires exactly two recipients, revision zero, current format,
+the declared round-four single component and independent income values 106/100.
+It does not validate archive/source freshness, assign tiers, emit a supplement,
+or close whole criteria. The historical readiness reader continues rejecting
+old summary-only evidence. `review-24/capture` is a new focused journey, not a
+replacement parent TASK-245 invocation. Integrate the provider-specific consumer
+and its bindings before freezing sources and refreshing affected providers.

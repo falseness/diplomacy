@@ -6,6 +6,7 @@ const helpers='../../diplomacy_server/tests/reliability/helpers/';
 const {withServices}=require(helpers+'services');
 const {BrowserPlayer,startClientServer}=require(helpers+'browser-driver');
 const {reconnect}=require(helpers+'movement-identity-reconnect');
+const {receivedBoard}=require('./task225-received-board');
 const cases=[{id:'browser-clear',fog:false,join:'sequential',round:0},{id:'browser-fog-before',fog:true,join:'simultaneous',round:0},{id:'browser-fog-upgraded',fog:true,join:'sequential',round:4}];
 module.exports={cases};
 const categories=['melee','ranged','siege','heavy','support','chaos'];
@@ -59,10 +60,12 @@ async function main(){
     const stored=await service.mongo.db(service.databaseName).collection('games').findOne({gameID:joined[0].coopCommit.gameID});
     write(c.id+'/persisted.json',stored);
     const ps=[];
+    const received=[];
+    const wire=packet=>{const row=receivedBoard(packet,secrets);if(row){received.push(row);fs.appendFileSync(path.join(dir,'received-boards.jsonl'),JSON.stringify(row)+'\n');}};
     const events={write:s=>fs.appendFileSync(path.join(dir,'network-trace.jsonl'),s)};
     const inputs={write:s=>{const r=JSON.parse(s);delete r.until;fs.appendFileSync(path.join(dir,'input-trace.jsonl'),JSON.stringify(r)+'\n');}};
     for(let i=0;i<2;i++){
-     const p=await BrowserPlayer.open(browser,{name:'p'+i,input:'mouse',endpoint:service.endpoint,clientUrl:client.url,errors,events,inputs,screenshotDir:path.join(dir,'screenshots')});ps.push(p);
+     const p=await BrowserPlayer.open(browser,{name:'p'+i,input:'mouse',endpoint:service.endpoint,clientUrl:client.url,errors,events,inputs,wire,screenshotDir:path.join(dir,'screenshots')});ps.push(p);
      // Simultaneous admission need not preserve request order. Drive the
      // authored player-1 scout with the credential actually assigned slot 1.
      const credentialIndex=joined.findIndex(board=>board.whooseTurn===i+1);
@@ -79,6 +82,9 @@ async function main(){
      if(i===0) rows.push(...await exercise(p,c,out,check));
     }
     check(c.id+'/browser-contexts',new Set(ps.map(p=>p.page.context())).size,2);
+    assert.deepEqual(received.map(r=>[r.player,r.event,r.board.whooseTurn,r.board.coopCommit]),
+     [['p0','playYourTurn',1,{gameID:stored.gameID,revision:0}],['p1','waitYouTurn',2,{gameID:stored.gameID,revision:0}]],'exact full inbound recipients');
+    console.log('PASS full-inbound-boards recipients=p0,p1 count=2 revision=0');
     // Inspect persisted initial boards recursively without assuming turn grouping.
     const boards=[];const visit=v=>{if(!v||typeof v!=='object')return;if(Array.isArray(v.grid)&&v.gameSettings?.coop&&Array.isArray(v.external))boards.push(v);for(const x of Object.values(v))if(x&&typeof x==='object')visit(x);};visit(stored);
     assert(boards.length>0,'persisted board present');for(const [i,b]of boards.entries())check(c.id+'/persisted-board-'+i,project(b),want);
