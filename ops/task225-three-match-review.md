@@ -39,3 +39,26 @@ oracle, rejects omitted checkpoints, changed operation identities, missing await
 ends and serialized copied traces. Measured phase duration remains separate from
 this scheduling assertion: a short phase still cannot close the long-phase
 clause. No G09 or whole-target closure is asserted by this experiment.
+
+Before spending another service/browser run on an immobile or short workload,
+calibrate a finite mobile alternative with:
+
+```sh
+python3 ops/run_mobile_workload.py artifacts/TASK-225/review-<fresh>-mobile
+```
+
+This executes the shipped `DemonPlayer.play()` on four declared H2/tiny/seed-1
+fixtures with 4, 12, 24 and 48 imps, open movement space, two human towns and
+the required typed portals. Each case uses a fresh process and the existing
+ownership supervisor; the cumulative stop is five minutes with thirty seconds
+reserved for cleanup. It saves full initial/final boards, exact sources, child
+exits and cleanup receipts. It neither replaces AI nor adds delays. Actor
+selection is source harness setup, not a real server phase observation.
+
+The initial review-37-mobile measured 226–420 ms despite actual movement in
+every case. Higher unit counts did not create a long phase on this tiny board.
+These measurements are workload selection evidence only: no independent state
+oracle, database interleaving, network progress or G09 closure is claimed. Do
+not silently treat “mobile” as “long”, expand to browser stress, or replay this
+same candidate matrix to claim the missing clause. The full audit remains
+gated on unresolved local proof, including the remaining provider reviews.
