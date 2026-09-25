@@ -41,3 +41,31 @@ select explicit real inputs. Defaults identify the retained review-27 provider
 and crosswalk. Selection is prerequisite review evidence, not a complete
 TASK-225 invocation. Actual inventory consumption is required to measure closure;
 AC2/AC4 gameplay and reproduction semantics still need separate review.
+
+Original failure linkage
+------------------------
+
+`review_fast_regressions.py HISTORY ARCHIVE SELECTED REPAIR_PATCH OUTPUT`
+reviews the retained TASK-231 `repro-*` logs alongside original `green-05`
+and the unchanged current parent. `SELECTED` is the later receipt selection;
+`REPAIR_PATCH` is the output of `git show 3fc3c7481fb26392245f127a5e17bf8ab6b2cbee`
+in the server repository. It classifies all 29 original focused failure records,
+retains their historical source identities, and links exact passing TAP lines
+from both positive runs. It independently checks two-peer version-4 metadata,
+14x14 grids, reconnect state and salary arithmetic from raw evidence.
+
+This reader deliberately emits `criterionCovered: false`. The saved readiness
+failure used 15000ms while the repair changes the default to 60000ms; neither
+TAP nor the retained checkpoints measures that individual readiness wait.
+The intermediate `expectedMap` call in repro-05 is also absent from the repair
+commit diff. The report records the focused observation/provenance work needed
+before AC2 can close. AC4 retains paused timers, runtime board mutation and
+45x11 fixture limitations. Nothing here promotes memory persistence to MongoDB
+or controlled fixtures to natural browser coverage.
+
+Run `python3 -m unittest discover -s ops -p test_review_fast_regressions.py -v`
+against the retained local archives (or set `TASK231_REGRESSION_REPORT` to an
+explicit report). Controls delete/substitute original and regression proof,
+omit cases, and reject false coverage promotion. A negative TAP line must never
+satisfy a positive marker. `validate()` rechecks report bindings; `build()`
+recomputes the independent observations. Neither replaces actual consumer review.
