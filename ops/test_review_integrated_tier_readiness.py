@@ -96,6 +96,25 @@ class TierReadinessTests(unittest.TestCase):
         shutil.move(file,outside);file.symlink_to(outside)
         self.reject('escaped-proof')
 
+    def test_standalone_capture_cannot_repair_old_parent(self):
+        name = CASE+'/received-boards.jsonl'
+        source = Path(os.environ['TASK225_RECEIVED_ARCHIVE'])/'received-boards.jsonl'
+        shutil.copyfile(source, self.root/name)
+        self.reject('changed-proof')
+        index_file = self.root/'evidence-hashes.json'
+        index = json.loads(index_file.read_text())
+        index[name] = sha(self.root/name)
+        index_file.write_text(json.dumps(index))
+        self.reject('parent-received-proof-binding')
+        coverage_file = self.root/'coverage-results.json'
+        coverage = json.loads(coverage_file.read_text())
+        coverage['evidenceHashes'][name] = index[name]
+        coverage_file.write_text(json.dumps(coverage))
+        index['coverage-results.json'] = sha(coverage_file)
+        index_file.write_text(json.dumps(index))
+        self.reject('received-state/inbound parent run window')
+        print('PASS standalone capture transplant rejected: unindexed, parent-unbound, rehashed wrong-run')
+
 
 if __name__=='__main__':
     unittest.main()

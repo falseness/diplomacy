@@ -6,6 +6,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 ops/review_integrated_tier_readiness.py \
   artifacts/TASK-225/review-22/integrated/selected-245 \
   --output /tmp/task245-tier-readiness.json
 TASK225_INTEGRATED_ARCHIVE=artifacts/TASK-225/review-22/integrated/selected-245 \
+  TASK225_RECEIVED_ARCHIVE=artifacts/TASK-225/review-24/capture/browser-fog-upgraded \
   PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ops \
   -p test_review_integrated_tier_readiness.py -v
 ```
@@ -31,8 +32,7 @@ compare full entities, economy, metadata, commit and recipient identity with
 the persisted current-format snapshot. Preserve the old archive; freeze changes
 before the dependency-justified refresh. Then implement the TASK-245-specific
 supplement and actual consumer comparison, including its required corruption
-controls. This reader deliberately does not accept a newly invented payload
-schema or close criteria. TASK-244's path reconciliation and remaining providers
+controls. This reader never closes criteria. TASK-244's path reconciliation and remaining providers
 also remain prerequisites to the complete TASK-225 audit.
 
 The bounded producer now writes `received-boards.jsonl` via the browser driver's
@@ -49,7 +49,20 @@ TASK225_RECEIVED_ARCHIVE=<journey-directory> PYTHONDONTWRITEBYTECODE=1 \
 This diagnostic requires exactly two recipients, revision zero, current format,
 the declared round-four single component and independent income values 106/100.
 It does not validate archive/source freshness, assign tiers, emit a supplement,
-or close whole criteria. The historical readiness reader continues rejecting
+or close whole criteria. The readiness reader continues rejecting
 old summary-only evidence. `review-24/capture` is a new focused journey, not a
 replacement parent TASK-245 invocation. Integrate the provider-specific consumer
 and its bindings before freezing sources and refreshing affected providers.
+
+The readiness reader now consumes `received-boards.jsonl` only when both the
+parent coverage index and final archive index bind it. It compares all board
+fields, independently checks the authored turn preparation, and requires each
+packet to match the corresponding network summary's recipient, event, transport,
+revision, game and round within the parent invocation window. A later capture
+transplanted into an older archive fails even if its indexes are rehashed.
+Matching changes to prepared unit state and both received packets also fail.
+
+Exit zero means raw readiness only and additionally requires matching current
+source hashes. It does not supply source case review, a provider supplement,
+actual clause-consumer acceptance, or whole AC2/AC5 closure. The original frozen
+archive still exits one because its full inbound packets were never captured.

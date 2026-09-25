@@ -2,8 +2,8 @@
 """Read-only TASK-225 preflight for TASK-245 browser/network clause review.
 
 This is deliberately not a tier supplement. Hashes and projected boards cannot
-reconstruct full received states. Missing raw evidence leaves whole criteria
-unresolved; this command exits 1 and never writes/promotes a crosswalk.
+reconstruct full received states. Missing or stale raw evidence exits 1. A raw
+readiness pass never writes/promotes a crosswalk or closes whole criteria.
 """
 import argparse
 import collections
@@ -11,6 +11,7 @@ import datetime
 import hashlib
 import json
 from pathlib import Path
+from review_received_boards import validate as validate_received_boards
 
 CASE = 'browser-fog-upgraded'
 CELLS = [('portal-empty', 'demonPortal', False), ('portal-occupied', 'demonPortal', False),
@@ -163,13 +164,30 @@ def review(directory):
     check('parent-selected-case-binding', True, all(any(c['id']==id and c['pass'] for c in coverage['cases']) for id in ids))
     protocol = read('protocol/transport-manifest.json')
     check('separate-protocol-http', True, protocol['endpoint'].startswith('http://127.0.0.1:'))
-    gaps = check_received_states(frames)
-    return dict(schemaVersion=1, kind='incomplete-tier-readiness-review', archive=str(root),
+    received_name = CASE+'/received-boards.jsonl'
+    if (root/received_name).exists() or received_name in manifest:
+        # Bind the new producer output before reading it. In particular, a later
+        # standalone capture cannot repair a parent that never recorded it.
+        bound(received_name)
+        check('parent-received-proof-binding', manifest[received_name],
+              coverage['evidenceHashes'].get(received_name))
+        try:
+            received = validate_received_boards(root/CASE, network_frames=frames,
+                run_window=(budget['startedAt'], budget['finishedAt']))
+        except AssertionError as error:
+            raise ValueError('received-state/'+str(error)) from error
+        for row in received['observations']:
+            check('full-reloaded-state/'+row['id'], row['expected'], row['observed'])
+        gaps = []
+    else:
+        gaps = check_received_states(frames)
+    ready = not gaps and not differences
+    return dict(schemaVersion=1, kind='raw-tier-readiness-review', archive=str(root),
         coverageSha256=sha(root/'coverage-results.json'), sourceSha256=manifest['source-identities.json'],
         checks=checks, proofs=proofs, sourceDifferences=differences, missingMilestones=gaps,
-        readyForSupplement=False, wholeCriteriaClosed=[],
-        limitation='Available UI observations are checked, but full received state for both reloaded browsers is absent. HTTP/in-memory protocol cannot replace HTTPS/MongoDB proof. No tier is assigned.',
-        next='Add sanitized full inbound state capture for both recipients to the bounded browser producer, compare against the persisted current-format board, then run only the dependency-justified provider refresh. Keep original evidence and unresolved clauses.')
+        readyForSupplement=ready, wholeCriteriaClosed=[],
+        limitation='Raw evidence readiness only. Missing received boards or stale source prevents readiness. HTTP/in-memory protocol cannot replace HTTPS/MongoDB proof. No tier is assigned and no clause is closed.',
+        next='Consume a TASK-245-specific supplement through the actual clause reviewer; a standalone capture or readiness PASS cannot close AC2/AC5. Preserve original evidence.')
 
 
 if __name__=='__main__':
@@ -178,6 +196,6 @@ if __name__=='__main__':
     a=p.parse_args();report=review(a.archive)
     with Path(a.output).open('x') as stream:
         json.dump(report,stream,indent=2);stream.write('\n')
-    print('INCOMPLETE TASK-245/AC2,AC5: '+','.join(m['id'] for m in report['missingMilestones']))
+    print('RAW READINESS '+str(report['readyForSupplement'])+' TASK-245/AC2,AC5: '+','.join(m['id'] for m in report['missingMilestones']))
     print('No whole criterion closed; no tier supplement emitted.')
-    raise SystemExit(1)
+    raise SystemExit(0 if report['readyForSupplement'] else 1)
