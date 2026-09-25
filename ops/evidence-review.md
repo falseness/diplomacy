@@ -1,6 +1,44 @@
 # TASK-225 prerequisite archive review
 
-The latest immutable review input is local
+The later `review-14/reviewed-crosswalk.json` preserves review-13's dispositions
+and adds the concrete AC1 follow-up from a complete persisted protocol review.
+It does **not** close another target: 163 prior targets remain unresolved.
+
+```sh
+python3 ops/review_remote_protocol_archive.py \
+  artifacts/TASK-225/refresh-230-13 \
+  artifacts/TASK-225/review-14/new-protocol-report.json
+python3 -m unittest discover -s ops -p 'test_review_remote*archive.py' -v
+```
+
+This reader binds 19 complete protocol traces and their ownership manifests to
+the original evidence hashes and 869 current source hashes. It checks three
+obsolete rejections before the accepted cases, sixteen accepted games, two
+connected identities per accepted game, and every declared revision and
+recipient. Expected final revisions come from the selected test actions: eight
+for each gameplay type, four for recovery, one/two/three for terminal focused
+cases, and eighteen for the round-39 through round-48 boundary. It compares the
+full committed states excluding recipient-specific `whooseTurn`, including HP,
+moves, gold and production. This comparison proves transport consistency;
+independent gameplay expectations remain the separate fixture reader's job.
+
+The shared database's zero-persistence checkpoints mean zero **delta**, not
+zero total documents: the three baselines are respectively 0/0, 22/11 and 24/12
+users/games, with zero turns. Service identity, verified TLS peer, MongoDB and
+Socket.IO readiness, authored initial portal quotas, run ownership, ordered
+timestamps and final socket cleanup are also checked. Ten controls against
+copies of the real archive reject missing files, changed hashes and rehashed
+semantic corruption. The originals remain unchanged.
+
+The actual consumer still rejects the unclassified network tier. The next
+implementation must explicitly consume a later tier supplement bound to the
+original manifest, run, lifecycle and full protocol hashes, with independent
+semantic validation. Do not trust the reader's pass boolean, rewrite the old
+plan, downgrade network claims to source tests, or rerun unchanged gameplay.
+AC4 separately needs the browser trace/context review. No full TASK-225 gate
+was run; its substantive prior-proof prerequisites remain unsatisfied.
+
+The preceding immutable review input is local
 `artifacts/TASK-225/review-13/reviewed-crosswalk.json`. It retains the completed
 TASK-224/AC1..9 reviews from review-12 and reviews TASK-230/AC2, AC3 and AC5
 against the affected provider refresh `refresh-230-13`. This provider run passed
