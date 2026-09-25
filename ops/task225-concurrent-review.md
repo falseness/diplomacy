@@ -61,3 +61,27 @@ the missing recipient proof; no complete review exists to select yet.
 
 The full TASK-225 gate stays conditional on closing all required prior targets.
 These reader reports cannot substitute for the eight full-invocation reports.
+
+The capture-justified refresh is launched with
+`python3 ops/run_concurrent_capture.py artifacts/TASK-225/<fresh-name>`.
+The observation preload delegates the existing concurrent provider unchanged,
+records complete sanitized inbound bodies, and binds stable peers to MongoDB
+roster membership using the outbound credential. Reconnection retains the peer
+while allocating a new connection identity. All sources must be frozen before
+launching; use the `/root/diplomacy` output spelling so the existing historical
+evidence guard recognizes the task directory across the workspace symlink.
+
+`review_concurrent_recipients.py` requires every revision 0..20 at every one
+of ten roster-bound recipients, independently reconstructs every board, checks
+the reconnect binding and both intermediate submitted documents.
+`review_concurrent_browser.py` independently checks all received browser boards
+and exact move/submission/reconnect input and delivery counts. Copied raw-proof
+controls exercise wrong recipient, roster, game, HP, moves, income, missing
+revision, missing file, reconnect and browser input defects.
+
+`prepare_concurrent_review.py` combines those readers with the original archive
+oracle in a later byte-identical provider selection. Its complete AC2 review is
+consumed by `consume_concurrent_review.js` on identical measured sources and
+proofs without/with only that review. Missing/tampered copies must be rejected.
+Neither capture nor AC2 consumption closes G09, AC3 or the overall TASK-225 gate.
+Do not interpret a passed child or a partial report as a passed parent invocation.
