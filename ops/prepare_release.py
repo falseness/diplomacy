@@ -5,7 +5,9 @@ The source manifest is produced by the completed local verification run. Any
 packaged source differing from that run blocks packaging. Output is local-only.
 """
 import argparse
+import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
@@ -21,57 +23,79 @@ def git(repo, *args):
     return subprocess.check_output(['git', '-C', str(repo), *args])
 
 
+def release_path(name, rel):
+    parts = Path(rel).parts
+    if not parts or any(p.startswith('.') or p in ('artifacts', 'node_modules', '__pycache__') for p in parts):
+        return False
+    if name == 'diplomacy':
+        return parts[0] in ('ai', 'assets', 'events', 'groups', 'interface',
+                            'menu', 'options', 'render', 'sprites') or (
+                                len(parts) == 1 and rel.endswith(('.html', '.js')))
+    return parts[0] == 'server' and not rel.endswith(('.key', '.crt', '.pem'))
+
+
 def prepare(client, server, evidence, out):
-    verified = json.loads(evidence.read_text())['sources']
-    out.mkdir(parents=True, exist_ok=True)
-    archive = out / 'candidate.tar.gz'
-    if archive.exists():
-        raise ValueError('Refusing to overwrite an existing release archive')
+    evidence_bytes = evidence.read_bytes()
+    verified = json.loads(evidence_bytes)['sources']
+    if out.exists():
+        raise ValueError('Refusing to overwrite an existing release directory')
     files = {}
     revisions = {}
+    patches = {}
     for name, repo in [('diplomacy', client), ('diplomacy_server', server)]:
-        patch = git(repo, 'diff', 'HEAD', '--binary')
-        (out / (name + '.patch')).write_bytes(patch)
+        # Pathspecs also constrain the patch: artifacts and unrelated edits must
+        # never leak through an unrestricted `git diff HEAD --binary`.
+        tracked = git(repo, 'ls-files', '-z').decode().split('\0')
+        others = git(repo, 'ls-files', '--others', '--exclude-standard', '-z').decode().split('\0')
+        committed = git(repo, 'ls-tree', '-r', '--name-only', '-z', 'HEAD').decode().split('\0')
+        selected = sorted({rel for rel in tracked + others + committed if release_path(name, rel)})
+        patch = git(repo, 'diff', 'HEAD', '--binary', '--no-renames', '--', *selected) if selected else b''
+        patches[name] = patch
         revisions[name] = {'head': git(repo, 'rev-parse', 'HEAD').decode().strip(),
-                           'patch_sha256': sha(patch), 'dirty': bool(patch)}
-        for rel in git(repo, 'ls-files', '-z').decode().split('\0'):
-            if not rel:
-                continue
-            parts = Path(rel).parts
-            if any(p in ('artifacts', '.artifacts', '.git', 'node_modules') for p in parts):
-                continue
-            if name == 'diplomacy':
-                # Ship browser resources and shared game code, including AI assets.
-                if parts[0] not in ('ai', 'assets', 'events', 'groups', 'interface',
-                                    'menu', 'options', 'render', 'sprites') and not (
-                                        len(parts) == 1 and rel.endswith(('.html', '.js'))):
-                    continue
-            elif parts[0] != 'server' or rel.endswith(('.key', '.crt')):
-                continue
+                           'patch_sha256': sha(patch), 'dirty': bool(patch) or bool(set(selected) & set(others)),
+                           'untracked_files': sorted(set(selected) & set(others)),
+                           'patch_scope': 'release files only; untracked bytes are in archive'}
+        for rel in selected:
             source = repo / rel
-            digest = sha(source.read_bytes())
+            if any(part.is_symlink() for part in [source, *source.parents] if part != repo.parent):
+                raise ValueError('Symlink release source: ' + str(source))
+            if not source.exists():
+                # Tracked deletions are represented by the scoped patch.
+                continue
+            data = source.read_bytes()
+            digest = sha(data)
             if verified.get(str(source)) != digest:
                 raise ValueError('Source not verified or changed: ' + str(source))
-            files[name + '/' + rel] = (source, digest)
-    html = (client / 'index.html').read_text()
+            # Archive the checked bytes, never re-open a source after hashing it.
+            files[name + '/' + rel] = (data, digest)
+    html = files['diplomacy/index.html'][0].decode()
     scripts = re.findall(r'<script\b[^>]*\bsrc=[\"\']([^\"\']+)', html)
     external = [p for p in scripts if '://' in p]
-    loader = (server / 'server/loadGameCode.js').read_text()
+    loader = files['diplomacy_server/server/loadGameCode.js'][0].decode()
     order = loader.split('const scriptOrder = [', 1)[1].split(']', 1)[0]
     required = [p for p in scripts if '://' not in p]
     required += re.findall(r"'([^']+\.js)'", order)
     for rel in required:
         if 'diplomacy/' + rel not in files:
             raise ValueError('Missing runtime script: ' + rel)
-    with tarfile.open(archive, 'w:gz') as tar:
-        for name, (source, _) in sorted(files.items()):
-            tar.add(source, arcname=name, recursive=False)
+    out.mkdir(parents=True, exist_ok=False)
+    archive = out / 'candidate.tar.gz'
+    for name, patch in patches.items():
+        (out / (name + '.patch')).write_bytes(patch)
+    # Stable headers make the archive reproducible despite checkout timestamps.
+    with archive.open('wb') as raw, gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode='w') as tar:
+            for name, (data, _) in sorted(files.items()):
+                member = tarfile.TarInfo(name)
+                member.size = len(data)
+                member.mode = 0o644
+                tar.addfile(member, io.BytesIO(data))
     with tarfile.open(archive) as tar:
         for member in tar.getmembers():
             if not member.isfile() or sha(tar.extractfile(member).read()) != files[member.name][1]:
                 raise ValueError('Archive readback mismatch: ' + member.name)
     manifest = {'revisions': revisions, 'archive_sha256': sha(archive.read_bytes()),
-                'verified_source_manifest_sha256': sha(evidence.read_bytes()),
+                'verified_source_manifest_sha256': sha(evidence_bytes),
                 'files': {name: pair[1] for name, pair in sorted(files.items())},
                 'external_browser_scripts': external,
                 'required_scripts': sorted(set(required)),

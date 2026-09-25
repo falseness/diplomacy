@@ -69,3 +69,20 @@ by their parent suites; the five parent processes must each exit zero.
 Previous suite logs and matrices are moved to a timestamped local directory
 before the run; verifier logs remain in place. Audit the new matrices, source
 identities and final PASS markers before handoff. Never commit evidence files.
+
+TASK-226 packaging hardening
+============================
+
+The packager now requires a fresh output directory, snapshots verified file
+bytes, and writes deterministic gzip/tar headers. Working patches contain only
+release paths; artifacts, private-key paths and unrelated edits are excluded.
+Untracked release files require source hashes and are listed in the manifest.
+Symlink source files are rejected. Run `python3 ops/test_prepare_release.py` for
+the isolated packaging regression tests.
+
+These checks establish byte packaging only. They do not establish passing game
+verification, dependency/runtime installation, current production rollback
+identity, or public smoke readiness. The TASK-065 switch script remains specific
+to that historical deployment and must not be used for TASK-226. TASK-226 still
+requires its registered release-preparation suite and complete TASK-225 audit
+before a release can be marked ready.
