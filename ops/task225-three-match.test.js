@@ -4,7 +4,7 @@ const sr=require('node:module').createRequire('/root/diplomacy_server/tests/reli
 process.env.PLAYWRIGHT_BROWSERS_PATH??='0';
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {chromium}=require('playwright'),{withServices,bounded}=sr('./helpers/services');
-const {BrowserPlayer,startClientServer}=sr('./helpers/browser-driver'),{reconnect}=sr('./helpers/movement-identity-reconnect');
+const {BrowserPlayer,startClientServer,splitPolling}=sr('./helpers/browser-driver'),{reconnect}=sr('./helpers/movement-identity-reconnect');
 const {canonicalBoard:projectBoard}=sr('./helpers/building-state'),fixture=sr('../coop/helpers/current-coop-fixture'),obs=sr('./helpers/observations');
 function canonicalBoard(b){const v=projectBoard(b);v.nature.sort((a,b)=>a.coord.x-b.coord.x||a.coord.y-b.coord.y||a.name.localeCompare(b.name));return v;}
 const READ_BOARD=new Function(`const projectBoard=${projectBoard.toString()};return (${canonicalBoard.toString()})({gameRound,grid:grid.arr.map(col=>col.map(c=>c.hexagon.playerColor)),players,external,externalProduction,nature,goldmines})`);
@@ -14,11 +14,11 @@ function board(humans,coop,label){
  global.townInterface??={change(){},hide(){}};
  const side=14;
  const players=[{rgb:{r:100,g:100,b:100},gold:0,towns:[]},...Array.from({length:humans},(_,i)=>({rgb:{r:40+i*17,g:80,b:160},gold:200+i*30,towns:[{x:i?9:1,y:i?8:1}],units:i===0?[{type:'noob',x:3,y:6}]:[]}))];
- // Four genuine imps, each in a separate one-cell authored mountain enclosure.
+ // Thirty genuine imps occupy every cell of an enclosed 5x6 chamber.
  // No substituted AI, injected delay or runtime board edits.
- const holes=[{x:9,y:3},{x:9,y:5},{x:11,y:3},{x:11,y:5}];
- const mountains=[];for(let x=8;x<=12;x++)for(let y=2;y<=6;y++)if(!holes.some(c=>c.x===x&&c.y===y))mountains.push({x,y});
- const spec=fixture.currentCoopFixtureSpec({label,humans:2,size:'tiny',seed:1,players,demons:holes.map(c=>({type:'imp',...c})),terrain:{mountains}});
+ const holes=[];for(let x=8;x<=12;x++)for(let y=0;y<=5;y++)holes.push({x,y});
+ const mountains=[];for(let x=7;x<=13;x++)for(let y=0;y<=6;y++)if(!holes.some(c=>c.x===x&&c.y===y))mountains.push({x,y});
+ const spec=fixture.currentCoopFixtureSpec({label,humans:2,size:'tiny',seed:1,players,demons:holes.map(c=>({type:'imp',...c})),terrain:{mountains},purpose:'TASK-225 dense-30 genuine AI workload'});
  const b=fixture.buildCurrentCoopBoardInVm(spec);b.isFogOfWar=coop;
  if(!coop){b.gameSettings.coop=null;b.players.pop();b.timers.pop();b.external=[];b.grid=b.grid.map(col=>col.map(n=>n===humans+1?0:n));}
  return {spec,board:b};
@@ -30,8 +30,8 @@ test('TASK-225 three real matches supplemental observation',{timeout:3300000},as
  const check=(id,expected,observed)=>{const pass=require('node:util').isDeepStrictEqual(expected,observed);checks.push({id,expected:structuredClone(expected),observed:structuredClone(observed),pass});console.log(`${pass?'PASS':'FAIL'} ${id}`);assert.deepEqual(observed,expected,id);};
  const trace=row=>{events.push(row);fs.appendFileSync(path.join(out,'game-isolation.jsonl'),JSON.stringify(obs.redact({at:Date.now(),...row},secrets))+'\n');};
  const measure=async(id,phase,ms,fn)=>{const start=Date.now();try{return await bounded(id+'/'+phase,ms,fn);}finally{timings.push({id,phase,elapsedMs:Date.now()-start,boundMs:ms,pass:Date.now()-start<ms});}};
- json('verification-plan.json',{cases:CASES.map(id=>({id,tier:'four shipped browser contexts plus two extra protocol identities; real HTTPS/Socket.IO/MongoDB'})),requiredCheckpoints:requiredCheckpoints(),estimateMs:1200000,budgetMs:3600000,stopWorkMs:3300000,bounds:{responseMs:30000,phaseMs:60000,uiSetupMs:240000},seed:1,size:'tiny',browserContexts:4,viewport:{width:960,height:640},commands:['ONLINE_EVIDENCE_DIR=<fresh> NODE_PATH=/opt/diplomacy/node_modules /usr/local/bin/node20 --test ops/task225-three-match.test.js','git diff --check in both repositories','evidence/source/cleanup audit'],exclusions:['ten-player boundary retained only in original TASK-209','three concurrent browser games','exhaustive seed/class/count matrices','high-count rendering stress'],oracle:'Authored fixture, literal +9/+10 income, movement and refresh; four individually mountain-enclosed real imps per co-op; exact canonical board assertions and persisted phase snapshots.'});
- let browser,client,logDir,lifecycle;
+ json('verification-plan.json',{cases:CASES.map(id=>({id,tier:'four shipped browser contexts plus two extra protocol identities; real HTTPS/Socket.IO/MongoDB'})),requiredCheckpoints:requiredCheckpoints(),estimateMs:1200000,budgetMs:3600000,stopWorkMs:3300000,bounds:{responseMs:30000,phaseMs:60000,uiSetupMs:240000},seed:1,size:'tiny',browserContexts:4,viewport:{width:960,height:640},commands:['ONLINE_EVIDENCE_DIR=<fresh> NODE_PATH=/opt/diplomacy/node_modules /usr/local/bin/node20 --test ops/task225-three-match.test.js','git diff --check in both repositories','evidence/source/cleanup audit'],exclusions:['ten-player boundary retained only in original TASK-209','three concurrent browser games','exhaustive seed/class/count matrices','high-count rendering stress'],oracle:'Authored fixture, literal +9/+10 income, movement and refresh; thirty genuine imps in a fully occupied mountain-enclosed chamber per co-op; exact canonical board assertions and persisted phase snapshots.'});
+ let browser,client,logDir,lifecycle,finalSubmissionTrigger=null;
  const abort=()=>void browser?.close();process.on('SIGTERM',abort);t.signal.addEventListener('abort',abort,{once:true});
  try{
  lifecycle=await withServices({evidenceDir:out,pollingOnly:true,serverPreloads:[path.join(__dirname,'task225-three-match-observer.js')]},async service=>{
@@ -58,6 +58,12 @@ test('TASK-225 three real matches supplemental observation',{timeout:3300000},as
  const ready=async(p,r)=>{await wait(()=>p.deliveries>0);await p.page.bringToFront();await p.page.waitForFunction(r=>onlineSocket?.connected&&gameRound===r&&!gameEvent.waitingMode,r,{timeout:30000});if(await p.observe(()=>nextTurnPauseInterface.visible))await p.tap({x:480,y:320},'dismiss turn overlay','!nextTurnPauseInterface.visible');await p.page.waitForFunction(()=>nextTurnButton.canClick&&!nextTurnButton.unactive,null,{timeout:10000});};
  await measure('browser-pair','UI joining',240000,async()=>{await Promise.all([a,b].map(async g=>{for(let i=0;i<2;i++){
   const p=await BrowserPlayer.open(browser,{name:g.id+'-p'+(i+1),input:'mouse',viewport:{width:960,height:640},endpoint:service.endpoint,clientUrl:client.url,errors:{push(row){if(reloading.has(row.player)&&row.type==='requestfailed'&&row.text==='net::ERR_ABORTED'&&row.url.startsWith(service.endpoint+'/socket.io/'))reloadAborts.push({...row,at:Date.now(),reason:'explicit UI reload canceled its outstanding polling request'});else errors.push(row);}},wire:({direction,text})=>{const packet=obs.sanitizePacket(text,secrets);fs.appendFileSync(path.join(out,'wire.jsonl'),JSON.stringify({at:Date.now(),id:g.id,slot:i+1,direction,...packet})+'\n');},screenshotDir:path.join(out,'screenshots'),events:{write(){}},inputs:{write(line){const row=JSON.parse(line);if(/password/.test(row.label||'')){delete row.x;delete row.y;}fs.appendFileSync(path.join(out,'inputs.jsonl'),JSON.stringify(row)+'\n');}}});
+  p.page.on('request',request=>{
+   if(g.id!=='coop-browser'||i!==1||!finalSubmissionTrigger||!request.url().startsWith(service.endpoint+'/socket.io/'))return;
+   for(const text of splitPolling(request.postData()||'')){
+    if(obs.sanitizePacket(text,secrets).event==='nextTurn'){const trigger=finalSubmissionTrigger;finalSubmissionTrigger=null;trigger();break;}
+   }
+  });
   // Hold a real key until a frame observes it, as in the existing purchases harness.
   p.pan=async(dx,dy,before)=>{const keys=[];if(dx)keys.push(dx>0?'ArrowRight':'ArrowLeft');if(dy)keys.push(dy>0?'ArrowDown':'ArrowUp');p.trace({action:'key-hold-until-camera-change',keys,before});try{for(const k of keys)await p.page.keyboard.down(k);await p.page.waitForFunction(b=>canvas.offset.x!==b.x||canvas.offset.y!==b.y,before,{timeout:5000,polling:'raf'});}finally{for(const k of keys)await p.page.keyboard.up(k);}};
   p.deliveries=0;p.page.on('console',m=>{if(['playYourTurn','gameStarted','waitYouTurn'].includes(m.text()))p.deliveries++;});
@@ -70,7 +76,7 @@ test('TASK-225 three real matches supplemental observation',{timeout:3300000},as
  const persisted=async(g,r)=>{const d=await games.findOne({gameID:g.gameID});check(g.id+'/persisted/'+r+'/participants',obs.redact([...g.peers.map(p=>obs.sha256(p.password)),...(g.coop?[null]:[])],secrets),obs.redact(d.playerIndexToUserIndex.slice(1),secrets));check(g.id+'/persisted/'+r+'/rounds',r+1,d.rounds.length);check(g.id+'/persisted/'+r+'/revision',g.coop?g.n*r:0,d.coopRevision||0);const base=structuredClone(g.expected);for(let i=1;i<=g.n;i++)base.players[i].gold-=i===1?9:10;if(g.movedRound===r)base.players[1].units[0].moves=1;check(g.id+'/persisted/'+r+'/board',base,canonicalBoard(d.rounds.at(-1)[0].parallelTurnResult));json(g.id+'-persisted-'+r+'.json',obs.redact(d,secrets));};
  const advanceExpected=g=>{g.round++;g.expected.gameRound=g.round;for(let i=1;i<=g.n;i++){g.expected.players[i].gold+=i===1?9:10;g.expected.players[i].units.forEach(u=>u.moves=2);}if(g.coop)g.expected.players[g.n+1].units.forEach(u=>u.moves=2);};
  const submitUI=async(g,i)=>{const p=g.ui[i];await ready(p,g.round);await p.tapControl('nextTurnButton','interleaved human submission');};
- const submitProtocol=async(g,i)=>{
+ const submitProtocol=(g,i)=>{
   const p=g.peers[i],game=structuredClone(p.state);delete game.coopCommit;
   trace({id:g.id,event:'submission',slot:i+1,round:g.round,gameID:g.gameID,board:canonicalBoard(game)});
   p.handle.client.emit('nextTurn',JSON.stringify({password:p.password,game,whooseTurn:p.state.whooseTurn}));
@@ -81,9 +87,12 @@ test('TASK-225 three real matches supplemental observation',{timeout:3300000},as
   await Promise.all([submitUI(a,0),submitUI(b,0),submitProtocol(c,0)]);
   await wait(()=>[a,c].every(g=>g.peers.every(p=>p.state.coopCommit.revision===round*2+1)));
   for(const g of [a,b,c])json(g.id+'-intermediate-'+round+'.json',obs.redact(await games.findOne({gameID:g.gameID}),secrets));
-  // Arm both UI submissions, then send the extra co-op's final request while
-  // the UI input promises are in flight. No artificial service delay.
-  await Promise.all([submitUI(a,1),submitUI(b,1),submitProtocol(c,1)]);
+  // Emit only when the browser has actually sent its final human request.
+  // This synchronizes clients; it never delays or substitutes server work.
+  finalSubmissionTrigger=()=>{trace({id:c.id,event:'wire-trigger',round,gameID:c.gameID,source:'coop-browser/p2/nextTurn'});submitProtocol(c,1);};
+  await Promise.all([submitUI(a,1),submitUI(b,1)]);
+  await wait(()=>finalSubmissionTrigger===null);
+  check('wire-trigger/'+round,true,finalSubmissionTrigger===null);
   await wait(()=>[a,b,c].every(g=>g.peers.every(p=>p.state.gameRound===round+1)));
   for(const g of [a,b,c]){
    advanceExpected(g);for(const p of g.ui)await ready(p,g.round);
@@ -100,7 +109,7 @@ test('TASK-225 three real matches supplemental observation',{timeout:3300000},as
  const allAI=lines.filter(l=>l.startsWith('CONCURRENT_AI ')).map(l=>JSON.parse(l.slice(14)));json('ai-boundaries.json',allAI);
  for(const co of [a,c]){
   const aiRows=allAI.filter(r=>r.label===co.id);
-  check(co.id+'/real-ai-invocations',[0,1].flatMap(round=>['start','end'].map(boundary=>({round,units:4,boundary}))),aiRows.map(({round,units,boundary})=>({round,units,boundary})));
+  check(co.id+'/real-ai-invocations',[0,1].flatMap(round=>['start','end'].map(boundary=>({round,units:30,boundary}))),aiRows.map(({round,units,boundary})=>({round,units,boundary})));
   check(co.id+'/demon-phase',['wave','demon','complete','wave','demon','complete'],phaseRows.filter(r=>r.gameID===co.gameID).map(r=>r.stage));
   const attributed=events.filter(e=>e.id===co.id&&['gameStarted','playYourTurn','waitYouTurn'].includes(e.event));
   check(co.id+'/event-attribution',true,attributed.length>co.n&&attributed.every(e=>e.gameID===co.gameID&&e.slot>=1&&e.slot<=co.n&&e.board.players.length===4));

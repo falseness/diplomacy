@@ -25,11 +25,13 @@ def interleaving(rows, labels):
     return windows
 
 
-def expected(label, round_number, moved, persisted=False):
+def expected(label, round_number, moved, persisted=False, dense=False):
     v = board(label, round_number, moved, persisted)
-    holes = [(9, 3), (9, 5), (11, 3), (11, 5)]
+    holes = ([(x, y) for x in range(8, 13) for y in range(6)] if dense
+             else [(9, 3), (9, 5), (11, 3), (11, 5)])
     v['nature'] = [dict(name='mountain', coord=dict(x=x, y=y))
-                   for x in range(8, 13) for y in range(2, 7) if (x, y) not in holes]
+                   for x in (range(7, 14) if dense else range(8, 13))
+                   for y in (range(7) if dense else range(2, 7)) if (x, y) not in holes]
     if label != 'competitive-browser':
         v['grid'][10][4] = 0
         for x, y in holes:
@@ -40,11 +42,67 @@ def expected(label, round_number, moved, persisted=False):
     return v
 
 
+def checkpoint_progress(rows, identities, require_overlap=True):
+    """Strict monotonic driver intervals; count only other-match *writes*.
+
+    A successful read or a timestamp inside synchronous AI is not evidence of
+    another match committing work. No elapsed-time threshold is invented here.
+    """
+    operations = {}
+    for row in rows:
+        operations.setdefault(row['operation'], []).append(row)
+    pairs = []
+    for pair in operations.values():
+        if len(pair) != 2 or [r['boundary'] for r in pair] != ['start', 'end']:
+            raise ValueError('phase-progress: incomplete driver operation')
+        a, b = pair
+        if any(a.get(k) != b.get(k) for k in ['gameID', 'method', 'phase']):
+            raise ValueError('phase-progress: changed operation identity')
+        if int(a['ns']) >= int(b['ns']):
+            raise ValueError('phase-progress: nonmonotonic operation')
+        pairs.append(pair)
+    changed = lambda r: r.get('succeeded') is True and r.get('writeResult') == dict(acknowledged=True, matchedCount=1, modifiedCount=1)
+    windows = []
+    for label in ['coop-browser', 'coop-extra']:
+        own = identities[label]
+        other = identities['coop-extra' if label == 'coop-browser' else 'coop-browser']
+        for round_number in [0, 1]:
+            phases = [p for p in pairs if p[0]['gameID'] == own and
+                      p[0].get('phase') and p[0]['phase']['round'] == round_number]
+            if [p[0]['phase']['stage'] for p in phases] != ['wave', 'demon', 'complete']:
+                raise ValueError('phase-progress: missing or reordered checkpoints')
+            if any(not changed(p[1]) for p in phases):
+                raise ValueError('phase-progress: checkpoint write not acknowledged as changed')
+            if any(p[0]['method'] != 'updateOne' for p in phases):
+                raise ValueError('phase-progress: checkpoint is not a write')
+            if any(int(phases[i][1]['ns']) >= int(phases[i+1][0]['ns']) for i in [0, 1]):
+                raise ValueError('phase-progress: overlapping same-match checkpoints')
+            start, end = int(phases[0][0]['ns']), int(phases[-1][1]['ns'])
+            commits = [p[1] for p in pairs if p[0]['gameID'] == other and
+                       p[0]['method'] == 'updateOne' and changed(p[1]) and start < int(p[1]['ns']) < end]
+            # Stronger than any arbitrary overlapping read: another co-op write
+            # completes while an actual checkpoint database await is outstanding.
+            awaited = [r for r in commits if any(int(a['ns']) < int(r['ns']) < int(b['ns'])
+                                                for a, b in phases)]
+            windows.append(dict(label=label, round=round_number, startNs=str(start), endNs=str(end),
+                                elapsedMs=(end-start)/1e6,
+                                otherCoopCommittedOperations=[r['operation'] for r in commits],
+                                otherCoopCommitsDuringAwait=[r['operation'] for r in awaited]))
+    if require_overlap and not any(w['otherCoopCommitsDuringAwait'] for w in windows):
+        raise ValueError('phase-progress: no other co-op commit during checkpoint await')
+    return windows
+
+
 def review(directory):
     root = Path(directory)
     read = lambda name: json.loads((root/name).read_text())
     rows = [json.loads(line) for line in (root/'game-isolation.jsonl').read_text().splitlines()]
     windows = interleaving(rows, LABELS)
+    purposes = [read(label+'-fixture.json')['spec'].get('generation', {}).get('testFixture', {}).get('purpose') for label in LABELS]
+    dense = purposes == ['TASK-225 dense-30 genuine AI workload'] * 3
+    if not dense and purposes != [None] * 3:
+        raise ValueError('independent-observation: mixed or unknown fixture workload')
+    oracle = lambda *args: expected(*args, dense=dense)
     checks = []
 
     def check(name, want, got):
@@ -59,7 +117,7 @@ def review(directory):
         check(label+'/fixture-seed', 1, fixture['spec']['seed'])
         check(label+'/fixture-label', label, fixture['spec']['label'])
         check(label+'/fixture-humans', 2, fixture['spec']['humans'])
-        fixture_expected = expected(label, 0, False, True)
+        fixture_expected = oracle(label, 0, False, True)
         check(label+'/authored-board', fixture_expected, project(fixture['board']))
         events = [r for r in rows if r['id'] == label and r['event'] in EVENTS]
         for number, row in enumerate(events):
@@ -70,7 +128,7 @@ def review(directory):
                 check(label+'/fixture-attribution/'+str(number), label,
                       row['fullBoard']['gameSettings']['coop']['generation']['testFixture']['label'])
             moved = label != 'coop-extra' and row['board']['players'][1]['units'][0]['coord']['y'] == 5
-            check(label+'/state/'+str(number), expected(label, row['round'], moved), row['board'])
+            check(label+'/state/'+str(number), oracle(label, row['round'], moved), row['board'])
         for r in [0, 1, 2]:
             check(label+'/round-slots/'+str(r), [1, 2], sorted({e['slot'] for e in events if e['round'] == r}))
         for r in [1, 2]:
@@ -78,7 +136,7 @@ def review(directory):
             check(label+'/persisted-game/'+str(r), identities[label], doc['gameID'])
             check(label+'/persisted-round-count/'+str(r), r+1, len(doc['rounds']))
             check(label+'/persisted-revision/'+str(r), 2*r if label != 'competitive-browser' else 0, doc.get('coopRevision', 0))
-            check(label+'/persisted-board/'+str(r), expected(label, r, label != 'coop-extra', True), project(doc['rounds'][-1][0]['parallelTurnResult']))
+            check(label+'/persisted-board/'+str(r), oracle(label, r, label != 'coop-extra', True), project(doc['rounds'][-1][0]['parallelTurnResult']))
     index = {r['id']: r for r in read('checkpoints.json')['checkpoints']}
     check('contexts-and-participants', dict(contexts=4, counts=[2, 2, 2], distinctGames=3), index['three-match/participants']['observed'])
     for label in LABELS[:2]:
@@ -86,7 +144,7 @@ def review(directory):
             for slot in [0, 1]:
                 row = index[f'three-match/round-{r}/{label}/p{slot}']
                 for field in ['expected', 'observed']:
-                    check(f'browser/{label}/{r}/{slot}/{field}', expected(label, r, True), row[field])
+                    check(f'browser/{label}/{r}/{slot}/{field}', oracle(label, r, True), row[field])
     for row in read('checkpoints.json')['checkpoints']:
         check('saved/'+row['id'], row['expected'], row['observed'])
         check('pass/'+row['id'], True, row['pass'])
@@ -110,11 +168,16 @@ def review(directory):
     durations = []
     for label in ['coop-browser', 'coop-extra']:
         selected = [r for r in ai if r['label'] == label]
-        check(label+'/ai-boundaries', [(r, b, 4) for r in [0, 1] for b in ['start', 'end']],
+        check(label+'/ai-boundaries', [(r, b, 30 if dense else 4) for r in [0, 1] for b in ['start', 'end']],
               [(r['round'], r['boundary'], r['units']) for r in selected])
         for r in [0, 1]:
             start, end = [v for v in selected if v['round'] == r]
             durations.append(dict(label=label, round=r, elapsedMs=end['at']-start['at']))
+    phase_progress = checkpoint_progress(db, identities, require_overlap=dense) if dense else []
+    if dense:
+        triggers = [r for r in rows if r['event'] == 'wire-trigger']
+        check('outbound-wire-triggers', [(r, identities['coop-extra'], 'coop-browser/p2/nextTurn') for r in [0, 1]],
+              [(r['round'], r['gameID'], r['source']) for r in triggers])
     for t in read('progress-timings.json'):
         check('response-bound/'+t['phase'], True, 0 <= t['elapsedMs'] < t['boundMs'])
     cleanup = read('cleanup.json')
@@ -125,6 +188,7 @@ def review(directory):
     # There is intentionally no invented millisecond threshold that closes G09.
     return dict(semanticChecksPassed=True, checkCount=len(checks), checks=checks,
                 windows=windows, databaseInterleavings=overlaps, aiDurations=durations,
+                phaseProgress=phase_progress, workload="dense-30" if dense else "enclosed-4",
                 claims=dict(threeMatchRoundInterleaving=True, realDatabaseInterleaving=bool(overlaps),
                             longBusyPhase=False), criterionClosures=[], fullAuditReady=False,
                 unresolved=['G09 long busy demon phase with cross-match progress during its actual await window',

@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from review_three_match import review, interleaving, LABELS
+from review_three_match import review, interleaving, checkpoint_progress, LABELS
 
 ARCHIVE = Path(os.environ.get('THREE_MATCH_ARCHIVE', '/root/diplomacy/artifacts/TASK-225/review-32'))
 
@@ -18,6 +18,48 @@ class ThreeMatchTests(unittest.TestCase):
         self.assertFalse(result['claims']['longBusyPhase'])
         self.assertEqual([], result['criterionClosures'])
         self.assertFalse(result['fullAuditReady'])
+
+    def phase_copy(self):
+        rows = json.loads((ARCHIVE/'database-awaits.json').read_text())
+        identities = {g['id']: g['gameID'] for g in json.loads((ARCHIVE/'game-identities.json').read_text())}
+        return rows, identities
+
+    def test_phase_checkpoint_omission(self):
+        rows, identities = self.phase_copy()
+        # Older observations have no phase attribution and must fail closed too.
+        rows = [r for r in rows if not r.get('phase') or r['phase']['stage'] != 'demon']
+        with self.assertRaisesRegex(ValueError, 'phase-progress: missing or reordered checkpoints'):
+            checkpoint_progress(rows, identities)
+
+    def test_phase_changed_operation_identity(self):
+        rows, identities = self.phase_copy()
+        rows[1]['gameID'] = 'wrong-match'
+        with self.assertRaisesRegex(ValueError, 'phase-progress: changed operation identity'):
+            checkpoint_progress(rows, identities)
+
+    def test_phase_missing_await_end(self):
+        rows, identities = self.phase_copy()
+        rows.pop()
+        with self.assertRaisesRegex(ValueError, 'phase-progress: incomplete driver operation'):
+            checkpoint_progress(rows, identities)
+
+    def test_unacknowledged_checkpoint_write(self):
+        rows, identities = self.phase_copy()
+        for r in rows:
+            if r.get('phase') and r['boundary'] == 'end':
+                r['writeResult'] = dict(acknowledged=False, matchedCount=1, modifiedCount=1)
+        with self.assertRaisesRegex(ValueError, 'phase-progress: (checkpoint write not acknowledged|missing or reordered checkpoints)'):
+            checkpoint_progress(rows, identities)
+
+    def test_sequentialized_database_progress(self):
+        rows, identities = self.phase_copy()
+        # Serialize whole matches while preserving each operation's duration and
+        # internal order. Real prior four-imp proofs lack attributed checkpoints.
+        for r in rows:
+            if r['gameID'] == identities['coop-extra']:
+                r['ns'] = str(int(r['ns']) + 10**15)
+        with self.assertRaisesRegex(ValueError, 'phase-progress: (no other co-op commit|missing or reordered checkpoints)'):
+            checkpoint_progress(rows, identities)
 
     def test_historical_sequential_trace(self):
         source = Path('/root/diplomacy/artifacts/TASK-209/green-14/game-isolation.jsonl')

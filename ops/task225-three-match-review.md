@@ -4,7 +4,10 @@ The TASK-225 supplemental producer keeps two H2 co-op matches and a competitive
 control alive for two interleaved rounds, using four browser contexts and two
 additional protocol identities. It delegates to the real MongoDB driver and AI,
 records await entry/exit, full inbound boards and intermediate documents, and
-uses four individually enclosed imps on each declared seed-1 tiny co-op board.
+uses thirty genuine imps in a fully occupied mountain-enclosed chamber on each
+declared seed-1 tiny co-op board. The extra match sends its final submission
+when the browser actually sends its final human request. This only coordinates
+client inputs; no server work is delayed or replaced.
 Run into a fresh directory:
 
 ```sh
@@ -25,3 +28,14 @@ existing 556-check historical oracle and all eight TASK-209 review obligations.
 Do not refresh providers or consume a whole G09 review on the strength of this
 partial observation. Archive controls check board semantics independently after
 changing both received/projection fields, not just saved expected/observed pairs.
+
+The dense-30 experiment adds monotonic, operation-attributed checkpoint await
+boundaries. The independent reader requires another co-op `updateOne` to
+complete during a genuine wave/demon/complete checkpoint await, with an actual
+MongoDB receipt of acknowledged=true, matchedCount=1 and modifiedCount=1.
+Unacknowledged or unchanged writes cannot supply that progress. Reads and mere
+coexistence do not meet that requirement. It preserves the enclosed-4 historical
+oracle, rejects omitted checkpoints, changed operation identities, missing await
+ends and serialized copied traces. Measured phase duration remains separate from
+this scheduling assertion: a short phase still cannot close the long-phase
+clause. No G09 or whole-target closure is asserted by this experiment.

@@ -59,7 +59,7 @@ def main():
               cases=['historical-sequential-rejection', 'three-match-interleaving', 'deleted-game-rejection', 'swapped-identity-rejection'],
               estimateMs=600000, targetMs=2700000, stopWorkMs=3300000, budgetMs=3600000,
               sourceEvidence='source-identities.json', baseline=str(BASELINE), baselineHash=BASELINE_HASH,
-              workload='two seed-1 H2 tiny co-op fixtures, four enclosed genuine imps each; competitive control; two rounds',
+              workload='two seed-1 H2 tiny co-op fixtures, thirty chamber-enclosed genuine imps each; extra submission triggered by actual browser wire request; competitive control; two rounds',
               evidenceTiers=['four shipped browser contexts', 'extra H2 Socket.IO game', 'real HTTPS/MongoDB/AI'],
               exclusions=['no long-workload closure inferred from short fixture', 'no ten-player repeat', 'no full TASK-225 gate before prerequisites']))
         assert digest(BASELINE) == BASELINE_HASH
