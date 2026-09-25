@@ -86,3 +86,9 @@ identity, or public smoke readiness. The TASK-065 switch script remains specific
 to that historical deployment and must not be used for TASK-226. TASK-226 still
 requires its registered release-preparation suite and complete TASK-225 audit
 before a release can be marked ready.
+
+Packaging also compares the full scoped file inventory with verification:
+deleting an unreferenced runtime file requires fresh verification, just like
+changing its bytes. Both server dependency manifests must be present, even when
+the provided source inventory is fresh. This presence check does not certify
+installed dependency bytes or runtime identity; those remain release-gate work.

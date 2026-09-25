@@ -26,8 +26,10 @@ class ReleasePackaging(unittest.TestCase):
             self.git(repo, 'config', 'user.name', 'fixture')
         self.write(self.client, 'index.html', '<script src="game.js"></script>')
         self.write(self.client, 'game.js', 'const version = 1;')
+        self.write(self.client, 'unused.js', 'previously verified runtime')
         self.write(self.client, 'README.md', 'readme-before')
         self.write(self.server, 'server/loadGameCode.js', "const scriptOrder = ['game.js'];")
+        self.write(self.server, 'server/package.json', '{}')
         self.write(self.server, 'server/package-lock.json', '{}')
         self.write(self.server, 'server/tls.key', 'key-before')
         for repo in (self.client, self.server):
@@ -75,17 +77,38 @@ class ReleasePackaging(unittest.TestCase):
         for forbidden in (b'ARTIFACT_SECRET', b'UNRELATED_EDIT', b'KEY_SECRET', b'artifacts/'):
             self.assertNotIn(forbidden, patches)
         with tarfile.open(out / 'candidate.tar.gz') as tar:
-            self.assertEqual(tar.getnames(), ['diplomacy/game.js', 'diplomacy/index.html',
-                'diplomacy_server/server/loadGameCode.js', 'diplomacy_server/server/package-lock.json'])
+            self.assertEqual(tar.getnames(), ['diplomacy/game.js', 'diplomacy/index.html', 'diplomacy/unused.js',
+                'diplomacy_server/server/loadGameCode.js', 'diplomacy_server/server/package-lock.json',
+                'diplomacy_server/server/package.json'])
         for repo in (self.client, self.server):
             self.assertEqual(before[repo], self.git(repo, 'status', '--porcelain'))
 
-    def test_staged_deletion_remains_in_release_patch(self):
-        self.git(self.server, 'rm', 'server/package-lock.json')
+    def test_unverified_deletion_is_rejected(self):
+        self.capture()
+        self.git(self.client, 'rm', 'unused.js')
+        with self.assertRaisesRegex(ValueError, 'Verified source inventory changed'):
+            self.prepare()
+        self.assertFalse((self.root / 'candidate').exists())
+
+    def test_verified_deletion_remains_in_release_patch(self):
+        self.git(self.client, 'rm', 'unused.js')
+        self.capture()
         out = self.prepare()
-        self.assertIn(b'deleted file mode', (out / 'diplomacy_server.patch').read_bytes())
+        self.assertIn(b'deleted file mode', (out / 'diplomacy.patch').read_bytes())
         manifest = json.loads((out / 'candidate-manifest.json').read_text())
-        self.assertNotIn('diplomacy_server/server/package-lock.json', manifest['files'])
+        self.assertNotIn('diplomacy/unused.js', manifest['files'])
+
+    def test_dependency_manifests_are_required_even_with_fresh_sources(self):
+        for filename in ('package.json', 'package-lock.json'):
+            with self.subTest(filename=filename):
+                target = self.server / 'server' / filename
+                data = target.read_bytes()
+                target.unlink()
+                self.capture()
+                with self.assertRaisesRegex(ValueError, 'Missing dependency manifest'):
+                    self.prepare(filename)
+                self.assertFalse((self.root / filename).exists())
+                target.write_bytes(data)
 
     def test_stale_source_rejected_before_output(self):
         self.write(self.client, 'game.js', 'untested bytes')

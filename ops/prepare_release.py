@@ -68,6 +68,24 @@ def prepare(client, server, evidence, out):
                 raise ValueError('Source not verified or changed: ' + str(source))
             # Archive the checked bytes, never re-open a source after hashing it.
             files[name + '/' + rel] = (data, digest)
+    # Hash equality for surviving files alone misses deletions. Compare the
+    # complete scoped inventory before accepting the candidate as verified.
+    expected = set()
+    for name, repo in [('diplomacy', client), ('diplomacy_server', server)]:
+        for source in verified:
+            try:
+                rel = Path(source).relative_to(repo).as_posix()
+            except ValueError:
+                continue
+            if release_path(name, rel):
+                expected.add(name + '/' + rel)
+    if expected != set(files):
+        raise ValueError('Verified source inventory changed: missing=' +
+                         repr(sorted(expected - set(files))) + ' added=' +
+                         repr(sorted(set(files) - expected)))
+    for rel in ('server/package.json', 'server/package-lock.json'):
+        if 'diplomacy_server/' + rel not in files:
+            raise ValueError('Missing dependency manifest: ' + rel)
     html = files['diplomacy/index.html'][0].decode()
     scripts = re.findall(r'<script\b[^>]*\bsrc=[\"\']([^\"\']+)', html)
     external = [p for p in scripts if '://' in p]
