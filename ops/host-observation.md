@@ -46,7 +46,39 @@ are reaped and an unrelated game sentinel is checked after every case.
 These tests do not prove systemd or SSH behavior on production, runtime ABI,
 HTTPS health, smoke identity issuance, or release readiness.
 
-Production gate wiring, authenticated transport/acquisition, executable service
-switch rehearsal, smoke issuance and final manifests remain required. TASK-225
+`acquire_release_host.py` now transports the collector through OpenSSH with an
+explicit known-hosts pin and client identity. It disables ambient configuration,
+agent authentication/forwarding, connection sharing, proxies and password prompts.
+It sends the four hash-pinned collector modules over encrypted stdin and loads
+them in memory using isolated Python; it neither installs remote files nor stages
+a release. The remote collector verifies real service/process state on the host.
+Remote filesystem paths are never interpreted as local workstation paths.
+
+Invoke it with `python3 ops/acquire_release_host.py --config PRIVATE_CONFIG.json
+--stop-at-ms ABSOLUTE_UNIX_MILLISECONDS`. The config contains `host`, `port`,
+`user`, `identity` (absolute private-key path, owned by the caller, mode 0600),
+`known_hosts` (absolute file path), `known_hosts_sha256`, `expected_host`,
+`service`, `roots`, and `collector_hashes`. The latter maps each of
+`prepare_release`, `prepare_runtime_bundle`, `prepare_rollback`, and
+`observe_release_host` to the SHA-256 of its reviewed Python source bytes.
+Supply the host key through an independently authenticated operator source;
+automatically accepting `ssh-keyscan` output does not establish trust.
+The known-hosts file must contain the selected host/port key. Remote authentication
+must permit root observation, as required by the collector. Stdout contains only
+the observation and public transport provenance, with `releaseReady:false`.
+SSH failures expose only the exit code; captured remote stderr is not published.
+The remote clock must agree with the caller's absolute deadline. The caller owns
+the enclosing cumulative deadline and must not claim remote process cleanup from
+local SSH termination alone. A receipt is acquisition evidence, not a signature
+that a later untrusted JSON consumer can treat as authenticated issuance.
+
+`python3 ops/test_acquire_release_host.py` uses a fresh loopback-only sshd, generated
+host/client keys and real SSH authentication. It checks the pinned server and
+client keys, changed source/pin refusal, remote failure, deadline and injection
+guards, exact remote process/executable observations, and owned-process cleanup.
+Only systemd attribution is fixture data. No production endpoint is contacted.
+
+Production gate wiring, real production acquisition, executable service
+switch rehearsal and smoke issuance remain required. TASK-225
 must supply finalized current proof before staging. This collector performs no
 staging, service mutation, activation, database operation, or ready-manifest write.
