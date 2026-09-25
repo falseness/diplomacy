@@ -81,9 +81,12 @@ function createOperations({config, issueSmoke, validateSmoke}) {
             await helper('archive-readback', context);
             const pair = read(context.outputDir, 'candidate/paired-package.json');
             const prior = read(context.outputDir, 'rollback/retained-installation.json');
-            // Declarative preparation only. TASK-227 needs an authenticated host
-            // plan and executable switch adapter; this is not a switch dry-run.
-            const plan = {releaseReady:false, scope:'local archive guard only', activation:false,
+            // Filesystem transitions were rehearsed in a private temporary tree.
+            // Service switching and authenticated host readiness remain unproven.
+            const rehearsal = read(context.outputDir, 'layout-rehearsal.json');
+            assert.equal(rehearsal.pass, true, 'layout-rehearsal-failed');
+            assert.equal(rehearsal.cleanup, true, 'layout-rehearsal-cleanup');
+            const plan = {releaseReady:false, scope:'local archive guard and isolated filesystem rehearsal', activation:false,
                 guards:priorProofs.map(p => ({...p})),
                 source:pair.source_archive_sha256, runtime:pair.runtime_archive_sha256, rollback:prior.archive_sha256,
                 requiredActivationSteps:['verify-current-host','verify-staged-hashes','retain-web-layout','switch-service-and-web','health-check'],
@@ -91,7 +94,8 @@ function createOperations({config, issueSmoke, validateSmoke}) {
                 databaseActions:[]};
             write(context.outputDir, 'guarded-plan.json', plan);
             fs.writeFileSync(path.join(context.outputDir, 'archive-guard.log'), 'PASS candidate/runtime/rollback archive hashes and readback\nACTIVATION=false RELEASE_READY=false\n', {flag:'wx'});
-            return receipt(context.outputDir, ['guarded-plan.json','archive-guard.log'], [check('no-activation', false, plan.activation)]);
+            return receipt(context.outputDir, ['guarded-plan.json','archive-guard.log','layout-dry-run.log','layout-rehearsal.json'],
+                [check('no-activation', false, plan.activation), check('rehearsal-cleanup', true, rehearsal.cleanup)]);
         },
         'authenticated-smoke-inputs': async context => {
             audit(context.outputDir);

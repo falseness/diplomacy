@@ -18,7 +18,7 @@ def main():
     output.mkdir(exist_ok=False)
     started = int(time.time() * 1000)
     cases = ['missing-map', 'complete', 'tampered-receipt', 'changed-observation',
-             'missing-smoke-adapter', 'expired-smoke', 'tampered-archive']
+             'missing-smoke-adapter', 'expired-smoke', 'tampered-archive', 'tampered-rehearsal']
     (output / 'verification-plan.json').write_text(json.dumps({
         'scope': 'helper-to-operation boundary diagnostics only', 'fullTaskPass': False,
         'cases': cases, 'tier': 'source-executed isolated fixtures; no public authentication',

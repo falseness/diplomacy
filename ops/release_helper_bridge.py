@@ -11,6 +11,7 @@ import time
 
 import prepare_runtime_bundle as bundle
 import prepare_rollback as rollback
+import rehearse_release_layout as layout
 
 
 def dispatch(request):
@@ -41,6 +42,7 @@ def dispatch(request):
         bundle.verify_archive(out / 'candidate/runtime-dependencies.tar.gz', pair['inventory'], stop_at)
         rollback.bundle.verify_archive(out / 'rollback/prior-installation.tar.gz', prior['inventory'], stop_at)
         print('PASS upstream archives read back before guarded plan')
+        layout.rehearse(out, stop_at)
         return {'source': pair['source_archive_sha256'], 'runtime': pair['runtime_archive_sha256'],
                 'rollback': prior['archive_sha256']}
     raise ValueError('unknown-helper-stage')

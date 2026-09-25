@@ -17,16 +17,25 @@ smoke issuer. Never provide untrusted command arguments as `observerArgv`.
 This is **not release readiness**. The production gate remains fail-closed and is
 not wired to these operations yet. Its TASK-225 prerequisite must pass, and it
 still needs authenticated current-host acquisition, real identity issuance,
-a current executable deployment/rollback adapter with a local switch dry-run,
+a current executable service deployment/rollback adapter,
 and final release/rollback manifest validation. `guarded-plan.json` describes
-archive guards and required future steps; `archive-guard.log` is not `dry-run.log`
-and proves no service switch. No operation here activates, restores, or writes a
-ready manifest. The historical TASK-065 switch script is never invoked.
+archive guards and required future steps. `rehearse_release_layout.py` now copies
+regular client and retained web files from the bound archives into a private
+temporary directory, performs six filesystem switch/rollback actions, and checks
+candidate visibility, retained/restored bytes, override ownership and cleanup.
+`layout-dry-run.log` and `layout-rehearsal.json` prove this isolated filesystem
+rehearsal only. They do not satisfy the final `dry-run.log` contract: no systemd
+restart, runtime execution, HTTPS health check or real-host transition is tested.
+Archive web links are rejected rather than followed. Negative controls cover
+existing backup/override paths and changed ownership before rollback. No operation
+here activates a live service or writes a ready manifest. The historical TASK-065
+switch script is never invoked.
 
 Run the new isolated comparison from the client repository:
 
 ```sh
 NODE_PATH=/opt/diplomacy/node_modules python3 ops/test_release_operations.py artifacts/TASK-226/<fresh-boundary-directory>
+python3 ops/test_rehearse_release_layout.py
 ```
 
 The separate Python entry point creates identical temporary candidate/runtime and
@@ -34,7 +43,7 @@ prior-installation fixtures and invokes the JS parent/worker with one deadline.
 It does not repeat the older component suites. The parent uses TASK-224's existing
 release supervisor, and checks missing-map, complete-map, changed receipt,
 changed observation, missing smoke validator, expired identities, and changed
-archive outcomes. It independently checks archive members/bytes, guarded plan
+archive and rehearsal receipt outcomes. It independently checks archive members/bytes, guarded plan
 bindings, smoke inputs, actual worker/supervisor exits, unchanged input/sentinel
 bytes, and cleanup. TASK-223's real source isolation policy validates fixture
 identities, but no public authentication, browser, or network claim is made.

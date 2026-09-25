@@ -37,6 +37,7 @@ async function worker(o) {
                 calls.push(id);
                 if (id === 'current-rollback' && o.scenario === 'tampered-receipt') fs.appendFileSync(path.join(o.outputDir,'candidate/paired-package.json'), ' ');
                 if (id === 'guarded-dry-run' && o.scenario === 'tampered-archive') fs.appendFileSync(path.join(o.outputDir,'candidate/runtime-dependencies.tar.gz'), 'tamper');
+                if (id === 'authenticated-smoke-inputs' && o.scenario === 'tampered-rehearsal') fs.appendFileSync(path.join(o.outputDir,'layout-rehearsal.json'), ' ');
                 return original(context);
             };
         }
@@ -59,7 +60,8 @@ async function parent(o) {
         'changed-observation':[1,2,'rollback-process-drift'],
         'missing-smoke-adapter':[1,0,'missing-authenticated-smoke-adapter'],
         'expired-smoke':[1,4,'Smoke isolation denied'],
-        'tampered-archive':[1,3,'changed-upstream-proof:candidate/runtime-dependencies.tar.gz']
+        'tampered-archive':[1,3,'changed-upstream-proof:candidate/runtime-dependencies.tar.gz'],
+        'tampered-rehearsal':[1,4,'changed-upstream-proof:layout-rehearsal.json']
     };
     const checks = [];
     for (const scenario of o.cases) {
@@ -91,6 +93,19 @@ async function parent(o) {
             assert.deepEqual(plan.requiredActivationSteps,['verify-current-host','verify-staged-hashes','retain-web-layout','switch-service-and-web','health-check']);
             assert.deepEqual(plan.requiredRollbackSteps,['verify-owned-layout','restore-retained-service-and-web','health-check']);
             assert.equal(plan.source,pair.source_archive_sha256); assert.equal(plan.runtime,pair.runtime_archive_sha256); assert.equal(plan.rollback,prior.archive_sha256);
+            const rehearsal = read(outputDir,'layout-rehearsal.json');
+            assert.deepEqual(rehearsal.actions, ['retain-web-layout','link-candidate-web','install-owned-override',
+                'unlink-owned-web','restore-prior-web','remove-owned-override']);
+            assert.deepEqual(rehearsal.bindings, {'candidate/candidate.tar.gz':pair.source_archive_sha256,
+                'candidate/runtime-dependencies.tar.gz':pair.runtime_archive_sha256,
+                'rollback/prior-installation.tar.gz':prior.archive_sha256});
+            assert.equal(rehearsal.candidateWebFiles,3); assert.equal(rehearsal.priorWebFiles,1);
+            assert.equal(rehearsal.cleanup,true); assert.equal(rehearsal.releaseReady,false);
+            assert.deepEqual(rehearsal.serviceActions,[]); assert.deepEqual(rehearsal.databaseActions,[]);
+            assert.deepEqual(rehearsal.checks.map(c => c.id), ['candidate-web-visible','owned-override-installed',
+                'prior-web-retained','prior-web-restored','owned-layout-removed','unrelated-game-unchanged','temporary-layout-cleanup']);
+            assert(rehearsal.checks.every(c => c.pass && JSON.stringify(c.expected) === JSON.stringify(c.observed)));
+            console.log('PASS isolated filesystem switch/rollback actions=6 candidateWebFiles=3 priorWebFiles=1 cleanup=true');
             assert.equal(smoke.binding.source,plan.source); assert.equal(smoke.binding.runtime,plan.runtime);
             assert.deepEqual(smoke.cases.map(c => [c.mode,c.seed,c.map,c.userIds.length,c.milestones]),['competitive','coop'].map(mode => [mode,1,'Tiny',2,['legal-move','one-round','reconnect']]));
             assert.equal(smoke.cleanupEvent,'cleanupSmokeRun');
