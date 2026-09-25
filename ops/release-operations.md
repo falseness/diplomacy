@@ -139,3 +139,17 @@ signatures and copied invocation IDs must fail in both consumers. One cumulative
 ten-minute deadline includes setup, services, negative controls, audit and
 cleanup. `diagnosticPass` never sets `fullTaskPass` or `releaseReady`. There is no
 production CLI or environment option to select its synthetic prerequisite.
+
+### Offline production loader boundary
+
+Run `/usr/local/bin/node20 ops/test_release_production_config.js artifacts/TASK-226/<fresh-directory>`
+from the client repository as root (the ownership controls change only disposable
+fixture ownership). This two-minute diagnostic compares the direct real factories
+with `loadProductionConfig` and `release_production.prepare`, observing arguments
+while delegating to the actual factories. It verifies pinned observer construction,
+helper-path removal, host roots, single-field rejections and real private-file
+mode, symlink and ownership rejection. Child-process execution is prohibited and
+returned operations are never invoked. Generated production-scope configuration
+is loader fixture data only; no prerequisite gate or readiness receipt is produced.
+A pass retires this experiment. Full release verification still requires finalized
+current TASK-225 proof and authentic operator configuration.
