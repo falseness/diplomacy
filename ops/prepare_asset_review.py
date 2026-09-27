@@ -11,9 +11,10 @@ ARCHIVE = Path('/root/diplomacy/artifacts/TASK-211/green-07')
 MANIFEST = '5580af417e65f71de3811ecb46e569a528431e1f241017a326a1af7bcc349f98'
 
 
-def review():
-    result = assets(ARCHIVE, MANIFEST)
-    manifest = json.loads((ARCHIVE/'coverage-results.json').read_text())['evidenceHashes']
+def review(archive=ARCHIVE, manifest_sha256=MANIFEST):
+    archive = Path(archive).resolve(strict=True)
+    result = assets(archive, manifest_sha256)
+    manifest = json.loads((archive/'coverage-results.json').read_text())['evidenceHashes']
     checks, proofs = result['checks'], result['proofs']
 
     def check(name, expected, observed):
@@ -22,7 +23,7 @@ def review():
         checks.append(dict(id=name, expected=expected, observed=observed, **{'pass': True}))
 
     def read(name, lines=False):
-        p = ARCHIVE/name
+        p = archive/name
         check('binding/'+name, manifest[name], sha(p))
         proofs[name] = sha(p)
         return [json.loads(l) for l in p.read_text().splitlines()] if lines else json.loads(p.read_text())
@@ -67,14 +68,15 @@ def review():
                 sourceMismatches=result['sourceMismatches'])
 
 
-def prepare(output, tasks):
+def prepare(output, tasks, archive=ARCHIVE, manifest_sha256=MANIFEST):
+    archive = Path(archive).resolve(strict=True)
     output = Path(output)
     output.mkdir(exist_ok=False)
-    report = review()
+    report = review(archive, manifest_sha256)
     selected = output/'selected-211'
-    shutil.copytree(ARCHIVE, selected)
-    original = json.loads((ARCHIVE/'coverage-results.json').read_text())
-    shutil.copyfile(ARCHIVE/'coverage-results.json', selected/'original-coverage.json')
+    shutil.copytree(archive, selected)
+    original = json.loads((archive/'coverage-results.json').read_text())
+    shutil.copyfile(archive/'coverage-results.json', selected/'original-coverage.json')
     projected = json.loads(json.dumps(original))
     for case in projected['cases']:
         assert 'proof' not in case and 'proofs' not in case
@@ -102,16 +104,17 @@ def prepare(output, tasks):
             acceptance='Same two asset cases, full traces/context/milestone checks, exact shipped sources, zero exits and owned cleanup; consume as covered-current only when source hashes match.',
             targetMs=900000, stopWorkMs=3300000, budgetMs=3600000))])
     save(output/'review.json', row)
-    save(output/'provenance.json', dict(original=str(ARCHIVE), coverageSha256=MANIFEST,
-        originalFiles={str(p.relative_to(ARCHIVE)): sha(p) for p in ARCHIVE.rglob('*') if p.is_file()},
+    save(output/'provenance.json', dict(original=str(archive), coverageSha256=manifest_sha256,
+        originalFiles={str(p.relative_to(archive)): sha(p) for p in archive.rglob('*') if p.is_file()},
         transformation='Only coverage.cases[*].proofs aliases original proofPaths; original-coverage.json retained byte-identically.'))
     print('PASS prepared TASK-211/AC1 checks='+str(len(report['checks'])))
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(); p.add_argument('output'); p.add_argument('tasks', nargs='?')
+    p.add_argument('--archive', default=str(ARCHIVE)); p.add_argument('--manifest-sha256', default=MANIFEST)
     a = p.parse_args()
     if a.tasks:
-        prepare(a.output, a.tasks)
+        prepare(a.output, a.tasks, a.archive, a.manifest_sha256)
     else:
-        print(json.dumps(review()))
+        print(json.dumps(review(a.archive, a.manifest_sha256)))

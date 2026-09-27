@@ -8,30 +8,35 @@ const R = require('/root/diplomacy_server/tests/reliability/helpers/evidence-rev
 const H = require('./consume_historical_catalog');
 const ORIGINAL = '/root/diplomacy/artifacts/TASK-211/green-07';
 const COVERAGE = '5580af417e65f71de3811ecb46e569a528431e1f241017a326a1af7bcc349f98';
-function inspect(tasks, prepared) {
+function inspect(tasks, prepared, binding = {original:ORIGINAL, coverageSha256:COVERAGE}) {
+    // Selection is supplied by the measured parent, never inferred from proof.
+    const originalPath = fs.realpathSync(binding.original), coverageHash = binding.coverageSha256;
+    const artifactRoot = fs.realpathSync(path.join(A.client, 'artifacts'));
+    assert(originalPath.startsWith(artifactRoot + path.sep), 'escaped-asset-provider');
+    assert(/^[a-f0-9]{64}$/.test(coverageHash), 'invalid-asset-coverage-hash');
     const provenance = A.read(path.join(prepared, 'provenance.json'));
-    assert.equal(provenance.original, ORIGINAL, 'wrong-asset-provider');
-    assert.equal(provenance.coverageSha256, COVERAGE, 'wrong-asset-coverage');
-    assert.equal(A.hash(path.join(ORIGINAL, 'coverage-results.json')), COVERAGE, 'changed-asset-original');
+    assert.equal(fs.realpathSync(provenance.original), originalPath, 'wrong-asset-provider');
+    assert.equal(provenance.coverageSha256, coverageHash, 'wrong-asset-coverage');
+    assert.equal(A.hash(path.join(originalPath, 'coverage-results.json')), coverageHash, 'changed-asset-original');
     const selected = path.join(prepared, 'selected-211');
     const manifest = A.read(path.join(selected, 'evidence-hashes.json'));
     const files = directory => fs.readdirSync(directory, {withFileTypes:true}).flatMap(e =>
         e.isDirectory() ? files(path.join(directory,e.name)).map(n => e.name+'/'+n) : [e.name]).sort();
-    assert.deepEqual(Object.keys(provenance.originalFiles).sort(), files(ORIGINAL), 'incomplete-original-binding');
+    assert.deepEqual(Object.keys(provenance.originalFiles).sort(), files(originalPath), 'incomplete-original-binding');
     for (const [name, sha] of Object.entries(provenance.originalFiles)) {
-        assert.equal(A.hash(path.join(ORIGINAL, name)), sha, 'changed-original:'+name);
+        assert.equal(A.hash(path.join(originalPath, name)), sha, 'changed-original:'+name);
         const copied = name === 'coverage-results.json' ? 'original-coverage.json' : name;
         assert.equal(A.hash(path.join(selected, A.proofKey(selected, copied, manifest))), sha, 'changed-copy:'+name);
     }
-    const original = A.read(path.join(ORIGINAL, 'coverage-results.json'));
+    const original = A.read(path.join(originalPath, 'coverage-results.json'));
     const projected = structuredClone(original);
     for (const c of projected.cases) {
         assert(!c.proof && !c.proofs && c.proofPaths?.length, 'unsupported-proofPaths-contract');
         c.proofs = c.proofPaths;
     }
     assert.deepEqual(A.read(path.join(selected, 'coverage-results.json')), projected, 'invalid-asset-projection');
-    assert.deepEqual(Object.keys(manifest).sort(), [...files(ORIGINAL), 'original-coverage.json', 'ac1-independent-review.json'].sort(), 'invalid-selected-files');
-    const oracle = spawnSync('python3', [path.join(__dirname, 'prepare_asset_review.py'), '--', 'recompute'],
+    assert.deepEqual(Object.keys(manifest).sort(), [...files(originalPath), 'original-coverage.json', 'ac1-independent-review.json'].sort(), 'invalid-selected-files');
+    const oracle = spawnSync('python3', [path.join(__dirname, 'prepare_asset_review.py'), 'recompute', '--archive', originalPath, '--manifest-sha256', coverageHash],
         {encoding:'utf8', timeout:60000, maxBuffer:8*1024*1024, env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}});
     assert.equal(oracle.status, 0, 'asset-oracle-failed: '+oracle.stderr);
     const report = JSON.parse(oracle.stdout);
@@ -41,8 +46,8 @@ function inspect(tasks, prepared) {
     assert(run.historicalValid, 'asset-inspection: '+run.issues.join(','));
     return {run, report, manifest};
 }
-function consume(before, tasks, research, baseline, prepared, row) {
-    const {run, report, manifest} = inspect(tasks, prepared);
+function consume(before, tasks, research, baseline, prepared, row, binding) {
+    const {run, report, manifest} = inspect(tasks, prepared, binding);
     assert.equal(row.id, 'TASK-211/AC1', 'wrong-asset-owner');
     assert.equal(row.clauses.length, 1, 'wrong-asset-partition');
     const clause = row.clauses[0], proof = {file:'ac1-independent-review.json',sha256:manifest['ac1-independent-review.json']};

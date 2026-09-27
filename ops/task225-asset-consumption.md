@@ -55,3 +55,19 @@ in-scope local clauses stay explicit obligations. Current TASK-230/231/232
 completion is not required. Definition-bound historical providers retain their
 existing obligations through the in-scope criteria and research clauses they
 support. This command does not launch services or browsers.
+
+To make the first current-source AC1 transition after dependencies freeze:
+
+```sh
+NODE_PATH=/opt/diplomacy/node_modules /usr/local/bin/node20 ops/refresh_asset_review.js artifacts/TASK-225/review-UNIQUE
+```
+
+This runs the existing four-case assets provider once, binds its manifest hash,
+then uses the same independent oracle and actual clause consumer. The caller's
+explicit archive/hash selection is checked against provenance; it cannot be
+chosen by a supplied proof document. Historical selection remains the default.
+Five copied-proof/ownership/binding controls must fail, all other dispositions
+and eight self checks remain unchanged, and current source hashes are rechecked.
+The cumulative parent deadline includes preflight, provider, consumption and
+audit. This prerequisite command leaves TASK-225 pending while other required
+local targets remain; its reports explicitly say `fullInvocation:false`.
