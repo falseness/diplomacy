@@ -10,7 +10,7 @@ import time
 
 ROOT = Path('/root/diplomacy')
 FILES = ['reconcile_evidence_catalog.js', 'run_catalog_reconciliation.js', 'run_catalog_review.py',
-         'review_concurrent_receipts.py', 'test_review_concurrent_receipts.py', 'task225-catalog-reconciliation.md']
+         'review_concurrent_receipts.py', 'test_review_concurrent_receipts.py', 'task225-catalog-reconciliation.md', 'test_reconcile_catalog_identity.js', 'consume_historical_catalog.js']
 
 
 def digest(p):
@@ -26,7 +26,9 @@ def main(out):
     frozen = {f:digest(ROOT/'ops'/f) for f in FILES}
     tasks_hash = digest(ROOT/'artifacts/tasks.json')
     env = dict(os.environ, NODE_PATH='/opt/diplomacy/node_modules', PYTHONDONTWRITEBYTECODE='1')
-    commands = [(['/usr/local/bin/node20', 'ops/run_catalog_reconciliation.js', str(out/'consumer')], ROOT),
+    commands = [(['/usr/local/bin/node20', '--version'], ROOT),
+                (['/usr/local/bin/node20', 'ops/test_reconcile_catalog_identity.js'], ROOT),
+                (['/usr/local/bin/node20', 'ops/run_catalog_reconciliation.js', str(out/'consumer')], ROOT),
                 (['python3', 'ops/review_concurrent_receipts.py', str(ROOT/'artifacts/TASK-225/review-43/prepared/selected-209'), str(out/'concurrent-receipts.json')], ROOT),
                 (['python3', '-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_review_concurrent_receipts.py', '-v'], ROOT),
                 (['git', 'diff', 'HEAD', '--check'], ROOT),

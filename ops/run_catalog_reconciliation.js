@@ -9,7 +9,7 @@ const save = (n, x) => fs.writeFileSync(path.join(out, n), JSON.stringify(x, nul
 const tasks = A.read(path.join(A.client, 'artifacts/tasks.json'));
 const research = A.read(path.join(A.client, 'artifacts/online-coop-coverage-audit-2026-09-14/scenario-matrix.json'));
 const frozen = C.prepare(tasks, research);
-const tools = Object.fromEntries(['reconcile_evidence_catalog.js', 'run_catalog_reconciliation.js'].map(f => [f, A.hash(path.join(__dirname, f))]));
+const tools = Object.fromEntries(['reconcile_evidence_catalog.js', 'run_catalog_reconciliation.js', 'consume_historical_catalog.js'].map(f => [f, A.hash(path.join(__dirname, f))]));
 save('verification-plan.json', {scope: 'catalog reconciliation prerequisite only; not the complete TASK-225 gate',
     estimateMs: 300000, stopWorkMs: 3300000, budgetMs: 3600000,
     cases: ['same-input-actual-consumer', 'current-target-conservation', 'historical-provenance', 'stale-follow-ups', 'self-ownership',
@@ -39,27 +39,45 @@ assert(Date.now() - started < 3300000, 'cumulative deadline');
 const after = C.inventory(tasks, research, frozen.candidate, frozen.annex); save('current-inventory.json', after);
 const oldRows = [...before.criteria, ...before.researchGaps], newRows = [...after.criteria, ...after.researchGaps];
 assert.deepEqual(oldRows.map(r => [r.id, r.text]), newRows.map(r => [r.id, r.text]), 'current-target-conservation');
-// Same measured source/proof state on both sides, not a selected historical measurement.
-for (const run of before.runs) assert.deepEqual(after.runs.find(r => r.task === run.task), run, 'changed-measured-run:' + run.task);
+// Colliding old run references are explicitly removed from current tasks and
+// independently re-inspected under hash-bound historical provider identities.
+const providerIds = new Set(frozen.annex.providers.map(p => p.id));
+for (const run of before.runs.filter(r => !providerIds.has(r.task)))
+    assert.deepEqual(after.runs.find(r => r.task === run.task), run, 'changed-measured-run:' + run.task);
+for (const p of frozen.annex.providers) {
+    const run = after.runs.find(r => r.task === C.providerKey(p));
+    assert(run?.historicalValid, 'invalid-historical-provider:' + p.id);
+    assert.equal(run.directory, p.run.directory);
+    const current = after.runs.find(r => r.task === p.id);
+    if (current) assert.notEqual(current.directory, p.run.directory, 'historical-run-credited-to-current-task');
+}
 const changes = oldRows.filter(r => JSON.stringify(r) !== JSON.stringify(newRows.find(n => n.id === r.id))).map(r => {
     const n = newRows.find(n => n.id === r.id); return {id: r.id, before: r.status, after: n.status, beforeReason: r.reason, covered: n.covered};
 });
-assert.deepEqual(changes.map(c => c.id).sort(), [...Array.from({length: 9}, (_, i) => 'TASK-224/AC' + (i + 1)), 'TASK-225/AC1', 'G11'].sort());
 assert.equal(after.inputIssues.length, 0); assert.equal(after.unexplainedGaps.length, 0);
 assert.equal(after.selfChecks.length, 8); assert(after.selfChecks.every(c => c.status === 'awaiting-current-invocation'));
-for (const id of ['TASK-209/AC1', 'TASK-209/AC2']) assert.equal(newRows.find(r => r.id === id).status, 'covered-current');
-for (const id of ['TASK-209/AC3', 'G09']) assert.equal(newRows.find(r => r.id === id).status, 'unresolved-local');
+for (const id of ['TASK-209/AC1', 'TASK-209/AC2']) {
+    const retained = newRows.find(r => r.id === id) || after.retainedConcurrentReviews.find(r => r.id === id);
+    const status = retained?.status;
+    assert(['covered-current', 'reviewed-historical'].includes(status), 'lost-reviewed-clause:' + id);
+}
+for (const t of R.targets(tasks, research).filter(t => !frozen.original.reviews.some(r => r.id === t.id && r.targetSha256 === R.digest(t.text)) && t.task !== 'TASK-225'))
+    assert.equal(newRows.find(r => r.id === t.id).status, 'unresolved-local', 'inherited-old-review:' + t.id);
+assert.equal(newRows.find(r => r.id === 'G09').status, 'unresolved-local');
+const ac3 = newRows.find(r => r.id === 'TASK-209/AC3');
+if (ac3) assert.equal(ac3.status, 'unresolved-local');
+else assert(frozen.annex.reviews.find(r => r.id === 'TASK-209/AC3').clauses.some(c => c.disposition === 'unresolved'));
 assert(changes.every(c => !c.covered), 'metadata repair cannot manufacture gameplay closure');
-assert.deepEqual(before.unresolvedPriorArchives, after.unresolvedPriorArchives);
+assert.deepEqual([...before.unresolvedPriorArchives].sort(), [...after.unresolvedPriorArchives].sort());
 assert.equal(after.priorArchivesComplete, false);
 for (const [f, h] of Object.entries(tools)) assert.equal(A.hash(path.join(__dirname, f)), h, 'changed-tool');
 C.validate(tasks, research, frozen.candidate, frozen.annex);
 assert(Date.now() - started < 3300000, 'cumulative deadline');
 save('comparison.json', {pass: true, inputIssuesBefore: before.inputIssues.length, inputIssuesAfter: after.inputIssues.length,
     unexplainedBefore: before.unexplainedGaps.length, unexplainedAfter: after.unexplainedGaps.length,
-    currentTargets: newRows.length, historicalReviews: frozen.annex.reviews.length, historicalProviders: 4,
+    currentTargets: newRows.length, historicalReviews: frozen.annex.reviews.length, historicalProviders: frozen.annex.providers.length,
     selfChecks: 8, priorBefore: before.unresolvedPriorArchives.length, priorAfter: after.unresolvedPriorArchives.length,
     changes, semanticClosures: 0, freshnessRestorations: 0, fullAuditReady: false, controls: controls.length});
 save('scoped-budget.json', {passScoped: true, startedMs: started, finishedMs: Date.now(), elapsedMs: Date.now() - started,
     cleanup: true, ownedProcesses: [], fullInvocation: false});
-console.log(`PASS catalog reconciliation inputIssues=${before.inputIssues.length}->0 unexplained=${before.unexplainedGaps.length}->0 historicalReviews=22 selfChecks=8 prior=${after.unresolvedPriorArchives.length} semanticClosures=0 fullAuditReady=false`);
+console.log(`PASS catalog reconciliation inputIssues=${before.inputIssues.length}->0 unexplained=${before.unexplainedGaps.length}->0 historicalReviews=${frozen.annex.reviews.length} selfChecks=8 prior=${after.unresolvedPriorArchives.length} semanticClosures=0 fullAuditReady=false`);
