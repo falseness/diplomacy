@@ -38,9 +38,30 @@ whole-criterion semantics, or the complete independent lifecycle/tier reader.
 ## Next acquisition work
 
 Do not repeat AC1, AC2 or this sufficiency inspection as a next deliverable.
-Prepare the dedicated passive terminal observer described in
-`task225-terminal-ac2.md`. Add throwing-getter source controls and identity/content
-comparisons before any browser use. At AC3 boundaries capture raw unit/town
+The first passive capture primitive now exists in `terminal_passive_capture.js`;
+`node20 --test ops/test_terminal_passive_capture.js` passes seven source tests
+on complete production class definitions, including throwing-getter controls and
+descriptor/reference comparisons. Evidence is in `capture-131`. This is not yet
+installed in the browser provider and grants no criterion credit.
+
+Keep one `createTerminalCapture()` instance per page so its WeakMap identities
+survive pre/post captures. Pass a plain root containing the named game globals,
+`oldSocket`/`oldTimer` (explicit null before retention), and `timerStorage` with
+one raw `Storage.getItem(gameSlot + 'timer' + index)` string or null per player.
+Do not serialize gameplay objects to construct this root. The capture retains
+duplicate/killed units and towns, grid occupancy references, ownership, raw
+`interaction.moves`, gold/round/result, control storage, commit, socket and timer
+identities. Missing optional scalar storage is explicit `{absent:true}`; the
+semantic reader must reject absence wherever a clause requires a value. IDs
+are observer-local references, not game IDs or cross-reconnect identities.
+
+Complete the schema before browser integration: external registries, town
+production/suburb arrays and any remaining clause-specific fields are not yet
+captured. This primitive intentionally makes no complete-board claim. It assumes
+ordinary production objects, not Proxy objects with descriptor traps. Read timer
+storage using the native read-only Storage API separately; the source tests do
+not certify that future adapter. Complete the independent AC2/AC3 reader and
+callback receipt contract before refreshing. At AC3 boundaries capture raw unit/town
 arrays, killed flags, grid identity/ownership, recipient turn, round, gold,
 stored result, commit, socket identity and timer storage for both participants.
 Do not invoke `isLost`, `isGameEnded`, packing, `toJSON` or pruning to collect
