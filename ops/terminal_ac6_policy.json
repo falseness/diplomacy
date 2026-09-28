@@ -1,0 +1,90 @@
+{
+  "scope": "Exact reviewed terminal acquisition call paths; future source bytes require a new review. These pins alone never establish coverage.",
+  "sources": [
+    {
+      "file": "/root/diplomacy_server/tests/reliability/terminal-flow.test.js",
+      "sha256": "e56fb519f9c0e6ffb3f8c0b4a22c9cf1d858a8a25a2faf5dfcbea201fdfbff99",
+      "review": "Five source rules precede exactly four browser journeys; required checkpoint enumeration is asserted; no retry loop or matrix override."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/terminal-flow-source.js",
+      "sha256": "f26b9457dc90d6c0d2a59ac03afeb378cc7b68913adf69bf88cc8d4b46b57ce1",
+      "review": "Headless authored initial fixture precedes sole neutral nextTurn; menuBack is a source-only UI stub. Independent source outcome oracle derives flood and survivors from before."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/crisis-cleanup-browser.js",
+      "sha256": "87a9c0b003eaa778d92076f64fa579f0d8cf5b37011f079a3884c52821759e8a",
+      "review": "Authored board constructed and saved before withServices; API admission is protocol-only; independent browser.newContext participants reconnect with shipped controls. Real MongoDB is read after legal clicks. Errors propagate; only recorded in-flight aborts during explicit reload are excluded."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/terminal-flow-flood.js",
+      "sha256": "a8449f13b3613cd223c105b1a1e7508dd54af87e484abb8e3d2f46be6c498e4d",
+      "review": "Initial round and perimeter authoring occurs before services. Browser exercise uses two pass clicks, real persistence polling, independent perimeter/upkeep expectations and shipped reconnect."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/terminal-flow-next-game.js",
+      "sha256": "31eff97d53f66a02be409405456c70e65397fdd029327f3d357ca861769d79e8",
+      "review": "Real received polling packet is forwarded with a real upstream HTTPS response exactly once. Old callbacks are invoked directly as source-tier controls. fillText wraps and forwards native rendering. Menu/keypad and first move use input APIs."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/browser-driver.js",
+      "sha256": "cd99d63051da689a098a3170ebb507f6e0aa28dfc9f74aeb5efd28d467fd6348",
+      "review": "Real isolated contexts, shipped static bytes and mouse input; evaluation locates controls or reads state. Bounded waits observe effects and never repeat failed gameplay actions. No sourceVariant passed by terminal provider."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/movement-identity-reconnect.js",
+      "sha256": "2cdbaad71f6fd832f75ce988b68dbeaa649914dcad2ccdf5d0885cb92c3c210b",
+      "review": "Explicit reload plus shipped menu/keypad controls. Wait failure propagates; no silent reconnect retry."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/services.js",
+      "sha256": "2c2f1ffe6cc8896e52521514621239b7ef85172dd6fb676483678d5651815831",
+      "review": "Owned mongod and production server processes; verified HTTPS CA, real socket client with reconnection false and MongoDB collection reads; terminal caller supplies only evidenceDir and pollingOnly."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/polling-transport.js",
+      "sha256": "82543164cf9f63c135383d2a0b1f0df1c697a81e26864782c2f78df4fc6e53d9",
+      "review": "Wraps real Socket.IO factory solely to select polling transport. Application handlers and persistence are unchanged."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/coop/helpers/remote-transport-local-tls.js",
+      "sha256": "3708a7973573709e95571f382b471f2ab253ffd4dd6d75d6293ee7e10cd5d65b",
+      "review": "Substitutes ephemeral loopback certificate/key in real https.createServer; no handler or response substitution."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/coop/helpers/current-coop-fixture.js",
+      "sha256": "231b5c61424b8b6214dd3b6db2e1908e05ca551e3d79ec58da15b77ff781cf3e",
+      "review": "Initial authored fixture is explicitly labeled non-generated and starts production GameMap in Node VM. UI stubs belong to authoring, never the real browser/server AI execution."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/building-state.js",
+      "sha256": "8a92f42994f864d683910473f6ec9502ef989b8016599870a207e3d2b858dfb3",
+      "review": "Read-only projection of coordinates, registries and backing fields; never serializes through pruning getGameObject/toJSON or reads isLost."
+    },
+    {
+      "file": "/root/diplomacy_server/tests/reliability/helpers/sequence-actions.js",
+      "sha256": "89b81d9c346659e52a23cb724f1fcd5d4beed9a3c64b10df80c912c9f49a44d3",
+      "review": "Only destination is invoked by next-game helper: independent cube geometry and raw occupancy. Other fixture/action functions are not called in this suite."
+    },
+    {
+      "file": "/root/diplomacy/ops/terminal_ac2_provider.js",
+      "sha256": "802314ad6f56435686c6136eb2aaaef7f164ad28bc1f8752c12aed95b6c44c51",
+      "review": "Wraps original reconnect without retries; raw before/after reads and read-only MongoDB. Replaces two mutating legacy OBSERVE calls, preserving both assertions and actual replay."
+    },
+    {
+      "file": "/root/diplomacy/ops/terminal_ac3_provider.js",
+      "sha256": "65dece02512cd55e13767c900bc89056766d16f0df85f212ea83e04d59cc5f1c",
+      "review": "Pinned helper transformation retains inputs/assertions; replaces four legacy reads with passive projection, adds both-page named source callback invocation and waits for native cooldown without rewriting time."
+    },
+    {
+      "file": "/root/diplomacy/ops/terminal_page_capture.js",
+      "sha256": "b23eb28e00a1a819cea379ef62c9faaab8f435cfc7706852f2d1d4e5954c0138",
+      "review": "Own descriptors plus pinned single-return private getters; reads Storage.getItem; no board writes. Observer identity maps are separate. invoke calls genuine retained listeners with bare fn(body)."
+    },
+    {
+      "file": "/root/diplomacy/ops/terminal_passive_capture.js",
+      "sha256": "52bf2eae24c591276d54843780b6cf9d33edc0624fb0f8b48f08c9adfe54f91b",
+      "review": "Reads own data descriptors and records local WeakMap identities. Does not invoke gameplay getters, toJSON or timer serialization."
+    }
+  ]
+}
