@@ -32,3 +32,33 @@ The earlier observation reader's mutable-reference fix remains intact. Owned lif
 The seventeenth diagnosis extended TASK-225/AC1 after review-114. Review-120 failed the older ancestry's exact retained-row comparison before launching services. The new adapter explicitly revalidates that immutable ancestry against its bound self wording, then rebuilds all eight self rows against the current target text using `evidence-self.ownership`. Checkpoint and finalization owners must be identical; every self criterion remains `awaiting-current-invocation`, covered=false. A corrupt-owner regression rejects removal of a checkpoint. No historical file or ancestor assertion is changed.
 
 Review-121 completed the historical row transitions and eight consumer rejection controls, but its current provider failed `coop-actions-1` at action 9 after a 51 ms ArrowDown hold. Prefixes 6 and 9 exited at intentional prefix stops. Prefix 10 failed a peer pan (a different marker from the original host pan); prefix 11 was interrupted. The enclosing supervisor received SIGTERM and recorded actual runner exit -15. The cause of the signal and the browser pan failure are unproven. Owned services and temporary directories were independently audited absent after emergency cleanup. No current criterion or full-pass credit is granted. Use the detached launcher above for future work; it reuses the established launcher pattern. Do not rerun the unchanged failed provider: first capture passive frame/event/offset/bounds evidence at the failing post-reconnect pan.
+
+Diagnosis-122 ran one passive seed-1 fog-on trajectory through
+`ops/diagnose_sequence_pan.py`, detached from the interactive session. Its
+`sequence_pan_observer.js` preload uses the existing before-navigation hook and
+survives reconnect. It records arrow events only, independent animation callbacks,
+the last production game-frame timestamp, offsets, clamp bounds, pressed keys,
+speed, visibility and focus around each unchanged `pan` call. It never replaces
+production callbacks or changes input durations. An independent callback is an
+observation of state, not a production frame entry/exit probe. Event listeners
+run before production handlers; use the following frame/state rows to observe
+their effects. Nominal animation timestamps can precede keydown even when the
+callback executes afterward; use recorded callback ordering.
+
+The diagnostic exited zero in 136740 ms: 12 actions, 183 independently matched
+assertions and five oracle controls. Both pans requested 51 ms. Observed browser
+keydown-to-keyup intervals were 90.0 ms for host and 99.8 ms for peer, with one
+observed frame during each hold. Camera Y increased by 180.144 and 143.856,
+respectively; both pages remained visible/focused and inside vertical bounds.
+The original failure did not reproduce. This proves neither its cause nor a
+repair, and grants no current criterion credit. `ops/audit_sequence_pan.py`
+validates the serialized observations, tested sources, immutable historical
+bindings, OS receipt and independent absence of owned services/directories.
+Four corrupt diagnostic controls reject missing keyup, missing held-frame
+observations, unchanged offsets and a failed OS receipt.
+
+The next experiment must declare a bounded scheduling variable and capture
+production game-frame entry/exit ordering without changing the 51 ms input,
+camera state, clocks or assertions. Do not infer a lost-pulse diagnosis from
+this successful trace or blindly replay the whole provider. The review-114
+selection remains authoritative; 63 obligations and all eight self owners remain.
