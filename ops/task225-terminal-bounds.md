@@ -35,3 +35,20 @@ and capture the actual new-game dimensions and legal move. Preserve every
 existing outcome/reconnect/isolation assertion and the four-journey bound. That
 future acquisition would need its own source/receipt/freshness review and actual
 consumer transition; this inspection does not authorize or establish closure.
+
+## Handoff after the stop condition
+
+The retained `terminal-bounds-163/run-02` inspection already reached this stop
+condition. Revalidating its bindings can establish continued freshness, but cannot
+close the map clause or advance the inventory. Do not treat another inspection
+exit zero as a new criterion transition. Keep TASK-225 pending while full test
+steps 3, 4, 5 and 7 are prerequisite-gated; no successful full invocation exists
+to report as `to-verify`.
+
+Before a future changed acquisition, its work order must address the competitive
+next-game selection explicitly. The predeclared initial fixture alone is
+insufficient: retain both participants' raw next-game dimensions, the shipped UI
+selection, source identities and original process receipts from that acquisition.
+Evaluate the entire AC7 clause map before implementing a whole-row consumer.
+Never overwrite the 21×21 observations or present separately acquired cases as
+one original invocation.
