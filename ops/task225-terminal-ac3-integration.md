@@ -92,3 +92,57 @@ Current selection remains join-139, with 62 prior obligations and eight self
 owners; all full-audit prerequisites remain. Read join-142/acquisition-diagnosis.json,
 raw-boundary-differences.json and handoff-audit.json. Historical failures and all
 unrelated source/index bytes remain preserved. No external blocker is established.
+
+## join-143 command boundary repair
+
+The focused production-source regression `ops/test_terminal_command_boundary.js`
+uses the existing declared mechanics fixture and the actual Events command,
+unit movement, command recording and vectorization implementations. The retained
+pre-change run `join-143/reproduction-03.log` fails both modes' clean-array
+identity assertions. Its recorded stacks prove the command → recording → vector
+→ income → salary → `updateUnits` path in this source fixture. Contents, gold,
+legal movement, undo count and one recorded command remain independently checked.
+This is source-tier attribution, not a recovered stack from the earlier browser.
+
+`Player.updateUnits` now returns early for an already clean registry. Its original
+killed-unit removal and adjacent duplicate cleanup remain intact; a separate
+regression checks those semantics and salary. Command recording remains enabled.
+
+The production pause setter invokes `gameLogicButtons.deactivate`, which sets
+`unactive` and clears it through a native 1000 ms timeout. The source test observes
+this actual timer without freezing or replacing it. The integrated provider now
+waits for both participants' existing cooldowns before the first-move boundary,
+and saves before/after readiness receipts. The reader requires those receipts;
+missing and still-pending controls are rejected. Raw movement/callback identity,
+control, timer, ownership, gold and board comparisons remain unchanged.
+
+One changed acquisition is declared in `join-143/run-01/verification-plan.json`.
+The production repair changes source freshness: older evidence must retain its
+staleness, even if that increases required prior-proof counts. Do not restore a
+fixed count by waiving hashes. Full TASK-225 remains prerequisite-gated.
+
+The changed acquisition completed all four original journeys and 145 provider
+checkpoints (provider OS exit 0). All 58 source tests pass. Both modes' raw
+movement and callback readers pass 110 checks each, including the formerly
+failing registry identities and unchanged peer controls. The actual co-op peer
+readiness receipt records `unactive: true` before the wait and `false` after it.
+
+Cumulative consumption stops earlier, at
+`terminal/implementation/client/player.js`: the immutable outcome reviewer pins
+`85123d8a…`, whereas this deliberately repaired source hashes to `09095f1b…`.
+Consumer OS exit is 1; neither whole AC2 nor whole AC3 has been rebound/consumed.
+Do not overwrite that historical implementation review or waive the new hash.
+The next integrated work needs a separately reviewed current implementation
+binding, retaining the historical pin and proving this exact cleanup delta,
+before another acquisition is justified. Account for source staleness in older
+selections and remove assumptions that the old 62/61 counts necessarily survive
+a runtime repair. Do not replay these four journeys unchanged.
+
+`join-143/run-01/verification-budget.json` records 952936 ms, scopePass false and
+cleanup true. Source/provider/consumer exits are 0/0/1. The outer tool session
+ended with observed exit 143 and no supervisor runner-exit receipt; do not infer
+or fabricate a runner OS exit from its printed summary. All owned service PIDs
+and directories are independently absent. No external cause is established.
+The join-139 selection pointer is preserved, but its old freshness/count claims
+must not be presented as current after this production change. TASK-225 stays
+pending; full audit steps remain gated and no successor has been selected.

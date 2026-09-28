@@ -10,7 +10,7 @@ node='/usr/local/lib/nodejs/node-v20.20.2-linux-x64/bin/node'
 env=dict(os.environ,NODE_PATH='/opt/diplomacy/node_modules',PLAYWRIGHT_BROWSERS_PATH='0')
 commands=[]; success=False
 save=lambda n,x:(out/n).write_text(json.dumps(x,indent=2)+'\n')
-files=['terminal_ac3_provider.js','review_terminal_ac3.js','test_terminal_ac3.js','evidence_terminal_ac3_selection.js','evidence_terminal_ac3_gate.js','run_terminal_ac3_consumer.js','run_terminal_ac3_integration.py','terminal_ac2_provider.js','test_terminal_ac2_provider.js','review_terminal_ac2_join.js','review_terminal_ac2.js',
+files=['test_terminal_command_boundary.js','terminal_ac3_provider.js','review_terminal_ac3.js','test_terminal_ac3.js','evidence_terminal_ac3_selection.js','evidence_terminal_ac3_gate.js','run_terminal_ac3_consumer.js','run_terminal_ac3_integration.py','terminal_ac2_provider.js','test_terminal_ac2_provider.js','review_terminal_ac2_join.js','review_terminal_ac2.js',
        'test_terminal_ac2_join.js','terminal_passive_capture.js','terminal_page_capture.js','test_terminal_page_capture.js','evidence_terminal_ac2_selection.js','evidence_terminal_ac2_gate.js','run_terminal_ac2_consumer.js','run_terminal_ac2_integration.py']
 hashes=lambda:{str(root/'ops'/n):hashlib.sha256((root/'ops'/n).read_bytes()).hexdigest() for n in files}
 before=hashes()
@@ -19,7 +19,7 @@ plan={'fullInvocation':False,'estimateMs':1800000,'stopWorkMs':3300000,'budgetMs
  'tiers':{'contract':'synthetic source only','provider':'four shipped browser/HTTPS/Socket.IO/MongoDB journeys'},
  'newCases':['menu-to-coop','menu-to-competitive','both-recipient-first-move','named-old-listener-invocations','whole-ac3-consumer'],
  'exclusions':['full TASK-225 audit: required local prerequisites remain','later tasks'],
- 'commands':[[node,'--test','ops/test_terminal_ac3.js','ops/test_terminal_ac2_join.js','ops/test_terminal_ac2_provider.js','ops/test_terminal_page_capture.js'],
+ 'commands':[[node,'--test','ops/test_terminal_command_boundary.js','ops/test_terminal_ac3.js','ops/test_terminal_ac2_join.js','ops/test_terminal_ac2_provider.js','ops/test_terminal_page_capture.js'],
  [node,'/root/diplomacy_server/tests/reliability/run.js','--suite','terminal-flow','--output-dir',str(out/'provider')],
  [node,'ops/run_terminal_ac3_consumer.js',str(out)],['git','diff','--check'],['git','-C','/root/diplomacy_server','diff','--check']]}
 save('verification-plan.json',plan)
@@ -47,7 +47,7 @@ def command(argv,cwd,extra=None,name='command'):
  assert code==0,name+' failed: '+str(code)
 
 try:
- command(plan['commands'][0],root,{'AC3_OUTPUT':str(out/'ac3-contract-checkpoints.json'),'AC2_JOIN_OUTPUT':str(out/'contract-checkpoints.json'),'TERMINAL_ADAPTER_OUTPUT':str(out/'page-source')},'source')
+ command(plan['commands'][0],root,{'COMMAND_BOUNDARY_OUTPUT':str(out/'command-boundary-checkpoints.json'),'AC3_OUTPUT':str(out/'ac3-contract-checkpoints.json'),'AC2_JOIN_OUTPUT':str(out/'contract-checkpoints.json'),'TERMINAL_ADAPTER_OUTPUT':str(out/'page-source')},'source')
  save('negative-control-results.json',{'fullInvocation':False,'checkpoints':[c for c in (json.loads((out/'contract-checkpoints.json').read_text())['checkpoints']+json.loads((out/'ac3-contract-checkpoints.json').read_text())['checkpoints']) if c['id'].startswith('reject/')]})
  command(plan['commands'][1],'/root/diplomacy_server',{'TERMINAL_AC3_CAPTURE':'1','NODE_OPTIONS':'--require /root/diplomacy/ops/terminal_ac3_provider.js','OPENING_COMPETITIVE_STOP_AT':str(round(deadline*1000))},'provider')
  command(plan['commands'][2],root,{'EVIDENCE_AUDIT_DEADLINE_MS':str(round(deadline*1000))},'consumer')

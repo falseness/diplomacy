@@ -18,7 +18,7 @@ function instrument(source) {
  assert.equal(source.split('obs.localGameplay(await p.observe(OBSERVE))').length,5);
  source=source.replaceAll('obs.localGameplay(await p.observe(OBSERVE))',
   'obs.localGameplay(await p.observe(() => globalThis.__terminalPassive.gameplay()))');
- replace(' const before=obs.localGameplay'," await capture.pair('first-move-before');\n const before=obs.localGameplay");
+ replace(' const before=obs.localGameplay'," await capture.ready();\n await capture.pair('first-move-before');\n const before=obs.localGameplay");
  replace(" check('new-first-move'", " await capture.pair('first-move-after');\n check('new-first-move'");
  replace(' await p.page.evaluate(body=>globalThis.__oldCallbacks.forEach(fn=>fn(body)),oldBoard);',
   " await capture.pair('callbacks-before');\n for(const participant of ps)await capture.invoke(participant,oldBoard);\n await capture.pair('callbacks-after');");
@@ -29,6 +29,17 @@ function recorder({ps,service,trace},mode,terminal) {
  trace('ac3-install',{mode,helperSha256:PIN,instrumentedSha256:hash(instrument(fs.readFileSync(FILE,'utf8'))),
   providerSha256:hash(fs.readFileSync(__filename)),tier:'browser-menu-and-movement;source-executed-callbacks'});
  const emit=r=>trace('ac3-passive',{sequence:++sequence,mode,...r});
+ async function ready() {
+  for(const p of ps) {
+   const before=await p.page.evaluate(()=>({at:Date.now(),unactive:nextTurnButton.unactive===true}));
+   // Overlay dismissal starts a native one-second cooldown, including on the
+   // peer. Bracket movement only after it settles; never freeze or rewrite it.
+   await p.page.waitForFunction(()=>nextTurnButton.unactive!==true,null,{timeout:5000});
+   const after=await p.page.evaluate(()=>({at:Date.now(),unactive:nextTurnButton.unactive===true}));
+   assert.equal(after.unactive,false,'new-game control ready');
+   trace('ac3-readiness',{mode,participant:p.name,before,after});
+  }
+ }
  async function page(p,boundary) {
   const raw=await p.page.evaluate(()=>globalThis.__terminalPassive.read());
   const connection=await p.page.evaluate(()=>({mode:gameSettings.coop?'coop':'competitive',lobby:onlineLobby}));
@@ -49,7 +60,7 @@ function recorder({ps,service,trace},mode,terminal) {
   emit({kind:'invoked',participant:p.name,session:sessions.get(p.name),invoked,body,
    tier:'source-executed-callbacks'});
  }
- return {page,pair,retain,invoke};
+ return {page,pair,retain,invoke,ready};
 }
 function install() {
  const Module=require('node:module'),load=Module._extensions['.js'];

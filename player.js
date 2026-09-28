@@ -58,6 +58,10 @@ class Player {
         return false
     }
     updateUnits() {
+        // Income/vectorization also calls this method. Keep a clean registry's
+        // reference stable when there is no removal or adjacent duplicate.
+        if (!this.units.some((unit, i) => unit.killed ||
+            (i > 0 && unit === this.units[i - 1]))) return
         for (let i = 0; i < this.units.length; ++i) {
             if (this.units[i].killed) {
                 this.units.splice(i--, 1)

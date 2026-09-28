@@ -31,6 +31,7 @@ function fixture(mode='coop') {
  }
  const documents=[terminal,{gameID:'new-game',rounds:[[{parallelTurnResult:{gameSettings:{coop:mode==='coop'?{}:null}}}]]}];
  const pair=boundary=>{for(const participant of names)emit({kind:'page',participant,session:'source-only-'+participant,boundary,raw:clone(snapshots[participant]),connection:{mode,lobby:{occupiedHumans:2}}});emit({kind:'persistence',boundary,documents:clone(documents)});};
+ for(const participant of names)trace.push({stage:'ac3-readiness',mode,participant,before:{at:1,unactive:true},after:{at:1001,unactive:false}});
  pair('first-move-before');
  inputs.push(...['select new game unit cell=1,1','first legal move in next game cell=2,1'].map(label=>({label,player:'p1',action:'tap',via:'mouse.click'})));
  const s=snapshots.p1.state,unit=s.players.items[1].units.items[0],empty=clone(s.grid.items[2].items[1].unit);
@@ -44,6 +45,8 @@ test('complete synthetic AC3 contract both modes, no gameplay credit',()=>{
  for(const mode of ['coop','competitive']){const r=R.reviewCase(fixture(mode));assert.equal(r.wholeCriterionCredit,false);results.push(...r.checks);}
 });
 const controls=[
+ ['missing-ready',x=>{x.trace=x.trace.filter(r=>r.stage!=='ac3-readiness');},/native readiness count/],
+ ['pending-ready',x=>{x.trace.find(r=>r.stage==='ac3-readiness').after.unactive=true;},/ready-control/],
  ['empty-retained',x=>{x.trace.find(r=>r.kind==='retained').retained=[];},/empty retained/],
  ['missing-invoked',x=>{delete x.trace.find(r=>r.kind==='invoked').invoked;},/assert|expression/i],
  ['empty-invoked',x=>{x.trace.find(r=>r.kind==='invoked').invoked=[];},/invocation receipts/],

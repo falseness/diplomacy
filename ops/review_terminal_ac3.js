@@ -48,6 +48,10 @@ function reviewCase({mode,trace,inputs}) {
  };
  const from=coordinate('select new game unit'),to=coordinate('first legal move in next game');
  for(const participant of ['p1','p2']) {
+  const ready=one(trace.filter(r=>r.stage==='ac3-readiness'&&r.participant===participant),'native readiness');
+  ck(participant+'/ready-mode',mode,ready.mode);
+  ck(participant+'/ready-control',false,ready.after.unactive);
+  assert(Number.isFinite(ready.before.at)&&ready.after.at>=ready.before.at,'ordered readiness timing');
   const retained=one(rows.filter(r=>r.kind==='retained'&&r.participant===participant),'named retention');
   const invoked=one(rows.filter(r=>r.kind==='invoked'&&r.participant===participant),'named invocation');
   const old=get(participant,'menu-before'),menu=get(participant,'menu-after'),pre=get(participant,'first-move-before'),post=get(participant,'first-move-after'),cb=get(participant,'callbacks-before'),after=get(participant,'callbacks-after');
