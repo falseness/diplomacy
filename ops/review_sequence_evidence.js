@@ -4,6 +4,8 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const A=require('/root/diplomacy_server/tests/reliability/helpers/evidence-audit');
 const O=require('/root/diplomacy_server/tests/reliability/helpers/observations');
+const {reviewRounds}=require('./review_sequence_rounds');
+const {reviewFailure}=require('./review_sequence_failure');
 const CASES=['coop','competitive'].flatMap(mode=>[0,1].map(actionSeed=>({id:`${mode}-actions-${actionSeed}`,mode,actionSeed,mapSeed:1,fog:!!actionSeed,join:actionSeed?'simultaneous':'sequential',humans:2,actions:12,tier:'shipped browser UI + real HTTPS/Socket.IO/MongoDB'})));
 const distance=(a,b)=>{const z=p=>p.y-(p.x-(p.x&1))/2;return Math.max(Math.abs(a.x-b.x),Math.abs(z(a)-z(b)),Math.abs(a.x+z(a)-b.x-z(b)));};
 function destination(g,u,slot,seed){
@@ -20,7 +22,7 @@ function review(dir){
  const coverage=A.read(path.join(dir,'coverage-results.json')),manifest=coverage.evidenceHashes,proofs={},checks=[];
  const file=n=>{A.proofKey(dir,n,manifest);proofs[n]=manifest[n];return path.join(dir,n);};
  const read=n=>A.read(file(n)),text=n=>fs.readFileSync(file(n),'utf8');
- const check=(id,expected,observed)=>{assert.deepEqual(observed,expected,'sequence/'+id);checks.push({id,expected,observed,pass:true});};
+ const check=(id,expected,observed)=>{assert.deepEqual(observed,expected,'sequence/'+id);checks.push({id,expected:structuredClone(expected),observed:structuredClone(observed),pass:true});};
  const ids=read('source-identities.json'),normalizer='tests/reliability/helpers/observations.js';assert.equal(A.hash(path.join(A.root,normalizer)),ids.after.server.files[normalizer],'changed-observation-normalizer');
  check('manifest',CASES,read('sequence-manifest.json').cases);check('plan',CASES,read('verification-plan.json').cases);
  check('results',CASES.map(c=>({...c,pass:true,exit:0,proof:c.id})),coverage.cases);
@@ -53,6 +55,7 @@ function review(dir){
    }
   }
   ck('moves',4,moveIndex);
+  reviewRounds({c,journal,actions,wire,cp,ck});
   if(c.mode==='coop'){
    ck('seed-size-fog',{seed:1,size:'tiny',fog:c.fog},observed('coop:seed-size-fog'));
    const before=journal.find(r=>r.stage==='round-complete'&&r.player==='host'&&r.state.game.gameRound===1)?.state.game;
@@ -62,6 +65,15 @@ function review(dir){
    if(!c.actionSeed){const attack=journal.find(r=>r.stage==='attack'),initial=journal.find(r=>r.stage==='attack-initial-fixture');assert(initial&&attack,'sequence-missing-attack');ck('fixture-size',{x:12,y:12},initial.spec.size);const expected=structuredClone(attack.before);ck('attack-units',[['noob',4,5,2,2],['noob',4,4,2,2]],expected.players.slice(1).flatMap(p=>p.units.map(u=>[u.name,u.x,u.y,u.hp,u.moves])));expected.players[1].units[0].moves=0;expected.players[2].units[0].hp=1;expected.players[2].units[0].wasHitted=true;ck('attack',expected,attack.after);ck('attack-undo',attack.before,observed(':attack-undo-exact'));}
   }
  }
- return {fullCriterionReview:false,criteria:[],checks,proofs,caseIds:CASES.map(c=>c.id),unresolved:['complete recipient-state and grid-occupancy derivation','original failure/minimized-prefix/regression linkage','whole-criterion tier/source/receipt/budget/cleanup reviews'],tier:'source-executed reader of archived browser/network observations; no new browser execution'};
+ const failureLink=reviewFailure(check,proofs);
+ // SHA-256 values independently compared with the retained TASK-220 commit
+ // c9cfc707, not inferred from the archive's pass flag. Read source only.
+ const repairHashes={'tests/reliability/helpers/sequence-actions.js':'89b81d9c346659e52a23cb724f1fcd5d4beed9a3c64b10df80c912c9f49a44d3','tests/reliability/sequence-exploration.test.js':'27e5c4ea822595c45555e1e0c52b01d907ae7c7869d02431d42948cc9b058bf1'};
+ for(const [n,h] of Object.entries(repairHashes)){check('regression/archived-source/'+n,h,ids.after.server.files[n]);const p=path.join(A.root,n);check('regression/retained-source/'+n,h,A.hash(p));proofs[p]=h;}
+ const regression=read('checkpoints.json').checkpoints.filter(r=>r.id.startsWith('source-regression/'));
+ check('regression/observation-shapes',['raw','projected'].flatMap(shape=>[0,1].map(seed=>'source-regression/'+shape+'/'+seed)).sort(),regression.map(r=>r.id).sort());
+ for(const row of regression)check('regression/'+row.id,{x:0,y:row.id.endsWith('/0')?1:2},row.observed);
+ assert.equal(new Set(checks.map(c=>c.id)).size,checks.length,'sequence-duplicate-check-id');
+ return {fullCriterionReview:false,criteria:[],checks,proofs,failureLink,caseIds:CASES.map(c=>c.id),unresolved:['whole-criterion tier/source/receipt/budget/cleanup reviews and cumulative adapter'],tier:'source-executed reader of archived browser/network observations; no new browser execution'};
 }
 module.exports={CASES,destination,projection,review};
