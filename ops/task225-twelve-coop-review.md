@@ -70,3 +70,52 @@ it omits payloads and does not alter handlers, input, clocks or timeouts. A
 network-only diagnostic cannot replace the required complete provider. The
 observed increasing board latency warrants measuring server join/serialization
 cost before a bounded repair and full replay; its root cause is not proven.
+
+For server CPU sampling, substitute `profile_twelve_coop_join.js` for the
+passive preload above. It adds an inspector profiler to the isolated server
+through the existing `serverPreloads` option, saving five-second sample
+intervals alongside the passive event trace. It changes no game handlers,
+inputs, deadlines or clocks. After the supervisor writes `process-exit.json`,
+run `python3 ops/summarize_join_profile.py <diagnostic-directory>` to create
+`profile-summary.json`. The summary refuses missing profiles and records
+source locations, sample weights and initial-board latencies. Recursive
+frames count once per sample in inclusive totals. Sampling covers the whole
+network workload, including holds; it does not measure per-join call counts.
+The unfinished final profiling interval is unavailable after service teardown.
+
+`diagnosis-111` completed the unchanged twelve-client network case with 141
+checkpoints and OS exit zero in 56886 ms. All twelve initial boards arrived
+within the existing timeout (6293..12830 ms). Eight CPU intervals identify
+board reconstruction/fog updates under influence-field preparation and
+`uniteTurns`, along with BSON deserialization and garbage collection. This
+is a diagnostic observation, not a demonstrated repair or an explanation
+of the preceding failures. No production changes or timeout increases were
+made. A single complete provider replay, `review-111`, was declared after
+this diagnosis; its independently observed exit and complete proof audit
+must be checked before consuming any criteria. Even a passing replay cannot
+close AC4 without a verified cause and repair of the retained failure.
+The diagnostic's later analysis/audit exceeded its declared 300000 ms
+budget; `diagnosis-111/verification-budget.json` explicitly records that
+limitation. Its child exit zero is not a complete green invocation. The
+separate `review-111` deadline includes its own full scoped verification
+sequence, final audit and cleanup.
+
+`review-111` completed with an OS-observed runner exit of zero in 1798646 ms
+and no supervisor signals or timeout. Its uninstrumented provider passed
+217 checkpoints with exit zero, both cases complete and cleanup true.
+The independent reader passed 1214 assertions and all ten consumer controls,
+consuming eight TASK-218 criteria (79 to 71 required prior targets).
+The handoff audit rehashed 2330 source entries, 115 original proofs, 118
+selected proofs, seven frozen tools and 115 historical files. Resume
+`review-111/reviewed-crosswalk.json` through `evidence_twelve_coop_gate.js`;
+the hard-coded review runner's 79-to-71 transition is now complete and must
+not be used as a generic resume command.
+
+TASK-225 remains pending: 51 earlier-task criteria, 20 research targets and
+all eight invocation self checks remain. TASK-217/AC4 and TASK-218/AC4 are
+still unresolved; the earlier twelve-client failures remain unexplained.
+The next provider to review is TASK-219, whose fresh inspection retains 17
+source mismatches and a missing exact-file case proof. Freeze its independent
+reader/projection before any justified refresh. Preserve this matching
+twelve-client provider and the entire cumulative ancestry. No full audit,
+release readiness or external-blocker claim follows from this scoped pass.
