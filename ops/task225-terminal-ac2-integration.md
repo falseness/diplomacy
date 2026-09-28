@@ -48,3 +48,67 @@ The eventual provider command adds `TERMINAL_AC2_CAPTURE=1` and
 existing terminal-flow runner environment. This document is not an execution
 receipt. Full TASK-225 steps 3/4/5/7 remain gated; no full pass or current credit
 is claimed.
+
+## Joined acquisition entry point
+
+`python3 ops/run_terminal_ac2_integration.py <fresh-directory>` declares one
+30-minute estimate, runs the source contracts, all four original terminal
+journeys with the preload, then the independent reader and actual cumulative
+consumer. It retains actual OS exits and full output; failure stops consumption.
+The outer deadline covers the entire sequence and leaves cleanup time.
+
+`review_terminal_ac2.js` reuses the frozen initial/commit/outcome derivation,
+then `review_terminal_ac2_join.js` joins fixture hashes, actual assignment slots,
+UUID game identity (distinct from Mongo `_id`), ordered passive page/database
+records, original packet bytes and dispatch, reconnect sessions, and winner UI.
+Both participants and all boundaries are mandatory. Same-document replay compares
+raw storage; reconnect compares independently checked board content and commit
+identity. The supported four fixtures end with no living towns; any expansion
+fails closed until its town/production contract is reviewed. Source synthetic
+positives never grant coverage.
+
+`evidence_terminal_ac2_gate.js` consumes the complete AC2 row through the actual
+inventory consumer using a separate provider key. AC1, AC3, the historical
+sequence rows and self owners retain their prior dispositions. A fresh
+`reviewed-crosswalk.json` is a candidate only until the comparison succeeds.
+
+The first real acquisition found two capture defects hidden by the earlier
+source fixtures: StaticNature has an own `hp: undefined`, and real unit movement
+uses `InterationWithUnit.#moves` while DemonPlayer gold is a constant getter.
+The adapter distinguishes stored undefined from absence and pins those reviewed
+getters. It rejects unreviewed moves overrides (including the catapult override,
+which these four terminal fixtures do not use), rather than treating base private
+storage as an overridden value. No gameplay code or old assertions are changed.
+Failed runs and their exact tested source copies remain under join-138.
+
+## Current acquisition stop (join-138)
+
+No whole AC2 row has been consumed. `run-01` failed on stored undefined nature
+HP; `run-02` passed the complete original four-journey provider but the independent
+reader rejected `moves required` (demon gold was also absent). `run-03` tested
+the corrected private moves/gold capture: all 27 source tests passed and victory
+and draw completed, but the third journey failed at the existing prepared-state
+reconnect with `p1: input "reconnect slot" had no observed effect (!menu.visible)`.
+Its fourth journey never ran. Three owned service cleanup receipts pass.
+
+A cheap read of the completed current victory trace then failed at
+`terminal-victory/capture-1/visible`: `raw.ui.menu` is `{absent:true}`. Both shipped
+`Menu.visible` (`menu/menu.js`) and `NextTurnPauseInterface.visible`
+(`interface/nextTurnPause.js`) are private getters, unlike the earlier source
+fixture's own boolean properties. Retain this strict rejection; do not replace
+absence with false, drop the assertion, or grant partial criterion credit.
+
+Next acquisition must first model those exact production UI getter brands in the
+source fixture and add a reviewed passive route. Separately capture the prepared
+reconnect failure's actual page/input/connection state **before** withServices
+teardown: current failure screenshots are taken after service cleanup and show a
+connection error, so they cannot establish its initiating cause. The existing
+observer wrapper delegates that nonterminal reconnect to the original helper;
+no controlled comparison attributes the failure to capture changes, gameplay,
+or an external blocker. Do not retry the unchanged full provider or alter input
+semantics speculatively. Once both input/capture prerequisites are demonstrated,
+use one fresh <=45-minute four-journey/reader/consumer invocation (55-minute stop,
+cleanup before 60). Preserve all old assertions, genuine packet dispatch, and
+both failed runs. Current selection remains review-114/evidence_competitive_gate;
+review-127 ancestry remains frozen. The new AC2 selection/gate is a candidate,
+not a consumed successor; full TASK-225 remains prerequisite-gated.

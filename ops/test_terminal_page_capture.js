@@ -17,7 +17,7 @@ function check(id, expected, observed) {
     assert.deepEqual(observed, expected, id);
 }
 const files = ['player.js', 'sprites/sprite.js', 'sprites/entities/entity.js',
-    'sprites/entities/units/unit/unit.js', 'sprites/empty.js', 'options/timer.js'];
+    'sprites/entities/units/unit/unit.js', 'sprites/entities/units/unit/interactionWithUnit.js', 'sprites/empty.js', 'options/timer.js'];
 const privateFiles = ['sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js',
     'sprites/entities/buildings/manufactures/preparingManufacture/production.js'];
 // Rendering superclass stub only; private brands and getters are production definitions.
@@ -330,4 +330,57 @@ test('integrated adapter: native Storage, passive UI, identities, legacy mutatio
         await context.close(); await browser.close();
         if(dir) fs.writeFileSync(path.join(dir,'cleanup.json'),JSON.stringify({browserClosed:!browser.isConnected(),ownedServices:0})+'\n');
     }
+});
+
+
+test('passive nature capture distinguishes stored undefined from absent HP', async () => {
+    const browser = await chromium.launch({headless:true,args:['--no-sandbox']});
+    try {
+        const page = await browser.newPage();
+        await page.route('http://terminal-fixture.test/**', route => route.fulfill({body:'<!doctype html>'}));
+        await page.goto('http://terminal-fixture.test/');
+        await page.addScriptTag({content:source + '\n' + fixture});
+        await page.addScriptTag({content:`(${installTerminalPageCapture})(${createTerminalCapture});`});
+        const result = await page.evaluate(() => {
+            // Same own storage produced by Entity for static nature with no
+            // maxHP; no prototype getter or game interaction is substituted.
+            nature.push({name:'sea',hp:undefined,killed:false,coord:{x:0,y:0}},
+                {name:'sea',killed:false,coord:{x:0,y:0}});
+            const before=rawBaseline(),read=__terminalPassive.read();
+            return {hp:read.extended.nature.items.map(n=>n.hp),unchanged:sameBaseline(before,rawBaseline())};
+        });
+        check('nature/undefined-vs-absent', [{undefined:true},{absent:true}],result.hp);
+        check('nature/raw-storage-unchanged',true,result.unchanged);
+    } finally {await browser.close();}
+});
+
+
+test('passive private moves and constant demon gold match production storage', async () => {
+    const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+    try {
+        const page=await browser.newPage();
+        await page.route('http://terminal-fixture.test/**',r=>r.fulfill({body:'<!doctype html>'}));
+        await page.goto('http://terminal-fixture.test/');
+        // Production Way construction is retained; no movement methods run.
+        await page.addScriptTag({content:source+'\n'+fixture});
+        await page.addScriptTag({content:`(${installTerminalPageCapture})(${createTerminalCapture});`});
+        const r=await page.evaluate(()=>{
+            unit.interaction=new InterationWithUnit(2);
+            const demon=Object.assign(Object.create(DemonPlayer.prototype),{units:[],towns:[]});
+            players.push(demon);
+            const before=rawBaseline(),a=__terminalPassive.read();
+            const unchanged=sameBaseline(before,rawBaseline());
+            unit.interaction.moves=1;
+            const b=__terminalPassive.read();
+            Object.defineProperty(unit.interaction,'moves',{get(){throw Error('must not invoke');}});
+            let rejected;try {__terminalPassive.read();} catch(e){rejected=e.message;}
+            return {before:a.state.players.items[1].units.items[0].moves,
+                after:b.state.players.items[1].units.items[0].moves,
+                gold:a.state.players.items[2].gold,ownGold:Object.hasOwn(demon,'gold'),unchanged,rejected};
+        });
+        check('live-storage/private-moves',[2,1],[r.before,r.after]);
+        check('live-storage/demon-gold',[0,false],[r.gold,r.ownGold]);
+        check('live-storage/no-mutation',true,r.unchanged);
+        check('live-storage/refuse-override','unreviewed moves override',r.rejected);
+    } finally {await browser.close();}
 });

@@ -101,14 +101,13 @@ test('source recorder waits for ordinary terminal delivery when persistence is a
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'terminal-ac2-wiring-'));
     try {
         const file = path.join(dir, 'fixture.json'); fs.writeFileSync(file, '{}\n');
-        const calls = [], gameId = '0123456789abcdef01234567';
+        const calls = [], gameId = 'fb2291ee-a285-4743-bd01-0e6b41c07efe';
         const service = {databaseName: 'fixture', mongo: {db(name) {
             assert.equal(name, 'fixture');
             return {collection(name) {
                 assert.equal(name, 'games');
                 return {async findOne(query) {
-                    assert.deepEqual(Object.keys(query), ['_id']);
-                    assert.equal(String(query._id), gameId); calls.push('read');
+                    assert.deepEqual(query, {gameID: gameId}); calls.push('read');
                     return {rounds: [[{parallelTurnResult: {gameSettings: {coop: {result: 'defeat'}}}}]]};
                 }};
             }};

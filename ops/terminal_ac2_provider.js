@@ -15,6 +15,9 @@ function createRecorder({ps, service, trace, dir, fixtureFile}) {
     const sessions = new WeakMap();
     let sequence = 0;
     const fixtureSha256 = hash(fs.readFileSync(fixtureFile));
+    trace('ac2-install', {caseId: path.basename(dir), fixtureSha256,
+        tools: Object.fromEntries(['terminal_ac2_provider.js', 'terminal_page_capture.js',
+            'terminal_passive_capture.js'].map(n => [n, hash(fs.readFileSync(path.join(__dirname, n)))]))});
     const emit = record => {
         const row = {schema: 'terminal-ac2-capture-v1', sequence: ++sequence,
             caseId: path.basename(dir), fixtureSha256, ...record};
@@ -24,10 +27,8 @@ function createRecorder({ps, service, trace, dir, fixtureFile}) {
     };
     async function readDocument(gameId) {
         assert.equal(typeof gameId, 'string', 'passive game ID required');
-        const {ObjectId} = require('node:module')
-            .createRequire('/root/diplomacy_server/server/index.js')('mongodb');
         return service.mongo.db(service.databaseName).collection('games')
-            .findOne({_id: new ObjectId(gameId)});
+            .findOne({gameID: gameId});
     }
     async function terminal(p) {
         const current = await p.page.evaluate(() => ({
@@ -69,7 +70,8 @@ function createRecorder({ps, service, trace, dir, fixtureFile}) {
         await persistence(boundary, rows[0].gameId);
         return rows;
     }
-    return {snapshot, persistence, pair, terminal};
+    return {snapshot, persistence, pair, terminal,
+        finish: () => trace('ac2-lifecycle', {lifecycle: service.lifecycle})};
 }
 
 // Dependencies are injectable for source-tier wiring tests. Production passes
@@ -98,13 +100,15 @@ function wire({browser, next, reconnect, OBSERVE, recorder = createRecorder}) {
     };
     browser.run = async function(c, out, check, t, hooks = {}) {
         const connected = hooks.connected;
+        let capture;
         const wrapped = {...hooks, connected: async ctx => {
             if (connected) await connected(ctx);
             const dir = path.join(out, c.id);
-            const capture = recorder({...ctx, dir, fixtureFile: path.join(dir, 'declared-fixture.json')});
+            capture = recorder({...ctx, dir, fixtureFile: path.join(dir, 'declared-fixture.json')});
             for (const p of ctx.ps) contexts.set(p, capture);
         }};
-        return originalRun(c, out, check, t, wrapped);
+        try { return await originalRun(c, out, check, t, wrapped); }
+        finally { if (capture) capture.finish?.(); }
     };
     next.run = async function(ctx, mode, check) {
         const p = ctx.ps[0], capture = contexts.get(p);

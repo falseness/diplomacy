@@ -17,6 +17,9 @@ function installTerminalPageCapture(createCapture) {
     const productionCoord = pin(Production.prototype, 'coord', 'getcoord(){returnthis.#coord}');
     const productionTown = pin(ManufactureProduction.prototype, 'town', 'gettown(){returnthis.#town}');
     const hasPrototype = (prototype, object) => Reflect.apply(Object.prototype.isPrototypeOf, prototype, [object]);
+    const privateMoves = pin(InterationWithUnit.prototype, 'moves', 'getmoves(){returnthis.#moves}');
+    const movesGetter = Object.getOwnPropertyDescriptor(InterationWithUnit.prototype, 'moves').get;
+    const demonGold = pin(DemonPlayer.prototype, 'gold', 'getgold(){return0}');
     const getItem = Storage.prototype.getItem;
     const refs = new WeakMap();
     let serial = 0, retained = null;
@@ -33,6 +36,9 @@ function installTerminalPageCapture(createCapture) {
     };
     const fields = (object, names) => Object.fromEntries(names.map(k => {
         const value = own(object, k);
+        // StaticNature stores an own hp with value undefined. Preserve it
+        // distinctly from an absent descriptor without invoking a getter.
+        if (value === undefined) return [k, {undefined: true}];
         if (value !== null && typeof value === 'object') {
             if (value.absent === true && Object.keys(value).length === 1) return [k, {absent: true}];
             throw Error('scalar storage required: ' + k);
@@ -43,7 +49,29 @@ function installTerminalPageCapture(createCapture) {
         return [k, value];
     }));
     const readCoord = object => Object.hasOwn(object, 'coord') ? own(object, 'coord') : productionCoord(object);
-    const capture = createCapture({readCoord});
+    const readMoves = interaction => {
+        if (!hasPrototype(InterationWithUnit.prototype, interaction)) {
+            const d = Object.getOwnPropertyDescriptor(interaction, 'moves');
+            if (d && !('value' in d)) throw Error('unreviewed moves accessor');
+            return d?.value;
+        }
+        let proto = interaction, descriptor;
+        while (proto && !descriptor) {
+            descriptor = Object.getOwnPropertyDescriptor(proto, 'moves');
+            proto = Object.getPrototypeOf(proto);
+        }
+        // Catapult and any future override require their own reviewed route;
+        // never misrepresent the base private value as an overridden getter.
+        if (descriptor?.get !== movesGetter) throw Error('unreviewed moves override');
+        return privateMoves(interaction);
+    };
+    const readGold = player => {
+        if (!Object.hasOwn(player, 'gold') && hasPrototype(DemonPlayer.prototype, player)) return demonGold(player);
+        const d = Object.getOwnPropertyDescriptor(player, 'gold');
+        if (d && !('value' in d)) throw Error('unreviewed gold accessor');
+        return d?.value;
+    };
+    const capture = createCapture({readCoord, readMoves, readGold});
     const coord = object => fields(readCoord(object), ['x', 'y']);
     const list = (array, read) => {
         if (!Array.isArray(array)) throw Error('registry array required');

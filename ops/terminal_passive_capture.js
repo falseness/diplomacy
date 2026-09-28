@@ -4,7 +4,7 @@
 // Default reads never traverse gameplay prototypes or call getters. The page
 // adapter may supply its reviewed private-coordinate reader. Never pack or call toJSON.
 // IDs belong to this observer session; they are not network/game unit IDs.
-function createTerminalCapture({readCoord} = {}) {
+function createTerminalCapture({readCoord, readMoves, readGold} = {}) {
     const identities = new WeakMap();
     let next = 1;
     const own = (object, key) => {
@@ -40,7 +40,7 @@ function createTerminalCapture({readCoord} = {}) {
         return {identity: identity(value), ...fields(value, ['id', 'name', 'hp', 'killed', 'wasHitted']),
             coord: fields(readCoord ? readCoord(value) : own(value, 'coord'), ['x', 'y']),
             // Unit.moves is a getter; its backing storage is interaction.moves.
-            moves: interaction === undefined ? {absent: true} : scalar(own(interaction, 'moves'))};
+            moves: interaction === undefined ? {absent: true} : scalar(readMoves ? readMoves(interaction) : own(interaction, 'moves'))};
     };
     const clock = value => value === null ? null : {identity: identity(value),
         ...fields(value, ['time', 'timeAdd', 'lastPause', 'isTick'])};
@@ -52,7 +52,7 @@ function createTerminalCapture({readCoord} = {}) {
         const result = {
             schema: 'terminal-passive-v1',
             ...fields(root, ['whooseTurn', 'gameRound', 'gameSlot']),
-            players: array(players, p => ({identity: identity(p), gold: scalar(own(p, 'gold')),
+            players: array(players, p => ({identity: identity(p), gold: scalar(readGold ? readGold(p) : own(p, 'gold')),
                 units: array(own(p, 'units'), entity), towns: array(own(p, 'towns'), entity)})),
             grid: array(own(own(root, 'grid'), 'arr'), column => array(column, cell => ({
                 identity: identity(cell),
