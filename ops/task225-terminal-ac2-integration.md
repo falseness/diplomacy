@@ -1,3 +1,27 @@
+# Current acquisition result: join-139
+
+Whole TASK-221/AC2 is now consumed as **covered-current**. The current selection
+is `artifacts/TASK-225/join-139/run-01/reviewed-crosswalk.json` with
+`ops/evidence_terminal_ac2_gate.js`. The complete four-journey provider and joined
+reader passed; the actual cumulative consumer reduced required prior obligations
+from 63 to 62, preserving every other row and all eight self owners. The measured
+invocation passed in 1,345,306 ms with all actual exits zero and cleanup complete.
+
+The new private visibility reads pass 29 source tests; the provider has 145
+checkpoints and the whole-criterion reader has 1,285 assertions. The previously
+failing prepared reconnect passed; its former cause remains unproven. No runtime
+input or gameplay behavior was changed. Reconnect rejection now captures page
+state and a screenshot before service teardown, preserving the original error.
+
+Do not rerun this completed acquisition unchanged. Remaining local obligations,
+including AC3 raw callback receipts and complete first-move/lifecycle proof, still
+gate full TASK-225 verification. It remains pending. The root required-artifact
+audit explicitly distinguishes scoped evidence from missing full-task proof.
+review-114 and review-127 remain immutable historical ancestry.
+
+The sections below record the acquisition design and earlier stops. Their old
+not-ready/selection statements are historical and superseded by this result.
+
 # Whole AC2 acquisition contract
 
 The provider integration is `terminal_ac2_provider.js`. It loads through an
@@ -112,3 +136,23 @@ cleanup before 60). Preserve all old assertions, genuine packet dispatch, and
 both failed runs. Current selection remains review-114/evidence_competitive_gate;
 review-127 ancestry remains frozen. The new AC2 selection/gate is a candidate,
 not a consumed successor; full TASK-225 remains prerequisite-gated.
+
+
+## join-139 acquisition change
+
+The adapter now pins the production `Menu.visible` and
+`NextTurnPauseInterface.visible` private getter bodies. A Chromium source test
+constructs the full production classes with rendering/tree dependencies stubbed,
+checks both values, changes them through production setters, and checks pinned
+reads and private-brand rejection. It makes no gameplay claim.
+
+The provider now records reconnect page state before/after and, on rejection,
+before the exception unwinds service teardown. A failure screenshot is captured
+at that same boundary; the original error still propagates. The diagnostic logs
+menu selection, slot coordinates, loading, connection, recipient and result,
+never the credential. No input, timing predicate or existing assertion changes.
+This addresses the missing diagnostic prerequisite for one changed acquisition;
+the prior reconnect cause remains unproven. The existing 30-minute entry-point
+plan still covers source tests, four journeys, joined reader, cumulative consumer,
+hash/exit audit and cleanup. A failure stops at the actual boundary and receives
+no criterion credit.

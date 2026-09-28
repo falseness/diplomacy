@@ -20,6 +20,9 @@ function installTerminalPageCapture(createCapture) {
     const privateMoves = pin(InterationWithUnit.prototype, 'moves', 'getmoves(){returnthis.#moves}');
     const movesGetter = Object.getOwnPropertyDescriptor(InterationWithUnit.prototype, 'moves').get;
     const demonGold = pin(DemonPlayer.prototype, 'gold', 'getgold(){return0}');
+    const menuVisible = pin(Menu.prototype, 'visible', 'getvisible(){returnthis.#visible}');
+    const pauseVisible = pin(NextTurnPauseInterface.prototype, 'visible', 'getvisible(){returnthis.#visible}');
+    const readVisible = (object, getter) => Object.hasOwn(object, 'visible') ? own(object, 'visible') : getter(object);
     const getItem = Storage.prototype.getItem;
     const refs = new WeakMap();
     let serial = 0, retained = null;
@@ -103,7 +106,7 @@ function installTerminalPageCapture(createCapture) {
             whooseTurn, gameRound, gameSlot, onlineCommit, onlineSocket, timer, timerStorage,
             oldSocket: retained ? retained.socket : null, oldTimer: retained ? retained.timer : null};
         return {schema: 'terminal-page-v1', state: capture(root),
-            ui: {menu: own(menu, 'visible'), pause: own(nextTurnPauseInterface, 'visible')},
+            ui: {menu: readVisible(menu, menuVisible), pause: readVisible(nextTurnPauseInterface, pauseVisible)},
             extended: {
                 towns: list(players, p => list(own(p, 'towns'), town)),
                 external: list(external, entity), externalProduction: list(externalProduction, production),

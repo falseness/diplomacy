@@ -70,7 +70,27 @@ function createRecorder({ps, service, trace, dir, fixtureFile}) {
         await persistence(boundary, rows[0].gameId);
         return rows;
     }
-    return {snapshot, persistence, pair, terminal,
+    async function diagnostic(p, boundary) {
+        // Capture before reconnect rejection unwinds withServices and closes
+        // the server. These are observations only, never replacement inputs.
+        const state = await p.page.evaluate(() => {
+            const m = typeof menu === 'undefined' ? null : menu;
+            const rect = m?.startGame?.buttons[0]?.movingForm?.elements[0]?.rect;
+            return {menuVisible:m?.visible, pauseVisible:typeof nextTurnPauseInterface === 'undefined' ? null : nextTurnPauseInterface.visible,
+                selectedTree:m ? ['main','online','startGame','load'].find(k=>m[k]===m.selectedTree) || 'other' : null,
+                slot:rect ? {x:rect.centerX,y:rect.centerY,canClick:rect.canClick} : null,
+                images:typeof imagesCountLoaded === 'undefined' ? null : {loaded:imagesCountLoaded,total:images.length},
+                connected:typeof onlineSocket === 'undefined' ? null : onlineSocket?.connected,
+                gameId:typeof onlineCommit === 'undefined' ? null : onlineCommit?.gameID,
+                recipient:typeof whooseTurn === 'undefined' ? null : whooseTurn,
+                waiting:typeof gameEvent === 'undefined' ? null : gameEvent?.waitingMode,
+                result:typeof gameSettings === 'undefined' ? null : gameSettings?.coop?.result,
+                visibility:document.visibilityState};
+        });
+        trace('ac2-reconnect-diagnostic', {participant:p.name,boundary,state});
+        if (boundary === 'failure') await p.page.screenshot({path:path.join(dir,'screenshots',p.name+'-reconnect-before-teardown.png')});
+    }
+    return {snapshot, persistence, pair, terminal, diagnostic,
         finish: () => trace('ac2-lifecycle', {lifecycle: service.lifecycle})};
 }
 
@@ -86,7 +106,15 @@ function wire({browser, next, reconnect, OBSERVE, recorder = createRecorder}) {
         const isTerminal = capture && await capture.terminal(p);
         const before = isTerminal ? await capture.snapshot(p, 'reconnect-before') : null;
         if (before) await capture.persistence('reconnect-before', before.gameId);
-        const result = await originalReconnect(p, options);
+        if (capture) await capture.diagnostic?.(p, 'before');
+        let result;
+        try { result = await originalReconnect(p, options); }
+        catch (error) {
+            try { await capture?.diagnostic?.(p, 'failure'); }
+            catch (diagnosticError) { error.message += '; diagnostic failed: ' + diagnosticError.message; }
+            throw error;
+        }
+        if (capture) await capture.diagnostic?.(p, 'after');
         if (before) {
             await p.page.waitForFunction(() => onlineSocket.connected &&
                 !menu.visible && !!gameSettings.coop?.result, null, {timeout: 60000});

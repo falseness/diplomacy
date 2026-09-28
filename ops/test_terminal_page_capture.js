@@ -21,7 +21,24 @@ const files = ['player.js', 'sprites/sprite.js', 'sprites/entities/entity.js',
 const privateFiles = ['sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js',
     'sprites/entities/buildings/manufactures/preparingManufacture/production.js'];
 // Rendering superclass stub only; private brands and getters are production definitions.
-const source = files.map(f => fs.readFileSync(f, 'utf8')).join('\n') + '\nclass Manufacture {}\n' +
+// Full production UI classes, with construction-only rendering/tree dependencies
+// stubbed in a separate closure. Private brands/getters/setters remain unchanged.
+const menuSource = fs.readFileSync('menu/menu.js', 'utf8').split('class Menu {')[1].split('let menu = new Menu()')[0];
+assert(menuSource);
+const uiSource = `
+const {Menu,NextTurnPauseInterface}=(()=>{
+ const WIDTH=1280,HEIGHT=900,mobilePhone=false;
+ class Dummy { constructor(){this.buttons=[];} setParent(){} }
+ const Rect=Dummy,JustImage=Dummy,Text=Dummy,ImageWithLabel=Dummy,SlotManager=Dummy;
+ const HotseatSettingsTree=Dummy,OnlineSettingsTree=Dummy,OtherSettingsTree=Dummy;
+ class Tree extends Dummy {constructor(buttons){super();this.buttons=buttons;}}
+ const start=()=>{},load=()=>{},startAI=()=>{},menuClick=()=>{};
+ class Menu {${menuSource}
+ Menu.getButton=()=>({}); // rendering factory only
+ ${fs.readFileSync('interface/nextTurnPause.js','utf8')}
+ return {Menu,NextTurnPauseInterface};
+})();`;
+const source = uiSource + '\n' + files.map(f => fs.readFileSync(f, 'utf8')).join('\n') + '\nclass Manufacture {}\n' +
     privateFiles.map(f => fs.readFileSync(f, 'utf8')).join('\n');
 const legacyFile = '/root/diplomacy_server/tests/reliability/helpers/observation-game.js';
 const legacyText = fs.readFileSync(legacyFile, 'utf8');
@@ -382,5 +399,36 @@ test('passive private moves and constant demon gold match production storage', a
         check('live-storage/demon-gold',[0,false],[r.gold,r.ownGold]);
         check('live-storage/no-mutation',true,r.unchanged);
         check('live-storage/refuse-override','unreviewed moves override',r.rejected);
+    } finally {await browser.close();}
+});
+
+
+test('production branded menu and pause visibility is passive and pinned', async () => {
+    const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+    try {
+        const page=await browser.newPage();
+        await page.route('http://terminal-fixture.test/**',r=>r.fulfill({body:'<!doctype html>'}));
+        await page.goto('http://terminal-fixture.test/');
+        await page.addScriptTag({content:source+'\n'+fixture});
+        await page.addScriptTag({content:`(${installTerminalPageCapture})(${createTerminalCapture});`});
+        const r=await page.evaluate(()=>{
+            menu=new Menu(); nextTurnPauseInterface=new NextTurnPauseInterface();
+            const before=rawBaseline(),initial=__terminalPassive.read().ui;
+            const unchanged=sameBaseline(before,rawBaseline());
+            Object.defineProperty(human,'hexColor',{value:'#ff0000'}); // rendering fixture only
+            menu.visible=false; nextTurnPauseInterface.visible=true;
+            const changed=__terminalPassive.read().ui;
+            Object.defineProperty(Menu.prototype,'visible',{get(){throw Error('replacement invoked');}});
+            Object.defineProperty(NextTurnPauseInterface.prototype,'visible',{get(){throw Error('replacement invoked');}});
+            const pinned=__terminalPassive.read().ui;
+            menu=Object.create(Menu.prototype);
+            let brandRejected=false;try{__terminalPassive.read();}catch(e){brandRejected=e instanceof TypeError;}
+            return {initial,changed,pinned,unchanged,brandRejected};
+        });
+        check('private-ui/initial',{menu:true,pause:false},r.initial);
+        check('private-ui/changed',{menu:false,pause:true},r.changed);
+        check('private-ui/pinned',r.changed,r.pinned);
+        check('private-ui/no-mutation',true,r.unchanged);
+        check('private-ui/unbranded-rejected',true,r.brandRejected);
     } finally {await browser.close();}
 });

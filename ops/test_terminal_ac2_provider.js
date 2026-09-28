@@ -5,7 +5,7 @@ const {wire, createRecorder} = require('./terminal_ac2_provider');
 
 // Source-tier wiring contracts. These deliberately have no real sockets,
 // database, browser, or gameplay coverage and never grant criterion credit.
-function fixture({fail = false} = {}) {
+function fixture({fail = false, reconnectFailure = null, diagnostics = false} = {}) {
     const events = [], OBSERVE = () => {}, OTHER = () => {};
     const ps = ['p1', 'p2'].map(name => ({name, session: 'old-' + name,
         page: {waitForFunction: async () => events.push(name + ':wait-connected')},
@@ -24,7 +24,8 @@ function fixture({fail = false} = {}) {
             await capture.persistence(boundary, 'game'); return rows;
         }
     };
-    const reconnect = {reconnect: async p => { events.push(p.name + ':real-reconnect'); p.session = 'new-' + p.name; return 7; }};
+    if (diagnostics) capture.diagnostic = async (p,boundary) => events.push(p.name+':diagnostic-'+boundary);
+    const reconnect = {reconnect: async p => { events.push(p.name + ':real-reconnect'); if(reconnectFailure) throw reconnectFailure; p.session = 'new-' + p.name; return 7; }};
     const browser = {run: async (c, out, check, t, hooks) => {
         events.push('original-browser-run'); await hooks.connected({ps}); return 9;
     }};
@@ -118,4 +119,15 @@ test('source recorder waits for ordinary terminal delivery when persistence is a
         assert.equal(await capture.terminal(p), true);
         assert.deepEqual(calls, ['read', 'wait']);
     } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+
+test('reconnect diagnostic precedes failure propagation and preserves original error', async () => {
+    const error = new Error('reconnect slot had no observed effect');
+    const f = fixture({reconnectFailure:error,diagnostics:true});
+    await f.connect(); f.events.length=0;
+    await assert.rejects(f.reconnect.reconnect(f.ps[0], {}), e=>e===error);
+    assert.deepEqual(f.events,['p1:reconnect-before','db:reconnect-before:game',
+        'p1:diagnostic-before','p1:real-reconnect','p1:diagnostic-failure']);
+    assert(!f.events.some(e=>e.includes('reconnect-after')));
 });
