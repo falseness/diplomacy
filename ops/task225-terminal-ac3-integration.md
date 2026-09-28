@@ -1,0 +1,62 @@
+# TASK-225 whole terminal AC3 integration
+
+Current consumed selection remains join-139/run-01 until an actual AC3 consumer
+transition passes. Immutable review-114/review-127 ancestry is never rewritten.
+Run `python3 ops/run_terminal_ac3_integration.py <fresh-directory>` for one
+30-minute estimated scoped invocation, with a cumulative 55-minute work deadline
+and cleanup/reporting before 60 minutes. This is not the full TASK-225 audit.
+
+| AC3 clause | Producer boundary | Independent reader / consumer |
+| --- | --- | --- |
+| Actual menu and next game in each mode | Original mouse menu inputs preserved, menu-before/menu-after for both recipients | Ordered real tap receipts; visible menu, old socket disconnected, old timer stopped; new mode/connection and distinct persisted game |
+| New connection and first legal movement | Both recipients at first-move-before/after plus read-only games collection | Select unit by actual input coordinates; independent hex adjacency, own empty land and blocking registry checks; exact decrement by one, same unit identity/HP, unchanged ownership, gold, remainder, turn/commit, native timers and peer |
+| Old sockets/timers cannot affect replacement | Per-document identities retained before menu and read at every subsequent boundary | Exact old identities retained, new socket/timer distinct, connected replacement and stopped old resources |
+| Queued old events do not change board | Named nonempty retain/invoke receipts; both recipients callbacks-before/after and read-only databases | All three event names, indexes and successful invocation receipts; exact original terminal body; complete raw state unchanged, including occupancy/ownership/HP/moves/gold/turn/commit/controls/timer storage |
+| Preserve AC2 and original journeys | Existing AC2 preload with hash-pinned AC3 helper instrumentation | All four original assertions, real packet/reconnect/persistence checks and lifecycle independently revalidated from same new provider |
+| Actual cumulative transition | Separate TASK-221-AC3 provider key; same-run rebound AC2 | Absent/present whole AC3 review on identical proof; preserve non-target rows, eight self owners and ancestry; intended 62 to 61 |
+
+Only the test helper is instrumented in memory; its exact original hash and
+instrumented hash are recorded and independently checked. Served client/server
+rules are unchanged. The added peer callback invocation uses the same bare
+`fn(body)` call as the original source control. It is explicitly source-tier,
+not authenticated packet replay. Natural clocks and original input predicates
+remain active. Raw snapshots preserve storage; only newly allocated empty grid
+unit identities are normalized for first-move comparison, and every occupied
+alias is checked exactly. Callback comparisons do not normalize anything.
+
+Before acquisition, source tests exercise both modes and content-rebound missing
+receipts/boundaries, game/recipient, socket/timer, movement/HP/gold/ownership,
+turn/commit, timer storage, peer change, real input and callback-body corruptions.
+Source fixtures cannot grant gameplay credit. Acquisition or semantic failure
+stops consumption at its actual boundary, retains diagnostics, and leaves the
+current selection and task status unchanged. Full TASK-225 remains pending while
+any required local obligation or current-invocation self check is unresolved.
+
+## join-141 acquisition result
+
+`artifacts/TASK-225/join-141/run-01` completed the one declared invocation in
+910370 ms. All 52 source tests and all four original browser journeys (145
+provider assertions) passed. The provider parent exited zero and all eight owned
+service PIDs/directories were absent after cleanup. The same-run AC2 reader passed
+1285 assertions, but no candidate successor was consumed.
+
+The whole AC3 reader failed at `AC3/coop/p1/first-move-full-raw`: the human unit
+array identities changed from 635/640 to 1247/1248. Subsequent legacy observations
+again changed them before the callback boundary. The raw callback before/after
+capture and named receipts are present; neither their presence nor the original
+projected provider checks establishes whole AC3 coverage. Both next-game traces
+contain 20 ordered raw records and three retained/invoked names per participant.
+
+The instrumented helper still calls legacy `OBSERVE` between the passive
+snapshots. That observer reads `Player.isLost`, whose `updateUnits()` replaces the
+units array. Do not waive these identity checks or retry the unchanged provider.
+The next producer repair must supply the original projected assertion fields
+from passive storage, preserving every assertion and input while avoiding the
+mutating getter reads. First add an integrated production-getter regression,
+then acquire one changed four-journey run and attempt real cumulative consumption.
+Read `join-141/acquisition-diagnosis.json` and `raw-boundary-differences.json`.
+
+TASK-225 remains pending; join-139 is still the current selection, 62 prior
+obligations and eight self owners remain, and full-invocation steps stay gated.
+No gameplay/input repair, full-pass, new current credit, or external blocker is
+claimed. All tested source bytes and the original failing evidence are retained.
