@@ -72,6 +72,8 @@ for(const [id,mutate,pattern] of controls)test('rehashed AC3 rejects '+id,()=>{
 test('pinned instrumentation retains every original check and actual input',()=>{
  const source=fs.readFileSync(P.FILE,'utf8'),changed=P.instrument(source);
  for(const pattern of [/check\('[^']+'/g,/await p\.tapControl\('[^']+'/g,/await p\.tapCell\([^\n]+/g])assert.deepEqual(changed.match(pattern),source.match(pattern));
+ assert.equal((changed.match(/__terminalPassive\.gameplay\(\)/g)||[]).length,4);
+ assert.equal((changed.match(/observe\(OBSERVE\)/g)||[]).length,1);
  assert.throws(()=>P.instrument(source+'\n'),/unreviewed/);
  new (require('node:vm').Script)(changed);
 });

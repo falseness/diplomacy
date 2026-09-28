@@ -60,3 +60,35 @@ TASK-225 remains pending; join-139 is still the current selection, 62 prior
 obligations and eight self owners remain, and full-invocation steps stay gated.
 No gameplay/input repair, full-pass, new current credit, or external blocker is
 claimed. All tested source bytes and the original failing evidence are retained.
+
+## join-142 changed acquisition result
+
+The four later `localGameplay` observations now use passive own-storage and
+reviewed private getters, preserving all original input and assertion sites.
+The production Player fixture verifies projected values and reference/descriptor
+stability; the legacy mutation counterexample remains. All 52 source tests pass.
+
+`artifacts/TASK-225/join-142/run-01` completes in 999434 ms with provider exit 0,
+consumer/runner exit 1, four cleanups and all 145 provider checkpoints passing.
+Same-run AC2 again passes 1285 checks. AC3 still fails at
+`AC3/coop/p1/first-move-full-raw`: human unit arrays 635/640 become 1247/1248.
+Competitive exhibits the corresponding replacement. The projection repair does
+remove the subsequent observation mutation: post-move to callbacks-before and
+callbacks-before to callbacks-after are now exactly unchanged for both players
+in both modes. Co-op p2 additionally changes `next.unactive` true to false during
+the first-move interval. No raw comparison is waived and no successor is consumed.
+
+The previous assertion that legacy OBSERVE alone caused the first-move mismatch
+was incomplete. Static inspection finds another path: `sendInstructions` calls
+`AiRuntime.recordHumanCommand`, then `vectoriseGrid`, global income channels,
+`playerIncome`, `Player.income`, `armySalary`, and `updateUnits`. This is a
+candidate mechanism, not an observed runtime call stack. Before another provider,
+reproduce this production command/vectorization effect with independent reference
+assertions and characterize the peer control transition, preserving callback
+semantics and natural timing. Do not remove runtime training or normalize array
+identities speculatively. Do not repeat the unchanged four journeys.
+
+Current selection remains join-139, with 62 prior obligations and eight self
+owners; all full-audit prerequisites remain. Read join-142/acquisition-diagnosis.json,
+raw-boundary-differences.json and handoff-audit.json. Historical failures and all
+unrelated source/index bytes remain preserved. No external blocker is established.

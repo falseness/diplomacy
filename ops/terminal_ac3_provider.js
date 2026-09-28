@@ -13,6 +13,11 @@ function instrument(source) {
  const capture=require('/root/diplomacy/ops/terminal_ac3_provider').recorder({ps,service,trace},mode,terminal);`);
  replace("  await p.tapControl('backToMenuButton'", "  await capture.retain(p);\n  await p.tapControl('backToMenuButton'");
  replace("  await p.tapControl('menu.main.buttons[1]'", "  await capture.page(p,'menu-after');\n  await p.tapControl('menu.main.buttons[1]'");
+ // Preserve the two AC2 stable observations; replace only the four later
+ // localGameplay reads with the passive page projection.
+ assert.equal(source.split('obs.localGameplay(await p.observe(OBSERVE))').length,5);
+ source=source.replaceAll('obs.localGameplay(await p.observe(OBSERVE))',
+  'obs.localGameplay(await p.observe(() => globalThis.__terminalPassive.gameplay()))');
  replace(' const before=obs.localGameplay'," await capture.pair('first-move-before');\n const before=obs.localGameplay");
  replace(" check('new-first-move'", " await capture.pair('first-move-after');\n check('new-first-move'");
  replace(' await p.page.evaluate(body=>globalThis.__oldCallbacks.forEach(fn=>fn(body)),oldBoard);',

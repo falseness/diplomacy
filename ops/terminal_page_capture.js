@@ -113,6 +113,37 @@ function installTerminalPageCapture(createCapture) {
                 nature: list(nature, entity), goldmines: list(goldmines, entity),
             }};
     };
+    // Only fields consumed by localGameplay in the pinned next-game helper.
+    // Never ask Player.isLost/isGameEnded or pack registries: those prune storage.
+    const gameplay = () => {
+        const value = (object, key) => {
+            const v = own(object, key);
+            return v && v.absent === true ? undefined : v;
+        };
+        const row = e => {
+            const c = readCoord(e);
+            const r = {name: value(e, 'name'), x: c.x, y: c.y,
+                hp: value(e, 'hp') ?? null, wasHitted: value(e, 'wasHitted') ?? null};
+            const interaction = value(e, 'interaction');
+            if (interaction !== undefined) r.moves = readMoves(interaction);
+            if (value(e, 'id') !== undefined) r.id = value(e, 'id');
+            if (Object.hasOwn(e, 'unitProduction') || hasPrototype(PreparingManufacture.prototype, e)) {
+                const prod = Object.hasOwn(e, 'unitProduction') ? own(e, 'unitProduction') : unitProduction(e);
+                const name = value(prod, 'name');
+                r.production = name && name !== 'Empty' ? {name, turns: value(prod, 'turns') ?? null} : null;
+            }
+            return r;
+        };
+        return {
+            gameRound, result: gameSettings.coop ? gameSettings.coop.result ?? null : null,
+            ownership: grid.arr.map(column => column.map(cell => own(own(cell, 'hexagon'), 'playerColor'))),
+            players: players.map((p, index) => ({index, gold: readGold(p),
+                units: own(p, 'units').map(u => ({...row(u), killed: !!value(u, 'killed')})),
+                towns: own(p, 'towns').map(row)})),
+            registries: {external: external.map(row), externalProduction: externalProduction.map(row),
+                nature: nature.map(row), goldmines: goldmines.map(row)}
+        };
+    };
     const retain = () => {
         if (retained) throw Error('callbacks already retained');
         const events = ['gameStarted', 'playYourTurn', 'waitYouTurn'];
@@ -131,7 +162,7 @@ function installTerminalPageCapture(createCapture) {
         }
         return receipts;
     };
-    Object.defineProperty(globalThis, '__terminalPassive', {value: {read, retain, invoke}});
+    Object.defineProperty(globalThis, '__terminalPassive', {value: {read, gameplay, retain, invoke}});
 }
 
 module.exports = {installTerminalPageCapture};

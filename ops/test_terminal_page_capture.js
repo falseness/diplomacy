@@ -111,6 +111,7 @@ test('integrated adapter: native Storage, passive UI, identities, legacy mutatio
             observations.push(await p.evaluate(() => {
                 const before = rawBaseline();
                 const first = __terminalPassive.read(), second = __terminalPassive.read();
+                const projected = __terminalPassive.gameplay();
                 const unchanged = sameBaseline(before, rawBaseline());
                 const held = __terminalPassive.retain();
                 onlineSocket.connected = false;
@@ -119,11 +120,14 @@ test('integrated adapter: native Storage, passive UI, identities, legacy mutatio
                 const pre = __terminalPassive.read();
                 const invoked = __terminalPassive.invoke('source-payload');
                 const post = __terminalPassive.read();
-                return {first, second, unchanged, held, invoked, pre, post, calls};
+                return {first, second, projected, unchanged, held, invoked, pre, post, calls};
             }));
         }
         for (const [i, r] of observations.entries()) {
-            check('participant-' + i + '/raw-descriptors-unchanged', true, r.unchanged);
+            check('participant-' + i + '/passive-projection-production-player',
+                {index:1,gold:17,units:[{name:'noob',x:0,y:0,hp:0,wasHitted:true,moves:0,killed:true}],
+                 towns:[{name:'town',x:0,y:0,hp:0,wasHitted:null,production:null}]},r.projected.players[1]);
+            check('participant-' + i + '/raw-descriptors-unchanged' , true, r.unchanged);
             check('participant-' + i + '/identity-continuity', r.first, r.second);
             check('participant-' + i + '/native-timer-storage', ['{"time":900}', '{"time":900}'], r.first.state.timerStorage);
             check('participant-' + i + '/passive-ui', {menu: false, pause: false}, r.first.ui);
