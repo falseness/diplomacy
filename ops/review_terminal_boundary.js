@@ -24,6 +24,29 @@ function reviewBoundary(record, {callbacks = false} = {}) {
             assert(Object.hasOwn(snapshot.state, key), 'missing state.' + key);
         for (const key of ['towns', 'external', 'externalProduction', 'nature', 'goldmines'])
             assert(Array.isArray(snapshot.extended[key]?.items), 'missing registry ' + key);
+        const requireFields = (value, keys, label) => {
+            assert(value && typeof value === 'object', 'missing ' + label);
+            for (const key of keys) assert(Object.hasOwn(value, key), 'missing ' + label + '.' + key);
+        };
+        const production = (value, label) => {
+            requireFields(value, ['ref', 'name', 'turns', 'cost', 'killed', 'coord', 'townRef'], label);
+            requireFields(value.coord, ['x', 'y'], label + '.coord');
+            assert(value.townRef === null || Number.isSafeInteger(value.townRef), 'invalid ' + label + '.townRef');
+        };
+        for (const group of snapshot.extended.towns.items) {
+            assert(Array.isArray(group.items), 'missing town group');
+            for (const town of group.items) {
+                requireFields(town, ['suburbs', 'buildings', 'buildingProduction', 'activeProduction', 'unitProduction'], 'town');
+                for (const key of ['suburbs', 'buildings', 'buildingProduction'])
+                    assert(Array.isArray(town[key]?.items), 'missing town.' + key + '.items');
+                for (const suburb of town.suburbs.items)
+                    requireFields(suburb, ['ref', 'coord', 'playerColor', 'isSuburb'], 'suburb');
+                for (const entry of town.buildingProduction.items) production(entry, 'buildingProduction');
+                production(town.activeProduction, 'activeProduction');
+                production(town.unitProduction, 'unitProduction');
+            }
+        }
+        for (const entry of snapshot.extended.externalProduction.items) production(entry, 'externalProduction');
         assert.equal(typeof snapshot.ui.menu, 'boolean');
         assert.equal(typeof snapshot.ui.pause, 'boolean');
         assert.equal(typeof snapshot.state.waiting, 'boolean');

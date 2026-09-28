@@ -27,7 +27,8 @@ def main():
          estimateMs=120000, stopWorkMs=3300000, deadlineMs=3600000,
          cases=['seven-existing-primitive-controls', 'integrated-native-storage-page-adapter',
                 'legacy-observer-mutation-comparison', 'two-page-named-callback-receipts',
-                'rebound-semantic-rejections', 'private-production-missing-proof-stop'],
+                'rebound-semantic-rejections', 'private-branded-production-and-reference-baselines', 'private-pinned-getter-rejection',
+                'mandatory-town-field-rejections'],
          commands=[dict(argv=c,cwd=str(ROOT)) for c in commands],
          exclusions=['shipped gameplay', 'authenticated network/persistence', 'whole criterion consumption', 'full audit']))
     files = [ROOT / p for p in ['ops/terminal_passive_capture.js','ops/test_terminal_passive_capture.js',
@@ -77,9 +78,8 @@ def main():
     save('coverage-results.json',dict(scope='source-tier only',scopePass=passed,wholeCriterionCredit=False,
          fullInvocation=False,selectedAssertions=[x['id'] for x in checkpoints],commands=exits,
          evidenceHashes={p.name:sha(p) for p in out.iterdir() if p.is_file()}))
-    save('acquisition-stop.json',dict(result='STOP_PRIVATE_PRODUCTION_CONTRACT_INCOMPLETE',overallPass=False,
-         fullInvocation=False,newCriterionCredit=0,missing=['PreparingManufacture.#unitProduction','Production.#coord',
-         'whole AC2/AC3 independent semantic/lifecycle reader','fresh four-journey provider and cumulative consumer receipts'],
+    save('acquisition-stop.json',dict(result='STOP_WHOLE_CRITERION_READER_INCOMPLETE',overallPass=False,
+         fullInvocation=False,newCriterionCredit=0,missing=['whole AC2/AC3 independent semantic/lifecycle reader','fresh four-journey provider and cumulative consumer receipts'],
          plan='ops/task225-terminal-page-capture.md',frozenToolsPreserved=frozen_ok,currentSelectionPreserved=selection_ok))
     elapsed=round((time.monotonic()-started)*1000)
     save('verification-budget.json',dict(start=start,end=stamp(),elapsedMs=elapsed,commands=exits,
@@ -89,7 +89,7 @@ def main():
     save('required-artifact-audit.json',[dict(path=str(out/n),exists=(out/n).exists(),
         fullTaskCondition='FAILED: scoped experiment, not complete invocation' if (out/n).exists() else 'FAILED: missing; full audit gated') for n in required])
     print('PASS scoped adapter experiment' if passed else 'FAIL scoped adapter experiment')
-    print('STOP_PRIVATE_PRODUCTION_CONTRACT_INCOMPLETE; TASK-225 remains pending; fullInvocation=false')
+    print('STOP_WHOLE_CRITERION_READER_INCOMPLETE; TASK-225 remains pending; fullInvocation=false')
     return 0 if passed else 1
 
 if __name__=='__main__':

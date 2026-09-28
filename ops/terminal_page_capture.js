@@ -1,11 +1,22 @@
 'use strict';
 
 // Inject once per document, passing createTerminalCapture. This adapter reads
-// lexical game globals, not a serialized/reconstructed board. No game getter is
-// used, including for private production fields (reported as unavailable).
+// lexical game globals, not a serialized/reconstructed board. Only explicitly
+// pinned, single-return private-field getters may supplement own descriptors.
 function installTerminalPageCapture(createCapture) {
     if (Object.hasOwn(globalThis, '__terminalPassive')) throw Error('capture already installed');
-    const capture = createCapture();
+    const pin = (prototype, key, expected) => {
+        const getter = Object.getOwnPropertyDescriptor(prototype, key)?.get;
+        if (typeof getter !== 'function' ||
+            Function.prototype.toString.call(getter).replace(/\s+/g, '') !== expected)
+            throw Error('unreviewed private getter: ' + key);
+        return object => Reflect.apply(getter, object, []);
+    };
+    const unitProduction = pin(PreparingManufacture.prototype, 'unitProduction',
+        'getunitProduction(){returnthis.#unitProduction}');
+    const productionCoord = pin(Production.prototype, 'coord', 'getcoord(){returnthis.#coord}');
+    const productionTown = pin(ManufactureProduction.prototype, 'town', 'gettown(){returnthis.#town}');
+    const hasPrototype = (prototype, object) => Reflect.apply(Object.prototype.isPrototypeOf, prototype, [object]);
     const getItem = Storage.prototype.getItem;
     const refs = new WeakMap();
     let serial = 0, retained = null;
@@ -31,7 +42,9 @@ function installTerminalPageCapture(createCapture) {
         if (typeof value === 'number' && !Number.isFinite(value)) throw Error('finite storage required: ' + k);
         return [k, value];
     }));
-    const coord = object => fields(own(object, 'coord'), ['x', 'y']);
+    const readCoord = object => Object.hasOwn(object, 'coord') ? own(object, 'coord') : productionCoord(object);
+    const capture = createCapture({readCoord});
+    const coord = object => fields(readCoord(object), ['x', 'y']);
     const list = (array, read) => {
         if (!Array.isArray(array)) throw Error('registry array required');
         const items = [];
@@ -41,10 +54,11 @@ function installTerminalPageCapture(createCapture) {
         }
         return {ref: id(array), items};
     };
-    const production = value => ({ref: id(value),
-        ...fields(value, ['name', 'turns', 'cost']),
-        // Production.coord is private backing storage; never invent a value.
-        coord: Object.hasOwn(value, 'coord') ? coord(value) : {unavailable: 'Production.#coord'}});
+    const production = value => {
+        const owner = hasPrototype(ManufactureProduction.prototype, value) ? productionTown(value) : null;
+        return {ref: id(value), ...fields(value, ['name', 'turns', 'cost', 'killed']),
+            coord: coord(value), townRef: owner == null ? null : id(owner)};
+    };
     const entity = value => ({ref: id(value), ...fields(value, ['name', 'hp', 'killed']), coord: coord(value)});
     const maybe = (value, key, read) => Object.hasOwn(value, key) ? read(own(value, key)) : {absent: true};
     const town = value => ({...entity(value),
@@ -53,8 +67,7 @@ function installTerminalPageCapture(createCapture) {
         buildings: maybe(value, 'buildings', a => list(a, entity)),
         buildingProduction: maybe(value, 'buildingProduction', a => list(a, production)),
         activeProduction: maybe(value, 'activeProduction', production),
-        unitProduction: Object.hasOwn(value, 'unitProduction') ? production(own(value, 'unitProduction')) :
-            {unavailable: 'PreparingManufacture.#unitProduction'}});
+        unitProduction: production(Object.hasOwn(value, 'unitProduction') ? own(value, 'unitProduction') : unitProduction(value))});
     const read = () => {
         const timerStorage = [];
         for (let i = 0; i < players.length; i++) timerStorage.push(getItem.call(localStorage, gameSlot + 'timer' + i));

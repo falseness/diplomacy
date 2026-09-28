@@ -1,9 +1,10 @@
 'use strict';
 
 // Source-tier capture primitive. Keep one instance per page across boundaries.
-// Never traverse gameplay prototypes, call getters, pack boards or call toJSON.
+// Default reads never traverse gameplay prototypes or call getters. The page
+// adapter may supply its reviewed private-coordinate reader. Never pack or call toJSON.
 // IDs belong to this observer session; they are not network/game unit IDs.
-function createTerminalCapture() {
+function createTerminalCapture({readCoord} = {}) {
     const identities = new WeakMap();
     let next = 1;
     const own = (object, key) => {
@@ -37,7 +38,7 @@ function createTerminalCapture() {
     const entity = value => {
         const interaction = own(value, 'interaction');
         return {identity: identity(value), ...fields(value, ['id', 'name', 'hp', 'killed', 'wasHitted']),
-            coord: fields(own(value, 'coord'), ['x', 'y']),
+            coord: fields(readCoord ? readCoord(value) : own(value, 'coord'), ['x', 'y']),
             // Unit.moves is a getter; its backing storage is interaction.moves.
             moves: interaction === undefined ? {absent: true} : scalar(own(interaction, 'moves'))};
     };

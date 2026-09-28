@@ -22,27 +22,36 @@ nonempty event/index invocation receipts. Rebound altered snapshots still fail.
 It deliberately exports **no criterion coverage row**. Its synthetic replay
 control does not establish an authenticated replay or persistence boundary.
 
+## Private storage capture
+
+The adapter pins PreparingManufacture.prototype.unitProduction,
+Production.prototype.coord and ManufactureProduction.prototype.town at
+installation. It checks each function's source string against the reviewed single-private-field-return body, then calls
+that function directly on branded instances. It never resolves an arbitrary
+instance getter. Altered bodies fail installation, unbranded objects fail the
+private brand check, and later prototype replacement cannot change the pinned
+read route. Own coordinate storage continues to use data descriptors only.
+The primitive accepts this explicit coordinate reader for grid production too;
+its default remains descriptor-only.
+
+The integrated Chromium source fixture uses complete production class definitions
+with a labeled rendering-superclass stub. Nonempty unit/building/external and
+unplaced active production are captured. An unplaced active production's raw
+coordinate is an empty object, so absent x/y is legitimate storage, not a guessed
+position. Retained fixture references and recursive raw descriptor baselines
+include private production objects and coordinates. Suburb aliases and ownership,
+private reference identity (including the manufacturing owner-town link), public
+descriptors, registry counts and stored result are checked independently. The historical legacy mutation counterexample remains.
+
+The boundary reader now requires town production/suburb fields even if the same
+field is omitted on both sides. This is still a boundary reader, **not a whole
+AC2/AC3 semantic/lifecycle reader**. Clause-required schema validation and
+ownership consistency across the full board,
+persistence/reconnect bindings, terminal outcome/first-move derivations and real
+provider dispatch remain acquisition prerequisites. Source fixtures and private
+getter checks grant no current gameplay coverage or complete criterion credit.
+
 ## Exact acquisition stop
-
-The complete production PreparingManufacture definition stores unitProduction
-in `#unitProduction`. Production stores coord in `#coord`. Own descriptors cannot
-read either field. The adapter records `unavailable` for these fields; the
-reader rejects them even when both snapshots contain identical unavailable
-markers. An own-property town fixture is used only to exercise the other reader
-and callback boundaries; a separate actual private-field class fixture proves
-the stop. That fixture stubs only the rendering superclass and makes no claim
-about rendering or real town construction. Do not deploy this adapter into the
-provider and call its schema complete.
-
-Next complete this contract with an explicitly reviewed passive private-storage
-route, for example narrowly pinned pure getter functions obtained directly from
-PreparingManufacture.prototype and Production.prototype. Test those exact
-functions against actual branded instances and raw before/after reference
-baselines; do not fall back to arbitrary instance getters or infer empty
-production from absent own storage. Cover nonempty active/building/external
-production and suburb identity/ownership, then require all clause-mandatory
-fields in the independent reader. This is a bounded local implementation need,
-not an external blocker or permission request.
 
 Then complete the independent whole AC2/AC3 reader: derive terminal outcomes,
 gold/ownership/turn invariants and first legal move from fixtures, bind read-only

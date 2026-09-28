@@ -17,7 +17,11 @@ function check(id, expected, observed) {
 }
 const files = ['player.js', 'sprites/sprite.js', 'sprites/entities/entity.js',
     'sprites/entities/units/unit/unit.js', 'sprites/empty.js', 'options/timer.js'];
-const source = files.map(f => fs.readFileSync(f, 'utf8')).join('\n');
+const privateFiles = ['sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js',
+    'sprites/entities/buildings/manufactures/preparingManufacture/production.js'];
+// Rendering superclass stub only; private brands and getters are production definitions.
+const source = files.map(f => fs.readFileSync(f, 'utf8')).join('\n') + '\nclass Manufacture {}\n' +
+    privateFiles.map(f => fs.readFileSync(f, 'utf8')).join('\n');
 const legacyFile = '/root/diplomacy_server/tests/reliability/helpers/observation-game.js';
 const legacyText = fs.readFileSync(legacyFile, 'utf8');
 const start = legacyText.indexOf('const OBSERVE = () => {');
@@ -44,7 +48,7 @@ let players=[neutral,human], whooseTurn=1, gameRound=2, gameSlot='fixture',
 localStorage.setItem('fixturetimer0','{"time":900}');
 localStorage.setItem('fixturetimer1','{"time":900}');
 // Independent recursive own-descriptor/reference baseline; no capture helper.
-function rawBaseline(){
+function rawBaseline(extra=[]){
     const graph=new Map();
     function walk(value){
         if(!value || typeof value!=='object' || graph.has(value))return;
@@ -52,7 +56,7 @@ function rawBaseline(){
         for(const d of Object.values(descriptors))if('value' in d)walk(d.value);
     }
     for(const value of [players,grid,gameSettings,gameEvent,nextTurnButton,undoButton,actionManager,
-        timer,onlineSocket,external,externalProduction,nature,goldmines,menu,nextTurnPauseInterface])walk(value);
+        timer,onlineSocket,external,externalProduction,nature,goldmines,menu,nextTurnPauseInterface,...extra])walk(value);
     return graph;
 }
 function sameBaseline(a,b){
@@ -149,28 +153,87 @@ test('integrated adapter: native Storage, passive UI, identities, legacy mutatio
             return {pre,post:{units:human.units.length,towns:human.towns.length,result:gameSettings.coop.result},unchanged:sameBaseline(before,rawBaseline())};
         });
         check('legacy-counterexample', {pre:{units:1,towns:1,result:'defeat'},post:{units:0,towns:0,result:'draw'},unchanged:false}, legacyResult);
-        // Execute the complete production private-field class. Its rendering
-        // superclass is a labeled source-fixture stub; no constructor/gameplay claim.
-        await pages[1].addScriptTag({content: 'class Manufacture {}\n' +
-            fs.readFileSync('sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js','utf8')});
         const privateResult = await pages[1].evaluate(() => {
-            const actualPrivate = Object.assign(new PreparingManufacture(),town);
-            if(Object.hasOwn(actualPrivate,'unitProduction'))throw Error('private-field fixture invalid');
+            // Declared production-source fixture, not a live game mutation.
+            grid.getCell = () => ({pos:{x:100,y:100}});
+            globalThis.assets = {size:10};
+            const actualPrivate = new PreparingManufacture();
+            const {unitProduction:ignored, ...ownTown} = town;
+            Object.assign(actualPrivate,ownTown);
+            const unitQueue = new UnitProduction(3,7,Empty,'noob');
+            actualPrivate.unitProduction = unitQueue;
+            const buildingQueue = new ManufactureProduction(4,9,Empty,'farm');
+            const buildingCoord = {x:0,y:0}; buildingQueue.coord=buildingCoord; buildingQueue.town=actualPrivate;
+            const externalQueue = new ExternalProduction(5,11,Empty,'tower');
+            const externalCoord = {x:0,y:0}; externalQueue.coord=externalCoord;
+            const activeQueue = new SuburbProduction(6,13,Empty,'suburb'); // Not placed: #coord is {}.
+            actualPrivate.activeProduction=activeQueue;
+            actualPrivate.buildingProduction=[buildingQueue];
+            const suburb={coord:{x:0,y:0},playerColor:1,isSuburb:true};
+            actualPrivate.suburbs=[suburb,suburb];
             human.towns[0]=actualPrivate;
-            grid.arr[0][0].building=actualPrivate;
-            return __terminalPassive.read();
+            grid.arr[0][0].building=buildingQueue;
+            externalProduction.push(externalQueue);
+            const privateGet=Object.getOwnPropertyDescriptor(PreparingManufacture.prototype,'unitProduction').get;
+            const coordGet=Object.getOwnPropertyDescriptor(Production.prototype,'coord').get;
+            const activeCoord=coordGet.call(activeQueue);
+            const townGet=Object.getOwnPropertyDescriptor(ManufactureProduction.prototype,'town').get;
+            const privateRefs=()=>townGet.call(buildingQueue)===actualPrivate && privateGet.call(actualPrivate)===unitQueue &&
+                coordGet.call(unitQueue)===actualPrivate.coord && coordGet.call(buildingQueue)===buildingCoord &&
+                coordGet.call(externalQueue)===externalCoord && coordGet.call(activeQueue)===activeCoord;
+            const privateRoots=[unitQueue,actualPrivate.coord,buildingCoord,externalCoord,activeCoord];
+            const baseline=rawBaseline(privateRoots);
+            const before=__terminalPassive.read(),after=__terminalPassive.read();
+            // Private values are independently checked against retained fixture references.
+            const references=privateRefs();
+            const unchanged=sameBaseline(baseline,rawBaseline(privateRoots));
+            // Override accessors after installation: the pinned functions must stay in use.
+            Object.defineProperty(PreparingManufacture.prototype,'unitProduction',{get(){throw Error('dynamic getter called');},configurable:true});
+            Object.defineProperty(Production.prototype,'coord',{get(){throw Error('dynamic coord called');},configurable:true});
+            const pinned=__terminalPassive.read();
+            return {before,after,unchanged,references,pinned};
         });
-        check('private-storage-explicit-unavailable','PreparingManufacture.#unitProduction',privateResult.extended.towns.items[1].items[0].unitProduction.unavailable);
-        assert.throws(()=>reviewBoundary({tier:'source-executed-callbacks',session:'p1',beforeSession:'p1',afterSession:'p1',before:privateResult,after:privateResult},{callbacks:true}),/unavailable/);
-        check('private-storage-reader-stop',true,true);
-        await pages[1].addScriptTag({content:fs.readFileSync('sprites/entities/buildings/manufactures/preparingManufacture/production.js','utf8')});
-        const productionStop=await pages[1].evaluate(()=>{
-            externalProduction.push(new Production(3,7,Empty,'noob'));
-            return __terminalPassive.read().extended.externalProduction.items[0];
-        });
-        check('private-production-coordinate-stop','Production.#coord',productionStop.coord.unavailable);
-        check('private-production-public-fields',{name:'noob',turns:3,cost:7},
-            {name:productionStop.name,turns:productionStop.turns,cost:productionStop.cost});
+        check('private-branded-raw-descriptors-unchanged',true,privateResult.unchanged);
+        check('private-branded-reference-baseline',true,privateResult.references);
+        check('private-branded-stable-capture',privateResult.before,privateResult.after);
+        check('private-getters-pinned-against-replacement',privateResult.before,privateResult.pinned);
+        const capturedTown=privateResult.before.extended.towns.items[1].items[0];
+        for(const [name,row,expected] of [
+            ['unit',capturedTown.unitProduction,{name:'noob',turns:3,cost:7,coord:{x:0,y:0}}],
+            ['building',capturedTown.buildingProduction.items[0],{name:'farm',turns:4,cost:9,coord:{x:0,y:0}}],
+            ['external',privateResult.before.extended.externalProduction.items[0],{name:'tower',turns:5,cost:11,coord:{x:0,y:0}}],
+            ['active-unplaced',capturedTown.activeProduction,{name:'suburb',turns:6,cost:13,coord:{x:{absent:true},y:{absent:true}}}],
+        ]) check('private-production-'+name,expected,{name:row.name,turns:row.turns,cost:row.cost,coord:row.coord});
+        check('private-production-owner-town-reference',capturedTown.ref,capturedTown.buildingProduction.items[0].townRef);
+        check('private-grid-production-coordinate',{x:0,y:0},privateResult.before.state.grid.items[0].items[0].building.coord);
+        check('suburb-reference-and-ownership',true,capturedTown.suburbs.items[0].ref===capturedTown.suburbs.items[1].ref &&
+            capturedTown.suburbs.items.every(x=>x.playerColor===1 && x.isSuburb===true));
+        const privateRecord={tier:'source-executed-callbacks',session:'p1',beforeSession:'p1',afterSession:'p1',
+            before:privateResult.before,after:privateResult.after,retained:observations[1].held,invoked:observations[1].invoked};
+        check('private-branded-boundary-reader',true,reviewBoundary(privateRecord,{callbacks:true}).pass);
+        for(const key of ['suburbs','buildingProduction','activeProduction','unitProduction']) {
+            const bad=structuredClone(privateRecord);
+            for(const side of ['before','after']) delete bad[side].extended.towns.items[1].items[0][key];
+            assert.throws(()=>reviewBoundary(bad,{callbacks:true}),/missing/);
+            check('private-rebound-reject-omitted-'+key,true,true);
+        }
+        for(const [name, mutate] of [
+            ['production-coordinate',x=>delete x.unitProduction.coord.x],
+            ['production-turns',x=>delete x.unitProduction.turns],
+            ['production-owner',x=>delete x.buildingProduction.items[0].townRef],
+            ['suburb-owner',x=>delete x.suburbs.items[0].playerColor],
+        ]) {
+            const bad=structuredClone(privateRecord);
+            for(const side of ['before','after'])mutate(bad[side].extended.towns.items[1].items[0]);
+            const rebound=crypto.createHash('sha256').update(JSON.stringify(bad)).digest('hex');
+            assert.equal(rebound.length,64);
+            assert.throws(()=>reviewBoundary(bad,{callbacks:true}),/missing/);
+            check('private-rebound-reject-'+name,true,true);
+        }
+        const corrupt=structuredClone(privateRecord);
+        corrupt.after.extended.towns.items[1].items[0].unitProduction.turns++;
+        assert.throws(()=>reviewBoundary(corrupt,{callbacks:true}),/raw boundary state changed/);
+        check('private-rebound-reject-changed-turns',true,true);
         const getterControl=await pages[1].evaluate(()=>{
             const original=Object.getOwnPropertyDescriptor(menu,'visible');
             Object.defineProperty(menu,'visible',{get(){throw Error('UI getter executed');},configurable:true});
@@ -182,6 +245,21 @@ test('integrated adapter: native Storage, passive UI, identities, legacy mutatio
         });
         check('UI-accessor-refused','accessor refused: visible',getterControl.error);
         check('native-storage-method-bound',['{"time":900}','{"time":900}'],getterControl.slots);
+        // Fresh document verifies installation refuses an altered getter before any read.
+        const pinPage=await context.newPage();
+        await pinPage.addScriptTag({content:source});
+        const pinFailure=await pinPage.evaluate(({install,create})=>{
+            Object.defineProperty(Production.prototype,'coord',{get(){return {};},configurable:true});
+            try{(0,eval)('('+install+')')( (0,eval)('('+create+')') );return 'accepted';}
+            catch(e){return e.message;}
+        },{install:installTerminalPageCapture.toString(),create:createTerminalCapture.toString()});
+        const brandFailure=await pages[1].evaluate(()=>{
+            externalProduction.push({name:'forged',turns:3,cost:7});
+            try{__terminalPassive.read();return false;}catch(e){return e instanceof TypeError;}
+            finally{externalProduction.pop();}
+        });
+        check('private-unbranded-production-rejected',true,brandFailure);
+        check('private-unreviewed-getter-rejected','unreviewed private getter: coord',pinFailure);
         check('unexpected-page-errors',[],errors);
         if(dir) {
             fs.writeFileSync(path.join(dir,'page-observations.json'),JSON.stringify({tier:'source-executed fixture in Chromium; no game/network claim',observations,legacyResult,privateResult},null,2)+'\n');
