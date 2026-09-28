@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "ancestry": {
+    "file": "/root/diplomacy/artifacts/TASK-225/review-127/historical-selection.json",
+    "sha256": "170c8a76f355135a42cff15d42bd40c795727857925b0f93abd63b98471eed49"
+  },
+  "records": {
+    "competitive": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-114/provider",
+      "sourceSha256": "6c2f9371bb343df99c66ef3e3fbec78a9f0792d8bfde088af9e5e031bc30d758",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-114/prepared/selected-219/competitive-independent-review.json",
+      "reportSha256": "9238f838234bb5ae877b201ed4792f2a46859b2225ed5829d01187df6c82e91e",
+      "assertionIds": [
+        "competitive/AC4/current-sources",
+        "competitive/AC5/current-sources",
+        "competitive/AC6/current-sources"
+      ],
+      "selectionKey": "competitiveSelection"
+    },
+    "camera": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-92/provider",
+      "sourceSha256": "47a6212120576db188ab0409fa3aea5aaa4d7b37ab63c3f49a5ac2904cbd69f9",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-92/prepared/selected-213/camera-independent-review.json",
+      "reportSha256": "dc9a7a14d727302d1f83a9d9be27285437cac1f85f645a613229deebd0d59794",
+      "assertionIds": [
+        "camera/AC4/current-source-hashes",
+        "camera/AC5/current-source-hashes",
+        "camera/AC6/current-source-hashes",
+        "camera/AC8/current-source-hashes"
+      ],
+      "selectionKey": "cameraSelection"
+    },
+    "matrix": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-96/provider",
+      "sourceSha256": "71e5f3db13e3a8c8df4bf030c3b91f8ea5038603dc90bd0d91e029a608e52354",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-98/prepared/selected-214/matrix-independent-review.json",
+      "reportSha256": "a4c6d2224b21be3eaacd05d3939d20d7f97409de6b49cf9a9c46769b25b51eb4",
+      "assertionIds": [
+        "matrix/AC3/current-sources",
+        "matrix/AC4/current-sources",
+        "matrix/AC5/current-sources",
+        "matrix/AC6/current-sources",
+        "matrix/AC8/current-sources"
+      ],
+      "selectionKey": "matrixSelection"
+    },
+    "natural": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-100/provider",
+      "sourceSha256": "003f1c69ca2c458aba6c773bd0bd5ffbd05775dce107c19c206cce9876ccfdfd",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-100/prepared/selected-215/natural-independent-review.json",
+      "reportSha256": "62a98cf342e984851f4da06b01ae73e68618c8d4df407bd4e07002f8bd699873",
+      "assertionIds": [
+        "natural/AC5/current-sources",
+        "natural/AC6/current-sources",
+        "natural/AC7/current-sources"
+      ],
+      "selectionKey": "naturalSelection"
+    },
+    "four": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-106/provider",
+      "sourceSha256": "717f5eb32e872f3753a4b5958cc4b8349e7aee459479f325026c2a9e212794d4",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-107/prepared/selected-216/four-independent-review.json",
+      "reportSha256": "3ca8692a65c32017df091987d01460310c9c587155a94648d46ed5af13edd064",
+      "assertionIds": [
+        "four/AC5/current-sources",
+        "four/AC6/current-sources",
+        "four/AC7/current-sources"
+      ],
+      "selectionKey": "fourSelection"
+    },
+    "ten": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-108/provider",
+      "sourceSha256": "c5eb674e79999e5b134b1413fa6ecfecd8a0751d6bb6ab84d4dc20f62c8f8426",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-108/prepared/selected-217/ten-independent-review.json",
+      "reportSha256": "46ac346aa16422115e05aaf9ec5e9c20df7ed0174340a3f4deef2dc3126976f1",
+      "assertionIds": [
+        "ten/AC5/current-sources",
+        "ten/AC6/current-sources",
+        "ten/AC7/current-sources"
+      ],
+      "selectionKey": "tenSelection"
+    },
+    "twelve": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-111/provider",
+      "sourceSha256": "1f5e8d31ebf5b384e5d8a296d2203191225fbda0b2a036e75f01ab2e685a8ecf",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-111/prepared/selected-218/twelve-independent-review.json",
+      "reportSha256": "997ce961701bf8d67672e693ebc234471b90755cc87368dcc0af01cd4798fad6",
+      "assertionIds": [
+        "twelve/AC5/current-sources",
+        "twelve/AC6/current-sources",
+        "twelve/AC7/current-sources"
+      ],
+      "selectionKey": "twelveSelection"
+    },
+    "fog": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-81/selected-212",
+      "sourceSha256": "4e1a4aed3a737bd74d009e2985fc1f6e041a47058000931d3cfe4128f2a20f77",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-81/selected-212/fog-ac4-review.json",
+      "reportSha256": "3a62206992e4544a027a5c7006cc2a85acc6256bb09799f02886eb1cffe2f268",
+      "assertionIds": [
+        "fog-records/AC4/current-sources"
+      ],
+      "selectionKey": "fogRecords"
+    },
+    "asset-records": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-75/prepared/selected-211",
+      "sourceSha256": "7f212904a56e309a3cbb6fd6440cc024898875f80faabc97cb226a60b9c12f1c",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-75/prepared/selected-211/ac4-independent-review.json",
+      "reportSha256": "d0462b8724499564d4560ff3f8d5cce3f927271887754f2c6a5d968466c99507",
+      "assertionIds": [
+        "records/source-current"
+      ],
+      "selectionKey": "evidenceSelection"
+    },
+    "asset-requirements": {
+      "directory": "/root/diplomacy/artifacts/TASK-225/review-75/prepared/selected-211",
+      "sourceSha256": "7f212904a56e309a3cbb6fd6440cc024898875f80faabc97cb226a60b9c12f1c",
+      "report": "/root/diplomacy/artifacts/TASK-225/review-75/prepared/selected-211/ac5-independent-review.json",
+      "reportSha256": "20d5a97a6938616dd292f3de0c404845cdb40d007c3746de44fe55924fe84622",
+      "assertionIds": [
+        "requirements/AC5/source-current"
+      ],
+      "selectionKey": "evidenceSelection"
+    }
+  },
+  "assetOracles": {
+    "ac1-independent-review.json": {
+      "file": "/root/diplomacy/artifacts/TASK-225/review-70/prepared/selected-211/ac1-independent-review.json",
+      "sha256": "2f0da68bc9e8950cf8cefcd5d38c3572d97b27fb6cd1988c9dd222e5be73b852",
+      "sourceSha256": "7f212904a56e309a3cbb6fd6440cc024898875f80faabc97cb226a60b9c12f1c"
+    },
+    "ac2-independent-review.json": {
+      "file": "/root/diplomacy/artifacts/TASK-225/review-70/prepared/selected-211/ac2-independent-review.json",
+      "sha256": "a7d3ca46037966111536f23f5d66e958bb317fca5597ef0e7346c705e6f7ca4e",
+      "sourceSha256": "7f212904a56e309a3cbb6fd6440cc024898875f80faabc97cb226a60b9c12f1c"
+    },
+    "ac3-independent-review.json": {
+      "file": "/root/diplomacy/artifacts/TASK-225/review-70/prepared/selected-211/ac3-independent-review.json",
+      "sha256": "5e47aa28886a8a838f91e5275ee006eec5618b476a04742c2c64dad5a1088326",
+      "sourceSha256": "7f212904a56e309a3cbb6fd6440cc024898875f80faabc97cb226a60b9c12f1c"
+    },
+    "ac7-independent-review.json": {
+      "file": "/root/diplomacy/artifacts/TASK-225/review-70/prepared/selected-211/ac7-independent-review.json",
+      "sha256": "062ef64ad864b1aad1921ba2eb918449d12a925f521cb54f68ecab2db483de28",
+      "sourceSha256": "7f212904a56e309a3cbb6fd6440cc024898875f80faabc97cb226a60b9c12f1c"
+    }
+  }
+}

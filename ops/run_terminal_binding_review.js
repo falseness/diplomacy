@@ -14,6 +14,8 @@ if(process.argv[3]==='old') {
 const G=require('./evidence_terminal_ac3_gate_v2'),C=require('./evidence_terminal_ac3_selection_v2'),C2=require('./evidence_terminal_ac2_selection_v2');
 const T=require('./evidence_terminal_selection_v2'),F=require('./review_terminal_outcomes_v2');
 for(let g=G;g;g=g.previous)g.onPhase=m=>console.log(m);
+const Hist=require('./historical_source_binding');Hist.toolIdentities();
+process.on('exit',()=>{save('historical-source-observations.json',[...Hist.observations.values()]);save('historical-oracle-executions.json',Hist.oracleExecutions);});
 const checks=[],ck=(id,e,o)=>{assert.deepEqual(o,e,id);checks.push({id,expected:e,observed:o,pass:true});};
 const controls=[];
 function reject(id,fn,re){let error;try{fn();}catch(e){error=e;}assert(error&&re.test(error.message),id+': '+error?.message);controls.push({id,expected:'rejection '+re,observed:error.message,pass:true});console.log('PASS reject '+id);}

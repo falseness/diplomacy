@@ -8,8 +8,8 @@ const R=require('/root/diplomacy_server/tests/reliability/helpers/evidence-revie
 const F=require('./review_terminal_outcomes_v2'),J=require('./review_terminal_ac3_v2'),H=require('./consume_historical_catalog');
 const BASE='/root/diplomacy/artifacts/TASK-225/review-127/historical-selection.json';
 const key='TASK-221-AC3';
-const toolHashes=()=>Object.fromEntries(['review_terminal_outcomes_v2.js','evidence_terminal_selection_v2.js','evidence_terminal_gate_v2.js','review_terminal_ac3_v2.js','terminal_ac3_provider.js',
-    'review_terminal_semantics.js','review_terminal_boundary.js','evidence_terminal_ac3_selection_v2.js','evidence_terminal_ac3_gate_v2.js'].map(n=>[n,A.hash(path.join(__dirname,n))]));
+const toolHashes=()=>({...require('./historical_source_binding').toolIdentities(),...Object.fromEntries(['review_terminal_outcomes_v2.js','evidence_terminal_selection_v2.js','evidence_terminal_gate_v2.js','review_terminal_ac3_v2.js','terminal_ac3_provider.js',
+    'review_terminal_semantics.js','review_terminal_boundary.js','evidence_terminal_ac3_selection_v2.js','evidence_terminal_ac3_gate_v2.js'].map(n=>[n,A.hash(path.join(__dirname,n))]))});
 function row(tasks,report,manifest) {
     const text=tasks.find(t=>t.id==='TASK-221').acceptance_criteria[2],ref=file=>({file,sha256:manifest[file]});
     return {id:'TASK-221/AC3',targetSha256:R.digest(text),reviewer:'Independent joined terminal lifecycle',clauses:[{

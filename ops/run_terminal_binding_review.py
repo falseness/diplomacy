@@ -25,14 +25,14 @@ def command(label,argv,cwd=ROOT,expected=0,env=None):
         f.write((out/(label+'.log')).read_text());f.write('\nACTUAL_EXIT='+str(code)+'\n')
     assert not timed and code==expected,(label,code)
     return (out/(label+'.log')).read_text()
-cases=['production-command-regressions','old-path-rejection','historical-ancestry-binding','current-whole-AC2-AC3-readers','nine-corruption-controls','actual-cumulative-target-only-transition','final-evidence-audit']
-save('verification-plan.json',{'fullInvocation':False,'estimateMs':1800000,'stopWorkMs':3300000,'budgetMs':3600000,'cases':cases,'tiers':['production-source fixture','independent offline review of original shipped-browser and network proof'],'exclusions':['no new provider or browser acquisition','no full audit while prior obligations remain'],'commands':[[NODE,'--test','ops/test_terminal_command_boundary.js'],[NODE,'ops/run_terminal_binding_review.js',str(out),'old'],[NODE,'ops/run_terminal_binding_review.js',str(out)],['git','diff','--check']],'provider':'artifacts/TASK-225/join-143/run-01/provider','providerReceipt':'artifacts/TASK-225/join-143/run-01/provider-exit.json'})
-tools=[*ROOT.glob('ops/*terminal*_v2.js'),ROOT/'ops/run_terminal_binding_review.js',pathlib.Path(__file__).resolve()]
+cases=['production-command-regressions','old-path-rejection','historical-ancestry-binding','current-whole-AC2-AC3-readers','nine-corruption-controls','pinned-historical-source-regressions','actual-cumulative-target-only-transition','final-evidence-audit']
+save('verification-plan.json',{'fullInvocation':False,'estimateMs':1800000,'stopWorkMs':3300000,'budgetMs':3600000,'cases':cases,'tiers':['production-source fixture','independent offline review of original shipped-browser and network proof'],'exclusions':['no new provider or browser acquisition','no full audit while prior obligations remain'],'commands':[[NODE,'--test','ops/test_terminal_command_boundary.js','ops/test_historical_source_binding.js'],[NODE,'ops/run_terminal_binding_review.js',str(out),'old'],[NODE,'ops/run_terminal_binding_review.js',str(out)],['git','diff','--check']],'provider':'artifacts/TASK-225/join-143/run-01/provider','providerReceipt':'artifacts/TASK-225/join-143/run-01/provider-exit.json'})
+tools=[*ROOT.glob('ops/*terminal*_v2.js'),*ROOT.glob('ops/terminal_ancestry_v1/*.js'),*ROOT.glob('ops/historical_*'),ROOT/'ops/test_historical_source_binding.js',ROOT/'ops/run_terminal_binding_review.js',pathlib.Path(__file__).resolve()]
 hashes={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in tools};save('review-tool-identities.json',hashes)
 passed=False
 try:
     command('runtime',[NODE,'--version'])
-    command('source-tests',[NODE,'--test','ops/test_terminal_command_boundary.js'],env={'COMMAND_BOUNDARY_OUTPUT':str(out/'command-checkpoints.json')})
+    command('source-tests',[NODE,'--test','ops/test_terminal_command_boundary.js','ops/test_historical_source_binding.js'],env={'COMMAND_BOUNDARY_OUTPUT':str(out/'command-checkpoints.json')})
     old=command('old-reader',[NODE,'ops/run_terminal_binding_review.js',str(out),'old'],expected=1)
     assert 'terminal/implementation/client/player.js' in old,'intended old rejection'
     command('consumer',[NODE,'ops/run_terminal_binding_review.js',str(out)])
