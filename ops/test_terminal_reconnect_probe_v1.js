@@ -27,7 +27,7 @@ test('success retains one original eight-second predicate wait and records timin
 test('failure retains original error and captures underlying cause without retry', async () => {
     const rows = []; let calls = 0;
     const original = Object.assign(new Error('page.waitForFunction: Timeout 8000ms exceeded.'), {name:'TimeoutError'});
-    await assert.rejects(driver().call({name:'p1',trace:r=>rows.push(r),page:{waitForFunction:async()=>{calls++;throw original;}}}, 'reconnect slot', '!menu.visible'), {message:'p1: input "reconnect slot" had no observed effect (!menu.visible)'});
+    await assert.rejects(driver().call({name:'p1',trace:r=>rows.push(r),page:{waitForFunction:async()=>{calls++;throw original;}}}, 'reconnect slot', '!menu.visible'), {message:'p1: input "reconnect slot" had no observed effect (!menu.visible)', cause:original});
     assert.equal(calls,1); assert.deepEqual(rows.map(r=>r.boundary),['before','failure']);
     assert.equal(rows[1].causeName,original.name); assert.equal(rows[1].causeMessage,original.message);
 });

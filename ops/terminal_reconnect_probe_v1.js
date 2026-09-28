@@ -5,11 +5,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const FILE = '/root/diplomacy_server/tests/reliability/helpers/browser-driver.js';
-const PIN = 'cd99d63051da689a098a3170ebb507f6e0aa28dfc9f74aeb5efd28d467fd6348';
+const PIN = 'a9ec0d9e5a8d3fc91192b2b5ebb559159e3d3a1c12d65e65a7b53e2838bf31c3';
 const BEFORE = `            try {
                 await this.page.waitForFunction(until, null, {timeout: 8000, polling: 50});
             } catch (error) {
-                throw new Error(\`${'${this.name}'}: input "${'${label}'}" had no observed effect (${'${until}'})\`);
+                throw new Error(\`${'${this.name}'}: input "${'${label}'}" had no observed effect (${'${until}'})\`, {cause: error});
             }`;
 const ADDED = [
     "            const reconnectProbe = label === 'reconnect slot' && until === '!menu.visible';\n            const reconnectStarted = reconnectProbe ? Date.now() : null;\n            if (reconnectProbe) this.trace({action:'reconnect-wait', boundary:'before', timeoutMs:8000, pollingMs:50, predicate:'!menu.visible'});\n",
