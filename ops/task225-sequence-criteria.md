@@ -62,3 +62,20 @@ production game-frame entry/exit ordering without changing the 51 ms input,
 camera state, clocks or assertions. Do not infer a lost-pulse diagnosis from
 this successful trace or blindly replay the whole provider. The review-114
 selection remains authoritative; 63 obligations and all eight self owners remain.
+
+The follow-up scheduling diagnostic is `python3 ops/diagnose_sequence_frames.py
+<fresh-directory>` (launch detached and retain its OS receipt). It reuses the
+passive pan observer and the same seed-1, fog-on, two-human, 12-action case.
+`sequence_frame_observer.js` applies CDP CPU throttling rate 4 only around each
+unchanged pan call, restores rate 1 in finally, and records synchronous entry/exit
+of actual `gameLoop` RAF callbacks. The wrapper forwards each callback exactly
+once with the native timestamp, receiver, return and exception semantics; it
+neither delays nor replaces the game callback. Instrumentation overhead and CPU
+throttling make this a diagnostic, not an uninstrumented current provider.
+No served bytes, clocks, camera state, assertions or input durations are changed.
+The predeclared hypothesis is that input entirely between production updates may
+be lost; success alone cannot establish the cause of review-121's failure.
+`audit_sequence_frames.py` independently checks every observed frame displacement
+against the frame-duration cap, incoming speed and clamp bounds, actual trusted
+input ordering, throttle restoration, tested hashes, OS exit and service cleanup.
+Its `diagnosticEvidencePass` never implies a complete invocation or current credit.
