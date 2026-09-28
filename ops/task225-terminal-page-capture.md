@@ -61,3 +61,24 @@ prerequisites may the single affected four-journey provider run and absent/prese
 cumulative consumption proceed. Keep review-114 current and review-127 frozen.
 The full audit remains gated by all required prior local obligations. No new
 criterion credit or successful full TASK-225 invocation is claimed here.
+
+## Independent raw-state semantics
+
+`review_terminal_semantics.js` independently reads registry/grid storage and
+checks finite HP/moves/gold, required ownership, coordinate bounds, consistent
+identity aliases and live registry occupancy. It derives living players without
+pruning captured arrays, excludes transferred towns, and computes competitive
+termination and all four co-op outcomes from a separately declared fixture policy.
+The production distinction between killed units and positive-HP demon threats is
+retained. Terminal control state and stored result must agree with that derivation.
+Identical malformed before/after snapshots with newly computed hashes are rejected.
+
+The integrated source fixture exercises this reader, including the original
+inconsistent stored result. Co-op outcome combinations are explicitly checker
+fixtures, not new browser game observations. The fixture policy is not yet bound
+to a provider manifest; portal classification uses the production demonPortal
+name contract. This reader does not claim complete AC2/AC3: it still needs
+recipient/fixture policy binding, complete initial-to-terminal and first-move
+expectations, read-only persistence/reconnect bindings, authenticated dispatch
+and execution lifecycle checks. Those are the exact next integration requirements
+before any affected provider refresh. A state-reader pass grants no criterion row.

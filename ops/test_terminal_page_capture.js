@@ -8,6 +8,7 @@ const {chromium} = require('/opt/diplomacy/node_modules/playwright');
 const {createTerminalCapture} = require('./terminal_passive_capture');
 const {installTerminalPageCapture} = require('./terminal_page_capture');
 const {reviewBoundary} = require('./review_terminal_boundary');
+const {deriveTerminalState, reviewTerminalState} = require('./review_terminal_semantics');
 const dir = process.env.TERMINAL_ADAPTER_OUTPUT;
 const records = [];
 function check(id, expected, observed) {
@@ -147,6 +148,66 @@ test('integrated adapter: native Storage, passive UI, identities, legacy mutatio
                 check('participant-'+i+'/rebound-reject-'+name,true,rejected);
             }
         }
+        // The two-player source fixture is competitive for independent outcome
+        // derivation: its coop declaration has an absent demon slot and is rejected.
+        const semantic = structuredClone(observations[0].first);
+        const policy = {mode:'competitive',neutralSlot:0};
+        check('semantic/raw-living-state', [{slot:0,units:0,towns:0,lost:true},
+            {slot:1,units:0,towns:0,lost:true}], deriveTerminalState(semantic,policy).living);
+        assert.throws(()=>reviewTerminalState(semantic,policy), /stored result/);
+        check('semantic/reject-inconsistent-stored-result',true,true);
+        // Labeled checker fixture only; never represented as browser game proof.
+        semantic.state.result=null;
+        check('semantic/competitive-terminal',true,reviewTerminalState(semantic,policy).pass);
+        for(const [name,mutate,pattern] of [
+            ['missing-hp',s=>{delete s.state.players.items[1].units.items[0].hp;},/hp required/],
+            ['missing-moves',s=>{delete s.state.players.items[1].units.items[0].moves;},/moves required/],
+            ['alias-hp',s=>s.state.grid.items[0].items[0].unit.hp++,/inconsistent identity alias/],
+            ['missing-owner',s=>delete s.state.grid.items[0].items[0].hexagon.playerColor,/owner slot/],
+            ['out-of-map',s=>s.state.players.items[1].units.items[0].coord.x=9,/outside grid/],
+            ['duplicate-player',s=>s.state.players.items[1].identity=s.state.players.items[0].identity,/duplicate player/],
+            ['enabled-next',s=>s.state.next.canClick=true,/next disabled/],
+            ['resumed-timer',s=>s.state.timer.isTick=true,/timer stopped/],
+        ]) {
+            const bad=structuredClone(semantic);mutate(bad);
+            const pair={before:bad,after:structuredClone(bad)};
+            assert.deepEqual(pair.before,pair.after);
+            assert.equal(crypto.createHash('sha256').update(JSON.stringify(pair)).digest('hex').length,64);
+            assert.throws(()=>reviewTerminalState(pair.before,policy),pattern);
+            check('semantic/rebound-identical-reject-'+name,true,true);
+        }
+        assert.throws(()=>deriveTerminalState(semantic,{mode:'coop',neutralSlot:0,demonSlot:2}),/demon slot/);
+        check('semantic/reject-missing-demon-slot',true,true);
+        const coopPolicy={mode:'coop',neutralSlot:0,demonSlot:2};
+        const coopFixture=structuredClone(semantic);
+        coopFixture.state.players.items.push({identity:1000,gold:0,units:{items:[]},towns:{items:[]}});
+        const setHumanLiving = live => {
+            coopFixture.state.players.items[1].units.items[0].killed=!live;
+            coopFixture.state.grid.items[0].items[0].unit.killed=!live;
+        };
+        for(const [name,human,portal,expected] of [
+            ['victory',true,false,'victory'],['ongoing',true,true,null],
+            ['defeat',false,true,'defeat'],['draw',false,false,'draw'],
+        ]) {
+            setHumanLiving(human);
+            coopFixture.extended.external.items=portal?[{ref:1001,name:'demonPortal',hp:1,killed:false}]:[];
+            check('semantic/independent-coop-'+name,expected,deriveTerminalState(coopFixture,coopPolicy).result);
+            coopFixture.state.result=expected;
+            if(expected!==null)check('semantic/terminal-coop-'+name,true,reviewTerminalState(coopFixture,coopPolicy).pass);
+            else assert.throws(()=>reviewTerminalState(coopFixture,coopPolicy),/not reached/);
+        }
+        // Towns transferred to another owner cease to keep the old registry
+        // alive even if its raw killed flag is false. No pruning is performed.
+        const transferred=structuredClone(semantic);
+        transferred.state.players.items[1].towns.items[0].killed=false;
+        transferred.state.grid.items[0].items[0].building.killed=false;
+        transferred.state.grid.items[0].items[0].hexagon.playerColor=0;
+        check('semantic/transferred-town-not-living',true,deriveTerminalState(transferred,policy).living[1].lost);
+        const misplaced=structuredClone(coopFixture);setHumanLiving(true);
+        misplaced.state.players.items[1].units.items[0].killed=false;
+        misplaced.state.grid.items[0].items[0].unit={...misplaced.state.players.items[1].units.items[0],identity:2000};
+        assert.throws(()=>deriveTerminalState(misplaced,coopPolicy),/live registry occupancy/);
+        check('semantic/reject-swapped-live-occupancy',true,true);
         const legacyResult = await pages[0].evaluate(() => {
             const before=rawBaseline(); const pre={units:human.units.length,towns:human.towns.length,result:gameSettings.coop.result};
             OBSERVE();

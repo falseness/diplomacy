@@ -28,11 +28,11 @@ def main():
          cases=['seven-existing-primitive-controls', 'integrated-native-storage-page-adapter',
                 'legacy-observer-mutation-comparison', 'two-page-named-callback-receipts',
                 'rebound-semantic-rejections', 'private-branded-production-and-reference-baselines', 'private-pinned-getter-rejection',
-                'mandatory-town-field-rejections'],
+                'mandatory-town-field-rejections', 'independent-raw-terminal-semantics'],
          commands=[dict(argv=c,cwd=str(ROOT)) for c in commands],
          exclusions=['shipped gameplay', 'authenticated network/persistence', 'whole criterion consumption', 'full audit']))
     files = [ROOT / p for p in ['ops/terminal_passive_capture.js','ops/test_terminal_passive_capture.js',
-        'ops/terminal_page_capture.js','ops/review_terminal_boundary.js','ops/test_terminal_page_capture.js',
+        'ops/terminal_page_capture.js','ops/review_terminal_semantics.js','ops/review_terminal_boundary.js','ops/test_terminal_page_capture.js',
         'ops/run_terminal_page_capture.py','ops/task225-terminal-page-capture.md',
         'player.js','sprites/sprite.js','sprites/entities/entity.js','sprites/entities/units/unit/unit.js',
         'sprites/empty.js','options/timer.js','options/save.js',
