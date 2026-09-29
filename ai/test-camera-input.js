@@ -2,10 +2,10 @@
 // Production-source regressions for desktop camera keyboard/mouse arbitration.
 // Loads events/screen.js and events/events.js into a VM and drives the real
 // Events/ComputerScreen/MobileScreen classes frame by frame.
-// Usage: node ai/test-camera-input.js --case arbitration --output-dir <fresh> [--source-dir <repo>]
+// Usage: node ai/test-camera-input.js --case arbitration|direction --output-dir <fresh> [--source-dir <repo>]
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path'), crypto = require('node:crypto')
 
-const CASES = ['arbitration']
+const CASES = ['arbitration', 'direction']
 const FRAMES = 60
 const SIZE = 1000
 const SPEED = 0.04 * SIZE // ComputerScreen speed configured by Events
@@ -207,11 +207,140 @@ function arbitration(sourceDir) {
     return checks
 }
 
+// Per-axis directional key priority: newest physical press wins, release restores
+// the newest still-held key, auto-repeat never reorders presses.
+function direction(sourceDir) {
+    const checks = []
+    const check = (id, description, observed, expected) => {
+        const pass = JSON.stringify(observed) === JSON.stringify(expected)
+        checks.push({ id, description, expected, observed, pass })
+        console.log((pass ? 'PASS ' : 'FAIL ') + id + ' expected=' + JSON.stringify(expected) + ' observed=' + JSON.stringify(observed))
+    }
+    const phase = (id, description, world, expected) => check(id, description, summarize(world.frames()), expected)
+    const press = (w, key) => w.events.keyboard(key, false, false)
+    const repeat = (w, key) => w.events.keyboard(key, false, true)
+
+    // Opposite keys on each axis, both press orders; release the newer then the older key.
+    const pairs = [
+        ['horizontal', 'right', 'left', 1, 0], ['horizontal', 'left', 'right', -1, 0],
+        ['vertical', 'down', 'up', 0, 1], ['vertical', 'up', 'down', 0, -1],
+        ['wasd-horizontal', 'd', 'a', 1, 0], ['wasd-vertical', 'w', 's', 0, -1],
+        ['mixed-horizontal', 'right', 'a', 1, 0], ['mixed-vertical', 's', 'up', 0, 1],
+    ]
+    for (const [axis, older, newer, dx, dy] of pairs) {
+        const w = createWorld(sourceDir)
+        press(w, KEY[older])
+        phase(`${axis}/${older}-${newer}/${older}-held`, `${older} held`, w, expectMove(dx, dy))
+        press(w, KEY[newer])
+        phase(`${axis}/${older}-${newer}/${newer}-pressed`, `${older} held, ${newer} pressed`, w, expectMove(-dx, -dy))
+        w.events.keyup(KEY[newer])
+        phase(`${axis}/${older}-${newer}/${newer}-released`, `${newer} released, ${older} still held`, w, expectMove(dx, dy))
+        w.events.keyup(KEY[older])
+        phase(`${axis}/${older}-${newer}/all-released`, 'all keys released, no mouse edge', w, expectMove(0, 0))
+    }
+
+    // Releasing the inactive (older) key keeps the newer direction.
+    let w = createWorld(sourceDir)
+    press(w, KEY.right)
+    press(w, KEY.left)
+    w.events.keyup(KEY.right)
+    phase('inactive-release/right-released-left-held', 'Right then Left, Right released', w, expectMove(-1, 0))
+    w.events.keyup(KEY.left)
+    phase('inactive-release/all-released', 'Left released', w, expectMove(0, 0))
+
+    // Two aliases for the same direction plus an opposite key.
+    w = createWorld(sourceDir)
+    press(w, KEY.right)
+    press(w, KEY.d)
+    press(w, KEY.left)
+    phase('aliases/right-d-then-left', 'Right and D held, Left pressed', w, expectMove(-1, 0))
+    w.events.keyup(KEY.left)
+    phase('aliases/left-released', 'Left released, Right and D held', w, expectMove(1, 0))
+    w.events.keyup(KEY.d)
+    phase('aliases/d-released', 'D released, Right held', w, expectMove(1, 0))
+    press(w, KEY.a)
+    w.events.keyup(KEY.right)
+    phase('aliases/a-pressed-right-released', 'A pressed, Right released', w, expectMove(-1, 0))
+    w.events.keyup(KEY.a)
+    phase('aliases/all-released', 'all released', w, expectMove(0, 0))
+
+    // Auto-repeat of an older held key must not take priority over a newer press.
+    w = createWorld(sourceDir)
+    press(w, KEY.right)
+    repeat(w, KEY.right)
+    press(w, KEY.left)
+    repeat(w, KEY.left)
+    repeat(w, KEY.right)
+    phase('auto-repeat/older-right-repeats', 'Right then Left held, Right auto-repeats', w, expectMove(-1, 0))
+    repeat(w, KEY.right)
+    phase('auto-repeat/older-right-repeats-again', 'Right auto-repeats again', w, expectMove(-1, 0))
+    w.events.keyup(KEY.left)
+    phase('auto-repeat/newer-left-released', 'Left released, Right still held', w, expectMove(1, 0))
+    w.events.keyup(KEY.right)
+    phase('auto-repeat/all-released', 'all released', w, expectMove(0, 0))
+    w = createWorld(sourceDir)
+    press(w, KEY.w)
+    press(w, KEY.down)
+    repeat(w, KEY.w)
+    phase('auto-repeat/older-w-repeats', 'W then Down held, W auto-repeats', w, expectMove(0, 1))
+    w.events.keyup(KEY.down)
+    phase('auto-repeat/down-released', 'Down released, W still held', w, expectMove(0, -1))
+    w.events.keyup(KEY.w)
+    phase('auto-repeat/vertical-all-released', 'all released', w, expectMove(0, 0))
+    // A fresh physical re-press (after release) does reorder.
+    w = createWorld(sourceDir)
+    press(w, KEY.right)
+    press(w, KEY.left)
+    w.events.keyup(KEY.right)
+    press(w, KEY.right)
+    phase('re-press/right-re-pressed', 'Right re-pressed after release while Left held', w, expectMove(1, 0))
+    w.events.keyup(KEY.right)
+    phase('re-press/right-released', 'Right released, Left held', w, expectMove(-1, 0))
+    w.events.keyup(KEY.left)
+
+    // Both axes together, independent per axis.
+    w = createWorld(sourceDir)
+    press(w, KEY.right)
+    press(w, KEY.up)
+    press(w, KEY.a)
+    press(w, KEY.s)
+    phase('both-axes/newer-a-and-s', 'Right, Up, A, S held', w, expectMove(-1, 1))
+    repeat(w, KEY.right)
+    repeat(w, KEY.up)
+    phase('both-axes/older-keys-repeat', 'Right and Up auto-repeat', w, expectMove(-1, 1))
+    w.events.keyup(KEY.a)
+    phase('both-axes/a-released', 'A released', w, expectMove(1, 1))
+    w.events.keyup(KEY.s)
+    phase('both-axes/s-released', 'S released', w, expectMove(1, -1))
+    w.events.keyup(KEY.up)
+    phase('both-axes/up-released', 'Up released', w, expectMove(1, 0))
+    w.events.keyup(KEY.right)
+    phase('both-axes/all-released', 'all released', w, expectMove(0, 0))
+    phase('both-axes/still-stopped', 'no stuck movement after another 60 frames', w, expectMove(0, 0))
+
+    // Final release falls back to mouse-edge input.
+    w = createWorld(sourceDir)
+    w.events.mousemove(EDGE.bottom, EDGE.bottom)
+    press(w, KEY.left)
+    press(w, KEY.right)
+    press(w, KEY.up)
+    phase('mouse-fallback/keys-override', 'Left, Right, Up held, mouse at bottom edge', w, expectMove(1, -1))
+    w.events.keyup(KEY.right)
+    phase('mouse-fallback/right-released', 'Right released', w, expectMove(-1, -1))
+    w.events.keyup(KEY.left)
+    w.events.keyup(KEY.up)
+    phase('mouse-fallback/all-released', 'all keys released, mouse at bottom edge', w, expectMove(0, 1))
+    w.events.mousemove(CENTER, CENTER)
+    phase('mouse-fallback/mouse-center', 'mouse moved to center', w, expectMove(0, 0))
+
+    return checks
+}
+
 function main() {
     const args = parseArgs(process.argv.slice(2))
     fs.mkdirSync(args.outputDir, { recursive: true })
     const started = Date.now()
-    const checks = arbitration(args.sourceDir)
+    const checks = { arbitration, direction }[args.case](args.sourceDir)
     const failed = checks.filter(c => !c.pass)
     const pass = failed.length === 0
     const out = f => path.join(args.outputDir, f)
@@ -229,4 +358,4 @@ function main() {
 }
 
 if (require.main === module) main()
-module.exports = { arbitration, CASES }
+module.exports = { arbitration, direction, CASES }

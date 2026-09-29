@@ -46,7 +46,7 @@ function touchend(event) {
     gameEvent.touchend(pos, event.touches.length)
 }
 function keydown(event) {
-    gameEvent.keyboard(event.keyCode, event.shiftKey)
+    gameEvent.keyboard(event.keyCode, event.shiftKey, event.repeat)
 }
 function keyup(event) {
     gameEvent.keyup(event.keyCode)
@@ -166,7 +166,7 @@ class Events {
         
         return keys.has(keycode)
     }
-    keyboard(keycode, isShiftPressed) {
+    keyboard(keycode, isShiftPressed, isRepeat = false) {
         if (this.isPressKeyCode(keycode)) {
             if (keycode == Events.kEscapeKeycode) {
                 debug = !debug
@@ -211,12 +211,15 @@ class Events {
         }
         
         if (this.goLeftKeys.has(keycode) || this.goRightKeys.has(keycode)) {
-            this.pressed_horizontal_keys.delete(keycode)
+            // auto-repeat keeps the original press order
+            if (!isRepeat)
+                this.pressed_horizontal_keys.delete(keycode)
             this.pressed_horizontal_keys.add(keycode)
             this.updateScreenSpeed()
         }
         else if (this.goUpKeys.has(keycode) || this.goDownKeys.has(keycode)) {
-            this.pressed_vertical_keys.delete(keycode)
+            if (!isRepeat)
+                this.pressed_vertical_keys.delete(keycode)
             this.pressed_vertical_keys.add(keycode)
             this.updateScreenSpeed()
         }
@@ -395,9 +398,9 @@ class EventsMapCreation {
         cell.building = new Empty()
         this.constructor.bushes_coords.pop()
     }
-    keyboard(keycode, isShiftPressed) { 
+    keyboard(keycode, isShiftPressed, isRepeat) {
         if (keycode != Events.kBackspaceKeycode) {
-            super.keyboard(keycode, isShiftPressed)
+            super.keyboard(keycode, isShiftPressed, isRepeat)
             return
         }
         this.pop_bushes_coords()
