@@ -101,12 +101,15 @@ function run(sourceDir) {
             { scale: 1.3, offset: { x: 40, y: -70 } })
     }
 
-    // Plain = is not a shortcut: no zoom, default not prevented.
+    // Plain = (the +/= key without Shift) zooms in exactly like +.
     {
         const w = zoomWorld(sourceDir)
         const e = w.down(FORMS.equal)
-        check('keys/plain-equal-ignored', 'plain = (Equal without Shift) does not zoom or prevent default',
-            { ...w.state(), prevented: e.prevented }, { scale: 1, offset: { x: 0, y: 0 }, prevented: 0 })
+        const ref = zoomWorld(sourceDir)
+        ref.down(FORMS.plus)
+        check('keys/plain-equal-zooms-in', 'plain = (Equal without Shift) zooms in like + and prevents default',
+            { ...w.state(), prevented: e.prevented }, { ...ref.state(), prevented: 1 })
+        check('keys/plain-equal-step', 'plain = multiplies scale by the keyboard step', w.env.canvas.scale, STEP)
     }
 
     // Pointer anchor: the world point under the last canvas pointer stays at the same screen position.
@@ -276,19 +279,54 @@ function run(sourceDir) {
         const w = zoomWorld(sourceDir)
         const e = w.down({ key: 'ArrowRight', code: 'ArrowRight', keyCode: KEY.right })
         w.down(FORMS.plus)
+        w.up(FORMS.plus)
         const start = w.offset()
         for (let i = 0; i < 60; i++) w.events.moveScreen(1000 / 60)
         const moved = w.offset().x - start.x
-        w.up(FORMS.plus)
         w.up({ key: 'ArrowRight', code: 'ArrowRight', keyCode: KEY.right })
         const s2 = w.offset()
         for (let i = 0; i < 60; i++) w.events.moveScreen(1000 / 60)
-        check('preserve/arrow-movement-with-zoom-key', 'Right held with plus: moves right 60 frames, not prevented, stops on release',
+        check('preserve/arrow-movement-with-zoom-key', 'Right held after a plus tap: moves right 60 frames, not prevented, stops on release',
             { moved, prevented: e.prevented, scale: w.env.canvas.scale, afterRelease: w.offset().x - s2.x },
             { moved: SPEED * 60, prevented: 0, scale: STEP, afterRelease: 0 })
         w.down({ key: '-', code: 'Minus' })
         check('preserve/zoom-key-not-movement', 'zoom keys do not change camera speed',
             { speedX: w.events.screen.speedX, speedY: w.events.screen.speedY }, { speedX: 0, speedY: 0 })
+    }
+    // Holding a zoom key: one step now, nothing more during the 300 ms delay, then 2x per second until the limit.
+    {
+        const HOLD_DELAY = 300, HOLD_RATE = 2, FRAME = 1000 / 60
+        const w = zoomWorld(sourceDir)
+        w.down(FORMS.plus)
+        for (let i = 0; i < 18; i++) w.events.moveScreen(FRAME) // 300 ms
+        const afterDelay = w.env.canvas.scale
+        for (let i = 0; i < 42; i++) w.events.moveScreen(FRAME) // up to 1000 ms held
+        check('hold/plus-delay-then-continuous', 'holding + zooms one step, waits 300 ms, then 2x per second',
+            { afterDelay, afterSecond: w.env.canvas.scale },
+            { afterDelay: STEP, afterSecond: STEP * Math.pow(HOLD_RATE, (1000 - HOLD_DELAY) / 1000) })
+        for (let i = 0; i < 120; i++) w.events.moveScreen(FRAME)
+        check('hold/plus-clamps-at-max', 'holding + stops at the max scale', w.env.canvas.scale, MAX)
+        w.up(FORMS.plus)
+        const released = w.env.canvas.scale
+        w.down(FORMS.numpadSubtract)
+        for (let i = 0; i < 18; i++) w.events.moveScreen(FRAME)
+        const afterMinusDelay = w.env.canvas.scale
+        for (let i = 0; i < 42; i++) w.events.moveScreen(FRAME)
+        check('hold/minus-after-release', 'after release + stops; holding numpad - zooms out the same way',
+            { released, afterMinusDelay, afterSecond: w.env.canvas.scale },
+            { released: MAX, afterMinusDelay: MAX / STEP,
+                afterSecond: MAX / STEP / Math.pow(HOLD_RATE, (1000 - HOLD_DELAY) / 1000) })
+        w.up(FORMS.numpadSubtract)
+        const stopped = w.env.canvas.scale
+        for (let i = 0; i < 60; i++) w.events.moveScreen(FRAME)
+        check('hold/stops-on-release', 'no zoom after the key is released', w.env.canvas.scale, stopped)
+    }
+    {
+        const w = zoomWorld(sourceDir)
+        w.down(FORMS.plus)
+        w.env.windowBlur()
+        for (let i = 0; i < 60; i++) w.events.moveScreen(1000 / 60)
+        check('hold/blur-stops', 'window blur ends a held zoom', w.env.canvas.scale, STEP)
     }
     return checks
 }

@@ -106,8 +106,10 @@ class Events {
         this.mouseEdgeDirection = { x: 0, y: 0 }
         // last mouse position over the canvas in device pixels (getEventPos), the keyboard zoom anchor
         this.pointerPosition = null
-        // physical zoom keys (event.code) held since their zooming keydown
-        this.heldZoomKeys = new Set()
+        // physical zoom keys (event.code) held since their zooming keydown -> zoom direction; last pressed wins
+        this.heldZoomKeys = new Map()
+        // ms the current zoom key has been held, advanced by frames
+        this.zoomHeldFor = 0
 
         if (!mobilePhone) {
             this.screen = new ComputerScreen(0.002 * HEIGHT, 0.04 * HEIGHT)
@@ -180,11 +182,15 @@ class Events {
     static kBackspaceKeycode = 8
     static kILetterKeycode = 73
     static kKeyboardZoomStep = 1.1
+    // holding a zoom key keeps zooming after the delay, by this factor per second
+    static kKeyboardZoomHoldDelay = 300
+    static kKeyboardZoomHoldRate = 2
     // 1 zoom in, -1 zoom out, 0 not a zoom shortcut; Ctrl/Meta/Alt combinations stay browser zoom
     getZoomShortcutDirection(event) {
         if (event.ctrlKey || event.metaKey || event.altKey)
             return 0
-        if (event.code == 'NumpadAdd' || event.key == '+')
+        // the =/+ key zooms in with or without Shift
+        if (event.code == 'NumpadAdd' || event.code == 'Equal' || event.key == '+' || event.key == '=')
             return 1
         if (event.code == 'NumpadSubtract' || event.key == '-')
             return -1
@@ -205,16 +211,32 @@ class Events {
         const key = event.code || event.key
         if (event.repeat || this.heldZoomKeys.has(key))
             return true
-        this.heldZoomKeys.add(key)
+        this.heldZoomKeys.set(key, direction)
+        this.zoomHeldFor = 0
         const zoom = direction > 0 ? Events.kKeyboardZoomStep : 1 / Events.kKeyboardZoomStep
         this.screen.zoomBy(this.getZoomAnchor(), zoom)
         return true
     }
     releaseZoomKey(event) {
-        this.heldZoomKeys.delete(event.code || event.key)
+        if (this.heldZoomKeys.delete(event.code || event.key))
+            this.zoomHeldFor = 0
     }
     resetKeyboardZoom() {
         this.heldZoomKeys.clear()
+        this.zoomHeldFor = 0
+    }
+    // continuous zoom while a zoom key stays held past the hold delay
+    holdKeyboardZoom(frameDuration) {
+        if (!this.heldZoomKeys.size || menu.visible)
+            return
+        const direction = [...this.heldZoomKeys.values()].pop()
+        const before = this.zoomHeldFor
+        this.zoomHeldFor += Math.min(frameDuration, Screen.kMaxFrameDuration)
+        const zoomingTime = this.zoomHeldFor - Math.max(before, Events.kKeyboardZoomHoldDelay)
+        if (zoomingTime <= 0)
+            return
+        const zoom = Math.pow(Events.kKeyboardZoomHoldRate, direction * zoomingTime / 1000)
+        this.screen.zoomBy(this.getZoomAnchor(), zoom)
     }
     setPointerPosition(pos) {
         if (Number.isFinite(pos.x) && Number.isFinite(pos.y) &&
@@ -326,6 +348,7 @@ class Events {
         this.updateScreenSpeed(time)
     }
     moveScreen(frameDuration, frameTime = undefined) {
+        this.holdKeyboardZoom(frameDuration)
         this.screen.move(frameDuration, frameTime)
     }
     draw(ctx) {
