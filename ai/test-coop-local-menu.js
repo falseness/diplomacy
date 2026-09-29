@@ -214,7 +214,7 @@ const compare = (label, observed, expected) => {
       await click('menu.startGame.buttons[1]');
       await click('menu.play.backButton');
       compare('cancel-no-launch-'+count,await page.evaluate(()=>startCalls.length),1);
-      await click('menu.main.buttons[4]');
+      await click('menu.main.buttons[3]');
       await click('menu.load.buttons[0].movingForm.elements['+(count===1?0:1)+'].rect');
       await page.waitForFunction(()=>!menu.visible);
       compare('resume-saved-mode-'+count,await page.evaluate(()=>({round:gameRound,human:whooseTurn,
@@ -224,7 +224,7 @@ const compare = (label, observed, expected) => {
     await page.setViewportSize({width:1280,height:900});
     await page.reload({waitUntil:'load'});
     await page.waitForFunction(()=>menu.visible && imagesCountLoaded===images.length, undefined, {timeout:60000});
-    await capture('main-menu',{labels:['hot seat','play online','play AI','settings','load game'],visible:true},
+    await capture('main-menu',{labels:['hot seat','play online','settings','load game'],visible:true},
       await page.evaluate(()=>({labels:menu.main.buttons.map(b=>b.text.text),
         visible:menu.main.buttons.every(b=>b.y>=0 && b.bottom<=HEIGHT)})));
     await click('menu.main.buttons[0]');

@@ -648,8 +648,9 @@ class Menu {
                 this.setTree, this.play, true, this),
             this.constructor.getButton(startPos, 'play online',
                 this.setTree, this.online, true, this),
-            this.constructor.getButton(startPos, 'play AI',
-                startAI, 0),
+            // 'play AI' button hidden for now; startAI is still available.
+            // this.constructor.getButton(startPos, 'play AI',
+            //     startAI, 0),
             this.constructor.getButton(startPos, 'settings',
                 this.setTree, this.settings, true, this),
             this.constructor.getButton(startPos, 'load game',
