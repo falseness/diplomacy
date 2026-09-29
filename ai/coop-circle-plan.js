@@ -394,8 +394,93 @@ function placeCircleExpansions(plan, starts) {
     }
 }
 
+// Common ring categories in the per-human deal order; COOP_CIRCLE_ELITE_CATEGORIES
+// fill the elite core.
+const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged', 'support'])
+
+// Portals after placeCircleExpansions. Elite categories sit on elite lattice
+// cells (layer <= E); common categories sit in the ring E < layer <= ringOuter,
+// which keeps them at hex distance >= D from every human town. Lattice cells
+// are preferred; any other band cell is used only if it touches no portal.
+// Every portal keeps two distinct free approach cells (bipartite matching) that
+// are not portals, towns, mines or reservations, and the passable region stays
+// connected after every placement.
+function placeCirclePortals(plan, layout) {
+    const {side, humans, radius, center} = plan, {elite, ringOuter} = plan.regions
+    const targets = circleScaling(humans, plan.size).counts.portalCategories
+    const shuffle = circleShuffler(plan.seed ^ 0xc2b2ae35)
+    const cell = id => ({x: id % side, y: Math.floor(id / side)}), idOf = c => c.y * side + c.x
+    const layerOf = id => circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center)
+    const townIds = layout.players.flatMap(p => p.towns.map(idOf)), mineIds = layout.goldmines.map(idOf)
+    const occupied = new Set([...townIds, ...mineIds]), reserved = new Set(layout.reserved.map(idOf))
+    const around = id => circleNeighbours(cell(id), side).map(idOf).filter(n => layerOf(n) <= radius)
+    const portals = [], categories = [], portalSet = new Set()
+    const free = n => !occupied.has(n) && !reserved.has(n) && !portalSet.has(n)
+    // Two distinct approach cells per portal, or null.
+    const approaches = () => {
+        const options = portals.map(id => around(id).filter(free)), owner = new Map()
+        const augment = (slot, seen) => {
+            for (const n of options[slot >> 1]) {
+                if (seen.has(n)) continue
+                seen.add(n)
+                if (!owner.has(n) || augment(owner.get(n), seen)) { owner.set(n, slot); return true }
+            }
+            return false
+        }
+        for (let slot = 0; slot < 2 * portals.length; slot++) if (!augment(slot, new Set())) return null
+        const result = portals.map(() => [])
+        for (const [n, slot] of owner) result[slot >> 1].push(n)
+        return result.map(list => list.sort((a, b) => a - b))
+    }
+    const connected = () => {
+        const objects = [...occupied, ...portals]
+        return circlePassableConnected(plan, new Set(objects), objects)
+    }
+    // Each human's share of a region's categories, repeated once per human.
+    const deal = list => Array.from({length: humans}, () => list.flatMap(c => Array(targets[c] / humans).fill(c))).flat()
+    const groups = [
+        {region: 'elite', inside: layer => layer <= elite, sequence: deal(COOP_CIRCLE_ELITE_CATEGORIES)},
+        {region: 'ring', inside: layer => layer > elite && layer <= ringOuter, sequence: deal(COOP_CIRCLE_RING_CATEGORIES)}
+    ]
+    for (const group of groups) {
+        const lattice = [], rest = []
+        for (let id = 0; id < side * side; id++) {
+            if (!group.inside(layerOf(id)) || occupied.has(id) || reserved.has(id)) continue
+            ;(circleGeometry.coopHexLattice(id % side, Math.floor(id / side)) ? lattice : rest).push(id)
+        }
+        const candidates = [...shuffle(lattice), ...shuffle(rest)]
+        for (const category of group.sequence) {
+            let placed = false
+            for (const id of candidates) {
+                if (portalSet.has(id) || around(id).some(n => portalSet.has(n))) continue
+                portals.push(id); portalSet.add(id)
+                if (connected() && approaches()) { categories.push(category); placed = true; break }
+                portals.pop(); portalSet.delete(id)
+            }
+            if (!placed) throw new Error(`Circle has no ${group.region} portal site: size=${plan.size} humans=${humans} seed=${plan.seed} category=${category}`)
+        }
+    }
+    const categoryCounts = Object.fromEntries(Object.keys(targets).map(c => [c, categories.filter(k => k === c).length]))
+    if (Object.keys(targets).some(c => categoryCounts[c] !== targets[c]))
+        throw new Error(`Circle portal categories do not match: size=${plan.size} humans=${humans} seed=${plan.seed}`)
+    const assigned = approaches()
+    return {
+        ...layout,
+        stages: [...layout.stages, 'portals', 'reserve-portal-approaches'],
+        ring: {...layout.ring, indices: layout.ring.indices.slice()},
+        players: layout.players.map(p => ({...p, towns: p.towns.map(t => ({...t}))})),
+        reserved: [...new Set([...reserved, ...assigned.flat()])].sort((a, b) => a - b).map(cell),
+        goldmines: layout.goldmines.map(m => ({...m})),
+        assignments: layout.assignments.map(a => ({...a, mine: {...a.mine}})),
+        expansions: JSON.parse(JSON.stringify(layout.expansions)),
+        portals: portals.map((id, i) => ({...cell(id), category: categories[i]})),
+        portalCategories: categoryCounts,
+        portalApproaches: portals.map((id, i) => ({portal: cell(id), cells: assigned[i].map(cell)}))
+    }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {planCoopCircle, placeCircleStarts, placeCircleExpansions, circleRingOrder, circlePassableConnected, circleRadiusPlan, circleCapacityAt, circleRegions, clearCirclePlanCache,
+    module.exports = {planCoopCircle, placeCircleStarts, placeCircleExpansions, placeCirclePortals, circleRingOrder, circlePassableConnected, circleRadiusPlan, circleCapacityAt, circleRegions, clearCirclePlanCache,
         createCircleRandom, circleNeighbours, COOP_CIRCLE_ELITE_CATEGORIES, CIRCLE_TOWN_DISTANCE, CIRCLE_LEGEND,
-        CIRCLE_MAX_GROWTH, CIRCLE_ACCESS_DISPARITY}
+        CIRCLE_MAX_GROWTH, CIRCLE_ACCESS_DISPARITY, COOP_CIRCLE_RING_CATEGORIES}
 }
