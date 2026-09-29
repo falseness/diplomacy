@@ -2,6 +2,23 @@ class Screen {
     constructor() {
         this.speedX = 0
         this.speedY = 0
+        // movement accumulated at the current speed up to integratedUntil (event/frame clock, ms)
+        this.pendingOffset = { x: 0, y: 0 }
+        this.integratedUntil = undefined
+    }
+    static kFrameDuration = 1000 / 60
+    static kMaxFrameDuration = 100
+    // call before a speed change so a press released between frames still moves the camera
+    advanceTo(time) {
+        if (time === undefined)
+            return
+        if (this.integratedUntil !== undefined) {
+            const elapsed = Math.min(Math.max(time - this.integratedUntil, 0), Screen.kMaxFrameDuration)
+            const distanceRatio = elapsed / Screen.kFrameDuration
+            this.pendingOffset.x += this.speedX * distanceRatio
+            this.pendingOffset.y += this.speedY * distanceRatio
+        }
+        this.integratedUntil = Math.max(this.integratedUntil ?? time, time)
     }
     setSpeedX(speed) {
         this.speedX = speed
@@ -59,13 +76,21 @@ class Screen {
         canvas.offset.y = Math.min(canvas.offset.y, this.getScreenBottom())
         canvas.offset.y = Math.max(canvas.offset.y, this.getScreenTop())
     }
-    move(frameDuration = 1000 / 60) {
+    move(frameDuration = 1000 / 60, frameTime = undefined) {
         let old_value_x = canvas.offset.x
         let old_value_y = canvas.offset.y
-        const distanceRatio = frameDuration / (1000 / 60)
         
-        canvas.offset.x -= this.speedX * distanceRatio
-        canvas.offset.y -= this.speedY * distanceRatio
+        if (frameTime === undefined) {
+            const distanceRatio = frameDuration / (1000 / 60)
+            canvas.offset.x -= this.speedX * distanceRatio
+            canvas.offset.y -= this.speedY * distanceRatio
+        }
+        else {
+            this.advanceTo(frameTime)
+            canvas.offset.x -= this.pendingOffset.x
+            canvas.offset.y -= this.pendingOffset.y
+            this.pendingOffset = { x: 0, y: 0 }
+        }
         
         this.correctCanvas()
 

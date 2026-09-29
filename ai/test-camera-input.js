@@ -2,10 +2,11 @@
 // Production-source regressions for desktop camera keyboard/mouse arbitration.
 // Loads events/screen.js and events/events.js into a VM and drives the real
 // Events/ComputerScreen/MobileScreen classes frame by frame.
-// Usage: node ai/test-camera-input.js --case arbitration|direction --output-dir <fresh> [--source-dir <repo>]
+// Usage: node ai/test-camera-input.js --case arbitration|direction|short-press --output-dir <fresh> [--source-dir <repo>]
+// short-press uses deterministic event/frame timestamps (production-source logic, not browser timing).
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path'), crypto = require('node:crypto')
 
-const CASES = ['arbitration', 'direction']
+const CASES = ['arbitration', 'direction', 'short-press']
 const FRAMES = 60
 const SIZE = 1000
 const SPEED = 0.04 * SIZE // ComputerScreen speed configured by Events
@@ -336,11 +337,134 @@ function direction(sourceDir) {
     return checks
 }
 
+// Timestamped input timelines: a press released between camera updates still moves the camera
+// by speed * pressDuration / (1000 / 60); frequent and delayed frame partitions agree.
+const MS_SPEED = SPEED / (1000 / 60) // camera offset per ms of held key
+const TOLERANCE = 1e-6 // px, predeclared
+
+// Plays timeline events and frames (both by timestamp, events first on ties) through the
+// real Events/Screen, returning per-frame offset deltas.
+function playTimeline(sourceDir, timeline, frameTimes, worldOptions) {
+    const w = createWorld(sourceDir, worldOptions)
+    if (timeline.start) w.env.canvas.offset.x = timeline.start.x, w.env.canvas.offset.y = timeline.start.y
+    const start = w.offset(), perFrame = []
+    const input = timeline.events.map(e => ({ ...e, order: 0 }))
+    const frames = frameTimes.map((t, i) => ({ t, type: 'frame', order: 1,
+        duration: i ? t - frameTimes[i - 1] : 1000 / 60 }))
+    for (const item of [...input, ...frames].sort((a, b) => a.t - b.t || a.order - b.order)) {
+        if (item.type === 'down') w.events.keyboard(KEY[item.key], false, false, item.t)
+        else if (item.type === 'up') w.events.keyup(KEY[item.key], item.t)
+        else if (item.type === 'mouse') w.events.mousemove(EDGE[item.edge] ?? CENTER, EDGE[item.edge] ?? CENTER, item.t)
+        else {
+            const before = w.offset()
+            w.events.moveScreen(item.duration, item.t)
+            const after = w.offset()
+            perFrame.push({ t: item.t, x: after.x - before.x, y: after.y - before.y })
+        }
+    }
+    const end = w.offset()
+    return { world: w, delta: { x: end.x - start.x, y: end.y - start.y }, perFrame }
+}
+
+const frameGrid = (step, until) => {
+    const times = []
+    for (let t = 0; t <= until + 1e-9; t += step) times.push(t)
+    return times
+}
+
+function shortPress(sourceDir) {
+    const checks = []
+    const check = (id, description, observed, expected) => {
+        const pass = Object.keys(expected).every(k => typeof expected[k] === 'number'
+            ? Math.abs(observed[k] - expected[k]) <= TOLERANCE : JSON.stringify(observed[k]) === JSON.stringify(expected[k]))
+        checks.push({ id, description, expected, observed, tolerancePx: TOLERANCE, pass })
+        console.log((pass ? 'PASS ' : 'FAIL ') + id + ' expected=' + JSON.stringify(expected) + ' observed=' + JSON.stringify(observed))
+    }
+    const near = v => Math.abs(v) <= TOLERANCE
+    // expectedMs: independently declared signed held duration per axis (+ right/down).
+    const timelines = [
+        { id: 'down-30ms-between-frames', description: 'Down pressed 10 ms, released 40 ms, frames at 0 and 50 ms (delayed) / 16.7 ms grid (frequent)',
+            events: [{ t: 10, type: 'down', key: 'down' }, { t: 40, type: 'up', key: 'down' }],
+            expectedMs: { x: 0, y: 30 }, lastInputT: 40 },
+        { id: 'down-78ms-between-frames', description: 'Down held 78 ms (archived browser pan) between two delayed frames',
+            events: [{ t: 5, type: 'down', key: 'down' }, { t: 83, type: 'up', key: 'down' }],
+            expectedMs: { x: 0, y: 78 }, lastInputT: 83, delayedStep: 90 },
+        { id: 'left-30ms-between-frames', description: 'Left (horizontal axis) held 30 ms between frames',
+            events: [{ t: 3, type: 'down', key: 'left' }, { t: 33, type: 'up', key: 'left' }],
+            expectedMs: { x: -30, y: 0 }, lastInputT: 33 },
+        { id: 'w-30ms-up', description: 'W (up) held 30 ms between frames',
+            events: [{ t: 20, type: 'down', key: 'w' }, { t: 50, type: 'up', key: 'w' }],
+            expectedMs: { x: 0, y: -30 }, lastInputT: 50, delayedStep: 60 },
+        { id: 'press-spans-frames', description: 'D held 5..145 ms across several frames, no duplicate movement',
+            events: [{ t: 5, type: 'down', key: 'd' }, { t: 145, type: 'up', key: 'd' }],
+            expectedMs: { x: 140, y: 0 }, lastInputT: 145 },
+        { id: 'mixed-held-and-short', description: 'Right held 0..300 ms, Up tapped 60..90 ms',
+            events: [{ t: 0, type: 'down', key: 'right' }, { t: 60, type: 'down', key: 'up' },
+                { t: 90, type: 'up', key: 'up' }, { t: 300, type: 'up', key: 'right' }],
+            expectedMs: { x: 300, y: -30 }, lastInputT: 300 },
+        { id: 'short-opposite-over-held', description: 'Right held 0..300 ms, Left tapped 100..130 ms overrides then releases',
+            events: [{ t: 0, type: 'down', key: 'right' }, { t: 100, type: 'down', key: 'left' },
+                { t: 130, type: 'up', key: 'left' }, { t: 300, type: 'up', key: 'right' }],
+            expectedMs: { x: 270 - 30, y: 0 }, lastInputT: 300 },
+        { id: 'both-axes-short', description: 'S tapped 10..40 ms and A tapped 20..98 ms between frames',
+            events: [{ t: 10, type: 'down', key: 's' }, { t: 20, type: 'down', key: 'a' },
+                { t: 40, type: 'up', key: 's' }, { t: 98, type: 'up', key: 'a' }],
+            expectedMs: { x: -78, y: 30 }, lastInputT: 98 },
+        { id: 'normal-hold', description: 'Down held 0..1000 ms (normal hold)',
+            events: [{ t: 0, type: 'down', key: 'down' }, { t: 1000, type: 'up', key: 'down' }],
+            expectedMs: { x: 0, y: 1000 }, lastInputT: 1000 },
+    ]
+    for (const tl of timelines) {
+        const until = tl.lastInputT + 400 // idle frames after release
+        const partitions = {
+            frequent: frameGrid(1000 / 60, until),
+            delayed: frameGrid(tl.delayedStep ?? 50, until),
+        }
+        const expected = { x: tl.expectedMs.x * MS_SPEED, y: tl.expectedMs.y * MS_SPEED }
+        const observed = {}
+        for (const [name, times] of Object.entries(partitions)) {
+            const r = playTimeline(sourceDir, tl, times)
+            const firstAfter = r.perFrame.find(f => f.t >= tl.lastInputT)
+            const idle = r.perFrame.filter(f => f.t > firstAfter.t)
+            observed[name] = r.delta
+            check(`${tl.id}/${name}/displacement`, `${tl.description}; ${name} frames every ${(times[1] - times[0]).toFixed(2)} ms`,
+                { x: r.delta.x, y: r.delta.y, direction: { x: sign(r.delta.x), y: sign(r.delta.y) } },
+                { x: expected.x, y: expected.y, direction: { x: sign(expected.x), y: sign(expected.y) } })
+            check(`${tl.id}/${name}/applied-by-next-frame`, 'full movement applied by the first frame at/after the last input',
+                { remainingAfterFrameX: near(idle.reduce((a, f) => a + f.x, 0)), remainingAfterFrameY: near(idle.reduce((a, f) => a + f.y, 0)) },
+                { remainingAfterFrameX: true, remainingAfterFrameY: true })
+            check(`${tl.id}/${name}/idle-frames-still`, 'no displacement on subsequent idle frames',
+                { idleFrames: idle.length > 0, moving: idle.filter(f => !near(f.x) || !near(f.y)).length },
+                { idleFrames: true, moving: 0 })
+        }
+        check(`${tl.id}/frequent-vs-delayed`, 'frequent and delayed partitions of the same timeline agree',
+            { dx: observed.frequent.x - observed.delayed.x, dy: observed.frequent.y - observed.delayed.y }, { dx: 0, dy: 0 })
+    }
+
+    // Boundary clamping: a short press toward a nearby limit stops at the limit and never overshoots.
+    const border = 1500 // getScreenRight() = 500 with SIZE 1000
+    const clampTl = { start: { x: 480, y: 0 },
+        events: [{ t: 10, type: 'down', key: 'right' }, { t: 40, type: 'up', key: 'right' }] }
+    for (const [name, times] of Object.entries({ frequent: frameGrid(1000 / 60, 300), delayed: frameGrid(50, 300) })) {
+        const r = playTimeline(sourceDir, clampTl, times, { border })
+        const limit = r.world.events.screen.getScreenRight()
+        check(`boundary/${name}/clamped-short-press`, 'Right tapped 30 ms (72 px) 20 px from right limit clamps to the limit',
+            { offsetX: r.world.env.canvas.offset.x, offsetY: r.world.env.canvas.offset.y, maxOffsetX: Math.max(...r.perFrame.map((f, i) => clampTl.start.x + r.perFrame.slice(0, i + 1).reduce((a, g) => a + g.x, 0))) },
+            { offsetX: limit, offsetY: 0, maxOffsetX: 500 })
+        // Pressing back after clamping moves away by exactly the press duration (no banked overshoot).
+        const back = playTimeline(sourceDir, { start: clampTl.start, events: [...clampTl.events,
+            { t: 200, type: 'down', key: 'left' }, { t: 230, type: 'up', key: 'left' }] }, times, { border })
+        check(`boundary/${name}/no-banked-overshoot`, 'Left tapped 30 ms after clamp moves 72 px left of the limit',
+            { offsetX: back.world.env.canvas.offset.x }, { offsetX: limit - 30 * MS_SPEED })
+    }
+    return checks
+}
+
 function main() {
     const args = parseArgs(process.argv.slice(2))
     fs.mkdirSync(args.outputDir, { recursive: true })
     const started = Date.now()
-    const checks = { arbitration, direction }[args.case](args.sourceDir)
+    const checks = { arbitration, direction, 'short-press': shortPress }[args.case](args.sourceDir)
     const failed = checks.filter(c => !c.pass)
     const pass = failed.length === 0
     const out = f => path.join(args.outputDir, f)
@@ -358,4 +482,4 @@ function main() {
 }
 
 if (require.main === module) main()
-module.exports = { arbitration, direction, CASES }
+module.exports = { arbitration, direction, shortPress, playTimeline, frameGrid, CASES }

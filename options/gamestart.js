@@ -1351,7 +1351,7 @@ function gameLoop(frameTime) {
         framesPerSecond = framesPerSecond * 0.9 + currentFps * 0.1
     }
 
-    gameEvent.moveScreen(frameDuration)
+    gameEvent.moveScreen(frameDuration, frameTime)
     drawAll()
     if (gameExit) {
         gameExit = false

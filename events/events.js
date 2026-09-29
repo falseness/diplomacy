@@ -46,10 +46,10 @@ function touchend(event) {
     gameEvent.touchend(pos, event.touches.length)
 }
 function keydown(event) {
-    gameEvent.keyboard(event.keyCode, event.shiftKey, event.repeat)
+    gameEvent.keyboard(event.keyCode, event.shiftKey, event.repeat, event.timeStamp)
 }
 function keyup(event) {
-    gameEvent.keyup(event.keyCode)
+    gameEvent.keyup(event.keyCode, event.timeStamp)
 }
 function click(event) {
     let pos = getEventPos(event)
@@ -60,7 +60,7 @@ function click(event) {
 function mousemove(event) {
     let pos = getEventPos(event)
     let realPos = getRealEventPos(event)
-    gameEvent.mousemove(pos, realPos)
+    gameEvent.mousemove(pos, realPos, event.timeStamp)
 }
 
 function mousewheel(event) {
@@ -166,7 +166,7 @@ class Events {
         
         return keys.has(keycode)
     }
-    keyboard(keycode, isShiftPressed, isRepeat = false) {
+    keyboard(keycode, isShiftPressed, isRepeat = false, time = undefined) {
         if (this.isPressKeyCode(keycode)) {
             if (keycode == Events.kEscapeKeycode) {
                 debug = !debug
@@ -215,13 +215,13 @@ class Events {
             if (!isRepeat)
                 this.pressed_horizontal_keys.delete(keycode)
             this.pressed_horizontal_keys.add(keycode)
-            this.updateScreenSpeed()
+            this.updateScreenSpeed(time)
         }
         else if (this.goUpKeys.has(keycode) || this.goDownKeys.has(keycode)) {
             if (!isRepeat)
                 this.pressed_vertical_keys.delete(keycode)
             this.pressed_vertical_keys.add(keycode)
-            this.updateScreenSpeed()
+            this.updateScreenSpeed(time)
         }
         
         /*if (keycode == 81) {
@@ -231,14 +231,14 @@ class Events {
             saveManager.load()
         }*/
     }
-    keyup(keycode) {
+    keyup(keycode, time = undefined) {
         // a 65 
         // w 87
         // d 68
         // s 83
         if (this.pressed_horizontal_keys.delete(keycode) ||
                 this.pressed_vertical_keys.delete(keycode))
-            this.updateScreenSpeed()
+            this.updateScreenSpeed(time)
     }
     // held keys win on their axis; otherwise the mouse edge direction applies
     getKeysDirection(pressedKeys, negativeKeys) {
@@ -247,7 +247,8 @@ class Events {
         let lastKey = [...pressedKeys].pop()
         return negativeKeys.has(lastKey) ? -1 : 1
     }
-    updateScreenSpeed() {
+    updateScreenSpeed(time = undefined) {
+        this.screen.advanceTo(time)
         let x = this.getKeysDirection(this.pressed_horizontal_keys, this.goLeftKeys)
         let y = this.getKeysDirection(this.pressed_vertical_keys, this.goUpKeys)
         this.screen.setDirectionX(x ?? this.mouseEdgeDirection.x)
@@ -256,12 +257,12 @@ class Events {
     mousewheel(pos, scale) {
         this.screen.scale(pos, scale)
     }
-    mousemove(pos, realPos) {
+    mousemove(pos, realPos, time = undefined) {
         this.mouseEdgeDirection = this.screen.getEdgeDirection(pos)
-        this.updateScreenSpeed()
+        this.updateScreenSpeed(time)
     }
-    moveScreen(frameDuration) {
-        this.screen.move(frameDuration)
+    moveScreen(frameDuration, frameTime = undefined) {
+        this.screen.move(frameDuration, frameTime)
     }
     draw(ctx) {
         this.screen.draw(ctx)
@@ -398,9 +399,9 @@ class EventsMapCreation {
         cell.building = new Empty()
         this.constructor.bushes_coords.pop()
     }
-    keyboard(keycode, isShiftPressed, isRepeat) {
+    keyboard(keycode, isShiftPressed, isRepeat, time) {
         if (keycode != Events.kBackspaceKeycode) {
-            super.keyboard(keycode, isShiftPressed, isRepeat)
+            super.keyboard(keycode, isShiftPressed, isRepeat, time)
             return
         }
         this.pop_bushes_coords()
