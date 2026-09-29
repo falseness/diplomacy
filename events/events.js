@@ -7,6 +7,7 @@ function createEvents() {
 
         document.addEventListener('keydown', keydown)
         document.addEventListener('keyup', keyup)
+        window.addEventListener('blur', windowBlur)
     }
     else {
         document.addEventListener('touchstart', touchstart)
@@ -46,9 +47,12 @@ function touchend(event) {
     gameEvent.touchend(pos, event.touches.length)
 }
 function keydown(event) {
+    if (gameEvent.keyboardZoom(event))
+        return
     gameEvent.keyboard(event.keyCode, event.shiftKey, event.repeat, event.timeStamp)
 }
 function keyup(event) {
+    gameEvent.releaseZoomKey(event)
     gameEvent.keyup(event.keyCode, event.timeStamp)
 }
 function click(event) {
@@ -60,7 +64,18 @@ function click(event) {
 function mousemove(event) {
     let pos = getEventPos(event)
     let realPos = getRealEventPos(event)
+    if (event.target?.tagName == 'CANVAS')
+        gameEvent.setPointerPosition(pos)
     gameEvent.mousemove(pos, realPos, event.timeStamp)
+}
+// a key released while the window is unfocused never sends keyup
+function windowBlur() {
+    gameEvent.resetKeyboardZoom()
+}
+function isEditableTarget(target) {
+    if (!target)
+        return false
+    return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || !!target.isContentEditable
 }
 
 function mousewheel(event) {
@@ -89,6 +104,10 @@ class Events {
         this.pressed_horizontal_keys = new Set()
         this.pressed_vertical_keys = new Set()
         this.mouseEdgeDirection = { x: 0, y: 0 }
+        // last mouse position over the canvas in device pixels (getEventPos), the keyboard zoom anchor
+        this.pointerPosition = null
+        // physical zoom keys (event.code) held since their zooming keydown
+        this.heldZoomKeys = new Set()
 
         if (!mobilePhone) {
             this.screen = new ComputerScreen(0.002 * HEIGHT, 0.04 * HEIGHT)
@@ -160,6 +179,51 @@ class Events {
     static kZKeycode = 90
     static kBackspaceKeycode = 8
     static kILetterKeycode = 73
+    static kKeyboardZoomStep = 1.1
+    // 1 zoom in, -1 zoom out, 0 not a zoom shortcut; Ctrl/Meta/Alt combinations stay browser zoom
+    getZoomShortcutDirection(event) {
+        if (event.ctrlKey || event.metaKey || event.altKey)
+            return 0
+        if (event.code == 'NumpadAdd' || event.key == '+')
+            return 1
+        if (event.code == 'NumpadSubtract' || event.key == '-')
+            return -1
+        return 0
+    }
+    // one zoom step per physical press during gameplay; returns true if the event was consumed
+    keyboardZoom(event) {
+        if (menu.visible) {
+            this.resetKeyboardZoom()
+            return false
+        }
+        if (isEditableTarget(event.target))
+            return false
+        const direction = this.getZoomShortcutDirection(event)
+        if (!direction)
+            return false
+        event.preventDefault()
+        const key = event.code || event.key
+        if (event.repeat || this.heldZoomKeys.has(key))
+            return true
+        this.heldZoomKeys.add(key)
+        const zoom = direction > 0 ? Events.kKeyboardZoomStep : 1 / Events.kKeyboardZoomStep
+        this.screen.zoomBy(this.getZoomAnchor(), zoom)
+        return true
+    }
+    releaseZoomKey(event) {
+        this.heldZoomKeys.delete(event.code || event.key)
+    }
+    resetKeyboardZoom() {
+        this.heldZoomKeys.clear()
+    }
+    setPointerPosition(pos) {
+        if (Number.isFinite(pos.x) && Number.isFinite(pos.y) &&
+                pos.x >= 0 && pos.x <= WIDTH && pos.y >= 0 && pos.y <= HEIGHT)
+            this.pointerPosition = { x: pos.x, y: pos.y }
+    }
+    getZoomAnchor() {
+        return this.pointerPosition ?? { x: WIDTH / 2, y: HEIGHT / 2 }
+    }
     isPressKeyCode(keycode) {
         let keys = new Set([Events.kEnterKeycode, Events.kEscapeKeycode, Events.kZKeycode, Events.kBackspaceKeycode,
             Events.kILetterKeycode])

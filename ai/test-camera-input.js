@@ -482,4 +482,4 @@ function main() {
 }
 
 if (require.main === module) main()
-module.exports = { arbitration, direction, shortPress, playTimeline, frameGrid, CASES }
+module.exports = { arbitration, direction, shortPress, playTimeline, frameGrid, createWorld, sha256, CASES, KEY, SPEED }

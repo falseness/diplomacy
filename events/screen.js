@@ -99,8 +99,10 @@ class Screen {
     scale(pos, scale) {
         const ratio = 0.001
 
-        let zoom = Math.exp(scale * ratio)
-
+        this.zoomBy(pos, Math.exp(scale * ratio))
+    }
+    // multiplies canvas.scale by zoom within the map limits, keeping the world point under pos
+    zoomBy(pos, zoom) {
         if (canvas.scale * zoom > mapBorder.scale.max)
             zoom = mapBorder.scale.max / canvas.scale
         if (canvas.scale * zoom < mapBorder.scale.min)
