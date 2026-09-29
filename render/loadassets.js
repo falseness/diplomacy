@@ -73,6 +73,9 @@ function cacheAllImages() {
     }
 }
 let cachedImages = {}
+// Mortar shares the bombard artwork until it gets its own images.
+for (const [alias, image] of [['mortar', 'bombard'], ['mortarLeft', 'bombardLeft']])
+    Object.defineProperty(cachedImages, alias, {get() { return cachedImages[image] }})
 
 
 function loadAssets() {

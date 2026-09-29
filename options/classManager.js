@@ -11,6 +11,7 @@ function getClass(name) {
         ravager: Ravager,
         demonLord: DemonLord,
         bombard: Bombard,
+        mortar: Mortar,
         suburb: Suburb,
         noob: Noob, 
         archer: Archer, 

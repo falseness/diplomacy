@@ -25,6 +25,7 @@ class JsonUnpackManager {
             ravager: Ravager,
             demonLord: DemonLord,
             bombard: Bombard,
+            mortar: Mortar,
             noob: Noob,
             archer: Archer,
             KOHb: KOHb,

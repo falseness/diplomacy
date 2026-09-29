@@ -49,13 +49,17 @@ class Bombard extends Catapult {
     }
     get info() {
         const res = super.info
-        res.info.range = '2 - 2'
+        res.info.range = this.constructor.minimumRange + ' - ' + this.range
         res.info.target = 'enemy buildings only'
         return res
     }
     draw(ctx) {
         this.drawBars(ctx)
-        drawCachedImage(ctx, cachedImages[this.mirrorX ? 'bombardLeft' : 'bombard'], this.pos)
+        drawCachedImage(ctx, cachedImages[this.mirrorX ? this.name + 'Left' : this.name], this.pos)
     }
 }
 registerDemonVariant(Bombard, 'bombard', 'catapult')
+class Mortar extends Bombard {
+    static minimumRange = 2
+}
+registerDemonVariant(Mortar, 'mortar', 'catapult')

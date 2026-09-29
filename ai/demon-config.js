@@ -1,8 +1,8 @@
 // Combat values are in hit points, damage per hit, and hexes per turn/attack.
 // Melee range is one adjacent hex. Ranged demons retain melee capability
-// except the building-only bombard. Keep runtime state off this table.
+// except the building-only siege demons. Keep runtime state off this table.
 const DEMON_TYPES = Object.freeze({
-  bombard: Object.freeze({name: 'bombard', role: 'building-only siege at range 2', health: 4, damage: 0, movement: 2, melee: false, ranged: true, range: 2}),
+  bombard: Object.freeze({name: 'bombard', role: 'building-only siege at range 2', health: 4, damage: 0, movement: 2, melee: false, ranged: true, range: 2, buildingDamage: 4}),
   imp: Object.freeze({name: 'imp', role: 'fragile basic melee', health: 2, damage: 1, movement: 2, melee: true, ranged: false, range: 1}),
   clawling: Object.freeze({name: 'clawling', role: 'quick light melee', health: 1, damage: 2, movement: 2, melee: true, ranged: false, range: 1}),
   hound: Object.freeze({name: 'hound', role: 'fast melee pursuit', health: 2, damage: 1, movement: 5, melee: true, ranged: false, range: 1}),
@@ -12,7 +12,8 @@ const DEMON_TYPES = Object.freeze({
   emberArcher: Object.freeze({name: 'ember archer', role: 'mobile ranged attacker', health: 1, damage: 1, movement: 2, melee: true, ranged: true, range: 3}),
   hexcaster: Object.freeze({name: 'hexcaster', role: 'slow stronger ranged attacker', health: 1, damage: 3, movement: 1, melee: true, ranged: true, range: 2}),
   ravager: Object.freeze({name: 'ravager', role: 'fast strong late-game melee', health: 4, damage: 1, movement: 3, melee: true, ranged: false, range: 1}),
-  demonLord: Object.freeze({name: 'demon lord', role: 'durable powerful late-game melee', health: 5, damage: 3, movement: 2, melee: true, ranged: false, range: 1})
+  demonLord: Object.freeze({name: 'demon lord', role: 'durable powerful late-game melee', health: 5, damage: 3, movement: 2, melee: true, ranged: false, range: 1}),
+  mortar: Object.freeze({name: 'mortar', role: 'long-range siege at range 3', health: 4, damage: 0, movement: 2, melee: false, ranged: true, range: 3, buildingDamage: 10})
 });
 
 // Combat stats are current for every game; saved wave versions do not select them.
