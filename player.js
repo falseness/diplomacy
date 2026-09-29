@@ -119,8 +119,10 @@ class Player {
                 this.units.splice(i--, 1)
                 continue
             }
-            res += production[this.units[i].name].cost
-        }
+            if (production[this.units[i].name]) {
+              res += production[this.units[i].name].cost
+                }
+            }
         return res
     }
     get goldminesIncome() {
