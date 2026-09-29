@@ -92,3 +92,37 @@ deleting an unreferenced runtime file requires fresh verification, just like
 changing its bytes. Both server dependency manifests must be present, even when
 the provided source inventory is fresh. This presence check does not certify
 installed dependency bytes or runtime identity; those remain release-gate work.
+
+TASK-239 deployment
+===================
+
+`stage_release_task239.sh` and `switch_release_task239.sh` deploy a
+`prepare_release.py` candidate next to the running TASK-065 release on
+`bakharevns@89.169.157.173`. Release root:
+`/home/bakharevns/diplomacy_releases/TASK-239-20260929`.
+
+Staging never touches the service. It checks the uploaded archive and the reused
+TASK-065 Node 20.20.2 tarball, then writes `rollback/`:
+
+- the service identity
+- the unit (`systemctl cat`)
+- the `/var/www/html` link target
+- `prior.tar.gz` holding the TASK-065 candidate, the unit and drop-ins, and `/etc/nginx`
+- `prior-manifest.json`
+
+After that it unpacks and checks the candidate, runs `npm ci`, loads the game
+scripts and writes `READY`.
+
+Activation adds the drop-in `90-task239-release.conf`, which takes precedence
+over `65-release.conf`. The drop-in sets the candidate working directory, the
+bundled Node executable, and `DIPLOMACY_SMOKE_ALLOWLIST`. That allowlist holds
+only the `prod_smoke_TASK239_*` identities. Activation also re-points
+`/var/www/html` to the candidate web tree.
+
+Rollback removes the drop-in and restores the TASK-065 link. It then
+health-checks the service and verifies the TASK-065 process paths and the prior
+manifest. Keep revoked smoke identities in the allowlist so they never become
+ordinary players.
+
+The gameplay check uses `/root/diplomacy_server/artifacts/prod_smoke_3p.js <tag>
+--rounds 3 --farms R:P,...`, then runs it again with `--cleanup-only`.
