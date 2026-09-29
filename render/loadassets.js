@@ -29,7 +29,7 @@ let assets = {
 }
 // Demon artwork is shared by both ordinary sprite themes.
 const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark',
-    'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft',
+    'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft', 'mortar', 'mortarLeft',
     'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
     'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos']
 for (const name of demonSpriteImages) assets[name] = new Image()
@@ -73,10 +73,6 @@ function cacheAllImages() {
     }
 }
 let cachedImages = {}
-// Mortar shares the bombard artwork until it gets its own images.
-for (const [alias, image] of [['mortar', 'bombard'], ['mortarLeft', 'bombardLeft']])
-    Object.defineProperty(cachedImages, alias, {get() { return cachedImages[image] }})
-
 
 function loadAssets() {
     assets.logo.src = "assets/logo.svg"

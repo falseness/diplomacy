@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="mortar-title mortar-desc">
+  <title id="mortar-title">Demonic mortar, left-facing</title>
+  <desc id="mortar-desc">A massive horned siege mortar facing left, with a short, broad obsidian barrel raised steeply on a heavy armored sled, a roaring furnace bore, ivory tusks, twin iron wheels and a pile of burning shells. Editable vectors on a transparent canvas.</desc>
+  <defs>
+    <linearGradient id="iron" x1="0" y1="1" x2=".8" y2="0" gradientUnits="objectBoundingBox"><stop stop-color="#1f1d2b"/><stop offset=".55" stop-color="#474a5c"/><stop offset="1" stop-color="#8a8b97"/></linearGradient>
+    <linearGradient id="red" x1="0" y1="1" x2=".7" y2="0"><stop stop-color="#3b1f2e"/><stop offset=".55" stop-color="#7a3947"/><stop offset="1" stop-color="#b3676d"/></linearGradient>
+    <linearGradient id="bone" x1="0" y1="1" x2=".8" y2="0"><stop stop-color="#87715d"/><stop offset=".5" stop-color="#d3bc95"/><stop offset="1" stop-color="#fff0cf"/></linearGradient>
+    <linearGradient id="brass" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#695040"/><stop offset=".5" stop-color="#b68a59"/><stop offset="1" stop-color="#e8c78b"/></linearGradient>
+    <radialGradient id="fire"><stop stop-color="#fff5b1"/><stop offset=".4" stop-color="#ffb94f"/><stop offset=".75" stop-color="#eb5f37"/><stop offset="1" stop-color="#762939"/></radialGradient>
+  </defs>
+  <g transform="translate(512 0) scale(-1 1) translate(20.5 20.5) scale(.92)" id="mortar-art" stroke="#2c2534" stroke-width="6" stroke-linejoin="round">
+    <!-- Far wheel behind a broad, low, double-plated sled. -->
+    <circle cx="372" cy="382" r="64" fill="url(#iron)"/>
+    <circle cx="372" cy="382" r="40" fill="#2c2737" stroke="#ac845a" stroke-width="10"/>
+    <path d="M44 356 L86 300 L420 300 L466 356 L440 412 L70 414Z" fill="url(#red)"/>
+    <path d="M70 366 L440 366 L426 396 L84 396Z" fill="url(#brass)"/>
+    <path d="M86 300 L420 300 L432 322 L74 322Z" fill="url(#iron)"/>
+    <path d="M60 330 L30 300 L36 362 L82 380 M424 324 L466 292 L462 350" fill="url(#bone)"/>
+    <!-- Heavy trunnion cradle and rear furnace. -->
+    <path d="M150 304 L178 214 L326 206 L360 304Z" fill="url(#iron)"/>
+    <path d="M92 300 Q58 262 74 222 Q92 186 144 190 L180 250 L160 300Z" fill="url(#red)"/>
+    <path d="M90 232 L120 222 L138 270 L106 280Z" fill="url(#fire)"/>
+    <path d="M98 230 L116 276 M110 226 L128 272" stroke="#352837" stroke-width="9"/>
+    <!-- Short, fat barrel raised steeply toward a gaping mouth. -->
+    <path d="M186 262 L262 98 Q300 60 360 78 Q410 98 414 150 L338 296 Q278 316 222 300 Q180 288 186 262Z" fill="url(#iron)"/>
+    <path d="M210 256 L280 106" stroke="#c4b7ab" stroke-opacity=".55" stroke-width="11" stroke-linecap="round"/>
+    <path d="M226 180 Q268 214 330 216 L318 244 Q256 242 212 208Z" fill="url(#brass)"/>
+    <path d="M252 122 Q296 154 364 150 L352 178 Q286 180 240 148Z" fill="url(#red)"/>
+    <!-- Horns sweep up from the barrel collar. -->
+    <path d="M232 170 Q192 150 186 110 Q184 80 206 60 Q204 104 244 130 L252 150Z" fill="url(#bone)"/>
+    <path d="M396 136 Q430 118 432 84 Q456 108 444 142 L412 160Z" fill="url(#bone)"/>
+    <!-- Armored muzzle ring around an incandescent bore. -->
+    <ellipse cx="338" cy="94" rx="80" ry="40" transform="rotate(22 338 94)" fill="url(#brass)"/>
+    <ellipse cx="338" cy="94" rx="62" ry="28" transform="rotate(22 338 94)" fill="#30202c" stroke="#713d3d"/>
+    <ellipse cx="338" cy="96" rx="46" ry="19" transform="rotate(22 338 96)" fill="url(#fire)" stroke="none"/>
+    <path d="M316 92 Q322 72 340 70 Q334 84 346 88 Q358 90 360 76 Q372 100 350 110Z" fill="#ffe49a" stroke="none"/>
+    <path d="M302 262 L330 244 L346 262 L322 280Z M362 190 L388 172 L400 190 L376 208Z" fill="#2d2330"/>
+    <path d="M314 262 L330 252 L336 262 L322 270Z M372 190 L388 180 L392 190 L378 198Z" fill="#ffbc62" stroke="none"/>
+    <!-- Pile of burning shells beside the sled. -->
+    <circle cx="444" cy="440" r="26" fill="url(#iron)"/>
+    <circle cx="400" cy="448" r="22" fill="url(#iron)"/>
+    <path d="M436 432 L452 432 L444 448Z M394 442 L406 442 L400 454Z" fill="url(#fire)" stroke="none"/>
+    <!-- Large foreground wheel, bronze hub and forged radial spokes. -->
+    <circle cx="170" cy="396" r="92" fill="url(#iron)"/>
+    <circle cx="170" cy="396" r="71" fill="#2f2837" stroke="url(#brass)" stroke-width="12"/>
+    <path d="M170 332 V460 M106 396 H234 M125 351 L215 441 M125 441 L215 351" stroke="#776876" stroke-width="15"/>
+    <circle cx="170" cy="396" r="32" fill="url(#brass)"/>
+    <path d="M170 370 L186 396 L170 422 L154 396Z" fill="url(#fire)"/>
+    <g fill="#d6b987" stroke="none"><circle cx="170" cy="318" r="5"/><circle cx="248" cy="396" r="5"/><circle cx="170" cy="474" r="5"/><circle cx="92" cy="396" r="5"/><circle cx="238" cy="232" r="4"/><circle cx="296" cy="276" r="4"/><circle cx="380" cy="234" r="4"/></g>
+  </g>
+</svg>

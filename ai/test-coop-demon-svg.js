@@ -9,7 +9,7 @@ const {chromium} = require('playwright');
 const root = path.resolve(__dirname, '..');
 const parents = {imp:['noob','normchel'], clawling:['noob','normchel'], hound:['KOHb'],
   brute:['normchel'], bulwark:['normchel'], spitter:['archer'], emberArcher:['archer'],
-  hexcaster:['archer'], ravager:['KOHb'], demonLord:['normchel'], demonPortal:['goldmine']};
+  hexcaster:['archer'], ravager:['KOHb'], demonLord:['normchel'], mortar:['catapult','bombard'], demonPortal:['goldmine']};
 function option(name, fallback) {
   const i = process.argv.indexOf(name);
   if (i < 0) return fallback;
@@ -18,7 +18,8 @@ function option(name, fallback) {
 }
 if (process.argv.includes('--all')) {
   const {spawnSync} = require('node:child_process');
-  for (const type of Object.keys(parents).filter(n => n !== 'demonPortal')) {
+  const types = Object.keys(parents).filter(n => n !== 'demonPortal');
+  for (const type of types) {
     const args = [__filename, '--type', type, '--output-dir',
       path.join(option('--output-dir', 'artifacts/TASK-102'), 'svg', type)];
     console.log('command='+JSON.stringify([process.execPath,...args]));
@@ -27,7 +28,7 @@ if (process.argv.includes('--all')) {
     if (result.error) console.error(result.error);
     if (result.status !== 0) process.exit(1);
   }
-  console.log('PASS all ten demon SVGs validated');
+  console.log(`PASS all ${types.length} demon SVGs validated`);
   process.exit(0);
 }
 const type = option('--type', 'imp');
