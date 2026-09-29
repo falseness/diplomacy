@@ -13,7 +13,9 @@ const DEMON_TYPES = Object.freeze({
   hexcaster: Object.freeze({name: 'hexcaster', role: 'slow stronger ranged attacker', health: 1, damage: 3, movement: 1, melee: true, ranged: true, range: 2}),
   ravager: Object.freeze({name: 'ravager', role: 'fast strong late-game melee', health: 4, damage: 1, movement: 3, melee: true, ranged: false, range: 1}),
   demonLord: Object.freeze({name: 'demon lord', role: 'durable powerful late-game melee', health: 5, damage: 3, movement: 2, melee: true, ranged: false, range: 1}),
-  mortar: Object.freeze({name: 'mortar', role: 'long-range siege at range 3', health: 4, damage: 0, movement: 2, melee: false, ranged: true, range: 3, buildingDamage: 10})
+  mortar: Object.freeze({name: 'mortar', role: 'long-range siege at range 3', health: 4, damage: 0, movement: 2, melee: false, ranged: true, range: 3, buildingDamage: 10}),
+  hexmaster: Object.freeze({name: 'hexmaster', role: 'fast stronger ranged attacker', health: 1, damage: 3, movement: 2, melee: true, ranged: true, range: 2}),
+  demonQueen: Object.freeze({name: 'demon queen', role: 'durable fast ranged attacker', health: 3, damage: 3, movement: 2, melee: true, ranged: true, range: 2})
 });
 
 // Combat stats are current for every game; saved wave versions do not select them.
