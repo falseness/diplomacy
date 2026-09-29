@@ -108,8 +108,8 @@ class Events {
         this.pointerPosition = null
         // physical zoom keys (event.code) held since their zooming keydown -> zoom direction; last pressed wins
         this.heldZoomKeys = new Map()
-        // ms the current zoom key has been held, advanced by frames
-        this.zoomHeldFor = 0
+        // current smooth keyboard zoom: { direction, applied: ln of zoom applied so far }, null when idle
+        this.keyboardZoomMotion = null
 
         if (!mobilePhone) {
             this.screen = new ComputerScreen(0.002 * HEIGHT, 0.04 * HEIGHT)
@@ -182,9 +182,8 @@ class Events {
     static kBackspaceKeycode = 8
     static kILetterKeycode = 73
     static kKeyboardZoomStep = 1.1
-    // holding a zoom key keeps zooming after the delay, by this factor per second
-    static kKeyboardZoomHoldDelay = 300
-    static kKeyboardZoomHoldRate = 2
+    // keyboard zoom runs smoothly at one step per this many ms; a tap zooms exactly one step
+    static kKeyboardZoomStepDuration = 100
     // 1 zoom in, -1 zoom out, 0 not a zoom shortcut; Ctrl/Meta/Alt combinations stay browser zoom
     getZoomShortcutDirection(event) {
         if (event.ctrlKey || event.metaKey || event.altKey)
@@ -196,7 +195,7 @@ class Events {
             return -1
         return 0
     }
-    // one zoom step per physical press during gameplay; returns true if the event was consumed
+    // starts a smooth zoom per physical press during gameplay; returns true if the event was consumed
     keyboardZoom(event) {
         if (menu.visible) {
             this.resetKeyboardZoom()
@@ -212,31 +211,43 @@ class Events {
         if (event.repeat || this.heldZoomKeys.has(key))
             return true
         this.heldZoomKeys.set(key, direction)
-        this.zoomHeldFor = 0
-        const zoom = direction > 0 ? Events.kKeyboardZoomStep : 1 / Events.kKeyboardZoomStep
-        this.screen.zoomBy(this.getZoomAnchor(), zoom)
+        this.keyboardZoomMotion = { direction, applied: 0 }
         return true
     }
     releaseZoomKey(event) {
-        if (this.heldZoomKeys.delete(event.code || event.key))
-            this.zoomHeldFor = 0
+        this.heldZoomKeys.delete(event.code || event.key)
     }
     resetKeyboardZoom() {
         this.heldZoomKeys.clear()
-        this.zoomHeldFor = 0
+        this.keyboardZoomMotion = null
     }
-    // continuous zoom while a zoom key stays held past the hold delay
-    holdKeyboardZoom(frameDuration) {
-        if (!this.heldZoomKeys.size || menu.visible)
+    // zooms while a key is held; after release finishes the current press up to one full step
+    updateKeyboardZoom(frameDuration) {
+        if (!this.heldZoomKeys.size && !this.keyboardZoomMotion)
             return
-        const direction = [...this.heldZoomKeys.values()].pop()
-        const before = this.zoomHeldFor
-        this.zoomHeldFor += Math.min(frameDuration, Screen.kMaxFrameDuration)
-        const zoomingTime = this.zoomHeldFor - Math.max(before, Events.kKeyboardZoomHoldDelay)
-        if (zoomingTime <= 0)
+        if (menu.visible) {
+            this.resetKeyboardZoom()
             return
-        const zoom = Math.pow(Events.kKeyboardZoomHoldRate, direction * zoomingTime / 1000)
-        this.screen.zoomBy(this.getZoomAnchor(), zoom)
+        }
+        const held = this.heldZoomKeys.size > 0
+        if (held) {
+            const direction = [...this.heldZoomKeys.values()].pop()
+            if (this.keyboardZoomMotion?.direction != direction)
+                this.keyboardZoomMotion = { direction, applied: 0 }
+        }
+        const motion = this.keyboardZoomMotion
+        if (!motion)
+            return
+        const step = Math.log(Events.kKeyboardZoomStep)
+        let amount = step * Math.min(frameDuration, Screen.kMaxFrameDuration) / Events.kKeyboardZoomStepDuration
+        if (!held)
+            amount = Math.min(amount, step - motion.applied)
+        if (amount <= 0) {
+            this.keyboardZoomMotion = null
+            return
+        }
+        this.screen.zoomBy(this.getZoomAnchor(), Math.exp(motion.direction * amount))
+        motion.applied += amount
     }
     setPointerPosition(pos) {
         if (Number.isFinite(pos.x) && Number.isFinite(pos.y) &&
@@ -348,7 +359,7 @@ class Events {
         this.updateScreenSpeed(time)
     }
     moveScreen(frameDuration, frameTime = undefined) {
-        this.holdKeyboardZoom(frameDuration)
+        this.updateKeyboardZoom(frameDuration)
         this.screen.move(frameDuration, frameTime)
     }
     draw(ctx) {

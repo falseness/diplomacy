@@ -50,7 +50,15 @@ function zoomWorld(sourceDir, { dpr = 1, scale = 1, offset = { x: 0, y: 0 } } = 
         return e
     }
     w.down = (form, extra) => { const e = event(form, extra); w.env.keydown(e); return e }
-    w.up = (form, extra) => { const e = event(form, extra); w.env.keyup(e); return e }
+    // frames advance the smooth keyboard zoom; settle() plays out a released press to its full step
+    w.frames = (count, duration = 1000 / 60) => { for (let i = 0; i < count; i++) w.events.moveScreen(duration) }
+    w.settle = () => { for (let i = 0; i < 1000 && w.events.keyboardZoomMotion; i++) w.events.moveScreen(1000 / 60) }
+    w.up = (form, extra) => {
+        const e = event(form, extra)
+        w.env.keyup(e)
+        if (!w.events.heldZoomKeys.size) w.settle()
+        return e
+    }
     w.move = (clientX, clientY, tagName = 'CANVAS') =>
         w.env.mousemove({ clientX, clientY, target: { tagName }, timeStamp: time += 10 })
     w.state = () => ({ scale: w.env.canvas.scale, offset: { ...w.env.canvas.offset } })
@@ -105,8 +113,9 @@ function run(sourceDir) {
     {
         const w = zoomWorld(sourceDir)
         const e = w.down(FORMS.equal)
+        w.up(FORMS.equal)
         const ref = zoomWorld(sourceDir)
-        ref.down(FORMS.plus)
+        ref.down(FORMS.plus), ref.up(FORMS.plus)
         check('keys/plain-equal-zooms-in', 'plain = (Equal without Shift) zooms in like + and prevents default',
             { ...w.state(), prevented: e.prevented }, { ...ref.state(), prevented: 1 })
         check('keys/plain-equal-step', 'plain = multiplies scale by the keyboard step', w.env.canvas.scale, STEP)
@@ -176,56 +185,61 @@ function run(sourceDir) {
             { width: SIZE / MIN, height: SIZE / MIN })
     }
 
-    // One step per physical press.
+    // Press and release gives one step; auto-repeat keydowns never add zoom (only held time does).
     {
         const w = zoomWorld(sourceDir)
         w.down(FORMS.plus)
         const repeats = [1, 2, 3, 4, 5].map(() => w.down(FORMS.plus, { repeat: true }).prevented)
         const dupNonRepeat = w.down(FORMS.plus).prevented // a second keydown without keyup (no repeat flag)
-        check('press/repeat-ignored', 'held plus with 5 auto-repeat keydowns and a duplicate keydown zooms once',
+        w.up(FORMS.plus)
+        check('press/repeat-ignored', 'plus with 5 auto-repeat keydowns and a duplicate keydown zooms one step',
             { scale: w.env.canvas.scale, repeatsPrevented: repeats, dupNonRepeatPrevented: dupNonRepeat },
             { scale: STEP, repeatsPrevented: [1, 1, 1, 1, 1], dupNonRepeatPrevented: 1 })
-        w.up(FORMS.plus)
         w.down(FORMS.plus)
         w.down(FORMS.plus, { repeat: true })
+        w.up(FORMS.plus)
         check('press/release-repress', 'release and re-press zooms exactly one more step', w.env.canvas.scale, STEP * STEP)
         // Shift released before Equal: keyup reports key '=' but the same physical code releases the latch
-        w.up({ key: '=', code: 'Equal' })
         w.down(FORMS.plus)
+        w.up({ key: '=', code: 'Equal' })
         check('press/release-by-code-after-shift-up', 'keyup of Equal with key "=" releases the + latch',
             w.env.canvas.scale, STEP ** 3)
-        w.up(FORMS.plus)
-        // numpad Add and main plus are independent physical keys
-        w.down(FORMS.numpadAdd), w.down(FORMS.plus)
-        check('press/two-physical-keys', 'numpad Add then main plus both held: two steps', w.env.canvas.scale,
-            STEP ** 5)
+        w.frames(60)
+        check('press/released-stays-still', 'no zoom after a released press finished', w.env.canvas.scale, STEP ** 3)
     }
     {
         const w = zoomWorld(sourceDir)
         w.down(FORMS.minus)
         w.env.windowBlur() // keyup lost while unfocused
-        w.down(FORMS.minus)
-        check('press/focus-loss-reset', 'minus held, window blur without keyup, next press zooms again',
-            w.env.canvas.scale, 1 / STEP / STEP)
+        w.frames(30)
+        const afterBlur = w.env.canvas.scale
+        w.down(FORMS.minus), w.up(FORMS.minus)
+        check('press/focus-loss-reset', 'minus held, window blur without keyup stops zoom, next press zooms again',
+            { afterBlur, scale: w.env.canvas.scale }, { afterBlur: 1, scale: 1 / STEP })
         w.env.windowBlur()
         w.down(FORMS.minus, { repeat: true })
-        check('press/repeat-after-blur-ignored', 'auto-repeat after blur is not a new press', w.env.canvas.scale, 1 / STEP / STEP)
+        w.frames(30)
+        check('press/repeat-after-blur-ignored', 'auto-repeat after blur is not a new press', w.env.canvas.scale, 1 / STEP)
     }
     {
         const w = zoomWorld(sourceDir)
         w.down(FORMS.plus) // held when leaving gameplay; keyup never delivered
         w.env.menu.visible = true
         const inMenu = w.down(FORMS.plus)
+        w.frames(30)
+        const inMenuScale = w.env.canvas.scale
         w.env.menu.visible = false
-        w.down(FORMS.plus)
-        check('press/leave-gameplay-reset', 'plus held into the menu, back to gameplay: next press zooms',
-            { scale: w.env.canvas.scale, menuPrevented: inMenu.prevented }, { scale: STEP * STEP, menuPrevented: 0 })
+        w.down(FORMS.plus), w.up(FORMS.plus)
+        check('press/leave-gameplay-reset', 'plus held into the menu stops; back in gameplay the next press zooms',
+            { inMenuScale, scale: w.env.canvas.scale, menuPrevented: inMenu.prevented },
+            { inMenuScale: 1, scale: STEP, menuPrevented: 0 })
         const v = zoomWorld(sourceDir)
         v.down(FORMS.numpadAdd)
         v.events.resetKeyboardZoom() // GameStart.clearBasisValues on a new game
-        v.down(FORMS.numpadAdd)
-        check('press/new-game-reset', 'resetKeyboardZoom (called on game start) clears a stale latch',
-            v.env.canvas.scale, STEP * STEP)
+        v.frames(30)
+        v.down(FORMS.numpadAdd), v.up(FORMS.numpadAdd)
+        check('press/new-game-reset', 'resetKeyboardZoom (called on game start) stops zoom and clears a stale latch',
+            v.env.canvas.scale, STEP)
     }
 
     // Ignored contexts and modifiers: no zoom, default not prevented.
@@ -250,13 +264,14 @@ function run(sourceDir) {
     {
         const w = zoomWorld(sourceDir)
         w.down(FORMS.plus, { ctrlKey: true })
-        w.down(FORMS.plus) // Ctrl combination did not latch the key
+        w.down(FORMS.plus), w.up(FORMS.plus) // Ctrl combination did not latch the key
         check('ignored/ctrl-does-not-latch', 'Ctrl+plus ignored, then plain plus zooms once', w.env.canvas.scale, STEP)
     }
     {
         const w = zoomWorld(sourceDir)
         w.events.waitingMode = true
         const e = w.down(FORMS.plus)
+        w.up(FORMS.plus)
         check('gameplay/waiting-for-turn', 'plus zooms while waiting for the turn (waitingMode)',
             { scale: w.env.canvas.scale, prevented: e.prevented }, { scale: STEP, prevented: 1 })
     }
@@ -293,40 +308,50 @@ function run(sourceDir) {
         check('preserve/zoom-key-not-movement', 'zoom keys do not change camera speed',
             { speedX: w.events.screen.speedX, speedY: w.events.screen.speedY }, { speedX: 0, speedY: 0 })
     }
-    // Holding a zoom key: one step now, nothing more during the 300 ms delay, then 2x per second until the limit.
+    // Smooth zoom: nothing jumps on keydown; held keys zoom one step per 100 ms from the first frame.
     {
-        const HOLD_DELAY = 300, HOLD_RATE = 2, FRAME = 1000 / 60
+        const FRAME = 1000 / 60, STEP_MS = 100
         const w = zoomWorld(sourceDir)
         w.down(FORMS.plus)
-        for (let i = 0; i < 18; i++) w.events.moveScreen(FRAME) // 300 ms
-        const afterDelay = w.env.canvas.scale
-        for (let i = 0; i < 42; i++) w.events.moveScreen(FRAME) // up to 1000 ms held
-        check('hold/plus-delay-then-continuous', 'holding + zooms one step, waits 300 ms, then 2x per second',
-            { afterDelay, afterSecond: w.env.canvas.scale },
-            { afterDelay: STEP, afterSecond: STEP * Math.pow(HOLD_RATE, (1000 - HOLD_DELAY) / 1000) })
-        for (let i = 0; i < 120; i++) w.events.moveScreen(FRAME)
+        const onKeydown = w.env.canvas.scale
+        w.frames(1)
+        const firstFrame = w.env.canvas.scale
+        w.frames(29) // 500 ms held
+        check('hold/no-jump-then-constant-speed', 'keydown alone does not zoom; each frame zooms STEP^(frame/100ms)',
+            { onKeydown, firstFrame, afterHalfSecond: w.env.canvas.scale },
+            { onKeydown: 1, firstFrame: Math.pow(STEP, FRAME / STEP_MS), afterHalfSecond: Math.pow(STEP, 500 / STEP_MS) })
+        w.frames(120)
         check('hold/plus-clamps-at-max', 'holding + stops at the max scale', w.env.canvas.scale, MAX)
         w.up(FORMS.plus)
-        const released = w.env.canvas.scale
         w.down(FORMS.numpadSubtract)
-        for (let i = 0; i < 18; i++) w.events.moveScreen(FRAME)
-        const afterMinusDelay = w.env.canvas.scale
-        for (let i = 0; i < 42; i++) w.events.moveScreen(FRAME)
-        check('hold/minus-after-release', 'after release + stops; holding numpad - zooms out the same way',
-            { released, afterMinusDelay, afterSecond: w.env.canvas.scale },
-            { released: MAX, afterMinusDelay: MAX / STEP,
-                afterSecond: MAX / STEP / Math.pow(HOLD_RATE, (1000 - HOLD_DELAY) / 1000) })
+        w.frames(30) // 500 ms
+        check('hold/minus-after-plus', 'holding numpad - zooms out at the same speed', w.env.canvas.scale,
+            MAX / Math.pow(STEP, 500 / STEP_MS))
+        const beforeRelease = w.env.canvas.scale
         w.up(FORMS.numpadSubtract)
-        const stopped = w.env.canvas.scale
-        for (let i = 0; i < 60; i++) w.events.moveScreen(FRAME)
-        check('hold/stops-on-release', 'no zoom after the key is released', w.env.canvas.scale, stopped)
+        check('hold/release-stops', 'releasing after more than one step stops without extra zoom',
+            w.env.canvas.scale, beforeRelease)
+    }
+    {
+        // a tap released mid-step finishes its step smoothly over later frames
+        const w = zoomWorld(sourceDir)
+        w.down(FORMS.plus)
+        w.frames(2)
+        w.env.keyup({ ...FORMS.plus, keyCode: KEYCODE.Equal, timeStamp: 1e6 })
+        const atRelease = w.env.canvas.scale
+        w.frames(1)
+        const nextFrame = w.env.canvas.scale
+        w.frames(60)
+        check('hold/tap-finishes-smoothly', 'released tap keeps zooming frame by frame and ends at exactly one step',
+            { partialAtRelease: atRelease > 1 && atRelease < STEP, stillZooming: nextFrame > atRelease, final: w.env.canvas.scale },
+            { partialAtRelease: true, stillZooming: true, final: STEP })
     }
     {
         const w = zoomWorld(sourceDir)
         w.down(FORMS.plus)
         w.env.windowBlur()
-        for (let i = 0; i < 60; i++) w.events.moveScreen(1000 / 60)
-        check('hold/blur-stops', 'window blur ends a held zoom', w.env.canvas.scale, STEP)
+        w.frames(60)
+        check('hold/blur-stops', 'window blur ends a held zoom', w.env.canvas.scale, 1)
     }
     return checks
 }
