@@ -144,8 +144,132 @@ function planCoopCircle(humans, size = 'normal', seed = 1) {
     }
 }
 
+const circleStartScaling = typeof getCoopMapScaling === 'function' ? getCoopMapScaling
+    : require('./coop-map-scaling.js').getCoopMapScaling
+const CIRCLE_NEUTRAL_RGB = Object.freeze({r: 208, g: 208, b: 208})
+const CIRCLE_OFFSETS3 = Object.freeze([-1, 0, 1].flatMap(dy => [-1, 0, 1].map(dx => Object.freeze({x: dx, y: dy}))))
+const circleChebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+
+function circleShuffler(seed) {
+    const rng = createCircleRandom(seed >>> 0)
+    return list => {
+        for (let i = list.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1))
+            ;[list[i], list[j]] = [list[j], list[i]]
+        }
+        return list
+    }
+}
+
+// Town ring cells in angular order around the centre cell (R, R). Pixel
+// positions follow sprites/sprite.js: columns 3/4 of a hex apart, odd columns half a row lower.
+function circleRingOrder(plan, layer) {
+    const {side, center} = plan, cells = []
+    const cx = 1.5 * plan.radius, cy = Math.sqrt(3) * (plan.radius + 0.5 * (plan.radius & 1))
+    for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) {
+        if (circleGeometry.coopHexLayer(x, y, center) !== layer) continue
+        cells.push({x, y, angle: Math.atan2(Math.sqrt(3) * (y + 0.5 * (x & 1)) - cy, 1.5 * x - cx)})
+    }
+    return cells.sort((a, b) => a.angle - b.angle).map(c => ({x: c.x, y: c.y}))
+}
+
+// Free cells (layer <= R, not solid) form one component and every listed object
+// touches it. Cells with layer > R are always solid (InvisibleMountain at runtime).
+function circlePassableConnected(plan, solid, objects) {
+    const {side, center, radius} = plan
+    const inside = id => circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center) <= radius
+    const seen = new Uint8Array(side * side), queue = []
+    let open = 0
+    for (let id = 0; id < side * side; id++) if (inside(id) && !solid.has(id)) {
+        open++
+        if (!queue.length) { queue.push(id); seen[id] = 1 }
+    }
+    for (let i = 0; i < queue.length; i++) {
+        const x = queue[i] % side
+        for (const n of circleNeighbours({x, y: (queue[i] - x) / side}, side)) {
+            const id = n.y * side + n.x
+            if (!seen[id] && inside(id) && !solid.has(id)) { seen[id] = 1; queue.push(id) }
+        }
+    }
+    return queue.length === open && objects.every(id => {
+        const x = id % side
+        return circleNeighbours({x, y: (id - x) / side}, side).some(n => seen[n.y * side + n.x])
+    })
+}
+
+// Starting towns on the town ring (layer R-3) and one owned mine per human.
+// Towns sit at ring indices start + floor(i*N/h), so consecutive angular gaps
+// differ by at most one ring cell; the start is drawn from a seeded shuffle and
+// the first start whose towns are pairwise Chebyshev >= 3 wins. Each town's 3x3
+// neighbourhood is reserved, then every human gets the nearest free cell with
+// layer > E (BFS with layer > R and other towns solid, mines as endpoints) that
+// keeps the passable region connected.
+function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
+    if (typeof colorOf !== 'function') throw new TypeError('Circle starts require coopPlayerColor')
+    const {side, humans, radius, center} = plan, elite = plan.regions.elite
+    const assets = circleStartScaling(humans, plan.size).startingAssets
+    const shuffle = circleShuffler(plan.seed ^ 0x9e3779b9)
+    const layerOf = id => circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center)
+    const ring = circleRingOrder(plan, plan.regions.townRing), N = ring.length
+    let towns = null, start = null
+    for (const s of shuffle([...Array(N).keys()])) {
+        const picked = [...Array(humans).keys()].map(i => ring[(s + Math.floor(i * N / humans)) % N])
+        if (picked.every((t, i) => picked.every((u, j) => j <= i || circleChebyshev(t, u) >= 3))) {
+            towns = picked; start = s; break
+        }
+    }
+    if (!towns) throw new Error(`Circle has no town ring sites: size=${plan.size} humans=${humans}`)
+    const idOf = c => c.y * side + c.x, cell = id => ({x: id % side, y: Math.floor(id / side)})
+    const reserved = new Set()
+    for (const t of towns) for (const o of CIRCLE_OFFSETS3) reserved.add(idOf({x: t.x + o.x, y: t.y + o.y}))
+    const townIds = towns.map(idOf), mineIds = new Set(), assigned = new Array(humans)
+    const distances = i => {
+        const distance = new Int32Array(side * side).fill(-1), queue = [towns[i]]
+        distance[townIds[i]] = 0
+        for (let k = 0; k < queue.length; k++) {
+            const c = queue[k], cid = idOf(c)
+            if (k > 0 && mineIds.has(cid)) continue
+            for (const n of circleNeighbours(c, side)) {
+                const id = idOf(n)
+                if (distance[id] >= 0 || layerOf(id) > radius || townIds.includes(id)) continue
+                distance[id] = distance[cid] + 1; queue.push(n)
+            }
+        }
+        return distance
+    }
+    for (let i = 0; i < humans; i++) {
+        const d = distances(i), tiers = new Map()
+        for (let id = 0; id < side * side; id++) {
+            if (d[id] <= 0 || reserved.has(id) || mineIds.has(id) || layerOf(id) <= elite) continue
+            if (!tiers.has(d[id])) tiers.set(d[id], [])
+            tiers.get(d[id]).push(id)
+        }
+        search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
+            for (const id of shuffle(tiers.get(tier))) {
+                mineIds.add(id)
+                if (circlePassableConnected(plan, new Set([...townIds, ...mineIds]), [...townIds, ...mineIds])) {
+                    assigned[i] = {id, distance: tier}; break search
+                }
+                mineIds.delete(id)
+            }
+        }
+        if (!assigned[i]) throw new Error(`Circle has no nearby mine: size=${plan.size} humans=${humans} slot=${i + 1}`)
+    }
+    const indices = towns.map((_, i) => (start + Math.floor(i * N / humans)) % N)
+    return {
+        version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize, radius,
+        stages: ['towns', 'reserve-neighbourhoods', 'nearby-mines'],
+        ring: {layer: plan.regions.townRing, cells: N, start, indices},
+        players: [{slot: 0, rgb: {...CIRCLE_NEUTRAL_RGB}, towns: [], units: [], gold: 0},
+            ...towns.map((t, i) => ({slot: i + 1, rgb: colorOf(i + 1), gold: assets.gold, units: [], towns: [{x: t.x, y: t.y}]}))],
+        reserved: [...reserved].sort((a, b) => a - b).map(cell),
+        goldmines: assigned.map((a, i) => ({...cell(a.id), owner: i + 1, income: 20})),
+        assignments: assigned.map((a, i) => ({slot: i + 1, mine: cell(a.id), distance: a.distance}))
+    }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {planCoopCircle, circleRadiusPlan, circleCapacityAt, circleRegions, clearCirclePlanCache,
+    module.exports = {planCoopCircle, placeCircleStarts, circleRingOrder, circlePassableConnected, circleRadiusPlan, circleCapacityAt, circleRegions, clearCirclePlanCache,
         createCircleRandom, circleNeighbours, COOP_CIRCLE_ELITE_CATEGORIES, CIRCLE_TOWN_DISTANCE, CIRCLE_LEGEND,
         CIRCLE_MAX_GROWTH}
 }
