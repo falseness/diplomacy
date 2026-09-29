@@ -34,7 +34,10 @@ function drawInterface() {
 
     iButton.draw(interfaceCtx)
 
-    const lobbyText = onlineLobbyText()
+    // A full lobby needs no banner; it reappears if a human drops out.
+    const lobbyFull = onlineLobby && onlineLobby.occupiedHumans !== null &&
+        onlineLobby.occupiedHumans === onlineLobby.humanCapacity
+    const lobbyText = lobbyFull ? '' : onlineLobbyText()
     if (lobbyText) {
         interfaceCtx.save()
         interfaceCtx.font = Math.min(20 * window.devicePixelRatio, WIDTH / 30) + 'px Arial'
