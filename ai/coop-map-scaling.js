@@ -4,9 +4,28 @@ const COOP_SCALING_PRESETS = Object.freeze({
     normal: Object.freeze({baseSide: 25, minSide: 15, objectsPerHuman: 2}),
     big: Object.freeze({baseSide: 39, minSide: 21, objectsPerHuman: 3})
 })
+// Hex radius presets for the hex co-op map. They are sized for the final elite load, so the
+// size selector stays meaningful; growth may only repair an infeasible preset.
+const COOP_HEX_RADIUS = Object.freeze({
+    tiny: Object.freeze({scale: 8, min: 10}),
+    normal: Object.freeze({scale: 11, min: 13}),
+    big: Object.freeze({scale: 14, min: 16})
+})
 // Three melee and ranged portals, one of each remaining category per initial human. Matches
 // COOP_PORTAL_CATEGORIES (ai/wave-config.js), which the server does not load.
 const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos'])
+
+function baselineRadius(initialHumanCount, size) {
+    const preset = COOP_HEX_RADIUS[size]
+    return Math.max(preset.min, Math.ceil(preset.scale * Math.sqrt(initialHumanCount)))
+}
+
+// Terrain targets come from the playable hex cells, not from side squared.
+function hexCounts(radius) {
+    const playable = 3 * radius * radius + 3 * radius + 1
+    return {playable, mountains: Math.round(playable * 0.08),
+        lakes: Math.round(playable * 0.06), bushes: Math.round(playable * 0.10)}
+}
 
 function getCoopMapScaling(initialHumanCount, size = 'normal') {
     if (!Number.isInteger(initialHumanCount) || initialHumanCount < 1 || initialHumanCount > 12) {
@@ -21,6 +40,7 @@ function getCoopMapScaling(initialHumanCount, size = 'normal') {
     const objects = initialHumanCount * preset.objectsPerHuman
     const portalCategories = Object.fromEntries(COOP_PORTAL_CATEGORY_ORDER.map(category => [category, initialHumanCount * (category === 'melee' || category === 'ranged' ? 3 : 1)]))
     return {size, initialHumanCount, side, mapSize: {x: side, y: side}, area,
+        baselineRadius: baselineRadius(initialHumanCount, size),
         counts: {humanTowns: initialHumanCount, neutralTowns: objects,
             goldmines: objects, portals: 10 * initialHumanCount,
             portalCategories, mountains: Math.round(area * 0.08),
@@ -42,5 +62,6 @@ function getCoopMapScalingFromMetadata(coop) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {getCoopMapScaling, getCoopMapScalingFromMetadata, COOP_PORTAL_CATEGORY_ORDER}
+    module.exports = {getCoopMapScaling, getCoopMapScalingFromMetadata, COOP_PORTAL_CATEGORY_ORDER,
+        COOP_HEX_RADIUS, baselineRadius, hexCounts}
 }

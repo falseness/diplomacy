@@ -1,5 +1,6 @@
 const assert = require('assert').strict;
 const {getCoopMapScaling, getCoopMapScalingFromMetadata} = require('./coop-map-scaling');
+const fs = require('fs'), path = require('path');
 const {createFixture} = require('./test-coop-harness');
 const {spawnSync} = require('child_process');
 const sides = {
@@ -11,6 +12,50 @@ function compare(name, observed, expected) {
   console.log(JSON.stringify({name, expected, observed}));
   assert.deepEqual(observed, expected, name);
   console.log('PASS '+name);
+}
+const argValue = flag => { const i=process.argv.indexOf(flag); return i<0 ? undefined : process.argv[i+1]; };
+const outputDir = argValue('--output-dir'), fault = argValue('--fault');
+if (fault!==undefined && fault!=='equal-scales') throw new Error('unknown --fault '+fault);
+// Hex radius presets. --fault equal-scales loads the real source with every scale set to 11.
+let hex = require('./coop-map-scaling');
+if (fault==='equal-scales') {
+  const source=fs.readFileSync(path.join(__dirname,'coop-map-scaling.js'),'utf8').replace(/scale: \d+/g,'scale: 11');
+  const sandbox={module:{exports:{}}};
+  require('vm').runInNewContext(source,sandbox);
+  hex=sandbox.module.exports;
+  console.log('FAULT equal-scales: every COOP_HEX_RADIUS scale forced to 11');
+}
+// Independent radius: smallest integer R with R*R >= scale*scale*h, no sqrt.
+const HEX = {tiny:{scale:8,min:10},normal:{scale:11,min:13},big:{scale:14,min:16}};
+const independentRadius=(h,size)=>{ let r=0; while (r*r<HEX[size].scale**2*h) r++; return Math.max(HEX[size].min,r); };
+const radiusRows=[];
+for (let h=1;h<=12;h++) {
+  const radii=['tiny','normal','big'].map(size=>hex.baselineRadius(h,size));
+  compare(`H${h}-radius-strictly-increasing`,{radii,increasing:radii[0]<radii[1]&&radii[1]<radii[2]},{radii,increasing:true});
+}
+for (let h=1;h<=12;h++) {
+  for (const size of ['tiny','normal','big']) {
+    const R=hex.baselineRadius(h,size), side=2*R+1, counts=hex.hexCounts(R), playable=3*R*R+3*R+1;
+    compare(`${size}-H${h}-baseline-radius`,R,independentRadius(h,size));
+    compare(`${size}-H${h}-side-odd`,{odd:side%2===1,side},{odd:true,side:2*R+1});
+    compare(`${size}-H${h}-hex-counts`,counts,{playable,mountains:Math.floor((playable*8+50)/100),
+      lakes:Math.floor((playable*6+50)/100),bushes:Math.floor((playable*10+50)/100)});
+    compare(`${size}-H${h}-scaling-exposes-radius`,getCoopMapScaling(h,size).baselineRadius,R);
+    radiusRows.push({size,humans:h,baselineRadius:R,side,...counts});
+  }
+}
+const referencePoints=[['tiny',1,10,21],['tiny',12,28,57],['normal',1,13,27],['normal',12,39,79],['big',1,16,33],['big',12,49,99]]
+  .map(([size,humans,radius,side])=>{
+    const row=radiusRows.find(r=>r.size===size&&r.humans===humans);
+    return {size,humans,expectedRadius:radius,expectedSide:side,radius:row.baselineRadius,side:row.side,
+      match:row.baselineRadius===radius&&row.side===side};
+  });
+for (const p of referencePoints) compare(`${p.size}-H${p.humans}-reference-point`,p.match,true);
+compare('radius-row-count',radiusRows.length,36);
+if (outputDir) {
+  fs.mkdirSync(outputDir,{recursive:true});
+  fs.writeFileSync(path.join(outputDir,'radius-presets.json'),
+    JSON.stringify({presets:hex.COOP_HEX_RADIUS,rows:radiusRows,referencePoints},null,1)+'\n');
 }
 const smoke = require('./smokeHarness').loadAiScripts();
 compare('smoke-shared-source',require('vm').runInContext('getCoopMapScaling(12).side',smoke.context),44);
@@ -25,6 +70,7 @@ for (const [size, table] of Object.entries(sides)) {
     // Independent integer rounding, with no sqrt or production constants.
     // Three melee/ranged and one siege/heavy/support/chaos portal per human.
     const expected={size,initialHumanCount:h,side,mapSize:{x:side,y:side},area,
+      baselineRadius:independentRadius(h,size),
       counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*multiplier,portals:10*h,
         portalCategories:{melee:3*h,ranged:3*h,siege:h,heavy:h,support:h,chaos:h},
         mountains:Math.floor((area*8+50)/100),lakes:Math.floor((area*6+50)/100),bushes:Math.floor((area*10+50)/100)},
@@ -81,4 +127,4 @@ process.stdout.write(probe.stdout);process.stderr.write(probe.stderr);
 console.log('END deliberate corruption probe actual_exit_status='+probe.status);
 assert.equal(probe.status,1);assert.match(probe.stderr,/tiny-H1-independent-table/);
 console.log('PASS corruption-probe expected_exit=1 observed_exit=1 marker=tiny-H1-independent-table');
-console.log('PASS co-op map scaling presets=3 humans=1..12 independent_cases=36 metadata_save_load=3');
+console.log('PASS co-op map scaling presets=3 humans=1..12 independent_cases=36 radius_rows=36 metadata_save_load=3');
