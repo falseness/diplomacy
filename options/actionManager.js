@@ -160,7 +160,9 @@ class ActionManager {
             }
             for (let j = 0; player.units && j < player.units.length; ++j) {
                 let unit = player.units[j]
-                if (unit && unit.coord) {
+                // A killed unit stays in its list until updateUnits. Its cell
+                // may now hold another player's unit, which restore would adopt.
+                if (unit && unit.coord && !unit.killed) {
                     snapshot[i].units.push({x: unit.coord.x, y: unit.coord.y})
                 }
             }
