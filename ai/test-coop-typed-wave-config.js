@@ -20,7 +20,7 @@ const WAVE_ROUNDS = Array.from({length: 25}, (_, i) => (i + 1) * 4);
 const EXPECTED_STEPS = {
   melee: [[4, 'imp'], [8, 'clawling'], [16, 'brute']],
   ranged: [[4, 'spitter'], [12, 'emberArcher']],
-  siege: [[16, 'bombard']], heavy: [[20, 'bulwark']],
+  siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[20, 'bulwark']],
   support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']]
 };
 function literalType(category, round) {
@@ -40,7 +40,7 @@ const NEXT = Object.fromEntries(CATEGORIES.map(c => [c,
     const n = literalNext(c, completed); return [completed, n.round, n.type, n.roundsRemaining];
   })]));
 const DEMON_TYPE_IDS = ['imp', 'clawling', 'hound', 'brute', 'bulwark', 'spitter', 'emberArcher', 'hexcaster',
-  'ravager', 'demonLord', 'bombard'];
+  'ravager', 'demonLord', 'bombard', 'mortar'];
 
 const checkpoints = [];
 function compare(id, observed, expected) {
@@ -87,9 +87,9 @@ function checkSchedule(a, runtime, record) {
   compare(`${runtime}-wave-rounds-0-100`, waveFlags.map((flag, round) => flag ? round : null).filter(r => r !== null),
     WAVE_ROUNDS);
   // Indefinite repetition of the strongest reached type, far past the table.
-  for (const [round, expected] of [[101, [null, null, null, null, null, null]], [104, ['brute', 'emberArcher', 'bombard', 'bulwark', 'hound', 'demonLord']],
-    [4000, ['brute', 'emberArcher', 'bombard', 'bulwark', 'hound', 'demonLord']], [4002, [null, null, null, null, null, null]],
-    [Number.MAX_SAFE_INTEGER - 3, ['brute', 'emberArcher', 'bombard', 'bulwark', 'hound', 'demonLord']]])
+  for (const [round, expected] of [[101, [null, null, null, null, null, null]], [104, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord']],
+    [4000, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord']], [4002, [null, null, null, null, null, null]],
+    [Number.MAX_SAFE_INTEGER - 3, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord']]])
     compare(`${runtime}-repeat-round-${round}`, CATEGORIES.map(c => a.getCoopScheduledDemonType(c, round)), expected);
   for (const category of CATEGORIES) {
     for (const [completed, round, type, roundsRemaining] of NEXT[category])
@@ -254,7 +254,7 @@ function checkCallers() {
       {round:28,types:[],selections:[]});
   }
   compare('caller-unblock-no-backlog', vm.runInContext(`external.forEach(p => p.hp = 30); generateCoopWave(32)`, context),
-    {round:32, types:['brute','emberArcher','bombard','bulwark','hound','demonLord'],
+    {round:32, types:['brute','emberArcher','mortar','bulwark','hound','demonLord'],
       selections:CATEGORIES.map((c,x)=>({x,y:0,type:literalType(c,32)}))});
   for (const category of CATEGORIES) for (const [gameRound, committed] of [[0,0],[3,4],[15,16],[28,24]]) {
     const observed = vm.runInContext(`gameRound=${gameRound}; gameSettings.coop.typedWaves={lastRound:${committed}};

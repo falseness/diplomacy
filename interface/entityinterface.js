@@ -137,7 +137,7 @@ class EntityInterface {
             info = {name: next.type, displayName: DEMON_TYPES[next.type].name,
                 image: next.type, info: {hp: info.info.hp, dmg: type.dmg,
                     movement: info.info.speed, range: type.range || 1,
-                    ...(next.type === 'bombard' ? {'building dmg': type.buildingDMG,
+                    ...(DEMON_TYPES[next.type].buildingDamage !== undefined ? {'building dmg': type.buildingDMG,
                         target: 'enemy buildings only'} : {})}}
         }
         const text = join(info.info, ': ', '\n')

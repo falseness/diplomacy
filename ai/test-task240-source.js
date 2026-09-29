@@ -37,7 +37,7 @@ if(require.main===module){
  })()`),[
  ['imp','clawling','clawling','brute','brute','brute','brute','brute'],
  ['spitter','spitter','ember archer','ember archer','ember archer','ember archer','ember archer','ember archer'],
- Array(8).fill('bombard'),Array(8).fill('bulwark'),
+ [...Array(7).fill('bombard'),'mortar'],Array(8).fill('bulwark'),
  ['ravager','ravager','ravager','ravager','ravager','hound','hound','hound'],Array(8).fill('demon lord')]);
  check(cases[6],f.evaluate('inspectionSnapshot240()===before240'),true);
  check(cases[2],f.evaluate(`(() => {
