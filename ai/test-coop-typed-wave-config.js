@@ -19,7 +19,7 @@ const WAVE_ROUNDS = Array.from({length: 25}, (_, i) => (i + 1) * 4);
 // Independent specification literals, never imported from production.
 const EXPECTED_STEPS = {
   melee: [[4, 'imp'], [8, 'clawling'], [16, 'brute']],
-  ranged: [[4, 'spitter'], [12, 'emberArcher'], [20, 'hexcaster']],
+  ranged: [[4, 'spitter'], [12, 'emberArcher']],
   siege: [[16, 'bombard']], heavy: [[20, 'bulwark']],
   support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']]
 };
@@ -87,9 +87,9 @@ function checkSchedule(a, runtime, record) {
   compare(`${runtime}-wave-rounds-0-100`, waveFlags.map((flag, round) => flag ? round : null).filter(r => r !== null),
     WAVE_ROUNDS);
   // Indefinite repetition of the strongest reached type, far past the table.
-  for (const [round, expected] of [[101, [null, null, null, null, null, null]], [104, ['brute', 'hexcaster', 'bombard', 'bulwark', 'hound', 'demonLord']],
-    [4000, ['brute', 'hexcaster', 'bombard', 'bulwark', 'hound', 'demonLord']], [4002, [null, null, null, null, null, null]],
-    [Number.MAX_SAFE_INTEGER - 3, ['brute', 'hexcaster', 'bombard', 'bulwark', 'hound', 'demonLord']]])
+  for (const [round, expected] of [[101, [null, null, null, null, null, null]], [104, ['brute', 'emberArcher', 'bombard', 'bulwark', 'hound', 'demonLord']],
+    [4000, ['brute', 'emberArcher', 'bombard', 'bulwark', 'hound', 'demonLord']], [4002, [null, null, null, null, null, null]],
+    [Number.MAX_SAFE_INTEGER - 3, ['brute', 'emberArcher', 'bombard', 'bulwark', 'hound', 'demonLord']]])
     compare(`${runtime}-repeat-round-${round}`, CATEGORIES.map(c => a.getCoopScheduledDemonType(c, round)), expected);
   for (const category of CATEGORIES) {
     for (const [completed, round, type, roundsRemaining] of NEXT[category])
@@ -254,7 +254,7 @@ function checkCallers() {
       {round:28,types:[],selections:[]});
   }
   compare('caller-unblock-no-backlog', vm.runInContext(`external.forEach(p => p.hp = 30); generateCoopWave(32)`, context),
-    {round:32, types:['brute','hexcaster','bombard','bulwark','hound','demonLord'],
+    {round:32, types:['brute','emberArcher','bombard','bulwark','hound','demonLord'],
       selections:CATEGORIES.map((c,x)=>({x,y:0,type:literalType(c,32)}))});
   for (const category of CATEGORIES) for (const [gameRound, committed] of [[0,0],[3,4],[15,16],[28,24]]) {
     const observed = vm.runInContext(`gameRound=${gameRound}; gameSettings.coop.typedWaves={lastRound:${committed}};
@@ -268,7 +268,9 @@ function nodeApi() {
 }
 function checkTypeRegistry(a) {
   const scheduled = [...new Set(CATEGORIES.flatMap(c => a.COOP_TYPED_WAVE_SCHEDULE.categories[c].map(s => s.type)))];
-  compare('scheduled-types-cover-all-demon-types', [...scheduled].sort(), [...DEMON_TYPE_IDS].sort());
+  // Hexcaster stays registered but no portal category schedules it (ranged ends at emberArcher).
+  compare('scheduled-types-cover-all-demon-types', [...scheduled].sort(),
+    DEMON_TYPE_IDS.filter(id => id !== 'hexcaster').sort());
   compare('scheduled-types-in-demon-config', scheduled.every(id =>
     Object.prototype.hasOwnProperty.call(require('./demon-config'), id)), true);
   const placement = fs.readFileSync(path.join(__dirname, 'wave-placement.js'), 'utf8');

@@ -13,7 +13,7 @@ const COOP_TYPED_WAVE_SCHEDULE = Object.freeze({
   waveInterval: 4,
   categories: Object.freeze(Object.fromEntries(Object.entries({
     melee: [[4, 'imp'], [8, 'clawling'], [16, 'brute']],
-    ranged: [[4, 'spitter'], [12, 'emberArcher'], [20, 'hexcaster']],
+    ranged: [[4, 'spitter'], [12, 'emberArcher']],
     siege: [[16, 'bombard']],
     heavy: [[20, 'bulwark']],
     support: [[16, 'ravager'], [24, 'hound']],
