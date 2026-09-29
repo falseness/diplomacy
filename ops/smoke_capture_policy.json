@@ -1,8 +1,0 @@
-{
-  "basis": "Completed smoke-policy-156 implementation review; this binding does not stand for network proof.",
-  "files": {
-    "/root/diplomacy/ops/task225-smoke-policy-review.md": "86a762bfdc97b0855b6ca400521a62485b3ef8b032869ebaa6262ae5b40d9edf",
-    "/root/diplomacy_server/server/index.js": "3b653a88c104ece01c2a7df384679165a41e6458832ecf426d2d7f5135aca10c",
-    "/root/diplomacy_server/server/smokeIsolation.js": "5d63115f72eb7feeaf4b3aab0310d1bd74bd565f07f58b3433c5e6c9e2aa8c5e"
-  }
-}
