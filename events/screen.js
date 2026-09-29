@@ -161,17 +161,30 @@ class ComputerScreen extends Screen {
     goDown() {
         this.setSpeedY(-this.speed)
     }
-    changeSpeed(pos) {
-        this.stop()
+    // direction: -1 left/up, 1 right/down, 0 stop
+    setDirectionX(direction) {
+        this.setSpeedX(-direction * this.speed)
+    }
+    setDirectionY(direction) {
+        this.setSpeedY(-direction * this.speed)
+    }
+    getEdgeDirection(pos) {
+        let direction = { x: 0, y: 0 }
         if (pos.x > this.rightBorder)
-            this.goRight()
+            direction.x = 1
         if (pos.x < this.leftBorder)
-            this.goLeft()
+            direction.x = -1
 
         if (pos.y > this.bottomBorder)
-            this.goDown()
+            direction.y = 1
         if (pos.y < this.topBorder)
-            this.goUp()
+            direction.y = -1
+        return direction
+    }
+    changeSpeed(pos) {
+        let direction = this.getEdgeDirection(pos)
+        this.setDirectionX(direction.x)
+        this.setDirectionY(direction.y)
     }
     draw(ctx) {
         if (!debug)
