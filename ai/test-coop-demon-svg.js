@@ -9,7 +9,8 @@ const {chromium} = require('playwright');
 const root = path.resolve(__dirname, '..');
 const parents = {imp:['noob','normchel'], clawling:['noob','normchel'], hound:['KOHb'],
   brute:['normchel'], bulwark:['normchel'], spitter:['archer'], emberArcher:['archer'],
-  hexcaster:['archer'], ravager:['KOHb'], demonLord:['normchel'], mortar:['catapult','bombard'], demonPortal:['goldmine']};
+  hexcaster:['archer'], ravager:['KOHb'], demonLord:['normchel'], mortar:['catapult','bombard'],
+  hexmaster:['archer','hexcaster'], demonQueen:['archer','hexcaster'], demonPortal:['goldmine']};
 function option(name, fallback) {
   const i = process.argv.indexOf(name);
   if (i < 0) return fallback;
