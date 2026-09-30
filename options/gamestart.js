@@ -1303,12 +1303,43 @@ class GameManager {
         gameRound = 0
         actionManager.clear()
     }
-    static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
+    // The board setup shared by start and buildOnlineBoard.
+    static setUpBoard(map, _isFogOfWar, isClassicTimer, isOnline, password, gameManager = this) {
         isFogOfWar = _isFogOfWar
         gameSettings.isOnline = isOnline
         unsafeVariablePassword = password
-        map.start(this, isClassicTimer, !isOnline)
+        map.start(gameManager, isClassicTimer, !isOnline)
         this.initValues()
+    }
+    // The initial online board as start(map, fog, false, true) builds it, without
+    // entering the game: the menu stays visible and the game globals it replaced
+    // that the menu or a later load reads are restored.
+    static buildOnlineBoard(map, _isFogOfWar) {
+        const saved = {isFogOfWar, gameSettings: JSON.parse(JSON.stringify(gameSettings)),
+            password: unsafeVariablePassword, timer}
+        // No clearBasisValues: it hides the menu and installs the game's input events.
+        const boardOnly = {
+            clearValues() {
+                external = []
+                externalProduction = []
+                nature = []
+                goldmines = []
+                gameRound = 0
+            },
+            updateCameraBorders() {},
+        }
+        try {
+            this.setUpBoard(map, _isFogOfWar, false, true, '', boardOnly)
+            return JSON.parse(JSON.stringify(getGameObject()))
+        } finally {
+            isFogOfWar = saved.isFogOfWar
+            gameSettings = saved.gameSettings
+            unsafeVariablePassword = saved.password
+            timer = saved.timer
+        }
+    }
+    static start(map, _isFogOfWar, isClassicTimer = false, isOnline = false, password = '') {
+        this.setUpBoard(map, _isFogOfWar, isClassicTimer, isOnline, password)
 
         if (isOnline) {
             console.log('isOnline')

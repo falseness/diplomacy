@@ -378,7 +378,10 @@ class HotseatSettingsTree extends GameSettingsTree {
     }
 }
 
-class OnlineSettingsTree {
+// The online game controls shared by the legacy password screen and the lobby
+// flow's create-lobby screen: mode toggle, competitive map/players or co-op
+// humans/seed/size sliders and 'fog of war'. Online always uses the long timer.
+class OnlineGameSettings {
     isOnline = true
     constructor(_menu) {
         const rectSize = WIDTH * 0.05
@@ -388,6 +391,9 @@ class OnlineSettingsTree {
         let intervalY = HEIGHT * 0.15*/
         const firstY = HEIGHT * 0.3
         let intervalY = HEIGHT * 0.12
+        this.firstY = firstY
+        this.intervalY = intervalY
+        this.marginLeft = marginLeft
 
         const posX = WIDTH * 0.5
 
@@ -439,31 +445,12 @@ class OnlineSettingsTree {
             WIDTH * 0.28, firstY, rectSize, rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
-
-
-        this.passwordButtons = []
-
-        this.currentPassword = ''
-
-        this.initializePasswordsButtons(firstY, intervalY)
-
-        this.passwordText = new Text(marginLeft,
-            firstY + intervalY * 2, fontSize, 'enter password:', 'black', 'left')
-
-
-
         // this.timerCheckBox = new ImageCheckBox('checkMark',
         //     new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
         //     WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize,
         //     [cornerR, cornerR, cornerR, cornerR],menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
         this.backButton = new Empty()
-
-        intervalY -= HEIGHT * 0.01
-
-        this.playButton = Menu.getButton(
-            {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start',
-            _menu.setTree, _menu.startGame, true, _menu)
 
         const modeRect = Menu.getButtonRect({x: WIDTH * 0.02, y: HEIGHT * 0.04})
         modeRect.width = WIDTH * 0.23
@@ -476,7 +463,10 @@ class OnlineSettingsTree {
         this.playersText.fontSize = WIDTH * 0.032
         this.isCoop = false
         this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
-        this.updateButtonsList()
+    }
+    // Where the screen's action button ('start' or 'create') goes.
+    get actionButtonPos() {
+        return {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: this.firstY + (this.intervalY - HEIGHT * 0.01) * 4}
     }
     toggleMode() {
         this.isCoop = !this.isCoop
@@ -492,46 +482,16 @@ class OnlineSettingsTree {
         this.sizeSlider = sliders.size
         this.playersText.text = this.isCoop ? 'humans' : 'players'
         this.playersText.x = this.isCoop ? WIDTH * 0.4 : this.competitivePlayersX
-        this.passwordText.fontSize = WIDTH * (this.isCoop ? 0.032 : 0.04)
         this.mapText.text = this.isCoop ? 'seed' : 'map'
         this.mapText.x = this.isCoop ? WIDTH * 0.12 : this.competitiveMapX
         this.modeButton.text.text = this.isCoop ? 'Co-op' : 'Competitive'
         this.modeButton.selectedText.text = this.modeButton.text.text
         this.updateButtonsList()
     }
-    initializePasswordsButtons(firstY, intervalY) {
-        let updatePassword = function(value) {
-            this.currentPassword += value;
-            this.passwordText.text = this.currentPassword
-            // temporary unsafe thing:
-            unsafeVariablePassword = this.currentPassword
-        }
-
-        const digits_count = 10
-        // just draws to rows of digits
-        for (let i = 0; i < digits_count; ++i) {
-            let size = WIDTH * 0.05
-            let step = WIDTH * 0.07
-
-            let max_digits_in_row = 5
-            let digits_row_width = size * max_digits_in_row + step * (max_digits_in_row - 1)
-            let xOffset = step * (i >= max_digits_in_row ? i - max_digits_in_row : i);
-            let rect = Menu.getButtonRect({x: WIDTH / 2 + xOffset - digits_row_width / 2 + WIDTH * 0.25 / 2,
-                y: firstY + intervalY * 2 - size / 2 + (i >= 5 ? intervalY : 0)})
-            rect.width = rect.height = size
-
-            let res = new MenuButton(
-                rect,
-                Menu.getButtonText(`${i}`),
-                updatePassword, i, true, this)
-            this.passwordButtons.push(res)
-        }
-    }
     updateButtonsList() {
         this.buttons = [this.backButton, this.playButton, this.modeButton,
             this.fogOfWarCheckBox/*, this.timerCheckBox*/, this.playersSlider, this.mapSlider]
         if (this.isCoop) this.buttons.push(this.sizeSlider)
-        this.buttons = this.buttons.concat(this.passwordButtons)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         let y = HEIGHT * 0.3 + 4 * HEIGHT * 0.12
@@ -578,7 +538,6 @@ class OnlineSettingsTree {
         this.playersText.draw(ctx)
         this.mapText.draw(ctx)
         if (this.isCoop) drawCoopDimensions(this, ctx)
-        this.passwordText.draw(ctx)
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].draw(ctx)
         }
@@ -586,6 +545,130 @@ class OnlineSettingsTree {
         this.backButton.draw(ctx)
 
         this.mapSlider.draw(ctx)*/
+    }
+}
+
+// The legacy password screen, reached only with window.DIPLOMACY_LEGACY_ONLINE_MENU
+// until TASK-326: the shared controls plus the digit keypad, then the save-slot picker.
+class OnlineSettingsTree extends OnlineGameSettings {
+    constructor(_menu) {
+        super(_menu)
+        const {firstY, intervalY, marginLeft} = this
+        const fontSize = 0.04 * WIDTH
+
+        this.passwordButtons = []
+
+        this.currentPassword = ''
+
+        this.initializePasswordsButtons(firstY, intervalY)
+
+        this.passwordText = new Text(marginLeft,
+            firstY + intervalY * 2, fontSize, 'enter password:', 'black', 'left')
+
+        this.playButton = Menu.getButton(this.actionButtonPos, 'start',
+            _menu.setTree, _menu.startGame, true, _menu)
+
+        this.updateButtonsList()
+    }
+    toggleMode() {
+        super.toggleMode()
+        this.passwordText.fontSize = WIDTH * (this.isCoop ? 0.032 : 0.04)
+    }
+    initializePasswordsButtons(firstY, intervalY) {
+        let updatePassword = function(value) {
+            this.currentPassword += value;
+            this.passwordText.text = this.currentPassword
+            // temporary unsafe thing:
+            unsafeVariablePassword = this.currentPassword
+        }
+
+        const digits_count = 10
+        // just draws to rows of digits
+        for (let i = 0; i < digits_count; ++i) {
+            let size = WIDTH * 0.05
+            let step = WIDTH * 0.07
+
+            let max_digits_in_row = 5
+            let digits_row_width = size * max_digits_in_row + step * (max_digits_in_row - 1)
+            let xOffset = step * (i >= max_digits_in_row ? i - max_digits_in_row : i);
+            let rect = Menu.getButtonRect({x: WIDTH / 2 + xOffset - digits_row_width / 2 + WIDTH * 0.25 / 2,
+                y: firstY + intervalY * 2 - size / 2 + (i >= 5 ? intervalY : 0)})
+            rect.width = rect.height = size
+
+            let res = new MenuButton(
+                rect,
+                Menu.getButtonText(`${i}`),
+                updatePassword, i, true, this)
+            this.passwordButtons.push(res)
+        }
+    }
+    updateButtonsList() {
+        super.updateButtonsList()
+        this.buttons = this.buttons.concat(this.passwordButtons)
+    }
+    draw(ctx) {
+        this.passwordText.draw(ctx)
+        super.draw(ctx)
+    }
+}
+
+// The lobby flow's 'create game' screen: the shared controls without a keypad or
+// save-slot picker. 'create' builds the initial board as GameManager.start does for
+// online games (without entering the game) and sends it with lobby:create.
+class CreateLobbyTree extends OnlineGameSettings {
+    constructor(_menu) {
+        super(_menu)
+        this.menu = _menu
+        this.creating = false
+        this.status = new Text(WIDTH / 2, this.firstY + this.intervalY * 2.5, 0.03 * WIDTH, '', 'black')
+        this.playButton = Menu.getButton(this.actionButtonPos, 'create', this.create, undefined, true, this)
+        this.updateButtonsList()
+    }
+    enter() {
+        this.creating = false
+        this.status.text = ''
+    }
+    // The slider and checkbox values createLobbyStartOptions maps.
+    get controls() {
+        return this.isCoop
+            ? {isCoop: true, fogOfWar: this.isFogOfWar, humans: this.playersSlider.value,
+                seed: this.mapSlider.value, size: this.sizeSlider.realValue}
+            : {isCoop: false, fogOfWar: this.isFogOfWar, mapKey: this.mapSlider.realValue,
+                variantIndex: this.playersSlider.value}
+    }
+    get startOptions() {
+        return createLobbyStartOptions(this.controls)
+    }
+    static mapOf(selectedMap) {
+        const {coop, mapName, variantIndex} = selectedMap
+        return coop ? generateCoopGame(coop.humans, {seed: coop.seed, size: coop.size}) : maps[mapName][variantIndex]
+    }
+    async create() {
+        if (this.creating) return
+        this.creating = true
+        this.status.text = 'creating…'
+        let ack
+        try {
+            const options = this.startOptions
+            const board = GameManager.buildOnlineBoard(CreateLobbyTree.mapOf(options.selectedMap), options.fog)
+            ack = await onlineSession.createLobby(board, options.mapName)
+        } catch (error) {
+            console.error(error)
+            ack = {ok: false, error: 'CLIENT_ERROR'}
+        }
+        this.creating = false
+        if (this.menu.selectedTree !== this) return
+        if (!ack.ok) {
+            this.status.text = createLobbyErrorText(ack.error)
+            return
+        }
+        // TASK-301 opens the lobby room here; until then the hub lists the new lobby.
+        this.menu.onlineHub.notice = 'lobby created'
+        this.menu.setTree(this.menu.onlineHub)
+    }
+    draw(ctx) {
+        super.draw(ctx)
+        this.status.draw(ctx)
     }
 }
 
@@ -731,6 +814,8 @@ class OnlineHubTree {
         this.menu = _menu
         this.account = null
         this.feed = null
+        // A one-off message after the status line, e.g. 'lobby created'; cleared on leave.
+        this.notice = ''
         this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', 'black')
         this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
         const arrow = (y, text, direction) => new MenuButton(
@@ -740,9 +825,8 @@ class OnlineHubTree {
         this.scrollUpButton = arrow(HEIGHT * 0.31, '▲', -1)
         this.scrollDownButton = arrow(HEIGHT * 0.68, '▼', 1)
         const rowY = HEIGHT * 0.83
-        // Temporary until TASK-300: the password game settings.
         this.createButton = Menu.getButton({x: WIDTH * 0.1, y: rowY}, 'create game',
-            _menu.setTree, _menu.online, true, _menu)
+            _menu.setTree, _menu.createLobby, true, _menu)
         this.nicknameButton = Menu.getButton({x: WIDTH * 0.375, y: rowY}, 'change nickname',
             _menu.setTree, _menu.nickname, true, _menu)
         // The label is longer than the other menu buttons'.
@@ -758,6 +842,7 @@ class OnlineHubTree {
     setAccount(account) {
         this.account = account
         this.status.text = account ? 'Signed in as ' + account.nickname : 'signing in…'
+        if (account && this.notice) this.status.text += ' · ' + this.notice
         this.buttons = account ? [this.list, this.scrollUpButton, this.scrollDownButton,
             this.createButton, this.nicknameButton, this.backButton] : [this.backButton]
         if (account && this.menu.selectedTree === this) this.startFeed()
@@ -768,10 +853,11 @@ class OnlineHubTree {
     }
     enter() {
         this.list.setRows([])
-        if (this.account) this.startFeed()
+        this.setAccount(this.account)
     }
     leave() {
         this.feed?.stop()
+        this.notice = ''
     }
     // Row texts in list order, for tests and diagnostics.
     get rowTexts() {
@@ -917,6 +1003,8 @@ class Menu {
 
         this.nickname = new NicknameTree(this)
 
+        this.createLobby = new CreateLobbyTree(this)
+
         this.onlineHub = new OnlineHubTree(this)
 
         this.signIn = new SignInTree(this)
@@ -948,6 +1036,7 @@ class Menu {
         this.play.setParent(this.main, this)
         this.online.setParent(this.main, this)
         this.onlineHub.setParent(this.main, this)
+        this.createLobby.setParent(this.onlineHub, this)
         this.signIn.setParent(this.main, this)
         this.settings.setParent(this.main, this)
         this.startGame.setParent(this.play, this)

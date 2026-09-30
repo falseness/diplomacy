@@ -64,6 +64,10 @@ class OnlineSession {
         if (ack.ok) this.account = ack.account
         return ack
     }
+    // lobby:create with a host-built initial board; mapName is null for co-op.
+    createLobby(board, mapName) {
+        return this.request('lobby:create', {board, mapName})
+    }
 }
 
 // Status text for an account:setNickname error code.
