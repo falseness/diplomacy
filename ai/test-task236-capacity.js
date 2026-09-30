@@ -4,7 +4,8 @@
 const range = (lo, hi, step=1) => Array.from({length:Math.max(0,Math.floor((hi-lo)/step)+1)},(_,i)=>lo+i*step);
 const distance=(a,b)=>{const z=p=>p.y-(p.x-(p.x&1))/2;return Math.max(Math.abs(a.x-b.x),Math.abs(z(a)-z(b)),Math.abs(a.x+z(a)-b.x-z(b)));};
 function feasible(h,size,n,perFront) {
- const objects=h*{tiny:1,normal:2,big:3}[size],minDistance={tiny:6,normal:10,big:14}[size];
+ // Neutral towns 1/2/3 per human (9-cell clearance each), gold mines 2/4/6 per human (one cell).
+ const towns=h*{tiny:1,normal:2,big:3}[size],mines=h*{tiny:2,normal:4,big:6}[size],minDistance={tiny:6,normal:10,big:14}[size];
  const terrain=Math.round(n*n*.08)+Math.round(n*n*.06),bushes=Math.round(n*n*.10);
  const lattice=(x,y)=>((3*x-(x&1))/2-y)%3===0;
  for(const depth of range(1,Math.floor(n/3))) {
@@ -26,8 +27,8 @@ function feasible(h,size,n,perFront) {
    if(n*(n-top)-9*h<h||thick*(n-4)>terrain)continue;
    let sites=0;
    for(const y of range(2,ridge-2,3))sites+=range(y<=depth?Math.max(2,width+1):2,y<=depth?Math.min(n-3,n-width-2):n-3,3).length;
-   if(sites<objects||n*(ridge-1)-2*width*depth-9*objects<objects-h)continue;
-   const free=n*n-thick*(n-4)-6*(thick+3)-2*n-2*width*depth-9*(h+objects)-objects;
+   if(sites<towns||n*(ridge-1)-2*width*depth-9*towns<mines-h)continue;
+   const free=n*n-thick*(n-4)-6*(thick+3)-2*n-2*width*depth-9*(h+towns)-mines;
    if(free<terrain-thick*(n-6)+bushes)continue;
    if(count(0,width,top)>=perFront*h&&count(n-width,width,top)>=perFront*h)return {depth,width,thick,ridge};
   }
@@ -43,3 +44,13 @@ function expectation(h,size,perFront=3){
  const result={base,side,rejected,witness};cache.set(key,result);return result;
 }
 module.exports={expectation};
+// Direct run: every size x 1..12 humans has a feasible side at or above the base.
+if(require.main===module){
+ let cases=0;
+ for(const size of ['tiny','normal','big'])for(let h=1;h<=12;h++){
+  const e=expectation(h,size);
+  if(!e.witness||e.side<e.base)throw Error(`oracle ${size} H${h}`);
+  console.log(`${size} H${h} base=${e.base} side=${e.side} rejected=${e.rejected.length}`);cases++;
+ }
+ console.log(`PASS task236-capacity cases=${cases}`);
+}

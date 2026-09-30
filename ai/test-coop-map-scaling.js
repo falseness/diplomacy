@@ -61,7 +61,7 @@ const smoke = require('./smokeHarness').loadAiScripts();
 compare('smoke-shared-source',require('vm').runInContext('getCoopMapScaling(12).side',smoke.context),44);
 const f = createFixture(undefined, () => {});
 for (const [size, table] of Object.entries(sides)) {
-  const multiplier = {tiny:1,normal:2,big:3}[size];
+  const multiplier = {tiny:1,normal:2,big:3}[size], mines = {tiny:2,normal:4,big:6}[size];
   const base = {tiny:15,normal:25,big:39}[size];
   const minimum = {tiny:11,normal:15,big:21}[size];
   let previousArea = 0;
@@ -71,7 +71,7 @@ for (const [size, table] of Object.entries(sides)) {
     // Three melee/ranged and one siege/heavy/support/chaos/mage portal per human.
     const expected={size,initialHumanCount:h,side,mapSize:{x:side,y:side},area,
       baselineRadius:independentRadius(h,size),
-      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*multiplier,portals:11*h,
+      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*mines,portals:11*h,
         portalCategories:{melee:3*h,ranged:3*h,siege:h,heavy:h,support:h,chaos:h,mage:h},
         mountains:Math.floor((area*8+50)/100),lakes:Math.floor((area*6+50)/100),bushes:Math.floor((area*10+50)/100)},
       startingAssets:{gold:100,towns:1,units:1}};

@@ -6,7 +6,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), Module = require('module');
 const {coopHexLayer, coopHexLattice} = require('./coop-hex-geometry');
-const {getCoopMapScaling, baselineRadius, hexCounts} = require('./coop-map-scaling');
+const {baselineRadius, hexCounts} = require('./coop-map-scaling');
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
@@ -35,6 +35,8 @@ if (fault) {
 
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 31, 4294967295];
 const TOWN_DISTANCE = {tiny: 3, normal: 4, big: 5}, MAX_GROWTH = 8;
+// Independent per-human targets: neutral towns 1/2/3, gold mines 2/4/6.
+const TOWNS_PER_HUMAN = {tiny: 1, normal: 2, big: 3}, MINES_PER_HUMAN = {tiny: 2, normal: 4, big: 6};
 
 // Independent region bands and capacity at radius R.
 function expectedAt(humans, size, R) {
@@ -62,9 +64,10 @@ function expectedAt(humans, size, R) {
         cells[region].push({x, y});
         if (onLattice && lattice[region] !== undefined) lattice[region]++;
     }
-    const counts = getCoopMapScaling(humans, size).counts, terrain = hexCounts(R);
+    const terrain = hexCounts(R);
     const playable = side * side - cells.outside.length, eliteCells = cells.elite.length;
-    const outsideNeed = 9 * (humans + counts.neutralTowns) + counts.goldmines + 3 * 11 * humans;
+    const neutralTowns = humans * TOWNS_PER_HUMAN[size], goldmines = humans * MINES_PER_HUMAN[size];
+    const outsideNeed = 9 * (humans + neutralTowns) + goldmines + 3 * 11 * humans;
     const rows = {
         eliteLattice: {have: lattice.elite, need: 4 * humans},
         eliteApproach: {have: eliteCells - 4 * humans, need: 2 * 4 * humans},

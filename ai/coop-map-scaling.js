@@ -1,8 +1,8 @@
 // Shared baseline targets for current co-op generation. Valley capacity may enlarge the side.
 const COOP_SCALING_PRESETS = Object.freeze({
-    tiny: Object.freeze({baseSide: 15, minSide: 11, objectsPerHuman: 1}),
-    normal: Object.freeze({baseSide: 25, minSide: 15, objectsPerHuman: 2}),
-    big: Object.freeze({baseSide: 39, minSide: 21, objectsPerHuman: 3})
+    tiny: Object.freeze({baseSide: 15, minSide: 11, objectsPerHuman: 1, minesPerHuman: 2}),
+    normal: Object.freeze({baseSide: 25, minSide: 15, objectsPerHuman: 2, minesPerHuman: 4}),
+    big: Object.freeze({baseSide: 39, minSide: 21, objectsPerHuman: 3, minesPerHuman: 6})
 })
 // Hex radius presets for the hex co-op map. They are sized for the final elite load, so the
 // size selector stays meaningful; growth may only repair an infeasible preset.
@@ -42,7 +42,7 @@ function getCoopMapScaling(initialHumanCount, size = 'normal') {
     return {size, initialHumanCount, side, mapSize: {x: side, y: side}, area,
         baselineRadius: baselineRadius(initialHumanCount, size),
         counts: {humanTowns: initialHumanCount, neutralTowns: objects,
-            goldmines: objects, portals: 11 * initialHumanCount,
+            goldmines: initialHumanCount * preset.minesPerHuman, portals: 11 * initialHumanCount,
             portalCategories, mountains: Math.round(area * 0.08),
             lakes: Math.round(area * 0.06), bushes: Math.round(area * 0.10)},
         startingAssets: {gold: 100, towns: 1, units: 1}}
