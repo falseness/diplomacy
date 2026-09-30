@@ -11,9 +11,9 @@ const COOP_HEX_RADIUS = Object.freeze({
     normal: Object.freeze({scale: 11, min: 13}),
     big: Object.freeze({scale: 14, min: 16})
 })
-// Three melee and ranged portals, one of each remaining category per initial human. Matches
+// Three melee and ranged portals, one of each remaining category (mage included) per initial human. Matches
 // COOP_PORTAL_CATEGORIES (ai/wave-config.js), which the server does not load.
-const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos'])
+const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos', 'mage'])
 
 function baselineRadius(initialHumanCount, size) {
     const preset = COOP_HEX_RADIUS[size]
@@ -42,7 +42,7 @@ function getCoopMapScaling(initialHumanCount, size = 'normal') {
     return {size, initialHumanCount, side, mapSize: {x: side, y: side}, area,
         baselineRadius: baselineRadius(initialHumanCount, size),
         counts: {humanTowns: initialHumanCount, neutralTowns: objects,
-            goldmines: objects, portals: 10 * initialHumanCount,
+            goldmines: objects, portals: 11 * initialHumanCount,
             portalCategories, mountains: Math.round(area * 0.08),
             lakes: Math.round(area * 0.06), bushes: Math.round(area * 0.10)},
         startingAssets: {gold: 100, towns: 1, units: 1}}

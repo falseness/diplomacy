@@ -11,8 +11,8 @@ const circleGeometry = typeof coopHexLayer === 'function'
     ? {coopHexLayer, coopHexCenter, coopHexMapShape, coopHexLattice}
     : require('./coop-hex-geometry.js')
 
-// Portal categories that live in the elite core; TASK-280 appends 'mage'.
-const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege']
+// Portal categories that live in the elite core, four per human.
+const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege', 'mage']
 // Minimum hex distance from every human town to a common ring portal.
 const CIRCLE_TOWN_DISTANCE = Object.freeze({tiny: 3, normal: 4, big: 5})
 const CIRCLE_MAX_GROWTH = 8
@@ -288,7 +288,8 @@ const CIRCLE_NEUTRAL_TARGET = 2
 
 // Neutral towns and the remaining mines after placeCircleStarts, all strictly
 // outside the elite core (layer > E). Neutral towns sit on free cells whose
-// whole 3x3 is inside the radius and clear of every reservation and mine; they
+// whole 3x3 is inside the radius, outside the elite core (so the capacity
+// predicate's free elite lattice holds) and clear of every reservation and mine; they
 // are chosen greedily so the spread of each human's nearest neutral-town path
 // stays within CIRCLE_ACCESS_DISPARITY. Every further mine is strictly farther
 // from each human than that human's own starting mine. Paths treat layer > R
@@ -346,7 +347,7 @@ function placeCircleExpansions(plan, starts) {
         if (layerOf(id) <= elite || layerOf(id) > radius) continue
         const cells = box(id)
         if (cells.every(c => c.x >= 0 && c.y >= 0 && c.x < side && c.y < side && layerOf(idOf(c)) <= radius
-            && !reserved.has(idOf(c)) && !mineIds.has(idOf(c)))) sites.push(id)
+            && layerOf(idOf(c)) > elite && !reserved.has(idOf(c)) && !mineIds.has(idOf(c)))) sites.push(id)
     }
     // One greedy pass; false when sites run out or the final spread is too wide.
     const placeNeutral = () => {

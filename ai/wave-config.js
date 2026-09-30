@@ -17,7 +17,8 @@ const COOP_TYPED_WAVE_SCHEDULE = Object.freeze({
     siege: [[16, 'bombard'], [32, 'mortar']],
     heavy: [[20, 'bulwark']],
     support: [[16, 'ravager'], [24, 'hound']],
-    chaos: [[28, 'demonLord']]
+    chaos: [[28, 'demonLord']],
+    mage: [[20, 'hexcaster'], [28, 'hexmaster'], [36, 'demonQueen']]
   }).map(([category, steps]) => [category,
     Object.freeze(steps.map(([round, type]) => Object.freeze({round, type})))])))
 });

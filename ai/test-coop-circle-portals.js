@@ -39,7 +39,7 @@ if (fault) {
 
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 2, 31, 777, 65535, 2654435769, 4294967295];
 const TOWN_DISTANCE = {tiny: 3, normal: 4, big: 5};
-const ELITE = ['chaos', 'heavy', 'siege'], RING = ['melee', 'ranged', 'support'];
+const ELITE = ['chaos', 'heavy', 'siege', 'mage'], RING = ['melee', 'ranged', 'support'];
 const colorOf = i => ({r: (i * 37) % 256, g: (i * 91) % 256, b: (i * 53) % 256});
 
 // Independent hex metric: offset column -> axial, cube distance to the centre cell (R, R).

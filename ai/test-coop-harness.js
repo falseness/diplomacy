@@ -3,11 +3,11 @@ function prepareMechanicsMap(map, fixtureConfig, configured) {
       const humans = configured.length - 2
       map.coop.generation = {version:5, playerCount:humans, seed:1, size:"tiny",
         options:{seed:1,size:"tiny"}, testFixture:{generated:false, kind:"declared-mechanics-fixture"}}
-      const categories = ["melee","melee","melee","ranged","ranged","ranged","siege","heavy","support","chaos"]
+      const categories = ["melee","melee","melee","ranged","ranged","ranged","siege","heavy","support","chaos","mage"]
       map.portals = []
       for(let x=0;x<fixtureConfig.size.x;x++) for(let y=0;y<fixtureConfig.size.y;y++) {
         if(configured.some(a=>a.units.some(u=>u.x===x&&u.y===y) || a.towns.some(t=>Math.abs(t.x-x)<=1&&Math.abs(t.y-y)<=2))) continue
-        if(map.portals.length < humans*10) map.portals.push({x,y,category:categories[map.portals.length%10]})
+        if(map.portals.length < humans*11) map.portals.push({x,y,category:categories[map.portals.length%11]})
       }
     }
 }

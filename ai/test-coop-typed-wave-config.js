@@ -14,14 +14,15 @@ const SOURCES = ['ai/wave-config.js', 'ai/wave-composition.js', 'ai/wave-placeme
   'index.html', 'sprites/entities/buildings/demonPortal.js', 'ai/test-coop-typed-wave-config.js'];
 
 // Independent design literals; none of these read production values.
-const CATEGORIES = ['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos'];
+const CATEGORIES = ['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos', 'mage'];
 const WAVE_ROUNDS = Array.from({length: 25}, (_, i) => (i + 1) * 4);
 // Independent specification literals, never imported from production.
 const EXPECTED_STEPS = {
   melee: [[4, 'imp'], [8, 'clawling'], [16, 'brute']],
   ranged: [[4, 'spitter'], [12, 'emberArcher']],
   siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[20, 'bulwark']],
-  support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']]
+  support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']],
+  mage: [[20, 'hexcaster'], [28, 'hexmaster'], [36, 'demonQueen']]
 };
 function literalType(category, round) {
   if (!round || round % 4) return null;
@@ -40,7 +41,7 @@ const NEXT = Object.fromEntries(CATEGORIES.map(c => [c,
     const n = literalNext(c, completed); return [completed, n.round, n.type, n.roundsRemaining];
   })]));
 const DEMON_TYPE_IDS = ['imp', 'clawling', 'hound', 'brute', 'bulwark', 'spitter', 'emberArcher', 'hexcaster',
-  'ravager', 'demonLord', 'bombard', 'mortar'];
+  'ravager', 'demonLord', 'bombard', 'mortar', 'hexmaster', 'demonQueen'];
 
 const checkpoints = [];
 function compare(id, observed, expected) {
@@ -87,9 +88,9 @@ function checkSchedule(a, runtime, record) {
   compare(`${runtime}-wave-rounds-0-100`, waveFlags.map((flag, round) => flag ? round : null).filter(r => r !== null),
     WAVE_ROUNDS);
   // Indefinite repetition of the strongest reached type, far past the table.
-  for (const [round, expected] of [[101, [null, null, null, null, null, null]], [104, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord']],
-    [4000, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord']], [4002, [null, null, null, null, null, null]],
-    [Number.MAX_SAFE_INTEGER - 3, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord']]])
+  for (const [round, expected] of [[101, [null, null, null, null, null, null, null]], [104, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord', 'demonQueen']],
+    [4000, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord', 'demonQueen']], [4002, [null, null, null, null, null, null, null]],
+    [Number.MAX_SAFE_INTEGER - 3, ['brute', 'emberArcher', 'mortar', 'bulwark', 'hound', 'demonLord', 'demonQueen']]])
     compare(`${runtime}-repeat-round-${round}`, CATEGORIES.map(c => a.getCoopScheduledDemonType(c, round)), expected);
   for (const category of CATEGORIES) {
     for (const [completed, round, type, roundsRemaining] of NEXT[category])
@@ -113,11 +114,11 @@ function portalSet(seed, humans) {
   const random = lcg(seed);
   const used = new Set();
   const portals = [];
-  for (let i = 0; i < 6 * humans; i++) {
+  for (let i = 0; i < CATEGORIES.length * humans; i++) {
     let x, y;
     do { x = Math.floor(random() * 62); y = Math.floor(random() * 62); } while (used.has(`${x},${y}`));
     used.add(`${x},${y}`);
-    portals.push({x, y, category: CATEGORIES[i % 6]});
+    portals.push({x, y, category: CATEGORIES[i % CATEGORIES.length]});
   }
   return portals.sort((p, q) => p.x - q.x || p.y - q.y);
 }
@@ -254,7 +255,7 @@ function checkCallers() {
       {round:28,types:[],selections:[]});
   }
   compare('caller-unblock-no-backlog', vm.runInContext(`external.forEach(p => p.hp = 30); generateCoopWave(32)`, context),
-    {round:32, types:['brute','emberArcher','mortar','bulwark','hound','demonLord'],
+    {round:32, types:['brute','emberArcher','mortar','bulwark','hound','demonLord','hexmaster'],
       selections:CATEGORIES.map((c,x)=>({x,y:0,type:literalType(c,32)}))});
   for (const category of CATEGORIES) for (const [gameRound, committed] of [[0,0],[3,4],[15,16],[28,24]]) {
     const observed = vm.runInContext(`gameRound=${gameRound}; gameSettings.coop.typedWaves={lastRound:${committed}};
@@ -268,9 +269,7 @@ function nodeApi() {
 }
 function checkTypeRegistry(a) {
   const scheduled = [...new Set(CATEGORIES.flatMap(c => a.COOP_TYPED_WAVE_SCHEDULE.categories[c].map(s => s.type)))];
-  // Hexcaster stays registered but no portal category schedules it (ranged ends at emberArcher).
-  compare('scheduled-types-cover-all-demon-types', [...scheduled].sort(),
-    DEMON_TYPE_IDS.filter(id => id !== 'hexcaster').sort());
+  compare('scheduled-types-cover-all-demon-types', [...scheduled].sort(), [...DEMON_TYPE_IDS].sort());
   compare('scheduled-types-in-demon-config', scheduled.every(id =>
     Object.prototype.hasOwnProperty.call(require('./demon-config'), id)), true);
   const placement = fs.readFileSync(path.join(__dirname, 'wave-placement.js'), 'utf8');

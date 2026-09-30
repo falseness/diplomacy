@@ -20,7 +20,7 @@ const COOP_START_BALANCE = (() => {
     return Object.freeze({assetDisparity: Number(match[1]), pathDisparity: Number(match[2])});
 })();
 const TOWN_DISTANCE = {tiny: 3, normal: 4, big: 5};
-const ELITE = ['chaos', 'heavy', 'siege'];
+const ELITE = ['chaos', 'heavy', 'siege', 'mage'];
 const COMMON = ['melee', 'ranged', 'support'];
 const MAX_GROWTH = 8;
 const BALANCE_ASSERTIONS = ['starting-asset-balance', 'nearest-objective-balance'];
