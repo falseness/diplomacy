@@ -218,7 +218,7 @@ function validateCoopTypedPortals(map) {
         cells.add(p.x + ',' + p.y)
         observed[p.category]++
         if (fixture) continue
-        const layer = coopHexLayer(p.x, p.y, shape.center), {elite, ringOuter} = circleRegions(R, generation.size)
+        const layer = coopHexLayer(p.x, p.y, shape.center), {elite, ringOuter} = circleRegions(R, generation.size, coop.initialHumanCount)
         const region = layer > R ? 'outside the radius'
             : COOP_CIRCLE_ELITE_CATEGORIES.includes(p.category) ? (layer <= elite ? '' : 'outside the elite core')
             : layer <= elite || layer > ringOuter ? 'outside the common ring' : ''

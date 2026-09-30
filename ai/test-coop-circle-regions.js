@@ -38,8 +38,17 @@ const TOWN_DISTANCE = {tiny: 3, normal: 4, big: 5}, MAX_GROWTH = 8;
 
 // Independent region bands and capacity at radius R.
 function expectedAt(humans, size, R) {
-    const E = Math.floor(R / 4), C = Math.floor(3 * R / 4), T = R - 3, ringOuter = Math.min(C, T - TOWN_DISTANCE[size]);
     const center = {q: R, r: Math.ceil(R / 2)}, side = 2 * R + 1;
+    // Elite core: R/6, grown to the first layer whose disc fits 4 lattice
+    // portals per human and 12 cells per human (portal + 2 approach cells).
+    let E = Math.floor(R / 6);
+    for (let grown = false; !grown && E < R; ) {
+        let total = 0, onLattice = 0;
+        for (let x = 0; x < side; x++) for (let y = 0; y < side; y++)
+            if (coopHexLayer(x, y, center) <= E) { total++; if (coopHexLattice(x, y)) onLattice++; }
+        if (onLattice >= 4 * humans && total >= 12 * humans) grown = true; else E++;
+    }
+    const C = Math.floor(R / 2), T = R - 3, ringOuter = Math.min(C, T - TOWN_DISTANCE[size]);
     const cells = {elite: [], ring: [], townRing: [], other: [], outside: []};
     const lattice = {elite: 0, ring: 0, townRing: 0};
     for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) {

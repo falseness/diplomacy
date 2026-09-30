@@ -44,18 +44,43 @@ function circleNeighbours(c, side) {
         .filter(n => n.x >= 0 && n.y >= 0 && n.x < side && n.y < side)
 }
 
-// Layer bands. Layer is 1-Lipschitz, so ringOuter <= townRing - D keeps every
-// ring cell at hex distance >= D from the whole town ring.
-function circleRegions(radius, size) {
-    const elite = Math.floor(radius / 4), townRing = radius - 3
+const circleEliteCache = new Map()
+
+// Smallest layer whose disc holds 4 lattice cells per human (the elite portals)
+// and 12 cells per human (each portal keeps two approach cells).
+function circleEliteMinimum(radius, humans) {
+    const id = `${radius}:${humans}`
+    if (circleEliteCache.has(id)) return circleEliteCache.get(id)
+    const center = circleGeometry.coopHexCenter(radius), side = 2 * radius + 1
+    const cells = new Array(radius + 1).fill(0), lattice = new Array(radius + 1).fill(0)
+    for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) {
+        const layer = circleGeometry.coopHexLayer(x, y, center)
+        if (layer > radius) continue
+        cells[layer]++
+        if (circleGeometry.coopHexLattice(x, y)) lattice[layer]++
+    }
+    let minimum = radius
+    for (let layer = 0, total = 0, onLattice = 0; layer <= radius; layer++) {
+        total += cells[layer]; onLattice += lattice[layer]
+        if (onLattice >= 4 * humans && total >= 4 * humans + 8 * humans) { minimum = layer; break }
+    }
+    circleEliteCache.set(id, minimum)
+    return minimum
+}
+
+// Layer bands. The elite core is R/6, grown only when the elite portals would
+// not fit. Layer is 1-Lipschitz, so ringOuter <= townRing - D keeps every ring
+// cell at hex distance >= D from the whole town ring.
+function circleRegions(radius, size, humans) {
+    const elite = Math.max(Math.floor(radius / 6), circleEliteMinimum(radius, humans)), townRing = radius - 3
     return {elite, ringInner: elite + 1,
-        ringOuter: Math.min(Math.floor(3 * radius / 4), townRing - CIRCLE_TOWN_DISTANCE[size]), townRing}
+        ringOuter: Math.min(Math.floor(3 * radius / 6), townRing - CIRCLE_TOWN_DISTANCE[size]), townRing}
 }
 
 // Capacity numbers and their requirements at one candidate radius.
 function circleCapacityAt(humans, size, radius) {
     const counts = circleScaling(humans, size).counts, terrain = circleHexCounts(radius)
-    const regions = circleRegions(radius, size), center = circleGeometry.coopHexCenter(radius)
+    const regions = circleRegions(radius, size, humans), center = circleGeometry.coopHexCenter(radius)
     const side = 2 * radius + 1
     let eliteCells = 0, eliteLattice = 0, ringLattice = 0, townRingLattice = 0, playable = 0
     for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) {
