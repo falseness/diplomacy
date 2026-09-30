@@ -185,11 +185,27 @@ function buildCoopCircleCandidate(playerCount, size, seed, attempt) {
     }
 }
 
-// Version-4 generated metadata: ten portals per initial human on distinct
+// Version-5 generated metadata: ten portals per initial human on distinct
 // in-bounds cells: three melee/ranged and one each siege/heavy/support/chaos.
+// Generated maps are also held to the Circle regions: a hexagonal shape with
+// the documented center/offset, elite categories (COOP_CIRCLE_ELITE_CATEGORIES)
+// in the core layer <= E and common categories in the ring (E, ringOuter].
+// Declared test fixtures (testFixture.generated === false) keep only the
+// count and cell checks.
 function validateCoopTypedPortals(map) {
     const coop = map.coop, generation = coop && coop.generation
     if (!generation || generation.version !== 5) throw new Error('Co-op typed portals require version-5 generation metadata')
+    const fixture = generation.testFixture && generation.testFixture.generated === false
+    const shape = map.mapShape || {}, R = shape.radius
+    if (!fixture) {
+        const center = Number.isInteger(R) && coopHexCenter(R)
+        if (shape.type !== 'hexagonal' || !Number.isInteger(R) || R < 1 ||
+            !shape.center || shape.center.q !== center.q || shape.center.r !== center.r ||
+            !shape.offset || shape.offset.x !== 0 || shape.offset.y !== 0 ||
+            map.mapSize.x !== 2 * R + 1 || map.mapSize.y !== 2 * R + 1)
+            throw new Error('Co-op typed portals require a hexagonal map shape with center {q:R, r:ceil(R/2)}, ' +
+                `offset {x:0, y:0} and a 2R+1 grid, observed ${JSON.stringify(shape)} size ${JSON.stringify(map.mapSize)}`)
+    }
     const counts = getCoopMapScaling(coop.initialHumanCount, generation.size).counts
     const portals = Array.isArray(map.portals) ? map.portals : []
     const observed = Object.fromEntries(COOP_PORTAL_CATEGORY_ORDER.map(category => [category, 0]))
@@ -201,6 +217,14 @@ function validateCoopTypedPortals(map) {
             throw new Error('Co-op typed portals require distinct in-bounds cells with a known category')
         cells.add(p.x + ',' + p.y)
         observed[p.category]++
+        if (fixture) continue
+        const layer = coopHexLayer(p.x, p.y, shape.center), {elite, ringOuter} = circleRegions(R, generation.size)
+        const region = layer > R ? 'outside the radius'
+            : COOP_CIRCLE_ELITE_CATEGORIES.includes(p.category) ? (layer <= elite ? '' : 'outside the elite core')
+            : layer <= elite || layer > ringOuter ? 'outside the common ring' : ''
+        if (region)
+            throw new Error(`Co-op ${p.category} portal at ${p.x},${p.y} (layer ${layer}) is ${region}: ` +
+                `R=${R} elite<=${elite} ring=(${elite},${ringOuter}]`)
     }
     if (portals.length !== counts.portals ||
         COOP_PORTAL_CATEGORY_ORDER.some(category => observed[category] !== counts.portalCategories[category]))
