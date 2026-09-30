@@ -1,0 +1,75 @@
+// Signed-in online session (server/docs/auth-lobby-protocol.md section 2): one
+// socket.io connection authenticated by auth:google or a stored auth:session token.
+const ONLINE_SESSION_KEY = 'diplomacyOnlineSession'
+const ONLINE_ACK_TIMEOUT = 10000
+
+// Storage may be unavailable (private mode, blocked cookies); sign-in still works.
+function readStoredSession() {
+    try { return localStorage.getItem(ONLINE_SESSION_KEY) } catch (error) { return null }
+}
+function storeSession(token) {
+    try { localStorage.setItem(ONLINE_SESSION_KEY, token) } catch (error) {}
+}
+function clearStoredSession() {
+    try { localStorage.removeItem(ONLINE_SESSION_KEY) } catch (error) {}
+}
+
+class OnlineSession {
+    constructor() {
+        this.socket = null
+        this.account = null
+    }
+    connect() {
+        if (this.socket) return this.socket
+        // Same io options as SetupServerCommunicationLogic in onlineLogic.js.
+        const socket = this.socket = io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER,
+            {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
+        // A transport reconnect is a new server socket: authenticate it again.
+        socket.io.on('reconnect', () => { if (this.account) this.resume() })
+        return socket
+    }
+    // Resolves the ack, or {ok: false, error: 'TIMEOUT'} when none arrives.
+    request(event, payload) {
+        const socket = this.connect()
+        return new Promise(resolve => {
+            const timer = setTimeout(() => resolve({ok: false, error: 'TIMEOUT'}), ONLINE_ACK_TIMEOUT)
+            socket.emit(event, payload, ack => {
+                clearTimeout(timer)
+                resolve(ack && typeof ack === 'object' ? ack : {ok: false, error: 'BAD_ACK'})
+            })
+        })
+    }
+    get hasStoredSession() {
+        return !!readStoredSession()
+    }
+    // Re-authenticates with the stored token; an invalid or expired token is cleared.
+    async resume() {
+        const sessionToken = readStoredSession()
+        if (!sessionToken) return null
+        const ack = await this.request('auth:session', {sessionToken})
+        if (ack.ok) return this.account = ack.account
+        if (ack.error === 'UNAUTHENTICATED') clearStoredSession()
+        this.account = null
+        return null
+    }
+    async signInWithGoogle(idToken) {
+        const ack = await this.request('auth:google', {idToken})
+        if (!ack.ok) return null
+        storeSession(ack.sessionToken)
+        return this.account = ack.account
+    }
+}
+
+const onlineSession = new OnlineSession()
+
+// 'play online': the hub for a signed-in or resumable session, else the sign-in screen.
+// show.hub(null) marks a pending resume; show.* return false once the user has left.
+async function openOnlineSession(show) {
+    if (onlineSession.account) return show.hub(onlineSession.account)
+    if (onlineSession.hasStoredSession) {
+        if (show.hub(null) === false) return
+        const account = await onlineSession.resume()
+        if (account) return show.hub(account)
+    }
+    show.signIn()
+}

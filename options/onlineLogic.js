@@ -1,3 +1,6 @@
+// Production game server; window.DIPLOMACY_SERVER overrides it for local runs.
+const DEFAULT_ONLINE_SERVER = 'wss://playdiplomacy.online:8080'
+
 let onlineLobby = null
 let onlineSocket = null
 let onlineCommit = null
@@ -68,7 +71,7 @@ function rebaseOnlineValue(base, local, remote) {
 
 function SetupServerCommunicationLogic(password) {
     if (onlineSocket) { const previous = onlineSocket; onlineSocket = null; previous.disconnect() }
-    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || 'wss://playdiplomacy.online:8080', {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
+    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER, {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
     document.getElementById('online-recovery')?.remove()
     let failed = false
     const fail = message => {

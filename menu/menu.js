@@ -585,6 +585,91 @@ class OnlineSettingsTree {
     }
 }
 
+// Online entry screens: Google sign-in and the signed-in hub (lobby list comes later).
+class SignInTree {
+    constructor(_menu) {
+        this.menu = _menu
+        this.container = null
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.33, 0.04 * WIDTH, 'sign in to play online', 'black')
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.58, 0.025 * WIDTH, '', '#747474')
+        this.buttons = []
+    }
+    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+        this.buttons = [Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', _menu.setTree, parent, true, _menu)]
+    }
+    // Google's button is the only DOM element of the menu; it lives while this screen is shown.
+    enter() {
+        this.leave()
+        const div = this.container = document.createElement('div')
+        div.id = 'google-signin'
+        div.style.cssText = `position:absolute;left:${WIDTH / 2 / devicePixelRatio}px;` +
+            `top:${HEIGHT * 0.43 / devicePixelRatio}px;transform:translateX(-50%);z-index:1`
+        // Clicks on Google's button must not reach the canvas menu below it.
+        div.addEventListener('click', event => event.stopPropagation())
+        document.body.append(div)
+        this.status.text = 'loading Google sign-in…'
+        loadGoogleIdentity().then(() => {
+            if (this.container !== div) return
+            this.status.text = ''
+            renderGoogleButton(div, credential => this.signIn(credential))
+        }, () => {
+            if (this.container === div) this.status.text = 'could not load Google sign-in'
+        })
+    }
+    leave() {
+        this.container?.remove()
+        this.container = null
+    }
+    async signIn(credential) {
+        this.status.text = 'signing in…'
+        const account = await onlineSession.signInWithGoogle(credential)
+        if (this.menu.selectedTree !== this) return
+        if (!account) {
+            this.status.text = 'sign-in failed, try again'
+            return
+        }
+        this.menu.onlineHub.setAccount(account)
+        this.menu.setTree(this.menu.onlineHub)
+    }
+    click(pos) {
+        for (const button of this.buttons) button.click(pos)
+    }
+    draw(ctx) {
+        this.title.draw(ctx)
+        this.status.draw(ctx)
+        for (const button of this.buttons) button.draw(ctx)
+    }
+}
+
+class OnlineHubTree {
+    constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+        this.account = null
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.33, 0.04 * WIDTH, '', 'black')
+        // Temporary until the lobby list lands: the password game settings.
+        this.createButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.45}, 'create game',
+            _menu.setTree, _menu.online, true, _menu)
+        this.backButton = new Empty()
+        this.setAccount(null)
+    }
+    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+        this.backButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', _menu.setTree, parent, true, _menu)
+        this.setAccount(this.account)
+    }
+    // A null account means the stored session is still being checked.
+    setAccount(account) {
+        this.account = account
+        this.status.text = account ? 'Signed in as ' + account.nickname : 'signing in…'
+        this.buttons = account ? [this.createButton, this.backButton] : [this.backButton]
+    }
+    click(pos) {
+        for (const button of this.buttons) button.click(pos)
+    }
+    draw(ctx) {
+        this.status.draw(ctx)
+        for (const button of this.buttons) button.draw(ctx)
+    }
+}
+
 class Menu {
     #visible
     static getButtonRect(pos) {
@@ -603,8 +688,27 @@ class Menu {
         return res
     }
     setTree(tree) {
+        if (this.selectedTree !== tree) this.selectedTree?.leave?.()
         this.previousTree = this.selectedTree
         this.selectedTree = tree
+        if (this.previousTree !== tree) tree.enter?.()
+    }
+    openOnline() {
+        // Temporary manual opt-in to the password menu; removed in TASK-326.
+        if (window.DIPLOMACY_LEGACY_ONLINE_MENU === true) return this.setTree(this.online)
+        // Late results are dropped once the user has moved elsewhere.
+        let expected = this.main
+        openOnlineSession({
+            hub: account => {
+                if (this.selectedTree !== expected) return false
+                this.onlineHub.setAccount(account)
+                this.setTree(this.onlineHub)
+                expected = this.onlineHub
+            },
+            signIn: () => {
+                if (this.selectedTree === expected) this.setTree(this.signIn)
+            },
+        })
     }
     constructor() {
         this.visible = true
@@ -637,6 +741,10 @@ class Menu {
 
         this.online = new OnlineSettingsTree(this)
 
+        this.onlineHub = new OnlineHubTree(this)
+
+        this.signIn = new SignInTree(this)
+
         this.settings = new OtherSettingsTree(this)
 
         this.load = new Tree([
@@ -647,7 +755,7 @@ class Menu {
             this.constructor.getButton(startPos, 'hot seat',
                 this.setTree, this.play, true, this),
             this.constructor.getButton(startPos, 'play online',
-                this.setTree, this.online, true, this),
+                this.openOnline, undefined, true, this),
             // 'play AI' button hidden for now; startAI is still available.
             // this.constructor.getButton(startPos, 'play AI',
             //     startAI, 0),
@@ -663,6 +771,8 @@ class Menu {
         })
         this.play.setParent(this.main, this)
         this.online.setParent(this.main, this)
+        this.onlineHub.setParent(this.main, this)
+        this.signIn.setParent(this.main, this)
         this.settings.setParent(this.main, this)
         this.startGame.setParent(this.play, this)
         this.load.setParent(this.main, this)
