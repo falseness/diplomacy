@@ -1,7 +1,7 @@
 function prepareMechanicsMap(map, fixtureConfig, configured) {
     if (map.coop) {
       const humans = configured.length - 2
-      map.coop.generation = {version:4, playerCount:humans, seed:1, size:"tiny",
+      map.coop.generation = {version:5, playerCount:humans, seed:1, size:"tiny",
         options:{seed:1,size:"tiny"}, testFixture:{generated:false, kind:"declared-mechanics-fixture"}}
       const categories = ["melee","melee","melee","ranged","ranged","ranged","siege","heavy","support","chaos"]
       map.portals = []

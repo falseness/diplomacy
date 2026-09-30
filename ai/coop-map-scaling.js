@@ -53,7 +53,7 @@ function getCoopMapScaling(initialHumanCount, size = 'normal') {
 // are current scaling targets, not a measurement of the stored grid.
 function getCoopMapScalingFromMetadata(coop) {
     const generation = coop && coop.generation
-    if (!generation || generation.version !== 4 ||
+    if (!generation || generation.version !== 5 ||
         !Number.isInteger(generation.seed) || generation.seed < 0 || generation.seed > 0xffffffff ||
         generation.playerCount !== coop.initialHumanCount || generation.size === undefined) {
         throw new RangeError('Co-op scaling requires original generation metadata')

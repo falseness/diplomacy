@@ -333,7 +333,7 @@ async function matrixCase(browser, url, entry, trace, browserErrors, fault, prog
 
   try {
     const expectedBounds = {min: 5 / expectedSide(size, count), max: 1};
-    const expectedGeneration = {version: 4, playerCount: count, seed: MATRIX_SEED, size};
+    const expectedGeneration = {version: 5, playerCount: count, seed: MATRIX_SEED, size};
     progress(`${id}-menu`);
     const desktop = await openPage('desktop', {});
     await click(desktop, 'menu.main.buttons[0]');

@@ -73,7 +73,7 @@ function runCoop(count, fault) {
       units:players.flatMap(p=>p.units.map(u=>({id:u.id,name:u.name,className:u.constructor.name,
         owner:u.playerColor,x:u.coord.x,y:u.coord.y,hp:u.hp,moves:u.moves,wasHitted:u.wasHitted}))),
       portals:external.map(p=>({name:p.name,owner:p.playerColor,x:p.coord.x,y:p.coord.y,hp:p.hp,wasHitted:p.wasHitted}))})`),
-    {coop:{initialHumanCount:count,humanSlots:Array.from({length:count},(_,i)=>i+1),humanTeam:'HUMANS',demonSlot:count+1,balanceVersion:2,generation:{version:4,playerCount:count,seed:1,size:'tiny',options:{seed:1,size:'tiny'},testFixture:{generated:false,kind:'declared-mechanics-fixture'}}},
+    {coop:{initialHumanCount:count,humanSlots:Array.from({length:count},(_,i)=>i+1),humanTeam:'HUMANS',demonSlot:count+1,balanceVersion:2,generation:{version:5,playerCount:count,seed:1,size:'tiny',options:{seed:1,size:'tiny'},testFixture:{generated:false,kind:'declared-mechanics-fixture'}}},
       roles:['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS'], teams:[0,...Array(count).fill('HUMANS'),'DEMONS'],
       neutral:true,demon:true,gold:[0,...Array.from({length:count},(_,i)=>101+i*37),0], units:expectedUnits,
       portals:[{name:'demonPortal',owner:count+1,x:5,y:7,hp:17,wasHitted:true},

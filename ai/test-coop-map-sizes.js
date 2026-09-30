@@ -23,7 +23,7 @@ for (const [size, base] of Object.entries(dimensions)) {
     if (process.argv.includes('--corrupt')) map.mapSize.x++;
     compare(label+'-dimensions', map.mapSize, {x:side,y:side});
     compare(label+'-metadata', map.coop.generation,
-      {version:4,playerCount:count,seed,size,options:{seed,size}});
+      {version:5,playerCount:count,seed,size,options:{seed,size}});
     compare(label+'-deterministic-replay', f.evaluate(`JSON.stringify(generated) === JSON.stringify(generateCoopGame(${count}, {size:'${size}',seed:${seed}})) && JSON.stringify(generated) === JSON.stringify(generateCoopGame(generated.coop.generation.playerCount, generated.coop.generation.options))`), true);
     const towns = map.players.flatMap(p=>p.towns);
     const objects = [...towns,...map.goldmines,...map.portals,...map.lakes,...map.mountains,...map.bushes,...map.hills];
@@ -39,7 +39,7 @@ for (const [size, base] of Object.entries(dimensions)) {
       starts:Array.from({length:count},()=>[100,1,0])});
     f.evaluate(`generated.start({clearValues() {external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders() {}}, false); whooseTurn=1;actionManager.clear();globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);`);
     compare(label+'-saved-metadata', f.evaluate('gameSettings.coop.generation'),
-      {version:4,playerCount:count,seed,size,options:{seed,size}});
+      {version:5,playerCount:count,seed,size,options:{seed,size}});
     compare(label+'-runtime-dimensions', f.evaluate('[grid.arr.length, ...new Set(grid.arr.map(column=>column.length))]'), [side,side]);
     compare(label+'-exact-save-load',f.evaluate('JSON.stringify(getGameObject()) === saved'),true);
     console.log(JSON.stringify({scenario:label+'-placements',towns,portals:map.portals,mapHash:hash(map),savedHash:hash(f.evaluate('JSON.parse(saved)'))}));

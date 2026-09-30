@@ -86,7 +86,7 @@ for (const [size, table] of Object.entries(sides)) {
     previousArea=actual.area;
     compare(`${size}-H${h}-browser-shared-source`,f.evaluate(`getCoopMapScaling(${h},'${size}')`),expected);
     const coop={initialHumanCount:h,humanSlots:[],survivingHumanCount:0,
-      generation:{version:4,playerCount:h,seed:4294967295,size,options:{seed:4294967295,size}}};
+      generation:{version:5,playerCount:h,seed:4294967295,size,options:{seed:4294967295,size}}};
     const snapshot=JSON.stringify(coop);
     compare(`${size}-H${h}-initial-roster-only`,getCoopMapScalingFromMetadata(coop),expected);
     compare(`${size}-H${h}-pure-metadata`,JSON.stringify(coop),snapshot);
@@ -105,7 +105,7 @@ for (const size of [null,false,0,[],{},'', 'Tiny','Normal','medium','huge','cons
 }
 for (const coop of [null,{}, {initialHumanCount:2,generation:{}},
   ...[{seed:-1},{seed:1.5},{seed:4294967296},{version:0},{version:1.5},{playerCount:1},{size:undefined}]
-    .map(change=>({initialHumanCount:2,generation:{version:4,seed:1,playerCount:2,size:'normal',...change}}))]) {
+    .map(change=>({initialHumanCount:2,generation:{version:5,seed:1,playerCount:2,size:'normal',...change}}))]) {
   assert.throws(()=>getCoopMapScalingFromMetadata(coop),/original generation metadata/);
 }
 console.log('PASS invalid-generation-metadata rejected=10');
@@ -117,7 +117,7 @@ for (const size of ['tiny','normal','big']) {
     gameSettings.coop.humanSlots=[1];
     globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);`);
   compare(`${size}-saved-replay-inputs`,f.evaluate('gameSettings.coop.generation'),
-    {version:4,playerCount:2,seed:0,size,options:{seed:0,size}});
+    {version:5,playerCount:2,seed:0,size,options:{seed:0,size}});
   compare(`${size}-saved-initial-count`,f.evaluate('getCoopMapScalingFromMetadata(gameSettings.coop)'),getCoopMapScaling(2,size));
   compare(`${size}-exact-save-load`,f.evaluate('JSON.stringify(getGameObject())===saved'),true);
 }

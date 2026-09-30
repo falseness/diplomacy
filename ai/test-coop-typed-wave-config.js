@@ -233,7 +233,7 @@ function checkCallers() {
   const context = vm.createContext({});
   for (const src of ['ai/wave-config.js', 'ai/wave-composition.js'])
     vm.runInContext(fs.readFileSync(path.join(ROOT, src), 'utf8'), context);
-  vm.runInContext(`class Building {}; const gameSettings = {coop: {demonSlot: 3, generation: {version: 4}}};
+  vm.runInContext(`class Building {}; const gameSettings = {coop: {demonSlot: 3, generation: {version: 5}}};
     let gameRound = 0;
     const external = COOP_PORTAL_CATEGORIES.map((category, x) => ({category, coord: {x,y:0},
       hp:30, killed:false, isDemonPortal:true, playerColor:3}));

@@ -154,7 +154,7 @@ const compare = (label, observed, expected) => {
       compare('selected-slot-'+count,await page.evaluate(()=>gameSlot),count===1?0:1);
       await page.waitForFunction(()=>!menu.visible && whooseTurn===1);
       const expected=await page.evaluate(()=>generationCalls[0].map);
-      compare('generated-metadata-'+count,expected.coop.generation,{version:4,playerCount:count,seed,size,options:{seed,size}});
+      compare('generated-metadata-'+count,expected.coop.generation,{version:5,playerCount:count,seed,size,options:{seed,size}});
       compare('generateCoopGame-'+count,await page.evaluate(()=>generationCalls),[{count,options:{seed,size},map:expected}]);
       compare('actual-grid-'+size+'-'+count,await page.evaluate(()=>[grid.arr.length,...new Set(grid.arr.map(c=>c.length))]),Array(2).fill(Math.max({tiny:11,normal:15,big:21}[size],Math.ceil({tiny:15,normal:25,big:39}[size]*Math.sqrt(count/4)))));
       compare('launch-options-'+count,await page.evaluate(()=>startCalls),[{fog:enabled,timer:enabled,online:false}]);

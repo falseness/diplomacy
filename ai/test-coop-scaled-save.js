@@ -10,7 +10,7 @@ function run(){
   const label=`scaled-save-H${count}-${size}`;
   e(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:1});generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);whooseTurn=1;actionManager.clear();
     gameSettings.coop.typedWaves={lastRound:3};gameSettings.coop.localPhase={round:3,stage:'complete'};gameRound=3;globalThis.before=JSON.stringify(getGameObject());loadFromJson(before)`);
-  check(label+'-metadata','gameSettings.coop.generation',{version:4,playerCount:count,seed:1,size,options:{seed:1,size}});
+  check(label+'-metadata','gameSettings.coop.generation',{version:5,playerCount:count,seed:1,size,options:{seed:1,size}});
   // Divided Valley terrain counts vary with the planned ridge; resources do not.
   check(label+'-dimensions-counts',`({side:grid.arr.length,height:grid.arr[0].length,initial:gameSettings.coop.initialHumanCount,portals:external.filter(p=>p.isDemonPortal).length,humans:players.filter(p=>p.role==='HUMAN').length,
     neutralTowns:players[0].towns.length,goldmines:goldmines.length,humanTowns:players.slice(1,${count+1}).map(p=>p.towns.length),

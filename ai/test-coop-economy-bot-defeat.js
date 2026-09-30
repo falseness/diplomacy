@@ -1,6 +1,6 @@
 'use strict';
 // TASK-159: co-op combat-defeat harness with the real economy bot in every human
-// slot. Each game is a generated version-4 map (current rules, standard starting
+// slot. Each game is a generated version-5 map (current rules, standard starting
 // assets) started in a fresh child process; every human slot is constructed as
 // SimpleAiPlayerWithEconomy through GameMap's playerType, so the production
 // dispatcher (nextTurn) invokes the unchanged policy at the start of each human
@@ -841,7 +841,7 @@ function runSelfTest(args) {
     sc('no-infrastructure-failure', row.infrastructure, false);
     sc('generation', {version: record.configuration.generation.version, playerCount: record.configuration.generation.playerCount,
       size: record.configuration.generation.size, seed: record.configuration.generation.seed},
-    {version: 4, playerCount: spec.humans, size: 'tiny', seed: 0});
+    {version: 5, playerCount: spec.humans, size: 'tiny', seed: 0});
     sc('fog', record.configuration.isFogOfWar, spec.fog);
     sc('human-slot-policy', slots.map(s => ({class: s.class, role: s.role, economyMode: s.economyMode, ownOverrides: s.ownOverrides})),
       humanSlots.map(() => ({class: POLICY, role: 'HUMAN', economyMode: 'war', ownOverrides: []})));
@@ -860,7 +860,7 @@ function runSelfTest(args) {
       allScheduled: firstWave.spawned.every(s => s.matchesSchedule)} : null, {round: 4, normalImp: true, allScheduled: true});
     sc('result-evaluator-observed', row.summary.terminal ? row.summary.resultFromEvaluator : c.resultEvaluations > 0, true);
     sc('snapshots-retained', [spec.snapshots.initial, spec.snapshots.final].map(file => fs.existsSync(path.join(out, file)) &&
-      JSON.parse(fs.readFileSync(path.join(out, file), 'utf8')).gameSettings.coop.generation.version === 4), [true, true]);
+      JSON.parse(fs.readFileSync(path.join(out, file), 'utf8')).gameSettings.coop.generation.version === 5), [true, true]);
     if (spec.fog) sc('fog-human-actions-visible', c.humanUnitActions > 0 && c.humanFoggedDestinations === 0, true);
     const finite = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
     sc('cpu-bound-usage-recorded', {bound: record.cpuBoundSeconds, perCase: [row.cpuSeconds, row.wallSeconds, row.cpuShare].every(finite),

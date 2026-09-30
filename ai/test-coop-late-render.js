@@ -56,9 +56,9 @@ const compare = (label, observed, expected) => {
       const configured=config.actors.map(a=>({...a, units:a.units.map(u=>({...u,type:Noob}))}));
       const map=new GameMap(config.size, configured.slice(0,-1), [],[],[],[],[],{type:'rectangular'},
         {units:configured[3].units});
-      // Labeled render fixture with the current version-4 metadata and ten typed
+      // Labeled render fixture with the current version-5 metadata and ten typed
       // portals per human on otherwise empty cells (not a generated layout).
-      map.coop.generation={version:4,playerCount:2,seed:1,size:'tiny',options:{seed:1,size:'tiny'},
+      map.coop.generation={version:5,playerCount:2,seed:1,size:'tiny',options:{seed:1,size:'tiny'},
         testFixture:{label:'late-render',kind:'declared-local-fixture',generated:false}};
       map.portals=config.portals.map(p=>({...p}));
       map.start(GameManager,false);

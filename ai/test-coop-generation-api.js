@@ -6,7 +6,7 @@ const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 const {initialEntities} = require('./test-coop-generation-fixtures');
-// Literal version-4 contract, independent of production scaling helpers.
+// Literal version-5 contract, independent of production scaling helpers.
 const colors = [{r:255,g:0,b:0},{r:98,g:168,b:222},{r:60,g:190,b:100},{r:230,g:170,b:40}];
 const sideFor = count => Math.max(15, Math.ceil(25*Math.sqrt(count/4)));
 // Divided Valley terrain follows 8/6/10% density within 2 points of area.
@@ -23,7 +23,7 @@ function run() {
     const label = `humans-${count}-seed-${seed}`;
     const expectedCoop = {initialHumanCount:count, humanSlots:Array.from({length:count},(_,i)=>i+1),
       humanTeam:'HUMANS', demonSlot:count+1,
-      generation:{version:4,playerCount:count,seed,size:'normal',options:{seed,size:'normal'}}};
+      generation:{version:5,playerCount:count,seed,size:'normal',options:{seed,size:'normal'}}};
     f.evaluate(`globalThis.beforeGeneration = JSON.stringify(getGameObject());
       globalThis.generated = generateCoopGame(${count}, {seed:${seed}});`);
     if (process.argv.includes('--corrupt')) expectedCoop.initialHumanCount++;
@@ -40,7 +40,7 @@ function run() {
         terrainWithin(expected.bushes.length,area,10),expected.hills.length],
       assets:expected.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length]),
       controller:expected.players[count+1]
-    }, {dimensions:{x:side,y:side},counts:[2*count,2*count,4*count],terrain:[true,true,true,0],
+    }, {dimensions:{x:side,y:side},counts:[2*count,2*count,10*count],terrain:[true,true,true,0],
       assets:Array.from({length:count},()=>[100,1,0]),
       controller:{rgb:{r:160,g:40,b:180},units:[],towns:[],gold:0,economyEnabled:false}});
     f.compare(label+'-independent-starting-roster',expected.players.map(p=>({...p,towns:p.towns.length})),[

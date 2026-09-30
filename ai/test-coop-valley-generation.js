@@ -86,7 +86,7 @@ function audit(size, humans, seed, r, fault) {
   checks.push(['bounded-attempts', candidates.length>=1&&candidates.length<=ATTEMPT_LIMIT&&candidates.every((c,i)=>c.attempt===i&&c.ok===(i===candidates.length-1))&&
     planSeeds.length===candidates.length&&planSeeds[0]===seed&&new Set(planSeeds).size===planSeeds.length]);
   const expectedCoop = {initialHumanCount:humans, humanSlots:ALL_HUMANS.slice(0,humans), humanTeam:'HUMANS', demonSlot:humans+1,
-    generation:{version:4,playerCount:humans,seed,size,options:{seed,size}}};
+    generation:{version:5,playerCount:humans,seed,size,options:{seed,size}}};
   obs.coop = map.coop; obs.mapKeys = Object.keys(map);
   checks.push(['api-metadata', same(map.coop,expectedCoop)&&same(Object.keys(map),MAP_KEYS)&&same(map.mapShape,{type:'rectangular'})]);
   const humansList = map.players.slice(1,1+humans), neutral = map.players[0].towns, controller = map.players[humans+1];
@@ -209,7 +209,7 @@ function seedZero(f, size, humans, mapJson) {
   return {checks, obs};
 }
 
-// Starting a version-4 map keeps the installed balance version and the
+// Starting a version-5 map keeps the installed balance version and the
 // version-1 wave generation boundary.
 function startCase(f, size) {
   return f.evaluate(`(() => {
@@ -281,11 +281,11 @@ if (require.main === module) {
     callersOk:callers.ok, startsOk:starts?starts.ok:null};
   fs.writeFileSync(path.join(out,'checkpoints.json'), JSON.stringify({mode:fault?'fault':'positive', fault:fault||null, intendedAssertion:fault?FAULTS[fault]:null,
     sizes:SIZES, humans:HUMANS, seeds:SEEDS, attemptLimit:ATTEMPT_LIMIT,
-    rules:{api:'generateCoopGame(playerCount,{seed,size}) validation unchanged; returns a GameMap with coop.generation {version:4,playerCount,seed,size,options:{seed,size}}; no layout selector (map keys '+MAP_KEYS.join(',')+')',
+    rules:{api:'generateCoopGame(playerCount,{seed,size}) validation unchanged; returns a GameMap with coop.generation {version:5,playerCount,seed,size,options:{seed,size}}; no layout selector (map keys '+MAP_KEYS.join(',')+')',
       attempts:'at most eight candidates; attempt 0 plans with the seed itself, later attempts with distinct derived seeds; failure throws "Co-op Divided Valley generation failed: size= playerCount= seed= attempts=8/8 constraint= failures= detail="',
       topology:'independent TASK-134 verifyValley on actual cells with the plan passage/lateral descriptors; every planned ridge cell is a mountain; humans below the ridge, portals above',
       runtime:'JSON.stringify(getGameObject()) identical before/after each generation, replay and fault call; options objects unchanged',
-      repair:'version-4 forced repair replays the deterministic candidates and restores portals/terrain only from a candidate whose map size, roster and goldmines match exactly; failure leaves input byte-identical',
+      repair:'version-5 forced repair replays the deterministic candidates and restores portals/terrain only from a candidate whose map size, roster and goldmines match exactly; failure leaves input byte-identical',
       impossiblePlacement:'fault replaces every allied territory cell of each plan with ridge, so starting-town placement is impossible in every attempt',
       balanceAndWaves:'starting a generated map keeps gameSettings.coop.balanceVersion=2 and no obsolete waveGeneration; typedWaves records completed rounds'},
     assertionOrder:matrix[0]?Object.keys(matrix[0].checks):[], summary, callers, starts, matrix},null,1)+'\n');

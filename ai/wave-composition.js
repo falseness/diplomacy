@@ -1,6 +1,6 @@
 function generateCoopWave(round) {
     const coop = gameSettings.coop
-    if (!coop || !coop.generation || coop.generation.version !== 4)
+    if (!coop || !coop.generation || coop.generation.version !== 5)
         throw new Error('Unsupported co-op generation version')
     // Destroyed portals leave external; occupied portals skip this round only.
     const portals = external.filter(portal => portal.isDemonPortal && !portal.killed &&

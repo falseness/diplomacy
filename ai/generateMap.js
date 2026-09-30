@@ -76,7 +76,7 @@ function enforceCoopStartBalance(map, force = false) {
     const size = map.coop.generation && map.coop.generation.size
     const humans = map.players.slice(1, 1 + map.coop.initialHumanCount)
     const scaling = getCoopMapScaling(map.coop.initialHumanCount, size)
-    if (map.coop.generation.version !== 4) fail('unsupported generation version')
+    if (map.coop.generation.version !== 5) fail('unsupported generation version')
     const side = valleyRowPlans(map.coop.initialHumanCount, size).side
     if (map.mapSize.x !== side || map.mapSize.y !== side ||
         map.goldmines.length !== scaling.counts.goldmines ||
@@ -134,7 +134,7 @@ function coopValleyAttemptSeed(seed, attempt) {
     return attempt ? (seed ^ Math.imul(attempt, 0x9e3779b9)) >>> 0 : seed
 }
 
-// A complete version-4 map detached from the active runtime, or an error
+// A complete version-5 map detached from the active runtime, or an error
 // tagged with the attempt and failed constraint (stage).
 function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
     let constraint = 'region-plan'
@@ -154,7 +154,7 @@ function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
         const map = new GameMap({x: plan.side, y: plan.side}, roster,
             layout.goldmines.map(m => ({...copy(m), owner: m.owner, income: m.income})),
             layout.lakes.map(copy), layout.mountains.map(copy), layout.bushes.map(copy), [], {type: 'rectangular'}, {})
-        map.coop.generation = {version: 4, playerCount, seed, size, options: {seed, size}}
+        map.coop.generation = {version: 5, playerCount, seed, size, options: {seed, size}}
         map.portals = layout.portals.map(p => ({...copy(p), category: p.category}))
         constraint = 'portal-categories'
         validateCoopTypedPortals(map)
@@ -175,7 +175,7 @@ function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
 // in-bounds cells: three melee/ranged and one each siege/heavy/support/chaos.
 function validateCoopTypedPortals(map) {
     const coop = map.coop, generation = coop && coop.generation
-    if (!generation || generation.version !== 4) throw new Error('Co-op typed portals require version-4 generation metadata')
+    if (!generation || generation.version !== 5) throw new Error('Co-op typed portals require version-5 generation metadata')
     const counts = getCoopMapScaling(coop.initialHumanCount, generation.size).counts
     const portals = Array.isArray(map.portals) ? map.portals : []
     const observed = Object.fromEntries(COOP_PORTAL_CATEGORY_ORDER.map(category => [category, 0]))
@@ -264,7 +264,7 @@ function repairCoopConnectivity(map) {
         const result = enforceCoopStartBalance(map, true)
         return {...result, status:'connected', strategy:'rebuild', placementLimit:8 * map.mapSize.x * map.mapSize.y}
     }
-    if (!map.coop.generation || map.coop.generation.version !== 4)
+    if (!map.coop.generation || map.coop.generation.version !== 5)
         throw new Error('Unsupported co-op generation version')
     return {status:'connected', relocated:0, placementLimit:0}
 }
