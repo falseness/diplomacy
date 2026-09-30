@@ -68,6 +68,18 @@ class OnlineSession {
     createLobby(board, mapName) {
         return this.request('lobby:create', {board, mapName})
     }
+    joinLobby(lobbyId) {
+        return this.request('lobby:join', {lobbyId})
+    }
+    leaveLobby(lobbyId) {
+        return this.request('lobby:leave', {lobbyId})
+    }
+    kickFromLobby(lobbyId, accountId) {
+        return this.request('lobby:kick', {lobbyId, accountId})
+    }
+    startLobby(lobbyId) {
+        return this.request('lobby:start', {lobbyId})
+    }
 }
 
 // Status text for an account:setNickname error code.

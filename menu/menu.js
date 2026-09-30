@@ -662,13 +662,153 @@ class CreateLobbyTree extends OnlineGameSettings {
             this.status.text = createLobbyErrorText(ack.error)
             return
         }
-        // TASK-301 opens the lobby room here; until then the hub lists the new lobby.
-        this.menu.onlineHub.notice = 'lobby created'
-        this.menu.setTree(this.menu.onlineHub)
+        this.menu.lobbyRoom.open(ack.lobby)
     }
     draw(ctx) {
         super.draw(ctx)
         this.status.draw(ctx)
+    }
+}
+
+// The lobby room: settings, members in join order (host tagged), 'waiting...' seats,
+// 'kick' next to other members and 'start' (enabled when full) for the host, 'leave'.
+// Live from lobby:updated; lobby:kicked returns to the hub. Entering the started game
+// is TASK-302; here lobby:started only shows 'starting...'.
+class LobbyRoomTree {
+    static noView = {lobbyId: null, settingsText: '', countText: '', rows: [], isHost: false, kickAccountIds: [],
+        start: {visible: false, enabled: false}}
+    constructor(_menu) {
+        this.menu = _menu
+        this.lobby = null
+        this.view = LobbyRoomTree.noView
+        this.socket = null
+        this.busy = false
+        this.rowTop = HEIGHT * 0.38
+        this.rowHeight = HEIGHT * 0.065
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.28, 0.028 * WIDTH, '', 'black')
+        this.count = new Text(WIDTH / 2, HEIGHT * 0.33, 0.028 * WIDTH, '', '#747474')
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.8, 0.025 * WIDTH, '', 'black')
+        this.rowTexts = []
+        this.kickButtons = []
+        this.leaveButton = Menu.getButton({x: WIDTH * 0.2, y: HEIGHT * 0.85}, 'leave', this.leaveLobby, undefined, true, this)
+        this.startButton = Menu.getButton({x: WIDTH * 0.55, y: HEIGHT * 0.85}, 'start', this.startLobby, undefined, true, this)
+        this.buttons = [this.leaveButton]
+    }
+    setParent() {}
+    // Opens the room for a lobby I am a member of (lobby:create or lobby:join ack).
+    open(lobby) {
+        this.listen()
+        this.busy = false
+        this.status.text = ''
+        this.setLobby(lobby)
+        this.menu.setTree(this)
+    }
+    // Room pushes go to this account's sockets; one set of handlers per socket.
+    listen() {
+        const socket = onlineSession.connect()
+        if (this.socket === socket) return
+        this.socket = socket
+        socket.on('lobby:updated', ({lobby} = {}) => { if (this.socket === socket) this.onUpdated(lobby) })
+        socket.on('lobby:kicked', ({lobbyId} = {}) => { if (this.socket === socket) this.onKicked(lobbyId) })
+        socket.on('lobby:started', ({lobbyId} = {}) => { if (this.socket === socket) this.onStarted(lobbyId) })
+    }
+    get myAccountId() {
+        return onlineSession.account?.accountId ?? null
+    }
+    isMine(lobbyId) {
+        return !!this.lobby && this.lobby.lobbyId === lobbyId
+    }
+    onUpdated(lobby) {
+        // A kicked or departed account may still see its old room's last update.
+        if (!lobby || !this.isMine(lobby.lobbyId)) return
+        if (!lobby.members.some(member => member.accountId === this.myAccountId)) return
+        this.setLobby(lobby)
+    }
+    onKicked(lobbyId) {
+        if (!this.isMine(lobbyId)) return
+        this.backToHub(LOBBY_REMOVED_TEXT)
+    }
+    onStarted(lobbyId) {
+        if (!this.isMine(lobbyId)) return
+        this.status.text = LOBBY_STARTING_TEXT
+    }
+    setLobby(lobby) {
+        this.lobby = lobby
+        const view = this.view = buildRoomView(lobby, this.myAccountId)
+        this.title.text = view.settingsText
+        this.count.text = view.countText
+        const fontSize = 0.03 * WIDTH
+        this.rowTexts = view.rows.map((row, i) => new Text(WIDTH * 0.3, this.rowTop + (i + 0.5) * this.rowHeight,
+            fontSize, row.text, row.kind === 'waiting' ? '#747474' : 'black', 'left'))
+        this.kickButtons = []
+        view.rows.forEach((row, i) => {
+            if (!row.kick) return
+            const rect = Menu.getButtonRect({x: WIDTH * 0.6, y: this.rowTop + (i + 0.1) * this.rowHeight})
+            rect.width = WIDTH * 0.12
+            rect.height = this.rowHeight * 0.8
+            const text = Menu.getButtonText('kick')
+            text.fontSize = fontSize
+            const button = new MenuButton(rect, text, this.kick, row.accountId, true, this)
+            button.accountId = row.accountId
+            this.kickButtons.push(button)
+        })
+        // A disabled start is drawn greyed and ignores clicks.
+        const enabled = view.start.enabled
+        this.startButton.canClick = enabled
+        this.startButton.color = enabled ? 'white' : '#bdbdbd'
+        this.startButton.textColor = enabled ? 'black' : '#747474'
+        this.startButton.selectedText.color = this.startButton.textColor
+        this.buttons = [this.leaveButton, ...this.kickButtons]
+        if (view.start.visible) this.buttons.push(this.startButton)
+    }
+    backToHub(notice = '') {
+        this.lobby = null
+        this.view = LobbyRoomTree.noView
+        this.title.text = this.count.text = this.status.text = ''
+        this.rowTexts = []
+        this.kickButtons = []
+        this.buttons = [this.leaveButton]
+        this.menu.onlineHub.notice = notice
+        this.menu.setTree(this.menu.onlineHub)
+    }
+    async request(send) {
+        if (this.busy || !this.lobby) return null
+        this.busy = true
+        const ack = await send(this.lobby.lobbyId)
+        this.busy = false
+        return this.menu.selectedTree === this ? ack : null
+    }
+    async leaveLobby() {
+        const ack = await this.request(lobbyId => onlineSession.leaveLobby(lobbyId))
+        if (!ack) return
+        if (ack.ok || ack.error === 'NOT_FOUND' || ack.error === 'NOT_A_MEMBER') this.backToHub()
+        else this.status.text = 'could not leave the lobby'
+    }
+    async kick(accountId) {
+        const ack = await this.request(lobbyId => onlineSession.kickFromLobby(lobbyId, accountId))
+        if (!ack) return
+        if (ack.ok) this.onUpdated(ack.lobby)
+        else this.status.text = 'could not kick'
+    }
+    async startLobby() {
+        if (!this.view.start.enabled) return
+        this.status.text = LOBBY_STARTING_TEXT
+        const ack = await this.request(lobbyId => onlineSession.startLobby(lobbyId))
+        if (ack && !ack.ok) this.status.text = ack.error === 'NOT_FULL' ? 'waiting for players' : 'could not start'
+    }
+    click(pos) {
+        for (const button of [...this.buttons]) button.click(pos)
+    }
+    draw(ctx) {
+        this.title.draw(ctx)
+        this.count.draw(ctx)
+        for (const text of this.rowTexts) text.draw(ctx)
+        this.status.draw(ctx)
+        for (const button of this.buttons) button.draw(ctx)
+        if (this.view.start.visible && !this.startButton.canClick) {
+            this.startButton.rect.draw(ctx)
+            this.startButton.text.draw(ctx)
+        }
     }
 }
 
@@ -750,7 +890,7 @@ class HubList {
         this.scroll.scrollBy(Math.sign(deltaY) * this.scroll.rowHeight)
         return true
     }
-    // Touch drag; rows are opened in TASK-301/302, for now a click only records the id.
+    // Touch drag of the list.
     select(pos) {
         this.dragY = this.isInside(pos) ? pos.y : null
     }
@@ -765,7 +905,10 @@ class HubList {
     click(pos) {
         if (!this.isInside(pos)) return false
         const row = this.rows[this.scroll.rowAt(pos.y - this.rect.y)]
-        if (row && row.id !== null) this.selectedId = row.id
+        if (row && row.id !== null) {
+            this.selectedId = row.id
+            this.onRow?.(row)
+        }
         return true
     }
     draw(ctx) {
@@ -814,10 +957,14 @@ class OnlineHubTree {
         this.menu = _menu
         this.account = null
         this.feed = null
-        // A one-off message after the status line, e.g. 'lobby created'; cleared on leave.
+        // A one-off message after the status line, e.g. a lobby:join error or
+        // 'you were removed from the lobby'; cleared on leave.
         this.notice = ''
         this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', 'black')
         this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
+        // Opening a game row is TASK-302.
+        this.list.onRow = row => { if (row.kind === 'lobby') this.joinLobby(row.id) }
+        this.joining = false
         const arrow = (y, text, direction) => new MenuButton(
             new Rect(WIDTH * 0.875, y, WIDTH * 0.05, HEIGHT * 0.1, [0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH],
                 0.0035 * WIDTH, 'white'),
@@ -858,6 +1005,20 @@ class OnlineHubTree {
     leave() {
         this.feed?.stop()
         this.notice = ''
+    }
+    // lobby:join, then the room; LOBBY_FULL, ALREADY_IN_LOBBY etc. show on the status line.
+    async joinLobby(lobbyId) {
+        if (this.joining) return
+        this.joining = true
+        const ack = await onlineSession.joinLobby(lobbyId)
+        this.joining = false
+        if (this.menu.selectedTree !== this) return
+        if (!ack.ok) {
+            this.notice = lobbyJoinErrorText(ack.error)
+            this.setAccount(this.account)
+            return
+        }
+        this.menu.lobbyRoom.open(ack.lobby)
     }
     // Row texts in list order, for tests and diagnostics.
     get rowTexts() {
@@ -1004,6 +1165,8 @@ class Menu {
         this.nickname = new NicknameTree(this)
 
         this.createLobby = new CreateLobbyTree(this)
+
+        this.lobbyRoom = new LobbyRoomTree(this)
 
         this.onlineHub = new OnlineHubTree(this)
 
