@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Parity and region checks for ai/coop-hex-geometry.js against the shipped
-// getHexagonalLayer (options/gamestart.js), evaluated in a vm sandbox.
+// getHexagonalLayer (options/gamestart.js), evaluated in a vm sandbox, and a literal lattice formula.
 // Usage: node ai/test-coop-hex-geometry.js [--output-dir DIR] [--fault shift-center|tweak-layer]
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
@@ -38,9 +38,8 @@ for (;;) {
 const shippedLayer = vm.runInContext('getHexagonalLayer', sandbox);
 if (typeof shippedLayer !== 'function') throw new Error('getHexagonalLayer missing from options/gamestart.js');
 
-const valleySource = fs.readFileSync(path.join(root, 'ai/coop-valley-plan.js'), 'utf8');
-const latticeLine = valleySource.split('\n').find(line => line.startsWith('const valleyPortalLattice ='));
-const shippedLattice = vm.runInNewContext(latticeLine.replace('const valleyPortalLattice =', '(') + ')');
+// Independent literal lattice: odd-q offset to axial (q = x, r = y - floor(x/2)), then (q - r) mod 3 === 0.
+const referenceLattice = (x, y) => { const q = x, r = y - Math.floor(x / 2); return ((q - r) % 3 + 3) % 3 === 0; };
 
 // Fault injections replace the module under test, never the shipped reference.
 const layer = fault === 'tweak-layer' ? (x, y, center) => {
@@ -67,7 +66,7 @@ for (let R = MIN_RADIUS; R <= MAX_RADIUS; R++) {
         }
         if (layer(x, y, center) <= R) cells++; else maskCells++;
         latticeComparisons++;
-        assert('lattice-parity', geometry.coopHexLattice(x, y) === shippedLattice(x, y), {x, y});
+        assert('lattice-parity', geometry.coopHexLattice(x, y) === referenceLattice(x, y), {x, y});
     }
     // Every axial hex within distance R of the centre must land inside the grid.
     let outOfBounds = 0;

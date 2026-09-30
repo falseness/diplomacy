@@ -36,7 +36,7 @@ function coopHexCells(radius) {
     return cells
 }
 
-// Axial (q - r) mod 3 lattice, copied from valleyPortalLattice (ai/coop-valley-plan.js).
+// Axial (q - r) mod 3 portal lattice on the odd-q offset grid (r = y - floor(x / 2)).
 const coopHexLattice = (x, y) => ((x - y + (x - (x & 1)) / 2) % 3 + 3) % 3 === 0
 
 if (typeof module !== 'undefined' && module.exports) {

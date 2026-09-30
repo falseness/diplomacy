@@ -29,7 +29,7 @@ async function main(){
     console.log('RUNTIME '+JSON.stringify({node:process.version,chromium:browser.version(),playwright:require('playwright/package.json').version,services:service.lifecycle.runtime}));
     const {currentCoopFixtureSpec,buildCurrentCoopBoardInVm}=require('../../diplomacy_server/tests/coop/helpers/current-coop-fixture');
     const portals=Array.from({length:12},(_,i)=>({x:2+i%6,y:5+3*Math.floor(i/6),category:categories[i%6]})).concat(Array.from({length:8},(_,i)=>({x:1+i,y:10,category:i<4?'melee':'ranged'})));
-    // Current v4 admission uses valleyRowPlans: Tiny/H2 is 14, not the
+    // Historical v4 admission used the retired row planner: Tiny/H2 is 14, not the
     // older scaling helper's 11. This is the smallest supported network map.
     const spec={...currentCoopFixtureSpec({label:c.id,humans:2,size:'tiny',seed:1,portals,
      purpose:'TASK-241 six-category render fixture with scouts; authored 14x14 Tiny H2 map, not generated geometry',
