@@ -32,7 +32,7 @@ const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bu
     'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft', 'mortar', 'mortarLeft',
     'hexmaster', 'demonQueen',
     'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
-    'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos']
+    'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos', 'demonPortalMage']
 for (const name of demonSpriteImages) assets[name] = new Image()
 let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
 for (let i = 0; i < grassHexImages.length; ++i)

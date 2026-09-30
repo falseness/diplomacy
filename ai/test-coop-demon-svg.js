@@ -73,6 +73,14 @@ function validate(source) {
   const source = fs.readFileSync(path.join(root, assetPath), 'utf8');
   console.log(JSON.stringify({asset:assetPath, sha256:hash(source), xml:validate(source)}));
   console.log('PASS XML viewBox metadata unique IDs resolved references vector-only');
+  // Portal categories share the base arch; each has its own artwork file.
+  const variants = type === 'demonPortal' ? require('./wave-config').COOP_PORTAL_CATEGORIES.map(c =>
+    type + c[0].toUpperCase() + c.slice(1)) : [];
+  for (const variant of variants) {
+    const variantSource = fs.readFileSync(path.join(root, `assets/sprites/${variant}.svg`), 'utf8');
+    console.log(JSON.stringify({asset:`assets/sprites/${variant}.svg`, sha256:hash(variantSource), xml:validate(variantSource)}));
+    console.log(`PASS category ${variant} XML viewBox metadata unique IDs resolved references vector-only`);
+  }
   const directional = ['hound','ravager'].includes(type) &&
     fs.existsSync(path.join(root, `assets/sprites/${type}Left.svg`));
   if (directional) {
@@ -91,7 +99,7 @@ function validate(source) {
     assert.throws(() => validate(corrupt), undefined, name);
     console.log(`PASS deliberate corruption rejected: ${name} (in-process expected assertion)`);
   }
-  const names = [...new Set([...parents[type], type, ...(directional ? [type+'Left'] : []), ...Object.keys(parents).filter(n =>
+  const names = [...new Set([...parents[type], type, ...variants, ...(directional ? [type+'Left'] : []), ...Object.keys(parents).filter(n =>
     n !== type && fs.existsSync(path.join(root, 'assets/sprites', n+'.svg')))])];
   const files = Object.fromEntries(names.map(n => [`/${n}.svg`, fs.readFileSync(path.join(root,'assets/sprites',n+'.svg'))]));
   const requests = [], errors = [];
@@ -135,6 +143,17 @@ function validate(source) {
       console.log(JSON.stringify({scenario:`pixels ${size}px`,...pixels}));
       compare(`${size}px transparent margins`,pixels.edge,0);
       compare(`${size}px visible miniature occupancy 10–85%`,pixels.ink/pixels.total>0.1 && pixels.ink/pixels.total<0.85,true);
+    }
+    for (const variant of variants) for (const size of [512,64]) {
+      await capture(`${variant}-${size}.png`, `<img crossorigin="anonymous" id="asset" width="${size}" height="${size}" src="${base}/${variant}.svg">`, '#asset');
+      const ink = await page.locator('#asset').evaluate(img => {
+        const c = document.createElement('canvas'); c.width=img.width; c.height=img.height;
+        const ctx=c.getContext('2d');ctx.drawImage(img,0,0,img.width,img.height);
+        const data=ctx.getImageData(0,0,c.width,c.height).data;
+        let n=0; for(let i=3;i<data.length;i+=4) if(data[i]) n++;
+        return n/(c.width*c.height);
+      });
+      compare(`${variant} ${size}px visible occupancy 10–85%`, ink>0.1 && ink<0.85, true);
     }
     await capture('comparison.png', '<div style="display:flex;flex-wrap:wrap;background:#bbcbb0">'+names.map(n=>
       `<div style="text-align:center">${n}<br><img width="256" height="256" src="${base}/${n}.svg"></div>`).join('')+'</div>');
