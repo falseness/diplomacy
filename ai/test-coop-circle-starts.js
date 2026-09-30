@@ -6,6 +6,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), Module = require('module'), crypto = require('crypto');
 const {coopHexLayer} = require('./coop-hex-geometry');
+const {circleTestBands} = require('./coop-circle-test-bands');
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
@@ -87,7 +88,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     let plan, layout;
     try { plan = planner.planCoopCircle(humans, size, seed); layout = planner.placeCircleStarts(plan, colorOf); }
     catch (error) { assert('planner-throws', false, {...id, error: error.message}); continue; }
-    const R = plan.radius, E = Math.floor(R / 4), side = 2 * R + 1, center = {q: R, r: Math.ceil(R / 2)};
+    const R = plan.radius, E = circleTestBands(R, humans, size).E, side = 2 * R + 1, center = {q: R, r: Math.ceil(R / 2)};
     const humansList = layout.players.slice(1), towns = humansList.map(p => p.towns[0]);
     assert('town-count', humansList.length === humans && humansList.every(p => p.towns.length === 1), id);
     const townLayers = towns.map(t => layerAt(t, R));

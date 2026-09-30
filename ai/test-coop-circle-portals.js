@@ -7,6 +7,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), Module = require('module'), crypto = require('crypto');
 const {coopHexLayer} = require('./coop-hex-geometry');
+const {circleTestBands} = require('./coop-circle-test-bands');
 const {getCoopMapScaling} = require('./coop-map-scaling');
 
 const args = process.argv.slice(2);
@@ -87,8 +88,8 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     let plan, layout, result;
     try { ({plan, layout, portals: result} = build(humans, size, seed)); }
     catch (error) { assert('planner-throws', false, {...id, error: error.message}); continue; }
-    const R = plan.radius, E = Math.floor(R / 4), D = TOWN_DISTANCE[size], side = 2 * R + 1;
-    const ringOuter = Math.min(Math.floor(3 * R / 4), (R - 3) - D), center = {q: R, r: Math.ceil(R / 2)};
+    const R = plan.radius, {E, ringOuter} = circleTestBands(R, humans, size), D = TOWN_DISTANCE[size], side = 2 * R + 1;
+    const center = {q: R, r: Math.ceil(R / 2)};
     const target = getCoopMapScaling(humans, size).counts.portalCategories;
     const portals = result.portals;
     assert('layer-agrees', portals.every(p => layerAt(p, R) === coopHexLayer(p.x, p.y, center)), id);

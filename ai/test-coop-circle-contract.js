@@ -10,6 +10,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const scaling = require('./coop-map-scaling.js');
+const {circleTestBands} = require('./coop-circle-test-bands');
 
 // COOP_START_BALANCE is read from ai/generateMap.js (a browser global script) so
 // the contract follows the production bound without loading the generator.
@@ -19,7 +20,6 @@ const COOP_START_BALANCE = (() => {
     if (!match) throw new Error('COOP_START_BALANCE not found in ai/generateMap.js');
     return Object.freeze({assetDisparity: Number(match[1]), pathDisparity: Number(match[2])});
 })();
-const TOWN_DISTANCE = {tiny: 3, normal: 4, big: 5};
 const ELITE = ['chaos', 'heavy', 'siege', 'mage'];
 const COMMON = ['melee', 'ranged', 'support'];
 const MAX_GROWTH = 8;
@@ -52,7 +52,8 @@ function geometry(map) {
     const inBounds = c => Number.isInteger(c.x) && Number.isInteger(c.y) && c.x >= 0 && c.y >= 0 &&
         c.x < map.mapSize.x && c.y < map.mapSize.y;
     const open = c => inBounds(c) && layerOf(c, center) <= R;
-    return {R, center, E: Math.floor(R / 4), inBounds, open, layer: c => layerOf(c, center)};
+    const {E, ringOuter} = circleTestBands(R, map.coop.initialHumanCount, map.coop.generation.size);
+    return {R, center, E, ringOuter, inBounds, open, layer: c => layerOf(c, center)};
 }
 
 // BFS over open (unmasked) cells: blocked cells are never entered, endpoint cells
@@ -151,8 +152,7 @@ const ASSERTIONS = [
         return {expected: {maxLayer: g.E}, observed: {violations: bad}, pass: !bad.length};
     }],
     ['common-portals-in-ring', map => {
-        const g = geometry(map), D = TOWN_DISTANCE[map.coop.generation.size];
-        const outer = Math.min(Math.floor(3 * g.R / 4), g.R - 3 - D);
+        const g = geometry(map), outer = g.ringOuter;
         const bad = map.portals.filter(p => !ELITE.includes(p.category) &&
             (!COMMON.includes(p.category) || g.layer(p) <= g.E || g.layer(p) > outer)).map(p => ({...p, layer: g.layer(p)}));
         return {expected: {layerAbove: g.E, layerAtMost: outer}, observed: {violations: bad}, pass: !bad.length};
