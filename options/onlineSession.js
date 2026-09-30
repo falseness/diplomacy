@@ -58,6 +58,21 @@ class OnlineSession {
         storeSession(ack.sessionToken)
         return this.account = ack.account
     }
+    // Resolves the ack; a successful rename updates the signed-in account.
+    async setNickname(nickname) {
+        const ack = await this.request('account:setNickname', {nickname})
+        if (ack.ok) this.account = ack.account
+        return ack
+    }
+}
+
+// Status text for an account:setNickname error code.
+const NICKNAME_ERROR_TEXT = {
+    NICKNAME_TAKEN: 'nickname is taken',
+    NICKNAME_INVALID: '3-16 letters, digits, _ or -',
+}
+function nicknameErrorText(error) {
+    return NICKNAME_ERROR_TEXT[error] || 'could not save nickname'
 }
 
 const onlineSession = new OnlineSession()

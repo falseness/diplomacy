@@ -646,8 +646,12 @@ class OnlineHubTree {
         this.account = null
         this.status = new Text(WIDTH / 2, HEIGHT * 0.33, 0.04 * WIDTH, '', 'black')
         // Temporary until the lobby list lands: the password game settings.
-        this.createButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.45}, 'create game',
+        this.createButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.42}, 'create game',
             _menu.setTree, _menu.online, true, _menu)
+        this.nicknameButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.56}, 'change nickname',
+            _menu.setTree, _menu.nickname, true, _menu)
+        // The label is longer than the other menu buttons'.
+        for (const text of [this.nicknameButton.text, this.nicknameButton.selectedText]) text.fontSize *= 0.75
         this.backButton = new Empty()
         this.setAccount(null)
     }
@@ -659,12 +663,67 @@ class OnlineHubTree {
     setAccount(account) {
         this.account = account
         this.status.text = account ? 'Signed in as ' + account.nickname : 'signing in…'
-        this.buttons = account ? [this.createButton, this.backButton] : [this.backButton]
+        this.buttons = account ? [this.createButton, this.nicknameButton, this.backButton] : [this.backButton]
     }
     click(pos) {
         for (const button of this.buttons) button.click(pos)
     }
     draw(ctx) {
+        this.status.draw(ctx)
+        for (const button of this.buttons) button.draw(ctx)
+    }
+}
+
+// 'change nickname': a canvas text input prefilled with the current nickname.
+class NicknameTree {
+    constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+        this.menu = _menu
+        this.saving = false
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.04 * WIDTH, 'change nickname', 'black')
+        // Wider than a button so 16 characters fit.
+        const inputRect = Menu.getButtonRect({x: WIDTH * 0.3, y: HEIGHT * 0.36})
+        inputRect.width = WIDTH * 0.4
+        this.input = new MenuTextInput(inputRect, 0.04 * WIDTH,
+            {maxLength: 16, onSubmit: () => this.save(), onCancel: () => this.back()})
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.51, 0.025 * WIDTH, '', '#747474')
+        this.buttons = [
+            Menu.getButton({x: pos0X, y: HEIGHT * 0.56}, 'save', this.save, undefined, true, this),
+            Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', this.back, undefined, true, this),
+        ]
+    }
+    enter() {
+        this.saving = false
+        this.status.text = ''
+        this.input.setValue(onlineSession.account?.nickname || '')
+        this.input.focus()
+    }
+    leave() {
+        this.input.blur()
+    }
+    back() {
+        this.menu.setTree(this.menu.onlineHub)
+    }
+    async save() {
+        if (this.saving) return
+        this.saving = true
+        this.status.text = 'saving…'
+        const ack = await onlineSession.setNickname(this.input.value)
+        this.saving = false
+        if (this.menu.selectedTree !== this) return
+        if (!ack.ok) {
+            this.status.text = nicknameErrorText(ack.error)
+            return
+        }
+        this.menu.onlineHub.setAccount(ack.account)
+        this.back()
+    }
+    click(pos) {
+        this.input.click(pos)
+        for (const button of this.buttons) button.click(pos)
+    }
+    draw(ctx) {
+        this.title.draw(ctx)
+        this.input.draw(ctx)
         this.status.draw(ctx)
         for (const button of this.buttons) button.draw(ctx)
     }
@@ -740,6 +799,8 @@ class Menu {
         this.play = new HotseatSettingsTree(this)
 
         this.online = new OnlineSettingsTree(this)
+
+        this.nickname = new NicknameTree(this)
 
         this.onlineHub = new OnlineHubTree(this)
 
