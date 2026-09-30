@@ -91,6 +91,8 @@ e("maps['open field'][0].players[1].gold=0;");start('open field',0,true);
 check('online explicit zero unchanged',state().gold,[0,1000]);
 check('global Player fallback unchanged',e('new Player({r:0,g:0,b:0}).gold'),1000);
 e("GameManager.start(generateCoopGame(2,{seed:0,size:'tiny'}),false);");
+// Slot 1's opening town income is credited at game start: town 4 + 7 suburbs - 1 noob = +10.
+// No human owns a starting mine (TASK-335), and the owned mine never contributed here anyway.
 check('coop opening unchanged',state().gold,[110,100,0]);
 check('coop no opening marker',e('gameSettings.pendingHotseatOpeningEconomy === undefined'),true);
 console.log('PASS hotseat starting gold maps=2 humans=4,2 opening=100 save-load restart overrides=0,37,250 later-economy production-spend unit-refresh timers coop online');

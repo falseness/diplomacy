@@ -201,8 +201,12 @@ const ASSERTIONS = [
             const v = observed.map(o => o[k]);
             return [k, Math.max(...v) - Math.min(...v)];
         }));
-        return {expected: {maxDisparity: COOP_START_BALANCE.assetDisparity}, observed: {assets: observed, disparity},
-            pass: Object.values(disparity).every(d => d <= COOP_START_BALANCE.assetDisparity)};
+        // No human owns a starting mine (TASK-335): every mine is neutral, so owned
+        // mines and mine income are 0 for all humans.
+        return {expected: {maxDisparity: COOP_START_BALANCE.assetDisparity, ownedMines: 0, income: 0},
+            observed: {assets: observed, disparity},
+            pass: Object.values(disparity).every(d => d <= COOP_START_BALANCE.assetDisparity)
+                && observed.every(o => o.ownedMines === 0 && o.income === 0)};
     }],
     ['nearest-objective-balance', map => {
         const g = geometry(map);
