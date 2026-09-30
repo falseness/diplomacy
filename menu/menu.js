@@ -3,6 +3,10 @@ function menuClick(event) {
     menu.click(pos)
 }
 
+function menuWheel(event) {
+    menu.wheel(getEventPos(event), event.deltaY)
+}
+
 function menuBack() {
     menu.back()
 }
@@ -585,7 +589,7 @@ class OnlineSettingsTree {
     }
 }
 
-// Online entry screens: Google sign-in and the signed-in hub (lobby list comes later).
+// Online entry screens: Google sign-in and the signed-in hub with its games and lobbies list.
 class SignInTree {
     constructor(_menu) {
         this.menu = _menu
@@ -641,29 +645,140 @@ class SignInTree {
     }
 }
 
+// The scrolling list of the hub: rows from buildHubRows, drawn on the canvas.
+class HubList {
+    constructor(rect) {
+        this.rect = rect
+        this.rows = []
+        this.selectedId = null
+        this.scroll = new HubScrollModel(HEIGHT * 0.055, rect.height)
+        this.dragY = null
+    }
+    setRows(rows) {
+        this.rows = rows
+        this.scroll.setRowCount(rows.length)
+    }
+    isInside(pos) {
+        return pos.x >= this.rect.x && pos.x <= this.rect.x + this.rect.width &&
+            pos.y >= this.rect.y && pos.y <= this.rect.y + this.rect.height
+    }
+    wheel(pos, deltaY) {
+        if (!this.isInside(pos)) return false
+        this.scroll.scrollBy(Math.sign(deltaY) * this.scroll.rowHeight)
+        return true
+    }
+    // Touch drag; rows are opened in TASK-301/302, for now a click only records the id.
+    select(pos) {
+        this.dragY = this.isInside(pos) ? pos.y : null
+    }
+    touchmove(pos) {
+        if (this.dragY === null) return
+        this.scroll.scrollBy(this.dragY - pos.y)
+        this.dragY = pos.y
+    }
+    removeSelect() {
+        this.dragY = null
+    }
+    click(pos) {
+        if (!this.isInside(pos)) return false
+        const row = this.rows[this.scroll.rowAt(pos.y - this.rect.y)]
+        if (row && row.id !== null) this.selectedId = row.id
+        return true
+    }
+    draw(ctx) {
+        const {x, y, width, height} = this.rect
+        const rowHeight = this.scroll.rowHeight
+        const pad = 0.01 * WIDTH
+        ctx.save()
+        ctx.fillStyle = '#e8e8e8'
+        ctx.fillRect(x, y, width, height)
+        ctx.beginPath()
+        ctx.rect(x, y, width, height)
+        ctx.clip()
+        ctx.textBaseline = 'middle'
+        const {first, last} = this.scroll.visibleRange
+        for (let i = first; i <= last; ++i) {
+            const row = this.rows[i]
+            const top = y + i * rowHeight - this.scroll.offset
+            const header = row.kind === 'header'
+            if (row.kind === 'game' || row.kind === 'lobby') {
+                ctx.fillStyle = row.yourTurn ? '#ffd54f' : 'white'
+                ctx.fillRect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight)
+                ctx.strokeStyle = row.id === this.selectedId ? 'black' : '#747474'
+                ctx.lineWidth = (row.id === this.selectedId ? 0.003 : 0.001) * WIDTH
+                ctx.strokeRect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight)
+            }
+            // Long rows shrink to fit the list width.
+            let fontSize = (header ? 0.55 : 0.45) * rowHeight
+            const maxWidth = width - 4 * pad
+            ctx.font = `${header ? 'bold ' : ''}${fontSize}px Times New Roman`
+            const textWidth = ctx.measureText(row.text).width
+            if (textWidth > maxWidth) {
+                fontSize *= maxWidth / textWidth
+                ctx.font = `${header ? 'bold ' : ''}${fontSize}px Times New Roman`
+            }
+            ctx.fillStyle = row.kind === 'empty' ? '#747474' : 'black'
+            ctx.textAlign = 'left'
+            ctx.fillText(row.text, x + 2 * pad, top + rowHeight / 2)
+        }
+        ctx.restore()
+    }
+}
+
+// The signed-in hub: your games and open lobbies from lobby:list, re-fetched on lobby:listChanged.
 class OnlineHubTree {
-    constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+    constructor(_menu) {
+        this.menu = _menu
         this.account = null
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.33, 0.04 * WIDTH, '', 'black')
-        // Temporary until the lobby list lands: the password game settings.
-        this.createButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.42}, 'create game',
+        this.feed = null
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', 'black')
+        this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
+        const arrow = (y, text, direction) => new MenuButton(
+            new Rect(WIDTH * 0.875, y, WIDTH * 0.05, HEIGHT * 0.1, [0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH],
+                0.0035 * WIDTH, 'white'),
+            Menu.getButtonText(text), () => this.list.scroll.scrollBy(direction * this.list.scroll.pageStep))
+        this.scrollUpButton = arrow(HEIGHT * 0.31, '▲', -1)
+        this.scrollDownButton = arrow(HEIGHT * 0.68, '▼', 1)
+        const rowY = HEIGHT * 0.83
+        // Temporary until TASK-300: the password game settings.
+        this.createButton = Menu.getButton({x: WIDTH * 0.1, y: rowY}, 'create game',
             _menu.setTree, _menu.online, true, _menu)
-        this.nicknameButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.56}, 'change nickname',
+        this.nicknameButton = Menu.getButton({x: WIDTH * 0.375, y: rowY}, 'change nickname',
             _menu.setTree, _menu.nickname, true, _menu)
         // The label is longer than the other menu buttons'.
         for (const text of [this.nicknameButton.text, this.nicknameButton.selectedText]) text.fontSize *= 0.75
         this.backButton = new Empty()
         this.setAccount(null)
     }
-    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
-        this.backButton = Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', _menu.setTree, parent, true, _menu)
+    setParent(parent, _menu) {
+        this.backButton = Menu.getButton({x: WIDTH * 0.65, y: HEIGHT * 0.83}, 'back', _menu.setTree, parent, true, _menu)
         this.setAccount(this.account)
     }
     // A null account means the stored session is still being checked.
     setAccount(account) {
         this.account = account
         this.status.text = account ? 'Signed in as ' + account.nickname : 'signing in…'
-        this.buttons = account ? [this.createButton, this.nicknameButton, this.backButton] : [this.backButton]
+        this.buttons = account ? [this.list, this.scrollUpButton, this.scrollDownButton,
+            this.createButton, this.nicknameButton, this.backButton] : [this.backButton]
+        if (account && this.menu.selectedTree === this) this.startFeed()
+    }
+    startFeed() {
+        this.feed ||= new HubListFeed(onlineSession, rows => this.list.setRows(rows))
+        return this.feed.start()
+    }
+    enter() {
+        this.list.setRows([])
+        if (this.account) this.startFeed()
+    }
+    leave() {
+        this.feed?.stop()
+    }
+    // Row texts in list order, for tests and diagnostics.
+    get rowTexts() {
+        return this.list.rows.map(row => row.text)
+    }
+    wheel(pos, deltaY) {
+        if (this.account) this.list.wheel(pos, deltaY)
     }
     click(pos) {
         for (const button of this.buttons) button.click(pos)
@@ -858,6 +973,7 @@ class Menu {
     setEvents(boolean) {
         if (boolean) {
             document.addEventListener('click', menuClick)
+            document.addEventListener('wheel', menuWheel)
             if (mobilePhone) {
                 document.addEventListener('touchstart', menuTouchStart)
                 document.addEventListener('touchmove', menuTouchMove)
@@ -865,6 +981,7 @@ class Menu {
             }
         } else {
             document.removeEventListener('click', menuClick)
+            document.removeEventListener('wheel', menuWheel)
             if (mobilePhone) {
                 document.removeEventListener('touchstart', menuTouchStart)
                 document.removeEventListener('touchmove', menuTouchMove)
@@ -907,6 +1024,9 @@ class Menu {
     }
     click(pos) {
         this.selectedTree.click(pos)
+    }
+    wheel(pos, deltaY) {
+        this.selectedTree.wheel?.(pos, deltaY)
     }
     touchEnd(pos) {
         for (let i = 0; i < this.selectedTree.buttons.length; ++i) {
