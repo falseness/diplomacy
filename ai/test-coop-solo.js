@@ -28,13 +28,19 @@ function generated(count) {
   f.compare(`roster-${count}`, f.evaluate('players.map(p=>p.role)'),['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS']);
   return f;
 }
+// Typed schedule: the first wave is round 4 (melee imp, ranged spitter per portal).
+function firstWave(g) {
+  const types=composeTypedCoopWave(4,g.evaluate('external.filter(p=>p.isDemonPortal).map(p=>({x:p.coord.x,y:p.coord.y,category:p.category}))')).types;
+  assert(types.length>0&&types.every(t=>t==='imp'||t==='spitter'),'first wave is imp/spitter only');
+  return types;
+}
 const f=generated(1);
 f.compare('local-online-settings',f.evaluate(`(()=>{const m=new Menu(); globalThis.menu=m;
-  m.play.toggleMode(); m.online.toggleMode(); return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.online.playersSlider.minimumValue(),m.online.playersSlider.maximumValue()]})()`),[1,4,2,4]);
-for(const count of [0,1.5,5]) {
-  f.compare(`reject-local-${count}`,f.evaluate(`(()=>{try{generateCoopGame(${count});return false}catch(e){return /integer from 1 to 4/.test(e.message)}})()`),true);
+  m.play.toggleMode(); m.online.toggleMode(); return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.online.playersSlider.minimumValue(),m.online.playersSlider.maximumValue()]})()`),[1,12,2,12]);
+for(const count of [0,1.5,13]) {
+  f.compare(`reject-local-${count}`,f.evaluate(`(()=>{try{generateCoopGame(${count});return false}catch(e){return /integer from 1 to 12/.test(e.message)}})()`),true);
 }
-for(const count of [0,1,1.5,5]) {
+for(const count of [0,1.5,13]) {
   assert.throws(()=>getHumanSlots({gameSettings:{coop:{initialHumanCount:count}}}),/Unsupported online co-op human count/);
   console.log(`PASS reject-online-${count} expected=rejection observed=rejection`);
 }
@@ -42,17 +48,19 @@ for(const count of [2,3,4]) {
   const peer=generated(count);
   const slots=Array.from({length:count},(_,i)=>i+1);
   f.compare(`online-valid-${count}`,getHumanSlots(peer.evaluate('JSON.parse(JSON.stringify(getGameObject()))')),slots);
-  for(let round=1;round<=3;round++) {
+  const wave=firstWave(peer).length;
+  for(let round=1;round<=4;round++) {
     for(let i=0;i<count;i++) peer.evaluate('nextTurn()');
     peer.compare(`local-round-${count}-${round}`,peer.evaluate('({round:gameRound,turn:whooseTurn,demonPhases,phases})'),
-      {round,turn:1,demonPhases:round,phases:Array.from({length:round},(_,i)=>({round:i+1,spawned:i===2?count*2:0}))});
+      {round,turn:1,demonPhases:round,phases:Array.from({length:round},(_,i)=>({round:i+1,spawned:i===3?wave:0}))});
   }
 }
-for(let round=1;round<=3;round++) {
-  // Third round is dispatched by the actual timer expiration path.
-  f.evaluate(round===3?'timer.lastPause=Date.now()-timer.time-1; timer.check()':'nextTurn()');
+const soloWave=firstWave(f);
+for(let round=1;round<=4;round++) {
+  // Fourth (first wave) round is dispatched by the actual timer expiration path.
+  f.evaluate(round===4?'timer.lastPause=Date.now()-timer.time-1; timer.check()':'nextTurn()');
   f.compare(`solo-round-${round}`,f.evaluate('({round:gameRound,turn:whooseTurn,demonPhases,phases,gold:players[2].gold,units:players[2].units.map(u=>u.name)})'),
-    {round,turn:1,demonPhases:round,phases:Array.from({length:round},(_,i)=>({round:i+1,spawned:i===2?2:0})),gold:0,units:round===3?['imp','imp']:[]});
+    {round,turn:1,demonPhases:round,phases:Array.from({length:round},(_,i)=>({round:i+1,spawned:i===3?soloWave.length:0})),gold:0,units:round===4?soloWave:[]});
   f.compare(`solo-timer-${round}`,f.evaluate('timer.time'),(12+10+Math.floor((100+round*10)/3))*1000);
   f.evaluate('globalThis.saved=JSON.stringify(getGameObject());loadFromJson(saved);');
   f.compare(`solo-save-load-${round}`,f.evaluate('JSON.stringify(getGameObject())===saved'),true);
@@ -67,4 +75,4 @@ for(const result of ['victory','defeat']) {
   g.evaluate('loadFromJson(JSON.stringify(getGameObject()));');
   g.compare(`solo-${result}-restored`,g.evaluate('gameSettings.coop.result'),result);
 }
-console.log('PASS solo generation rounds=3 demon_phases=3 timer_dispatch=1 save_load=3 results=2 online_minimum=2');
+console.log('PASS solo generation rounds=4 demon_phases=4 timer_dispatch=1 save_load=4 results=2 online_minimum=2');
