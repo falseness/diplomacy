@@ -635,19 +635,31 @@ function placeCircleTerrain(plan, layout) {
             const remaining = target - placed, frontier = frontierOf(k)
             // Small remainders extend a cluster so every cell keeps a same-kind neighbour.
             const attach = frontier.length > 0 && (remaining < 3 || random() < attachShare)
-            let seed
-            if (attach) seed = frontier[pick(frontier.length)]
-            else {
+            // A new cluster keeps clear of same-kind cells outside itself, so it stays a separate group;
+            // an attached one may touch only the group it extends, so it never bridges two groups.
+            const clear = (id, cluster) => around(id).every(n => kind[n] !== k || cluster.includes(n))
+            const groupOf = id => {
+                const group = [id]
+                for (let i = 0; i < group.length; i++) for (const n of around(group[i])) if (kind[n] === k && !group.includes(n)) group.push(n)
+                return group
+            }
+            let seed, home = []
+            if (attach) {
+                const single = frontier.filter(id => clear(id, groupOf(around(id).find(n => kind[n] === k))))
+                const seeds = single.length ? single : frontier
+                seed = seeds[pick(seeds.length)]
+                home = groupOf(around(seed).find(n => kind[n] === k))
+            } else {
                 const free = []
-                for (let id = 0; id < area; id++) if (open(id)) free.push(id)
+                for (let id = 0; id < area; id++) if (open(id) && clear(id, [])) free.push(id)
                 if (!free.length) break
                 seed = free[pick(free.length)]
             }
-            const size = attach && remaining < 3 ? remaining : Math.min(remaining, 3 + pick(4))
+            const size = attach && remaining < 3 ? remaining : Math.min(remaining, 2 + pick(3))
             const cluster = [seed]
             kind[seed] = k
             while (cluster.length < size) {
-                const next = [...new Set(cluster.flatMap(around))].filter(open)
+                const next = [...new Set(cluster.flatMap(around))].filter(id => open(id) && clear(id, [...cluster, ...home]))
                 if (!next.length) break
                 const id = next[pick(next.length)]
                 kind[id] = k; cluster.push(id)
@@ -661,9 +673,9 @@ function placeCircleTerrain(plan, layout) {
         }
         report[name] = {target, achieved: placed, deviation: placed - target, acceptedClusters: accepted, rejectedClusters: rejected}
     }
-    grow('mountains', 0.5)
-    grow('lakes', 0.25)
-    grow('bushes', 0.25)
+    grow('mountains', 0.1)
+    grow('lakes', 0.1)
+    grow('bushes', 0.1)
     accepts()
     const cellsOf = k => {
         const list = []

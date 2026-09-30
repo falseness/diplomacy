@@ -17,7 +17,7 @@ const FAULTS = {
     'terrain-outside-radius': [['for (let id = 0; id < area; id++) if (layers[id] > radius) forbidden[id] = 1', ''],
         ['const around = id => Array.from(adjacent.subarray(adjacentStart[id], adjacentStart[id + 1]))',
             'const around = id => circleNeighbours(cell(id), side).map(idOf)']],
-    'wall-off-portal': [["    grow('bushes', 0.25)\n", "    for (const n of around(portalIds[0])) kind[n] = CIRCLE_TERRAIN_KINDS.mountains\n    grow('bushes', 0.25)\n"]]
+    'wall-off-portal': [["    grow('bushes', 0.1)\n", "    for (const n of around(portalIds[0])) kind[n] = CIRCLE_TERRAIN_KINDS.mountains\n    grow('bushes', 0.1)\n"]]
 };
 if (fault !== undefined && !FAULTS[fault]) { console.error(`unknown fault ${fault}`); process.exit(2); }
 
