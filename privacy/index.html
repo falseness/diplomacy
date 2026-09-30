@@ -12,19 +12,25 @@
 </head>
 <body>
 <h1>Diplomacy — Privacy Policy</h1>
-<p>Last updated: September 29, 2026</p>
+<p>Last updated: September 30, 2026</p>
 
 <h2>What we collect</h2>
-<p>When you sign in with Google, we receive a signed token from Google that contains your Google account identifier, email address and name. We use it only to recognize you as the same player across sessions. We store only an anonymous identifier derived from your Google account ID. We do not store your email address, name or profile picture.</p>
+<p>When you sign in with Google, we receive a signed token from Google that contains your Google account identifier, email address, name and profile picture. We use it only to recognize you as the same player across sessions. From that token we store only a one-way hash of your Google account ID, which cannot be turned back into the ID. We do not store your email address, name or profile picture.</p>
+
+<h2>Your player account</h2>
+<p>Your account record holds that hash, a player number and a nickname. The nickname starts as "player" followed by your player number (for example, player12), and you can change it at any time. Your nickname is visible to other players in lobbies and games.</p>
+
+<h2>Sign-in sessions</h2>
+<p>After you sign in, we create a session token so you stay signed in when you reload the page. The server keeps only a hash of the session token, for up to 30 days, after which it is deleted automatically. The token itself is kept in your browser's localStorage; you can remove it by clearing this site's data in your browser.</p>
 
 <h2>Game data</h2>
-<p>We store the games you play (moves, game state and game settings), linked to that anonymous identifier, so that online games can continue between sessions.</p>
+<p>We store your lobby membership (which lobbies you created or joined) and records of the games you play (moves, game state, game settings and which seat is yours), linked to your player account, so that online games can continue between sessions.</p>
 
 <h2>How we use it</h2>
 <p>This data is used only to run the game. We do not sell or share it with third parties, and we do not use it for advertising or analytics.</p>
 
 <h2>Deleting your data</h2>
-<p>To delete your data, email us at the address below and we will remove your games and identifier.</p>
+<p>To delete your data, email us at the address below and we will remove your player account, sessions, lobby membership and games.</p>
 
 <h2>Contact</h2>
 <p><a href="mailto:freebobra@gmail.com">freebobra@gmail.com</a></p>
