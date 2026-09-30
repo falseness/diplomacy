@@ -6,6 +6,19 @@ function neighbours(c) {
   return [{x:c.x,y:c.y-1},{x:c.x,y:c.y+1},
     ...[-1,1].flatMap(dx=>[0,1].map(dy=>({x:c.x+dx,y:c.y+shift+dy})))];
 }
+// Hexagonal maps mask every cell beyond the radius (InvisibleMountain at runtime).
+function hexLayer(c, center) {
+  const q=c.x, r=c.y-Math.floor(c.x/2);
+  return Math.max(Math.abs(q-center.q),Math.abs(r-center.r),Math.abs(q+r-center.q-center.r));
+}
+function masked(map) {
+  const s=map.mapShape;
+  return s&&s.type==='hexagonal' ? c=>hexLayer(c,s.center)>s.radius : ()=>false;
+}
+function playableArea(map) {
+  const s=map.mapShape;
+  return s&&s.type==='hexagonal' ? 3*s.radius*s.radius+3*s.radius+1 : map.mapSize.x*map.mapSize.y;
+}
 function components(cells) {
   const remaining=new Set(cells.map(key)), sizes=[];
   for(const origin of cells) {
@@ -20,13 +33,14 @@ function components(cells) {
 function routes(map) {
   const targets=[...map.portals,...map.players[0].towns,...map.goldmines];
   const endpoints=new Set([...map.portals,...map.players[0].towns].map(key));
+  const outside=masked(map);
   return map.players.slice(1,1+map.coop.initialHumanCount).map((human,i)=>{
     const blocked=new Set([...map.lakes,...map.mountains,
       ...map.players.slice(1).flatMap((p,j)=>j===i?[]:p.towns)].map(key));
     const queue=[human.towns[0]], seen=new Set();
     for(let head=0;head<queue.length;head++) {
       const c=queue[head], id=key(c);
-      if(c.x<0||c.y<0||c.x>=map.mapSize.x||c.y>=map.mapSize.y||blocked.has(id)||seen.has(id)) continue;
+      if(c.x<0||c.y<0||c.x>=map.mapSize.x||c.y>=map.mapSize.y||outside(c)||blocked.has(id)||seen.has(id)) continue;
       seen.add(id);
       if(!endpoints.has(id)) queue.push(...neighbours(c));
     }
@@ -34,11 +48,11 @@ function routes(map) {
   });
 }
 function audit(map,label) {
-  const area=map.mapSize.x*map.mapSize.y;
+  const area=playableArea(map), outside=masked(map);
   const towns=map.players.flatMap(p=>p.towns);
   const all=[...towns,...map.portals,...map.goldmines,...map.hills,...map.lakes,...map.mountains,...map.bushes];
   assert.equal(new Set(all.map(key)).size,all.length,label+' disjoint');
-  assert(all.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<map.mapSize.x&&c.y<map.mapSize.y),label+' bounds');
+  assert(all.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<map.mapSize.x&&c.y<map.mapSize.y&&!outside(c)),label+' bounds');
   assert([...map.lakes,...map.mountains,...map.bushes].every(c=>towns.every(t=>Math.abs(c.x-t.x)>1||Math.abs(c.y-t.y)>1)),label+' starting-neighborhoods');
   const categories={};
   for(const [kind,target] of [['mountains',8],['lakes',6],['bushes',10]]) {

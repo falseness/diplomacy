@@ -240,7 +240,7 @@ if (require.main === module) {
     const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
     const outputDir = path.resolve(option('--output-dir') || 'artifacts/TASK-268');
     const fault = option('--fault');
-    // Same derivation as coopValleyAttemptSeed (ai/generateMap.js), the production retry sequence.
+    // Same derivation as coopCircleAttemptSeed (ai/generateMap.js), the production retry sequence.
     const attemptSeed = (seed, attempt) => attempt ? (seed ^ Math.imul(attempt, 0x9e3779b9)) >>> 0 : seed;
     const ATTEMPTS = 8, SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1];
     const colorOf = i => ({r: (i * 37) % 256, g: (i * 91) % 256, b: (i * 53) % 256});

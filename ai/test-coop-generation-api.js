@@ -8,8 +8,11 @@ const {createTurnLedger} = require('./test-coop-turn-ledger');
 const {initialEntities} = require('./test-coop-generation-fixtures');
 // Literal version-5 contract, independent of production scaling helpers.
 const colors = [{r:255,g:0,b:0},{r:98,g:168,b:222},{r:60,g:190,b:100},{r:230,g:170,b:40}];
-const sideFor = count => Math.max(15, Math.ceil(25*Math.sqrt(count/4)));
-// Divided Valley terrain follows 8/6/10% density within 2 points of area.
+// Normal Circle baseline radius: smallest R >= 13 with R*R >= 121*count; growth adds at most 8.
+const baselineFor = count => { let R = 13; while (R*R < 121*count) R++; return R; };
+const layerOf = (c, R) => { const q = c.x - R, r = c.y - Math.floor(c.x/2) - Math.ceil(R/2);
+  return Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)); };
+// Circle terrain follows 8/6/10% density within 2 points of the playable hex area.
 const terrainWithin = (actual, area, percent) => Math.abs(actual - Math.round(area*percent/100)) <= area*0.02;
 function run() {
   const f = createFixture(undefined, line => {
@@ -28,11 +31,14 @@ function run() {
       globalThis.generated = generateCoopGame(${count}, {seed:${seed}});`);
     if (process.argv.includes('--corrupt')) expectedCoop.initialHumanCount++;
     f.compare(label+'-generation-metadata', f.evaluate('generated.coop'), expectedCoop);
-    // Version-4 Divided Valley places resources exactly and terrain around
+    // Version-5 Circle places resources exactly and terrain around
     // density targets. Assert its public contract independently, then track
     // these validated placements across start/load.
     const expected = f.evaluate('JSON.parse(JSON.stringify(generated))');
-    const side = sideFor(count), area = side*side;
+    const R = expected.mapShape.radius, side = 2*R+1, area = 3*R*R+3*R+1;
+    f.compare(label+'-radius', {growthOk: Number.isInteger(R) && R >= baselineFor(count) && R <= baselineFor(count)+8,
+      shape: expected.mapShape}, {growthOk: true,
+      shape: {type:'hexagonal', center:{q:R, r:Math.ceil(R/2)}, radius:R, offset:{x:0, y:0}}});
     f.compare(label+'-dimensions-counts-assets', {
       dimensions:expected.mapSize,
       counts:[expected.players[0].towns.length,expected.goldmines.length,expected.portals.length],
@@ -51,7 +57,7 @@ function run() {
       ...expected.portals,...expected.mountains,...expected.lakes,...expected.bushes];
     f.compare(label+'-placements-valid', {
       unique:new Set(objects.map(c=>`${c.x},${c.y}`)).size===objects.length,
-      inBounds:objects.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<side&&c.y<side)
+      inBounds:objects.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<side&&c.y<side&&layerOf(c,R)<=R)
     }, {unique:true,inBounds:true});
     f.compare(label+'-active-game-unchanged', f.evaluate('JSON.stringify(getGameObject()) === beforeGeneration'), true);
     f.compare(label+'-repeat', f.evaluate(`JSON.stringify(generated) === JSON.stringify(generateCoopGame(${count}, {seed:${seed}}))`), true);

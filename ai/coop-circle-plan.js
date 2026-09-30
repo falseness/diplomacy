@@ -173,11 +173,26 @@ function circleRingOrder(plan, layer) {
     return cells.sort((a, b) => a.angle - b.angle).map(c => ({x: c.x, y: c.y}))
 }
 
+// Layer of every cell id (y * side + x), shared per radius; the plan center is
+// always coopHexCenter(radius). circlePassableConnected runs once per candidate
+// placement, so recomputing layers there dominated generation time.
+const circleLayerTables = new Map()
+function circleLayerTable(plan) {
+    let table = circleLayerTables.get(plan.radius)
+    if (!table) {
+        const {side, center} = plan
+        table = new Int16Array(side * side)
+        for (let id = 0; id < side * side; id++) table[id] = circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center)
+        circleLayerTables.set(plan.radius, table)
+    }
+    return table
+}
+
 // Free cells (layer <= R, not solid) form one component and every listed object
 // touches it. Cells with layer > R are always solid (InvisibleMountain at runtime).
 function circlePassableConnected(plan, solid, objects) {
-    const {side, center, radius} = plan
-    const inside = id => circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center) <= radius
+    const {side, radius} = plan, layers = circleLayerTable(plan)
+    const inside = id => layers[id] <= radius
     const seen = new Uint8Array(side * side), queue = []
     let open = 0
     for (let id = 0; id < side * side; id++) if (inside(id) && !solid.has(id)) {
@@ -206,10 +221,10 @@ function circlePassableConnected(plan, solid, objects) {
 // keeps the passable region connected.
 function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
     if (typeof colorOf !== 'function') throw new TypeError('Circle starts require coopPlayerColor')
-    const {side, humans, radius, center} = plan, elite = plan.regions.elite
+    const {side, humans, radius} = plan, elite = plan.regions.elite
     const assets = circleStartScaling(humans, plan.size).startingAssets
     const shuffle = circleShuffler(plan.seed ^ 0x9e3779b9)
-    const layerOf = id => circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center)
+    const layers = circleLayerTable(plan), layerOf = id => layers[id]
     const ring = circleRingOrder(plan, plan.regions.townRing), N = ring.length
     let towns = null, start = null
     for (const s of shuffle([...Array(N).keys()])) {
@@ -408,11 +423,11 @@ const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged', 'support']
 // nearest reachable ring cell to that human's town, keeping the nearest-portal
 // path spread level for the terrain stage.
 function placeCirclePortals(plan, layout) {
-    const {side, humans, radius, center} = plan, {elite, ringOuter} = plan.regions
+    const {side, humans, radius} = plan, {elite, ringOuter} = plan.regions
     const targets = circleScaling(humans, plan.size).counts.portalCategories
     const shuffle = circleShuffler(plan.seed ^ 0xc2b2ae35)
     const cell = id => ({x: id % side, y: Math.floor(id / side)}), idOf = c => c.y * side + c.x
-    const layerOf = id => circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center)
+    const layers = circleLayerTable(plan), layerOf = id => layers[id]
     const townIds = layout.players.flatMap(p => p.towns.map(idOf)), mineIds = layout.goldmines.map(idOf)
     const occupied = new Set([...townIds, ...mineIds]), reserved = new Set(layout.reserved.map(idOf))
     const around = id => circleNeighbours(cell(id), side).map(idOf).filter(n => layerOf(n) <= radius)

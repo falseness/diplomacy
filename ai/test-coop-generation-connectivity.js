@@ -7,11 +7,14 @@ const f=createFixture(undefined,()=>{}),rows=[];
 const index=process.argv.indexOf('--output-dir');
 const out=path.resolve(index<0?'artifacts/TASK-122':process.argv[index+1]);
 fs.mkdirSync(out,{recursive:true});
-for(const size of ['tiny','normal','big']) for(let count=1;count<=12;count++) for(let seed=0;seed<32;seed++) {
+const seedsIndex=process.argv.indexOf('--seeds');
+const seeds=seedsIndex<0?32:Number(process.argv[seedsIndex+1]);
+assert(Number.isInteger(seeds)&&seeds>=1&&seeds<=32,'--seeds must be an integer from 1 to 32');
+for(const size of ['tiny','normal','big']) for(let count=1;count<=12;count++) for(let seed=0;seed<seeds;seed++) {
   const label=`${size}-humans-${count}-seed-${seed}`;
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}})`);
   const map=f.evaluate('JSON.parse(JSON.stringify(generated))');
-  const expected=Array.from({length:count},()=>Array(count*3*{tiny:1,normal:2,big:3}[size]).fill(true)),observed=routes(map);
+  const expected=Array.from({length:count},()=>Array(count*(10+2*{tiny:1,normal:2,big:3}[size])).fill(true)),observed=routes(map);
   assert.deepEqual(observed,expected,label);
   const row={scenario:label,expected,observed};
   if(seed===0) {
@@ -32,7 +35,10 @@ for(const size of ['tiny','normal','big']) for(let count=1;count<=12;count++) fo
         return targets.map(c=>seen.has(c.x+','+c.y));
       });
     })()`);
-    assert.deepEqual(row.runtimeObserved,expected,label+' runtime-Way');
+    // A teammate's owned starting mine is an allied building, never entered at runtime.
+    const targets=[...map.portals,...map.players[0].towns,...map.goldmines];
+    row.runtimeExpected=Array.from({length:count},(_,i)=>targets.map(c=>!(c.owner>0&&c.owner!==i+1)));
+    assert.deepEqual(row.runtimeObserved,row.runtimeExpected,label+' runtime-Way');
   }
   rows.push(row);console.log(JSON.stringify(row));console.log('PASS connectivity '+label);
 }
@@ -48,4 +54,4 @@ assert(routes(repaired).flat().every(Boolean));
 console.log(JSON.stringify({scenario:'isolated-start-repair',expected:{connected:true,densityBounds:true},observed:{connected:true,densityBounds:true},repair}));
 console.log('PASS isolated-start-repair');
 fs.writeFileSync(path.join(out,'connectivity-matrix.json'),JSON.stringify(rows,null,2)+'\n');
-console.log('PASS connectivity matrix=1152 sizes=tiny,normal,big humans=1..12 seeds=0..31 runtime_Way=36 isolated_repair=passed');
+console.log(`PASS connectivity matrix=${rows.length} sizes=tiny,normal,big humans=1..12 seeds=0..${seeds-1} runtime_Way=36 isolated_repair=passed`);

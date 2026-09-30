@@ -33,12 +33,22 @@ function createSeededRandom(seed) {
 // must also be reachable; hostile buildings cannot be used as transit cells.
 const COOP_START_BALANCE = Object.freeze({assetDisparity: 0, pathDisparity: 4})
 
+// Cells outside a hexagonal map's radius; they become InvisibleMountain at runtime.
+function coopMaskedCells(map) {
+    const shape = map.mapShape, cells = []
+    if (!shape || shape.type !== 'hexagonal') return cells
+    for (let x = 0; x < map.mapSize.x; x++) for (let y = 0; y < map.mapSize.y; y++)
+        if (coopHexLayer(x, y, shape.center) > shape.radius) cells.push({x, y})
+    return cells
+}
+
 function coopStartBalanceMetrics(map) {
     const key = c => `${c.x},${c.y}`
     const groups = [map.goldmines, map.players[0].towns, map.portals]
     const terminal = new Set([...groups[1], ...groups[2]].map(key))
+    const masked = coopMaskedCells(map)
     return map.players.slice(1, 1 + map.coop.initialHumanCount).map((p, index) => {
-        const blocked = new Set([...map.lakes, ...map.mountains,
+        const blocked = new Set([...map.lakes, ...map.mountains, ...masked,
             ...map.players.slice(1).flatMap((other, i) => i === index ? [] : other.towns)].map(key))
         const start = p.towns[0], distances = new Map(), queue = []
         if (start && !blocked.has(key(start))) { distances.set(key(start), 0); queue.push(start) }
@@ -67,7 +77,7 @@ function coopStartsBalanced(map) {
 }
 
 const COOP_MAP_SIZES = Object.freeze(Object.fromEntries(
-    ['tiny', 'normal', 'big'].map(size => [size, getCoopMapScaling(4, size).side])))
+    ['tiny', 'normal', 'big'].map(size => [size, 2 * getCoopMapScaling(4, size).baselineRadius + 1])))
 
 // Transactional, dimension-aware rebuild. Fixed towns and starting assets never
 // move during repair; each attempt uses finite placement pools and terrain growth.
@@ -77,19 +87,22 @@ function enforceCoopStartBalance(map, force = false) {
     const humans = map.players.slice(1, 1 + map.coop.initialHumanCount)
     const scaling = getCoopMapScaling(map.coop.initialHumanCount, size)
     if (map.coop.generation.version !== 5) fail('unsupported generation version')
-    const side = valleyRowPlans(map.coop.initialHumanCount, size).side
-    if (map.mapSize.x !== side || map.mapSize.y !== side ||
+    const shape = map.mapShape || {}, R = shape.radius
+    if (shape.type !== 'hexagonal' || !Number.isInteger(R) ||
+        map.mapSize.x !== 2 * R + 1 || map.mapSize.y !== 2 * R + 1 ||
         map.goldmines.length !== scaling.counts.goldmines ||
         map.players[0].towns.length !== scaling.counts.neutralTowns) fail('invalid dimensions or resource count')
     if (humans.some(p => p.gold !== 100 || p.towns.length !== 1 || p.units.length !== 0))
         fail('unequal starting assets')
     const towns = map.players.flatMap(p => p.towns)
-    if (towns.some(t => !Number.isInteger(t.x) || !Number.isInteger(t.y) ||
-        t.x < 2 || t.y < 2 || t.x >= side-2 || t.y >= side-2) ||
+    const layer = c => coopHexLayer(c.x, c.y, shape.center)
+    const objects = [...towns, ...map.goldmines, ...(map.portals || []), ...map.lakes, ...map.mountains, ...map.bushes]
+    if (towns.some(t => !Number.isInteger(t.x) || !Number.isInteger(t.y)) ||
+        humans.some(p => layer(p.towns[0]) !== R - 3) || objects.some(c => layer(c) > R) ||
         towns.some((t,i) => towns.slice(i+1).some(u => Math.abs(t.x-u.x)<3 && Math.abs(t.y-u.y)<3)))
         fail('invalid fixed towns')
     if (!force && coopStartsBalanced(map)) return {status:'balanced', iterations:0, iterationLimit:8}
-    return repairCoopValley(map, fail)
+    return repairCoopCircle(map, fail)
 }
 
 // Pure generation API: callers explicitly start the returned GameMap. Counts
@@ -111,49 +124,50 @@ function generateCoopGame(playerCount, options = {}) {
         throw new RangeError('Co-op size must be tiny, normal or big')
     }
     const failures = []
-    for (let attempt = 0; attempt < COOP_VALLEY_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < COOP_CIRCLE_ATTEMPTS; attempt++) {
         try {
-            return buildCoopValleyCandidate(playerCount, size, seed, attempt)
+            return buildCoopCircleCandidate(playerCount, size, seed, attempt)
         } catch (error) {
             failures.push(error)
         }
     }
     const last = failures[failures.length - 1]
-    throw new Error(`Co-op Divided Valley generation failed: size=${size} playerCount=${playerCount} seed=${seed} ` +
-        `attempts=${failures.length}/${COOP_VALLEY_ATTEMPTS} constraint=${last.constraint} ` +
+    throw new Error(`Co-op Circle generation failed: size=${size} playerCount=${playerCount} seed=${seed} ` +
+        `attempts=${failures.length}/${COOP_CIRCLE_ATTEMPTS} constraint=${last.constraint} ` +
         `failures=${failures.map(f => f.attempt + ':' + f.constraint).join(',')} detail=${last.message}`)
 }
 
-// Divided Valley candidates (ai/coop-valley-plan.js). Attempt 0 uses the seed
+// Circle candidates (ai/coop-circle-plan.js). Attempt 0 uses the seed
 // itself; later attempts use distinct derived seeds, so the at most eight full
 // candidates are deterministic. Every stage keeps finite pools and throws on
-// exhaustion; no partial map, row layout or relaxed bound is ever returned.
-const COOP_VALLEY_ATTEMPTS = 8
+// exhaustion; no partial map or relaxed bound is ever returned.
+const COOP_CIRCLE_ATTEMPTS = 8
 
-function coopValleyAttemptSeed(seed, attempt) {
+function coopCircleAttemptSeed(seed, attempt) {
     return attempt ? (seed ^ Math.imul(attempt, 0x9e3779b9)) >>> 0 : seed
 }
 
 // A complete version-5 map detached from the active runtime, or an error
 // tagged with the attempt and failed constraint (stage).
-function buildCoopValleyCandidate(playerCount, size, seed, attempt) {
+function buildCoopCircleCandidate(playerCount, size, seed, attempt) {
     let constraint = 'region-plan'
     try {
-        const plan = planDividedValley(playerCount, size, coopValleyAttemptSeed(seed, attempt))
+        const plan = planCoopCircle(playerCount, size, coopCircleAttemptSeed(seed, attempt))
+        const R = plan.radius
         constraint = 'starting-towns'
-        const starts = placeValleyStarts(plan, coopPlayerColor)
+        const starts = placeCircleStarts(plan, coopPlayerColor)
         constraint = 'neutral-expansions'
-        const expansions = placeValleyExpansions(plan, starts)
+        const expansions = placeCircleExpansions(plan, starts)
         constraint = 'portal-groups'
-        const portals = placeValleyPortals(plan, expansions)
+        const portals = placeCirclePortals(plan, expansions)
         constraint = 'terrain-formations'
-        const layout = placeValleyTerrain(plan, portals)
+        const layout = placeCircleTerrain(plan, portals)
         const copy = c => ({x: c.x, y: c.y})
         const roster = [{rgb: {...layout.players[0].rgb}, towns: layout.players[0].towns.map(copy), units: [], gold: 0},
             ...layout.players.slice(1).map(p => ({rgb: {...p.rgb}, gold: p.gold, units: [], towns: p.towns.map(copy)}))]
-        const map = new GameMap({x: plan.side, y: plan.side}, roster,
+        const map = new GameMap({x: 2 * R + 1, y: 2 * R + 1}, roster,
             layout.goldmines.map(m => ({...copy(m), owner: m.owner, income: m.income})),
-            layout.lakes.map(copy), layout.mountains.map(copy), layout.bushes.map(copy), [], {type: 'rectangular'}, {})
+            layout.lakes.map(copy), layout.mountains.map(copy), layout.bushes.map(copy), [], coopHexMapShape(R), {})
         map.coop.generation = {version: 5, playerCount, seed, size, options: {seed, size}}
         map.portals = layout.portals.map(p => ({...copy(p), category: p.category}))
         constraint = 'portal-categories'
@@ -194,18 +208,18 @@ function validateCoopTypedPortals(map) {
             `observed ${portals.length} (${JSON.stringify(observed)})`)
 }
 
-// Version-4 repair never moves towns, resources or assets. It replays the same
-// deterministic candidates and restores portals and terrain (with them the
-// ridge, passages and laterals) only from a balanced, connected candidate whose
-// fixed objects match exactly; otherwise the map is left untouched.
-function repairCoopValley(map, fail) {
+// Repair never moves towns, resources or assets. It replays the same
+// deterministic candidates and restores portals and terrain only from a
+// balanced, connected candidate whose fixed objects match exactly; otherwise
+// the map is left untouched.
+function repairCoopCircle(map, fail) {
     const {playerCount, seed, size} = map.coop.generation
     const fixed = m => JSON.stringify([m.mapSize, m.players.slice(0, 1 + m.coop.initialHumanCount), m.goldmines])
     const failures = []
-    for (let attempt = 0; attempt < COOP_VALLEY_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < COOP_CIRCLE_ATTEMPTS; attempt++) {
         let candidate
         try {
-            candidate = buildCoopValleyCandidate(playerCount, size, seed, attempt)
+            candidate = buildCoopCircleCandidate(playerCount, size, seed, attempt)
         } catch (error) {
             failures.push(attempt + ':' + error.constraint)
             continue
@@ -215,9 +229,9 @@ function repairCoopValley(map, fail) {
             continue
         }
         for (const kind of ['portals', 'lakes', 'mountains', 'bushes', 'hills']) map[kind] = candidate[kind]
-        return {status:'balanced', strategy:'valley-replay', iterations:attempt + 1, iterationLimit:COOP_VALLEY_ATTEMPTS}
+        return {status:'balanced', strategy:'circle-replay', iterations:attempt + 1, iterationLimit:COOP_CIRCLE_ATTEMPTS}
     }
-    fail(`version=4 attempts=${COOP_VALLEY_ATTEMPTS} failures=${failures.join(',')}`)
+    fail(`version=5 attempts=${COOP_CIRCLE_ATTEMPTS} failures=${failures.join(',')}`)
 }
 
 // Offset-column hex coordinates converted to axial coordinates. Distances count
@@ -235,7 +249,7 @@ function coopRoutesConnected(map) {
     const key = c => `${c.x},${c.y}`
     const targets = [...map.portals, ...map.players[0].towns, ...map.goldmines]
     const terminal = new Set([...map.portals, ...map.players[0].towns].map(key))
-    const terrain = [...map.lakes, ...map.mountains]
+    const terrain = [...map.lakes, ...map.mountains, ...coopMaskedCells(map)]
     return map.players.slice(1, 1 + map.coop.initialHumanCount).every((player, index) => {
         const start = player.towns[0]
         const blocked = new Set([...terrain, ...map.players.slice(1).flatMap((p, i) =>
