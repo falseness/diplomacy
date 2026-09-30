@@ -24,6 +24,7 @@ const ELITE = ['chaos', 'heavy', 'siege', 'mage'];
 const COMMON = ['melee', 'ranged', 'support'];
 const MAX_GROWTH = 8;
 const BALANCE_ASSERTIONS = ['starting-asset-balance', 'nearest-objective-balance'];
+const RETRYABLE = [...BALANCE_ASSERTIONS, 'planner-throws'];
 
 // Offset columns (odd columns lower) -> axial q = x, r = y - floor(x/2); cube distance.
 const key = c => `${c.x},${c.y}`;
@@ -288,7 +289,11 @@ if (require.main === module) {
         const rows = [];
         let allRejected = true;
         for (const size of SIZES) {
-            const map = assemble(4, size, 0, 0);
+            // First attempt that assembles, as generateCoopGame would pick it.
+            let map = null;
+            for (let attempt = 0; !map && attempt < ATTEMPTS; attempt++) {
+                try { map = assemble(4, size, 0, attempt); } catch (error) { if (attempt === ATTEMPTS - 1) throw error; }
+            }
             FAULTS[fault].apply(map);
             const r = verifyCircle(map);
             const ok = !r.valid && r.failed.includes(FAULTS[fault].assertion);
@@ -312,10 +317,11 @@ if (require.main === module) {
             try { map = assemble(humans, size, seed, attempt); r = verifyCircle(map); }
             catch (error) { r = {valid: false, failed: ['planner-throws'], assertions: ASSERTIONS.map(a => a[0]), error: error.message}; map = null; }
             history.push({attempt, attemptSeed: attemptSeed(seed, attempt), failed: r.failed});
-            if (r.valid || r.failed.some(f => !BALANCE_ASSERTIONS.includes(f))) break;
+            if (r.valid || r.failed.some(f => !RETRYABLE.includes(f))) break;
         }
-        // Non-balance failures on any attempt, or balance still failing after 8 attempts, invalidate the case.
-        const nonBalance = history.flatMap(h => h.failed.filter(f => !BALANCE_ASSERTIONS.includes(f)));
+        // Non-retryable failures on any attempt, or balance/planner throws still failing after 8 attempts,
+        // invalidate the case. generateCoopGame retries planner throws too (random starts, TASK-334).
+        const nonBalance = history.flatMap(h => h.failed.filter(f => !RETRYABLE.includes(f)));
         const valid = r.valid && !nonBalance.length;
         const failed = valid ? [] : [...new Set([...nonBalance, ...r.failed])];
         let sha = null;

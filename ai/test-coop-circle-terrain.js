@@ -7,6 +7,7 @@
 // Usage: node ai/test-coop-circle-terrain.js [--output-dir DIR] [--fault terrain-outside-radius|wall-off-portal]
 'use strict';
 const fs = require('fs'), path = require('path'), Module = require('module'), crypto = require('crypto');
+const {withCircleTestAttempts} = require('./coop-circle-test-attempts');
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
@@ -87,20 +88,21 @@ function paths(R, origin, solid, endpoints) {
     return distance;
 }
 
-const build = (humans, size, seed) => {
-    const plan = planner.planCoopCircle(humans, size, seed);
+// Production retry sequence: the first attempt seed whose stages all build wins.
+const build = (humans, size, seed) => withCircleTestAttempts(seed, s => {
+    const plan = planner.planCoopCircle(humans, size, s);
     const starts = planner.placeCircleStarts(plan, colorOf);
     const portals = planner.placeCirclePortals(plan, planner.placeCircleExpansions(plan, starts));
     return {plan, layout: portals, terrain: planner.placeCircleTerrain(plan, portals)};
-};
+});
 
 const failures = [];
 const assert = (name, ok, detail) => { if (!ok) failures.push({name, detail}); };
 const matrix = [], reachability = [];
 for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (const seed of SEEDS) {
     const id = {size, humans, seed};
-    let plan, result;
-    try { ({plan, terrain: result} = build(humans, size, seed)); }
+    let plan, result, attempt;
+    try { ({plan, terrain: result, attempt} = build(humans, size, seed)); }
     catch (error) { assert('planner-throws', false, {...id, error: error.message}); continue; }
     const R = plan.radius, side = 2 * R + 1, playable = 3 * R * R + 3 * R + 1;
     const counts = {};
@@ -149,7 +151,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         [name, !list.length || list.every(v => v === null) ? 0 : list.some(v => v === null) ? null : Math.max(...list) - Math.min(...list)]));
     assert('reachability', unreached === 0, {...id, pairs, unreached});
     assert('spread-within-4', Object.values(spreads).every(s => s !== null && s <= 4), {...id, spreads, nearest});
-    matrix.push({size, humans, seed, radius: R, playable, counts, maxLayer, freeComponents: conn.components,
+    matrix.push({size, humans, seed, attempt, radius: R, playable, counts, maxLayer, freeComponents: conn.components,
         detachedObjects: conn.detachedObjects, conflicts, nearest, spreads, maxSpread: Math.max(...Object.values(spreads))});
     reachability.push({size, humans, seed, radius: R, towns: towns.length, portals: portals.length, neutralTowns: neutral.length,
         goldmines: mines.length, pairsChecked: pairs, unreached, allReached: unreached === 0});

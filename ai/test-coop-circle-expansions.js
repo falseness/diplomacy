@@ -7,6 +7,7 @@
 const fs = require('fs'), path = require('path'), Module = require('module'), crypto = require('crypto');
 const {coopHexLayer} = require('./coop-hex-geometry');
 const {circleTestBands} = require('./coop-circle-test-bands');
+const {withCircleTestAttempts} = require('./coop-circle-test-attempts');
 const {getCoopMapScaling} = require('./coop-map-scaling');
 
 const args = process.argv.slice(2);
@@ -96,11 +97,13 @@ const assert = (name, ok, detail) => { if (!ok) failures.push({name, detail}); }
 const matrix = [], fairness = [];
 for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (const seed of SEEDS) {
     const id = {size, humans, seed};
-    let plan, starts, layout;
+    let plan, starts, layout, attempt;
     try {
-        plan = planner.planCoopCircle(humans, size, seed);
-        starts = planner.placeCircleStarts(plan, colorOf);
-        layout = planner.placeCircleExpansions(plan, starts);
+        // Production retry sequence: the first attempt seed whose stages build wins.
+        ({plan, starts, layout, attempt} = withCircleTestAttempts(seed, s => {
+            const plan = planner.planCoopCircle(humans, size, s), starts = planner.placeCircleStarts(plan, colorOf);
+            return {plan, starts, layout: planner.placeCircleExpansions(plan, starts)};
+        }));
     } catch (error) { assert('planner-throws', false, {...id, error: error.message}); continue; }
     const R = plan.radius, E = circleTestBands(R, humans, size).E, side = 2 * R + 1, center = {q: R, r: Math.ceil(R / 2)};
     const target = getCoopMapScaling(humans, size).counts;
@@ -155,7 +158,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         unfairMines: unfair, allStrictlyFarther: unfair === 0});
     const conn = components(R, allObjects);
     assert('connectivity', conn.components === 1 && conn.detachedObjects === 0, {...id, conn});
-    matrix.push({size, humans, seed, radius: R, eliteLayer: E,
+    matrix.push({size, humans, seed, attempt, radius: R, eliteLayer: E,
         neutralTowns: {placed: neutral.length, target: target.neutralTowns},
         goldmines: {placed: layout.goldmines.length, target: target.goldmines, starting: humans, further: further.length},
         minExpansionLayer: minLayer, nearestNeutralDistance: nearest, neutralSpread: spread,
@@ -169,8 +172,10 @@ const determinism = [];
 for (const [humans, size, seed] of [[1, 'tiny', 0], [5, 'tiny', 31], [2, 'normal', 0], [7, 'normal', 777], [4, 'big', 1], [12, 'big', 65535]]) {
     const run = () => {
         planner.clearCirclePlanCache();
-        const plan = planner.planCoopCircle(humans, size, seed);
-        return JSON.stringify(planner.placeCircleExpansions(plan, planner.placeCircleStarts(plan, colorOf)));
+        return JSON.stringify(withCircleTestAttempts(seed, s => {
+            const plan = planner.planCoopCircle(humans, size, s);
+            return planner.placeCircleExpansions(plan, planner.placeCircleStarts(plan, colorOf));
+        }));
     };
     let first, second;
     try { first = run(); second = run(); }

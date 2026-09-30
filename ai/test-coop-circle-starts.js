@@ -15,8 +15,7 @@ const fault = option('--fault');
 // Fault injections rewrite the planner source before it is loaded.
 const FAULTS = {
     'off-ring': [['circleRingOrder(plan, plan.regions.townRing)', 'circleRingOrder(plan, plan.regions.townRing - 1)']],
-    'collide-towns': [['ring[(s + Math.floor(i * N / humans)) % N]', 'ring[(s + i) % N]'],
-        ['circleChebyshev(t, u) >= 3', 'circleChebyshev(t, u) >= 0']]
+    'collide-towns': [['circleHexDistance(t, ring[j]) >= CIRCLE_START_SPACING', 'circleHexDistance(t, ring[j]) >= 0']]
 };
 if (fault !== undefined && !FAULTS[fault]) { console.error(`unknown fault ${fault}`); process.exit(2); }
 
@@ -100,13 +99,19 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         if (minChebyshev === null || d < minChebyshev) minChebyshev = d;
     }
     assert('town-chebyshev', minChebyshev === null || minChebyshev >= 3, {...id, minChebyshev});
+    let minHex = null;
+    for (let i = 0; i < towns.length; i++) for (let j = i + 1; j < towns.length; j++) {
+        const d = hexDistance(towns[i], towns[j]);
+        if (minHex === null || d < minHex) minHex = d;
+    }
+    assert('town-hex-distance', minHex === null || minHex >= 5, {...id, minHex});
     // Angular gaps along the test's own ring walk.
     const walk = ringWalk(R, R - 3), index = new Map(walk.order.map((c, i) => [key(c), i]));
     assert('ring-walk', walk.complete && walk.order.length === 6 * (R - 3), {...id, walked: walk.order.length});
     const positions = towns.map(t => index.get(key(t))).filter(i => i !== undefined).sort((a, b) => a - b);
     const gaps = positions.map((p, i) => i + 1 < positions.length ? positions[i + 1] - p : positions[0] + walk.order.length - p);
     const gapSpread = gaps.length === towns.length ? Math.max(...gaps) - Math.min(...gaps) : null;
-    assert('gap-spread', gapSpread !== null && gapSpread <= 1, {...id, gaps});
+    assert('towns-on-walk', positions.length === towns.length, {...id, positions});
     // Mines: one per human, owned, income 20, layer > E, not on a town or reservation.
     const mines = layout.goldmines, mineLayers = mines.map(m => layerAt(m, R));
     const ownedBy = humansList.map(p => mines.filter(m => m.owner === p.slot).length);
@@ -128,7 +133,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     assert('connectivity', conn.connected, {...id, conn});
     connectivityRows.push({size, humans, seed, radius: R, solidOutsideRadius: side * side - (3 * R * R + 3 * R + 1), ...conn});
     matrix.push({size, humans, seed, radius: R, eliteLayer: E, townRing: R - 3, ringCells: walk.order.length,
-        towns, townLayers, minChebyshev, gaps, gapSpread,
+        towns, townLayers, minChebyshev, minHex, gaps, gapSpread,
         mines: mines.map((m, i) => ({x: m.x, y: m.y, owner: m.owner, income: m.income, layer: mineLayers[i]})),
         minesPerHuman: ownedBy, reservationsDisjoint: disjoint, reservedCells: layout.reserved.length, reservedOutsideRadius: reservedOutside});
 }

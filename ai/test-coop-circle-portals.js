@@ -8,6 +8,7 @@
 const fs = require('fs'), path = require('path'), Module = require('module'), crypto = require('crypto');
 const {coopHexLayer} = require('./coop-hex-geometry');
 const {circleTestBands} = require('./coop-circle-test-bands');
+const {withCircleTestAttempts} = require('./coop-circle-test-attempts');
 const {getCoopMapScaling} = require('./coop-map-scaling');
 
 const args = process.argv.slice(2);
@@ -74,19 +75,20 @@ function components(R, objects) {
     return {components: count, detachedObjects: detached};
 }
 
-const build = (humans, size, seed) => {
-    const plan = planner.planCoopCircle(humans, size, seed);
+// Production retry sequence: the first attempt seed whose stages all build wins.
+const build = (humans, size, seed) => withCircleTestAttempts(seed, s => {
+    const plan = planner.planCoopCircle(humans, size, s);
     const layout = planner.placeCircleExpansions(plan, planner.placeCircleStarts(plan, colorOf));
     return {plan, layout, portals: planner.placeCirclePortals(plan, layout)};
-};
+});
 
 const failures = [];
 const assert = (name, ok, detail) => { if (!ok) failures.push({name, detail}); };
 const matrix = [], approachRows = [];
 for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (const seed of SEEDS) {
     const id = {size, humans, seed};
-    let plan, layout, result;
-    try { ({plan, layout, portals: result} = build(humans, size, seed)); }
+    let plan, layout, result, attempt;
+    try { ({plan, layout, portals: result, attempt} = build(humans, size, seed)); }
     catch (error) { assert('planner-throws', false, {...id, error: error.message}); continue; }
     const R = plan.radius, {E, ringOuter} = circleTestBands(R, humans, size), D = TOWN_DISTANCE[size], side = 2 * R + 1;
     const center = {q: R, r: Math.ceil(R / 2)};
@@ -124,7 +126,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     assert('recorded-approaches', approachesValid, id);
     const conn = components(R, [...layout.players.flatMap(p => p.towns), ...layout.goldmines, ...portals]);
     assert('connectivity', conn.components === 1 && conn.detachedObjects === 0, {...id, conn});
-    matrix.push({size, humans, seed, radius: R, eliteLayer: E, ringOuter, townDistance: D,
+    matrix.push({size, humans, seed, attempt, radius: R, eliteLayer: E, ringOuter, townDistance: D,
         categories: table, minTownDistance, minPortalDistance, freeRegion: conn,
         portals: portals.map(p => ({x: p.x, y: p.y, category: p.category}))});
     approachRows.push({size, humans, seed, portals: portals.length, minFreeAdjacent: Math.min(...freeAdjacent),

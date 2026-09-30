@@ -174,6 +174,10 @@ const circleStartScaling = typeof getCoopMapScaling === 'function' ? getCoopMapS
 const CIRCLE_NEUTRAL_RGB = Object.freeze({r: 208, g: 208, b: 208})
 const CIRCLE_OFFSETS3 = Object.freeze([-1, 0, 1].flatMap(dy => [-1, 0, 1].map(dx => Object.freeze({x: dx, y: dy}))))
 const circleChebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+const circleHexDistance = (a, b) => circleGeometry.coopHexLayer(a.x, a.y, {q: b.x, r: b.y - Math.floor(b.x / 2)})
+// Minimum hex distance between human towns, and seeded shuffles tried before giving up.
+const CIRCLE_START_SPACING = 5
+const CIRCLE_START_ATTEMPTS = 64
 
 function circleShuffler(seed) {
     const rng = createCircleRandom(seed >>> 0)
@@ -238,9 +242,10 @@ function circlePassableConnected(plan, solid, objects) {
 }
 
 // Starting towns on the town ring (layer R-3) and one owned mine per human.
-// Towns sit at ring indices start + floor(i*N/h), so consecutive angular gaps
-// differ by at most one ring cell; the start is drawn from a seeded shuffle and
-// the first start whose towns are pairwise Chebyshev >= 3 wins. Each town's 3x3
+// Towns are random ring cells: each attempt walks a seeded shuffle of the ring
+// and greedily keeps cells at hex distance >= CIRCLE_START_SPACING and
+// Chebyshev >= 3 from every kept town; up to CIRCLE_START_ATTEMPTS shuffles are
+// tried. Slots follow ring order. Each town's 3x3
 // neighbourhood is reserved, then every human gets the nearest free cell with
 // layer > E (BFS with layer > R and other towns solid, mines as endpoints) that
 // keeps the passable region connected.
@@ -251,14 +256,17 @@ function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function'
     const shuffle = circleShuffler(plan.seed ^ 0x9e3779b9)
     const layers = circleLayerTable(plan), layerOf = id => layers[id]
     const ring = circleRingOrder(plan, plan.regions.townRing), N = ring.length
-    let towns = null, start = null
-    for (const s of shuffle([...Array(N).keys()])) {
-        const picked = [...Array(humans).keys()].map(i => ring[(s + Math.floor(i * N / humans)) % N])
-        if (picked.every((t, i) => picked.every((u, j) => j <= i || circleChebyshev(t, u) >= 3))) {
-            towns = picked; start = s; break
+    let indices = null
+    for (let attempt = 0; attempt < CIRCLE_START_ATTEMPTS && !indices; attempt++) {
+        const picked = []
+        for (const k of shuffle([...Array(N).keys()])) {
+            const t = ring[k]
+            if (picked.every(j => circleHexDistance(t, ring[j]) >= CIRCLE_START_SPACING && circleChebyshev(t, ring[j]) >= 3)) picked.push(k)
+            if (picked.length === humans) { indices = picked.sort((a, b) => a - b); break }
         }
     }
-    if (!towns) throw new Error(`Circle has no town ring sites: size=${plan.size} humans=${humans}`)
+    if (!indices) throw new Error(`Circle has no town ring sites: size=${plan.size} humans=${humans}`)
+    const towns = indices.map(k => ring[k]), start = indices[0]
     const idOf = c => c.y * side + c.x, cell = id => ({x: id % side, y: Math.floor(id / side)})
     const reserved = new Set()
     for (const t of towns) for (const o of CIRCLE_OFFSETS3) reserved.add(idOf({x: t.x + o.x, y: t.y + o.y}))
@@ -295,7 +303,6 @@ function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function'
         }
         if (!assigned[i]) throw new Error(`Circle has no nearby mine: size=${plan.size} humans=${humans} slot=${i + 1}`)
     }
-    const indices = towns.map((_, i) => (start + Math.floor(i * N / humans)) % N)
     return {
         version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize, radius,
         stages: ['towns', 'reserve-neighbourhoods', 'nearby-mines'],
