@@ -7,7 +7,6 @@ let onlineCommit = null
 // [target, event, handler] of the open game; a lobby game's socket is the
 // signed-in session socket, which outlives the game and only loses these.
 let onlineListeners = []
-let onlineSocketOwned = false
 
 function onlineLobbyText() {
     if (!gameSettings.isOnline || !onlineLobby) return ''
@@ -73,22 +72,19 @@ function rebaseOnlineValue(base, local, remote) {
     return remote
 }
 
-// Stops the open online game: a legacy password socket is closed, the session
-// socket of a lobby game stays connected for the hub.
+// Stops the open online game: the signed-in session socket stays connected for
+// the hub and only loses the game's listeners.
 function closeOnlineGameSocket() {
-    const socket = onlineSocket
     onlineSocket = null
     for (const [target, event, handler] of onlineListeners) target.off(event, handler)
     onlineListeners = []
-    if (socket && onlineSocketOwned) socket.disconnect()
 }
 
 // A lobby game (lobby:started or a 'your games' row): game:open on the signed-in
 // session socket; the first board enters the game, with no save-slot picker.
 function openLobbyGame(gameID) {
     gameSettings.isOnline = true
-    unsafeVariablePassword = ''
-    SetupServerCommunicationLogic('', gameID)
+    SetupServerCommunicationLogic(gameID)
 }
 
 function enterLobbyGame() {
@@ -99,13 +95,10 @@ function enterLobbyGame() {
     requestAnimationFrame(gameLoop)
 }
 
-// password: the legacy startGameOrConnect game; gameID: a lobby game (password unused).
-function SetupServerCommunicationLogic(password, gameID = null) {
-    const lobbyGame = gameID !== null
+// Plays the lobby game gameID over the signed-in session socket.
+function SetupServerCommunicationLogic(gameID) {
     closeOnlineGameSocket()
-    onlineSocketOwned = !lobbyGame
-    const socket = onlineSocket = lobbyGame ? onlineSession.connect() :
-        io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER, {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
+    const socket = onlineSocket = onlineSession.connect()
     const listeners = onlineListeners
     const on = (target, event, handler) => {
         target.on(event, handler)
@@ -140,17 +133,11 @@ function SetupServerCommunicationLogic(password, gameID = null) {
         }
         const retry = button('Retry', () => {
             panel.remove()
-            SetupServerCommunicationLogic(password, gameID)
+            SetupServerCommunicationLogic(gameID)
         })
         button('Back to menu', () => {
             panel.remove()
-            if (lobbyGame) return menu.back()
-            onlineSocket = null
-            socket.disconnect()
-            gameExit = true
-            menu.visible = true
-            menu.start()
-            menu.setTree(menu.main)
+            menu.back()
         })
         document.body.append(panel)
         retry.focus()
@@ -218,7 +205,7 @@ function SetupServerCommunicationLogic(password, gameID = null) {
             gameEvent.hideAll()
         }
         loadFromJson(JSON.stringify(restored))
-        if (lobbyGame && menu.visible) enterLobbyGame()
+        if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
         acceptedBoard = board
@@ -287,13 +274,10 @@ function SetupServerCommunicationLogic(password, gameID = null) {
         timer.pause()
     });
 
-    const requestCurrentGame = lobbyGame ? async () => {
+    const requestCurrentGame = async () => {
         const ack = await onlineSession.openGame(gameID)
         if (!ack.ok && ack.error !== 'TIMEOUT') fail('The server rejected the action.')
-    } : () => socket.emit('startGameOrConnect', JSON.stringify({
-        'password': password,
-        'game': getGameObject()
-    }))
+    }
     on(socket, 'connect', () => {
         if (socket !== onlineSocket) return
         // A transport reconnect keeps this socket and its listeners. Resume
@@ -304,18 +288,15 @@ function SetupServerCommunicationLogic(password, gameID = null) {
         onlineCommit = null
         competitiveDelivery = null
         acceptedBoard = null
-        // A lobby game's session re-sends auth:session, then game:open.
-        if (!lobbyGame) requestCurrentGame()
+        // The session re-sends auth:session, then game:open.
     })
-    if (lobbyGame || socket.connected) requestCurrentGame()
+    requestCurrentGame()
     SendNextTurn = () => {
         if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')
         const gameObject = getGameObject()
         // whoseTurn currently means the only index of CURRENT player on client
-        socket.emit('nextTurn', JSON.stringify(lobbyGame ?
-            {'gameID': gameID, 'game': gameObject, 'whooseTurn': whooseTurn} :
-            {'password': password, 'game': gameObject, 'whooseTurn': whooseTurn}))
+        socket.emit('nextTurn', JSON.stringify({'gameID': gameID, 'game': gameObject, 'whooseTurn': whooseTurn}))
     }
 }

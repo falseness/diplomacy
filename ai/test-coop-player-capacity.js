@@ -59,15 +59,15 @@ async function run() {
   const f=createFixture(undefined,()=>{});
   compare('unique-palette',new Set(palette.map(String)).size,12);
   compare('reserved-colors-excluded',palette.some(p=>['208,208,208','160,40,180'].includes(String(p))),false);
-  compare('local-online-limits',f.evaluate(`(()=>{const m=new Menu();menu=m;m.play.toggleMode();m.online.toggleMode();
-    return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.online.playersSlider.minimumValue(),m.online.playersSlider.maximumValue()]})()`),[1,12,2,12]);
+  compare('local-online-limits',f.evaluate(`(()=>{const m=new Menu();menu=m;m.play.toggleMode();m.createLobby.toggleMode();
+    return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.createLobby.playersSlider.minimumValue(),m.createLobby.playersSlider.maximumValue()]})()`),[1,12,2,12]);
   for(const n of [0,1.5,13]) {
     assert.throws(()=>f.evaluate(`generateCoopGame(${n})`),{name:'RangeError'});
     assert.throws(()=>f.evaluate(`coopPlayerColor(${n})`),{name:'RangeError'});
     console.log(`PASS invalid-local-wave-palette-${n} expected=RangeError observed=RangeError`);
   }
   for(const n of [0,1,1.5,13]) {
-    assert.throws(()=>f.evaluate(`menu.online.playersSlider.value=${n};menu.online.selectedMap`),{name:'RangeError'});
+    assert.throws(()=>f.evaluate(`menu.createLobby.playersSlider.value=${n};menu.createLobby.selectedMap`),{name:'RangeError'});
     console.log(`PASS invalid-online-${n} expected=RangeError observed=RangeError`);
   }
   for(const count of [0,13]) {

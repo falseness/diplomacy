@@ -155,7 +155,9 @@ function runContinuing() {
     timer = {updateLastPause() {}, pause() {}}
     GameManager.updateCameraBorders = () => {}
     gameEvent.waitingMode = false
-    SetupServerCommunicationLogic('local-test-password')
+    onlineSession.openGame = async () => ({ok: true, playerIndex: 1})
+    enterLobbyGame = () => {}
+    SetupServerCommunicationLogic('task247-local')
   })()`);
   assert.equal(socket.url, LOCAL_SERVER);
   const start = board(f);

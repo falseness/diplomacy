@@ -19,7 +19,9 @@ e(`GameManager.clearBasisValues=()=>{}; GameManager.updateCameraBorders=()=>{};
    globalThis.nextTurnPauseInterface={visible:false};
    globalThis.SetupServerCommunicationLogic=()=>{}; undefined;`);
 function start(name,index=0,online=false) {
-  e(`GameManager.start(maps[${JSON.stringify(name)}][${index}],false,false,${online});`);
+  // An online board is set up as for lobby:create (GameManager.buildOnlineBoard) without starting a turn.
+  e(online ? `GameManager.setUpBoard(maps[${JSON.stringify(name)}][${index}],false,false,true);`
+    : `GameManager.start(maps[${JSON.stringify(name)}][${index}],false,false);`);
 }
 function state() {return e(`({slot:whooseTurn,round:gameRound,gold:players.slice(1).map(p=>p.gold)})`);}
 function reload() {

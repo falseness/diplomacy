@@ -25,7 +25,7 @@ function menuTouchEnd(event) {
 function start(_slot) {
     gameSlot = _slot
     let game_mode = menu.previousTree
-    GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer, game_mode.isOnline, game_mode.currentPassword)
+    GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer)
 }
 function startAI(_slot) {
     gameSlot = _slot
@@ -165,8 +165,6 @@ function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
 
 class GameSettingsTree {
     isOnline = false
-    // needed for online game
-    currentPassword = 'error'
     constructor(_menu) {
         const rectSize = WIDTH * 0.05
         const cornerR = rectSize * 0.1
@@ -378,8 +376,7 @@ class HotseatSettingsTree extends GameSettingsTree {
     }
 }
 
-// The online game controls shared by the legacy password screen and the lobby
-// flow's create-lobby screen: mode toggle, competitive map/players or co-op
+// The online game controls of the lobby flow's create-lobby screen: mode toggle, competitive map/players or co-op
 // humans/seed/size sliders and 'fog of war'. Online always uses the long timer.
 class OnlineGameSettings {
     isOnline = true
@@ -548,73 +545,9 @@ class OnlineGameSettings {
     }
 }
 
-// The legacy password screen, reached only with window.DIPLOMACY_LEGACY_ONLINE_MENU
-// until TASK-326: the shared controls plus the digit keypad, then the save-slot picker.
-class OnlineSettingsTree extends OnlineGameSettings {
-    constructor(_menu) {
-        super(_menu)
-        const {firstY, intervalY, marginLeft} = this
-        const fontSize = 0.04 * WIDTH
-
-        this.passwordButtons = []
-
-        this.currentPassword = ''
-
-        this.initializePasswordsButtons(firstY, intervalY)
-
-        this.passwordText = new Text(marginLeft,
-            firstY + intervalY * 2, fontSize, 'enter password:', 'black', 'left')
-
-        this.playButton = Menu.getButton(this.actionButtonPos, 'start',
-            _menu.setTree, _menu.startGame, true, _menu)
-
-        this.updateButtonsList()
-    }
-    toggleMode() {
-        super.toggleMode()
-        this.passwordText.fontSize = WIDTH * (this.isCoop ? 0.032 : 0.04)
-    }
-    initializePasswordsButtons(firstY, intervalY) {
-        let updatePassword = function(value) {
-            this.currentPassword += value;
-            this.passwordText.text = this.currentPassword
-            // temporary unsafe thing:
-            unsafeVariablePassword = this.currentPassword
-        }
-
-        const digits_count = 10
-        // just draws to rows of digits
-        for (let i = 0; i < digits_count; ++i) {
-            let size = WIDTH * 0.05
-            let step = WIDTH * 0.07
-
-            let max_digits_in_row = 5
-            let digits_row_width = size * max_digits_in_row + step * (max_digits_in_row - 1)
-            let xOffset = step * (i >= max_digits_in_row ? i - max_digits_in_row : i);
-            let rect = Menu.getButtonRect({x: WIDTH / 2 + xOffset - digits_row_width / 2 + WIDTH * 0.25 / 2,
-                y: firstY + intervalY * 2 - size / 2 + (i >= 5 ? intervalY : 0)})
-            rect.width = rect.height = size
-
-            let res = new MenuButton(
-                rect,
-                Menu.getButtonText(`${i}`),
-                updatePassword, i, true, this)
-            this.passwordButtons.push(res)
-        }
-    }
-    updateButtonsList() {
-        super.updateButtonsList()
-        this.buttons = this.buttons.concat(this.passwordButtons)
-    }
-    draw(ctx) {
-        this.passwordText.draw(ctx)
-        super.draw(ctx)
-    }
-}
-
-// The lobby flow's 'create game' screen: the shared controls without a keypad or
-// save-slot picker. 'create' builds the initial board as GameManager.start does for
-// online games (without entering the game) and sends it with lobby:create.
+// The lobby flow's 'create game' screen: the online controls without a save-slot
+// picker. 'create' builds the initial online board with GameManager.buildOnlineBoard
+// (without entering the game) and sends it with lobby:create.
 class CreateLobbyTree extends OnlineGameSettings {
     constructor(_menu) {
         super(_menu)
@@ -1123,8 +1056,6 @@ class Menu {
         if (this.previousTree !== tree) tree.enter?.()
     }
     openOnline() {
-        // Temporary manual opt-in to the password menu; removed in TASK-326.
-        if (window.DIPLOMACY_LEGACY_ONLINE_MENU === true) return this.setTree(this.online)
         // Late results are dropped once the user has moved elsewhere.
         let expected = this.main
         openOnlineSession({
@@ -1168,8 +1099,6 @@ class Menu {
 
         this.play = new HotseatSettingsTree(this)
 
-        this.online = new OnlineSettingsTree(this)
-
         this.nickname = new NicknameTree(this)
 
         this.createLobby = new CreateLobbyTree(this)
@@ -1205,7 +1134,6 @@ class Menu {
             button.pos = {x: startPos.x, y: HEIGHT * (0.27 + index * 0.12)}
         })
         this.play.setParent(this.main, this)
-        this.online.setParent(this.main, this)
         this.onlineHub.setParent(this.main, this)
         this.createLobby.setParent(this.onlineHub, this)
         this.signIn.setParent(this.main, this)

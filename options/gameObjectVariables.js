@@ -29,7 +29,6 @@ function normalizeInterfaceSettings(settings) {
         settings.interface.drawChanceOfWinningText = false
     return settings
 }
-let unsafeVariablePassword = 'error'
 
 let whooseTurn
 let isFogOfWar = true
@@ -50,7 +49,6 @@ if (typeof module !== 'undefined' && module.exports) {
         gameRound,
         suddenDeathRound,
         gameSettings,
-        unsafeVariablePassword,
         whooseTurn,
         isFogOfWar,
         debug,

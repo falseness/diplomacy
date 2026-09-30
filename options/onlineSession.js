@@ -23,11 +23,11 @@ class OnlineSession {
     }
     connect() {
         if (this.socket) return this.socket
-        // Same io options as SetupServerCommunicationLogic in onlineLogic.js.
+        // The one online socket: the hub and every lobby game use it.
         const socket = this.socket = io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER,
             {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
         // A transport reconnect is a new server socket: authenticate it again,
-        // then re-open the game on screen (it replaces startGameOrConnect here).
+        // then re-open the game on screen.
         socket.io.on('reconnect', async () => {
             if (!this.account || !await this.resume()) return
             if (this.openGameID) this.openGame(this.openGameID)
