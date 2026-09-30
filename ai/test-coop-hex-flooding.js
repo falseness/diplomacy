@@ -15,7 +15,7 @@ const option = name => { const i = process.argv.indexOf(name); return i < 0 ? nu
 const outputDir = option('--output-dir');
 const fault = option('--fault');
 // Literal elite categories and layer formula, independent of the planner/runtime helpers.
-const ELITE = ['chaos', 'heavy', 'siege'];
+const ELITE = ['chaos', 'heavy', 'siege', 'mage'];
 const layerOf = (c, R) => { const q = c.x - R, r = c.y - Math.floor(c.x/2) - Math.ceil(R/2);
   return Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)); };
 const f = createFixture(undefined, () => {});

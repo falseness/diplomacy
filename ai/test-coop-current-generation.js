@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
-const CATEGORIES = ['melee','ranged','siege','heavy','support','chaos'];
-const PER_HUMAN = [3,3,1,1,1,1];
+const CATEGORIES = ['melee','ranged','siege','heavy','support','chaos','mage'];
+const PER_HUMAN = [3,3,1,1,1,1,1];
 const key = c => `${c.x},${c.y}`;
 const inside = (map,c) => Number.isInteger(c.x)&&Number.isInteger(c.y)&&c.x>=0&&c.y>=0&&c.x<map.mapSize.x&&c.y<map.mapSize.y;
 
@@ -37,7 +37,7 @@ function portalChecks(map, count) {
   const counts = Object.fromEntries(CATEGORIES.map(c=>[c,map.portals.filter(p=>p.category===c).length]));
   return [
     {name:'categories', expected:Object.fromEntries(CATEGORIES.map((c,i)=>[c,PER_HUMAN[i]*count])), observed:counts},
-    {name:'counts', expected:10*count, observed:map.portals.length},
+    {name:'counts', expected:11*count, observed:map.portals.length},
     {name:'portals-in-bounds', expected:true, observed:map.portals.every(p=>inside(map,p))},
     {name:'portals-distinct', expected:map.portals.length, observed:new Set(map.portals.map(key)).size},
   ].map(r=>({...r,pass:JSON.stringify(r.expected)===JSON.stringify(r.observed)}));
@@ -46,6 +46,6 @@ function portalChecks(map, count) {
 function checkGeneratedMap(map, count, seed, size = 'normal') {
   assert.deepEqual(map.coop.generation, {version:5,playerCount:count,seed,size,options:{seed,size}});
   for (const r of portalChecks(map,count)) assert.deepEqual(r.observed,r.expected,r.name);
-  console.log(`PASS current-generation size=${size} humans=${count} seed=${seed} portals=${count*10}`);
+  console.log(`PASS current-generation size=${size} humans=${count} seed=${seed} portals=${count*11}`);
 }
 module.exports = {checkGeneratedMap, portalChecks, neighbours, bfs, CATEGORIES};

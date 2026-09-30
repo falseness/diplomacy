@@ -40,12 +40,12 @@ check('source/non-coop-landmarks',calls,['gold','portal']);
 // TASK-239: category portraits stay distinct; rendering is checked by the real browser.
 const artSpec=require('./test-coop-harness').defaultFixture();artSpec.coop=true;
 const artFixture=require('./test-coop-harness').createFixture(artSpec,()=>{});
-const categories=['melee','ranged','siege','heavy','support','chaos'];
+const categories=['melee','ranged','siege','heavy','support','chaos','mage'];
 const images=categories.map(category=>'demonPortal'+category[0].toUpperCase()+category.slice(1));
 const actualArt=artFixture.evaluate(`(() => {whooseTurn=3;grid.getHexagon({x:5,y:4}).firstpaint(3);return ${JSON.stringify(categories)}.map(category=>{const p=new DemonPortal(5,4,category);const image=p.imageName;p.kill();return image;});})()`);
 check('source/portal-artwork',actualArt,images);
 const artwork=images.map(image=>fs.readFileSync(path.join(__dirname,'../assets/sprites',image+'.svg'),'utf8'));
-assert.equal(new Set(artwork).size,6);for(const svg of artwork)assert(svg.includes('<svg'));
+assert.equal(new Set(artwork).size,7);for(const svg of artwork)assert(svg.includes('<svg'));
 const protocol=path.join(out,'protocol');fs.mkdirSync(protocol);
 child(path.resolve(__dirname,'../../diplomacy_server/tests/coop/task244-network.js'),[protocol]);
 const protocolChecks=JSON.parse(fs.readFileSync(path.join(protocol,'checkpoints.json'))).checks;

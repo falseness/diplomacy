@@ -27,7 +27,7 @@ if(require.main===module){
  check(cases[1],f.evaluate(`(() => {gameRound=3;gameSettings.coop.typedWaves.lastRound=4;portal240.drawNextProduction(ctx);return [portal240.nextProduction.round,entityInterface.entity.name.text,entityInterface.portalDescription]})()`),[8,'clawling',true]);
  check(cases[5],f.evaluate(`(() => {
  const result=[];gameSettings.coop.typedWaves.lastRound=0;
- for(const category of ['melee','ranged','siege','heavy','support','chaos']){
+ for(const category of ['melee','ranged','siege','heavy','support','chaos','mage']){
  const p=external.find(e=>e.category===category);gameEvent.selected=p;p.select(false);entityInterface.refreshPortal(p,true);
  const names=[];for(const r of [0,4,8,12,16,20,24,28]){gameRound=r;p.drawNextProduction(ctx);names.push(entityInterface.entity.name.text)}
  result.push(names);
@@ -38,7 +38,8 @@ if(require.main===module){
  ['imp','clawling','clawling','brute','brute','brute','brute','brute'],
  ['spitter','spitter','ember archer','ember archer','ember archer','ember archer','ember archer','ember archer'],
  [...Array(7).fill('bombard'),'mortar'],Array(8).fill('bulwark'),
- ['ravager','ravager','ravager','ravager','ravager','hound','hound','hound'],Array(8).fill('demon lord')]);
+ ['ravager','ravager','ravager','ravager','ravager','hound','hound','hound'],Array(8).fill('demon lord'),
+ [...Array(6).fill('hexcaster'),'hexmaster','hexmaster']]);
  check(cases[6],f.evaluate('inspectionSnapshot240()===before240'),true);
  check(cases[2],f.evaluate(`(() => {
  // Source-only blocked placement fixture, independent of browser gameplay.

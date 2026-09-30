@@ -54,7 +54,7 @@ if (require.main === module) {
       check(id+'-dimensions',[map.mapSize.x,map.mapSize.y].every(n=>Number.isInteger(n)&&n>0),true);
       const contract=portalChecks(map,h);
       for(const r of contract) check(id+'-'+r.name,r.pass,true);
-      check(id+'-initial-humans',getCoopMapScalingFromMetadata({...map.coop,humanSlots:[],survivingPlayers:0}).counts.portals,10*h);
+      check(id+'-initial-humans',getCoopMapScalingFromMetadata({...map.coop,humanSlots:[],survivingPlayers:0}).counts.portals,11*h);
       const reach=endpointResults(map,h);
       check(id+'-mine-endpoint-reach',approachesOk(reach),true);
       check(id+'-mine-endpoint-fairness',Math.max(...reach.map(r=>r.nearest))-Math.min(...reach.map(r=>r.nearest))<=4,true);
@@ -67,12 +67,12 @@ if (require.main === module) {
           ? {name:reason,pass:approachesOk(endpointResults(observation,h))}
           : portalChecks(observation,h).find(r=>r.name===reason);
         check(id+'-negative-'+type,result.pass,false);
-        if(type==='wrong-category')check(id+'-negative-unchanged-total',observation.portals.length,10*h);
+        if(type==='wrong-category')check(id+'-negative-unchanged-total',observation.portals.length,11*h);
         negatives.push({id:id+'-'+type,input,reason,expectedRejection:reason,observedRejection:result.pass?null:reason,result,pass:!result.pass});
       }
       maps.push({id,input,map,contract,endpointResults:reach,duplicateHashes:[sha(result.first),sha(result.second)],identical:true});
       fs.appendFileSync(path.join(out,'progress.log'),`PASS ${id} size=${map.mapSize.x}x${map.mapSize.y} portals=${map.portals.length}\n`);
-      console.log(`PASS ${id} size=${map.mapSize.x}x${map.mapSize.y} portals=${map.portals.length} categories=6 repeat=identical fairness=pass reachability=pass negative-controls=3`);
+      console.log(`PASS ${id} size=${map.mapSize.x}x${map.mapSize.y} portals=${map.portals.length} categories=7 repeat=identical fairness=pass reachability=pass negative-controls=3`);
     }
   } finally {write('maps.json',maps);write('negative-controls.json',negatives);write('checkpoints.json',{cases:selected.map(idOf),checkpoints,pass:maps.length===selected.length&&checkpoints.every(c=>c.pass)});}
   assert.equal(maps.length,selected.length);console.log(`PASS maps=${maps.length}/${selected.length} assertions=${checkpoints.length} negative-controls=${negatives.length}`);

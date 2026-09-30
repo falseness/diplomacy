@@ -71,8 +71,8 @@ for (const size of Object.keys(radiusPreset)) {
       reserved:objects.slice(towns.length).every(c=>towns.every(t=>Math.abs(c.x-t.x)>1||Math.abs(c.y-t.y)>1)),
       humanTownLayers:[...new Set(humanTowns.map(t=>layerOf(t,R)))],
       starts:map.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length])
-    // TASK-151/269: ten typed portals per human; towns and goldmines keep the size multiplier.
-    }, {inBounds:true,unique:objects.length,counts:[count+resources,resources,10*count],terrain:[true,true,true,0],reserved:true,
+    // TASK-151/269: eleven typed portals per human; towns and goldmines keep the size multiplier.
+    }, {inBounds:true,unique:objects.length,counts:[count+resources,resources,11*count],terrain:[true,true,true,0],reserved:true,
       humanTownLayers:[R-3], starts:Array.from({length:count},()=>[100,1,0])});
     const start = f.evaluate(`(() => { try {
       generated.start({clearValues() {external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders() {}}, false);
@@ -82,7 +82,7 @@ for (const size of Object.keys(radiusPreset)) {
     const started = f.evaluate(scanGrid);
     f.evaluate(`whooseTurn=1;actionManager.clear();globalThis.saved=JSON.stringify(getGameObject());globalThis.savedShape=JSON.stringify(gameSettings.mapShape);loadFromJson(saved);`);
     const loaded = f.evaluate(scanGrid);
-    const expectedScan = {maskCells:R*R+R, playableCells:area, maskMismatches:0, portals:10*count, portalsOnMaskedCells:0};
+    const expectedScan = {maskCells:R*R+R, playableCells:area, maskMismatches:0, portals:11*count, portalsOnMaskedCells:0};
     compare(label+'-runtime-mask-started', started, expectedScan);
     compare(label+'-runtime-mask-loaded', loaded, expectedScan);
     compare(label+'-saved-metadata', f.evaluate('gameSettings.coop.generation'),

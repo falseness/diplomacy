@@ -22,16 +22,16 @@ function run(){
   check(label+'-dimensions-counts',`({side:grid.arr.length,height:grid.arr[0].length,initial:gameSettings.coop.initialHumanCount,portals:external.filter(p=>p.isDemonPortal).length,humans:players.filter(p=>p.role==='HUMAN').length,
     neutralTowns:players[0].towns.length,goldmines:goldmines.length,humanTowns:players.slice(1,${count+1}).map(p=>p.towns.length),
     terrain:['mountain','lake','bush'].every(n=>nature.some(t=>t.name===n)),stored:[generated.mountains.length+generated.lakes.length+generated.bushes.length,nature.filter(t=>!t.isMapEdge).length],mask:nature.filter(t=>t.isMapEdge).length})`,
-    {side,height:side,initial:count,portals:10*count,humans:count,neutralTowns:count*multiplier,goldmines:count*multiplier,
+    {side,height:side,initial:count,portals:11*count,humans:count,neutralTowns:count*multiplier,goldmines:count*multiplier,
      humanTowns:Array(count).fill(1),terrain:true,stored:e('[generated.mountains.length+generated.lakes.length+generated.bushes.length,generated.mountains.length+generated.lakes.length+generated.bushes.length]'),mask:R*R+R});
-  results.push({count,size,radius:R,side,portals:10*count,mask:R*R+R});
+  results.push({count,size,radius:R,side,portals:11*count,mask:R*R+R});
   check(label+'-all-registries-and-markers-exact','JSON.stringify(getGameObject())===before',true);
   if(count>1){e(`players[${count}].units.slice().forEach(u=>u.kill());players[${count}].towns.slice().forEach(t=>t.destroy());globalThis.afterDeath=JSON.stringify(getGameObject());loadFromJson(afterDeath)`);
-   check(label+'-eliminated-initial-versus-surviving',`({initial:gameSettings.coop.initialHumanCount,surviving:players.filter(p=>p.role==='HUMAN'&&!p.isLost).length,side:grid.arr.length,portals:external.filter(p=>p.isDemonPortal).length,exact:JSON.stringify(getGameObject())===afterDeath})`,{initial:count,surviving:count-1,side,portals:10*count,exact:true});}
+   check(label+'-eliminated-initial-versus-surviving',`({initial:gameSettings.coop.initialHumanCount,surviving:players.filter(p=>p.role==='HUMAN'&&!p.isLost).length,side:grid.arr.length,portals:external.filter(p=>p.isDemonPortal).length,exact:JSON.stringify(getGameObject())===afterDeath})`,{initial:count,surviving:count-1,side,portals:11*count,exact:true});}
  }
  const i=process.argv.indexOf('--output-dir');
  if(i>=0){fs.mkdirSync(process.argv[i+1],{recursive:true});fs.writeFileSync(path.join(process.argv[i+1],'scaled-save.json'),JSON.stringify(results,null,1)+'\n')}
- console.log('PASS scaled-save presets=3 six_categories=true controls=1,4 metadata=exact ownership_registries=exact phase_markers=exact');
+ console.log('PASS scaled-save presets=3 seven_categories=true controls=1,4 metadata=exact ownership_registries=exact phase_markers=exact');
 }
 module.exports={run};
 if(require.main===module)run();
