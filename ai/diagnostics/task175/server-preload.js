@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 // Explicit --require only on diagnostic ON services. No NODE_OPTIONS use.
 const fs=require('node:fs'), Module=require('node:module'), path=require('node:path');

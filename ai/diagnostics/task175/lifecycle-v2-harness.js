@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),Module=require('node:module');
 const hashFactory=require('./recorder'), hooks=require('./lifecycle-v2-hooks');

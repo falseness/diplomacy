@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const helpers='../../diplomacy_server/tests/reliability/helpers/';

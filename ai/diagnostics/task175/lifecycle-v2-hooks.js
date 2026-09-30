@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 const assert = require('node:assert/strict');
 const esprima = require('/usr/share/nodejs/esprima');

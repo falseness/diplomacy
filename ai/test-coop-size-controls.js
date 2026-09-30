@@ -12,15 +12,14 @@ async function checkSizeLayout(page, tree, compare) {
     return {viewport:[WIDTH,HEIGHT],label:slider.realValue,inside:boxes.every(b=>b.left>=0 && b.right<=WIDTH && b.top>=0 && b.bottom<=HEIGHT),
       clear:boxes.every((b,i)=>boxes.slice(i+1).every(c=>!overlaps(b,c)) && others.every(c=>!overlaps(b,c))),
       readable:slider.text.fontSize>=15 && slider.text.color==='black',seedLabelClear:settings.mapText.right<settings.mapSlider.leftButton.x,
-      humansLabelClear:settings.playersText.right<settings.playersSlider.leftButton.x,
-      passwordLabelClear:tree!=='online' || settings.passwordText.right<settings.passwordButtons[0].x,boxes};
+      humansLabelClear:settings.playersText.right<settings.playersSlider.leftButton.x,boxes};
   }, tree);
   const dimensions = await page.evaluate(tree=>{menu[tree].draw(interfaceCtx);return {humans:menu[tree].playersSlider.value,size:menu[tree].sizeSlider.realValue.toLowerCase(),text:menu[tree].dimensionsText.text}},tree);
   const side=Math.max({tiny:11,normal:15,big:21}[dimensions.size],Math.ceil({tiny:15,normal:25,big:39}[dimensions.size]*Math.sqrt(dimensions.humans/4)));
   compare(tree+'-displayed-dimensions-'+dimensions.humans,dimensions.text,`${side}×${side}`);
   console.log(JSON.stringify({scenario:tree+'-size-layout-measurements',...result}));
   compare(tree+'-size-layout-'+result.viewport.join('x')+'-'+result.label,
-    {inside:result.inside,clear:result.clear,readable:result.readable,seedLabelClear:result.seedLabelClear,humansLabelClear:result.humansLabelClear,passwordLabelClear:result.passwordLabelClear},
-    {inside:true,clear:true,readable:true,seedLabelClear:true,humansLabelClear:true,passwordLabelClear:true});
+    {inside:result.inside,clear:result.clear,readable:result.readable,seedLabelClear:result.seedLabelClear,humansLabelClear:result.humansLabelClear},
+    {inside:true,clear:true,readable:true,seedLabelClear:true,humansLabelClear:true});
 }
 module.exports={checkSizeLayout};

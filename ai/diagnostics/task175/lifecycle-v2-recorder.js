@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 // Passed as source to the browser. No listeners, timers, gameplay properties or
 // raw credentials are added. Object relationships live exclusively in WeakMaps.

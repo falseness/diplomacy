@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 // Only loaded by the standalone diagnostic ON child via explicit --require.
 const fs = require('node:fs'), Module = require('node:module'), crypto = require('node:crypto');

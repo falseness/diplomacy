@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 // Self-contained synchronous recorder, shared by Node and browser. No timers,
 // listeners, network, saved raw identifiers, or callback argument serialization.

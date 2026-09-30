@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 // Offline only: the pinned client runs unchanged apart from recording insertions.
 // XMLHttpRequest and timers are explicit boundary adapters; no sockets/services.

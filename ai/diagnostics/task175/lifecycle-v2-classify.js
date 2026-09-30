@@ -1,3 +1,4 @@
+// historical: uses the pre-TASK-326 password protocol
 'use strict';
 // Across processes, only session + ordered protocol occurrence + exact keyed
 // wire membership are used. Wall-clock proximity is deliberately unavailable.
