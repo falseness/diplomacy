@@ -158,7 +158,8 @@ function onlineNextTurn() {
     actionManager.clear()
 
     timer.setNextTurnTime()
-    saveManager.save()
+    // A lobby game lives on the server, not in a save slot.
+    if (onlineSession.openGameID === null) saveManager.save()
 
     SendNextTurn()
     

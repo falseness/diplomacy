@@ -4,6 +4,10 @@ const DEFAULT_ONLINE_SERVER = 'wss://playdiplomacy.online:8080'
 let onlineLobby = null
 let onlineSocket = null
 let onlineCommit = null
+// [target, event, handler] of the open game; a lobby game's socket is the
+// signed-in session socket, which outlives the game and only loses these.
+let onlineListeners = []
+let onlineSocketOwned = false
 
 function onlineLobbyText() {
     if (!gameSettings.isOnline || !onlineLobby) return ''
@@ -69,9 +73,44 @@ function rebaseOnlineValue(base, local, remote) {
     return remote
 }
 
-function SetupServerCommunicationLogic(password) {
-    if (onlineSocket) { const previous = onlineSocket; onlineSocket = null; previous.disconnect() }
-    const socket = onlineSocket = io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER, {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
+// Stops the open online game: a legacy password socket is closed, the session
+// socket of a lobby game stays connected for the hub.
+function closeOnlineGameSocket() {
+    const socket = onlineSocket
+    onlineSocket = null
+    for (const [target, event, handler] of onlineListeners) target.off(event, handler)
+    onlineListeners = []
+    if (socket && onlineSocketOwned) socket.disconnect()
+}
+
+// A lobby game (lobby:started or a 'your games' row): game:open on the signed-in
+// session socket; the first board enters the game, with no save-slot picker.
+function openLobbyGame(gameID) {
+    gameSettings.isOnline = true
+    unsafeVariablePassword = ''
+    SetupServerCommunicationLogic('', gameID)
+}
+
+function enterLobbyGame() {
+    menu.selectedTree?.leave?.()
+    GameManager.clearBasisValues()
+    lastGameFrameTime = undefined
+    framesPerSecond = 60
+    requestAnimationFrame(gameLoop)
+}
+
+// password: the legacy startGameOrConnect game; gameID: a lobby game (password unused).
+function SetupServerCommunicationLogic(password, gameID = null) {
+    const lobbyGame = gameID !== null
+    closeOnlineGameSocket()
+    onlineSocketOwned = !lobbyGame
+    const socket = onlineSocket = lobbyGame ? onlineSession.connect() :
+        io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER, {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
+    const listeners = onlineListeners
+    const on = (target, event, handler) => {
+        target.on(event, handler)
+        listeners.push([target, event, handler])
+    }
     document.getElementById('online-recovery')?.remove()
     let failed = false
     const fail = message => {
@@ -101,12 +140,13 @@ function SetupServerCommunicationLogic(password) {
         }
         const retry = button('Retry', () => {
             panel.remove()
-            SetupServerCommunicationLogic(password)
+            SetupServerCommunicationLogic(password, gameID)
         })
         button('Back to menu', () => {
+            panel.remove()
+            if (lobbyGame) return menu.back()
             onlineSocket = null
             socket.disconnect()
-            panel.remove()
             gameExit = true
             menu.visible = true
             menu.start()
@@ -116,10 +156,10 @@ function SetupServerCommunicationLogic(password) {
         retry.focus()
     }
     // The shipped Socket.IO 3.0 client reports transport startup errors on its manager.
-    socket.io.on('error', () => fail(socket.connected ? 'Connection lost.' : 'Could not connect. Check your connection.'))
-    socket.on('connect_error', () => fail('Could not connect. Check your connection.'))
-    socket.on('disconnect', () => fail('Connection lost.'))
-    socket.on('error', () => fail('The server rejected the action.'))
+    on(socket.io, 'error', () => fail(socket.connected ? 'Connection lost.' : 'Could not connect. Check your connection.'))
+    on(socket, 'connect_error', () => fail('Could not connect. Check your connection.'))
+    on(socket, 'disconnect', () => fail('Connection lost.'))
+    on(socket, 'error', () => fail('The server rejected the action.'))
     onlineCommit = null
     // Competitive scheduling gives each player one active turn per round.
     // A waiting connection may become active in that same round when its
@@ -172,9 +212,13 @@ function SetupServerCommunicationLogic(password) {
         }
         // Clear references and panels while their old board still exists.
         // A received board may remove a selected entity or hide its cell.
-        gameEvent.removeSelection()
-        gameEvent.hideAll()
+        // A lobby game opened from the menu may have no board yet.
+        if (grid) {
+            gameEvent.removeSelection()
+            gameEvent.hideAll()
+        }
         loadFromJson(JSON.stringify(restored))
+        if (lobbyGame && menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
         acceptedBoard = board
@@ -196,12 +240,12 @@ function SetupServerCommunicationLogic(password) {
         return continuing ? 'continued' : true
     }
     onlineLobby = {mode: gameSettings.coop ? 'coop' : 'competitive', occupiedHumans: null}
-    socket.on('lobbyStatus', status => {
+    on(socket, 'lobbyStatus', status => {
         if (socket !== onlineSocket) return
         onlineLobby = status
     })
 
-    socket.on('gameStarted', game => {
+    on(socket, 'gameStarted', game => {
         console.log('gameStarted')
 
         const delivery = receiveBoard(game, true)
@@ -212,7 +256,7 @@ function SetupServerCommunicationLogic(password) {
         gameEvent.screen.moveToPlayer(players[whooseTurn])
 
     });
-    socket.on('playYourTurn', game => {
+    on(socket, 'playYourTurn', game => {
 
         console.log(`playYourTurn`)
         const delivery = receiveBoard(game, true)
@@ -224,7 +268,7 @@ function SetupServerCommunicationLogic(password) {
         gameEvent.screen.moveToPlayer(players[whooseTurn])
 
     });
-    socket.on('waitYouTurn', game => {
+    on(socket, 'waitYouTurn', game => {
         console.log(`waitYouTurn`)
 
         // let dict = JSON.parse(gameAndTurnIndex)
@@ -243,11 +287,14 @@ function SetupServerCommunicationLogic(password) {
         timer.pause()
     });
 
-    const requestCurrentGame = () => socket.emit('startGameOrConnect', JSON.stringify({
+    const requestCurrentGame = lobbyGame ? async () => {
+        const ack = await onlineSession.openGame(gameID)
+        if (!ack.ok && ack.error !== 'TIMEOUT') fail('The server rejected the action.')
+    } : () => socket.emit('startGameOrConnect', JSON.stringify({
         'password': password,
         'game': getGameObject()
     }))
-    socket.on('connect', () => {
+    on(socket, 'connect', () => {
         if (socket !== onlineSocket) return
         // A transport reconnect keeps this socket and its listeners. Resume
         // only from the saved turn requested below; local uncommitted actions
@@ -257,19 +304,18 @@ function SetupServerCommunicationLogic(password) {
         onlineCommit = null
         competitiveDelivery = null
         acceptedBoard = null
-        requestCurrentGame()
+        // A lobby game's session re-sends auth:session, then game:open.
+        if (!lobbyGame) requestCurrentGame()
     })
-    if (socket.connected) requestCurrentGame()
+    if (lobbyGame || socket.connected) requestCurrentGame()
     SendNextTurn = () => {
         if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')
         const gameObject = getGameObject()
-        socket.emit('nextTurn', JSON.stringify({
-            'password': password,
-            'game': gameObject,
-            // whoseTurn currently means the only index of CURRENT player on client
-            'whooseTurn': whooseTurn
-        }))
+        // whoseTurn currently means the only index of CURRENT player on client
+        socket.emit('nextTurn', JSON.stringify(lobbyGame ?
+            {'gameID': gameID, 'game': gameObject, 'whooseTurn': whooseTurn} :
+            {'password': password, 'game': gameObject, 'whooseTurn': whooseTurn}))
     }
 }

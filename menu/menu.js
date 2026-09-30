@@ -672,8 +672,7 @@ class CreateLobbyTree extends OnlineGameSettings {
 
 // The lobby room: settings, members in join order (host tagged), 'waiting...' seats,
 // 'kick' next to other members and 'start' (enabled when full) for the host, 'leave'.
-// Live from lobby:updated; lobby:kicked returns to the hub. Entering the started game
-// is TASK-302; here lobby:started only shows 'starting...'.
+// Live from lobby:updated; lobby:kicked returns to the hub; lobby:started opens the game.
 class LobbyRoomTree {
     static noView = {lobbyId: null, settingsText: '', countText: '', rows: [], isHost: false, kickAccountIds: [],
         start: {visible: false, enabled: false}}
@@ -710,7 +709,7 @@ class LobbyRoomTree {
         this.socket = socket
         socket.on('lobby:updated', ({lobby} = {}) => { if (this.socket === socket) this.onUpdated(lobby) })
         socket.on('lobby:kicked', ({lobbyId} = {}) => { if (this.socket === socket) this.onKicked(lobbyId) })
-        socket.on('lobby:started', ({lobbyId} = {}) => { if (this.socket === socket) this.onStarted(lobbyId) })
+        socket.on('lobby:started', ({lobbyId, gameID} = {}) => { if (this.socket === socket) this.onStarted(lobbyId, gameID) })
     }
     get myAccountId() {
         return onlineSession.account?.accountId ?? null
@@ -728,9 +727,11 @@ class LobbyRoomTree {
         if (!this.isMine(lobbyId)) return
         this.backToHub(LOBBY_REMOVED_TEXT)
     }
-    onStarted(lobbyId) {
+    // The room is done: the hub is behind the game, which opens with game:open.
+    onStarted(lobbyId, gameID) {
         if (!this.isMine(lobbyId)) return
-        this.status.text = LOBBY_STARTING_TEXT
+        this.backToHub(LOBBY_STARTING_TEXT)
+        this.menu.onlineHub.openGame(gameID)
     }
     setLobby(lobby) {
         this.lobby = lobby
@@ -962,8 +963,10 @@ class OnlineHubTree {
         this.notice = ''
         this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', 'black')
         this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
-        // Opening a game row is TASK-302.
-        this.list.onRow = row => { if (row.kind === 'lobby') this.joinLobby(row.id) }
+        this.list.onRow = row => {
+            if (row.kind === 'lobby') this.joinLobby(row.id)
+            else if (row.kind === 'game') this.openGame(row.id)
+        }
         this.joining = false
         const arrow = (y, text, direction) => new MenuButton(
             new Rect(WIDTH * 0.875, y, WIDTH * 0.05, HEIGHT * 0.1, [0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH],
@@ -1019,6 +1022,11 @@ class OnlineHubTree {
             return
         }
         this.menu.lobbyRoom.open(ack.lobby)
+    }
+    // game:open; the first board enters the game (options/onlineLogic.js).
+    openGame(gameID) {
+        if (this.menu.selectedTree !== this || onlineSession.openGameID !== null) return
+        openLobbyGame(gameID)
     }
     // Row texts in list order, for tests and diagnostics.
     get rowTexts() {
@@ -1255,15 +1263,16 @@ class Menu {
     }
     back() {
         gameExit = true
+        const lobbyGame = onlineSession.openGameID !== null
         if (onlineSocket) {
-            const previous = onlineSocket
-            onlineSocket = null
-            previous.disconnect()
+            closeOnlineGameSocket()
             onlineLobby = null
         }
+        onlineSession.closeGame()
 
         nextTurnPauseInterface.backToMenu()
-        saveManager.save() //some bugs or not
+        // A lobby game lives on the server, not in a save slot.
+        if (!lobbyGame) saveManager.save() //some bugs or not
 
         // very important save first then pause timer
         // so that the timer saves the current remaining time
@@ -1271,7 +1280,12 @@ class Menu {
 
         menu.visible = true
         menu.start()
-        menu.setTree(menu.main)
+        // A lobby game returns to the hub, whose enter re-fetches lobby:list;
+        // the hub already left when the game was entered.
+        if (lobbyGame) {
+            this.selectedTree = this.main
+            this.setTree(this.onlineHub)
+        } else menu.setTree(menu.main)
         this.updateSlotManagers()
     }
     click(pos) {

@@ -18,14 +18,20 @@ class OnlineSession {
     constructor() {
         this.socket = null
         this.account = null
+        // The lobby game on screen (game:open); re-opened after a reconnect.
+        this.openGameID = null
     }
     connect() {
         if (this.socket) return this.socket
         // Same io options as SetupServerCommunicationLogic in onlineLogic.js.
         const socket = this.socket = io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER,
             {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
-        // A transport reconnect is a new server socket: authenticate it again.
-        socket.io.on('reconnect', () => { if (this.account) this.resume() })
+        // A transport reconnect is a new server socket: authenticate it again,
+        // then re-open the game on screen (it replaces startGameOrConnect here).
+        socket.io.on('reconnect', async () => {
+            if (!this.account || !await this.resume()) return
+            if (this.openGameID) this.openGame(this.openGameID)
+        })
         return socket
     }
     // Resolves the ack, or {ok: false, error: 'TIMEOUT'} when none arrives.
@@ -79,6 +85,14 @@ class OnlineSession {
     }
     startLobby(lobbyId) {
         return this.request('lobby:start', {lobbyId})
+    }
+    // game:open: the server answers with the board (playYourTurn/waitYouTurn/gameStarted), then acks.
+    openGame(gameID) {
+        this.openGameID = gameID
+        return this.request('game:open', {gameID})
+    }
+    closeGame() {
+        this.openGameID = null
     }
 }
 
