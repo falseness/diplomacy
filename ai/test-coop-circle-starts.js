@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Starting town and mine checks for placeCircleStarts (ai/coop-circle-plan.js).
+// Starting town checks for placeCircleStarts (ai/coop-circle-plan.js), which places no mines.
 // Layers, ring order, reservations and connectivity are re-derived here with an
 // axial-coordinate hex metric and the test's own BFS, never the planner's helpers.
 // Usage: node ai/test-coop-circle-starts.js [--output-dir DIR] [--fault off-ring|collide-towns]
@@ -65,16 +65,16 @@ function ringWalk(R, layer) {
     return {order, complete: order.length === cells.length && hexDistance(order[0], order[order.length - 1]) === 1};
 }
 
-// Free cells = layer <= R minus towns and mines; one component, and every town and mine touches it.
-function connectivity(R, towns, mines) {
-    const side = 2 * R + 1, solid = new Set([...towns, ...mines].map(key));
+// Free cells = layer <= R minus towns; one component, and every town touches it.
+function connectivity(R, towns) {
+    const side = 2 * R + 1, solid = new Set(towns.map(key));
     const free = c => layerAt(c, R) <= R && !solid.has(key(c));
     let open = 0, first = null;
     for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) if (free({x, y})) { open++; if (!first) first = {x, y}; }
     const seen = new Set([key(first)]), queue = [first];
     for (let i = 0; i < queue.length; i++) for (const n of neighbours(queue[i], side))
         if (!seen.has(key(n)) && free(n)) { seen.add(key(n)); queue.push(n); }
-    const detached = [...towns, ...mines].filter(o => !neighbours(o, side).some(n => seen.has(key(n))));
+    const detached = towns.filter(o => !neighbours(o, side).some(n => seen.has(key(n))));
     return {freeCells: open, reached: queue.length, components: queue.length === open ? 1 : 2, detachedObjects: detached.length,
         connected: queue.length === open && detached.length === 0};
 }
@@ -112,12 +112,10 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     const gaps = positions.map((p, i) => i + 1 < positions.length ? positions[i + 1] - p : positions[0] + walk.order.length - p);
     const gapSpread = gaps.length === towns.length ? Math.max(...gaps) - Math.min(...gaps) : null;
     assert('towns-on-walk', positions.length === towns.length, {...id, positions});
-    // Mines: one per human, owned, income 20, layer > E, not on a town or reservation.
-    const mines = layout.goldmines, mineLayers = mines.map(m => layerAt(m, R));
-    const ownedBy = humansList.map(p => mines.filter(m => m.owner === p.slot).length);
-    assert('one-mine-per-human', mines.length === humans && ownedBy.every(n => n === 1), {...id, ownedBy});
-    assert('mine-income', mines.every(m => m.income === 20), id);
-    assert('mine-layer', mineLayers.every(l => l > E && l <= R), {...id, mineLayers, E});
+    // No starting mines: every mine is neutral and placed by placeCircleExpansions.
+    const mines = layout.goldmines;
+    assert('no-starting-mines', Array.isArray(mines) && mines.length === 0 && layout.assignments.length === 0
+        && !layout.stages.includes('nearby-mines'), {...id, mines: mines.length, stages: layout.stages});
     // Reservations: the 3x3 of every town, pairwise disjoint, inside the radius.
     const boxes = towns.map(t => [-1, 0, 1].flatMap(dy => [-1, 0, 1].map(dx => key({x: t.x + dx, y: t.y + dy}))));
     const union = new Set(boxes.flat());
@@ -127,15 +125,13 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     assert('reservation-matches', reservedKeys.size === union.size && [...union].every(k => reservedKeys.has(k)), id);
     const reservedOutside = layout.reserved.filter(c => c.x < 0 || c.y < 0 || c.x >= side || c.y >= side || layerAt(c, R) > R).length;
     assert('reservation-inside', reservedOutside === 0, {...id, reservedOutside});
-    assert('mine-free-cell', mines.every(m => !reservedKeys.has(key(m))), id);
     assert('colors', humansList.every(p => JSON.stringify(p.rgb) === JSON.stringify(colorOf(p.slot))), id);
-    const conn = connectivity(R, towns, mines);
+    const conn = connectivity(R, towns);
     assert('connectivity', conn.connected, {...id, conn});
     connectivityRows.push({size, humans, seed, radius: R, solidOutsideRadius: side * side - (3 * R * R + 3 * R + 1), ...conn});
     matrix.push({size, humans, seed, radius: R, eliteLayer: E, townRing: R - 3, ringCells: walk.order.length,
         towns, townLayers, minChebyshev, minHex, gaps, gapSpread,
-        mines: mines.map((m, i) => ({x: m.x, y: m.y, owner: m.owner, income: m.income, layer: mineLayers[i]})),
-        minesPerHuman: ownedBy, reservationsDisjoint: disjoint, reservedCells: layout.reserved.length, reservedOutsideRadius: reservedOutside});
+        mines: mines.length, reservationsDisjoint: disjoint, reservedCells: layout.reserved.length, reservedOutsideRadius: reservedOutside});
 }
 assert('matrix-complete', matrix.length === 36 * SEEDS.length, {rows: matrix.length});
 

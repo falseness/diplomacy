@@ -241,20 +241,17 @@ function circlePassableConnected(plan, solid, objects) {
     })
 }
 
-// Starting towns on the town ring (layer R-3) and one owned mine per human.
-// Towns are random ring cells: each attempt walks a seeded shuffle of the ring
-// and greedily keeps cells at hex distance >= CIRCLE_START_SPACING and
-// Chebyshev >= 3 from every kept town; up to CIRCLE_START_ATTEMPTS shuffles are
-// tried. Slots follow ring order. Each town's 3x3
-// neighbourhood is reserved, then every human gets the nearest free cell with
-// layer > E (BFS with layer > R and other towns solid, mines as endpoints) that
-// keeps the passable region connected.
+// Starting towns on the town ring (layer R-3); no mines (every mine is neutral,
+// placed by placeCircleExpansions). Towns are random ring cells: each attempt
+// walks a seeded shuffle of the ring and greedily keeps cells at hex distance
+// >= CIRCLE_START_SPACING and Chebyshev >= 3 from every kept town; up to
+// CIRCLE_START_ATTEMPTS shuffles are tried. Slots follow ring order. Each
+// town's 3x3 neighbourhood is reserved.
 function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
     if (typeof colorOf !== 'function') throw new TypeError('Circle starts require coopPlayerColor')
-    const {side, humans, radius} = plan, elite = plan.regions.elite
+    const {side, humans, radius} = plan
     const assets = circleStartScaling(humans, plan.size).startingAssets
     const shuffle = circleShuffler(plan.seed ^ 0x9e3779b9)
-    const layers = circleLayerTable(plan), layerOf = id => layers[id]
     const ring = circleRingOrder(plan, plan.regions.townRing), N = ring.length
     let indices = null
     for (let attempt = 0; attempt < CIRCLE_START_ATTEMPTS && !indices; attempt++) {
@@ -270,63 +267,33 @@ function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function'
     const idOf = c => c.y * side + c.x, cell = id => ({x: id % side, y: Math.floor(id / side)})
     const reserved = new Set()
     for (const t of towns) for (const o of CIRCLE_OFFSETS3) reserved.add(idOf({x: t.x + o.x, y: t.y + o.y}))
-    const townIds = towns.map(idOf), mineIds = new Set(), assigned = new Array(humans)
-    const distances = i => {
-        const distance = new Int32Array(side * side).fill(-1), queue = [towns[i]]
-        distance[townIds[i]] = 0
-        for (let k = 0; k < queue.length; k++) {
-            const c = queue[k], cid = idOf(c)
-            if (k > 0 && mineIds.has(cid)) continue
-            for (const n of circleNeighbours(c, side)) {
-                const id = idOf(n)
-                if (distance[id] >= 0 || layerOf(id) > radius || townIds.includes(id)) continue
-                distance[id] = distance[cid] + 1; queue.push(n)
-            }
-        }
-        return distance
-    }
-    for (let i = 0; i < humans; i++) {
-        const d = distances(i), tiers = new Map()
-        for (let id = 0; id < side * side; id++) {
-            if (d[id] <= 0 || reserved.has(id) || mineIds.has(id) || layerOf(id) <= elite) continue
-            if (!tiers.has(d[id])) tiers.set(d[id], [])
-            tiers.get(d[id]).push(id)
-        }
-        search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
-            for (const id of shuffle(tiers.get(tier))) {
-                mineIds.add(id)
-                if (circlePassableConnected(plan, new Set([...townIds, ...mineIds]), [...townIds, ...mineIds])) {
-                    assigned[i] = {id, distance: tier}; break search
-                }
-                mineIds.delete(id)
-            }
-        }
-        if (!assigned[i]) throw new Error(`Circle has no nearby mine: size=${plan.size} humans=${humans} slot=${i + 1}`)
-    }
     return {
         version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize, radius,
-        stages: ['towns', 'reserve-neighbourhoods', 'nearby-mines'],
+        stages: ['towns', 'reserve-neighbourhoods'],
         ring: {layer: plan.regions.townRing, cells: N, start, indices},
         players: [{slot: 0, rgb: {...CIRCLE_NEUTRAL_RGB}, towns: [], units: [], gold: 0},
             ...towns.map((t, i) => ({slot: i + 1, rgb: colorOf(i + 1), gold: assets.gold, units: [], towns: [{x: t.x, y: t.y}]}))],
         reserved: [...reserved].sort((a, b) => a - b).map(cell),
-        goldmines: assigned.map((a, i) => ({...cell(a.id), owner: i + 1, income: 20})),
-        assignments: assigned.map((a, i) => ({slot: i + 1, mine: cell(a.id), distance: a.distance}))
+        goldmines: [],
+        assignments: []
     }
 }
 
 const CIRCLE_ACCESS_DISPARITY = 4
 const CIRCLE_NEUTRAL_TARGET = 2
+const CIRCLE_MINE_CLEARANCE = 4
+const CIRCLE_EXPANSION_PASSES = 6
 
-// Neutral towns and the remaining mines after placeCircleStarts, all strictly
+// Neutral towns and every gold mine after placeCircleStarts, all strictly
 // outside the elite core (layer > E). Neutral towns sit on free cells whose
 // whole 3x3 is inside the radius, outside the elite core (so the capacity
-// predicate's free elite lattice holds) and clear of every reservation and mine; they
+// predicate's free elite lattice holds) and clear of every reservation; they
 // are chosen greedily so the spread of each human's nearest neutral-town path
-// stays within CIRCLE_ACCESS_DISPARITY. Every further mine is strictly farther
-// from each human than that human's own starting mine. Paths treat layer > R
-// and other humans' towns as solid; neutral towns and mines are endpoints.
-// Passable connectivity is re-checked after every placement.
+// stays within CIRCLE_ACCESS_DISPARITY. Mines are all neutral (owner 0), off
+// reservations and at hex distance >= CIRCLE_MINE_CLEARANCE from every human
+// town, chosen greedily the same way for the nearest-mine path spread. Paths
+// treat layer > R and other humans' towns as solid; neutral towns and mines are
+// endpoints. Passable connectivity is re-checked after every placement.
 function placeCircleExpansions(plan, starts) {
     const {side, humans, radius, center, counts} = plan, elite = plan.regions.elite
     const shuffle = circleShuffler(plan.seed ^ 0x85ebca6b)
@@ -335,7 +302,7 @@ function placeCircleExpansions(plan, starts) {
     for (let id = 0; id < side * side; id++) layers[id] = circleGeometry.coopHexLayer(id % side, Math.floor(id / side), center)
     const layerOf = id => layers[id]
     const towns = starts.players.slice(1).map(p => p.towns[0]), townIds = towns.map(idOf)
-    const neutral = [], mineIds = new Set(starts.goldmines.map(idOf)), extraMines = []
+    const neutral = [], mineIds = new Set()
     const reserved = new Set(starts.reserved.map(idOf)), townMask = new Uint8Array(side * side)
     for (const id of townIds) townMask[id] = 1
     // Neighbour ids inside the radius as flat offset/list arrays; the BFS runs
@@ -379,7 +346,7 @@ function placeCircleExpansions(plan, starts) {
         if (layerOf(id) <= elite || layerOf(id) > radius) continue
         const cells = box(id)
         if (cells.every(c => c.x >= 0 && c.y >= 0 && c.x < side && c.y < side && layerOf(idOf(c)) <= radius
-            && layerOf(idOf(c)) > elite && !reserved.has(idOf(c)) && !mineIds.has(idOf(c)))) sites.push(id)
+            && layerOf(idOf(c)) > elite && !reserved.has(idOf(c)))) sites.push(id)
     }
     // One greedy pass; false when sites run out or the final spread is too wide.
     const placeNeutral = () => {
@@ -407,38 +374,59 @@ function placeCircleExpansions(plan, starts) {
         }
         return !neutral.length || spread(nearestNeutral(fields())) <= CIRCLE_ACCESS_DISPARITY
     }
-    if (![...Array(6)].some(placeNeutral))
+    if (![...Array(CIRCLE_EXPANSION_PASSES)].some(placeNeutral))
         throw new Error(`Circle has no fair neutral town layout: size=${plan.size} humans=${humans} seed=${plan.seed}`)
     for (const id of neutral) for (const c of box(id)) reserved.add(idOf(c))
-    const ownMine = new Map(starts.goldmines.map(m => [m.owner, idOf(m)]))
-    for (let k = humans; k < counts.goldmines; k++) {
-        const d = fields(), own = towns.map((_, i) => d[i][ownMine.get(i + 1)]), candidates = []
-        for (let id = 0; id < side * side; id++) {
-            if (layerOf(id) <= elite || layerOf(id) > radius || reserved.has(id) || mineIds.has(id) || townMask[id]) continue
-            if (d.every((di, i) => di[id] > own[i])) candidates.push(id)
-        }
-        let placed = false
-        for (const id of shuffle(candidates)) {
-            mineIds.add(id)
-            if (connected() && (!neutral.length || spread(nearestNeutral(fields())) <= CIRCLE_ACCESS_DISPARITY)) {
-                extraMines.push(id); placed = true; break
-            }
-            mineIds.delete(id)
-        }
-        if (!placed) throw new Error(`Circle has no further mine site: size=${plan.size} humans=${humans} mine=${k + 1}`)
+    const mineSites = []
+    for (let id = 0; id < side * side; id++) {
+        if (layerOf(id) <= elite || layerOf(id) > radius || reserved.has(id) || townMask[id]) continue
+        if (towns.every(t => circleHexDistance(cell(id), t) >= CIRCLE_MINE_CLEARANCE)) mineSites.push(id)
     }
+    const nearestMine = d => d.map(di => Math.min(...[...mineIds].map(id => di[id] < 0 ? Infinity : di[id])))
+    const neutralFair = d => !neutral.length || spread(nearestNeutral(d)) <= CIRCLE_ACCESS_DISPARITY
+    // One greedy pass over the mine sites, lowest resulting nearest-mine spread
+    // first; false when sites run out or the final spread is too wide.
+    const placeMines = () => {
+        mineIds.clear()
+        for (let k = 0; k < counts.goldmines; k++) {
+            const d = fields(), current = mineIds.size ? nearestMine(d) : towns.map(() => Infinity), tiers = new Map()
+            for (const id of mineSites) {
+                if (mineIds.has(id)) continue
+                const next = d.map((di, i) => di[id] < 0 ? Infinity : Math.min(current[i], di[id]))
+                if (!next.every(Number.isFinite)) continue
+                const tier = Math.max(CIRCLE_NEUTRAL_TARGET, spread(next))
+                if (!tiers.has(tier)) tiers.set(tier, [])
+                tiers.get(tier).push(id)
+            }
+            let placed = false
+            search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
+                for (const id of shuffle(tiers.get(tier))) {
+                    mineIds.add(id)
+                    if (connected() && neutralFair(fields())) { placed = true; break search }
+                    mineIds.delete(id)
+                }
+            }
+            if (!placed) return false
+        }
+        const d = fields(), nearest = nearestMine(d)
+        return nearest.every(Number.isFinite) && spread(nearest) <= CIRCLE_ACCESS_DISPARITY && neutralFair(d)
+    }
+    if (![...Array(CIRCLE_EXPANSION_PASSES)].some(placeMines))
+        throw new Error(`Circle has no fair mine layout: size=${plan.size} humans=${humans} seed=${plan.seed}`)
+    const mines = [...mineIds], nearestMines = nearestMine(fields())
     const nearest = neutral.length ? nearestNeutral(fields()) : []
     return {
         version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize, radius,
-        stages: [...starts.stages, 'neutral-towns', 'reserve-neutral-neighbourhoods', 'further-mines'],
+        stages: [...starts.stages, 'neutral-towns', 'reserve-neutral-neighbourhoods', 'neutral-mines'],
         ring: {...starts.ring, indices: starts.ring.indices.slice()},
         players: [{...starts.players[0], towns: neutral.map(cell)},
             ...starts.players.slice(1).map(p => ({...p, towns: p.towns.map(t => ({...t}))}))],
         reserved: [...reserved].sort((a, b) => a - b).map(cell),
-        goldmines: [...starts.goldmines.map(m => ({...m})), ...extraMines.map(id => ({...cell(id), owner: 0, income: 20}))],
+        goldmines: mines.map(id => ({...cell(id), owner: 0, income: 20})),
         assignments: starts.assignments.map(a => ({...a, mine: {...a.mine}})),
-        expansions: {neutralTowns: neutral.map(cell), furtherMines: extraMines.map(cell),
-            nearestNeutralDistance: nearest, neutralSpread: nearest.length ? spread(nearest) : 0}
+        expansions: {neutralTowns: neutral.map(cell), mines: mines.map(cell),
+            nearestNeutralDistance: nearest, neutralSpread: nearest.length ? spread(nearest) : 0,
+            nearestMineDistance: nearestMines, mineSpread: spread(nearestMines)}
     }
 }
 
