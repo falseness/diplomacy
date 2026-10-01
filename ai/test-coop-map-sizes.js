@@ -19,6 +19,8 @@ const MATRIX_HUMANS = [1, 4, 12];
 const radiusPreset = {tiny:{min:10, scale:8}, normal:{min:13, scale:11}, big:{min:16, scale:14}};
 const baselineFor = (size, count) => { const p = radiusPreset[size]; let R = p.min; while (R*R < p.scale*p.scale*count) R++; return R; };
 const multiplier = {tiny:1, normal:2, big:3};
+// TASK-337: gold mines per human, doubled from the neutral-town multiplier.
+const minesPerHuman = {tiny:2, normal:4, big:6};
 const layerOf = (c, R) => { const q = c.x - R, r = c.y - Math.floor(c.x/2) - Math.ceil(R/2);
   return Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)); };
 // Circle terrain follows 8/6/10% density within 2 points of the playable hex area.
@@ -71,8 +73,8 @@ for (const size of Object.keys(radiusPreset)) {
       reserved:objects.slice(towns.length).every(c=>towns.every(t=>Math.abs(c.x-t.x)>1||Math.abs(c.y-t.y)>1)),
       humanTownLayers:[...new Set(humanTowns.map(t=>layerOf(t,R)))],
       starts:map.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length])
-    // TASK-151/269: eleven typed portals per human; towns and goldmines keep the size multiplier.
-    }, {inBounds:true,unique:objects.length,counts:[count+resources,resources,11*count],terrain:[true,true,true,0],reserved:true,
+    // TASK-151/269: eleven typed portals per human; neutral towns keep the size multiplier, goldmines double it.
+    }, {inBounds:true,unique:objects.length,counts:[count+resources,count*minesPerHuman[size],11*count],terrain:[true,true,true,0],reserved:true,
       humanTownLayers:[R-3], starts:Array.from({length:count},()=>[100,1,0])});
     const start = f.evaluate(`(() => { try {
       generated.start({clearValues() {external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false;},updateCameraBorders() {}}, false);

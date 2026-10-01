@@ -127,10 +127,12 @@ const ASSERTIONS = [
     }],
     ['counts', map => {
         const c = scaling.getCoopMapScaling(map.coop.initialHumanCount, map.coop.generation.size).counts;
+        // TASK-337 literals: neutral towns {1,2,3} and goldmines {2,4,6} per human.
+        const h = map.coop.initialHumanCount, size = map.coop.generation.size;
         const observed = {humanTowns: humansOf(map).length, neutralTowns: map.players[0].towns.length,
             goldmines: map.goldmines.length, portals: map.portals.length};
-        const expected = {humanTowns: map.coop.initialHumanCount, neutralTowns: c.neutralTowns,
-            goldmines: c.goldmines, portals: c.portals};
+        const expected = {humanTowns: h, neutralTowns: h * {tiny: 1, normal: 2, big: 3}[size],
+            goldmines: h * {tiny: 2, normal: 4, big: 6}[size], portals: c.portals};
         return {expected, observed, pass: JSON.stringify(expected) === JSON.stringify(observed)};
     }],
     ['portal-category-counts', map => {
