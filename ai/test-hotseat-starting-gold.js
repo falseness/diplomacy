@@ -84,12 +84,12 @@ e('delete gameSettings.pendingHotseatOpeningEconomy; gameRound=0; players[1].gol
 check('legacy save balances preserved',state().gold,[511,612]);
 e('nextTurn();');check('legacy save retains economy behavior',state().gold,[511,622]);
 start('open field',0,true);
-check('online default unchanged',state().gold,[1000,1000]);
+check('online default 100',state().gold,[100,100]);
 check('online no opening marker',e('gameSettings.pendingHotseatOpeningEconomy === undefined'),true);
-e('startTurn();');check('online opening credit unchanged',state().gold,[1010,1000]);
+e('startTurn();');check('online opening credit unchanged',state().gold,[110,100]);
 e("maps['open field'][0].players[1].gold=0;");start('open field',0,true);
-check('online explicit zero unchanged',state().gold,[0,1000]);
-check('global Player fallback unchanged',e('new Player({r:0,g:0,b:0}).gold'),1000);
+check('online explicit zero unchanged',state().gold,[0,100]);
+check('global Player fallback 100',e('new Player({r:0,g:0,b:0}).gold'),100);
 e("GameManager.start(generateCoopGame(2,{seed:0,size:'tiny'}),false);");
 // Slot 1's opening town income is credited at game start: town 4 + 7 suburbs - 1 noob = +10.
 // No human owns a starting mine (TASK-335), and the owned mine never contributed here anyway.

@@ -1,5 +1,5 @@
 class Player {
-    constructor(color, gold = 1000) {
+    constructor(color, gold = 100) {
         this.gold = gold
         this.economyEnabled = true
         this.towns = []
