@@ -29,6 +29,13 @@ function normalizeInterfaceSettings(settings) {
         settings.interface.drawChanceOfWinningText = false
     return settings
 }
+// Fogged goldmines and live portals are drawn only in competitive games.
+// Saves and boards without an explicit boolean derive it from the mode.
+function normalizeFogLandmarkSettings(settings) {
+    if (typeof settings.drawFogLandmarks !== 'boolean')
+        settings.drawFogLandmarks = !settings.coop
+    return settings
+}
 
 let whooseTurn
 let isFogOfWar = true

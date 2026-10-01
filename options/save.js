@@ -276,6 +276,7 @@ class JsonUnpackManager {
         }
         // Before any restore step that can throw, so later frames still draw.
         normalizeInterfaceSettings(gameSettings)
+        normalizeFogLandmarkSettings(gameSettings)
 
         let gridSize = {
             x: packedGrid.length,

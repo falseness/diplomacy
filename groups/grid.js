@@ -230,6 +230,8 @@ class Grid extends SpritesGroup {
     // Public landmarks reveal only their artwork, never an occupying unit or
     // overlays. Fog/vision state remains authoritative for everything else.
     drawFogLandmark(ctx, building) {
+        if (gameSettings.drawFogLandmarks !== true)
+            return
         if (building.name === 'goldmine' || (building.isDemonPortal && !building.killed))
             drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(building)], building.pos)
     }

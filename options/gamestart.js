@@ -288,6 +288,7 @@ class GameMap {
         gameSettings.mapShape = this.mapShape
         if (this.coop) gameSettings.coop = {...JSON.parse(JSON.stringify(this.coop)), balanceVersion: 2}
         else delete gameSettings.coop
+        gameSettings.drawFogLandmarks = !this.coop
 
         // Store unplayed opening slots with the save, including round-zero saves.
         delete gameSettings.pendingHotseatOpeningEconomy

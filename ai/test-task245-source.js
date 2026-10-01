@@ -33,7 +33,7 @@ child(path.join(__dirname,'test-coop-typed-wave-config.js'),['--output-dir',path
 const schedule=JSON.parse(fs.readFileSync(path.join(out,'schedule/checkpoints.json')));
 for(const c of schedule.checkpoints){assert(c.pass,c.id);assert.deepEqual(c.observed,c.expected,c.id);}check('source/current-schedule',true,true);
 const source=fs.readFileSync(path.join(__dirname,'../groups/grid.js'),'utf8'),calls=[];
-const Grid=require('node:vm').runInNewContext(source+';Grid',{SpritesGroup:class {},cachedImages:{goldmine:'gold',portal:'portal'},drawCachedImage:(_ctx,img)=>calls.push(img)});
+const Grid=require('node:vm').runInNewContext(source+';Grid',{SpritesGroup:class {},gameSettings:{drawFogLandmarks:true},cachedImages:{goldmine:'gold',portal:'portal'},drawCachedImage:(_ctx,img)=>calls.push(img)});
 const grid=new Grid();
 for(const props of [{name:'goldmine'},{name:'demonPortal',isDemonPortal:true,imageName:'portal'},{name:'town'},{name:'demonPortal',isDemonPortal:true,imageName:'portal',killed:true}])grid.drawFogLandmark({},{...props,pos:{x:0,y:0},get unit(){throw Error('occupant accessed');},draw(){throw Error('indirect draw');}});
 check('source/non-coop-landmarks',calls,['gold','portal']);
