@@ -194,7 +194,7 @@ function run() {
     const label = 'legacy-slot';
     check(`${label}-restore-error`, f.evaluate('errorOf(() => loadFromJson(savedInput))'), 'portal requires demon ownership');
     check(`${label}-settings-after-failed-restore`, f.evaluate('JSON.parse(JSON.stringify(gameSettings))'),
-      {isOnline: false, interface: {drawChanceOfWinningText: false}});
+      {isOnline: false, interface: {drawChanceOfWinningText: false}, drawFogLandmarks: true});
     check(`${label}-new-game-start-error`, f.evaluate('errorOf(startCoop)'), null);
     exercise(f, `${label}-new-game`, {drawChanceOfWinningText: false}, cases);
     cases[cases.length - 1].input = {boundary: 'loadFromJson without gameSettings, then GameMap.start', savedGameSettings: null};
