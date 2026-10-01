@@ -46,9 +46,20 @@ const actualArt=artFixture.evaluate(`(() => {whooseTurn=3;grid.getHexagon({x:5,y
 check('source/portal-artwork',actualArt,images);
 const artwork=images.map(image=>fs.readFileSync(path.join(__dirname,'../assets/sprites',image+'.svg'),'utf8'));
 assert.equal(new Set(artwork).size,7);for(const svg of artwork)assert(svg.includes('<svg'));
-const protocol=path.join(out,'protocol');fs.mkdirSync(protocol);
-child(path.resolve(__dirname,'../../diplomacy_server/tests/coop/task244-network.js'),[protocol]);
-const protocolChecks=JSON.parse(fs.readFileSync(path.join(protocol,'checkpoints.json'))).checks;
-assert.deepEqual(protocolChecks.map(c=>c.id).sort(),require('../../diplomacy_server/tests/coop/task244-network').caseIDs.slice().sort());
-for(const c of protocolChecks){assert(c.pass,c.id);assert.deepEqual(c.observed,c.expected,c.id);}check('server/current-protocol',true,true);
+// task244-network.js used the removed password protocol (historical since TASK-311);
+// the current account/lobby protocol is covered by the co-op online suites below.
+const protocol=path.join(out,'protocol'),serverRoot=path.resolve(__dirname,'../../diplomacy_server');fs.mkdirSync(protocol);
+const suites=['unit-demon-combat-coop','ai-full-game-coop','ai-full-game-reconnect'],suiteResults=[];
+for(const suite of suites){
+ const stop=Number(process.env.TASK244_STOP_AT);assert(Date.now()<stop);
+ const args=['--test','--test-concurrency=1','--test-reporter=tap','tests/online/'+suite+'.test.js'],evidence=path.join(protocol,suite);fs.mkdirSync(evidence);
+ const env={...process.env,ONLINE_EVIDENCE_DIR:evidence};if(fs.existsSync('/opt/diplomacy/node_modules'))env.NODE_PATH='/opt/diplomacy/node_modules';
+ console.log(`COMMAND ${process.execPath} ${args.join(' ')}\nCWD=${serverRoot}`);
+ const r=spawnSync(process.execPath,args,{cwd:serverRoot,env,encoding:'utf8',timeout:stop-Date.now(),maxBuffer:64*1024*1024});
+ console.log(r.stdout||'');console.log(r.stderr||'');console.log('ACTUAL_EXIT_STATUS='+r.status);
+ const count=k=>Number(((r.stdout||'').match(new RegExp('^# '+k+' (\\d+)$','m'))||[])[1]);
+ suiteResults.push({suite,exit:r.status,pass:count('pass'),fail:count('fail')});
+}
+details.push({id:'current-protocol',suites:suiteResults});
+check('server/current-protocol',suiteResults.map(r=>({suite:r.suite,exit:r.exit,fail:r.fail,ran:r.pass>0})),suites.map(suite=>({suite,exit:0,fail:0,ran:true})));
 write('integrated-source.json',{checkpoints:checks,details,pass:true});
