@@ -103,7 +103,7 @@ class StatisticsInterface {
             else {
                 text = players[i].info
                 
-                if (isFogOfWar && i != whooseTurn) {
+                if (isFogOfWar && !gameSettings.coop && i != whooseTurn) {
                     text = '???'
                 }
             }
