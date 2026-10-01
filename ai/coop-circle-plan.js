@@ -282,13 +282,15 @@ function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function'
 const CIRCLE_ACCESS_DISPARITY = 4
 const CIRCLE_NEUTRAL_TARGET = 2
 const CIRCLE_MINE_CLEARANCE = 4
+const CIRCLE_NEUTRAL_SPACING = 5
 const CIRCLE_EXPANSION_PASSES = 6
 
 // Neutral towns and every gold mine after placeCircleStarts, all strictly
 // outside the elite core (layer > E). Neutral towns sit on free cells whose
 // whole 3x3 is inside the radius, outside the elite core (so the capacity
-// predicate's free elite lattice holds) and clear of every reservation; they
-// are chosen greedily so the spread of each human's nearest neutral-town path
+// predicate's free elite lattice holds), clear of every reservation and at hex
+// distance >= CIRCLE_NEUTRAL_SPACING from every other neutral town; they are
+// chosen greedily so the spread of each human's nearest neutral-town path
 // stays within CIRCLE_ACCESS_DISPARITY. Mines are all neutral (owner 0), off
 // reservations and at hex distance >= CIRCLE_MINE_CLEARANCE from every human
 // town, chosen greedily the same way for the nearest-mine path spread. Paths
@@ -356,6 +358,7 @@ function placeCircleExpansions(plan, starts) {
             const d = fields(), current = neutral.length ? nearestNeutral(d) : towns.map(() => Infinity), tiers = new Map()
             for (const id of sites) {
                 if (box(id).some(c => taken.has(idOf(c)))) continue
+                if (neutral.some(n => circleHexDistance(cell(id), cell(n)) < CIRCLE_NEUTRAL_SPACING)) continue
                 const next = d.map((di, i) => di[id] < 0 ? Infinity : Math.min(current[i], di[id]))
                 if (!next.every(Number.isFinite)) continue
                 const tier = Math.max(CIRCLE_NEUTRAL_TARGET, spread(next))

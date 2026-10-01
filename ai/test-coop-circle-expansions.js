@@ -2,7 +2,7 @@
 // Neutral town and neutral mine checks for placeCircleExpansions (ai/coop-circle-plan.js).
 // Layers, path distances, clearances and connectivity are re-derived here with an
 // axial-coordinate hex metric and the test's own BFS, never the planner's helpers.
-// Usage: node ai/test-coop-circle-expansions.js [--output-dir DIR] [--fault elite-mine|unfair-neutral|mine-near-town]
+// Usage: node ai/test-coop-circle-expansions.js [--output-dir DIR] [--fault elite-mine|unfair-neutral|mine-near-town|close-neutral]
 'use strict';
 const fs = require('fs'), path = require('path'), Module = require('module'), crypto = require('crypto');
 const {coopHexLayer} = require('./coop-hex-geometry');
@@ -19,7 +19,8 @@ const FAULTS = {
     'elite-mine': [['if (layerOf(id) <= elite || layerOf(id) > radius || reserved.has(id)', 'if (layerOf(id) > elite || reserved.has(id)']],
     'unfair-neutral': [['const CIRCLE_ACCESS_DISPARITY = 4', 'const CIRCLE_ACCESS_DISPARITY = Infinity'],
         ['const tier = Math.max(CIRCLE_NEUTRAL_TARGET, spread(next))', 'const tier = -spread(next)']],
-    'mine-near-town': [['circleHexDistance(cell(id), t) >= CIRCLE_MINE_CLEARANCE', 'circleHexDistance(cell(id), t) >= 2']]
+    'mine-near-town': [['circleHexDistance(cell(id), t) >= CIRCLE_MINE_CLEARANCE', 'circleHexDistance(cell(id), t) >= 2']],
+    'close-neutral': [['const CIRCLE_NEUTRAL_SPACING = 5', 'const CIRCLE_NEUTRAL_SPACING = 0']]
 };
 if (fault !== undefined && !FAULTS[fault]) { console.error(`unknown fault ${fault}`); process.exit(2); }
 
@@ -39,7 +40,7 @@ if (fault) {
 } else planner = require('./coop-circle-plan');
 
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 2, 31, 777, 65535, 2654435769, 4294967295];
-const DISPARITY = 4, MINE_CLEARANCE = 4;
+const DISPARITY = 4, MINE_CLEARANCE = 4, NEUTRAL_SPACING = 5;
 const colorOf = i => ({r: (i * 37) % 256, g: (i * 91) % 256, b: (i * 53) % 256});
 
 // Independent hex metric: offset column -> axial, cube distance to the centre cell (R, R).
@@ -125,7 +126,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     assert('outside-elite', layers.every(l => l > E && l <= R), {...id, minLayer, E});
     // Clearances: nothing on a human town or starting reserved cell; every
     // neutral 3x3 inside the radius and clear of every other object and reservation;
-    // no mine inside any town's 3x3.
+    // neutral towns pairwise at hex distance >= NEUTRAL_SPACING; no mine inside any town's 3x3.
     const startReserved = new Set(starts.reserved.map(key));
     const taken = new Set(towns.map(key));
     const onOccupied = expansion.filter(o => taken.has(key(o)) || startReserved.has(key(o))).length;
@@ -138,10 +139,13 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         else if (allObjects.some(o => o !== t && chebyshev(o, t) <= 1)) neutralBoxViolations++;
         else if (neutral.some((u, j) => j !== i && chebyshev(u, t) <= 2)) neutralBoxViolations++;
     });
+    const neutralPairs = neutral.flatMap((a, i) => neutral.slice(i + 1).map(b => hexDistance(a, b)));
+    const minNeutralHex = neutralPairs.length ? Math.min(...neutralPairs) : null;
+    const neutralSpacingViolations = neutralPairs.filter(d => d < NEUTRAL_SPACING).length;
     const mineInTownBox = mines.filter(m => [...towns, ...neutral].some(t => chebyshev(t, m) <= 1)).length;
     const duplicates = allObjects.length - new Set(allObjects.map(key)).size;
     assert('no-occupied-cell', onOccupied === 0 && duplicates === 0, {...id, onOccupied, duplicates});
-    assert('neutral-clearance', neutralBoxViolations === 0, {...id, neutralBoxViolations});
+    assert('neutral-clearance', neutralBoxViolations === 0 && neutralSpacingViolations === 0, {...id, neutralBoxViolations, neutralSpacingViolations, minNeutralHex});
     assert('mine-clearance', mineInTownBox === 0, {...id, mineInTownBox});
     const reservedKeys = new Set(layout.reserved.map(key));
     assert('reservation-covers', neutral.every(t => box(t).every(c => reservedKeys.has(key(c)))) && [...startReserved].every(k => reservedKeys.has(k)), id);
@@ -165,8 +169,8 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         neutralTowns: {placed: neutral.length, target: target.neutralTowns},
         goldmines: {placed: layout.goldmines.length, target: target.goldmines, owners: [...new Set(mines.map(m => m.owner))]},
         minExpansionLayer: minLayer, nearestNeutralDistance: nearest, neutralSpread: spread, nearestMineDistance: nearestMine, mineSpread,
-        minMineTownHex: mineTownHex,
-        freeRegion: conn, clearance: {onOccupiedOrReserved: onOccupied, duplicates, neutralBoxViolations, mineInTownBox},
+        minMineTownHex: mineTownHex, minNeutralHex,
+        freeRegion: conn, clearance: {onOccupiedOrReserved: onOccupied, duplicates, neutralBoxViolations, neutralSpacingViolations, mineInTownBox},
         neutral, mines: mines.map(m => ({x: m.x, y: m.y}))});
 }
 assert('matrix-complete', matrix.length === 36 * SEEDS.length, {rows: matrix.length});
