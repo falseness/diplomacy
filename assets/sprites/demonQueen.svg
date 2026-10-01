@@ -1,17 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="demonQueen-title demonQueen-desc">
   <title id="demonQueen-title">Demon Queen — crowned hex sovereign miniature</title>
-  <desc id="demonQueen-desc">The apex of the hexcaster line: an ivory-faced demon queen wearing a spiked golden crown between tall curling horns, in a crimson-and-black royal gown with a flared golden-trimmed cape, holds a sceptre staff crowned with a ruby hex and commands three orbiting golden hex spells. Archer's leg silhouette, head scale and foot baseline preserve the shared miniature proportions. Rounded vector shading is lit from the upper right. Editable shapes on a transparent 512 by 512 canvas.</desc>
+  <desc id="demonQueen-desc">The apex of the hexcaster line, styled as a chibi succubus queen: crimson demon skin, a glossy black hime cut with jagged bangs, curved red horns around a jewelled golden tiara, pointed ears with gold hoops, and smug half-lidded ember eyes glancing sideways above a fanged smirk. Bat wings and a spade-tipped tail frame a fitted plum gown with a sweetheart neckline, gold girdle and flared skirt over a black royal cape; she holds a ruby-crowned sceptre and commands three orbiting golden hex spells. Rounded vector shading is lit from the upper right. Editable shapes on a transparent 512 by 512 canvas.</desc>
   <defs>
     <radialGradient id="dq-cloth" cx="78%" cy="19%" r="99%">
-      <stop stop-color="#b8484f"/><stop offset=".35" stop-color="#8a2632"/><stop offset=".72" stop-color="#5c1422"/><stop offset="1" stop-color="#360a16"/>
+      <stop stop-color="#9a5aae"/><stop offset=".35" stop-color="#6a2e80"/><stop offset=".72" stop-color="#421856"/><stop offset="1" stop-color="#260c34"/>
     </radialGradient>
     <linearGradient id="dq-cape" x1="100%" y1="0%" x2="0%" y2="100%">
       <stop stop-color="#3a2a44"/><stop offset=".6" stop-color="#1e1426"/><stop offset="1" stop-color="#120a18"/>
     </linearGradient>
-    <radialGradient id="dq-skin" cx="72%" cy="24%" r="86%">
-      <stop stop-color="#f6ecd2"/><stop offset=".4" stop-color="#d4cbb4"/><stop offset=".75" stop-color="#a0a29c"/><stop offset="1" stop-color="#626c7a"/>
+    <radialGradient id="dq-skin" cx="70%" cy="24%" r="90%">
+      <stop stop-color="#ff8a80"/><stop offset=".4" stop-color="#e24a52"/><stop offset=".8" stop-color="#b8243a"/><stop offset="1" stop-color="#7e1028"/>
     </radialGradient>
+    <linearGradient id="dq-horn" x1="0%" y1="100%" x2="40%" y2="0%">
+      <stop stop-color="#3a0a14"/><stop offset=".5" stop-color="#9a1a2c"/><stop offset="1" stop-color="#e8505a"/>
+    </linearGradient>
+    <clipPath id="dq-eye-left"><path d="M216 102 L250 106 Q251 120 236 121 Q221 120 216 102Z"/></clipPath>
+    <clipPath id="dq-eye-right"><path d="M296 102 L262 106 Q261 120 276 121 Q291 120 296 102Z"/></clipPath>
+    <linearGradient id="dq-hair" x1="80%" y1="0%" x2="20%" y2="100%">
+      <stop stop-color="#3e3048"/><stop offset=".45" stop-color="#1a1222"/><stop offset="1" stop-color="#0a060e"/>
+    </linearGradient>
+    <radialGradient id="dq-iris" cx="50%" cy="40%" r="60%">
+      <stop stop-color="#fff2a0"/><stop offset=".5" stop-color="#ff7a2a"/><stop offset="1" stop-color="#a0102a"/>
+    </radialGradient>
+    <linearGradient id="dq-wing" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop stop-color="#6a1424"/><stop offset=".6" stop-color="#3a0a16"/><stop offset="1" stop-color="#1e050c"/>
+    </linearGradient>
     <linearGradient id="dq-boots" x1="0%" y1="0%" x2="100%" y2="15%">
       <stop stop-color="#1e1016"/><stop offset=".7" stop-color="#553440"/><stop offset="1" stop-color="#34202a"/>
     </linearGradient>
@@ -25,51 +39,90 @@
       <stop stop-color="#ffd0d0"/><stop offset=".45" stop-color="#e2404e"/><stop offset="1" stop-color="#7a0f1e"/>
     </radialGradient>
   </defs>
+  <!-- Succubus bat wings: wrist peaks above each shoulder, fingers fan outward away from the head. -->
+  <g id="dq-wings">
+    <path d="M222 206 Q186 150 148 122 Q128 150 108 178 Q130 184 124 226 Q148 220 162 250 Q184 236 212 240Z M 290 206 Q 326 150 364 122 Q 384 150 404 178 Q 382 184 388 226 Q 364 220 350 250 Q 328 236 300 240 Z" fill="url(#dq-wing)" stroke="#14070f" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M222 206 Q186 150 148 122 M148 122 L110 178 M148 122 L126 224 M148 122 L162 248 M 290 206 Q 326 150 364 122 M 364 122 L 402 178 M 364 122 L 386 224 M 364 122 L 350 248" stroke="#c83444" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M148 122 L142 106 L156 118Z M 364 122 L 370 106 L 356 118 Z" fill="#14070f" stroke="#14070f" stroke-width="2" stroke-linejoin="round"/>
+  </g>
   <!-- Flared royal cape sits behind the figure and widens the silhouette. -->
-  <path id="dq-back-cape" d="M186 136 Q256 118 326 136 L394 300 L418 452 Q336 470 256 462 Q176 470 94 452 L118 300Z" fill="url(#dq-cape)"/>
-  <path d="M94 452 Q176 470 256 462 Q336 470 418 452" stroke="url(#dq-gold)" stroke-width="7" stroke-linecap="round"/>
-  <!-- Exact Archer leg outline keeps the miniature stance and foot baseline. -->
+  <path id="dq-back-cape" d="M200 190 Q256 178 312 190 L392 300 L416 454 Q256 478 96 454 L120 300Z" fill="url(#dq-cape)"/>
+  <path d="M96 454 Q256 478 416 454" stroke="url(#dq-gold)" stroke-width="7" stroke-linecap="round"/>
+  <g id="dq-tail">
+    <path d="M330 432 C372 440 400 414 396 384 C394 368 384 360 386 348" stroke="#14070f" stroke-width="11" stroke-linecap="round"/>
+    <path d="M330 432 C372 440 400 414 396 384 C394 368 384 360 386 348" stroke="url(#dq-skin)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M386 326 L402 350 L386 358 L370 350Z" fill="url(#dq-horn)" stroke="#14070f" stroke-width="3.5" stroke-linejoin="round"/>
+  </g>
+  <!-- Long hair falls down the back, behind collar and gown. -->
+  <path id="dq-hair-back" d="M256 34 C192 34 172 80 176 124 C180 172 160 214 166 262 C170 296 196 310 214 300 C202 266 216 226 214 186 L298 186 C296 226 310 266 298 300 C316 310 342 296 346 262 C352 214 332 172 336 124 C340 80 320 34 256 34Z" fill="url(#dq-hair)"/>
+  <!-- Exact Archer leg outline keeps the miniature stance and foot baseline; the gown hides all but the slippers. -->
   <path id="dq-parent-legs" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#dq-boots)"/>
   <g id="dq-gown">
-    <path d="M196 135 Q256 124 316 135 Q342 144 354 170 L390 251 L352 284 L329 236 L364 444 L284 454 L256 366 L228 454 L148 444 L182 236 L157 289 L112 267 L151 175 Q164 143 196 135Z" fill="url(#dq-cloth)"/>
-    <path d="M203 152 L226 204 L232 311 L208 430 L170 436 L204 286Z" fill="#46101c"/>
-    <path d="M309 151 L286 202 L280 311 L304 432 L342 438 L307 286Z" fill="#c86a70" opacity=".4"/>
-    <path d="M194 144 L256 190 L318 144 L293 216 L256 240 L218 216Z" fill="#240a12"/>
-    <path d="M197 150 L256 197 L315 150 M256 199 V329 L224 449 M256 329 L289 449 M153 441 L224 451 M290 451 L360 441" stroke="url(#dq-gold)" stroke-width="8" stroke-linejoin="round"/>
-    <path d="M181 286 Q256 301 331 286 L333 304 Q256 319 179 304Z" fill="#1f0a10"/>
-    <path d="M256 279 L273 289 V309 L256 319 L239 309 V289Z" fill="url(#dq-gold)"/>
-    <path d="M256 290 L265 299 L256 308 L247 299Z" fill="url(#dq-ruby)"/>
+    <!-- Hourglass: fitted bodice, narrow waist, wide bell skirt. -->
+    <path d="M204 196 Q222 186 236 196 Q248 204 256 214 Q264 204 276 196 Q290 186 308 196 L302 250 Q292 270 286 290 Q330 360 364 456 Q256 476 148 456 Q182 360 226 290 Q220 270 210 250Z" fill="url(#dq-cloth)"/>
+    <path d="M226 290 Q190 360 160 452 L196 458 Q214 376 238 300Z" fill="#46101c" opacity=".7"/>
+    <path d="M286 290 Q318 360 350 452 L320 460 Q300 380 276 300Z" fill="#e08a90" opacity=".3"/>
+    <path d="M256 300 L220 462 Q256 470 292 462Z" fill="#240a12"/>
+    <path d="M256 300 L220 462 M256 300 L292 462 M148 456 Q256 476 364 456" stroke="url(#dq-gold)" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M204 196 Q222 186 236 196 Q248 204 256 214 Q264 204 276 196 Q290 186 308 196" stroke="url(#dq-gold)" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M256 222 V282 M246 236 L266 248 M266 236 L246 248 M246 258 L266 270 M266 258 L246 270" stroke="#d2b06e" stroke-width="4" stroke-linecap="round"/>
+    <path d="M224 280 Q256 296 288 280 L286 296 Q256 316 226 296Z" fill="url(#dq-gold)"/>
+    <path d="M256 296 L266 306 L256 318 L246 306Z" fill="url(#dq-ruby)"/>
   </g>
-  <g id="dq-collar">
-    <path d="M160 150 Q176 108 206 116 L256 174 L306 116 Q336 108 352 150 L326 176 L256 198 L186 176Z" fill="#2a1a32"/>
-    <path d="M160 150 Q176 108 206 116 L256 174 L306 116 Q336 108 352 150" stroke="url(#dq-gold)" stroke-width="8" stroke-linejoin="round"/>
-    <path d="M178 146 L192 162 M334 146 L320 162 M256 186 V196" stroke="#e8c579" stroke-width="6" stroke-linecap="round"/>
+  <g id="dq-slippers" fill="url(#dq-gold)">
+    <path d="M184 470 Q186 462 204 462 Q222 462 226 470 Q206 480 184 470Z"/>
+    <path d="M286 470 Q290 462 308 462 Q326 462 328 470 Q306 480 286 470Z"/>
   </g>
   <g id="dq-sceptre">
-    <path d="M96 466 L96 132" stroke="#2a1a24" stroke-width="18" stroke-linecap="round"/>
-    <path d="M100 460 V134" stroke="url(#dq-gold)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M96 466 L96 132" stroke="#2a1a24" stroke-width="16" stroke-linecap="round"/>
+    <path d="M99 460 V134" stroke="url(#dq-gold)" stroke-width="6" stroke-linecap="round"/>
     <path d="M96 146 Q40 128 38 80 Q42 48 60 30 Q56 62 68 88 Q80 112 96 116 Q112 112 124 88 Q136 62 132 28 Q150 48 154 80 Q152 128 96 146Z" fill="url(#dq-gold)"/>
     <path d="M96 44 L119 57 V83 L96 96 L73 83 V57Z" fill="url(#dq-ruby)" stroke="#6e5739" stroke-width="5" stroke-linejoin="round"/>
     <path d="M96 57 L105 70 L96 83 L87 70Z" fill="#fff3bb"/>
-    <path d="M81 164 H112 M81 177 H112 M81 190 H112" stroke="#d2b06e" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g id="dq-sleeves">
+    <path d="M212 194 Q186 192 178 214 L128 260 L122 278 Q138 290 150 282 L166 262 L210 236Z" fill="url(#dq-cloth)"/>
+    <path d="M300 194 Q326 192 336 212 L378 236 L392 252 Q382 266 368 264 L352 254 L304 236Z" fill="url(#dq-cloth)"/>
+    <path d="M128 260 L112 286 Q134 300 158 286 L150 282 Q138 290 122 278Z M378 236 L402 250 Q392 270 364 268 L368 264 Q382 266 392 252Z" fill="url(#dq-gold)"/>
   </g>
   <g id="dq-hands" fill="url(#dq-skin)">
-    <path d="M111 256 Q93 252 83 266 L81 290 Q87 312 104 302 L116 281 L147 278 L153 267Z"/>
-    <path d="M355 268 Q368 284 383 277 L404 256 L431 249 Q445 253 439 264 L420 272 L429 281 Q433 291 421 293 L398 289 L378 310 Q360 321 346 302 L339 287Z"/>
+    <path d="M104 282 Q88 284 86 298 Q88 312 104 310 L122 304 Q132 300 128 292 L120 290Z"/>
+    <path d="M398 250 Q410 236 422 240 L446 230 Q454 232 448 240 L428 248 L446 250 Q452 256 444 260 L420 260 Q412 266 402 262Z"/>
   </g>
   <g id="dq-head">
-    <path d="M210 62 Q150 60 146 28 Q164 48 196 40 Q180 32 186 26 Q204 40 226 40Z M302 62 Q362 60 366 28 Q348 48 316 40 Q332 32 326 26 Q308 40 286 40Z" fill="#3a2230"/>
-    <circle cx="256" cy="93" r="62.5" fill="url(#dq-skin)"/>
-    <path d="M203 70 L244 81 L241 96 L218 92Z M309 70 L268 81 L271 96 L294 92Z" fill="#2a0d16"/>
-    <path d="M218 80 L235 85 L232 90 L220 87Z M294 80 L277 85 L280 90 L292 87Z" fill="#ff8a8a"/>
-    <path d="M256 79 L250 110 L263 110Z" fill="#8a9290"/>
-    <path d="M238 121 Q256 131 274 121" stroke="#7a1f2c" stroke-width="6" stroke-linecap="round"/>
-    <path d="M241 122 L247 135 L250 125 M271 122 L265 135 L262 125" fill="#f5e8c6"/>
-    <!-- Spiked crown: the sovereign mark the hexmaster lacks. -->
-    <path d="M206 56 L200 30 L222 44 L234 26 L246 42 L256 22 L266 42 L278 26 L290 44 L312 30 L306 56 Q256 44 206 54Z" fill="url(#dq-gold)" stroke="#6e5739" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M256 36 L263 45 L256 54 L249 45Z" fill="url(#dq-ruby)"/>
-    <circle cx="228" cy="46" r="5" fill="url(#dq-ruby)"/>
-    <circle cx="284" cy="46" r="5" fill="url(#dq-ruby)"/>
+    <path d="M238 148 H274 V186 Q256 196 238 186Z" fill="url(#dq-skin)"/>
+    <path d="M206 196 Q222 186 236 196 Q248 204 256 214 Q264 204 276 196 Q290 186 306 196 L282 180 Q256 192 230 180Z" fill="url(#dq-skin)"/>
+    <path d="M234 182 Q256 200 278 182" stroke="url(#dq-gold)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M256 194 L263 202 L256 212 L249 202Z" fill="url(#dq-ruby)"/>
+    <path d="M206 114 Q190 106 180 70 Q198 80 208 94Z M306 114 Q322 106 332 70 Q314 80 304 94Z" fill="url(#dq-skin)" stroke="#7e1028" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M203 104 Q194 96 188 82 Q198 90 205 96Z M309 104 Q318 96 324 82 Q314 90 307 96Z" fill="#b8243a"/>
+    <circle cx="203" cy="121" r="4.5" stroke="url(#dq-gold)" stroke-width="2.5"/>
+    <circle cx="309" cy="121" r="4.5" stroke="url(#dq-gold)" stroke-width="2.5"/>
+    <path d="M256 44 C290 44 312 68 312 98 C312 128 292 152 256 160 C220 152 200 128 200 98 C200 68 222 44 256 44Z" fill="url(#dq-skin)"/>
+    <path d="M216 102 L250 106 Q251 120 236 121 Q221 120 216 102Z M296 102 L262 106 Q261 120 276 121 Q291 120 296 102Z" fill="#fff6ea"/>
+    <g clip-path="url(#dq-eye-left)"><circle cx="243" cy="113" r="7.5" fill="url(#dq-iris)"/><ellipse cx="244" cy="113" rx="2.2" ry="4.5" fill="#1a0610"/></g>
+    <g clip-path="url(#dq-eye-right)"><circle cx="285" cy="113" r="7.5" fill="url(#dq-iris)"/><ellipse cx="286" cy="113" rx="2.2" ry="4.5" fill="#1a0610"/></g>
+    <circle cx="246" cy="110" r="1.8" fill="#fff"/>
+    <circle cx="288" cy="110" r="1.8" fill="#fff"/>
+    <path d="M211 100 L252 106 M211 100 L203 94 M301 100 L260 106 M301 100 L309 94" stroke="#14070f" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M222 121 Q236 124 248 118 M290 121 Q276 124 264 118" stroke="#5a0c1c" stroke-width="2" stroke-linecap="round"/>
+    <path d="M216 89 Q232 81 248 88 M296 86 Q282 76 264 86" stroke="#14070f" stroke-width="5" stroke-linecap="round"/>
+    <path d="M244 136 Q258 142 272 131" stroke="#3a0810" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M246 137 Q258 145 270 134 Q258 140 246 137Z" fill="#7e1028"/>
+    <path d="M261 139 L264 147 L267 138Z" fill="#fff6ea"/>
+  </g>
+  <g id="dq-hair-front" fill="url(#dq-hair)">
+    <path d="M198 106 C194 56 222 36 256 36 C290 36 318 56 314 106 L306 84 L296 92 L288 74 L276 86 L266 72 L256 84 L246 72 L236 86 L224 74 L216 92 L206 84Z"/>
+    <path d="M200 92 C190 130 196 170 188 210 C182 236 192 254 206 258 C202 236 210 214 210 186 C212 160 206 130 210 104Z"/>
+    <path d="M312 92 C322 130 316 170 324 210 C330 236 320 254 306 258 C310 236 302 214 302 186 C300 160 306 130 302 104Z"/>
+    <path d="M232 46 C252 40 280 44 296 56" stroke="#6a5a7a" stroke-width="4" stroke-linecap="round" opacity=".8" fill="none"/>
+  </g>
+  <g id="dq-crown">
+    <path d="M222 58 C198 50 186 34 196 22 C200 36 214 42 234 46Z M290 58 C314 50 326 34 316 22 C312 36 298 42 278 46Z" fill="url(#dq-horn)" stroke="#2a0610" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M222 54 L228 36 L240 48 L256 24 L272 48 L284 36 L290 54 Q256 44 222 54Z" fill="url(#dq-gold)" stroke="#6e5739" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M256 36 L262 44 L256 52 L250 44Z" fill="url(#dq-ruby)"/>
+    <circle cx="232" cy="48" r="3.5" fill="url(#dq-ruby)"/>
+    <circle cx="280" cy="48" r="3.5" fill="url(#dq-ruby)"/>
   </g>
   <!-- Three orbiting hex rings escalate from hexcaster (one) and hexmaster (two). -->
   <g id="dq-floating-spells" stroke-linejoin="round">
@@ -79,9 +132,9 @@
     <path d="M384 56 L406 69 V95 L384 108 L362 95 V69Z" stroke="#6e5739" stroke-width="12"/>
     <path d="M384 56 L406 69 V95 L384 108 L362 95 V69Z" stroke="url(#dq-spell-paint)" stroke-width="7"/>
     <path d="M384 70 L393 82 L384 94 L375 82Z" fill="url(#dq-spell-paint)"/>
-    <path d="M462 238 L482 250 V274 L462 286 L442 274 V250Z" stroke="#6e5739" stroke-width="11"/>
-    <path d="M462 238 L482 250 V274 L462 286 L442 274 V250Z" stroke="url(#dq-spell-paint)" stroke-width="6"/>
-    <path d="M462 251 L470 262 L462 273 L454 262Z" fill="url(#dq-spell-paint)"/>
+    <path d="M466 268 L484 279 V301 L466 312 L448 301 V279Z" stroke="#6e5739" stroke-width="11"/>
+    <path d="M466 268 L484 279 V301 L466 312 L448 301 V279Z" stroke="url(#dq-spell-paint)" stroke-width="6"/>
+    <path d="M466 280 L473 290 L466 300 L459 290Z" fill="url(#dq-spell-paint)"/>
     <path d="M434 112 V120 M470 204 L477 208 M412 120 L404 113 M348 82 H356" stroke="#e9cc88" stroke-width="6" stroke-linecap="round"/>
   </g>
 </svg>
