@@ -542,7 +542,11 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             return false
         }
         let activeProduction = choice.producer.activeProduction
-        if (!activeProduction || activeProduction.isEmpty()) {
+        // A unit prepare() leaves activeProduction alone: a building production still armed there
+        // (Town.sendInstructions re-arms it while gold covers another) is not this choice and would
+        // be placed without a gold check.
+        if (!activeProduction || activeProduction.isEmpty() ||
+                activeProduction.name != choice.product) {
             return true
         }
         let available = activeProduction.availableHexagons || []
