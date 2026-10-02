@@ -292,7 +292,9 @@ class Way {
         let ourUnit = cell.unit.notEmpty() && cell.unit.playerColor == player &&
             !coordsEqually(neighbour, v0)
         // Teammate buildings cannot be captured, including by an intermediate path step.
+        // Passable nature has no owner of its own (it reports the hex colour), so it stays walkable.
         let teammateBuilding = cell.building.notEmpty() && cell.building.playerColor != player &&
+            !(cell.building.isNature && cell.building.isPassable) &&
             players[player].isAlliedWith(cell.building.player)
         let teammateUnit = cell.unit.notEmpty() && cell.unit.playerColor != player &&
             players[player].isAlliedWith(cell.unit.player)

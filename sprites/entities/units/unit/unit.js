@@ -103,7 +103,9 @@ class Unit extends Entity {
         return this.interaction.needInstructions()
     }
     cellHasTeammate(cell) {
+        // Passable nature only reports the hex colour; it is not a teammate building.
         return [cell.unit, cell.building].some(entity => entity.notEmpty() &&
+            !(entity.isNature && entity.isPassable) &&
             entity.playerColor !== this.playerColor && this.player.isAlliedWith(entity.player))
     }
     canHitSomethingOnCell(cell) {
