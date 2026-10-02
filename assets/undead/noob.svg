@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="nb-noob-title nb-noob-desc">
+  <title id="nb-noob-title">Undead Noob</title>
+  <desc id="nb-noob-desc">Undead demon-owned variant of the sprite with the same silhouette: bone-grey skin, glowing red eyes, dark tattered cloth and purple demon accents. Editable vector shapes, no raster images.</desc>
+  <defs>
+    <clipPath id="nb-noob-legs-clip">
+      <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z"/>
+    </clipPath>
+    <clipPath id="nb-noob-pants-clip">
+      <path d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z"/>
+    </clipPath>
+    <clipPath id="nb-noob-arms-clip">
+      <path d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z"/>
+    </clipPath>
+    <clipPath id="nb-noob-shirt-clip">
+      <path d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z"/>
+    </clipPath>
+    <radialGradient id="nb-noob-skin" cx="72%" cy="24%" r="86%">
+      <stop stop-color="#c2cbb7"/>
+      <stop offset=".38" stop-color="#b5c0a8"/>
+      <stop offset=".7" stop-color="#a0af90"/>
+      <stop offset="1" stop-color="#7f926a"/>
+    </radialGradient>
+    <linearGradient id="nb-noob-left-arm" gradientUnits="userSpaceOnUse" x1="105" y1="255" x2="138" y2="268">
+      <stop stop-color="#8b9d77"/>
+      <stop offset=".4" stop-color="#adb99f"/>
+      <stop offset=".69" stop-color="#b8c3ac"/>
+      <stop offset="1" stop-color="#91a27e"/>
+    </linearGradient>
+    <linearGradient id="nb-noob-right-arm" gradientUnits="userSpaceOnUse" x1="373" y1="269" x2="409" y2="251">
+      <stop stop-color="#879973"/>
+      <stop offset=".4" stop-color="#a5b295"/>
+      <stop offset=".76" stop-color="#bdc7b2"/>
+      <stop offset="1" stop-color="#abb79c"/>
+    </linearGradient>
+    <radialGradient id="nb-noob-shirt-paint" cx="78%" cy="19%" r="99%">
+      <stop stop-color="#493651"/>
+      <stop offset=".28" stop-color="#3b2c42"/>
+      <stop offset=".6" stop-color="#302436"/>
+      <stop offset="1" stop-color="#221925"/>
+    </radialGradient>
+    <radialGradient id="nb-noob-sleeve-left" cx="76%" cy="15%" r="110%">
+      <stop stop-color="#3f2f46"/>
+      <stop offset=".46" stop-color="#332639"/>
+      <stop offset="1" stop-color="#241b28"/>
+    </radialGradient>
+    <radialGradient id="nb-noob-sleeve-right" cx="57%" cy="29%" r="75%">
+      <stop stop-color="#584162"/>
+      <stop offset=".27" stop-color="#46344d"/>
+      <stop offset=".6" stop-color="#35283b"/>
+      <stop offset="1" stop-color="#241b28"/>
+    </radialGradient>
+    <radialGradient id="nb-noob-pants-paint" cx="75%" cy="14%" r="101%">
+      <stop stop-color="#575146"/>
+      <stop offset=".36" stop-color="#49443d"/>
+      <stop offset=".76" stop-color="#38342f"/>
+      <stop offset="1" stop-color="#282521"/>
+    </radialGradient>
+    <radialGradient id="nb-noob-cloth-light">
+      <stop stop-color="#807356" stop-opacity=".29"/>
+      <stop offset=".55" stop-color="#746851" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#6d6250" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="nb-noob-boot-left" gradientUnits="userSpaceOnUse" x1="181" y1="440" x2="228" y2="445">
+      <stop stop-color="#2f2b27"/>
+      <stop offset=".35" stop-color="#443f37"/>
+      <stop offset=".68" stop-color="#564f44"/>
+      <stop offset="1" stop-color="#342f2a"/>
+    </linearGradient>
+    <linearGradient id="nb-noob-boot-right" gradientUnits="userSpaceOnUse" x1="284" y1="440" x2="332" y2="445">
+      <stop stop-color="#292622"/>
+      <stop offset=".35" stop-color="#413c35"/>
+      <stop offset=".74" stop-color="#60584b"/>
+      <stop offset="1" stop-color="#3b352f"/>
+    </linearGradient>
+    <linearGradient id="nb-noob-belt-paint" x1="0" y1="0" x2="1" y2=".3">
+      <stop stop-color="#411049"/>
+      <stop offset=".57" stop-color="#54155f"/>
+      <stop offset=".85" stop-color="#731d81"/>
+      <stop offset="1" stop-color="#4c1355"/>
+    </linearGradient>
+  <radialGradient id="ud-eye-glow"><stop stop-color="#ffd04a" stop-opacity="1"/><stop offset="0.35" stop-color="#ff2a1a" stop-opacity="0.95"/><stop offset="1" stop-color="#ff2a1a" stop-opacity="0"/></radialGradient></defs>
+  <g id="nb-unit-body">
+    <g id="nb-noob-boots" clip-path="url(#nb-noob-legs-clip)">
+      <path id="nb-noob-original-legs-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V456.325C226 458.436 225.797 460.549 225.283 462.597C222.276 474.567 217.856 479.893 207.651 483.21C204.636 484.189 201.358 484.193 198.364 483.154C187.762 479.476 184.734 473.419 182.621 461.924C182.325 460.316 182.2 458.678 182.2 457.043V297H329.8V457.043C329.8 458.678 329.675 460.316 329.379 461.924C327.266 473.419 324.238 479.476 313.636 483.154C310.642 484.193 307.364 484.189 304.349 483.21C294.144 479.893 289.724 474.567 286.717 462.597C286.203 460.549 286 458.436 286 456.325V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#nb-noob-boot-left)"/>
+      <path d="M255 295 H332 V486 H255Z" fill="url(#nb-noob-boot-right)"/>
+    </g>
+    <g id="nb-noob-pants" clip-path="url(#nb-noob-pants-clip)">
+      <path id="nb-noob-original-pants-silhouette" d="M256 323.5C240.434 325.233 233.781 329.583 226 344V416.969H182.2V297H329.8V416.969H286V344C278.219 329.583 271.566 325.233 256 323.5Z" fill="url(#nb-noob-pants-paint)"/>
+      <ellipse cx="209" cy="365" rx="30" ry="66" fill="url(#nb-noob-cloth-light)"/>
+      <ellipse cx="315" cy="365" rx="29" ry="66" fill="url(#nb-noob-cloth-light)"/>
+    <path d="M176 392 L336 392 L336 406 L329.3 401.5 L322.7 406 L316.0 413.2 L309.3 406 L302.7 403.3 L296.0 406 L289.3 415.0 L282.7 406 L276.0 402.4 L269.3 406 L262.7 411.4 L256.0 406 L249.3 401.5 L242.7 406 L236.0 413.2 L229.3 406 L222.7 403.3 L216.0 406 L209.3 415.0 L202.7 406 L196.0 402.4 L189.3 406 L182.7 411.4 L176.0 406Z" fill="#1b1320"/><path d="M200 352 Q209 342 218 352 L214 366 Q207 371 202 364Z" fill="#c9cdb5" stroke="#1b1320" stroke-width="3"/><path d="M296 340 L305 352 L300 356 L309 370" stroke="#1b1320" stroke-width="4" stroke-linecap="round"/></g>
+    <g id="nb-noob-arms" clip-path="url(#nb-noob-arms-clip)">
+      <path id="nb-noob-original-arms-silhouette" d="M89.463 285.549C108.84 227.843 124.176 194.365 159.329 151.904C168.388 140.962 182.046 135 196.251 135L315.749 135C329.954 135 343.612 140.962 352.671 151.904C387.824 194.365 403.16 227.843 422.537 285.549L423.524 290.336C427.726 310.725 403.104 321.952 390.031 309.285C386.874 306.226 385.574 301.815 384.476 297.559C373.115 253.505 356.981 228.883 329.8 184.5V297H182.2V184.5C155.019 228.883 138.885 253.505 127.524 297.559C126.426 301.815 125.126 306.226 121.969 309.285C108.896 321.952 84.2744 310.725 88.4764 290.336L89.463 285.549Z" fill="url(#nb-noob-left-arm)"/>
+      <path d="M256 130 H428 V320 H256Z" fill="url(#nb-noob-right-arm)"/>
+    </g>
+    <g id="nb-noob-shirt" clip-path="url(#nb-noob-shirt-clip)">
+      <path id="nb-noob-original-shirt-silhouette" d="M182.2 297V184.5C168.218 206.247 160.408 218.458 148.186 242.53L114.525 220.882C130.53 189.977 142.073 171.65 160.05 150.859C169.009 140.498 182.254 135 195.951 135L316.049 135C329.746 135 342.991 140.498 351.95 150.859C369.927 171.65 381.47 189.977 397.475 220.882L363.814 242.53C351.592 218.458 343.782 206.247 329.8 184.5V297H256H182.2Z" fill="url(#nb-noob-shirt-paint)"/>
+      <path d="M195 135 C175 145 169 158 158 180 L125 231 L110 227 L134 184 L159 149 Q174 133 195 135Z" fill="url(#nb-noob-sleeve-left)"/>
+      <path d="M315 134 Q340 130 358 155 Q380 181 401 223 L363 245 Q343 201 331 182 Q327 151 315 134Z" fill="url(#nb-noob-sleeve-right)"/>
+      <path d="M230 138 Q255 129 281 138 L256 164Z" fill="#211825"/>
+      <path d="M239 140 Q255 137 273 141 L256 158Z" fill="#4d473c"/>
+    <path d="M108 224 L150 245 L144 232 L134 238 L130 226 L120 230Z" fill="#1b1320"/><path d="M404 224 L362 245 L368 232 L378 238 L382 226 L392 230Z" fill="#1b1320"/><path d="M205 196 L222 214 L214 216 L231 238 L210 222 L216 220Z" fill="#1b1320" opacity="0.85"/><path d="M300 170 L286 196 L294 196 L281 222 L304 194 L296 193Z" fill="#1b1320" opacity="0.85"/><path d="M232 150 L256 178 L280 150" stroke="#000000" stroke-width="6" stroke-linejoin="round"/></g>
+  </g>
+  <g id="nb-plain-belt">
+    <path d="M182 282 Q256 291 330 282 V301 Q256 311 182 301Z" fill="url(#nb-noob-belt-paint)"/>
+  </g>
+  <g id="nb-unit-head">
+    <circle id="nb-noob-original-head-silhouette" cx="256" cy="91" r="62.5" fill="url(#nb-noob-skin)"/>
+    <g id="noob-eye-1">
+      <ellipse cx="236" cy="73" rx="8.64" ry="10.2" fill="#1c0e14"/>
+      <circle cx="236" cy="73" r="4.5" fill="#ff2a1a"/><circle cx="236.00" cy="73.00" r="9.00" fill="url(#ud-eye-glow)"/>
+    </g>
+    <g id="noob-eye-2">
+      <ellipse cx="277" cy="73" rx="8.64" ry="10.2" fill="#1c0e14"/>
+      <circle cx="277" cy="73" r="4.5" fill="#ff2a1a"/><circle cx="277.00" cy="73.00" r="9.00" fill="url(#ud-eye-glow)"/>
+    </g>
+    <path d="M242 114 H270" stroke="#2a1a22" stroke-width="5" stroke-linecap="round"/>
+  <path d="M247 109 V119" stroke="#2a1a22" stroke-width="2.5" stroke-linecap="round"/><path d="M256 109 V119" stroke="#2a1a22" stroke-width="2.5" stroke-linecap="round"/><path d="M265 109 V119" stroke="#2a1a22" stroke-width="2.5" stroke-linecap="round"/><path d="M214 92 Q220 104 230 106" stroke="#6c7462" stroke-width="4" stroke-linecap="round" opacity="0.8"/><path d="M298 92 Q292 104 282 106" stroke="#6c7462" stroke-width="4" stroke-linecap="round" opacity="0.8"/></g>
+</svg>
