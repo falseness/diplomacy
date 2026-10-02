@@ -463,16 +463,27 @@ function placeCircleExpansions(plan, starts) {
 // Common ring categories in the per-human deal order; COOP_CIRCLE_ELITE_CATEGORIES
 // fill the elite core.
 const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged', 'support'])
+// Per-human ring portal groups. Members of a group are at hex distance 1-2 from
+// each other; portals of different groups are at hex distance >= CIRCLE_GROUP_GAP.
+const COOP_CIRCLE_RING_GROUPS = Object.freeze([
+    Object.freeze({kind: 'trio', categories: Object.freeze(['support', 'melee', 'ranged'])}),
+    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])}),
+    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])})])
+const CIRCLE_GROUP_SPAN = 2
+const CIRCLE_GROUP_GAP = 3
 
 // Portals after placeCircleExpansions. Elite categories sit on elite lattice
 // cells (layer <= E); common categories sit in the ring E < layer <= ringOuter,
 // which keeps them at hex distance >= D from every human town. Lattice cells
-// are preferred; any other band cell is used only if it touches no portal.
+// are preferred. Elite portals touch no other portal. Ring portals form
+// COOP_CIRCLE_RING_GROUPS per human: every member within CIRCLE_GROUP_SPAN of
+// the others, at least CIRCLE_GROUP_GAP from other groups, and a group that
+// cannot be completed is retried from another first member.
 // Every portal keeps two distinct free approach cells (bipartite matching) that
 // are not portals, towns, mines or reservations, and the passable region stays
-// connected after every placement. The first ring portal per human is the
-// nearest reachable ring cell to that human's town, keeping the nearest-portal
-// path spread level for the terrain stage.
+// connected after every placement. Each human's trio starts at the nearest
+// reachable ring cell to that human's town, keeping the nearest-portal path
+// spread level for the terrain stage; pairs start from the shuffled candidates.
 function placeCirclePortals(plan, layout) {
     const {side, humans, radius} = plan, {elite, ringOuter} = plan.regions
     const targets = circleScaling(humans, plan.size).counts.portalCategories
@@ -482,7 +493,9 @@ function placeCirclePortals(plan, layout) {
     const townIds = layout.players.flatMap(p => p.towns.map(idOf)), mineIds = layout.goldmines.map(idOf)
     const occupied = new Set([...townIds, ...mineIds]), reserved = new Set(layout.reserved.map(idOf))
     const around = id => circleNeighbours(cell(id), side).map(idOf).filter(n => layerOf(n) <= radius)
-    const portals = [], categories = [], portalSet = new Set()
+    // groupOf[i]: index into portalGroups for ring portals, -1 for elite portals.
+    const portals = [], categories = [], groupOf = [], portalGroups = [], portalSet = new Set()
+    const hex = (a, b) => circleHexDistance(cell(a), cell(b))
     const free = n => !occupied.has(n) && !reserved.has(n) && !portalSet.has(n)
     // Two distinct approach cells per portal, or null.
     const approaches = () => {
@@ -523,12 +536,65 @@ function placeCirclePortals(plan, layout) {
         }
         return distance
     }
-    const tryPlace = (id, category) => {
-        if (portalSet.has(id) || around(id).some(n => portalSet.has(n))) return false
+    // Elite portals touch no portal; ring portals keep CIRCLE_GROUP_GAP from
+    // other ring groups (members of their own group are filtered by the caller).
+    const tryPlace = (id, category, group = -1) => {
+        if (portalSet.has(id)) return false
+        if (portals.some((p, i) => {
+            const d = hex(p, id)
+            return group >= 0 && groupOf[i] >= 0 ? groupOf[i] !== group && d < CIRCLE_GROUP_GAP : d < 2
+        })) return false
         portals.push(id); portalSet.add(id)
-        if (connected() && approaches()) { categories.push(category); return true }
+        if (connected() && approaches()) { categories.push(category); groupOf.push(group); return true }
         portals.pop(); portalSet.delete(id)
         return false
+    }
+    const unplace = () => { portalSet.delete(portals.pop()); categories.pop(); groupOf.pop() }
+    // Distance from a cell to the nearest placed ring portal (Infinity if none).
+    const ringGap = id => portals.reduce((m, p, i) => groupOf[i] >= 0 ? Math.min(m, hex(p, id)) : m, Infinity)
+    // Places one ring group: the first member from firsts, every later member
+    // within CIRCLE_GROUP_SPAN of all placed members; backtracks on dead ends.
+    // Packed placement tries the closest member cells first.
+    const placeGroup = (group, slot, firsts, candidates, packed) => {
+        const index = portalGroups.length, members = []
+        const extend = k => {
+            if (k === group.categories.length) return true
+            let pool = k ? candidates.filter(id => members.every(m => hex(portals[m], id) <= CIRCLE_GROUP_SPAN)) : firsts
+            if (k && packed) {
+                const spread = id => members.reduce((sum, m) => sum + hex(portals[m], id), 0)
+                pool = pool.sort((a, b) => spread(a) - spread(b))
+            }
+            for (const id of pool) {
+                if (!tryPlace(id, group.categories[k], index)) continue
+                members.push(portals.length - 1)
+                if (extend(k + 1)) return true
+                members.pop(); unplace()
+            }
+            return false
+        }
+        if (!extend(0)) throw new Error(`Circle has no ring portal site: size=${plan.size} humans=${humans} seed=${plan.seed} category=${group.categories.join('+')} slot=${slot}`)
+        portalGroups.push({slot, kind: group.kind, members})
+    }
+    // Trios first, one per human: the first member is tried in order of path
+    // distance from that human's town, so nearest-portal distances start level.
+    // Pairs start from the shuffled candidates; packed placement instead starts
+    // each pair next to the placed ring portals (closest gap first, then
+    // cells on the band edges).
+    const placeRing = (candidates, packed) => {
+        layout.players.slice(1).forEach((p, i) => {
+            const d = pathFrom(idOf(p.towns[0]))
+            const firsts = candidates.filter(id => d[id] > 0).sort((a, b) => d[a] - d[b])
+            placeGroup(COOP_CIRCLE_RING_GROUPS[0], i + 1, firsts, candidates, packed)
+        })
+        layout.players.slice(1).forEach((p, i) => COOP_CIRCLE_RING_GROUPS.slice(1).forEach(g => {
+            let firsts = candidates
+            if (packed) {
+                const edge = id => Math.min(layerOf(id) - elite - 1, ringOuter - layerOf(id))
+                const key = new Map(candidates.map(id => [id, ringGap(id) * side + edge(id)]))
+                firsts = candidates.slice().sort((a, b) => key.get(a) - key.get(b))
+            }
+            placeGroup(g, i + 1, firsts, candidates, packed)
+        }))
     }
     for (const group of groups) {
         const lattice = [], rest = []
@@ -537,22 +603,19 @@ function placeCirclePortals(plan, layout) {
             ;(circleGeometry.coopHexLattice(id % side, Math.floor(id / side)) ? lattice : rest).push(id)
         }
         const candidates = [...shuffle(lattice), ...shuffle(rest)]
-        let sequence = group.sequence
-        // Ring anchors: each human first gets a ring portal at the smallest path
-        // distance from their town, so nearest-portal distances start level.
         if (group.region === 'ring') {
-            layout.players.slice(1).forEach((p, i) => {
-                const d = pathFrom(idOf(p.towns[0])), tiers = new Map()
-                for (const id of candidates) if (d[id] > 0) {
-                    if (!tiers.has(d[id])) tiers.set(d[id], [])
-                    tiers.get(d[id]).push(id)
-                }
-                const anchored = [...tiers.keys()].sort((a, b) => a - b).some(tier => tiers.get(tier).some(id => tryPlace(id, sequence[i])))
-                if (!anchored) throw new Error(`Circle has no ring anchor portal: size=${plan.size} humans=${humans} seed=${plan.seed} slot=${i + 1}`)
-            })
-            sequence = sequence.slice(humans)
+            const dealt = COOP_CIRCLE_RING_GROUPS.flatMap(g => g.categories)
+            if (group.sequence.join() !== Array(humans).fill(COOP_CIRCLE_RING_CATEGORIES.flatMap(c => dealt.filter(k => k === c))).flat().join())
+                throw new Error(`Circle ring groups do not match the portal categories: size=${plan.size} humans=${humans} seed=${plan.seed}`)
+            // Small rings may not fit spread-out groups: retry them packed.
+            try { placeRing(candidates, false) } catch (error) {
+                while (groupOf.length && groupOf[groupOf.length - 1] >= 0) unplace()
+                portalGroups.length = 0
+                placeRing(candidates, true)
+            }
+            continue
         }
-        for (const category of sequence) {
+        for (const category of group.sequence) {
             if (!candidates.some(id => tryPlace(id, category)))
                 throw new Error(`Circle has no ${group.region} portal site: size=${plan.size} humans=${humans} seed=${plan.seed} category=${category}`)
         }
@@ -572,6 +635,7 @@ function placeCirclePortals(plan, layout) {
         expansions: JSON.parse(JSON.stringify(layout.expansions)),
         portals: portals.map((id, i) => ({...cell(id), category: categories[i]})),
         portalCategories: categoryCounts,
+        portalGroups: portalGroups.map(g => ({slot: g.slot, kind: g.kind, members: g.members.slice()})),
         portalApproaches: portals.map((id, i) => ({portal: cell(id), cells: assigned[i].map(cell)}))
     }
 }
@@ -756,5 +820,5 @@ function placeCircleTerrain(plan, layout) {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {planCoopCircle, placeCircleStarts, placeCircleExpansions, placeCirclePortals, placeCircleTerrain, circleRingOrder, circlePassableConnected, circleRadiusPlan, circleCapacityAt, circleRegions, clearCirclePlanCache,
         createCircleRandom, circleNeighbours, COOP_CIRCLE_ELITE_CATEGORIES, CIRCLE_TOWN_DISTANCE, CIRCLE_LEGEND,
-        CIRCLE_MAX_GROWTH, CIRCLE_ACCESS_DISPARITY, COOP_CIRCLE_RING_CATEGORIES, CIRCLE_TERRAIN_KINDS}
+        CIRCLE_MAX_GROWTH, CIRCLE_ACCESS_DISPARITY, COOP_CIRCLE_RING_CATEGORIES, COOP_CIRCLE_RING_GROUPS, CIRCLE_TERRAIN_KINDS}
 }
