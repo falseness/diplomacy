@@ -237,7 +237,7 @@ function checkCallers() {
   vm.runInContext(`class Building {}; const gameSettings = {coop: {demonSlot: 3, generation: {version: 5}}};
     let gameRound = 0;
     const external = COOP_PORTAL_CATEGORIES.map((category, x) => ({category, coord: {x,y:0},
-      hp:30, killed:false, isDemonPortal:true, playerColor:3}));
+      hp:coopPortalHealth(category), killed:false, isDemonPortal:true, playerColor:3}));
     let blocked = false;
     const grid = {getBuilding: c => external[c.x], getUnit: () => ({isEmpty: () => !blocked})};`, context);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'sprites/entities/buildings/demonPortal.js'), 'utf8'), context);

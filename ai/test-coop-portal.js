@@ -39,8 +39,8 @@ function run(fault) {
   f.compare('demon-ownership-visible-health', f.evaluate(`({owner: portal.playerColor, role: portal.player.role,
     hp: portal.hp, max: portal.maxHP, bar: Boolean(portal.hpBar), info: portal.info.info.hp,
     wire: portal.toJSON(), standable: portal.isStandable, product: Object.prototype.hasOwnProperty.call(production, 'demonPortal')})`),
-  {owner: 3, role: 'DEMONS', hp: 30, max: 30, bar: true, info: '30 / 30',
-    wire: {name: 'demonPortal', coord: {x: 3, y: 2}, hp: 30, wasHitted: false, ownerSlot: 3, category: 'melee'}, standable: false, product: false});
+  {owner: 3, role: 'DEMONS', hp: 12, max: 12, bar: true, info: '12 / 12',
+    wire: {name: 'demonPortal', coord: {x: 3, y: 2}, hp: 12, wasHitted: false, ownerSlot: 3, category: 'melee'}, standable: false, product: false});
   if (fault === 'ownership') f.evaluate('external.push(portal)');
   check('spawn');
   action('portal-draw-and-health-bar', `(() => {
@@ -78,9 +78,9 @@ function run(fault) {
   action('melee-capture-attempt-damages-only', `(() => {const u = grid.getUnit({x:2,y:2});
     u.select(); u.sendInstructions(grid.getCell({x:3,y:2}));
     return {hp:portal.hp, owner:portal.playerColor, attacker:u.coord, live:external.length}})()`,
-    {hp:29, owner:3, attacker:{x:2,y:2}, live:1});
-  action('damage-visible-in-state', `portal.hit(28); ({hp:portal.hp, info:portal.info.info.hp, wireHP:portal.toJSON().hp})`,
-    {hp:1, info:'1 / 30', wireHP:1});
+    {hp:11, owner:3, attacker:{x:2,y:2}, live:1});
+  action('damage-visible-in-state', `portal.hit(10); ({hp:portal.hp, info:portal.info.info.hp, wireHP:portal.toJSON().hp})`,
+    {hp:1, info:'1 / 12', wireHP:1});
   // Replenish the test attacker's movement explicitly; this fixture does not advance rounds.
   action('fixture-replenish-moves', 'grid.getUnit({x:2,y:2}).moves = 2', 2);
   action('lethal-melee-removes-portal', `(() => {const u = grid.getUnit({x:2,y:2});
@@ -93,16 +93,16 @@ function run(fault) {
   action('fixture-clear-destroyed-portal-tile', `(() => {const u=grid.getUnit({x:3,y:2}); u.moves=2;
     u.select(); u.sendInstructions(grid.getCell({x:2,y:2})); return u.coord})()`,
     {x:2,y:2}, {type:'move',id:'human-one-unit',destination:{x:2,y:2}});
-  f.evaluate(`globalThis.restored = unpacker.fullUnpackBuilding({name:'demonPortal', coord:{x:3,y:2}, hp:17, wasHitted:true, ownerSlot:3, category:'melee'}); undefined`);
+  f.evaluate(`globalThis.restored = unpacker.fullUnpackBuilding({name:'demonPortal', coord:{x:3,y:2}, hp:7, wasHitted:true, ownerSlot:3, category:'melee'}); undefined`);
   entities.record({type:'spawn', entity:{id:'restored', kind:'portal', name:'demonPortal', owner:3, x:3, y:2}});
   entities.bind('restored', 'restored');
-  f.compare('deserialize-visible-health', f.evaluate('({hp:restored.hp, owner:restored.playerColor, info:restored.info.info.hp})'), {hp:17, owner:3, info:'17 / 30'});
+  f.compare('deserialize-visible-health', f.evaluate('({hp:restored.hp, owner:restored.playerColor, info:restored.info.info.hp})'), {hp:7, owner:3, info:'7 / 12'});
   check('deserialized');
   action('stale-kill-preserves-replacement', 'portal.kill(); grid.getBuilding({x:3,y:2}) === restored', true);
   action('invalid-damage-rejected', `(() => {try {restored.hit(-1)} catch(e) {return e.message}})()`, 'invalid portal damage');
   console.log('INAPPLICABLE online convergence: offline fixture has no online committed revisions.');
   console.log('INAPPLICABLE completed round/wave/demon phase counts: no round advancement; shared turn helper verifies unchanged round 0 and first human after every action.');
-  console.log('PASS co-op portal lifecycle health=30 damage=29,1,0 live_portals=1,0,1 demon_assets=0');
+  console.log('PASS co-op portal lifecycle health=12 damage=11,1,0 live_portals=1,0,1 demon_assets=0');
 }
 
 // Revised portal ownership and movement rules, isolated from combat fixtures.
@@ -138,7 +138,7 @@ function runOwnershipAndMovement() {
     f.evaluate('walker.select(); walker.sendInstructions(grid.getCell({x:4,y:3})); undefined');
     f.compare(label+'-leave-portal', f.evaluate(`({coord:walker.coord,moves:walker.moves,
       tile:tile.playerColor,owner:portal.playerColor,suburb:tile.isSuburb,hp:portal.hp})`),
-      {coord:{x:4,y:3},moves:1,tile:3,owner:3,suburb:false,hp:30});
+      {coord:{x:4,y:3},moves:1,tile:3,owner:3,suburb:false,hp:12});
     f.evaluate('actionManager.undo(); globalThis.walker=grid.getUnit({x:3,y:3}); undefined');
     f.compare(label+'-undo-exact', f.evaluate('JSON.stringify(getGameObject())'), before);
     // Replenish explicitly for the return
@@ -147,7 +147,7 @@ function runOwnershipAndMovement() {
     f.evaluate('walker.select(); walker.sendInstructions(grid.getCell({x:4,y:3})); walker.moves=walker.speed; walker.select(); walker.sendInstructions(grid.getCell({x:3,y:3})); undefined');
     f.compare(label+'-enter-own-portal', f.evaluate(`({coord:walker.coord,moves:walker.moves,
       tile:tile.playerColor,owner:portal.playerColor,hp:portal.hp,gold:players[3].gold})`),
-      {coord:{x:3,y:3},moves:1,tile:3,owner:3,hp:30,gold:0});
+      {coord:{x:3,y:3},moves:1,tile:3,owner:3,hp:12,gold:0});
     const packed = JSON.parse(f.evaluate('JSON.stringify(getGameObject())'));
     packed.grid[3][3] = 1;
     f.context.savedPortal = JSON.stringify(packed);

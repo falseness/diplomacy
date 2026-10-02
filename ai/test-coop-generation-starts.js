@@ -5,6 +5,8 @@ const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 const {initialEntities} = require('./test-coop-generation-fixtures');
+const {getCoopMapScaling} = require('./coop-map-scaling');
+const {coopPortalHealth} = require('./wave-config');
 
 const fault = process.argv[2];
 const f = createFixture(undefined, line => {
@@ -17,10 +19,11 @@ for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4,5,6,7,8
   if (fault === '--overlap') f.evaluate('generated.portals[0]={...generated.players[1].towns[0]}');
   const actual = f.evaluate('JSON.parse(JSON.stringify(generated))');
   const {audit}=require('./test-coop-terrain-audit');
-  assert.equal(actual.portals.length,count*({tiny:1,normal:2,big:3}[size]),'required-categories');
+  const counts=getCoopMapScaling(count,size).counts;
+  assert.equal(actual.portals.length,counts.portals,'required-categories');
   audit(actual,label+' legal-placement');
   assert(actual.players.slice(1,count+1).every(p=>p.gold===100&&p.towns.length===1&&p.units.length===0),'equal starting roster');
-  assert.equal(actual.goldmines.length,count*{tiny:1,normal:2,big:3}[size]);
+  assert.equal(actual.goldmines.length,counts.goldmines);
   assert(actual.goldmines.every(m=>m.owner===0&&m.income===20));
   const expected=actual; // Coordinates audited above; runtime values below are literal expectations.
   console.log(JSON.stringify({scenario:'seed-indexed-placement',count,seed,
@@ -47,7 +50,7 @@ for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4,5,6,7,8
       {role:'DEMONS',gold:0,towns:[],units:[]}]);
     f.compare(label+stage+'-portal-state',f.evaluate(`external.map(p=>({coord:p.coord,owner:p.playerColor,
       hp:p.hp,name:p.name,emptyUnit:grid.getUnit(p.coord).isEmpty(),territory:grid.getHexagon(p.coord).playerColor}))`),
-      expected.portals.map(coord=>({coord,owner:count+1,hp:30,name:'demonPortal',emptyUnit:true,territory:count+1})));
+      expected.portals.map(({x,y,category})=>({coord:{x,y},owner:count+1,hp:coopPortalHealth(category),name:'demonPortal',emptyUnit:true,territory:count+1})));
     f.compare(label+stage+'-separate-ownership',f.evaluate(`new Set(players).size===players.length &&
       new Set(players.map(p=>p.towns)).size===players.length &&
       new Set(players.map(p=>p.units)).size===players.length`),true);
@@ -58,7 +61,7 @@ for (const size of ['tiny','normal','big']) for (const count of [1,2,3,4,5,6,7,8
     f.compare(label+stage+'-serialized-mines',f.evaluate('JSON.parse(JSON.stringify(goldmines))'),
       expected.goldmines.map(c=>({name:'goldmine',coord:{x:c.x,y:c.y},income:20})));
     f.compare(label+stage+'-town-owners',f.evaluate('players.map(p=>p.towns.map(t=>t.playerColor))'),
-      [Array(count*{tiny:1,normal:2,big:3}[size]).fill(0),...Array.from({length:count},(_,i)=>[i+1]),[]]);
+      [Array(counts.neutralTowns).fill(0),...Array.from({length:count},(_,i)=>[i+1]),[]]);
     f.compare(label+stage+'-metadata',f.evaluate('gameSettings.coop'),{...expected.coop,balanceVersion:2});
   }
   check('-started');

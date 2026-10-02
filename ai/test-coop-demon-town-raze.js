@@ -74,6 +74,6 @@ for (const [label, hp, defenderHP, ranged, expectedHP, expectedDefender, razed] 
     attacker.select(); attacker.sendInstructions(grid.getCell({x:6,y:3})); undefined`);
   f.compare('own-portal-entry-preserved',f.evaluate(`({position:attacker.coord,moves:attacker.moves,
     hp:portal.hp,killed:portal.killed,owner:portal.playerColor})`),
-    {position:{x:6,y:3},moves:1,hp:30,killed:false,owner:3});
+    {position:{x:6,y:3},moves:1,hp:12,killed:false,owner:3});
 }
 console.log(`PASS demon-town-raze scenarios=${count} portal_controls=1 same_action_raze=3 ranged_no_raze=2 temporary_registration=0`);

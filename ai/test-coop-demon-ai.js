@@ -62,7 +62,7 @@ function run(fault) {
     if(fault) f.evaluate("trace.push({type:'purchase'})");
     f.compare('legal-combat-only-human-'+owner,f.evaluate('trace'),[{type:'combat',destination:{x:5,y:3},legal:true}]);
     f.compare('actual-SimpleAiPlayer-'+owner,f.evaluate('players[3].combatAI instanceof SimpleAiPlayer'),true);
-    f.compare('own-portal-and-demon-unharmed-'+owner,f.evaluate('({portal:portal.hp,demon:players[3].units[0].hp,friend:players[3].units[1].hp})'),{portal:30,demon:2,friend:2});
+    f.compare('own-portal-and-demon-unharmed-'+owner,f.evaluate('({portal:portal.hp,demon:players[3].units[0].hp,friend:players[3].units[1].hp})'),{portal:12,demon:2,friend:2});
     f.compare('economic-opportunities-present-'+owner,f.evaluate('({towns:players[0].towns.length+players[1].towns.length+players[2].towns.length,humanGold:players[1].gold})'),{towns:3,humanGold:100});
     f.compare('allied-human-units-excluded-'+owner,f.evaluate(`new BestEnemyTargetForAI().calculateBestEnemyTarget(
       {x:7,y:1},grid.arr.map(column=>column.map(cell=>({...cell,building:new Empty()}))),1)`),{x:4,y:2});

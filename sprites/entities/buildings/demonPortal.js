@@ -2,6 +2,11 @@
 class DemonPortal extends Building {
     static get maxHP() { return COOP_PORTAL_HEALTH }
     static healSpeed = 0
+    // Per-category durability. Entity's constructor reads this before category
+    // exists, so it falls back to the static value until the constructor resets hp.
+    get maxHP() {
+        return this.category === undefined ? DemonPortal.maxHP : coopPortalHealth(this.category)
+    }
     // Every portal carries a validated current category.
     constructor(x, y, category) {
         const slot = gameSettings.coop && gameSettings.coop.demonSlot
@@ -21,6 +26,9 @@ class DemonPortal extends Building {
         super(x, y, 'demonPortal')
         Object.defineProperty(this, 'ownerSlot', {value: slot})
         Object.defineProperty(this, 'category', {value: category})
+        // Fresh portal at its category max; deserialization overwrites hp afterwards.
+        this.hp = this.maxHP
+        this.hpBar = new HealthBar(this.hpBar.pos, this.maxHP)
         external.push(this)
     }
     get playerColor() { return this.ownerSlot }

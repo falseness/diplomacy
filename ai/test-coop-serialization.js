@@ -59,8 +59,9 @@ function runCoop(count, fault) {
     expectedUnits.push({id:row.id,name,className,owner:count+1,x:row.x,y:4,hp,moves:0,wasHitted:true});
     check(prefix+'-spawn-'+name);
   }
-  for (const [x,hp] of [[5,17],[15,1]]) {
-    f.evaluate(`globalThis.born = new DemonPortal(${x},7,"melee"); born.hit(${30-hp}); undefined`);
+  // An elite portal (max 30) and a common one (max 12), each saved below its max.
+  for (const [x,hp,category,max] of [[5,17,'siege',30],[15,1,'melee',12]]) {
+    f.evaluate(`globalThis.born = new DemonPortal(${x},7,"${category}"); born.hit(${max-hp}); undefined`);
     const row = {id:`portal-${x}`,kind:'portal',name:'demonPortal',owner:count+1,x,y:7};
     s.entities.record({type:'spawn',entity:row}); s.entities.bind(row.id,'born');
     check(prefix+'-portal-'+x);
@@ -72,12 +73,12 @@ function runCoop(count, fault) {
       gold:players.map(p=>p.gold),
       units:players.flatMap(p=>p.units.map(u=>({id:u.id,name:u.name,className:u.constructor.name,
         owner:u.playerColor,x:u.coord.x,y:u.coord.y,hp:u.hp,moves:u.moves,wasHitted:u.wasHitted}))),
-      portals:external.map(p=>({name:p.name,owner:p.playerColor,x:p.coord.x,y:p.coord.y,hp:p.hp,wasHitted:p.wasHitted}))})`),
+      portals:external.map(p=>({name:p.name,owner:p.playerColor,x:p.coord.x,y:p.coord.y,hp:p.hp,max:p.maxHP,wasHitted:p.wasHitted}))})`),
     {coop:{initialHumanCount:count,humanSlots:Array.from({length:count},(_,i)=>i+1),humanTeam:'HUMANS',demonSlot:count+1,balanceVersion:2,generation:{version:5,playerCount:count,seed:1,size:'tiny',options:{seed:1,size:'tiny'},testFixture:{generated:false,kind:'declared-mechanics-fixture'}}},
       roles:['NEUTRAL',...Array(count).fill('HUMAN'),'DEMONS'], teams:[0,...Array(count).fill('HUMANS'),'DEMONS'],
       neutral:true,demon:true,gold:[0,...Array.from({length:count},(_,i)=>101+i*37),0], units:expectedUnits,
-      portals:[{name:'demonPortal',owner:count+1,x:5,y:7,hp:17,wasHitted:true},
-        {name:'demonPortal',owner:count+1,x:15,y:7,hp:1,wasHitted:true}]});
+      portals:[{name:'demonPortal',owner:count+1,x:5,y:7,hp:17,max:30,wasHitted:true},
+        {name:'demonPortal',owner:count+1,x:15,y:7,hp:1,max:12,wasHitted:true}]});
     f.compare(label+'-unique-persisted-ids',f.evaluate('new Set(players.flatMap(p=>p.units.map(u=>u.id))).size'),count+10);
   }
   identity(prefix+'-before');
