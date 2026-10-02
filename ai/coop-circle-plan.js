@@ -289,18 +289,29 @@ const CIRCLE_NEUTRAL_TARGET = 2
 const CIRCLE_MINE_CLEARANCE = 4
 const CIRCLE_NEUTRAL_SPACING = 5
 const CIRCLE_EXPANSION_PASSES = 6
+// Neutral-town kinds per human by size, and hex distance windows from the owner's town.
+const CIRCLE_NEUTRAL_KINDS = Object.freeze({tiny: Object.freeze(['gap']), normal: Object.freeze(['gap', 'ring']),
+    big: Object.freeze(['gap', 'ring', 'elite'])})
+const CIRCLE_GAP_HEX = Object.freeze({min: 5, max: 9})
+const CIRCLE_RING_HEX = Object.freeze({min: 5, max: 10})
 
-// Neutral towns and every gold mine after placeCircleStarts, all strictly
-// outside the elite core (layer > E). Neutral towns sit on free cells whose
-// whole 3x3 is inside the radius, outside the elite core (so the capacity
-// predicate's free elite lattice holds), clear of every reservation and at hex
-// distance >= CIRCLE_NEUTRAL_SPACING from every other neutral town; they are
-// chosen greedily so the spread of each human's nearest neutral-town path
-// stays within CIRCLE_ACCESS_DISPARITY. Mines are all neutral (owner 0), off
-// reservations and at hex distance >= CIRCLE_MINE_CLEARANCE from every human
-// town, chosen greedily the same way for the nearest-mine path spread. Paths
-// treat layer > R and other humans' towns as solid; neutral towns and mines are
-// endpoints. Passable connectivity is re-checked after every placement.
+// Neutral towns and every gold mine after placeCircleStarts. Each human gets
+// the neutral-town kinds of CIRCLE_NEUTRAL_KINDS[size], placed in slot order:
+// 'gap' has its whole 3x3 at ringOuter < layer <= R and hex distance
+// CIRCLE_GAP_HEX from its owner's town; 'ring' has the town at E < layer <=
+// ringOuter and the whole 3x3 at layer > E, preferring hex distance
+// CIRCLE_RING_HEX and otherwise taking the nearest site at hex distance >= 5
+// (relaxed, for large maps); 'elite' has the town at layer <= E and is the
+// nearest valid site to its owner. Every 3x3 is inside the radius, clear of
+// reservations and other neutral 3x3s, at hex distance >= CIRCLE_NEUTRAL_SPACING
+// from every other neutral town; gap and ring towns are not strictly closer to
+// another human's town than to their owner's. Candidates are shuffled, and a
+// pass must leave the spread of each human's nearest neutral-town path within
+// CIRCLE_ACCESS_DISPARITY. Mines are all neutral (owner 0), outside the elite
+// core (layer > E), off reservations and at hex distance >= CIRCLE_MINE_CLEARANCE
+// from every human town, chosen greedily for the lowest nearest-mine path
+// spread. Paths treat layer > R and other humans' towns as solid; neutral towns
+// and mines are endpoints. Passable connectivity is re-checked after every placement.
 function placeCircleExpansions(plan, starts) {
     const {side, humans, radius, center, counts} = plan, elite = plan.regions.elite
     const shuffle = circleShuffler(plan.seed ^ 0x85ebca6b)
@@ -348,35 +359,46 @@ function placeCircleExpansions(plan, starts) {
     const spread = values => Math.max(...values) - Math.min(...values)
     const nearestNeutral = d => d.map(di => Math.min(...neutral.map(id => di[id] < 0 ? Infinity : di[id])))
     const box = id => CIRCLE_OFFSETS3.map(o => ({x: id % side + o.x, y: Math.floor(id / side) + o.y}))
-    const sites = []
+    // Candidate sites per kind: whole 3x3 in bounds, inside the radius and off reservations.
+    const ringOuter = plan.regions.ringOuter, sites = {gap: [], ring: [], elite: []}
     for (let id = 0; id < side * side; id++) {
-        if (layerOf(id) <= elite || layerOf(id) > radius) continue
+        if (layerOf(id) > radius) continue
         const cells = box(id)
-        if (cells.every(c => c.x >= 0 && c.y >= 0 && c.x < side && c.y < side && layerOf(idOf(c)) <= radius
-            && layerOf(idOf(c)) > elite && !reserved.has(idOf(c)))) sites.push(id)
+        if (!cells.every(c => c.x >= 0 && c.y >= 0 && c.x < side && c.y < side && layerOf(idOf(c)) <= radius
+            && !reserved.has(idOf(c)))) continue
+        const boxLayers = cells.map(c => layerOf(idOf(c)))
+        if (boxLayers.every(l => l > ringOuter)) sites.gap.push(id)
+        if (layerOf(id) > elite && layerOf(id) <= ringOuter && boxLayers.every(l => l > elite)) sites.ring.push(id)
+        if (layerOf(id) <= elite) sites.elite.push(id)
     }
-    // One greedy pass; false when sites run out or the final spread is too wide.
+    const kinds = CIRCLE_NEUTRAL_KINDS[plan.size], neutralAssignments = []
+    const within = (d, range) => d >= range.min && d <= range.max
+    const byHex = (list, hexOf) => list.map(id => [id, hexOf(id)]).sort((p, q) => p[1] - q[1]).map(p => p[0])
+    // One pass over humans in slot order; false when a kind has no connected
+    // site or the final nearest-neutral spread is too wide.
     const placeNeutral = () => {
-        neutral.length = 0
+        neutral.length = 0; neutralAssignments.length = 0
         const taken = new Set()
-        for (let k = 0; k < counts.neutralTowns; k++) {
-            const d = fields(), current = neutral.length ? nearestNeutral(d) : towns.map(() => Infinity), tiers = new Map()
-            for (const id of sites) {
-                if (box(id).some(c => taken.has(idOf(c)))) continue
-                if (neutral.some(n => circleHexDistance(cell(id), cell(n)) < CIRCLE_NEUTRAL_SPACING)) continue
-                const next = d.map((di, i) => di[id] < 0 ? Infinity : Math.min(current[i], di[id]))
-                if (!next.every(Number.isFinite)) continue
-                const tier = Math.max(CIRCLE_NEUTRAL_TARGET, spread(next))
-                if (!tiers.has(tier)) tiers.set(tier, [])
-                tiers.get(tier).push(id)
-            }
+        for (let i = 0; i < humans; i++) for (const kind of kinds) {
+            const hexOf = id => circleHexDistance(cell(id), towns[i])
+            const valid = sites[kind].filter(id => !box(id).some(c => taken.has(idOf(c)))
+                && !neutral.some(n => circleHexDistance(cell(id), cell(n)) < CIRCLE_NEUTRAL_SPACING)
+                && (kind === 'elite' || towns.every(t => circleHexDistance(cell(id), t) >= hexOf(id))))
+            // [candidates, relaxed] tiers, tried in order.
+            const tiers = kind === 'gap' ? [[shuffle(valid.filter(id => within(hexOf(id), CIRCLE_GAP_HEX))), false]]
+                : kind === 'ring' ? [[shuffle(valid.filter(id => within(hexOf(id), CIRCLE_RING_HEX))), false],
+                    [byHex(shuffle(valid.filter(id => hexOf(id) > CIRCLE_RING_HEX.max)), hexOf), true]]
+                : [[byHex(shuffle(valid), hexOf), false]]
             let placed = false
-            search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
-                for (const id of shuffle(tiers.get(tier))) {
-                    neutral.push(id)
-                    if (connected()) { box(id).forEach(c => taken.add(idOf(c))); placed = true; break search }
-                    neutral.pop()
+            search: for (const [candidates, relaxed] of tiers) for (const id of candidates) {
+                neutral.push(id)
+                if (connected()) {
+                    box(id).forEach(c => taken.add(idOf(c)))
+                    neutralAssignments.push({slot: i + 1, kind, ...cell(id), hexDistance: hexOf(id), relaxed})
+                    placed = true
+                    break search
                 }
+                neutral.pop()
             }
             if (!placed) return false
         }
@@ -432,7 +454,7 @@ function placeCircleExpansions(plan, starts) {
         reserved: [...reserved].sort((a, b) => a - b).map(cell),
         goldmines: mines.map(id => ({...cell(id), owner: 0, income: 20})),
         assignments: starts.assignments.map(a => ({...a, mine: {...a.mine}})),
-        expansions: {neutralTowns: neutral.map(cell), mines: mines.map(cell),
+        expansions: {neutralTowns: neutral.map(cell), neutralAssignments: neutralAssignments.map(a => ({...a})), mines: mines.map(cell),
             nearestNeutralDistance: nearest, neutralSpread: nearest.length ? spread(nearest) : 0,
             nearestMineDistance: nearestMines, mineSpread: spread(nearestMines)}
     }
