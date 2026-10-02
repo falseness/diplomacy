@@ -437,7 +437,53 @@ class DemonPlayer extends Player {
     // Bankruptcy never disbands demons (portal waves are unpaid): nextTurn still
     // resets a negative balance to 0, so the demons simply cannot buy anything.
     crisisPenalty() {}
+    // SimpleAiPlayerWithEconomy's spending logic run against this player: gold,
+    // income, towns and units forward here, so every purchase is charged to the
+    // demon slot and produced units are ordinary classes owned by it.
+    get economyAI() {
+        if (this.demonEconomyAI) return this.demonEconomyAI
+        const demon = this
+        const ai = Object.create(SimpleAiPlayerWithEconomy.prototype)
+        for (const key of ['gold', 'income', 'towns', 'units', 'aiInitialTownCount'])
+            Object.defineProperty(ai, key, {get: () => demon[key], set: value => { demon[key] = value }})
+        ai.getPlayerIndex = () => players.indexOf(demon)
+        // Salary guard: a unit is only bought while net income still covers its
+        // salary plus the salaries of units already in production.
+        ai.addProductionChoices = function(choices, producer, products) {
+            const start = choices.length
+            SimpleAiPlayerWithEconomy.prototype.addProductionChoices.call(this, choices, producer, products)
+            const upkeep = demon.income - demon.pendingUnitSalary
+            for (let i = choices.length - 1; i >= start; --i) {
+                const unitClass = production[choices[i].product].class
+                if (AI_UNIT_PRODUCTS.includes(choices[i].product) && upkeep < unitClass.salary)
+                    choices.splice(i, 1)
+            }
+        }
+        return this.demonEconomyAI = ai
+    }
+    get pendingUnitSalary() {
+        let salary = 0
+        for (const town of this.towns) {
+            if (town.killed) continue
+            for (const producer of [town, ...town.buildings]) {
+                if (!producer.killed && producer.isPreparingUnit)
+                    salary += production[producer.unitProduction.name].class.salary
+            }
+        }
+        return salary
+    }
+    spendGold() {
+        const ai = this.economyAI
+        if (this.aiInitialTownCount === undefined)
+            this.aiInitialTownCount = ai.getLiveTownCount(this)
+        // One growth purchase (farm/suburb, first barrack), then the war mode's
+        // army purchases (units up to the cap, a barrack per town, suburbs).
+        ai.spendEconomyGold()
+        ai.spendWarGoldWithinLimit(ai.inspectEconomy().towns.length > 1 ?
+            AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT : 1)
+    }
     play() {
+        this.spendGold()
         // Reuse the combat-only controller without replacing demon ownership or
         // invoking a normal player's economy/turn hooks.
         if (!this.combatAI) this.combatAI = new SimpleAiPlayer(this.color, 0)
