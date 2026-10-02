@@ -303,12 +303,19 @@ class Grid extends SpritesGroup {
                     continue
                 const cell = this.arr[i][j]
                 const building = cell.building
+                let silhouette = false
                 if (building.isBuildingProduction())
                     building.draw(ctx)
-                else if (building.isPreparingManufacture)
+                else if (building.isPreparingManufacture) {
+                    silhouette = building.unitProduction.notEmpty()
                     building.unitProduction.draw(ctx)
-                else if (building.isDemonPortal)
+                } else if (building.isDemonPortal) {
+                    silhouette = !!building.nextProduction
                     building.drawNextProduction(ctx)
+                }
+                // The cached unit sits under the silhouette; repaint it on top.
+                if (silhouette && cell.unit.notEmpty())
+                    this.drawEntityBody(ctx, cell.unit)
                 if (building.hasBar)
                     buildingBars.push(building)
                 if (cell.unit.notEmpty())

@@ -1,7 +1,9 @@
 'use strict';
 // TASK-405: in the uncached map path (grid.drawOther) the translucent production
 // silhouette is drawn after the building and before the unit standing on the
-// same cell, for demon portals, barracks and towns. A recording canvas logs
+// same cell, for demon portals, barracks and towns. TASK-406: in the cached path
+// (grid.drawEntityOverlays) the unit body baked into the surface cache is drawn
+// again right after the silhouette, so the unit stays on top of it. A recording canvas logs
 // every drawImage with its image key and the canvas alpha at call time; the
 // per-cell order is checked against literal expectations.
 //
@@ -22,6 +24,8 @@ const CASES = [
   {kind: 'town', coord: {x: 1, y: 1}, ghost: 'KOHb', unit: 'noob'}
 ];
 const CONTROL = {kind: 'control', coord: {x: 0, y: 2}, ghost: 'archer'};
+// Overlay pass: the barrack unit is mirrored, so its body is the 'Left' image.
+const OVERLAY_UNIT_IMAGE = {portal: 'noob', barrack: 'noobLeft', town: 'noob'};
 
 // Test-only faults, injected into the game realm; repo files are never modified.
 const FAULTS = {
@@ -35,6 +39,22 @@ const FAULTS = {
         cell.unit.draw(ctx)
         if (cell.building.isPreparingManufacture) cell.building.unitProduction.draw(ctx)
         else if (cell.building.isDemonPortal) cell.building.drawNextProduction(ctx)
+      }
+      for (const b of bars) b.drawBars(ctx)
+    }`,
+  // The pre-TASK-406 cached overlay pass: silhouettes painted over the cached unit.
+  'no-unit-redraw': `
+    Grid.prototype.drawEntityOverlays = function(ctx) {
+      const bars = []
+      for (let i = 0; i < this.arr.length; ++i) for (let j = 0; j < this.arr[i].length; ++j) {
+        if (isFogOfWar && !this.fogOfWar[i][j]) continue
+        const cell = this.arr[i][j]
+        const building = cell.building
+        if (building.isBuildingProduction()) building.draw(ctx)
+        else if (building.isPreparingManufacture) building.unitProduction.draw(ctx)
+        else if (building.isDemonPortal) building.drawNextProduction(ctx)
+        if (building.hasBar) bars.push(building)
+        if (cell.unit.notEmpty()) cell.unit.drawBars(ctx)
       }
       for (const b of bars) b.drawBars(ctx)
     }`
@@ -64,6 +84,12 @@ function setupScene(f) {
     const control = new Barrack(0, 2, town)
     control.unitProduction = new UnitProduction(3, 40, Archer, 'archer')
     new DemonPortal(7, 5, 'melee')
+    // A unit on a plain cell (no building, no silhouette) for the overlay pass.
+    plainCell: for (const column of grid.arr) for (const cell of column)
+      if (cell.coord.x > 2 && cell.building.isEmpty() && cell.unit.isEmpty() && !cell.hexagon.isMapEdge) {
+        globalThis.plainUnit = new Noob(cell.coord.x, cell.coord.y)
+        break plainCell
+      }
     globalThis.recordingCanvas = () => {
       const calls = []
       const target = {globalAlpha: 1}
@@ -91,9 +117,9 @@ function main() {
   setupScene(f);
   if (args.fault) f.evaluate(FAULTS[args.fault] + '; undefined');
 
-  const result = f.evaluate(`(() => {
+  const record = pass => f.evaluate(`(() => {
     const canvas = recordingCanvas()
-    grid.drawOther(canvas.ctx)
+    ${pass}
     const cellAt = {}
     for (const column of grid.arr) for (const cell of column) {
       const at = cell.coord.x + ',' + cell.coord.y
@@ -101,6 +127,7 @@ function main() {
     }
     return canvas.calls.map((c, index) => ({index, ...c, cell: cellAt[c.x + ',' + c.y] || null}))
   })()`);
+  const result = record('grid.drawOther(canvas.ctx)');
   fs.writeFileSync(path.join(out, 'sequence-drawOther.json'), JSON.stringify(
     {fault: args.fault || null, ghostAlpha: GHOST_ALPHA, unitAlpha: UNIT_ALPHA, drawImage: result}, null, 2) + '\n');
 
@@ -128,6 +155,31 @@ function main() {
   check('drawOther-control-ghost', {ghosts: control.filter(d => d.image === CONTROL.ghost).map(d => d.alpha),
     units: control.filter(d => d.alpha === UNIT_ALPHA && d.image !== 'barrack').length},
     {ghosts: [GHOST_ALPHA], units: 0});
+
+  // Cached path: the overlay pass on top of the surface cache.
+  const plain = f.evaluate(`plainUnit.coord`);
+  f.evaluate(`grid.getUnit({x: 1, y: 2}).mirrorX = true; undefined`);
+  const overlay = record('grid.drawEntityOverlays(canvas.ctx)');
+  f.evaluate(`globalThis.savedFog = {on: isFogOfWar, map: grid.fogOfWar}
+    isFogOfWar = true
+    grid.fogOfWar = grid.arr.map(column => column.map(() => true))
+    grid.fogOfWar[7][5] = false; undefined`);
+  const fogged = record('grid.drawEntityOverlays(canvas.ctx)');
+  f.evaluate(`isFogOfWar = savedFog.on; grid.fogOfWar = savedFog.map; undefined`);
+  fs.writeFileSync(path.join(out, 'sequence-overlay.json'), JSON.stringify(
+    {fault: args.fault || null, ghostAlpha: GHOST_ALPHA, unitAlpha: UNIT_ALPHA, unitImage: OVERLAY_UNIT_IMAGE,
+      plainUnitCell: plain, drawImage: overlay, foggedPortalDrawImage: fogged}, null, 2) + '\n');
+  const overlayOn = (calls, coord) => calls.filter(c => c.cell === coord.x + ',' + coord.y)
+    .map(d => ({image: d.image, alpha: d.alpha}));
+  for (const c of CASES) {
+    check(`overlay-${c.kind}-unit-over-ghost`, overlayOn(overlay, c.coord),
+      [{image: c.ghost, alpha: GHOST_ALPHA}, {image: OVERLAY_UNIT_IMAGE[c.kind], alpha: UNIT_ALPHA}]);
+  }
+  check('overlay-no-redraw-without-ghost', {plainCellFound: !!plain, drawImage: plain ? overlayOn(overlay, plain) : null},
+    {plainCellFound: true, drawImage: []});
+  check('overlay-fogged-cell-silent', {portalCell: overlayOn(fogged, CASES[0].coord),
+    barrackStillDrawn: overlayOn(fogged, CASES[1].coord).length > 0},
+    {portalCell: [], barrackStillDrawn: true});
 
   console.log(failures ? `FAIL silhouette-order failures=${failures}` : 'PASS silhouette-order');
   process.exit(failures ? 1 : 0);

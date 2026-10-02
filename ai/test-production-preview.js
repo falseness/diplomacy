@@ -44,7 +44,7 @@ const FAULTS = {
     drawProductionPreview = (ctx, imageName, pos, coord, turns) => {
       ctx.globalAlpha = 0.5; drawCachedImage(ctx, cachedImages[imageName], pos); ctx.globalAlpha = 1
       grid.getCell(coord).infoText = new CoordText(coord.x, coord.y, turns, 'red') }`},
-  'live-unit-on-draw': {marker: 'MISMATCH ordered-draw-1-ledgers-unchanged', inject: `{
+  'live-unit-on-draw': {marker: 'MISMATCH ordered-draw-1-ghosts', inject: `{
     const draw = drawProductionPreview
     drawProductionPreview = (ctx, imageName, pos, coord, turns) => {
       draw(ctx, imageName, pos, coord, turns)
@@ -226,8 +226,9 @@ function runScenario(fault, report) {
   }
 
   // Draws the real map overlays three times at alpha 1 and once at a non-default
-  // alpha; the ghost list and restored alpha are literal expectations.
-  function drawStage(stage, expectedGhost, expectedTurnsText) {
+  // alpha; the ghost list and restored alpha are literal expectations. A unit
+  // standing under the ghost is redrawn on top of it (TASK-406) at the canvas alpha.
+  function drawStage(stage, expectedGhost, expectedTurnsText, expectedUnit = null) {
     const before = observeState(f);
     const infoBefore = f.evaluate('grid.getBuilding(' + JSON.stringify(BARRACK) + ').info');
     const draws = [];
@@ -249,7 +250,8 @@ function runScenario(fault, report) {
       draws.push({draw: n, initialAlpha, calls: result.calls, ghosts, finalAlpha: result.finalAlpha,
         turnsText: result.text});
       check(`${stage}-draw-${n}-ghosts`, ghosts, expectedGhost ?
-        [{image: expectedGhost, alpha: OPACITY, x: result.pos.x, y: result.pos.y}] : []);
+        [{image: expectedGhost, alpha: OPACITY, x: result.pos.x, y: result.pos.y}].concat(expectedUnit ?
+          [{image: expectedUnit, alpha: initialAlpha, x: result.pos.x, y: result.pos.y}] : []) : []);
       check(`${stage}-draw-${n}-alpha-restored`, result.finalAlpha, initialAlpha);
       check(`${stage}-draw-${n}-other-sprites-unaffected`, otherAlphas.filter(a => a !== initialAlpha), []);
       check(`${stage}-draw-${n}-turns-text`, result.text, expectedTurnsText);
@@ -350,7 +352,7 @@ function runScenario(fault, report) {
   ledgers.record({type: 'gold', owner: 1, amount: -RATES.barrackUpkeep, rule: 'barrack upkeep'});
   ledgerCheck('blocked');
   barrackStage('blocked', {...pending, gold: goldText(human1(), income), occupant: 'noob'});
-  drawStage('blocked', 'archer', 1);
+  drawStage('blocked', 'archer', 1, 'noob');
 
   // Save/load: a fresh runtime restores the blocked order and its preview.
   const saved = f.evaluate('JSON.stringify(getGameObject())');
@@ -365,7 +367,7 @@ function runScenario(fault, report) {
   check('loaded-state-equals-saved', {...loadedState, undo: 0}, {...expectedAfterLoad, undo: 0});
   ledgerCheck('loaded');
   barrackStage('loaded', {...pending, gold: goldText(human1(), income), occupant: 'noob'});
-  drawStage('loaded', 'archer', 1);
+  drawStage('loaded', 'archer', 1, 'noob');
 
   // Completion in the loaded runtime once the cell is free.
   const unblock = realm => realm.submit({type: 'move', source: BARRACK, destination: {x: 1, y: 3}}, {x: 1, y: 3},
