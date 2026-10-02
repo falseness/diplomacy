@@ -110,8 +110,13 @@ class Unit extends Entity {
         return !this.cellHasTeammate(cell) && this.interaction.canHitSomethingOnCell(cell, this)
     }
     sendInstructions(cell) {
-        if (!this.isMyTurn || this.cellHasTeammate(cell))
+        if (!this.isMyTurn)
             return true
+        // A rejected teammate target ends the selection like any finished command.
+        if (this.cellHasTeammate(cell)) {
+            this.removeSelect()
+            return true
+        }
         
         let noNeedInstructionsEnough = this.interaction.sendInstructions(cell, this)
         this.updateMovesBar()
