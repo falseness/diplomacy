@@ -594,9 +594,16 @@ class NeutralPlayer extends Player {
         if (!gameSettings.coop) return null
         const humansGone = players.filter(p => p.role === 'HUMAN').every(p => p.isLost)
         const portalsRemain = external.some(p => p.isDemonPortal && !p.killed && p.hp > 0)
+        // Any live demon-owned unit counts, including produced Noob/Archer/...
         const demonsRemain = players.some(p => p.role === 'DEMONS' &&
             p.units.some(u => !u.killed && u.hp > 0))
-        const enemiesGone = !portalsRemain && !demonsRemain
+        // Victory also needs every demon-held town retaken or destroyed.
+        const demonTownsRemain = players.some(p => {
+            if (p.role !== 'DEMONS') return false
+            p.updateTowns()
+            return p.towns.length > 0
+        })
+        const enemiesGone = !portalsRemain && !demonsRemain && !demonTownsRemain
         if (humansGone && enemiesGone) return 'draw'
         if (humansGone) return 'defeat'
         if (enemiesGone) return 'victory'

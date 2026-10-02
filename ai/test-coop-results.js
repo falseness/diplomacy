@@ -1,9 +1,16 @@
 const assert = require('assert').strict;
+const fs = require('fs');
+const path = require('path');
 const {spawnSync} = require('child_process');
 const {createFixture, defaultFixture} = require('./test-coop-harness');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
+
+// Usage: node ai/test-coop-results.js [--output-dir <dir>] [--fault]
+const outIndex = process.argv.indexOf('--output-dir');
+const output = outIndex < 0 ? null : process.argv[outIndex + 1];
+const results = [];
 
 function scenario(name, removals, expected, flood = false) {
   const c = defaultFixture(); c.coop = true;
@@ -67,7 +74,66 @@ function scenario(name, removals, expected, flood = false) {
       {exit:true,result:expected,ends:1,round:0,turn:1});
     check('terminal',true);
   }
-  console.log(`PASS result-case ${name} expected=${expected} observed=${f.evaluate('players[0].coopResult')}`);
+  const observed = f.evaluate('players[0].coopResult');
+  results.push({case:name, expected, observed, pass:true});
+  console.log(`PASS result-case ${name} expected=${expected} observed=${observed}`);
+}
+
+// Demon-held territory: victory also needs the demon slot to own no town.
+const TOWN = {x:6, y:3};
+const SUBURBS = [{x:6,y:3},{x:6,y:4},{x:7,y:3},{x:7,y:4}];
+function territoryFixture() {
+  const c = defaultFixture(); c.coop = true;
+  const f = createFixture(c);
+  f.evaluate(`globalThis.portal=new DemonPortal(4,4,"melee"); globalThis.demon=grid.getUnit({x:7,y:5});
+    gameSettings.isOnline=false; menuBack=()=>{}; undefined`);
+  return f;
+}
+const state = f => f.evaluate(`({result:players[0].coopResult, ended:players[0].isGameEnded,
+  portalAlive:!portal.killed, demonUnits:players[3].units.filter(u=>!u.killed&&u.hp>0).map(u=>u.constructor.name),
+  demonTowns:players[3].towns.filter(t=>!t.killed).map(t=>t.coord)})`);
+function territory(name, run) {
+  const {observed, expected} = run();
+  const pass = JSON.stringify(observed) === JSON.stringify(expected);
+  results.push({case:name, expected, observed, pass});
+  assert.deepEqual(observed, expected, name);
+  console.log(`PASS result-case ${name} expected=${expected.result} observed=${observed.result}`);
+}
+territory('town-blocks-victory', () => {
+  const f = territoryFixture();
+  f.evaluate(`for(const c of ${JSON.stringify(SUBURBS)}) grid.getHexagon(c).firstpaint(3);
+    globalThis.target=new Town(${TOWN.x},${TOWN.y},true); portal.kill(); demon.kill(); undefined`);
+  return {observed:state(f),
+    expected:{result:null, ended:false, portalAlive:false, demonUnits:[], demonTowns:[TOWN]}};
+});
+territory('retake-wins', () => {
+  const f = territoryFixture();
+  f.evaluate(`for(const c of ${JSON.stringify(SUBURBS)}) grid.getHexagon(c).firstpaint(3);
+    globalThis.target=new Town(${TOWN.x},${TOWN.y},true); portal.kill(); demon.kill(); undefined`);
+  const before = state(f);
+  // A red Noob next to the hp-0 demon town walks in and captures it.
+  f.evaluate(`grid.getHexagon({x:5,y:3}).firstpaint(1); globalThis.attacker=new Noob(5,3); target.hp=0;
+    whooseTurn=1; attacker.select(); attacker.sendInstructions(grid.getCell(${JSON.stringify(TOWN)})); undefined`);
+  const after = state(f);
+  return {observed:{before:before.result, ...after,
+      townOwner:f.evaluate('target.playerColor'), humanOwns:f.evaluate('players[1].towns.includes(target)')},
+    expected:{before:null, result:'victory', ended:true, portalAlive:false, demonUnits:[], demonTowns:[],
+      townOwner:1, humanOwns:true}};
+});
+territory('produced-unit-blocks-victory', () => {
+  const f = territoryFixture();
+  // A Noob bought by the demon economy is an ordinary unit on a demon-slot hex.
+  f.evaluate(`portal.kill(); demon.kill(); grid.getHexagon({x:8,y:5}).firstpaint(3);
+    globalThis.produced=new Noob(8,5); undefined`);
+  const blocked = state(f);
+  f.evaluate('produced.kill(); undefined');
+  const cleared = state(f);
+  return {observed:{...blocked, afterKill:cleared.result},
+    expected:{result:null, ended:false, portalAlive:false, demonUnits:['Noob'], demonTowns:[], afterKill:'victory'}};
+});
+if (output) {
+  fs.mkdirSync(output, {recursive:true});
+  fs.writeFileSync(path.join(output, 'cases.json'), JSON.stringify(results, null, 2) + '\n');
 }
 scenario('no-demon-towns',[],null);
 scenario('portals-remain',['d'],null);
