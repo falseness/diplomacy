@@ -15,7 +15,7 @@ const expected = {
   emberArcher: ['ember archer', 'mobile ranged attacker', 1, 1, 2, true, 3],
   hexcaster: ['hexcaster', 'slow stronger ranged attacker', 1, 3, 1, true, 2],
   hexmaster: ['hexmaster', 'fast stronger ranged attacker', 1, 3, 2, true, 2],
-  demonQueen: ['demon queen', 'durable fast ranged attacker', 3, 3, 2, true, 2],
+  demonQueen: ['demon queen', 'slow heavy-hitting ranged attacker', 1, 5, 1, true, 2],
   ravager: ['ravager', 'fast strong late-game melee', 4, 1, 3, false, 1],
   demonLord: ['demon lord', 'durable powerful late-game melee', 5, 3, 2, false, 1]
 };
