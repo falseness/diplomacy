@@ -41,6 +41,7 @@ if (fault) {
 
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 2, 31, 777, 65535, 2654435769, 4294967295];
 const DISPARITY = 4, MINE_CLEARANCE = 4, NEUTRAL_SPACING = 5;
+const NEUTRAL_KINDS = {tiny: ['gap'], normal: ['gap', 'ring'], big: ['gap', 'ring', 'elite']};
 const colorOf = i => ({r: (i * 37) % 256, g: (i * 91) % 256, b: (i * 53) % 256});
 
 // Independent hex metric: offset column -> axial, cube distance to the centre cell (R, R).
@@ -107,7 +108,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
             return {plan, starts, layout: planner.placeCircleExpansions(plan, starts)};
         }));
     } catch (error) { assert('planner-throws', false, {...id, error: error.message}); continue; }
-    const R = plan.radius, E = circleTestBands(R, humans, size).E, side = 2 * R + 1, center = {q: R, r: Math.ceil(R / 2)};
+    const R = plan.radius, {E, ringOuter} = circleTestBands(R, humans, size), side = 2 * R + 1, center = {q: R, r: Math.ceil(R / 2)};
     const target = getCoopMapScaling(humans, size).counts;
     const towns = layout.players.slice(1).map(p => p.towns[0]), neutral = layout.players[0].towns;
     const mines = layout.goldmines;
@@ -123,7 +124,22 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     const coopLayers = expansion.map(o => coopHexLayer(o.x, o.y, center));
     const minLayer = layers.length ? Math.min(...layers) : null;
     assert('layer-agrees', JSON.stringify(layers) === JSON.stringify(coopLayers), id);
-    assert('outside-elite', layers.every(l => l > E && l <= R), {...id, minLayer, E});
+    // Per-player kinds (TASK-390): every human gets KINDS[size] in slot order. Gap towns
+    // sit beyond the common ring, ring towns in E < layer <= ringOuter and elite towns
+    // (big only, one per human) inside the core; mines always stay outside the core.
+    const assignments = (layout.expansions && layout.expansions.neutralAssignments) || [];
+    const expectedKinds = towns.flatMap((_, i) => NEUTRAL_KINDS[size].map(kind => ({slot: i + 1, kind})));
+    const kindOf = neutral.map((t, i) => assignments[i] && assignments[i].x === t.x && assignments[i].y === t.y ? assignments[i].kind : null);
+    assert('neutral-kinds', assignments.length === neutral.length
+        && JSON.stringify(assignments.map(a => ({slot: a.slot, kind: a.kind}))) === JSON.stringify(expectedKinds)
+        && kindOf.every(k => k !== null), {...id, kinds: assignments.map(a => `${a.slot}:${a.kind}`)});
+    const siteViolations = neutral.map((t, i) => ({...t, kind: kindOf[i], layer: layerAt(t, R)})).filter(t =>
+        t.kind === 'elite' ? t.layer > E : t.kind === 'ring' ? t.layer <= E || t.layer > ringOuter : t.layer <= ringOuter);
+    assert('neutral-sites', siteViolations.length === 0, {...id, E, ringOuter, siteViolations});
+    const coreNeutrals = neutral.filter(t => layerAt(t, R) <= E).length;
+    assert('elite-neutral-core', coreNeutrals === (size === 'big' ? humans : 0), {...id, coreNeutrals, E});
+    const outside = [...neutral.filter((_, i) => kindOf[i] !== 'elite'), ...mines].map(o => layerAt(o, R));
+    assert('outside-elite', outside.every(l => l > E && l <= R), {...id, minLayer: outside.length ? Math.min(...outside) : null, E});
     // Clearances: nothing on a human town or starting reserved cell; every
     // neutral 3x3 inside the radius and clear of every other object and reservation;
     // neutral towns pairwise at hex distance >= NEUTRAL_SPACING; no mine inside any town's 3x3.
@@ -168,7 +184,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     matrix.push({size, humans, seed, attempt, radius: R, eliteLayer: E,
         neutralTowns: {placed: neutral.length, target: target.neutralTowns},
         goldmines: {placed: layout.goldmines.length, target: target.goldmines, owners: [...new Set(mines.map(m => m.owner))]},
-        minExpansionLayer: minLayer, nearestNeutralDistance: nearest, neutralSpread: spread, nearestMineDistance: nearestMine, mineSpread,
+        minExpansionLayer: minLayer, coreNeutrals, neutralKinds: kindOf, nearestNeutralDistance: nearest, neutralSpread: spread, nearestMineDistance: nearestMine, mineSpread,
         minMineTownHex: mineTownHex, minNeutralHex,
         freeRegion: conn, clearance: {onOccupiedOrReserved: onOccupied, duplicates, neutralBoxViolations, neutralSpacingViolations, mineInTownBox},
         neutral, mines: mines.map(m => ({x: m.x, y: m.y}))});

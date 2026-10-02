@@ -161,10 +161,16 @@ const ASSERTIONS = [
         return {expected: {layerAbove: g.E, layerAtMost: outer}, observed: {violations: bad}, pass: !bad.length};
     }],
     ['neutral-towns-mines-outside-core', map => {
-        const g = geometry(map);
-        const bad = [...map.players[0].towns, ...map.goldmines].filter(c => g.layer(c) <= g.E)
-            .map(c => ({...c, layer: g.layer(c)}));
-        return {expected: {layerAbove: g.E}, observed: {violations: bad}, pass: !bad.length};
+        // Goldmines always sit outside the core. Neutral towns may sit in the core
+        // only on big (one elite neutral town per human, TASK-390), at most humans of them.
+        const g = geometry(map), h = map.coop.initialHumanCount, big = map.coop.generation.size === 'big';
+        const tag = c => ({...c, layer: g.layer(c)});
+        const badMines = map.goldmines.filter(c => g.layer(c) <= g.E).map(tag);
+        const coreTowns = map.players[0].towns.filter(c => g.layer(c) <= g.E).map(tag);
+        const allowedCoreTowns = big ? h : 0;
+        return {expected: {goldmineLayerAbove: g.E, maxCoreNeutralTowns: allowedCoreTowns},
+            observed: {goldmineViolations: badMines, coreNeutralTowns: coreTowns},
+            pass: !badMines.length && coreTowns.length <= allowedCoreTowns};
     }],
     ['free-region-connected', map => {
         const g = geometry(map);
