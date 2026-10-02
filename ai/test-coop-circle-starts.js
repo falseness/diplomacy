@@ -15,7 +15,9 @@ const fault = option('--fault');
 // Fault injections rewrite the planner source before it is loaded.
 const FAULTS = {
     'off-ring': [['circleRingOrder(plan, plan.regions.townRing)', 'circleRingOrder(plan, plan.regions.townRing - 1)']],
-    'collide-towns': [['circleHexDistance(t, ring[j]) >= CIRCLE_START_SPACING', 'circleHexDistance(t, ring[j]) >= 0']]
+    // Even spacing alone already clears 11, so the fault also packs towns 3 ring cells apart.
+    'collide-towns': [['circleHexDistance(ring[k], ring[j]) >= CIRCLE_START_SPACING', 'circleHexDistance(ring[k], ring[j]) >= 0'],
+        ['Math.floor(i * N / humans)) % N', '3 * i) % N']]
 };
 if (fault !== undefined && !FAULTS[fault]) { console.error(`unknown fault ${fault}`); process.exit(2); }
 
@@ -104,7 +106,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         const d = hexDistance(towns[i], towns[j]);
         if (minHex === null || d < minHex) minHex = d;
     }
-    assert('town-hex-distance', minHex === null || minHex >= 5, {...id, minHex});
+    assert('town-hex-distance', minHex === null || minHex >= 11, {...id, minHex});
     // Angular gaps along the test's own ring walk.
     const walk = ringWalk(R, R - 3), index = new Map(walk.order.map((c, i) => [key(c), i]));
     assert('ring-walk', walk.complete && walk.order.length === 6 * (R - 3), {...id, walked: walk.order.length});
@@ -112,6 +114,8 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     const gaps = positions.map((p, i) => i + 1 < positions.length ? positions[i + 1] - p : positions[0] + walk.order.length - p);
     const gapSpread = gaps.length === towns.length ? Math.max(...gaps) - Math.min(...gaps) : null;
     assert('towns-on-walk', positions.length === towns.length, {...id, positions});
+    // Even spacing: consecutive gaps along the walk differ by at most one cell.
+    assert('even-gap', gapSpread !== null && gapSpread <= 1, {...id, gaps, gapSpread});
     // No starting mines: every mine is neutral and placed by placeCircleExpansions.
     const mines = layout.goldmines;
     assert('no-starting-mines', Array.isArray(mines) && mines.length === 0 && layout.assignments.length === 0
@@ -130,7 +134,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     assert('connectivity', conn.connected, {...id, conn});
     connectivityRows.push({size, humans, seed, radius: R, solidOutsideRadius: side * side - (3 * R * R + 3 * R + 1), ...conn});
     matrix.push({size, humans, seed, radius: R, eliteLayer: E, townRing: R - 3, ringCells: walk.order.length,
-        towns, townLayers, minChebyshev, minHex, gaps, gapSpread,
+        towns, townLayers, minChebyshev, minHex, minTownHex: minHex, gaps, gapSpread,
         mines: mines.length, reservationsDisjoint: disjoint, reservedCells: layout.reserved.length, reservedOutsideRadius: reservedOutside});
 }
 assert('matrix-complete', matrix.length === 36 * SEEDS.length, {rows: matrix.length});

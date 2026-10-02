@@ -175,8 +175,8 @@ const CIRCLE_NEUTRAL_RGB = Object.freeze({r: 208, g: 208, b: 208})
 const CIRCLE_OFFSETS3 = Object.freeze([-1, 0, 1].flatMap(dy => [-1, 0, 1].map(dx => Object.freeze({x: dx, y: dy}))))
 const circleChebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 const circleHexDistance = (a, b) => circleGeometry.coopHexLayer(a.x, a.y, {q: b.x, r: b.y - Math.floor(b.x / 2)})
-// Minimum hex distance between human towns, and seeded shuffles tried before giving up.
-const CIRCLE_START_SPACING = 5
+// Minimum hex distance between human towns, and seeded start offsets tried before giving up.
+const CIRCLE_START_SPACING = 11
 const CIRCLE_START_ATTEMPTS = 64
 
 function circleShuffler(seed) {
@@ -242,25 +242,24 @@ function circlePassableConnected(plan, solid, objects) {
 }
 
 // Starting towns on the town ring (layer R-3); no mines (every mine is neutral,
-// placed by placeCircleExpansions). Towns are random ring cells: each attempt
-// walks a seeded shuffle of the ring and greedily keeps cells at hex distance
-// >= CIRCLE_START_SPACING and Chebyshev >= 3 from every kept town; up to
-// CIRCLE_START_ATTEMPTS shuffles are tried. Slots follow ring order. Each
-// town's 3x3 neighbourhood is reserved.
+// placed by placeCircleExpansions). Towns are evenly spaced along the ring:
+// town i sits at ring[(start + floor(i * N / humans)) % N], so consecutive gaps
+// differ by at most one cell. Start offsets come from a seeded shuffle of the
+// ring; up to CIRCLE_START_ATTEMPTS offsets are tried until every pair is at hex
+// distance >= CIRCLE_START_SPACING and Chebyshev >= 3. Slots follow ring order.
+// Each town's 3x3 neighbourhood is reserved.
 function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
     if (typeof colorOf !== 'function') throw new TypeError('Circle starts require coopPlayerColor')
     const {side, humans, radius} = plan
     const assets = circleStartScaling(humans, plan.size).startingAssets
-    const shuffle = circleShuffler(plan.seed ^ 0x9e3779b9)
     const ring = circleRingOrder(plan, plan.regions.townRing), N = ring.length
+    const offsets = circleShuffler(plan.seed ^ 0x9e3779b9)([...Array(N).keys()])
     let indices = null
-    for (let attempt = 0; attempt < CIRCLE_START_ATTEMPTS && !indices; attempt++) {
-        const picked = []
-        for (const k of shuffle([...Array(N).keys()])) {
-            const t = ring[k]
-            if (picked.every(j => circleHexDistance(t, ring[j]) >= CIRCLE_START_SPACING && circleChebyshev(t, ring[j]) >= 3)) picked.push(k)
-            if (picked.length === humans) { indices = picked.sort((a, b) => a - b); break }
-        }
+    for (let attempt = 0; attempt < Math.min(CIRCLE_START_ATTEMPTS, N) && !indices; attempt++) {
+        const picked = [...Array(humans).keys()].map(i => (offsets[attempt] + Math.floor(i * N / humans)) % N)
+        const spaced = picked.every((k, i) => picked.slice(i + 1).every(j =>
+            circleHexDistance(ring[k], ring[j]) >= CIRCLE_START_SPACING && circleChebyshev(ring[k], ring[j]) >= 3))
+        if (spaced) indices = picked.sort((a, b) => a - b)
     }
     if (!indices) throw new Error(`Circle has no town ring sites: size=${plan.size} humans=${humans}`)
     const towns = indices.map(k => ring[k]), start = indices[0]
