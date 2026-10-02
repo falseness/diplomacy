@@ -444,8 +444,12 @@ class DemonPlayer extends Player {
         if (this.demonEconomyAI) return this.demonEconomyAI
         const demon = this
         const ai = Object.create(SimpleAiPlayerWithEconomy.prototype)
-        for (const key of ['gold', 'income', 'towns', 'units', 'aiInitialTownCount'])
+        for (const key of ['gold', 'income', 'towns', 'aiInitialTownCount'])
             Object.defineProperty(ai, key, {get: () => demon[key], set: value => { demon[key] = value }})
+        // The economy sees only the army it pays for: unpaid portal-wave units
+        // (salary 0) would otherwise fill the unit cap and block every purchase.
+        Object.defineProperty(ai, 'units', {get: () => demon.units.filter(unit => unit.salary > 0),
+            set: value => { demon.units = value }})
         ai.getPlayerIndex = () => players.indexOf(demon)
         // Salary guard: a unit is only bought while net income still covers its
         // salary plus the salaries of units already in production.
