@@ -80,6 +80,9 @@ class Unit extends Entity {
         if (this.constructor.type)
             unit.displayName = DEMON_TYPES[this.constructor.type].name
         unit.info.dmg = this.dmg
+        // Foreign units have no moves row, so show their full speed instead.
+        if (!this.isMyTurn)
+            unit.info.speed = this.speed
 
         unit.canSkipMoves = this.isMyTurn && this.moves != 0
 

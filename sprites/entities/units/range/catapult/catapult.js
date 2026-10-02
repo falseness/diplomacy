@@ -27,6 +27,8 @@ class Catapult extends RangeUnit {
     get info() {
         let unit = super.info
         unit.info.dmg += '\nbuilding dmg: ' + this.buildingDMG
+        if (!this.isMyTurn)
+            unit.info.range = '2 - ' + this.range
         return unit
     }
     draw(ctx) {

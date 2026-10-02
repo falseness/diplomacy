@@ -11,6 +11,12 @@ class RangeUnit extends Unit {
         
         return res
     }
+    get info() {
+        let unit = super.info
+        if (!this.isMyTurn)
+            unit.info.range = this.range
+        return unit
+    }
     get range() {
         return this.constructor.range
     }
