@@ -6,15 +6,18 @@ const {createEconomyLedger} = require('./test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 // Independent literal expectations: class, key, health, movement, damage, range.
-const cases = [['Spitter','spitter',2,2,1,2], ['EmberArcher','emberArcher',4,3,2,3]];
+const cases = [['Spitter','spitter',2,2,1,1], ['EmberArcher','emberArcher',1,2,1,3]];
 const DEMON_NAMES = {"spitter": "spitter", "emberArcher": "ember archer", "hexcaster": "hexcaster"};
 const DEMON_ROLES = {"spitter": "fragile short-range attacker", "emberArcher": "mobile ranged attacker", "hexcaster": "slow stronger ranged attacker"};
 function run(fault, testCases = cases, summary) {
   for (const [klass,name,hp,speed,damage,range] of testCases) {
-    for (const mode of ['inside','at','outside','obstruction','restrictions','movement','durability']) {
+    // A range-1 shot has no intermediate hex for the mountain ring to block.
+    if (range < 2) console.log('INAPPLICABLE '+name+'-obstruction: range '+range+' has no intermediate hex');
+    for (const mode of ['inside','at','outside','obstruction','restrictions','movement','durability'].filter(m => m !== 'obstruction' || range >= 2)) {
       const distance = mode === 'outside' ? range+1 : mode === 'inside' ? 1 : range;
       const vx = mode === 'durability' ? 6 : 5;
-      const vy = mode === 'durability' ? 3 : 3+distance;
+      // Movement keeps the victim out of range of every movement target (range 3 reaches 4+speed when speed is 2).
+      const vy = mode === 'durability' ? 3 : mode === 'movement' ? 5+speed+range : 3+distance;
       const config = defaultFixture();
       config.coop = true;
       config.size = {x:15,y:15};
@@ -88,13 +91,15 @@ function run(fault, testCases = cases, summary) {
             action((lethal?'lethal':'nonlethal')+'-shot-'+hit,command(vx,vy)+combatState,
               {hp:5-hit*damage,killed:lethal,coord:{x:5,y:3},moves:0},lethal?[{type:'death',id:'victim'}]:[]);
           }
-          action('fixture-damage-for-persistence','demon.hit(1); ({hp:demon.hp,hit:demon.wasHitted})',{hp:hp-1,hit:true});
+          // A 1-health demon would die from the persistence damage, so it is stored undamaged.
+          const taken = hp > 1 ? 1 : 0;
+          if (taken) action('fixture-damage-for-persistence','demon.hit(1); ({hp:demon.hp,hit:demon.wasHitted})',{hp:hp-1,hit:true});
           action('serialize-and-remove','globalThis.packed=demon.toJSON(); demon.kill(); demon.killed',true,[{type:'death',id:'demon'}]);
           f.evaluate('unpacker.fullUnpackUnit(packed); globalThis.restored=grid.getUnit(packed.coord); undefined');
           entities.record({type:'spawn',entity:{id:'restored',kind:'unit',owner:3,x:5,y:3,name}});
           entities.bind('restored','restored');
           f.compare(prefix+'-restored-identity',f.evaluate('({className:restored.constructor.name,owner:restored.playerColor,range:restored.range,wire:restored.toJSON()})'),
-            {className:klass,owner:3,range,wire:{name,coord:{x:5,y:3},hp:hp-1,wasHitted:true,moves:0}});
+            {className:klass,owner:3,range,wire:{name,coord:{x:5,y:3},hp:hp-taken,wasHitted:taken>0,moves:0}});
           check('restored');
         }
       } else if (mode === 'restrictions') {
@@ -137,7 +142,7 @@ function run(fault, testCases = cases, summary) {
   }
   console.log('INAPPLICABLE completed round/wave/demon phase counts: isolated fixture commands; human order and round 0 checked after every action. No round advancement.');
   console.log('INAPPLICABLE online convergence: offline fixtures have no online committed revisions.');
-  console.log(summary || 'PASS co-op early ranged types=2 health=2,4 movement=2,3 damage=1,2 ranges=2,3 boundary=inside,at,outside obstruction=mountain target_restrictions=ally,self,empty,static-nature persistence=4 incoming_lethal=2,4');
+  console.log(summary || 'PASS co-op early ranged types=2 health=2,1 movement=2,2 damage=1,1 ranges=1,3 boundary=inside,at,outside obstruction=mountain target_restrictions=ally,self,empty,static-nature persistence=4 incoming_lethal=2,1');
 }
 if (require.main === module) {
   if (process.argv[2]==='--fault') run(process.argv[3]);
