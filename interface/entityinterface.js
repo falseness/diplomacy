@@ -136,7 +136,9 @@ class EntityInterface {
             // Only combat fields: keep the description and navigation within the panel.
             info = {name: next.type, displayName: DEMON_TYPES[next.type].name,
                 image: next.type, info: {hp: info.info.hp, dmg: type.dmg,
-                    movement: info.info.speed, range: type.range || 1,
+                    speed: info.info.speed,
+                    // Same range text as the non-mine unit panel, only for ranged demons.
+                    ...(DEMON_TYPES[next.type].ranged ? {range: info.info.range} : {}),
                     ...(DEMON_TYPES[next.type].buildingDamage !== undefined ? {'building dmg': type.buildingDMG,
                         target: 'enemy buildings only'} : {})}}
         }

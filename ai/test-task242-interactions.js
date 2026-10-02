@@ -62,7 +62,7 @@ async function exercise(p,c,out,check){
    const stats=await p.observe(()=>({name:entityInterface.entity.name.text,text:entityInterface.entity.info.text}));
    const ranged=q.id==='portal-occupied';
    const type=c.round===4?(ranged?'spitter':'clawling'):(ranged?'spitter':'imp');
-   check(c.id+'/'+q.id+'/stats',stats,{name:type,text:type==='clawling'?'hp: 1\ndmg: 2\nmovement: 2\nrange: 1':'hp: 2\ndmg: 1\nmovement: 2\nrange: 1'});
+   check(c.id+'/'+q.id+'/stats',stats,{name:type,text:{clawling:'hp: 1\ndmg: 2\nspeed: 2',imp:'hp: 2\ndmg: 1\nspeed: 2',spitter:'hp: 2\ndmg: 1\nspeed: 2\nrange: 1'}[type]});
    const shot=await p.screenshot(q.id+'-stats');rows.push({id:c.id+'/'+q.id+'/stats',screenshot:c.id+'/screenshots/'+shot.file,observed:stats});
    await p.tapControl('entityInterface.portalBackButton','portal back','!entityInterface.portalDescription');
    check(c.id+'/'+q.id+'/back',await p.observe(()=>({name:entityInterface.entity.name.text,selected:gameEvent.selected.name})),{name:'demon portal',selected:'demonPortal'});
