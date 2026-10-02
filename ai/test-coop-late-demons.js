@@ -7,11 +7,11 @@ const {run: melee} = require('./test-coop-heavy-melee');
 // Reuse the full action and invariant suites, including persistence and death.
 function run(fault) {
   ranged(fault === 'hexcaster' ? 'health' : undefined,
-    [['Hexcaster', 'hexcaster', 5, 1, 4, 3]],
-    'PASS late ranged hexcaster health=5 movement=1 damage=4 range=3 boundary=inside,at,outside obstruction=mountain persistence=2 incoming_lethal=5');
+    [['Hexcaster', 'hexcaster', 1, 1, 3, 2]],
+    'PASS late ranged hexcaster health=1 movement=1 damage=3 range=2 boundary=inside,at,outside obstruction=mountain persistence=2 incoming_lethal=1');
   melee(fault === 'melee' ? 'health' : undefined,
-    [['Ravager', 'ravager', 8, 4, 5], ['DemonLord', 'demonLord', 20, 2, 6]],
-    'PASS late melee ravager health=8 movement=4 damage=5 range=1; demonLord health=20 movement=2 damage=6 range=1; incoming_lethal=8,20 persistence=2');
+    [['Ravager', 'ravager', 4, 3, 1], ['DemonLord', 'demonLord', 5, 2, 3]],
+    'PASS late melee ravager health=4 movement=3 damage=1 range=1; demonLord health=5 movement=2 damage=3 range=1; incoming_lethal=4,5 persistence=2');
   console.log('PASS co-op late demons types=3 exact_stats movement_boundaries range_boundaries death_cleanup shared_invariants');
 }
 if (require.main === module) {

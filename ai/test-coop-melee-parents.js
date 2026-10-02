@@ -23,16 +23,17 @@ function run(cases) {
       owner:subject.playerColor, registry:players[3].units.includes(subject), registered:getClass(subject.name)===${klass}})`),
     {parent:true,interaction:parent==='KOHb'?'MirroringInteraction':'InterationWithUnit',draw:true,
       instructions:true,prototypeKeys:['constructor'],name,owner:3,registry:true,registered:true});
-    f.compare(name+'-existing-assets', f.evaluate(`(() => {
+    // Demons draw their own sprite artwork (and a Left variant for KOHb parents), not the parent asset.
+    f.compare(name+'-dedicated-assets', f.evaluate(`(() => {
       cacheAllImages(); const calls=[]; const ctx=new Proxy({drawImage(image){calls.push(image)}},
         {get(t,k){return k in t?t[k]:()=>{}}});
-      subject.draw(ctx); const right=calls.includes(cachedImages['${asset}']);
+      subject.draw(ctx); const right=calls.includes(cachedImages['${name}']);
       const before=cachedImages[subject.name]; cacheAllImages();
-      const refreshed=cachedImages[subject.name]===cachedImages['${asset}'] && before!==cachedImages[subject.name];
+      const refreshed=cachedImages[subject.name]!==undefined && before!==cachedImages[subject.name];
       calls.length=0; subject.mirrorX=true; subject.draw(ctx);
-      const left=calls.includes(cachedImages['${parent==='KOHb'?'KOHbLeft':asset}']);
-      return {right,left,refreshed,portrait:assets[subject.name]===assets['${asset}']};
-    })()`), {right:true,left:true,refreshed:true,portrait:true});
+      const left=calls.includes(cachedImages['${parent==='KOHb'?name+'Left':name}']);
+      return {right,left,refreshed,portrait:assets[subject.name]!==undefined,parentPortrait:assets[subject.name]===assets['${asset}']};
+    })()`), {right:true,left:true,refreshed:true,portrait:true,parentPortrait:false});
     for (const scenario of ['portal-exit-left','nonlethal-move-attack','lethal-move-attack']) {
       const observations=[];
       for (const normal of [true,false]) {
@@ -59,6 +60,7 @@ function run(cases) {
       }
       f.compare(name+'-'+scenario+'-parent-parity',observations[1],observations[0]);
     }
+    // Since TASK-110 a demon enters a human town only to raze it, never to capture it.
     f.compare(name+'-save-load-and-no-economy',f.evaluate(`(() => {
       subject.hit(1); subject.moves=0; const packed=subject.toJSON(); subject.kill();
       unpacker.fullUnpackUnit(packed); const restored=grid.getUnit(packed.coord);
@@ -66,8 +68,8 @@ function run(cases) {
       return {name:restored.name,className:restored.constructor.name,hp:restored.hp,moves:restored.moves,
         owner:restored.playerColor,registry:players[3].units.includes(restored),gold:players[3].gold,
         income:players[3].income,salary:players[3].armySalary,towns:players[3].towns.length,
-        economicEntry:!!players[3].canEnterBuilding(players[1].towns[0]),healSpeed:restored.healSpeed};
-    })()`),{name,className:klass,hp:hp-1,moves:speed,owner:3,registry:true,gold:0,income:0,salary:0,towns:0,economicEntry:false,healSpeed:0});
+        townEntryRazes:!!players[3].canEnterBuilding(players[1].towns[0])&&players[3].shouldRazeBuilding(players[1].towns[0]),healSpeed:restored.healSpeed};
+    })()`),{name,className:klass,hp:hp-1,moves:speed,owner:3,registry:true,gold:0,income:0,salary:0,towns:0,townEntryRazes:true,healSpeed:0});
     console.log(`PASS normal-parent ${name} parent=${parent} inheritance interaction rendering registry portal-exit save-load no-economy`);
   }
 }
