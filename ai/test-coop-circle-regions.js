@@ -42,13 +42,15 @@ const TOWNS_PER_HUMAN = {tiny: 1, normal: 2, big: 3}, MINES_PER_HUMAN = {tiny: 2
 function expectedAt(humans, size, R) {
     const center = {q: R, r: Math.ceil(R / 2)}, side = 2 * R + 1;
     // Elite core: R/6, grown to the first layer whose disc fits 4 lattice
-    // portals per human and 12 cells per human (portal + 2 approach cells).
+    // portals per human and 12 cells per human (portal + 2 approach cells);
+    // big adds a 3x3 elite neutral-town box per human.
+    const eliteCellsNeeded = 12 * humans + (size === 'big' ? 9 * humans : 0);
     let E = Math.floor(R / 6);
     for (let grown = false; !grown && E < R; ) {
         let total = 0, onLattice = 0;
         for (let x = 0; x < side; x++) for (let y = 0; y < side; y++)
             if (coopHexLayer(x, y, center) <= E) { total++; if (coopHexLattice(x, y)) onLattice++; }
-        if (onLattice >= 4 * humans && total >= 12 * humans) grown = true; else E++;
+        if (onLattice >= 4 * humans && total >= eliteCellsNeeded) grown = true; else E++;
     }
     const C = Math.floor(R / 2), T = R - 3, ringOuter = Math.min(C, T - TOWN_DISTANCE[size]);
     const cells = {elite: [], ring: [], townRing: [], other: [], outside: []};
@@ -78,6 +80,10 @@ function expectedAt(humans, size, R) {
         outsideElite: {have: playable - eliteCells, need: outsideNeed},
         terrain: {have: playable - eliteCells - outsideNeed, need: terrain.mountains + terrain.lakes + terrain.bushes}
     };
+    // Neutral-town 3x3 boxes: one per human in the common ring (normal/big), past
+    // 7 portals x 3 cells per human; one per human in the elite core (big).
+    if (size !== 'tiny') rows.ringNeutral = {have: cells.ring.length - 21 * humans, need: 9 * humans};
+    if (size === 'big') rows.eliteNeutral = {have: eliteCells - 12 * humans, need: 9 * humans};
     for (const row of Object.values(rows)) row.slack = row.have - row.need;
     return {regions: {elite: E, ringInner: E + 1, ringOuter, townRing: T}, cells, playable,
         rows, ok: Object.values(rows).every(row => row.slack >= 0)};

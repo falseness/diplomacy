@@ -11,7 +11,8 @@ const layer = (x, y, R) => {
 const onLattice = (x, y) => (((x - (y - Math.floor(x / 2))) % 3) + 3) % 3 === 0;
 
 // Elite core E = max(floor(R/6), smallest layer whose disc holds 4 lattice cells
-// and 12 cells per human); common ring ends at min(floor(R/2), R - 3 - D).
+// and 12 cells per human, plus 9 per human on big for the elite neutral towns);
+// common ring ends at min(floor(R/2), R - 3 - D).
 function circleTestBands(R, humans, size) {
     const side = 2 * R + 1, discCells = [], discLattice = [];
     for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) {
@@ -20,10 +21,11 @@ function circleTestBands(R, humans, size) {
         discCells[l] = (discCells[l] || 0) + 1;
         if (onLattice(x, y)) discLattice[l] = (discLattice[l] || 0) + 1;
     }
+    const cellsNeeded = (size === 'big' ? 21 : 12) * humans;
     let E = 0, cells = 0, lattice = 0;
     for (; E < R; E++) {
         cells += discCells[E] || 0; lattice += discLattice[E] || 0;
-        if (E >= Math.floor(R / 6) && cells >= 12 * humans && lattice >= 4 * humans) break;
+        if (E >= Math.floor(R / 6) && cells >= cellsNeeded && lattice >= 4 * humans) break;
     }
     const ringOuter = Math.min(Math.floor(R / 2), R - 3 - TOWN_DISTANCE[size]);
     return {E, ringOuter};
