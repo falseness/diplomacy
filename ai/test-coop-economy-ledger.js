@@ -8,7 +8,8 @@ const copy = value => JSON.parse(JSON.stringify(value));
 // delta or use Player.income/armySalary as the expected accounting result.
 function createEconomyLedger(fixture, initial, rules, report = console.log) {
   const baseline = copy(initial), configured = copy(rules), events = [];
-  // Towns a demon captured through an ordinary capture (TASK-409); nothing else may be demon-owned.
+  // Towns (TASK-409) and goldmines (TASK-411) a demon captured through an ordinary capture;
+  // nothing else may be demon-owned.
   const captures = [];
   function expected() {
     const balances = baseline.map(actor => actor.gold);
@@ -50,7 +51,8 @@ function createEconomyLedger(fixture, initial, rules, report = console.log) {
   function check(label) {
     const wanted = expected();
     const wantedAssets = sortAssets(captures.flatMap(({name, coord}) =>
-      ['grid', 'ownership'].map(source => ({source, name, coord}))));
+      // Goldmines are also listed in the global goldmines registry.
+      [...name === 'goldmine' ? ['global'] : [], 'grid', 'ownership'].map(source => ({source, name, coord}))));
     const observed = fixture.evaluate(`(() => {
       const assets = [];
       const add = (entity, source) => {
@@ -62,7 +64,7 @@ function createEconomyLedger(fixture, initial, rules, report = console.log) {
       for (const column of grid.arr) for (const cell of column) add(cell.building, 'grid');
       for (let owner = 0; owner < players.length; owner++) {
         if (fixtureConfig.actors[owner].role !== 'demon') continue;
-        for (const entity of [...players[owner].towns, ...players[owner].goldmines]) {
+        for (const entity of [...players[owner].towns, ...goldmines.filter(g => players[owner].isOurGoldmine(g))]) {
           if (!entity.killed) assets.push({source: 'ownership', name: entity.name, coord: entity.coord});
         }
       }

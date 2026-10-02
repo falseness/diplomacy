@@ -49,11 +49,10 @@ class Player {
     ignoresCell(cell) {
         return false
     }
-    // Demons can neither hit nor capture neutral goldmines yet, so they are no objectives.
-    // Kept apart from ignoresCell, which also decides passability.
+    // Kept apart from ignoresCell, which also decides passability. Demons capture
+    // goldmines by stepping onto them, so nothing is excluded as an objective.
     ignoresObjective(cell) {
-        return this.ignoresCell(cell) || (this.role === 'DEMONS' && cell.building.notEmpty() &&
-            cell.building.name === 'goldmine')
+        return this.ignoresCell(cell)
     }
     canEnterBuilding(building) {
         return true
@@ -420,9 +419,11 @@ class DemonPlayer extends Player {
         super(color, 0)
         this.economyEnabled = false
     }
-    // Demons capture (never raze) a town once its HP is down, like a human.
+    // Demons capture (never raze) a town once its HP is down, like a human, and
+    // capture a goldmine by stepping onto it (ownership is the hex colour).
     canEnterBuilding(building) {
         return building.isEmpty() || (building.isNature && building.isPassable) ||
+            building instanceof Goldmine ||
             this.canCaptureTown(building) || (building.isDemonPortal &&
             !building.killed && building.playerColor === players.indexOf(this))
     }

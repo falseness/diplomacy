@@ -96,17 +96,21 @@ function run(fault) {
     globalThis.blocker=new ${kind==='town'?'Town(4,3,true)':'Goldmine(4,3,50)'};
     ${kind==='town'?'blocker.hp=0;':''}
     whooseTurn=3; walker.select(); undefined`);
-    f.compare(`${kind}-destination-cost`,f.evaluate('walker.interaction.way.getDistance({x:4,y:3})'),2);
-    f.compare(`${kind}-transit-cost`,f.evaluate('walker.interaction.way.getDistance({x:5,y:3})'),3);
-    f.compare(`${kind}-no-transit-command`,f.evaluate(`walker.getAvailableCommands().some(c=>
-      c.destinationCoord.x===5 && c.destinationCoord.y===3)`),false);
-    f.evaluate('walker.sendInstructions(grid.getCell({x:5,y:3})); undefined');
-    f.compare(`${kind}-transit-rejected`,f.evaluate('walker.coord'),{x:3,y:3});
-    f.evaluate('walker.select(); walker.sendInstructions(grid.getCell({x:4,y:3})); undefined');
-    f.compare(`${kind}-destination-no-capture`,f.evaluate(`({coord:walker.coord,owner:blocker.playerColor,
+    // Since TASK-411 demons stand on goldmines like on empty cells, so only the town is a transit blocker.
+    f.compare(`${kind}-destination-cost`,f.evaluate('walker.interaction.way.getDistance({x:4,y:3})'),kind==='town'?2:1);
+    if (kind==='town') {
+      f.compare(`${kind}-transit-cost`,f.evaluate('walker.interaction.way.getDistance({x:5,y:3})'),3);
+      f.compare(`${kind}-no-transit-command`,f.evaluate(`walker.getAvailableCommands().some(c=>
+        c.destinationCoord.x===5 && c.destinationCoord.y===3)`),false);
+      f.evaluate('walker.sendInstructions(grid.getCell({x:5,y:3})); undefined');
+      f.compare(`${kind}-transit-rejected`,f.evaluate('walker.coord'),{x:3,y:3});
+      f.evaluate('walker.select(); undefined');
+    }
+    f.evaluate('walker.sendInstructions(grid.getCell({x:4,y:3})); undefined');
+    f.compare(`${kind}-destination-capture`,f.evaluate(`({coord:walker.coord,owner:blocker.playerColor,
       gold:players[3].gold,towns:players[3].towns.length})`),
-      // Since TASK-410 the hp-0 neutral town is captured; the goldmine is still neither entered nor captured.
-      kind==='town'?{coord:{x:4,y:3},owner:3,gold:0,towns:1}:{coord:{x:3,y:3},owner:0,gold:0,towns:0});
+      // Since TASK-410 the hp-0 neutral town is captured; since TASK-411 the goldmine too (hex colour).
+      kind==='town'?{coord:{x:4,y:3},owner:3,gold:0,towns:1}:{coord:{x:4,y:3},owner:3,gold:0,towns:0});
   }
   let count=0;
   for (const [kind,hp] of [['town',10],['town',1],['town',0],['goldmine',null]]) {
@@ -122,16 +126,19 @@ function run(fault) {
       f.evaluate('whooseTurn=3; attacker.select(); attacker.sendInstructions(grid.getCell({x:6,y:3})); whooseTurn=1; undefined');
       if(fault) f.evaluate('players[1].gold++');
       // Since TASK-409 a melee demon captures (never razes) an hp-0 human town; since TASK-410 neutral ones too.
-      const captured = kind==='town' && !ranged && hp<=1;
+      // Since TASK-411 any demon captures a goldmine by stepping onto it.
+      const captured = kind==='goldmine' || (kind==='town' && !ranged && hp<=1);
       if (captured) {
         s.entities().record({type:'capture',id:'target',owner:3});
-        s.economy.capture('town',{x:6,y:3});
+        s.economy.capture(kind,{x:6,y:3});
         s.entities().record({type:'move',id:'attacker',destination:{x:6,y:3}});
       }
       f.compare(label+'-ownership-and-combat',f.evaluate(`({owner:target.playerColor,hp:${hp===null?'null':'target.hp'},
         attacker:attacker.coord,gold:players.map(p=>p.gold),demonTowns:players[3].towns.length})`),
-        {owner:captured?3:owner,hp:hp===null?null:Math.max(0,hp-(ranged?2:1)),attacker:{x:captured?6:5,y:3},gold:[0,100,75,0],demonTowns:captured?1:0});
-      f.compare(label+'-path-no-economic-transit',f.evaluate('attacker.interaction.way.getDistance({x:6,y:3})'),ranged?3:2);
+        {owner:captured?3:owner,hp:hp===null?null:Math.max(0,hp-(ranged?2:1)),attacker:{x:captured?6:5,y:3},gold:[0,100,75,0],demonTowns:captured&&kind==='town'?1:0});
+      f.compare(label+'-path-no-economic-transit',f.evaluate('attacker.interaction.way.getDistance({x:6,y:3})'),
+        // A goldmine is no transit blocker since TASK-411: the demon now stands on it.
+        kind==='goldmine'?0:ranged?3:2);
       s.check(label+'-after-command'); count++;
     }
   }
