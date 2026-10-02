@@ -45,11 +45,11 @@ class Player {
         return this === other || Boolean(gameSettings.coop && this.role === 'HUMAN' &&
             other.role === 'HUMAN' && this.team === other.team)
     }
+    // Nothing is ignored for pathing: demons path next to, hit and capture neutral towns too.
     ignoresCell(cell) {
-        return this.role === 'DEMONS' && cell.building.notEmpty() &&
-            cell.building.isTown() && cell.building.player.role === 'NEUTRAL'
+        return false
     }
-    // Demons can neither hit nor capture neutral goldmines, so they are no objectives.
+    // Demons can neither hit nor capture neutral goldmines yet, so they are no objectives.
     // Kept apart from ignoresCell, which also decides passability.
     ignoresObjective(cell) {
         return this.ignoresCell(cell) || (this.role === 'DEMONS' && cell.building.notEmpty() &&

@@ -7,6 +7,8 @@ const neutralOnlyFault = process.argv.includes('--fault-neutral-only-objectives'
 function fixture(coop=true) {
   const config=defaultFixture(); config.coop=coop;
   const f=createFixture(config);
+  // Since TASK-410 the neutral town (4,5) is a demon objective; remove it so only mines compete with human towns.
+  f.evaluate('for(const t of [...players[0].towns]) t.destroy(); undefined');
   if(fault) f.evaluate('Player.prototype.ignoresObjective=Player.prototype.ignoresCell; undefined');
   if(neutralOnlyFault) f.evaluate(`Player.prototype.ignoresObjective=function(cell) {
     return this.ignoresCell(cell) || (this.role === 'DEMONS' && cell.building.notEmpty() &&
@@ -29,7 +31,7 @@ const target = (coord,color) => `new BestEnemyTargetForAI().calculateBestEnemyTa
 }
 {
   const f=fixture();
-  // Only neutral objectives remain: the mine must not replace them as objective.
+  // Only the neutral mine remains: it must not become an objective.
   f.evaluate(`for(const p of players.slice(1,3)) {for(const t of [...p.towns]) t.destroy(); for(const u of [...p.units]) u.kill();}
     grid.getHexagon({x:7,y:4}).playerColor=0; new Goldmine(7,4,50); undefined`);
   f.compare('neutral-goldmine-only-objective',f.evaluate(target({x:7,y:5},3)),null);
