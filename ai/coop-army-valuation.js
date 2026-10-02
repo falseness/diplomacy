@@ -10,9 +10,8 @@ const PARAMETERS = Object.freeze({baseline: 20, health: 20 / 3, damage: 10,
 const UNIT = 'sprites/entities/units/';
 const SOURCES = [
   'ai/demon-config.js', UNIT + 'unit/unit.js', UNIT + 'noob.js', UNIT + 'normchel.js',
-  UNIT + 'KOHb/KOHb.js', UNIT + 'range/rangeUnit/rangeUnit.js',
-  UNIT + 'range/archer/archer.js', UNIT + 'range/catapult/catapult.js',
-  UNIT + 'earlyDemons.js', UNIT + 'heavyDemons.js',
+  UNIT + 'KOHb/KOHb.js', UNIT + 'earlyDemons.js', UNIT + 'range/rangeUnit/rangeUnit.js',
+  UNIT + 'range/archer/archer.js', UNIT + 'range/catapult/catapult.js', UNIT + 'heavyDemons.js',
   UNIT + 'range/earlyRangedDemons.js', UNIT + 'lateDemons.js',
   'sprites/entities/buildings/manufactures/preparingManufacture/town.js'
 ];

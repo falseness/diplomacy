@@ -34,15 +34,15 @@ for (const a of report.anchors) {
 }
 const expected = [
   ['imp','Noob',2,1,2,1,'melee',20],
-  ['clawling','Noob',3,1,3,1,'melee',100/3],
-  ['hound','KOHb',4,2,4,1,'melee',170/3],
-  ['brute','Normchel',10,3,1,1,'melee',260/3],
-  ['bulwark','Normchel',16,2,1,1,'melee',350/3],
-  ['spitter','Archer',2,1,2,2,'archer',110/3],
-  ['emberArcher','Archer',4,2,3,3,'archer',250/3],
-  ['hexcaster','Archer',5,4,1,3,'archer',290/3],
-  ['ravager','KOHb',8,5,4,1,'melee',340/3],
-  ['demonLord','Normchel',20,6,2,1,'melee',190]
+  ['clawling','Noob',1,2,2,1,'melee',70/3],
+  ['hound','KOHb',2,1,5,1,'melee',40],
+  ['brute','Normchel',3,2,2,1,'melee',110/3],
+  ['bulwark','Normchel',7,1,2,1,'melee',160/3],
+  ['spitter','Archer',2,1,2,1,'archer',20],
+  ['emberArcher','Archer',1,1,2,3,'archer',140/3],
+  ['hexcaster','Archer',1,3,1,2,'archer',130/3],
+  ['ravager','KOHb',4,1,3,1,'melee',40],
+  ['demonLord','Normchel',5,3,2,1,'melee',60]
 ];
 compare('ten-current-demon-characteristics', report.demons.map(d =>
   [d.id,d.parent,d.health,d.damage,d.movement,d.range,d.profile]), expected.map(row => row.slice(0,7)));
@@ -68,7 +68,8 @@ for (const unit of [...report.anchors,...report.demons]) {
     valueUnit({...unit,healSpeed:99,salary:99}).value,unit.value);
 }
 const spitter = report.demons.find(d => d.id === 'spitter');
-compare('range-advantage-vs-otherwise-identical-Imp',spitter.value-report.demons[0].value,50/3);
+// Spitter has Imp's stats at range 1; one more range point is the whole ranged premium.
+compare('range-advantage-vs-otherwise-identical-Imp',valueUnit({...spitter,range:2}).value-report.demons[0].value,50/3);
 const siege = report.anchors.find(a => a.name === 'Catapult');
 compare('siege-limitation-discount',valueUnit({...siege,profile:'archer'}).value-siege.value,50);
 compare('catapult-ordinary-damage-distinct-from-effective-damage',[siege.ordinaryDamage,siege.damage],[0,4]);
