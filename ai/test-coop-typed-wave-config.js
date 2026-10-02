@@ -22,7 +22,7 @@ const EXPECTED_STEPS = {
   ranged: [[4, 'spitter'], [12, 'emberArcher']],
   siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[20, 'bulwark']],
   support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']],
-  mage: [[20, 'hexcaster'], [28, 'hexmaster'], [36, 'demonQueen']]
+  mage: [[20, 'hexcaster'], [36, 'demonQueen']]
 };
 function literalType(category, round) {
   if (!round || round % 4) return null;
@@ -41,7 +41,7 @@ const NEXT = Object.fromEntries(CATEGORIES.map(c => [c,
     const n = literalNext(c, completed); return [completed, n.round, n.type, n.roundsRemaining];
   })]));
 const DEMON_TYPE_IDS = ['imp', 'clawling', 'hound', 'brute', 'bulwark', 'spitter', 'emberArcher', 'hexcaster',
-  'ravager', 'demonLord', 'bombard', 'mortar', 'hexmaster', 'demonQueen'];
+  'ravager', 'demonLord', 'bombard', 'mortar', 'demonQueen'];
 
 const checkpoints = [];
 function compare(id, observed, expected) {
@@ -255,7 +255,7 @@ function checkCallers() {
       {round:28,types:[],selections:[]});
   }
   compare('caller-unblock-no-backlog', vm.runInContext(`external.forEach(p => p.hp = 30); generateCoopWave(32)`, context),
-    {round:32, types:['brute','emberArcher','mortar','bulwark','hound','demonLord','hexmaster'],
+    {round:32, types:['brute','emberArcher','mortar','bulwark','hound','demonLord','hexcaster'],
       selections:CATEGORIES.map((c,x)=>({x,y:0,type:literalType(c,32)}))});
   for (const category of CATEGORIES) for (const [gameRound, committed] of [[0,0],[3,4],[15,16],[28,24]]) {
     const observed = vm.runInContext(`gameRound=${gameRound}; gameSettings.coop.typedWaves={lastRound:${committed}};

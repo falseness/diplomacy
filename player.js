@@ -1,6 +1,6 @@
 // Statistics only: demons are never bought, so armyCost uses these prices.
 const DEMON_COSTS = Object.freeze({imp: 20, spitter: 20, clawling: 25, brute: 40,
-    hound: 40, ravager: 40, hexcaster: 40, emberArcher: 40, hexmaster: 60, bulwark: 60,
+    hound: 40, ravager: 40, hexcaster: 40, emberArcher: 40, bulwark: 60,
     demonLord: 60, demonQueen: 60, bombard: 60, mortar: 80})
 class Player {
     constructor(color, gold = 100) {

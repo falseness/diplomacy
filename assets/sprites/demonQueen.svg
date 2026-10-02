@@ -124,7 +124,7 @@
     <circle cx="232" cy="48" r="3.5" fill="url(#dq-ruby)"/>
     <circle cx="280" cy="48" r="3.5" fill="url(#dq-ruby)"/>
   </g>
-  <!-- Three orbiting hex rings escalate from hexcaster (one) and hexmaster (two). -->
+  <!-- Three orbiting hex rings escalate from hexcaster (one). -->
   <g id="dq-floating-spells" stroke-linejoin="round">
     <path d="M434 134 L467 153 V191 L434 210 L401 191 V153Z" stroke="#6e5739" stroke-width="14"/>
     <path d="M434 134 L467 153 V191 L434 210 L401 191 V153Z" stroke="url(#dq-spell-paint)" stroke-width="9"/>

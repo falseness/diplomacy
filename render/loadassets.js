@@ -30,7 +30,7 @@ let assets = {
 // Demon artwork is shared by both ordinary sprite themes.
 const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark',
     'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft', 'mortar', 'mortarLeft',
-    'hexmaster', 'demonQueen',
+    'demonQueen',
     'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
     'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos', 'demonPortalMage']
 for (const name of demonSpriteImages) assets[name] = new Image()

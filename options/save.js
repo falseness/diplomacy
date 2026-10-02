@@ -22,7 +22,6 @@ class JsonUnpackManager {
             spitter: Spitter,
             emberArcher: EmberArcher,
             hexcaster: Hexcaster,
-            hexmaster: Hexmaster,
             demonQueen: DemonQueen,
             ravager: Ravager,
             demonLord: DemonLord,

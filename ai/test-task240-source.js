@@ -39,7 +39,7 @@ if(require.main===module){
  ['spitter','spitter','ember archer','ember archer','ember archer','ember archer','ember archer','ember archer'],
  [...Array(7).fill('bombard'),'mortar'],Array(8).fill('bulwark'),
  ['ravager','ravager','ravager','ravager','ravager','hound','hound','hound'],Array(8).fill('demon lord'),
- [...Array(6).fill('hexcaster'),'hexmaster','hexmaster']]);
+ Array(8).fill('hexcaster')]);
  check(cases[6],f.evaluate('inspectionSnapshot240()===before240'),true);
  check(cases[2],f.evaluate(`(() => {
  // Source-only blocked placement fixture, independent of browser gameplay.

@@ -7,7 +7,7 @@ function placeCoopWave(wave) {
     const constructors = {bombard: Bombard, mortar: Mortar, imp: Imp, clawling: Clawling, hound: Hound,
         brute: Brute, bulwark: Bulwark, spitter: Spitter,
         emberArcher: EmberArcher, hexcaster: Hexcaster,
-        hexmaster: Hexmaster, demonQueen: DemonQueen, ravager: Ravager, demonLord: DemonLord}
+        demonQueen: DemonQueen, ravager: Ravager, demonLord: DemonLord}
     const seen = new Set()
     if (!wave || !Array.isArray(wave.selections) || wave.selections.some(entry => {
         if (!entry || !Number.isInteger(entry.x) || !Number.isInteger(entry.y) ||
