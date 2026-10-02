@@ -248,14 +248,20 @@ class Grid extends SpritesGroup {
                 cell.building.draw(ctx)
                 if (cell.building.hasBar)
                     tmpBuildings.push(cell.building)
+                // Production silhouette under the unit standing on the cell.
+                this.drawProductionSilhouette(ctx, cell.building)
                 cell.unit.draw(ctx)
-                if (cell.building.isDemonPortal)
-                    cell.building.drawNextProduction(ctx)
             }
         }
         for (let i = 0; i < tmpBuildings.length; ++i) {
             tmpBuildings[i].drawBars(ctx)
         }
+    }
+    drawProductionSilhouette(ctx, building) {
+        if (building.isPreparingManufacture)
+            building.unitProduction.draw(ctx)
+        else if (building.isDemonPortal)
+            building.drawNextProduction(ctx)
     }
     isCacheableBuilding(building) {
         return building.notEmpty() && !building.isInvisible && !building.isBuildingProduction()

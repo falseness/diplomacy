@@ -89,8 +89,4 @@ class PreparingManufacture extends Manufacture {
     get isPreparingManufacture() {
         return true
     }
-    draw(ctx) {
-        super.draw(ctx)
-        this.unitProduction.draw(ctx)
-    }
 }
