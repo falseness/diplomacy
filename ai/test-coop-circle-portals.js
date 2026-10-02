@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Portal checks for placeCirclePortals (ai/coop-circle-plan.js): elite categories
 // in the core (layer <= floor(R/4)), common categories in the ring, town distance,
-// non-adjacency, approach cells, category counts, connectivity and determinism.
+// non-adjacency (elite portals touch no portal; ring portals touch only their own
+// group, whose members sit within hex distance 2), approach cells, category counts,
+// connectivity and determinism.
 // Layers and hex distances are re-derived here with an axial-coordinate metric.
 // Usage: node ai/test-coop-circle-portals.js [--output-dir DIR] [--fault elite-melee|adjacent-portals]
 'use strict';
@@ -18,9 +20,12 @@ const fault = option('--fault');
 // Fault injections rewrite the planner source before it is loaded.
 const FAULTS = {
     'elite-melee': [["sequence: deal(COOP_CIRCLE_ELITE_CATEGORIES)}", "sequence: ['melee', ...deal(COOP_CIRCLE_ELITE_CATEGORIES)]}"],
-        ["sequence: deal(COOP_CIRCLE_RING_CATEGORIES)}", "sequence: deal(COOP_CIRCLE_RING_CATEGORIES).slice(1)}"]],
-    'adjacent-portals': [['if (portalSet.has(id) || around(id).some(n => portalSet.has(n))) continue', 'if (portalSet.has(id)) continue'],
-        ['const candidates = [...shuffle(lattice), ...shuffle(rest)]', 'const candidates = [...shuffle(rest), ...shuffle(lattice)]']]
+        // Ring portals come from COOP_CIRCLE_RING_GROUPS: skip the planner's own sequence and
+        // count checks so the extra core melee reaches the suite's category assertions.
+        ["if (group.sequence.join() !== Array(humans)", "if (false && group.sequence.join() !== Array(humans)"],
+        ["if (Object.keys(targets).some(c => categoryCounts[c] !== targets[c]))", "if (false)"]],
+    // Drops the inter-group gap: ring portals of different groups may touch.
+    'adjacent-portals': [['groupOf[i] !== group && d < CIRCLE_GROUP_GAP : d < 2', 'false : d < 2']]
 };
 if (fault !== undefined && !FAULTS[fault]) { console.error(`unknown fault ${fault}`); process.exit(2); }
 
@@ -42,6 +47,7 @@ if (fault) {
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 2, 31, 777, 65535, 2654435769, 4294967295];
 const TOWN_DISTANCE = {tiny: 3, normal: 4, big: 5};
 const ELITE = ['chaos', 'heavy', 'siege', 'mage'], RING = ['melee', 'ranged', 'support'];
+const GROUP_SPAN = 2;
 const colorOf = i => ({r: (i * 37) % 256, g: (i * 91) % 256, b: (i * 53) % 256});
 
 // Independent hex metric: offset column -> axial, cube distance to the centre cell (R, R).
@@ -107,11 +113,26 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     assert('portal-total', portals.length === Object.values(target).reduce((a, b) => a + b, 0), {...id, placed: portals.length});
     const towns = layout.players.slice(1).map(p => p.towns[0]);
     const minTownDistance = Math.min(...portals.flatMap(p => towns.map(t => hexDistance(p, t))));
-    let minPortalDistance = Infinity;
-    portals.forEach((p, i) => portals.forEach((q, j) => { if (j > i) minPortalDistance = Math.min(minPortalDistance, hexDistance(p, q)); }));
-    if (!Number.isFinite(minPortalDistance)) minPortalDistance = null;
+    // Group of each portal (-1 = elite); every ring portal belongs to exactly one group.
+    const groupOf = portals.map(() => -1), groups = result.portalGroups || [];
+    groups.forEach((g, gi) => g.members.forEach(m => { groupOf[m] = groupOf[m] === -1 ? gi : -2; }));
+    assert('ring-groups-partition', portals.every((p, i) => (groupOf[i] >= 0) === RING.includes(p.category)), id);
+    // Non-adjacency: any pair with an elite portal, or ring portals of different groups.
+    let minPortalDistance = Infinity, minElitePortalDistance = Infinity, minInterGroupDistance = Infinity, maxGroupSpan = 0;
+    portals.forEach((p, i) => portals.forEach((q, j) => {
+        if (j <= i) return;
+        const d = hexDistance(p, q);
+        minPortalDistance = Math.min(minPortalDistance, d);
+        if (groupOf[i] < 0 || groupOf[j] < 0) minElitePortalDistance = Math.min(minElitePortalDistance, d);
+        else if (groupOf[i] !== groupOf[j]) minInterGroupDistance = Math.min(minInterGroupDistance, d);
+        else maxGroupSpan = Math.max(maxGroupSpan, d);
+    }));
+    const finite = d => Number.isFinite(d) ? d : null;
+    [minPortalDistance, minElitePortalDistance, minInterGroupDistance] = [minPortalDistance, minElitePortalDistance, minInterGroupDistance].map(finite);
     assert('town-distance', minTownDistance >= D, {...id, minTownDistance, D});
-    assert('portals-not-adjacent', minPortalDistance === null || minPortalDistance >= 2, {...id, minPortalDistance});
+    assert('portals-not-adjacent', (minElitePortalDistance === null || minElitePortalDistance >= 2) &&
+        (minInterGroupDistance === null || minInterGroupDistance >= 2), {...id, minElitePortalDistance, minInterGroupDistance});
+    assert('group-span', maxGroupSpan <= GROUP_SPAN, {...id, maxGroupSpan});
     // Approach cells: free = inside the radius and not a portal, town, mine or pre-portal reservation.
     const blocked = new Set([...portals, ...layout.players.flatMap(p => p.towns), ...layout.goldmines, ...layout.reserved].map(key));
     const onBlocked = portals.filter(p => [...layout.players.flatMap(t => t.towns), ...layout.goldmines, ...layout.reserved]
@@ -127,7 +148,7 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     const conn = components(R, [...layout.players.flatMap(p => p.towns), ...layout.goldmines, ...portals]);
     assert('connectivity', conn.components === 1 && conn.detachedObjects === 0, {...id, conn});
     matrix.push({size, humans, seed, attempt, radius: R, eliteLayer: E, ringOuter, townDistance: D,
-        categories: table, minTownDistance, minPortalDistance, freeRegion: conn,
+        categories: table, minTownDistance, minPortalDistance, minElitePortalDistance, minInterGroupDistance, maxGroupSpan, freeRegion: conn,
         portals: portals.map(p => ({x: p.x, y: p.y, category: p.category}))});
     approachRows.push({size, humans, seed, portals: portals.length, minFreeAdjacent: Math.min(...freeAdjacent),
         allAtLeastTwo: freeAdjacent.every(n => n >= 2), recordedApproachesValid: approachesValid, freeAdjacent});
