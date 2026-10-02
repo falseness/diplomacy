@@ -61,17 +61,22 @@ function run(cases) {
       f.compare(name+'-'+scenario+'-parent-parity',observations[1],observations[0]);
     }
     // Since TASK-409 a demon captures (never razes) a human town, and only once its HP is 0.
-    f.compare(name+'-save-load-and-no-economy',f.evaluate(`(() => {
+    f.compare(name+'-save-load-and-human-economy',f.evaluate(`(() => {
       subject.hit(1); subject.moves=0; const packed=subject.toJSON(); subject.kill();
       unpacker.fullUnpackUnit(packed); const restored=grid.getUnit(packed.coord);
-      restored.wasHitted=false; players[3].gold=900; players[3].nextTurn();
+      restored.wasHitted=false;
+      // Since TASK-412 demons earn like humans: towns + open mines - salaries of live units.
+      const formula=()=>players[3].towns.filter(t=>!t.killed).reduce((s,t)=>s+t.income,0)+
+        goldmines.filter(g=>players[3].isOurGoldmine(g)).reduce((s,g)=>s+g.income,0)-
+        players[3].units.filter(u=>!u.killed).reduce((s,u)=>s+u.constructor.salary,0);
+      const expectedGold=900+formula(); players[3].gold=900; players[3].nextTurn();
       return {name:restored.name,className:restored.constructor.name,hp:restored.hp,moves:restored.moves,
-        owner:restored.playerColor,registry:players[3].units.includes(restored),gold:players[3].gold,
-        income:players[3].income,salary:players[3].armySalary,towns:players[3].towns.length,
+        owner:restored.playerColor,registry:players[3].units.includes(restored),goldByFormula:players[3].gold===expectedGold,
+        incomeByFormula:players[3].income===formula(),salary:restored.salary,towns:players[3].towns.length,
         townEntry:(()=>{const t=players[1].towns[0],hp=t.hp,full=!!players[3].canEnterBuilding(t);t.hp=0;
           const zero=!!players[3].canEnterBuilding(t);t.hp=hp;return {full,zero,raze:players[3].shouldRazeBuilding(t)};})(),healSpeed:restored.healSpeed};
-    })()`),{name,className:klass,hp:hp-1,moves:speed,owner:3,registry:true,gold:0,income:0,salary:0,towns:0,townEntry:{full:false,zero:true,raze:false},healSpeed:0});
-    console.log(`PASS normal-parent ${name} parent=${parent} inheritance interaction rendering registry portal-exit save-load no-economy`);
+    })()`),{name,className:klass,hp:hp-1,moves:speed,owner:3,registry:true,goldByFormula:true,incomeByFormula:true,salary:0,towns:0,townEntry:{full:false,zero:true,raze:false},healSpeed:0});
+    console.log(`PASS normal-parent ${name} parent=${parent} inheritance interaction rendering registry portal-exit save-load human-economy`);
   }
 }
 module.exports = {run};

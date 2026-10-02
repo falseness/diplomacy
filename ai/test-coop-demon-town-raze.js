@@ -68,10 +68,14 @@ for (const [label, hp, defenderHP, ranged, expectedHP, expectedDefender, capture
   f.compare(label+'-unrelated-preserved',f.evaluate(`({unit:bystander.toJSON(),farm:unrelated.toJSON(),
     towns:players.slice(0,3).map(p=>p.towns.filter(t=>t!==target).map(t=>t.toJSON()))})`),unrelatedBefore);
   f.compare(label+'-no-immediate-reward',f.evaluate('players.map(p=>p.gold)'),[0,68,75,0]);
+  // Since TASK-412 the demons earn like a human: the human formula (town income
+  // + open mines - unit salaries) decides the tick, and a negative balance is a crisis.
+  const pre=f.evaluate(`({towns:players[3].towns.filter(t=>!t.killed).reduce((s,t)=>s+t.income,0),
+    mines:goldmines.filter(g=>players[3].isOurGoldmine(g)).reduce((s,g)=>s+g.income,0),
+    salary:players[3].units.filter(u=>!u.killed).reduce((s,u)=>s+u.constructor.salary,0)})`);
   f.evaluate('players[3].nextTurn(); undefined');
-  f.compare(label+'-zero-economy-after-tick',f.evaluate(`({gold:players.map(p=>p.gold),
-    income:players[3].income,salary:players[3].armySalary,mines:players[3].goldminesIncome,
-    towns:players[3].towns.length})`),{gold:[0,68,75,0],income:0,salary:0,mines:0,towns:captured?1:0});
+  f.compare(label+'-human-economy-after-tick',f.evaluate(`({gold:players.map(p=>p.gold),
+    towns:players[3].towns.length})`),{gold:[0,68,75,Math.max(0,pre.towns+pre.mines-pre.salary)],towns:captured?1:0});
   count++;
 }
 // The same shared move boundary still accepts a demon's own portal.

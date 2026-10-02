@@ -1,164 +1,142 @@
-const assert = require('assert').strict;
-const {spawnSync} = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const {isDeepStrictEqual} = require('util');
 const {createFixture, defaultFixture} = require('./test-coop-harness');
-const {createEntityLedger} = require('./test-coop-entity-ledger');
-const {createEconomyLedger} = require('./test-coop-economy-ledger');
-const {createTurnLedger} = require('./test-coop-turn-ledger');
 
-function setup(extra = [], emptyDemon = false) {
-  const config = defaultFixture(); config.coop = true;
-  if (emptyDemon) config.actors[3].units = [];
-  const f = createFixture(config);
-  const initial = [
-    ['neutral-town','town',0,4,5,'town'], ['human-one-town','town',1,1,1,'town'],
-    ['human-two-town','town',2,7,1,'town'], ['human-one-unit','unit',1,2,2,'noob'],
-    ['garrison-one','unit',1,1,1,'noob'], ['garrison-two','unit',2,7,1,'noob'],
-    ...emptyDemon ? [] : [['demon','unit',3,7,5,'noob']], ...extra
-  ].map(([id,kind,owner,x,y,name])=>({id,kind,owner,x,y,name}));
-  const economy = createEconomyLedger(f, config.actors.map(({role,gold})=>({role,gold})),
-    {income:{town:4,suburb:1},salary:{noob:1}});
-  const turns = createTurnLedger([1,2]);
-  let entities;
-  return {f, economy, init() {entities=createEntityLedger(f,initial)}, entities:()=>entities,
-    check(label) {
-      entities.check(label+'-entities'); economy.check(label+'-economy');
-      turns.check(label+'-turn',f.evaluate(`({round:gameRound,terminal:gameExit,
-        events:[{type:'human',round:gameRound,player:whooseTurn}]})`),0);
-    }};
+// The demon slot has a human-like economy: towns, suburbs and open goldmines pay
+// income, ordinary units cost salary, portal variants cost nothing and survive a
+// crisis, gold survives save/load and demon towns may buy units. Usage:
+//   node ai/test-coop-demon-economy.js [--output-dir <dir>] [--fault no-economy]
+const arg = name => { const i = process.argv.indexOf(name); return i < 0 ? null : process.argv[i + 1]; };
+const output = arg('--output-dir');
+const fault = arg('--fault');
+if (fault && fault !== 'no-economy') throw new Error('unknown fault ' + fault);
+
+const TOWN = {x:6, y:3};
+const SUBURBS = [{x:6,y:3},{x:6,y:4},{x:7,y:3},{x:7,y:4}];
+const MINE = {x:4, y:3};
+const MINE_INCOME = 50;
+const PORTAL_DEMONS = [['Imp',{x:2,y:5}],['Clawling',{x:3,y:5}],['Hound',{x:2,y:4}],
+  ['Brute',{x:3,y:4}],['Spitter',{x:5,y:5}]];
+
+// Coop fixture without the default demon Noob; the demon owns one town with its
+// suburbs and one goldmine, opened long ago so it pays income this turn.
+function scene() {
+  const config = defaultFixture(); config.coop = true; config.actors[3].units = [];
+  const f = createFixture(config, () => {});
+  if (fault === 'no-economy') {
+    // Restore the pre-TASK-412 demon overrides in this process only.
+    f.evaluate(`for (const key of ['gold','income','armySalary','goldminesIncome'])
+      Object.defineProperty(DemonPlayer.prototype, key, {configurable:true,
+        get() { return 0 }, set(value) {}});
+      DemonPlayer.prototype.correctGoldminesIncome = function() {};
+      for (const p of players) if (p instanceof DemonPlayer) { delete p.gold; p.economyEnabled = false }
+      undefined`);
+  }
+  f.evaluate(`gameRound=25;
+    for(const c of ${JSON.stringify(SUBURBS)}) grid.getHexagon(c).firstpaint(3);
+    globalThis.town=new Town(${TOWN.x},${TOWN.y},true);
+    for(const c of ${JSON.stringify(SUBURBS)}) { const h=grid.getHexagon(c); h.isSuburb=true;
+      if(!town.suburbs.includes(h)) town.suburbs.push(h); }
+    if(!players[3].towns.includes(town)) players[3].towns.push(town);
+    grid.getHexagon(${JSON.stringify(MINE)}).firstpaint(3);
+    globalThis.mine=new Goldmine(${MINE.x},${MINE.y},${MINE_INCOME});
+    gameSettings.isOnline=false; actionManager.clear(); undefined`);
+  return f;
 }
-function run(fault) {
-  for (const empty of [false,true]) {
-    const s=setup([],empty), {f,economy}=s; s.init();
-    s.check('tick-initial');
-    f.compare('real-demon-controller',f.evaluate('players[3] instanceof DemonPlayer'),true);
-    for (let tick=0;tick<2;tick++) {
-      for (const owner of [1,2]) {
-        for (const [type,rule,count] of [['income','town',1],['income','suburb',7],['salary','noob',owner===1?2:1]])
-          economy.record({id:`${tick}-${owner}-${rule}`,owner,type,rule,count});
-        f.evaluate(`players[${owner}].nextTurn()`);
-        s.check(`human-${owner}-tick-${tick}-empty-${empty}`);
-      }
-      f.evaluate('players[3].gold += 500; players[3].correctGoldminesIncome(); players[3].nextTurn()');
-      f.compare('demon-no-economy-no-elimination',f.evaluate(`({gold:players[3].gold,income:players[3].income,
-        salary:players[3].armySalary,mines:players[3].goldminesIncome,lost:players[3].isLost,
-        towns:players[3].towns.length,units:players[3].units.length})`),
-        {gold:0,income:0,salary:0,mines:0,lost:false,towns:0,units:empty?0:1});
-      s.check(`demon-tick-${tick}-empty-${empty}`);
-    }
-    f.compare('demon-no-purchase-commands',f.evaluate('AIPlayerWithEconomy.prototype.getEconomyCommands.call(players[3])'),[]);
-    f.compare('demon-purchase-rejected',f.evaluate(`AIPlayerWithEconomy.prototype.applyEconomyCommand.call(players[3],
-      {product:'wall',producerCoord:{x:1,y:1},destinationCoord:{x:2,y:1}})`),false);
-    s.check('purchase-rejected');
-    // Borrow the production entry points with a demon owner: rejection must
-    // precede undo, cost lookup, queue creation, or production advancement.
-    for (const [prototype,method] of [['PreparingManufacture','prepare'],['PreparingManufacture','startUnitPreparing'],
-      ['PreparingManufacture','unitPreparingLogic'],['Town','prepare'],['Town','startBuildingPreparing'],['Town','buildingPreparingLogic']]) {
-      f.compare(`demon-production-rejected-${method}`,f.evaluate(`${prototype}.prototype.${method}.call({player:players[3]},'noob')`),false);
-      s.check(`production-${prototype}-${method}`);
-    }
-  }
-  // Exercise real production instances with existing queues, not only borrowed methods.
-  {
-    const {f}=setup();
-    f.evaluate(`globalThis.producers=[grid.getBuilding({x:1,y:1}),new Barrack(3,1,grid.getBuilding({x:1,y:1}))];
-      grid.getHexagon({x:3,y:1}).playerColor=1;
-      for (const producer of producers) {
-        producer.startUnitPreparing('noob');
-        Object.defineProperty(producer,'player',{get:()=>players[3]});
-      } undefined`);
-    f.evaluate("players[1].updateTowns(); undefined");
-    const before=f.snapshot();
-    const queued=[1,1];
-    const undoBefore=f.evaluate('JSON.stringify(actionManager.arr)');
-    f.compare('human-production-costs',f.evaluate('players[1].gold'),60);
-    for (const index of [0,1]) {
-      for (const method of ['prepare','startUnitPreparing','unitPreparingLogic',
-        ...index===0?['startBuildingPreparing','buildingPreparingLogic']:[]]) {
-        f.evaluate(`producers[${index}].${method}('noob'); undefined`);
-        f.compare(`real-producer-${index}-${method}-unchanged`,f.snapshot(),before);
-        f.compare(`real-producer-${index}-${method}-undo`,
-          f.evaluate("JSON.stringify(actionManager.arr)"),undoBefore);
-        f.compare(`real-producer-${index}-${method}-queue`,
-          f.evaluate('producers.map(p=>p.unitProduction.turns)'),queued);
-      }
-    }
-    f.compare('real-producers-no-building-queue',f.evaluate('producers[0].buildingProduction.length'),0);
-  }
-  // A one-cell-wide corridor makes the economic building an unavoidable transit step.
-  for (const kind of ['town','goldmine']) {
-    const {f}=setup();
-    f.evaluate(`for(let x=0;x<9;x++) for(let y=0;y<7;y++) {
-      if(y!==3 || x<3 || x>5) grid.setBuilding(new Sea(x,y),{x,y});
-    }
-    grid.getHexagon({x:3,y:3}).playerColor=3;
-    globalThis.walker=new Noob(3,3);
-    grid.getHexagon({x:4,y:3}).playerColor=0;
-    globalThis.blocker=new ${kind==='town'?'Town(4,3,true)':'Goldmine(4,3,50)'};
-    ${kind==='town'?'blocker.hp=0;':''}
-    whooseTurn=3; walker.select(); undefined`);
-    // Since TASK-411 demons stand on goldmines like on empty cells, so only the town is a transit blocker.
-    f.compare(`${kind}-destination-cost`,f.evaluate('walker.interaction.way.getDistance({x:4,y:3})'),kind==='town'?2:1);
-    if (kind==='town') {
-      f.compare(`${kind}-transit-cost`,f.evaluate('walker.interaction.way.getDistance({x:5,y:3})'),3);
-      f.compare(`${kind}-no-transit-command`,f.evaluate(`walker.getAvailableCommands().some(c=>
-        c.destinationCoord.x===5 && c.destinationCoord.y===3)`),false);
-      f.evaluate('walker.sendInstructions(grid.getCell({x:5,y:3})); undefined');
-      f.compare(`${kind}-transit-rejected`,f.evaluate('walker.coord'),{x:3,y:3});
-      f.evaluate('walker.select(); undefined');
-    }
-    f.evaluate('walker.sendInstructions(grid.getCell({x:4,y:3})); undefined');
-    f.compare(`${kind}-destination-capture`,f.evaluate(`({coord:walker.coord,owner:blocker.playerColor,
-      gold:players[3].gold,towns:players[3].towns.length})`),
-      // Since TASK-410 the hp-0 neutral town is captured; since TASK-411 the goldmine too (hex colour).
-      kind==='town'?{coord:{x:4,y:3},owner:3,gold:0,towns:1}:{coord:{x:4,y:3},owner:3,gold:0,towns:0});
-  }
-  let count=0;
-  for (const [kind,hp] of [['town',10],['town',1],['town',0],['goldmine',null]]) {
-    for (const owner of [0,1]) for (const ranged of [false,true]) {
-      const label=`demon-${ranged?'ranged':'melee'}-${kind}-owner${owner}-hp${hp}`;
-      const s=setup([['attacker','unit',3,5,3,ranged?'archer':'noob'],
-        ['target',kind==='town'?'town':'goldmine',owner,6,3,kind]]),{f}=s;
-      f.evaluate(`grid.getHexagon({x:5,y:3}).playerColor=3; globalThis.attacker=new ${ranged?'Archer':'Noob'}(5,3);
-        grid.getHexagon({x:6,y:3}).playerColor=${owner}; globalThis.target=new ${kind==='town'?'Town(6,3,true)':'Goldmine(6,3,50)'};
-        ${hp===null?'':`target.hp=${hp};`} undefined`);
-      s.init(); s.check(label+'-initial');
-      console.log(JSON.stringify({scenario:label,submitted:'attacker.select(); attacker.sendInstructions(target cell)'}));
-      f.evaluate('whooseTurn=3; attacker.select(); attacker.sendInstructions(grid.getCell({x:6,y:3})); whooseTurn=1; undefined');
-      if(fault) f.evaluate('players[1].gold++');
-      // Since TASK-409 a melee demon captures (never razes) an hp-0 human town; since TASK-410 neutral ones too.
-      // Since TASK-411 any demon captures a goldmine by stepping onto it.
-      const captured = kind==='goldmine' || (kind==='town' && !ranged && hp<=1);
-      if (captured) {
-        s.entities().record({type:'capture',id:'target',owner:3});
-        s.economy.capture(kind,{x:6,y:3});
-        s.entities().record({type:'move',id:'attacker',destination:{x:6,y:3}});
-      }
-      f.compare(label+'-ownership-and-combat',f.evaluate(`({owner:target.playerColor,hp:${hp===null?'null':'target.hp'},
-        attacker:attacker.coord,gold:players.map(p=>p.gold),demonTowns:players[3].towns.length})`),
-        {owner:captured?3:owner,hp:hp===null?null:Math.max(0,hp-(ranged?2:1)),attacker:{x:captured?6:5,y:3},gold:[0,100,75,0],demonTowns:captured&&kind==='town'?1:0});
-      f.compare(label+'-path-no-economic-transit',f.evaluate('attacker.interaction.way.getDistance({x:6,y:3})'),
-        // A goldmine is no transit blocker since TASK-411: the demon now stands on it.
-        kind==='goldmine'?0:ranged?3:2);
-      s.check(label+'-after-command'); count++;
-    }
-  }
-  const s=setup([['attacker','unit',1,3,5,'noob']]),{f}=s;
-  f.evaluate('grid.getHexagon({x:3,y:5}).playerColor=1; globalThis.attacker=new Noob(3,5); grid.getBuilding({x:4,y:5}).hp=0; undefined');
-  s.init(); s.check('neutral-capture-initial');
-  f.evaluate('attacker.select(); attacker.sendInstructions(grid.getCell({x:4,y:5})); undefined');
-  s.entities().record({type:'capture',id:'neutral-town',owner:1});
-  s.entities().record({type:'move',id:'attacker',destination:{x:4,y:5}});
-  f.compare('human-neutral-town-capture',f.evaluate('grid.getBuilding({x:4,y:5}).playerColor'),1);
-  s.check('human-neutral-town-capture');
-  console.log('INAPPLICABLE completed rounds/phase counts: isolated player economy hooks and commands keep dispatcher at human 1, round 0; shared turn ledger checked after each action.');
-  console.log('INAPPLICABLE online convergence: offline fixtures have no committed online revisions.');
-  console.log(`PASS demon-economy combat_scenarios=${count} tick_fixtures=2 neutral_human_captures=1`);
+function addPortalDemons(f) {
+  f.evaluate(`globalThis.portalDemons=${JSON.stringify(PORTAL_DEMONS)}.map(([name,c])=>{
+    grid.getHexagon(c).firstpaint(3); return new ({Imp,Clawling,Hound,Brute,Spitter})[name](c.x,c.y) }); undefined`);
 }
-if(process.argv[2]==='--fault') run(true);
-else {
-  run(false);
-  const child=spawnSync(process.execPath,[__filename,'--fault'],{encoding:'utf8'});
-  process.stdout.write(child.stdout); process.stderr.write(child.stderr);
-  assert.equal(child.status,1); assert.ok(child.stderr.includes('AssertionError')&&child.stderr.includes('ownership-and-combat'));
-  console.log('PASS rejects-combat-credit-corruption expected_exit=1 observed_exit=1');
+const gold = f => f.evaluate('players[3].gold');
+
+const cases = {
+  income: () => {
+    const f = scene();
+    // Same rule the human Town/Goldmine use: Town.income + 1 per owned suburb + open mine income.
+    const parts = f.evaluate(`({townBase:Town.income, suburbs:town.suburbsCount,
+      suburbIncome:1, mine:mine.potentialIncome, mineOpen:mine.isLongOpened, salary:players[3].armySalary})`);
+    const expectedGain = parts.townBase + parts.suburbs * parts.suburbIncome + parts.mine - parts.salary;
+    const before = gold(f);
+    f.evaluate('players[3].nextTurn(); undefined');
+    const after = gold(f);
+    return {observed:{goldBefore:before, goldAfter:after, gain:after - before, parts},
+      expected:{goldBefore:0, goldAfter:expectedGain, gain:expectedGain,
+        parts:{townBase:4, suburbs:SUBURBS.length, suburbIncome:1, mine:MINE_INCOME, mineOpen:true, salary:0}},
+      formula:'Town.income + suburbsCount*1 + goldmine.income - armySalary = 4 + 4*1 + 50 - 0 = 58'};
+  },
+  'portal-salary': () => {
+    const f = scene();
+    const before = f.evaluate('players[3].armySalary');
+    addPortalDemons(f);
+    const o = f.evaluate(`({salary:players[3].armySalary, units:players[3].units.length,
+      classSalaries:portalDemons.map(u=>u.constructor.salary)})`);
+    return {observed:{salaryBefore:before, salaryAfter:o.salary, units:o.units, classSalaries:o.classSalaries},
+      expected:{salaryBefore:0, salaryAfter:0, units:5, classSalaries:[0,0,0,0,0]}};
+  },
+  'noob-salary': () => {
+    const f = scene();
+    addPortalDemons(f);
+    const before = f.evaluate('players[3].armySalary');
+    f.evaluate('grid.getHexagon({x:5,y:3}).firstpaint(3); globalThis.noob=new Noob(5,3); undefined');
+    const o = f.evaluate(`({salary:players[3].armySalary, noobSalary:Noob.salary,
+      owner:noob.player===players[3], humanNoob:players[1].units.find(u=>u.constructor===Noob).salary})`);
+    return {observed:{salaryBefore:before, salaryAfter:o.salary, owner:o.owner, humanNoobSalary:o.humanNoob},
+      expected:{salaryBefore:0, salaryAfter:o.noobSalary, owner:true, humanNoobSalary:1}};
+  },
+  crisis: () => {
+    const f = scene();
+    addPortalDemons(f);
+    f.evaluate('grid.getHexagon({x:5,y:3}).firstpaint(3); globalThis.noob=new Noob(5,3); players[3].gold=-1000; undefined');
+    const before = f.evaluate('players[3].units.length');
+    f.evaluate('players[3].nextTurn(); undefined');
+    const o = f.evaluate(`({goldAfter:players[3].gold, units:players[3].units.length,
+      portalKilled:portalDemons.filter(u=>u.killed).length,
+      portalRegistered:portalDemons.every(u=>players[3].units.includes(u)),
+      portalOnGrid:portalDemons.every(u=>grid.getUnit(u.coord)===u),
+      noobKilled:noob.killed, lost:players[3].isLost})`);
+    return {observed:{unitsBefore:before, ...o},
+      // The crisis penalty is skipped for the demon slot: nothing dies, gold is reset to 0.
+      expected:{unitsBefore:6, goldAfter:0, units:6, portalKilled:0, portalRegistered:true,
+        portalOnGrid:true, noobKilled:false, lost:false}};
+  },
+  'save-roundtrip': () => {
+    const f = scene();
+    f.evaluate('players[3].nextTurn(); players[3].gold=137; undefined');
+    const view = () => f.evaluate(`({gold:players[3].gold, demon:players[3] instanceof DemonPlayer,
+      towns:players[3].towns.filter(t=>!t.killed).map(t=>t.coord),
+      suburbs:grid.getBuilding(${JSON.stringify(TOWN)}).suburbsCount,
+      mineOwner:grid.getHexagon(${JSON.stringify(MINE)}).playerColor})`);
+    const before = view();
+    const json = f.evaluate('JSON.stringify(getGameObject())');
+    f.context.saveInput = json;
+    f.evaluate('loadFromJson(saveInput); undefined');
+    const after = view();
+    return {observed:{before, after, savedGold:JSON.parse(json).players[3].gold},
+      expected:{before:{gold:137, demon:true, towns:[TOWN], suburbs:4, mineOwner:3},
+        after:{gold:137, demon:true, towns:[TOWN], suburbs:4, mineOwner:3}, savedGold:137}};
+  },
+  'purchase-allowed': () => {
+    const f = scene();
+    f.evaluate('players[3].gold=100; undefined');
+    const o = f.evaluate(`({cost:production.noob.cost, started:town.prepare('noob'),
+      gold:players[3].gold, preparing:town.isPreparingUnit,
+      queued:town.isPreparingUnit ? town.unitProduction.name : null})`);
+    return {observed:{started:o.started, gold:o.gold, preparing:o.preparing, queued:o.queued},
+      expected:{started:true, gold:100 - o.cost, preparing:true, queued:'noob'}, cost:o.cost};
+  },
+};
+
+if (output) fs.mkdirSync(output, {recursive: true});
+let failed = 0;
+for (const [name, run] of Object.entries(cases)) {
+  let result;
+  try { result = run(); } catch (error) { result = {error: error.stack}; }
+  const pass = !result.error && isDeepStrictEqual(result.observed, result.expected);
+  if (output) fs.writeFileSync(path.join(output, name + '.json'),
+    JSON.stringify({case: name, fault, pass, ...result}, null, 2) + '\n');
+  if (!pass) failed++;
+  console.log(`${pass ? 'PASS' : 'FAIL'} ${name} ${JSON.stringify(result.error ? {error: result.error} :
+    {observed: result.observed, expected: result.expected})}`);
 }
+process.exitCode = failed ? 1 : 0;

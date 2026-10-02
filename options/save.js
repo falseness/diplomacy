@@ -299,7 +299,7 @@ class JsonUnpackManager {
             if (!i)
                 players.push(new NeutralPlayer(packedPlayers[i].color, packedPlayers[i].gold))
             else if (gameSettings.coop && i === gameSettings.coop.demonSlot)
-                players.push(new DemonPlayer(packedPlayers[i].color))
+                players.push(new DemonPlayer(packedPlayers[i].color, packedPlayers[i].gold))
             else 
                 players.push(new Player(packedPlayers[i].color, packedPlayers[i].gold))
 

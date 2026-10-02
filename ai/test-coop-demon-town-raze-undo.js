@@ -80,7 +80,11 @@ function run(c, fault=false) {
     subject.compare(c.name+'-'+label+'-economic-ledger',subject.evaluate(`({gold:players.map(p=>p.gold),
       demonTowns:players[3].towns.length,demonIncome:players[3].income,demonSalary:players[3].armySalary,
       demonMines:players[3].goldminesIncome})`),
-      {gold:[0,68,75,0],demonTowns:captured?1:0,demonIncome:0,demonSalary:0,demonMines:0});
+      // Since TASK-412 demon income follows the human formula: towns + open mines - salaries.
+      {gold:[0,68,75,0],demonTowns:captured?1:0,...subject.evaluate(`(() => {
+        const towns=players[3].towns.filter(t=>!t.killed).reduce((s,t)=>s+t.income,0);
+        const salary=players[3].units.filter(u=>!u.killed).reduce((s,u)=>s+u.constructor.salary,0);
+        return {demonIncome:towns-salary,demonSalary:salary,demonMines:0};})()`)});
     if(!captured) subject.compare(c.name+'-'+label+'-queues',subject.evaluate(`({town:grid.getBuilding({x:6,y:3}).unitProduction.toJSON(),barrack:grid.getBuilding({x:7,y:3}).unitProduction.toJSON(),construction:grid.getBuilding({x:7,y:4}).turns})`),{town:{turns:1,cost:20,name:'noob'},barrack:{turns:2,cost:40,name:'archer'},construction:2});
     subject.compare(c.name+'-'+label+'-suburbs',subject.evaluate(`[{x:6,y:3},{x:6,y:4},{x:7,y:3},{x:7,y:4}].map(c=>grid.getHexagon(c).isSuburb)`),
       captured?[true,!c.survivor,true,true]:Array(4).fill(true));

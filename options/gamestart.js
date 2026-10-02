@@ -33,7 +33,7 @@ class GameMap {
         if (coop) {
             this.players = [..._players, {
                 rgb: {r: 160, g: 40, b: 180}, units: coop.units || [],
-                towns: [], gold: 0, economyEnabled: false
+                towns: [], gold: 0
             }]
         }
     }

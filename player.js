@@ -415,9 +415,11 @@ class Player {
 }
 // Demon phases refresh units only; portal/terminal rules decide their lifetime.
 class DemonPlayer extends Player {
-    constructor(color) {
-        super(color, 0)
-        this.economyEnabled = false
+    // Demons earn and pay like a human player (gold starts at 0); towns, suburbs,
+    // goldmines and salaries all use the base Player economy.
+    constructor(color, gold = 0) {
+        super(color, gold)
+        this.economyEnabled = true
     }
     // Demons capture (never raze) a town once its HP is down, like a human, and
     // capture a goldmine by stepping onto it (ownership is the hex colour).
@@ -431,13 +433,10 @@ class DemonPlayer extends Player {
         return building.notEmpty() && building.isTown() && !building.killed &&
             !building.hp && building.playerColor !== players.indexOf(this)
     }
-    get gold() { return 0 }
-    set gold(value) {} // Combat rewards and restored balances cannot fund demons.
-    get income() { return 0 }
-    get armySalary() { return 0 }
-    get goldminesIncome() { return 0 }
     get isLost() { return false }
-    correctGoldminesIncome() {}
+    // Bankruptcy never disbands demons (portal waves are unpaid): nextTurn still
+    // resets a negative balance to 0, so the demons simply cannot buy anything.
+    crisisPenalty() {}
     play() {
         // Reuse the combat-only controller without replacing demon ownership or
         // invoking a normal player's economy/turn hooks.
@@ -447,7 +446,7 @@ class DemonPlayer extends Player {
     }
     nextTurn() {
         this.updateUnits()
-        for (const unit of this.units) unit.nextTurn()
+        super.nextTurn()
     }
 }
 class NeutralPlayer extends Player {
