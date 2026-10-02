@@ -269,9 +269,7 @@ class Grid extends SpritesGroup {
     getEntityBodyImageName(entity) {
         if (entity.isDemonPortal)
             return entity.imageName
-        if (entity.mirrorX && cachedImages[entity.name + 'Left'])
-            return entity.name + 'Left'
-        return entity.name
+        return entity.bodyImageName
     }
     drawEntityBody(ctx, entity) {
         if (entity.isDemonPortal) {

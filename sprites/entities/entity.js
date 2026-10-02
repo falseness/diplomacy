@@ -1,3 +1,4 @@
+const UNDEAD_UNIT_NAMES = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
 class Entity extends Sprite {
     constructor(x, y, name) {
         super(x, y)
@@ -105,6 +106,7 @@ class Entity extends Sprite {
         hp += ' / ' + this.maxHP
         return {
             name: this.name,
+            bodyImageName: this.bodyImageName,
             info: {
                 hp: hp
             }
@@ -150,8 +152,16 @@ class Entity extends Sprite {
         if (otherSettings.alwaysDisplayHPBar || !this.isFullHP)
             this.hpBar.draw(ctx)
     }
+    // Image key: mirrored classes (KOHb, Catapult) add 'Left'; ordinary units
+    // owned by the demon slot use the undead art. Demon variants keep their own.
+    get bodyImageName() {
+        const name = this.mirrorX ? this.name + 'Left' : this.name
+        if (UNDEAD_UNIT_NAMES.includes(this.name) && this.player?.role === 'DEMONS')
+            return 'undead/' + name
+        return name
+    }
     draw(ctx) {
-        drawCachedImage(ctx, cachedImages[this.name], this.pos)
+        drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)
     }
     nextTurn() {
         console.log("ERROR entity next turn")

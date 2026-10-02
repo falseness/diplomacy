@@ -34,6 +34,10 @@ const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bu
     'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
     'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos', 'demonPortalMage']
 for (const name of demonSpriteImages) assets[name] = new Image()
+// Undead artwork for ordinary units owned by the demon slot, shared by both themes.
+const undeadSpriteImages = ['undead/noob', 'undead/archer', 'undead/KOHb', 'undead/KOHbLeft',
+    'undead/normchel', 'undead/catapult', 'undead/catapultLeft']
+for (const name of undeadSpriteImages) assets[name] = new Image()
 let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
 for (let i = 0; i < grassHexImages.length; ++i)
     assets[grassHexImages[i]] = new Image()
@@ -41,7 +45,7 @@ let imagesCountLoaded = 0
 let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
-        'mountain', 'lake', 'sea', 'goldmine', 'bush'].concat(demonSpriteImages)
+        'mountain', 'lake', 'sea', 'goldmine', 'bush'].concat(demonSpriteImages, undeadSpriteImages)
 let images = spriteImages.concat(grassHexImages)
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
@@ -96,6 +100,10 @@ function loadAssets() {
 function loadSprites() {
     let spritesFolder = otherSettings.usePolishedSprites ? "sprites" : "spritesOld"
     for (let i = 0; i < spriteImages.length; ++i) {
+        if (undeadSpriteImages.includes(spriteImages[i])) {
+            assets[spriteImages[i]].src = "assets/" + spriteImages[i] + ".svg"
+            continue
+        }
         const folder = demonSpriteImages.includes(spriteImages[i]) ? "sprites" : spritesFolder
         assets[spriteImages[i]].src = "assets/" + folder + "/" + spriteImages[i] + ".svg"
     }

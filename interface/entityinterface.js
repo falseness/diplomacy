@@ -154,7 +154,7 @@ class EntityInterface {
         this.portalStatsButton.canClick = Boolean(portal && portal.nextProduction && !description)
         this.portalBackButton.canClick = Boolean(portal && description)
         this.background.color = color.hex
-        this.img.image = entity.image || entity.name
+        this.img.image = entity.image || entity.bodyImageName || entity.name
         this.entity.name.text = entity.displayName || entity.name
         if (entity.isDescriptionInfo) 
             this.entity.info.text = entity.info

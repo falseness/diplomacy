@@ -19,13 +19,14 @@ const ROOT = path.resolve(__dirname, '..');
 const GHOST_ALPHA = 0.5;
 const UNIT_ALPHA = 1;
 const CASES = [
-  {kind: 'portal', coord: {x: 7, y: 5}, ghost: 'imp', unit: 'noob'},
+  // The portal cell's Noob is owned by the demon slot, so it uses the undead art.
+  {kind: 'portal', coord: {x: 7, y: 5}, ghost: 'imp', unit: 'undead/noob'},
   {kind: 'barrack', coord: {x: 1, y: 2}, ghost: 'archer', unit: 'noob'},
   {kind: 'town', coord: {x: 1, y: 1}, ghost: 'KOHb', unit: 'noob'}
 ];
 const CONTROL = {kind: 'control', coord: {x: 0, y: 2}, ghost: 'archer'};
 // Overlay pass: the barrack unit is mirrored, so its body is the 'Left' image.
-const OVERLAY_UNIT_IMAGE = {portal: 'noob', barrack: 'noobLeft', town: 'noob'};
+const OVERLAY_UNIT_IMAGE = {portal: 'undead/noob', barrack: 'noobLeft', town: 'noob'};
 
 // Test-only faults, injected into the game realm; repo files are never modified.
 const FAULTS = {
