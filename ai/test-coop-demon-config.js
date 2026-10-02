@@ -35,7 +35,7 @@ function expectedUnit(id) {
   const [name,,hp,dmg,speed,ranged,range] = expected[id];
   return {id, constructor:[hp,dmg,speed,range],
     description:{hp,'heal speed':0,dmg,speed,salary:0,...(ranged?{range}:{})},
-    info:{name:id,info:{hp:hp+' / '+hp,dmg,moves:speed+' / '+speed},
+    info:{name:id,bodyImageName:id,info:{hp:hp+' / '+hp,dmg,moves:speed+' / '+speed},
       displayName:name,canSkipMoves:true},salary:0,healSpeed:0};
 }
 function browserSource() {
