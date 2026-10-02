@@ -130,8 +130,9 @@ class InterationWithUnit {
         if (capturedBuilding.isStandable)
             capturedBuildingColor = capturedBuilding.playerColor
 
-        // Entry has already passed HP and defender clearance. Destroy before
-        // repainting so a razed town is never registered as a demon asset.
+        // Entry has already passed HP and defender clearance. No player razes
+        // today (demons capture towns like humans); a razing player destroys
+        // the building before repainting so it is never registered as its asset.
         if (capturedBuildingColor != -1 && unit.player.shouldRazeBuilding(capturedBuilding)) {
             const owner = capturedBuilding.player
             capturedBuilding.destroy()

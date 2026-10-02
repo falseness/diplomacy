@@ -120,14 +120,16 @@ function run(fault) {
       console.log(JSON.stringify({scenario:label,submitted:'attacker.select(); attacker.sendInstructions(target cell)'}));
       f.evaluate('whooseTurn=3; attacker.select(); attacker.sendInstructions(grid.getCell({x:6,y:3})); whooseTurn=1; undefined');
       if(fault) f.evaluate('players[1].gold++');
-      const razed = kind==='town' && owner===1 && !ranged && hp<=1;
-      if (razed) {
-        s.entities().record({type:'death',id:'target'});
+      // Since TASK-409 a melee demon captures (never razes) an hp-0 human town.
+      const captured = kind==='town' && owner===1 && !ranged && hp<=1;
+      if (captured) {
+        s.entities().record({type:'capture',id:'target',owner:3});
+        s.economy.capture('town',{x:6,y:3});
         s.entities().record({type:'move',id:'attacker',destination:{x:6,y:3}});
       }
       f.compare(label+'-ownership-and-combat',f.evaluate(`({owner:target.playerColor,hp:${hp===null?'null':'target.hp'},
         attacker:attacker.coord,gold:players.map(p=>p.gold),demonTowns:players[3].towns.length})`),
-        {owner:razed?3:owner,hp:hp===null?null:owner===0?hp:Math.max(0,hp-(ranged?2:1)),attacker:{x:razed?6:5,y:3},gold:[0,100,75,0],demonTowns:0});
+        {owner:captured?3:owner,hp:hp===null?null:owner===0?hp:Math.max(0,hp-(ranged?2:1)),attacker:{x:captured?6:5,y:3},gold:[0,100,75,0],demonTowns:captured?1:0});
       f.compare(label+'-path-no-economic-transit',f.evaluate('attacker.interaction.way.getDistance({x:6,y:3})'),ranged||kind==='town'&&owner===0?3:2);
       s.check(label+'-after-command'); count++;
     }

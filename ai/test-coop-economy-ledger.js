@@ -8,6 +8,8 @@ const copy = value => JSON.parse(JSON.stringify(value));
 // delta or use Player.income/armySalary as the expected accounting result.
 function createEconomyLedger(fixture, initial, rules, report = console.log) {
   const baseline = copy(initial), configured = copy(rules), events = [];
+  // Towns a demon captured through an ordinary capture (TASK-409); nothing else may be demon-owned.
+  const captures = [];
   function expected() {
     const balances = baseline.map(actor => actor.gold);
     const entries = new Map(), reversed = new Set();
@@ -39,8 +41,16 @@ function createEconomyLedger(fixture, initial, rules, report = console.log) {
     expected();
     report(JSON.stringify({scenario: 'economy-event', event}));
   }
+  function capture(name, coord) {
+    captures.push({name, coord: copy(coord)});
+    report(JSON.stringify({scenario: 'economy-demon-capture', name, coord}));
+  }
+  const sortAssets = assets => assets.slice().sort((a, b) =>
+    JSON.stringify(a).localeCompare(JSON.stringify(b)));
   function check(label) {
     const wanted = expected();
+    const wantedAssets = sortAssets(captures.flatMap(({name, coord}) =>
+      ['grid', 'ownership'].map(source => ({source, name, coord}))));
     const observed = fixture.evaluate(`(() => {
       const assets = [];
       const add = (entity, source) => {
@@ -60,18 +70,18 @@ function createEconomyLedger(fixture, initial, rules, report = console.log) {
       return {balances: players.map(p => p.gold), assets};
     })()`);
     report(JSON.stringify({scenario: label, initial: baseline, rules: configured,
-      events, expected: {balances: wanted, assets: []}, observed}));
+      events, expected: {balances: wanted, assets: wantedAssets}, observed}));
     baseline.forEach((actor, owner) => {
       if (actor.role === 'human')
         assert.equal(observed.balances[owner], wanted[owner], `human ${owner} balance`);
       if (actor.role === 'demon')
         assert.equal(observed.balances[owner], 0, 'zero demon gold');
     });
-    assert.deepStrictEqual(observed.assets, [], 'no demon economic assets');
-    report(`PASS ${label} expected_balances=${JSON.stringify(wanted)} observed_balances=${JSON.stringify(observed.balances)} demon_assets=0`);
+    assert.deepStrictEqual(sortAssets(observed.assets), wantedAssets, 'no demon economic assets');
+    report(`PASS ${label} expected_balances=${JSON.stringify(wanted)} observed_balances=${JSON.stringify(observed.balances)} demon_assets=${wantedAssets.length ? 'captured:' + captures.length : 0}`);
     return observed;
   }
-  return {record, expected, check};
+  return {record, capture, expected, check};
 }
 
 function setup() {

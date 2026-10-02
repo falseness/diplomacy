@@ -60,7 +60,7 @@ function run(cases) {
       }
       f.compare(name+'-'+scenario+'-parent-parity',observations[1],observations[0]);
     }
-    // Since TASK-110 a demon enters a human town only to raze it, never to capture it.
+    // Since TASK-409 a demon captures (never razes) a human town, and only once its HP is 0.
     f.compare(name+'-save-load-and-no-economy',f.evaluate(`(() => {
       subject.hit(1); subject.moves=0; const packed=subject.toJSON(); subject.kill();
       unpacker.fullUnpackUnit(packed); const restored=grid.getUnit(packed.coord);
@@ -68,8 +68,9 @@ function run(cases) {
       return {name:restored.name,className:restored.constructor.name,hp:restored.hp,moves:restored.moves,
         owner:restored.playerColor,registry:players[3].units.includes(restored),gold:players[3].gold,
         income:players[3].income,salary:players[3].armySalary,towns:players[3].towns.length,
-        townEntryRazes:!!players[3].canEnterBuilding(players[1].towns[0])&&players[3].shouldRazeBuilding(players[1].towns[0]),healSpeed:restored.healSpeed};
-    })()`),{name,className:klass,hp:hp-1,moves:speed,owner:3,registry:true,gold:0,income:0,salary:0,towns:0,townEntryRazes:true,healSpeed:0});
+        townEntry:(()=>{const t=players[1].towns[0],hp=t.hp,full=!!players[3].canEnterBuilding(t);t.hp=0;
+          const zero=!!players[3].canEnterBuilding(t);t.hp=hp;return {full,zero,raze:players[3].shouldRazeBuilding(t)};})(),healSpeed:restored.healSpeed};
+    })()`),{name,className:klass,hp:hp-1,moves:speed,owner:3,registry:true,gold:0,income:0,salary:0,towns:0,townEntry:{full:false,zero:true,raze:false},healSpeed:0});
     console.log(`PASS normal-parent ${name} parent=${parent} inheritance interaction rendering registry portal-exit save-load no-economy`);
   }
 }

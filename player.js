@@ -420,14 +420,15 @@ class DemonPlayer extends Player {
         super(color, 0)
         this.economyEnabled = false
     }
+    // Demons capture (never raze) a town once its HP is down, like a human.
     canEnterBuilding(building) {
         return building.isEmpty() || (building.isNature && building.isPassable) ||
-            this.shouldRazeBuilding(building) || (building.isDemonPortal &&
+            this.canCaptureTown(building) || (building.isDemonPortal &&
             !building.killed && building.playerColor === players.indexOf(this))
     }
-    shouldRazeBuilding(building) {
+    canCaptureTown(building) {
         return building.notEmpty() && building.isTown() && !building.killed &&
-            building.player.role === 'HUMAN'
+            !building.hp && building.playerColor !== players.indexOf(this)
     }
     get gold() { return 0 }
     set gold(value) {} // Combat rewards and restored balances cannot fund demons.

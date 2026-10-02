@@ -7,12 +7,14 @@ const {assertDemonTileOwnership} = require('./test-coop-demon-ownership-assertio
 const outputIndex = process.argv.indexOf('--output-dir');
 const output = outputIndex < 0 ? null : process.argv[outputIndex + 1];
 if (output) fs.mkdirSync(output, {recursive:true});
+// Since TASK-409 a demon captures (never razes) a human town. These scenarios
+// check that a capture, its save/load and its undo keep every ledger exact.
 const scenarios = [
-  {name:'damaged', hp:1, defender:null, survivor:true, razed:true},
-  {name:'zero', hp:0, defender:null, survivor:true, razed:true},
-  {name:'surviving-defender', hp:0, defender:2, survivor:true, razed:false},
-  {name:'defeated-defender', hp:0, defender:1, survivor:true, razed:true},
-  {name:'last-human-asset', hp:0, defender:1, survivor:false, razed:true}
+  {name:'damaged', hp:1, defender:null, survivor:true, captured:true},
+  {name:'zero', hp:0, defender:null, survivor:true, captured:true},
+  {name:'surviving-defender', hp:0, defender:2, survivor:true, captured:false},
+  {name:'defeated-defender', hp:0, defender:1, survivor:true, captured:true},
+  {name:'last-human-asset', hp:0, defender:1, survivor:false, captured:true}
 ];
 function run(c, fault=false) {
   const config=defaultFixture(); config.coop=true;
@@ -45,9 +47,15 @@ function run(c, fault=false) {
   const sort = rows=>rows.sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
   function check(label, after, subject=f) {
     assertDemonTileOwnership(subject,c.name+'-'+label);
-    const wanted=expectedRows.filter(r=>!after || !c.razed ||
-      !(r[0]==='building' && r[2]===1 || r[0]==='unit' && r[2]===1 && r[3]===6 && r[4]===3))
-      .map(r=>after && c.razed && r[0]==='unit' && r[2]===3 ? [...r.slice(0,3),6,3] : [...r]);
+    // A capture hands the town to the demons, moves the attacker onto it and
+    // kills the defeated defender, the barrack and the queued farm. The farm at
+    // (6,4) changes hands with its free suburb, or dies under a human survivor.
+    const captured=after && c.captured;
+    const keptFarm=r=>r[1]==='farm' && r[3]===6 && r[4]===4 && !c.survivor;
+    const wanted=expectedRows.filter(r=>!captured || !(r[0]==='building' && r[2]===1 &&
+        r[1]!=='town' && !keptFarm(r) || r[0]==='unit' && r[2]===1 && r[3]===6 && r[4]===3))
+      .map(r=>!captured ? [...r] : r[0]==='unit' && r[2]===3 ? [...r.slice(0,3),6,3] :
+        r[1]==='town' || keptFarm(r) ? [r[0],r[1],3,r[3],r[4]] : [...r]);
     const rows=subject.evaluate(`grid.arr.flatMap(col=>col.flatMap(cell=>['unit','building'].flatMap(kind=>{
       const e=cell[kind];return e.isEmpty()?[]:[[kind,e.name,e.playerColor,e.coord.x,e.coord.y]];
     })))`);
@@ -59,7 +67,8 @@ function run(c, fault=false) {
           refs.push(e); if(e.player!==p || (e.isUnit?grid.getUnit(e.coord):grid.getBuilding(e.coord))!==e) problems.push('owner/map');
         }
         for(const t of p.towns.filter(t=>!t.killed)) {
-          for(const b of [...t.buildings,...t.buildingProduction]) {
+          // A captured town drops its killed buildings lazily (Town prunes killed entries).
+          for(const b of [...t.buildings,...t.buildingProduction].filter(b=>!b.killed)) {
             refs.push(b);if(b.killed || grid.getBuilding(b.coord)!==b || b.town!==t) problems.push('dependent restoration');
           }
           for(const h of t.suburbs) if(grid.getHexagon(h.coord)!==h) problems.push('suburb reference');
@@ -71,9 +80,12 @@ function run(c, fault=false) {
     subject.compare(c.name+'-'+label+'-economic-ledger',subject.evaluate(`({gold:players.map(p=>p.gold),
       demonTowns:players[3].towns.length,demonIncome:players[3].income,demonSalary:players[3].armySalary,
       demonMines:players[3].goldminesIncome})`),
-      {gold:[0,68,75,0],demonTowns:0,demonIncome:0,demonSalary:0,demonMines:0});
-    if(!(after&&c.razed)) subject.compare(c.name+'-'+label+'-queues',subject.evaluate(`({town:grid.getBuilding({x:6,y:3}).unitProduction.toJSON(),barrack:grid.getBuilding({x:7,y:3}).unitProduction.toJSON(),construction:grid.getBuilding({x:7,y:4}).turns})`),{town:{turns:1,cost:20,name:'noob'},barrack:{turns:2,cost:40,name:'archer'},construction:2});
-    subject.compare(c.name+'-'+label+'-suburbs',subject.evaluate(`[{x:6,y:3},{x:6,y:4},{x:7,y:3},{x:7,y:4}].map(c=>grid.getHexagon(c).isSuburb)`),Array(4).fill(!(after&&c.razed)));
+      {gold:[0,68,75,0],demonTowns:captured?1:0,demonIncome:0,demonSalary:0,demonMines:0});
+    if(!captured) subject.compare(c.name+'-'+label+'-queues',subject.evaluate(`({town:grid.getBuilding({x:6,y:3}).unitProduction.toJSON(),barrack:grid.getBuilding({x:7,y:3}).unitProduction.toJSON(),construction:grid.getBuilding({x:7,y:4}).turns})`),{town:{turns:1,cost:20,name:'noob'},barrack:{turns:2,cost:40,name:'archer'},construction:2});
+    subject.compare(c.name+'-'+label+'-suburbs',subject.evaluate(`[{x:6,y:3},{x:6,y:4},{x:7,y:3},{x:7,y:4}].map(c=>grid.getHexagon(c).isSuburb)`),
+      captured?[true,!c.survivor,true,true]:Array(4).fill(true));
+    subject.compare(c.name+'-'+label+'-suburb-owners',subject.evaluate(`[{x:6,y:3},{x:6,y:4},{x:7,y:3},{x:7,y:4}].map(c=>grid.getHexagon(c).playerColor)`),
+      captured?[3,c.survivor?1:3,3,3]:Array(4).fill(1));
   }
   function snapshot() {
     return f.evaluate(`JSON.parse(JSON.stringify({game:getGameObject(),
@@ -91,10 +103,10 @@ function run(c, fault=false) {
   f.compare(c.name+'-combat',f.evaluate(`({moves:players[3].units[0].moves,hp:players[3].units[0].hp,
     townHP:grid.getBuilding({x:6,y:3}).isEmpty()?null:grid.getBuilding({x:6,y:3}).hp,
     defenderHP:grid.getUnit({x:6,y:3}).playerColor===1?grid.getUnit({x:6,y:3}).hp:null})`),
-    {moves:0,hp:2,townHP:c.razed?null:0,defenderHP:c.razed||c.defender===null?null:1});
+    {moves:0,hp:2,townHP:0,defenderHP:c.captured||c.defender===null?null:1});
   // Result getters run only after the entire combat/move/destruction action.
   f.compare(c.name+'-stable-result',f.evaluate('({lost:players[1].isLost,result:players[0].coopResult,terminal:gameExit})'),
-    {lost:!c.survivor&&c.razed,result:!c.survivor&&c.razed?'defeat':null,terminal:false});
+    {lost:!c.survivor&&c.captured,result:!c.survivor&&c.captured?'defeat':null,terminal:false});
   const after=snapshot();save('after',after);
   for(const coord of [{x:1,y:5},{x:8,y:5}]) f.compare(c.name+'-unrelated-'+coord.x,after.cells[coord.x][coord.y],before.cells[coord.x][coord.y]);
   if(c.survivor) f.compare(c.name+'-unrelated-human-unit',after.cells[6][4].unit,before.cells[6][4].unit);
@@ -104,7 +116,7 @@ function run(c, fault=false) {
     loaded.evaluate('loadFromJson(saved);undefined');
     check(label,afterAction,loaded);
     f.compare(c.name+'-'+label+'-exact-save',loaded.evaluate('JSON.parse(JSON.stringify(getGameObject()))'),state.game);
-    f.compare(c.name+'-'+label+'-result',loaded.evaluate('players[0].coopResult'),afterAction&&!c.survivor&&c.razed?'defeat':null);
+    f.compare(c.name+'-'+label+'-result',loaded.evaluate('players[0].coopResult'),afterAction&&!c.survivor&&c.captured?'defeat':null);
     save(label,loaded.evaluate('JSON.parse(JSON.stringify(getGameObject()))'));
   }
   roundtrip('after-load',after,true);
@@ -114,7 +126,7 @@ function run(c, fault=false) {
   const undo=snapshot();save('undo',undo);
   f.compare(c.name+'-exact-undo',undo,before);
   roundtrip('undo-load',undo,false);
-  console.log(`PASS raze-undo ${c.name} cleanup=exact undo=exact save_load=exact ledger=balanced references=consistent`);
+  console.log(`PASS capture-undo ${c.name} cleanup=exact undo=exact save_load=exact ledger=balanced references=consistent`);
 }
 if(process.argv.includes('--fault')) run(scenarios[0],true);
 else {
