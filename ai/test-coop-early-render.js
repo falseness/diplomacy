@@ -46,12 +46,21 @@ const compare = (label, observed, expected) => {
     await page.goto(`http://127.0.0.1:${server.address().port}/`, {waitUntil:'load'});
     await page.waitForFunction(() => typeof menu !== 'undefined' && menu.visible && imagesCountLoaded === images.length);
     const config = defaultFixture(); config.coop=true;
+    const portalCells=[...Array.from({length:9},(_,x)=>[x,0]),...Array.from({length:9},(_,x)=>[x,6]),[0,3],[8,3]];
+    config.portals=[...portalCells.map(([x,y],i)=>({x,y,category:['melee','melee','melee','ranged','ranged','ranged','siege','heavy','support','chaos'][i%10]})),
+      {x:0,y:4,category:'mage'},{x:8,y:4,category:'mage'}];
     await page.evaluate(config => {
       window.fixtureConfig=config;
       isFogOfWar=false; gameSettings.isOnline=false;
       const configured=config.actors.map(a=>({...a, units:a.units.map(u=>({...u,type:Noob}))}));
-      new GameMap(config.size, configured.slice(0,-1), [],[],[],[],[],{type:'rectangular'},
-        {units:configured[3].units}).start(GameManager,false);
+      const map=new GameMap(config.size, configured.slice(0,-1), [],[],[],[],[],{type:'rectangular'},
+        {units:configured[3].units});
+      // Labeled render fixture with the current version-5 metadata and eleven typed
+      // portals per human on otherwise empty cells (not a generated layout).
+      map.coop.generation={version:5,playerCount:2,seed:1,size:'tiny',options:{seed:1,size:'tiny'},
+        testFixture:{label:'early-render',kind:'declared-local-fixture',generated:false}};
+      map.portals=config.portals.map(p=>({...p}));
+      map.start(GameManager,false);
       whooseTurn=1; actionManager.clear();
       nextTurnPauseInterface.hideButDontUpdateTimer();
       timer.pauseAndSaveTime();
@@ -87,6 +96,7 @@ const compare = (label, observed, expected) => {
       ['human-one-garrison','unit',1,1,1],['human-two-garrison','unit',2,7,1],
       ['demon-unit','unit',3,7,5]].map(([id,kind,owner,x,y])=>
         ({id,kind,owner,x,y,name:kind==='unit'?'noob':kind==='portal'?'demonPortal':'town'}));
+    config.portals.forEach(({x,y})=>initial.push({id:`portal-${x}-${y}`,kind:'portal',owner:3,x,y,name:'demonPortal'}));
     ['imp','clawling','hound','brute','bulwark'].forEach((name,i)=>initial.push({id:name,kind:'unit',owner:3,x:i+2,y:3,name}));
     const entities=await shared(()=>createEntityLedger(f,initial));
     const economy=createEconomyLedger(f,config.actors.map(({role,gold})=>({role,gold})),{});
