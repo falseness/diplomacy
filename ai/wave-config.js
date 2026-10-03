@@ -23,10 +23,10 @@ function validateCoopWaveRound(round) {
 const COOP_TYPED_WAVE_SCHEDULE = Object.freeze({
   waveInterval: 4,
   categories: Object.freeze(Object.fromEntries(Object.entries({
-    melee: [[4, 'imp'], [12, 'clawling'], [16, 'brute']],
-    ranged: [[4, 'spitter'], [12, 'emberArcher']],
+    melee: [[8, 'imp'], [12, 'clawling'], [16, 'brute']],
+    ranged: [[8, 'spitter'], [12, 'emberArcher']],
     siege: [[16, 'bombard'], [32, 'mortar']],
-    heavy: [[20, 'bulwark']],
+    heavy: [[28, 'bulwark']],
     support: [[16, 'ravager'], [24, 'hound']],
     chaos: [[28, 'demonLord']],
     mage: [[20, 'hexcaster'], [36, 'demonQueen']]
