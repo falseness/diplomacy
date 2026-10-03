@@ -5,7 +5,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const {createFixture} = require('./test-coop-harness');
-const {createEntityLedger} = require('./test-coop-entity-ledger');
+const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
 
 const root = path.resolve(__dirname, '..');
 const option = process.argv.indexOf('--output-dir');

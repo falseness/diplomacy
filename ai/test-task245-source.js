@@ -2,7 +2,7 @@
 // Focused production-source checks; literals/oracles reused from TASK-232..244.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {spawnSync}=require('node:child_process');
-// The bombard scripts moved to diplomacy_server tests/client (TASK-448).
+// The bombard scripts (TASK-448) and test-coop-demon-config (TASK-450) moved to diplomacy_server tests/client.
 const SERVER_CLIENT_TESTS=path.resolve(__dirname,'../../diplomacy_server/tests/client');
 const out=process.argv[2],checks=[],details=[];
 const write=(n,v)=>fs.writeFileSync(path.join(out,n),JSON.stringify(v,null,2)+'\n');
@@ -15,9 +15,9 @@ function child(file,args=[],input){
 }
 function result(file,marker){const local=JSON.parse(child(path.join(SERVER_CLIENT_TESTS,file)).split('\n').find(s=>s.startsWith(marker)).slice(marker.length));
  const server=JSON.parse(child(path.join(SERVER_CLIENT_TESTS,file),['--server'],JSON.stringify(local.input)).split('\n').find(s=>s.startsWith(marker)).slice(marker.length));return [local,server];}
-const config=require('./test-coop-demon-config');
+const config=require('../../diplomacy_server/tests/client/test-coop-demon-config');
 const local=config.browserSource();
-const server=JSON.parse(child(path.join(__dirname,'test-coop-demon-config.js'),['--server'],JSON.stringify(local.inputs)).split('\n').find(s=>s.startsWith('TASK232_SERVER_RESULTS=')).slice('TASK232_SERVER_RESULTS='.length));
+const server=JSON.parse(child(path.join(SERVER_CLIENT_TESTS,'test-coop-demon-config.js'),['--server'],JSON.stringify(local.inputs)).split('\n').find(s=>s.startsWith('TASK232_SERVER_RESULTS=')).slice('TASK232_SERVER_RESULTS='.length));
 for(const rows of [local.observations,server])for(const group of rows)for(const row of group.rows)assert.deepEqual(row,config.expectedUnit(row.id));
 details.push({id:'demon-stats',local:local.observations,server});check('source/current-demon-stats',true,true);
 const bombard=require(path.join(SERVER_CLIENT_TESTS,'test-bombard'));

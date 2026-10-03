@@ -1,6 +1,6 @@
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
-const {run: ranged} = require('./test-coop-early-ranged');
+const {run: ranged} = require('../../diplomacy_server/tests/client/test-coop-early-ranged');
 const {run: melee} = require('./test-coop-heavy-melee');
 
 // Independent literal expectations, never derived from production configuration.

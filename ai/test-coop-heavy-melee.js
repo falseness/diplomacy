@@ -1,8 +1,8 @@
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
 const {createFixture, defaultFixture} = require('./test-coop-harness');
-const {createEntityLedger} = require('./test-coop-entity-ledger');
-const {createEconomyLedger} = require('./test-coop-economy-ledger');
+const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
+const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 // Literal expectations deliberately independent of DEMON_TYPES and runtime deltas.

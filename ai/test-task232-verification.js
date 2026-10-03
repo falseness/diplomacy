@@ -8,7 +8,7 @@ const {spawnSync}=require('node:child_process');
 const {parseArgs}=require('node:util');
 const ROOT=path.resolve(__dirname,'..');
 const SERVER=path.resolve(ROOT,'../diplomacy_server');
-const {expected,versions,expectedUnit,browserSource}=require('./test-coop-demon-config');
+const {expected,versions,expectedUnit,browserSource}=require('../../diplomacy_server/tests/client/test-coop-demon-config');
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const equal=(a,b)=>{try {assert.deepEqual(a,b);return true;}catch{return false;}};
 if (process.argv.includes('--browser-source-child')) {
@@ -87,7 +87,7 @@ function main() {
     const browserText=command(process.execPath,[__filename,'--browser-source-child']);
     const browser=JSON.parse(browserText.split('\n').find(l=>l.startsWith('TASK232_BROWSER_RESULTS=')).slice('TASK232_BROWSER_RESULTS='.length));
     write('fixtures.json',{configuration:browser.fixture,serverInputs:browser.inputs});
-    const serverText=command(process.execPath,[path.join(__dirname,'test-coop-demon-config.js'),'--server'],ROOT,JSON.stringify(browser.inputs));
+    const serverText=command(process.execPath,[path.join(SERVER,'tests/client/test-coop-demon-config.js'),'--server'],ROOT,JSON.stringify(browser.inputs));
     const server=JSON.parse(serverText.split('\n').find(l=>l.startsWith('TASK232_SERVER_RESULTS=')).slice('TASK232_SERVER_RESULTS='.length));
     const stats=[];
     for(const [tier,observations] of [['browser-source',browser.observations],['server-source',server]]) {

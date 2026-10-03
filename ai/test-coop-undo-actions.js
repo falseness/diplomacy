@@ -1,9 +1,9 @@
-const {assertDemonTileOwnership} = require('./test-coop-demon-ownership-assertions');
+const {assertDemonTileOwnership} = require('../../diplomacy_server/tests/client/test-coop-demon-ownership-assertions');
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
 const {createFixture, defaultFixture} = require('./test-coop-harness');
-const {createEntityLedger} = require('./test-coop-entity-ledger');
-const {createEconomyLedger} = require('./test-coop-economy-ledger');
+const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
+const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
 // Literal balance-version-2 combat expectations, independent of runtime outcomes.
