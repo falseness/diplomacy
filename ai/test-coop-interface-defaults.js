@@ -162,6 +162,8 @@ function run() {
     check(`${label}-start-error`, startup, null);
     check(`${label}-coop-roster`, f.evaluate('({roles: players.map(p => p.role), playerCount: gameSettings.coop.generation.playerCount})'),
       {roles: ['NEUTRAL', ...Array(HUMANS).fill('HUMAN'), 'DEMONS'], playerCount: HUMANS});
+    // TASK-450-4: co-op draws fog landmarks (goldmines, live portals, neutral towns).
+    check(`${label}-coop-draws-fog-landmarks`, f.evaluate('gameSettings.drawFogLandmarks'), true);
     exercise(f, label, expectedInterface(variant), cases);
     cases[cases.length - 1].input = {boundary: 'GameMap.start', settings: f.context.variantSettings};
     // Starting the next game on the same settings object keeps the options.

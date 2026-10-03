@@ -1,3 +1,12 @@
+// Public fog landmarks: goldmines, live demon portals and neutral towns.
+// A town owned by a player or by the demons is not public.
+function isFogLandmark(building) {
+    if (!building || building.killed)
+        return false
+    if (building.name === 'goldmine' || building.isDemonPortal)
+        return true
+    return building.name === 'town' && building.player?.isNeutral === true
+}
 class Cell {
     constructor(hexagon, unit, building, coordText, logicText) {
         this.hexagon = hexagon
@@ -232,7 +241,7 @@ class Grid extends SpritesGroup {
     drawFogLandmark(ctx, building) {
         if (gameSettings.drawFogLandmarks !== true)
             return
-        if (building.name === 'goldmine' || (building.isDemonPortal && !building.killed))
+        if (isFogLandmark(building))
             drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(building)], building.pos)
     }
     drawOther(ctx) {

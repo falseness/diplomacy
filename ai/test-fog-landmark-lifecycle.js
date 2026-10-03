@@ -1,6 +1,7 @@
 'use strict';
 // TASK-369: gameSettings.drawFogLandmarks across the real client lifecycle
 // (GameManager.start, buildOnlineBoard, getGameObject/loadFromJson, legacy saves).
+// TASK-450-4: co-op also draws landmarks, so every mode starts with true.
 // Needs node >= 14 (client scripts use optional chaining).
 // Usage: node ai/test-fog-landmark-lifecycle.js --output-dir DIR [--fixtures-dir DIR]
 const fs=require('fs'),path=require('path'),util=require('util');
@@ -31,7 +32,8 @@ function page(){
     };
 }
 function onlineBoard(before,map){
-    const p=page();p.start(before);
+    // Stale false from the previous game; a leak into the board would show.
+    const p=page();p.start(before);p.e('gameSettings.drawFogLandmarks=false');
     const settingsBefore=p.e('JSON.stringify(gameSettings)');
     const board=p.e(`GameManager.buildOnlineBoard(${map},true)`);
     const settingsAfter=p.e('JSON.stringify(gameSettings)');
@@ -60,23 +62,22 @@ const cases=[
     ['start-competitive-hotseat',()=>{const p=page();p.e('gameSettings.drawFogLandmarks=false');
         return {started:p.start(COMPETITIVE),fog:p.e('isFogOfWar'),coop:p.e('!!gameSettings.coop')};},
         {started:true,fog:true,coop:false}],
-    ['start-coop-local',()=>{const p=page();p.e('gameSettings.drawFogLandmarks=true');
+    ['start-coop-local',()=>{const p=page();p.e('gameSettings.drawFogLandmarks=false');
         return {started:p.start(COOP),fog:p.e('isFogOfWar'),coop:p.e('!!gameSettings.coop')};},
-        {started:false,fog:true,coop:true}],
-    // The caller's settings come from the opposite mode, so a leak would be visible.
+        {started:true,fog:true,coop:true}],
     ['online-board-competitive',()=>onlineBoard(COOP,COMPETITIVE),{board:true,before:false,after:false,unchanged:true,fog:true}],
-    ['online-board-coop',()=>onlineBoard(COMPETITIVE,COOP),{board:false,before:true,after:true,unchanged:true,fog:true}],
+    ['online-board-coop',()=>onlineBoard(COMPETITIVE,COOP),{board:true,before:false,after:false,unchanged:true,fog:true}],
     ['save-roundtrip-competitive',()=>roundtrip(COMPETITIVE,false),{saved:true,loaded:true}],
-    ['save-roundtrip-coop',()=>roundtrip(COOP,true),{saved:false,loaded:false}],
-    ['legacy-coop',()=>legacy(COOP,'legacy-coop',true),
-        {file:path.relative(process.cwd(),path.join(fixturesDir,'legacy-coop.json')),inputHasKey:false,coop:true,loaded:false}],
+    ['save-roundtrip-coop',()=>roundtrip(COOP,false),{saved:true,loaded:true}],
+    ['legacy-coop',()=>legacy(COOP,'legacy-coop',false),
+        {file:path.relative(process.cwd(),path.join(fixturesDir,'legacy-coop.json')),inputHasKey:false,coop:true,loaded:true}],
     ['legacy-competitive',()=>legacy(COMPETITIVE,'legacy-competitive',false),
         {file:path.relative(process.cwd(),path.join(fixturesDir,'legacy-competitive.json')),inputHasKey:false,coop:false,loaded:true}],
     ['explicit-preserved',()=>{const p=page();p.start(COMPETITIVE);
         const packed=JSON.parse(p.save());packed.gameSettings.drawFogLandmarks=false;
         return {coop:!!packed.gameSettings.coop,loaded:page().load(JSON.stringify(packed),true)};},
         {coop:false,loaded:false}],
-    ['mode-switch',()=>{const p=page();return [p.start(COMPETITIVE),p.start(COOP),p.start(COMPETITIVE)];},[true,false,true]],
+    ['mode-switch',()=>{const p=page();return [p.start(COMPETITIVE),p.start(COOP),p.start(COMPETITIVE)];},[true,true,true]],
 ];
 const checkpoints=[];
 for(const [id,run,expected] of cases){

@@ -210,7 +210,7 @@ function instrument() {
         record.threshold = {differingPixelsAtLeast:DRAWN_MIN_DIFF};
         check('drawFogLandmarks true', game.drawFogLandmarks === true);
         check('fog mask natural', setup.fogMask === 'natural-fogged' && stillFog === 0);
-        check('goldmine drawn by drawFogLandmark every frame', targetCalls.every(calls => calls.length === 1 && calls[0].drawCachedImage));
+        check('landmark drawn by drawFogLandmark every frame', targetCalls.every(calls => calls.length === 1 && calls[0].drawCachedImage));
         check('target drawCachedImage count == frames', targetDrawCachedImage === frames.length);
         check('artwork differs from fog-only reference', diff >= DRAWN_MIN_DIFF);
       } else {
@@ -232,8 +232,9 @@ function instrument() {
       const {page, game} = await openGame('coop', COOP_MAP);
       const goldmine = await pick(page, 'goldmine'), portal = await pick(page, 'portal');
       const visible = await pick(page, 'goldmine', [goldmine.x+','+goldmine.y]);
-      await runCase(page, game, {name:'coop-fogged-goldmine-hidden', cell:goldmine, prefix:'coop-goldmine', full:'coop-full.png', expect:'hidden'});
-      await runCase(page, game, {name:'coop-fogged-portal-hidden', cell:portal, prefix:'coop-portal', expect:'hidden'});
+      // TASK-450-4: co-op draws fog landmarks too.
+      await runCase(page, game, {name:'coop-fogged-goldmine-drawn', cell:goldmine, prefix:'coop-goldmine', full:'coop-full.png', expect:'fog-drawn'});
+      await runCase(page, game, {name:'coop-fogged-portal-drawn', cell:portal, prefix:'coop-portal', expect:'fog-drawn'});
       // No co-op goldmine is in vision at game start, so this cell is forced visible (controlled fixture).
       await runCase(page, game, {name:'coop-visible-goldmine-drawn', cell:visible, prefix:'coop-visible-goldmine', forceVisible:true, expect:'visible-drawn'});
       await page.close();

@@ -457,7 +457,7 @@ class Events {
             // Public landmarks may be inspected without consulting the hidden
             // occupant. Keep this after the normal instruction/legality path.
             const building = grid.arr[coord.x][coord.y].building
-            if (!building.killed && (building.name === 'goldmine' || building.isDemonPortal)) {
+            if (isFogLandmark(building)) {
                 building.select()
                 this.selected = building
             }
