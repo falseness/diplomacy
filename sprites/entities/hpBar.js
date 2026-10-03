@@ -37,7 +37,8 @@ class Bar {
     repaintRects(healthCount) {
         if (healthCount < 0)
             return
-        // guaranteed healCount < hpCount 
+        // A save from before a speed cut can hold more moves than the bar has boxes.
+        healthCount = Math.min(healthCount, this.rects.length)
         for (let i = 0; i < healthCount; ++i) {
             this.rects[i].color = this.healthColor
         }
