@@ -61,7 +61,9 @@ function getCoopNextScheduledProduction(category, completedRound) {
   const steps = getCoopPortalCategorySteps(category);
   validateCoopWaveRound(completedRound);
   const interval = COOP_TYPED_WAVE_SCHEDULE.waveInterval;
-  const round = Math.max(steps[0].round, completedRound - completedRound % interval + interval);
+  // A first step between wave rounds (e.g. round 6 with interval 4) first produces at the next wave round.
+  const firstWave = Math.ceil(steps[0].round / interval) * interval;
+  const round = Math.max(firstWave, completedRound - completedRound % interval + interval);
   if (!Number.isSafeInteger(round)) throw new RangeError('Wave round exceeds safe integer range');
   return {round, type: getCoopScheduledDemonType(category, round), roundsRemaining: round - completedRound};
 }
