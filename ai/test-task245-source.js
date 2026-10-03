@@ -2,6 +2,8 @@
 // Focused production-source checks; literals/oracles reused from TASK-232..244.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {spawnSync}=require('node:child_process');
+// The bombard scripts moved to diplomacy_server tests/client (TASK-448).
+const SERVER_CLIENT_TESTS=path.resolve(__dirname,'../../diplomacy_server/tests/client');
 const out=process.argv[2],checks=[],details=[];
 const write=(n,v)=>fs.writeFileSync(path.join(out,n),JSON.stringify(v,null,2)+'\n');
 const check=(id,observed,expected)=>{assert.deepEqual(observed,expected,id);checks.push({id,observed,expected,pass:true});console.log('PASS '+id);};
@@ -11,14 +13,14 @@ function child(file,args=[],input){
  const r=spawnSync(process.execPath,[file,...args],{input,encoding:'utf8',timeout:stop-Date.now(),maxBuffer:64*1024*1024});
  console.log(r.stdout||'');console.log(r.stderr||'');console.log('ACTUAL_EXIT_STATUS='+r.status);assert.equal(r.status,0);return r.stdout;
 }
-function result(file,marker){const local=JSON.parse(child(path.join(__dirname,file)).split('\n').find(s=>s.startsWith(marker)).slice(marker.length));
- const server=JSON.parse(child(path.join(__dirname,file),['--server'],JSON.stringify(local.input)).split('\n').find(s=>s.startsWith(marker)).slice(marker.length));return [local,server];}
+function result(file,marker){const local=JSON.parse(child(path.join(SERVER_CLIENT_TESTS,file)).split('\n').find(s=>s.startsWith(marker)).slice(marker.length));
+ const server=JSON.parse(child(path.join(SERVER_CLIENT_TESTS,file),['--server'],JSON.stringify(local.input)).split('\n').find(s=>s.startsWith(marker)).slice(marker.length));return [local,server];}
 const config=require('./test-coop-demon-config');
 const local=config.browserSource();
 const server=JSON.parse(child(path.join(__dirname,'test-coop-demon-config.js'),['--server'],JSON.stringify(local.inputs)).split('\n').find(s=>s.startsWith('TASK232_SERVER_RESULTS=')).slice('TASK232_SERVER_RESULTS='.length));
 for(const rows of [local.observations,server])for(const group of rows)for(const row of group.rows)assert.deepEqual(row,config.expectedUnit(row.id));
 details.push({id:'demon-stats',local:local.observations,server});check('source/current-demon-stats',true,true);
-const bombard=require('./test-bombard');
+const bombard=require(path.join(SERVER_CLIENT_TESTS,'test-bombard'));
 const attacks=result('test-bombard.js','TASK233_RESULTS=');
 for(const observed of attacks){assert.deepEqual(observed.rows.map(r=>r.id),bombard.cases.map(c=>c.id));for(const [i,row]of observed.rows.entries()){
  const expected=bombard.expected(row,bombard.cases[i]);assert.deepEqual({before:row.before,after:row.after,command:row.command,incoming:row.incoming},expected);details.push({id:'bombard/'+row.id,observed:row,expected});}}

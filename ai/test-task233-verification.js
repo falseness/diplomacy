@@ -8,7 +8,9 @@ const {spawnSync}=require('node:child_process');
 const {parseArgs}=require('node:util');
 const ROOT=path.resolve(__dirname,'..');
 const SERVER=path.resolve(ROOT,'../diplomacy_server');
-const {cases:attackCases,fixture,expected:expectedAttack}=require('./test-bombard');
+// The bombard scripts moved to diplomacy_server tests/client (TASK-448).
+const SERVER_CLIENT_TESTS=path.join(SERVER,'tests/client');
+const {cases:attackCases,fixture,expected:expectedAttack}=require(path.join(SERVER_CLIENT_TESTS,'test-bombard'));
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const equal=(a,b)=>{try {assert.deepEqual(a,b);return true;}catch{return false;}};
 main();
@@ -60,8 +62,8 @@ function main() {
     identities.before=snapshot();
     write('fixtures.json',{fixture,cases:attackCases});
     const parse=text=>JSON.parse(text.split('\n').find(l=>l.startsWith('TASK233_RESULTS=')).slice(16));
-    const browser=parse(command(process.execPath,[path.join(__dirname,'test-bombard.js')]));
-    const server=parse(command(process.execPath,[path.join(__dirname,'test-bombard.js'),'--server'],ROOT,JSON.stringify(browser.input)));
+    const browser=parse(command(process.execPath,[path.join(SERVER_CLIENT_TESTS,'test-bombard.js')]));
+    const server=parse(command(process.execPath,[path.join(SERVER_CLIENT_TESTS,'test-bombard.js'),'--server'],ROOT,JSON.stringify(browser.input)));
     const stats=browser.rows[0].stats;
     check('stats',stats,{hp:4,damage:0,buildingDamage:4,speed:2,range:2,salary:0,heal:0,role:'DEMONS',economy:false,recruitable:false,
       description:{hp:4,'heal speed':0,dmg:'0\nbuilding dmg: 4',speed:2,salary:0,range:'2 - 2',target:'enemy buildings only'},
@@ -83,7 +85,7 @@ function main() {
     // before launching detached services; never let the outer child deadline
     // cut off the lifecycle helper while it owns processes.
     assert.ok(start+3300000-Date.now()>300000,'insufficient cumulative budget for network setup and cleanup');
-    command(process.execPath,[path.join(__dirname,'test-bombard-network.js'),out]);
+    command(process.execPath,[path.join(SERVER_CLIENT_TESTS,'test-bombard-network.js'),out]);
     const network=JSON.parse(fs.readFileSync(path.join(out,'network-attacks.json'),'utf8'));
     for(const row of network.rows)check(row.id,[...row.observed,row.persisted],Array(3).fill(row.expected));
     for(const repo of [ROOT,SERVER]) {
