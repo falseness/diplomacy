@@ -1,8 +1,8 @@
 // Shared baseline targets for current co-op generation. Valley capacity may enlarge the side.
 const COOP_SCALING_PRESETS = Object.freeze({
-    tiny: Object.freeze({baseSide: 15, minSide: 11, objectsPerHuman: 1, minesPerHuman: 2}),
-    normal: Object.freeze({baseSide: 25, minSide: 15, objectsPerHuman: 2, minesPerHuman: 4}),
-    big: Object.freeze({baseSide: 39, minSide: 21, objectsPerHuman: 3, minesPerHuman: 6})
+    tiny: Object.freeze({baseSide: 15, minSide: 11, objectsPerHuman: 2, minesPerHuman: 2}),
+    normal: Object.freeze({baseSide: 25, minSide: 15, objectsPerHuman: 3, minesPerHuman: 4}),
+    big: Object.freeze({baseSide: 39, minSide: 21, objectsPerHuman: 4, minesPerHuman: 6})
 })
 // Hex radius presets for the hex co-op map. They are sized for the final elite load, so the
 // size selector stays meaningful; growth may only repair an infeasible preset.

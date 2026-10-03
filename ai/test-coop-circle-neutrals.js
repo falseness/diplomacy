@@ -2,7 +2,7 @@
 // Per-player neutral town checks for placeCircleExpansions (ai/coop-circle-plan.js).
 // Kinds, bands, hex distances, ownership, clearances and connectivity are re-derived
 // here with an axial-coordinate hex metric and the test's own BFS, never the planner's helpers.
-// Usage: node ai/test-coop-circle-neutrals.js [--output-dir DIR] [--fault far-gap|elite-on-normal]
+// Usage: node ai/test-coop-circle-neutrals.js [--output-dir DIR] [--fault far-gap|elite-on-normal|near-far]
 'use strict';
 const fs = require('fs'), path = require('path'), Module = require('module');
 const {circleTestBands} = require('./coop-circle-test-bands');
@@ -15,7 +15,8 @@ const fault = option('--fault');
 // Fault injections rewrite the planner source before it is loaded.
 const FAULTS = {
     'far-gap': [['const CIRCLE_GAP_HEX = Object.freeze({min: 5, max: 9})', 'const CIRCLE_GAP_HEX = Object.freeze({min: 5, max: 30})']],
-    'elite-on-normal': [["normal: Object.freeze(['gap', 'ring'])", "normal: Object.freeze(['gap', 'ring', 'elite'])"]]
+    'elite-on-normal': [["normal: Object.freeze(['gap', 'far', 'ring'])", "normal: Object.freeze(['gap', 'far', 'ring', 'elite'])"]],
+    'near-far': [['const CIRCLE_FAR_GAP_HEX = Object.freeze({min: 10', 'const CIRCLE_FAR_GAP_HEX = Object.freeze({min: 5']]
 };
 if (fault !== undefined && !FAULTS[fault]) { console.error(`unknown fault ${fault}`); process.exit(2); }
 
@@ -35,8 +36,8 @@ if (fault) {
 } else planner = require('./coop-circle-plan');
 
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 2, 31, 777, 65535, 2654435769, 4294967295];
-const KINDS = {tiny: ['gap'], normal: ['gap', 'ring'], big: ['gap', 'ring', 'elite']};
-const GAP = [5, 9], RING = [5, 10], NEUTRAL_SPACING = 5, DISPARITY = 4;
+const KINDS = {tiny: ['gap', 'far'], normal: ['gap', 'far', 'ring'], big: ['gap', 'far', 'ring', 'elite']};
+const GAP = [5, 9], FAR = [10, 15], RING = [5, 10], NEUTRAL_SPACING = 5, DISPARITY = 4;
 const colorOf = i => ({r: (i * 37) % 256, g: (i * 91) % 256, b: (i * 53) % 256});
 
 // Independent hex metric: offset column -> axial, cube distance to the centre cell (R, R).
@@ -87,12 +88,13 @@ function connected(R, objects) {
     return count === 1 && objects.every(o => neighbours(o, side).some(n => seen.has(key(n))));
 }
 
-// Band of a kind for a site: every box cell in bounds and inside the radius, plus the kind's layer rule.
+// Band of a kind for a site: every box cell in bounds and inside the radius, plus the kind's layer rule
+// ('far' shares the gap band).
 function inBand(kind, c, R, E, ringOuter) {
     const side = 2 * R + 1, cells = box(c);
     if (!cells.every(b => b.x >= 0 && b.y >= 0 && b.x < side && b.y < side && layerAt(b, R) <= R)) return false;
     const l = layerAt(c, R), boxLayers = cells.map(b => layerAt(b, R));
-    if (kind === 'gap') return boxLayers.every(v => v > ringOuter);
+    if (kind === 'gap' || kind === 'far') return boxLayers.every(v => v > ringOuter);
     if (kind === 'ring') return l > E && l <= ringOuter && boxLayers.every(v => v > E);
     return l <= E;
 }
@@ -119,7 +121,9 @@ function scanSites(kind, owner, prev, ctx, lo, hi) {
 
 const failures = [];
 const assert = (name, ok, detail) => { if (!ok) failures.push({name, detail}); };
-const matrix = [], relaxedCases = [];
+const matrix = [], relaxedCases = {ringTowns: [], farTowns: []};
+// How far a hex distance lies outside the far window.
+const farMiss = d => Math.max(FAR[0] - d, d - FAR[1]);
 for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (const seed of SEEDS) {
     const id = {size, humans, seed};
     let plan, starts, layout, attempt;
@@ -151,17 +155,30 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         assert('hex-distance-reported', d === a.hexDistance, detail);
         assert(`band-${a.kind}`, inBand(a.kind, c, R, E, ringOuter), detail);
         if (a.kind === 'gap') assert('gap-distance', within(d, GAP), detail);
+        if (a.kind === 'far') {
+            assert('far-band', box(c).every(b => layerAt(b, R) > ringOuter && layerAt(b, R) <= R), detail);
+            assert('far-distance', a.relaxed ? !within(d, FAR) : within(d, FAR), detail);
+        }
         if (a.kind === 'ring') assert('ring-distance', a.relaxed ? d > RING[1] : within(d, RING), detail);
-        assert('relaxed-ring-only', !a.relaxed || a.kind === 'ring', detail);
+        assert('relaxed-ring-or-far-only', !a.relaxed || a.kind === 'ring' || a.kind === 'far', detail);
         if (a.kind !== 'elite') assert('ownership', owner && owns(c, owner, towns), {...detail, hexToTowns: towns.map(t => hexDistance(c, t))});
         // Placement order is assignment order: the scans see only the earlier neutral towns.
         const prev = assignments.slice(0, k).map(p => ({x: p.x, y: p.y}));
-        if (a.relaxed) {
+        if (a.relaxed && a.kind === 'far') {
+            const preferred = scanSites('far', owner, prev, ctx, FAR[0], FAR[1]);
+            // Valid connected gap-band sites strictly less far outside the window than the chosen one.
+            const miss = farMiss(d), nearer = scanSites('far', owner, prev, ctx, FAR[0] - miss + 1, FAR[1] + miss - 1);
+            assert('far-relaxed-justified', preferred.length === 0, {...detail, preferred: preferred.slice(0, 3)});
+            assert('far-relaxed-nearest', nearer.length === 0, {...detail, nearer: nearer.slice(0, 3)});
+            relaxedCases.farTowns.push({size, humans, seed, attempt, radius: R, E, ringOuter, slot: a.slot, x: a.x, y: a.y,
+                hexDistance: d, validFarSites10to15: preferred.length, lessOutsideValidSites: nearer.length});
+        }
+        if (a.relaxed && a.kind === 'ring') {
             const preferred = scanSites('ring', owner, prev, ctx, RING[0], RING[1]);
             const nearer = scanSites('ring', owner, prev, ctx, RING[1] + 1, d - 1);
             assert('relaxed-justified', preferred.length === 0, {...detail, preferred: preferred.slice(0, 3)});
             assert('relaxed-nearest', nearer.length === 0, {...detail, nearer: nearer.slice(0, 3)});
-            relaxedCases.push({size, humans, seed, attempt, radius: R, E, ringOuter, slot: a.slot, x: a.x, y: a.y,
+            relaxedCases.ringTowns.push({size, humans, seed, attempt, radius: R, E, ringOuter, slot: a.slot, x: a.x, y: a.y,
                 hexDistance: d, validRingSites5to10: preferred.length, nearerValidSites: nearer.length});
         }
         if (a.kind === 'elite') {
@@ -195,7 +212,8 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
 assert('matrix-complete', matrix.length === 36 * SEEDS.length, {rows: matrix.length});
 
 const failedNames = [...new Set(failures.map(f => f.name))];
-const summary = {fault: fault || null, cases: matrix.length, seeds: SEEDS, relaxedRingTowns: relaxedCases.length,
+const summary = {fault: fault || null, cases: matrix.length, seeds: SEEDS, relaxedRingTowns: relaxedCases.ringTowns.length,
+    relaxedFarTowns: relaxedCases.farTowns.length,
     failures: failures.length, failedAssertions: failedNames, firstFailures: failures.slice(0, 5), pass: failures.length === 0};
 if (outputDir) {
     const suffix = fault ? `-${fault}` : '';
@@ -206,4 +224,4 @@ if (outputDir) {
 console.log(JSON.stringify(summary));
 for (const name of failedNames) console.error(`FAIL ${name}`);
 if (failures.length) process.exit(1);
-console.error(`PASS co-op circle neutrals cases=${matrix.length} relaxed=${relaxedCases.length}`);
+console.error(`PASS co-op circle neutrals cases=${matrix.length} relaxedRing=${relaxedCases.ringTowns.length} relaxedFar=${relaxedCases.farTowns.length}`);

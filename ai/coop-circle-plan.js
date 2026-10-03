@@ -290,21 +290,25 @@ const CIRCLE_MINE_CLEARANCE = 4
 const CIRCLE_NEUTRAL_SPACING = 5
 const CIRCLE_EXPANSION_PASSES = 6
 // Neutral-town kinds per human by size, and hex distance windows from the owner's town.
-const CIRCLE_NEUTRAL_KINDS = Object.freeze({tiny: Object.freeze(['gap']), normal: Object.freeze(['gap', 'ring']),
-    big: Object.freeze(['gap', 'ring', 'elite'])})
+const CIRCLE_NEUTRAL_KINDS = Object.freeze({tiny: Object.freeze(['gap', 'far']), normal: Object.freeze(['gap', 'far', 'ring']),
+    big: Object.freeze(['gap', 'far', 'ring', 'elite'])})
 const CIRCLE_GAP_HEX = Object.freeze({min: 5, max: 9})
+const CIRCLE_FAR_GAP_HEX = Object.freeze({min: 10, max: 15})
 const CIRCLE_RING_HEX = Object.freeze({min: 5, max: 10})
 
 // Neutral towns and every gold mine after placeCircleStarts. Each human gets
 // the neutral-town kinds of CIRCLE_NEUTRAL_KINDS[size], placed in slot order:
 // 'gap' has its whole 3x3 at ringOuter < layer <= R and hex distance
-// CIRCLE_GAP_HEX from its owner's town; 'ring' has the town at E < layer <=
+// CIRCLE_GAP_HEX from its owner's town; 'far' uses the gap sites, preferring
+// hex distance CIRCLE_FAR_GAP_HEX and otherwise taking the valid gap site whose
+// distance lies least outside that window, the farther side first (relaxed);
+// 'ring' has the town at E < layer <=
 // ringOuter and the whole 3x3 at layer > E, preferring hex distance
 // CIRCLE_RING_HEX and otherwise taking the nearest site at hex distance >= 5
 // (relaxed, for large maps); 'elite' has the town at layer <= E and is the
 // nearest valid site to its owner. Every 3x3 is inside the radius, clear of
 // reservations and other neutral 3x3s, at hex distance >= CIRCLE_NEUTRAL_SPACING
-// from every other neutral town; gap and ring towns are not strictly closer to
+// from every other neutral town; gap, far and ring towns are not strictly closer to
 // another human's town than to their owner's. Candidates are shuffled, and a
 // pass must leave the spread of each human's nearest neutral-town path within
 // CIRCLE_ACCESS_DISPARITY. Mines are all neutral (owner 0), outside the elite
@@ -381,11 +385,16 @@ function placeCircleExpansions(plan, starts) {
         const taken = new Set()
         for (let i = 0; i < humans; i++) for (const kind of kinds) {
             const hexOf = id => circleHexDistance(cell(id), towns[i])
-            const valid = sites[kind].filter(id => !box(id).some(c => taken.has(idOf(c)))
+            const valid = sites[kind === 'far' ? 'gap' : kind].filter(id => !box(id).some(c => taken.has(idOf(c)))
                 && !neutral.some(n => circleHexDistance(cell(id), cell(n)) < CIRCLE_NEUTRAL_SPACING)
                 && (kind === 'elite' || towns.every(t => circleHexDistance(cell(id), t) >= hexOf(id))))
             // [candidates, relaxed] tiers, tried in order.
+            // Far fallback: least distance outside the window first, then the farther side, then shuffled order.
+            const farMiss = id => Math.max(CIRCLE_FAR_GAP_HEX.min - hexOf(id), hexOf(id) - CIRCLE_FAR_GAP_HEX.max)
             const tiers = kind === 'gap' ? [[shuffle(valid.filter(id => within(hexOf(id), CIRCLE_GAP_HEX))), false]]
+                : kind === 'far' ? [[shuffle(valid.filter(id => within(hexOf(id), CIRCLE_FAR_GAP_HEX))), false],
+                    [shuffle(valid.filter(id => !within(hexOf(id), CIRCLE_FAR_GAP_HEX))).map(id => [id, farMiss(id), hexOf(id)])
+                        .sort((p, q) => p[1] - q[1] || q[2] - p[2]).map(p => p[0]), true]]
                 : kind === 'ring' ? [[shuffle(valid.filter(id => within(hexOf(id), CIRCLE_RING_HEX))), false],
                     [byHex(shuffle(valid.filter(id => hexOf(id) > CIRCLE_RING_HEX.max)), hexOf), true]]
                 : [[byHex(shuffle(valid), hexOf), false]]
