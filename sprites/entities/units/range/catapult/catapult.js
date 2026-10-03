@@ -31,6 +31,9 @@ class Catapult extends RangeUnit {
             unit.info.range = '2 - ' + this.range
         return unit
     }
+    get hasMirroredImage() {
+        return true
+    }
     draw(ctx) {
         this.drawBars(ctx)
         drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)

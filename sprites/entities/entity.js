@@ -152,10 +152,15 @@ class Entity extends Sprite {
         if (otherSettings.alwaysDisplayHPBar || !this.isFullHP)
             this.hpBar.draw(ctx)
     }
+    // Only classes with a mirrored ('Left') image (KOHb, Catapult and their
+    // demon variants) turn mirrorX into a different image key.
+    get hasMirroredImage() {
+        return false
+    }
     // Image key: mirrored classes (KOHb, Catapult) add 'Left'; ordinary units
     // owned by the demon slot use the undead art. Demon variants keep their own.
     get bodyImageName() {
-        const name = this.mirrorX ? this.name + 'Left' : this.name
+        const name = this.mirrorX && this.hasMirroredImage ? this.name + 'Left' : this.name
         if (UNDEAD_UNIT_NAMES.includes(this.name) && this.player?.role === 'DEMONS')
             return 'undead/' + name
         return name

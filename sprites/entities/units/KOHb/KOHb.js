@@ -14,6 +14,9 @@ class KOHb extends Unit {
         res.name = this.name
         return res
     }
+    get hasMirroredImage() {
+        return true
+    }
     draw(ctx) {
         this.drawBars(ctx)
         drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)
