@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const {createFixture} = require('./test-coop-harness');
-const {checkGeneratedMap, portalChecks, neighbours, bfs} = require('./test-coop-current-generation');
+const {checkGeneratedMap, portalChecks, neighbours, bfs} = require('../../diplomacy_server/tests/client/test-coop-current-generation');
 const {getCoopMapScalingFromMetadata} = require('./coop-map-scaling');
 const inputs = ['tiny','normal','big'].flatMap(size=>Array.from({length:12},(_,i)=>({size,h:i+1,seed:1})));
 for (const seed of [0,4294967295]) inputs.push({size:'tiny',h:1,seed},{size:'big',h:12,seed});

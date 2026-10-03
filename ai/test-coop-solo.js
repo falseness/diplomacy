@@ -3,7 +3,7 @@ const {createFixture} = require('./test-coop-harness');
 const {initialEntities} = require('./test-coop-generation-fixtures');
 const {createEntityLedger} = require('./test-coop-entity-ledger');
 const {getHumanSlots} = require('../../diplomacy_server/server/matchmakingSlots');
-const {checkGeneratedMap} = require('./test-coop-current-generation');
+const {checkGeneratedMap} = require('../../diplomacy_server/tests/client/test-coop-current-generation');
 const {composeTypedCoopWave} = require('./wave-composition');
 
 function generated(count) {
