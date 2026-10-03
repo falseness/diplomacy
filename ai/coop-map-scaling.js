@@ -11,11 +11,12 @@ const COOP_HEX_RADIUS = Object.freeze({
     normal: Object.freeze({scale: 11, min: 13}),
     big: Object.freeze({scale: 14, min: 16})
 })
-// Three melee and ranged portals, one of each remaining category (mage included) per initial human,
+// Three melee, ranged and mage portals, one of each remaining category per initial human,
 // plus COOP_EXTRA_HEAVY_PORTALS heavy portals per map. Matches COOP_PORTAL_CATEGORIES (ai/wave-config.js),
 // which the server does not load.
 const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos', 'mage'])
 const COOP_EXTRA_HEAVY_PORTALS = 2
+const COOP_PORTALS_PER_HUMAN = Object.freeze({melee: 3, ranged: 3, siege: 1, heavy: 1, support: 1, chaos: 1, mage: 3})
 
 function baselineRadius(initialHumanCount, size) {
     const preset = COOP_HEX_RADIUS[size]
@@ -40,12 +41,12 @@ function getCoopMapScaling(initialHumanCount, size = 'normal') {
     const side = Math.max(preset.minSide, Math.ceil(preset.baseSide * Math.sqrt(initialHumanCount / 4)))
     const area = side * side
     const objects = initialHumanCount * preset.objectsPerHuman
-    const portalCategories = Object.fromEntries(COOP_PORTAL_CATEGORY_ORDER.map(category => [category, initialHumanCount * (category === 'melee' || category === 'ranged' ? 3 : 1) +
+    const portalCategories = Object.fromEntries(COOP_PORTAL_CATEGORY_ORDER.map(category => [category, initialHumanCount * COOP_PORTALS_PER_HUMAN[category] +
         (category === 'heavy' ? COOP_EXTRA_HEAVY_PORTALS : 0)]))
     return {size, initialHumanCount, side, mapSize: {x: side, y: side}, area,
         baselineRadius: baselineRadius(initialHumanCount, size),
         counts: {humanTowns: initialHumanCount, neutralTowns: objects,
-            goldmines: initialHumanCount * preset.minesPerHuman, portals: 11 * initialHumanCount + COOP_EXTRA_HEAVY_PORTALS,
+            goldmines: initialHumanCount * preset.minesPerHuman, portals: Object.values(portalCategories).reduce((a, b) => a + b, 0),
             portalCategories, mountains: Math.round(area * 0.08),
             lakes: Math.round(area * 0.06), bushes: Math.round(area * 0.10)},
         startingAssets: {gold: 100, towns: 1, units: 1}}

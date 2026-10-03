@@ -11,7 +11,7 @@ const circleGeometry = typeof coopHexLayer === 'function'
     ? {coopHexLayer, coopHexCenter, coopHexMapShape, coopHexLattice}
     : require('./coop-hex-geometry.js')
 
-// Portal categories that live in the elite core, four per human plus the per-map extra heavy portals.
+// Portal categories that live in the elite core, six per human plus the per-map extra heavy portals.
 const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege', 'mage']
 // Minimum hex distance from every human town to a common ring portal.
 const CIRCLE_TOWN_DISTANCE = Object.freeze({tiny: 3, normal: 4, big: 5})
@@ -46,7 +46,7 @@ function circleNeighbours(c, side) {
 
 const circleEliteCache = new Map()
 
-// Elite portals of one map: 4 per human plus the extra heavy portals.
+// Elite portals of one map: 6 per human plus the extra heavy portals.
 function circleElitePortals(humans, size) {
     const targets = circleScaling(humans, size).counts.portalCategories
     return COOP_CIRCLE_ELITE_CATEGORIES.reduce((sum, c) => sum + targets[c], 0)
@@ -101,7 +101,7 @@ function circleCapacityAt(humans, size, radius) {
         if (layer === regions.townRing && lattice) townRingLattice++
     }
     const elitePortals = circleElitePortals(humans, size)
-    const outsideReserved = 9 * (humans + counts.neutralTowns) + counts.goldmines + 3 * 11 * humans
+    const outsideReserved = 9 * (humans + counts.neutralTowns) + counts.goldmines + 3 * (counts.portals - counts.portalCategories.heavy + humans)
     const reserved = eliteCells + outsideReserved
     // Nothing is placed yet, so every elite cell is free; each elite portal keeps two approach cells.
     const rows = {
