@@ -338,7 +338,8 @@ function createTrainingBatch(
         goldmines = []
         gameRound = 0
         gameExit = false
-      }
+      },
+      updateCameraBorders() {}
     }
     let map
     if (__nativeMapGenerator) {

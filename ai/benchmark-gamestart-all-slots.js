@@ -413,7 +413,8 @@ function runRuntimeScenario(mapEntry, candidateSlot, seed, options, checkpoint, 
         goldmines = []
         gameRound = 0
         gameExit = false
-      }
+      },
+      updateCameraBorders() {}
     }
     let map = __task063MapEntry.sourceType == 'standalone-factory' ?
       globalThis[__task063MapEntry.sourceName](__task063MapEntry.factoryOptions) :

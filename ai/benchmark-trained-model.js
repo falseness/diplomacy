@@ -456,7 +456,8 @@ function runRuntimeGame(options, loadedCheckpoint, candidateSide, seed) {
         goldmines = []
         gameRound = 0
         gameExit = false
-      }
+      },
+      updateCameraBorders() {}
     }
     let configured = __task047Map
     let map = new GameMap(

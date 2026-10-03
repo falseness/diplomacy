@@ -356,7 +356,8 @@ function runtimeMapScript() {
       goldmines = []
       gameRound = 0
       gameExit = false
-    }
+    },
+    updateCameraBorders() {}
   }
   let unitTypes = {
     Noob: Noob,

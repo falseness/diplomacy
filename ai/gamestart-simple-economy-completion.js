@@ -332,7 +332,8 @@ function runRuntimeScenario(mapEntry, seed, options) {
         goldmines = []
         gameRound = 0
         gameExit = false
-      }
+      },
+      updateCameraBorders() {}
     }
     let map = __task055MapEntry.sourceType == 'standalone-factory' ?
       globalThis[__task055MapEntry.sourceName]() :

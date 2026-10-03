@@ -623,7 +623,8 @@ function runRuntimeGame(mapInfo, candidateSide, seed, options, loadedCheckpoint)
         goldmines = []
         gameRound = 0
         gameExit = false
-      }
+      },
+      updateCameraBorders() {}
     }
     let map = maps[__task037MapInfo.category][__task037MapInfo.index]
     map.players[1].playerType =
