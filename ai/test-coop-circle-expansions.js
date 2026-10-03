@@ -41,7 +41,7 @@ if (fault) {
 
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 2, 31, 777, 65535, 2654435769, 4294967295];
 const DISPARITY = 4, MINE_CLEARANCE = 4, NEUTRAL_SPACING = 5;
-const NEUTRAL_KINDS = {tiny: ['gap'], normal: ['gap', 'ring'], big: ['gap', 'ring', 'elite']};
+const NEUTRAL_KINDS = {tiny: ['gap', 'far'], normal: ['gap', 'far', 'ring'], big: ['gap', 'far', 'ring', 'elite']};
 const colorOf = i => ({r: (i * 37) % 256, g: (i * 91) % 256, b: (i * 53) % 256});
 
 // Independent hex metric: offset column -> axial, cube distance to the centre cell (R, R).
@@ -125,8 +125,9 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
     const minLayer = layers.length ? Math.min(...layers) : null;
     assert('layer-agrees', JSON.stringify(layers) === JSON.stringify(coopLayers), id);
     // Per-player kinds (TASK-390): every human gets KINDS[size] in slot order. Gap towns
-    // sit beyond the common ring, ring towns in E < layer <= ringOuter and elite towns
-    // (big only, one per human) inside the core; mines always stay outside the core.
+    // sit beyond the common ring, far towns (TASK-422) have their whole 3x3 beyond it,
+    // ring towns in E < layer <= ringOuter and elite towns (big only, one per human)
+    // inside the core; mines always stay outside the core.
     const assignments = (layout.expansions && layout.expansions.neutralAssignments) || [];
     const expectedKinds = towns.flatMap((_, i) => NEUTRAL_KINDS[size].map(kind => ({slot: i + 1, kind})));
     const kindOf = neutral.map((t, i) => assignments[i] && assignments[i].x === t.x && assignments[i].y === t.y ? assignments[i].kind : null);
@@ -134,7 +135,8 @@ for (const size of SIZES) for (let humans = 1; humans <= 12; humans++) for (cons
         && JSON.stringify(assignments.map(a => ({slot: a.slot, kind: a.kind}))) === JSON.stringify(expectedKinds)
         && kindOf.every(k => k !== null), {...id, kinds: assignments.map(a => `${a.slot}:${a.kind}`)});
     const siteViolations = neutral.map((t, i) => ({...t, kind: kindOf[i], layer: layerAt(t, R)})).filter(t =>
-        t.kind === 'elite' ? t.layer > E : t.kind === 'ring' ? t.layer <= E || t.layer > ringOuter : t.layer <= ringOuter);
+        t.kind === 'elite' ? t.layer > E : t.kind === 'ring' ? t.layer <= E || t.layer > ringOuter
+            : t.kind === 'far' ? box(t).some(c => layerAt(c, R) <= ringOuter) : t.layer <= ringOuter);
     assert('neutral-sites', siteViolations.length === 0, {...id, E, ringOuter, siteViolations});
     const coreNeutrals = neutral.filter(t => layerAt(t, R) <= E).length;
     assert('elite-neutral-core', coreNeutrals === (size === 'big' ? humans : 0), {...id, coreNeutrals, E});

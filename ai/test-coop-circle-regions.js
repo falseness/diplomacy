@@ -35,8 +35,8 @@ if (fault) {
 
 const SIZES = ['tiny', 'normal', 'big'], SEEDS = [0, 1, 31, 4294967295];
 const TOWN_DISTANCE = {tiny: 3, normal: 4, big: 5}, MAX_GROWTH = 8;
-// Independent per-human targets: neutral towns 1/2/3, gold mines 2/4/6.
-const TOWNS_PER_HUMAN = {tiny: 1, normal: 2, big: 3}, MINES_PER_HUMAN = {tiny: 2, normal: 4, big: 6};
+// Independent per-human targets: neutral towns 2/3/4 (TASK-422 far-gap town), gold mines 2/4/6.
+const TOWNS_PER_HUMAN = {tiny: 2, normal: 3, big: 4}, MINES_PER_HUMAN = {tiny: 2, normal: 4, big: 6};
 
 // Independent region bands and capacity at radius R.
 function expectedAt(humans, size, R) {
