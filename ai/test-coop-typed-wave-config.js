@@ -18,7 +18,7 @@ const CATEGORIES = ['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos', 'ma
 const WAVE_ROUNDS = Array.from({length: 25}, (_, i) => (i + 1) * 4);
 // Independent specification literals, never imported from production.
 const EXPECTED_STEPS = {
-  melee: [[4, 'imp'], [8, 'clawling'], [16, 'brute']],
+  melee: [[4, 'imp'], [12, 'clawling'], [16, 'brute']],
   ranged: [[4, 'spitter'], [12, 'emberArcher']],
   siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[20, 'bulwark']],
   support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']],

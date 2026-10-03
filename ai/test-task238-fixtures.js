@@ -4,7 +4,7 @@
 // portals sit on unmasked cells (layer <= R), eleven portals per human in 3/3/1/1/1/1/1 order.
 const {coopHexCells,coopHexCenter,coopHexLayer}=require('./coop-hex-geometry');
 const categories=['melee','melee','melee','ranged','ranged','ranged','siege','heavy','support','chaos','mage'];
-const schedule={melee:[[4,'imp'],[8,'clawling'],[16,'brute']],ranged:[[4,'spitter'],[12,'emberArcher']],siege:[[16,'bombard'],[32,'mortar']],heavy:[[20,'bulwark']],support:[[16,'ravager'],[24,'hound']],chaos:[[28,'demonLord']],mage:[[20,'hexcaster'],[36,'demonQueen']]};
+const schedule={melee:[[4,'imp'],[12,'clawling'],[16,'brute']],ranged:[[4,'spitter'],[12,'emberArcher']],siege:[[16,'bombard'],[32,'mortar']],heavy:[[20,'bulwark']],support:[[16,'ravager'],[24,'hound']],chaos:[[28,'demonLord']],mage:[[20,'hexcaster'],[36,'demonQueen']]};
 const stats={imp:[2,1,2,'Imp'],clawling:[1,2,2,'Clawling'],brute:[3,2,2,'Brute'],spitter:[2,1,2,'Spitter'],emberArcher:[1,1,2,'EmberArcher'],hexcaster:[1,3,1,'Hexcaster'],demonQueen:[1,5,1,'DemonQueen'],bombard:[4,0,2,'Bombard'],mortar:[4,0,2,'Mortar'],bulwark:[7,1,2,'Bulwark'],ravager:[4,1,3,'Ravager'],hound:[2,1,5,'Hound'],demonLord:[5,3,2,'DemonLord']};
 const typeAt=(c,r)=>r>0&&r%4===0?schedule[c].filter(([n])=>n<=r).at(-1)?.[1]||null:null;
 function spec(h){

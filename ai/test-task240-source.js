@@ -23,8 +23,8 @@ if(require.main===module){
  rows.push([round,entityInterface.entity.name.text,entityInterface.portalDescription]);
  }
  return rows;
- })()`),[[0,'imp',true],[3,'imp',true],[4,'clawling',true],[7,'clawling',true],[8,'clawling',true],[12,'brute',true],[15,'brute',true],[16,'brute',true],[36,'brute',true]]);
- check(cases[1],f.evaluate(`(() => {gameRound=3;gameSettings.coop.typedWaves.lastRound=4;portal240.drawNextProduction(ctx);return [portal240.nextProduction.round,entityInterface.entity.name.text,entityInterface.portalDescription]})()`),[8,'clawling',true]);
+ })()`),[[0,'imp',true],[3,'imp',true],[4,'imp',true],[7,'imp',true],[8,'clawling',true],[12,'brute',true],[15,'brute',true],[16,'brute',true],[36,'brute',true]]);
+ check(cases[1],f.evaluate(`(() => {gameRound=3;gameSettings.coop.typedWaves.lastRound=4;portal240.drawNextProduction(ctx);return [portal240.nextProduction.round,entityInterface.entity.name.text,entityInterface.portalDescription]})()`),[8,'imp',true]);
  check(cases[5],f.evaluate(`(() => {
  const result=[];gameSettings.coop.typedWaves.lastRound=0;
  for(const category of ['melee','ranged','siege','heavy','support','chaos','mage']){
@@ -35,7 +35,7 @@ if(require.main===module){
  gameEvent.selected=portal240;gameRound=3;gameSettings.coop.typedWaves.lastRound=4;entityInterface.refreshPortal(portal240,true);
  return result;
  })()`),[
- ['imp','clawling','clawling','brute','brute','brute','brute','brute'],
+ ['imp','imp','clawling','brute','brute','brute','brute','brute'],
  ['spitter','spitter','ember archer','ember archer','ember archer','ember archer','ember archer','ember archer'],
  [...Array(7).fill('bombard'),'mortar'],Array(8).fill('bulwark'),
  ['ravager','ravager','ravager','ravager','ravager','hound','hound','hound'],Array(8).fill('demon lord'),
@@ -47,7 +47,7 @@ if(require.main===module){
  const before=inspectionSnapshot240();
  portal240.drawNextProduction(ctx);return {emptyCells:grid.arr.flat().filter(c=>c.unit.isEmpty()).length,
  name:entityInterface.entity.name.text,description:entityInterface.portalDescription,nextRound:portal240.nextProduction.round,unchanged:before===inspectionSnapshot240()}
- })()`),{emptyCells:0,name:'clawling',description:true,nextRound:8,unchanged:true});
+ })()`),{emptyCells:0,name:'imp',description:true,nextRound:8,unchanged:true});
  check(cases[3],f.evaluate(`(() => {gameEvent.removeSelection=()=>{gameEvent.selected.removeSelect();gameEvent.selected=new Empty()};portal240.kill();return [entityInterface.visible,entityInterface.portalDescription,gameEvent.selected.isEmpty(),external.includes(portal240)]})()`),[false,false,true,false]);
  check(cases[4],f.evaluate(`(() => {const p=external.find(e=>e.isDemonPortal);p.select(false);return [entityInterface.portalStatsButton.canClick,entityInterface.portalBackButton.canClick,entityInterface.entity.name.text]})()`),[true,false,'demon portal']);
  fs.writeFileSync(path.join(process.argv[2],'source-checkpoints.json'),JSON.stringify({checkpoints:checks,pass:true},null,2)+'\n');
