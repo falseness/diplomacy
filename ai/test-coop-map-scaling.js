@@ -68,11 +68,11 @@ for (const [size, table] of Object.entries(sides)) {
   for (let h=1;h<=12;h++) {
     const side=table[h-1], area=side*side;
     // Independent integer rounding, with no sqrt or production constants.
-    // Three melee/ranged and one siege/heavy/support/chaos/mage portal per human.
+    // Three melee/ranged and one siege/heavy/support/chaos/mage portal per human, plus two heavy per map (TASK-450-3).
     const expected={size,initialHumanCount:h,side,mapSize:{x:side,y:side},area,
       baselineRadius:independentRadius(h,size),
-      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*mines,portals:11*h,
-        portalCategories:{melee:3*h,ranged:3*h,siege:h,heavy:h,support:h,chaos:h,mage:h},
+      counts:{humanTowns:h,neutralTowns:h*multiplier,goldmines:h*mines,portals:11*h+2,
+        portalCategories:{melee:3*h,ranged:3*h,siege:h,heavy:h+2,support:h,chaos:h,mage:h},
         mountains:Math.floor((area*8+50)/100),lakes:Math.floor((area*6+50)/100),bushes:Math.floor((area*10+50)/100)},
       startingAssets:{gold:100,towns:1,units:1}};
     if (process.argv.includes('--corrupt')) expected.side++;

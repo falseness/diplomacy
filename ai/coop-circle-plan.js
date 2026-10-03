@@ -11,7 +11,7 @@ const circleGeometry = typeof coopHexLayer === 'function'
     ? {coopHexLayer, coopHexCenter, coopHexMapShape, coopHexLattice}
     : require('./coop-hex-geometry.js')
 
-// Portal categories that live in the elite core, four per human.
+// Portal categories that live in the elite core, four per human plus the per-map extra heavy portals.
 const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege', 'mage']
 // Minimum hex distance from every human town to a common ring portal.
 const CIRCLE_TOWN_DISTANCE = Object.freeze({tiny: 3, normal: 4, big: 5})
@@ -46,8 +46,14 @@ function circleNeighbours(c, side) {
 
 const circleEliteCache = new Map()
 
-// Smallest layer whose disc holds 4 lattice cells per human (the elite portals)
-// and 12 cells per human (each portal keeps two approach cells). On big the disc
+// Elite portals of one map: 4 per human plus the extra heavy portals.
+function circleElitePortals(humans, size) {
+    const targets = circleScaling(humans, size).counts.portalCategories
+    return COOP_CIRCLE_ELITE_CATEGORIES.reduce((sum, c) => sum + targets[c], 0)
+}
+
+// Smallest layer whose disc holds one lattice cell per elite portal and three
+// cells per elite portal (each portal keeps two approach cells). On big the disc
 // also holds one elite neutral-town 3x3 box (9 cells) per human.
 function circleEliteMinimum(radius, humans, size) {
     const id = `${radius}:${humans}:${size}`
@@ -60,11 +66,11 @@ function circleEliteMinimum(radius, humans, size) {
         cells[layer]++
         if (circleGeometry.coopHexLattice(x, y)) lattice[layer]++
     }
-    const eliteTownCells = size === 'big' ? 9 * humans : 0
+    const eliteTownCells = size === 'big' ? 9 * humans : 0, elitePortals = circleElitePortals(humans, size)
     let minimum = radius
     for (let layer = 0, total = 0, onLattice = 0; layer <= radius; layer++) {
         total += cells[layer]; onLattice += lattice[layer]
-        if (onLattice >= 4 * humans && total >= 4 * humans + 8 * humans + eliteTownCells) { minimum = layer; break }
+        if (onLattice >= elitePortals && total >= 3 * elitePortals + eliteTownCells) { minimum = layer; break }
     }
     circleEliteCache.set(id, minimum)
     return minimum
@@ -94,7 +100,7 @@ function circleCapacityAt(humans, size, radius) {
         else if (layer <= regions.ringOuter) { ringCells++; if (lattice) ringLattice++ }
         if (layer === regions.townRing && lattice) townRingLattice++
     }
-    const elitePortals = 4 * humans
+    const elitePortals = circleElitePortals(humans, size)
     const outsideReserved = 9 * (humans + counts.neutralTowns) + counts.goldmines + 3 * 11 * humans
     const reserved = eliteCells + outsideReserved
     // Nothing is placed yet, so every elite cell is free; each elite portal keeps two approach cells.
@@ -109,9 +115,10 @@ function circleCapacityAt(humans, size, radius) {
         terrain: {have: playable - reserved, need: terrain.mountains + terrain.lakes + terrain.bushes}
     }
     // Per-human neutral-town 3x3 boxes: two in the common ring on normal/big (after
-    // 3 x 7h portal-plus-approach cells), one in the elite core on big.
+    // 3 x 7h portal-plus-approach cells), one in the elite core on big (after the
+    // elite portal-plus-approach cells).
     if (size !== 'tiny') rows.ringNeutral = {have: ringCells - 3 * 7 * humans, need: 2 * 9 * humans}
-    if (size === 'big') rows.eliteNeutral = {have: eliteCells - 12 * humans, need: 9 * humans}
+    if (size === 'big') rows.eliteNeutral = {have: eliteCells - 3 * elitePortals, need: 9 * humans}
     for (const row of Object.values(rows)) row.slack = row.have - row.need
     return {radius, playable, eliteCells, regions, rows, ok: Object.values(rows).every(row => row.slack >= 0)}
 }
@@ -526,8 +533,10 @@ function placeCirclePortals(plan, layout) {
         const objects = [...occupied, ...portals]
         return circlePassableConnected(plan, new Set(objects), objects)
     }
-    // Each human's share of a region's categories, repeated once per human.
-    const deal = list => Array.from({length: humans}, () => list.flatMap(c => Array(targets[c] / humans).fill(c))).flat()
+    // Each human's share of a region's categories, repeated once per human; the
+    // per-map remainder (the extra heavy portals) comes last.
+    const deal = list => [...Array.from({length: humans}, () => list.flatMap(c => Array(Math.floor(targets[c] / humans)).fill(c))).flat(),
+        ...list.flatMap(c => Array(targets[c] % humans).fill(c))]
     const groups = [
         {region: 'elite', inside: layer => layer <= elite, sequence: deal(COOP_CIRCLE_ELITE_CATEGORIES)},
         {region: 'ring', inside: layer => layer > elite && layer <= ringOuter, sequence: deal(COOP_CIRCLE_RING_CATEGORIES)}

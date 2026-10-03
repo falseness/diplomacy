@@ -54,7 +54,7 @@ if (require.main === module) {
       check(id+'-dimensions',[map.mapSize.x,map.mapSize.y].every(n=>Number.isInteger(n)&&n>0),true);
       const contract=portalChecks(map,h);
       for(const r of contract) check(id+'-'+r.name,r.pass,true);
-      check(id+'-initial-humans',getCoopMapScalingFromMetadata({...map.coop,humanSlots:[],survivingPlayers:0}).counts.portals,11*h);
+      check(id+'-initial-humans',getCoopMapScalingFromMetadata({...map.coop,humanSlots:[],survivingPlayers:0}).counts.portals,11*h+2);
       const reach=endpointResults(map,h);
       check(id+'-mine-endpoint-reach',approachesOk(reach),true);
       check(id+'-mine-endpoint-fairness',Math.max(...reach.map(r=>r.nearest))-Math.min(...reach.map(r=>r.nearest))<=4,true);
@@ -67,7 +67,7 @@ if (require.main === module) {
           ? {name:reason,pass:approachesOk(endpointResults(observation,h))}
           : portalChecks(observation,h).find(r=>r.name===reason);
         check(id+'-negative-'+type,result.pass,false);
-        if(type==='wrong-category')check(id+'-negative-unchanged-total',observation.portals.length,11*h);
+        if(type==='wrong-category')check(id+'-negative-unchanged-total',observation.portals.length,11*h+2);
         negatives.push({id:id+'-'+type,input,reason,expectedRejection:reason,observedRejection:result.pass?null:reason,result,pass:!result.pass});
       }
       maps.push({id,input,map,contract,endpointResults:reach,duplicateHashes:[sha(result.first),sha(result.second)],identical:true});

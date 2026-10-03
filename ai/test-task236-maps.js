@@ -53,7 +53,7 @@ if (require.main === module) {
       check(id+'-dimensions',[map.mapSize.x,map.mapSize.y].every(n=>Number.isInteger(n)&&n>0),true);
       const contract=portalChecks(map,h);
       for(const r of contract) check(id+'-'+r.name,r.pass,true);
-      check(id+'-initial-humans',getCoopMapScalingFromMetadata({...map.coop,humanSlots:[],survivingPlayers:0}).counts.portals,11*h);
+      check(id+'-initial-humans',getCoopMapScalingFromMetadata({...map.coop,humanSlots:[],survivingPlayers:0}).counts.portals,11*h+2);
       const reach=endpointResults(map,h);
       check(id+'-mine-endpoint-reach',approachesOk(reach),true);
       check(id+'-mine-endpoint-fairness',Math.max(...reach.map(r=>r.nearest))-Math.min(...reach.map(r=>r.nearest))<=4,true);
