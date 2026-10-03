@@ -5,8 +5,9 @@ const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-c
 const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
-// Literal expectations deliberately independent of DEMON_TYPES and runtime deltas.
-const cases = [['Brute', 'brute', 10, 1, 3], ['Bulwark', 'bulwark', 16, 1, 2]];
+// Literal expectations deliberately independent of DEMON_TYPES and runtime deltas
+// (the TASK-232 demon table: brute 3 health/2 movement/2 damage, bulwark 7/2/1).
+const cases = [['Brute', 'brute', 3, 2, 2], ['Bulwark', 'bulwark', 7, 2, 1]];
 const DEMON_NAMES = {"brute": "brute", "bulwark": "bulwark", "ravager": "ravager", "demonLord": "demon lord"};
 const DEMON_ROLES = {"brute": "slow high-health melee", "bulwark": "very durable slow melee", "ravager": "fast strong late-game melee", "demonLord": "durable powerful late-game melee"};
 function run(fault, testCases = cases, summary) {
@@ -112,7 +113,7 @@ function run(fault, testCases = cases, summary) {
   }
   console.log('INAPPLICABLE completed round/wave/demon phase counts: isolated commands in a fixture demon phase; no round advancement. Human cursor and round 0 checked after every action.');
   console.log('INAPPLICABLE online convergence: offline fixtures have no online committed revisions.');
-  console.log(summary || 'PASS co-op heavy melee types=2 movement_limits=1,1 health=10,16 damage=3,2 outgoing_lethal=2 incoming_lethal=2 incoming_nonlethal=24 persistence=2');
+  console.log(summary || 'PASS co-op heavy melee types=2 movement_limits=2,2 health=3,7 damage=2,1 outgoing_lethal=2 incoming_lethal=2 incoming_nonlethal=8 persistence=2');
 }
 if (require.main === module) {
   if (process.argv[2] === '--fault') run(process.argv[3]);

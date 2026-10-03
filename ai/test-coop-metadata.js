@@ -52,8 +52,13 @@ function metadata(f) {
 }
 function runCount(count) {
   const c = config(count), clients = [setup(c), setup(c)];
+  // Since TASK-243 the harness declares version-5 generation metadata on every co-op fixture
+  // (prepareMechanicsMap); it is part of the saved co-op metadata and must survive move/undo/load.
+  const generation = {version: 5, playerCount: count, seed: 1, size: 'tiny', options: {seed: 1, size: 'tiny'},
+    testFixture: {generated: false, kind: 'declared-mechanics-fixture'}};
   const expected = {coop: {initialHumanCount: count,
-    humanSlots: Array.from({length: count}, (_, i) => i + 1), humanTeam: 'HUMANS', demonSlot: count + 1, balanceVersion: 2},
+    humanSlots: Array.from({length: count}, (_, i) => i + 1), humanTeam: 'HUMANS', demonSlot: count + 1, balanceVersion: 2,
+    generation},
     roles: ['NEUTRAL', ...Array(count).fill('HUMAN'), 'DEMONS'],
     teams: [0, ...Array(count).fill('HUMANS'), 'DEMONS'], allied: true,
     neutralAllied: false, demonAllied: false, separateController: true, neutral: true,

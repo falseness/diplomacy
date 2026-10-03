@@ -46,13 +46,15 @@ function run() {
         terrainWithin(expected.bushes.length,area,10),expected.hills.length],
       assets:expected.players.slice(1,count+1).map(p=>[p.gold,p.towns.length,p.units.length]),
       controller:expected.players[count+1]
-    }, {dimensions:{x:side,y:side},counts:[2*count,4*count,11*count],terrain:[true,true,true,0],
+    // TASK-422: three neutral towns per human on normal maps (gap, far, ring). TASK-412: the demon
+    // controller is generated with an ordinary economy (no economyEnabled:false).
+    }, {dimensions:{x:side,y:side},counts:[3*count,4*count,11*count],terrain:[true,true,true,0],
       assets:Array.from({length:count},()=>[100,1,0]),
-      controller:{rgb:{r:160,g:40,b:180},units:[],towns:[],gold:0,economyEnabled:false}});
+      controller:{rgb:{r:160,g:40,b:180},units:[],towns:[],gold:0}});
     f.compare(label+'-independent-starting-roster',expected.players.map(p=>({...p,towns:p.towns.length})),[
-      {rgb:{r:208,g:208,b:208},towns:2*count,units:[],gold:0},
+      {rgb:{r:208,g:208,b:208},towns:3*count,units:[],gold:0},
       ...colors.slice(0,count).map(rgb=>({rgb,gold:100,units:[],towns:1})),
-      {rgb:{r:160,g:40,b:180},units:[],towns:0,gold:0,economyEnabled:false}]);
+      {rgb:{r:160,g:40,b:180},units:[],towns:0,gold:0}]);
     const objects = [...expected.players.flatMap(p=>p.towns),...expected.goldmines,
       ...expected.portals,...expected.mountains,...expected.lakes,...expected.bushes];
     f.compare(label+'-placements-valid', {
