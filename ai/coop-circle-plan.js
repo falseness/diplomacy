@@ -108,9 +108,9 @@ function circleCapacityAt(humans, size, radius) {
         outsideElite: {have: playable - eliteCells, need: outsideReserved},
         terrain: {have: playable - reserved, need: terrain.mountains + terrain.lakes + terrain.bushes}
     }
-    // Per-human neutral-town 3x3 boxes: one in the common ring on normal/big (after
+    // Per-human neutral-town 3x3 boxes: two in the common ring on normal/big (after
     // 3 x 7h portal-plus-approach cells), one in the elite core on big.
-    if (size !== 'tiny') rows.ringNeutral = {have: ringCells - 3 * 7 * humans, need: 9 * humans}
+    if (size !== 'tiny') rows.ringNeutral = {have: ringCells - 3 * 7 * humans, need: 2 * 9 * humans}
     if (size === 'big') rows.eliteNeutral = {have: eliteCells - 12 * humans, need: 9 * humans}
     for (const row of Object.values(rows)) row.slack = row.have - row.need
     return {radius, playable, eliteCells, regions, rows, ok: Object.values(rows).every(row => row.slack >= 0)}
@@ -290,8 +290,8 @@ const CIRCLE_MINE_CLEARANCE = 4
 const CIRCLE_NEUTRAL_SPACING = 5
 const CIRCLE_EXPANSION_PASSES = 6
 // Neutral-town kinds per human by size, and hex distance windows from the owner's town.
-const CIRCLE_NEUTRAL_KINDS = Object.freeze({tiny: Object.freeze(['gap', 'far']), normal: Object.freeze(['gap', 'far', 'ring']),
-    big: Object.freeze(['gap', 'far', 'ring', 'elite'])})
+const CIRCLE_NEUTRAL_KINDS = Object.freeze({tiny: Object.freeze(['gap', 'far']), normal: Object.freeze(['gap', 'far', 'ring', 'ring']),
+    big: Object.freeze(['gap', 'far', 'ring', 'ring', 'elite'])})
 const CIRCLE_GAP_HEX = Object.freeze({min: 5, max: 9})
 const CIRCLE_FAR_GAP_HEX = Object.freeze({min: 10, max: 15})
 const CIRCLE_RING_HEX = Object.freeze({min: 5, max: 10})

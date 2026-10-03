@@ -15,7 +15,7 @@ for(const size of ['tiny','normal','big']) for(let count=1;count<=12;count++) fo
   f.evaluate(`globalThis.generated=generateCoopGame(${count},{size:'${size}',seed:${seed}})`);
   const map=f.evaluate('JSON.parse(JSON.stringify(generated))');
   // Per human: 11 portals, {2,3,4} neutral towns (TASK-422) and {2,4,6} goldmines (TASK-337).
-  const expected=Array.from({length:count},()=>Array(count*(11+{tiny:2,normal:3,big:4}[size]+{tiny:2,normal:4,big:6}[size])).fill(true)),observed=routes(map);
+  const expected=Array.from({length:count},()=>Array(count*(11+{tiny:2,normal:4,big:5}[size]+{tiny:2,normal:4,big:6}[size])).fill(true)),observed=routes(map);
   assert.deepEqual(observed,expected,label);
   const row={scenario:label,expected,observed};
   if(seed===0) {

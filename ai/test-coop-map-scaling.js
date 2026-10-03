@@ -61,7 +61,7 @@ const smoke = require('./smokeHarness').loadAiScripts();
 compare('smoke-shared-source',require('vm').runInContext('getCoopMapScaling(12).side',smoke.context),44);
 const f = createFixture(undefined, () => {});
 for (const [size, table] of Object.entries(sides)) {
-  const multiplier = {tiny:2,normal:3,big:4}[size], mines = {tiny:2,normal:4,big:6}[size];
+  const multiplier = {tiny:2,normal:4,big:5}[size], mines = {tiny:2,normal:4,big:6}[size];
   const base = {tiny:15,normal:25,big:39}[size];
   const minimum = {tiny:11,normal:15,big:21}[size];
   let previousArea = 0;

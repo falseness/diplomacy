@@ -18,8 +18,8 @@ const MATRIX_HUMANS = [1, 4, 12];
 // Baseline radius: smallest R >= min with R*R >= scale*scale*humans; growth adds at most 8.
 const radiusPreset = {tiny:{min:10, scale:8}, normal:{min:13, scale:11}, big:{min:16, scale:14}};
 const baselineFor = (size, count) => { const p = radiusPreset[size]; let R = p.min; while (R*R < p.scale*p.scale*count) R++; return R; };
-// TASK-422: neutral towns per human by size (tiny gap+far, normal +ring, big +elite).
-const multiplier = {tiny:2, normal:3, big:4};
+// TASK-422/TASK-450-1: neutral towns per human by size (tiny gap+far, normal +2 ring, big +2 ring +elite).
+const multiplier = {tiny:2, normal:4, big:5};
 // TASK-337: gold mines per human (doubled from the pre-TASK-422 neutral-town multiplier).
 const minesPerHuman = {tiny:2, normal:4, big:6};
 const layerOf = (c, R) => { const q = c.x - R, r = c.y - Math.floor(c.x/2) - Math.ceil(R/2);
