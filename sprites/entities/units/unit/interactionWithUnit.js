@@ -228,13 +228,18 @@ class InterationWithUnit {
             !unit.player.isAlliedWith(cell.unit.player)
     }
 
+    // A demon standing on its live portal is hit instead of the portal.
+    demonShieldsPortal(cell, unit) {
+        return cell.building.isDemonPortal === true && !cell.building.killed &&
+            this.cellHasEnemyUnit(cell, unit)
+    }
     markIgnoredBuilding(cell) {
         this.addHittedBuildingUndo(cell)
         cell.building.wasHitted = true
     }
     hitIfCellHasEnemy(cell, unit) {
-        // the building is always priority target
-        if (this.cellHasEnemyBuilding(cell, unit)) {
+        // the building is the priority target, except a demon-held portal
+        if (this.cellHasEnemyBuilding(cell, unit) && !this.demonShieldsPortal(cell, unit)) {
             if (cell.building.isHitable) {
                 this.hitBuilding(cell, unit)
                 return false

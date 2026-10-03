@@ -686,7 +686,10 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 continue
             }
             let score = 0
-            if (cell.building && cell.building.notEmpty &&
+            // A demon on its live portal is hit instead of the portal.
+            let portalShielded = unit.interaction && unit.interaction.demonShieldsPortal &&
+                unit.interaction.demonShieldsPortal(cell, unit)
+            if (!portalShielded && cell.building && cell.building.notEmpty &&
                     cell.building.notEmpty() &&
                     cell.building.playerColor != playerIndex) {
                 score += cell.building.name == 'town' ? 10000 : 5000

@@ -92,7 +92,8 @@ class InteractionWithRangeUnit extends InterationWithUnit {
             //this.removeSelect()
             return super.sendInstructions(cell, rangeUnit)
         }
-        if (this.cellHasEnemyBuilding(cell, rangeUnit)) {
+        if (this.cellHasEnemyBuilding(cell, rangeUnit) &&
+                !this.demonShieldsPortal(cell, rangeUnit)) {
             let result = this.buildingAttack(cell, rangeUnit)
             if (result)
                 return true

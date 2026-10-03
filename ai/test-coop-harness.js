@@ -7,7 +7,10 @@ function prepareMechanicsMap(map, fixtureConfig, configured) {
       map.portals = []
       for(let x=0;x<fixtureConfig.size.x;x++) for(let y=0;y<fixtureConfig.size.y;y++) {
         if(configured.some(a=>a.units.some(u=>u.x===x&&u.y===y) || a.towns.some(t=>Math.abs(t.x-x)<=1&&Math.abs(t.y-y)<=2))) continue
-        if(map.portals.length < humans*11) map.portals.push({x,y,category:categories[map.portals.length%11]})
+        // 11 per human plus the two per-map extra heavy portals (TASK-450-3).
+        const n = map.portals.length
+        if(n < humans*11) map.portals.push({x,y,category:categories[n%11]})
+        else if(n < humans*11+2) map.portals.push({x,y,category:"heavy"})
       }
     }
 }

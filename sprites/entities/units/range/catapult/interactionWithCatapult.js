@@ -108,6 +108,7 @@ class InteractionWithBombard extends InteractionWithCatapult {
         return this.rangeWay.getDistance(coord) < Bombard.minimumRange
     }
     hitUnit() {} // No melee, ranged or counterattack damage to units.
+    demonShieldsPortal() { return false } // Building-only: always the portal.
     canHitSomethingOnCell(cell, unit) {
         return this.moves > 0 && !unit.player.ignoresCell(cell) &&
             !this.cantRangeInteract(cell.coord, unit) && !this.isBlindArea(cell.coord) &&
