@@ -2,7 +2,7 @@
 // Entity panel stats: foreign units show speed (and range when ranged); own units keep moves.
 // Demon portal stats views show the same speed/range lines as the unit panel for that type.
 const fs=require('node:fs'),path=require('node:path');
-const {createFixture,defaultFixture}=require('./test-coop-harness');
+const {createFixture,defaultFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');
 const outDir=process.argv[2];
 if(!outDir){console.error('usage: test-unit-panel-stats.js <output-dir>');process.exit(2);}
 fs.mkdirSync(outDir,{recursive:true});

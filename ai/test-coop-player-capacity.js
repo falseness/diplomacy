@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
-const {createFixture} = require('./test-coop-harness');
+const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
 
 const root = path.resolve(__dirname, '..');

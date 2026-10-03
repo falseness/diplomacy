@@ -5,7 +5,7 @@
 // Needs node >= 14 (client scripts use optional chaining).
 // Usage: node ai/test-fog-landmark-lifecycle.js --output-dir DIR [--fixtures-dir DIR]
 const fs=require('fs'),path=require('path'),util=require('util');
-const {createFixture}=require('./test-coop-harness');
+const {createFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');
 const arg=name=>{const i=process.argv.indexOf(name);return i<0?undefined:process.argv[i+1];};
 const out=arg('--output-dir');
 if(!out){console.error('usage: --output-dir DIR [--fixtures-dir DIR]');process.exit(2);}

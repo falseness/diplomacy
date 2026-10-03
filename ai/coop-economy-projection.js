@@ -2,7 +2,7 @@
 // Offline scenario accounting. Never imported by game code.
 const fs = require('fs'), path = require('path'), assert = require('assert').strict;
 const crypto = require('crypto');
-const {createFixture} = require('./test-coop-harness');
+const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const {neighbours} = require('./test-coop-terrain-audit');
 const {getCoopMapScaling} = require('./coop-map-scaling');
 const {buildReport} = require('./coop-army-valuation');

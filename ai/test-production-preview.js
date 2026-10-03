@@ -15,10 +15,10 @@ const path = require('path');
 const crypto = require('crypto');
 const {spawnSync} = require('child_process');
 const {isDeepStrictEqual} = require('util');
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 
 const ROOT = path.resolve(__dirname, '..');
-const SOURCES = ['ai/test-production-preview.js', 'ai/test-coop-harness.js', 'ai/browserScriptCache.js',
+const SOURCES = ['ai/test-production-preview.js', '../diplomacy_server/tests/client/test-coop-harness.js', 'ai/browserScriptCache.js',
   'render/productionPreview.js', 'render/image.js',
   'sprites/entities/buildings/manufactures/preparingManufacture/production.js',
   'sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js',

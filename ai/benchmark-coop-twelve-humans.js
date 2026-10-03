@@ -2,7 +2,7 @@
 // Real dispatcher workload with an explicitly disclosed late-phase setup clock jump.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),os=require('node:os');
 const {performance}=require('node:perf_hooks');
-const {createFixture}=require('./test-coop-harness');
+const {createFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');
 const arg=process.argv.indexOf('--output-dir'),out=path.resolve(arg<0?'artifacts/TASK-127':process.argv[arg+1]);
 fs.mkdirSync(out,{recursive:true});
 const report={machine:{cpu:os.cpus()[0].model,cpus:os.cpus().length,platform:os.platform(),arch:os.arch(),memory:os.totalmem(),runtime:process.version,executable:process.execPath},seed:0,waveSeed:0,fastForward:{afterCompletedRound:20,setupRound:29,skippedRounds:[21,22,23,24,25,26,27,28,29],changedFields:["gameRound"],reason:"The uninterrupted idle-human sample loses at round 22. Retain the naturally accumulated population and measure one complete late dispatcher transition; not a continuous survival claim."},watchdogMs:60000,phases:[],rounds:[],limits:'One Big seed-0 sample: 20 real idle-human rounds then a disclosed clock-only setup jump to 29 and actual round-30 execution. No artificial units or capped/skipped AI within measured rounds. UI, persistence, border drawing and training side effects stubbed. Not a balance, survival or broad performance claim.'};

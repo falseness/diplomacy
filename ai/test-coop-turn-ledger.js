@@ -1,6 +1,6 @@
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
-const {createFixture} = require('./test-coop-harness');
+const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const copy = value => JSON.parse(JSON.stringify(value));
 
 // A reference schedule takes declared eliminations, never runtime isLost or

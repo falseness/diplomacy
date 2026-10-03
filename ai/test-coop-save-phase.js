@@ -2,7 +2,7 @@
 // Current typed-wave persistence at each local phase boundary, with stationary
 // combat to isolate dispatch/persistence. Fixtures are authored, not generated play.
 const assert=require('node:assert/strict');
-const {createFixture,defaultFixture}=require('./test-coop-harness');
+const {createFixture,defaultFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');
 function setup(saved) {
   const c=defaultFixture();c.coop=true;
   const f=createFixture(c,()=>{});

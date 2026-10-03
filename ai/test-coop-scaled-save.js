@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict');
-const {createFixture}=require('./test-coop-harness');
+const {createFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');
 // Usage: node ai/test-coop-scaled-save.js [--output-dir DIR]  (DIR receives scaled-save.json)
 const fs=require('node:fs'),path=require('node:path');
 // Literal Circle contract: baseline radius is the smallest R >= min with R*R >= scale*scale*humans,

@@ -1,5 +1,5 @@
 const assert = require('assert').strict;
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const config = defaultFixture();
 config.coop = true;
 config.size = {x:13,y:9};

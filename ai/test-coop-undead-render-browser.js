@@ -4,7 +4,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const {chromium} = require('playwright');
-const {defaultFixture} = require('./test-coop-harness');
+const {defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 
 // Browser proof of the undead look: demon-owned Noob, mirrored KOHb and
 // Catapult draw cachedImages/assets['undead/<key>'] on the direct path

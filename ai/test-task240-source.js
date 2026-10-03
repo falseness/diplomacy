@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const {createFixture}=require('./test-coop-harness');
+const {createFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');
 const cases=['source/schedule-upgrades','source/committed-wave','source/blocked','source/removal','source/current-reselection','source/all-category-upgrades','source/inspection-no-mutation'];
 module.exports={cases};
 if(require.main===module){

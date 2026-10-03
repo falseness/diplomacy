@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 
 // Demon-owned ordinary units use the undead art key (undead/<name>, mirrored
 // KOHb/catapult add 'Left'); human-owned units and the demon variants keep

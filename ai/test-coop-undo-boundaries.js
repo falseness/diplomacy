@@ -1,10 +1,10 @@
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
 const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
-const {run: runRound} = require('./test-coop-local-round');
+const {run: runRound} = require('../../diplomacy_server/tests/client/test-coop-local-round');
 
 function snapshot(f) {
   return f.evaluate(`JSON.parse(JSON.stringify({game:getGameObject(),terminal:gameExit,

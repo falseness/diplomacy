@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const {isDeepStrictEqual} = require('util');
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 
 const ROOT = path.resolve(__dirname, '..');
 

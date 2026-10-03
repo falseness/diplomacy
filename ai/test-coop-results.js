@@ -2,7 +2,7 @@ const assert = require('assert').strict;
 const fs = require('fs');
 const path = require('path');
 const {spawnSync} = require('child_process');
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
 const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
@@ -149,7 +149,7 @@ scenario('defeat-demons-remain',['p','h1','t1','h2','t2'],'defeat');
 scenario('simultaneous-flood-draw',[],'draw',true);
 console.log('INAPPLICABLE online committed convergence: offline fixtures have no online commits. Mutation scenarios do not advance rounds or invoke economic hooks; shared ledgers check zero balance events and unchanged round after each action. The following real local-round suite checks human skipping, survivor continuation, income/salary and exactly one wave/demon phase per completed round.');
 if (!process.argv.includes('--fault')) {
-  const rounds=spawnSync(process.execPath,['ai/test-coop-local-round.js'],{encoding:'utf8',maxBuffer:32*1024*1024});
+  const rounds=spawnSync(process.execPath,[path.join(__dirname,'../../diplomacy_server/tests/client/test-coop-local-round.js')],{encoding:'utf8',maxBuffer:32*1024*1024});
   process.stdout.write(rounds.stdout); process.stderr.write(rounds.stderr);
   assert.equal(rounds.status,0,'local survivor rounds');
   console.log('PASS survivor-round-suite expected_exit=0 observed_exit=0');

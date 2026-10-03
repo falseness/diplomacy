@@ -15,7 +15,7 @@ if (Number(process.versions.node.split('.')[0]) < 16) {
   process.exit(result.status === null ? 1 : result.status);
 }
 
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 
 const root = path.resolve(__dirname, '..');
 const arg = (name, fallback) => {

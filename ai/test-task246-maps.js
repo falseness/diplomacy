@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const {createFixture} = require('./test-coop-harness');
+const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const {checkGeneratedMap, portalChecks, neighbours, bfs} = require('../../diplomacy_server/tests/client/test-coop-current-generation');
 const {getCoopMapScalingFromMetadata} = require('./coop-map-scaling');
 const sha = value => require('node:crypto').createHash('sha256').update(value).digest('hex');

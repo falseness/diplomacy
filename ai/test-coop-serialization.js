@@ -1,7 +1,7 @@
 const {assertDemonTileOwnership} = require('../../diplomacy_server/tests/client/test-coop-demon-ownership-assertions');
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
-const {createFixture} = require('./test-coop-harness');
+const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
 const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger, committedSnapshot, compareCommitted} = require('./test-coop-turn-ledger');

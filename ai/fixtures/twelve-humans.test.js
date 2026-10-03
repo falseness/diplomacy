@@ -76,7 +76,7 @@ async function launch(board, savedGame) {
 }
 // Installed temporarily at tests/coop/twelve-humans.test.js by the game adapter.
 test('twelve humans Big: authoritative peer and persisted reconnect convergence',{timeout:60000},async()=>{
- const {createFixture}=require(path.join(runtime.gameDir,'ai/test-coop-harness'));
+ const {createFixture}=require('../client/test-coop-harness');
  const f=createFixture(undefined,()=>{});
  f.evaluate(`globalThis.generated=generateCoopGame(12,{size:'big',seed:0});generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);whooseTurn=0;gameSettings.isOnline=true;gameSettings.coop.typedWaves={lastRound:0};`);
  const board=f.evaluate('JSON.parse(JSON.stringify(getGameObject()))');

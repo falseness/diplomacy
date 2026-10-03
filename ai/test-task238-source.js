@@ -4,7 +4,7 @@ const {spec,expected,project}=require('./test-task238-fixtures');
 const {BUILD_CURRENT_COOP_BOARD}=require('../../diplomacy_server/tests/coop/helpers/current-coop-fixture');
 const tier=process.argv[2],out=process.argv[3];let ev;
 if(tier==='server'){require('../../diplomacy_server/server/loadGameCode');ev=s=>JSON.parse(JSON.stringify(require('node:vm').runInThisContext(s))??'null');}
-else {const {createFixture,defaultFixture}=require('./test-coop-harness');ev=createFixture(defaultFixture(),()=>{}).evaluate;}
+else {const {createFixture,defaultFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');ev=createFixture(defaultFixture(),()=>{}).evaluate;}
 const checks=[],waves=[],roundtrips=[],fixtures=[];
 const write=()=>fs.writeFileSync(path.join(out,tier+'.json'),JSON.stringify({checks,waves,roundtrips,fixtures},null,2)+'\n');
 const check=(id,observed,expected)=>{checks.push({id:tier+'/'+id,observed,expected,pass:require('node:util').isDeepStrictEqual(observed,expected)});if(!checks.at(-1).pass)write();assert.deepEqual(observed,expected,id);console.log('PASS '+tier+'/'+id);};

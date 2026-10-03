@@ -5,7 +5,7 @@
 // and radialSuddenDeath read raw grid coordinates.
 
 // Same algorithm as getHexagonalLayer (options/gamestart.js), which is kept
-// byte-identical; ai/test-coop-hex-geometry.js checks parity.
+// byte-identical; diplomacy_server tests/client/test-coop-hex-geometry.js checks parity.
 function coopHexLayer(x, y, center) {
     let q = x
     let r = y - Math.floor(x / 2)

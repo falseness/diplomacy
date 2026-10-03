@@ -1,6 +1,6 @@
 const assert = require('assert').strict;
 const {spawnSync} = require('child_process');
-const {createFixture, defaultFixture} = require('./test-coop-harness');
+const {createFixture, defaultFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
 const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
@@ -168,7 +168,7 @@ if (require.main === module) {
     runOwnershipAndMovement();
     if (process.argv.includes('--skip-portal-load'))
       console.log('SKIP portal-load: authored fixture chain migrated by TASK-282-1');
-    else require('./test-coop-portal-load').run();
+    else require('../../diplomacy_server/tests/client/test-coop-portal-load').run();
     for (const [fault, marker] of [['health', 'demon-ownership-visible-health'], ['ownership', 'ownership live entities']]) {
       const child = spawnSync(process.execPath, [__filename, '--fault', fault], {encoding:'utf8'});
       process.stdout.write(child.stdout);

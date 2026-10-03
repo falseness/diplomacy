@@ -21,8 +21,9 @@ function saveBoard(name, board) {
   if (output) fs.writeFileSync(path.join(output, 'boards', name + '.json'), JSON.stringify(board, null, 2) + '\n');
 }
 
-// The client copy's own harness loads that copy's browser scripts.
-const {createFixture, defaultFixture} = require(path.join(clientDir, 'ai/test-coop-harness.js'));
+// The harness moved to diplomacy_server tests/client (TASK-451); it is loaded for the client copy so that it
+// plays that copy's browser scripts.
+const {createFixture, defaultFixture} = require(path.resolve(serverDir, '../tests/client/helpers/coop-harness-for-tree')).coopHarnessForTree(clientDir);
 const {validateCoopAuthority} = require(path.join(serverDir, 'coopAuthority.js'));
 log(`client-dir=${clientDir} server-dir=${serverDir}`);
 

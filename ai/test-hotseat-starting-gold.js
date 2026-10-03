@@ -5,7 +5,7 @@ const outputIndex = process.argv.indexOf('--output-dir');
 const out = path.resolve(outputIndex < 0 ? 'artifacts/TASK-116/regression' : process.argv[outputIndex+1]);
 fs.mkdirSync(out,{recursive:true});
 let saveNumber=0;
-const {createFixture} = require('./test-coop-harness');
+const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const f = createFixture(undefined,()=>{});
 const e = source => f.evaluate(source);
 const check = (label,observed,expected) => {

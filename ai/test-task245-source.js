@@ -40,8 +40,8 @@ const grid=new Grid();
 for(const props of [{name:'goldmine'},{name:'demonPortal',isDemonPortal:true,imageName:'portal'},{name:'town'},{name:'demonPortal',isDemonPortal:true,imageName:'portal',killed:true}])grid.drawFogLandmark({},{...props,pos:{x:0,y:0},get unit(){throw Error('occupant accessed');},draw(){throw Error('indirect draw');}});
 check('source/non-coop-landmarks',calls,['gold','portal']);
 // TASK-239: category portraits stay distinct; rendering is checked by the real browser.
-const artSpec=require('./test-coop-harness').defaultFixture();artSpec.coop=true;
-const artFixture=require('./test-coop-harness').createFixture(artSpec,()=>{});
+const artSpec=require('../../diplomacy_server/tests/client/test-coop-harness').defaultFixture();artSpec.coop=true;
+const artFixture=require('../../diplomacy_server/tests/client/test-coop-harness').createFixture(artSpec,()=>{});
 const categories=['melee','ranged','siege','heavy','support','chaos','mage'];
 const images=categories.map(category=>'demonPortal'+category[0].toUpperCase()+category.slice(1));
 const actualArt=artFixture.evaluate(`(() => {whooseTurn=3;grid.getHexagon({x:5,y:4}).firstpaint(3);return ${JSON.stringify(categories)}.map(category=>{const p=new DemonPortal(5,4,category);const image=p.imageName;p.kill();return image;});})()`);

@@ -18,9 +18,9 @@ const CATEGORIES = ['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos', 'ma
 const WAVE_ROUNDS = Array.from({length: 25}, (_, i) => (i + 1) * 4);
 // Independent specification literals, never imported from production.
 const EXPECTED_STEPS = {
-  melee: [[4, 'imp'], [12, 'clawling'], [16, 'brute']],
-  ranged: [[4, 'spitter'], [12, 'emberArcher']],
-  siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[20, 'bulwark']],
+  melee: [[8, 'imp'], [12, 'clawling'], [16, 'brute']],
+  ranged: [[8, 'spitter'], [12, 'emberArcher']],
+  siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[28, 'bulwark']],
   support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']],
   mage: [[20, 'hexcaster'], [36, 'demonQueen']]
 };
@@ -214,7 +214,7 @@ function checkInvalid(a, runtime) {
   const next = a.getCoopNextScheduledProduction('melee', 0);
   next.type = 'demonLord';
   compare(`${runtime}-next-result-detached`, a.getCoopNextScheduledProduction('melee', 0),
-    {round: 4, type: 'imp', roundsRemaining: 4});
+    {round: 8, type: 'imp', roundsRemaining: 8});
 }
 
 function loadBrowserRealm() {
@@ -280,7 +280,7 @@ function runFault(fault) {
   const a = nodeApi();
   if (fault === 'late-imp') {
     const original = a.getCoopScheduledDemonType;
-    a.getCoopScheduledDemonType = (c, r) => c === 'melee' && r === 4 ? null : original(c, r);
+    a.getCoopScheduledDemonType = (c, r) => c === 'melee' && r === 8 ? null : original(c, r);
     checkSchedule(a, 'node');
   } else if (fault === 'order-dependent') {
     const original = a.composeTypedCoopWave;
@@ -318,8 +318,8 @@ function run(outputDir) {
   checkCallers();
   const negative = [];
   for (const [fault, marker] of [['late-imp', 'MISMATCH node-schedule-melee-rounds-0-100'],
-    ['order-dependent', 'MISMATCH node-seed-order-H1-round-4-seed-0-reversed'],
-    ['next-at-wave', 'MISMATCH node-next-melee-4 ']]) {
+    ['order-dependent', 'MISMATCH node-seed-order-H1-round-8-seed-0-reversed'],
+    ['next-at-wave', 'MISMATCH node-next-melee-8 ']]) {
     const child = spawnSync(process.execPath, [__filename, '--fault', fault], {encoding: 'utf8', timeout: Math.max(1, Number(process.env.TASK235_STOP_AT || Date.now() + 60000) - Date.now())});
     process.stdout.write(child.stdout || ''); process.stderr.write(child.stderr || '');
     const observed = {exit: child.status, marker: child.stdout.includes(marker)};

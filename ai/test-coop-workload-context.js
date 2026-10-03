@@ -2,7 +2,7 @@
 // The benchmark may omit drawing output, but must preserve commands and state.
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const {createFixture} = require('./test-coop-harness');
+const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function run(nativeIntrinsics, omitLines) {
     const f = createFixture(undefined, () => {}, {nativeIntrinsics});
