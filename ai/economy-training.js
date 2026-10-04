@@ -298,6 +298,13 @@ function createTrainingBatch(
   context.__nativeMapGenerator = NATIVE_MAP_GENERATORS[mapSource] || null;
   context.__advanced9x9Stage = advancedEconomy9x9StageForSeed(seed);
   context.__actionCategories = ACTION_CATEGORIES;
+  // Non-native boards are stored at the model shape as they are collected. Keeping every candidate's
+  // full-map board until the end needs ~1 GB per big 4-player game before detaching, and doubles that
+  // while copying (the test-economy-training smoke ran out of heap). adaptBoard is deterministic, so
+  // the batch is unchanged.
+  context.__trainingBoard = NATIVE_MAP_GENERATORS[mapSource]
+    ? board => board
+    : board => adaptBoard(board, ECONOMY_MODEL_WIDTH, ECONOMY_MODEL_HEIGHT);
   context.__trainingCandidateLimit = 48;
   context.__trainingRounds =
     mapSource === 'final-symmetrical-economy' ? 8 :
@@ -513,7 +520,7 @@ function createTrainingBatch(
             turn: turnsPlayed + 1,
             category,
             product: commands[index].product || null,
-            board: vector[0],
+            board: __trainingBoard(vector[0]),
             global: vector[1]
           })
           labels.push(label)
