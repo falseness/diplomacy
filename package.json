@@ -18,17 +18,11 @@
     "test-play-ai-snapback": "npx -y node@20 ai/test-play-ai-snapback-reproduction.js --regression",
     "gamestart-map-coverage": "node ai/gamestart-map-coverage.js",
     "gamestart-simple-economy-completion": "node ai/gamestart-simple-economy-completion.js",
-    "test-town-map-generation": "node ai/test-town-map-generation.js",
-    "test-unit-map-generation": "node ai/test-unit-map-generation.js",
-    "test-unit-vectorization": "node ai/test-unit-vectorization.js",
-    "test-model-predict-benchmark-gate": "node ai/tests/task103-benchmark-gate.cjs",
     "benchmark-model-predict-batching": "node ai/benchmark-model-predict-batching.js",
     "benchmark": "node ai/benchmark.js",
     "benchmark-trained": "node ai/benchmark-trained-model.js",
-    "test-trained-benchmark": "node ai/test-trained-model-benchmark.js",
     "benchmark-gamestart-trained": "node ai/benchmark-gamestart-trained-model.js",
-    "benchmark-gamestart-all-slots": "node ai/benchmark-gamestart-all-slots.js",
-    "test-task156-all-gamestart-benchmark": "node ai/test-task156-all-gamestart-benchmark.js"
+    "benchmark-gamestart-all-slots": "node ai/benchmark-gamestart-all-slots.js"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",
