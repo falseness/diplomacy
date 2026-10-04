@@ -93,6 +93,13 @@ class Town extends PreparingManufacture {
     updateSuburbsAndBuildings() {
         for (let i = 0; i < this.suburbs.length; ++i) {
             let cell = grid.getCell(this.suburbs[i].coord)
+            // A live demon portal keeps its demon-owned hex: capturing the
+            // town neither kills nor repaints it, and drops it from suburbs.
+            if (isLiveDemonPortal(cell.building)) {
+                cell.hexagon.isSuburb = false
+                this.suburbs.splice(i--, 1)
+                continue
+            }
             if (cell.unit.notEmpty()) {
                 if (cell.building.isManufacture)
                     cell.building.kill()
@@ -440,6 +447,10 @@ class Town extends PreparingManufacture {
 
         this.isRecentlyCaptured = false
     }
+}
+
+function isLiveDemonPortal(building) {
+    return Boolean(building) && building.name === 'demonPortal' && !building.killed
 }
 
 function prepareEvent(product) {

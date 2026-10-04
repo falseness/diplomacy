@@ -209,7 +209,7 @@ class ActionManager {
         let playerColor = grid.getBuilding(town.coord).playerColor
         for (let i = 0; i < town.suburbs.length; ++i) {
             let hexagon = grid.getHexagon(town.suburbs[i])
-            if (hexagon.isSuburb)
+            if (hexagon.isSuburb && !isLiveDemonPortal(grid.getBuilding(town.suburbs[i])))
                 hexagon.sudoPaint(playerColor)
         }
     }
