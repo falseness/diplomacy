@@ -9,7 +9,8 @@ const { execFileSync } = require('child_process');
 
 const root = path.resolve(__dirname, '../..');
 const runnerPath = 'ai/cloud-train-runner.js';
-const testPath = 'ai/test-task104-training-cadence.js';
+// The cadence suite moved to diplomacy_server tests/client (TASK-456); it reads the runner through clientPath().
+const testPath = '../diplomacy_server/tests/client/test-task104-training-cadence.js';
 const change = '1a70d88730d6bbc1e8150ac4ea3a497853f4c96f';
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
 const sha = (source) => crypto.createHash('sha256').update(source).digest('hex');
@@ -33,7 +34,7 @@ for (const [label, revision, source, expected] of [
   let failure = null;
   try {
     vm.runInNewContext(`${contract}\nassertSourceUsesInMemoryMetrics();`, {
-      __dirname: path.join(root, 'ai'), path,
+      clientPath: relative => path.join(root, relative), path,
       fs: { readFileSync(file, encoding) {
         assert.strictEqual(file, path.join(root, runnerPath));
         assert.strictEqual(encoding, 'utf8');
