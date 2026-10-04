@@ -41,6 +41,6 @@ vm.Script = class UndoOwnershipCheckScript extends OriginalScript {
     return super.runInContext(context, options);
   }
 };
-require('../test-fast-unit-actions');
+require('../../../diplomacy_server/tests/client/test-fast-unit-actions');
 assert(checkedVectors > 0, 'real apply/undo vectors exercised');
 console.log('UNDO_OWNERSHIP: PASS ' + checkedVectors + ' detached vectors and independent restorations');

@@ -14,7 +14,7 @@ retain their existing ownership and policy.
 Run `node ai/tests/task102-buffer-allocation.cjs CHECKPOINT` to compare exact
 input tensor bytes and real checkpoint scores across matching and adapted shapes.
 Run real vector invariants with
-`node -r ./ai/tests/task102-suburb-lookup-preload.cjs ai/test-fast-unit-actions.js`
+`node -r ./ai/tests/task102-suburb-lookup-preload.cjs ../diplomacy_server/tests/client/test-fast-unit-actions.js`
 (and the ownership/production/building/suburb suites) to compare every optimized
 lookup against the original scan through apply and undo.
 

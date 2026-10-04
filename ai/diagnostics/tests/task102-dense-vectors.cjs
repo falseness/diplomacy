@@ -5,7 +5,7 @@ const {transform, install} = require('../task102-dense-vectors.cjs');
 const source = fs.readFileSync('ai/vectorizeContent.js', 'utf8');
 if (process.argv.includes('--invariants')) {
   const counts = install(true);
-  require('../../test-fast-unit-actions.js');
+  require('../../../../diplomacy_server/tests/client/test-fast-unit-actions.js');
   assert(counts.vectorizeCellLocal > 0 && counts.computeGlobalVectorChannels > 0);
   console.log('DENSE_INVARIANTS: PASS ' + JSON.stringify(counts));
 } else {
