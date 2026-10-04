@@ -44,11 +44,11 @@ function main() {
   };
   const cases=['local/roundtrip','local/approach-attack','local/unit-only','local/factory','server/roundtrip','server/approach-attack','server/unit-only','server/factory','browser/render','network-sequential-fog-false','network-simultaneous-fog-true'];
   write('verification-plan.json',{estimateMs:300000,targetMs:2700000,stopWorkMs:3300000,budgetMs:3600000,
-    cases,tiers:['local production-source dispatcher','actual server loader/dispatcher','one real Chromium rendering and mouse selection journey','HTTPS/Socket.IO/MongoDB automatic siege: two humans, sequential/fog off and simultaneous/fog on'],
+    cases,tiers:['local production-source dispatcher','actual server loader/dispatcher','one jsdom + node-canvas page rendering and click selection journey','HTTPS/Socket.IO/MongoDB automatic siege: two humans, sequential/fog off and simultaneous/fog on'],
     exclusions:['No browser multiplayer claims','No exhaustive class/seed/map Cartesian product','No natural long games or stress'],
     commands:['local source child','server source child','browser render child','network child','git diff --check in both repositories','source/evidence audit'],fixtures:'fixtures.json, render-fixture.json, network-*-fixture.json'});
   process.env.TASK233_STOP_AT=String(start+3300000);
-  log(`COMMAND NODE_PATH=${process.env.NODE_PATH || ''} ${process.execPath} ${process.argv.slice(1).join(' ')}\nCWD=${process.cwd()}\nNODE=${process.version}\nV8=${process.versions.v8}\nBROWSER=real Chromium version recorded by render child`);
+  log(`COMMAND NODE_PATH=${process.env.NODE_PATH || ''} ${process.execPath} ${process.argv.slice(1).join(' ')}\nCWD=${process.cwd()}\nNODE=${process.version}\nV8=${process.versions.v8}\nRENDERER=jsdom + node-canvas versions recorded by render child`);
   const identities={before:{},after:{}};
   const snapshot=()=>Object.fromEntries([ROOT,SERVER].map(repo=>{
     const names=command('git',['ls-files','--cached','--others','--exclude-standard'],repo).split('\n')
@@ -77,7 +77,8 @@ function main() {
       check(tier+'/factory',result.factory,{result:{spawned:[{type:'bombard',x:2,y:4}],skipped:0},className:'Bombard'});
     }
     write('roundtrip.json',{rows:roundtrip,pass:true});write('ai-actions.json',{rows:actions,pass:true});
-    command(process.execPath,[path.join(__dirname,'test-bombard-render.js'),out]);
+    // test-bombard-render moved to diplomacy_server tests/client and renders with jsdom + node-canvas (TASK-459).
+    command(process.execPath,[path.join(SERVER_CLIENT_TESTS,'test-bombard-render.js'),out]);
     const render=JSON.parse(fs.readFileSync(path.join(out,'browser-render.json')));
     check('browser/render',render.observed,render.expected);
     // Reserve startup, the bounded three-minute scenario, and service cleanup
@@ -120,7 +121,7 @@ function main() {
     // The network lifecycle helper reports its owned services and temporary DB cleanup.
     const networkCleanup=fs.existsSync(path.join(out,'network-cleanup.json')) ? JSON.parse(fs.readFileSync(path.join(out,'network-cleanup.json'),'utf8')).cleanup : null;
     const browserCleanup=fs.existsSync(path.join(out,'browser-cleanup.json')) ? JSON.parse(fs.readFileSync(path.join(out,'browser-cleanup.json'))) : {};
-    const cleanup=browserCleanup.browserClosed===true && browserCleanup.serverClosed===true && commands.every(c=>c.signal===null && c.error===null) && !!networkCleanup &&
+    const cleanup=browserCleanup.windowClosed===true && commands.every(c=>c.signal===null && c.error===null) && !!networkCleanup &&
       networkCleanup.processes.every(p=>!p.aliveAfter) && networkCleanup.directories.every(d=>!d.existsAfter);
     log(`${cleanup?'PASS':'FAIL'} owned-process-cleanup children-reaped=${commands.length} network service cleanup recorded in network-cleanup.json`);
     const evidenceHashes=Object.fromEntries(fs.readdirSync(out,{recursive:true}).filter(n=>n!=='verification.log' && fs.statSync(path.join(out,n)).isFile())

@@ -1,3 +1,3 @@
-// Use the shared vector validator and real Chromium preview checks.
+// Use the shared vector validator and node-canvas preview checks (moved to diplomacy_server, TASK-459).
 process.argv.push('--type', 'demonPortal');
-require('./test-coop-demon-svg');
+require('../../diplomacy_server/tests/client/test-coop-demon-svg');
