@@ -35,9 +35,12 @@ async function launch(board, savedGame, previous) {
     return h;
 }
 // Installed temporarily at tests/coop/twelve-humans.test.js by the game adapter.
-// 180 s: the current Big H12 board (99x99, 158 portals; it was 68x68 with 36 when the bound was 60 s) took 50 s
-// wall / 55 s CPU alone on this host (TASK-452).
-test('twelve humans Big: authoritative peer and persisted reconnect convergence',{timeout:180000},async()=>{
+// The bound is CPU time (CPU_LIMIT_S, checked at the end): the current Big H12 board (99x99, 158 portals; it was
+// 68x68 with 36 when the bound was 60 s wall) took 55 s CPU / 50 s wall alone on this host, but over 180 s wall
+// next to two other co-op suites (TASK-452). The 900 s wall timeout only guards against a hang.
+const CPU_LIMIT_S = 180;
+test('twelve humans Big: authoritative peer and persisted reconnect convergence',{timeout:900000},async()=>{
+ const cpuStart=process.cpuUsage();
  const {createFixture}=require('../client/test-coop-harness');
  const f=createFixture(undefined,()=>{});
  f.evaluate(`globalThis.generated=generateCoopGame(12,{size:'big',seed:0});generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);whooseTurn=0;gameSettings.isOnline=true;gameSettings.coop.typedWaves={lastRound:0};`);
@@ -59,6 +62,9 @@ test('twelve humans Big: authoritative peer and persisted reconnect convergence'
   peers=await snapshots();compare('committed-peer-convergence',hash(peers[0]),hash(peers[1]));
   const saved=copy(h.game),before=hash(saved.rounds);await h.close();h=await launch(board,saved,h);
   peers=await snapshots();compare('reconnected-peer-convergence',hash(peers[0]),hash(peers[1]));compare('persisted-rounds-no-replay',hash(h.game.rounds),before);
+  const cpu=process.cpuUsage(cpuStart),cpuSeconds=(cpu.user+cpu.system)/1e6;
+  console.log(`CPU_USAGE seconds=${cpuSeconds.toFixed(1)} limit=${CPU_LIMIT_S}`);
+  assert(cpuSeconds<=CPU_LIMIT_S,`twelve-human case used ${cpuSeconds.toFixed(1)} s CPU, over ${CPU_LIMIT_S} s`);
   console.log('PASS twelve-human server Big=99x99 portals=158 peers=2 reconnect=identical replay=none server_errors=0');
  }finally{await h.close()}
 });
