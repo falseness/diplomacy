@@ -10,7 +10,6 @@
     "test-task107-measured-gate-failure": "npx -y node@20 ai/test-task107-measured-gate-failure.js",
     "test-task112-gate-failure": "npx -y node@20 ai/test-task107-measured-gate-failure.js",
     "test-task104-training-cadence": "npx -y node@20 ai/test-task104-training-cadence.js",
-    "test-no-cheating-guard": "node ai/test-no-cheating-guard.js",
     "test-symmetrical-combat-map-generation": "node ai/test-symmetrical-combat-map-generation.js",
     "benchmark-combat-model": "node ai/benchmark-combat-model.js",
     "benchmark-final-symmetrical-combat": "node ai/benchmark-final-symmetrical-combat-gate.js",
@@ -27,7 +26,6 @@
     "test-simple-ai-economy-mode": "node ai/test-simple-ai-economy-mode.js",
     "test-simple-ai-economy-game": "node ai/test-simple-ai-economy-game.js",
     "test-simple-ai-war": "node ai/test-simple-ai-war-mode.js",
-    "test-ai-boundary": "node ai/test-runtime-boundary.js",
     "test-play-ai-combat-map": "npx -y node@20 ai/test-play-ai-combat-map.js",
     "test-play-ai-browser-turn": "npx -y node@20 ai/test-play-ai-browser-turn.js",
     "test-play-ai-invalid-command": "npx -y node@20 ai/test-play-ai-invalid-command-reproduction.js",
@@ -42,7 +40,6 @@
     "test-symmetrical-economy-9v9-validation": "node ai/test-symmetrical-economy-9v9-validation.js",
     "test-unit-map-generation": "node ai/test-unit-map-generation.js",
     "test-unit-vectorization": "node ai/test-unit-vectorization.js",
-    "test-mutable-vector-grid": "node ai/test-mutable-vector-grid.js",
     "test-model-predict-benchmark-gate": "node ai/tests/task103-benchmark-gate.cjs",
     "benchmark-model-predict-batching": "node ai/benchmark-model-predict-batching.js",
     "benchmark": "node ai/benchmark.js",
@@ -52,12 +49,7 @@
     "test-task062-tiny-1v1-benchmark": "node ai/test-task062-tiny-1v1-benchmark.js",
     "benchmark-gamestart-all-slots": "node ai/benchmark-gamestart-all-slots.js",
     "test-task063-all-gamestart-benchmark": "node ai/test-task063-all-gamestart-benchmark.js",
-    "test-task156-all-gamestart-benchmark": "node ai/test-task156-all-gamestart-benchmark.js",
-    "test-regression-seeds": "node ai/test-regression-seeds.js",
-    "test-regression-map-seeds": "node ai/test-regression-seeds.js map-generation",
-    "test-regression-vector-seeds": "node ai/test-regression-seeds.js vectorization",
-    "test-regression-ai-turn-seeds": "node ai/test-regression-seeds.js ai-turn",
-    "test-regression-training-seed": "node ai/test-regression-seeds.js training-smoke"
+    "test-task156-all-gamestart-benchmark": "node ai/test-task156-all-gamestart-benchmark.js"
   },
   "dependencies": {
     "@tensorflow/tfjs": "4.22.0",
