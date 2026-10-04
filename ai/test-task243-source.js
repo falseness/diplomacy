@@ -10,7 +10,7 @@ function run(out){
  const f=createFixture(undefined,()=>{}),checks=[];
  const check=(id,observed,expected)=>{assert.deepEqual(observed,expected,id);checks.push({id,observed,expected,pass:true});console.log('PASS '+id+' '+(id==='current-save-load'?'exact-state=true':JSON.stringify(observed)));};
  const map=f.evaluate('JSON.parse(JSON.stringify(generateCoopGame(2,{size:"tiny",seed:1})))');
- check('current-generation',[map.coop.generation.version,map.portals.length],[5,24]); // 11h+2 (TASK-450-3)
+ check('current-generation',[map.coop.generation.version,map.portals.length],[5,28]); // 13h+2 (TASK-450-3, client 1699b63)
  check('current-replay',f.evaluate(`JSON.stringify(generateCoopGame(2,{size:'tiny',seed:1}))===JSON.stringify(generateCoopGame(${map.coop.generation.playerCount},${JSON.stringify(map.coop.generation.options)}))`),true);
  f.evaluate(`(${BUILD_CURRENT_COOP_BOARD})(${JSON.stringify({spec:spec(2),browser:false})});undefined`);
  const before=f.evaluate('JSON.parse(JSON.stringify(getGameObject()))');

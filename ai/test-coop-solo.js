@@ -35,8 +35,9 @@ function firstWave(g) {
   return types;
 }
 const f=generated(1);
+// Online co-op settings live on the lobby flow's create-lobby screen (TASK-300; Menu.online was removed).
 f.compare('local-online-settings',f.evaluate(`(()=>{const m=new Menu(); globalThis.menu=m;
-  m.play.toggleMode(); m.online.toggleMode(); return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.online.playersSlider.minimumValue(),m.online.playersSlider.maximumValue()]})()`),[1,12,2,12]);
+  m.play.toggleMode(); m.createLobby.toggleMode(); return [m.play.playersSlider.minimumValue(),m.play.playersSlider.maximumValue(),m.createLobby.playersSlider.minimumValue(),m.createLobby.playersSlider.maximumValue()]})()`),[1,12,2,12]);
 for(const count of [0,1.5,13]) {
   f.compare(`reject-local-${count}`,f.evaluate(`(()=>{try{generateCoopGame(${count});return false}catch(e){return /integer from 1 to 12/.test(e.message)}})()`),true);
 }

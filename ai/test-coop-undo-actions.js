@@ -6,14 +6,16 @@ const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-c
 const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
 const {createTurnLedger} = require('./test-coop-turn-ledger');
 
-// Literal balance-version-2 combat expectations, independent of runtime outcomes.
+// Literal combat expectations, independent of runtime outcomes. Demon values follow the current
+// ai/demon-config.js table (brute health 3, clawling health 1 damage 2, ember archer health 1, hound movement 5).
 const cases = [
   {name:'human-movement', actor:'Normchel', key:'normchel', owner:1, hp:5, speed:2, move:true},
-  {name:'demon-movement', actor:'Hound', key:'hound', owner:3, hp:2, speed:2, move:true},
-  {name:'human-melee', actor:'Normchel', key:'normchel', owner:1, hp:5, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:5, damage:1, distance:1},
-  {name:'human-ranged', actor:'Archer', key:'archer', owner:1, hp:1, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:5, damage:2, distance:2},
-  {name:'demon-melee', actor:'Clawling', key:'clawling', owner:3, hp:2, speed:2, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:1, distance:1},
-  {name:'demon-ranged', actor:'EmberArcher', key:'emberArcher', owner:3, hp:2, speed:2, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:1, distance:2}
+  // Hound movement is 5 (ai/demon-config.js, user balance); the case still undoes two single-cell moves.
+  {name:'demon-movement', actor:'Hound', key:'hound', owner:3, hp:2, speed:5, move:true},
+  {name:'human-melee', actor:'Normchel', key:'normchel', owner:1, hp:5, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:3, damage:1, distance:1},
+  {name:'human-ranged', actor:'Archer', key:'archer', owner:1, hp:1, speed:2, victim:'Brute', victimKey:'brute', victimOwner:3, victimHP:3, damage:2, distance:2},
+  {name:'demon-melee', actor:'Clawling', key:'clawling', owner:3, hp:1, speed:2, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:2, distance:1},
+  {name:'demon-ranged', actor:'EmberArcher', key:'emberArcher', owner:3, hp:1, speed:2, victim:'Normchel', victimKey:'normchel', victimOwner:1, victimHP:5, damage:1, distance:2}
 ];
 function run(c, fault) {
   const config = defaultFixture(); config.coop = true; config.size = {x:13,y:11};

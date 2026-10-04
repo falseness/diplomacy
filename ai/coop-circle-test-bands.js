@@ -11,9 +11,10 @@ const layer = (x, y, R) => {
 const onLattice = (x, y) => (((x - (y - Math.floor(x / 2))) % 3) + 3) % 3 === 0;
 
 // Elite core E = max(floor(R/6), smallest layer whose disc holds one lattice cell
-// and 3 cells per elite portal (4 per human + 2 extra heavy per map, TASK-450-3),
-// plus 9 per human on big for the elite neutral towns);
-// common ring ends at min(floor(R/2), R - 3 - D).
+// and 3 cells per elite portal (6 per human: chaos, heavy, siege, 3 mage (client 1699b63)
+// + 2 extra heavy per map, TASK-450-3), plus 9 per human on big for the elite neutral towns);
+// common ring ends at floor(R/2), extended outwards while layers E+1..ringOuter hold fewer
+// than 2 lattice cells per common ring portal (7 per human), never past R - 3 - D.
 function circleTestBands(R, humans, size) {
     const side = 2 * R + 1, discCells = [], discLattice = [];
     for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) {
@@ -22,14 +23,17 @@ function circleTestBands(R, humans, size) {
         discCells[l] = (discCells[l] || 0) + 1;
         if (onLattice(x, y)) discLattice[l] = (discLattice[l] || 0) + 1;
     }
-    const elitePortals = 4 * humans + 2;
+    const elitePortals = 6 * humans + 2;
     const cellsNeeded = 3 * elitePortals + (size === 'big' ? 9 * humans : 0);
     let E = 0, cells = 0, lattice = 0;
     for (; E < R; E++) {
         cells += discCells[E] || 0; lattice += discLattice[E] || 0;
         if (E >= Math.floor(R / 6) && cells >= cellsNeeded && lattice >= elitePortals) break;
     }
-    const ringOuter = Math.min(Math.floor(R / 2), R - 3 - TOWN_DISTANCE[size]);
+    const limit = R - 3 - TOWN_DISTANCE[size], ringLattice = l => discLattice.slice(E + 1, l + 1).reduce((a, b) => a + (b || 0), 0);
+    let ringOuter = Math.floor(R / 2);
+    while (ringOuter < limit && ringLattice(ringOuter) < 2 * 7 * humans) ringOuter++;
+    ringOuter = Math.min(ringOuter, limit);
     return {E, ringOuter};
 }
 

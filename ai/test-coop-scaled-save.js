@@ -6,6 +6,9 @@ const fs=require('node:fs'),path=require('node:path');
 // Literal Circle contract: baseline radius is the smallest R >= min with R*R >= scale*scale*humans,
 // growth adds at most 8; the grid is (2R+1)^2 and createMapEdge masks the R*R+R cells beyond layer R.
 const radiusPreset={tiny:{min:10,scale:8},normal:{min:13,scale:11},big:{min:16,scale:14}};
+// TASK-450-3 + client 1699b63: 13 typed portals per initial human (3 melee, 3 ranged, 3 mage, one each of siege, heavy,
+// support, chaos) plus 2 extra heavy portals per map.
+const portalsFor=count=>13*count+2;
 const baselineFor=(size,count)=>{const p=radiusPreset[size];let R=p.min;while(R*R<p.scale*p.scale*count)R++;return R};
 function run(){
  const f=createFixture(undefined,()=>{}),e=s=>f.evaluate(s),results=[];
@@ -23,12 +26,12 @@ function run(){
   check(label+'-dimensions-counts',`({side:grid.arr.length,height:grid.arr[0].length,initial:gameSettings.coop.initialHumanCount,portals:external.filter(p=>p.isDemonPortal).length,humans:players.filter(p=>p.role==='HUMAN').length,
     neutralTowns:players[0].towns.length,goldmines:goldmines.length,humanTowns:players.slice(1,${count+1}).map(p=>p.towns.length),
     terrain:['mountain','lake','bush'].every(n=>nature.some(t=>t.name===n)),stored:[generated.mountains.length+generated.lakes.length+generated.bushes.length,nature.filter(t=>!t.isMapEdge).length],mask:nature.filter(t=>t.isMapEdge).length})`,
-    {side,height:side,initial:count,portals:11*count,humans:count,neutralTowns:count*townsPerHuman,goldmines:count*minesPerHuman,
+    {side,height:side,initial:count,portals:portalsFor(count),humans:count,neutralTowns:count*townsPerHuman,goldmines:count*minesPerHuman,
      humanTowns:Array(count).fill(1),terrain:true,stored:e('[generated.mountains.length+generated.lakes.length+generated.bushes.length,generated.mountains.length+generated.lakes.length+generated.bushes.length]'),mask:R*R+R});
-  results.push({count,size,radius:R,side,portals:11*count,mask:R*R+R});
+  results.push({count,size,radius:R,side,portals:portalsFor(count),mask:R*R+R});
   check(label+'-all-registries-and-markers-exact','JSON.stringify(getGameObject())===before',true);
   if(count>1){e(`players[${count}].units.slice().forEach(u=>u.kill());players[${count}].towns.slice().forEach(t=>t.destroy());globalThis.afterDeath=JSON.stringify(getGameObject());loadFromJson(afterDeath)`);
-   check(label+'-eliminated-initial-versus-surviving',`({initial:gameSettings.coop.initialHumanCount,surviving:players.filter(p=>p.role==='HUMAN'&&!p.isLost).length,side:grid.arr.length,portals:external.filter(p=>p.isDemonPortal).length,exact:JSON.stringify(getGameObject())===afterDeath})`,{initial:count,surviving:count-1,side,portals:11*count,exact:true});}
+   check(label+'-eliminated-initial-versus-surviving',`({initial:gameSettings.coop.initialHumanCount,surviving:players.filter(p=>p.role==='HUMAN'&&!p.isLost).length,side:grid.arr.length,portals:external.filter(p=>p.isDemonPortal).length,exact:JSON.stringify(getGameObject())===afterDeath})`,{initial:count,surviving:count-1,side,portals:portalsFor(count),exact:true});}
  }
  const i=process.argv.indexOf('--output-dir');
  if(i>=0){fs.mkdirSync(process.argv[i+1],{recursive:true});fs.writeFileSync(path.join(process.argv[i+1],'scaled-save.json'),JSON.stringify(results,null,1)+'\n')}

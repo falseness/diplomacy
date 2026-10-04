@@ -16,7 +16,9 @@ function run(nativeIntrinsics, omitLines) {
             return send.call(this,cell)
         };void 0`);
     if (omitLines) f.evaluate('border.createLine=()=>{};attackBorder.createLine=()=>{};void 0');
-    f.evaluate(`for(let round=1;round<=3;round++){
+    // Play past the first typed wave (round 4 since TASK-235; the user's balance tuning has moved it to 8 and back)
+    // so demons exist and issue commands.
+    f.evaluate(`for(let round=1;round<=9;round++){
         spawnCoopWave(round,0);players[3].nextTurn();players[3].play();gameRound=round;
     }void 0`);
     const result = f.evaluate('({trace,state:JSON.parse(JSON.stringify(getGameObject()))})');

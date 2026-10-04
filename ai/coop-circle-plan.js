@@ -76,13 +76,39 @@ function circleEliteMinimum(radius, humans, size) {
     return minimum
 }
 
+const circleLatticeCache = new Map()
+
+// Lattice cells per layer of a radius-R disc.
+function circleLayerLattice(radius) {
+    if (circleLatticeCache.has(radius)) return circleLatticeCache.get(radius)
+    const center = circleGeometry.coopHexCenter(radius), side = 2 * radius + 1, lattice = new Array(radius + 1).fill(0)
+    for (let x = 0; x < side; x++) for (let y = 0; y < side; y++) {
+        const layer = circleGeometry.coopHexLayer(x, y, center)
+        if (layer <= radius && circleGeometry.coopHexLattice(x, y)) lattice[layer]++
+    }
+    circleLatticeCache.set(radius, lattice)
+    return lattice
+}
+
+// Ring lattice cells per common ring portal. Ring groups keep CIRCLE_GROUP_GAP
+// from each other, so a ring with fewer cells (a tiny map whose elite core grew
+// for three mage portals per human) has no site for its last groups.
+const CIRCLE_RING_LATTICE_PER_PORTAL = 2
+
 // Layer bands. The elite core is R/6, grown only when the elite portals would
-// not fit. Layer is 1-Lipschitz, so ringOuter <= townRing - D keeps every ring
-// cell at hex distance >= D from the whole town ring.
+// not fit. The common ring ends at R/2, extended outwards while it holds fewer
+// than CIRCLE_RING_LATTICE_PER_PORTAL lattice cells per ring portal. Layer is
+// 1-Lipschitz, so ringOuter <= townRing - D keeps every ring cell at hex
+// distance >= D from the whole town ring.
 function circleRegions(radius, size, humans) {
     const elite = Math.max(Math.floor(radius / 6), circleEliteMinimum(radius, humans, size)), townRing = radius - 3
-    return {elite, ringInner: elite + 1,
-        ringOuter: Math.min(Math.floor(3 * radius / 6), townRing - CIRCLE_TOWN_DISTANCE[size]), townRing}
+    const limit = townRing - CIRCLE_TOWN_DISTANCE[size], lattice = circleLayerLattice(radius)
+    const targets = circleScaling(humans, size).counts.portalCategories
+    const need = CIRCLE_RING_LATTICE_PER_PORTAL * (targets.melee + targets.ranged + targets.support)
+    let ringOuter = Math.floor(3 * radius / 6), have = 0
+    for (let layer = elite + 1; layer <= ringOuter; layer++) have += lattice[layer]
+    while (have < need && ringOuter < limit) have += lattice[++ringOuter]
+    return {elite, ringInner: elite + 1, ringOuter: Math.min(ringOuter, limit), townRing}
 }
 
 // Capacity numbers and their requirements at one candidate radius.

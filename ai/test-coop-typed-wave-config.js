@@ -1,7 +1,7 @@
 'use strict';
 // Pure typed portal wave schedule: categories, per-round selection, next-production
 // lookup and seedless composition, checked in Node and in a browser-style VM realm.
-// Usage: node20 ai/test-coop-typed-wave-config.js --output-dir DIR
+// Usage: node20 ai/test-coop-typed-wave-config.js [--output-dir DIR]
 //        node20 ai/test-coop-typed-wave-config.js --fault late-imp|order-dependent|next-at-wave
 const assert = require('assert').strict;
 const crypto = require('crypto');
@@ -18,9 +18,10 @@ const CATEGORIES = ['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos', 'ma
 const WAVE_ROUNDS = Array.from({length: 25}, (_, i) => (i + 1) * 4);
 // Independent specification literals, never imported from production.
 const EXPECTED_STEPS = {
-  melee: [[8, 'imp'], [12, 'clawling'], [16, 'brute']],
-  ranged: [[8, 'spitter'], [12, 'emberArcher']],
-  siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[28, 'bulwark']],
+  // Client balance 719766a: imp/spitter at round 4, ember archer 16; heavy bulwark at 20.
+  melee: [[4, 'imp'], [12, 'clawling'], [16, 'brute']],
+  ranged: [[4, 'spitter'], [16, 'emberArcher']],
+  siege: [[16, 'bombard'], [32, 'mortar']], heavy: [[20, 'bulwark']],
   support: [[16, 'ravager'], [24, 'hound']], chaos: [[28, 'demonLord']],
   mage: [[20, 'hexcaster'], [36, 'demonQueen']]
 };
@@ -214,7 +215,7 @@ function checkInvalid(a, runtime) {
   const next = a.getCoopNextScheduledProduction('melee', 0);
   next.type = 'demonLord';
   compare(`${runtime}-next-result-detached`, a.getCoopNextScheduledProduction('melee', 0),
-    {round: 8, type: 'imp', roundsRemaining: 8});
+    {round: 4, type: 'imp', roundsRemaining: 4});
 }
 
 function loadBrowserRealm() {
@@ -280,7 +281,7 @@ function runFault(fault) {
   const a = nodeApi();
   if (fault === 'late-imp') {
     const original = a.getCoopScheduledDemonType;
-    a.getCoopScheduledDemonType = (c, r) => c === 'melee' && r === 8 ? null : original(c, r);
+    a.getCoopScheduledDemonType = (c, r) => c === 'melee' && r === 4 ? null : original(c, r);
     checkSchedule(a, 'node');
   } else if (fault === 'order-dependent') {
     const original = a.composeTypedCoopWave;
@@ -318,8 +319,8 @@ function run(outputDir) {
   checkCallers();
   const negative = [];
   for (const [fault, marker] of [['late-imp', 'MISMATCH node-schedule-melee-rounds-0-100'],
-    ['order-dependent', 'MISMATCH node-seed-order-H1-round-8-seed-0-reversed'],
-    ['next-at-wave', 'MISMATCH node-next-melee-8 ']]) {
+    ['order-dependent', 'MISMATCH node-seed-order-H1-round-4-seed-0-reversed'],
+    ['next-at-wave', 'MISMATCH node-next-melee-4 ']]) {
     const child = spawnSync(process.execPath, [__filename, '--fault', fault], {encoding: 'utf8', timeout: Math.max(1, Number(process.env.TASK235_STOP_AT || Date.now() + 60000) - Date.now())});
     process.stdout.write(child.stdout || ''); process.stderr.write(child.stderr || '');
     const observed = {exit: child.status, marker: child.stdout.includes(marker)};
@@ -348,8 +349,9 @@ if (require.main === module) {
   const option = name => argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined;
   try {
     if (option('--fault')) runFault(option('--fault'));
-    else if (option('--output-dir')) run(path.resolve(option('--output-dir')));
-    else throw new Error('usage: --output-dir DIR | --fault late-imp|order-dependent|next-at-wave');
+    // Evidence goes to --output-dir, else the runner's redirected COOP_TEST_OUTPUT_DIR, else a fresh TMPDIR directory.
+    else run(path.resolve(option('--output-dir') || process.env.COOP_TEST_OUTPUT_DIR ||
+      fs.mkdtempSync(path.join(require('os').tmpdir(), 'coop-typed-wave-config-'))));
   } catch (error) {
     console.error(error.stack || error);
     process.exit(1);
