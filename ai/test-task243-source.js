@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {createFixture}=require('../../diplomacy_server/tests/client/test-coop-harness');
-const {spec}=require('./test-task238-fixtures');
+const {spec}=require('../../diplomacy_server/tests/client/test-task238-fixtures');
 const {BUILD_CURRENT_COOP_BOARD}=require('../../diplomacy_server/tests/coop/helpers/current-coop-fixture');
 const cases=['current-generation','current-replay','current-save-load','typed-categories','weak-stats','removed-apis',...['missing-generation','v1','v2','v3','v4','missing-balance','old-balance','weighted-wave','untyped','old-category','missing-owner','old-owner-tile'].map(k=>'reject/'+k)];
 module.exports={cases,run};
