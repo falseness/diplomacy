@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const {chromium} = require('playwright');
 const {createEntityLedger} = require('../../diplomacy_server/tests/client/test-coop-entity-ledger');
 const {createEconomyLedger} = require('../../diplomacy_server/tests/client/test-coop-economy-ledger');
-const {createTurnLedger} = require('./test-coop-turn-ledger');
+const {createTurnLedger} = require('../../diplomacy_server/tests/client/test-coop-turn-ledger');
 const root = path.resolve(__dirname, '..');
 const outputIndex = process.argv.indexOf('--output-dir');
 if (outputIndex !== -1 && (!process.argv[outputIndex + 1] || process.argv[outputIndex + 1].startsWith('--')))

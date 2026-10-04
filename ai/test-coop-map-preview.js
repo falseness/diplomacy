@@ -6,7 +6,7 @@ const crypto=require('crypto');
 // Browser tests run with NODE_PATH/PLAYWRIGHT_BROWSERS_PATH; default both so the plain command works too.
 if(process.env.PLAYWRIGHT_BROWSERS_PATH===undefined)process.env.PLAYWRIGHT_BROWSERS_PATH='0';
 const {chromium}=(()=>{try{return require('playwright')}catch(error){return require('/opt/diplomacy/node_modules/playwright')}})();
-const {audit,components}=require('./test-coop-terrain-audit');
+const {audit,components}=require('../../diplomacy_server/tests/client/test-coop-terrain-audit');
 const root=path.resolve(__dirname,'..'), arg=name=>{const i=process.argv.indexOf(name);return i<0?undefined:process.argv[i+1]};
 // Renders production co-op maps (Tiny/Normal/Big x humans 1/4/12, seed 0) next to the authored references.
 // --fault stale-render is a negative control; --only narrows.

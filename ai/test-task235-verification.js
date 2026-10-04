@@ -30,7 +30,7 @@ const command = (program,args) => {
   assert.equal(r.status,0); return r.stdout;
 };
 const files = ['ai/wave-config.js','ai/wave-composition.js','ai/wave-placement.js','ai/demon-config.js',
-  'sprites/entities/buildings/demonPortal.js','index.html','ai/test-coop-typed-wave-config.js','ai/test-task235-verification.js'];
+  'sprites/entities/buildings/demonPortal.js','index.html','../diplomacy_server/tests/client/test-coop-typed-wave-config.js','ai/test-task235-verification.js'];
 const snapshot = () => Object.fromEntries(files.map(f=>[f,sha(fs.readFileSync(path.join(ROOT,f)))]));
 const cases = ['node-schedule','script-vm-schedule','node-composition','script-vm-composition',
   'invalid-inputs','registered-types','availability-and-preview-callers','negative-controls'];
@@ -38,13 +38,13 @@ write('verification-plan.json',{estimateMs:120000,targetMs:2700000,stopWorkMs:33
   cases,tiers:['Node production source','shipped script VM production source'],
   coverage:'six categories; every round 0..100; all unlock before/at/after boundaries; final repetition at 4000; invalid inputs; availability/committed preview callers',
   exclusions:['No browser UI or network claims: integration belongs to TASK-238','No map quota or artwork changes: TASK-236/239'],
-  commands:['node ai/test-coop-typed-wave-config.js --output-dir <run>/focused','git diff --check','git diff --cached --name-only','source and evidence audit']});
+  commands:['node ../diplomacy_server/tests/client/test-coop-typed-wave-config.js --output-dir <run>/focused','git diff --check','git diff --cached --name-only','source and evidence audit']});
 log(`COMMAND NODE_PATH=${process.env.NODE_PATH || ''} ${process.execPath} ${process.argv.slice(1).join(' ')}\nCWD=${process.cwd()}\nNODE=${process.version}\nV8=${process.versions.v8}\nBROWSER=not applicable; script VM only`);
 const before = snapshot();
 let passed = false, checkpoints = [];
 try {
   const head = command('git',['rev-parse','HEAD']).trim();
-  command(process.execPath,[path.join(__dirname,'test-coop-typed-wave-config.js'),'--output-dir',path.join(out,'focused')]);
+  command(process.execPath,[path.join(__dirname,'../../diplomacy_server/tests/client/test-coop-typed-wave-config.js'),'--output-dir',path.join(out,'focused')]);
   checkpoints = read('focused/checkpoints.json').checkpoints;
   const schedule = read('focused/schedule.json');
   write('schedule.json',schedule);

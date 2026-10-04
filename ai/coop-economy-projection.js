@@ -3,7 +3,7 @@
 const fs = require('fs'), path = require('path'), assert = require('assert').strict;
 const crypto = require('crypto');
 const {createFixture} = require('../../diplomacy_server/tests/client/test-coop-harness');
-const {neighbours} = require('./test-coop-terrain-audit');
+const {neighbours} = require('../../diplomacy_server/tests/client/test-coop-terrain-audit');
 const {getCoopMapScaling} = require('./coop-map-scaling');
 const {buildReport} = require('./coop-army-valuation');
 const key = c => `${c.x},${c.y}`;

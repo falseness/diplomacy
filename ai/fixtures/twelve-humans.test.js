@@ -9,7 +9,7 @@ const runtime = require('../../server/loadGameCode');
 const {launchMemoryServer} = require('./helpers/memory-server');
 const {createEntityLedger} = require('../client/test-coop-entity-ledger');
 const {createEconomyLedger} = require('../client/test-coop-economy-ledger');
-const {createTurnLedger, compareCommitted} = require(path.join(runtime.gameDir, 'ai/test-coop-turn-ledger'));
+const {createTurnLedger, compareCommitted} = require('../client/test-coop-turn-ledger');
 const copy = x => JSON.parse(JSON.stringify(x));
 const evaluate = code => {const v = vm.runInThisContext(code); return v === undefined ? v : copy(v)};
 const fixture = {context:global, evaluate};

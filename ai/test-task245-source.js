@@ -31,7 +31,7 @@ const identity={name:'bombard',className:'Bombard',id:'siege-234',owner:3,hp:3,c
 const trace=[{from:{x:4,y:6},to:{x:4,y:5},legal:true,attack:false,before:{coord:{x:4,y:6},moves:2,hp:5},after:{coord:{x:4,y:5},moves:1,hp:5},result:false},{from:{x:4,y:5},to:{x:4,y:3},legal:true,attack:true,before:{coord:{x:4,y:5},moves:1,hp:5},after:{coord:{x:4,y:5},moves:0,hp:1},result:true}];
 for(const r of integration){assert.deepEqual([r.roundtrip.before,r.roundtrip.after],[identity,identity]);assert.deepEqual(r.rows,[{target:'building',trace,observed:{hp:1,coord:{x:4,y:5},moves:0}},{target:'unit-only',trace:[],observed:{hp:5,coord:{x:4,y:6},moves:0}}]);assert.deepEqual(r.factory,{result:{spawned:[{type:'bombard',x:2,y:4}],skipped:0},className:'Bombard'});}
 details.push({id:'bombard-integration',observed:integration,expected:{identity,trace}});check('source/bombard-integration',true,true);
-child(path.join(__dirname,'test-coop-typed-wave-config.js'),['--output-dir',path.join(out,'schedule')]);
+child(path.join(__dirname,'../../diplomacy_server/tests/client/test-coop-typed-wave-config.js'),['--output-dir',path.join(out,'schedule')]);
 const schedule=JSON.parse(fs.readFileSync(path.join(out,'schedule/checkpoints.json')));
 for(const c of schedule.checkpoints){assert(c.pass,c.id);assert.deepEqual(c.observed,c.expected,c.id);}check('source/current-schedule',true,true);
 const source=fs.readFileSync(path.join(__dirname,'../groups/grid.js'),'utf8'),calls=[];
