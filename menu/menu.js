@@ -861,8 +861,8 @@ class HubList {
             const row = this.rows[i]
             const top = y + i * rowHeight - this.scroll.offset
             const header = row.kind === 'header'
-            if (row.kind === 'game' || row.kind === 'lobby') {
-                ctx.fillStyle = row.yourTurn ? '#ffd54f' : 'white'
+            if (row.kind === 'game' || row.kind === 'lobby' || row.kind === 'myLobby') {
+                ctx.fillStyle = row.yourTurn ? '#ffd54f' : row.kind === 'myLobby' ? '#c8e6c9' : 'white'
                 ctx.fillRect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight)
                 ctx.strokeStyle = row.id === this.selectedId ? 'black' : '#747474'
                 ctx.lineWidth = (row.id === this.selectedId ? 0.003 : 0.001) * WIDTH
@@ -885,7 +885,7 @@ class HubList {
     }
 }
 
-// The signed-in hub: your games and open lobbies from lobby:list, re-fetched on lobby:listChanged.
+// The signed-in hub: 'return to my lobby', your games and open lobbies from lobby:list, re-fetched on lobby:listChanged.
 class OnlineHubTree {
     constructor(_menu) {
         this.menu = _menu
@@ -897,7 +897,8 @@ class OnlineHubTree {
         this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', 'black')
         this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
         this.list.onRow = row => {
-            if (row.kind === 'lobby') this.joinLobby(row.id)
+            // lobby:join of my own lobby returns it, so both open the room.
+            if (row.kind === 'lobby' || row.kind === 'myLobby') this.joinLobby(row.id)
             else if (row.kind === 'game') this.openGame(row.id)
         }
         this.joining = false
