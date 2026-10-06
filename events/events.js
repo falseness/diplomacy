@@ -397,6 +397,9 @@ class Events {
         this.updateScreenSpeed()
     }
     updateScreenSpeed(time = undefined) {
+        // MobileScreen has no key or mouse-edge scrolling
+        if (!(this.screen instanceof ComputerScreen))
+            return
         this.screen.advanceTo(time)
         let x = this.getKeysDirection(this.pressed_horizontal_keys, this.goLeftKeys)
         let y = this.getKeysDirection(this.pressed_vertical_keys, this.goUpKeys)
