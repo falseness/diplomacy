@@ -2,6 +2,9 @@
 // socket.io connection authenticated by auth:google or a stored auth:session token.
 const ONLINE_SESSION_KEY = 'diplomacyOnlineSession'
 const ONLINE_ACK_TIMEOUT = 10000
+// auth:session retries after an UNAVAILABLE ack (server busy or still connecting to its
+// database, protocol doc section 7): wait these many ms before each retry, then give up.
+const ONLINE_RETRY_DELAYS = [1000, 2000, 4000]
 
 // Storage may be unavailable (private mode, blocked cookies); sign-in still works.
 function readStoredSession() {
@@ -49,10 +52,16 @@ class OnlineSession {
         return !!readStoredSession()
     }
     // Re-authenticates with the stored token; an invalid or expired token is cleared.
+    // UNAVAILABLE is retried with backoff and keeps the token.
     async resume() {
         const sessionToken = readStoredSession()
         if (!sessionToken) return null
-        const ack = await this.request('auth:session', {sessionToken})
+        let ack = await this.request('auth:session', {sessionToken})
+        for (const delay of ONLINE_RETRY_DELAYS) {
+            if (ack.error !== 'UNAVAILABLE') break
+            await new Promise(resolve => setTimeout(resolve, delay))
+            ack = await this.request('auth:session', {sessionToken})
+        }
         if (ack.ok) return this.account = ack.account
         if (ack.error === 'UNAUTHENTICATED') clearStoredSession()
         this.account = null

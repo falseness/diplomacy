@@ -90,9 +90,18 @@ class Town extends PreparingManufacture {
         this.buildingProduction = []
         this.activeProduction = new Empty()
     }
-    updateSuburbsAndBuildings() {
+    updateSuburbsAndBuildings(previousColor) {
         for (let i = 0; i < this.suburbs.length; ++i) {
             let cell = grid.getCell(this.suburbs[i].coord)
+            // town.suburbs is only pruned in the owner's nextTurn: a suburb a
+            // third player has painted since then is no longer the previous
+            // owner's, so the capture neither takes nor clears it.
+            if (previousColor !== undefined &&
+                    cell.hexagon.playerColor != previousColor &&
+                    cell.hexagon.playerColor != this.playerColor) {
+                this.suburbs.splice(i--, 1)
+                continue
+            }
             // A live demon portal keeps its demon-owned hex: capturing the
             // town neither kills nor repaints it, and drops it from suburbs.
             if (isLiveDemonPortal(cell.building)) {
@@ -107,9 +116,23 @@ class Town extends PreparingManufacture {
                 this.suburbs.splice(i--, 1)
                 continue
             }
-            // Mines are independent map assets, not town dependencies. Keep
-            // them on the grid when their suburb transfers to the capturer.
-            else if (cell.building.canBeDestroyed && cell.building.name !== 'goldmine') {
+            // A manufacture of another town on this suburb (an old save, or a
+            // placement before canCreateOnCell required the town's own suburb)
+            // is killed with the capture, so it no longer pays its town's owner;
+            // undo restores it into that town (townExternal -> undoBuilding).
+            if (cell.building.isManufacture && cell.building.town &&
+                    cell.building.town !== this &&
+                    !coordsEqually(cell.hexagon.coord, this.coord)) {
+                actionManager.lastAction.townExternal.push(cell.building.toUndoJSON())
+                cell.building.kill()
+                this.suburbs[i].sudoPaint(this.playerColor)
+                continue
+            }
+            // Mines and nature (bushes, hills) are independent map assets, not
+            // town dependencies. Keep them on the grid when their suburb
+            // transfers to the capturer.
+            else if (cell.building.canBeDestroyed && cell.building.name !== 'goldmine' &&
+                    !cell.building.isNature) {
                 if (cell.building.isManufacture) {
                     if (coordsEqually(cell.hexagon.coord, this.coord)) { // town cell
                         this.suburbs[i].sudoPaint(this.playerColor)
@@ -131,7 +154,7 @@ class Town extends PreparingManufacture {
             this.suburbs[i].sudoPaint(this.playerColor)
         }
     }
-    updatePlayer() {
+    updatePlayer(previousColor) {
         if (typeof players != 'undefined') {
             for (let i = 0; i < players.length; ++i) {
                 let townList = players[i].towns
@@ -151,7 +174,7 @@ class Town extends PreparingManufacture {
 
         // first suburb must be town suburb
 
-        this.updateSuburbsAndBuildings()
+        this.updateSuburbsAndBuildings(previousColor)
         refreshCoopVision()
     }
     get isHitable() {
@@ -300,6 +323,11 @@ class Town extends PreparingManufacture {
                 this.buildings.splice(i--, 1)
                 continue
             }
+            // income follows the hex owner: a building on a hex this town
+            // no longer holds pays nothing to it
+            if (this.buildings[i].playerColor != this.playerColor) {
+                continue
+            }
             income += this.buildings[i].income
         }
         let countSuburbs = this.suburbsCount
@@ -324,7 +352,8 @@ class Town extends PreparingManufacture {
         this.activeProduction = new Empty()
     }
     sendInstructions(cell) {
-        if (!this.activeProduction.canCreateOnCell(cell, this)) {
+        if (!this.activeProduction.canCreateOnCell(cell, this) ||
+                !this.activeProduction.canAfford(this)) {
             this.removeSelect()
 
             return true

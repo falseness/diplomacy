@@ -1,11 +1,11 @@
 # Twelve-human scaled-map validation
 
-Run with Node 20 from the game repository:
+Run with Node 20; the benchmark from the game repository, the tests from the server
+repository (`../diplomacy_server`, where the test runner registers them):
 
 ```
-node ai/test-coop-scaled-generation.js
 node ai/benchmark-coop-twelve-humans.js --output-dir artifacts/TASK-127
-node ai/test-coop-twelve-humans-server-adapter.js
+node20 tests/client/test-coop-twelve-humans-server-adapter.js
 ```
 
 The matrix auditor requires the local TASK-126 archive. It verifies generation
@@ -30,7 +30,7 @@ Node must support that VM mode. Other harness callers keep their existing mode;
 no production source, AI action limit or gameplay decision changes.
 The headless workload also omits `border.createLine` / `attackBorder.createLine`
 drawing output: the stubbed UI otherwise retains millions of unused BFS edges.
-`node ai/test-coop-workload-context.js` checks identical actual command traces
+`node20 tests/client/test-coop-workload-context.js` (server repository) checks identical actual command traces
 and serialized states across the default, native, and native-without-lines modes.
 Pathfinding, command collectors and combat remain unmodified.
 Each measured VM phase has a 60-second watchdog. The report records machine,

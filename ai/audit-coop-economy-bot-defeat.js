@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Independent audit of an ai/test-coop-economy-bot-defeat.js gate output directory.
+// Independent audit of a test-coop-economy-bot-defeat.js gate output directory (diplomacy_server tests/client).
 // Recounts every case from its journal, record, per-round ledger and initial/final snapshots instead of trusting
 // the harness summary, then writes results.json, audit-checkpoints.json and ledgers/<case>.json.
 //   node ai/audit-coop-economy-bot-defeat.js --output-dir DIR --size tiny --humans 1,2,4,10,12 --seeds 0,...,9

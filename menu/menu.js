@@ -4,6 +4,8 @@ function menuClick(event) {
 }
 
 function menuWheel(event) {
+    if (event.ctrlKey)
+        return
     menu.wheel(getEventPos(event), event.deltaY)
 }
 
@@ -1197,6 +1199,7 @@ class Menu {
             onlineLobby = null
         }
         onlineSession.closeGame()
+        GameManager.clearWaitingMode()
 
         nextTurnPauseInterface.backToMenu()
         // A lobby game lives on the server, not in a save slot.
@@ -1206,6 +1209,7 @@ class Menu {
         // so that the timer saves the current remaining time
         timer.pauseAndSaveTime()
 
+        removeEvents()
         menu.visible = true
         menu.start()
         // A lobby game returns to the hub, whose enter re-fetches lobby:list;

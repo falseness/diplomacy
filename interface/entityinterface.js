@@ -1,7 +1,7 @@
 function destroySelected() {
     if (gameEvent.selected.isUnit) {
         console.error(`trying to destroy selected which is unit = ${gameEvent.selected.toJSON()}`)
-        retutn
+        return
     }
     let type = 'destroyBuilding'
     if (gameEvent.selected.isTown()) 

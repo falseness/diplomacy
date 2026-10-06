@@ -16,6 +16,20 @@ function createEvents() {
         document.addEventListener('touchcancel', touchend)
     }
 }
+// The menu has its own listeners (menu.setEvents); the game's must not act on
+// the game left behind or on its hidden buttons while the menu is shown.
+function removeEvents() {
+    document.removeEventListener('click', click)
+    document.removeEventListener('mousemove', mousemove)
+    document.removeEventListener('wheel', mousewheel)
+    document.removeEventListener('keydown', keydown)
+    document.removeEventListener('keyup', keyup)
+    window.removeEventListener('blur', windowBlur)
+    document.removeEventListener('touchstart', touchstart)
+    document.removeEventListener('touchmove', touchmove)
+    document.removeEventListener('touchend', touchend)
+    document.removeEventListener('touchcancel', touchend)
+}
 
 /*document.addEventListener('touchmove', function(event) {
 event.preventDefault();
@@ -46,8 +60,7 @@ function touchend(event) {
     let pos = getTouchesPos(event)
     // the one finger still down (event.touches: targetTouches may not hold it) re-anchors the pan
     if (event.touches.length == 1)
-        pos = {x: event.touches[0].clientX * window.devicePixelRatio,
-               y: event.touches[0].clientY * window.devicePixelRatio}
+        pos = clientToCanvas(event.touches[0].clientX, event.touches[0].clientY)
     gameEvent.touchend(pos, event.touches.length)
 }
 function keydown(event) {
@@ -82,7 +95,10 @@ function isEditableTarget(target) {
     return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || !!target.isContentEditable
 }
 
+// ctrl+wheel is the browser's page zoom; the map must not zoom along with it
 function mousewheel(event) {
+    if (event.ctrlKey)
+        return
     let pos = getEventPos(event)
     gameEvent.mousewheel(pos, event.wheelDelta ?? -event.deltaY)
 }
@@ -148,6 +164,8 @@ class Events {
         if (touchesCount == 2) {
             if (this.scaling) {
                 this.screen.scale(pos, this.pitchStartDist, this.pitchStartPos)
+                // the zoom step is relative to the previous touchmove, not to the touchstart
+                this.pitchStartDist = pointPythagorean(pos[0], pos[1])
             }
             return
         }
@@ -279,7 +297,7 @@ class Events {
                 return
             }
             if (keycode == Events.kILetterKeycode) {
-                gameSettings.interface.drawChanceOfWinningText = true
+                grid.showChanceOfWinning = true
                 grid.fillChancesOfWinning(this.selected)
                 return
             }
@@ -289,9 +307,28 @@ class Events {
             }
             
             if (keycode == Events.kEnterKeycode) {
-                if (isShiftPressed || nextTurnButton.highlightButton) {
+                // A held key must not end the turns of the next players (or select their units) unseen.
+                if (isRepeat)
+                    return
+                if (isShiftPressed) {
+                    // the same 1-second guard as the mouse next-turn button
+                    if (nextTurnButton.unactive)
+                        return
                     nextTurnPauseInterface.hideButDontUpdateTimer()
                     nextTurn()
+                    nextTurnButton.deactivate()
+                    return
+                }
+                // Behind the 'Player N' overlay Enter only dismisses it, as a click does.
+                if (nextTurnPauseInterface.visible) {
+                    nextTurnPauseInterface.click()
+                    return
+                }
+                if (nextTurnButton.highlightButton) {
+                    if (nextTurnButton.unactive)
+                        return
+                    nextTurn()
+                    nextTurnButton.deactivate()
                     return
                 }
 
@@ -309,9 +346,7 @@ class Events {
                 return
             }
             if (keycode == Events.kZKeycode || keycode == Events.kBackspaceKeycode) {
-                actionManager.undo()
-                humanCommands.pop()
-                console.log('pop human command')
+                AiRuntime.undoHumanCommand()
             }
             return 
         }
@@ -406,6 +441,7 @@ class Events {
         this.interface.statistics.visible = false
     }
     nextTurn() {
+        grid.clearChancesOfWinning()
         this.selected.removeSelect()
         this.selected = new Empty()
         this.hideAll()

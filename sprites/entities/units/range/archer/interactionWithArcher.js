@@ -6,7 +6,9 @@ class InteractionWithArcher extends InteractionWithRangeUnit {
         this.standartRange = this.range
         this.rangeWay = this.standartRangeWay
     }
-    select(archer) {
+    // range and range way depend on the archer's current cell (hill/tower/town); the AI never
+    // selects its units, so they are recomputed on every move, at turn start and before commands
+    updateRange(archer) {
         if (archer.onHill) {
             this.range = this.standartRange + archer.rangeIncrease
             this.rangeWay = this.hillRangeWay
@@ -15,7 +17,18 @@ class InteractionWithArcher extends InteractionWithRangeUnit {
             this.range = this.standartRange
             this.rangeWay = this.standartRangeWay
         }
+    }
+    select(archer) {
+        this.updateRange(archer)
         super.select(archer)
+    }
+    changeCoord(coord, archer, killUnit) {
+        super.changeCoord(coord, archer, killUnit)
+        this.updateRange(archer)
+    }
+    getAvailableCommandDestinations(archer) {
+        this.updateRange(archer)
+        return super.getAvailableCommandDestinations(archer)
     }
 }
 class ArcherRangeWay extends RangeWay {

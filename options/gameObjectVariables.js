@@ -20,13 +20,14 @@ let gameSettings = {
         drawChanceOfWinning: false
     }
 }
-// Rendering and input read gameSettings.interface every frame. Settings from
-// older saves, received boards or a failed restore may omit it or the flag.
+// Settings from older saves, received boards or a failed restore may omit
+// gameSettings.interface. The debug overlay flag (I key) is client-only UI
+// state on the grid; a stale copy from older saves is dropped so it is never
+// saved or sent with the board again.
 function normalizeInterfaceSettings(settings) {
     if (!settings.interface || typeof settings.interface !== 'object')
         settings.interface = {}
-    if (settings.interface.drawChanceOfWinningText === undefined)
-        settings.interface.drawChanceOfWinningText = false
+    delete settings.interface.drawChanceOfWinningText
     return settings
 }
 // Fogged landmarks (goldmines, live portals, neutral towns) are drawn in

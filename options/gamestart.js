@@ -1285,12 +1285,24 @@ class GameManager {
         gameEvent.screen.stop()
         gameEvent.resetKeyboardZoom()
         this.updateCameraBorders()
+        this.clearWaitingMode()
 
 	    createEvents()
+    }
+    // An online wait or connection-lost panel freezes input; a game entered
+    // from the menu starts unfrozen (an online board re-freezes after this),
+    // without the 1-second next-turn guard of the previous game.
+    static clearWaitingMode() {
+        gameEvent.waitingMode = false
+        nextTurnButton.highlightButton = false
+        nextTurnButton.enableClick()
+        nextTurnButton.unactive = false
+        if (typeof undoButton != 'undefined') undoButton.enableClick()
     }
     static load() {
         this.clearBasisValues()
         actionManager.clear()
+        this.clearHumanCommands()
 
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
@@ -1303,6 +1315,13 @@ class GameManager {
         whooseTurn = 0
         gameRound = 0
         actionManager.clear()
+        this.clearHumanCommands()
+    }
+    // Human commands belong to one game. AiRuntime is absent where only the
+    // game rules are loaded (server, benchmarks).
+    static clearHumanCommands() {
+        if (typeof AiRuntime != 'undefined')
+            AiRuntime.clearHumanCommands()
     }
     // The board setup shared by start and buildOnlineBoard.
     static setUpBoard(map, _isFogOfWar, isClassicTimer, isOnline, gameManager = this) {

@@ -533,17 +533,18 @@ class NeutralPlayer extends Player {
     floodCell(i, j) {
         let arr = grid.arr
 
-        if (arr[i][j].building.isTown) {
-            arr[i][j].building.destroy()
+        let building = arr[i][j].building
+        if (building.isTown && building.isTown()) {
+            building.destroy()
         }
         else {
-            arr[i][j].building.kill()
+            building.kill()
         }
 
         arr[i][j].unit.kill()
 
         arr[i][j].hexagon.sudoPaint(0)
-        arr[i][j].hexagon.isSuburub = false
+        arr[i][j].hexagon.isSuburb = false
 
         arr[i][j].building = new Sea(i, j)
     }

@@ -194,6 +194,10 @@ all moves when attacking it\n\nunit on it is priority target`,
     hit() {
         this.kill()
     }
+    // the gold is checked when the building is chosen, but the town can spend it (on a unit) before placement
+    canAfford(town) {
+        return town.gold >= this.cost
+    }
     sendInstructions(coord, town) {
         town.minusGold(this.cost)
 
@@ -238,8 +242,12 @@ class ManufactureProduction extends BuildingProduction {
         super(turns, cost, _class, name)
     }
     canCreateOnCell(cell, town) {
+        // only the producing town's own suburbs: a manufacture joins this
+        // town's buildings, so on another town's suburb it would pay the
+        // wrong town (and its old owner after that town is captured)
         return cell.building.isEmpty() &&
-            this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor)
+            this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor) &&
+            this.isOurSuburb(cell.hexagon.coord, town.suburbs)
     }
     get isManufacture() {
         return true
@@ -405,6 +413,10 @@ class SuburbProduction extends BuildingProduction {
             }
         }
         return false
+    }
+    canAfford() {
+        // the suburb cost depends on the cell, canCreateOnCell checks it
+        return true
     }
     sendInstructions(coord, town) {
         town.minusGold(this.suburbsCostformula(this.distance[coord.x][coord.y]))
