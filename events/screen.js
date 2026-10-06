@@ -107,6 +107,9 @@ class Screen {
             zoom = mapBorder.scale.max / canvas.scale
         if (canvas.scale * zoom < mapBorder.scale.min)
             zoom = mapBorder.scale.min / canvas.scale
+        // a NaN zoom or a non-finite anchor would turn canvas.scale and canvas.offset into NaN for good
+        if (!Number.isFinite(zoom) || zoom <= 0 || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y))
+            return
 
         mainCtx.translate(canvas.offset.x, canvas.offset.y)
 
@@ -170,6 +173,8 @@ class MobileScreen extends Screen {
     }
     scale(points, oldDist, oldPos) {
         const scaleRatio = 0.75
+        if (!Array.isArray(points) || points.length != 2)
+            return
         let scale = pointPythagorean(points[0], points[1]) - oldDist 
         super.scale(oldPos, scale * scaleRatio)
     }

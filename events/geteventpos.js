@@ -15,7 +15,8 @@ function getEventPos(event) {
 }
 function getTouchesPos(event) {
     let pos = []
-    for (let i = 0; i < event.targetTouches.length; ++i) {
+    // the handlers pass event.touches.length as the count, so read the same list
+    for (let i = 0; i < event.touches.length; ++i) {
         pos.push({x: event.touches[i].clientX * window.devicePixelRatio, 
                   y: event.touches[i].clientY * window.devicePixelRatio})
     }
