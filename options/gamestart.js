@@ -28,7 +28,8 @@ class GameMap {
         this.coop = coop ? {
             initialHumanCount: _players.length - 1,
             humanSlots: _players.slice(1).map((_, i) => i + 1),
-            humanTeam: 'HUMANS', demonSlot: _players.length
+            humanTeam: 'HUMANS', demonSlot: _players.length,
+            ...(coop.tutorial ? {tutorial: true} : {})
         } : null
         if (coop) {
             this.players = [..._players, {

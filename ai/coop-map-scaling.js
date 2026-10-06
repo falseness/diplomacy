@@ -17,6 +17,21 @@ const COOP_HEX_RADIUS = Object.freeze({
 // which the server does not load.
 const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'cavalry', 'chaos', 'mage'])
 const COOP_EXTRA_HEAVY_PORTALS = 2
+// Hand-made tutorial co-op maps (GameMap coop {tutorial:true}) list their own portals and use a
+// fixed spawn table instead of the generated schedule: from round 4, every 4 rounds, each free
+// portal spawns its type; a chaos portal spawns one demonLord at COOP_TUTORIAL_CHAOS_ROUND only.
+const COOP_TUTORIAL_PORTAL_TYPES = Object.freeze({melee: 'brute', mage: 'hexcaster', siege: 'bombard',
+    ranged: 'emberArcher', heavy: 'bulwark', chaos: 'demonLord'})
+const COOP_TUTORIAL_WAVE_INTERVAL = 4
+const COOP_TUTORIAL_CHAOS_ROUND = 8
+
+function getCoopTutorialDemonType(category, round) {
+    if (typeof category !== 'string' || !Object.prototype.hasOwnProperty.call(COOP_TUTORIAL_PORTAL_TYPES, category))
+        throw new RangeError('Invalid tutorial portal category')
+    if (!Number.isSafeInteger(round) || round < 0) throw new RangeError('Invalid wave round')
+    if (category === 'chaos') return round === COOP_TUTORIAL_CHAOS_ROUND ? COOP_TUTORIAL_PORTAL_TYPES.chaos : null
+    return round > 0 && round % COOP_TUTORIAL_WAVE_INTERVAL === 0 ? COOP_TUTORIAL_PORTAL_TYPES[category] : null
+}
 const COOP_PORTALS_PER_HUMAN = Object.freeze({melee: 3, ranged: 3, siege: 1, heavy: 1, cavalry: 2, chaos: 1, mage: 3})
 
 function baselineRadius(initialHumanCount, size) {
@@ -68,5 +83,5 @@ function getCoopMapScalingFromMetadata(coop) {
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {getCoopMapScaling, getCoopMapScalingFromMetadata, COOP_PORTAL_CATEGORY_ORDER, COOP_EXTRA_HEAVY_PORTALS,
-        COOP_HEX_RADIUS, baselineRadius, hexCounts}
+        COOP_HEX_RADIUS, baselineRadius, hexCounts, COOP_TUTORIAL_PORTAL_TYPES, getCoopTutorialDemonType}
 }

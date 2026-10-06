@@ -200,9 +200,21 @@ function buildCoopCircleCandidate(playerCount, size, seed, attempt) {
 // the documented center/offset, elite categories (COOP_CIRCLE_ELITE_CATEGORIES)
 // in the core layer <= E and common categories in the ring (E, ringOuter].
 // Declared test fixtures (testFixture.generated === false) keep only the
-// count and cell checks.
+// count and cell checks. Hand-made tutorial maps (coop.tutorial) keep only the
+// cell checks and tutorial categories (COOP_TUTORIAL_PORTAL_TYPES).
 function validateCoopTypedPortals(map) {
     const coop = map.coop, generation = coop && coop.generation
+    if (coop && coop.tutorial) {
+        const cells = new Set()
+        for (const p of Array.isArray(map.portals) ? map.portals : []) {
+            if (!p || !Number.isInteger(p.x) || !Number.isInteger(p.y) || p.x < 0 || p.y < 0 ||
+                p.x >= map.mapSize.x || p.y >= map.mapSize.y || cells.has(p.x + ',' + p.y) ||
+                !Object.prototype.hasOwnProperty.call(COOP_TUTORIAL_PORTAL_TYPES, p.category))
+                throw new Error('Tutorial co-op portals require distinct in-bounds cells with a known category')
+            cells.add(p.x + ',' + p.y)
+        }
+        return
+    }
     if (!generation || generation.version !== 5) throw new Error('Co-op typed portals require version-5 generation metadata')
     const fixture = generation.testFixture && generation.testFixture.generated === false
     const shape = map.mapShape || {}, R = shape.radius

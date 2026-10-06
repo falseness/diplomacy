@@ -1,5 +1,6 @@
 function generateCoopWave(round) {
     const coop = gameSettings.coop
+    if (coop && coop.tutorial) return generateTutorialCoopWave(round)
     if (!coop || !coop.generation || coop.generation.version !== 5)
         throw new Error('Unsupported co-op generation version')
     // Destroyed portals leave external; occupied portals skip this round only.
@@ -13,6 +14,22 @@ function generateCoopWave(round) {
     const wave = composeTypedCoopWave(round, portals)
     coop.typedWaves = {lastRound: round}
     return wave
+}
+
+// Hand-made tutorial maps: fixed per-category types (getCoopTutorialDemonType),
+// once per round like the generated schedule.
+function generateTutorialCoopWave(round) {
+    const coop = gameSettings.coop
+    const last = coop.typedWaves ? coop.typedWaves.lastRound : 0
+    if (round <= last) return {round, types: [], selections: []}
+    const selections = external.filter(portal => portal.isDemonPortal && !portal.killed &&
+        portal.hp > 0 && portal.playerColor === coop.demonSlot &&
+        grid.getBuilding(portal.coord) === portal && grid.getUnit(portal.coord).isEmpty())
+        .map(portal => ({x: portal.coord.x, y: portal.coord.y, type: getCoopTutorialDemonType(portal.category, round)}))
+        .filter(entry => entry.type)
+        .sort((a, b) => a.x - b.x || a.y - b.y)
+    coop.typedWaves = {lastRound: round}
+    return {round, types: selections.map(entry => entry.type), selections}
 }
 
 // Typed replacement for seeded sampling: each portal's type depends only on its
