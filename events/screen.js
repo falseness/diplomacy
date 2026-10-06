@@ -151,11 +151,18 @@ class MobileScreen extends Screen {
         this.ACCELERATION = 0.001 * HEIGHT
         this.speedRatio = 1
     }
+    // touchmoves between two frames add up; move() applies the total once and clears it
     setSpeedX(speedX) {
-        this.speedX = speedX * this.speedRatio / canvas.scale
+        this.speedX += speedX * this.speedRatio / canvas.scale
     }
     setSpeedY(speedY) {
-        this.speedY = speedY * this.speedRatio / canvas.scale
+        this.speedY += speedY * this.speedRatio / canvas.scale
+    }
+    stopX() {
+        this.speedX = 0
+    }
+    stopY() {
+        this.speedY = 0
     }
     move() {
         super.move()
