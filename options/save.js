@@ -1,3 +1,12 @@
+// Whether the current game keeps its timers and player history in the online namespace of gameStorageSlot; chosen
+// when a game is set up (GameManager.setUpBoard) or loaded (unpackAll).
+let onlineGameStorage = false
+// The localStorage prefix of the current game's timers and player history: the save slot gameSlot for a local game.
+// An online game has no save slot, so it gets its own namespace and never overwrites the offline slot's keys.
+function gameStorageSlot() {
+    return onlineGameStorage ? 'online:' : gameSlot
+}
+
 class SaveManager {
     constructor() {}
     save() {
@@ -48,10 +57,10 @@ class JsonUnpackManager {
         }
     }
     setPlayerTimerByIndex(index, _timer) {
-        localStorage.setItem(gameSlot + 'timer' + index, JSON.stringify(_timer))
+        localStorage.setItem(gameStorageSlot() + 'timer' + index, JSON.stringify(_timer))
     }
     getPlayerTimerByIndex(index) {
-        return localStorage.getItem(gameSlot + 'timer' + index)
+        return localStorage.getItem(gameStorageSlot() + 'timer' + index)
     }
     static timeNotFound = 9999
     getPlayerTime() {
@@ -247,6 +256,8 @@ class JsonUnpackManager {
                     throw new Error('Invalid saved portal ownership')
             }
         }
+        // A board of the game open in onlineSession (the server loads no onlineSession).
+        onlineGameStorage = typeof onlineSession !== 'undefined' && onlineSession.openGameID !== null
         let packedTimer = JSON.parse(jsonTimer)
         if (packedTimer.type == 'long') {
             timer = new LongTimer(packedTimer.time)

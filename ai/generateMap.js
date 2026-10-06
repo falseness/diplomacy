@@ -42,8 +42,16 @@ function coopMaskedCells(map) {
     return cells
 }
 
+// Set/Map key of a cell: its index for in-bounds integer cells, "x,y" otherwise,
+// so distinct cells never share a key and in-bounds lookups stay cheap.
+function coopCellKey(map) {
+    const width = map.mapSize.x, height = map.mapSize.y
+    return c => Number.isInteger(c.x) && Number.isInteger(c.y) && c.x >= 0 && c.y >= 0 && c.x < width && c.y < height
+        ? c.y * width + c.x : `${c.x},${c.y}`
+}
+
 function coopStartBalanceMetrics(map) {
-    const key = c => `${c.x},${c.y}`
+    const key = coopCellKey(map)
     const groups = [map.goldmines, map.players[0].towns, map.portals]
     const terminal = new Set([...groups[1], ...groups[2]].map(key))
     const masked = coopMaskedCells(map)
@@ -185,8 +193,8 @@ function buildCoopCircleCandidate(playerCount, size, seed, attempt) {
     }
 }
 
-// Version-5 generated metadata: eleven portals per initial human on distinct
-// in-bounds cells: three melee/ranged and one each siege/heavy/support/chaos/mage,
+// Version-5 generated metadata: fourteen portals per initial human on distinct
+// in-bounds cells: three melee/ranged/mage, two cavalry and one each siege/heavy/chaos,
 // plus two heavy portals per map (COOP_EXTRA_HEAVY_PORTALS).
 // Generated maps are also held to the Circle regions: a hexagonal shape with
 // the documented center/offset, elite categories (COOP_CIRCLE_ELITE_CATEGORIES)
@@ -271,7 +279,7 @@ function coopPortalDistance(a, b) {
 // shortcuts. Humans must reach each target from an adjacent walkable cell;
 // allied town centers remain obstacles, as in Way.isCellImpassable.
 function coopRoutesConnected(map) {
-    const key = c => `${c.x},${c.y}`
+    const key = coopCellKey(map)
     const targets = [...map.portals, ...map.players[0].towns, ...map.goldmines]
     const terminal = new Set([...map.portals, ...map.players[0].towns].map(key))
     const terrain = [...map.lakes, ...map.mountains, ...coopMaskedCells(map)]

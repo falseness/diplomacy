@@ -6,7 +6,10 @@ function menuClick(event) {
 function menuWheel(event) {
     if (event.ctrlKey)
         return
-    menu.wheel(getEventPos(event), event.deltaY)
+    menu.wheel(getEventPos(event), event.deltaY, event.deltaX)
+}
+function menuKeyDown(event) {
+    menu.keydown(event)
 }
 
 function menuBack() {
@@ -62,6 +65,13 @@ class Tree {
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].click(pos)
         }
+    }
+    // Scrollable buttons (the save slot list) scroll on desktop by wheel and arrow keys.
+    wheel(pos, deltaY, deltaX) {
+        for (const button of this.buttons) button.wheel?.(pos, deltaY, deltaX)
+    }
+    scrollKey(key) {
+        for (const button of this.buttons) button.scrollKey?.(key)
     }
     draw(ctx) {
         for (let i = 0; i < this.buttons.length; ++i) {
@@ -863,8 +873,8 @@ class HubList {
             const row = this.rows[i]
             const top = y + i * rowHeight - this.scroll.offset
             const header = row.kind === 'header'
-            if (row.kind === 'game' || row.kind === 'lobby') {
-                ctx.fillStyle = row.yourTurn ? '#ffd54f' : 'white'
+            if (row.kind === 'game' || row.kind === 'lobby' || row.kind === 'myLobby') {
+                ctx.fillStyle = row.yourTurn ? '#ffd54f' : row.kind === 'myLobby' ? '#c8e6c9' : 'white'
                 ctx.fillRect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight)
                 ctx.strokeStyle = row.id === this.selectedId ? 'black' : '#747474'
                 ctx.lineWidth = (row.id === this.selectedId ? 0.003 : 0.001) * WIDTH
@@ -887,7 +897,7 @@ class HubList {
     }
 }
 
-// The signed-in hub: your games and open lobbies from lobby:list, re-fetched on lobby:listChanged.
+// The signed-in hub: 'return to my lobby', your games and open lobbies from lobby:list, re-fetched on lobby:listChanged.
 class OnlineHubTree {
     constructor(_menu) {
         this.menu = _menu
@@ -899,7 +909,8 @@ class OnlineHubTree {
         this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', 'black')
         this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
         this.list.onRow = row => {
-            if (row.kind === 'lobby') this.joinLobby(row.id)
+            // lobby:join of my own lobby returns it, so both open the room.
+            if (row.kind === 'lobby' || row.kind === 'myLobby') this.joinLobby(row.id)
             else if (row.kind === 'game') this.openGame(row.id)
         }
         this.joining = false
@@ -1164,6 +1175,7 @@ class Menu {
         if (boolean) {
             document.addEventListener('click', menuClick)
             document.addEventListener('wheel', menuWheel)
+            document.addEventListener('keydown', menuKeyDown)
             if (mobilePhone) {
                 document.addEventListener('touchstart', menuTouchStart)
                 document.addEventListener('touchmove', menuTouchMove)
@@ -1172,6 +1184,7 @@ class Menu {
         } else {
             document.removeEventListener('click', menuClick)
             document.removeEventListener('wheel', menuWheel)
+            document.removeEventListener('keydown', menuKeyDown)
             if (mobilePhone) {
                 document.removeEventListener('touchstart', menuTouchStart)
                 document.removeEventListener('touchmove', menuTouchMove)
@@ -1223,8 +1236,11 @@ class Menu {
     click(pos) {
         this.selectedTree.click(pos)
     }
-    wheel(pos, deltaY) {
-        this.selectedTree.wheel?.(pos, deltaY)
+    wheel(pos, deltaY, deltaX) {
+        this.selectedTree.wheel?.(pos, deltaY, deltaX)
+    }
+    keydown(event) {
+        this.selectedTree.scrollKey?.(event.key)
     }
     touchEnd(pos) {
         for (let i = 0; i < this.selectedTree.buttons.length; ++i) {

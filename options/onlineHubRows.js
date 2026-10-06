@@ -24,10 +24,21 @@ function hubLobbyRowText(lobby) {
         'host ' + lobby.host.nickname].join(' · ')
 }
 
-// Your games first (in the ack's newest-first order), then the open lobbies.
+// After a reload the lobby I am a member of is reachable only from this row (lobby:list myLobbyId).
+function hubMyLobbyRowText(lobby) {
+    return lobby ? 'return to my lobby · ' + hubLobbyRowText(lobby) : 'return to my lobby'
+}
+
+// The 'return to my lobby' row (when the ack has myLobbyId), your games (in the ack's
+// newest-first order), then the open lobbies.
 function buildHubRows(list) {
     const myGames = list?.myGames || [], lobbies = list?.lobbies || []
-    const rows = [{kind: 'header', id: null, text: 'your games'}]
+    const rows = []
+    const myLobbyId = list?.myLobbyId || null
+    if (myLobbyId)
+        rows.push({kind: 'myLobby', id: myLobbyId,
+            text: hubMyLobbyRowText(lobbies.find(lobby => lobby.lobbyId === myLobbyId))})
+    rows.push({kind: 'header', id: null, text: 'your games'})
     if (!myGames.length) rows.push({kind: 'empty', id: null, text: 'no games'})
     for (const game of myGames)
         rows.push({kind: 'game', id: game.gameID, text: hubGameRowText(game), yourTurn: !!game.yourTurn})

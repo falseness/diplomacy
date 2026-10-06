@@ -21,7 +21,8 @@ function getEventPos(event) {
 }
 function getTouchesPos(event) {
     let pos = []
-    for (let i = 0; i < event.targetTouches.length; ++i)
+    // the handlers pass event.touches.length as the count, so read the same list
+    for (let i = 0; i < event.touches.length; ++i)
         pos.push(clientToCanvas(event.touches[i].clientX, event.touches[i].clientY))
     if (pos.length == 1)
         return pos[0]

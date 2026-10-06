@@ -11,8 +11,8 @@ const circleGeometry = typeof coopHexLayer === 'function'
     ? {coopHexLayer, coopHexCenter, coopHexMapShape, coopHexLattice}
     : require('./coop-hex-geometry.js')
 
-// Portal categories that live in the elite core, six per human plus the per-map extra heavy portals.
-const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege', 'mage']
+// Portal categories that live in the elite core, eight per human plus the per-map extra heavy portals.
+const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege', 'mage', 'cavalry']
 // Minimum hex distance from every human town to a common ring portal.
 const CIRCLE_TOWN_DISTANCE = Object.freeze({tiny: 3, normal: 4, big: 5})
 const CIRCLE_MAX_GROWTH = 8
@@ -46,7 +46,7 @@ function circleNeighbours(c, side) {
 
 const circleEliteCache = new Map()
 
-// Elite portals of one map: 6 per human plus the extra heavy portals.
+// Elite portals of one map: 8 per human plus the extra heavy portals.
 function circleElitePortals(humans, size) {
     const targets = circleScaling(humans, size).counts.portalCategories
     return COOP_CIRCLE_ELITE_CATEGORIES.reduce((sum, c) => sum + targets[c], 0)
@@ -92,8 +92,10 @@ function circleLayerLattice(radius) {
 
 // Ring lattice cells per common ring portal. Ring groups keep CIRCLE_GROUP_GAP
 // from each other, so a ring with fewer cells (a tiny map whose elite core grew
-// for three mage portals per human) has no site for its last groups.
+// for the elite portals) has no site for its last groups.
 const CIRCLE_RING_LATTICE_PER_PORTAL = 2
+// Common ring portals of one map (melee + ranged, 6 per human).
+const circleRingPortals = targets => targets.melee + targets.ranged
 
 // Layer bands. The elite core is R/6, grown only when the elite portals would
 // not fit. The common ring ends at R/2, extended outwards while it holds fewer
@@ -104,7 +106,7 @@ function circleRegions(radius, size, humans) {
     const elite = Math.max(Math.floor(radius / 6), circleEliteMinimum(radius, humans, size)), townRing = radius - 3
     const limit = townRing - CIRCLE_TOWN_DISTANCE[size], lattice = circleLayerLattice(radius)
     const targets = circleScaling(humans, size).counts.portalCategories
-    const need = CIRCLE_RING_LATTICE_PER_PORTAL * (targets.melee + targets.ranged + targets.support)
+    const need = CIRCLE_RING_LATTICE_PER_PORTAL * circleRingPortals(targets)
     let ringOuter = Math.floor(3 * radius / 6), have = 0
     for (let layer = elite + 1; layer <= ringOuter; layer++) have += lattice[layer]
     while (have < need && ringOuter < limit) have += lattice[++ringOuter]
@@ -126,14 +128,14 @@ function circleCapacityAt(humans, size, radius) {
         else if (layer <= regions.ringOuter) { ringCells++; if (lattice) ringLattice++ }
         if (layer === regions.townRing && lattice) townRingLattice++
     }
-    const elitePortals = circleElitePortals(humans, size)
+    const elitePortals = circleElitePortals(humans, size), ringPortals = circleRingPortals(counts.portalCategories)
     const outsideReserved = 9 * (humans + counts.neutralTowns) + counts.goldmines + 3 * (counts.portals - counts.portalCategories.heavy + humans)
     const reserved = eliteCells + outsideReserved
     // Nothing is placed yet, so every elite cell is free; each elite portal keeps two approach cells.
     const rows = {
         eliteLattice: {have: eliteLattice, need: elitePortals},
         eliteApproach: {have: eliteCells - elitePortals, need: 2 * elitePortals},
-        ringLattice: {have: ringLattice, need: 7 * humans},
+        ringLattice: {have: ringLattice, need: ringPortals},
         townRingLattice: {have: townRingLattice, need: humans},
         townRingGap: {have: regions.townRing, need: regions.elite + 2},
         eliteDepth: {have: regions.elite, need: 1},
@@ -141,9 +143,9 @@ function circleCapacityAt(humans, size, radius) {
         terrain: {have: playable - reserved, need: terrain.mountains + terrain.lakes + terrain.bushes}
     }
     // Per-human neutral-town 3x3 boxes: two in the common ring on normal/big (after
-    // 3 x 7h portal-plus-approach cells), one in the elite core on big (after the
+    // 3 x 6h ring portal-plus-approach cells), one in the elite core on big (after the
     // elite portal-plus-approach cells).
-    if (size !== 'tiny') rows.ringNeutral = {have: ringCells - 3 * 7 * humans, need: 2 * 9 * humans}
+    if (size !== 'tiny') rows.ringNeutral = {have: ringCells - 3 * ringPortals, need: 2 * 9 * humans}
     if (size === 'big') rows.eliteNeutral = {have: eliteCells - 3 * elitePortals, need: 9 * humans}
     for (const row of Object.values(rows)) row.slack = row.have - row.need
     return {radius, playable, eliteCells, regions, rows, ok: Object.values(rows).every(row => row.slack >= 0)}
@@ -214,8 +216,8 @@ const CIRCLE_NEUTRAL_RGB = Object.freeze({r: 208, g: 208, b: 208})
 const CIRCLE_OFFSETS3 = Object.freeze([-1, 0, 1].flatMap(dy => [-1, 0, 1].map(dx => Object.freeze({x: dx, y: dy}))))
 const circleChebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 const circleHexDistance = (a, b) => circleGeometry.coopHexLayer(a.x, a.y, {q: b.x, r: b.y - Math.floor(b.x / 2)})
-// Minimum hex distance between human towns, and seeded start offsets tried before giving up.
-const CIRCLE_START_SPACING = 11
+// Target hex distance between human towns, and seeded ring walks tried per spacing before relaxing it.
+const CIRCLE_START_SPACING = 12
 const CIRCLE_START_ATTEMPTS = 64
 
 function circleShuffler(seed) {
@@ -256,49 +258,143 @@ function circleLayerTable(plan) {
     return table
 }
 
+// In-bounds neighbour ids of every cell id as flat offset/list arrays, shared per side.
+const circleAdjacencyTables = new Map()
+function circleAdjacencyTable(side) {
+    let table = circleAdjacencyTables.get(side)
+    if (!table) {
+        const start = new Int32Array(side * side + 1), list = []
+        for (let id = 0; id < side * side; id++) {
+            start[id] = list.length
+            for (const n of circleNeighbours({x: id % side, y: Math.floor(id / side)}, side)) list.push(n.y * side + n.x)
+        }
+        start[side * side] = list.length
+        table = {start, list: Int32Array.from(list)}
+        circleAdjacencyTables.set(side, table)
+    }
+    return table
+}
+
 // Free cells (layer <= R, not solid) form one component and every listed object
 // touches it. Cells with layer > R are always solid (InvisibleMountain at runtime).
 function circlePassableConnected(plan, solid, objects) {
-    const {side, radius} = plan, layers = circleLayerTable(plan)
-    const inside = id => layers[id] <= radius
-    const seen = new Uint8Array(side * side), queue = []
-    let open = 0
-    for (let id = 0; id < side * side; id++) if (inside(id) && !solid.has(id)) {
+    const {side, radius} = plan, layers = circleLayerTable(plan), area = side * side
+    const {start, list} = circleAdjacencyTable(side)
+    const blocked = new Uint8Array(area), seen = new Uint8Array(area), queue = new Int32Array(area)
+    for (const id of solid) if (id >= 0 && id < area) blocked[id] = 1
+    let open = 0, tail = 0
+    for (let id = 0; id < area; id++) if (layers[id] <= radius && !blocked[id]) {
         open++
-        if (!queue.length) { queue.push(id); seen[id] = 1 }
+        if (!tail) { queue[tail++] = id; seen[id] = 1 }
     }
-    for (let i = 0; i < queue.length; i++) {
-        const x = queue[i] % side
-        for (const n of circleNeighbours({x, y: (queue[i] - x) / side}, side)) {
-            const id = n.y * side + n.x
-            if (!seen[id] && inside(id) && !solid.has(id)) { seen[id] = 1; queue.push(id) }
-        }
+    for (let i = 0; i < tail; i++) for (let j = start[queue[i]]; j < start[queue[i] + 1]; j++) {
+        const id = list[j]
+        if (!seen[id] && layers[id] <= radius && !blocked[id]) { seen[id] = 1; queue[tail++] = id }
     }
-    return queue.length === open && objects.every(id => {
-        const x = id % side
-        return circleNeighbours({x, y: (id - x) / side}, side).some(n => seen[n.y * side + n.x])
+    return tail === open && objects.every(id => {
+        for (let j = start[id]; j < start[id + 1]; j++) if (seen[list[j]]) return true
+        return false
     })
 }
 
+// Scratch arrays for circleRepairField on a grid of the given area.
+function circleRepairScratch(area) {
+    return {unsafe: new Uint8Array(area), best: new Float64Array(area), buckets: []}
+}
+
+// Updates a BFS field (distance from origin, -1 if unreached) in place after each
+// cell in changed became solid (enter false) or an endpoint that is reached but
+// not passed through (expand false). Removing options only lengthens paths, and
+// BFS distances are unique, so the result equals a full BFS of the new state. Cells that keep a parent one step closer keep
+// their distance; the others are re-solved by a unit-weight Dijkstra seeded
+// from their kept neighbours. enter/expand are never asked about the origin.
+function circleRepairField(distance, origin, adjacentStart, adjacent, enter, expand, changed, scratch) {
+    const {unsafe, best, buckets} = scratch
+    const expands = id => id === origin || expand(id)
+    let low = Infinity, high = -1
+    const push = (d, id) => {
+        (buckets[d] || (buckets[d] = [])).push(id)
+        low = Math.min(low, d); high = Math.max(high, d)
+    }
+    const children = (c, d) => {
+        for (let k = adjacentStart[c]; k < adjacentStart[c + 1]; k++) if (distance[adjacent[k]] === d + 1) push(d + 1, adjacent[k])
+    }
+    for (const c of changed) if (c !== origin && distance[c] >= 0) push(distance[c], c)
+    // Level order: every parent is decided before its children.
+    const lost = []
+    for (let d = low; d <= high; d++) {
+        const list = buckets[d]
+        if (!list) continue
+        buckets[d] = undefined
+        for (const v of list) {
+            if (unsafe[v] || distance[v] !== d) continue
+            let safe = enter(v)
+            if (safe) {
+                safe = false
+                for (let k = adjacentStart[v]; k < adjacentStart[v + 1] && !safe; k++) {
+                    const u = adjacent[k]
+                    safe = distance[u] === d - 1 && !unsafe[u] && expands(u)
+                }
+            }
+            if (!safe) { unsafe[v] = 1; lost.push(v) }
+            // Children lose v as a parent when v is lost or no longer expands.
+            if (!safe || !expands(v)) children(v, d)
+        }
+    }
+    for (const v of lost) distance[v] = -1
+    low = Infinity; high = -1
+    for (const v of lost) {
+        best[v] = Infinity
+        if (!enter(v)) continue
+        for (let k = adjacentStart[v]; k < adjacentStart[v + 1]; k++) {
+            const u = adjacent[k]
+            if (distance[u] >= 0 && expands(u)) best[v] = Math.min(best[v], distance[u] + 1)
+        }
+        if (best[v] !== Infinity) push(best[v], v)
+    }
+    for (let d = low; d <= high; d++) {
+        const list = buckets[d]
+        if (!list) continue
+        buckets[d] = undefined
+        for (const v of list) {
+            if (distance[v] >= 0 || best[v] !== d) continue
+            distance[v] = d
+            if (!expands(v)) continue
+            for (let k = adjacentStart[v]; k < adjacentStart[v + 1]; k++) {
+                const n = adjacent[k]
+                if (unsafe[n] && distance[n] < 0 && best[n] > d + 1 && enter(n)) { best[n] = d + 1; push(d + 1, n) }
+            }
+        }
+    }
+    for (const v of lost) unsafe[v] = 0
+}
+
 // Starting towns on the town ring (layer R-3); no mines (every mine is neutral,
-// placed by placeCircleExpansions). Towns are evenly spaced along the ring:
-// town i sits at ring[(start + floor(i * N / humans)) % N], so consecutive gaps
-// differ by at most one cell. Start offsets come from a seeded shuffle of the
-// ring; up to CIRCLE_START_ATTEMPTS offsets are tried until every pair is at hex
-// distance >= CIRCLE_START_SPACING and Chebyshev >= 3. Slots follow ring order.
+// placed by placeCircleExpansions). Towns are not evenly spaced. For a target
+// spacing S starting at CIRCLE_START_SPACING, up to min(CIRCLE_START_ATTEMPTS, N)
+// seeded walks are tried; walk a is the a-th shuffle of the ring indices drawn
+// from one seeded shuffler. A walk greedily keeps a ring cell at hex distance
+// >= S and Chebyshev >= 3 from every town already kept, and succeeds once
+// `humans` towns are kept. If every walk fails, S drops by one; Chebyshev >= 3
+// is never relaxed. ring.spacing is the S achieved. Slots follow ring order.
 // Each town's 3x3 neighbourhood is reserved.
 function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function' ? coopPlayerColor : null) {
     if (typeof colorOf !== 'function') throw new TypeError('Circle starts require coopPlayerColor')
     const {side, humans, radius} = plan
     const assets = circleStartScaling(humans, plan.size).startingAssets
     const ring = circleRingOrder(plan, plan.regions.townRing), N = ring.length
-    const offsets = circleShuffler(plan.seed ^ 0x9e3779b9)([...Array(N).keys()])
-    let indices = null
-    for (let attempt = 0; attempt < Math.min(CIRCLE_START_ATTEMPTS, N) && !indices; attempt++) {
-        const picked = [...Array(humans).keys()].map(i => (offsets[attempt] + Math.floor(i * N / humans)) % N)
-        const spaced = picked.every((k, i) => picked.slice(i + 1).every(j =>
-            circleHexDistance(ring[k], ring[j]) >= CIRCLE_START_SPACING && circleChebyshev(ring[k], ring[j]) >= 3))
-        if (spaced) indices = picked.sort((a, b) => a - b)
+    const shuffle = circleShuffler(plan.seed ^ 0x9e3779b9), walks = []
+    const walkOf = a => walks[a] || (walks[a] = shuffle([...Array(N).keys()]))
+    let indices = null, spacing = null
+    for (let S = CIRCLE_START_SPACING; S >= 0 && !indices; S--) {
+        for (let attempt = 0; attempt < Math.min(CIRCLE_START_ATTEMPTS, N) && !indices; attempt++) {
+            const kept = []
+            for (const k of walkOf(attempt)) {
+                if (kept.length === humans) break
+                if (kept.every(j => circleHexDistance(ring[k], ring[j]) >= S && circleChebyshev(ring[k], ring[j]) >= 3)) kept.push(k)
+            }
+            if (kept.length === humans) { indices = kept.sort((a, b) => a - b); spacing = S }
+        }
     }
     if (!indices) throw new Error(`Circle has no town ring sites: size=${plan.size} humans=${humans}`)
     const towns = indices.map(k => ring[k]), start = indices[0]
@@ -308,7 +404,7 @@ function placeCircleStarts(plan, colorOf = typeof coopPlayerColor === 'function'
     return {
         version: 1, size: plan.size, humans, seed: plan.seed, side, mapSize: plan.mapSize, radius,
         stages: ['towns', 'reserve-neighbourhoods'],
-        ring: {layer: plan.regions.townRing, cells: N, start, indices},
+        ring: {layer: plan.regions.townRing, cells: N, start, indices, spacing},
         players: [{slot: 0, rgb: {...CIRCLE_NEUTRAL_RGB}, towns: [], units: [], gold: 0},
             ...towns.map((t, i) => ({slot: i + 1, rgb: colorOf(i + 1), gold: assets.gold, units: [], towns: [{x: t.x, y: t.y}]}))],
         reserved: [...reserved].sort((a, b) => a - b).map(cell),
@@ -411,16 +507,18 @@ function placeCircleExpansions(plan, starts) {
     const kinds = CIRCLE_NEUTRAL_KINDS[plan.size], neutralAssignments = []
     const within = (d, range) => d >= range.min && d <= range.max
     const byHex = (list, hexOf) => list.map(id => [id, hexOf(id)]).sort((p, q) => p[1] - q[1]).map(p => p[0])
+    // Hex distance from each human town to every cell, shared by all passes.
+    const townHex = towns.map(t => Array.from({length: side * side}, (_, id) => circleHexDistance(cell(id), t)))
     // One pass over humans in slot order; false when a kind has no connected
     // site or the final nearest-neutral spread is too wide.
     const placeNeutral = () => {
         neutral.length = 0; neutralAssignments.length = 0
         const taken = new Set()
         for (let i = 0; i < humans; i++) for (const kind of kinds) {
-            const hexOf = id => circleHexDistance(cell(id), towns[i])
+            const hexOf = id => townHex[i][id]
             const valid = sites[kind === 'far' ? 'gap' : kind].filter(id => !box(id).some(c => taken.has(idOf(c)))
                 && !neutral.some(n => circleHexDistance(cell(id), cell(n)) < CIRCLE_NEUTRAL_SPACING)
-                && (kind === 'elite' || towns.every(t => circleHexDistance(cell(id), t) >= hexOf(id))))
+                && (kind === 'elite' || townHex.every(hex => hex[id] >= hexOf(id))))
             // [candidates, relaxed] tiers, tried in order.
             // Far fallback: least distance outside the window first, then the farther side, then shuffled order.
             const farMiss = id => Math.max(CIRCLE_FAR_GAP_HEX.min - hexOf(id), hexOf(id) - CIRCLE_FAR_GAP_HEX.max)
@@ -456,17 +554,60 @@ function placeCircleExpansions(plan, starts) {
     }
     const nearestMine = d => d.map(di => Math.min(...[...mineIds].map(id => di[id] < 0 ? Infinity : di[id])))
     const neutralFair = d => !neutral.length || spread(nearestNeutral(d)) <= CIRCLE_ACCESS_DISPARITY
+    // neutralFair(fields()) without full fields: the first neutral town a BFS discovers is the nearest one.
+    const neutralMask = new Uint8Array(side * side), stopDistance = new Int32Array(side * side)
+    for (const id of neutral) neutralMask[id] = 1
+    const nearestNeutralFrom = (i, endpoints) => {
+        stopDistance.fill(-1)
+        let tail = 1
+        queue[0] = townIds[i]; stopDistance[townIds[i]] = 0
+        for (let k = 0; k < tail; k++) {
+            const cid = queue[k]
+            if (k > 0 && endpoints[cid]) continue
+            for (let j = adjacentStart[cid]; j < adjacentStart[cid + 1]; j++) {
+                const id = adjacent[j]
+                if (stopDistance[id] >= 0 || townMask[id]) continue
+                stopDistance[id] = stopDistance[cid] + 1
+                if (neutralMask[id]) return stopDistance[id]
+                queue[tail++] = id
+            }
+        }
+        return Infinity
+    }
+    const neutralFairNow = () => {
+        if (!neutral.length) return true
+        const endpoints = new Uint8Array(side * side)
+        for (const id of [...mineIds, ...neutral]) endpoints[id] = 1
+        return spread(towns.map((_, i) => nearestNeutralFrom(i, endpoints))) <= CIRCLE_ACCESS_DISPARITY
+    }
+    // fields() after one more mine: the previous step's fields updated in place for that mine (circleRepairField).
+    const repairScratch = circleRepairScratch(side * side), mineEndpoints = new Uint8Array(side * side)
+    const fieldsAfter = (previous, mine) => {
+        mineEndpoints.fill(0)
+        for (const id of [...mineIds, ...neutral]) mineEndpoints[id] = 1
+        previous.forEach((d, i) => circleRepairField(d, townIds[i], adjacentStart, adjacent,
+            id => !townMask[id], id => !mineEndpoints[id], [mine], repairScratch))
+        return previous
+    }
     // One greedy pass over the mine sites, lowest resulting nearest-mine spread
     // first; false when sites run out or the final spread is too wide.
     const placeMines = () => {
         mineIds.clear()
+        let previous = null, lastMine = -1
         for (let k = 0; k < counts.goldmines; k++) {
-            const d = fields(), current = mineIds.size ? nearestMine(d) : towns.map(() => Infinity), tiers = new Map()
+            const d = previous ? fieldsAfter(previous, lastMine) : fields()
+            const current = mineIds.size ? nearestMine(d) : towns.map(() => Infinity), tiers = new Map()
+            previous = d
             for (const id of mineSites) {
                 if (mineIds.has(id)) continue
-                const next = d.map((di, i) => di[id] < 0 ? Infinity : Math.min(current[i], di[id]))
-                if (!next.every(Number.isFinite)) continue
-                const tier = Math.max(CIRCLE_NEUTRAL_TARGET, spread(next))
+                // Spread of the nearest-mine distances with this site added; unreachable for a human skips it.
+                let lo = Infinity, hi = -Infinity
+                for (let i = 0; i < d.length && hi !== Infinity; i++) {
+                    const next = d[i][id] < 0 ? Infinity : Math.min(current[i], d[i][id])
+                    lo = Math.min(lo, next); hi = Math.max(hi, next)
+                }
+                if (hi === Infinity) continue
+                const tier = Math.max(CIRCLE_NEUTRAL_TARGET, hi - lo)
                 if (!tiers.has(tier)) tiers.set(tier, [])
                 tiers.get(tier).push(id)
             }
@@ -474,7 +615,7 @@ function placeCircleExpansions(plan, starts) {
             search: for (const tier of [...tiers.keys()].sort((a, b) => a - b)) {
                 for (const id of shuffle(tiers.get(tier))) {
                     mineIds.add(id)
-                    if (connected() && neutralFair(fields())) { placed = true; break search }
+                    if (connected() && neutralFairNow()) { placed = true; lastMine = id; break search }
                     mineIds.delete(id)
                 }
             }
@@ -504,13 +645,11 @@ function placeCircleExpansions(plan, starts) {
 
 // Common ring categories in the per-human deal order; COOP_CIRCLE_ELITE_CATEGORIES
 // fill the elite core.
-const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged', 'support'])
-// Per-human ring portal groups. Members of a group are at hex distance 1-2 from
-// each other; portals of different groups are at hex distance >= CIRCLE_GROUP_GAP.
-const COOP_CIRCLE_RING_GROUPS = Object.freeze([
-    Object.freeze({kind: 'trio', categories: Object.freeze(['support', 'melee', 'ranged'])}),
-    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])}),
-    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])})])
+const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged'])
+// Per-human ring portal groups: three melee+ranged pairs. Members of a group are at
+// hex distance 1-2 from each other; portals of different groups are at hex distance >= CIRCLE_GROUP_GAP.
+const COOP_CIRCLE_RING_GROUPS = Object.freeze([...Array(3)].map(() =>
+    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])})))
 const CIRCLE_GROUP_SPAN = 2
 const CIRCLE_GROUP_GAP = 3
 
@@ -523,9 +662,9 @@ const CIRCLE_GROUP_GAP = 3
 // cannot be completed is retried from another first member.
 // Every portal keeps two distinct free approach cells (bipartite matching) that
 // are not portals, towns, mines or reservations, and the passable region stays
-// connected after every placement. Each human's trio starts at the nearest
+// connected after every placement. Each human's first pair starts at the nearest
 // reachable ring cell to that human's town, keeping the nearest-portal path
-// spread level for the terrain stage; pairs start from the shuffled candidates.
+// spread level for the terrain stage; the other pairs start from the shuffled candidates.
 function placeCirclePortals(plan, layout) {
     const {side, humans, radius} = plan, {elite, ringOuter} = plan.regions
     const targets = circleScaling(humans, plan.size).counts.portalCategories
@@ -619,9 +758,9 @@ function placeCirclePortals(plan, layout) {
         if (!extend(0)) throw new Error(`Circle has no ring portal site: size=${plan.size} humans=${humans} seed=${plan.seed} category=${group.categories.join('+')} slot=${slot}`)
         portalGroups.push({slot, kind: group.kind, members})
     }
-    // Trios first, one per human: the first member is tried in order of path
+    // First pairs first, one per human: the first member is tried in order of path
     // distance from that human's town, so nearest-portal distances start level.
-    // Pairs start from the shuffled candidates; packed placement instead starts
+    // The other pairs start from the shuffled candidates; packed placement instead starts
     // each pair next to the placed ring portals (closest gap first, then
     // cells on the band edges).
     const placeRing = (candidates, packed) => {
@@ -711,7 +850,6 @@ function placeCircleTerrain(plan, layout) {
     }
     adjacentStart[area] = adjacentList.length
     const adjacent = Int32Array.from(adjacentList)
-    const around = id => Array.from(adjacent.subarray(adjacentStart[id], adjacentStart[id + 1]))
     const townIds = layout.players.slice(1).map(p => idOf(p.towns[0]))
     const neutralIds = layout.players[0].towns.map(idOf), mineIds = layout.goldmines.map(idOf)
     const portalIds = layout.portals.map(idOf), approachIds = layout.portalApproaches.flatMap(a => a.cells.map(idOf))
@@ -766,6 +904,14 @@ function placeCircleTerrain(plan, layout) {
         }
         return hi - lo
     }
+    // Fields and blocked cells of the last accepted state. Blocking cells only
+    // lengthens paths, so a later state that only adds blocked cells is updated
+    // from them (circleRepairField) instead of a full fill per town.
+    const committed = townIds.map(() => new Int32Array(area)), committedBlocked = new Uint8Array(area)
+    let hasCommitted = false
+    const repairScratch = circleRepairScratch(area)
+    const repair = (origin, distance, added) => circleRepairField(distance, origin, adjacentStart, adjacent,
+        id => !blocked[id], id => !blocked[id] && !endpoints[id], added, repairScratch)
     const spreads = {}
     const accepts = () => {
         const solid = new Uint8Array(area)
@@ -773,17 +919,58 @@ function placeCircleTerrain(plan, layout) {
         for (const id of objects) solid[id] = 1
         if (!connected(solid)) return false
         for (const id of townIds) blocked[id] = 1
-        if (!townIds.every((t, i) => { fill(t, distances[i]); return targets.every(id => distances[i][id] >= 0) })) return false
+        let added = null
+        if (hasCommitted) {
+            added = []
+            for (let id = 0; id < area && added; id++) if (blocked[id] !== committedBlocked[id]) {
+                if (blocked[id]) added.push(id)
+                else added = null
+            }
+        }
+        const field = (t, i) => {
+            if (!added) fill(t, distances[i])
+            else { distances[i].set(committed[i]); repair(t, distances[i], added) }
+        }
+        if (!townIds.every((t, i) => { field(t, i); return targets.every(id => distances[i][id] >= 0) })) return false
         Object.assign(spreads, {mines: nearestSpread(mineIds), neutralTowns: nearestSpread(neutralIds), portals: nearestSpread(portalIds)})
-        return Object.values(spreads).every(s => s <= CIRCLE_ACCESS_DISPARITY)
+        if (!Object.values(spreads).every(s => s <= CIRCLE_ACCESS_DISPARITY)) return false
+        distances.forEach((d, i) => committed[i].set(d))
+        committedBlocked.set(blocked); hasCommitted = true
+        return true
     }
     if (!accepts()) throw new Error(`Circle layout breaks access before terrain: size=${plan.size} humans=${humans} seed=${plan.seed}`)
     const open = id => !forbidden[id] && !kind[id]
     const tally = k => kind.reduce((sum, v) => sum + (v === k), 0)
+    // Generation stamps: listed[id] === stamp marks membership without allocating a Set per call.
+    const listed = new Int32Array(area)
+    let stamp = 0
+    // Open cells next to kind k, in first-seen order (ascending id, then adjacency order).
     const frontierOf = k => {
-        const list = new Set()
-        for (let id = 0; id < area; id++) if (kind[id] === k) for (const n of around(id)) if (open(n)) list.add(n)
-        return [...list]
+        const list = []
+        stamp++
+        for (let id = 0; id < area; id++) if (kind[id] === k) for (let j = adjacentStart[id]; j < adjacentStart[id + 1]; j++) {
+            const n = adjacent[j]
+            if (open(n) && listed[n] !== stamp) { listed[n] = stamp; list.push(n) }
+        }
+        return list
+    }
+    // Same-kind group labels (0 = not kind k), filled by labelGroups.
+    const group = new Int32Array(area)
+    const labelGroups = k => {
+        group.fill(0)
+        let label = 0
+        for (let id = 0; id < area; id++) {
+            if (kind[id] !== k || group[id]) continue
+            group[id] = ++label; queue[0] = id
+            for (let head = 0, tail = 1; head < tail; head++) for (let j = adjacentStart[queue[head]]; j < adjacentStart[queue[head] + 1]; j++) {
+                const n = adjacent[j]
+                if (kind[n] === k && !group[n]) { group[n] = label; queue[tail++] = n }
+            }
+        }
+    }
+    const firstOfKind = (id, k) => {
+        for (let j = adjacentStart[id]; j < adjacentStart[id + 1]; j++) if (kind[adjacent[j]] === k) return adjacent[j]
+        return -1
     }
     const report = {}
     const grow = (name, attachShare) => {
@@ -795,32 +982,41 @@ function placeCircleTerrain(plan, layout) {
             const attach = frontier.length > 0 && (remaining < 3 || random() < attachShare)
             // A new cluster keeps clear of same-kind cells outside itself, so it stays a separate group;
             // an attached one may touch only the group it extends, so it never bridges two groups.
-            const clear = (id, cluster) => around(id).every(n => kind[n] !== k || cluster.includes(n))
-            const groupOf = id => {
-                const group = [id]
-                for (let i = 0; i < group.length; i++) for (const n of around(group[i])) if (kind[n] === k && !group.includes(n)) group.push(n)
-                return group
+            // Members of the allowed cluster are the cells with listed[n] === stamp, or of group label home.
+            const clear = (id, home) => {
+                for (let j = adjacentStart[id]; j < adjacentStart[id + 1]; j++) {
+                    const n = adjacent[j]
+                    if (kind[n] === k && listed[n] !== stamp && !(home && group[n] === home)) return false
+                }
+                return true
             }
-            let seed, home = []
+            let seed, home = 0
+            stamp++
             if (attach) {
-                const single = frontier.filter(id => clear(id, groupOf(around(id).find(n => kind[n] === k))))
+                labelGroups(k)
+                const single = frontier.filter(id => clear(id, group[firstOfKind(id, k)]))
                 const seeds = single.length ? single : frontier
                 seed = seeds[pick(seeds.length)]
-                home = groupOf(around(seed).find(n => kind[n] === k))
+                home = group[firstOfKind(seed, k)]
             } else {
                 const free = []
-                for (let id = 0; id < area; id++) if (open(id) && clear(id, [])) free.push(id)
+                for (let id = 0; id < area; id++) if (open(id) && clear(id, 0)) free.push(id)
                 if (!free.length) break
                 seed = free[pick(free.length)]
             }
             const size = attach && remaining < 3 ? remaining : Math.min(remaining, 2 + pick(3))
             const cluster = [seed]
-            kind[seed] = k
+            kind[seed] = k; listed[seed] = stamp
             while (cluster.length < size) {
-                const next = [...new Set(cluster.flatMap(around))].filter(id => open(id) && clear(id, [...cluster, ...home]))
+                // Open neighbours of the cluster in first-seen order (open cells are never in the cluster).
+                const next = [], seen = new Set()
+                for (const c of cluster) for (let j = adjacentStart[c]; j < adjacentStart[c + 1]; j++) {
+                    const n = adjacent[j]
+                    if (!seen.has(n)) { seen.add(n); if (open(n) && clear(n, home)) next.push(n) }
+                }
                 if (!next.length) break
                 const id = next[pick(next.length)]
-                kind[id] = k; cluster.push(id)
+                kind[id] = k; listed[id] = stamp; cluster.push(id)
             }
             if ((!attach && cluster.length < 2) || (blocking && !accepts())) {
                 for (const id of cluster) kind[id] = 0

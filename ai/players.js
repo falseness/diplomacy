@@ -1,4 +1,5 @@
 const AI_UNIT_PRODUCTS = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+const AI_BARRACK_UNIT_PRODUCTS = ['archer', 'KOHb', 'normchel', 'catapult']
 const AI_ECONOMY_ADVANCED_UNIT_THRESHOLD = 6
 const AI_ECONOMY_TOWN_THREAT_DISTANCE = 6
 const AI_ECONOMY_DEFAULT_ACTION_LIMIT = 30
@@ -38,6 +39,10 @@ const SIMPLE_ECONOMY_DEFAULT_ACTION_LIMIT = 12
 const SIMPLE_ECONOMY_DEFAULT_COMMAND_LIMIT = 200
 const SIMPLE_ECONOMY_STALEMATE_PATH_ROUND = 120
 const SIMPLE_ECONOMY_LARGE_MAP_CELL_THRESHOLD = 600
+// Surplus spending: after its purchases an economy bot keeps buying while it holds this much gold.
+const AI_ECONOMY_SPEND_DOWN_GOLD = 60
+const AI_ECONOMY_MAX_BARRACKS_PER_TOWN = 3
+const AI_ECONOMY_BARRACK_MIN_PROJECTED_INCOME = 2
 
 function compareAiTargets(townBonus) {
     return function(left, right) {
@@ -380,6 +385,77 @@ class SimpleAiPlayer extends Player {
             }
             remainingActions -= this.unitDoMoves(this.units[cycle], remainingActions)
         }
+        this.vacateProducerHexes()
+    }
+    // A unit spawns only on its producer's own hex (unitPreparingLogic -> cantCreateNow), so a
+    // unit still standing on its own town or barrack while that producer has a unit in production
+    // steps to a free adjacent hex (a nearest reachable free hex when every neighbour is taken),
+    // the one nearest to its current target, ties and no target by lowest x, y.
+    isOwnProducerWithUnitInProduction(cell, unit) {
+        let building = cell && cell.building
+        return !!(building && building.isPreparingManufacture && !building.killed &&
+            building.isPreparingUnit && building.playerColor === unit.playerColor)
+    }
+    getProducerHexExitCommand(unit) {
+        let neighbours = unit.neighbours
+        let commands = getAiMoveCommands(unit)
+        let way = unit.interaction && unit.interaction.way
+        let candidates = []
+        for (let i = 0; i < commands.length; ++i) {
+            let to = commands[i].destinationCoord
+            let cell = getAiCommandCell(to)
+            if (areCoordsEqual(to, unit.coord) || !cell || !cell.unit || cell.unit.notEmpty() ||
+                    (unit.player && !unit.player.canEnterBuilding(cell.building)) ||
+                    this.isOwnProducerWithUnitInProduction(cell, unit)) {
+                continue
+            }
+            let steps = neighbours.some(coord => areCoordsEqual(coord, to)) ? 1 :
+                (way && way.getDistance ? way.getDistance(to) : Infinity)
+            candidates.push({command: commands[i], steps: steps})
+        }
+        if (!candidates.length) {
+            return null
+        }
+        let minSteps = Math.min(...candidates.map(candidate => candidate.steps))
+        candidates = candidates.filter(candidate => candidate.steps == minSteps)
+        let targetFinder = this.bestEnemyTargetForAI
+        let target = targetFinder.calculateBestEnemyTarget(
+            unit.coord, grid.arr, unit.playerColor)
+        let targetDistance = () => 0
+        if (target) {
+            targetFinder.create(target, BestEnemyTargetForAI.unreachableDistance,
+                grid.arr, unit.playerColor, border)
+            targetDistance = coord => targetFinder.distance[coord.x][coord.y]
+        }
+        candidates.sort((left, right) => {
+            let l = left.command.destinationCoord
+            let r = right.command.destinationCoord
+            return targetDistance(l) - targetDistance(r) || l.x - r.x || l.y - r.y
+        })
+        return candidates[0].command
+    }
+    vacateProducerHexes() {
+        let moved = []
+        for (let i = 0; i < this.units.length; ++i) {
+            let unit = this.units[i]
+            if (unit.killed || !(unit.moves > 0) || unit.isMyTurn === false ||
+                    !this.isOwnProducerWithUnitInProduction(grid.getCell(unit.coord), unit)) {
+                continue
+            }
+            let command = this.getProducerHexExitCommand(unit)
+            if (!command) {
+                continue
+            }
+            let from = {x: unit.coord.x, y: unit.coord.y}
+            // select() rebuilds the unit's ways for its hex; a range unit's sendInstructions
+            // reads its rangeWay, which may still belong to another unit.
+            unit.select()
+            unit.sendInstructions(grid.getCell(command.destinationCoord))
+            if (!areCoordsEqual(unit.coord, from)) {
+                moved.push({from: from, to: {x: unit.coord.x, y: unit.coord.y}})
+            }
+        }
+        return moved
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 0)
@@ -387,6 +463,10 @@ class SimpleAiPlayer extends Player {
     shouldReinforce() {
         return false
     }
+}
+
+function getSpendDownCellKey(town, product) {
+    return town.coord.x + ',' + town.coord.y + ',' + product
 }
 
 class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
@@ -481,22 +561,13 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                     left.cost - right.cost
             })
         }
-        let isLargeMap = isCurrentGridLargeForSimpleEconomy()
-        let unitsPerTownCap = !isLargeMap ?
-            SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP :
-            SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP
-        let maxUnitCap = !isLargeMap ?
-            SIMPLE_ECONOMY_MAX_UNIT_CAP : SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP
-        let unitCap = Math.max(
-            AI_ECONOMY_ADVANCED_UNIT_THRESHOLD,
-            Math.min(
-                maxUnitCap,
-                state.towns.length * unitsPerTownCap))
+        let unitCap = this.getUnitCap(state)
         let unitProducts = state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD ?
             ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
             AI_UNIT_PRODUCTS
         let unitChoices = state.units.length < unitCap ?
-            byProducts(unitProducts) : []
+            this.mixBarrackUnitChoices(
+                state, byProducts(unitProducts), unitProducts, Math.ceil(unitCap / 2)) : []
         let barrackCapacity = state.barracks.length + state.pendingBarracks.length
         if (this.aiInitialTownCount == AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
             let choices = []
@@ -514,6 +585,73 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         return choices
     }
+    getUnitCap(state) {
+        let isLargeMap = isCurrentGridLargeForSimpleEconomy()
+        let unitsPerTownCap = !isLargeMap ?
+            SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP :
+            SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP
+        let maxUnitCap = !isLargeMap ?
+            SIMPLE_ECONOMY_MAX_UNIT_CAP : SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP
+        return Math.max(
+            AI_ECONOMY_ADVANCED_UNIT_THRESHOLD,
+            Math.min(
+                maxUnitCap,
+                state.towns.length * unitsPerTownCap))
+    }
+    // Even barrack army: the barrack-product choices keep their slots in `choices` but are
+    // reordered so the class with the fewest live + in-production units comes first (ties by
+    // `productOrder`). A barrack drops its noob choice while it has a barrack product on offer.
+    // With a live barrack, town noobs stop at `noobCap` live + in-production noobs, so the rest
+    // of the unit cap stays free for barrack units.
+    mixBarrackUnitChoices(state, choices, productOrder, noobCap = Infinity) {
+        let countUnits = function(product) {
+            let unitClass = production[product].class
+            return typeof unitClass != 'function' ? 0 : state.units.filter(function(unit) {
+                return unit instanceof unitClass
+            }).length
+        }
+        let noobs = countUnits('noob')
+        let counts = {}
+        for (let i = 0; i < AI_BARRACK_UNIT_PRODUCTS.length; ++i) {
+            counts[AI_BARRACK_UNIT_PRODUCTS[i]] = countUnits(AI_BARRACK_UNIT_PRODUCTS[i])
+        }
+        let producers = state.towns.concat(state.barracks)
+        for (let i = 0; i < producers.length; ++i) {
+            let producer = producers[i]
+            if (!producer.isPreparingUnit || !producer.unitProduction) {
+                continue
+            }
+            if (producer.unitProduction.name == 'noob') {
+                ++noobs
+            }
+            else if (counts[producer.unitProduction.name] !== undefined) {
+                ++counts[producer.unitProduction.name]
+            }
+        }
+        let isBarrackUnit = function(choice) {
+            return AI_BARRACK_UNIT_PRODUCTS.includes(choice.product)
+        }
+        let noobsCapped = state.barracks.length > 0 && noobs >= noobCap
+        choices = choices.filter(function(choice) {
+            if (choice.product != 'noob') {
+                return true
+            }
+            if (noobsCapped) {
+                return false
+            }
+            return choice.producer.name != 'barrack' || !choices.some(function(other) {
+                return other.producer === choice.producer && isBarrackUnit(other)
+            })
+        })
+        let mixed = choices.filter(isBarrackUnit).sort(function(left, right) {
+            return counts[left.product] - counts[right.product] ||
+                productOrder.indexOf(left.product) - productOrder.indexOf(right.product) ||
+                left.cost - right.cost
+        })
+        return choices.map(function(choice) {
+            return isBarrackUnit(choice) ? mixed.shift() : choice
+        })
+    }
     chooseEconomyProductions(state) {
         let byProducts = function(products) {
             return state.productionChoices.filter(function(choice) {
@@ -524,8 +662,10 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                     left.cost - right.cost
             })
         }
+        let unitChoices = this.mixBarrackUnitChoices(
+            state, byProducts(AI_UNIT_PRODUCTS), AI_UNIT_PRODUCTS)
         if (state.units.length == 0) {
-            return byProducts(AI_UNIT_PRODUCTS)
+            return unitChoices
         }
 
         let farmCount = state.farms.length + state.pendingFarms.length
@@ -535,7 +675,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         if (state.barracks.length + state.pendingBarracks.length == 0) {
             choices = choices.concat(byProducts(['barrack']))
         }
-        return choices.concat(byProducts(AI_UNIT_PRODUCTS))
+        return choices.concat(unitChoices)
     }
     startEconomyProduction(choice) {
         if (!choice || !choice.producer.prepare(choice.product)) {
@@ -551,11 +691,18 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         let available = activeProduction.availableHexagons || []
         let validCells = []
+        let legalCoords = []
         for (let i = 0; i < available.length; ++i) {
             let cell = grid.getCell(available[i].coord)
             if (activeProduction.canCreateOnCell(cell, choice.producer)) {
                 validCells.push(cell)
+                // Take the coord from the hexagon: test grids return cells without one.
+                legalCoords.push({x: available[i].coord.x, y: available[i].coord.y})
             }
+        }
+        this.lastProductionCells = {
+            candidates: available.map(hexagon => ({x: hexagon.coord.x, y: hexagon.coord.y})),
+            legal: legalCoords
         }
         if (AI_UNIT_PRODUCTS.includes(choice.product) &&
                 this.aiInitialTownCount == AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
@@ -607,6 +754,222 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             }
         }
         return false
+    }
+    // Net income once every pending production is done: pending farms +4, pending barracks -2,
+    // units in production pay their salary.
+    getProjectedIncome(state) {
+        let income = this.income
+        for (let i = 0; i < state.pendingFarms.length; ++i) {
+            income += Farm.income
+        }
+        for (let i = 0; i < state.pendingBarracks.length; ++i) {
+            income += Barrack.income
+        }
+        let producers = state.towns.concat(state.barracks)
+        for (let i = 0; i < producers.length; ++i) {
+            if (producers[i].isPreparingUnit && production[producers[i].unitProduction.name]) {
+                income -= production[producers[i].unitProduction.name].class.salary
+            }
+        }
+        return income
+    }
+    // Every surplus purchase in spend-down order: (1) units in the TASK-556 mix, (2) barracks,
+    // (3) farms, (4) suburbs, (5) units the mix leaves out. Each option says whether it passes
+    // the cheap checks and, if not, why. Building cells are only searched when the purchase is
+    // tried; `noCellKeys` maps the town/product pairs already found without a legal cell this
+    // turn to the cells that were checked.
+    getSpendDownOptions(noCellKeys) {
+        let state = this.inspectEconomy()
+        let projectedIncome = this.getProjectedIncome(state)
+        let options = []
+        let addOption = (producer, product, reason, cells) => {
+            options.push({
+                producer: producer,
+                product: product,
+                cost: production[product].cost,
+                legal: !reason,
+                reason: reason || null,
+                candidateCells: cells ? cells.candidates : null,
+                legalCells: cells ? cells.legal : null,
+                choice: {producer: producer, product: product, cost: production[product].cost}
+            })
+        }
+
+        let unitCap = this.getUnitCap(state)
+        let producers = state.towns.concat(state.barracks)
+        let unitsWithProduction = state.units.length + producers.filter(function(producer) {
+            return producer.isPreparingUnit
+        }).length
+        let unitProducts = state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD ?
+            ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] : AI_UNIT_PRODUCTS
+        let unitChoices = this.mixBarrackUnitChoices(state, state.productionChoices.filter(
+            function(choice) {
+                return unitProducts.includes(choice.product)
+            }).sort(function(left, right) {
+                return unitProducts.indexOf(left.product) - unitProducts.indexOf(right.product) ||
+                    left.cost - right.cost
+            }), unitProducts, Math.ceil(unitCap / 2))
+        let unitReason = function(producer, product) {
+            let offered = state.productionChoices.some(function(choice) {
+                return choice.producer === producer && choice.product == product
+            })
+            if (!offered) {
+                if (producer.isBadlyDamaged) {
+                    return 'producer badly damaged'
+                }
+                if (producer.isPreparingUnit) {
+                    return 'producer busy'
+                }
+                return this.gold < production[product].cost ? 'unaffordable' : 'salary guard'
+            }
+            if (unitsWithProduction >= unitCap) {
+                return 'unit cap'
+            }
+            if (projectedIncome - production[product].class.salary < 0) {
+                return 'projected income'
+            }
+            return null
+        }.bind(this)
+        let isMixChoice = function(producer, product) {
+            return unitChoices.some(function(choice) {
+                return choice.producer === producer && choice.product == product
+            })
+        }
+        for (let i = 0; i < unitChoices.length; ++i) {
+            if (!unitReason(unitChoices[i].producer, unitChoices[i].product)) {
+                addOption(unitChoices[i].producer, unitChoices[i].product, null)
+            }
+        }
+        // Units the TASK-556 mix leaves out (town noobs over the half-cap, barrack noobs while a
+        // barrack product is on offer) are still legal: they come last, after the suburbs.
+        let fallbackUnits = []
+        let addUnitOption = function(producer, product) {
+            let reason = unitReason(producer, product)
+            if (reason) {
+                addOption(producer, product, reason)
+            }
+            else if (!isMixChoice(producer, product)) {
+                fallbackUnits.push({producer: producer, product: product})
+            }
+        }
+        for (let i = 0; i < state.towns.length; ++i) {
+            addUnitOption(state.towns[i], 'noob')
+        }
+        for (let i = 0; i < state.barracks.length; ++i) {
+            for (let j = 0; j < AI_UNIT_PRODUCTS.length; ++j) {
+                addUnitOption(state.barracks[i], AI_UNIT_PRODUCTS[j])
+            }
+        }
+
+        let buildingProducts = ['barrack', 'farm', 'suburb']
+        for (let k = 0; k < buildingProducts.length; ++k) {
+            let product = buildingProducts[k]
+            for (let i = 0; i < state.towns.length; ++i) {
+                let town = state.towns[i]
+                let reason = null
+                let cells = null
+                if (town.isBadlyDamaged) {
+                    reason = 'producer badly damaged'
+                }
+                else if (this.gold < production[product].cost) {
+                    reason = 'unaffordable'
+                }
+                else if (product == 'barrack' && town.buildings.concat(
+                        town.buildingProduction || []).filter(function(building) {
+                            return !building.killed && building.name == 'barrack'
+                        }).length >= AI_ECONOMY_MAX_BARRACKS_PER_TOWN) {
+                    reason = 'barrack cap'
+                }
+                else if (product == 'barrack' && projectedIncome + Barrack.income <
+                        AI_ECONOMY_BARRACK_MIN_PROJECTED_INCOME) {
+                    reason = 'projected income'
+                }
+                else if (noCellKeys.has(getSpendDownCellKey(town, product))) {
+                    reason = 'no legal cell'
+                    cells = noCellKeys.get(getSpendDownCellKey(town, product))
+                }
+                addOption(town, product, reason, cells)
+            }
+        }
+        for (let i = 0; i < fallbackUnits.length; ++i) {
+            addOption(fallbackUnits[i].producer, fallbackUnits[i].product, null)
+        }
+        return options
+    }
+    // Surplus spending, run after the bot's own purchases: while it holds
+    // AI_ECONOMY_SPEND_DOWN_GOLD or more, buy the first option of getSpendDownOptions that
+    // production accepts. When nothing is left, lastSpendDown.noLegalPurchase keeps the
+    // enumerated options with the reason each one is not legal (for a building with no legal
+    // cell: the candidate cells checked and an empty legalCells list).
+    spendDownGold() {
+        let purchases = []
+        let options = null
+        let noCellKeys = new Map()
+        while (this.gold >= AI_ECONOMY_SPEND_DOWN_GOLD) {
+            options = this.getSpendDownOptions(noCellKeys)
+            let bought = null
+            for (let i = 0; i < options.length && !bought; ++i) {
+                let option = options[i]
+                if (!option.legal) {
+                    continue
+                }
+                let goldBefore = this.gold
+                this.lastProductionCells = null
+                if (this.startEconomyProduction(option.choice) && this.gold < goldBefore) {
+                    bought = option
+                    continue
+                }
+                option.legal = false
+                if (AI_UNIT_PRODUCTS.includes(option.product)) {
+                    option.reason = 'production refused'
+                }
+                else {
+                    option.reason = 'no legal cell'
+                    let cells = this.lastProductionCells || {candidates: [], legal: []}
+                    option.candidateCells = cells.candidates
+                    option.legalCells = cells.legal
+                    noCellKeys.set(getSpendDownCellKey(option.producer, option.product), cells)
+                }
+            }
+            if (!bought) {
+                break
+            }
+            // A new suburb can open farm and barrack cells for its town.
+            if (bought.product == 'suburb') {
+                noCellKeys.delete(getSpendDownCellKey(bought.producer, 'farm'))
+                noCellKeys.delete(getSpendDownCellKey(bought.producer, 'barrack'))
+            }
+            purchases.push({product: bought.product, producer: bought.producer.name,
+                at: bought.producer.coord ?
+                    {x: bought.producer.coord.x, y: bought.producer.coord.y} : null})
+            options = null
+        }
+        let noLegalPurchase = this.gold >= AI_ECONOMY_SPEND_DOWN_GOLD
+        let coordOf = building => building.coord ? {x: building.coord.x, y: building.coord.y} : null
+        // A noLegalPurchase turn also records what its proof is checked against: the unit cap,
+        // units + units in production and every live producer.
+        let state = noLegalPurchase ? this.inspectEconomy() : null
+        this.lastSpendDown = {
+            purchases: purchases,
+            gold: this.gold,
+            unitCap: state ? this.getUnitCap(state) : null,
+            unitsWithProduction: state ? state.units.length +
+                state.towns.concat(state.barracks).filter(function(producer) {
+                    return producer.isPreparingUnit
+                }).length : null,
+            producers: state ? {
+                towns: state.towns.map(coordOf),
+                barracks: state.barracks.map(coordOf)
+            } : null,
+            noLegalPurchase: noLegalPurchase,
+            options: !options ? [] : options.map(function(option) {
+                return {producer: option.producer.name, at: coordOf(option.producer),
+                    product: option.product, cost: option.cost, legal: option.legal,
+                    reason: option.reason, candidateCells: option.candidateCells,
+                    legalCells: option.legalCells}
+            })
+        }
+        return purchases.length
     }
     spendWarGoldWithinLimit(maxPurchases) {
         let purchases = 0
@@ -788,7 +1151,9 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         else {
             this.spendEconomyGold()
         }
+        this.spendDownGold()
         this.playCombatActions()
+        this.vacateProducerHexes()
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 3)

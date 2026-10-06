@@ -331,7 +331,7 @@ class GameMap {
 
         // refactoring is needed
         for (let i = 1; i < players.length; ++i) {
-            localStorage.setItem(gameSlot + 'Player:' + i,
+            localStorage.setItem(gameStorageSlot() + 'Player:' + i,
             JSON.stringify([]))
         }
     }
@@ -1328,6 +1328,7 @@ class GameManager {
     static setUpBoard(map, _isFogOfWar, isClassicTimer, isOnline, gameManager = this) {
         isFogOfWar = _isFogOfWar
         gameSettings.isOnline = isOnline
+        onlineGameStorage = isOnline
         map.start(gameManager, isClassicTimer, !isOnline)
         this.initValues()
     }
@@ -1335,7 +1336,7 @@ class GameManager {
     // entering the game: the menu stays visible and the game globals it replaced
     // that the menu or a later load reads are restored.
     static buildOnlineBoard(map, _isFogOfWar) {
-        const saved = {isFogOfWar, gameSettings: JSON.parse(JSON.stringify(gameSettings)), timer}
+        const saved = {isFogOfWar, gameSettings: JSON.parse(JSON.stringify(gameSettings)), timer, onlineGameStorage}
         // No clearBasisValues: it hides the menu and installs the game's input events.
         const boardOnly = {
             clearValues() {
@@ -1354,6 +1355,7 @@ class GameManager {
             isFogOfWar = saved.isFogOfWar
             gameSettings = saved.gameSettings
             timer = saved.timer
+            onlineGameStorage = saved.onlineGameStorage
         }
     }
     // A local (hot seat) game; online games start from a lobby (openLobbyGame).

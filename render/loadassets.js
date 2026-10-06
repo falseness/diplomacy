@@ -32,7 +32,7 @@ const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bu
     'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft', 'mortar', 'mortarLeft',
     'demonQueen',
     'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
-    'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos', 'demonPortalMage']
+    'demonPortalHeavy', 'demonPortalCavalry', 'demonPortalChaos', 'demonPortalMage']
 for (const name of demonSpriteImages) assets[name] = new Image()
 // Undead artwork for ordinary units owned by the demon slot, shared by both themes.
 const undeadSpriteImages = ['undead/noob', 'undead/archer', 'undead/KOHb', 'undead/KOHbLeft',
@@ -65,9 +65,19 @@ for (let i = 0; i < images.length; ++i) {
 
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
+    paintCachedImage(tmpCanvas, image)
+    // The browser may drop an offscreen canvas backing store (backgrounded mobile tab).
+    if (typeof tmpCanvas.addEventListener == 'function') {
+        tmpCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+        tmpCanvas.addEventListener('contextrestored', restoreImageCaches)
+    }
+
+    return tmpCanvas
+}
+function paintCachedImage(tmpCanvas, image) {
     let width = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.width * 2 : assets.size
     let height = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.height * 2 : assets.size
-    
+
     tmpCanvas.width = width
     tmpCanvas.height = height
 
@@ -79,9 +89,35 @@ function cacheImage(image) {
     }
     if (!failedImages.has(image))
         drawImage(tmpCtx, image, pos, width, height)
-
-    return tmpCanvas
 }
+// Repaints the existing cached canvases in place, so hexagon.grassHexImage and the grid
+// surface cache image refs stay valid, then makes the next frame rebuild the surface cache.
+function restoreImageCaches() {
+    for (const name in cachedImages) {
+        const image = assets[name]
+        if (cachedImages[name] && image && image.complete && image.naturalWidth > 0)
+            paintCachedImage(cachedImages[name], name)
+    }
+    if (typeof grid != 'undefined' && grid)
+        grid.surfaceCacheState = undefined
+    restoreCameraTransform()
+}
+// A restored main context comes back with the identity transform, and events/screen.js only ever
+// applies the camera incrementally (translate/scale), so set it again from canvas.scale and offset.
+function restoreCameraTransform() {
+    if (typeof mainCtx == 'undefined' || typeof canvas == 'undefined' || !canvas)
+        return
+    mainCtx.setTransform(canvas.scale, 0, 0, canvas.scale,
+        -canvas.offset.x * canvas.scale, -canvas.offset.y * canvas.scale)
+}
+if (typeof document.addEventListener == 'function') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState == 'visible')
+            restoreImageCaches()
+    })
+}
+if (typeof window.addEventListener == 'function')
+    window.addEventListener('pageshow', restoreImageCaches)
 function cacheAllImages() {
     for (let i = 0; i < images.length; ++i) {
         cachedImages[images[i]] = cacheImage(images[i])
@@ -121,6 +157,10 @@ function loadSprites() {
 function waitForImagesLoad() {
     if (imagesCountLoaded == images.length) {
         cacheAllImages()
+        if (typeof mainCanvas.addEventListener == 'function') {
+            mainCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+            mainCanvas.addEventListener('contextrestored', restoreImageCaches)
+        }
         menu.start()
         return 
     }

@@ -58,6 +58,9 @@ function touchend(event) {
     event.stopPropagation()
     
     let pos = getTouchesPos(event)
+    // the one finger still down (event.touches: targetTouches may not hold it) re-anchors the pan
+    if (event.touches.length == 1)
+        pos = clientToCanvas(event.touches[0].clientX, event.touches[0].clientY)
     gameEvent.touchend(pos, event.touches.length)
 }
 function keydown(event) {
@@ -147,7 +150,12 @@ class Events {
     }
     touchend(pos, touchesCount) {
         this.scaling = false
-        this.scalingStopped = !touchesCount
+        // one finger left down after a pinch pans again from where it is now, with no jump
+        this.scalingStopped = touchesCount <= 1
+        if (touchesCount == 1) {
+            this.touchStartPoint.x = pos.x
+            this.touchStartPoint.y = pos.y
+        }
     }
     touchmove(pos, touchesCount) {
         if (touchesCount > 2) {

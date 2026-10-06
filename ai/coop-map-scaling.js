@@ -11,12 +11,13 @@ const COOP_HEX_RADIUS = Object.freeze({
     normal: Object.freeze({scale: 11, min: 13}),
     big: Object.freeze({scale: 14, min: 16})
 })
-// Three melee, ranged and mage portals, one of each remaining category per initial human,
+// Three melee, ranged and mage portals, two cavalry portals and one of each remaining category
+// (siege, heavy, chaos) per initial human, 14 in all,
 // plus COOP_EXTRA_HEAVY_PORTALS heavy portals per map. Matches COOP_PORTAL_CATEGORIES (ai/wave-config.js),
 // which the server does not load.
-const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'support', 'chaos', 'mage'])
+const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'heavy', 'cavalry', 'chaos', 'mage'])
 const COOP_EXTRA_HEAVY_PORTALS = 2
-const COOP_PORTALS_PER_HUMAN = Object.freeze({melee: 3, ranged: 3, siege: 1, heavy: 1, support: 1, chaos: 1, mage: 3})
+const COOP_PORTALS_PER_HUMAN = Object.freeze({melee: 3, ranged: 3, siege: 1, heavy: 1, cavalry: 2, chaos: 1, mage: 3})
 
 function baselineRadius(initialHumanCount, size) {
     const preset = COOP_HEX_RADIUS[size]
