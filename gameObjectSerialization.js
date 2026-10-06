@@ -45,7 +45,9 @@ function loadFromJson(game_string) {
     for (let i = 0; i < game.players.length; ++i) {
         unpacker.setPlayerTimerByIndex(i, game.timers[i])
     }
-    // An authoritative online co-op snapshot starts a new undo scope.
-    // Stale/equal network deliveries are rejected before reaching this loader.
-    if (gameSettings.isOnline && gameSettings.coop) actionManager.clear()
+    // An authoritative online snapshot (co-op or competitive, incl. a reconnect/Retry reload) starts a new
+    // undo scope: entries recorded on the old board would re-create units the reloaded board already has.
+    // Stale/equal network deliveries are rejected before reaching this loader; a continued co-op turn
+    // restores its own undo history after this call (onlineLogic receiveBoard).
+    if (gameSettings.isOnline) actionManager.clear()
 }
