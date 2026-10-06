@@ -21,11 +21,11 @@ class TutorialManager {
         if (tutorialResultInterface.visible)
             return true
         let outcome = null
-        if (players[TUTORIAL_AI_SLOT].isLost) {
+        if (TutorialManager.isPassed()) {
             markTutorialPassed(gameSettings.tutorial.id)
             outcome = 'victory'
         }
-        else if (players[TUTORIAL_HUMAN_SLOT].isLost) {
+        else if (TutorialManager.isFailed()) {
             outcome = 'defeat'
         }
         if (!outcome)
@@ -35,6 +35,26 @@ class TutorialManager {
         gameEvent.waitingMode = true
         tutorialResultInterface.show(outcome)
         return true
+    }
+    // The pass rule of the running tutorial (tutorials entry `pass`), see options/tutorials.js.
+    static isPassed() {
+        const tutorial = tutorials.find(tutorial => tutorial.id === gameSettings.tutorial.id)
+        const human = players[TUTORIAL_HUMAN_SLOT], enemy = players[TUTORIAL_AI_SLOT]
+        switch (tutorial ? tutorial.pass : 'enemyUnitsDead') {
+            case 'enemyUnitsDead':
+                enemy.updateUnits()
+                return enemy.units.length === 0
+            case 'enemyLost':
+                return enemy.isLost
+            case 'coopVictory':
+                human.updateTowns()
+                return players[0].coopResult === 'victory' && human.towns.length > 0
+            default:
+                throw new Error('Unknown tutorial pass rule ' + tutorial.pass)
+        }
+    }
+    static isFailed() {
+        return players[TUTORIAL_HUMAN_SLOT].isLost || players[0].coopResult === 'defeat'
     }
     // The old game loop stops on the next frame (gameExit); the new game starts after it.
     static retry() {
