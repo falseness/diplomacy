@@ -16,6 +16,20 @@ function createEvents() {
         document.addEventListener('touchcancel', touchend)
     }
 }
+// The menu has its own listeners (menu.setEvents); the game's must not act on
+// the game left behind or on its hidden buttons while the menu is shown.
+function removeEvents() {
+    document.removeEventListener('click', click)
+    document.removeEventListener('mousemove', mousemove)
+    document.removeEventListener('wheel', mousewheel)
+    document.removeEventListener('keydown', keydown)
+    document.removeEventListener('keyup', keyup)
+    window.removeEventListener('blur', windowBlur)
+    document.removeEventListener('touchstart', touchstart)
+    document.removeEventListener('touchmove', touchmove)
+    document.removeEventListener('touchend', touchend)
+    document.removeEventListener('touchcancel', touchend)
+}
 
 /*document.addEventListener('touchmove', function(event) {
 event.preventDefault();

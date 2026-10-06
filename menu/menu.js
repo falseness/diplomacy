@@ -1207,6 +1207,7 @@ class Menu {
         // so that the timer saves the current remaining time
         timer.pauseAndSaveTime()
 
+        removeEvents()
         menu.visible = true
         menu.start()
         // A lobby game returns to the hub, whose enter re-fetches lobby:list;
