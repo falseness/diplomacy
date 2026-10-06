@@ -1,5 +1,5 @@
 // Hand-made tutorial maps. The human always plays red (slot 1, fog of war) against
-// blue (slot 2, SimpleAiPlayer). `pass` picks the win rule (TutorialManager.isPassed):
+// blue (slot 2, an AI player). `pass` picks the win rule (TutorialManager.isPassed):
 // 'enemyUnitsDead' every blue unit is dead, 'enemyLost' blue has no towns and no units,
 // 'coopVictory' the co-op result is victory while red still owns a town.
 // Unit classes load after this file, so each map is built on access.
@@ -45,6 +45,59 @@ function createTutorial1Map() {
     return map
 }
 
+function createTutorial2Map() {
+    // Blue's army (5 normchels in front of 5 archers) stands 3 hexes left of red's
+    // 2 normchels and 2 archers; red's town with a barrack is 7 hexes behind red's army.
+    // Fighting at once loses. Retreating to the town for 4 rounds while the town and the
+    // barrack order a unit every turn wins. Blue has no town, so its economy is off
+    // (salaries would bankrupt it and disband its army).
+    let map = new GameMap(
+        {x: 16, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 250,
+                towns: [{x: 13, y: 4}],
+                barracks: [{x: 14, y: 4, town: {x: 13, y: 4}}],
+                units: [
+                    {x: 5, y: 3, type: Normchel},
+                    {x: 5, y: 5, type: Normchel},
+                    {x: 6, y: 3, type: Archer},
+                    {x: 6, y: 5, type: Archer}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayerWithEconomy',
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 2, y: 2, type: Normchel},
+                    {x: 2, y: 3, type: Normchel},
+                    {x: 2, y: 4, type: Normchel},
+                    {x: 2, y: 5, type: Normchel},
+                    {x: 2, y: 6, type: Normchel},
+                    {x: 1, y: 2, type: Archer},
+                    {x: 1, y: 3, type: Archer},
+                    {x: 1, y: 4, type: Archer},
+                    {x: 1, y: 5, type: Archer},
+                    {x: 1, y: 6, type: Archer}
+                ]
+            }
+        ],
+        [],
+        [],
+        []
+    )
+    map.testName = 'tutorial 2'
+    return map
+}
+
 const tutorials = [
-    {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }}
+    {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
+    {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }}
 ]
