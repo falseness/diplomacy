@@ -28,6 +28,10 @@ class Timer {
         return Math.floor(this.time / 1000)
     }
     pause() {
+        // keep the elapsed time: this.time becomes the remaining time,
+        // so a later save (menu back) does not restore the full turn
+        if (this.isTick && !isNaN(this.lastPause))
+            this.time = Math.max(this.time - Math.floor(Date.now() - this.lastPause), 0)
         this.isTick = false
     }
     pauseAndSaveTime() {
