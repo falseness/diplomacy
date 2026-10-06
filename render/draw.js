@@ -64,6 +64,8 @@ function drawInterface() {
     timer.draw(interfaceCtx)
 
     nextTurnPauseInterface.draw(interfaceCtx)
+    if (gameSettings.tutorial)
+        tutorialResultInterface.draw(interfaceCtx)
     const outcome = gameSettings.coop && gameSettings.coop.result
     if (outcome) {
         const labels = {victory: 'Victory — humans win', defeat: 'Defeat — demons win', draw: 'Draw — all sides eliminated'}

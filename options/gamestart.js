@@ -288,6 +288,9 @@ class GameMap {
         gameSettings.mapShape = this.mapShape
         if (this.coop) gameSettings.coop = {...JSON.parse(JSON.stringify(this.coop)), balanceVersion: 2}
         else delete gameSettings.coop
+        // Set before the timers below, which a tutorial keeps out of the save slot.
+        if (this.tutorial) gameSettings.tutorial = {...this.tutorial}
+        else delete gameSettings.tutorial
         gameSettings.drawFogLandmarks = true
 
         // Store unplayed opening slots with the save, including round-zero saves.

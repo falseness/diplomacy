@@ -53,6 +53,7 @@
     <script src="https://cdn.socket.io/socket.io-3.0.0.js"></script>
     <script src='options/onlineLogic.js'></script>
     <script src='options/tutorialProgress.js'></script>
+    <script src='options/tutorialManager.js'></script>
     <script src='options/onlineSession.js'></script>
     <script src='options/onlineHubRows.js'></script>
     <script src='options/onlineCreateLobby.js'></script>
@@ -85,6 +86,7 @@
     <script src='interface/towninterface.js'></script>
     <script src='interface/statisticsinterface.js'></script>
     <script src='interface/nextTurnPause.js'></script>
+    <script src='interface/tutorialResultInterface.js'></script>
 
     <script src='sprites/sprite.js'></script>
     <script src='groups/spritesGroup.js'></script>
@@ -205,6 +207,7 @@
         let townInterface = new TownInterface()
         let statisticsInterface = new StatisticsInterface()
         let nextTurnPauseInterface = new NextTurnPauseInterface()
+        let tutorialResultInterface = new TutorialResultInterface()
 
         let entityInterface = new EntityInterface()
         let gameEvent = new Events(barrackInterface, townInterface, entityInterface,
@@ -238,6 +241,9 @@
         )
 
         function saveGame() {
+            // A tutorial is never saved.
+            if (gameSettings.tutorial)
+                return
             try {
                 let _grid = JSON.stringify(grid)
                 let _players = JSON.stringify(players)

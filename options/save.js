@@ -2,14 +2,19 @@
 // when a game is set up (GameManager.setUpBoard) or loaded (unpackAll).
 let onlineGameStorage = false
 // The localStorage prefix of the current game's timers and player history: the save slot gameSlot for a local game.
-// An online game has no save slot, so it gets its own namespace and never overwrites the offline slot's keys.
+// An online game or a tutorial has no save slot, so it gets its own namespace and never overwrites the offline slot's keys.
 function gameStorageSlot() {
-    return onlineGameStorage ? 'online:' : gameSlot
+    if (onlineGameStorage)
+        return 'online:'
+    return gameSettings.tutorial ? 'tutorial:' : gameSlot
 }
 
 class SaveManager {
     constructor() {}
     save() {
+        // A tutorial is never saved.
+        if (gameSettings.tutorial)
+            return
         updateExternal()
 
         saveGame()

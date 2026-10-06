@@ -462,9 +462,12 @@ class Events {
         AiRuntime.recordHumanCommand()
         if (instructionsAreNotLongerNeeded)
             this.selected = new Empty()
+        if (gameSettings.tutorial)
+            TutorialManager.checkResult()
     }
     click(pos, realPos) {
-        let clickToButton = this.interface.nextTurnPause.click(pos) ||
+        let clickToButton = (gameSettings.tutorial && tutorialResultInterface.click(pos)) ||
+            this.interface.nextTurnPause.click(pos) ||
             undoButton.click(pos) || backToMenuButton.click(pos) || 
             this.interface.statistics.click(pos) || this.interface.entity.click(pos) || 
             this.interface.barrack.click(pos) || this.interface.town.click(pos) || 

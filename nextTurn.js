@@ -91,6 +91,10 @@ function advanceOfflineTurn() {
         menuBack()
         return
     }
+    // A finished tutorial stays on its result screen.
+    if (gameSettings.tutorial && TutorialManager.checkResult()) {
+        return
+    }
 
     gameEvent.nextTurn()
 
@@ -111,12 +115,24 @@ function advanceOfflineTurn() {
         return
     }
     players[whooseTurn].nextTurn()
+    if (gameSettings.tutorial && TutorialManager.checkResult()) {
+        return
+    }
     if (players[whooseTurn].isLost) {
         AiRuntime.trainFromHumanCommands()
     }
     if (players[whooseTurn].isNeutral || players[whooseTurn].isLost) {
         if (coopLocalTransitionActive) advanceOfflineTurn()
         else nextTurn()
+        return
+    }
+    // Blue has played in nextTurn above: the view stays red's and the turn passes on
+    // without a pass-device screen.
+    if (gameSettings.tutorial && whooseTurn !== TUTORIAL_HUMAN_SLOT) {
+        if (isFogOfWar) {
+            players[TUTORIAL_HUMAN_SLOT].changeFogOfWarByVision()
+        }
+        advanceOfflineTurn()
         return
     }
     if (isFogOfWar) {
@@ -132,7 +148,8 @@ function advanceOfflineTurn() {
     timer.setNextTurnTime()
     saveManager.save()
 
-    nextTurnPauseInterface.visible = true
+    // A tutorial has one human: the turn starts at once.
+    nextTurnPauseInterface.visible = !gameSettings.tutorial
 }
 
 function nextTurn() {
