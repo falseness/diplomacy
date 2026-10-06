@@ -90,6 +90,15 @@ function restoreImageCaches() {
     }
     if (typeof grid != 'undefined' && grid)
         grid.surfaceCacheState = undefined
+    restoreCameraTransform()
+}
+// A restored main context comes back with the identity transform, and events/screen.js only ever
+// applies the camera incrementally (translate/scale), so set it again from canvas.scale and offset.
+function restoreCameraTransform() {
+    if (typeof mainCtx == 'undefined' || typeof canvas == 'undefined' || !canvas)
+        return
+    mainCtx.setTransform(canvas.scale, 0, 0, canvas.scale,
+        -canvas.offset.x * canvas.scale, -canvas.offset.y * canvas.scale)
 }
 if (typeof document.addEventListener == 'function') {
     document.addEventListener('visibilitychange', () => {
@@ -138,6 +147,10 @@ function loadSprites() {
 function waitForImagesLoad() {
     if (imagesCountLoaded == images.length) {
         cacheAllImages()
+        if (typeof mainCanvas.addEventListener == 'function') {
+            mainCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+            mainCanvas.addEventListener('contextrestored', restoreImageCaches)
+        }
         menu.start()
         return 
     }
