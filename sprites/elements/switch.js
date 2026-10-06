@@ -54,6 +54,10 @@ class Switch {
         }
     }
     click(pos) {
+        // the selected half is already active: handle the click without toggling
+        let active = this.selected == 1 ? this.buttonOne : this.buttonTwo
+        if (active.canClick && active.isInside(pos))
+            return this.selected
         if (this.buttonOne.click(pos))
             return 1
         if (this.buttonTwo.click(pos))
