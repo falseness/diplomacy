@@ -37,14 +37,14 @@ function getGameObject() {
 
 function loadFromJson(game_string) {
     let game = JSON.parse(game_string)
-    for (let i = 0; i < game.players.length; ++i) {
-        unpacker.setPlayerTimerByIndex(i, game.timers[i])
-    }
-
     unpacker.unpackAll(JSON.stringify(game.grid), JSON.stringify(game.players), JSON.stringify(game.external),
         JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
         JSON.stringify(game.timers[game.whooseTurn]), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
         JSON.stringify(game.isFogOfWar), 'gameSettings' in game ? JSON.stringify(game.gameSettings) : null)
+    // After unpackAll, which picks the timers' storage slot (gameStorageSlot) for this board.
+    for (let i = 0; i < game.players.length; ++i) {
+        unpacker.setPlayerTimerByIndex(i, game.timers[i])
+    }
     // An authoritative online co-op snapshot starts a new undo scope.
     // Stale/equal network deliveries are rejected before reaching this loader.
     if (gameSettings.isOnline && gameSettings.coop) actionManager.clear()
