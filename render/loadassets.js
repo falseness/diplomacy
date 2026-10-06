@@ -47,8 +47,17 @@ let spriteImages = ['town', 'farm', 'noob', 'archer',
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
         'mountain', 'lake', 'sea', 'goldmine', 'bush'].concat(demonSpriteImages, undeadSpriteImages)
 let images = spriteImages.concat(grassHexImages)
+// Images whose last request failed: they still count as loaded (so the menu starts) and are cached as a blank placeholder.
+let failedImages = new Set()
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
+        failedImages.delete(images[i])
+        ++imagesCountLoaded
+        cachedImages[images[i]] = cacheImage(images[i])
+    }
+    assets[images[i]].onerror = function() {
+        console.error('failed to load asset ' + images[i] + ': ' + assets[images[i]].src)
+        failedImages.add(images[i])
         ++imagesCountLoaded
         cachedImages[images[i]] = cacheImage(images[i])
     }
@@ -68,7 +77,8 @@ function cacheImage(image) {
         x: width / 2,
         y: height / 2
     }
-    drawImage(tmpCtx, image, pos, width, height)
+    if (!failedImages.has(image))
+        drawImage(tmpCtx, image, pos, width, height)
 
     return tmpCanvas
 }
