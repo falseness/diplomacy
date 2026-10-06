@@ -107,6 +107,18 @@ class Town extends PreparingManufacture {
                 this.suburbs.splice(i--, 1)
                 continue
             }
+            // A manufacture of another town on this suburb (an old save, or a
+            // placement before canCreateOnCell required the town's own suburb)
+            // is killed with the capture, so it no longer pays its town's owner;
+            // undo restores it into that town (townExternal -> undoBuilding).
+            if (cell.building.isManufacture && cell.building.town &&
+                    cell.building.town !== this &&
+                    !coordsEqually(cell.hexagon.coord, this.coord)) {
+                actionManager.lastAction.townExternal.push(cell.building.toUndoJSON())
+                cell.building.kill()
+                this.suburbs[i].sudoPaint(this.playerColor)
+                continue
+            }
             // Mines are independent map assets, not town dependencies. Keep
             // them on the grid when their suburb transfers to the capturer.
             else if (cell.building.canBeDestroyed && cell.building.name !== 'goldmine') {
@@ -298,6 +310,11 @@ class Town extends PreparingManufacture {
         for (let i = 0; i < this.buildings.length; ++i) {
             if (this.buildings[i].killed) {
                 this.buildings.splice(i--, 1)
+                continue
+            }
+            // income follows the hex owner: a building on a hex this town
+            // no longer holds pays nothing to it
+            if (this.buildings[i].playerColor != this.playerColor) {
                 continue
             }
             income += this.buildings[i].income

@@ -240,8 +240,12 @@ class ManufactureProduction extends BuildingProduction {
         super(turns, cost, _class, name)
     }
     canCreateOnCell(cell, town) {
+        // only the producing town's own suburbs: a manufacture joins this
+        // town's buildings, so on another town's suburb it would pay the
+        // wrong town (and its old owner after that town is captured)
         return cell.building.isEmpty() &&
-            this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor)
+            this.isSuburb(cell.hexagon.coord, grid.arr, town.playerColor) &&
+            this.isOurSuburb(cell.hexagon.coord, town.suburbs)
     }
     get isManufacture() {
         return true
