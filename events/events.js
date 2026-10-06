@@ -284,7 +284,7 @@ class Events {
                 return
             }
             if (keycode == Events.kILetterKeycode) {
-                gameSettings.interface.drawChanceOfWinningText = true
+                grid.showChanceOfWinning = true
                 grid.fillChancesOfWinning(this.selected)
                 return
             }
@@ -428,6 +428,7 @@ class Events {
         this.interface.statistics.visible = false
     }
     nextTurn() {
+        grid.clearChancesOfWinning()
         this.selected.removeSelect()
         this.selected = new Empty()
         this.hideAll()

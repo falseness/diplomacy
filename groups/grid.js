@@ -124,6 +124,7 @@ class Grid extends SpritesGroup {
                     new CoordText(i, j, i + ' ' + j), new CoordText(i, j, ''))
             }
         }
+        this.showChanceOfWinning = false
         this.chanceOfWinning = []
         this.createArr(n, this.chanceOfWinning)
         for (let i = 0; i < n; ++i) {
@@ -146,16 +147,28 @@ class Grid extends SpritesGroup {
             this.visionWay = new VisionWay()
         }
     }
-    fillChancesOfWinning(entity) {
-        if (!entity.isUnit) {
-            console.log(entity.toJSON())
-            return
-        }
+    // Debug 'chance of winning' overlay (I key). Client-only UI state: it is
+    // not part of gameSettings, so it is never saved or sent with the board.
+    clearChancesOfWinning() {
+        this.showChanceOfWinning = false
+        this.clearChanceOfWinningText()
+    }
+    clearChanceOfWinningText() {
         for (let i = 0; i < this.chanceOfWinning.length; ++i) {
             for (let j = 0; j < this.chanceOfWinning[i].length; ++j) {
                 this.chanceOfWinning[i][j].text = ''
             }
         }
+    }
+    fillChancesOfWinning(entity) {
+        if (!entity.isUnit) {
+            console.log(entity.toJSON())
+            return
+        }
+        this.clearChanceOfWinningText()
+        // getAvailableCommands asserts isMyTurn: other players' units have none.
+        if (!entity.isMyTurn)
+            return
         let commands = entity.getAvailableCommands()
         console.log(commands)
         for (let i = 0; i < commands.length; ++i) {
@@ -206,6 +219,8 @@ class Grid extends SpritesGroup {
     drawChanceOfWinningText(ctx) {
         for (let i = 0; i < this.chanceOfWinning.length; ++i) {
             for (let j = 0; j < this.chanceOfWinning[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
                 this.chanceOfWinning[i][j].draw(ctx)
             }
         }
@@ -523,7 +538,7 @@ class Grid extends SpritesGroup {
         else
             this.drawOther(ctx)
 
-        if (gameSettings.interface.drawChanceOfWinningText) {
+        if (this.showChanceOfWinning) {
             this.drawChanceOfWinningText(ctx)
         }
 
