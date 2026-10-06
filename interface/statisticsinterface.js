@@ -132,6 +132,7 @@ class StatisticsInterface {
     }
     updateSuddenDeathText() {
         if (gameRound < suddenDeathRound - 1) {
+            this.suddenDeathText.color = 'black'
             this.suddenDeathText.text = 'sudden death ' + suddenDeathRound
             return
         }

@@ -14,7 +14,9 @@ class TemporaryWindow extends Button {
     enableTemporary() {
         this.visible = true
         const interval = 3000
-        setTimeout(function(tempWindow) {
+        clearTimeout(this.hideTimeout)
+        this.hideTimeout = setTimeout(function(tempWindow) {
+            tempWindow.hideTimeout = undefined
             tempWindow.visible = false
         }, interval, this)
     }
