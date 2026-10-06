@@ -1,4 +1,5 @@
 const AI_UNIT_PRODUCTS = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+const AI_BARRACK_UNIT_PRODUCTS = ['archer', 'KOHb', 'normchel', 'catapult']
 const AI_ECONOMY_ADVANCED_UNIT_THRESHOLD = 6
 const AI_ECONOMY_TOWN_THREAT_DISTANCE = 6
 const AI_ECONOMY_DEFAULT_ACTION_LIMIT = 30
@@ -442,6 +443,9 @@ class SimpleAiPlayer extends Player {
                 continue
             }
             let from = {x: unit.coord.x, y: unit.coord.y}
+            // select() rebuilds the unit's ways for its hex; a range unit's sendInstructions
+            // reads its rangeWay, which may still belong to another unit.
+            unit.select()
             unit.sendInstructions(grid.getCell(command.destinationCoord))
             if (!areCoordsEqual(unit.coord, from)) {
                 moved.push({from: from, to: {x: unit.coord.x, y: unit.coord.y}})
@@ -564,7 +568,8 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
             AI_UNIT_PRODUCTS
         let unitChoices = state.units.length < unitCap ?
-            byProducts(unitProducts) : []
+            this.mixBarrackUnitChoices(
+                state, byProducts(unitProducts), unitProducts, Math.ceil(unitCap / 2)) : []
         let barrackCapacity = state.barracks.length + state.pendingBarracks.length
         if (this.aiInitialTownCount == AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
             let choices = []
@@ -582,6 +587,60 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         return choices
     }
+    // Even barrack army: the barrack-product choices keep their slots in `choices` but are
+    // reordered so the class with the fewest live + in-production units comes first (ties by
+    // `productOrder`). A barrack drops its noob choice while it has a barrack product on offer.
+    // With a live barrack, town noobs stop at `noobCap` live + in-production noobs, so the rest
+    // of the unit cap stays free for barrack units.
+    mixBarrackUnitChoices(state, choices, productOrder, noobCap = Infinity) {
+        let countUnits = function(product) {
+            let unitClass = production[product].class
+            return typeof unitClass != 'function' ? 0 : state.units.filter(function(unit) {
+                return unit instanceof unitClass
+            }).length
+        }
+        let noobs = countUnits('noob')
+        let counts = {}
+        for (let i = 0; i < AI_BARRACK_UNIT_PRODUCTS.length; ++i) {
+            counts[AI_BARRACK_UNIT_PRODUCTS[i]] = countUnits(AI_BARRACK_UNIT_PRODUCTS[i])
+        }
+        let producers = state.towns.concat(state.barracks)
+        for (let i = 0; i < producers.length; ++i) {
+            let producer = producers[i]
+            if (!producer.isPreparingUnit || !producer.unitProduction) {
+                continue
+            }
+            if (producer.unitProduction.name == 'noob') {
+                ++noobs
+            }
+            else if (counts[producer.unitProduction.name] !== undefined) {
+                ++counts[producer.unitProduction.name]
+            }
+        }
+        let isBarrackUnit = function(choice) {
+            return AI_BARRACK_UNIT_PRODUCTS.includes(choice.product)
+        }
+        let noobsCapped = state.barracks.length > 0 && noobs >= noobCap
+        choices = choices.filter(function(choice) {
+            if (choice.product != 'noob') {
+                return true
+            }
+            if (noobsCapped) {
+                return false
+            }
+            return choice.producer.name != 'barrack' || !choices.some(function(other) {
+                return other.producer === choice.producer && isBarrackUnit(other)
+            })
+        })
+        let mixed = choices.filter(isBarrackUnit).sort(function(left, right) {
+            return counts[left.product] - counts[right.product] ||
+                productOrder.indexOf(left.product) - productOrder.indexOf(right.product) ||
+                left.cost - right.cost
+        })
+        return choices.map(function(choice) {
+            return isBarrackUnit(choice) ? mixed.shift() : choice
+        })
+    }
     chooseEconomyProductions(state) {
         let byProducts = function(products) {
             return state.productionChoices.filter(function(choice) {
@@ -592,8 +651,10 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                     left.cost - right.cost
             })
         }
+        let unitChoices = this.mixBarrackUnitChoices(
+            state, byProducts(AI_UNIT_PRODUCTS), AI_UNIT_PRODUCTS)
         if (state.units.length == 0) {
-            return byProducts(AI_UNIT_PRODUCTS)
+            return unitChoices
         }
 
         let farmCount = state.farms.length + state.pendingFarms.length
@@ -603,7 +664,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         if (state.barracks.length + state.pendingBarracks.length == 0) {
             choices = choices.concat(byProducts(['barrack']))
         }
-        return choices.concat(byProducts(AI_UNIT_PRODUCTS))
+        return choices.concat(unitChoices)
     }
     startEconomyProduction(choice) {
         if (!choice || !choice.producer.prepare(choice.product)) {
