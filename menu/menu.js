@@ -1197,6 +1197,7 @@ class Menu {
             onlineLobby = null
         }
         onlineSession.closeGame()
+        GameManager.clearWaitingMode()
 
         nextTurnPauseInterface.backToMenu()
         // A lobby game lives on the server, not in a save slot.
