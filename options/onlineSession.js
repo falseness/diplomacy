@@ -30,7 +30,8 @@ class OnlineSession {
         const socket = this.socket = io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER,
             {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
         // A transport reconnect is a new server socket: authenticate it again,
-        // then re-open the game on screen.
+        // then re-open the game on screen. A failed resume keeps the account and
+        // token (unless UNAUTHENTICATED), so the next reconnect tries again.
         socket.io.on('reconnect', async () => {
             if (!this.account || !await this.resume()) return
             if (this.openGameID) this.openGame(this.openGameID)
@@ -51,8 +52,9 @@ class OnlineSession {
     get hasStoredSession() {
         return !!readStoredSession()
     }
-    // Re-authenticates with the stored token; an invalid or expired token is cleared.
-    // UNAVAILABLE is retried with backoff and keeps the token.
+    // Re-authenticates with the stored token; only UNAUTHENTICATED (invalid or expired
+    // token) clears the token and the account. UNAVAILABLE is retried with backoff;
+    // TIMEOUT, BAD_ACK and other failures keep both, so a later reconnect retries.
     async resume() {
         const sessionToken = readStoredSession()
         if (!sessionToken) return null
@@ -63,8 +65,10 @@ class OnlineSession {
             ack = await this.request('auth:session', {sessionToken})
         }
         if (ack.ok) return this.account = ack.account
-        if (ack.error === 'UNAUTHENTICATED') clearStoredSession()
-        this.account = null
+        if (ack.error === 'UNAUTHENTICATED') {
+            clearStoredSession()
+            this.account = null
+        }
         return null
     }
     async signInWithGoogle(idToken) {
