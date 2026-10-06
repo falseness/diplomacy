@@ -9,6 +9,10 @@ class Archer extends RangeUnit {
         super(x, y, 'archer')
         this.interaction = new InteractionWithArcher(this.speed, this.range)
     }
+    nextTurn() {
+        super.nextTurn()
+        this.interaction.updateRange(this)
+    }
     get onHill() {
         return grid.getBuilding(this.coord).rangeIncrease
     }
