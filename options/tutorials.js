@@ -170,8 +170,42 @@ function createTutorial3Map() {
     return map
 }
 
+function createTutorial4Map() {
+    // A full 1v1 from the very beginning: each side has one town (with its spawned noob) and the
+    // default gold. The map is mirror-symmetric about column 9 (x -> 18 - x keeps the column
+    // parity, so hex neighbours mirror exactly): red's town (1,4) faces blue's (17,4) across a
+    // mountain ridge on each side, two neutral towns and a lake on the centre column, bushes and
+    // hills on the flanks.
+    let map = new GameMap(
+        {x: 19, y: 10},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: [{x: 9, y: 2}, {x: 9, y: 7}]
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                towns: [{x: 1, y: 4}]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayerWithEconomy',
+                towns: [{x: 17, y: 4}]
+            }
+        ],
+        [],
+        coordDictionary([[9, 4], [9, 5]]),
+        coordDictionary([[5, 4], [5, 5], [6, 5], [13, 4], [13, 5], [12, 5]]),
+        coordDictionary([[3, 7], [4, 8], [15, 7], [14, 8]]),
+        coordDictionary([[7, 2], [3, 1], [11, 2], [15, 1]])
+    )
+    map.testName = 'tutorial 4'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-3', title: 'Tutorial 3', pass: 'enemyLost', get map() { return createTutorial3Map() }}
+    {id: 'tutorial-3', title: 'Tutorial 3', pass: 'enemyLost', get map() { return createTutorial3Map() }},
+    {id: 'tutorial-4', title: 'Tutorial 4', pass: 'enemyLost', get map() { return createTutorial4Map() }}
 ]
