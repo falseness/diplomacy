@@ -32,7 +32,7 @@ const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bu
     'spitter', 'emberArcher', 'hexcaster', 'ravager', 'ravagerLeft', 'demonLord', 'bombard', 'bombardLeft', 'mortar', 'mortarLeft',
     'demonQueen',
     'demonPortalMelee', 'demonPortalRanged', 'demonPortalSiege',
-    'demonPortalHeavy', 'demonPortalSupport', 'demonPortalChaos', 'demonPortalMage']
+    'demonPortalHeavy', 'demonPortalCavalry', 'demonPortalChaos', 'demonPortalMage']
 for (const name of demonSpriteImages) assets[name] = new Image()
 // Undead artwork for ordinary units owned by the demon slot, shared by both themes.
 const undeadSpriteImages = ['undead/noob', 'undead/archer', 'undead/KOHb', 'undead/KOHbLeft',

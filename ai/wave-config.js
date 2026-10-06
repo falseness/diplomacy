@@ -1,9 +1,9 @@
 // Current portal durability; wave production uses the six-category schedule below.
 const COOP_PORTAL_HEALTH = 30;
-// Common (melee/ranged/support) portals are weaker than elite ones.
+// Common (melee/ranged/cavalry) portals are weaker than elite ones.
 const COOP_COMMON_PORTAL_HEALTH = 12;
 const COOP_ELITE_PORTAL_HEALTH = 30;
-const COOP_COMMON_PORTAL_CATEGORIES = Object.freeze(['melee', 'ranged', 'support']);
+const COOP_COMMON_PORTAL_CATEGORIES = Object.freeze(['melee', 'ranged', 'cavalry']);
 const COOP_ELITE_PORTAL_CATEGORIES = Object.freeze(['siege', 'heavy', 'chaos', 'mage']);
 
 function coopPortalHealth(category) {
@@ -27,7 +27,7 @@ const COOP_TYPED_WAVE_SCHEDULE = Object.freeze({
     ranged: [[4, 'spitter'], [16, 'emberArcher']],
     siege: [[16, 'bombard'], [32, 'mortar']],
     heavy: [[20, 'bulwark']],
-    support: [[16, 'ravager'], [24, 'hound']],
+    cavalry: [[16, 'ravager'], [24, 'hound']],
     chaos: [[28, 'demonLord']],
     mage: [[20, 'hexcaster'], [36, 'demonQueen']]
   }).map(([category, steps]) => [category,

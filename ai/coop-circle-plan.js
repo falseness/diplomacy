@@ -104,7 +104,7 @@ function circleRegions(radius, size, humans) {
     const elite = Math.max(Math.floor(radius / 6), circleEliteMinimum(radius, humans, size)), townRing = radius - 3
     const limit = townRing - CIRCLE_TOWN_DISTANCE[size], lattice = circleLayerLattice(radius)
     const targets = circleScaling(humans, size).counts.portalCategories
-    const need = CIRCLE_RING_LATTICE_PER_PORTAL * (targets.melee + targets.ranged + targets.support)
+    const need = CIRCLE_RING_LATTICE_PER_PORTAL * (targets.melee + targets.ranged + targets.cavalry)
     let ringOuter = Math.floor(3 * radius / 6), have = 0
     for (let layer = elite + 1; layer <= ringOuter; layer++) have += lattice[layer]
     while (have < need && ringOuter < limit) have += lattice[++ringOuter]
@@ -511,11 +511,11 @@ function placeCircleExpansions(plan, starts) {
 
 // Common ring categories in the per-human deal order; COOP_CIRCLE_ELITE_CATEGORIES
 // fill the elite core.
-const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged', 'support'])
+const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged', 'cavalry'])
 // Per-human ring portal groups. Members of a group are at hex distance 1-2 from
 // each other; portals of different groups are at hex distance >= CIRCLE_GROUP_GAP.
 const COOP_CIRCLE_RING_GROUPS = Object.freeze([
-    Object.freeze({kind: 'trio', categories: Object.freeze(['support', 'melee', 'ranged'])}),
+    Object.freeze({kind: 'trio', categories: Object.freeze(['cavalry', 'melee', 'ranged'])}),
     Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])}),
     Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])})])
 const CIRCLE_GROUP_SPAN = 2

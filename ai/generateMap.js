@@ -186,7 +186,7 @@ function buildCoopCircleCandidate(playerCount, size, seed, attempt) {
 }
 
 // Version-5 generated metadata: eleven portals per initial human on distinct
-// in-bounds cells: three melee/ranged and one each siege/heavy/support/chaos/mage,
+// in-bounds cells: three melee/ranged and one each siege/heavy/cavalry/chaos/mage,
 // plus two heavy portals per map (COOP_EXTRA_HEAVY_PORTALS).
 // Generated maps are also held to the Circle regions: a hexagonal shape with
 // the documented center/offset, elite categories (COOP_CIRCLE_ELITE_CATEGORIES)
