@@ -105,6 +105,7 @@ class SlotManager {
                     0.0035 * WIDTH, 'white', undefined, 0.4
             ), new Text(NaN, NaN, NaN, ''), clickFunc, i), i))
         }
+        this.step = rectSize + marginX
         let maximumOffset = firstX * 2 + (rectSize * slotsCount + marginX * (slotsCount - 1)) - WIDTH
         this.movingForm = new MovingForm(slots, 
             {min: -maximumOffset, max: 0})
@@ -150,6 +151,15 @@ class SlotManager {
     }
     touchmove(pos) {
         this.movingForm.touchmove(pos)
+    }
+    // Desktop scrolling: wheel down/right brings the later slots in, ArrowLeft/ArrowRight move by one slot.
+    wheel(pos, deltaY, deltaX = 0) {
+        const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY
+        this.movingForm.scrollBy(-delta)
+    }
+    scrollKey(key) {
+        if (key === 'ArrowLeft') this.movingForm.scrollBy(this.step)
+        else if (key === 'ArrowRight') this.movingForm.scrollBy(-this.step)
     }
     click(pos) {
         this.movingForm.click(pos)

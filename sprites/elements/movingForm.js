@@ -14,10 +14,13 @@ class MovingForm {
         this.posTouchStart = pos
     }
     touchmove(pos) {
-        let offsetTouch = (pos.x - this.posTouchStart.x)
-
+        this.scrollBy(pos.x - this.posTouchStart.x)
+        this.posTouchStart = pos
+    }
+    // Shifts the elements by dx (clamped by offsetLimitation): touch drag, mouse wheel and arrow keys.
+    scrollBy(dx) {
         let oldOffsetX = this.offsetX
-        this.offsetX += offsetTouch
+        this.offsetX += dx
         this.correctOffsetX()
 
         let offset = this.offsetX - oldOffsetX
@@ -25,8 +28,6 @@ class MovingForm {
         for (let i = 0; i < this.elements.length; ++i) {
             this.elements[i].x += offset
         }
-
-        this.posTouchStart = pos
     }
     select(pos) {
         for (let i = 0; i < this.elements.length; ++i) {
