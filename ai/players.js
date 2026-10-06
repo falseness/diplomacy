@@ -697,6 +697,10 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 validCells.push(cell)
             }
         }
+        this.lastProductionCells = {
+            candidates: available.map(hexagon => ({x: hexagon.coord.x, y: hexagon.coord.y})),
+            legal: validCells.map(cell => ({x: cell.coord.x, y: cell.coord.y}))
+        }
         if (AI_UNIT_PRODUCTS.includes(choice.product) &&
                 this.aiInitialTownCount == AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
             let targets = []
@@ -766,10 +770,11 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         return income
     }
-    // Every surplus purchase in spend-down order: (1) units, (2) barracks, (3) farms,
-    // (4) suburbs. Each option says whether it passes the cheap checks and, if not, why. Building
-    // cells are only searched when the purchase is tried; `noCellKeys` holds the town/product
-    // pairs already found without a legal cell this turn.
+    // Every surplus purchase in spend-down order: (1) units in the TASK-556 mix, (2) barracks,
+    // (3) farms, (4) suburbs, (5) units the mix leaves out. Each option says whether it passes
+    // the cheap checks and, if not, why. Building cells are only searched when the purchase is
+    // tried; `noCellKeys` maps the town/product pairs already found without a legal cell this
+    // turn to the cells that were checked.
     getSpendDownOptions(noCellKeys) {
         let state = this.inspectEconomy()
         let projectedIncome = this.getProjectedIncome(state)
@@ -781,7 +786,8 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 cost: production[product].cost,
                 legal: !reason,
                 reason: reason || null,
-                legalCells: cells ? cells.map(cell => ({x: cell.coord.x, y: cell.coord.y})) : null,
+                candidateCells: cells ? cells.candidates : null,
+                legalCells: cells ? cells.legal : null,
                 choice: {producer: producer, product: product, cost: production[product].cost}
             })
         }
@@ -819,32 +825,36 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             if (projectedIncome - production[product].class.salary < 0) {
                 return 'projected income'
             }
-            if (!unitChoices.some(function(choice) {
-                return choice.producer === producer && choice.product == product
-            })) {
-                return producer.name == 'barrack' ?
-                    'barrack noob while a barrack product is on offer' : 'town noob half-cap'
-            }
             return null
         }.bind(this)
+        let isMixChoice = function(producer, product) {
+            return unitChoices.some(function(choice) {
+                return choice.producer === producer && choice.product == product
+            })
+        }
         for (let i = 0; i < unitChoices.length; ++i) {
             if (!unitReason(unitChoices[i].producer, unitChoices[i].product)) {
                 addOption(unitChoices[i].producer, unitChoices[i].product, null)
             }
         }
-        for (let i = 0; i < state.towns.length; ++i) {
-            if (!unitReason(state.towns[i], 'noob')) {
-                continue
+        // Units the TASK-556 mix leaves out (town noobs over the half-cap, barrack noobs while a
+        // barrack product is on offer) are still legal: they come last, after the suburbs.
+        let fallbackUnits = []
+        let addUnitOption = function(producer, product) {
+            let reason = unitReason(producer, product)
+            if (reason) {
+                addOption(producer, product, reason)
             }
-            addOption(state.towns[i], 'noob', unitReason(state.towns[i], 'noob'))
+            else if (!isMixChoice(producer, product)) {
+                fallbackUnits.push({producer: producer, product: product})
+            }
+        }
+        for (let i = 0; i < state.towns.length; ++i) {
+            addUnitOption(state.towns[i], 'noob')
         }
         for (let i = 0; i < state.barracks.length; ++i) {
-            for (let j = 0; j < AI_BARRACK_UNIT_PRODUCTS.length; ++j) {
-                let product = AI_BARRACK_UNIT_PRODUCTS[j]
-                let reason = unitReason(state.barracks[i], product)
-                if (reason) {
-                    addOption(state.barracks[i], product, reason)
-                }
+            for (let j = 0; j < AI_UNIT_PRODUCTS.length; ++j) {
+                addUnitOption(state.barracks[i], AI_UNIT_PRODUCTS[j])
             }
         }
 
@@ -873,22 +883,25 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 }
                 else if (noCellKeys.has(getSpendDownCellKey(town, product))) {
                     reason = 'no legal cell'
-                    cells = []
+                    cells = noCellKeys.get(getSpendDownCellKey(town, product))
                 }
                 addOption(town, product, reason, cells)
             }
+        }
+        for (let i = 0; i < fallbackUnits.length; ++i) {
+            addOption(fallbackUnits[i].producer, fallbackUnits[i].product, null)
         }
         return options
     }
     // Surplus spending, run after the bot's own purchases: while it holds
     // AI_ECONOMY_SPEND_DOWN_GOLD or more, buy the first option of getSpendDownOptions that
     // production accepts. When nothing is left, lastSpendDown.noLegalPurchase keeps the
-    // enumerated options with the reason each one is not legal (an empty legalCells list for
-    // a building with no legal cell).
+    // enumerated options with the reason each one is not legal (for a building with no legal
+    // cell: the candidate cells checked and an empty legalCells list).
     spendDownGold() {
         let purchases = []
         let options = null
-        let noCellKeys = new Set()
+        let noCellKeys = new Map()
         while (this.gold >= AI_ECONOMY_SPEND_DOWN_GOLD) {
             options = this.getSpendDownOptions(noCellKeys)
             let bought = null
@@ -898,6 +911,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                     continue
                 }
                 let goldBefore = this.gold
+                this.lastProductionCells = null
                 if (this.startEconomyProduction(option.choice) && this.gold < goldBefore) {
                     bought = option
                     continue
@@ -908,8 +922,10 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 }
                 else {
                     option.reason = 'no legal cell'
-                    option.legalCells = []
-                    noCellKeys.add(getSpendDownCellKey(option.producer, option.product))
+                    let cells = this.lastProductionCells || {candidates: [], legal: []}
+                    option.candidateCells = cells.candidates
+                    option.legalCells = cells.legal
+                    noCellKeys.set(getSpendDownCellKey(option.producer, option.product), cells)
                 }
             }
             if (!bought) {
@@ -921,18 +937,33 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                 noCellKeys.delete(getSpendDownCellKey(bought.producer, 'barrack'))
             }
             purchases.push({product: bought.product, producer: bought.producer.name,
-                at: {x: bought.producer.coord.x, y: bought.producer.coord.y}})
+                at: bought.producer.coord ?
+                    {x: bought.producer.coord.x, y: bought.producer.coord.y} : null})
             options = null
         }
+        let noLegalPurchase = this.gold >= AI_ECONOMY_SPEND_DOWN_GOLD
+        let coordOf = building => building.coord ? {x: building.coord.x, y: building.coord.y} : null
+        // A noLegalPurchase turn also records what its proof is checked against: the unit cap,
+        // units + units in production and every live producer.
+        let state = noLegalPurchase ? this.inspectEconomy() : null
         this.lastSpendDown = {
             purchases: purchases,
             gold: this.gold,
-            noLegalPurchase: this.gold >= AI_ECONOMY_SPEND_DOWN_GOLD,
+            unitCap: state ? this.getUnitCap(state) : null,
+            unitsWithProduction: state ? state.units.length +
+                state.towns.concat(state.barracks).filter(function(producer) {
+                    return producer.isPreparingUnit
+                }).length : null,
+            producers: state ? {
+                towns: state.towns.map(coordOf),
+                barracks: state.barracks.map(coordOf)
+            } : null,
+            noLegalPurchase: noLegalPurchase,
             options: !options ? [] : options.map(function(option) {
-                return {producer: option.producer.name,
-                    at: {x: option.producer.coord.x, y: option.producer.coord.y},
+                return {producer: option.producer.name, at: coordOf(option.producer),
                     product: option.product, cost: option.cost, legal: option.legal,
-                    reason: option.reason, legalCells: option.legalCells}
+                    reason: option.reason, candidateCells: option.candidateCells,
+                    legalCells: option.legalCells}
             })
         }
         return purchases.length
