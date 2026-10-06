@@ -11,8 +11,8 @@ const circleGeometry = typeof coopHexLayer === 'function'
     ? {coopHexLayer, coopHexCenter, coopHexMapShape, coopHexLattice}
     : require('./coop-hex-geometry.js')
 
-// Portal categories that live in the elite core, six per human plus the per-map extra heavy portals.
-const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege', 'mage']
+// Portal categories that live in the elite core, eight per human plus the per-map extra heavy portals.
+const COOP_CIRCLE_ELITE_CATEGORIES = ['chaos', 'heavy', 'siege', 'mage', 'cavalry']
 // Minimum hex distance from every human town to a common ring portal.
 const CIRCLE_TOWN_DISTANCE = Object.freeze({tiny: 3, normal: 4, big: 5})
 const CIRCLE_MAX_GROWTH = 8
@@ -46,7 +46,7 @@ function circleNeighbours(c, side) {
 
 const circleEliteCache = new Map()
 
-// Elite portals of one map: 6 per human plus the extra heavy portals.
+// Elite portals of one map: 8 per human plus the extra heavy portals.
 function circleElitePortals(humans, size) {
     const targets = circleScaling(humans, size).counts.portalCategories
     return COOP_CIRCLE_ELITE_CATEGORIES.reduce((sum, c) => sum + targets[c], 0)
@@ -92,8 +92,10 @@ function circleLayerLattice(radius) {
 
 // Ring lattice cells per common ring portal. Ring groups keep CIRCLE_GROUP_GAP
 // from each other, so a ring with fewer cells (a tiny map whose elite core grew
-// for three mage portals per human) has no site for its last groups.
+// for the elite portals) has no site for its last groups.
 const CIRCLE_RING_LATTICE_PER_PORTAL = 2
+// Common ring portals of one map (melee + ranged, 6 per human).
+const circleRingPortals = targets => targets.melee + targets.ranged
 
 // Layer bands. The elite core is R/6, grown only when the elite portals would
 // not fit. The common ring ends at R/2, extended outwards while it holds fewer
@@ -104,7 +106,7 @@ function circleRegions(radius, size, humans) {
     const elite = Math.max(Math.floor(radius / 6), circleEliteMinimum(radius, humans, size)), townRing = radius - 3
     const limit = townRing - CIRCLE_TOWN_DISTANCE[size], lattice = circleLayerLattice(radius)
     const targets = circleScaling(humans, size).counts.portalCategories
-    const need = CIRCLE_RING_LATTICE_PER_PORTAL * (targets.melee + targets.ranged + targets.cavalry)
+    const need = CIRCLE_RING_LATTICE_PER_PORTAL * circleRingPortals(targets)
     let ringOuter = Math.floor(3 * radius / 6), have = 0
     for (let layer = elite + 1; layer <= ringOuter; layer++) have += lattice[layer]
     while (have < need && ringOuter < limit) have += lattice[++ringOuter]
@@ -126,14 +128,14 @@ function circleCapacityAt(humans, size, radius) {
         else if (layer <= regions.ringOuter) { ringCells++; if (lattice) ringLattice++ }
         if (layer === regions.townRing && lattice) townRingLattice++
     }
-    const elitePortals = circleElitePortals(humans, size)
+    const elitePortals = circleElitePortals(humans, size), ringPortals = circleRingPortals(counts.portalCategories)
     const outsideReserved = 9 * (humans + counts.neutralTowns) + counts.goldmines + 3 * (counts.portals - counts.portalCategories.heavy + humans)
     const reserved = eliteCells + outsideReserved
     // Nothing is placed yet, so every elite cell is free; each elite portal keeps two approach cells.
     const rows = {
         eliteLattice: {have: eliteLattice, need: elitePortals},
         eliteApproach: {have: eliteCells - elitePortals, need: 2 * elitePortals},
-        ringLattice: {have: ringLattice, need: 7 * humans},
+        ringLattice: {have: ringLattice, need: ringPortals},
         townRingLattice: {have: townRingLattice, need: humans},
         townRingGap: {have: regions.townRing, need: regions.elite + 2},
         eliteDepth: {have: regions.elite, need: 1},
@@ -141,9 +143,9 @@ function circleCapacityAt(humans, size, radius) {
         terrain: {have: playable - reserved, need: terrain.mountains + terrain.lakes + terrain.bushes}
     }
     // Per-human neutral-town 3x3 boxes: two in the common ring on normal/big (after
-    // 3 x 7h portal-plus-approach cells), one in the elite core on big (after the
+    // 3 x 6h ring portal-plus-approach cells), one in the elite core on big (after the
     // elite portal-plus-approach cells).
-    if (size !== 'tiny') rows.ringNeutral = {have: ringCells - 3 * 7 * humans, need: 2 * 9 * humans}
+    if (size !== 'tiny') rows.ringNeutral = {have: ringCells - 3 * ringPortals, need: 2 * 9 * humans}
     if (size === 'big') rows.eliteNeutral = {have: eliteCells - 3 * elitePortals, need: 9 * humans}
     for (const row of Object.values(rows)) row.slack = row.have - row.need
     return {radius, playable, eliteCells, regions, rows, ok: Object.values(rows).every(row => row.slack >= 0)}
@@ -511,13 +513,11 @@ function placeCircleExpansions(plan, starts) {
 
 // Common ring categories in the per-human deal order; COOP_CIRCLE_ELITE_CATEGORIES
 // fill the elite core.
-const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged', 'cavalry'])
-// Per-human ring portal groups. Members of a group are at hex distance 1-2 from
-// each other; portals of different groups are at hex distance >= CIRCLE_GROUP_GAP.
-const COOP_CIRCLE_RING_GROUPS = Object.freeze([
-    Object.freeze({kind: 'trio', categories: Object.freeze(['cavalry', 'melee', 'ranged'])}),
-    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])}),
-    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])})])
+const COOP_CIRCLE_RING_CATEGORIES = Object.freeze(['melee', 'ranged'])
+// Per-human ring portal groups: three melee+ranged pairs. Members of a group are at
+// hex distance 1-2 from each other; portals of different groups are at hex distance >= CIRCLE_GROUP_GAP.
+const COOP_CIRCLE_RING_GROUPS = Object.freeze([...Array(3)].map(() =>
+    Object.freeze({kind: 'pair', categories: Object.freeze(['melee', 'ranged'])})))
 const CIRCLE_GROUP_SPAN = 2
 const CIRCLE_GROUP_GAP = 3
 
@@ -530,9 +530,9 @@ const CIRCLE_GROUP_GAP = 3
 // cannot be completed is retried from another first member.
 // Every portal keeps two distinct free approach cells (bipartite matching) that
 // are not portals, towns, mines or reservations, and the passable region stays
-// connected after every placement. Each human's trio starts at the nearest
+// connected after every placement. Each human's first pair starts at the nearest
 // reachable ring cell to that human's town, keeping the nearest-portal path
-// spread level for the terrain stage; pairs start from the shuffled candidates.
+// spread level for the terrain stage; the other pairs start from the shuffled candidates.
 function placeCirclePortals(plan, layout) {
     const {side, humans, radius} = plan, {elite, ringOuter} = plan.regions
     const targets = circleScaling(humans, plan.size).counts.portalCategories
@@ -626,9 +626,9 @@ function placeCirclePortals(plan, layout) {
         if (!extend(0)) throw new Error(`Circle has no ring portal site: size=${plan.size} humans=${humans} seed=${plan.seed} category=${group.categories.join('+')} slot=${slot}`)
         portalGroups.push({slot, kind: group.kind, members})
     }
-    // Trios first, one per human: the first member is tried in order of path
+    // First pairs first, one per human: the first member is tried in order of path
     // distance from that human's town, so nearest-portal distances start level.
-    // Pairs start from the shuffled candidates; packed placement instead starts
+    // The other pairs start from the shuffled candidates; packed placement instead starts
     // each pair next to the placed ring portals (closest gap first, then
     // cells on the band edges).
     const placeRing = (candidates, packed) => {

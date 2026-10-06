@@ -1,10 +1,10 @@
 // Current portal durability; wave production uses the six-category schedule below.
 const COOP_PORTAL_HEALTH = 30;
-// Common (melee/ranged/cavalry) portals are weaker than elite ones.
+// Common (melee/ranged) portals are weaker than elite ones.
 const COOP_COMMON_PORTAL_HEALTH = 12;
 const COOP_ELITE_PORTAL_HEALTH = 30;
-const COOP_COMMON_PORTAL_CATEGORIES = Object.freeze(['melee', 'ranged', 'cavalry']);
-const COOP_ELITE_PORTAL_CATEGORIES = Object.freeze(['siege', 'heavy', 'chaos', 'mage']);
+const COOP_COMMON_PORTAL_CATEGORIES = Object.freeze(['melee', 'ranged']);
+const COOP_ELITE_PORTAL_CATEGORIES = Object.freeze(['siege', 'heavy', 'chaos', 'mage', 'cavalry']);
 
 function coopPortalHealth(category) {
   if (COOP_COMMON_PORTAL_CATEGORIES.includes(category)) return COOP_COMMON_PORTAL_HEALTH;
@@ -70,6 +70,7 @@ function getCoopNextScheduledProduction(category, completedRound) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {COOP_PORTAL_HEALTH, COOP_COMMON_PORTAL_HEALTH, COOP_ELITE_PORTAL_HEALTH, coopPortalHealth,
+    COOP_COMMON_PORTAL_CATEGORIES, COOP_ELITE_PORTAL_CATEGORIES,
     COOP_TYPED_WAVE_SCHEDULE, COOP_PORTAL_CATEGORIES, isCoopTypedWaveRound,
     getCoopScheduledDemonType, getCoopNextScheduledProduction};
 }
