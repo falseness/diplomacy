@@ -22,14 +22,10 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
     isBlindArea(coord) {
     	return this.way.getDistance(coord) <= this.moves
     }
-    hitUnit(cell, catapult) {
-        this.addHittedUnitUndo(cell)
-
-        let cellUnit = cell.unit
-        let killed = cell.unit.hit(catapult.buildingDMG)
-        if (!killed) 
-            this.addKillUnitUndo(cellUnit)
-    }
+    // Siege never damages units: an open-ground unit is not a target, a hidden
+    // unit in fog is unharmed and a garrisoned town/building only loses hp.
+    hitUnit() {}
+    demonShieldsPortal() { return false } // A demon never shields its portal.
     hitBuilding(cell, catapult) {
         if (cell.building.isBuildingProduction()) {
             this.hitBuildingProduction(cell.building, catapult)
@@ -67,6 +63,16 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             }
 
             // blind area cant be fogged
+            if (this.cellHasEnemyUnit(cell, catapult) &&
+                    !this.cellHasEnemyBuilding(cell, catapult) &&
+                    !this.cellHasEnemyBuildingProduction(cell, catapult)) {
+                // the shot is spent on a hidden unit, which takes no damage
+                this.addThisUndo(catapult)
+                this.moves = 0
+                this.addKillUnitUndo(catapult)
+                this.removeSelect()
+                return true
+            }
             let result = this.sendAttackInstructions(cell, catapult)
             if (!this.undoAdded) {
                 this.addThisUndo(catapult)
@@ -81,8 +87,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
                 this.cellHasEnemy(cell, catapult))
         let noObjectsToAttack = !isCellInBlindArea &&
             !(this.cellHasEnemyBuilding(cell, catapult) ||
-            this.cellHasEnemyBuildingProduction(cell, catapult) ||
-            this.cellHasEnemyUnit(cell, catapult))
+            this.cellHasEnemyBuildingProduction(cell, catapult))
 
         if (cell.building.isStaticNature || 
             isEnemyInBlindArea ||
@@ -107,8 +112,6 @@ class InteractionWithBombard extends InteractionWithCatapult {
     isBlindArea(coord) {
         return this.rangeWay.getDistance(coord) < Bombard.minimumRange
     }
-    hitUnit() {} // No melee, ranged or counterattack damage to units.
-    demonShieldsPortal() { return false } // Building-only: always the portal.
     canHitSomethingOnCell(cell, unit) {
         return this.moves > 0 && !unit.player.ignoresCell(cell) &&
             !this.cantRangeInteract(cell.coord, unit) && !this.isBlindArea(cell.coord) &&

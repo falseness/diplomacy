@@ -23,7 +23,7 @@ const INTERACTIONS = [
 const PROFILES = Object.freeze({
   melee: 'Adjacent combat and ordinary movement/capture; cavalry mirroring is cosmetic.',
   archer: 'Ordinary movement and adjacent/ranged attacks; ranged attack exhausts moves; terrain barriers constrain base range, elevated buildings extend range and change its path rules.',
-  siege: 'Uses buildingDMG for completed buildings and hitUnit, dmg for production; blind area depends on remaining movement/path distance; restrictive target gating, no ordinary adjacent attack. Range premium discounted to one quarter.'
+  siege: 'Uses buildingDMG for completed buildings, dmg for production, never damages units; blind area depends on remaining movement/path distance; restrictive target gating, no ordinary adjacent attack. Range premium discounted to one quarter.'
 });
 function valueUnit(unit) {
   for (const key of ['health', 'damage', 'movement', 'range']) {
@@ -86,7 +86,7 @@ function buildReport() {
 function markdown(report) {
   return `# Fixed gold-equivalent model v1\n\n` +
     `V = 20 + (H-2)*20/3 + (D-1)*10 + (M-2)*20/3 + (R-1)*50/3*W.\n\n` +
-    `H is maximum health, M movement, R base attack range (melee 1). D is ordinary damage except siege uses buildingDMG (4), which also drives its hitUnit method. W is 1 normally and 0.25 for the siege interaction profile. Values are unrounded in JSON; the table rounds to two decimals.\n\n` +
+    `H is maximum health, M movement, R base attack range (melee 1). D is ordinary damage except siege uses buildingDMG (4) against buildings; siege never damages units. W is 1 normally and 0.25 for the siege interaction profile. Values are unrounded in JSON; the table rounds to two decimals.\n\n` +
     `Calibration: Noob sets 20. Normchel's extra 3 HP fixes health at 20/3. KOHb's extra 1 HP and 2 movement fixes movement at 20/3. Choose damage = 10 gold per point as an explicit modeling prior; Archer then fixes range at 50/3. Catapult fixes W = 1/4 after substituting H=1,D=4,M=2,R=5. Five prices cannot uniquely identify all tactical effects: this is an exact anchor fit, not empirical combat validation. Siege's discount aggregates blind-area and targeting limits; it is not a universal probability of landing a shot.\n\n` +
     `Healing/salary: record real class rates (demons 0/0, recruits as below), but assign both zero contribution at a zero-turn upkeep/healing horizon. This measures immediate full-health combat capacity, not lifetime ownership cost. Human healing needs a suburb and no recent hit; demons cannot heal. No salary-free bonus is granted and no healing benefit is assumed; hence unchanged Noob-equivalent Imp is exactly 20. Longer campaigns require a separately declared horizon, never a silent change to v1. Demon economic capture restrictions likewise earn no value because capture utility is excluded for every anchor.\n\n` +
     Object.entries(PROFILES).map(([p, text]) => `- ${p}: ${text}`).join('\n') + '\n\n' +
