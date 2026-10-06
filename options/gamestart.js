@@ -1290,11 +1290,13 @@ class GameManager {
 	    createEvents()
     }
     // An online wait or connection-lost panel freezes input; a game entered
-    // from the menu starts unfrozen (an online board re-freezes after this).
+    // from the menu starts unfrozen (an online board re-freezes after this),
+    // without the 1-second next-turn guard of the previous game.
     static clearWaitingMode() {
         gameEvent.waitingMode = false
         nextTurnButton.highlightButton = false
         nextTurnButton.enableClick()
+        nextTurnButton.unactive = false
         if (typeof undoButton != 'undefined') undoButton.enableClick()
     }
     static load() {

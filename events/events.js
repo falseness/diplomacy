@@ -294,9 +294,28 @@ class Events {
             }
             
             if (keycode == Events.kEnterKeycode) {
-                if (isShiftPressed || nextTurnButton.highlightButton) {
+                // A held key must not end the turns of the next players (or select their units) unseen.
+                if (isRepeat)
+                    return
+                if (isShiftPressed) {
+                    // the same 1-second guard as the mouse next-turn button
+                    if (nextTurnButton.unactive)
+                        return
                     nextTurnPauseInterface.hideButDontUpdateTimer()
                     nextTurn()
+                    nextTurnButton.deactivate()
+                    return
+                }
+                // Behind the 'Player N' overlay Enter only dismisses it, as a click does.
+                if (nextTurnPauseInterface.visible) {
+                    nextTurnPauseInterface.click()
+                    return
+                }
+                if (nextTurnButton.highlightButton) {
+                    if (nextTurnButton.unactive)
+                        return
+                    nextTurn()
+                    nextTurnButton.deactivate()
                     return
                 }
 

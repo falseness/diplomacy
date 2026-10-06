@@ -182,7 +182,8 @@ class gameLogicButtons extends ImageButton {
     deactivate() {
         this.unactive = true
         const interval = 1000
-        setTimeout(function(){ 
+        clearTimeout(this.activateTimer)
+        this.activateTimer = setTimeout(function(){ 
             nextTurnButton.unactive = false
         }, interval)
     }
