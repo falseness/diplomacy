@@ -23,6 +23,8 @@ class OnlineSession {
         this.account = null
         // The lobby game on screen (game:open); re-opened after a reconnect.
         this.openGameID = null
+        // The account:mergeTutorial request of the last sign-in (resolves when it settles).
+        this.tutorialSync = null
     }
     connect() {
         if (this.socket) return this.socket
@@ -64,7 +66,11 @@ class OnlineSession {
             await new Promise(resolve => setTimeout(resolve, delay))
             ack = await this.request('auth:session', {sessionToken})
         }
-        if (ack.ok) return this.account = ack.account
+        if (ack.ok) {
+            this.account = ack.account
+            this.tutorialSync = this.syncTutorialProgress()
+            return this.account
+        }
         if (ack.error === 'UNAUTHENTICATED') {
             clearStoredSession()
             this.account = null
@@ -75,7 +81,20 @@ class OnlineSession {
         const ack = await this.request('auth:google', {idToken})
         if (!ack.ok) return null
         storeSession(ack.sessionToken)
-        return this.account = ack.account
+        this.account = ack.account
+        this.tutorialSync = this.syncTutorialProgress()
+        return this.account
+    }
+    // Unites the passed tutorials of this browser and of the account (protocol doc 2.6).
+    // Not awaited by sign-in: a server without account:mergeTutorial only times out here.
+    async syncTutorialProgress() {
+        try {
+            const ack = await this.request('account:mergeTutorial', {passed: readTutorialPassed()})
+            if (ack.ok && Array.isArray(ack.passed)) mergeTutorialPassed(ack.passed)
+            else console.warn('tutorial progress sync failed:', ack.error)
+        } catch (error) {
+            console.warn('tutorial progress sync failed:', error)
+        }
     }
     // Resolves the ack; a successful rename updates the signed-in account.
     async setNickname(nickname) {
