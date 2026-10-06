@@ -271,22 +271,30 @@ class Way {
         return this.distance[coord.x][coord.y]
     }
     getParent(coord) {
-        return Object.assign({}, this.parent[coord.x][coord.y])
+        // an unreached cell (parent null) is its own parent
+        let parent = this.parent[coord.x][coord.y]
+        return parent ? Object.assign({}, parent) : { x: coord.x, y: coord.y }
     }
+    // Every search reuses the arrays of the previous one on the same map size:
+    // units search the whole map several times per move.
     initialization(v0, moves, arr, bord, newBorder) {
         grid.newLogicText()
-        let used = new Array(arr.length)
-        this.distance = new Array(arr.length)
-        this.parent = new Array(arr.length)
-        for (let i = 0; i < arr.length; ++i) {
-            used[i] = new Array(arr[i].length)
-            this.distance[i] = new Array(arr[i].length)
-            this.parent[i] = new Array(arr[i].length)
-            for (let j = 0; j < used[i].length; ++j) {
-                used[i][j] = false
-                this.distance[i][j] = moves + 1
-                this.parent[i][j] = { x: i, y: j }
+        if (!this.used || this.used.length != arr.length ||
+                this.used[0].length != arr[0].length) {
+            this.used = new Array(arr.length)
+            this.distance = new Array(arr.length)
+            this.parent = new Array(arr.length)
+            for (let i = 0; i < arr.length; ++i) {
+                this.used[i] = new Array(arr[i].length)
+                this.distance[i] = new Array(arr[i].length)
+                this.parent[i] = new Array(arr[i].length)
             }
+        }
+        let used = this.used
+        for (let i = 0; i < arr.length; ++i) {
+            used[i].fill(false)
+            this.distance[i].fill(moves + 1)
+            this.parent[i].fill(null)
         }
         used[v0.x][v0.y] = true
         this.distance[v0.x][v0.y] = 0
@@ -459,26 +467,106 @@ class InfluenceFieldWay {
 }
 
 // used in simple ai player logic
+// Runs two whole-map searches per AI step, so it keeps flat typed arrays and a cached
+// neighbour table and draws no border lines or logic text. Plain BFS: the distances,
+// and hence every target and command choice, equal those of Way.create.
 class BestEnemyTargetForAI extends Way {
-    isCellImpassable(neighbour, v0, arr, player) {
-        let cell = arr[neighbour.x][neighbour.y]
+    isCellBlocked(cell, player) {
         return players[player].ignoresCell(cell) ||
             (cell.building.isStaticNature && cell.building.isObstacle(player))
     }
-    notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
-        Q.push(coord)
-        this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
-        this.parent[coord.x][coord.y] = v
-        used[coord.x][coord.y] = true
+    isCellImpassable(neighbour, v0, arr, player) {
+        return this.isCellBlocked(arr[neighbour.x][neighbour.y], player)
+    }
+    prepareSearch(arr) {
+        const n = arr.length
+        const m = arr[0].length
+        if (this.searchArr === arr && this.searchN === n && this.searchM === m) {
+            return
+        }
+        const size = n * m
+        // neighbourTable[6k + side]: flat index of that neighbour of cell k, or -1 off the map
+        const neighbourTable = new Int32Array(size * 6)
+        for (let x = 0; x < n; ++x) {
+            const sides = neighborhood[x & 1]
+            for (let y = 0; y < m; ++y) {
+                const base = (x * m + y) * 6
+                for (let side = 0; side < 6; ++side) {
+                    const nx = x + sides[side][0]
+                    const ny = y + sides[side][1]
+                    neighbourTable[base + side] = isCoordNotOnMap({x: nx, y: ny}, n, m) ? -1 : nx * m + ny
+                }
+            }
+        }
+        this.searchArr = arr
+        this.searchN = n
+        this.searchM = m
+        this.neighbourTable = neighbourTable
+        this.flatDistance = new Int32Array(size)
+        this.queue = new Int32Array(size)
+        // usedStamp[k] == searchStamp: cell k is reached in the current search;
+        // blockedStamp[k] == searchStamp: blocked[k] is known for it
+        this.usedStamp = new Uint32Array(size)
+        this.blockedStamp = new Uint32Array(size)
+        this.blocked = new Uint8Array(size)
+        this.searchStamp = 0
+        this.distance = new Array(n)
+        for (let x = 0; x < n; ++x) {
+            this.distance[x] = this.flatDistance.subarray(x * m, (x + 1) * m)
+        }
+    }
+    create(v0, moves, arr, player) {
+        this.prepareSearch(arr)
+        const m = this.searchM
+        const distance = this.flatDistance
+        const neighbourTable = this.neighbourTable
+        const queue = this.queue
+        const blocked = this.blocked
+        const usedStamp = this.usedStamp
+        const blockedStamp = this.blockedStamp
+        const stamp = ++this.searchStamp
+        distance.fill(moves + 1)
+        const start = v0.x * m + v0.y
+        distance[start] = 0
+        usedStamp[start] = stamp
+        let head = 0
+        let tail = 0
+        queue[tail++] = start
+        while (head < tail) {
+            const v = queue[head++]
+            if (distance[v] > moves) {
+                continue
+            }
+            const next = distance[v] + 1
+            for (let side = 0; side < 6; ++side) {
+                const k = neighbourTable[v * 6 + side]
+                if (k < 0 || usedStamp[k] === stamp) {
+                    continue
+                }
+                if (blockedStamp[k] !== stamp) {
+                    blockedStamp[k] = stamp
+                    blocked[k] = this.isCellBlocked(arr[(k / m) | 0][k % m], player) ? 1 : 0
+                }
+                if (blocked[k]) {
+                    continue
+                }
+                usedStamp[k] = stamp
+                distance[k] = next
+                queue[tail++] = k
+            }
+        }
     }
     static unreachableDistance = 999999
     calculateBestEnemyTarget(v0, grid_arr, myPlayerColor) {
-        // might be faster but it is not important
         this.create(v0, this.constructor.unreachableDistance, grid_arr, myPlayerColor, border)
         let resultCoord = { x: -1, y: -1 }
         let minDistance = this.constructor.unreachableDistance
         for (let i = 0; i < grid_arr.length; ++i) {
             for (let j = 0; j < grid_arr[i].length; ++j) {
+                // the cheap distance test first: only nearer cells can change the result
+                if (this.distance[i][j] >= minDistance) {
+                    continue
+                }
                 let cell = grid_arr[i][j]
                 let is_building_target = !players[myPlayerColor].ignoresObjective(cell) && cell.building.notEmpty() &&
                     !players[myPlayerColor].isAlliedWith(cell.building.player) &&
@@ -498,6 +586,9 @@ class BestEnemyTargetForAI extends Way {
         if (grid_arr[v0.x][v0.y].unit instanceof Bombard) return null
         for (let i = 0; i < grid_arr.length; ++i) {
             for (let j = 0; j < grid_arr[i].length; ++j) {
+                if (this.distance[i][j] >= minDistance) {
+                    continue
+                }
                 let cell = grid_arr[i][j]
                 let is_unit_target = !players[myPlayerColor].ignoresCell(cell) && cell.unit.notEmpty() &&
                     !players[myPlayerColor].isAlliedWith(cell.unit.player)
