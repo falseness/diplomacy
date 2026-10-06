@@ -1282,6 +1282,7 @@ class GameManager {
         width = WIDTH
         height = HEIGHT
         mainCtx.setTransform(1, 0, 0, 1, 0, 0)
+        gameEvent.resetCameraInput()
         gameEvent.screen.stop()
         gameEvent.resetKeyboardZoom()
         this.updateCameraBorders()

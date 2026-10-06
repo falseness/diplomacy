@@ -85,6 +85,7 @@ function mousemove(event) {
 // a key released while the window is unfocused never sends keyup
 function windowBlur() {
     gameEvent.resetKeyboardZoom()
+    gameEvent.resetCameraInput()
 }
 function isEditableTarget(target) {
     if (!target)
@@ -379,6 +380,13 @@ class Events {
             return null
         let lastKey = [...pressedKeys].pop()
         return negativeKeys.has(lastKey) ? -1 : 1
+    }
+    // forgets held camera keys and the mouse edge direction, stopping their scrolling
+    resetCameraInput() {
+        this.pressed_horizontal_keys.clear()
+        this.pressed_vertical_keys.clear()
+        this.mouseEdgeDirection = { x: 0, y: 0 }
+        this.updateScreenSpeed()
     }
     updateScreenSpeed(time = undefined) {
         this.screen.advanceTo(time)
