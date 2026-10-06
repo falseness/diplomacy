@@ -380,6 +380,74 @@ class SimpleAiPlayer extends Player {
             }
             remainingActions -= this.unitDoMoves(this.units[cycle], remainingActions)
         }
+        this.vacateProducerHexes()
+    }
+    // A unit spawns only on its producer's own hex (unitPreparingLogic -> cantCreateNow), so a
+    // unit still standing on its own town or barrack while that producer has a unit in production
+    // steps to a free adjacent hex (a nearest reachable free hex when every neighbour is taken),
+    // the one nearest to its current target, ties and no target by lowest x, y.
+    isOwnProducerWithUnitInProduction(cell, unit) {
+        let building = cell && cell.building
+        return !!(building && building.isPreparingManufacture && !building.killed &&
+            building.isPreparingUnit && building.playerColor === unit.playerColor)
+    }
+    getProducerHexExitCommand(unit) {
+        let neighbours = unit.neighbours
+        let commands = getAiMoveCommands(unit)
+        let way = unit.interaction && unit.interaction.way
+        let candidates = []
+        for (let i = 0; i < commands.length; ++i) {
+            let to = commands[i].destinationCoord
+            let cell = getAiCommandCell(to)
+            if (areCoordsEqual(to, unit.coord) || !cell || !cell.unit || cell.unit.notEmpty() ||
+                    (unit.player && !unit.player.canEnterBuilding(cell.building)) ||
+                    this.isOwnProducerWithUnitInProduction(cell, unit)) {
+                continue
+            }
+            let steps = neighbours.some(coord => areCoordsEqual(coord, to)) ? 1 :
+                (way && way.getDistance ? way.getDistance(to) : Infinity)
+            candidates.push({command: commands[i], steps: steps})
+        }
+        if (!candidates.length) {
+            return null
+        }
+        let minSteps = Math.min(...candidates.map(candidate => candidate.steps))
+        candidates = candidates.filter(candidate => candidate.steps == minSteps)
+        let targetFinder = this.bestEnemyTargetForAI
+        let target = targetFinder.calculateBestEnemyTarget(
+            unit.coord, grid.arr, unit.playerColor)
+        let targetDistance = () => 0
+        if (target) {
+            targetFinder.create(target, BestEnemyTargetForAI.unreachableDistance,
+                grid.arr, unit.playerColor, border)
+            targetDistance = coord => targetFinder.distance[coord.x][coord.y]
+        }
+        candidates.sort((left, right) => {
+            let l = left.command.destinationCoord
+            let r = right.command.destinationCoord
+            return targetDistance(l) - targetDistance(r) || l.x - r.x || l.y - r.y
+        })
+        return candidates[0].command
+    }
+    vacateProducerHexes() {
+        let moved = []
+        for (let i = 0; i < this.units.length; ++i) {
+            let unit = this.units[i]
+            if (unit.killed || !(unit.moves > 0) || unit.isMyTurn === false ||
+                    !this.isOwnProducerWithUnitInProduction(grid.getCell(unit.coord), unit)) {
+                continue
+            }
+            let command = this.getProducerHexExitCommand(unit)
+            if (!command) {
+                continue
+            }
+            let from = {x: unit.coord.x, y: unit.coord.y}
+            unit.sendInstructions(grid.getCell(command.destinationCoord))
+            if (!areCoordsEqual(unit.coord, from)) {
+                moved.push({from: from, to: {x: unit.coord.x, y: unit.coord.y}})
+            }
+        }
+        return moved
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 0)
@@ -789,6 +857,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             this.spendEconomyGold()
         }
         this.playCombatActions()
+        this.vacateProducerHexes()
     }
     chooseAiTarget(targets) {
         return chooseAiTargetByPriority(targets, 3)
