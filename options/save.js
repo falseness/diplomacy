@@ -241,13 +241,14 @@ class JsonUnpackManager {
             jsonNature, jsonGoldmines, jsonTimer, jsonWhooseTurn, jsonGameRound, jsonIsFogOfWar, jsonGameSettings) {
         // Reject obsolete co-op saves before mutating the active board or timers.
         const settings = jsonGameSettings == null ? null : JSON.parse(jsonGameSettings)
+        let packedExternal = normalizeLegacyCoopPortalCategories(JSON.parse(jsonExternal))
         if (settings && settings.coop) {
             const coop = settings.coop
             getCoopMapScalingFromMetadata(coop)
             if (coop.balanceVersion !== 2 || coop.waveGeneration !== undefined)
                 throw new Error('Unsupported co-op wave metadata')
             const savedGrid = JSON.parse(jsonGrid)
-            for (const portal of JSON.parse(jsonExternal)) {
+            for (const portal of packedExternal) {
                 if (portal.name !== 'demonPortal') continue
                 if (!COOP_PORTAL_CATEGORIES.includes(portal.category))
                     throw new Error('Invalid saved portal category')
@@ -268,7 +269,6 @@ class JsonUnpackManager {
         }
         let packedGrid = JSON.parse(jsonGrid)
         let packedPlayers = JSON.parse(jsonPlayers)
-        let packedExternal = JSON.parse(jsonExternal)
         let packedExternalProduction = JSON.parse(jsonExternalProduction)
         let packedNature = JSON.parse(jsonNature)
         let packedGoldmines = JSON.parse(jsonGoldmines)

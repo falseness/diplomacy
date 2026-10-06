@@ -34,6 +34,19 @@ const COOP_TYPED_WAVE_SCHEDULE = Object.freeze({
     Object.freeze(steps.map(([round, type]) => Object.freeze({round, type})))])))
 });
 const COOP_PORTAL_CATEGORIES = Object.freeze(Object.keys(COOP_TYPED_WAVE_SCHEDULE.categories));
+// Saves written before TASK-572 call the cavalry category 'support' (same schedule).
+const COOP_LEGACY_PORTAL_CATEGORIES = Object.freeze({support: 'cavalry'});
+
+// In place, before any category validation; unknown categories stay as they are and are rejected later.
+function normalizeLegacyCoopPortalCategories(external) {
+  if (!Array.isArray(external)) return external;
+  for (const portal of external) {
+    if (portal && portal.name === 'demonPortal' &&
+        Object.prototype.hasOwnProperty.call(COOP_LEGACY_PORTAL_CATEGORIES, portal.category))
+      portal.category = COOP_LEGACY_PORTAL_CATEGORIES[portal.category];
+  }
+  return external;
+}
 
 function getCoopPortalCategorySteps(category) {
   if (typeof category !== 'string' ||
@@ -72,5 +85,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {COOP_PORTAL_HEALTH, COOP_COMMON_PORTAL_HEALTH, COOP_ELITE_PORTAL_HEALTH, coopPortalHealth,
     COOP_COMMON_PORTAL_CATEGORIES, COOP_ELITE_PORTAL_CATEGORIES,
     COOP_TYPED_WAVE_SCHEDULE, COOP_PORTAL_CATEGORIES, isCoopTypedWaveRound,
+    COOP_LEGACY_PORTAL_CATEGORIES, normalizeLegacyCoopPortalCategories,
     getCoopScheduledDemonType, getCoopNextScheduledProduction};
 }
