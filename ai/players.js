@@ -39,6 +39,10 @@ const SIMPLE_ECONOMY_DEFAULT_ACTION_LIMIT = 12
 const SIMPLE_ECONOMY_DEFAULT_COMMAND_LIMIT = 200
 const SIMPLE_ECONOMY_STALEMATE_PATH_ROUND = 120
 const SIMPLE_ECONOMY_LARGE_MAP_CELL_THRESHOLD = 600
+// Surplus spending: after its purchases an economy bot keeps buying while it holds this much gold.
+const AI_ECONOMY_SPEND_DOWN_GOLD = 60
+const AI_ECONOMY_MAX_BARRACKS_PER_TOWN = 3
+const AI_ECONOMY_BARRACK_MIN_PROJECTED_INCOME = 2
 
 function compareAiTargets(townBonus) {
     return function(left, right) {
@@ -461,6 +465,10 @@ class SimpleAiPlayer extends Player {
     }
 }
 
+function getSpendDownCellKey(town, product) {
+    return town.coord.x + ',' + town.coord.y + ',' + product
+}
+
 class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
     constructor(color, gold = 90, economyMode = 'war') {
         super(color, gold)
@@ -553,17 +561,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
                     left.cost - right.cost
             })
         }
-        let isLargeMap = isCurrentGridLargeForSimpleEconomy()
-        let unitsPerTownCap = !isLargeMap ?
-            SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP :
-            SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP
-        let maxUnitCap = !isLargeMap ?
-            SIMPLE_ECONOMY_MAX_UNIT_CAP : SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP
-        let unitCap = Math.max(
-            AI_ECONOMY_ADVANCED_UNIT_THRESHOLD,
-            Math.min(
-                maxUnitCap,
-                state.towns.length * unitsPerTownCap))
+        let unitCap = this.getUnitCap(state)
         let unitProducts = state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD ?
             ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] :
             AI_UNIT_PRODUCTS
@@ -586,6 +584,19 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             choices = choices.concat(byProducts(['suburb']))
         }
         return choices
+    }
+    getUnitCap(state) {
+        let isLargeMap = isCurrentGridLargeForSimpleEconomy()
+        let unitsPerTownCap = !isLargeMap ?
+            SIMPLE_ECONOMY_UNITS_PER_TOWN_CAP :
+            SIMPLE_ECONOMY_LARGE_MAP_UNITS_PER_TOWN_CAP
+        let maxUnitCap = !isLargeMap ?
+            SIMPLE_ECONOMY_MAX_UNIT_CAP : SIMPLE_ECONOMY_LARGE_MAP_MAX_UNIT_CAP
+        return Math.max(
+            AI_ECONOMY_ADVANCED_UNIT_THRESHOLD,
+            Math.min(
+                maxUnitCap,
+                state.towns.length * unitsPerTownCap))
     }
     // Even barrack army: the barrack-product choices keep their slots in `choices` but are
     // reordered so the class with the fewest live + in-production units comes first (ties by
@@ -736,6 +747,195 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
             }
         }
         return false
+    }
+    // Net income once every pending production is done: pending farms +4, pending barracks -2,
+    // units in production pay their salary.
+    getProjectedIncome(state) {
+        let income = this.income
+        for (let i = 0; i < state.pendingFarms.length; ++i) {
+            income += Farm.income
+        }
+        for (let i = 0; i < state.pendingBarracks.length; ++i) {
+            income += Barrack.income
+        }
+        let producers = state.towns.concat(state.barracks)
+        for (let i = 0; i < producers.length; ++i) {
+            if (producers[i].isPreparingUnit && production[producers[i].unitProduction.name]) {
+                income -= production[producers[i].unitProduction.name].class.salary
+            }
+        }
+        return income
+    }
+    // Every surplus purchase in spend-down order: (1) units, (2) barracks, (3) farms,
+    // (4) suburbs. Each option says whether it passes the cheap checks and, if not, why. Building
+    // cells are only searched when the purchase is tried; `noCellKeys` holds the town/product
+    // pairs already found without a legal cell this turn.
+    getSpendDownOptions(noCellKeys) {
+        let state = this.inspectEconomy()
+        let projectedIncome = this.getProjectedIncome(state)
+        let options = []
+        let addOption = (producer, product, reason, cells) => {
+            options.push({
+                producer: producer,
+                product: product,
+                cost: production[product].cost,
+                legal: !reason,
+                reason: reason || null,
+                legalCells: cells ? cells.map(cell => ({x: cell.coord.x, y: cell.coord.y})) : null,
+                choice: {producer: producer, product: product, cost: production[product].cost}
+            })
+        }
+
+        let unitCap = this.getUnitCap(state)
+        let producers = state.towns.concat(state.barracks)
+        let unitsWithProduction = state.units.length + producers.filter(function(producer) {
+            return producer.isPreparingUnit
+        }).length
+        let unitProducts = state.units.length >= AI_ECONOMY_ADVANCED_UNIT_THRESHOLD ?
+            ['catapult', 'normchel', 'KOHb', 'archer', 'noob'] : AI_UNIT_PRODUCTS
+        let unitChoices = this.mixBarrackUnitChoices(state, state.productionChoices.filter(
+            function(choice) {
+                return unitProducts.includes(choice.product)
+            }).sort(function(left, right) {
+                return unitProducts.indexOf(left.product) - unitProducts.indexOf(right.product) ||
+                    left.cost - right.cost
+            }), unitProducts, Math.ceil(unitCap / 2))
+        let unitReason = function(producer, product) {
+            let offered = state.productionChoices.some(function(choice) {
+                return choice.producer === producer && choice.product == product
+            })
+            if (!offered) {
+                if (producer.isBadlyDamaged) {
+                    return 'producer badly damaged'
+                }
+                if (producer.isPreparingUnit) {
+                    return 'producer busy'
+                }
+                return this.gold < production[product].cost ? 'unaffordable' : 'salary guard'
+            }
+            if (unitsWithProduction >= unitCap) {
+                return 'unit cap'
+            }
+            if (projectedIncome - production[product].class.salary < 0) {
+                return 'projected income'
+            }
+            if (!unitChoices.some(function(choice) {
+                return choice.producer === producer && choice.product == product
+            })) {
+                return producer.name == 'barrack' ?
+                    'barrack noob while a barrack product is on offer' : 'town noob half-cap'
+            }
+            return null
+        }.bind(this)
+        for (let i = 0; i < unitChoices.length; ++i) {
+            if (!unitReason(unitChoices[i].producer, unitChoices[i].product)) {
+                addOption(unitChoices[i].producer, unitChoices[i].product, null)
+            }
+        }
+        for (let i = 0; i < state.towns.length; ++i) {
+            if (!unitReason(state.towns[i], 'noob')) {
+                continue
+            }
+            addOption(state.towns[i], 'noob', unitReason(state.towns[i], 'noob'))
+        }
+        for (let i = 0; i < state.barracks.length; ++i) {
+            for (let j = 0; j < AI_BARRACK_UNIT_PRODUCTS.length; ++j) {
+                let product = AI_BARRACK_UNIT_PRODUCTS[j]
+                let reason = unitReason(state.barracks[i], product)
+                if (reason) {
+                    addOption(state.barracks[i], product, reason)
+                }
+            }
+        }
+
+        let buildingProducts = ['barrack', 'farm', 'suburb']
+        for (let k = 0; k < buildingProducts.length; ++k) {
+            let product = buildingProducts[k]
+            for (let i = 0; i < state.towns.length; ++i) {
+                let town = state.towns[i]
+                let reason = null
+                let cells = null
+                if (town.isBadlyDamaged) {
+                    reason = 'producer badly damaged'
+                }
+                else if (this.gold < production[product].cost) {
+                    reason = 'unaffordable'
+                }
+                else if (product == 'barrack' && town.buildings.concat(
+                        town.buildingProduction || []).filter(function(building) {
+                            return !building.killed && building.name == 'barrack'
+                        }).length >= AI_ECONOMY_MAX_BARRACKS_PER_TOWN) {
+                    reason = 'barrack cap'
+                }
+                else if (product == 'barrack' && projectedIncome + Barrack.income <
+                        AI_ECONOMY_BARRACK_MIN_PROJECTED_INCOME) {
+                    reason = 'projected income'
+                }
+                else if (noCellKeys.has(getSpendDownCellKey(town, product))) {
+                    reason = 'no legal cell'
+                    cells = []
+                }
+                addOption(town, product, reason, cells)
+            }
+        }
+        return options
+    }
+    // Surplus spending, run after the bot's own purchases: while it holds
+    // AI_ECONOMY_SPEND_DOWN_GOLD or more, buy the first option of getSpendDownOptions that
+    // production accepts. When nothing is left, lastSpendDown.noLegalPurchase keeps the
+    // enumerated options with the reason each one is not legal (an empty legalCells list for
+    // a building with no legal cell).
+    spendDownGold() {
+        let purchases = []
+        let options = null
+        let noCellKeys = new Set()
+        while (this.gold >= AI_ECONOMY_SPEND_DOWN_GOLD) {
+            options = this.getSpendDownOptions(noCellKeys)
+            let bought = null
+            for (let i = 0; i < options.length && !bought; ++i) {
+                let option = options[i]
+                if (!option.legal) {
+                    continue
+                }
+                let goldBefore = this.gold
+                if (this.startEconomyProduction(option.choice) && this.gold < goldBefore) {
+                    bought = option
+                    continue
+                }
+                option.legal = false
+                if (AI_UNIT_PRODUCTS.includes(option.product)) {
+                    option.reason = 'production refused'
+                }
+                else {
+                    option.reason = 'no legal cell'
+                    option.legalCells = []
+                    noCellKeys.add(getSpendDownCellKey(option.producer, option.product))
+                }
+            }
+            if (!bought) {
+                break
+            }
+            // A new suburb can open farm and barrack cells for its town.
+            if (bought.product == 'suburb') {
+                noCellKeys.delete(getSpendDownCellKey(bought.producer, 'farm'))
+                noCellKeys.delete(getSpendDownCellKey(bought.producer, 'barrack'))
+            }
+            purchases.push({product: bought.product, producer: bought.producer.name,
+                at: {x: bought.producer.coord.x, y: bought.producer.coord.y}})
+            options = null
+        }
+        this.lastSpendDown = {
+            purchases: purchases,
+            gold: this.gold,
+            noLegalPurchase: this.gold >= AI_ECONOMY_SPEND_DOWN_GOLD,
+            options: !options ? [] : options.map(function(option) {
+                return {producer: option.producer.name,
+                    at: {x: option.producer.coord.x, y: option.producer.coord.y},
+                    product: option.product, cost: option.cost, legal: option.legal,
+                    reason: option.reason, legalCells: option.legalCells}
+            })
+        }
+        return purchases.length
     }
     spendWarGoldWithinLimit(maxPurchases) {
         let purchases = 0
@@ -917,6 +1117,7 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         else {
             this.spendEconomyGold()
         }
+        this.spendDownGold()
         this.playCombatActions()
         this.vacateProducerHexes()
     }

@@ -487,6 +487,8 @@ class DemonPlayer extends Player {
         ai.spendEconomyGold()
         ai.spendWarGoldWithinLimit(ai.inspectEconomy().towns.length > 1 ?
             AI_ECONOMY_PRE_MOVE_PURCHASE_LIMIT : 1)
+        // Surplus gold goes to units, barracks, farms and suburbs (salary guard still applies).
+        ai.spendDownGold()
     }
     play() {
         this.spendGold()

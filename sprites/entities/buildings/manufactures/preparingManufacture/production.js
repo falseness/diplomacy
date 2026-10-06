@@ -108,12 +108,14 @@ class BuildingProduction extends Production {
         this.killed = true
         grid.setBuilding(new Empty(), this.coord)
     }
-    isOurSuburb(coord, suburbs) {
+    // Set of 'x,y' keys of `suburbs`: border painting checks every suburb neighbour against it
+    // instead of scanning the suburb list (O(suburbs^2) for a large town).
+    getSuburbKeys(suburbs) {
+        let keys = new Set()
         for (let i = 0; i < suburbs.length; ++i) {
-            if (coordsEqually(coord, suburbs[i].coord))
-                return true
+            keys.add(suburbs[i].coord.x + ',' + suburbs[i].coord.y)
         }
-        return false
+        return keys
     }
     isObstacle() {
         return false
@@ -267,6 +269,7 @@ class ManufactureProduction extends BuildingProduction {
     paintTownBorders(town, suburbs, arr, player) {
         border.newBrokenLine()
 
+        let ourSuburbs = this.getSuburbKeys(suburbs)
         this.availableHexagons = []
         let used = new Array(arr.length)
 
@@ -287,7 +290,7 @@ class ManufactureProduction extends BuildingProduction {
 
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
                         !this.isSuburb(neighbourCoord, arr, player) ||
-                            !this.isOurSuburb(neighbourCoord, suburbs, arr, player)) {
+                            !ourSuburbs.has(neighbourCoord.x + ',' + neighbourCoord.y)) {
                     border.createLine(hexagon.calcPos(), j)
                     continue
                 }
@@ -426,6 +429,7 @@ class SuburbProduction extends BuildingProduction {
         return true
     }
     getDistances(town, arr, player) {
+        let ourSuburbs = this.getSuburbKeys(town.suburbs)
         let used = new Array(arr.length)
         let distance = new Array(arr.length)
         for (let i = 0; i < arr.length; ++i) {
@@ -461,7 +465,7 @@ class SuburbProduction extends BuildingProduction {
                 }
             }
             if (this.isSuburb(v.coord, arr, player) && 
-                    this.isOurSuburb(v.coord, town.suburbs))
+                    ourSuburbs.has(v.coord.x + ',' + v.coord.y))
                 ++suburbsUsedCount
 
             if (suburbsUsedCount == town.suburbs.length)
@@ -474,6 +478,7 @@ class SuburbProduction extends BuildingProduction {
         border.newBrokenLine()
         grid.drawLogicText = true
 
+        let ourSuburbs = this.getSuburbKeys(suburbs)
         this.distance = []
         this.availableHexagons = []
             //let suburbsNeighbours = []
@@ -497,7 +502,7 @@ class SuburbProduction extends BuildingProduction {
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
                         grid.getHexagon(neighbourCoord).playerColor != player ||
                         (this.isSuburb(neighbourCoord, arr, player) &&
-                            !this.isOurSuburb(neighbourCoord, suburbs, arr, player))) {
+                            !ourSuburbs.has(neighbourCoord.x + ',' + neighbourCoord.y))) {
                     border.createLine(hexagon.calcPos(), j)
                     continue
                 }
