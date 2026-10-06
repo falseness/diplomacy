@@ -4,6 +4,8 @@ function menuClick(event) {
 }
 
 function menuWheel(event) {
+    if (event.ctrlKey)
+        return
     menu.wheel(getEventPos(event), event.deltaY)
 }
 

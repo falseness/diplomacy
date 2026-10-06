@@ -389,12 +389,20 @@
                 errorWindow.enableTemporary()
             }
         }
+        // The game lays out in WIDTH x HEIGHT canvas pixels fixed at load; after a resize or browser zoom the
+        // canvas keeps that backing store and its CSS box is scaled to fit the window (aspect kept), and
+        // getEventPos maps clicks through that box.
+        function fitCanvasToWindow() {
+            const width = Math.min(window.innerWidth, window.innerHeight * WIDTH / HEIGHT)
+            mainCanvas.style.width = width + 'px'
+            mainCanvas.style.height = width * HEIGHT / WIDTH + 'px'
+        }
         function start() {
 
             mainCanvas.width = WIDTH
             mainCanvas.height = HEIGHT
-            mainCanvas.style.width = WIDTH / window.devicePixelRatio + 'px'
-            mainCanvas.style.height = HEIGHT / window.devicePixelRatio + 'px'
+            fitCanvasToWindow()
+            window.addEventListener('resize', fitCanvasToWindow)
 
             loadOtherSettings()
             loadAssets()

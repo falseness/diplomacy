@@ -92,7 +92,10 @@ function isEditableTarget(target) {
     return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || !!target.isContentEditable
 }
 
+// ctrl+wheel is the browser's page zoom; the map must not zoom along with it
 function mousewheel(event) {
+    if (event.ctrlKey)
+        return
     let pos = getEventPos(event)
     gameEvent.mousewheel(pos, event.wheelDelta ?? -event.deltaY)
 }
