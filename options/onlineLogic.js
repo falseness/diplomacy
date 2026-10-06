@@ -19,9 +19,11 @@ function onlineLobbyText() {
 let SendNextTurn
 
 
+// The turn clock is not started here: it starts when the turn overlay is hidden
+// (nextTurnPauseInterface.visible = false calls timer.updateLastPause), so it
+// neither runs behind the overlay nor restarts when the overlay is dismissed.
 function unfreezeGame() {
     gameEvent.waitingMode = false
-    timer.updateLastPause()
     nextTurnButton.highlightButton = false
     undoButton.enableClick()
     nextTurnButton.enableClick()
