@@ -4,7 +4,10 @@ function menuClick(event) {
 }
 
 function menuWheel(event) {
-    menu.wheel(getEventPos(event), event.deltaY)
+    menu.wheel(getEventPos(event), event.deltaY, event.deltaX)
+}
+function menuKeyDown(event) {
+    menu.keydown(event)
 }
 
 function menuBack() {
@@ -60,6 +63,13 @@ class Tree {
         for (let i = 0; i < this.buttons.length; ++i) {
             this.buttons[i].click(pos)
         }
+    }
+    // Scrollable buttons (the save slot list) scroll on desktop by wheel and arrow keys.
+    wheel(pos, deltaY, deltaX) {
+        for (const button of this.buttons) button.wheel?.(pos, deltaY, deltaX)
+    }
+    scrollKey(key) {
+        for (const button of this.buttons) button.scrollKey?.(key)
     }
     draw(ctx) {
         for (let i = 0; i < this.buttons.length; ++i) {
@@ -1163,6 +1173,7 @@ class Menu {
         if (boolean) {
             document.addEventListener('click', menuClick)
             document.addEventListener('wheel', menuWheel)
+            document.addEventListener('keydown', menuKeyDown)
             if (mobilePhone) {
                 document.addEventListener('touchstart', menuTouchStart)
                 document.addEventListener('touchmove', menuTouchMove)
@@ -1171,6 +1182,7 @@ class Menu {
         } else {
             document.removeEventListener('click', menuClick)
             document.removeEventListener('wheel', menuWheel)
+            document.removeEventListener('keydown', menuKeyDown)
             if (mobilePhone) {
                 document.removeEventListener('touchstart', menuTouchStart)
                 document.removeEventListener('touchmove', menuTouchMove)
@@ -1222,8 +1234,11 @@ class Menu {
     click(pos) {
         this.selectedTree.click(pos)
     }
-    wheel(pos, deltaY) {
-        this.selectedTree.wheel?.(pos, deltaY)
+    wheel(pos, deltaY, deltaX) {
+        this.selectedTree.wheel?.(pos, deltaY, deltaX)
+    }
+    keydown(event) {
+        this.selectedTree.scrollKey?.(event.key)
     }
     touchEnd(pos) {
         for (let i = 0; i < this.selectedTree.buttons.length; ++i) {
