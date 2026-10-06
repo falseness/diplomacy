@@ -90,9 +90,18 @@ class Town extends PreparingManufacture {
         this.buildingProduction = []
         this.activeProduction = new Empty()
     }
-    updateSuburbsAndBuildings() {
+    updateSuburbsAndBuildings(previousColor) {
         for (let i = 0; i < this.suburbs.length; ++i) {
             let cell = grid.getCell(this.suburbs[i].coord)
+            // town.suburbs is only pruned in the owner's nextTurn: a suburb a
+            // third player has painted since then is no longer the previous
+            // owner's, so the capture neither takes nor clears it.
+            if (previousColor !== undefined &&
+                    cell.hexagon.playerColor != previousColor &&
+                    cell.hexagon.playerColor != this.playerColor) {
+                this.suburbs.splice(i--, 1)
+                continue
+            }
             // A live demon portal keeps its demon-owned hex: capturing the
             // town neither kills nor repaints it, and drops it from suburbs.
             if (isLiveDemonPortal(cell.building)) {
@@ -145,7 +154,7 @@ class Town extends PreparingManufacture {
             this.suburbs[i].sudoPaint(this.playerColor)
         }
     }
-    updatePlayer() {
+    updatePlayer(previousColor) {
         if (typeof players != 'undefined') {
             for (let i = 0; i < players.length; ++i) {
                 let townList = players[i].towns
@@ -165,7 +174,7 @@ class Town extends PreparingManufacture {
 
         // first suburb must be town suburb
 
-        this.updateSuburbsAndBuildings()
+        this.updateSuburbsAndBuildings(previousColor)
         refreshCoopVision()
     }
     get isHitable() {

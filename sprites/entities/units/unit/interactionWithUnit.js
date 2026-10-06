@@ -150,7 +150,7 @@ class InterationWithUnit {
         if (capturedBuildingColor != -1 &&
             capturedBuildingColor != unit.playerColor) { // <=> something building captured
             actionManager.lastAction.isBuildingCaptured = true
-            capturedBuilding.updatePlayer()
+            capturedBuilding.updatePlayer(capturedBuildingColor)
             capturedBuilding.isRecentlyCaptured = true
         }
     }
