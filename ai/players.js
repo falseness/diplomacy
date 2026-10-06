@@ -691,15 +691,18 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
         }
         let available = activeProduction.availableHexagons || []
         let validCells = []
+        let legalCoords = []
         for (let i = 0; i < available.length; ++i) {
             let cell = grid.getCell(available[i].coord)
             if (activeProduction.canCreateOnCell(cell, choice.producer)) {
                 validCells.push(cell)
+                // Take the coord from the hexagon: test grids return cells without one.
+                legalCoords.push({x: available[i].coord.x, y: available[i].coord.y})
             }
         }
         this.lastProductionCells = {
             candidates: available.map(hexagon => ({x: hexagon.coord.x, y: hexagon.coord.y})),
-            legal: validCells.map(cell => ({x: cell.coord.x, y: cell.coord.y}))
+            legal: legalCoords
         }
         if (AI_UNIT_PRODUCTS.includes(choice.product) &&
                 this.aiInitialTownCount == AI_ECONOMY_MULTI_TOWN_THRESHOLD) {
