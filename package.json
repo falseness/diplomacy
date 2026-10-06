@@ -2,6 +2,8 @@
   "name": "diplomacy",
   "private": true,
   "scripts": {
+    "test": "cd ../diplomacy_server && tests/run.sh",
+    "test:fast": "cd ../diplomacy_server && TEST_PROFILE=fast tests/run.sh",
     "init-model": "node ai/init-model.js",
     "train": "node ai/train-cloud.js",
     "train-cloud": "./train.sh",

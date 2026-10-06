@@ -1,7 +1,7 @@
 # TASK-175: session correlation
 
 The authorized diagnostic was implemented and executed once on 2026-09-21 by
-`ai/test-task175-session-correlation.js`. Offline recording checks passed 34/34;
+`test-task175-session-correlation.js` (deleted in TASK-325-1). Offline recording checks passed 34/34;
 the OFF/ON/ON/OFF H12 samples each passed the unchanged 34 checks (136/136).
 All child exits were 0. The diagnostic parent exited 1, INCONCLUSIVE, because
 neither instrumented wave failed. Both ON traces were complete and showed one

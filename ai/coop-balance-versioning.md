@@ -9,5 +9,5 @@ old generation versions and untyped portals are rejected, never migrated.
 
 Historical results remain under local artifacts. The inert
 `fixtures/coop-legacy-stored-maps.json` is retained as TASK-230 rejection data.
-Current source save/load and UI regression coverage runs with
-`node ai/test-task243-verification.js --output-dir <fresh-directory>`.
+Current source save/load coverage moved to the server repo and runs there with
+`node20 tests/client/test-task243-source.js` (registered in `tests/reliability/registry.js`).
