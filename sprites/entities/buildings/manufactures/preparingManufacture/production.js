@@ -117,6 +117,14 @@ class BuildingProduction extends Production {
         }
         return keys
     }
+    // single-coord check (ManufactureProduction.canCreateOnCell); bulk callers use getSuburbKeys
+    isOurSuburb(coord, suburbs) {
+        for (let i = 0; i < suburbs.length; ++i) {
+            if (coordsEqually(coord, suburbs[i].coord))
+                return true
+        }
+        return false
+    }
     isObstacle() {
         return false
     }
