@@ -156,6 +156,8 @@ class Events {
         if (touchesCount == 2) {
             if (this.scaling) {
                 this.screen.scale(pos, this.pitchStartDist, this.pitchStartPos)
+                // the zoom step is relative to the previous touchmove, not to the touchstart
+                this.pitchStartDist = pointPythagorean(pos[0], pos[1])
             }
             return
         }
