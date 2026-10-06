@@ -426,7 +426,7 @@ class ActionManager {
     }
     undo() {
         if (!this.arr.length)
-            return
+            return false
 
         let wasSelection = gameEvent.selected.notEmpty()
         gameEvent.hideAll()
@@ -452,6 +452,7 @@ class ActionManager {
             gameEvent.selected.select()
         else
             gameEvent.selected = new Empty()
+        return true
     }
     __moveCameraToUndoTarget() {
         gameEvent.screen.moveTo(gameEvent.selected.pos)

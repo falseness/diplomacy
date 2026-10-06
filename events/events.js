@@ -300,9 +300,7 @@ class Events {
                 return
             }
             if (keycode == Events.kZKeycode || keycode == Events.kBackspaceKeycode) {
-                actionManager.undo()
-                humanCommands.pop()
-                console.log('pop human command')
+                AiRuntime.undoHumanCommand()
             }
             return 
         }
