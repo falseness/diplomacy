@@ -119,9 +119,11 @@ class Town extends PreparingManufacture {
                 this.suburbs[i].sudoPaint(this.playerColor)
                 continue
             }
-            // Mines are independent map assets, not town dependencies. Keep
-            // them on the grid when their suburb transfers to the capturer.
-            else if (cell.building.canBeDestroyed && cell.building.name !== 'goldmine') {
+            // Mines and nature (bushes, hills) are independent map assets, not
+            // town dependencies. Keep them on the grid when their suburb
+            // transfers to the capturer.
+            else if (cell.building.canBeDestroyed && cell.building.name !== 'goldmine' &&
+                    !cell.building.isNature) {
                 if (cell.building.isManufacture) {
                     if (coordsEqually(cell.hexagon.coord, this.coord)) { // town cell
                         this.suburbs[i].sudoPaint(this.playerColor)
