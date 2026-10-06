@@ -97,7 +97,81 @@ function createTutorial2Map() {
     return map
 }
 
+function createTutorial3Map() {
+    // Blue's town (2,4) sits behind a wall line in column 5 that spans the whole map height;
+    // the line's cells (5,3) and (5,5) are towers, each with a blue archer on it (range 3).
+    // Red has no town: 2 normchels, 2 archers, 2 KOHb and 2 catapults (range 2-5, 4 damage
+    // to buildings). Both catapults start 5 hexes from both towers, out of the tower archers'
+    // reach: shooting the same tower together destroys it (hp 5) in one turn. Attacking at once
+    // loses; destroying both towers while the army holds its line, then fighting the defenders
+    // who come out, wins. Red has no town and blue never buys, so both economies are off.
+    let wallLine = []
+    for (let y = 0; y < 9; ++y) {
+        if (y != 3 && y != 5) {
+            wallLine.push({x: 5, y: y})
+        }
+    }
+    let blueSide = []
+    for (let x = 0; x <= 5; ++x) {
+        for (let y = 0; y < 9; ++y) {
+            blueSide.push({x: x, y: y})
+        }
+    }
+    let map = new GameMap(
+        {x: 14, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 10, y: 3, type: Catapult},
+                    {x: 10, y: 5, type: Catapult},
+                    {x: 11, y: 3, type: Normchel},
+                    {x: 11, y: 5, type: Normchel},
+                    {x: 12, y: 3, type: Archer},
+                    {x: 12, y: 5, type: Archer},
+                    {x: 11, y: 4, type: KOHb},
+                    {x: 12, y: 4, type: KOHb}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayerWithEconomy',
+                economyEnabled: false,
+                towns: [{x: 2, y: 4}],
+                suburbs: [{
+                    town: {x: 2, y: 4},
+                    cells: [{x: 2, y: 4}, {x: 2, y: 3}, {x: 3, y: 3}, {x: 3, y: 4},
+                        {x: 2, y: 5}, {x: 1, y: 4}, {x: 1, y: 3}],
+                    expansionCells: blueSide
+                }],
+                walls: wallLine,
+                towers: [{x: 5, y: 3}, {x: 5, y: 5}],
+                units: [
+                    {x: 5, y: 3, type: Archer},
+                    {x: 5, y: 5, type: Archer},
+                    {x: 4, y: 3, type: Normchel},
+                    {x: 4, y: 5, type: Normchel},
+                    {x: 3, y: 4, type: Archer},
+                    {x: 4, y: 4, type: Archer}
+                ]
+            }
+        ],
+        [],
+        [],
+        []
+    )
+    map.testName = 'tutorial 3'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
-    {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }}
+    {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
+    {id: 'tutorial-3', title: 'Tutorial 3', pass: 'enemyLost', get map() { return createTutorial3Map() }}
 ]
