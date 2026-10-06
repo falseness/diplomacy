@@ -78,6 +78,7 @@ function rebaseOnlineValue(base, local, remote) {
 // the hub and only loses the game's listeners.
 function closeOnlineGameSocket() {
     onlineSocket = null
+    delete window.kick
     for (const [target, event, handler] of onlineListeners) target.off(event, handler)
     onlineListeners = []
 }
@@ -107,9 +108,17 @@ function SetupServerCommunicationLogic(gameID) {
         listeners.push([target, event, handler])
     }
     document.getElementById('online-recovery')?.remove()
+    // The host kicks a seat from the DevTools console: kick(playerIndex).
+    window.kick = async playerIndex => {
+        const ack = await onlineSession.kickPlayer(gameID, playerIndex)
+        if (ack.ok) console.log('kick ok', playerIndex)
+        else console.warn('kick failed', ack.error)
+    }
     let failed = false
-    const fail = message => {
-        if (socket !== onlineSocket || failed) return
+    // Set by an 'error' KICKED or a kicked: true board; this seat sends no more turns.
+    let kicked = false
+    // Freezes the board and shows a panel with the message; returns the panel's button factory.
+    const showPanel = (label, message) => {
         failed = true
         onlineLobby = null
         gameEvent.waitingMode = true
@@ -117,13 +126,14 @@ function SetupServerCommunicationLogic(gameID) {
         undoButton.disableClick()
         nextTurnPauseInterface.visible = false
         if (typeof timer !== 'undefined' && timer) timer.pause()
+        document.getElementById('online-recovery')?.remove()
         const panel = document.createElement('div')
         panel.id = 'online-recovery'
         panel.setAttribute('role', 'alertdialog')
-        panel.setAttribute('aria-label', 'Online connection problem')
+        panel.setAttribute('aria-label', label)
         panel.style.cssText = 'position:fixed;inset:30% 10% auto;z-index:10000;padding:24px;background:white;color:black;text-align:center;border:2px solid #444;font:20px sans-serif'
         const text = document.createElement('p')
-        text.textContent = message + ' Retry to reload the saved turn, or go back to the menu.'
+        text.textContent = message
         panel.append(text)
         const button = (label, action) => {
             const b = document.createElement('button')
@@ -133,22 +143,34 @@ function SetupServerCommunicationLogic(gameID) {
             panel.append(b)
             return b
         }
+        document.body.append(panel)
+        return button
+    }
+    const backToMenu = button => button('Back to menu', () => {
+        document.getElementById('online-recovery')?.remove()
+        menu.back()
+    })
+    const fail = message => {
+        if (socket !== onlineSocket || failed) return
+        const button = showPanel('Online connection problem',
+            message + ' Retry to reload the saved turn, or go back to the menu.')
         const retry = button('Retry', () => {
-            panel.remove()
+            document.getElementById('online-recovery')?.remove()
             SetupServerCommunicationLogic(gameID)
         })
-        button('Back to menu', () => {
-            panel.remove()
-            menu.back()
-        })
-        document.body.append(panel)
+        backToMenu(button)
         retry.focus()
+    }
+    const removedByHost = () => {
+        if (socket !== onlineSocket) return
+        kicked = true
+        backToMenu(showPanel('Removed from game', 'You were removed from this game by the host.')).focus()
     }
     // The shipped Socket.IO 3.0 client reports transport startup errors on its manager.
     on(socket.io, 'error', () => fail(socket.connected ? 'Connection lost.' : 'Could not connect. Check your connection.'))
     on(socket, 'connect_error', () => fail('Could not connect. Check your connection.'))
     on(socket, 'disconnect', () => fail('Connection lost.'))
-    on(socket, 'error', () => fail('The server rejected the action.'))
+    on(socket, 'error', error => error === 'KICKED' ? removedByHost() : fail('The server rejected the action.'))
     onlineCommit = null
     // Competitive scheduling gives each player one active turn per round.
     // A waiting connection may become active in that same round when its
@@ -260,8 +282,10 @@ function SetupServerCommunicationLogic(gameID) {
     on(socket, 'waitYouTurn', game => {
         console.log(`waitYouTurn`)
 
-        // let dict = JSON.parse(gameAndTurnIndex)
-        if (!receiveBoard(game, false)) return
+        const board = typeof game === 'string' ? JSON.parse(game) : game
+        if (!receiveBoard(board, false)) return
+        // game:open answers a kicked seat with its board marked kicked: true.
+        if (board.kicked) { removedByHost(); return }
 
         if (isFogOfWar) {
             players[whooseTurn].changeFogOfWarByVision()
@@ -294,6 +318,7 @@ function SetupServerCommunicationLogic(gameID) {
     })
     requestCurrentGame()
     SendNextTurn = () => {
+        if (kicked) return
         if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')

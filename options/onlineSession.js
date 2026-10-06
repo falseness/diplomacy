@@ -96,6 +96,10 @@ class OnlineSession {
     kickFromLobby(lobbyId, accountId) {
         return this.request('lobby:kick', {lobbyId, accountId})
     }
+    // game:kick: the seat-1 host removes seat playerIndex from the game (protocol doc 4.5).
+    kickPlayer(gameID, playerIndex) {
+        return this.request('game:kick', {gameID, playerIndex})
+    }
     startLobby(lobbyId) {
         return this.request('lobby:start', {lobbyId})
     }
