@@ -1045,6 +1045,49 @@ class NicknameTree {
     }
 }
 
+// 'tutorial': every entry of options/tutorials.js, all playable; a check mark next to the
+// passed ones (readTutorialPassed, re-read on every enter).
+class TutorialTree {
+    FIRST_Y = 0.27 * HEIGHT
+    INTERVAL_Y = 0.12 * HEIGHT
+    constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+        this.menu = _menu
+        this.pos0X = pos0X
+        this.backButton = new Empty()
+        this.entries = []
+        this.passed = []
+        this.buttons = [this.backButton]
+    }
+    setParent(parent, _menu) {
+        const y = this.FIRST_Y + tutorials.length * this.INTERVAL_Y
+        this.backButton = Menu.getButton({x: this.pos0X, y: y}, 'back', _menu.setTree, parent, true, _menu)
+        this.update()
+    }
+    enter() {
+        this.update()
+    }
+    update() {
+        this.passed = readTutorialPassed()
+        const size = menuOptions.rectSize
+        this.entries = tutorials.map((tutorial, index) => {
+            const button = Menu.getButton({x: this.pos0X, y: this.FIRST_Y + index * this.INTERVAL_Y},
+                tutorial.title, TutorialManager.start, tutorial.id, true, TutorialManager)
+            const checkMark = this.passed.includes(tutorial.id) ? new JustImage('checkMark',
+                {x: button.rect.x + button.rect.width + menuOptions.marginLeft + size / 2, y: button.rect.centerY},
+                size, size) : null
+            return {id: tutorial.id, button, checkMark}
+        })
+        this.buttons = [...this.entries.map(entry => entry.button), this.backButton]
+    }
+    click(pos) {
+        for (const button of this.buttons) button.click(pos)
+    }
+    draw(ctx) {
+        for (const button of this.buttons) button.draw(ctx)
+        for (const entry of this.entries) entry.checkMark?.draw(ctx)
+    }
+}
+
 class Menu {
     #visible
     static getButtonRect(pos) {
@@ -1124,6 +1167,8 @@ class Menu {
 
         this.settings = new OtherSettingsTree(this)
 
+        this.tutorial = new TutorialTree(this)
+
         this.load = new Tree([
             new SlotManager(slotsCount, startPos.y, load)
         ], this)
@@ -1140,6 +1185,8 @@ class Menu {
                 this.setTree, this.settings, true, this),
             this.constructor.getButton(startPos, 'load game',
                 this.setTree, this.load, true, this),
+            this.constructor.getButton(startPos, 'tutorial',
+                this.setTree, this.tutorial, true, this),
         ], this)
 
         // Main entries fit in the visible area on both desktop and mobile.
@@ -1153,6 +1200,7 @@ class Menu {
         this.settings.setParent(this.main, this)
         this.startGame.setParent(this.play, this)
         this.load.setParent(this.main, this)
+        this.tutorial.setParent(this.main, this)
         this.selectedTree = this.main
 
         let firstY = HEIGHT * 0.3

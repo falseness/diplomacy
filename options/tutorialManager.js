@@ -43,9 +43,10 @@ class TutorialManager {
         menuBack()
         requestAnimationFrame(() => TutorialManager.start(id))
     }
-    // The tutorial menu comes later; until then the main menu.
+    // The tutorial list; its enter re-reads the passed ids, so a fresh pass shows its check mark.
     static backToTutorials() {
         tutorialResultInterface.hide()
         menuBack()
+        menu.setTree(menu.tutorial)
     }
 }
