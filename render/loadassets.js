@@ -56,9 +56,19 @@ for (let i = 0; i < images.length; ++i) {
 
 function cacheImage(image) {
     let tmpCanvas = document.createElement('canvas')
+    paintCachedImage(tmpCanvas, image)
+    // The browser may drop an offscreen canvas backing store (backgrounded mobile tab).
+    if (typeof tmpCanvas.addEventListener == 'function') {
+        tmpCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+        tmpCanvas.addEventListener('contextrestored', restoreImageCaches)
+    }
+
+    return tmpCanvas
+}
+function paintCachedImage(tmpCanvas, image) {
     let width = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.width * 2 : assets.size
     let height = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.height * 2 : assets.size
-    
+
     tmpCanvas.width = width
     tmpCanvas.height = height
 
@@ -69,9 +79,26 @@ function cacheImage(image) {
         y: height / 2
     }
     drawImage(tmpCtx, image, pos, width, height)
-
-    return tmpCanvas
 }
+// Repaints the existing cached canvases in place, so hexagon.grassHexImage and the grid
+// surface cache image refs stay valid, then makes the next frame rebuild the surface cache.
+function restoreImageCaches() {
+    for (const name in cachedImages) {
+        const image = assets[name]
+        if (cachedImages[name] && image && image.complete && image.naturalWidth > 0)
+            paintCachedImage(cachedImages[name], name)
+    }
+    if (typeof grid != 'undefined' && grid)
+        grid.surfaceCacheState = undefined
+}
+if (typeof document.addEventListener == 'function') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState == 'visible')
+            restoreImageCaches()
+    })
+}
+if (typeof window.addEventListener == 'function')
+    window.addEventListener('pageshow', restoreImageCaches)
 function cacheAllImages() {
     for (let i = 0; i < images.length; ++i) {
         cachedImages[images[i]] = cacheImage(images[i])
