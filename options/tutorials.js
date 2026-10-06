@@ -203,9 +203,87 @@ function createTutorial4Map() {
     return map
 }
 
+function createTutorial5Map() {
+    // Town defense against demons (co-op tutorial map). Red's town (1,4) owns the whole strip x <= 4 as
+    // suburbs (a rich town: it pays for the army it builds after the first turns). Walls face the demons:
+    // the column x = 4 with two gates (4,3) and (4,5) the KOHb sortie through, (3,1)/(3,2) and (2,7)/(2,8) on
+    // the flanks and (2,4) right in front of the town. Red starts with 2 KOHb, the town's noob, a barrack and
+    // 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. 6 ember archers and a bulwark
+    // stand 3-6 hexes from the walls; two ranged portals and a heavy one keep sending more. Attacking at once
+    // loses; ordering 2 KOHb (town + barrack) and waiting behind the walls until round 4, then attacking with
+    // 4 KOHb, wins.
+    let redSide = []
+    for (let x = 0; x <= 4; ++x) {
+        for (let y = 0; y < 9; ++y) {
+            redSide.push({x: x, y: y})
+        }
+    }
+    // The same cells as suburbs, nearest to the town first (breadth-first over the hex neighbours).
+    let suburbs = [{x: 1, y: 4}]
+    for (let i = 0; i < suburbs.length; ++i) {
+        for (let offset of neighborhood[suburbs[i].x & 1]) {
+            let cell = {x: suburbs[i].x + offset[0], y: suburbs[i].y + offset[1]}
+            if (cell.x >= 0 && cell.x <= 4 && cell.y >= 0 && cell.y < 9 &&
+                    !suburbs.some(suburb => suburb.x == cell.x && suburb.y == cell.y)) {
+                suburbs.push(cell)
+            }
+        }
+    }
+    let map = new GameMap(
+        {x: 17, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 77,
+                towns: [{x: 1, y: 4}],
+                suburbs: [{town: {x: 1, y: 4}, cells: suburbs, expansionCells: redSide}],
+                barracks: [{x: 1, y: 3, town: {x: 1, y: 4}}],
+                walls: [
+                    {x: 4, y: 1}, {x: 4, y: 2}, {x: 4, y: 4}, {x: 4, y: 6}, {x: 4, y: 7},
+                    {x: 3, y: 1}, {x: 3, y: 2}, {x: 2, y: 4}, {x: 2, y: 7}, {x: 2, y: 8}
+                ],
+                units: [
+                    {x: 1, y: 1, type: KOHb},
+                    {x: 2, y: 6, type: KOHb}
+                ]
+            }
+        ],
+        [],
+        [],
+        coordDictionary([[5, 6]]),
+        [],
+        [],
+        {type: 'rectangular'},
+        {
+            tutorial: true,
+            units: [
+                {x: 9, y: 3, type: EmberArcher},
+                {x: 7, y: 7, type: EmberArcher},
+                {x: 7, y: 4, type: EmberArcher},
+                {x: 10, y: 8, type: EmberArcher},
+                {x: 10, y: 6, type: EmberArcher},
+                {x: 8, y: 5, type: EmberArcher},
+                {x: 8, y: 2, type: Bulwark}
+            ]
+        }
+    )
+    map.portals = [
+        {x: 12, y: 2, category: 'ranged'},
+        {x: 15, y: 4, category: 'ranged'},
+        {x: 16, y: 7, category: 'heavy'}
+    ]
+    map.testName = 'tutorial 5'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
     {id: 'tutorial-3', title: 'Tutorial 3', pass: 'enemyLost', get map() { return createTutorial3Map() }},
-    {id: 'tutorial-4', title: 'Tutorial 4', pass: 'enemyLost', get map() { return createTutorial4Map() }}
+    {id: 'tutorial-4', title: 'Tutorial 4', pass: 'enemyLost', get map() { return createTutorial4Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 5', pass: 'coopVictory', get map() { return createTutorial5Map() }}
 ]
