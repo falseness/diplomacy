@@ -192,6 +192,10 @@ all moves when attacking it\n\nunit on it is priority target`,
     hit() {
         this.kill()
     }
+    // the gold is checked when the building is chosen, but the town can spend it (on a unit) before placement
+    canAfford(town) {
+        return town.gold >= this.cost
+    }
     sendInstructions(coord, town) {
         town.minusGold(this.cost)
 
@@ -402,6 +406,10 @@ class SuburbProduction extends BuildingProduction {
             }
         }
         return false
+    }
+    canAfford() {
+        // the suburb cost depends on the cell, canCreateOnCell checks it
+        return true
     }
     sendInstructions(coord, town) {
         town.minusGold(this.suburbsCostformula(this.distance[coord.x][coord.y]))

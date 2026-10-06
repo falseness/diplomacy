@@ -324,7 +324,8 @@ class Town extends PreparingManufacture {
         this.activeProduction = new Empty()
     }
     sendInstructions(cell) {
-        if (!this.activeProduction.canCreateOnCell(cell, this)) {
+        if (!this.activeProduction.canCreateOnCell(cell, this) ||
+                !this.activeProduction.canAfford(this)) {
             this.removeSelect()
 
             return true
