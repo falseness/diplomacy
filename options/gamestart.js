@@ -10,6 +10,55 @@ function getHexagonalLayer(x, y, center) {
     ))
 }
 
+// Checked before a map is built (GameMap.start): every unit, town, building, goldmine and
+// portal stands inside the map on a cell without impassable nature (Mountain, Lake, or the
+// InvisibleMountain edge of a hexagonal map), and no two of them share a cell, except a
+// unit standing on a building or portal. A violation throws with the coordinates.
+// Coordinates go through the same offset rules as the build below.
+function validateGameMap(map) {
+    const layers = {building: new Map(), unit: new Map()}
+    const where = coord => coord.x + ',' + coord.y
+    const inside = coord => Number.isInteger(coord.x) && Number.isInteger(coord.y) &&
+        coord.x >= 0 && coord.y >= 0 && coord.x < map.mapSize.x && coord.y < map.mapSize.y
+    const impassable = new Map()
+    for (const [cells, name] of [[map.mountains, 'mountain'], [map.lakes, 'lake']]) {
+        for (const cell of cells || []) {
+            const coord = map.getMapCoord(cell)
+            impassable.set(where(coord), name)
+        }
+    }
+    const shape = map.mapShape
+    const onEdge = coord => shape && shape.type == 'hexagonal' &&
+        getHexagonalLayer(coord.x, coord.y, shape.center) > shape.radius
+    const entity = (layer, coord, label) => {
+        if (onEdge(coord))
+            throw new Error('Map ' + label + ' at ' + where(coord) + ' stands on impassable invisibleMountain')
+        if (!inside(coord))
+            throw new Error('Map ' + label + ' at ' + where(coord) + ' is outside the map')
+        if (impassable.has(where(coord)))
+            throw new Error('Map ' + label + ' at ' + where(coord) + ' stands on impassable ' + impassable.get(where(coord)))
+        const previous = layers[layer].get(where(coord))
+        if (previous)
+            throw new Error('Map ' + label + ' at ' + where(coord) + ' shares its cell with ' + previous)
+        layers[layer].set(where(coord), label)
+    }
+    for (let i = 0; i < map.players.length; ++i) {
+        const player = map.players[i]
+        for (const town of player.towns || [])
+            entity('building', map.getMapCoord(town), 'town of player ' + i)
+        for (const property of ['barracks', 'pendingBarracks', 'farms', 'pendingFarms', 'walls', 'bastions', 'towers']) {
+            for (const building of player[property] || [])
+                entity('building', building, property + ' of player ' + i)
+        }
+        for (const unit of player.units || [])
+            entity('unit', unit, 'unit of player ' + i)
+    }
+    for (const goldmine of map.goldmines || [])
+        entity('building', map.getMapCoord(goldmine), 'goldmine')
+    for (const portal of map.portals || [])
+        entity('building', map.getMapCoord(portal), 'portal')
+}
+
 class GameMap {
     constructor(mapSize, _players, _goldmines, lakes, mountains, bushes=[], hills=[], mapShape={type: 'rectangular'}, coop=null) {
         if (coop && (_players.length < 2 || _players.length > 13)) {
@@ -284,6 +333,7 @@ class GameMap {
     start(_gameManager, isClassicTimer, competitiveHotseat = false) {
         // Local and online co-op accept only current typed maps.
         if (this.coop) validateCoopTypedPortals(this)
+        validateGameMap(this)
         grid = new Grid(0, 0, this.mapSize)
         _gameManager.clearValues()
         normalizeInterfaceSettings(gameSettings)
@@ -315,6 +365,9 @@ class GameMap {
             }
         }
         _gameManager.updateCameraBorders()
+        // A map may start later in the game (tutorials entry startRound): round
+        // counters and the co-op wave schedule continue from it.
+        gameRound = this.startRound || 0
 
         if (!isClassicTimer) {
             timer = new LongTimer()
@@ -1336,6 +1389,7 @@ class GameManager {
         onlineGameStorage = isOnline
         map.start(gameManager, isClassicTimer, !isOnline)
         this.initValues()
+        gameRound = map.startRound || 0
     }
     // The initial online board (the long timer, online settings), without
     // entering the game: the menu stays visible and the game globals it replaced

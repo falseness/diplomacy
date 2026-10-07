@@ -622,20 +622,17 @@ function createTutorial11Map() {
 }
 
 function createTutorial12Map() {
-    // Scout first: blue's 3 archers stand on the back row (x=8) of a two-row ridge of hills (x=7 rows 1..7,
-    // x=8 rows 2..6): the front row hides them from red's units on the plain, and from a hill they shoot 3 hexes
-    // over everything. Under fog of war blue only moves through hexes red sees, so a hidden blue army waits.
-    // Marching at the ridge blind (what SimpleAiPlayer does for red) walks red into their range without a target
-    // and red loses everything by round 3. The KOHb (3,4) can ride 2 hexes onto the lone lookout hill (5,4), see
-    // over the ridge, and ride back out of range in the same turn; the revealed archers come down off the ridge
-    // into the open, where red's archers step onto the hills (3,3) and (3,5) and shoot them from 3 hexes, out of
+    // Scout first: blue's 3 archers stand on the plain (x=8) right behind a ridge of hills (x=7 rows 1..7) that hides
+    // them from red's units on the plain. No unit starts on a hill: hills share the mountain art, and an archer there
+    // reads as one standing on a mountain (TASK-731). Under fog of war blue only moves through hexes red sees, so a
+    // hidden blue army waits. Marching at the ridge blind (what SimpleAiPlayer does for red) walks red into their range
+    // without a target and red loses everything by round 3. The KOHb (3,4) can ride 2 hexes onto the lone lookout hill
+    // (5,4), see over the ridge, and ride back out of range in the same turn; the revealed archers come down off the
+    // ridge into the open, where red's archers step onto the hills (3,3) and (3,5) and shoot them from 3 hexes, out of
     // a plain archer's range. The economy is off for both sides: no towns, so the upkeep would bankrupt blue.
     let hills = [[5, 4], [3, 3], [3, 5]]
     for (let y = 1; y <= 7; ++y) {
         hills.push([7, y])
-    }
-    for (let y = 2; y <= 6; ++y) {
-        hills.push([8, y])
     }
     let map = new GameMap(
         {x: 15, y: 9},
@@ -944,3 +941,15 @@ const tutorials = [
         get map() { return createTutorial15Map() }},
     {id: 'tutorial-16', title: 'Tutorial 16: Close the Portals', pass: 'coopVictory', get map() { return createTutorial16Map() }}
 ]
+// An entry may set startRound: N (the game starts at gameRound N, so round counters and the
+// co-op wave schedule follow it) and suddenDeathRound (default the normal round 40).
+for (const tutorial of tutorials) {
+    const createMap = Object.getOwnPropertyDescriptor(tutorial, 'map').get
+    Object.defineProperty(tutorial, 'map', {
+        get() {
+            const map = createMap.call(tutorial)
+            map.startRound = tutorial.startRound || 0
+            return map
+        }
+    })
+}

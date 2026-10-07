@@ -3,6 +3,8 @@
 // = {id} marks the game; such a game is never saved and shows no pass-device screen.
 const TUTORIAL_HUMAN_SLOT = 1
 const TUTORIAL_AI_SLOT = 2
+// The normal sudden death round; a tutorials entry may set its own suddenDeathRound.
+const TUTORIAL_SUDDEN_DEATH_ROUND = 40
 
 class TutorialManager {
     static start(id) {
@@ -15,6 +17,7 @@ class TutorialManager {
         // 'surviveRounds' counts red's units only when the map gives red no town.
         const human = map.players[TUTORIAL_HUMAN_SLOT]
         TutorialManager.humanStartsWithTown = !!(human && human.towns && human.towns.length)
+        suddenDeathRound = tutorial.suddenDeathRound || TUTORIAL_SUDDEN_DEATH_ROUND
         GameManager.start(map, true)
     }
     // Called after every human move and every turn; true once the tutorial is over.
