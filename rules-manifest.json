@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "f42a2c7ae018f3745bae43d7182e07481198cdf2cd559b476e9d547f649791fc",
+  "rulesVersion": "6826c0596ff1a4d1b50598de78ef60b01daaf60958bada45d4a36464132217f2",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -50,8 +50,8 @@
     },
     {
       "path": "options/save.js",
-      "sha256": "b117a40f716a0cb645de47ece9a706840166c12ad2ba1db283509ab6162f9e8b",
-      "bytes": 14488
+      "sha256": "93b1627a5cc1e7bf2377404a7c9400303df38969234bbaf7d1ed9689733f7b12",
+      "bytes": 14821
     },
     {
       "path": "options/actionManager.js",
@@ -70,8 +70,8 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "893817a272af6cc48f6c7c7726480070462940307b34b6c452d76e2f80b1db63",
-      "bytes": 1609
+      "sha256": "988032c3982f244042cf70300c369c454555d9c92f934eea46ad64414fb4dfcc",
+      "bytes": 2053
     },
     {
       "path": "options/actionApi.js",
@@ -95,8 +95,8 @@
     },
     {
       "path": "options/filteredView.js",
-      "sha256": "9cd09ee1e50c013332af37137b3f48929bcfce7ec1ce2df7a1fc0a83353fc389",
-      "bytes": 6598
+      "sha256": "c942169fa72a3f7e2caad16891291cd9a6398137c54be3f33024893bfb78c6fa",
+      "bytes": 9659
     },
     {
       "path": "ai/coop-map-scaling.js",
@@ -295,8 +295,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "eeeda0c52266142721592f74dd1d131993765b0abbc851e1c91c4981c9903145",
-      "bytes": 55348
+      "sha256": "fe0d001ec8fdfdf7a29d4e1822c4450592d24a05acea311449048dbb5e572b90",
+      "bytes": 55890
     },
     {
       "path": "sprites/hexagon.js",
@@ -485,8 +485,8 @@
     },
     {
       "path": "sprites/entities/buildings/demonPortal.js",
-      "sha256": "c124e6cf329659eba7e79b90aa8d973d0784395c232c0d736c4b6f62c8b4d761",
-      "bytes": 5359
+      "sha256": "8232976bdcda5de509dfb76e0e1a884ec6144aa164f219bcfbe61a6babcaae1c",
+      "bytes": 5527
     },
     {
       "path": "ai/wave-placement.js",

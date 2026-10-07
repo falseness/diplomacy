@@ -79,6 +79,26 @@ function rebaseOnlineValue(base, local, remote) {
     return remote
 }
 
+// The public terrain of lobby games by gameID (game:terrain under the server's HIDDEN_INFO, PRD sec. 6.3): sent once
+// per game:open, before the board; the boards then carry no nature, only terrainId and terrainChanges.
+const onlineTerrains = new Map()
+
+function cacheOnlineTerrain(message) {
+    if (!message || typeof message.gameID !== 'string' || typeof message.terrainId !== 'string' ||
+            !Array.isArray(message.nature)) return false
+    onlineTerrains.set(message.gameID, message)
+    return true
+}
+
+// The board to load: a board without nature (terrainId) gets the cached terrain plus its terrainChanges
+// (boardWithTerrain, options/filteredView.js); null when that terrain is not cached. Other boards stay as they are.
+function boardWithOnlineTerrain(gameID, board) {
+    if (!('terrainId' in board)) return board
+    const terrain = onlineTerrains.get(gameID)
+    if (!terrain || terrain.terrainId !== board.terrainId) return null
+    return boardWithTerrain(board, terrain)
+}
+
 // The online recovery panel (#online-recovery) with the message; returns its
 // button factory, button(label, action).
 function showOnlinePanel(label, message) {
@@ -209,9 +229,21 @@ function SetupServerCommunicationLogic(gameID) {
     // component predecessor finishes. Reconnect deliberately reloads authority.
     let competitiveDelivery = null
     let acceptedBoard = null
+    // Set when a board named a terrain this client does not hold and game:open was re-sent for it.
+    let terrainRequested = false
     function receiveBoard(body, active) {
         if (socket !== onlineSocket || failed) return false
-        const board = typeof body === 'string' ? JSON.parse(body) : body
+        const board = boardWithOnlineTerrain(gameID, typeof body === 'string' ? JSON.parse(body) : body)
+        if (!board) {
+            // game:open answers with game:terrain first; a second miss is a protocol error.
+            if (terrainRequested) fail('The server sent an unknown map.')
+            else {
+                terrainRequested = true
+                requestCurrentGame()
+            }
+            return false
+        }
+        terrainRequested = false
         const commit = board.coopCommit
         if (board.gameSettings?.coop) {
             if (!commit || !Number.isSafeInteger(commit.revision) || commit.revision < 0 ||
@@ -300,6 +332,9 @@ function SetupServerCommunicationLogic(gameID) {
         if (typeof timer !== 'undefined' && timer) timer.pause()
     }
     onlineLobby = {mode: gameSettings.coop ? 'coop' : 'competitive', occupiedHumans: null}
+    on(socket, 'game:terrain', message => {
+        if (socket === onlineSocket && message?.gameID === gameID) cacheOnlineTerrain(message)
+    })
     on(socket, 'lobbyStatus', status => {
         if (socket !== onlineSocket) return
         onlineLobby = status
