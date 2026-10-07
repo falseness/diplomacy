@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "b8d560c13e8a24fcedc40b8f76b931ece0e03911d2aecf4ef5f97a813d54b196",
+  "rulesVersion": "5564cb96f73f1538f8423c0918e6d4dea660a6c12a875406f681973236012a17",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -515,8 +515,8 @@
     },
     {
       "path": "gameObjectSerialization.js",
-      "sha256": "0613b479182daa78dd8e7c82e7e4c7bfb7f403a824201662ccae4ca947c365a1",
-      "bytes": 22711
+      "sha256": "bf9397ce1399c2ee49740bc20eefce89bc02ea46cb68f0177e337162e23d7a71",
+      "bytes": 25138
     }
   ]
 }

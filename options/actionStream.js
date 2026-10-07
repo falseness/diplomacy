@@ -11,6 +11,9 @@
 // board is delivered (a new turn, a reconnect's reloaded turn) and on a transport reconnect: it drops the queue and
 // the in-flight action, starts seq again from 1 and restarts the action log from the board on screen; stop() detaches
 // the stream. A late ack of a dropped entry is ignored.
+// Reveal on ack (TASK-700, hidden information): an ok ack may carry revealed, the cells the action made visible with
+// their contents; they are marked known (markRevealedCellsKnown, gameObjectSerialization.js), so the loading cells the
+// local fog uncovered resolve. revealedCells counts the cells filled since start().
 const ActionStream = {
     socket: null,
     gameID: null,
@@ -21,11 +24,13 @@ const ActionStream = {
     inFlight: null,
     timer: null,
     counters: {sent: 0, acked: 0, failed: 0, timeouts: 0, hashMismatches: 0, restarts: 0},
+    revealedCells: 0,
     start(socket, gameID) {
         this.stop()
         this.socket = socket
         this.gameID = gameID
         this.counters = {sent: 0, acked: 0, failed: 0, timeouts: 0, hashMismatches: 0, restarts: 0}
+        this.revealedCells = 0
         actionLog.listener = (action, hash) => this.enqueue(action, hash)
     },
     stop() {
@@ -84,6 +89,8 @@ const ActionStream = {
                 ++this.counters.hashMismatches
                 console.warn('game:action hash mismatch', entry.seq, entry.action.t, ack.hash, entry.hash)
             }
+            if (Array.isArray(ack.revealed) && ack.revealed.length && typeof markRevealedCellsKnown === 'function')
+                this.revealedCells += markRevealedCellsKnown(ack.revealed)
         }
         this.pump()
     },

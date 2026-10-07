@@ -92,6 +92,52 @@ function markCellsKnown(cells) {
     return filled
 }
 
+// Cells revealed on an action's ack (reveal on ack, PRD 6.2, 7.1; diplomacy_server server/reveal.js): the boardDiff
+// cell shape {x, y, colour, unit, building, production}, each entity tagged with owner / list / town. The cells this
+// client still holds as unknown (its loading cells) become known with those contents, applied in place by
+// applyCellDiff; cells it already knows keep the local state (its own optimistic actions). Public terrain the client
+// already holds on an unknown cell (nature, landmarks: never in a reveal) stays. Returns the number of cells filled.
+const REVEALED_CELL_LAYERS = {towns: 'town', townBuildings: 'townBuilding', external: 'external', nature: 'nature',
+    goldmines: 'goldmine', townProduction: 'manufacture', externalProduction: 'externalProduction'}
+
+function revealedCellEntity(entry) {
+    if (!entry || !REVEALED_CELL_LAYERS[entry.list])
+        return null
+    const {list, owner, ...packed} = entry
+    packed.layer = REVEALED_CELL_LAYERS[list]
+    if (packed.layer !== 'townBuilding' && packed.layer !== 'manufacture')
+        delete packed.town
+    return packed
+}
+
+function markRevealedCellsKnown(cells) {
+    if (typeof grid === 'undefined' || !grid || !Array.isArray(cells))
+        return 0
+    const suburbs = new Map()
+    for (const cell of cells)
+        if (cell && cell.building && cell.building.list === 'towns')
+            for (const suburb of cell.building.suburbs || [])
+                suburbs.set(cellDiffKey(suburb), !('isSuburb' in suburb) || Boolean(suburb.isSuburb))
+    const records = []
+    for (const cell of cells) {
+        if (!cell || !Number.isInteger(cell.x) || !Number.isInteger(cell.y) || !Number.isInteger(cell.colour) ||
+                isCoordNotOnMap(cell, grid.arr.length, grid.arr[0].length) || !grid.arr[cell.x][cell.y].hexagon.unknown)
+            continue
+        const local = packCellRecord(cell.x, cell.y)
+        let unit = null
+        if (cell.unit) {
+            const {owner, ...packed} = cell.unit
+            unit = packed
+        }
+        records.push({x: cell.x, y: cell.y, colour: cell.colour, isSuburb: suburbs.get(cellDiffKey(cell)) === true, unit,
+            building: revealedCellEntity(cell.building) || local.building,
+            production: revealedCellEntity(cell.production) || local.production})
+    }
+    if (records.length)
+        applyCellDiff({cells: records, players: []})
+    return records.length
+}
+
 function loadFromJson(game_string) {
     loadFromObject(JSON.parse(game_string))
 }
