@@ -621,6 +621,65 @@ function createTutorial11Map() {
     return map
 }
 
+function createTutorial12Map() {
+    // Scout first: blue's 3 archers stand on the back row (x=8) of a two-row ridge of hills (x=7 rows 1..7,
+    // x=8 rows 2..6): the front row hides them from red's units on the plain, and from a hill they shoot 3 hexes
+    // over everything. Under fog of war blue only moves through hexes red sees, so a hidden blue army waits.
+    // Marching at the ridge blind (what SimpleAiPlayer does for red) walks red into their range without a target
+    // and red loses everything by round 3. The KOHb (3,4) can ride 2 hexes onto the lone lookout hill (5,4), see
+    // over the ridge, and ride back out of range in the same turn; the revealed archers come down off the ridge
+    // into the open, where red's archers step onto the hills (3,3) and (3,5) and shoot them from 3 hexes, out of
+    // a plain archer's range. The economy is off for both sides: no towns, so the upkeep would bankrupt blue.
+    let hills = [[5, 4], [3, 3], [3, 5]]
+    for (let y = 1; y <= 7; ++y) {
+        hills.push([7, y])
+    }
+    for (let y = 2; y <= 6; ++y) {
+        hills.push([8, y])
+    }
+    let map = new GameMap(
+        {x: 15, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 3, y: 4, type: KOHb},
+                    {x: 2, y: 3, type: Archer},
+                    {x: 2, y: 5, type: Archer},
+                    {x: 1, y: 3, type: Normchel},
+                    {x: 1, y: 4, type: Normchel}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 8, y: 3, type: Archer},
+                    {x: 8, y: 4, type: Archer},
+                    {x: 8, y: 5, type: Archer},
+                    {x: 10, y: 3, type: Normchel},
+                    {x: 10, y: 5, type: Normchel}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary(hills)
+    )
+    map.testName = 'tutorial 12'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -634,5 +693,6 @@ const tutorials = [
         get map() { return createTutorial9Map() }},
     {id: 'tutorial-10', title: 'Tutorial 10: Hold the Bridge', pass: 'enemyUnitsDead', get map() { return createTutorial10Map() }},
     {id: 'tutorial-11', title: 'Tutorial 11: Rotate and Heal', pass: 'surviveRounds', rounds: 12,
-        get map() { return createTutorial11Map() }}
+        get map() { return createTutorial11Map() }},
+    {id: 'tutorial-12', title: 'Tutorial 12: Scout First', pass: 'enemyUnitsDead', get map() { return createTutorial12Map() }}
 ]
