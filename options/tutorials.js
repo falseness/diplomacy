@@ -972,16 +972,18 @@ function createTutorial16Map() {
     // is closed by a pond (13,4)(14,4) and mountains in its corners. Red's town (1,4) has 2 catapults (2,3),
     // (2,5) behind 3 normchels (3,3), (3,4), (3,5) and 30 gold (the army costs a little more than the town
     // earns). Chasing the demons through the ford bleeds the army while the far portal keeps spawning; marching
-    // the normchels up to the river bank with the catapults behind them - the hills (5,3), (5,5), (6,6) on the
-    // near bank are high posts - destroys every portal from across the water (range 2-5, 4 damage to a 12 hp
-    // portal), after which the remaining demons can be cleaned up. Bushes stay off the fire lines to the portals.
+    // the normchels up to the river bank with the catapults behind them destroys every portal from across the
+    // water (range 2-5, 4 damage to a 12 hp portal), after which the remaining demons can be cleaned up. The hill
+    // (6,7) by the ford is a lookout: a unit standing on a hill sees over bushes, so from there red spots the Imp
+    // waiting at (9,8) behind the ford's bush (hills give range only to archers, not to catapults). Bushes stay
+    // off the fire lines to the portals.
     let lakes = [[0, 0], [0, 8], [8, 0], [13, 4], [14, 4]]
     for (let y = 0; y <= 7; ++y) {
         lakes.push([7, y])
     }
     let mountains = [[4, 0], [4, 8], [5, 8], [13, 0], [14, 0], [14, 1], [14, 7], [14, 8]]
     let bushes = [[1, 1], [1, 7], [2, 0], [2, 8], [5, 1], [8, 8], [12, 2], [12, 8], [13, 6]]
-    let hills = [[5, 3], [5, 5], [6, 6]]
+    let hills = [[6, 7]]
     let map = new GameMap(
         {x: 15, y: 9},
         [
