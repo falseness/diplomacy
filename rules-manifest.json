@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "b8d560c13e8a24fcedc40b8f76b931ece0e03911d2aecf4ef5f97a813d54b196",
+  "rulesVersion": "7282f8c8a19faf7de1fb644c12d6e7223cb3295563f560a9c15358b0d8c58866",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -85,8 +85,8 @@
     },
     {
       "path": "options/actionRecorder.js",
-      "sha256": "567c0b1b99febaafea824d55f03ab92a506e61c06099b7cfab1517bddf24ad8f",
-      "bytes": 5187
+      "sha256": "4fece8bd3bb07064599121e7c90429548fe8ae4247a2f79dd095e8edddd8c210",
+      "bytes": 5321
     },
     {
       "path": "options/reveal.js",

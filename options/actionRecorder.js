@@ -35,9 +35,9 @@ const actionLog = {
     turn: null,
     finished: null,
     listener: null,
-    // turnInfo: {player, round}
-    start(turnInfo) {
-        this.turn = {player: turnInfo.player, round: turnInfo.round, actions: []}
+    // turnInfo: {player, round}; actions: the entries the turn already has (a server resync keeps its accepted prefix).
+    start(turnInfo, actions = []) {
+        this.turn = {player: turnInfo.player, round: turnInfo.round, actions: actions.map(entry => ({...entry}))}
     },
     push(action, hashAfter) {
         if (!this.turn)

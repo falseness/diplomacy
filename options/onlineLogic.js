@@ -324,6 +324,18 @@ function showOnlinePanel(label, message) {
     return button
 }
 
+// A short message over the game that goes away by itself (#online-notice); the game is not frozen.
+function showOnlineNotice(message, duration = 3000) {
+    document.getElementById('online-notice')?.remove()
+    const notice = document.createElement('div')
+    notice.id = 'online-notice'
+    notice.setAttribute('role', 'status')
+    notice.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:10000;padding:8px 16px;background:rgba(0,0,0,0.75);color:white;font:18px sans-serif;pointer-events:none'
+    notice.textContent = message
+    document.body.append(notice)
+    setTimeout(() => notice.remove(), duration)
+}
+
 // Freezes the open online game, if any (set by SetupServerCommunicationLogic).
 let onlineGameFreeze = null
 
@@ -367,8 +379,9 @@ function SetupServerCommunicationLogic(gameID) {
     closeOnlineGameSocket()
     const socket = onlineSocket = onlineSession.connect()
     const listeners = onlineListeners
-    // Every recorded action of this game is streamed as game:action (shadow phase, options/actionStream.js).
-    onlineActionStream()?.start(socket, gameID)
+    // Every recorded action of this game is streamed as game:action (options/actionStream.js); a refusal's resync
+    // board is loaded by resyncBoard.
+    onlineActionStream()?.start(socket, gameID, resyncBoard)
     const on = (target, event, handler) => {
         target.on(event, handler)
         listeners.push([target, event, handler])
@@ -524,6 +537,33 @@ function SetupServerCommunicationLogic(gameID) {
             return 'ended'
         }
         return continuing ? 'continued' : true
+    }
+    // The server refused an action of this turn and sent its board after the accepted ones (TASK-686): load it in
+    // place of the local state, which ran ahead. The turn, its clock and (when the turn was ended locally and its
+    // nextTurn dropped) the controls go on; the selection and the undo stack (loadFromJson clears it: its entries were
+    // recorded on the replaced board) start again. Returns true when the board was loaded.
+    function resyncBoard(body, turnEnded) {
+        if (socket !== onlineSocket || failed) return false
+        const board = boardWithOnlineTerrain(gameID, typeof body === 'string' ? JSON.parse(body) : body)
+        if (!board || board.whooseTurn !== whooseTurn || board.gameRound !== gameRound) {
+            fail('The server corrected a move this page cannot show.')
+            return false
+        }
+        // The wall clock is local: the server's board carries the turn-start timers.
+        const restored = {...board, timers: getGameObject().timers}
+        const runningTimer = timer
+        if (grid) {
+            gameEvent.removeSelection()
+            gameEvent.hideAll()
+        }
+        loadFromJson(JSON.stringify(restored))
+        if (turnEnded) {
+            // onlineNextTurn saved the remaining time into timers; the reloaded timer resumes from it.
+            unfreezeGame()
+            timer.updateLastPause()
+        } else timer = runningTimer
+        showOnlineNotice('Move corrected by server')
+        return true
     }
     // The end of a hidden-information game: the board stays frozen under the result banner.
     function showHiddenGameEnd() {
