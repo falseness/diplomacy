@@ -449,8 +449,8 @@ function SetupServerCommunicationLogic(gameID) {
                     (board.gameRound === competitiveDelivery.round &&
                         (competitiveDelivery.active || !active)))) return false
         }
-        // A partial board's lists cannot be rebased (hidden entities look removed): reload it.
-        const continuing = !!(board.gameSettings?.coop && !board.hiddenInfo && acceptedBoard && active &&
+        // Protocol 2 supplies an authoritative filtered snapshot and accepted prefix.
+        const continuing = !!(board.gameSettings?.coop && (!board.hiddenInfo || board.coopContinuing) && acceptedBoard && active &&
             !gameEvent.waitingMode && board.gameRound === acceptedBoard.gameRound &&
             board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
         if (continuing && typeof BROWSER_PROTOCOL !== 'undefined' && BROWSER_PROTOCOL === 2 && onlineActionStream()) {
@@ -483,6 +483,7 @@ function SetupServerCommunicationLogic(gameID) {
                 for (const [live, packed] of [[external, board.external], [externalProduction, board.externalProduction],
                     [nature, board.nature], [goldmines, board.goldmines]]) order(live, packed)
                 gameSettings = board.gameSettings
+                if (hiddenInfo) hiddenStatus = board.status
             })
             acceptedBoard = board
             onlineCommit = commit
