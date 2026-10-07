@@ -249,37 +249,6 @@ const remoteEffects = {
     }
 }
 
-// Rebase disjoint local actions on a newer same-turn co-op view. Components
-// cannot act on one another's influence area. Coordinate-keyed entity lists
-// still need merging when both components insert/remove external entities.
-function rebaseOnlineValue(base, local, remote) {
-    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-    if (equal(base, local)) return remote
-    if (equal(base, remote) || equal(local, remote)) return local
-    if (Array.isArray(base) && Array.isArray(local) && Array.isArray(remote)) {
-        const coord = value => value && (value.coord ||
-            (Number.isInteger(value.x) && Number.isInteger(value.y) ? value : null))
-        if ([...base, ...local, ...remote].every(value => coord(value))) {
-            const key = value => coord(value).x + ':' + coord(value).y
-            const keyed = list => Object.fromEntries(list.map(value => [key(value), value]))
-            const merged = rebaseOnlineValue(keyed(base), keyed(local), keyed(remote))
-            return Object.values(merged)
-        }
-        if (base.length === local.length && base.length === remote.length)
-            return base.map((value, i) => rebaseOnlineValue(value, local[i], remote[i]))
-    } else if (base && local && remote && typeof base === 'object' &&
-            typeof local === 'object' && typeof remote === 'object') {
-        const merged = {}
-        for (const key of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)])) {
-            const value = rebaseOnlineValue(base[key], local[key], remote[key])
-            if (value !== undefined) merged[key] = value
-        }
-        return merged
-    }
-    // Shared fields changed by authority (for example a terminal result) win.
-    return remote
-}
-
 // The public terrain of lobby games by gameID (game:terrain under the server's HIDDEN_INFO, PRD sec. 6.3): sent once
 // per game:open, before the board; the boards then carry no nature, only terrainId and terrainChanges.
 const onlineTerrains = new Map()
@@ -324,6 +293,18 @@ function showOnlinePanel(label, message) {
     return button
 }
 
+// A short message over the game that goes away by itself (#online-notice); the game is not frozen.
+function showOnlineNotice(message, duration = 3000) {
+    document.getElementById('online-notice')?.remove()
+    const notice = document.createElement('div')
+    notice.id = 'online-notice'
+    notice.setAttribute('role', 'status')
+    notice.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:10000;padding:8px 16px;background:rgba(0,0,0,0.75);color:white;font:18px sans-serif;pointer-events:none'
+    notice.textContent = message
+    document.body.append(notice)
+    setTimeout(() => notice.remove(), duration)
+}
+
 // Freezes the open online game, if any (set by SetupServerCommunicationLogic).
 let onlineGameFreeze = null
 
@@ -333,6 +314,13 @@ function showRulesVersionPanel() {
     if (onlineGameFreeze) onlineGameFreeze()
     const button = showOnlinePanel('New version available',
         'A new version of the game is available. Reload the page to keep playing online.')
+    button('Reload', () => location.reload()).focus()
+}
+
+// The server speaks another browser protocol (an OUTDATED_CLIENT ack, protocol doc section 4.9): same reload offer.
+function showOutdatedClientPanel() {
+    if (onlineGameFreeze) onlineGameFreeze()
+    const button = showOnlinePanel('Please reload', 'This page is outdated: please reload it.')
     button('Reload', () => location.reload()).focus()
 }
 
@@ -367,8 +355,9 @@ function SetupServerCommunicationLogic(gameID) {
     closeOnlineGameSocket()
     const socket = onlineSocket = onlineSession.connect()
     const listeners = onlineListeners
-    // Every recorded action of this game is streamed as game:action (shadow phase, options/actionStream.js).
-    onlineActionStream()?.start(socket, gameID)
+    // Every recorded action of this game is streamed as game:action (options/actionStream.js); a refusal's resync
+    // board is loaded by resyncBoard.
+    onlineActionStream()?.start(socket, gameID, resyncBoard)
     const on = (target, event, handler) => {
         target.on(event, handler)
         listeners.push([target, event, handler])
@@ -423,7 +412,8 @@ function SetupServerCommunicationLogic(gameID) {
     on(socket.io, 'error', () => fail(socket.connected ? 'Connection lost.' : 'Could not connect. Check your connection.'))
     on(socket, 'connect_error', () => fail('Could not connect. Check your connection.'))
     on(socket, 'disconnect', () => fail('Connection lost.'))
-    on(socket, 'error', error => error === 'KICKED' ? removedByHost() : fail('The server rejected the action.'))
+    on(socket, 'error', error => error === 'KICKED' ? removedByHost()
+        : fail(error === 'OUTDATED_CLIENT' ? 'This page is outdated: please reload it.' : 'The server rejected the action.'))
     onlineCommit = null
     gameDiffHandler.reset(gameID)
     // Competitive scheduling gives each player one active turn per round.
@@ -463,30 +453,40 @@ function SetupServerCommunicationLogic(gameID) {
         const continuing = !!(board.gameSettings?.coop && !board.hiddenInfo && acceptedBoard && active &&
             !gameEvent.waitingMode && board.gameRound === acceptedBoard.gameRound &&
             board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
-        let restored = board
-        let undo, selected, runningTimer
-        if (continuing) {
-            const local = JSON.parse(JSON.stringify(getGameObject()))
-            restored = {...board}
-            for (const key of ['grid', 'players', 'external', 'externalProduction', 'nature', 'goldmines'])
-                restored[key] = rebaseOnlineValue(acceptedBoard[key], local[key], board[key])
-            // The current turn's clock and undo scope continue across peer commits.
-            restored.timers = board.timers.map((value, index) =>
-                index === whooseTurn ? local.timers[index] : value)
-            runningTimer = timer
-            selected = gameEvent.selected.notEmpty() ? {
-                coord: {...gameEvent.selected.coord}, unit: !!gameEvent.selected.isUnit
-            } : null
-            undo = actionManager.arr
-            const lists = packed => packed.players.map(player => ({
-                units: player.units.map(unit => ({...unit.coord})),
-                towns: player.towns.map(town => ({...town.coord}))
-            }))
-            for (const action of undo) {
-                action.playerEntityLists = rebaseOnlineValue(lists(acceptedBoard), action.playerEntityLists, lists(board))
-                action.externalOrder = rebaseOnlineValue(acceptedBoard.external.map(e => e.coord),
-                    action.externalOrder, board.external.map(e => e.coord))
+        if (continuing && typeof BROWSER_PROTOCOL !== 'undefined' && BROWSER_PROTOCOL === 2 && onlineActionStream()) {
+            const update = board.coopContinuing
+            if (!update || !Number.isSafeInteger(update.lastSeq) || !update.snapshot ||
+                    !Array.isArray(update.snapshot.cells) || !Array.isArray(update.accepted)) {
+                fail('The server sent an incomplete turn update.')
+                return false
             }
+            onlineActionStream().continueFrom(update, () => {
+                gameEvent.removeSelection()
+                gameEvent.hideAll()
+                const cells = update.snapshot.cells.filter(cell =>
+                    JSON.stringify(packCellRecord(cell.x, cell.y)) !== JSON.stringify(cell))
+                applyCellDiff({...update.snapshot, cells})
+                // Cell application preserves object identity; restore authoritative
+                // list order too, since order participates in the state hash.
+                const order = (live, packed) => {
+                    const byCoord = new Map(live.map(value => [cellDiffKey(value.coord), value]))
+                    live.splice(0, live.length, ...packed.map(value => byCoord.get(cellDiffKey(value.coord))))
+                }
+                board.players.forEach((player, i) => {
+                    order(players[i].units, player.units)
+                    order(players[i].towns, player.towns)
+                    player.towns.forEach((town, j) => {
+                        order(players[i].towns[j].buildings, town.buildings)
+                        order(players[i].towns[j].buildingProduction, town.buildingProduction)
+                    })
+                })
+                for (const [live, packed] of [[external, board.external], [externalProduction, board.externalProduction],
+                    [nature, board.nature], [goldmines, board.goldmines]]) order(live, packed)
+                gameSettings = board.gameSettings
+            })
+            acceptedBoard = board
+            onlineCommit = commit
+            return 'continued'
         }
         // Clear references and panels while their old board still exists.
         // A received board may remove a selected entity or hide its cell.
@@ -495,26 +495,12 @@ function SetupServerCommunicationLogic(gameID) {
             gameEvent.removeSelection()
             gameEvent.hideAll()
         }
-        loadFromJson(JSON.stringify(restored))
+        loadFromJson(JSON.stringify(board))
         if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
         acceptedBoard = board
-        // A continued co-op turn keeps its action stream; any other board starts the log and seq from this board.
-        if (!continuing) onlineActionStream()?.restart()
-        if (continuing) {
-            timer = runningTimer
-            actionManager.arr = undo
-            gameEvent.removeSelection()
-            if (selected) {
-                const entity = selected.unit ? grid.getUnit(selected.coord) : grid.getBuilding(selected.coord)
-                if (entity.notEmpty() && (!isFogOfWar ||
-                        grid.fogOfWar[selected.coord.x][selected.coord.y])) {
-                    entity.select()
-                    gameEvent.selected = entity
-                }
-            }
-        }
+        onlineActionStream()?.restart()
         if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
         onlineCommit = commit || null
         // A partial board's end comes from the server's status, not from the local lists.
@@ -522,7 +508,34 @@ function SetupServerCommunicationLogic(gameID) {
             showHiddenGameEnd()
             return 'ended'
         }
-        return continuing ? 'continued' : true
+        return true
+    }
+    // The server refused an action of this turn and sent its board after the accepted ones (TASK-686): load it in
+    // place of the local state, which ran ahead. The turn, its clock and (when the turn was ended locally and its
+    // nextTurn dropped) the controls go on; the selection and the undo stack (loadFromJson clears it: its entries were
+    // recorded on the replaced board) start again. Returns true when the board was loaded.
+    function resyncBoard(body, turnEnded) {
+        if (socket !== onlineSocket || failed) return false
+        const board = boardWithOnlineTerrain(gameID, typeof body === 'string' ? JSON.parse(body) : body)
+        if (!board || board.whooseTurn !== whooseTurn || board.gameRound !== gameRound) {
+            fail('The server corrected a move this page cannot show.')
+            return false
+        }
+        // The wall clock is local: the server's board carries the turn-start timers.
+        const restored = {...board, timers: getGameObject().timers}
+        const runningTimer = timer
+        if (grid) {
+            gameEvent.removeSelection()
+            gameEvent.hideAll()
+        }
+        loadFromJson(JSON.stringify(restored))
+        if (turnEnded) {
+            // onlineNextTurn saved the remaining time into timers; the reloaded timer resumes from it.
+            unfreezeGame()
+            timer.updateLastPause()
+        } else timer = runningTimer
+        showOnlineNotice('Move corrected by server')
+        return true
     }
     // The end of a hidden-information game: the board stays frozen under the result banner.
     function showHiddenGameEnd() {
@@ -619,8 +632,16 @@ function SetupServerCommunicationLogic(gameID) {
         if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')
-        const gameObject = getGameObject()
-        // whoseTurn currently means the only index of CURRENT player on client
-        socket.emit('nextTurn', JSON.stringify({'gameID': gameID, 'game': gameObject, 'whooseTurn': whooseTurn}))
+        // Protocol 2 (TASK-687): no board, only the hash of the turn's 'end' (actionRecorder.js recordEnd); the server
+        // commits its replay of the streamed actions (TASK-684), so send after the stream flushed.
+        const ended = actionLog.lastTurn()?.actions.at(-1)
+        const endHash = ended?.action.t === 'end' ? ended.hash : stateHash()
+        const message = JSON.stringify({gameID: gameID, endHash: endHash})
+        const send = () => {
+            if (socket === onlineSocket && !failed) socket.emit('nextTurn', message)
+        }
+        const stream = onlineActionStream()
+        if (stream) stream.afterFlush(send)
+        else send()
     }
 }

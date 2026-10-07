@@ -10,6 +10,10 @@ const ONLINE_RETRY_DELAYS = [1000, 2000, 4000]
 // auth:session and game:open carry it; a server running other rules code acks RULES_VERSION_MISMATCH (protocol doc
 // section 2.7) and the page offers a reload (showRulesVersionPanel, options/onlineLogic.js).
 const ONLINE_RULES_VERSION = typeof RULES_VERSION === 'string' ? RULES_VERSION : null
+// The wire protocol this page speaks (handshake auth.browserProtocol, protocol doc section 4.9). Protocol 2 (TASK-687):
+// nextTurn is {gameID, endHash}, the server commits its replay of the game:action stream. A server speaking another
+// protocol refuses the game events with OUTDATED_CLIENT and the page asks for a reload.
+const BROWSER_PROTOCOL = 2
 
 // Storage may be unavailable (private mode, blocked cookies); sign-in still works.
 function readStoredSession() {
@@ -35,7 +39,7 @@ class OnlineSession {
         if (this.socket) return this.socket
         // The one online socket: the hub and every lobby game use it.
         const socket = this.socket = io(window.DIPLOMACY_SERVER || DEFAULT_ONLINE_SERVER,
-            {forceNew: true, timeout: 10000, auth: {browserProtocol: 1}})
+            {forceNew: true, timeout: 10000, auth: {browserProtocol: BROWSER_PROTOCOL}})
         // A transport reconnect is a new server socket: authenticate it again,
         // then re-open the game on screen. A failed resume keeps the account and
         // token (unless UNAUTHENTICATED), so the next reconnect tries again.
@@ -55,6 +59,8 @@ class OnlineSession {
                 const reply = ack && typeof ack === 'object' ? ack : {ok: false, error: 'BAD_ACK'}
                 if (reply.error === 'RULES_VERSION_MISMATCH' && typeof showRulesVersionPanel === 'function')
                     showRulesVersionPanel(reply.expected)
+                if (reply.error === 'OUTDATED_CLIENT' && typeof showOutdatedClientPanel === 'function')
+                    showOutdatedClientPanel()
                 resolve(reply)
             })
         })
