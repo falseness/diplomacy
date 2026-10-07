@@ -353,11 +353,58 @@ function createTutorial6Map() {
     return map
 }
 
+function createTutorial7Map() {
+    // High ground: a 3-hex hill (4,4), (4,5), (5,4) stands between red (2 archers, 2 noobs) and blue's
+    // 3 archers and 2 noobs on open ground. Each red archer is one step from a hill hex, and every blue
+    // archer is exactly 3 hexes from the nearest hill hex: an archer on a hill shoots 3 hexes, so red's
+    // archers on it hit blue first, while blue's archers (range 2) must walk up and spend their moves.
+    // Walking the archers straight at blue (what SimpleAiPlayer does for red) gets them shot first.
+    let map = new GameMap(
+        {x: 12, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                towns: [],
+                units: [
+                    {x: 4, y: 3, type: Archer},
+                    {x: 3, y: 5, type: Archer},
+                    {x: 3, y: 3, type: Noob},
+                    {x: 4, y: 6, type: Noob}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                towns: [],
+                units: [
+                    {x: 8, y: 3, type: Archer},
+                    {x: 8, y: 4, type: Archer},
+                    {x: 8, y: 5, type: Archer},
+                    {x: 7, y: 5, type: Noob},
+                    {x: 7, y: 6, type: Noob}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([[4, 4], [4, 5], [5, 4]])
+    )
+    map.testName = 'tutorial 7'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
     {id: 'tutorial-3', title: 'Tutorial 3', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-4', title: 'Tutorial 4', pass: 'enemyLost', get map() { return createTutorial4Map() }},
     {id: 'tutorial-5', title: 'Tutorial 5', pass: 'coopVictory', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 6', pass: 'coopVictory', get map() { return createTutorial6Map() }}
+    {id: 'tutorial-6', title: 'Tutorial 6', pass: 'coopVictory', get map() { return createTutorial6Map() }},
+    {id: 'tutorial-7', title: 'Tutorial 7: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }}
 ]
