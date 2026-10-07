@@ -4,7 +4,8 @@
 // local stateHash() after the action: the unit/skip/train/build/destroy actions, {t: 'undo'} and {t: 'end', hash}.
 // The local state has already advanced (the engine is deterministic), so the queue only orders delivery: exactly one
 // action is in flight, the next one is sent when its ack arrives (or after ONLINE_ACK_TIMEOUT). The full board still
-// goes in nextTurn as before.
+// goes in nextTurn as before, but only after the stream has flushed (afterFlush, TASK-684): the enforcing server commits
+// its own replayed board, so the turn's 'end' must reach it before nextTurn does.
 // Shadow phase: {ok: false} acks, timeouts and acked hashes that differ from the local hash are logged and counted
 // (console, ActionStream.stats()) but not acted on.
 // start(socket, gameID) attaches the stream to the open game (SetupServerCommunicationLogic); restart() runs when a
@@ -20,6 +21,8 @@ const ActionStream = {
     queue: [],
     inFlight: null,
     timer: null,
+    // The callback afterFlush deferred until the queue drains.
+    flushed: null,
     counters: {sent: 0, acked: 0, failed: 0, timeouts: 0, hashMismatches: 0, restarts: 0},
     start(socket, gameID) {
         this.stop()
@@ -43,6 +46,7 @@ const ActionStream = {
         actionLog.start({player: whooseTurn, round: gameRound})
     },
     drop() {
+        this.flushed = null
         clearTimeout(this.timer)
         this.timer = null
         this.queue = []
@@ -55,9 +59,25 @@ const ActionStream = {
         this.queue.push({seq: ++this.seq, action: JSON.parse(JSON.stringify(action)), hash: hash})
         this.pump()
     },
-    pump() {
-        if (this.inFlight || !this.queue.length)
+    // Calls send once every queued action has been acked (at once when nothing is pending or no stream is attached);
+    // a restart/stop before that drops it (the board delivered then starts the turn again).
+    afterFlush(send) {
+        if (!this.socket || (!this.inFlight && !this.queue.length)) {
+            send()
             return
+        }
+        this.flushed = send
+    },
+    pump() {
+        if (this.inFlight)
+            return
+        if (!this.queue.length) {
+            const send = this.flushed
+            this.flushed = null
+            if (send)
+                send()
+            return
+        }
         const entry = this.inFlight = this.queue.shift()
         ++this.counters.sent
         this.timer = setTimeout(() => this.settle(entry, {ok: false, seq: entry.seq, reason: 'TIMEOUT'}),

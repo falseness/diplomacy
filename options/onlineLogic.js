@@ -423,7 +423,8 @@ function SetupServerCommunicationLogic(gameID) {
     on(socket.io, 'error', () => fail(socket.connected ? 'Connection lost.' : 'Could not connect. Check your connection.'))
     on(socket, 'connect_error', () => fail('Could not connect. Check your connection.'))
     on(socket, 'disconnect', () => fail('Connection lost.'))
-    on(socket, 'error', error => error === 'KICKED' ? removedByHost() : fail('The server rejected the action.'))
+    on(socket, 'error', error => error === 'KICKED' ? removedByHost()
+        : fail(error === 'OUTDATED_CLIENT' ? 'This page is outdated: please reload it.' : 'The server rejected the action.'))
     onlineCommit = null
     gameDiffHandler.reset(gameID)
     // Competitive scheduling gives each player one active turn per round.
@@ -619,8 +620,13 @@ function SetupServerCommunicationLogic(gameID) {
         if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')
-        const gameObject = getGameObject()
-        // whoseTurn currently means the only index of CURRENT player on client
-        socket.emit('nextTurn', JSON.stringify({'gameID': gameID, 'game': gameObject, 'whooseTurn': whooseTurn}))
+        const message = JSON.stringify({'gameID': gameID, 'game': getGameObject(), 'whooseTurn': whooseTurn})
+        // The enforcing server commits its replay of the streamed actions (TASK-684): send after the stream flushed.
+        const send = () => {
+            if (socket === onlineSocket && !failed) socket.emit('nextTurn', message)
+        }
+        const stream = onlineActionStream()
+        if (stream) stream.afterFlush(send)
+        else send()
     }
 }
