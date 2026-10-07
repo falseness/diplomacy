@@ -506,6 +506,68 @@ function createTutorial9Map() {
     return map
 }
 
+function createTutorial10Map() {
+    // Hold the bridge: a lake (column 5, every row but 4) splits an 11x9 map; the bridge (5,4) is its only
+    // passable hex, and the lake hex (4,5) leaves the bridge a single exit on red's side, (4,4). Blue's 8 noobs
+    // and 2 archers start on the far side (columns 8..10); red's 2 normchels and 2 archers stand at the exit.
+    // Crossing the bridge (what SimpleAiPlayer does for red) gets red surrounded by the noobs on the open far
+    // bank. Holding the exit with one normchel (the other relieves it when wounded) means only the unit on the
+    // bridge can strike it, while red's archers shoot whoever queues on the bridge; once blue's numbers are
+    // gone red crosses and finishes the rest. The economy is off for both sides: without towns the upkeep would
+    // bankrupt blue's 10 units by round 8 and win the map for a red that just waits.
+    let lakes = [[4, 5]]
+    for (let y = 0; y < 9; ++y) {
+        if (y != 4) {
+            lakes.push([5, y])
+        }
+    }
+    let map = new GameMap(
+        {x: 11, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 4, y: 4, type: Normchel},
+                    {x: 3, y: 5, type: Normchel},
+                    {x: 3, y: 3, type: Archer},
+                    {x: 4, y: 3, type: Archer}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 8, y: 2, type: Noob},
+                    {x: 8, y: 3, type: Noob},
+                    {x: 8, y: 4, type: Noob},
+                    {x: 8, y: 5, type: Noob},
+                    {x: 9, y: 2, type: Noob},
+                    {x: 9, y: 3, type: Noob},
+                    {x: 9, y: 4, type: Noob},
+                    {x: 9, y: 5, type: Noob},
+                    {x: 10, y: 3, type: Archer},
+                    {x: 10, y: 5, type: Archer}
+                ]
+            }
+        ],
+        [],
+        coordDictionary(lakes),
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([])
+    )
+    map.testName = 'tutorial 10'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -516,5 +578,6 @@ const tutorials = [
     {id: 'tutorial-7', title: 'Tutorial 7: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
     {id: 'tutorial-8', title: 'Tutorial 8: Through the Bushes', pass: 'enemyUnitsDead', get map() { return createTutorial8Map() }},
     {id: 'tutorial-9', title: 'Tutorial 9: Cavalry Raid', pass: 'captureTowns', targets: [{x: 14, y: 7}],
-        get map() { return createTutorial9Map() }}
+        get map() { return createTutorial9Map() }},
+    {id: 'tutorial-10', title: 'Tutorial 10: Hold the Bridge', pass: 'enemyUnitsDead', get map() { return createTutorial10Map() }}
 ]
