@@ -680,6 +680,58 @@ function createTutorial12Map() {
     return map
 }
 
+function createTutorial13Map() {
+    // Escort the catapults: blue's town (14,4) sits in a pocket of mountains (13,2), (14,2), (13,5), (14,6); its
+    // only ways in are the bastions (13,3) and (13,4) on its west suburbs. Catapults are the only red units that
+    // hurt buildings from range (2..5 hexes, 4 damage), but they have 1 hp and never hit units. Blue's 3 KOHb
+    // raiders wait in front of the pocket, (8,3), (8,5), (9,4), hidden in the fog. Red's catapults and archer start
+    // in front of its normchels: marching everything at the town (what SimpleAiPlayer does for red) sends the
+    // catapults and the archer into the raiders alone, and the normchels lose the fight that is left. Sending the
+    // normchels ahead with the archer and the catapults behind them kills the raiders first; then the catapults
+    // shoot both bastions and the town down to 0 hp from 5 hexes, and a normchel walks through the gap into the
+    // town. The economy is off for both sides: no production, and red (no town) does not go bankrupt.
+    let map = new GameMap(
+        {x: 15, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 3, y: 3, type: Catapult},
+                    {x: 3, y: 5, type: Catapult},
+                    {x: 3, y: 4, type: Archer},
+                    {x: 1, y: 3, type: Normchel},
+                    {x: 1, y: 5, type: Normchel}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                economyEnabled: false,
+                towns: [{x: 14, y: 4}],
+                bastions: [{x: 13, y: 3}, {x: 13, y: 4}],
+                units: [
+                    {x: 8, y: 3, type: KOHb},
+                    {x: 8, y: 5, type: KOHb},
+                    {x: 9, y: 4, type: KOHb}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary([[13, 2], [14, 2], [13, 5], [14, 6]]),
+        coordDictionary([]),
+        coordDictionary([])
+    )
+    map.testName = 'tutorial 13'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -694,5 +746,7 @@ const tutorials = [
     {id: 'tutorial-10', title: 'Tutorial 10: Hold the Bridge', pass: 'enemyUnitsDead', get map() { return createTutorial10Map() }},
     {id: 'tutorial-11', title: 'Tutorial 11: Rotate and Heal', pass: 'surviveRounds', rounds: 12,
         get map() { return createTutorial11Map() }},
-    {id: 'tutorial-12', title: 'Tutorial 12: Scout First', pass: 'enemyUnitsDead', get map() { return createTutorial12Map() }}
+    {id: 'tutorial-12', title: 'Tutorial 12: Scout First', pass: 'enemyUnitsDead', get map() { return createTutorial12Map() }},
+    {id: 'tutorial-13', title: 'Tutorial 13: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
+        get map() { return createTutorial13Map() }}
 ]
