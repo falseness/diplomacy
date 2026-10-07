@@ -640,7 +640,13 @@ function createTutorial11Map() {
     // wounded normchels (what SimpleAiPlayer does) leaves the suburbs, so nothing heals and red loses its units
     // and then the town by round 7. Holding the suburbs, striking only what comes next to them, and pulling a
     // unit at hp 2 or less back onto a quiet suburb hex keeps red's town past round 12. The economy is off for
-    // both sides: no production, and blue (no town) does not go bankrupt.
+    // both sides: no production, and blue (no town) does not go bankrupt. Terrain (TASK-743): lakes behind the
+    // town's corners and mountain shoulders on the field's north and south edges bring both waves onto the town's
+    // front, so the back suburbs stay quiet for healing; bushes (2,1)/(2,7) beside the town, a wood on the field
+    // edges and a pond (10,4)/(11,4)/(11,5) on the second wave's road. Every suburb hex stays free.
+    let lakes = [[0, 0], [0, 1], [1, 0], [0, 7], [0, 8], [1, 8], [10, 4], [11, 4], [11, 5]]
+    let mountains = [[3, 0], [4, 0], [5, 0], [3, 8], [4, 8], [5, 8], [8, 0], [9, 0], [8, 8]]
+    let bushes = [[2, 1], [2, 7], [8, 1], [9, 1], [8, 7], [9, 7], [12, 2], [12, 6], [13, 6]]
     let map = new GameMap(
         {x: 16, y: 9},
         [
@@ -676,9 +682,9 @@ function createTutorial11Map() {
             }
         ],
         [],
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([]),
+        coordDictionary(lakes),
+        coordDictionary(mountains),
+        coordDictionary(bushes),
         coordDictionary([])
     )
     map.testName = 'tutorial 11'
@@ -687,17 +693,23 @@ function createTutorial11Map() {
 
 function createTutorial12Map() {
     // Scout first: blue's 3 archers stand on the plain (x=8) right behind a ridge of hills (x=7 rows 1..7) that hides
-    // them from red's units on the plain. No unit starts on a hill: hills share the mountain art, and an archer there
-    // reads as one standing on a mountain (TASK-731). Under fog of war blue only moves through hexes red sees, so a
+    // them from red's units on the plain. No unit starts on a hill or a mountain (TASK-731: an archer there
+    // once read as one standing on a mountain). Under fog of war blue only moves through hexes red sees, so a
     // hidden blue army waits. Marching at the ridge blind (what SimpleAiPlayer does for red) walks red into their range
     // without a target and red loses everything by round 3. The KOHb (3,4) can ride 2 hexes onto the lone lookout hill
     // (5,4), see over the ridge, and ride back out of range in the same turn; the revealed archers come down off the
     // ridge into the open, where red's archers step onto the hills (3,3) and (3,5) and shoot them from 3 hexes, out of
     // a plain archer's range. The economy is off for both sides: no towns, so the upkeep would bankrupt blue.
+    // Terrain (TASK-743): mountains cap both ends of the ridge (6..7, 0) and (6..7, 8), so the only way to see
+    // behind it is from a hill; lakes and a rock in the corners, a pond (11,8)/(12,8) behind blue; bushes on the
+    // flanks of red's plain (4,1)/(4,7)/(1,7) and behind blue's line, all off the hill posts' fire lines.
     let hills = [[5, 4], [3, 3], [3, 5]]
     for (let y = 1; y <= 7; ++y) {
         hills.push([7, y])
     }
+    let lakes = [[0, 0], [1, 0], [0, 8], [13, 0], [14, 0], [14, 1], [11, 8], [12, 8], [14, 8]]
+    let mountains = [[7, 0], [7, 8], [6, 0], [6, 8], [0, 1]]
+    let bushes = [[12, 2], [12, 6], [13, 4], [4, 1], [4, 7], [1, 7], [9, 0], [9, 8]]
     let map = new GameMap(
         {x: 15, y: 9},
         [
@@ -732,9 +744,9 @@ function createTutorial12Map() {
             }
         ],
         [],
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([]),
+        coordDictionary(lakes),
+        coordDictionary(mountains),
+        coordDictionary(bushes),
         coordDictionary(hills)
     )
     map.testName = 'tutorial 12'
