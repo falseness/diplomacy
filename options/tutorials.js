@@ -443,14 +443,23 @@ function createTutorial7Map() {
 }
 
 function createTutorial8Map() {
-    // Through the bushes: blue's 4 archers stand on the right of a 13x9 map behind a wide open field; red's
-    // 3 normchels and 2 noobs start on the left. A 2-row band of bushes (rows 0 and 1, x 1..11) runs along
-    // the top from red's side to blue's flank. Bushes block line of sight: an archer can shoot a bush hex
-    // but not past it, so a unit in the inner row or behind the band cannot be shot from the field. Walking
-    // straight across the field (what SimpleAiPlayer does for red) gets red shot on the way; moving along
-    // the bushes out of the archers' sight and striking when they come close wins.
+    // Through the bushes: blue holds a line behind a river. The river (lakes down column 8) springs from a band of
+    // bushes along the top of a 15x9 map and has a single ford (8,7) near its mouth; blue's 2 normchels guard the
+    // ford's far bank and its 3 archers stand behind the river covering the ford and the open field. Lakes do not
+    // stop arrows, bushes do: an archer can shoot into a bush hex but not past it. Red (3 normchels, 2 noobs) starts
+    // on the left. Walking at the nearest blue unit (what SimpleAiPlayer does for red) crosses the open field into
+    // the archers' fire and fights the screen in the ford. The bush band crosses the river at its source and ends
+    // in a thicket on the archers' flank: walking in its outer row red sees nothing and is seen by nobody, so blue
+    // (which only moves into hexes red sees) keeps facing the ford; from the thicket red falls on the archers.
+    // Both sides keep their army without paying for it (economy off), so waiting in the bushes costs nothing.
+    let bushes = []
+    for (let x = 1; x <= 12; ++x) {
+        bushes.push([x, 0], [x, 1])
+    }
+    // The thicket on blue's flank.
+    bushes.push([12, 2], [13, 0], [13, 1], [13, 2])
     let map = new GameMap(
-        {x: 13, y: 9},
+        {x: 15, y: 9},
         [
             {
                 rgb: {r: 208, g: 208, b: 208},
@@ -458,34 +467,36 @@ function createTutorial8Map() {
             },
             {
                 rgb: {r: 255, g: 0, b: 0},
+                economyEnabled: false,
                 towns: [],
                 units: [
-                    {x: 0, y: 4, type: Normchel},
-                    {x: 2, y: 4, type: Normchel},
                     {x: 1, y: 4, type: Normchel},
+                    {x: 2, y: 4, type: Normchel},
+                    {x: 1, y: 5, type: Normchel},
                     {x: 1, y: 3, type: Noob},
-                    {x: 1, y: 2, type: Noob}
+                    {x: 2, y: 3, type: Noob}
                 ]
             },
             {
                 rgb: {r: 98, g: 168, b: 222},
                 playerType: 'SimpleAiPlayer',
+                economyEnabled: false,
                 towns: [],
                 units: [
-                    {x: 12, y: 5, type: Archer},
-                    {x: 11, y: 4, type: Archer},
-                    {x: 10, y: 6, type: Archer},
-                    {x: 11, y: 3, type: Archer}
+                    {x: 9, y: 6, type: Normchel},
+                    {x: 9, y: 7, type: Normchel},
+                    {x: 10, y: 4, type: Archer},
+                    {x: 11, y: 5, type: Archer},
+                    {x: 10, y: 6, type: Archer}
                 ]
             }
         ],
         [],
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([
-            [1, 1], [1, 0], [2, 1], [2, 0], [3, 1], [3, 0], [4, 1], [4, 0], [5, 1], [5, 0], [6, 1], [6, 0],
-            [7, 1], [7, 0], [8, 1], [8, 0], [9, 1], [9, 0], [10, 1], [10, 0], [11, 1], [11, 0]
-        ]),
+        // The river with its ford (8,7), and a pond in red's corner.
+        coordDictionary([[8, 2], [8, 3], [8, 4], [8, 5], [8, 6], [8, 8], [0, 7], [0, 8], [1, 8]]),
+        // Rocks along the bottom edge on both banks.
+        coordDictionary([[4, 7], [4, 8], [5, 8], [14, 7], [14, 8], [13, 8]]),
+        coordDictionary(bushes),
         coordDictionary([])
     )
     map.testName = 'tutorial 8'
