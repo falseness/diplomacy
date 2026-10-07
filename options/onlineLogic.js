@@ -249,37 +249,6 @@ const remoteEffects = {
     }
 }
 
-// Rebase disjoint local actions on a newer same-turn co-op view. Components
-// cannot act on one another's influence area. Coordinate-keyed entity lists
-// still need merging when both components insert/remove external entities.
-function rebaseOnlineValue(base, local, remote) {
-    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-    if (equal(base, local)) return remote
-    if (equal(base, remote) || equal(local, remote)) return local
-    if (Array.isArray(base) && Array.isArray(local) && Array.isArray(remote)) {
-        const coord = value => value && (value.coord ||
-            (Number.isInteger(value.x) && Number.isInteger(value.y) ? value : null))
-        if ([...base, ...local, ...remote].every(value => coord(value))) {
-            const key = value => coord(value).x + ':' + coord(value).y
-            const keyed = list => Object.fromEntries(list.map(value => [key(value), value]))
-            const merged = rebaseOnlineValue(keyed(base), keyed(local), keyed(remote))
-            return Object.values(merged)
-        }
-        if (base.length === local.length && base.length === remote.length)
-            return base.map((value, i) => rebaseOnlineValue(value, local[i], remote[i]))
-    } else if (base && local && remote && typeof base === 'object' &&
-            typeof local === 'object' && typeof remote === 'object') {
-        const merged = {}
-        for (const key of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)])) {
-            const value = rebaseOnlineValue(base[key], local[key], remote[key])
-            if (value !== undefined) merged[key] = value
-        }
-        return merged
-    }
-    // Shared fields changed by authority (for example a terminal result) win.
-    return remote
-}
-
 // The public terrain of lobby games by gameID (game:terrain under the server's HIDDEN_INFO, PRD sec. 6.3): sent once
 // per game:open, before the board; the boards then carry no nature, only terrainId and terrainChanges.
 const onlineTerrains = new Map()
@@ -519,31 +488,6 @@ function SetupServerCommunicationLogic(gameID) {
             onlineCommit = commit
             return 'continued'
         }
-        let restored = board
-        let undo, selected, runningTimer
-        if (continuing) {
-            const local = JSON.parse(JSON.stringify(getGameObject()))
-            restored = {...board}
-            for (const key of ['grid', 'players', 'external', 'externalProduction', 'nature', 'goldmines'])
-                restored[key] = rebaseOnlineValue(acceptedBoard[key], local[key], board[key])
-            // The current turn's clock and undo scope continue across peer commits.
-            restored.timers = board.timers.map((value, index) =>
-                index === whooseTurn ? local.timers[index] : value)
-            runningTimer = timer
-            selected = gameEvent.selected.notEmpty() ? {
-                coord: {...gameEvent.selected.coord}, unit: !!gameEvent.selected.isUnit
-            } : null
-            undo = actionManager.arr
-            const lists = packed => packed.players.map(player => ({
-                units: player.units.map(unit => ({...unit.coord})),
-                towns: player.towns.map(town => ({...town.coord}))
-            }))
-            for (const action of undo) {
-                action.playerEntityLists = rebaseOnlineValue(lists(acceptedBoard), action.playerEntityLists, lists(board))
-                action.externalOrder = rebaseOnlineValue(acceptedBoard.external.map(e => e.coord),
-                    action.externalOrder, board.external.map(e => e.coord))
-            }
-        }
         // Clear references and panels while their old board still exists.
         // A received board may remove a selected entity or hide its cell.
         // A lobby game opened from the menu may have no board yet.
@@ -551,26 +495,12 @@ function SetupServerCommunicationLogic(gameID) {
             gameEvent.removeSelection()
             gameEvent.hideAll()
         }
-        loadFromJson(JSON.stringify(restored))
+        loadFromJson(JSON.stringify(board))
         if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
         acceptedBoard = board
-        // A continued co-op turn keeps its action stream; any other board starts the log and seq from this board.
-        if (!continuing) onlineActionStream()?.restart()
-        if (continuing) {
-            timer = runningTimer
-            actionManager.arr = undo
-            gameEvent.removeSelection()
-            if (selected) {
-                const entity = selected.unit ? grid.getUnit(selected.coord) : grid.getBuilding(selected.coord)
-                if (entity.notEmpty() && (!isFogOfWar ||
-                        grid.fogOfWar[selected.coord.x][selected.coord.y])) {
-                    entity.select()
-                    gameEvent.selected = entity
-                }
-            }
-        }
+        onlineActionStream()?.restart()
         if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
         onlineCommit = commit || null
         // A partial board's end comes from the server's status, not from the local lists.
@@ -578,7 +508,7 @@ function SetupServerCommunicationLogic(gameID) {
             showHiddenGameEnd()
             return 'ended'
         }
-        return continuing ? 'continued' : true
+        return true
     }
     // The server refused an action of this turn and sent its board after the accepted ones (TASK-686): load it in
     // place of the local state, which ran ahead. The turn, its clock and (when the turn was ended locally and its
