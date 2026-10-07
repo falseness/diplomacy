@@ -227,7 +227,8 @@ function createTutorial5Map() {
     // 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. 6 ember archers and a bulwark
     // stand 3-6 hexes from the walls; two ranged portals and a heavy one keep sending more. Attacking at once
     // loses; ordering 2 KOHb (town + barrack) and waiting behind the walls until round 4, then attacking with
-    // 4 KOHb, wins.
+    // 4 KOHb, wins. Mountains on the flanks of the field and the walls' open ends are left free: the sortie
+    // needs them (closing (4,0)/(4,8) makes the intended plan lose).
     let redSide = []
     for (let x = 0; x <= 4; ++x) {
         for (let y = 0; y < 9; ++y) {
@@ -269,9 +270,11 @@ function createTutorial5Map() {
             }
         ],
         [],
-        [],
-        coordDictionary([[5, 6]]),
-        [],
+        // Lakes guard the town's back corners and split the demons' field into a north and a south lane.
+        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [10, 4], [11, 4]]),
+        coordDictionary([[5, 6], [6, 0], [16, 0], [16, 8]]),
+        // Bushes inside the walls stop the ember archers' arrows; the others grow in the field.
+        coordDictionary([[2, 1], [3, 6], [1, 7], [7, 1], [6, 8], [11, 5], [12, 6], [13, 3]]),
         [],
         {type: 'rectangular'},
         {
