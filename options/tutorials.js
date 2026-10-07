@@ -183,17 +183,21 @@ function createTutorial3Map() {
 }
 
 function createTutorial4Map() {
-    // A full 1v1 from the very beginning: each side has one town (with its spawned noob) and the
-    // default gold. The map is mirror-symmetric about column 9 (x -> 18 - x keeps the column
-    // parity, so hex neighbours mirror exactly): red's town (1,4) faces blue's (17,4) across a
-    // mountain ridge on each side, two neutral towns and a lake on the centre column, bushes and
-    // hills on the flanks.
+    // A full 1v1 from the very beginning: each side has one town (with its spawned noob), but blue
+    // starts with a war chest of 250 gold against red's 100 and spends it on an army at once. The map
+    // is mirror-symmetric about column 7 (x -> 14 - x keeps the column parity, so hex neighbours
+    // mirror exactly): each town backs onto lakes and corner mountains and faces the centre behind a
+    // mountain ridge; two neutral towns sit on the centre column among bushes, with a lake between
+    // them (no hills: a Hill is drawn with the mountain picture). Buying units every turn and sending
+    // each one off at once trickles them into blue's bigger army and loses. Growing first (suburbs and
+    // a farm while the neutral towns are taken), gathering 8 units and only then attacking together
+    // wins.
     let map = new GameMap(
-        {x: 19, y: 10},
+        {x: 15, y: 10},
         [
             {
                 rgb: {r: 208, g: 208, b: 208},
-                towns: [{x: 9, y: 2}, {x: 9, y: 7}]
+                towns: [{x: 7, y: 1}, {x: 7, y: 8}]
             },
             {
                 rgb: {r: 255, g: 0, b: 0},
@@ -202,14 +206,14 @@ function createTutorial4Map() {
             {
                 rgb: {r: 98, g: 168, b: 222},
                 playerType: 'SimpleAiPlayerWithEconomy',
-                towns: [{x: 17, y: 4}]
+                gold: 250,
+                towns: [{x: 13, y: 4}]
             }
         ],
         [],
-        coordDictionary([[9, 4], [9, 5]]),
-        coordDictionary([[5, 4], [5, 5], [6, 5], [13, 4], [13, 5], [12, 5]]),
-        coordDictionary([[3, 7], [4, 8], [15, 7], [14, 8]]),
-        coordDictionary([[7, 2], [3, 1], [11, 2], [15, 1]])
+        coordDictionary([[7, 4], [7, 5], [0, 1], [0, 7], [14, 1], [14, 7]]),
+        coordDictionary([[4, 4], [4, 5], [5, 5], [10, 4], [10, 5], [9, 5], [0, 0], [0, 9], [14, 0], [14, 9]]),
+        coordDictionary([[3, 7], [4, 8], [11, 7], [10, 8], [6, 7], [8, 7], [3, 1], [5, 2], [11, 1], [9, 2]])
     )
     map.testName = 'tutorial 4'
     return map
