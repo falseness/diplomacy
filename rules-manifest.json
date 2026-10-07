@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "c6ad08d383ddce78b077d73f02c42139ae53f9c8310689bf92aaf922caa8d2b8",
+  "rulesVersion": "0a013b480eaa998fc33de73c008d56a6e88661a4337dd40822376f102c1bc5c4",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -25,18 +25,18 @@
     },
     {
       "path": "options/gameObjectVariables.js",
-      "sha256": "5f7a79a8b498305b05d7372934d830ff7f7939a97bcceebc38be4ed3398e132a",
-      "bytes": 1839
+      "sha256": "424dd39f6d8e9d9ebfd0c1dbc1165b199d5fa1fcd2311e64923a0c45a3d585ce",
+      "bytes": 2040
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "1fa40acd58473ce6d042154ee8535846c8823fff8a884468e723165a46b9c8b7",
-      "bytes": 65054
+      "sha256": "8dc0ef2eaa31516b1d8e31aac4cf35059655cc8e98dacccc7afc941cd54d83c0",
+      "bytes": 65272
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "fabc37dedd24667b61ae06d5f8c125561587912bd161c0cfc2c9cfbdc6d3b093",
-      "bytes": 14073
+      "sha256": "299590509c2146554ab673829b4849f1581389a207c01a6f270da07abff197b5",
+      "bytes": 38468
     },
     {
       "path": "options/tutorialProgress.js",
@@ -45,18 +45,18 @@
     },
     {
       "path": "options/tutorialManager.js",
-      "sha256": "637436d8a6ebfda3bc262603d402a29e04bdd3622ace6c6ccabf23e17a7cf384",
-      "bytes": 2859
+      "sha256": "8765ce3f8d4779dd82388551866b7ee650dec53d8ed394731294f512edba68f3",
+      "bytes": 3718
     },
     {
       "path": "options/save.js",
-      "sha256": "77e47ad46969eda72f6dc6adf6c44f53b88200666110ef7cb9c686f604799bdb",
-      "bytes": 14145
+      "sha256": "c7973683df4fe306775ed5a3aa262c3f1dbf320121c2609f14bc82b96941e0cf",
+      "bytes": 14464
     },
     {
       "path": "options/actionManager.js",
-      "sha256": "a93ddf7b830a56d7f2bafdbacfaa9f1b2e2cb36d270611329371f6cb8351cb4c",
-      "bytes": 16154
+      "sha256": "6bdbbae3b1b013b2e85c1cf818a7aae256613134e3103c2360670e2bcfbc8fbc",
+      "bytes": 19941
     },
     {
       "path": "options/classManager.js",
@@ -70,8 +70,33 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "9456030c3e2d76569f252d355820e709e64f6e95486dda83d466f67656b176d7",
-      "bytes": 1177
+      "sha256": "893817a272af6cc48f6c7c7726480070462940307b34b6c452d76e2f80b1db63",
+      "bytes": 1609
+    },
+    {
+      "path": "options/actionApi.js",
+      "sha256": "63708113d09f48553f8bfea90628a643ce8b3cc91ba57c4b754146faeda02a5d",
+      "bytes": 17310
+    },
+    {
+      "path": "options/sha256.js",
+      "sha256": "60d58afd7349f49c96709118d3e67df7df53be4284f1062b7f81d121fa8c9832",
+      "bytes": 4829
+    },
+    {
+      "path": "options/actionRecorder.js",
+      "sha256": "5e6f1a9fd0e1e4afbe35b7063290678fb8f9717d4f1d9280332b60f4a09a5a04",
+      "bytes": 4973
+    },
+    {
+      "path": "options/reveal.js",
+      "sha256": "8869b326567d4a98e930c3971f5562768efb9fd034cfb7a2c941687b84863fed",
+      "bytes": 28854
+    },
+    {
+      "path": "options/filteredView.js",
+      "sha256": "9cd09ee1e50c013332af37137b3f48929bcfce7ec1ce2df7a1fc0a83353fc389",
+      "bytes": 6598
     },
     {
       "path": "ai/coop-map-scaling.js",
@@ -114,14 +139,19 @@
       "bytes": 1109
     },
     {
+      "path": "render/moveTween.js",
+      "sha256": "4d5eac615287868cc628a3120c01f4ad80b60c1f921f09b578288fe68a81f907",
+      "bytes": 3469
+    },
+    {
       "path": "render/draw.js",
-      "sha256": "77bc0efb5fc06d8cc93df8b5ce47f869a59fbbd149ffc36aa8defe431d59c2a2",
-      "bytes": 3296
+      "sha256": "8afcf36d604ef2fd5e149c75c58cf8447184b3dbd2dc076a8b06422bb11828f8",
+      "bytes": 3616
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "9e65592f5079b7afe6cb1bda1d4fed64b71c874cf994a26b18c24f8662648476",
-      "bytes": 9651
+      "sha256": "c7c2dbc402120c13f4eb64bec8003a4c54ffe1113e53e3f07e4338367c3ec19b",
+      "bytes": 9527
     },
     {
       "path": "interface/barrackinterface.js",
@@ -135,8 +165,8 @@
     },
     {
       "path": "interface/statisticsinterface.js",
-      "sha256": "213b01a67ee5dc556ab9647d4711880ae1a4635f05cba942c4257aa7cb8930ff",
-      "bytes": 6376
+      "sha256": "08ee562bca15197af2c49db9469bfaa68f90fa2aebf5519e8e435998edf9115b",
+      "bytes": 6781
     },
     {
       "path": "interface/nextTurnPause.js",
@@ -245,8 +275,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "be085e7af0d3942ff089df37c46f5b04dbfa6fd402365cd7d959a2906c312786",
-      "bytes": 24064
+      "sha256": "1c9071327ec0448ffe51d3844d13f25d9f50a8ef051e1da8fe9edb316b79f447",
+      "bytes": 24200
     },
     {
       "path": "options/onlineHubRows.js",
@@ -259,19 +289,24 @@
       "bytes": 5476
     },
     {
+      "path": "menu/replay.js",
+      "sha256": "c7431f17b3bb1bb02658eae983f6cb19188ccd39d66565014fe0e80047f0ddd2",
+      "bytes": 25824
+    },
+    {
       "path": "menu/menu.js",
-      "sha256": "5559650e36be1fdc4ea0ff8283defa8c511b7459c86826a9758ffba537bfb2dd",
-      "bytes": 53025
+      "sha256": "eeeda0c52266142721592f74dd1d131993765b0abbc851e1c91c4981c9903145",
+      "bytes": 55348
     },
     {
       "path": "sprites/hexagon.js",
-      "sha256": "364392a5f459eddc4ee7d18ac18b31490e17010ec4064495af2c0b6a6366e7b4",
-      "bytes": 3345
+      "sha256": "39b371d56d116e79a1530caead02ccc418aa610adfaa6c7fd8f1a7d63302d8d4",
+      "bytes": 3840
     },
     {
       "path": "groups/grid.js",
-      "sha256": "c5b2b7d2321079bc3dae560b3f9a1baafef8caa91d4d20e57cbdb8e8f5c8342a",
-      "bytes": 20750
+      "sha256": "b56f3f0e3d5d1221addc80335e242ec3e38b4fe27db03088d74a644dc6baab77",
+      "bytes": 23738
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -285,8 +320,8 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "2392c3405689956ea6135815f9b8046f69c64b245e2f3bfe99df5200fb28f720",
-      "bytes": 25309
+      "sha256": "5f9afb41b46abefa06575d3d8d1f6b3602aef70324ec060d5421cbeab49db4be",
+      "bytes": 25591
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
@@ -370,8 +405,8 @@
     },
     {
       "path": "sprites/entities/buildings/nature/goldmine.js",
-      "sha256": "16886c03890981fd774ba094eb6f92cde5e79335271bcd26ff5c7b2729bc47e4",
-      "bytes": 1379
+      "sha256": "b74de0396340f492dbebf0521e54805a985c186469c697f25dc8112838c5c3ba",
+      "bytes": 1599
     },
     {
       "path": "sprites/entities/buildings/nature/nature.js",
@@ -390,8 +425,8 @@
     },
     {
       "path": "sprites/entities/buildings/nature/interactableNature.js",
-      "sha256": "d6d733e8e50c2d524341bfa56778baab9288dbd699bf0d30d7e26a0aa8a27ae0",
-      "bytes": 1081
+      "sha256": "504a50961c3110656f00d786d53569653cf7aeecc0c2a73c613853e9487649af",
+      "bytes": 1335
     },
     {
       "path": "sprites/entities/buildings/tower.js",
@@ -415,8 +450,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/production.js",
-      "sha256": "94b40095ad37c7f5c81312a011a7723fbd1eb2dc7f6110ed66c974cc5cba0880",
-      "bytes": 16585
+      "sha256": "b51a6220930417fee1af9815d7f59e267e9c46550eb7f952c9b779bbad6d11bb",
+      "bytes": 16905
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",
@@ -430,8 +465,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/town.js",
-      "sha256": "08a2cf30102b3b923fa6f3fda0ba3a666378c25aa6b54b5da9d6cddd4734dcf0",
-      "bytes": 15466
+      "sha256": "a40b2e521986cfaa62a06c236881484d8ffbdb7657735602e82725778f1bb1ad",
+      "bytes": 15699
     },
     {
       "path": "ai/demon-config.js",
@@ -460,8 +495,8 @@
     },
     {
       "path": "player.js",
-      "sha256": "655d800897a7bdfcf173ea8f21247d4c9f98bd2f683b32873910a11087d5aeb9",
-      "bytes": 22155
+      "sha256": "029bfb97d72494fef359205006a4d93c44bc3340197a5fd2d360824d651e3f52",
+      "bytes": 23408
     },
     {
       "path": "ai/players.js",
@@ -470,8 +505,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "dc5596285e9a3f55b5a5e9118064beba57c6db83b6e66dca0e0a03eab8d7ea00",
-      "bytes": 7429
+      "sha256": "72fdc5038c2a7e450651c19eedec0b883243ffc1a79a55b1f2aa287ab5070a84",
+      "bytes": 7673
     },
     {
       "path": "managers.js",
@@ -480,8 +515,8 @@
     },
     {
       "path": "gameObjectSerialization.js",
-      "sha256": "2b1ca8596df63094f0f6c469ee64036811425dc64c88671d07b6634f383c758d",
-      "bytes": 2708
+      "sha256": "0613b479182daa78dd8e7c82e7e4c7bfb7f403a824201662ccae4ca947c365a1",
+      "bytes": 22711
     }
   ]
 }

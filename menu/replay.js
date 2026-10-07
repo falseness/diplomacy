@@ -113,6 +113,15 @@ function replayExecuteAction(action) {
     return pushed()
 }
 
+// The action as the rules API (options/actionApi.js) takes it: its destroy layer is 'building' for every own
+// building (options/actionRecorder.js records it so), while a recording may name the building's kind
+// ('town', 'production'; replayBuildingLayer), which replayExecuteAction checks.
+function replayEngineAction(action) {
+    if (action.t === 'destroy' && (action.layer === 'town' || action.layer === 'production'))
+        return {...action, layer: 'building'}
+    return action
+}
+
 function replayBuildingLayer(building) {
     if (building.isTown())
         return 'town'
@@ -253,7 +262,7 @@ class ReplaySession {
             const path = animate && unit && unit.notEmpty() ? replayUnitPath(action.from, action.to) : null
             let result
             try {
-                result = typeof applyAction == 'function' ? applyAction(action) : replayExecuteAction(action)
+                result = typeof applyAction == 'function' ? applyAction(replayEngineAction(action)) : replayExecuteAction(action)
             } catch (error) {
                 console.log('replay action failed', error)
                 result = {ok: false, reason: String(error && error.message || error)}
