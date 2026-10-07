@@ -792,6 +792,80 @@ function createTutorial14Map() {
     return map
 }
 
+function createTutorial15Map() {
+    // Fortify in time: red's town (2,4) sits behind a mountain line at column 5 whose only gap is the gate
+    // (5,3),(5,4). Blue's wave (SimpleAiPlayer: 6 normchels, 4 archers, economy off) starts at columns 14..16,
+    // 4-5 rounds of marching from the gate. Red's farmland road (6..13,4) is part of its town's suburbs, so the
+    // approach lies in red's sight and blue (which only moves through hexes red sees) marches in at once.
+    // Red's 70 gold pays for 2 towers (30 each) and the walls (2 each); both take 4 turns. Spending it on units (what
+    // SimpleAiPlayerWithEconomy does for red) sends them out to meet the wave and red loses the town by round 9.
+    // Ordering towers (4,3),(4,5) and walls in the gate (5,3),(5,4) on turn 1 finishes them in round 4, when the
+    // wave reaches the gate; the archers stand on the towers (range 3) and shoot the normchels hacking at the
+    // walls, and the town still stands at round 16.
+    let band = (fromX, toX) => {
+        let cells = []
+        for (let x = fromX; x <= toX; ++x) {
+            for (let y = 0; y < 9; ++y) {
+                cells.push({x: x, y: y})
+            }
+        }
+        return cells
+    }
+    let mountains = [[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8]]
+    let road = []
+    for (let x = 6; x <= 13; ++x) {
+        road.push({x: x, y: 4})
+    }
+    let map = new GameMap(
+        {x: 18, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 70,
+                towns: [{x: 2, y: 4}],
+                suburbs: [{
+                    town: {x: 2, y: 4},
+                    cells: [{x: 2, y: 4}].concat(neighborhood[0].map(offset => ({x: 2 + offset[0], y: 4 + offset[1]})), road),
+                    expansionCells: band(0, 4).concat([{x: 5, y: 3}, {x: 5, y: 4}])
+                }],
+                units: [
+                    {x: 2, y: 3, type: Archer},
+                    {x: 2, y: 5, type: Archer}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 14, y: 3, type: Normchel},
+                    {x: 14, y: 4, type: Normchel},
+                    {x: 14, y: 5, type: Normchel},
+                    {x: 15, y: 2, type: Normchel},
+                    {x: 15, y: 4, type: Normchel},
+                    {x: 15, y: 6, type: Normchel},
+                    {x: 15, y: 3, type: Archer},
+                    {x: 15, y: 5, type: Archer},
+                    {x: 16, y: 3, type: Archer},
+                    {x: 16, y: 4, type: Archer}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary(mountains),
+        coordDictionary([]),
+        coordDictionary([])
+    )
+    map.testName = 'tutorial 15'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -809,5 +883,7 @@ const tutorials = [
     {id: 'tutorial-12', title: 'Tutorial 12: Scout First', pass: 'enemyUnitsDead', get map() { return createTutorial12Map() }},
     {id: 'tutorial-13', title: 'Tutorial 13: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-14', title: 'Tutorial 14: Grow Your Economy', pass: 'enemyLost', get map() { return createTutorial14Map() }}
+    {id: 'tutorial-14', title: 'Tutorial 14: Grow Your Economy', pass: 'enemyLost', get map() { return createTutorial14Map() }},
+    {id: 'tutorial-15', title: 'Tutorial 15: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+        get map() { return createTutorial15Map() }}
 ]
