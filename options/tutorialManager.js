@@ -12,6 +12,9 @@ class TutorialManager {
         tutorialResultInterface.hide()
         const map = tutorial.map
         map.tutorial = {id: id}
+        // 'surviveRounds' counts red's units only when the map gives red no town.
+        const human = map.players[TUTORIAL_HUMAN_SLOT]
+        TutorialManager.humanStartsWithTown = !!(human && human.towns && human.towns.length)
         GameManager.start(map, true)
     }
     // Called after every human move and every turn; true once the tutorial is over.
@@ -49,6 +52,19 @@ class TutorialManager {
             case 'coopVictory':
                 human.updateTowns()
                 return players[0].coopResult === 'victory' && human.towns.length > 0
+            case 'captureTowns':
+                return tutorial.targets.every(target => {
+                    const building = grid.getCell(target).building
+                    return building instanceof Town && !building.killed && building.player === human
+                })
+            case 'surviveRounds':
+                if (gameRound < tutorial.rounds)
+                    return false
+                human.updateTowns()
+                if (human.towns.length > 0)
+                    return true
+                human.updateUnits()
+                return !TutorialManager.humanStartsWithTown && human.units.length > 0
             default:
                 throw new Error('Unknown tutorial pass rule ' + tutorial.pass)
         }

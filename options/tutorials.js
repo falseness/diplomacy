@@ -1,7 +1,9 @@
 // Hand-made tutorial maps. The human always plays red (slot 1, fog of war) against
 // blue (slot 2, an AI player). `pass` picks the win rule (TutorialManager.isPassed):
 // 'enemyUnitsDead' every blue unit is dead, 'enemyLost' blue has no towns and no units,
-// 'coopVictory' the co-op result is victory while red still owns a town.
+// 'coopVictory' the co-op result is victory while red still owns a town,
+// 'captureTowns' red owns every town of `targets` [{x, y}], 'surviveRounds' gameRound
+// reaches `rounds` while red still owns a town (a unit if the map gives red no town).
 // Unit classes load after this file, so each map is built on access.
 function createTutorial1Map() {
     // Blue holds column 3, red stands directly to its right in column 4. The red
