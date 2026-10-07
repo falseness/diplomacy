@@ -82,6 +82,18 @@ class TutorialManager {
         menuBack()
         requestAnimationFrame(() => TutorialManager.start(id))
     }
+    // The id of the tutorial after the running one in the list, or null after the last.
+    static nextId() {
+        const index = tutorials.findIndex(tutorial => tutorial.id === gameSettings.tutorial.id)
+        return index >= 0 && index + 1 < tutorials.length ? tutorials[index + 1].id : null
+    }
+    // Starts the next tutorial directly, the same way as retry.
+    static next() {
+        const id = TutorialManager.nextId()
+        tutorialResultInterface.hide()
+        menuBack()
+        requestAnimationFrame(() => TutorialManager.start(id))
+    }
     // The tutorial list; its enter re-reads the passed ids, so a fresh pass shows its check mark.
     static backToTutorials() {
         tutorialResultInterface.hide()
