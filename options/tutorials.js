@@ -754,17 +754,22 @@ function createTutorial12Map() {
 }
 
 function createTutorial13Map() {
-    // Escort the catapults: blue's town (14,4) sits in a pocket of mountains (13,2), (14,2), (13,5), (14,6); its
-    // only ways in are the bastions (13,3) and (13,4) on its west suburbs. Catapults are the only red units that
-    // hurt buildings from range (2..5 hexes, 4 damage), but they have 1 hp and never hit units. Blue's 3 KOHb
-    // raiders wait in front of the pocket, (8,3), (8,5), (9,4), hidden in the fog. Red's catapults and archer start
-    // in front of its normchels: marching everything at the town (what SimpleAiPlayer does for red) sends the
-    // catapults and the archer into the raiders alone, and the normchels lose the fight that is left. Sending the
-    // normchels ahead with the archer and the catapults behind them kills the raiders first; then the catapults
-    // shoot both bastions and the town down to 0 hp from 5 hexes, and a normchel walks through the gap into the
-    // town. The economy is off for both sides: no production, and red (no town) does not go bankrupt.
+    // Escort the catapults: blue's town (14,4) sits in a pocket of mountains closed on the west by three walls
+    // (12,3)-(12,5). Archers on the towers (14,3) and (14,5) shoot 3 hexes over anything, so every hex in front of
+    // the walls is under their arrows, and two noobs wait behind the walls. Three KOHb raiders (speed 4) wait in
+    // the fog east of a mountain ridge whose only pass is (6,3)-(6,5). Catapults are the only red units that hurt
+    // buildings from range (2..5 hexes, 4 damage), but they have 1 hp and never hit units; nobody heals (red has
+    // no town). Marching everything at the town (what SimpleAiPlayer does for red) sends the catapults and the
+    // archers into the raiders alone, and the normchels left die at the walls under the towers' arrows; storming
+    // the walls without the catapults fails the same way. Lining the normchels up in the pass with the archers and
+    // the catapults behind them kills the raiders where they cannot reach the catapults; then the catapults shoot
+    // the towers from 5 hexes (out of the archers' reach), knock the walls down and bring the town to 0 hp, and a
+    // normchel walks in. The economy is off for both sides: no production, and red (no town) does not go bankrupt.
+    let lakes = [[0, 0], [0, 1], [0, 8], [6, 2], [6, 6], [11, 8], [12, 8]]
+    let mountains = [[6, 0], [6, 1], [6, 7], [6, 8], [13, 2], [14, 2], [15, 2], [13, 5], [14, 6], [15, 5], [15, 0], [15, 8]]
+    let bushes = [[3, 0], [3, 8], [8, 1], [8, 7], [10, 0], [10, 8]]
     let map = new GameMap(
-        {x: 15, y: 9},
+        {x: 16, y: 9},
         [
             {
                 rgb: {r: 208, g: 208, b: 208},
@@ -778,8 +783,11 @@ function createTutorial13Map() {
                     {x: 3, y: 3, type: Catapult},
                     {x: 3, y: 5, type: Catapult},
                     {x: 3, y: 4, type: Archer},
+                    {x: 2, y: 4, type: Archer},
                     {x: 1, y: 3, type: Normchel},
-                    {x: 1, y: 5, type: Normchel}
+                    {x: 1, y: 4, type: Normchel},
+                    {x: 1, y: 5, type: Normchel},
+                    {x: 2, y: 3, type: Normchel}
                 ]
             },
             {
@@ -787,18 +795,23 @@ function createTutorial13Map() {
                 playerType: 'SimpleAiPlayer',
                 economyEnabled: false,
                 towns: [{x: 14, y: 4}],
-                bastions: [{x: 13, y: 3}, {x: 13, y: 4}],
+                walls: [{x: 12, y: 3}, {x: 12, y: 4}, {x: 12, y: 5}],
+                towers: [{x: 14, y: 3}, {x: 14, y: 5}],
                 units: [
-                    {x: 8, y: 3, type: KOHb},
-                    {x: 8, y: 5, type: KOHb},
-                    {x: 9, y: 4, type: KOHb}
+                    {x: 9, y: 3, type: KOHb},
+                    {x: 9, y: 5, type: KOHb},
+                    {x: 10, y: 4, type: KOHb},
+                    {x: 14, y: 3, type: Archer},
+                    {x: 14, y: 5, type: Archer},
+                    {x: 13, y: 3, type: Noob},
+                    {x: 13, y: 4, type: Noob}
                 ]
             }
         ],
         [],
-        coordDictionary([]),
-        coordDictionary([[13, 2], [14, 2], [13, 5], [14, 6]]),
-        coordDictionary([]),
+        coordDictionary(lakes),
+        coordDictionary(mountains),
+        coordDictionary(bushes),
         coordDictionary([])
     )
     map.testName = 'tutorial 13'
