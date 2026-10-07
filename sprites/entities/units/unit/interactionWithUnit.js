@@ -410,8 +410,11 @@ class VisionWay {
 
             fogOfWarArr[v.x][v.y] += value
 
-            if (dist[v.x][v.y] == visionRange || (!isIgnoreBarriers && !coordsEqually(v, v0) &&
-                    grid.arr[v.x][v.y].building.isBarrier()))
+            // The InvisibleMountain ring of a hexagonal map ends the vision even for a unit on a
+            // tower/hill/town (isIgnoreBarriers): nothing beyond the map edge is seen.
+            let building = grid.arr[v.x][v.y].building
+            if (dist[v.x][v.y] == visionRange || (!coordsEqually(v, v0) &&
+                    (building.isMapEdge || (!isIgnoreBarriers && building.isBarrier()))))
                 continue
 
             let neighbours = grid.arr[v.x][v.y].hexagon.neighbours
