@@ -508,13 +508,18 @@ function createTutorial9Map() {
     // detour; the passes are its two ends (x 0..1 and x 13..14). Blue's army (4 normchels in column 8, 3 archers
     // behind them in column 9) blocks the road between red (3 KOHb, 2 normchels, bottom left) and the blue town
     // (14,7), which starts at 0 hp guarded only by its own noob. Riding the road (what SimpleAiPlayer does for
-    // red: it heads for the nearest enemy building) runs into the army and loses. Leaving the normchels on the
-    // road as bait while the KOHb (speed 4) ride around the mountains reaches the town long before blue's army
-    // (speed 2) can turn back; the KOHb knock the healing town down to 0 hp again and step in.
+    // red: it heads for the nearest enemy building) runs into the army and loses. Walking the normchels up the
+    // road as bait until blue's army sees them (it turns on them) while the KOHb (speed 4) ride around the
+    // mountains reaches the town long before blue's army (speed 2) can turn back; the KOHb knock the healing town
+    // down to 0 hp again and step in. The detour runs through a wood (bushes) between a peak and a pond on the
+    // north edge; a pond and rocks lie on the road's south edge, bushes along the road.
     let mountains = []
     for (let x = 2; x <= 12; ++x) {
         mountains.push([x, 4])
     }
+    mountains.push([6, 0], [7, 0], [0, 8])
+    let lakes = [[10, 0], [11, 0], [3, 8], [4, 8], [12, 8]]
+    let bushes = [[3, 1], [4, 1], [4, 2], [8, 1], [9, 2], [10, 2], [6, 6], [10, 7], [11, 5]]
     let map = new GameMap(
         {x: 15, y: 9},
         [
@@ -551,9 +556,9 @@ function createTutorial9Map() {
             }
         ],
         [],
-        coordDictionary([]),
+        coordDictionary(lakes),
         coordDictionary(mountains),
-        coordDictionary([]),
+        coordDictionary(bushes),
         coordDictionary([])
     )
     map.testName = 'tutorial 9'
@@ -561,20 +566,25 @@ function createTutorial9Map() {
 }
 
 function createTutorial10Map() {
-    // Hold the bridge: a lake (column 5, every row but 4) splits an 11x9 map; the bridge (5,4) is its only
-    // passable hex, and the lake hex (4,5) leaves the bridge a single exit on red's side, (4,4). Blue's 8 noobs
-    // and 2 archers start on the far side (columns 8..10); red's 2 normchels and 2 archers stand at the exit.
+    // Hold the bridge: a river (column 5, every row but 4, widening into the lakes (4,8), (6,0) and (6,8)) splits
+    // an 11x9 map; the bridge (5,4) is its only passable hex, and the lake hex (4,5) leaves the bridge a single
+    // exit on red's side, (4,4). Blue's 8 noobs and 2 archers start on the far side (columns 8..10); red's 2
+    // normchels stand at the exit and its 2 archers behind it, one on a hill (3,3) (+1 range over the bridge).
     // Crossing the bridge (what SimpleAiPlayer does for red) gets red surrounded by the noobs on the open far
     // bank. Holding the exit with one normchel (the other relieves it when wounded) means only the unit on the
     // bridge can strike it, while red's archers shoot whoever queues on the bridge; once blue's numbers are
-    // gone red crosses and finishes the rest. The economy is off for both sides: without towns the upkeep would
-    // bankrupt blue's 10 units by round 8 and win the map for a red that just waits.
-    let lakes = [[4, 5]]
+    // gone red crosses and finishes the rest. Bushes and rocky corners frame both banks away from the bridge, so
+    // the archers' lines of fire onto the bridge stay open. The economy is off for both sides: without towns the
+    // upkeep would bankrupt blue's 10 units by round 8 and win the map for a red that just waits.
+    let lakes = [[4, 5], [6, 0], [6, 8], [4, 8]]
     for (let y = 0; y < 9; ++y) {
         if (y != 4) {
             lakes.push([5, y])
         }
     }
+    let mountains = [[0, 0], [1, 0], [0, 8], [10, 0], [10, 8]]
+    let bushes = [[1, 2], [2, 6], [1, 7], [8, 0], [9, 1], [8, 7], [9, 8]]
+    let hills = [[3, 3]]
     let map = new GameMap(
         {x: 11, y: 9},
         [
@@ -614,9 +624,9 @@ function createTutorial10Map() {
         ],
         [],
         coordDictionary(lakes),
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([])
+        coordDictionary(mountains),
+        coordDictionary(bushes),
+        coordDictionary(hills)
     )
     map.testName = 'tutorial 10'
     return map
