@@ -141,6 +141,41 @@ const ActionStream = {
         // The loaded board is the state after the accepted actions; its log goes on from them.
         actionLog.start({player: whooseTurn, round: gameRound}, accepted)
     },
+    // The peer commit includes our server-accepted prefix. An in-flight action may
+    // already be in it even if its ack has not reached this page yet.
+    continueFrom(update, applySnapshot) {
+        const pending = [this.inFlight, ...this.queue].filter(entry => entry && entry.seq > update.lastSeq)
+        if (this.inFlight && this.inFlight.seq <= update.lastSeq) {
+            clearTimeout(this.timer)
+            this.timer = null
+            this.inFlight = null
+        }
+        this.accepted = update.accepted.map(entry => ({...entry}))
+        this.queue = []
+        this.seq = this.inFlight ? this.inFlight.seq : update.lastSeq
+        actionManager.clear()
+        applySnapshot()
+        // The authority also rebased undo snapshots over the peer commit.
+        actionManager.arr = JSON.parse(JSON.stringify(update.undo || []))
+        const kept = []
+        let dropped = 0
+        for (const entry of pending) {
+            const result = applyAction(entry.action)
+            if (!result.ok) {
+                ++dropped
+                // Already sent: its ack/resync owns the sequence. Never resend or
+                // reuse that seq, even when it no longer applies locally.
+                continue
+            }
+            const hash = stateHash()
+            kept.push({action: entry.action, hash})
+            if (entry === this.inFlight) continue
+            this.queue.push({...entry, seq: ++this.seq, hash})
+        }
+        actionLog.start({player: whooseTurn, round: gameRound}, [...this.accepted, ...kept])
+        if (dropped) showOnlineNotice('Some pending moves no longer apply')
+        this.pump()
+    },
     stats() {
         return {...this.counters, queued: this.queue.length, inFlight: this.inFlight ? this.inFlight.seq : null}
     }

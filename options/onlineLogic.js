@@ -484,6 +484,41 @@ function SetupServerCommunicationLogic(gameID) {
         const continuing = !!(board.gameSettings?.coop && !board.hiddenInfo && acceptedBoard && active &&
             !gameEvent.waitingMode && board.gameRound === acceptedBoard.gameRound &&
             board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
+        if (continuing && typeof BROWSER_PROTOCOL !== 'undefined' && BROWSER_PROTOCOL === 2 && onlineActionStream()) {
+            const update = board.coopContinuing
+            if (!update || !Number.isSafeInteger(update.lastSeq) || !update.snapshot ||
+                    !Array.isArray(update.snapshot.cells) || !Array.isArray(update.accepted)) {
+                fail('The server sent an incomplete turn update.')
+                return false
+            }
+            onlineActionStream().continueFrom(update, () => {
+                gameEvent.removeSelection()
+                gameEvent.hideAll()
+                const cells = update.snapshot.cells.filter(cell =>
+                    JSON.stringify(packCellRecord(cell.x, cell.y)) !== JSON.stringify(cell))
+                applyCellDiff({...update.snapshot, cells})
+                // Cell application preserves object identity; restore authoritative
+                // list order too, since order participates in the state hash.
+                const order = (live, packed) => {
+                    const byCoord = new Map(live.map(value => [cellDiffKey(value.coord), value]))
+                    live.splice(0, live.length, ...packed.map(value => byCoord.get(cellDiffKey(value.coord))))
+                }
+                board.players.forEach((player, i) => {
+                    order(players[i].units, player.units)
+                    order(players[i].towns, player.towns)
+                    player.towns.forEach((town, j) => {
+                        order(players[i].towns[j].buildings, town.buildings)
+                        order(players[i].towns[j].buildingProduction, town.buildingProduction)
+                    })
+                })
+                for (const [live, packed] of [[external, board.external], [externalProduction, board.externalProduction],
+                    [nature, board.nature], [goldmines, board.goldmines]]) order(live, packed)
+                gameSettings = board.gameSettings
+            })
+            acceptedBoard = board
+            onlineCommit = commit
+            return 'continued'
+        }
         let restored = board
         let undo, selected, runningTimer
         if (continuing) {
