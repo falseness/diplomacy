@@ -43,6 +43,82 @@ class OnlineLogic {
     }
 }
 
+// Live spectating, client side (PRD sec. 8): the server (server/spectate.js) sends each other
+// player's action as game:diff {gameID, seq, actorSeat, diff, paths?}, the cells that changed as
+// this player sees them. A diff is applied in place with applyCellDiff (cell records, no
+// loadFromJson), both while waiting (waitingMode stays on and the board keeps rendering) and in
+// the middle of the local player's own turn: the local turn (whooseTurn) is never taken from a
+// remote diff, and the selection and undo stack are kept (parallel players cannot touch the cells
+// of the local player's pending actions). paths are the visible segments of the moved units' paths,
+// [{unitId, segments: [[{x, y}, ...], ...]}]; the last visible segment is drawn with the movement
+// tween (moveTween). seq numbers the messages of this socket in the game without gaps: a message
+// ahead of the next expected one is buffered until the gap is filled, an applied seq is dropped.
+const gameDiffHandler = {
+    gameID: null,
+    lastSeq: 0,
+    // seq -> message waiting for an earlier one.
+    buffered: new Map(),
+    // A new game or a new socket (the server counts seq per socket from 1).
+    reset(gameID = null, lastSeq = 0) {
+        this.gameID = gameID
+        this.lastSeq = lastSeq
+        this.buffered.clear()
+    },
+    // Takes one game:diff message; returns the applyCellDiff results of the messages applied now,
+    // in seq order (empty when it was buffered, stale or for another game).
+    receive(message) {
+        if (!message || !message.diff || (this.gameID !== null && message.gameID !== this.gameID))
+            return []
+        if (!Number.isInteger(message.seq))
+            return [this.apply(message)]
+        if (message.seq <= this.lastSeq)
+            return []
+        this.buffered.set(message.seq, message)
+        const applied = []
+        while (this.buffered.has(this.lastSeq + 1)) {
+            const next = this.buffered.get(++this.lastSeq)
+            this.buffered.delete(this.lastSeq)
+            applied.push(this.apply(next))
+        }
+        return applied
+    },
+    apply(message) {
+        if (typeof grid === 'undefined' || !grid)
+            return null
+        const diff = {...message.diff}
+        if (diff.meta) {
+            diff.meta = {...diff.meta}
+            delete diff.meta.whooseTurn
+        }
+        const segmented = Array.isArray(message.paths) ? message.paths : []
+        const hints = segmented.map(entry => this.pathHint(entry)).filter(Boolean)
+        if (hints.length || Array.isArray(diff.paths))
+            diff.paths = (Array.isArray(diff.paths) ? diff.paths : []).concat(hints)
+        const result = applyCellDiff(diff)
+        // A unit whose path left the fog has no visible start to match: it slides along the last
+        // visible segment, from where it came into view.
+        for (const hint of hints) {
+            const unit = grid.getUnit(hint.to)
+            if (unit.notEmpty() && !moveTween.isActive(unit))
+                moveTween.start(unit, hint.path)
+        }
+        return result
+    },
+    // {from, to, path} for applyCellDiff from {segments} (a hint already in that shape is kept):
+    // from is where the unit was first seen, path its last visible segment.
+    pathHint(entry) {
+        if (!entry)
+            return null
+        if (!Array.isArray(entry.segments))
+            return entry.path || (entry.from && entry.to) ? entry : null
+        const segments = entry.segments.filter(segment => Array.isArray(segment) && segment.length)
+        if (!segments.length)
+            return null
+        const last = segments[segments.length - 1]
+        return {from: segments[0][0], to: last[last.length - 1], path: last}
+    }
+}
+
 // Rebase disjoint local actions on a newer same-turn co-op view. Components
 // cannot act on one another's influence area. Coordinate-keyed entity lists
 // still need merging when both components insert/remove external entities.
@@ -196,6 +272,7 @@ function SetupServerCommunicationLogic(gameID) {
     on(socket, 'disconnect', () => fail('Connection lost.'))
     on(socket, 'error', error => error === 'KICKED' ? removedByHost() : fail('The server rejected the action.'))
     onlineCommit = null
+    gameDiffHandler.reset(gameID)
     // Competitive scheduling gives each player one active turn per round.
     // A waiting connection may become active in that same round when its
     // component predecessor finishes. Reconnect deliberately reloads authority.
@@ -340,6 +417,12 @@ function SetupServerCommunicationLogic(gameID) {
         timer.pause()
     });
 
+    // Other players' actions as this seat sees them, applied live (waiting or mid-turn).
+    on(socket, 'game:diff', message => {
+        if (socket !== onlineSocket || failed) return
+        gameDiffHandler.receive(message)
+    })
+
     const requestCurrentGame = async () => {
         const ack = await onlineSession.openGame(gameID)
         if (!ack.ok && ack.error !== 'TIMEOUT') fail('The server rejected the action.')
@@ -354,6 +437,8 @@ function SetupServerCommunicationLogic(gameID) {
         onlineCommit = null
         competitiveDelivery = null
         acceptedBoard = null
+        // The server numbers game:diff per socket, from 1 again.
+        gameDiffHandler.reset(gameID)
         // The session re-sends auth:session, then game:open.
     })
     requestCurrentGame()
