@@ -399,6 +399,56 @@ function createTutorial7Map() {
     return map
 }
 
+function createTutorial8Map() {
+    // Through the bushes: blue's 4 archers stand on the right of a 13x9 map behind a wide open field; red's
+    // 3 normchels and 2 noobs start on the left. A 2-row band of bushes (rows 0 and 1, x 1..11) runs along
+    // the top from red's side to blue's flank. Bushes block line of sight: an archer can shoot a bush hex
+    // but not past it, so a unit in the inner row or behind the band cannot be shot from the field. Walking
+    // straight across the field (what SimpleAiPlayer does for red) gets red shot on the way; moving along
+    // the bushes out of the archers' sight and striking when they come close wins.
+    let map = new GameMap(
+        {x: 13, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                towns: [],
+                units: [
+                    {x: 0, y: 4, type: Normchel},
+                    {x: 2, y: 4, type: Normchel},
+                    {x: 1, y: 4, type: Normchel},
+                    {x: 1, y: 3, type: Noob},
+                    {x: 1, y: 2, type: Noob}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                towns: [],
+                units: [
+                    {x: 12, y: 5, type: Archer},
+                    {x: 11, y: 4, type: Archer},
+                    {x: 10, y: 6, type: Archer},
+                    {x: 11, y: 3, type: Archer}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([
+            [1, 1], [1, 0], [2, 1], [2, 0], [3, 1], [3, 0], [4, 1], [4, 0], [5, 1], [5, 0], [6, 1], [6, 0],
+            [7, 1], [7, 0], [8, 1], [8, 0], [9, 1], [9, 0], [10, 1], [10, 0], [11, 1], [11, 0]
+        ]),
+        coordDictionary([])
+    )
+    map.testName = 'tutorial 8'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -406,5 +456,6 @@ const tutorials = [
     {id: 'tutorial-4', title: 'Tutorial 4', pass: 'enemyLost', get map() { return createTutorial4Map() }},
     {id: 'tutorial-5', title: 'Tutorial 5', pass: 'coopVictory', get map() { return createTutorial5Map() }},
     {id: 'tutorial-6', title: 'Tutorial 6', pass: 'coopVictory', get map() { return createTutorial6Map() }},
-    {id: 'tutorial-7', title: 'Tutorial 7: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }}
+    {id: 'tutorial-7', title: 'Tutorial 7: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
+    {id: 'tutorial-8', title: 'Tutorial 8: Through the Bushes', pass: 'enemyUnitsDead', get map() { return createTutorial8Map() }}
 ]
