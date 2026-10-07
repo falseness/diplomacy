@@ -920,12 +920,12 @@ function createTutorial16Map() {
 }
 
 const tutorials = [
-    {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
-    {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-3', title: 'Tutorial 3', pass: 'enemyLost', get map() { return createTutorial3Map() }},
-    {id: 'tutorial-4', title: 'Tutorial 4', pass: 'enemyLost', get map() { return createTutorial4Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 5', pass: 'coopVictory', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 6', pass: 'coopVictory', get map() { return createTutorial6Map() }},
+    {id: 'tutorial-1', title: 'Tutorial 1: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
+    {id: 'tutorial-2', title: 'Tutorial 2: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
+    {id: 'tutorial-3', title: 'Tutorial 3: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
+    {id: 'tutorial-4', title: 'Tutorial 4: First Duel', pass: 'enemyLost', get map() { return createTutorial4Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 5: Hold the Walls', pass: 'coopVictory', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-6', title: 'Tutorial 6: Lose a Town, Win the War', pass: 'coopVictory', get map() { return createTutorial6Map() }},
     {id: 'tutorial-7', title: 'Tutorial 7: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
     {id: 'tutorial-8', title: 'Tutorial 8: Through the Bushes', pass: 'enemyUnitsDead', get map() { return createTutorial8Map() }},
     {id: 'tutorial-9', title: 'Tutorial 9: Cavalry Raid', pass: 'captureTowns', targets: [{x: 14, y: 7}],
