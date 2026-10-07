@@ -5,6 +5,8 @@ class Settings {
         this.moveCameraToUndoTarget = true
         this.usePolishedSprites = true
         this.animateMoves = true
+        // The 'replays' menu entry, hidden until the server serves game:replay.
+        this.showReplays = false
     }
     fromJSON(dict) {
         if (!dict) // no settings in local storage
@@ -14,6 +16,7 @@ class Settings {
         this.moveCameraToUndoTarget = dict.moveCameraToUndoTarget
         this.usePolishedSprites = dict.usePolishedSprites !== false
         this.animateMoves = dict.animateMoves !== false
+        this.showReplays = dict.showReplays === true
     }
     toJSON() {
         let res =  {
@@ -21,14 +24,16 @@ class Settings {
             alwaysDisplayMovesBar: this.alwaysDisplayMovesBar,
             moveCameraToUndoTarget: this.moveCameraToUndoTarget,
             usePolishedSprites: this.usePolishedSprites,
-            animateMoves: this.animateMoves
+            animateMoves: this.animateMoves,
+            showReplays: this.showReplays
         }
         res = {
             alwaysDisplayHPBar: this.alwaysDisplayHPBar,
             alwaysDisplayMovesBar: this.alwaysDisplayMovesBar,
             moveCameraToUndoTarget: this.moveCameraToUndoTarget,
             usePolishedSprites: this.usePolishedSprites,
-            animateMoves: this.animateMoves
+            animateMoves: this.animateMoves,
+            showReplays: this.showReplays
         }
         return res
     }
