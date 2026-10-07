@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
-<title id="title">Support demon portal: reinforcement gate with staff and cyan healing rune</title>
-<desc id="desc">Derived from the existing obsidian demon portal. Distinct support silhouette and central symbol; transparent 512 by 512 artwork.</desc>
+<title id="title">Cavalry demon portal: lancer gate with crossed lances over a charging hound</title>
+<desc id="desc">Obsidian arch from the base demon portal. Two bone lances with magenta pennants cross in front of the arch and rise above the mound, over a dark charging hound on a magenta rift, marking the cavalry category (ravager, hound). Transparent editable vector, 512 by 512.</desc>
 <defs>
 <radialGradient id="ground"><stop offset="0" stop-color="#17151b" stop-opacity="0.39"/><stop offset="0.5" stop-color="#1b181f" stop-opacity="0.22"/><stop offset="1" stop-color="#1b181f" stop-opacity="0"/></radialGradient>
 <radialGradient id="contact"><stop offset="0" stop-color="#131115" stop-opacity="0.6"/><stop offset="0.55" stop-color="#131115" stop-opacity="0.3"/><stop offset="1" stop-color="#131115" stop-opacity="0"/></radialGradient>
@@ -15,7 +15,8 @@
 <linearGradient id="cave" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#0d0b0f"/><stop offset="1" stop-color="#17151b"/></linearGradient>
 <linearGradient id="floor" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#413a4a"/><stop offset="1" stop-color="#201c24"/></linearGradient>
 <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#7c6e8e"/><stop offset="1" stop-color="#554b60"/></linearGradient>
-<radialGradient id="rift"><stop stop-color="#e6ffff"/><stop offset=".28" stop-color="#8df7ed"/><stop offset=".65" stop-color="#24bdbd"/><stop offset="1" stop-color="#125162"/></radialGradient>
+<radialGradient id="rift"><stop offset="0" stop-color="#fff0fa"/><stop offset=".28" stop-color="#ff9be0"/><stop offset=".65" stop-color="#e2259f"/><stop offset="1" stop-color="#4f0a3c"/></radialGradient>
+<linearGradient id="ivory" x1="0%" y1="80%" x2="100%" y2="15%"><stop stop-color="#958476"/><stop offset=".5" stop-color="#dac8a5"/><stop offset="1" stop-color="#fff0ce"/></linearGradient>
 <linearGradient id="horn"><stop stop-color="#cbbbd8"/><stop offset=".5" stop-color="#6f597e"/><stop offset="1" stop-color="#30233e"/></linearGradient>
 </defs>
 <g id="ground-shadows">
@@ -43,7 +44,6 @@
 <g id="recessed-entrance">
 <path d="M160 438 L164 328 Q168 214 245 208 Q324 219 329 335 L331 439 Z" fill="#381329"/>
 <path d="M178 437 L179 336 Q180 279 203 259 Q222 235 245 237 Q269 237 285 260 Q307 285 307 331 L311 439 Q245 457 178 437Z" fill="url(#rift)"/>
-<path d="M246 258 L226 305 L249 325 L221 365 L247 353 L233 429 L275 346 L252 321 L268 289 Z" fill="#fff5cd"/>
 </g>
 <g id="carved-stone-arch">
 <path d="M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 L348 436 L311 439 L307 331 Q305 286 285 260 Q269 237 245 237 Q221 237 202 261 Q179 291 178 336 L176 439 L149 441 Z" fill="url(#arch)" />
@@ -75,16 +75,19 @@
 <path d="M181 439 L213 431 L264 433 L279 442 L250 449 L206 451 L176 450 Z" fill="#6d617d" />
 <path d="M206 451 L250 449 L279 442 L276 457 L210 460 Z" fill="#494154" />
 </g>
-
-<g id="runes" fill="none" stroke="#ff879d" stroke-width="8" stroke-linejoin="round">
-<path d="M237 195 L247 184 L257 195 L247 218 Z"/>
+<g id="runes" fill="none" stroke="#ff9be0" stroke-width="8" stroke-linejoin="round">
 <path d="M148 309 L164 319 L149 329 M329 311 L345 321 L331 334"/>
 </g>
-<path d="M193 442 Q250 426 309 443 L294 451 Q249 440 206 453Z" fill="#ff5575" opacity=".65"/>
-<g id="support-staff-motif" stroke="#122f43" stroke-width="7" stroke-linejoin="round">
-<path d="M80 409 V108 M432 409 V108" stroke="#94efef" stroke-width="16"/>
-<path d="M80 30 L108 76 L80 126 L52 76Z M432 30 L460 76 L432 126 L404 76Z" fill="#83ffff"/>
-<circle cx="246" cy="111" r="55" fill="none" stroke="#94efef" stroke-width="13"/>
-<path d="M227 292 H267 V330 H305 V370 H267 V408 H227 V370 H189 V330 H227Z" fill="#e6ffff"/>
+<path d="M193 442 Q250 426 309 443 L294 451 Q249 440 206 453Z" fill="#ff4fc0" opacity=".65"/>
+<g id="cavalry-lance-motif" stroke-linejoin="round">
+<path d="M196 404 Q182 380 190 360 Q206 346 236 350 L266 346 Q276 326 290 324 L294 312 L300 330 Q314 336 312 352 L294 358 Q284 372 272 376 L290 402 L276 408 L256 382 L230 386 L210 412 L198 406 L214 382 Z" fill="#2a0f24" stroke="#fff0ce" stroke-width="6"/>
+<path d="M290 326 Q300 296 320 290 Q308 312 300 334 Z" fill="url(#ivory)" stroke="#30233e" stroke-width="3"/>
+<circle cx="296" cy="338" r="4" fill="#ffb43a"/>
+<g stroke-linecap="round">
+<path d="M104 440 L388 70 M408 440 L124 70" stroke="#30233e" stroke-width="20"/>
+<path d="M104 440 L388 70 M408 440 L124 70" stroke="url(#ivory)" stroke-width="10"/>
+</g>
+<path d="M376 86 L414 20 L404 98 Z M136 86 L98 20 L108 98 Z" fill="url(#ivory)" stroke="#30233e" stroke-width="5"/>
+<path d="M366 100 L430 112 L392 126 L420 146 L350 128 Z M146 100 L82 112 L120 126 L92 146 L162 128 Z" fill="#e2259f" stroke="#30233e" stroke-width="4"/>
 </g>
 </svg>
