@@ -35,7 +35,7 @@ async function launch(board, savedGame, previous) {
     return h;
 }
 // Installed temporarily at tests/coop/twelve-humans.test.js by the game adapter.
-// The bound is CPU time (CPU_LIMIT_S, checked at the end): the current Big H12 board (99x99, 158 portals; it was
+// The bound is CPU time (CPU_LIMIT_S, checked at the end): the current Big H12 board (99x99, 170 portals since TASK-575; it was
 // 68x68 with 36 when the bound was 60 s wall) took 55 s CPU / 50 s wall alone on this host, but over 180 s wall
 // next to two other co-op suites (TASK-452). The 900 s wall timeout only guards against a hang.
 const CPU_LIMIT_S = 180;
@@ -45,8 +45,8 @@ test('twelve humans Big: authoritative peer and persisted reconnect convergence'
  const f=createFixture(undefined,()=>{});
  f.evaluate(`globalThis.generated=generateCoopGame(12,{size:'big',seed:0});generated.start({clearValues(){external=[];externalProduction=[];nature=[];goldmines=[];gameRound=0;gameExit=false},updateCameraBorders(){}},false);whooseTurn=0;gameSettings.isOnline=true;gameSettings.coop.typedWaves={lastRound:0};`);
  const board=f.evaluate('JSON.parse(JSON.stringify(getGameObject()))');
- // Hex circle big H12: R=max(16,ceil(14*sqrt(12)))=49, side 2R+1=99; 13 portals per human + 2 heavy = 158.
- compare('Big-dimensions-roster-portals',f.evaluate('[grid.arr.length,grid.arr[0].length,gameSettings.coop.initialHumanCount,external.filter(p=>p.isDemonPortal).length]'),[99,99,12,158]);
+ // Hex circle big H12: R=max(16,ceil(14*sqrt(12)))=49, side 2R+1=99; 14 portals per human (TASK-575: two elite cavalry) + 2 heavy = 170.
+ compare('Big-dimensions-roster-portals',f.evaluate('[grid.arr.length,grid.arr[0].length,gameSettings.coop.initialHumanCount,external.filter(p=>p.isDemonPortal).length]'),[99,99,12,170]);
  let h=await launch(board);
  const snapshots=()=>Promise.all(h.clients.map(c=>new Promise((resolve,reject)=>c.timeout(5000).emit('authoritySnapshot',(e,s)=>e?reject(e):resolve(s)))));
  try {
@@ -65,6 +65,6 @@ test('twelve humans Big: authoritative peer and persisted reconnect convergence'
   const cpu=process.cpuUsage(cpuStart),cpuSeconds=(cpu.user+cpu.system)/1e6;
   console.log(`CPU_USAGE seconds=${cpuSeconds.toFixed(1)} limit=${CPU_LIMIT_S}`);
   assert(cpuSeconds<=CPU_LIMIT_S,`twelve-human case used ${cpuSeconds.toFixed(1)} s CPU, over ${CPU_LIMIT_S} s`);
-  console.log('PASS twelve-human server Big=99x99 portals=158 peers=2 reconnect=identical replay=none server_errors=0');
+  console.log('PASS twelve-human server Big=99x99 portals=170 peers=2 reconnect=identical replay=none server_errors=0');
  }finally{await h.close()}
 });
