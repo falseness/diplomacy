@@ -359,6 +359,65 @@ class Grid extends SpritesGroup {
             }
         }
     }
+    // Two layers on a hidden-information board (PRD 7.3-7.4): the fog (visible now) and the
+    // known contents (cells whose colour is known). A loading cell is uncovered by the local
+    // fog but its contents have not arrived: drawn as fog plus a glyph, and unplannable like
+    // any unknown cell (Player.ignoresCell) until markCellsKnown fills it.
+    isLoadingCell(x, y) {
+        return hiddenInfo && isFogOfWar && this.fogOfWar[x][y] > 0 && this.arr[x][y].hexagon.unknown
+    }
+    getLoadingCells() {
+        let cells = []
+        if (!hiddenInfo || !isFogOfWar)
+            return cells
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.isLoadingCell(i, j))
+                    cells.push({x: i, y: j})
+            }
+        }
+        return cells
+    }
+    // Asks onLoadingCellsNeeded once for each cell that became loading since the last call.
+    reportLoadingCells() {
+        if (!hiddenInfo || !isFogOfWar)
+            return
+        if (!this.requestedLoadingCells)
+            this.requestedLoadingCells = new Set()
+        let cells = this.getLoadingCells().filter(cell =>
+            !this.requestedLoadingCells.has(cell.x + ',' + cell.y))
+        if (!cells.length)
+            return
+        for (const cell of cells)
+            this.requestedLoadingCells.add(cell.x + ',' + cell.y)
+        onLoadingCellsNeeded(cells)
+    }
+    drawLoadingGlyph(ctx, pos) {
+        const r = basis.r * 0.3
+        ctx.save()
+        ctx.lineWidth = Math.max(1, basis.r * 0.08)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'
+        ctx.beginPath()
+        ctx.arc(pos.x, pos.y, r, -Math.PI / 2, Math.PI)
+        ctx.stroke()
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
+        for (let k = -1; k <= 1; ++k) {
+            ctx.beginPath()
+            ctx.arc(pos.x + k * r * 0.45, pos.y, ctx.lineWidth * 0.7, 0, 2 * Math.PI)
+            ctx.fill()
+        }
+        ctx.restore()
+    }
+    drawLoadingCells(ctx) {
+        if (!hiddenInfo || !isFogOfWar)
+            return
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (this.isLoadingCell(i, j))
+                    this.drawLoadingGlyph(ctx, this.arr[i][j].hexagon.calcPos())
+            }
+        }
+    }
     getSurfaceStateValue(x, y) {
         const hexagon = this.arr[x][y].hexagon
         const fogVisible = !isFogOfWar || this.fogOfWar[x][y] ? 1 : 0
@@ -538,6 +597,7 @@ class Grid extends SpritesGroup {
             this.drawEntityOverlays(ctx)
         else
             this.drawOther(ctx)
+        this.drawLoadingCells(ctx)
 
         if (this.showChanceOfWinning) {
             this.drawChanceOfWinningText(ctx)
@@ -549,6 +609,10 @@ class Grid extends SpritesGroup {
         border.draw(ctx)
     }
 }
+
+// Hook for a cell-contents request (PRD 7.4): the cells the local fog just uncovered on a
+// hidden-information board without contents. No network yet; markCellsKnown answers it.
+function onLoadingCellsNeeded(cells) {}
 
 function isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray) {
     return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray

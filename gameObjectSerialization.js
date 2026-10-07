@@ -60,6 +60,38 @@ function hiddenGameEndText() {
     return status.winner !== null ? 'Game over — Player ' + status.winner + ' wins' : 'Game over'
 }
 
+// Contents for unknown cells of a hidden-information board (PRD 7.3-7.4), e.g. the answer to
+// onLoadingCellsNeeded: [{x, y, colour, isSuburb?, building?, unit?}], building and unit packed
+// as in a board (a town as in players[i].towns, a goldmine as in goldmines). A filled cell is a
+// normal cell from then on (known contents, no longer loading); known cells are left alone.
+// Returns the number of cells filled.
+function markCellsKnown(cells) {
+    let filled = 0
+    for (const cell of cells) {
+        const hexagon = grid.arr[cell.x][cell.y].hexagon
+        if (!hexagon.unknown || !Number.isInteger(cell.colour))
+            continue
+        hexagon.firstpaint(cell.colour)
+        hexagon.isSuburb = Boolean(cell.isSuburb)
+        const building = cell.building
+        if (building && building.name === 'town')
+            unpacker.unpackTown(building)
+        else if (building && building.name === 'goldmine')
+            new Goldmine(cell.x, cell.y, building.income)
+        else if (building && building.name !== 'Empty')
+            unpacker.fullUnpackBuilding(building)
+        if (cell.unit && cell.unit.name !== 'Empty')
+            unpacker.fullUnpackUnit(cell.unit)
+        ++filled
+    }
+    // New contents can be vision barriers or always-visible nature: recompute the fog.
+    if (filled && isFogOfWar) {
+        if (gameSettings.coop) refreshCoopVision()
+        else players[whooseTurn].changeFogOfWarByVision()
+    }
+    return filled
+}
+
 function loadFromJson(game_string) {
     let game = JSON.parse(game_string)
     // A partial board: unknown cells (grid null) and partial entity lists.

@@ -208,6 +208,7 @@ class Player {
         const viewers = shared ? players.filter(player =>
             player.role === 'HUMAN' && this.isAlliedWith(player)) : [this]
         for (const viewer of viewers) viewer.accumulateVision(shared)
+        grid.reportLoadingCells()
     }
     accumulateVision(currentAssetsOnly = false) {
         for (const unit of this.units) {

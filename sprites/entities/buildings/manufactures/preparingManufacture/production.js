@@ -433,6 +433,7 @@ class SuburbProduction extends BuildingProduction {
         this.choose(town)
         if (isFogOfWar && !gameSettings.coop)
             grid.visionWay.changeFogOfWarByVision(coord, grid.fogOfWar, SUBURBSVISIONRANGE)
+        grid.reportLoadingCells()
         return this.availableHexagons.length && town.gold >= this.cost
     }
     create(coord, town) {
