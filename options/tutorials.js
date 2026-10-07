@@ -300,26 +300,28 @@ function createTutorial5Map() {
 }
 
 function createTutorial6Map() {
-    // Retreat and come back (co-op tutorial map). Red owns two towns on the axis toward the demons, the
-    // back town (3,4) and the front town (10,4), 7 hexes apart; each town has every hex within 3 steps
-    // (every suburb up to cost 5) as a suburb. Red's army (a normchel, 2 archers and a KOHb) starts on the
-    // far side among 10 portals (4 melee, 4 mage, a siege and a chaos one) that open on round 4. Attacking
-    // at once loses; pulling the army back toward the back town while both towns buy units, then
-    // counter-attacking, wins.
-    let size = {x: 25, y: 9}
-    let towns = [{x: 3, y: 4}, {x: 10, y: 4}]
+    // Retreat and come back (co-op tutorial map). The game starts on round 20 (tutorials entry startRound),
+    // so every 4 rounds melee portals spawn Brutes and mage portals Hexcasters; sudden death stays round 40.
+    // Red owns two towns on the axis toward the demons, the back town (1,4) and the front town (6,4), each
+    // with a barrack and every hex within 2 steps as a suburb, and 400 gold. Red's army (a normchel, 3 archers
+    // and a KOHb) starts on the far side among 5 portals whose demons stand on them: a Brute on each melee
+    // portal, a Hexcaster on the mage portal, a Bombard on the siege portal and the Demon Lord on the chaos
+    // portal. Attacking at once loses the army and then both towns; pulling the army back for 2 rounds while
+    // the towns buy catapults and the barracks archers, then counter-attacking, wins.
+    let size = {x: 16, y: 9}
+    let towns = [{x: 1, y: 4}, {x: 6, y: 4}]
     // Hex distance in the x-parity offset layout of sprites/sprite.js.
     let distance = (a, b) => {
         let dq = a.x - b.x
         let dr = (a.y - (a.x - (a.x & 1)) / 2) - (b.y - (b.x - (b.x & 1)) / 2)
         return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2
     }
-    // A town's suburbs: every cell within 3 steps (37 cells including the town), nearest first.
+    // A town's suburbs: every cell within 2 steps, nearest first.
     let suburbsOf = town => {
         let cells = []
         for (let x = 0; x < size.x; ++x) {
             for (let y = 0; y < size.y; ++y) {
-                if (distance(town, {x: x, y: y}) <= 3) {
+                if (distance(town, {x: x, y: y}) <= 2) {
                     cells.push({x: x, y: y})
                 }
             }
@@ -335,36 +337,46 @@ function createTutorial6Map() {
             },
             {
                 rgb: {r: 255, g: 0, b: 0},
-                gold: 850,
+                gold: 400,
                 towns: towns,
                 suburbs: towns.map(town => ({town: town, cells: suburbsOf(town), expansionCells: suburbsOf(town)})),
+                barracks: [{x: 1, y: 3, town: {x: 1, y: 4}}, {x: 6, y: 3, town: {x: 6, y: 4}}],
                 units: [
-                    {x: 18, y: 4, type: Normchel},
-                    {x: 16, y: 3, type: Archer},
-                    {x: 15, y: 4, type: Archer},
-                    {x: 16, y: 7, type: KOHb}
+                    {x: 10, y: 3, type: Normchel},
+                    {x: 11, y: 7, type: Archer},
+                    {x: 11, y: 4, type: Archer},
+                    {x: 10, y: 7, type: KOHb},
+                    {x: 13, y: 4, type: Archer}
                 ]
             }
         ],
         [],
-        [],
-        coordDictionary([]),
-        coordDictionary([[17, 0]]),
+        // Lakes guard the back town's corners and close the demons' rear.
+        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [15, 4], [15, 5], [12, 8], [13, 8]]),
+        // Mountains narrow the ground between the towns and the field's edges in front of the portals.
+        coordDictionary([[3, 0], [4, 0], [3, 8], [4, 8], [8, 0], [8, 8], [9, 8]]),
+        // Bushes around the front town give the returning archers cover.
+        coordDictionary([[5, 2], [7, 5], [5, 6]]),
         [],
         {type: 'rectangular'},
-        {tutorial: true}
+        {
+            tutorial: true,
+            // The demons start standing on their portals; a portal spawns only once its hex is free.
+            units: [
+                {x: 13, y: 3, type: Brute},
+                {x: 10, y: 4, type: Brute},
+                {x: 10, y: 1, type: Hexcaster},
+                {x: 12, y: 6, type: Bombard},
+                {x: 14, y: 1, type: DemonLord}
+            ]
+        }
     )
     map.portals = [
-        {x: 17, y: 1, category: 'melee'},
-        {x: 20, y: 7, category: 'melee'},
-        {x: 23, y: 2, category: 'melee'},
-        {x: 22, y: 5, category: 'melee'},
-        {x: 21, y: 4, category: 'mage'},
-        {x: 22, y: 0, category: 'mage'},
-        {x: 23, y: 7, category: 'mage'},
-        {x: 19, y: 4, category: 'mage'},
-        {x: 24, y: 3, category: 'siege'},
-        {x: 24, y: 5, category: 'chaos'}
+        {x: 13, y: 3, category: 'melee'},
+        {x: 10, y: 4, category: 'melee'},
+        {x: 10, y: 1, category: 'mage'},
+        {x: 12, y: 6, category: 'siege'},
+        {x: 14, y: 1, category: 'chaos'}
     ]
     map.testName = 'tutorial 6'
     return map
@@ -942,7 +954,8 @@ const tutorials = [
     {id: 'tutorial-3', title: 'Tutorial 3: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-4', title: 'Tutorial 4: First Duel', pass: 'enemyLost', get map() { return createTutorial4Map() }},
     {id: 'tutorial-5', title: 'Tutorial 5: Hold the Walls', pass: 'coopVictory', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 6: Lose a Town, Win the War', pass: 'coopVictory', get map() { return createTutorial6Map() }},
+    {id: 'tutorial-6', title: 'Tutorial 6: Lose a Town, Win the War', pass: 'coopVictory', startRound: 20,
+        get map() { return createTutorial6Map() }},
     {id: 'tutorial-7', title: 'Tutorial 7: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
     {id: 'tutorial-8', title: 'Tutorial 8: Through the Bushes', pass: 'enemyUnitsDead', get map() { return createTutorial8Map() }},
     {id: 'tutorial-9', title: 'Tutorial 9: Cavalry Raid', pass: 'captureTowns', targets: [{x: 14, y: 7}],

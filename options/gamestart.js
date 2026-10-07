@@ -360,7 +360,7 @@ class GameMap {
         if (this.coop) {
             for (const placement of this.portals || []) {
                 const coord = this.getMapCoord(placement)
-                assert(grid.getUnit(coord).isEmpty())
+                // A demon from coop.units may start standing on its portal (DemonPortal checks the owner).
                 new DemonPortal(coord.x, coord.y, placement.category)
             }
         }
