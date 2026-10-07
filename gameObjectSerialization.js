@@ -368,6 +368,8 @@ function applyCellDiff(diff) {
         const unit = grid.arr[record.x][record.y].unit
         if (unit.isEmpty())
             continue
+        // A new diff for a unit interrupts its running move tween.
+        moveTween.cancel(unit)
         if (record.unit && record.unit.name === unit.name && record.colour === unit.playerColor)
             continue
         const key = unit.playerColor + ':' + unit.name
@@ -416,10 +418,14 @@ function applyCellDiff(diff) {
     }
     // Units: kept in place, moved from the pool (a paths hint names the source cell), or new.
     const hints = new Map()
+    const hintPaths = new Map()
     for (const hint of diff && Array.isArray(diff.paths) ? diff.paths : []) {
         const to = hint.to || (hint.path && hint.path[hint.path.length - 1])
         const from = hint.from || (hint.path && hint.path[0])
-        if (to && from) hints.set(cellDiffKey(to), cellDiffKey(from))
+        if (to && from) {
+            hints.set(cellDiffKey(to), cellDiffKey(from))
+            hintPaths.set(cellDiffKey(to), Array.isArray(hint.path) ? hint.path : [from, to])
+        }
     }
     for (const record of records) {
         if (!record.unit)
@@ -441,6 +447,10 @@ function applyCellDiff(diff) {
                 unit.pos = unit.calcPos()
                 unit.trimBars()
                 changes.unitsMoved.push({from: moved.from, to: coord})
+                // Drawn sliding along the hinted path (UI only), when it starts where the unit was.
+                const path = hintPaths.get(cellDiffKey(coord))
+                if (path && cellDiffKey(path[0]) === cellDiffKey(moved.from))
+                    moveTween.start(unit, path)
             }
             else {
                 unit = unpacker.unpackUnit(record.unit, unpacker.unitClass[record.unit.name])

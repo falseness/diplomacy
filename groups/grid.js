@@ -274,7 +274,8 @@ class Grid extends SpritesGroup {
                     tmpBuildings.push(cell.building)
                 // Production silhouette under the unit standing on the cell.
                 this.drawProductionSilhouette(ctx, cell.building)
-                cell.unit.draw(ctx)
+                if (!moveTween.isActive(cell.unit))
+                    cell.unit.draw(ctx)
             }
         }
         for (let i = 0; i < tmpBuildings.length; ++i) {
@@ -302,6 +303,10 @@ class Grid extends SpritesGroup {
         }
         drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(entity)], entity.pos)
     }
+    // The cell's unit as drawn in place: none while it is tweening (moveTween draws it).
+    getStillUnit(cell) {
+        return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) ? cell.unit : undefined
+    }
     drawEntityBodies(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
@@ -312,7 +317,7 @@ class Grid extends SpritesGroup {
                 const cell = this.arr[i][j]
                 if (this.isCacheableBuilding(cell.building))
                     this.drawEntityBody(ctx, cell.building)
-                if (cell.unit.notEmpty())
+                if (this.getStillUnit(cell))
                     this.drawEntityBody(ctx, cell.unit)
             }
         }
@@ -336,12 +341,13 @@ class Grid extends SpritesGroup {
                     building.drawNextProduction(ctx)
                 }
                 // The cached unit sits under the silhouette; repaint it on top.
-                if (silhouette && cell.unit.notEmpty())
-                    this.drawEntityBody(ctx, cell.unit)
+                const unit = this.getStillUnit(cell)
+                if (silhouette && unit)
+                    this.drawEntityBody(ctx, unit)
                 if (building.hasBar)
                     buildingBars.push(building)
-                if (cell.unit.notEmpty())
-                    cell.unit.drawBars(ctx)
+                if (unit)
+                    unit.drawBars(ctx)
             }
         }
         for (let i = 0; i < buildingBars.length; ++i)
@@ -444,7 +450,7 @@ class Grid extends SpritesGroup {
                 const cell = this.arr[i][j]
                 const building = this.isCacheableBuilding(cell.building) ?
                     cell.building : undefined
-                const unit = cell.unit.notEmpty() ? cell.unit : undefined
+                const unit = this.getStillUnit(cell)
                 if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j) ||
                     this.surfaceCacheBuildings[index] != building ||
                     this.surfaceCacheUnits[index] != unit ||
@@ -470,7 +476,7 @@ class Grid extends SpritesGroup {
                 const cell = this.arr[i][j]
                 const building = this.isCacheableBuilding(cell.building) ?
                     cell.building : undefined
-                const unit = cell.unit.notEmpty() ? cell.unit : undefined
+                const unit = this.getStillUnit(cell)
                 state[index] = this.getSurfaceStateValue(i, j)
                 buildings[index] = building
                 units[index] = unit
@@ -597,6 +603,7 @@ class Grid extends SpritesGroup {
             this.drawEntityOverlays(ctx)
         else
             this.drawOther(ctx)
+        moveTween.draw(ctx)
         this.drawLoadingCells(ctx)
 
         if (this.showChanceOfWinning) {

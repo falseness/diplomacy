@@ -1257,6 +1257,7 @@ class GameManager {
         gameRound = 0
         hiddenInfo = false
         hiddenStatus = null
+        moveTween.clear()
 
         this.clearBasisValues()
     }
