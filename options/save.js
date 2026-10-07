@@ -116,6 +116,8 @@ class JsonUnpackManager {
         return building
     }
     fullUnpackBuilding(packedBuilding) {
+        if (packedBuilding.hill === true)
+            return this.unpackBuilding(packedBuilding, Hill)
         return this.unpackBuilding(packedBuilding, this.buildingClass[packedBuilding.name])
     }
     unpackBuildingProduction(packedProduction, _production, _class) {

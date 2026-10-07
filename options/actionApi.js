@@ -29,7 +29,7 @@ const ACTION_REASON = Object.freeze({
     ILLEGAL_TARGET: 'ILLEGAL_TARGET',   // the rules refused: no undo entry was pushed (or a precondition the UI enforces)
     CANNOT_AFFORD: 'CANNOT_AFFORD',     // not enough gold for the product (suburbs: for that cell's distance cost)
     NOTHING_TO_UNDO: 'NOTHING_TO_UNDO', // the undo stack of this turn is empty
-    BAD_ACTION: 'BAD_ACTION',           // malformed action: unknown type, missing/off-map coords, bad product or layer
+    BAD_ACTION: 'BAD_ACTION',           // malformed action: unknown type, missing/off-map coords (incl. the hex map edge ring), bad product or layer
     WAITING: 'WAITING'                  // gameEvent.waitingMode: the client waits for the server
 })
 
@@ -85,6 +85,9 @@ function destroyEntityWithUndo(entity) {
 
     actionManager.startAction(type)
     actionManager.lastAction.building = entity.toUndoJSON()
+    // Bushes and hills: the undo puts the restored one back at its place in `nature` (state hash order).
+    if (entity.isNature)
+        actionManager.lastAction.natureIndex = nature.filter(other => !other.killed).indexOf(entity)
 
     entity.destroy()
 }
@@ -106,7 +109,12 @@ const ActionApi = {
                 coord.y < 0 || coord.y >= grid.arr[coord.x].length) {
             return null
         }
-        return grid.arr[coord.x][coord.y]
+        let cell = grid.arr[coord.x][coord.y]
+        // The InvisibleMountain ring of a hexagonal map is outside the playable map: a click on it
+        // only clears the selection (Events.click).
+        if (cell.building && cell.building.isMapEdge)
+            return null
+        return cell
     },
     copyCoord(coord) {
         return {x: coord.x, y: coord.y}

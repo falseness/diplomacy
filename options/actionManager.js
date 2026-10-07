@@ -347,18 +347,31 @@ class ActionManager {
             }
         }
         this.restorePlayerEntityLists(undo.playerEntityLists)
-        // Portals remove themselves immediately on death, so there is no
-        // tombstone index for undoBuilding to reuse. Restore ordering without
-        // recreating any unrelated external entities.
-        if (undo.externalOrder) {
-            const rank = entity => {
-                const index = undo.externalOrder.findIndex(coord => coordsEqually(coord, entity.coord))
-                return index === -1 ? undo.externalOrder.length : index
-            }
-            external.sort((a, b) => rank(a) - rank(b))
-        }
+        this.restoreExternalOrder(undo)
         gameEvent.selected = grid.getUnit(undo.units[0].coord)
         nextTurnButton.highlightButton = false
+    }
+    // Portals remove themselves immediately on death, and getGameObject() (every state hash) prunes killed
+    // walls and towers, so there may be no tombstone index for undoBuilding to reuse. Restore ordering without
+    // recreating any unrelated external entities.
+    restoreExternalOrder(undo) {
+        if (!undo.externalOrder)
+            return
+        const rank = entity => {
+            const index = undo.externalOrder.findIndex(coord => coordsEqually(coord, entity.coord))
+            return index === -1 ? undo.externalOrder.length : index
+        }
+        external.sort((a, b) => rank(a) - rank(b))
+    }
+    // A restored bush or hill is appended to `nature`; move it back to the index it had among the
+    // live entries (killed ones are pruned, as getGameObject() does).
+    restoreNatureIndex(coord, index) {
+        removeFromArrayIfKilled(nature)
+        let current = nature.findIndex(entity => coordsEqually(entity.coord, coord))
+        if (current === -1 || index < 0)
+            return
+        let restored = nature.splice(current, 1)[0]
+        nature.splice(Math.min(index, nature.length), 0, restored)
     }
     preparingUnitUndo() {
         let undo = this.arr.pop()
@@ -403,6 +416,9 @@ class ActionManager {
         let undo = this.arr.pop()
 
         this.undoBuilding(undo.building)
+        this.restoreExternalOrder(undo)
+        if (Number.isInteger(undo.natureIndex))
+            this.restoreNatureIndex(undo.building.coord, undo.natureIndex)
         gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     destroyTownUndo() {
