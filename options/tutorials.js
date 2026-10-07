@@ -6,10 +6,14 @@
 // reaches `rounds` while red still owns a town (a unit if the map gives red no town).
 // Unit classes load after this file, so each map is built on access.
 function createTutorial1Map() {
-    // Blue holds column 3, red stands directly to its right in column 4. The red
-    // archer can kill the blue noob (dmg 2 = hp 2) and a red noob the blue archer (hp 1)
-    // on the first turn; after that red out-damages the two normchels. Hitting the
-    // nearest normchel instead (what SimpleAiPlayer does for red) loses.
+    // Red stands on the left, blue on the right, along a hedge of bushes (column 5) with a
+    // single gap at (5,3). Blue's two normchels stand in the hedge, its noob blocks the gap
+    // and its archer waits behind the noob. Bushes block shots, so the gap is the only line
+    // of fire through the hedge: the red archer can hit only the blue noob (dmg 2 = hp 2),
+    // and with the noob dead the red noob in front of the gap runs through it and kills the
+    // blue archer (hp 1); the other two noobs both hit one normchel. Then red's 4 units
+    // out-damage the two normchels. Hitting the nearest normchels instead (what SimpleAiPlayer
+    // does for red) leaves the archer shooting through the gap and loses.
     let map = new GameMap(
         {x: 9, y: 7},
         [
@@ -21,10 +25,10 @@ function createTutorial1Map() {
                 rgb: {r: 255, g: 0, b: 0},
                 towns: [],
                 units: [
-                    {x: 4, y: 1, type: Noob},
                     {x: 4, y: 2, type: Noob},
-                    {x: 4, y: 3, type: Archer},
-                    {x: 4, y: 4, type: Noob}
+                    {x: 4, y: 3, type: Noob},
+                    {x: 4, y: 4, type: Noob},
+                    {x: 3, y: 3, type: Archer}
                 ]
             },
             {
@@ -32,16 +36,17 @@ function createTutorial1Map() {
                 playerType: 'SimpleAiPlayer',
                 towns: [],
                 units: [
-                    {x: 3, y: 1, type: Normchel},
-                    {x: 3, y: 2, type: Archer},
-                    {x: 3, y: 3, type: Normchel},
-                    {x: 3, y: 4, type: Noob}
+                    {x: 5, y: 2, type: Normchel},
+                    {x: 5, y: 3, type: Noob},
+                    {x: 5, y: 4, type: Normchel},
+                    {x: 6, y: 3, type: Archer}
                 ]
             }
         ],
         [],
         [],
-        []
+        [],
+        coordDictionary([[5, 0], [5, 1], [5, 2], [5, 4], [5, 5], [5, 6]])
     )
     map.testName = 'tutorial 1'
     return map
