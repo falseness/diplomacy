@@ -1046,21 +1046,52 @@ class NicknameTree {
 }
 
 // 'tutorial': every entry of options/tutorials.js, all playable; a check mark next to the
-// passed ones (readTutorialPassed, re-read on every enter).
+// passed ones (readTutorialPassed, re-read on every enter). The entries fill columns of
+// ROWS buttons below the logo (16 tutorials = 3 columns); all titles share the font size
+// that fits the longest one.
 class TutorialTree {
-    FIRST_Y = 0.27 * HEIGHT
-    INTERVAL_Y = 0.12 * HEIGHT
-    constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+    FIRST_Y = 0.26 * HEIGHT
+    INTERVAL_Y = 0.1 * HEIGHT
+    ROWS = 6
+    COLUMN_STEP = 0.325 * WIDTH
+    BUTTON_WIDTH = 0.22 * WIDTH
+    BUTTON_HEIGHT = 0.08 * HEIGHT
+    constructor(_menu) {
         this.menu = _menu
-        this.pos0X = pos0X
         this.backButton = new Empty()
         this.entries = []
         this.passed = []
         this.buttons = [this.backButton]
     }
+    get columns() {
+        return Math.max(1, Math.ceil(tutorials.length / this.ROWS))
+    }
+    // Top-left of entry `index`; the columns (button + check mark) are centred as a block.
+    entryPos(index) {
+        const blockWidth = (this.columns - 1) * this.COLUMN_STEP + this.BUTTON_WIDTH +
+            menuOptions.marginLeft + menuOptions.rectSize
+        return {x: (WIDTH - blockWidth) / 2 + Math.floor(index / this.ROWS) * this.COLUMN_STEP,
+            y: this.FIRST_Y + (index % this.ROWS) * this.INTERVAL_Y}
+    }
+    // The menu is built before mainCtx exists: measure with an own context in Text's font.
+    fontSizeFor(titles) {
+        const fontSize = Menu.getButtonText('').fontSize, maxWidth = this.BUTTON_WIDTH * 0.9
+        const measure = document.createElement('canvas').getContext('2d')
+        measure.font = fontSize + 'px Times New Roman'
+        const width = Math.max(...titles.map(title => measure.measureText(title).width))
+        return width > maxWidth ? Math.floor(fontSize * maxWidth / width) : fontSize
+    }
+    getButton(pos, title, fontSize, clickFunc, parameters, callThis) {
+        const rect = Menu.getButtonRect(pos)
+        rect.width = this.BUTTON_WIDTH
+        rect.height = this.BUTTON_HEIGHT
+        const text = Menu.getButtonText(title)
+        text.fontSize = fontSize
+        return new MenuButton(rect, text, clickFunc, parameters, true, callThis)
+    }
     setParent(parent, _menu) {
-        const y = this.FIRST_Y + tutorials.length * this.INTERVAL_Y
-        this.backButton = Menu.getButton({x: this.pos0X, y: y}, 'back', _menu.setTree, parent, true, _menu)
+        const pos = {x: WIDTH / 2 - this.BUTTON_WIDTH / 2, y: this.FIRST_Y + Math.min(tutorials.length, this.ROWS) * this.INTERVAL_Y}
+        this.backButton = this.getButton(pos, 'back', this.fontSizeFor(['back']), _menu.setTree, parent, _menu)
         this.update()
     }
     enter() {
@@ -1069,9 +1100,10 @@ class TutorialTree {
     update() {
         this.passed = readTutorialPassed()
         const size = menuOptions.rectSize
+        const fontSize = this.fontSizeFor(tutorials.map(tutorial => tutorial.title))
         this.entries = tutorials.map((tutorial, index) => {
-            const button = Menu.getButton({x: this.pos0X, y: this.FIRST_Y + index * this.INTERVAL_Y},
-                tutorial.title, TutorialManager.start, tutorial.id, true, TutorialManager)
+            const button = this.getButton(this.entryPos(index), tutorial.title, fontSize, TutorialManager.start,
+                tutorial.id, TutorialManager)
             const checkMark = this.passed.includes(tutorial.id) ? new JustImage('checkMark',
                 {x: button.rect.x + button.rect.width + menuOptions.marginLeft + size / 2, y: button.rect.centerY},
                 size, size) : null
