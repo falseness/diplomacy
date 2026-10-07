@@ -568,6 +568,59 @@ function createTutorial10Map() {
     return map
 }
 
+function createTutorial11Map() {
+    // Rotate and heal: red's town (1,4) heals every unit standing on it or its 6 suburbs, a normchel by 3 a
+    // round, but only in a round it was not hit. Red's 3 normchels start wounded (hp 2, 3, 3) on the suburbs (2,4), (1,3), (2,5).
+    // Blue's first wave (4 noobs and a normchel, columns 6..7) arrives at once; the second (2 noobs and a
+    // normchel, columns 14..15) arrives about round 4, after the first is worn down. Charging out with the
+    // wounded normchels (what SimpleAiPlayer does) leaves the suburbs, so nothing heals and red loses its units
+    // and then the town by round 7. Holding the suburbs, striking only what comes next to them, and pulling a
+    // unit at hp 2 or less back onto a quiet suburb hex keeps red's town past round 12. The economy is off for
+    // both sides: no production, and blue (no town) does not go bankrupt.
+    let map = new GameMap(
+        {x: 16, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                economyEnabled: false,
+                towns: [{x: 1, y: 4}],
+                units: [
+                    {x: 2, y: 4, type: Normchel, hp: 2},
+                    {x: 1, y: 3, type: Normchel, hp: 3},
+                    {x: 2, y: 5, type: Normchel, hp: 3}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 6, y: 3, type: Noob},
+                    {x: 6, y: 4, type: Noob},
+                    {x: 6, y: 5, type: Noob},
+                    {x: 6, y: 6, type: Noob},
+                    {x: 7, y: 4, type: Normchel},
+                    {x: 14, y: 3, type: Noob},
+                    {x: 14, y: 4, type: Noob},
+                    {x: 15, y: 4, type: Normchel}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([])
+    )
+    map.testName = 'tutorial 11'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -579,5 +632,7 @@ const tutorials = [
     {id: 'tutorial-8', title: 'Tutorial 8: Through the Bushes', pass: 'enemyUnitsDead', get map() { return createTutorial8Map() }},
     {id: 'tutorial-9', title: 'Tutorial 9: Cavalry Raid', pass: 'captureTowns', targets: [{x: 14, y: 7}],
         get map() { return createTutorial9Map() }},
-    {id: 'tutorial-10', title: 'Tutorial 10: Hold the Bridge', pass: 'enemyUnitsDead', get map() { return createTutorial10Map() }}
+    {id: 'tutorial-10', title: 'Tutorial 10: Hold the Bridge', pass: 'enemyUnitsDead', get map() { return createTutorial10Map() }},
+    {id: 'tutorial-11', title: 'Tutorial 11: Rotate and Heal', pass: 'surviveRounds', rounds: 12,
+        get map() { return createTutorial11Map() }}
 ]
