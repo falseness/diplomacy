@@ -1,0 +1,487 @@
+{
+  "format": 1,
+  "algorithm": "sha256(path NUL bytes NUL ...)",
+  "rulesVersion": "c6ad08d383ddce78b077d73f02c42139ae53f9c8310689bf92aaf922caa8d2b8",
+  "scripts": [
+    {
+      "path": "options/assert.js",
+      "sha256": "fd69f9bb6561481a1307f7e35fcb3dadcacd4aa5d095bd49dfd9b59e6ba432a1",
+      "bytes": 170
+    },
+    {
+      "path": "options/dictionaryToList.js",
+      "sha256": "93494ba52862d7ea8339bbbba4c3f5621f0cb4f601e57851720d2cb4a5c70cd8",
+      "bytes": 741
+    },
+    {
+      "path": "options/gameCoords.js",
+      "sha256": "703354e4906c424766f92d8d998ca021ce53e51add6a2b8d18abe37a97b8fccf",
+      "bytes": 3878
+    },
+    {
+      "path": "options/dictionaryEnumeration.js",
+      "sha256": "51bcf7f06437bbf0fb4f005e35924c27d0d30678c21eba04f160f3100fa70ab9",
+      "bytes": 407
+    },
+    {
+      "path": "options/gameObjectVariables.js",
+      "sha256": "5f7a79a8b498305b05d7372934d830ff7f7939a97bcceebc38be4ed3398e132a",
+      "bytes": 1839
+    },
+    {
+      "path": "options/gamestart.js",
+      "sha256": "1fa40acd58473ce6d042154ee8535846c8823fff8a884468e723165a46b9c8b7",
+      "bytes": 65054
+    },
+    {
+      "path": "options/tutorials.js",
+      "sha256": "fabc37dedd24667b61ae06d5f8c125561587912bd161c0cfc2c9cfbdc6d3b093",
+      "bytes": 14073
+    },
+    {
+      "path": "options/tutorialProgress.js",
+      "sha256": "55d0a8460a126596f0c0514d4ab83875ac6ed55951aa27916131bade61d9795f",
+      "bytes": 1695
+    },
+    {
+      "path": "options/tutorialManager.js",
+      "sha256": "637436d8a6ebfda3bc262603d402a29e04bdd3622ace6c6ccabf23e17a7cf384",
+      "bytes": 2859
+    },
+    {
+      "path": "options/save.js",
+      "sha256": "77e47ad46969eda72f6dc6adf6c44f53b88200666110ef7cb9c686f604799bdb",
+      "bytes": 14145
+    },
+    {
+      "path": "options/actionManager.js",
+      "sha256": "a93ddf7b830a56d7f2bafdbacfaa9f1b2e2cb36d270611329371f6cb8351cb4c",
+      "bytes": 16154
+    },
+    {
+      "path": "options/classManager.js",
+      "sha256": "0ee91a16032c82b4c6315133e6a820444e42a256b6aa4864529dcc6cb116c4d1",
+      "bytes": 688
+    },
+    {
+      "path": "options/timer.js",
+      "sha256": "7bc58b794106a7bc3cac87d46f85b400090757a1469a3f03dd0dbf164543d733",
+      "bytes": 3907
+    },
+    {
+      "path": "options/otherSettings.js",
+      "sha256": "9456030c3e2d76569f252d355820e709e64f6e95486dda83d466f67656b176d7",
+      "bytes": 1177
+    },
+    {
+      "path": "ai/coop-map-scaling.js",
+      "sha256": "4ab06a6359cd53a6c287404ad3e099a42ac700013b10009e4d046172b9109b1b",
+      "bytes": 5404
+    },
+    {
+      "path": "ai/coop-hex-geometry.js",
+      "sha256": "6a49d50caa115c2898bf606d71955cbfb2065f08c3f1678bb466338f53265100",
+      "bytes": 1714
+    },
+    {
+      "path": "ai/coop-circle-plan.js",
+      "sha256": "adb9fa6147c0d7215e17422022c0514d1ca8f8f94814ce1152ad7867a333acae",
+      "bytes": 59755
+    },
+    {
+      "path": "ai/generateMap.js",
+      "sha256": "fe996af7b62c7b48f0cf226f9a8cf71d70d07796b5b62379c7b16c182cacec15",
+      "bytes": 180463
+    },
+    {
+      "path": "render/loadassets.js",
+      "sha256": "b7fed084e0824bca66cc4c9df41d5bd8a6a4904bd17da9186ed5cb31cefe205a",
+      "bytes": 6712
+    },
+    {
+      "path": "render/image.js",
+      "sha256": "b599a45e3d7cf0a3d950aa1dfd1e230fa91c76a1c07726fa16b9c4368edf5209",
+      "bytes": 598
+    },
+    {
+      "path": "render/rgbtohex.js",
+      "sha256": "3ff380ec1a6264bf044b1da2bdf3522ac323b3fac9f0dbd5a67dfb08de66bb24",
+      "bytes": 417
+    },
+    {
+      "path": "render/productionPreview.js",
+      "sha256": "c040fb6dd8bf9516446dce39e752b7f9acd29e1c7def067cd078249ed7b2148c",
+      "bytes": 1109
+    },
+    {
+      "path": "render/draw.js",
+      "sha256": "77bc0efb5fc06d8cc93df8b5ce47f869a59fbbd149ffc36aa8defe431d59c2a2",
+      "bytes": 3296
+    },
+    {
+      "path": "interface/entityinterface.js",
+      "sha256": "9e65592f5079b7afe6cb1bda1d4fed64b71c874cf994a26b18c24f8662648476",
+      "bytes": 9651
+    },
+    {
+      "path": "interface/barrackinterface.js",
+      "sha256": "4155b7a5b6cf2afc7f47eadb54049d726e21226a7e8da9f8c070a79975ea5576",
+      "bytes": 11484
+    },
+    {
+      "path": "interface/towninterface.js",
+      "sha256": "0d19140df9bf6f320b6b16ceda6bb59fe2fb604365e660d7a6affc30b87d3cfd",
+      "bytes": 3369
+    },
+    {
+      "path": "interface/statisticsinterface.js",
+      "sha256": "213b01a67ee5dc556ab9647d4711880ae1a4635f05cba942c4257aa7cb8930ff",
+      "bytes": 6376
+    },
+    {
+      "path": "interface/nextTurnPause.js",
+      "sha256": "06999622068979318e4b159fa7f8ff89133634e96dbec440012740dd0f3ef386",
+      "bytes": 2149
+    },
+    {
+      "path": "sprites/sprite.js",
+      "sha256": "e33c6e82787b9f35e053a8071338724c865f9c41e011931697ea7dd24c9d2854",
+      "bytes": 1230
+    },
+    {
+      "path": "groups/spritesGroup.js",
+      "sha256": "245495f3fd30b04caa9345a7467db52f3c1729eb58dee1de9bc16f77f696f3e8",
+      "bytes": 655
+    },
+    {
+      "path": "sprites/empty.js",
+      "sha256": "96aaa6e726696473503c8e545e57fd6b67dfb6741f181e30aefdfe23e41d6cd4",
+      "bytes": 1328
+    },
+    {
+      "path": "sprites/elements/text.js",
+      "sha256": "ded346c0e2d0f4c673bf7237f1e67764d9735d64808a29fd4ec3de3373a690fd",
+      "bytes": 3629
+    },
+    {
+      "path": "sprites/elements/rect.js",
+      "sha256": "c4f90bb93434c35103a388285d9f1e070d8d800ad5d14e501f9b027c2b0044b3",
+      "bytes": 3854
+    },
+    {
+      "path": "sprites/elements/button.js",
+      "sha256": "ac80258ad53025806592bf12a673a1bf77317252c9e39c895ec3c4b52fe20439",
+      "bytes": 2244
+    },
+    {
+      "path": "sprites/elements/menuButton.js",
+      "sha256": "bcfc18f11ebd13bcb1098f9a57b7b38cda5b4babf684f7f31b7e68f322a2ef58",
+      "bytes": 2175
+    },
+    {
+      "path": "sprites/elements/menuTextInput.js",
+      "sha256": "4adc7f104c948360abe75249ef56b27888e9cafec8437fd93ac9876ec3eeaf39",
+      "bytes": 4139
+    },
+    {
+      "path": "sprites/elements/temporaryWindow.js",
+      "sha256": "46e03b4b745a9bc0b30ce290bba98ca3d9b3b08e94cde07689d760e8367bfddf",
+      "bytes": 867
+    },
+    {
+      "path": "sprites/elements/image.js",
+      "sha256": "6c1adbc24e3df858b3f36a8c91a5c8266fc12eed97ad80dfee031f6116cf978c",
+      "bytes": 4873
+    },
+    {
+      "path": "sprites/elements/imageButton.js",
+      "sha256": "41059d18d37efef3c35e7d9a8a5faf0eb61bd0da8b201d2461c7187d8b84bf66",
+      "bytes": 2251
+    },
+    {
+      "path": "sprites/elements/switch.js",
+      "sha256": "bab8e503b7a47fe07a69bc44c2dd46ef75cf09a6e8bc5320f56e701df85c559e",
+      "bytes": 2136
+    },
+    {
+      "path": "sprites/elements/imageWithLabel.js",
+      "sha256": "d2a647082ffbc99568f145c0fb32b5b8d20e68c916b61ace0759261a1069b938",
+      "bytes": 740
+    },
+    {
+      "path": "sprites/elements/movingForm.js",
+      "sha256": "6684d59578cd3778f7ae623a45c55e2d9524a196cfb4fa6bbd4a6d3103978846",
+      "bytes": 1604
+    },
+    {
+      "path": "sprites/elements/checkBox.js",
+      "sha256": "d6d7c9f9edd80f486eaa89bb7e1a3d5a9692882acf34ae87e4d9cc9994a29cf5",
+      "bytes": 2037
+    },
+    {
+      "path": "sprites/elements/slider.js",
+      "sha256": "923ae7047410b060c004365dfe8b22119e03f314cfc03004b8c96371808e8930",
+      "bytes": 2194
+    },
+    {
+      "path": "sprites/elements/menuSlider.js",
+      "sha256": "24cb3b82d48970cc9ab4c4133cb2d85dfc962df4ffdd5a8093912c3e68dc1b86",
+      "bytes": 607
+    },
+    {
+      "path": "sprites/border.js",
+      "sha256": "4cf0fd33f24ea44e6d24cc36544e30ce4504cb2d39960464345479aa97490973",
+      "bytes": 14037
+    },
+    {
+      "path": "events/geteventpos.js",
+      "sha256": "66193f5f70c87dc46d6bd8d2015c6080dc1105041e04a76b1a4523d97abe6720",
+      "bytes": 1523
+    },
+    {
+      "path": "events/screen.js",
+      "sha256": "b5718d4a0f7c1b62bf3efd4d4dc6d645d630ed66df8dba7f1e4aa98ffe0c17f1",
+      "bytes": 7577
+    },
+    {
+      "path": "events/events.js",
+      "sha256": "be085e7af0d3942ff089df37c46f5b04dbfa6fd402365cd7d959a2906c312786",
+      "bytes": 24064
+    },
+    {
+      "path": "options/onlineHubRows.js",
+      "sha256": "51f70a113f660f73865a91ad5f4b60adfcc97157ad8e1d57807186a9e2160768",
+      "bytes": 5016
+    },
+    {
+      "path": "menu/slotManager.js",
+      "sha256": "c503893cd4476b6bfa09101358d0540ed2457d5e4346a3ef341af01848dfd9da",
+      "bytes": 5476
+    },
+    {
+      "path": "menu/menu.js",
+      "sha256": "5559650e36be1fdc4ea0ff8283defa8c511b7459c86826a9758ffba537bfb2dd",
+      "bytes": 53025
+    },
+    {
+      "path": "sprites/hexagon.js",
+      "sha256": "364392a5f459eddc4ee7d18ac18b31490e17010ec4064495af2c0b6a6366e7b4",
+      "bytes": 3345
+    },
+    {
+      "path": "groups/grid.js",
+      "sha256": "c5b2b7d2321079bc3dae560b3f9a1baafef8caa91d4d20e57cbdb8e8f5c8342a",
+      "bytes": 20750
+    },
+    {
+      "path": "sprites/entities/hpBar.js",
+      "sha256": "707c038641a9350e0c15d4e997ee88ee89d7e59be0dfb545cf9c1582f1cab15c",
+      "bytes": 3786
+    },
+    {
+      "path": "sprites/entities/entity.js",
+      "sha256": "c9eb79e691da2077ee673dcdde8355293dd7a16872eb35fecc19c2018486f3b0",
+      "bytes": 4170
+    },
+    {
+      "path": "sprites/entities/units/unit/interactionWithUnit.js",
+      "sha256": "2392c3405689956ea6135815f9b8046f69c64b245e2f3bfe99df5200fb28f720",
+      "bytes": 25309
+    },
+    {
+      "path": "sprites/entities/units/unit/unit.js",
+      "sha256": "7c53373c7ae3ab789426c2f80aff857fe27009444c5489a39645e24fd9c39c1d",
+      "bytes": 6329
+    },
+    {
+      "path": "sprites/entities/units/noob.js",
+      "sha256": "6c029f69d34de6e84c1493f33f90ff3f4ff1b3ff09e4ed97eab410f4ddeb076d",
+      "bytes": 193
+    },
+    {
+      "path": "sprites/entities/units/normchel.js",
+      "sha256": "b9d1720d7a2a167678f22228d9d9b9a9dd1d079d173eb3831429f3f1161ef071",
+      "bytes": 201
+    },
+    {
+      "path": "sprites/entities/units/KOHb/mirroringInteraction.js",
+      "sha256": "71c782c14d135f448d651541f3f50c3449009ec2cb351b19b1ca4425f48682ad",
+      "bytes": 309
+    },
+    {
+      "path": "sprites/entities/units/KOHb/KOHb.js",
+      "sha256": "39685783e8ec40a9e79ff444d77e54a682b591c8868e65fa59cf6ee14584001b",
+      "bytes": 584
+    },
+    {
+      "path": "sprites/entities/units/earlyDemons.js",
+      "sha256": "aacccc31c8b1ab6154bb9140dfbff20525a6cebbd5cc062ea53925ec208c9f24",
+      "bytes": 1077
+    },
+    {
+      "path": "sprites/entities/units/heavyDemons.js",
+      "sha256": "b3a57c0291c8328c6f56749b0ba246055452848025f1e3f261a4fb977b392a9b",
+      "bytes": 168
+    },
+    {
+      "path": "sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js",
+      "sha256": "adfb5fc7d13dce7386c544bb65cb6ec79efee7223ce46250c438567904b8a677",
+      "bytes": 6134
+    },
+    {
+      "path": "sprites/entities/units/range/rangeUnit/rangeUnit.js",
+      "sha256": "4d62a2a03253a9a92052c609c81b7173509e1dfef773c9dac6de62542b48663a",
+      "bytes": 517
+    },
+    {
+      "path": "sprites/entities/units/range/archer/interactionWithArcher.js",
+      "sha256": "9db3e3c51aaa9ba9a444218f039be8e80789c380e336001bf712abf4f0e498ec",
+      "bytes": 1781
+    },
+    {
+      "path": "sprites/entities/units/range/archer/archer.js",
+      "sha256": "b502b97e190993b61577fdead9d22bdfedfa101002abd094f044ac46f7e9c623",
+      "bytes": 564
+    },
+    {
+      "path": "sprites/entities/units/range/earlyRangedDemons.js",
+      "sha256": "51c2a3d47609d6cb6e18deb61d658e30415a7f700d296837f8b55b04954206b2",
+      "bytes": 252
+    },
+    {
+      "path": "sprites/entities/units/lateDemons.js",
+      "sha256": "853f84b5c471b1fb3ff4c10e4270f4fb0862c56a475da09cecde4ff45f520c93",
+      "bytes": 429
+    },
+    {
+      "path": "sprites/entities/units/range/catapult/interactionWithCatapult.js",
+      "sha256": "c95ac49d19b6194221e2722df88d1f8cb88d8405a57f59ca17a827c2228ed1fe",
+      "bytes": 5043
+    },
+    {
+      "path": "sprites/entities/units/range/catapult/catapult.js",
+      "sha256": "b5c7d80b2c48a5edbbdc473538ad1d11699965db741bcddfb429b5b5669c7623",
+      "bytes": 1988
+    },
+    {
+      "path": "sprites/entities/buildings/building.js",
+      "sha256": "e573ca53a05087c825d951a15961a376a37a0e881fb4f945bdcf3394bacd5bb3",
+      "bytes": 2674
+    },
+    {
+      "path": "sprites/entities/buildings/nature/goldmine.js",
+      "sha256": "16886c03890981fd774ba094eb6f92cde5e79335271bcd26ff5c7b2729bc47e4",
+      "bytes": 1379
+    },
+    {
+      "path": "sprites/entities/buildings/nature/nature.js",
+      "sha256": "d1ba1269648c5d98f4e87082d4eafe8acf86fff45d2b19a7cbab3dc74db1f9bd",
+      "bytes": 1128
+    },
+    {
+      "path": "sprites/entities/buildings/nature/lake.js",
+      "sha256": "9071359850e11e8b050f21abeeedde903516290506d4b53376ab3040301ca9f5",
+      "bytes": 237
+    },
+    {
+      "path": "sprites/entities/buildings/nature/mountain.js",
+      "sha256": "4a6bcc3e8bab05c5b2f35b441514c0bf72a3f7611933601a8678dd068c263139",
+      "bytes": 640
+    },
+    {
+      "path": "sprites/entities/buildings/nature/interactableNature.js",
+      "sha256": "d6d733e8e50c2d524341bfa56778baab9288dbd699bf0d30d7e26a0aa8a27ae0",
+      "bytes": 1081
+    },
+    {
+      "path": "sprites/entities/buildings/tower.js",
+      "sha256": "2f717ee4fb9a475ed84119fd05a57c0e634ec930bd5d986e6ce29085c46fcc65",
+      "bytes": 1289
+    },
+    {
+      "path": "sprites/entities/buildings/wall.js",
+      "sha256": "a02b185d02eaa923c7a0685b7edf3e17bef2bdff619ed1b48bc3625f39335ded",
+      "bytes": 989
+    },
+    {
+      "path": "sprites/entities/buildings/manufactures/manufacture.js",
+      "sha256": "ead9286c65ef721f82645858310c7ac54c8d7005586252cd6a74123b1dc06da4",
+      "bytes": 808
+    },
+    {
+      "path": "sprites/entities/buildings/manufactures/farm.js",
+      "sha256": "d3550740e2e2a9061f708ab4a989d56d2760ea5d304e4954302a4910f0af79f0",
+      "bytes": 788
+    },
+    {
+      "path": "sprites/entities/buildings/manufactures/preparingManufacture/production.js",
+      "sha256": "94b40095ad37c7f5c81312a011a7723fbd1eb2dc7f6110ed66c974cc5cba0880",
+      "bytes": 16585
+    },
+    {
+      "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",
+      "sha256": "e7ec6877b596e77ca74edee85e1fc9e1e019d5934a6520061d0953d2f0247196",
+      "bytes": 2594
+    },
+    {
+      "path": "sprites/entities/buildings/manufactures/preparingManufacture/barrack.js",
+      "sha256": "e33a7bc97f1215dc881d31257d2162bf7b9c94a134cbb719d7e86a7b10df5f8a",
+      "bytes": 867
+    },
+    {
+      "path": "sprites/entities/buildings/manufactures/preparingManufacture/town.js",
+      "sha256": "08a2cf30102b3b923fa6f3fda0ba3a666378c25aa6b54b5da9d6cddd4734dcf0",
+      "bytes": 15466
+    },
+    {
+      "path": "ai/demon-config.js",
+      "sha256": "f94fd1d2379e03a8871a037f97c28fe0934c773a2d0fcbab252728c660771689",
+      "bytes": 2473
+    },
+    {
+      "path": "ai/wave-config.js",
+      "sha256": "cf0103b853cccc08b6f2497a258b91336eb09d8af1293a428f6653639629a0b4",
+      "bytes": 4501
+    },
+    {
+      "path": "ai/wave-composition.js",
+      "sha256": "839277a102bd3067f91f847fef4f4df4b231950af073a300076daea9ddf275cc",
+      "bytes": 3145
+    },
+    {
+      "path": "sprites/entities/buildings/demonPortal.js",
+      "sha256": "c124e6cf329659eba7e79b90aa8d973d0784395c232c0d736c4b6f62c8b4d761",
+      "bytes": 5359
+    },
+    {
+      "path": "ai/wave-placement.js",
+      "sha256": "ea2517d30540ba2ef8a2143b7cb5383c0f36540991257b7070f96339c75b54f7",
+      "bytes": 2129
+    },
+    {
+      "path": "player.js",
+      "sha256": "655d800897a7bdfcf173ea8f21247d4c9f98bd2f683b32873910a11087d5aeb9",
+      "bytes": 22155
+    },
+    {
+      "path": "ai/players.js",
+      "sha256": "519be3519a975b50194dac150db8aa9e0e2084cb8bc1e084de74e9d91bf1b3e2",
+      "bytes": 100043
+    },
+    {
+      "path": "nextTurn.js",
+      "sha256": "dc5596285e9a3f55b5a5e9118064beba57c6db83b6e66dca0e0a03eab8d7ea00",
+      "bytes": 7429
+    },
+    {
+      "path": "managers.js",
+      "sha256": "68137b708a0ef516c13b36353a2e401631d70be13657ab271e4350355c0e7881",
+      "bytes": 120
+    },
+    {
+      "path": "gameObjectSerialization.js",
+      "sha256": "2b1ca8596df63094f0f6c469ee64036811425dc64c88671d07b6634f383c758d",
+      "bytes": 2708
+    }
+  ]
+}

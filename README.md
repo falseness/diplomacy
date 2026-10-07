@@ -20,3 +20,18 @@ npm run test:fast     # cd ../diplomacy_server && TEST_PROFILE=fast tests/run.sh
 
 `TEST_JOBS=N` runs N suites at a time and `TEST_OUTPUT_DIR` sets the evidence
 directory; see `tests/run.sh` and `tests/reliability/registry.js` in the server repo.
+
+## Rules version (regenerate before packaging)
+
+The online server refuses a client whose rules code differs from its own
+(`RULES_VERSION_MISMATCH`, protocol doc `server/docs/auth-lobby-protocol.md` 2.7
+in the server repo). `rules-manifest.json` and `options/rulesVersion.js` are
+generated from the rules script list: after changing any rules script, and always
+before packaging a release, run
+
+```
+node tools/rules-manifest.js          # rewrites both files when stale
+node tools/rules-manifest.js --check  # exit 1 when stale (release preparation gate)
+```
+
+and commit the regenerated files.

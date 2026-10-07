@@ -74,10 +74,47 @@ function rebaseOnlineValue(base, local, remote) {
     return remote
 }
 
+// The online recovery panel (#online-recovery) with the message; returns its
+// button factory, button(label, action).
+function showOnlinePanel(label, message) {
+    document.getElementById('online-recovery')?.remove()
+    const panel = document.createElement('div')
+    panel.id = 'online-recovery'
+    panel.setAttribute('role', 'alertdialog')
+    panel.setAttribute('aria-label', label)
+    panel.style.cssText = 'position:fixed;inset:30% 10% auto;z-index:10000;padding:24px;background:white;color:black;text-align:center;border:2px solid #444;font:20px sans-serif'
+    const text = document.createElement('p')
+    text.textContent = message
+    panel.append(text)
+    const button = (label, action) => {
+        const b = document.createElement('button')
+        b.textContent = label
+        b.style.cssText = 'padding:12px 24px;margin:8px;font:inherit'
+        b.onclick = event => { event.stopPropagation(); action() }
+        panel.append(b)
+        return b
+    }
+    document.body.append(panel)
+    return button
+}
+
+// Freezes the open online game, if any (set by SetupServerCommunicationLogic).
+let onlineGameFreeze = null
+
+// The server runs other rules code (an ack RULES_VERSION_MISMATCH, protocol doc
+// section 2.7): freeze the open game and offer a reload that fetches the new client.
+function showRulesVersionPanel() {
+    if (onlineGameFreeze) onlineGameFreeze()
+    const button = showOnlinePanel('New version available',
+        'A new version of the game is available. Reload the page to keep playing online.')
+    button('Reload', () => location.reload()).focus()
+}
+
 // Stops the open online game: the signed-in session socket stays connected for
 // the hub and only loses the game's listeners.
 function closeOnlineGameSocket() {
     onlineSocket = null
+    onlineGameFreeze = null
     delete window.kick
     for (const [target, event, handler] of onlineListeners) target.off(event, handler)
     onlineListeners = []
@@ -117,8 +154,8 @@ function SetupServerCommunicationLogic(gameID) {
     let failed = false
     // Set by an 'error' KICKED or a kicked: true board; this seat sends no more turns.
     let kicked = false
-    // Freezes the board and shows a panel with the message; returns the panel's button factory.
-    const showPanel = (label, message) => {
+    // Freezes the board (no more turns from this socket).
+    const freeze = () => {
         failed = true
         onlineLobby = null
         gameEvent.waitingMode = true
@@ -126,25 +163,12 @@ function SetupServerCommunicationLogic(gameID) {
         undoButton.disableClick()
         nextTurnPauseInterface.visible = false
         if (typeof timer !== 'undefined' && timer) timer.pause()
-        document.getElementById('online-recovery')?.remove()
-        const panel = document.createElement('div')
-        panel.id = 'online-recovery'
-        panel.setAttribute('role', 'alertdialog')
-        panel.setAttribute('aria-label', label)
-        panel.style.cssText = 'position:fixed;inset:30% 10% auto;z-index:10000;padding:24px;background:white;color:black;text-align:center;border:2px solid #444;font:20px sans-serif'
-        const text = document.createElement('p')
-        text.textContent = message
-        panel.append(text)
-        const button = (label, action) => {
-            const b = document.createElement('button')
-            b.textContent = label
-            b.style.cssText = 'padding:12px 24px;margin:8px;font:inherit'
-            b.onclick = event => { event.stopPropagation(); action() }
-            panel.append(b)
-            return b
-        }
-        document.body.append(panel)
-        return button
+    }
+    onlineGameFreeze = () => { if (socket === onlineSocket) freeze() }
+    // Freezes the board and shows a panel with the message; returns the panel's button factory.
+    const showPanel = (label, message) => {
+        freeze()
+        return showOnlinePanel(label, message)
     }
     const backToMenu = button => button('Back to menu', () => {
         document.getElementById('online-recovery')?.remove()
