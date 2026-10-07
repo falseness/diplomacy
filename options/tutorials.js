@@ -866,6 +866,62 @@ function createTutorial15Map() {
     return map
 }
 
+function createTutorial16Map() {
+    // Close the Portals (co-op tutorial map). A lake (column 7, rows 0..7) splits the map; its only ford is
+    // (7,8) at the bottom. Behind it three melee portals (10,1), (11,4), (10,6) send a Brute every 4 rounds
+    // from round 4 and three Imps wait in front of them. Red's town (1,4) has 2 catapults (2,3), (2,5) behind
+    // 3 normchels (3,3), (3,4), (3,5) and 30 gold (the army costs a little more than the town earns).
+    // Chasing the demons through the ford bleeds the army while the far portal keeps spawning; marching the
+    // normchels up to the lake shore with the catapults behind them destroys every portal from across the
+    // water (range 2-5, 4 damage to a 12 hp portal), after which the remaining demons can be cleaned up.
+    let lakes = []
+    for (let y = 0; y <= 7; ++y) {
+        lakes.push([7, y])
+    }
+    let map = new GameMap(
+        {x: 15, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 30,
+                towns: [{x: 1, y: 4}],
+                units: [
+                    {x: 2, y: 3, type: Catapult},
+                    {x: 2, y: 5, type: Catapult},
+                    {x: 3, y: 3, type: Normchel},
+                    {x: 3, y: 4, type: Normchel},
+                    {x: 3, y: 5, type: Normchel}
+                ]
+            }
+        ],
+        [],
+        coordDictionary(lakes),
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([]),
+        {type: 'rectangular'},
+        {
+            tutorial: true,
+            units: [
+                {x: 9, y: 2, type: Imp},
+                {x: 9, y: 8, type: Imp},
+                {x: 11, y: 7, type: Imp}
+            ]
+        }
+    )
+    map.portals = [
+        {x: 10, y: 1, category: 'melee'},
+        {x: 11, y: 4, category: 'melee'},
+        {x: 10, y: 6, category: 'melee'}
+    ]
+    map.testName = 'tutorial 16'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -885,5 +941,6 @@ const tutorials = [
         get map() { return createTutorial13Map() }},
     {id: 'tutorial-14', title: 'Tutorial 14: Grow Your Economy', pass: 'enemyLost', get map() { return createTutorial14Map() }},
     {id: 'tutorial-15', title: 'Tutorial 15: Fortify in Time', pass: 'surviveRounds', rounds: 16,
-        get map() { return createTutorial15Map() }}
+        get map() { return createTutorial15Map() }},
+    {id: 'tutorial-16', title: 'Tutorial 16: Close the Portals', pass: 'coopVictory', get map() { return createTutorial16Map() }}
 ]
