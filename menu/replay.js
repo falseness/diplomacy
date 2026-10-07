@@ -10,6 +10,10 @@
 // drives the same UI calls a player's clicks do. Display only: the fog view ('off' = everything
 // visible, or a player's vision) and the move tween; while an action runs the fog is the acting
 // player's, as in the game.
+// A server recording (game:replay, its turns carry their round component) starts every turn as the server
+// emitted it (ReplaySession.serverTurnStart). Hash drift (PRD sec. 9.2): a turn whose board does not reach its
+// endHash (sha-256 stateHash for server recordings, else replayStateHash) is marked (driftMarkers), and the replay
+// resyncs at the next turn that starts from a round snapshot.
 const REPLAY_ACTION_TYPES = ['unit', 'skip', 'train', 'build', 'destroy', 'undo', 'end']
 
 // The board state without timers (they hold wall-clock time), FNV-1a 32-bit hex.
@@ -148,6 +152,12 @@ function replayUnitPath(from, to) {
     return coordsEqually(path[0], from) ? path : null
 }
 
+// The hash a recording's endHash is compared with: options/actionRecorder.js stateHash (sha-256, 64 hex digits,
+// the server's action logs) or replayStateHash (8 hex digits, offline recordings).
+function replayHashLike(endHash) {
+    return endHash.length === 64 && typeof stateHash == 'function' ? stateHash() : replayStateHash()
+}
+
 class ReplaySession {
     static parse(source) {
         const recording = typeof source === 'string' ? JSON.parse(source) : source
@@ -169,6 +179,11 @@ class ReplaySession {
         this.position = -1
         this.results = []
         this.drift = new Set()
+        // turn index -> {turn, round, playerIndex, expected, actual, inherited, resyncTurn}
+        this.driftLog = new Map()
+        this.serverTurns = this.recording.turns.every(turn => Number.isInteger(turn.component))
+        this.snapshotBoards = new Map()
+        this.boardOnline = false
         this.playTimer = null
         this.speed = 1
         this.buildTimeline()
@@ -197,12 +212,30 @@ class ReplaySession {
                 this.entries.push({kind: 'action', turn: turnIndex, index, action: turn.actions[index]})
         })
     }
+    // The snapshot a turn starts from, null when it continues the previous turn's board: a server recording's
+    // turn continues the previous turn of its round component, an offline one the previous turn of its round.
     snapshotFor(turnIndex) {
         const turn = this.recording.turns[turnIndex]
         const previous = this.recording.turns[turnIndex - 1]
-        if (previous && previous.round === turn.round)
+        if (previous && previous.round === turn.round && (!this.serverTurns || previous.component === turn.component))
             return null
         return this.recording.snapshots.find(snapshot => snapshot.round === turn.round) || null
+    }
+    // The next turn after turnIndex that starts from a snapshot (where a drift is resynced), null if none.
+    nextSnapshotTurn(turnIndex) {
+        for (let index = turnIndex + 1; index < this.recording.turns.length; ++index) {
+            if (this.snapshotFor(index))
+                return index
+        }
+        return null
+    }
+    // Drift markers in turn order; inherited: the turn continued a drifted board (not the drift's origin).
+    driftMarkers() {
+        return [...this.driftLog.values()].sort((a, b) => a.turn - b.turn)
+    }
+    // The drift a snapshot turn resyncs, null if none.
+    resyncOf(turnIndex) {
+        return this.driftMarkers().find(marker => marker.resyncTurn === turnIndex && !marker.inherited) || null
     }
     // The turn whose snapshot an entry is replayed from.
     baseTurn(entryIndex) {
@@ -223,8 +256,75 @@ class ReplaySession {
     loadBoard(board) {
         moveTween.clear()
         loadFromJson(typeof board === 'string' ? board : JSON.stringify(board))
+        // The viewer plays offline; the hashes cover the recorded flag (turnHash, boardObject).
+        this.boardOnline = gameSettings.isOnline
         gameSettings.isOnline = false
         actionManager.clear()
+    }
+    withRecordedOnline(read) {
+        const viewer = gameSettings.isOnline
+        gameSettings.isOnline = this.boardOnline
+        try {
+            return read()
+        } finally {
+            gameSettings.isOnline = viewer
+        }
+    }
+    turnHash(endHash) {
+        return this.withRecordedOnline(() => replayHashLike(endHash))
+    }
+    // The current state as a saved board (getGameObject, a copy).
+    boardObject() {
+        return this.withRecordedOnline(() => JSON.parse(JSON.stringify(getGameObject())))
+    }
+    snapshotBoard(round) {
+        if (!this.snapshotBoards.has(round)) {
+            const board = this.recording.snapshots.find(snapshot => snapshot.round === round).board
+            this.snapshotBoards.set(round, typeof board === 'string' ? JSON.parse(board) : board)
+        }
+        return this.snapshotBoards.get(round)
+    }
+    // server/index.js prepareHumanTurnState: the player's part of the board after its turn start (income, moves,
+    // productions), from board.
+    preparedTurnState(board, playerIndex) {
+        this.loadBoard({...board, whooseTurn: playerIndex})
+        const player = players[playerIndex]
+        if (playerIndex >= 1 && player && !player.isNeutral && !player.isLost) {
+            externalNextTurn()
+            player.nextTurn()
+        }
+        const game = this.boardObject()
+        return {player: game.players[playerIndex], external: game.external, externalProduction: game.externalProduction}
+    }
+    // A server recording's turn start, as getTurnGameObjectForEmit (server/index.js) emitted it to the player: the
+    // board of its round component so far (the round snapshot for the component's first turn, else the board the
+    // previous turn left) with, for every human component of the round in order (component 0 is the neutral 0's
+    // automatic turn), the prepared turn state of its head overlaid (the player, and its own external rows): the
+    // acting player's from that board, another component's opening turn's from the round snapshot.
+    serverTurnStart(turnIndex) {
+        const turn = this.recording.turns[turnIndex]
+        const snapshot = this.snapshotBoard(turn.round)
+        const base = this.snapshotFor(turnIndex) ? snapshot : this.boardObject()
+        const board = {...base, whooseTurn: turn.playerIndex}
+        if (turn.component > 0) {
+            const heads = new Map()
+            for (const other of this.recording.turns) {
+                if (other.round === turn.round && other.component > 0 && !heads.has(other.component))
+                    heads.set(other.component, other.playerIndex)
+            }
+            heads.set(turn.component, turn.playerIndex)
+            board.players = board.players.slice()
+            for (const component of [...heads.keys()].sort((a, b) => a - b)) {
+                const index = heads.get(component)
+                const prepared = this.preparedTurnState(component === turn.component ? base : snapshot, index)
+                const owned = row => board.grid[row.coord.x][row.coord.y] == index
+                board.players[index] = prepared.player
+                board.external = board.external.filter(row => !owned(row)).concat(prepared.external.filter(owned))
+                board.externalProduction = board.externalProduction.filter(row => !owned(row))
+                    .concat(prepared.externalProduction.filter(owned))
+            }
+        }
+        this.loadBoard(board)
     }
     // The rules part of a turn change (advanceOfflineTurn without saves, UI and AI).
     advanceTo(playerIndex) {
@@ -249,7 +349,8 @@ class ReplaySession {
         replayClearSelection()
         if (entry.kind === 'start') {
             const snapshot = this.snapshotFor(entry.turn)
-            if (snapshot) this.loadBoard(snapshot.board)
+            if (this.serverTurns) this.serverTurnStart(entry.turn)
+            else if (snapshot) this.loadBoard(snapshot.board)
             else this.advanceTo(turn.playerIndex)
             actionManager.clear()
             this.restoreRulesFog()
@@ -275,8 +376,16 @@ class ReplaySession {
         }
         const next = this.entries[entryIndex + 1]
         if (turn.endHash && (!next || next.turn !== entry.turn)) {
-            if (replayStateHash() === turn.endHash) this.drift.delete(entry.turn)
-            else this.drift.add(entry.turn)
+            const actual = this.turnHash(turn.endHash)
+            if (actual === turn.endHash) {
+                this.drift.delete(entry.turn)
+                this.driftLog.delete(entry.turn)
+            } else {
+                this.drift.add(entry.turn)
+                this.driftLog.set(entry.turn, {turn: entry.turn, round: turn.round, playerIndex: turn.playerIndex,
+                    expected: turn.endHash, actual, inherited: !this.snapshotFor(entry.turn) && this.drift.has(entry.turn - 1),
+                    resyncTurn: this.nextSnapshotTurn(entry.turn)})
+            }
         }
         this.position = entryIndex
     }
@@ -381,7 +490,8 @@ class ReplaySession {
         const action = entry.kind === 'start' ? 'turn start' : replayActionText(entry.action)
         return `round ${turn.round} · player ${turn.playerIndex} · action ${number}/${actions.length}: ${action}` +
             (result && !result.ok ? ` (rejected: ${result.reason})` : '') +
-            (this.drift.has(entry.turn) ? ' · hash drift' : '')
+            (this.drift.has(entry.turn) ? ' · hash drift' : '') +
+            (entry.kind === 'start' && this.resyncOf(entry.turn) ? ` · resynced from the round ${turn.round} snapshot` : '')
     }
 }
 
