@@ -280,10 +280,82 @@ function createTutorial5Map() {
     return map
 }
 
+function createTutorial6Map() {
+    // Retreat and come back (co-op tutorial map). Red owns two towns on the axis toward the demons, the
+    // back town (3,4) and the front town (10,4), 7 hexes apart; each town has every hex within 3 steps
+    // (every suburb up to cost 5) as a suburb. Red's army (a normchel, 2 archers and a KOHb) starts on the
+    // far side among 10 portals (4 melee, 4 mage, a siege and a chaos one) that open on round 4. Attacking
+    // at once loses; pulling the army back toward the back town while both towns buy units, then
+    // counter-attacking, wins.
+    let size = {x: 25, y: 9}
+    let towns = [{x: 3, y: 4}, {x: 10, y: 4}]
+    // Hex distance in the x-parity offset layout of sprites/sprite.js.
+    let distance = (a, b) => {
+        let dq = a.x - b.x
+        let dr = (a.y - (a.x - (a.x & 1)) / 2) - (b.y - (b.x - (b.x & 1)) / 2)
+        return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2
+    }
+    // A town's suburbs: every cell within 3 steps (37 cells including the town), nearest first.
+    let suburbsOf = town => {
+        let cells = []
+        for (let x = 0; x < size.x; ++x) {
+            for (let y = 0; y < size.y; ++y) {
+                if (distance(town, {x: x, y: y}) <= 3) {
+                    cells.push({x: x, y: y})
+                }
+            }
+        }
+        return cells.sort((left, right) => distance(town, left) - distance(town, right))
+    }
+    let map = new GameMap(
+        size,
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 850,
+                towns: towns,
+                suburbs: towns.map(town => ({town: town, cells: suburbsOf(town), expansionCells: suburbsOf(town)})),
+                units: [
+                    {x: 18, y: 4, type: Normchel},
+                    {x: 16, y: 3, type: Archer},
+                    {x: 15, y: 4, type: Archer},
+                    {x: 16, y: 7, type: KOHb}
+                ]
+            }
+        ],
+        [],
+        [],
+        coordDictionary([]),
+        coordDictionary([[17, 0]]),
+        [],
+        {type: 'rectangular'},
+        {tutorial: true}
+    )
+    map.portals = [
+        {x: 17, y: 1, category: 'melee'},
+        {x: 20, y: 7, category: 'melee'},
+        {x: 23, y: 2, category: 'melee'},
+        {x: 22, y: 5, category: 'melee'},
+        {x: 21, y: 4, category: 'mage'},
+        {x: 22, y: 0, category: 'mage'},
+        {x: 23, y: 7, category: 'mage'},
+        {x: 19, y: 4, category: 'mage'},
+        {x: 24, y: 3, category: 'siege'},
+        {x: 24, y: 5, category: 'chaos'}
+    ]
+    map.testName = 'tutorial 6'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
     {id: 'tutorial-3', title: 'Tutorial 3', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-4', title: 'Tutorial 4', pass: 'enemyLost', get map() { return createTutorial4Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 5', pass: 'coopVictory', get map() { return createTutorial5Map() }}
+    {id: 'tutorial-5', title: 'Tutorial 5', pass: 'coopVictory', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-6', title: 'Tutorial 6', pass: 'coopVictory', get map() { return createTutorial6Map() }}
 ]
