@@ -12,6 +12,7 @@
 // skipMovesOfSelected (skip), AiRuntime.undoHumanCommand (undo, when actionManager.undo() undid something)
 // and nextTurn (end, on a human player's turn). The log is cleared with actionManager in nextTurn.js; the
 // turn it held stays readable as actionLog.lastTurn() until the next turn ends. Not persisted yet.
+// actionLog.listener(action, hashAfter), when set, sees every pushed entry (the online stream, options/actionStream.js).
 //
 // Loaded after options/actionApi.js (index.html, server/loadGameCode.js); game globals resolve at call time.
 
@@ -33,6 +34,7 @@ function stateHash() {
 const actionLog = {
     turn: null,
     finished: null,
+    listener: null,
     // turnInfo: {player, round}
     start(turnInfo) {
         this.turn = {player: turnInfo.player, round: turnInfo.round, actions: []}
@@ -41,6 +43,8 @@ const actionLog = {
         if (!this.turn)
             this.start({player: whooseTurn, round: gameRound})
         this.turn.actions.push({action: action, hash: hashAfter})
+        if (this.listener)
+            this.listener(action, hashAfter)
     },
     current() {
         return this.turn

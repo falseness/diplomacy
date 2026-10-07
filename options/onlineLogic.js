@@ -18,6 +18,11 @@ function onlineLobbyText() {
 
 let SendNextTurn
 
+// The game:action stream (options/actionStream.js); null where only the online scripts are loaded.
+function onlineActionStream() {
+    return typeof ActionStream === 'undefined' ? null : ActionStream
+}
+
 
 // The turn clock is not started here: it starts when the turn overlay is hidden
 // (nextTurnPauseInterface.visible = false calls timer.updateLastPause), so it
@@ -115,6 +120,7 @@ function showRulesVersionPanel() {
 function closeOnlineGameSocket() {
     onlineSocket = null
     onlineGameFreeze = null
+    onlineActionStream()?.stop()
     delete window.kick
     for (const [target, event, handler] of onlineListeners) target.off(event, handler)
     onlineListeners = []
@@ -140,6 +146,8 @@ function SetupServerCommunicationLogic(gameID) {
     closeOnlineGameSocket()
     const socket = onlineSocket = onlineSession.connect()
     const listeners = onlineListeners
+    // Every recorded action of this game is streamed as game:action (shadow phase, options/actionStream.js).
+    onlineActionStream()?.start(socket, gameID)
     const on = (target, event, handler) => {
         target.on(event, handler)
         listeners.push([target, event, handler])
@@ -258,6 +266,8 @@ function SetupServerCommunicationLogic(gameID) {
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
         acceptedBoard = board
+        // A continued co-op turn keeps its action stream; any other board starts the log and seq from this board.
+        if (!continuing) onlineActionStream()?.restart()
         if (continuing) {
             timer = runningTimer
             actionManager.arr = undo
@@ -354,6 +364,8 @@ function SetupServerCommunicationLogic(gameID) {
         onlineCommit = null
         competitiveDelivery = null
         acceptedBoard = null
+        // Unacked and unsent actions belong to the dropped local turn; the reloaded board restarts the log.
+        onlineActionStream()?.restart()
         // The session re-sends auth:session, then game:open.
     })
     requestCurrentGame()
