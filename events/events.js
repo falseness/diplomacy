@@ -458,7 +458,10 @@ class Events {
         this.hideAll()
     }
     sendInstructions(coord) {
-        let instructionsAreNotLongerNeeded = this.selected.sendInstructions(grid.arr[coord.x][coord.y])
+        let selected = this.selected
+        let instructionsAreNotLongerNeeded = ActionRecorder.track(
+            ActionRecorder.instructionAction(selected, coord),
+            () => selected.sendInstructions(grid.arr[coord.x][coord.y]))
         AiRuntime.recordHumanCommand()
         if (instructionsAreNotLongerNeeded)
             this.selected = new Empty()

@@ -14,7 +14,9 @@ const AiRuntime = {
     // Keyboard and button undo: drop the last command only if an action was
     // actually undone.
     undoHumanCommand() {
-        if (!actionManager.undo() || !humanCommands.length) return
+        if (!actionManager.undo()) return
+        ActionRecorder.record({t: 'undo'})
+        if (!humanCommands.length) return
         humanCommands.pop()
         console.log('pop human command')
     },

@@ -103,6 +103,7 @@ function advanceOfflineTurn() {
 
     whooseTurn = (whooseTurn + 1) % players.length
     actionManager.clear()
+    actionLog.clear()
 
     externalNextTurn() 
     natureNextTurn()
@@ -145,6 +146,7 @@ function advanceOfflineTurn() {
 
     
     actionManager.clear()
+    actionLog.clear()
 
     timer.setNextTurnTime()
     saveManager.save()
@@ -154,6 +156,7 @@ function advanceOfflineTurn() {
 }
 
 function nextTurn() {
+    ActionRecorder.recordEnd()
     if (gameSettings.isOnline) {
         onlineNextTurn();
     }
@@ -174,6 +177,7 @@ function onlineNextTurn() {
 
     timer.pauseAndSaveTime()
     actionManager.clear()
+    actionLog.clear()
 
     timer.setNextTurnTime()
     // A lobby game lives on the server, not in a save slot.

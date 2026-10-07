@@ -4,7 +4,8 @@ function destroySelected() {
         return
     }
     // The undo entry + destroy() body is shared with the headless rules API (options/actionApi.js).
-    destroyEntityWithUndo(gameEvent.selected)
+    let entity = gameEvent.selected
+    ActionRecorder.track(ActionRecorder.destroyAction(entity), () => destroyEntityWithUndo(entity))
     gameEvent.removeSelection()
 }
 
@@ -13,7 +14,8 @@ function skipMovesOfSelected() {
         console.error(`trying to skip moves of selected which is not unit = ${gameEvent.selected.toJSON()}`)
         return
     }
-    gameEvent.selected.skipMoves()
+    let unit = gameEvent.selected
+    ActionRecorder.track(ActionRecorder.skipAction(unit), () => unit.skipMoves())
     gameEvent.removeSelection()
 }
 class EntityInterface {

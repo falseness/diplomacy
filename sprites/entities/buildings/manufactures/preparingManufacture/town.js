@@ -484,7 +484,9 @@ function isLiveDemonPortal(building) {
 
 function prepareEvent(product) {
     let building = gameEvent.selected
-    if (building.prepare(product)) {
+    // Unit products push an undo entry here (train); building products only start the placement,
+    // recorded by the map click (Events.sendInstructions).
+    if (ActionRecorder.track(ActionRecorder.trainAction(building, product), () => building.prepare(product))) {
         building.select(false)
         return
     }
