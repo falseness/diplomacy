@@ -26,8 +26,55 @@ class ActionManager {
             townExternalProduction: [],
             buildingProductions: [],
             playerEntityLists: this.snapshotPlayerEntityLists(),
-            externalOrder: external.map(entity => ({...entity.coord}))
+            externalOrder: external.map(entity => ({...entity.coord})),
+            productionOrders: this.snapshotProductionOrders(),
+            fogOfWar: this.snapshotFogOfWar()
         })
+    }
+    // The fog of war before the action: undo() puts it back, so it re-hides exactly what the undone action revealed
+    // and keeps what earlier actions of the turn revealed (the state equals a replay of the turn without the action).
+    snapshotFogOfWar() {
+        if (typeof isFogOfWar === 'undefined' || !isFogOfWar || typeof grid === 'undefined' || !grid || !grid.fogOfWar)
+            return null
+        return grid.fogOfWar.map(column => column.slice())
+    }
+    // Order of the pending external buildings and of every town's buildings / pending buildings. An undo
+    // re-creates a destroyed entry at the end of its list once getGameObject() (every state hash) pruned the
+    // killed one, so undo() sorts the lists back to this order (the state hash keeps list order).
+    snapshotProductionOrders() {
+        const coords = list => (list || []).filter(entity => entity && entity.coord && !entity.killed)
+            .map(entity => ({x: entity.coord.x, y: entity.coord.y}))
+        let towns = []
+        for (let i = 0; players && i < players.length; ++i) {
+            for (let j = 0; players[i] && players[i].towns && j < players[i].towns.length; ++j) {
+                let town = players[i].towns[j]
+                if (town && town.coord && !town.killed)
+                    towns.push({coord: {x: town.coord.x, y: town.coord.y}, buildings: coords(town.buildings),
+                        buildingProduction: coords(town.buildingProduction)})
+            }
+        }
+        return {externalProduction: coords(typeof externalProduction === 'undefined' ? [] : externalProduction), towns}
+    }
+    restoreProductionOrders(orders) {
+        if (!orders)
+            return
+        const sortBy = (list, order) => {
+            if (!list)
+                return
+            const rank = entity => {
+                const index = entity && entity.coord ? order.findIndex(coord => coordsEqually(coord, entity.coord)) : -1
+                return index === -1 ? order.length : index
+            }
+            list.sort((a, b) => rank(a) - rank(b))
+        }
+        sortBy(externalProduction, orders.externalProduction)
+        for (let entry of orders.towns) {
+            let town = grid.getBuilding(entry.coord)
+            if (!town || !town.isTown || !town.isTown() || town.killed)
+                continue
+            sortBy(town.buildings, entry.buildings)
+            sortBy(town.buildingProduction, entry.buildingProduction)
+        }
     }
     get lastAction() {
         return this.arr[this.arr.length - 1]
@@ -347,18 +394,31 @@ class ActionManager {
             }
         }
         this.restorePlayerEntityLists(undo.playerEntityLists)
-        // Portals remove themselves immediately on death, so there is no
-        // tombstone index for undoBuilding to reuse. Restore ordering without
-        // recreating any unrelated external entities.
-        if (undo.externalOrder) {
-            const rank = entity => {
-                const index = undo.externalOrder.findIndex(coord => coordsEqually(coord, entity.coord))
-                return index === -1 ? undo.externalOrder.length : index
-            }
-            external.sort((a, b) => rank(a) - rank(b))
-        }
+        this.restoreExternalOrder(undo)
         gameEvent.selected = grid.getUnit(undo.units[0].coord)
         nextTurnButton.highlightButton = false
+    }
+    // Portals remove themselves immediately on death, and getGameObject() (every state hash) prunes killed
+    // walls and towers, so there may be no tombstone index for undoBuilding to reuse. Restore ordering without
+    // recreating any unrelated external entities.
+    restoreExternalOrder(undo) {
+        if (!undo.externalOrder)
+            return
+        const rank = entity => {
+            const index = undo.externalOrder.findIndex(coord => coordsEqually(coord, entity.coord))
+            return index === -1 ? undo.externalOrder.length : index
+        }
+        external.sort((a, b) => rank(a) - rank(b))
+    }
+    // A restored bush or hill is appended to `nature`; move it back to the index it had among the
+    // live entries (killed ones are pruned, as getGameObject() does).
+    restoreNatureIndex(coord, index) {
+        removeFromArrayIfKilled(nature)
+        let current = nature.findIndex(entity => coordsEqually(entity.coord, coord))
+        if (current === -1 || index < 0)
+            return
+        let restored = nature.splice(current, 1)[0]
+        nature.splice(Math.min(index, nature.length), 0, restored)
     }
     preparingUnitUndo() {
         let undo = this.arr.pop()
@@ -403,6 +463,9 @@ class ActionManager {
         let undo = this.arr.pop()
 
         this.undoBuilding(undo.building)
+        this.restoreExternalOrder(undo)
+        if (Number.isInteger(undo.natureIndex))
+            this.restoreNatureIndex(undo.building.coord, undo.natureIndex)
         gameEvent.selected = grid.getBuilding(undo.building.coord)
     }
     destroyTownUndo() {
@@ -443,8 +506,16 @@ class ActionManager {
             destroyExternalProduction: this.destroyExternalProductionUndo
         }
 
-        func[this.lastAction.type].call(this)
-        refreshCoopVision()
+        let entry = this.lastAction
+        func[entry.type].call(this)
+        this.restoreProductionOrders(entry.productionOrders)
+        if (entry.fogOfWar && grid.fogOfWar && entry.fogOfWar.length === grid.fogOfWar.length) {
+            for (let x = 0; x < entry.fogOfWar.length; ++x)
+                for (let y = 0; y < entry.fogOfWar[x].length; ++y)
+                    grid.fogOfWar[x][y] = entry.fogOfWar[x][y]
+        }
+        else
+            refreshUndoVision()
 
         if (otherSettings.moveCameraToUndoTarget)
             this.__moveCameraToUndoTarget()

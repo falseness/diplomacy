@@ -3,18 +3,9 @@ function destroySelected() {
         console.error(`trying to destroy selected which is unit = ${gameEvent.selected.toJSON()}`)
         return
     }
-    let type = 'destroyBuilding'
-    if (gameEvent.selected.isTown()) 
-        type = 'destroyTown'
-    if (gameEvent.selected.isExternalProduction()) 
-        type = 'destroyExternalProduction'
-    else if (gameEvent.selected.isBuildingProduction())
-        type = 'destroyBuildingProduction'
-    
-    actionManager.startAction(type)
-    actionManager.lastAction.building = gameEvent.selected.toUndoJSON() 
-
-    gameEvent.selected.destroy()
+    // The undo entry + destroy() body is shared with the headless rules API (options/actionApi.js).
+    let entity = gameEvent.selected
+    ActionRecorder.track(ActionRecorder.destroyAction(entity), () => destroyEntityWithUndo(entity))
     gameEvent.removeSelection()
 }
 
@@ -23,7 +14,8 @@ function skipMovesOfSelected() {
         console.error(`trying to skip moves of selected which is not unit = ${gameEvent.selected.toJSON()}`)
         return
     }
-    gameEvent.selected.skipMoves()
+    let unit = gameEvent.selected
+    ActionRecorder.track(ActionRecorder.skipAction(unit), () => unit.skipMoves())
     gameEvent.removeSelection()
 }
 class EntityInterface {

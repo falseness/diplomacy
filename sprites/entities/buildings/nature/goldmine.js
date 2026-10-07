@@ -39,6 +39,11 @@ class Goldmine extends Building {
     get isHitable() {
         return false
     }
+    // A map resource: `goldmines` keeps it (income, save/load) whatever happens to the cell, and undo
+    // cannot unpack one, so nobody may destroy it (TASK-667).
+    get canBeDestroyed() {
+        return false
+    }
     get isStandable() {
         return true
     }

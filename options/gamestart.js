@@ -333,12 +333,6 @@ class GameMap {
                 recalculatePlayerTimer(i, packedTimer)
             }
         }
-
-        // refactoring is needed
-        for (let i = 1; i < players.length; ++i) {
-            localStorage.setItem(gameStorageSlot() + 'Player:' + i,
-            JSON.stringify([]))
-        }
     }
     /*
     эта структура нужна для удобного хранения карт
@@ -1309,6 +1303,7 @@ class GameManager {
         this.clearBasisValues()
         actionManager.clear()
         this.clearHumanCommands()
+        this.clearActionLog()
 
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
@@ -1322,12 +1317,18 @@ class GameManager {
         gameRound = 0
         actionManager.clear()
         this.clearHumanCommands()
+        this.clearActionLog()
     }
     // Human commands belong to one game. AiRuntime is absent where only the
     // game rules are loaded (server, benchmarks).
     static clearHumanCommands() {
         if (typeof AiRuntime != 'undefined')
             AiRuntime.clearHumanCommands()
+    }
+    // So does the recorded action log (options/actionRecorder.js).
+    static clearActionLog() {
+        if (typeof actionLog != 'undefined')
+            actionLog.reset()
     }
     // The board setup shared by start and buildOnlineBoard.
     static setUpBoard(map, _isFogOfWar, isClassicTimer, isOnline, gameManager = this) {

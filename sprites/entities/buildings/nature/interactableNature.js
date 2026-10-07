@@ -42,6 +42,13 @@ class Hill extends InteractableNature {
     get rangeIncrease() {
         return this.constructor.rangeIncrease
     }
+    // A hill serializes as 'mountain' (its art); the undo entry marks it so undoing its destroy
+    // restores a hill, not an impassable mountain.
+    toUndoJSON() {
+        let res = super.toUndoJSON()
+        res.hill = true
+        return res
+    }
     get info() {
         let info = super.info
         info.info += '\nrange increase: ' + this.rangeIncrease

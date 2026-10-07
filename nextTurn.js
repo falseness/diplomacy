@@ -93,6 +93,9 @@ function advanceOfflineTurn() {
     // Resolve the whole committed action/phase before deciding a shared result;
     // individual deaths must not preempt simultaneous elimination (e.g. flood).
     if (gameSettings.coop && players[0].isGameEnded) {
+        // The ended turn cannot be undone after the game is over (as after any turn end).
+        actionManager.clear()
+        actionLog.clear()
         menuBack()
         return
     }
@@ -103,6 +106,7 @@ function advanceOfflineTurn() {
 
     whooseTurn = (whooseTurn + 1) % players.length
     actionManager.clear()
+    actionLog.clear()
 
     externalNextTurn() 
     natureNextTurn()
@@ -145,6 +149,7 @@ function advanceOfflineTurn() {
 
     
     actionManager.clear()
+    actionLog.clear()
 
     timer.setNextTurnTime()
     saveManager.save()
@@ -154,6 +159,7 @@ function advanceOfflineTurn() {
 }
 
 function nextTurn() {
+    ActionRecorder.recordEnd()
     if (gameSettings.isOnline) {
         onlineNextTurn();
     }
@@ -174,6 +180,7 @@ function onlineNextTurn() {
 
     timer.pauseAndSaveTime()
     actionManager.clear()
+    actionLog.clear()
 
     timer.setNextTurnTime()
     // A lobby game lives on the server, not in a save slot.
