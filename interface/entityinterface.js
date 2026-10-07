@@ -3,18 +3,8 @@ function destroySelected() {
         console.error(`trying to destroy selected which is unit = ${gameEvent.selected.toJSON()}`)
         return
     }
-    let type = 'destroyBuilding'
-    if (gameEvent.selected.isTown()) 
-        type = 'destroyTown'
-    if (gameEvent.selected.isExternalProduction()) 
-        type = 'destroyExternalProduction'
-    else if (gameEvent.selected.isBuildingProduction())
-        type = 'destroyBuildingProduction'
-    
-    actionManager.startAction(type)
-    actionManager.lastAction.building = gameEvent.selected.toUndoJSON() 
-
-    gameEvent.selected.destroy()
+    // The undo entry + destroy() body is shared with the headless rules API (options/actionApi.js).
+    destroyEntityWithUndo(gameEvent.selected)
     gameEvent.removeSelection()
 }
 
