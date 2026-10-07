@@ -92,7 +92,7 @@ menuOptions.cornerR = 0.1 * menuOptions.rectSize
 
 class OtherSettingsTree {
     FIRST_Y = 0.35 * HEIGHT
-    INTERVAL_Y = 0.12 * HEIGHT
+    INTERVAL_Y = 0.1 * HEIGHT
     constructor() {
         const firstY = this.FIRST_Y
         const intervalY = this.INTERVAL_Y
@@ -118,8 +118,14 @@ class OtherSettingsTree {
             WIDTH * 0.7, firstY + 3 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
+        this.autoscoutCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize,
+            'autoscout (online fog)', 'black'), menuOptions.marginLeft,
+            WIDTH * 0.7, firstY + 4 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+
         this.buttons = []
-        this.buttons.push(this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox, this.polishedSpritesCheckBox)
+        this.buttons.push(this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox, this.polishedSpritesCheckBox,
+            this.autoscoutCheckBox)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         let y = this.FIRST_Y + this.buttons.length * this.INTERVAL_Y
@@ -143,6 +149,7 @@ class OtherSettingsTree {
         otherSettings.alwaysDisplayMovesBar = this.movesBarCheckBox.mark
         otherSettings.moveCameraToUndoTarget = this.undoCheckBox.mark
         otherSettings.usePolishedSprites = this.polishedSpritesCheckBox.mark
+        otherSettings.autoscout = this.autoscoutCheckBox.mark
 
         if (usePolishedSprites != otherSettings.usePolishedSprites)
             loadSprites()
@@ -154,6 +161,7 @@ class OtherSettingsTree {
         this.movesBarCheckBox.mark = otherSettings.alwaysDisplayMovesBar
         this.undoCheckBox.mark = otherSettings.moveCameraToUndoTarget
         this.polishedSpritesCheckBox.mark = otherSettings.usePolishedSprites
+        this.autoscoutCheckBox.mark = otherSettings.autoscout
     }
     draw(ctx) {
         this.__updateButtonsByOtherSettings()

@@ -130,9 +130,11 @@ class OnlineSession {
         return this.request('lobby:start', {lobbyId})
     }
     // game:open: the server answers with the board (playYourTurn/waitYouTurn/gameStarted), then acks.
+    // autoscout: the otherSettings.autoscout preference (prefetch at turn start, protocol doc 4.2); on without settings.
     openGame(gameID) {
         this.openGameID = gameID
-        return this.request('game:open', {gameID, rulesVersion: ONLINE_RULES_VERSION})
+        return this.request('game:open', {gameID, rulesVersion: ONLINE_RULES_VERSION,
+            autoscout: typeof otherSettings === 'undefined' || otherSettings.autoscout !== false})
     }
     closeGame() {
         this.openGameID = null
