@@ -646,3 +646,12 @@ function refreshCoopVision() {
     const viewer = players[gameSettings.coop.humanSlots[0]]
     if (viewer) viewer.changeFogOfWarByVision()
 }
+
+// Undo re-hides what the undone action revealed (actions PRD sec. 4.4): the acting player's fog is rebuilt from
+// vision in every mode, so "move, peek, undo" leaves no extra knowledge and matches a replay of the action list.
+function refreshUndoVision() {
+    if (gameSettings.coop) return refreshCoopVision()
+    if (!isFogOfWar || !grid.visionWay) return
+    const actor = players[whooseTurn]
+    if (actor) actor.changeFogOfWarByVision()
+}

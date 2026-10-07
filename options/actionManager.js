@@ -501,7 +501,7 @@ class ActionManager {
         let entry = this.lastAction
         func[entry.type].call(this)
         this.restoreProductionOrders(entry.productionOrders)
-        refreshCoopVision()
+        refreshUndoVision()
 
         if (otherSettings.moveCameraToUndoTarget)
             this.__moveCameraToUndoTarget()
