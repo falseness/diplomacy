@@ -97,13 +97,20 @@ class StatisticsInterface {
                 this.playerInfoHeight * Math.floor((i - 1 ) / this.playersCountInRow)
 
             let text 
+            let textColor = players[i].hexColor
             if (players[i].isLost) {
                 text = 'Lost'
+                // A partial board: lost players come from the server's status and are greyed out.
+                if (hiddenInfo) textColor = 'grey'
             }
             else {
                 text = players[i].info
                 
                 if (isFogOfWar && !gameSettings.coop && i != whooseTurn) {
+                    text = '???'
+                }
+                // A partial board's lists hide most of another player's economy.
+                if (hiddenInfo && !players[whooseTurn]?.isAlliedWith(players[i])) {
                     text = '???'
                 }
             }
@@ -112,7 +119,7 @@ class StatisticsInterface {
                 textPlayer: new Text(x + w / 2, y + textMargin, 
                     h * 0.2, 'Player ' + i, players[i].hexColor),
                 text: new Text(x + textIndent, y + textMargin * 2.5, 
-                    h * 0.15, text, players[i].hexColor, 'left')
+                    h * 0.15, text, textColor, 'left')
             })
             if (gameSettings.coop) {
                 const info = this.playersInfo[this.playersInfo.length - 1]

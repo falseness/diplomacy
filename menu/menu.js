@@ -1137,7 +1137,13 @@ class Menu {
             clickFunc, parameters, canClick, callThis)
         return res
     }
+    // 'replays' is listed only with otherSettings.showReplays.
+    updateMainButtons() {
+        this.main.buttons = this.mainButtons.filter(button =>
+            button.text.text !== 'replays' || otherSettings.showReplays)
+    }
     setTree(tree) {
+        if (tree === this.main) this.updateMainButtons()
         if (this.selectedTree !== tree) this.selectedTree?.leave?.()
         this.previousTree = this.selectedTree
         this.selectedTree = tree
@@ -1201,6 +1207,8 @@ class Menu {
 
         this.tutorial = new TutorialTree(this)
 
+        this.replays = new ReplayTree(this)
+
         this.load = new Tree([
             new SlotManager(slotsCount, startPos.y, load)
         ], this)
@@ -1222,9 +1230,12 @@ class Menu {
         ], this)
 
         // Main entries fit in the visible area on both desktop and mobile.
-        this.main.buttons.forEach((button, index) => {
+        this.mainButtons = this.main.buttons.concat([
+            this.constructor.getButton(startPos, 'replays', this.setTree, this.replays, true, this)])
+        this.mainButtons.forEach((button, index) => {
             button.pos = {x: startPos.x, y: HEIGHT * (0.27 + index * 0.12)}
         })
+        this.updateMainButtons()
         this.play.setParent(this.main, this)
         this.onlineHub.setParent(this.main, this)
         this.createLobby.setParent(this.onlineHub, this)
@@ -1233,6 +1244,7 @@ class Menu {
         this.startGame.setParent(this.play, this)
         this.load.setParent(this.main, this)
         this.tutorial.setParent(this.main, this)
+        this.replays.setParent(this.main, this)
         this.selectedTree = this.main
 
         let firstY = HEIGHT * 0.3
@@ -1248,6 +1260,7 @@ class Menu {
         return this.play.isDynamicTimer
     }
     start() {
+        this.updateMainButtons()
         this.updateSlotManagers()
         requestAnimationFrame(menuLoop)
     }

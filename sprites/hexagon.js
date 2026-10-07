@@ -10,7 +10,15 @@ class Hexagon extends Sprite {
     get isMyTurn() {
         return this.playerColor == whooseTurn
     }
+    // A cell whose contents the client does not have (hidden-information board,
+    // grid colour null): no owner, no suburb, nothing on it, drawn like fog.
+    get unknown() {
+        return this.playerColor === null
+    }
+    // An unknown cell has no owner: callers reading owner fields get the neutral player.
     get player() {
+        if (this.unknown)
+            return players[0]
         return players[this.playerColor]
     }
     get grassHex() {
@@ -73,6 +81,10 @@ class Hexagon extends Sprite {
     draw(ctx) {
         let pos = this.pos
 
+        if (this.unknown) {
+            drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
+            return
+        }
         if (this.isSuburb) {
             drawCachedImage(ctx, this.player.suburbHexagon, pos)
         } 

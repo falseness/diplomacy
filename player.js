@@ -46,8 +46,9 @@ class Player {
             other.role === 'HUMAN' && this.team === other.team)
     }
     // Nothing is ignored for pathing: demons path next to, hit and capture neutral towns too.
+    // Unknown cells (hidden-information boards) are impassable and untargetable.
     ignoresCell(cell) {
-        return false
+        return cell.hexagon.unknown
     }
     // Kept apart from ignoresCell, which also decides passability. Demons capture
     // goldmines by stepping onto them, so nothing is excluded as an objective.
@@ -195,6 +196,8 @@ class Player {
         return res
     }
     get isLost() {
+        // A partial board's lists miss hidden entities: the server says who has lost.
+        if (hiddenInfo) return hiddenGameStatus().lostPlayers.includes(players.indexOf(this))
         this.updateTowns()
         this.updateUnits()
         return !this.towns.length && !this.units.length
@@ -205,6 +208,7 @@ class Player {
         const viewers = shared ? players.filter(player =>
             player.role === 'HUMAN' && this.isAlliedWith(player)) : [this]
         for (const viewer of viewers) viewer.accumulateVision(shared)
+        grid.reportLoadingCells()
     }
     accumulateVision(currentAssetsOnly = false) {
         for (const unit of this.units) {
@@ -508,7 +512,8 @@ class NeutralPlayer extends Player {
         super(color, gold)
         this.hexagon = this.calcSuburbHexagon()
 
-        if (isFogOfWar) {
+        // Unknown cells of a hidden-information board are drawn with it too.
+        if (isFogOfWar || hiddenInfo) {
             let oldColor = this.color
             this.color = {r: 51, g: 51, b: 51}
             this.fogOfWarHexagon = this.calcSuburbHexagon()
@@ -523,7 +528,8 @@ class NeutralPlayer extends Player {
 
         ++gameRound
 
-        if (gameRound >= suddenDeathRound) {
+        // A partial board cannot flood hidden cells: the server's board carries the flood.
+        if (gameRound >= suddenDeathRound && !hiddenInfo) {
             this.suddenDeath()
         }
         if (this.isGameEnded) {
@@ -601,6 +607,7 @@ class NeutralPlayer extends Player {
     }
     get coopResult() {
         if (!gameSettings.coop) return null
+        if (hiddenInfo) return hiddenGameStatus().result
         const humansGone = players.filter(p => p.role === 'HUMAN').every(p => p.isLost)
         const portalsRemain = external.some(p => p.isDemonPortal && !p.killed && p.hp > 0)
         // Any live demon-owned unit counts, including produced Noob/Archer/...
@@ -619,6 +626,10 @@ class NeutralPlayer extends Player {
         return null
     }
     get isGameEnded() {
+        if (hiddenInfo) {
+            if (gameSettings.coop) gameSettings.coop.result = this.coopResult
+            return hiddenGameStatus().ended
+        }
         if (gameSettings.coop) {
             gameSettings.coop.result = this.coopResult
             return gameSettings.coop.result !== null

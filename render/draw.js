@@ -33,6 +33,13 @@ function drawDebugFps(ctx) {
 function drawInterface() {
     interfaceCtx.save()
     interfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
+    // A replay has no turn controls of its own: its controls are DOM, its status is drawn here.
+    if (typeof replayViewer != 'undefined' && replayViewer) {
+        replayViewer.drawOverlay(interfaceCtx)
+        errorWindow.draw(interfaceCtx)
+        interfaceCtx.restore()
+        return
+    }
 
     nextTurnButton.draw(interfaceCtx)
 
@@ -66,7 +73,7 @@ function drawInterface() {
     nextTurnPauseInterface.draw(interfaceCtx)
     if (gameSettings.tutorial)
         tutorialResultInterface.draw(interfaceCtx)
-    const outcome = gameSettings.coop && gameSettings.coop.result
+    const outcome = gameSettings.coop && gameSettings.coop.result || hiddenGameEndText()
     if (outcome) {
         const labels = {victory: 'Victory — humans win', defeat: 'Defeat — demons win', draw: 'Draw — all sides eliminated'}
         interfaceCtx.save()

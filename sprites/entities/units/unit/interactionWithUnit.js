@@ -121,6 +121,7 @@ class InterationWithUnit {
         this.changeCoord(coord, unit, killUnit)
         if (gameSettings.coop) refreshCoopVision()
         else if (isFogOfWar) unit.changeFogOfWarByVision()
+        grid.reportLoadingCells()
     }
     paintHexagons(original_coord, arr, unit, isKillUnit) {
         let coord = Object.assign({}, original_coord)
