@@ -348,6 +348,13 @@ function showRulesVersionPanel() {
     button('Reload', () => location.reload()).focus()
 }
 
+// The server speaks another browser protocol (an OUTDATED_CLIENT ack, protocol doc section 4.9): same reload offer.
+function showOutdatedClientPanel() {
+    if (onlineGameFreeze) onlineGameFreeze()
+    const button = showOnlinePanel('Please reload', 'This page is outdated: please reload it.')
+    button('Reload', () => location.reload()).focus()
+}
+
 // Stops the open online game: the signed-in session socket stays connected for
 // the hub and only loses the game's listeners.
 function closeOnlineGameSocket() {
@@ -660,8 +667,11 @@ function SetupServerCommunicationLogic(gameID) {
         if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')
-        const message = JSON.stringify({'gameID': gameID, 'game': getGameObject(), 'whooseTurn': whooseTurn})
-        // The enforcing server commits its replay of the streamed actions (TASK-684): send after the stream flushed.
+        // Protocol 2 (TASK-687): no board, only the hash of the turn's 'end' (actionRecorder.js recordEnd); the server
+        // commits its replay of the streamed actions (TASK-684), so send after the stream flushed.
+        const ended = actionLog.lastTurn()?.actions.at(-1)
+        const endHash = ended?.action.t === 'end' ? ended.hash : stateHash()
+        const message = JSON.stringify({gameID: gameID, endHash: endHash})
         const send = () => {
             if (socket === onlineSocket && !failed) socket.emit('nextTurn', message)
         }
