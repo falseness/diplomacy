@@ -6,6 +6,8 @@ let goldmines = []
 let grid
 let mapBorder
 let gameExit = false
+// The loaded board is partial (board.hiddenInfo): see loadFromJson.
+let hiddenInfo = false
 
 let gameRound
 let suddenDeathRound = 40

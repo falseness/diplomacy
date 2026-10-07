@@ -362,7 +362,8 @@ class Grid extends SpritesGroup {
     getSurfaceStateValue(x, y) {
         const hexagon = this.arr[x][y].hexagon
         const fogVisible = !isFogOfWar || this.fogOfWar[x][y] ? 1 : 0
-        return ((hexagon.playerColor + 1) << 2) |
+        // Unknown cells (playerColor null) get their own value, apart from colour 0.
+        return ((hexagon.unknown ? 0 : hexagon.playerColor + 1) << 2) |
             (hexagon.isSuburb ? 2 : 0) | fogVisible
     }
     surfaceStateMatches() {

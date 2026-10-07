@@ -1255,6 +1255,7 @@ class GameManager {
         nature = []
         goldmines = []
         gameRound = 0
+        hiddenInfo = false
 
         this.clearBasisValues()
     }

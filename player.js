@@ -46,8 +46,9 @@ class Player {
             other.role === 'HUMAN' && this.team === other.team)
     }
     // Nothing is ignored for pathing: demons path next to, hit and capture neutral towns too.
+    // Unknown cells (hidden-information boards) are impassable and untargetable.
     ignoresCell(cell) {
-        return false
+        return cell.hexagon.unknown
     }
     // Kept apart from ignoresCell, which also decides passability. Demons capture
     // goldmines by stepping onto them, so nothing is excluded as an objective.
@@ -508,7 +509,8 @@ class NeutralPlayer extends Player {
         super(color, gold)
         this.hexagon = this.calcSuburbHexagon()
 
-        if (isFogOfWar) {
+        // Unknown cells of a hidden-information board are drawn with it too.
+        if (isFogOfWar || hiddenInfo) {
             let oldColor = this.color
             this.color = {r: 51, g: 51, b: 51}
             this.fogOfWarHexagon = this.calcSuburbHexagon()

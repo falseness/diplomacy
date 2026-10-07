@@ -31,12 +31,16 @@ function getGameObject() {
         'whooseTurn': whooseTurn,
         'gameRound': gameRound,
         'isFogOfWar': isFogOfWar,
-        'gameSettings': gameSettings
+        'gameSettings': gameSettings,
+        // Only partial boards carry the key, so full boards serialize unchanged.
+        ...(hiddenInfo ? {'hiddenInfo': true} : {})
     }
 }
 
 function loadFromJson(game_string) {
     let game = JSON.parse(game_string)
+    // A partial board: unknown cells (grid null) and partial entity lists.
+    hiddenInfo = game.hiddenInfo === true
     unpacker.unpackAll(JSON.stringify(game.grid), JSON.stringify(game.players), JSON.stringify(game.external),
         JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
         JSON.stringify(game.timers[game.whooseTurn]), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),

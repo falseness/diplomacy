@@ -182,6 +182,9 @@ class JsonUnpackManager {
         for (let q = 0; q < packedTown.suburbs.length; ++q) {
             let packedSuburb = packedTown.suburbs[q]
             let hexagon =  grid.arr[packedSuburb.x][packedSuburb.y].hexagon
+            // An unknown cell is nobody's suburb (hidden-information boards).
+            if (hexagon.unknown)
+                continue
             town.suburbs.push(hexagon)
             // hexagon can be in suburbs array, but no be suburb
             // (it need for undo work with no bugs)
@@ -302,6 +305,7 @@ class JsonUnpackManager {
 
         for (let i = 0; i < packedGrid.length; ++i) {
             for (let j = 0; j < packedGrid[i].length; ++j) {
+                // null: a cell whose contents are unknown (hiddenInfo boards)
                 grid.arr[i][j].hexagon.firstpaint(packedGrid[i][j])
             }
         }
