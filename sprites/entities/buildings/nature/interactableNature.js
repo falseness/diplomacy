@@ -35,8 +35,7 @@ class Bush extends InteractableNature {
 class Hill extends InteractableNature {
     static rangeIncrease = 1
     constructor(x, y) {
-        // is not done and probably won't be
-        const name = 'mountain'
+        const name = 'hill'
         super(x, y, name)
     }
     get rangeIncrease() {

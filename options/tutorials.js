@@ -383,11 +383,14 @@ function createTutorial6Map() {
 }
 
 function createTutorial7Map() {
-    // High ground: a 3-hex hill (4,4), (4,5), (5,4) stands between red (2 archers, 2 noobs) and blue's
-    // 3 archers and 2 noobs on open ground. Each red archer is one step from a hill hex, and every blue
-    // archer is exactly 3 hexes from the nearest hill hex: an archer on a hill shoots 3 hexes, so red's
-    // archers on it hit blue first, while blue's archers (range 2) must walk up and spend their moves.
-    // Walking the archers straight at blue (what SimpleAiPlayer does for red) gets them shot first.
+    // High ground: red holds a plateau behind a mountain ridge (column 5) with a 2-hex pass (5,3)-(5,4).
+    // Red's own tower (3,4) stands empty behind the pass mouth and two hills (4,2) and (4,6), drawn as hills, flank
+    // the pass behind the ridge; each of red's 3 archers is one step from one of them. An archer on the tower or a
+    // hill shoots 3 hexes and sees and shoots over bushes and mountains. Red's 3 normchels plug the pass exits
+    // (4,3) (4,4) (4,5). Blue pushes 4 normchels and 2 KOHb at the pass while its 3 archers (range 2) wait behind
+    // bushes (8,3) (8,5). From the tower and the hills red shoots everything that comes into the pass before blue's
+    // archers get in range. Walking down through the pass to fight (what SimpleAiPlayer does for red) gets the
+    // normchels surrounded in the open and then the archers overrun.
     let map = new GameMap(
         {x: 12, y: 9},
         [
@@ -398,11 +401,15 @@ function createTutorial7Map() {
             {
                 rgb: {r: 255, g: 0, b: 0},
                 towns: [],
+                // GameMap.start paints the tower's hex red.
+                towers: [{x: 3, y: 4}],
                 units: [
-                    {x: 4, y: 3, type: Archer},
-                    {x: 3, y: 5, type: Archer},
-                    {x: 3, y: 3, type: Noob},
-                    {x: 4, y: 6, type: Noob}
+                    {x: 3, y: 3, type: Archer},
+                    {x: 3, y: 2, type: Archer},
+                    {x: 3, y: 6, type: Archer},
+                    {x: 4, y: 3, type: Normchel},
+                    {x: 4, y: 4, type: Normchel},
+                    {x: 4, y: 5, type: Normchel}
                 ]
             },
             {
@@ -410,19 +417,26 @@ function createTutorial7Map() {
                 playerType: 'SimpleAiPlayer',
                 towns: [],
                 units: [
-                    {x: 8, y: 3, type: Archer},
-                    {x: 8, y: 4, type: Archer},
-                    {x: 8, y: 5, type: Archer},
-                    {x: 7, y: 5, type: Noob},
-                    {x: 7, y: 6, type: Noob}
+                    {x: 7, y: 3, type: Normchel},
+                    {x: 7, y: 4, type: Normchel},
+                    {x: 7, y: 5, type: Normchel},
+                    {x: 8, y: 4, type: Normchel},
+                    {x: 8, y: 2, type: KOHb},
+                    {x: 8, y: 6, type: KOHb},
+                    {x: 9, y: 3, type: Archer},
+                    {x: 9, y: 5, type: Archer},
+                    {x: 10, y: 4, type: Archer}
                 ]
             }
         ],
         [],
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([[4, 4], [4, 5], [5, 4]])
+        // Lakes close the map's corners.
+        coordDictionary([[0, 0], [0, 1], [0, 8], [1, 8], [11, 0], [11, 8]]),
+        // The ridge: only (5,3) and (5,4) lead onto red's plateau.
+        coordDictionary([[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8]]),
+        // Bushes hide blue's archers from the low ground, not from the tower or the hills.
+        coordDictionary([[8, 3], [8, 5], [9, 1], [9, 7]]),
+        coordDictionary([[4, 2], [4, 6]])
     )
     map.testName = 'tutorial 7'
     return map

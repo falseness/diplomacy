@@ -280,7 +280,11 @@ class GameMap {
                 for (let i = 0; i < configuredBuildings.length; ++i) {
                     let configured = configuredBuildings[i]
                     assert(grid.getBuilding(configured).isEmpty())
-                    assert(grid.getHexagon(configured).playerColor == playerIndex)
+                    // A building on a hex nothing painted yet (no unit, town or suburb) takes its owner's colour.
+                    let hexagon = grid.getHexagon(configured)
+                    if (hexagon.playerColor == 0)
+                        hexagon.firstpaint(playerIndex)
+                    assert(hexagon.playerColor == playerIndex)
                     let building = new BuildingType(configured.x, configured.y)
                     if (!('hp' in configured)) {
                         continue

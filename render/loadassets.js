@@ -25,7 +25,8 @@ let assets = {
     lake: new Image(),
     sea: new Image(),
     goldmine: new Image(),
-    bush: new Image()
+    bush: new Image(),
+    hill: new Image()
 }
 // Demon artwork is shared by both ordinary sprite themes.
 const demonSpriteImages = ['imp', 'clawling', 'hound', 'houndLeft', 'brute', 'bulwark',
@@ -45,7 +46,7 @@ let imagesCountLoaded = 0
 let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
-        'mountain', 'lake', 'sea', 'goldmine', 'bush'].concat(demonSpriteImages, undeadSpriteImages)
+        'mountain', 'lake', 'sea', 'goldmine', 'bush', 'hill'].concat(demonSpriteImages, undeadSpriteImages)
 let images = spriteImages.concat(grassHexImages)
 // Images whose last request failed: they still count as loaded (so the menu starts) and are cached as a blank placeholder.
 let failedImages = new Set()
