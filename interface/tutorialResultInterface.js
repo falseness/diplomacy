@@ -1,5 +1,6 @@
 // The end screen of a tutorial: 'Victory' or 'Defeat' over the board with Retry
-// (the same tutorial again) and Back to tutorials. While it is shown it takes
+// (the same tutorial again) and Back to tutorials; a victory with a later tutorial
+// in the list also shows Next tutorial above them. While it is shown it takes
 // every game click.
 class TutorialResultInterface {
     constructor() {
@@ -10,8 +11,15 @@ class TutorialResultInterface {
         this.panel = new Rect(WIDTH * 0.25, HEIGHT * 0.2, WIDTH * 0.5, HEIGHT * 0.6,
             [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.0035 * WIDTH, 'white')
         this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.06 * WIDTH, 'Victory', 'black')
-        this.retryButton = TutorialResultInterface.getButton(HEIGHT * 0.42, 'Retry', TutorialManager.retry)
-        this.backButton = TutorialResultInterface.getButton(HEIGHT * 0.6, 'Back to tutorials',
+        this.layOut(false)
+    }
+    // Two buttons, or three when Next tutorial is shown.
+    layOut(hasNext) {
+        const ys = hasNext ? [0.37, 0.51, 0.65] : [null, 0.42, 0.6]
+        this.nextButton = hasNext ?
+            TutorialResultInterface.getButton(HEIGHT * ys[0], 'Next tutorial', TutorialManager.next) : null
+        this.retryButton = TutorialResultInterface.getButton(HEIGHT * ys[1], 'Retry', TutorialManager.retry)
+        this.backButton = TutorialResultInterface.getButton(HEIGHT * ys[2], 'Back to tutorials',
             TutorialManager.backToTutorials)
     }
     // A menu button wide enough for 'Back to tutorials'.
@@ -25,6 +33,7 @@ class TutorialResultInterface {
         this.outcome = outcome
         this.title.text = outcome == 'victory' ? 'Victory' : 'Defeat'
         this.title.color = outcome == 'victory' ? 'green' : 'red'
+        this.layOut(outcome == 'victory' && TutorialManager.nextId() !== null)
         this.visible = true
     }
     hide() {
@@ -34,7 +43,8 @@ class TutorialResultInterface {
     click(pos) {
         if (!this.visible)
             return false
-        this.retryButton.click(pos) || this.backButton.click(pos)
+        if (!(this.nextButton && this.nextButton.click(pos)))
+            this.retryButton.click(pos) || this.backButton.click(pos)
         return true
     }
     draw(ctx) {
@@ -43,6 +53,8 @@ class TutorialResultInterface {
         this.background.draw(ctx)
         this.panel.draw(ctx)
         this.title.draw(ctx)
+        if (this.nextButton)
+            this.nextButton.draw(ctx)
         this.retryButton.draw(ctx)
         this.backButton.draw(ctx)
     }

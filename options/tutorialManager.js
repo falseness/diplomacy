@@ -3,6 +3,8 @@
 // = {id} marks the game; such a game is never saved and shows no pass-device screen.
 const TUTORIAL_HUMAN_SLOT = 1
 const TUTORIAL_AI_SLOT = 2
+// The normal sudden death round; a tutorials entry may set its own suddenDeathRound.
+const TUTORIAL_SUDDEN_DEATH_ROUND = 40
 
 class TutorialManager {
     static start(id) {
@@ -15,6 +17,7 @@ class TutorialManager {
         // 'surviveRounds' counts red's units only when the map gives red no town.
         const human = map.players[TUTORIAL_HUMAN_SLOT]
         TutorialManager.humanStartsWithTown = !!(human && human.towns && human.towns.length)
+        suddenDeathRound = tutorial.suddenDeathRound || TUTORIAL_SUDDEN_DEATH_ROUND
         GameManager.start(map, true)
     }
     // Called after every human move and every turn; true once the tutorial is over.
@@ -75,6 +78,18 @@ class TutorialManager {
     // The old game loop stops on the next frame (gameExit); the new game starts after it.
     static retry() {
         const id = gameSettings.tutorial.id
+        tutorialResultInterface.hide()
+        menuBack()
+        requestAnimationFrame(() => TutorialManager.start(id))
+    }
+    // The id of the tutorial after the running one in the list, or null after the last.
+    static nextId() {
+        const index = tutorials.findIndex(tutorial => tutorial.id === gameSettings.tutorial.id)
+        return index >= 0 && index + 1 < tutorials.length ? tutorials[index + 1].id : null
+    }
+    // Starts the next tutorial directly, the same way as retry.
+    static next() {
+        const id = TutorialManager.nextId()
         tutorialResultInterface.hide()
         menuBack()
         requestAnimationFrame(() => TutorialManager.start(id))
