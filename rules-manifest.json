@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "37ab368087c3b8f0e2386daea6f048355944e6468a198a6fded09afe09d3c95f",
+  "rulesVersion": "30d4eece3f3069fa96f6fc3a03a23d9041d7f6c092c381bc2e13d8b651663d71",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,13 +30,13 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "8dc0ef2eaa31516b1d8e31aac4cf35059655cc8e98dacccc7afc941cd54d83c0",
-      "bytes": 65272
+      "sha256": "615021fed2d5425543850c2cdab7b73f47974f07b46fc9452f0a0a019ec6462f",
+      "bytes": 68552
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "299590509c2146554ab673829b4849f1581389a207c01a6f270da07abff197b5",
-      "bytes": 38468
+      "sha256": "2a4730477d4ba4cb33ef8decdab5cd374cbe4ff3234c64094d8eb022b56b57b7",
+      "bytes": 49022
     },
     {
       "path": "options/tutorialProgress.js",
@@ -45,13 +45,13 @@
     },
     {
       "path": "options/tutorialManager.js",
-      "sha256": "8765ce3f8d4779dd82388551866b7ee650dec53d8ed394731294f512edba68f3",
-      "bytes": 3718
+      "sha256": "474e7039972e3d1e247e429b7667c7eaca8baca908bf1d92e73ea0628c8bc975",
+      "bytes": 4487
     },
     {
       "path": "options/save.js",
-      "sha256": "c7973683df4fe306775ed5a3aa262c3f1dbf320121c2609f14bc82b96941e0cf",
-      "bytes": 14464
+      "sha256": "b117a40f716a0cb645de47ece9a706840166c12ad2ba1db283509ab6162f9e8b",
+      "bytes": 14488
     },
     {
       "path": "options/actionManager.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "b7fed084e0824bca66cc4c9df41d5bd8a6a4904bd17da9186ed5cb31cefe205a",
-      "bytes": 6712
+      "sha256": "bdf3e20c49b2cb24daafd869324a9e690cd3f634dd5828ac639331a179f1d6da",
+      "bytes": 6743
     },
     {
       "path": "render/image.js",
@@ -425,8 +425,8 @@
     },
     {
       "path": "sprites/entities/buildings/nature/interactableNature.js",
-      "sha256": "504a50961c3110656f00d786d53569653cf7aeecc0c2a73c613853e9487649af",
-      "bytes": 1335
+      "sha256": "cdd91062966d7c64d9ca971660630e9495018691d1281290a258748544e49eee",
+      "bytes": 1286
     },
     {
       "path": "sprites/entities/buildings/tower.js",
