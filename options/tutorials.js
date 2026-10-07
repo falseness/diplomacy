@@ -966,17 +966,22 @@ function createTutorial15Map() {
 }
 
 function createTutorial16Map() {
-    // Close the Portals (co-op tutorial map). A lake (column 7, rows 0..7) splits the map; its only ford is
-    // (7,8) at the bottom. Behind it three melee portals (10,1), (11,4), (10,6) send a Brute every 4 rounds
-    // from round 4 and three Imps wait in front of them. Red's town (1,4) has 2 catapults (2,3), (2,5) behind
-    // 3 normchels (3,3), (3,4), (3,5) and 30 gold (the army costs a little more than the town earns).
-    // Chasing the demons through the ford bleeds the army while the far portal keeps spawning; marching the
-    // normchels up to the lake shore with the catapults behind them destroys every portal from across the
-    // water (range 2-5, 4 damage to a 12 hp portal), after which the remaining demons can be cleaned up.
-    let lakes = []
+    // Close the Portals (co-op tutorial map). A river (lakes in column 7, rows 0..7) splits the map; its only
+    // ford is (7,8) at the bottom, hidden by a bush (8,8) on the far bank. Behind it three melee portals (10,1),
+    // (11,4), (10,6) send a Brute every 4 rounds from round 4 and three Imps wait in front of them; the far side
+    // is closed by a pond (13,4)(14,4) and mountains in its corners. Red's town (1,4) has 2 catapults (2,3),
+    // (2,5) behind 3 normchels (3,3), (3,4), (3,5) and 30 gold (the army costs a little more than the town
+    // earns). Chasing the demons through the ford bleeds the army while the far portal keeps spawning; marching
+    // the normchels up to the river bank with the catapults behind them - the hills (5,3), (5,5), (6,6) on the
+    // near bank are high posts - destroys every portal from across the water (range 2-5, 4 damage to a 12 hp
+    // portal), after which the remaining demons can be cleaned up. Bushes stay off the fire lines to the portals.
+    let lakes = [[0, 0], [0, 8], [8, 0], [13, 4], [14, 4]]
     for (let y = 0; y <= 7; ++y) {
         lakes.push([7, y])
     }
+    let mountains = [[4, 0], [4, 8], [5, 8], [13, 0], [14, 0], [14, 1], [14, 7], [14, 8]]
+    let bushes = [[1, 1], [1, 7], [2, 0], [2, 8], [5, 1], [8, 8], [12, 2], [12, 8], [13, 6]]
+    let hills = [[5, 3], [5, 5], [6, 6]]
     let map = new GameMap(
         {x: 15, y: 9},
         [
@@ -999,9 +1004,9 @@ function createTutorial16Map() {
         ],
         [],
         coordDictionary(lakes),
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([]),
+        coordDictionary(mountains),
+        coordDictionary(bushes),
+        coordDictionary(hills),
         {type: 'rectangular'},
         {
             tutorial: true,
