@@ -24,7 +24,7 @@ Training and inference both call `vectoriseGrid()` from
 | 81 | Continuous acting-player town-defense margin: nearest attacker distance minus nearest defender distance, normalized by map size |
 
 Ownership channels are relative to the acting player: `1` friendly, `-1`
-enemy, and `0` neutral. Health is normalized by maximum health. Production
+enemy, and `0` neutral (an unknown owner counts as neutral, never enemy). Health is normalized by maximum health. Production
 turns are divided by the corresponding `*_PRODUCTION_TURNS_VECTOR_SCALE`.
 
 Completed external defenses use separate type channels. Wall marks movement
@@ -37,3 +37,16 @@ Expansion opportunities mark owned, non-suburb cells adjacent to a valid
 suburb belonging to one of that owner's live towns. Town and global suburb
 income channels count only suburbs whose ownership and live state still match
 their town, so capture and town loss are reflected without stale list entries.
+
+## Unknown Cells
+
+On a hidden-information board (`board.hiddenInfo`) a cell whose contents the
+client does not have has grid colour `null`. Such a cell is encoded without a
+new channel, so the 82-channel shape and the trained models are unchanged:
+channel 0 (`hasBuilding`, `CELL_UNKNOWN_CHANNEL`) holds `CELL_UNKNOWN_VALUE`
+(`-1`), every other local channel is `0`, and the global channels (gold,
+income, suburb income, town-defense margin) hold the same values as on every
+other cell. Known cells keep `hasBuilding` at `0` or `1`, so full boards
+vectorize exactly as before. A public demon portal on an unknown cell is not
+encoded either. Seats whose gold is hidden (`null`) contribute `0` gold, and
+the distance channels only see known units and towns.

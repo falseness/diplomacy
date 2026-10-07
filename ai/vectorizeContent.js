@@ -85,6 +85,12 @@ var CELL_VECTOR_INDEX = {
 }
 
 var CELL_VECTOR_SIZE = 82
+// Unknown cell (hidden-information board, grid colour null): the shape stays
+// 82 channels so trained models still load. Its hasBuilding channel holds -1
+// (known cells hold 0 or 1), every other local channel is 0 and the global
+// channels are filled as on any other cell. See ai/model-input-schema.md.
+var CELL_UNKNOWN_CHANNEL = CELL_VECTOR_INDEX.hasBuilding
+var CELL_UNKNOWN_VALUE = -1
 var CELL_VECTOR_GLOBAL_CHANNELS = [
     CELL_VECTOR_INDEX.currentPlayerGold,
     CELL_VECTOR_INDEX.strongestOpponentGold,
@@ -111,7 +117,8 @@ var SUBURB_INCOME_VECTOR_SCALE = 20.0
 var SUBURB_COUNT_VECTOR_SCALE = 20.0
 
 function relativePlayerValue(playerColor) {
-    if (playerColor == 0) {
+    // An unknown owner (null) is neutral, not enemy.
+    if (playerColor == 0 || playerColor === null || playerColor === undefined) {
         return 0
     }
     return playerColor == whooseTurn ? 1 : -1
@@ -599,10 +606,19 @@ function applyGlobalVectorChannels(result, globalChannels) {
     }
 }
 
+function isUnknownVectorCell(cell) {
+    return cell.playerColor === null
+}
+
 function vectorizeCellLocal(cell, globalChannels, expansionLookup) {
     let result = new Array(CELL_VECTOR_SIZE)
     result = result.fill(0)
     applyGlobalVectorChannels(result, globalChannels)
+    // Nothing on an unknown cell is encoded, a public demon portal included.
+    if (isUnknownVectorCell(cell)) {
+        result[CELL_UNKNOWN_CHANNEL] = CELL_UNKNOWN_VALUE
+        return result
+    }
     vectorizeSuburb(cell, result, expansionLookup)
     if (!cell.building.isEmpty()) {
         result[CELL_VECTOR_INDEX.hasBuilding] = 1
