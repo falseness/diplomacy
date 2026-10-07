@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "2cf2e9e46c8d0d5315d613ad6a58e559bc20b8801212e128db6fb60898ac9844",
+  "rulesVersion": "932ffa392ec926c0503f36046927bf428cca37a194a49d18973fccc0e8722fc5",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -50,8 +50,8 @@
     },
     {
       "path": "options/save.js",
-      "sha256": "c7973683df4fe306775ed5a3aa262c3f1dbf320121c2609f14bc82b96941e0cf",
-      "bytes": 14464
+      "sha256": "e1306295a28e2a99d4e53fc329f85fcad4abafd34ace2eca643ec385663e8065",
+      "bytes": 14797
     },
     {
       "path": "options/actionManager.js",
@@ -95,8 +95,8 @@
     },
     {
       "path": "options/filteredView.js",
-      "sha256": "bac60c951f03aaa89cffc1b397190a4a48aea614c29b5c98ce37bea5292a6c13",
-      "bytes": 9037
+      "sha256": "c942169fa72a3f7e2caad16891291cd9a6398137c54be3f33024893bfb78c6fa",
+      "bytes": 9659
     },
     {
       "path": "ai/coop-map-scaling.js",
@@ -485,8 +485,8 @@
     },
     {
       "path": "sprites/entities/buildings/demonPortal.js",
-      "sha256": "c124e6cf329659eba7e79b90aa8d973d0784395c232c0d736c4b6f62c8b4d761",
-      "bytes": 5359
+      "sha256": "8232976bdcda5de509dfb76e0e1a884ec6144aa164f219bcfbe61a6babcaae1c",
+      "bytes": 5527
     },
     {
       "path": "ai/wave-placement.js",

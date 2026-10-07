@@ -9,13 +9,16 @@
 //                                            knownCells ([{x, y}], e.g. revealableByOneAction) and the cells of the
 //                                            player's own units. Grid colours of other cells are null; units, towns
 //                                            (and their suburbs / buildings / pending buildings), external,
-//                                            externalProduction and goldmines only on known cells; gold and timer
+//                                            externalProduction and goldmines only on known cells, except demon
+//                                            portals: public landmarks, every live one sent (its cell's colour
+//                                            only when the cell is known); gold and timer
 //                                            only the player's own (others null); no nature (see terrainView);
 //                                            plus hiddenInfo: true, viewer, status {ended, lostPlayers, round} and
 //                                            hiddenTownParts [{player, suburbs, buildings, buildingProduction}]: the
 //                                            known parts of towns standing on unknown cells (no town coord).
 //   terrainView()                         -> {nature}: the public terrain, sent once (sec. 6.3).
-//   boardFromFilteredView(view, terrain)  -> a board loadFromJson accepts: unknown colours neutral (0), hidden gold
+//   boardFromFilteredView(view, terrain)  -> a board loadFromJson accepts: unknown colours neutral (0) (a portal's
+//                                            cell the demons' colour, as every portal cell is), hidden gold
 //                                            0, hidden timers a copy of the viewer's, terrain's nature;
 //                                            hiddenTownParts are dropped (a town object needs its coord).
 //   terrainChanges(baseNature, nature)    -> [{x, y, nature}]: nature (a packed board's list) as cell changes against
@@ -126,7 +129,8 @@ function filteredView(playerIndex, knownCells = []) {
         }
         return res
     })
-    view.external = full.external.filter(onKnown)
+    // Portals are public landmarks (PRD 6.3): the complete list, drawn under fog (Grid.drawFogLandmark).
+    view.external = full.external.filter(entity => entity.name === 'demonPortal' || onKnown(entity))
     view.externalProduction = full.externalProduction.filter(onKnown)
     view.goldmines = full.goldmines.filter(onKnown)
     view.timers = full.timers.map((packed, i) => i === playerIndex ? packed : null)
@@ -158,6 +162,9 @@ function filteredViewStatus() {
 function boardFromFilteredView(view, terrain) {
     let board = JSON.parse(JSON.stringify(view))
     board.grid = board.grid.map(column => column.map(colour => colour === null ? 0 : colour))
+    for (let portal of board.external)
+        if (portal.name === 'demonPortal')
+            board.grid[portal.coord.x][portal.coord.y] = portal.ownerSlot
     board.players.forEach(packed => {
         if (packed.gold === null)
             packed.gold = 0

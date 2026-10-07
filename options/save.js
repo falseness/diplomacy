@@ -243,7 +243,9 @@ class JsonUnpackManager {
                         unit.name !== 'Empty' && unit.coord.x === x && unit.coord.y === y))
                     throw new Error('portal requires empty or demon-occupied unit cell')
             }
-            if (grid.getHexagon({x, y}).playerColor !== slot)
+            // Unknown cell (hidden-information board): the portal is a landmark, its cell's colour is not sent.
+            const hexagon = grid.getHexagon({x, y})
+            if (!hexagon.unknown && hexagon.playerColor !== slot)
                 throw new Error('Invalid saved portal ownership')
         }
     }
@@ -262,8 +264,9 @@ class JsonUnpackManager {
                 if (portal.name !== 'demonPortal') continue
                 if (!COOP_PORTAL_CATEGORIES.includes(portal.category))
                     throw new Error('Invalid saved portal category')
-                if (portal.ownerSlot !== coop.demonSlot ||
-                        savedGrid[portal.coord.x]?.[portal.coord.y] !== coop.demonSlot)
+                // A portal is a public landmark: on a hidden-information board its cell may be unknown (null).
+                const colour = savedGrid[portal.coord.x]?.[portal.coord.y]
+                if (portal.ownerSlot !== coop.demonSlot || (colour !== coop.demonSlot && !(hiddenInfo && colour === null)))
                     throw new Error('Invalid saved portal ownership')
             }
         }

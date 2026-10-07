@@ -22,7 +22,10 @@ class DemonPortal extends Building {
             throw new Error('portal requires empty or demon-occupied unit cell')
         // Setup and deserialization share ownership bookkeeping, without adding
         // a player action to the undo stack. The building cell is still empty.
-        grid.getHexagon({x, y}).repaint(slot, false)
+        // An unknown cell (hidden-information board: the portal is a public landmark) stays unknown.
+        const hexagon = grid.getHexagon({x, y})
+        if (!hexagon.unknown)
+            hexagon.repaint(slot, false)
         super(x, y, 'demonPortal')
         Object.defineProperty(this, 'ownerSlot', {value: slot})
         Object.defineProperty(this, 'category', {value: category})
