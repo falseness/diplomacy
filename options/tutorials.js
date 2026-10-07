@@ -732,6 +732,66 @@ function createTutorial13Map() {
     return map
 }
 
+function createTutorial14Map() {
+    // Grow your economy: an open 15x9 plain, mirror-symmetric around column 7. Red's town (2,4) has only its
+    // noob but 100 gold; blue's town (12,4) (SimpleAiPlayerWithEconomy, 60 gold) has a head start of 2 noobs and
+    // an archer. Each side owns the land of its 5 home columns (red x 0..4, blue x 10..14), where suburbs are
+    // cheap (3 gold two hexes from the town, 5 at three hexes) and each pays +1 gold a turn; a farm (32 gold)
+    // pays +4. Spending the gold on noobs at once (what SimpleAiPlayerWithEconomy does for red) keeps
+    // red's income near 4, the noobs walk into blue's head start one by one and red loses its town by round 25.
+    // Buying the cheap suburbs and farms first lifts red's income from 10 to over 40 in 4 turns; blue only moves
+    // through hexes red sees, so it waits; then the bigger income buys barracks and a mixed army that wipes blue
+    // out before round 40.
+    let band = (fromX, toX) => {
+        let cells = []
+        for (let x = fromX; x <= toX; ++x) {
+            for (let y = 0; y < 9; ++y) {
+                cells.push({x: x, y: y})
+            }
+        }
+        return cells
+    }
+    let townSuburbs = (x, y, expansionCells) => ({
+        town: {x: x, y: y},
+        cells: [{x: x, y: y}].concat(neighborhood[x & 1].map(offset => ({x: x + offset[0], y: y + offset[1]}))),
+        expansionCells: expansionCells
+    })
+    let map = new GameMap(
+        {x: 15, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 100,
+                towns: [{x: 2, y: 4}],
+                suburbs: [townSuburbs(2, 4, band(0, 4))]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayerWithEconomy',
+                gold: 60,
+                towns: [{x: 12, y: 4}],
+                suburbs: [townSuburbs(12, 4, band(10, 14))],
+                units: [
+                    {x: 10, y: 3, type: Noob},
+                    {x: 10, y: 5, type: Noob},
+                    {x: 11, y: 4, type: Archer}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([]),
+        coordDictionary([])
+    )
+    map.testName = 'tutorial 14'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -748,5 +808,6 @@ const tutorials = [
         get map() { return createTutorial11Map() }},
     {id: 'tutorial-12', title: 'Tutorial 12: Scout First', pass: 'enemyUnitsDead', get map() { return createTutorial12Map() }},
     {id: 'tutorial-13', title: 'Tutorial 13: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
-        get map() { return createTutorial13Map() }}
+        get map() { return createTutorial13Map() }},
+    {id: 'tutorial-14', title: 'Tutorial 14: Grow Your Economy', pass: 'enemyLost', get map() { return createTutorial14Map() }}
 ]
