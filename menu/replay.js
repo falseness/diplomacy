@@ -640,8 +640,14 @@ class ReplayViewer {
     }
 }
 
-// 'replays' (behind otherSettings.showReplays until the server serves game:replay): a recording
-// from a file or a URL.
+// A 'My finished games' row: settings, rounds, players, when it finished.
+function replayFinishedGameText(game) {
+    const finished = game.finishedAt ? 'finished ' + game.finishedAt.slice(0, 16).replace('T', ' ') : 'finished'
+    return [hubSettingsText(game.settings), `${game.rounds} rounds`, (game.players || []).join(', '), finished].join(' · ')
+}
+
+// 'replays' (behind otherSettings.showReplays): a recording from a file or a URL, or one of the signed-in
+// account's finished games ('My finished games': game:myFinished, opened through game:replay).
 class ReplayTree {
     constructor(_menu) {
         this.menu = _menu
@@ -675,12 +681,76 @@ class ReplayTree {
         open.textContent = 'open'
         open.addEventListener('click', () => this.openUrl(url.value))
         row.append(url, open)
-        div.append(file, row)
+        const finished = document.createElement('div')
+        finished.id = 'replay-finished'
+        finished.style.cssText = 'display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow-y:auto'
+        const heading = document.createElement('b')
+        heading.textContent = 'My finished games'
+        this.finishedList = document.createElement('div')
+        this.finishedList.id = 'replay-finished-list'
+        this.finishedList.style.cssText = 'display:flex;flex-direction:column;gap:4px'
+        finished.append(heading, this.finishedList)
+        div.append(file, row, finished)
         document.body.append(div)
+        this.loadFinished(div)
     }
     leave() {
         this.container?.remove()
         this.container = null
+    }
+    // Lists the signed-in (or resumable) account's finished games; late results for a closed screen are dropped.
+    async loadFinished(container) {
+        const list = this.finishedList
+        const show = text => {
+            list.textContent = ''
+            const line = document.createElement('span')
+            line.id = 'replay-finished-status'
+            line.textContent = text
+            list.append(line)
+        }
+        this.finishedGames = null
+        if (typeof onlineSession === 'undefined' || !onlineSession.account && !onlineSession.hasStoredSession) {
+            show('sign in (play online) to list your finished games')
+            return
+        }
+        show('loading…')
+        const account = onlineSession.account || await onlineSession.resume()
+        if (this.container !== container) return
+        if (!account) {
+            show('sign in (play online) to list your finished games')
+            return
+        }
+        const ack = await onlineSession.myFinishedGames()
+        if (this.container !== container) return
+        if (!ack.ok) {
+            show(`could not list: ${ack.error}`)
+            return
+        }
+        this.finishedGames = ack.games
+        if (!ack.games.length) {
+            show('no finished games')
+            return
+        }
+        list.textContent = ''
+        for (const game of ack.games) {
+            const button = document.createElement('button')
+            button.className = 'replay-finished-game'
+            button.dataset.gameId = game.gameID
+            button.textContent = replayFinishedGameText(game)
+            button.addEventListener('click', () => this.openFinished(game.gameID))
+            list.append(button)
+        }
+    }
+    async openFinished(gameID) {
+        const container = this.container
+        this.status.text = 'loading…'
+        const ack = await onlineSession.replayGame(gameID)
+        if (this.container !== container) return false
+        if (!ack.ok) {
+            this.status.text = `could not load: ${ack.error}`
+            return false
+        }
+        return this.open(ack)
     }
     openFile(file) {
         this.status.text = 'reading…'
