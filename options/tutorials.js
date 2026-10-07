@@ -54,9 +54,12 @@ function createTutorial1Map() {
 
 function createTutorial2Map() {
     // Blue's army (5 normchels in front of 5 archers) stands 3 hexes left of red's
-    // 2 normchels and 2 archers; red's town with a barrack is 7 hexes behind red's army.
-    // Fighting at once loses. Retreating to the town for 4 rounds while the town and the
-    // barrack order a unit every turn wins. Blue has no town, so its economy is off
+    // 2 normchels and 2 archers in an open field; red's town with a barrack is 7 hexes behind
+    // red's army. The way home is a road between a lake (north) and mountains (south) that
+    // ends at a gate: mountain spurs in column 11 leave only rows 3-5 open, 2 hexes in front
+    // of the town. Fighting in the field at once loses. Retreating along the road to the gate
+    // for 4 rounds while the town and the barrack order a unit every turn, then meeting blue
+    // at the gate with the new units, wins. Blue has no town, so its economy is off
     // (salaries would bankrupt it and disband its army).
     let map = new GameMap(
         {x: 16, y: 9},
@@ -97,8 +100,8 @@ function createTutorial2Map() {
             }
         ],
         [],
-        [],
-        []
+        coordDictionary([[8, 0], [9, 0], [8, 1], [9, 1], [10, 0]]),
+        coordDictionary([[8, 7], [8, 8], [9, 8], [10, 8], [11, 0], [11, 1], [11, 2], [11, 6], [11, 7], [11, 8]])
     )
     map.testName = 'tutorial 2'
     return map
