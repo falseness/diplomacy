@@ -63,6 +63,7 @@ const gameDiffHandler = {
         this.gameID = gameID
         this.lastSeq = lastSeq
         this.buffered.clear()
+        remoteEffects.clear()
     },
     // Takes one game:diff message; returns the applyCellDiff results of the messages applied now,
     // in seq order (empty when it was buffered, stale or for another game).
@@ -94,7 +95,9 @@ const gameDiffHandler = {
         const hints = segmented.map(entry => this.pathHint(entry)).filter(Boolean)
         if (hints.length || Array.isArray(diff.paths))
             diff.paths = (Array.isArray(diff.paths) ? diff.paths : []).concat(hints)
+        const before = remoteEffects.snapshot(diff.cells)
         const result = applyCellDiff(diff)
+        remoteEffects.play(before, hints)
         // A unit whose path left the fog has no visible start to match: it slides along the last
         // visible segment, from where it came into view.
         for (const hint of hints) {
@@ -116,6 +119,128 @@ const gameDiffHandler = {
             return null
         const last = segments[segments.length - 1]
         return {from: segments[0][0], to: last[last.length - 1], path: last}
+    }
+}
+
+// Effects of remote diffs (PRD sec. 7.6): a sound, hit flash or highlight of another player's
+// action plays only for cells the local player sees (fog off, or in vision before or after the
+// diff and not an unknown cell), so effects never leak what happens in the fog. gameDiffHandler
+// takes a snapshot of the diff's cells before applyCellDiff and plays the effects of the change:
+// a unit or building losing hp or a unit killed -> 'hit'/'death' sound and hit flash, a town
+// changing owner -> 'capture' sound and highlight, a unit arriving -> 'move' sound and highlight
+// of its cell and of its visible path. sound, hitFlash and highlight are the effect functions
+// (tests spy on them); flashes and highlights are drawn by grid.draw for a short time.
+const remoteEffects = {
+    flashMs: 400,
+    highlightMs: 800,
+    // {kind: 'hit' | 'highlight', cells, startTime} being drawn.
+    active: [],
+    // name -> Audio-like object with play(); the game ships no sound assets yet.
+    sounds: {},
+    now() {
+        return typeof performance != 'undefined' ? performance.now() : Date.now()
+    },
+    visible(cell) {
+        if (!grid.arr[cell.x] || !grid.arr[cell.x][cell.y])
+            return false
+        if (grid.arr[cell.x][cell.y].hexagon.unknown)
+            return false
+        return !isFogOfWar || Boolean(grid.fogOfWar[cell.x][cell.y])
+    },
+    // The diff's cells before the diff: what stood there and whether the player saw it.
+    snapshot(records) {
+        return (Array.isArray(records) ? records : []).filter(record => grid.arr[record.x] && grid.arr[record.x][record.y])
+            .map(record => {
+                const cell = grid.arr[record.x][record.y]
+                return {x: record.x, y: record.y, visible: this.visible(record),
+                    unit: cell.unit.notEmpty() ? cell.unit : null, unitHp: cell.unit.hp,
+                    building: cell.building.notEmpty() ? cell.building : null,
+                    buildingHp: cell.building.hp, buildingColour: cell.building.playerColor}
+            })
+    },
+    // Plays the effects of the change since snapshot before; hints are the diff's path hints.
+    play(before, hints = []) {
+        const highlighted = new Map()
+        const highlight = cell => highlighted.set(cell.x + ',' + cell.y, {x: cell.x, y: cell.y})
+        const pathEnds = new Set(hints.map(hint => hint.to && hint.to.x + ',' + hint.to.y))
+        for (const cell of before) {
+            const coord = {x: cell.x, y: cell.y}
+            if (!cell.visible && !this.visible(coord))
+                continue
+            const unit = grid.getUnit(coord)
+            const building = grid.getBuilding(coord)
+            if (cell.unit && cell.unit.killed) {
+                this.sound('death', coord)
+                this.hitFlash(coord)
+            }
+            else if (cell.unit && unit === cell.unit && unit.hp < cell.unitHp) {
+                this.sound('hit', coord)
+                this.hitFlash(coord)
+            }
+            if (cell.building && building === cell.building) {
+                if (building.hp < cell.buildingHp) {
+                    this.sound('hit', coord)
+                    this.hitFlash(coord)
+                }
+                if (building.isTown() && building.playerColor !== cell.buildingColour) {
+                    this.sound('capture', coord)
+                    highlight(coord)
+                }
+            }
+            if (unit.notEmpty() && unit !== cell.unit) {
+                this.sound('move', coord)
+                if (!pathEnds.has(coord.x + ',' + coord.y))
+                    highlight(coord)
+            }
+        }
+        for (const hint of hints)
+            for (const cell of Array.isArray(hint.path) ? hint.path : [])
+                if (this.visible(cell)) highlight(cell)
+        if (highlighted.size)
+            this.highlight([...highlighted.values()])
+    },
+    sound(name, cell) {
+        const sound = this.sounds[name]
+        if (sound && typeof sound.play === 'function')
+            sound.play()
+    },
+    hitFlash(cell) {
+        this.active.push({kind: 'hit', cells: [{x: cell.x, y: cell.y}], startTime: this.now()})
+    },
+    highlight(cells) {
+        this.active.push({kind: 'highlight', cells: cells.map(cell => ({x: cell.x, y: cell.y})), startTime: this.now()})
+    },
+    clear() {
+        this.active = []
+    },
+    // Drawn over the board; a cell that fell back into the fog is no longer drawn.
+    draw(ctx) {
+        if (!this.active.length)
+            return
+        const now = this.now()
+        this.active = this.active.filter(effect =>
+            now - effect.startTime < (effect.kind === 'hit' ? this.flashMs : this.highlightMs))
+        for (const effect of this.active) {
+            const fade = 1 - (now - effect.startTime) / (effect.kind === 'hit' ? this.flashMs : this.highlightMs)
+            ctx.save()
+            ctx.lineWidth = Math.max(1, basis.r * 0.1)
+            for (const cell of effect.cells) {
+                if (!this.visible(cell))
+                    continue
+                const pos = grid.arr[cell.x][cell.y].hexagon.calcPos()
+                ctx.beginPath()
+                ctx.arc(pos.x, pos.y, basis.r * 0.75, 0, 2 * Math.PI)
+                if (effect.kind === 'hit') {
+                    ctx.fillStyle = 'rgba(255, 40, 40, ' + (0.6 * fade) + ')'
+                    ctx.fill()
+                }
+                else {
+                    ctx.strokeStyle = 'rgba(255, 230, 80, ' + fade + ')'
+                    ctx.stroke()
+                }
+            }
+            ctx.restore()
+        }
     }
 }
 

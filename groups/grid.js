@@ -604,6 +604,8 @@ class Grid extends SpritesGroup {
         else
             this.drawOther(ctx)
         moveTween.draw(ctx)
+        if (typeof remoteEffects !== 'undefined')
+            remoteEffects.draw(ctx)
         this.drawLoadingCells(ctx)
 
         if (this.showChanceOfWinning) {
