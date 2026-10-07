@@ -85,14 +85,15 @@ function advanceOfflineTurn() {
         return
     }
 
+    // A finished tutorial stays on its result screen. Checked before the co-op end: a co-op
+    // tutorial that ends during the demon phase must show its result, not return to the menu.
+    if (gameSettings.tutorial && TutorialManager.checkResult()) {
+        return
+    }
     // Resolve the whole committed action/phase before deciding a shared result;
     // individual deaths must not preempt simultaneous elimination (e.g. flood).
     if (gameSettings.coop && players[0].isGameEnded) {
         menuBack()
-        return
-    }
-    // A finished tutorial stays on its result screen.
-    if (gameSettings.tutorial && TutorialManager.checkResult()) {
         return
     }
 
