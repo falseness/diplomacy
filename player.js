@@ -196,6 +196,8 @@ class Player {
         return res
     }
     get isLost() {
+        // A partial board's lists miss hidden entities: the server says who has lost.
+        if (hiddenInfo) return hiddenGameStatus().lostPlayers.includes(players.indexOf(this))
         this.updateTowns()
         this.updateUnits()
         return !this.towns.length && !this.units.length
@@ -525,7 +527,8 @@ class NeutralPlayer extends Player {
 
         ++gameRound
 
-        if (gameRound >= suddenDeathRound) {
+        // A partial board cannot flood hidden cells: the server's board carries the flood.
+        if (gameRound >= suddenDeathRound && !hiddenInfo) {
             this.suddenDeath()
         }
         if (this.isGameEnded) {
@@ -603,6 +606,7 @@ class NeutralPlayer extends Player {
     }
     get coopResult() {
         if (!gameSettings.coop) return null
+        if (hiddenInfo) return hiddenGameStatus().result
         const humansGone = players.filter(p => p.role === 'HUMAN').every(p => p.isLost)
         const portalsRemain = external.some(p => p.isDemonPortal && !p.killed && p.hp > 0)
         // Any live demon-owned unit counts, including produced Noob/Archer/...
@@ -621,6 +625,10 @@ class NeutralPlayer extends Player {
         return null
     }
     get isGameEnded() {
+        if (hiddenInfo) {
+            if (gameSettings.coop) gameSettings.coop.result = this.coopResult
+            return hiddenGameStatus().ended
+        }
         if (gameSettings.coop) {
             gameSettings.coop.result = this.coopResult
             return gameSettings.coop.result !== null

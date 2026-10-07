@@ -193,7 +193,8 @@ function SetupServerCommunicationLogic(gameID) {
                     (board.gameRound === competitiveDelivery.round &&
                         (competitiveDelivery.active || !active)))) return false
         }
-        const continuing = !!(board.gameSettings?.coop && acceptedBoard && active &&
+        // A partial board's lists cannot be rebased (hidden entities look removed): reload it.
+        const continuing = !!(board.gameSettings?.coop && !board.hiddenInfo && acceptedBoard && active &&
             !gameEvent.waitingMode && board.gameRound === acceptedBoard.gameRound &&
             board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
         let restored = board
@@ -248,7 +249,21 @@ function SetupServerCommunicationLogic(gameID) {
         }
         if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
         onlineCommit = commit || null
+        // A partial board's end comes from the server's status, not from the local lists.
+        if (hiddenInfo && players[0].isGameEnded) {
+            showHiddenGameEnd()
+            return 'ended'
+        }
         return continuing ? 'continued' : true
+    }
+    // The end of a hidden-information game: the board stays frozen under the result banner.
+    function showHiddenGameEnd() {
+        gameEvent.waitingMode = true
+        nextTurnButton.highlightButton = false
+        nextTurnButton.disableClick()
+        undoButton.disableClick()
+        nextTurnPauseInterface.visible = false
+        if (typeof timer !== 'undefined' && timer) timer.pause()
     }
     onlineLobby = {mode: gameSettings.coop ? 'coop' : 'competitive', occupiedHumans: null}
     on(socket, 'lobbyStatus', status => {
@@ -260,7 +275,7 @@ function SetupServerCommunicationLogic(gameID) {
         console.log('gameStarted')
 
         const delivery = receiveBoard(game, true)
-        if (!delivery || delivery === 'continued') return
+        if (!delivery || delivery === 'continued' || delivery === 'ended') return
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
@@ -271,7 +286,7 @@ function SetupServerCommunicationLogic(gameID) {
 
         console.log(`playYourTurn`)
         const delivery = receiveBoard(game, true)
-        if (!delivery || delivery === 'continued') return
+        if (!delivery || delivery === 'continued' || delivery === 'ended') return
         nextTurnPauseInterface.visible = true
 
         unfreezeGame()
@@ -283,7 +298,8 @@ function SetupServerCommunicationLogic(gameID) {
         console.log(`waitYouTurn`)
 
         const board = typeof game === 'string' ? JSON.parse(game) : game
-        if (!receiveBoard(board, false)) return
+        const delivery = receiveBoard(board, false)
+        if (!delivery || delivery === 'ended') return
         // game:open answers a kicked seat with its board marked kicked: true.
         if (board.kicked) { removedByHost(); return }
 

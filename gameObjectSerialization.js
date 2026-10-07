@@ -32,15 +32,39 @@ function getGameObject() {
         'gameRound': gameRound,
         'isFogOfWar': isFogOfWar,
         'gameSettings': gameSettings,
-        // Only partial boards carry the key, so full boards serialize unchanged.
-        ...(hiddenInfo ? {'hiddenInfo': true} : {})
+        // Only partial boards carry the keys, so full boards serialize unchanged.
+        ...(hiddenInfo ? {'hiddenInfo': true} : {}),
+        ...(hiddenInfo && hiddenStatus ? {'status': hiddenStatus} : {})
     }
+}
+
+// The game status of a hidden-information board: the partial entity lists cannot tell game end,
+// lost players or the winner, so the server sends them (board.status {ended, result, lostPlayers, winner, round}).
+function hiddenGameStatus() {
+    const status = hiddenStatus || {}
+    return {
+        ended: status.ended === true,
+        result: typeof status.result === 'string' ? status.result : null,
+        lostPlayers: Array.isArray(status.lostPlayers) ? status.lostPlayers.filter(Number.isInteger) : [],
+        winner: Number.isInteger(status.winner) ? status.winner : null,
+        round: Number.isInteger(status.round) ? status.round : gameRound,
+    }
+}
+
+// The end-of-game banner text of a hidden-information board, or null while it goes on.
+function hiddenGameEndText() {
+    if (!hiddenInfo) return null
+    const status = hiddenGameStatus()
+    if (!status.ended) return null
+    if (gameSettings.coop) return null // the co-op banner shows gameSettings.coop.result
+    return status.winner !== null ? 'Game over — Player ' + status.winner + ' wins' : 'Game over'
 }
 
 function loadFromJson(game_string) {
     let game = JSON.parse(game_string)
     // A partial board: unknown cells (grid null) and partial entity lists.
     hiddenInfo = game.hiddenInfo === true
+    hiddenStatus = hiddenInfo && game.status && typeof game.status === 'object' ? game.status : null
     unpacker.unpackAll(JSON.stringify(game.grid), JSON.stringify(game.players), JSON.stringify(game.external),
         JSON.stringify(game.externalProduction),  JSON.stringify(game.nature),  JSON.stringify(game.goldmines),
         JSON.stringify(game.timers[game.whooseTurn]), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
