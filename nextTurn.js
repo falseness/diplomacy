@@ -93,6 +93,9 @@ function advanceOfflineTurn() {
     // Resolve the whole committed action/phase before deciding a shared result;
     // individual deaths must not preempt simultaneous elimination (e.g. flood).
     if (gameSettings.coop && players[0].isGameEnded) {
+        // The ended turn cannot be undone after the game is over (as after any turn end).
+        actionManager.clear()
+        actionLog.clear()
         menuBack()
         return
     }

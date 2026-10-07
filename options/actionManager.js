@@ -27,8 +27,16 @@ class ActionManager {
             buildingProductions: [],
             playerEntityLists: this.snapshotPlayerEntityLists(),
             externalOrder: external.map(entity => ({...entity.coord})),
-            productionOrders: this.snapshotProductionOrders()
+            productionOrders: this.snapshotProductionOrders(),
+            fogOfWar: this.snapshotFogOfWar()
         })
+    }
+    // The fog of war before the action: undo() puts it back, so it re-hides exactly what the undone action revealed
+    // and keeps what earlier actions of the turn revealed (the state equals a replay of the turn without the action).
+    snapshotFogOfWar() {
+        if (typeof isFogOfWar === 'undefined' || !isFogOfWar || typeof grid === 'undefined' || !grid || !grid.fogOfWar)
+            return null
+        return grid.fogOfWar.map(column => column.slice())
     }
     // Order of the pending external buildings and of every town's buildings / pending buildings. An undo
     // re-creates a destroyed entry at the end of its list once getGameObject() (every state hash) pruned the
@@ -501,7 +509,13 @@ class ActionManager {
         let entry = this.lastAction
         func[entry.type].call(this)
         this.restoreProductionOrders(entry.productionOrders)
-        refreshUndoVision()
+        if (entry.fogOfWar && grid.fogOfWar && entry.fogOfWar.length === grid.fogOfWar.length) {
+            for (let x = 0; x < entry.fogOfWar.length; ++x)
+                for (let y = 0; y < entry.fogOfWar[x].length; ++y)
+                    grid.fogOfWar[x][y] = entry.fogOfWar[x][y]
+        }
+        else
+            refreshUndoVision()
 
         if (otherSettings.moveCameraToUndoTarget)
             this.__moveCameraToUndoTarget()

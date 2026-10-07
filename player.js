@@ -647,8 +647,9 @@ function refreshCoopVision() {
     if (viewer) viewer.changeFogOfWarByVision()
 }
 
-// Undo re-hides what the undone action revealed (actions PRD sec. 4.4): the acting player's fog is rebuilt from
-// vision in every mode, so "move, peek, undo" leaves no extra knowledge and matches a replay of the action list.
+// Undo re-hides what the undone action revealed (actions PRD sec. 4.4): ActionManager.undo() puts back the fog
+// saved when the action started; for an entry without one (fog off when it started) the acting player's fog is
+// rebuilt from vision, so "move, peek, undo" leaves no extra knowledge either way.
 function refreshUndoVision() {
     if (gameSettings.coop) return refreshCoopVision()
     if (!isFogOfWar || !grid.visionWay) return
