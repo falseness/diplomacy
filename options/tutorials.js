@@ -819,15 +819,22 @@ function createTutorial13Map() {
 }
 
 function createTutorial14Map() {
-    // Grow your economy: an open 15x9 plain, mirror-symmetric around column 7. Red's town (2,4) has only its
-    // noob but 100 gold; blue's town (12,4) (SimpleAiPlayerWithEconomy, 60 gold) has a head start of 2 noobs and
-    // an archer. Each side owns the land of its 5 home columns (red x 0..4, blue x 10..14), where suburbs are
-    // cheap (3 gold two hexes from the town, 5 at three hexes) and each pays +1 gold a turn; a farm (32 gold)
-    // pays +4. Spending the gold on noobs at once (what SimpleAiPlayerWithEconomy does for red) keeps
-    // red's income near 4, the noobs walk into blue's head start one by one and red loses its town by round 25.
-    // Buying the cheap suburbs and farms first lifts red's income from 10 to over 40 in 4 turns; blue only moves
-    // through hexes red sees, so it waits; then the bigger income buys barracks and a mixed army that wipes blue
-    // out before round 40.
+    // Grow your economy: a 15x9 valley, mirror-symmetric around column 7. A ridge of mountains and lakes down
+    // column 7 splits the two home valleys; its only pass is (7,3)-(7,5), flanked by hills on both sides, so every
+    // army (and every lone raider) has to cross where the other side's units stand. Lakes and bushes only edge the
+    // home valleys' corners. Red's town (2,4) has only its noob but 100 gold; blue's town (12,4)
+    // (SimpleAiPlayerWithEconomy, 60 gold) has a head start of 2 noobs and an archer. Each side owns the land of
+    // its 5 home columns (red x 0..4, blue x 10..14), where suburbs are cheap (3 gold two hexes from the town, 5 at
+    // three hexes) and each pays +1 gold a turn; a farm (32 gold) pays +4. Spending the gold on noobs at once (what
+    // SimpleAiPlayerWithEconomy does for red) keeps red's income near 5 and its noobs die one by one in the pass;
+    // a lone noob sent at blue's town meets blue's army in the pass. Buying the cheap suburbs and farms first lifts
+    // red's income from 10 to over 40 in 4 turns; blue only moves through hexes red sees, so it waits; then red
+    // gathers 5 units at home, and the bigger income keeps barracks and a mixed army coming through the pass to
+    // wipe blue out before round 40.
+    let lakes = [[7, 2], [7, 6], [0, 0], [14, 0], [0, 8], [14, 8]]
+    let mountains = [[7, 0], [7, 1], [7, 7], [7, 8], [6, 0], [8, 0], [6, 8], [8, 8]]
+    let bushes = [[5, 1], [9, 1], [5, 7], [9, 7], [4, 0], [10, 0], [4, 8], [10, 8]]
+    let hills = [[6, 3], [8, 3], [6, 5], [8, 5]]
     let band = (fromX, toX) => {
         let cells = []
         for (let x = fromX; x <= toX; ++x) {
@@ -869,10 +876,10 @@ function createTutorial14Map() {
             }
         ],
         [],
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([]),
-        coordDictionary([])
+        coordDictionary(lakes),
+        coordDictionary(mountains),
+        coordDictionary(bushes),
+        coordDictionary(hills)
     )
     map.testName = 'tutorial 14'
     return map
@@ -887,7 +894,10 @@ function createTutorial15Map() {
     // SimpleAiPlayerWithEconomy does for red) sends them out to meet the wave and red loses the town by round 9.
     // Ordering towers (4,3),(4,5) and walls in the gate (5,3),(5,4) on turn 1 finishes them in round 4, when the
     // wave reaches the gate; the archers stand on the towers (range 3) and shoot the normchels hacking at the
-    // walls, and the town still stands at round 16.
+    // walls, and the town still stands at round 16. Lakes guard the town's back corners; the mountain line
+    // thickens at its ends (6,0),(6,8) and lakes (9..10,1),(9..10,7) funnel the field towards the road, so the wave
+    // comes straight at the gate; bushes lie off the road (never in the towers' fire lines), and mountains close
+    // the far corners.
     let band = (fromX, toX) => {
         let cells = []
         for (let x = fromX; x <= toX; ++x) {
@@ -897,7 +907,10 @@ function createTutorial15Map() {
         }
         return cells
     }
-    let mountains = [[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8]]
+    let mountains = [[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8], [17, 0], [17, 8], [6, 0], [6, 8]]
+    let lakes = [[0, 0], [0, 1], [0, 7], [0, 8], [9, 1], [10, 1], [9, 7], [10, 7]]
+    let bushes = [[1, 0], [1, 8], [8, 1], [7, 7], [12, 1], [12, 7], [13, 1]]
+    let hills = []
     let road = []
     for (let x = 6; x <= 13; ++x) {
         road.push({x: x, y: 4})
@@ -943,10 +956,10 @@ function createTutorial15Map() {
             }
         ],
         [],
-        coordDictionary([]),
+        coordDictionary(lakes),
         coordDictionary(mountains),
-        coordDictionary([]),
-        coordDictionary([])
+        coordDictionary(bushes),
+        coordDictionary(hills)
     )
     map.testName = 'tutorial 15'
     return map
