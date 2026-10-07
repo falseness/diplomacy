@@ -114,7 +114,10 @@ function createTutorial3Map() {
     // to buildings). Both catapults start 5 hexes from both towers, out of the tower archers'
     // reach: shooting the same tower together destroys it (hp 5) in one turn. Attacking at once
     // loses; destroying both towers while the army holds its line, then fighting the defenders
-    // who come out, wins. Red has no town and blue never buys, so both economies are off.
+    // who come out, wins. Red has no town (economy off). Blue's economy is on: 40 gold and a
+    // one-hex suburb (low income) buy suburbs, a barrack and noobs during the game, so waiting
+    // too long lets the town refill. The fortress backs onto lakes in its rear corners and
+    // mountains close the field's corners, so the approach runs through the towers' rows.
     let wallLine = []
     for (let y = 0; y < 9; ++y) {
         if (y != 3 && y != 5) {
@@ -152,12 +155,11 @@ function createTutorial3Map() {
             {
                 rgb: {r: 98, g: 168, b: 222},
                 playerType: 'SimpleAiPlayerWithEconomy',
-                economyEnabled: false,
+                gold: 40,
                 towns: [{x: 2, y: 4}],
                 suburbs: [{
                     town: {x: 2, y: 4},
-                    cells: [{x: 2, y: 4}, {x: 2, y: 3}, {x: 3, y: 3}, {x: 3, y: 4},
-                        {x: 2, y: 5}, {x: 1, y: 4}, {x: 1, y: 3}],
+                    cells: [{x: 2, y: 4}],
                     expansionCells: blueSide
                 }],
                 walls: wallLine,
@@ -173,8 +175,8 @@ function createTutorial3Map() {
             }
         ],
         [],
-        [],
-        []
+        coordDictionary([[0, 0], [1, 0], [0, 1], [0, 7], [0, 8], [1, 8]]),
+        coordDictionary([[8, 0], [9, 0], [8, 1], [8, 7], [8, 8], [9, 8]])
     )
     map.testName = 'tutorial 3'
     return map
