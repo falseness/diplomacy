@@ -2,6 +2,7 @@
 // socket.io connection authenticated by auth:google or a stored auth:session token.
 const ONLINE_SESSION_KEY = 'diplomacyOnlineSession'
 const ONLINE_ACK_TIMEOUT = 10000
+const ONLINE_REPLAY_TIMEOUT = 60000
 // auth:session retries after an UNAVAILABLE ack (server busy or still connecting to its
 // database, protocol doc section 7): wait these many ms before each retry, then give up.
 const ONLINE_RETRY_DELAYS = [1000, 2000, 4000]
@@ -44,11 +45,11 @@ class OnlineSession {
         })
         return socket
     }
-    // Resolves the ack, or {ok: false, error: 'TIMEOUT'} when none arrives.
-    request(event, payload) {
+    // Resolves the ack, or {ok: false, error: 'TIMEOUT'} when none arrives within timeoutMs.
+    request(event, payload, timeoutMs = ONLINE_ACK_TIMEOUT) {
         const socket = this.connect()
         return new Promise(resolve => {
-            const timer = setTimeout(() => resolve({ok: false, error: 'TIMEOUT'}), ONLINE_ACK_TIMEOUT)
+            const timer = setTimeout(() => resolve({ok: false, error: 'TIMEOUT'}), timeoutMs)
             socket.emit(event, payload, ack => {
                 clearTimeout(timer)
                 const reply = ack && typeof ack === 'object' ? ack : {ok: false, error: 'BAD_ACK'}
@@ -136,6 +137,14 @@ class OnlineSession {
     }
     closeGame() {
         this.openGameID = null
+    }
+    // game:myFinished: the account's finished games, newest first (protocol doc 4.7).
+    myFinishedGames() {
+        return this.request('game:myFinished', {})
+    }
+    // game:replay: a finished game's snapshots and turns (protocol doc 4.6); a long game's reply is large.
+    replayGame(gameID) {
+        return this.request('game:replay', {gameID}, ONLINE_REPLAY_TIMEOUT)
     }
 }
 
