@@ -449,6 +449,63 @@ function createTutorial8Map() {
     return map
 }
 
+function createTutorial9Map() {
+    // Cavalry raid: a mountain range (row 4, x 2..12) splits a 15x9 map into a southern road and a northern
+    // detour; the passes are its two ends (x 0..1 and x 13..14). Blue's army (4 normchels in column 8, 3 archers
+    // behind them in column 9) blocks the road between red (3 KOHb, 2 normchels, bottom left) and the blue town
+    // (14,7), which starts at 0 hp guarded only by its own noob. Riding the road (what SimpleAiPlayer does for
+    // red: it heads for the nearest enemy building) runs into the army and loses. Leaving the normchels on the
+    // road as bait while the KOHb (speed 4) ride around the mountains reaches the town long before blue's army
+    // (speed 2) can turn back; the KOHb knock the healing town down to 0 hp again and step in.
+    let mountains = []
+    for (let x = 2; x <= 12; ++x) {
+        mountains.push([x, 4])
+    }
+    let map = new GameMap(
+        {x: 15, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                economyEnabled: false,
+                towns: [],
+                units: [
+                    {x: 0, y: 6, type: KOHb},
+                    {x: 1, y: 6, type: KOHb},
+                    {x: 0, y: 7, type: KOHb},
+                    {x: 1, y: 7, type: Normchel},
+                    {x: 2, y: 7, type: Normchel}
+                ]
+            },
+            {
+                rgb: {r: 98, g: 168, b: 222},
+                playerType: 'SimpleAiPlayer',
+                economyEnabled: false,
+                towns: [{x: 14, y: 7, hp: 0}],
+                units: [
+                    {x: 8, y: 5, type: Normchel},
+                    {x: 8, y: 6, type: Normchel},
+                    {x: 8, y: 7, type: Normchel},
+                    {x: 8, y: 8, type: Normchel},
+                    {x: 9, y: 5, type: Archer},
+                    {x: 9, y: 6, type: Archer},
+                    {x: 9, y: 7, type: Archer}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([]),
+        coordDictionary(mountains),
+        coordDictionary([]),
+        coordDictionary([])
+    )
+    map.testName = 'tutorial 9'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -457,5 +514,7 @@ const tutorials = [
     {id: 'tutorial-5', title: 'Tutorial 5', pass: 'coopVictory', get map() { return createTutorial5Map() }},
     {id: 'tutorial-6', title: 'Tutorial 6', pass: 'coopVictory', get map() { return createTutorial6Map() }},
     {id: 'tutorial-7', title: 'Tutorial 7: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
-    {id: 'tutorial-8', title: 'Tutorial 8: Through the Bushes', pass: 'enemyUnitsDead', get map() { return createTutorial8Map() }}
+    {id: 'tutorial-8', title: 'Tutorial 8: Through the Bushes', pass: 'enemyUnitsDead', get map() { return createTutorial8Map() }},
+    {id: 'tutorial-9', title: 'Tutorial 9: Cavalry Raid', pass: 'captureTowns', targets: [{x: 14, y: 7}],
+        get map() { return createTutorial9Map() }}
 ]

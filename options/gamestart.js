@@ -102,7 +102,7 @@ class GameMap {
             let town_coord = this.getMapCoord(this.players[0].towns[i])
             let town = new Town(town_coord.x, town_coord.y, false, -1)
             if ('hp' in town_coord) {
-                assert(0 < town_coord.hp && town_coord.hp <= town.hp)
+                assert(0 <= town_coord.hp && town_coord.hp <= town.hp)
                 town.hit(town.hp - town_coord.hp)
             }
         }
@@ -114,7 +114,8 @@ class GameMap {
                 grid.arr[town_coord.x][town_coord.y].hexagon.firstpaint(i)
                 let town = new Town(town_coord.x, town_coord.y, false, true)
                 if ('hp' in town_coord) {
-                    assert(0 < town_coord.hp && town_coord.hp <= town.hp)
+                    // A town may start at 0 hp: an enemy unit can step in and capture it.
+                    assert(0 <= town_coord.hp && town_coord.hp <= town.hp)
                     town.hit(town.hp - town_coord.hp)
                 }
             }
