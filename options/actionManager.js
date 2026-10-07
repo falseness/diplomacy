@@ -26,8 +26,47 @@ class ActionManager {
             townExternalProduction: [],
             buildingProductions: [],
             playerEntityLists: this.snapshotPlayerEntityLists(),
-            externalOrder: external.map(entity => ({...entity.coord}))
+            externalOrder: external.map(entity => ({...entity.coord})),
+            productionOrders: this.snapshotProductionOrders()
         })
+    }
+    // Order of the pending external buildings and of every town's buildings / pending buildings. An undo
+    // re-creates a destroyed entry at the end of its list once getGameObject() (every state hash) pruned the
+    // killed one, so undo() sorts the lists back to this order (the state hash keeps list order).
+    snapshotProductionOrders() {
+        const coords = list => (list || []).filter(entity => entity && entity.coord && !entity.killed)
+            .map(entity => ({x: entity.coord.x, y: entity.coord.y}))
+        let towns = []
+        for (let i = 0; players && i < players.length; ++i) {
+            for (let j = 0; players[i] && players[i].towns && j < players[i].towns.length; ++j) {
+                let town = players[i].towns[j]
+                if (town && town.coord && !town.killed)
+                    towns.push({coord: {x: town.coord.x, y: town.coord.y}, buildings: coords(town.buildings),
+                        buildingProduction: coords(town.buildingProduction)})
+            }
+        }
+        return {externalProduction: coords(typeof externalProduction === 'undefined' ? [] : externalProduction), towns}
+    }
+    restoreProductionOrders(orders) {
+        if (!orders)
+            return
+        const sortBy = (list, order) => {
+            if (!list)
+                return
+            const rank = entity => {
+                const index = entity && entity.coord ? order.findIndex(coord => coordsEqually(coord, entity.coord)) : -1
+                return index === -1 ? order.length : index
+            }
+            list.sort((a, b) => rank(a) - rank(b))
+        }
+        sortBy(externalProduction, orders.externalProduction)
+        for (let entry of orders.towns) {
+            let town = grid.getBuilding(entry.coord)
+            if (!town || !town.isTown || !town.isTown() || town.killed)
+                continue
+            sortBy(town.buildings, entry.buildings)
+            sortBy(town.buildingProduction, entry.buildingProduction)
+        }
     }
     get lastAction() {
         return this.arr[this.arr.length - 1]
@@ -459,7 +498,9 @@ class ActionManager {
             destroyExternalProduction: this.destroyExternalProductionUndo
         }
 
-        func[this.lastAction.type].call(this)
+        let entry = this.lastAction
+        func[entry.type].call(this)
+        this.restoreProductionOrders(entry.productionOrders)
         refreshCoopVision()
 
         if (otherSettings.moveCameraToUndoTarget)

@@ -519,7 +519,10 @@ class SuburbProduction extends BuildingProduction {
             for (let j = 0; j < neighbours.length; ++j) {
                 let neighbourCoord = neighbours[j]
 
+                // The InvisibleMountain ring of a hexagonal map is off the playable map (a rim town's first
+                // suburbs paint it, but no click reaches it): never offered for purchase.
                 if (isCoordNotOnMap(neighbourCoord, arr.length, arr[0].length) ||
+                        arr[neighbourCoord.x][neighbourCoord.y].building.isMapEdge ||
                         grid.getHexagon(neighbourCoord).playerColor != player ||
                         (this.isSuburb(neighbourCoord, arr, player) &&
                             !ourSuburbs.has(neighbourCoord.x + ',' + neighbourCoord.y))) {
