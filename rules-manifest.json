@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "0a013b480eaa998fc33de73c008d56a6e88661a4337dd40822376f102c1bc5c4",
+  "rulesVersion": "2cf2e9e46c8d0d5315d613ad6a58e559bc20b8801212e128db6fb60898ac9844",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -95,8 +95,8 @@
     },
     {
       "path": "options/filteredView.js",
-      "sha256": "9cd09ee1e50c013332af37137b3f48929bcfce7ec1ce2df7a1fc0a83353fc389",
-      "bytes": 6598
+      "sha256": "bac60c951f03aaa89cffc1b397190a4a48aea614c29b5c98ce37bea5292a6c13",
+      "bytes": 9037
     },
     {
       "path": "ai/coop-map-scaling.js",

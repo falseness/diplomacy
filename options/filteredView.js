@@ -18,6 +18,13 @@
 //   boardFromFilteredView(view, terrain)  -> a board loadFromJson accepts: unknown colours neutral (0), hidden gold
 //                                            0, hidden timers a copy of the viewer's, terrain's nature;
 //                                            hiddenTownParts are dropped (a town object needs its coord).
+//   terrainChanges(baseNature, nature)    -> [{x, y, nature}]: nature (a packed board's list) as cell changes against
+//                                            baseNature (the terrain sent once, game:terrain): nature null = the
+//                                            cell's entity is gone (a destroyed bush), else the cell's entity now (a
+//                                            sudden-death sea). Base entities stay in base order; the changed ones
+//                                            follow in nature's order, so boardWithTerrain rebuilds nature exactly.
+//   boardWithTerrain(board, terrain)      -> board (no nature, board.terrainChanges) with terrain.nature plus those
+//                                            changes as its nature; terrainId and terrainChanges dropped.
 //
 // Nothing here draws or changes the board: getGameObject() is only serialized (it prunes killed entities, as every
 // state hash does). Loaded after options/reveal.js in index.html and server/loadGameCode.js.
@@ -42,6 +49,39 @@ function computeFogFor(playerIndex) {
 
 function terrainView() {
     return {nature: JSON.parse(JSON.stringify(getGameObject().nature))}
+}
+
+function terrainCellKey(entity) {
+    return entity.coord.x + ',' + entity.coord.y
+}
+
+function terrainChanges(baseNature, nature) {
+    let current = new Map(nature.map(entity => [terrainCellKey(entity), JSON.stringify(entity)]))
+    // Base entities still on the board unchanged, in base order; nature keeps the longest prefix of them.
+    let kept = baseNature.filter(entity => current.get(terrainCellKey(entity)) === JSON.stringify(entity))
+    let prefix = 0
+    while (prefix < kept.length && prefix < nature.length &&
+            JSON.stringify(nature[prefix]) === JSON.stringify(kept[prefix]))
+        ++prefix
+    let changes = nature.slice(prefix).map(entity => ({x: entity.coord.x, y: entity.coord.y,
+        nature: JSON.parse(JSON.stringify(entity))}))
+    // Every other base cell is gone: neither kept in the prefix nor re-sent in the changes.
+    let named = new Set(kept.slice(0, prefix).map(terrainCellKey).concat(changes.map(change => change.x + ',' + change.y)))
+    for (let entity of baseNature)
+        if (!named.has(terrainCellKey(entity)))
+            changes.push({x: entity.coord.x, y: entity.coord.y, nature: null})
+    return changes
+}
+
+function boardWithTerrain(board, terrain) {
+    let changes = board.terrainChanges || []
+    let changed = new Set(changes.map(change => change.x + ',' + change.y))
+    let merged = Object.assign({}, board)
+    merged.nature = terrain.nature.filter(entity => !changed.has(terrainCellKey(entity)))
+        .concat(changes.filter(change => change.nature).map(change => change.nature))
+    delete merged.terrainChanges
+    delete merged.terrainId
+    return merged
 }
 
 function filteredView(playerIndex, knownCells = []) {
