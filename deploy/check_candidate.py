@@ -11,6 +11,7 @@ from candidate import verify, runtime, rules
 # Each live suite uses reliability/helpers/services: unique loopback ports,
 # private generated keys outside the candidate, disposable mongod, owned cleanup.
 SUITES = ['tests/online/lobby-start.test.js', 'tests/online/action-enforce-commit.test.js',
+          'tests/online/coop-continuing.test.js',
           'tests/server/undo-diff.test.js', 'tests/legacy_round.test.js']
 
 
