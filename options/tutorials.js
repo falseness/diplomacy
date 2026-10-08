@@ -104,8 +104,14 @@ function createTutorial2Map() {
             }
         ],
         [],
-        coordDictionary([[8, 0], [9, 0], [8, 1], [9, 1], [10, 0]]),
-        coordDictionary([[8, 7], [8, 8], [9, 8], [10, 8], [11, 0], [11, 1], [11, 2], [11, 6], [11, 7], [11, 8]])
+        // Widen the northern pond and southern ridge along the road, keeping rows
+        // 3-5 clear through the gate and the town's deployment area unobstructed.
+        coordDictionary([[8, 0], [9, 0], [8, 1], [9, 1], [10, 0], [6, 0], [7, 0], [7, 1], [10, 1]]),
+        coordDictionary([[8, 7], [8, 8], [9, 8], [10, 8], [11, 0], [11, 1], [11, 2], [11, 6], [11, 7], [11, 8],
+            [6, 7], [6, 8], [7, 7], [7, 8], [9, 7]]),
+        // Two thickets frame the field and a third sits behind the northern spur.
+        // None crosses the retreat road or the archers' central lines of fire.
+        coordDictionary([[4, 0], [4, 1], [5, 1], [4, 7], [4, 8], [5, 7], [12, 1], [13, 1], [13, 0]])
     )
     map.testName = 'tutorial 2'
     return map
