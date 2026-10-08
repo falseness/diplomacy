@@ -438,6 +438,8 @@ function createTutorial8Map() {
     }
     // The thicket on blue's flank.
     bushes.push([12, 2], [13, 0], [13, 1], [13, 2])
+    // A deeper near-bank thicket keeps the concealed approach legible beside the open ford route.
+    bushes.push([3, 2], [4, 2], [5, 2], [6, 2])
     let map = new GameMap(
         {x: 15, y: 9},
         [
@@ -472,10 +474,10 @@ function createTutorial8Map() {
             }
         ],
         [],
-        // The river with its ford (8,7), and a pond in red's corner.
-        coordDictionary([[8, 2], [8, 3], [8, 4], [8, 5], [8, 6], [8, 8], [0, 7], [0, 8], [1, 8]]),
-        // Rocks along the bottom edge on both banks.
-        coordDictionary([[4, 7], [4, 8], [5, 8], [14, 7], [14, 8], [13, 8]]),
+        // The river keeps its single ford (8,7); a near-bank pond breaks up the open field.
+        coordDictionary([[8, 2], [8, 3], [8, 4], [8, 5], [8, 6], [8, 8], [0, 7], [0, 8], [1, 8], [5, 4], [5, 5], [6, 4]]),
+        // Low ridges frame the southern approach and far bank without closing the ford or firing lanes.
+        coordDictionary([[4, 7], [4, 8], [5, 8], [14, 7], [14, 8], [13, 8], [5, 7], [6, 7], [6, 8], [13, 6], [14, 6]]),
         coordDictionary(bushes),
         coordDictionary([])
     )
