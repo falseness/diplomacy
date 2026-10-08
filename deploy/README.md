@@ -220,6 +220,20 @@ Run as bakharevns, using each repository's CURRENT branch/upstream:
 /home/bakharevns/diplomacy/deploy/deploy.sh
 ```
 
+For a published, reviewed branch pair, pass both full commit IDs to **both**
+invocations: `--expected-client CLIENT_SHA --expected-server SERVER_SHA`.
+The source gate rejects changed advertised tips before either pull, rechecks
+each fetched snapshot before pulling it, and checks the resulting pair before
+orchestration. These pins survive entrypoint self-update. A changed tip requires
+a fresh reviewed pair; do not omit the pins to bypass a rejection.
+
+Production prerequisites must exist before activation. In particular, a Node
+binary inside an old release does not establish `/usr/local/bin/node20`, and
+the orchestration configuration and its read-only probes are not created by
+the entrypoint. The read-only sudo preflight currently requires `sudo -N`
+support. A host without these prerequisites must retain its running release
+until they are configured and preflight passes.
+
 No branch name is silently selected; client master/server demons are the
 expected operator checkouts. The runtime is exactly Node 20.20.2, client root
 is explicit, and tests use `TMPDIR=/mnt/storage/tmp-diplomacy` with

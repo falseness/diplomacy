@@ -49,6 +49,8 @@ def pull(root, info):
     merge = git(root, 'config', 'branch.' + info['branch'] + '.merge')
     git(root, 'fetch', '--no-tags', remote, merge)
     target = git(root, 'rev-parse', 'FETCH_HEAD')
+    if info.get('expected') and target != info['expected']:
+        raise RuntimeError('Published pair changed during fetch; refusing activation')
     tracked = git(root, 'ls-tree', '-r', '--name-only', '-z', target).split('\0')
     untracked = git(root, 'ls-files', '--others', '-z').split('\0')
     for path in filter(None, untracked):
@@ -107,7 +109,14 @@ def main(argv=None, client=None):
     parser = argparse.ArgumentParser(description='Deploy current upstream branches with complete verification')
     parser.add_argument('--dry-run', action='store_true', help='Read-only report; no fetch, pull or lock')
     parser.add_argument('--server-repo', type=Path, help='Default: sibling diplomacy_server')
+    parser.add_argument('--expected-client', help='Published client full commit SHA')
+    parser.add_argument('--expected-server', help='Published server full commit SHA')
     args = parser.parse_args(argv)
+    expected = [args.expected_client, args.expected_server]
+    if any(expected):
+        import re
+        if not all(s and re.fullmatch('[0-9a-f]{40}', s) for s in expected):
+            raise RuntimeError('Both published full commit SHAs are required')
     client = (client or Path(__file__).resolve().parent.parent).resolve()
     server = (args.server_repo or client.parent / 'diplomacy_server').resolve()
     if client == server:
@@ -125,12 +134,17 @@ def main(argv=None, client=None):
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if [git(r, 'rev-parse', 'HEAD') for r in (client, server)] != state['heads']:
             raise RuntimeError('Source changed during continuation')
+        if any(expected) and state['heads'] != expected:
+            raise RuntimeError('Continuation does not match published pair')
         print('SELF_UPDATE_RESUMED exactly once; lock retained', flush=True)
         return finish(client, server)
     preflight((client, server), args.dry_run)
     if args.dry_run:
-        for root in (client, server):
-            print(json.dumps(dict(repo=str(root), **inspect(root))), flush=True)
+        for root, sha in zip((client, server), expected):
+            info = inspect(root)
+            if sha and info['advertised'] != sha:
+                raise RuntimeError('Remote tip does not match published pair')
+            print(json.dumps(dict(repo=str(root), **info)), flush=True)
         print('DRY_RUN: read-only; untracked collision/ancestry checks deferred to guarded ff-only pull')
         return 0
     with LOCK.open('a') as lock:
@@ -139,10 +153,18 @@ def main(argv=None, client=None):
         except BlockingIOError:
             raise RuntimeError('Deployment already locked') from None
         infos = [inspect(root) for root in (client, server)]
+        for info, sha in zip(infos, expected):
+            if sha and info['advertised'] != sha:
+                raise RuntimeError('Remote tip does not match published pair')
+            info['expected'] = sha
         old = {p: (client / 'deploy' / p).read_bytes() for p in ('deploy.sh', 'source.py')}
         for root, info in zip((client, server), infos):
             print(json.dumps(dict(repo=str(root), phase='before', **info)), flush=True)
             pull(root, info)
+        if any(expected):
+            if [git(r, 'rev-parse', 'HEAD') for r in (client, server)] != expected:
+                raise RuntimeError('Pulled sources do not match published pair')
+            print('PUBLISHED_PAIR_MATCH ' + ' '.join(expected), flush=True)
         if any((client / 'deploy' / p).read_bytes() != data for p, data in old.items()):
             for p in old:
                 git(client, 'ls-files', '--error-unmatch', 'deploy/' + p)
@@ -150,8 +172,10 @@ def main(argv=None, client=None):
             os.environ['_DIPLOMACY_SOURCE_RESUME'] = json.dumps(dict(
                 fd=lock.fileno(), lock=str(LOCK), client=str(client), server=str(server),
                 heads=[git(r, 'rev-parse', 'HEAD') for r in (client, server)]))
-            os.execv(str(client / 'deploy/deploy.sh'), [str(client / 'deploy/deploy.sh'),
-                                                      '--server-repo', str(server)])
+            continuation = [str(client / 'deploy/deploy.sh'), '--server-repo', str(server)]
+            if any(expected):
+                continuation += ['--expected-client', expected[0], '--expected-server', expected[1]]
+            os.execv(continuation[0], continuation)
         return finish(client, server)
 
 

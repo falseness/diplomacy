@@ -103,6 +103,36 @@ def log(name):
             print('EXIT_STATUS=0')
 
 try:
+    with log('published-pair.log'):
+        b, r = fixture('published-pair')
+        initial = [git(x, 'rev-parse', 'HEAD') for x in r]
+        expected = [advance(x) for x in r]
+        args = ['--expected-client', expected[0], '--expected-server', expected[1]]
+        rc, out = run(b, r, args + ['--dry-run'])
+        assert rc == 0
+        rc, out = run(b, r, ['--expected-client', expected[0]])
+        assert rc == 1 and 'Both published full commit SHAs' in out
+        advance(r[1], content='remote moved\n')
+        rc, out = run(b, r, args)
+        assert rc == 1 and 'Remote tip does not match published pair' in out
+        assert [git(x, 'rev-parse', 'HEAD') for x in r] == initial
+        print('PASS moved remote pair rejected before either pull or activation')
+        expected[1] = git(r[1].parent / 'diplomacy_server-seed', 'rev-parse', 'HEAD')
+        rc, out = run(b, r, ['--expected-client', expected[0], '--expected-server', expected[1]])
+        assert rc == 1 and 'PUBLISHED_PAIR_MATCH ' + ' '.join(expected) in out
+        assert 'fixture orchestration boundary' in out
+        print('PASS exact published pair reaches orchestration')
+        spec = importlib.util.spec_from_file_location('source', SOURCE / 'source.py')
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        info = module.inspect(r[1]); info['expected'] = expected[1]
+        advance(r[1], content='fetch raced\n')
+        try:
+            module.pull(r[1], info)
+            raise AssertionError('fetch race accepted')
+        except RuntimeError as error:
+            assert 'Published pair changed during fetch' in str(error)
+        assert git(r[1], 'rev-parse', 'HEAD') == expected[1]
+        print('PASS fetch race rejected before pull or activation')
     with log('cli.log'):
         print(cmd(str(SOURCE / 'deploy.sh'), '--help', cwd='/'))
         b, r = fixture('cli')
@@ -209,7 +239,8 @@ try:
         code = code.replace("        return finish(client, server)",
                             "        (client.parent / 'resumed').touch()\n        __import__('time').sleep(2)\n        raise RuntimeError('fixture orchestration boundary')", 1)
         advance(r[0], 'deploy/source.py', code)
-        updated = run(b, r, wait=False)
+        pinned = [git(x.parent / (x.name + '-seed'), 'rev-parse', 'HEAD') for x in r]
+        updated = run(b, r, ['--expected-client', pinned[0], '--expected-server', pinned[1]], wait=False)
         deadline = time.monotonic() + 15
         while not (b / 'resumed').exists() and time.monotonic() < deadline: time.sleep(.02)
         assert (b / 'resumed').exists()
@@ -220,6 +251,7 @@ try:
         print(out); print('INVOCATION_EXIT_STATUS=' + str(rc))
         assert all(p.read_text() == 'untouched' for p in (b / 'live').iterdir())
         assert rc == 1 and out.count('PULLED_IMPLEMENTATION') == 1 and out.count('SELF_UPDATE_RESUMED') == 1
+        assert 'PUBLISHED_PAIR_MATCH ' + ' '.join(pinned) in out
         assert out.count('"after_branch"') == 2 and 'fixture orchestration boundary' in out
         rc, out = run(b, r)
         assert 'already locked' not in out
