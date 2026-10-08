@@ -217,7 +217,7 @@ function createTutorial5Map() {
         }
     }
     let map = new GameMap(
-        {x: 17, y: 9},
+        {x: 13, y: 9},
         [
             {
                 rgb: {r: 208, g: 208, b: 208},
@@ -241,10 +241,10 @@ function createTutorial5Map() {
         ],
         [],
         // Lakes guard the town's back corners and split the demons' field into a north and a south lane.
-        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [10, 4], [11, 4]]),
-        coordDictionary([[5, 6], [6, 0], [16, 0], [16, 8]]),
+        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [10, 4], [11, 4], [11, 3]]),
+        coordDictionary([[5, 6], [6, 0], [12, 0], [12, 8], [10, 0]]),
         // Bushes inside the walls stop the ember archers' arrows; the others grow in the field.
-        coordDictionary([[2, 1], [3, 6], [1, 7], [7, 1], [6, 8], [11, 5], [12, 6], [13, 3]]),
+        coordDictionary([[2, 1], [3, 6], [1, 7], [7, 1], [6, 8], [11, 5], [12, 6], [10, 3], [9, 0]]),
         [],
         {type: 'rectangular'},
         {
@@ -262,8 +262,8 @@ function createTutorial5Map() {
     )
     map.portals = [
         {x: 12, y: 2, category: 'ranged'},
-        {x: 15, y: 4, category: 'ranged'},
-        {x: 16, y: 7, category: 'heavy'}
+        {x: 12, y: 4, category: 'ranged'},
+        {x: 12, y: 7, category: 'heavy'}
     ]
     map.testName = 'tutorial 5'
     return map
