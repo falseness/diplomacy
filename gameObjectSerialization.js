@@ -33,9 +33,39 @@ function getGameObject() {
         'isFogOfWar': isFogOfWar,
         'gameSettings': gameSettings,
         // Only partial boards carry the keys, so full boards serialize unchanged.
-        ...(hiddenInfo ? {'hiddenInfo': true} : {}),
+        ...(hiddenInfo ? {'hiddenInfo': true, 'knownSuburbs': knownSuburbCells(), 'hiddenTownParts': knownHiddenTownParts()} : {}),
         ...(hiddenInfo && hiddenStatus ? {'status': hiddenStatus} : {})
     }
+}
+
+// Suburb flags remain rule-relevant even when their owning town is hidden. Preserve only
+// known cell coordinates, never the hidden town identity, through save/load and state hashing.
+function knownSuburbCells() {
+    const cells = []
+    for (let x = 0; x < grid.arr.length; ++x)
+        for (let y = 0; y < grid.arr[x].length; ++y) {
+            const hexagon = grid.arr[x][y].hexagon
+            if (!hexagon.unknown && hexagon.isSuburb) cells.push({x, y})
+        }
+    return cells
+}
+
+// Visible buildings whose owning town is outside the snapshot still occupy their cells.
+// Keep them in the partial serialization, without inventing or revealing a town coordinate.
+function knownHiddenTownParts() {
+    const registered = new Set(players.flatMap(player => player.towns.flatMap(town =>
+        [...town.buildings, ...town.buildingProduction])))
+    const parts = new Map()
+    for (const column of grid.arr) for (const cell of column) {
+        if (cell.hexagon.unknown || registered.has(cell.building)) continue
+        const layer = cellBuildingLayer(cell.building)
+        if (layer !== 'townBuilding' && layer !== 'manufacture') continue
+        const player = cell.hexagon.playerColor
+        if (!parts.has(player)) parts.set(player, {player, suburbs: [], buildings: [], buildingProduction: []})
+        parts.get(player)[layer === 'townBuilding' ? 'buildings' : 'buildingProduction']
+            .push(JSON.parse(JSON.stringify(cell.building)))
+    }
+    return [...parts.values()]
 }
 
 // The game status of a hidden-information board: the partial entity lists cannot tell game end,
@@ -129,7 +159,7 @@ function markRevealedCellsKnown(cells) {
             const {owner, ...packed} = cell.unit
             unit = packed
         }
-        records.push({x: cell.x, y: cell.y, colour: cell.colour, isSuburb: suburbs.get(cellDiffKey(cell)) === true, unit,
+        records.push({x: cell.x, y: cell.y, colour: cell.colour, isSuburb: 'isSuburb' in cell ? Boolean(cell.isSuburb) : suburbs.get(cellDiffKey(cell)) === true, unit,
             building: revealedCellEntity(cell.building) || local.building,
             production: revealedCellEntity(cell.production) || local.production})
     }
@@ -155,6 +185,32 @@ function loadFromObject(game) {
         JSON.stringify(packedTimer(game.whooseTurn)), JSON.stringify(game.whooseTurn), JSON.stringify(game.gameRound),
         JSON.stringify(game.isFogOfWar),
         'gameSettings' in game && game.gameSettings !== undefined ? JSON.stringify(game.gameSettings) : null)
+    if (hiddenInfo) {
+        for (const part of game.hiddenTownParts || []) {
+            for (const field of ['buildings', 'buildingProduction']) for (const packed of part[field] || []) {
+                if (isCoordNotOnMap(packed.coord, grid.arr.length, grid.arr[0].length) ||
+                        grid.getHexagon(packed.coord).unknown) continue
+                const building = field === 'buildings' ? unpacker.fullUnpackBuilding(packed) :
+                    unpacker.fullUnpackManufacture(packed)
+                building.town = null
+            }
+        }
+        if (game.hiddenTownParts?.length && isFogOfWar) {
+            if (gameSettings.coop) refreshCoopVision()
+            else players[whooseTurn].changeFogOfWarByVision()
+        }
+        // Constructors may mark their default suburb ring; the filtered snapshot's flags
+        // are authoritative, including known cells that are explicitly not suburbs.
+        if (Array.isArray(game.knownSuburbs))
+            for (const column of grid.arr)
+                for (const cell of column) cell.hexagon.isSuburb = false
+        const suburbs = game.knownSuburbs || (game.hiddenTownParts || []).flatMap(part => part.suburbs || [])
+        for (const suburb of suburbs) {
+            if (isCoordNotOnMap(suburb, grid.arr.length, grid.arr[0].length)) continue
+            const hexagon = grid.arr[suburb.x][suburb.y].hexagon
+            if (!hexagon.unknown) hexagon.isSuburb = suburb.isSuburb !== false
+        }
+    }
     // After unpackAll, which picks the timers' storage slot (gameStorageSlot) for this board.
     for (let i = 0; i < game.players.length; ++i) {
         unpacker.setPlayerTimerByIndex(i, packedTimer(i))

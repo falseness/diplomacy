@@ -92,6 +92,30 @@ const gameDiffHandler = {
         if (typeof grid === 'undefined' || !grid)
             return null
         const diff = {...message.diff}
+        // The wire boardDiff tags entities by list/owner; applyCellDiff uses runtime layer tags.
+        // In particular a town update must not be mistaken for an unsupported building and removed.
+        const suburbs = new Map()
+        for (const cell of diff.cells || [])
+            if (cell.building?.list === 'towns')
+                for (const suburb of cell.building.suburbs || [])
+                    suburbs.set(cellDiffKey(suburb), suburb.isSuburb !== false)
+        diff.cells = (diff.cells || []).map(cell => {
+            const wire = cell.building?.list || cell.production?.list || cell.unit?.owner !== undefined
+            if (!wire && 'isSuburb' in cell) return cell
+            const local = grid.arr[cell.x][cell.y].hexagon
+            const unit = cell.unit ? {...cell.unit} : null
+            if (unit) delete unit.owner
+            const building = cell.building?.list ? revealedCellEntity(cell.building) : cell.building
+            if (cell.building?.list === 'towns') {
+                delete building.buildings
+                delete building.buildingProduction
+            }
+            return {...cell, unit,
+                isSuburb: 'isSuburb' in cell ? Boolean(cell.isSuburb) : suburbs.has(cellDiffKey(cell)) ? suburbs.get(cellDiffKey(cell)) :
+                    local.playerColor === cell.colour && local.isSuburb,
+                building,
+                production: cell.production?.list ? revealedCellEntity(cell.production) : cell.production}
+        })
         if (diff.meta) {
             diff.meta = {...diff.meta}
             delete diff.meta.whooseTurn
@@ -102,6 +126,19 @@ const gameDiffHandler = {
             diff.paths = (Array.isArray(diff.paths) ? diff.paths : []).concat(hints)
         const before = remoteEffects.snapshot(diff.cells)
         const result = applyCellDiff(diff)
+        // Updating a child may recreate it at the end of its town's list. Restore the
+        // wire order after all cells are applied, without recreating unchanged children.
+        for (const cell of message.diff.cells || []) {
+            if (cell.building?.list !== 'towns') continue
+            const town = cellDiffTownAt(cell)
+            if (!town) continue
+            for (const field of ['buildings', 'buildingProduction']) {
+                const order = new Map((cell.building[field] || []).map((entry, index) =>
+                    [cellDiffKey(entry.coord), index]))
+                town[field].sort((a, b) => (order.get(cellDiffKey(a.coord)) ?? Infinity) -
+                    (order.get(cellDiffKey(b.coord)) ?? Infinity))
+            }
+        }
         remoteEffects.play(before, hints)
         // A unit whose path left the fog has no visible start to match: it slides along the last
         // visible segment, from where it came into view.

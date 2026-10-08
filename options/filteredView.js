@@ -116,6 +116,7 @@ function filteredView(playerIndex, knownCells = []) {
         buildingProduction: town.buildingProduction.filter(onKnown),
         suburbs: town.suburbs.filter(isKnown)
     })
+    view.knownSuburbs = knownSuburbCells().filter(isKnown)
     view.hiddenTownParts = []
     view.players = full.players.map((packed, i) => {
         let res = Object.assign({}, packed)

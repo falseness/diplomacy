@@ -271,6 +271,12 @@ class ActionManager {
         }
     }
     undoBuildingProduction(buildingProduction) {
+        // The visible construction survives without exposing its hidden town.
+        if (hiddenInfo && buildingProduction.town === null) {
+            const restored = unpacker.fullUnpackManufacture(buildingProduction)
+            restored.town = null
+            return
+        }
         if (!buildingProduction.town || !buildingProduction.town.coord ||
                 isCoordNotOnMap(
                     buildingProduction.town.coord,

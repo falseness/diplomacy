@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "68d684c4e51c742d5ffaf4c851cd4b1bea9a5d7bf84302d1b3b8b86ad4db470f",
+  "rulesVersion": "5d747b9d3ee4f31c1651b92dff8257ec912c67760a899fe4e66a92b6f809a46b",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -55,8 +55,8 @@
     },
     {
       "path": "options/actionManager.js",
-      "sha256": "6bdbbae3b1b013b2e85c1cf818a7aae256613134e3103c2360670e2bcfbc8fbc",
-      "bytes": 19941
+      "sha256": "fbedf93fe6ce5c748901dc27e54dae161a297699638b022eab083851ec2a3297",
+      "bytes": 20224
     },
     {
       "path": "options/classManager.js",
@@ -95,8 +95,8 @@
     },
     {
       "path": "options/filteredView.js",
-      "sha256": "c942169fa72a3f7e2caad16891291cd9a6398137c54be3f33024893bfb78c6fa",
-      "bytes": 9659
+      "sha256": "4c31349b9327cbbac3949e1f83ebc09985f2bd99d34e30d3103aecf28ed45b23",
+      "bytes": 9718
     },
     {
       "path": "ai/coop-map-scaling.js",
@@ -450,8 +450,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/production.js",
-      "sha256": "b51a6220930417fee1af9815d7f59e267e9c46550eb7f952c9b779bbad6d11bb",
-      "bytes": 16905
+      "sha256": "01861f31c71969440fbc9667943ec27b961662a16fa1a912b093df4ef70fb361",
+      "bytes": 17060
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",
@@ -515,8 +515,8 @@
     },
     {
       "path": "gameObjectSerialization.js",
-      "sha256": "bf9397ce1399c2ee49740bc20eefce89bc02ea46cb68f0177e337162e23d7a71",
-      "bytes": 25138
+      "sha256": "ff7598075d0f0431a1fd0374c0b1b9f600aaa98449ce5f130f33b02f6e1b58c9",
+      "bytes": 28249
     }
   ]
 }

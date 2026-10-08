@@ -171,12 +171,12 @@ class BuildingProduction extends Production {
     }
     toUndoJSON() {
         let res = this.toJSON()
-        res.town = {
+        res.town = this.town ? {
             coord: {
                 x: this.town.coord.x,
                 y: this.town.coord.y
             }
-        }
+        } : null
         return res
     }
     isKilled() {
@@ -261,7 +261,8 @@ class ManufactureProduction extends BuildingProduction {
         return true
     }
     get playerColor() {
-        return this.town.playerColor
+        // A visible production can belong to a town outside a filtered snapshot.
+        return this.town ? this.town.playerColor : grid.getHexagon(this.coord).playerColor
     }
     create() {
         let t = new this.class(this.coord.x, this.coord.y, this.town)
