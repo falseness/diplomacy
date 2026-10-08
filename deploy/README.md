@@ -298,7 +298,12 @@ The orchestration adapter mocks remote Git admission, packaging and systemd but
 uses real config/link transactions, BSON backup validation and actual HTTP asset
 fetches. The source suite separately runs real paired ff-only Git pulls/flock/
 self-update. The gameplay fixture runs the real shipped service, MongoDB, TLS,
-auth/lobby/action/undo/commit/diff/replay and cleanup. These layers are labeled
+auth/lobby/action/undo/commit/diff/replay and cleanup, with the local test-map
+bypass disabled. Live gameplay uses the unmodified shipped two-human open field
+map: shipped SimpleAiPlayer commands against a passing opponent, with action/undo
+pairs, until a natural terminal board permits replay (bounded to 240 turns and
+the existing verification deadline). Synthetic maps, modified health and changed
+layouts are not used. These layers are labeled
 in evidence; none claims an actual production deployment. Deploy tests are
 standalone, outside the game registry; no rules manifest or discovery pins change.
 

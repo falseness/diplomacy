@@ -20,7 +20,25 @@ function child(argv,env=process.env){return new Promise((resolve,reject)=>{
  process.env.DIPLOMACY_SMOKE_AUTH_KEY_FILE=key;process.env.DIPLOMACY_SMOKE_ALLOWLIST=allow;
  let service;
  try{
-  service=await launchServices({evidenceDir:out,label:'services',enforce:true,hiddenInfo:'default',storage:'default',freshMongod:true,serverPreloads:[path.join(__dirname,'candidate_tls.js')]});
+  // Validate the exact verifier board under the production map policy, and
+  // prove the former test-only label and changed layout are rejected.
+  const policyTest = `(() => {
+    delete process.env.DIPLOMACY_TEST_GOOGLE_JWKS;
+    const assert=require('node:assert/strict'),vm=require('vm');
+    const {validateLobbyBoard,isLocalTestServer}=require(${JSON.stringify(path.join(server,'server/lobby/lobbySettings'))});
+    const {competitiveBoard}=require(${JSON.stringify(path.join(__dirname,'live_map'))});
+    const b=competitiveBoard(()=>source=>vm.runInThisContext('('+source+')')());
+    assert.equal(isLocalTestServer(),false);
+    assert.doesNotThrow(()=>validateLobbyBoard(b,{mapName:'open field'}));
+    assert.throws(()=>validateLobbyBoard(b,{mapName:'test:deploy-enforce-replay'}),/Unknown competitive map/);
+    const changed=structuredClone(b); changed.players[1].towns=[];
+    assert.throws(()=>validateLobbyBoard(changed,{mapName:'open field'}),/Board does not match/);
+    console.log('PASS production map policy: exact shipped verifier board accepted; test-only name and altered layout rejected');
+  })();`;
+  await child([process.execPath,'-e',policyTest]);
+  const policy=path.join(temp,'production-policy.js');
+  fs.writeFileSync(policy, "delete process.env.DIPLOMACY_TEST_GOOGLE_JWKS; console.log('PRODUCTION_MAP_POLICY test-board bypass disabled');\n");
+  service=await launchServices({evidenceDir:out,label:'services',enforce:true,hiddenInfo:'default',storage:'default',freshMongod:true,serverPreloads:[path.join(__dirname,'candidate_tls.js'),policy]});
   const db=service.mongo.db(service.databaseName);
   await db.collection('accounts').insertOne({accountId:'foreign-account',identity:'foreign-real'});
 
