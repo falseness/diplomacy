@@ -270,14 +270,11 @@ function createTutorial5Map() {
 }
 
 function createTutorial6Map() {
-    // Retreat and come back (co-op tutorial map). The game starts on round 20 (tutorials entry startRound),
-    // so every 4 rounds melee portals spawn Brutes and mage portals Hexcasters; sudden death stays round 40.
-    // Red owns two towns on the axis toward the demons, the back town (1,4) and the front town (6,4), each
-    // with a barrack and every hex within 2 steps as a suburb, and 400 gold. Red's army (a normchel, 3 archers
-    // and a KOHb) starts on the far side among 5 portals whose demons stand on them: a Brute on each melee
-    // portal, a Hexcaster on the mage portal, a Bombard on the siege portal and the Demon Lord on the chaos
-    // portal. Attacking at once loses the army and then both towns; pulling the army back for 2 rounds while
-    // the towns buy catapults and the barracks archers, then counter-attacking, wins.
+    // Fighting withdrawal: ten portals north/east of the front town leave the center road open.
+    // Nine Imps and a Bombard engage immediately; the melee portal sustains Brute pressure every
+    // four rounds. Chaos portals contribute their initial defenders (their tutorial wave was round 8).
+    // Preserve both towns, 400 gold, the starting army, round 20 and the round-40 deadline.
+    // Trade the exposed front town for time to regroup at the rear and build a siege counterattack.
     let size = {x: 16, y: 9}
     let towns = [{x: 1, y: 4}, {x: 6, y: 4}]
     // Hex distance in the x-parity offset layout of sprites/sprite.js.
@@ -322,31 +319,41 @@ function createTutorial6Map() {
         ],
         [],
         // Lakes guard the back town's corners and close the demons' rear.
-        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [15, 4], [15, 5], [12, 8], [13, 8]]),
+        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [15, 4], [15, 5], [12, 8], [13, 8], [15, 6]]),
         // Mountains narrow the ground between the towns and the field's edges in front of the portals.
-        coordDictionary([[3, 0], [4, 0], [3, 8], [4, 8], [8, 0], [8, 8], [9, 8]]),
+        coordDictionary([[3, 0], [4, 0], [3, 8], [4, 8], [8, 0], [8, 8], [9, 8], [15, 0]]),
         // Bushes around the front town give the returning archers cover.
-        coordDictionary([[5, 2], [7, 5], [5, 6]]),
+        coordDictionary([[5, 2], [7, 5], [5, 6], [4, 2], [4, 6]]),
         [],
         {type: 'rectangular'},
         {
             tutorial: true,
             // The demons start standing on their portals; a portal spawns only once its hex is free.
             units: [
-                {x: 13, y: 3, type: Brute},
-                {x: 10, y: 4, type: Brute},
-                {x: 10, y: 1, type: Hexcaster},
-                {x: 12, y: 6, type: Bombard},
-                {x: 14, y: 1, type: DemonLord}
+                {x: 8, y: 1, type: Imp},
+                {x: 9, y: 5, type: Imp},
+                {x: 8, y: 2, type: Bombard},
+                {x: 9, y: 1, type: Imp},
+                {x: 9, y: 2, type: Imp},
+                {x: 10, y: 1, type: Imp},
+                {x: 12, y: 2, type: Imp},
+                {x: 12, y: 1, type: Imp},
+                {x: 11, y: 1, type: Imp},
+                {x: 10, y: 5, type: Imp}
             ]
         }
     )
     map.portals = [
-        {x: 13, y: 3, category: 'melee'},
-        {x: 10, y: 4, category: 'melee'},
-        {x: 10, y: 1, category: 'mage'},
-        {x: 12, y: 6, category: 'siege'},
-        {x: 14, y: 1, category: 'chaos'}
+        {x: 8, y: 1, category: 'melee'},
+        {x: 9, y: 5, category: 'chaos'},
+        {x: 8, y: 2, category: 'chaos'},
+        {x: 9, y: 1, category: 'chaos'},
+        {x: 9, y: 2, category: 'chaos'},
+        {x: 10, y: 1, category: 'chaos'},
+        {x: 12, y: 2, category: 'chaos'},
+        {x: 12, y: 1, category: 'chaos'},
+        {x: 11, y: 1, category: 'chaos'},
+        {x: 10, y: 5, category: 'chaos'}
     ]
     map.testName = 'tutorial 6'
     return map
