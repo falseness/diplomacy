@@ -125,3 +125,59 @@ Standalone deployment tests (outside the game test registry):
 DIPLOMACY_CLIENT_ROOT=/path/diplomacy python3 -B deploy/test_candidate.py
 DIPLOMACY_SERVER_ROOT=/path/diplomacy_server /usr/local/bin/node20 deploy/test_backup.js
 ```
+
+## Standalone activation and code rollback
+
+`activate.py` is deliberately separate from `deploy.sh`; orchestration is later
+work. It targets `diplomacy-server.service`, its one owned
+`99-zz-diplomacy-release.conf` drop-in and `/var/www/html`. Run with privileges
+for those targets and the existing exclusive host lock. Required arguments:
+`activate --candidate PATH --manifest PATH --record NEW_PRIVATE_FILE
+--backups PRIVATE_DIRECTORY --health-probe EXECUTABLE
+--existing-games-probe EXECUTABLE`. The probes must be trusted, bounded,
+read-only executables, requiring no arguments, with nonzero status for failure;
+they must inspect the current local service and existing-game compatibility.
+Do not supply probes that write games. Caller must exclude other DB writers
+and concurrent configuration edits throughout the transaction. Probes,
+credentials/configuration and backup tools are host prerequisites, not packaged
+secrets. The helpers do not provision them.
+
+Before stopping, activation validates candidate hashes/repository/runtime
+identities, records process cwd/executable, unit/effective settings, exact owned
+config bytes/ownership/mode and the literal web link, checks initial health/game
+compatibility and rejects competing later-sorting drop-ins. The recovery record
+is private (0600); it may contain sensitive service settings and must not be
+committed or printed. Other unit files are never rewritten. Non-release settings
+in the owned file survive activation. The service must use control-group/mixed
+kill mode; stop is followed by state/PID/cgroup checks. A fresh TASK-775 full
+validated backup must succeed before either target switches. Existing releases
+and backups are retained. Config and web use same-directory atomic rename;
+the pair cannot switch atomically, so any intermediate failure requires rollback.
+
+Failures, TERM and INT after a stop attempt restore the prior config/link and
+restart/verify the prior process, effective configuration, health and game
+compatibility. Before-stop errors leave the service alone. Child command groups
+are killed/reaped on interruption before rollback proceeds. Further TERM/INT
+are ignored during recovery. SIGKILL/power loss cannot run handlers: the private
+record supports a later explicit `rollback --record FILE --backups DIRECTORY
+--health-probe EXECUTABLE --existing-games-probe EXECUTABLE` under the same lock.
+A failed activation always exits nonzero, even after successful recovery. JSON
+output retains the original failure stage/reason and a separate rollback result.
+No database is ever restored or wiped. A later code rollback preserves new-format
+writes and reports existing-game incompatibility explicitly; it cannot promise
+that the previous code understands those writes. Incomplete rollback must be
+resolved manually using the retained private record.
+
+Run isolated coverage with pinned Node and dependencies (Python drives the
+transaction; backup BSON validation runs on Node 20):
+
+```sh
+DIPLOMACY_CLIENT_ROOT=/root/diplomacy NODE_PATH=/opt/diplomacy/node_modules \
+TMPDIR=/mnt/storage/tmp-diplomacy python3 -B deploy/test_activate.py
+```
+
+The stateful service adapter is disposable; tests exercise shipped transaction,
+preflight, atomic replacements, candidate inventory validation and real backup
+validation using fake Mongo command fixtures. Production systemd/process/runtime
+inspection is not exercised against a live host. These standalone deployment
+tests do not change the game reliability registry or rules manifest inputs.
