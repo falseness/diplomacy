@@ -148,8 +148,9 @@ class Host:
     def backup(self, candidate):
         self.quiescent()
         helper = Path(__file__).with_name('backup.js')
-        script = "const b=require(process.argv[1]);const {BSON}=require(process.argv[3]+'/diplomacy_server/server/node_modules/mongodb');const r=b.backup({directory:process.argv[2],quiesced:true,BSON});b.verifyBackup(r.path);"
-        self.command([candidate / 'runtime/bin/node', '-e', script, helper, self.backups, candidate], timeout=1800)
+        script = "const b=require(process.argv[1]);const {BSON}=require(process.argv[3]+'/diplomacy_server/server/node_modules/mongodb');const r=b.backup({directory:process.argv[2],quiesced:true,BSON});b.verifyBackup(r.path);console.log('BACKUP_RECEIPT '+JSON.stringify(r));"
+        output = self.command([candidate / 'runtime/bin/node', '-e', script, helper, self.backups, candidate], timeout=1800)
+        self.backup_receipt = json.loads(next(line.removeprefix('BACKUP_RECEIPT ') for line in output.splitlines() if line.startswith('BACKUP_RECEIPT ')))
         self.quiescent()
 
     def probe(self, games=False):
@@ -229,6 +230,10 @@ def activate(host, candidate, manifest, record):
         # Safe literal paths only: no systemd percent specifiers, quotes or shell syntax.
         content = ('[Service]\nWorkingDirectory=%s/diplomacy_server/server\nExecStart=\nExecStart=%s/runtime/bin/node %s/diplomacy_server/server/index.js\n' % (candidate, candidate, candidate))
         # Retain any previous non-release directives even inside our owned file.
+        for key, value in getattr(host, 'release_environment', {}).items():
+            if not re.fullmatch(r'[A-Z_]+', key) or not re.fullmatch(r'/[a-zA-Z0-9_./-]+', value):
+                raise RuntimeError('Unsupported release environment')
+            content += 'Environment=' + key + '=' + value + '\n'
         prefix = bytes.fromhex(before['owned']) + b'\n' if before['owned'] is not None else b''
         atomic_file(host.owned, prefix + content.encode(), before['mode'] or 0o644,
                     before['uid'], before['gid'])
@@ -242,6 +247,7 @@ def activate(host, candidate, manifest, record):
         if host.web.resolve() != candidate / 'diplomacy': raise RuntimeError('Candidate web mismatch')
         stage = 'health'; host.checkpoint(stage); host.probe(); host.probe(games=True)
         result['status'] = 'activated'
+        result['backup'] = getattr(host, 'backup_receipt', None)
     except Exception as error:
         result['failure'] = {'stage': stage, 'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}
         if stopped:

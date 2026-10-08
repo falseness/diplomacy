@@ -40,7 +40,9 @@ def fixture(name):
         git(seed, 'checkout', '-b', branch)
         (seed / 'tracked').write_text('initial\n')
         if label == 'diplomacy':
-            shutil.copytree(SOURCE, seed / 'deploy', ignore=shutil.ignore_patterns('__pycache__'))
+            (seed / 'deploy').mkdir()
+            for name in ('source.py', 'deploy.sh'):
+                shutil.copy2(SOURCE / name, seed / 'deploy' / name)
         git(seed, 'add', '.')
         git(seed, 'commit', '-m', 'fixture initial')
         git(seed, 'push', '-u', 'origin', branch)
@@ -72,7 +74,9 @@ def run(base, roots, args=(), wait=True):
     # Exercise main with real fixtures, substituting only production host preflight.
     code = '''import importlib.util,sys,pathlib
 s=importlib.util.spec_from_file_location('source',sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m)
+sys.path.insert(0,str(pathlib.Path(sys.argv[1]).parent))
 m.LOCK=pathlib.Path(sys.argv[2]); m.preflight=lambda roots,dry: None
+m.finish=lambda client,server: (_ for _ in ()).throw(RuntimeError('fixture orchestration boundary'))
 try: sys.exit(m.main(sys.argv[4:], pathlib.Path(sys.argv[3])))
 except Exception as e: print('ERROR:',str(e)); sys.exit(1)
 '''
@@ -118,7 +122,7 @@ try:
         after = [advance(x) for x in r]
         (r[0] / 'foreign').write_text('preserved')
         rc, out = run(b, r)
-        assert rc == 1 and 'activation not implemented' in out
+        assert rc == 1 and 'fixture orchestration boundary' in out
         assert all(s in out for s in before + after)
         assert [git(x, 'rev-parse', 'HEAD') for x in r] == after
         assert (r[0] / 'foreign').read_text() == 'preserved'
@@ -141,7 +145,7 @@ try:
                 (r[1] / 'collision').write_text('foreign')
                 if case == 'ignored-collision': (r[1] / '.git/info/exclude').write_text('collision\n')
             rc, out = run(b, r)
-            assert rc == 1 and 'activation not implemented' not in out and 'SENTINEL_SECRET' not in out
+            assert rc == 1 and 'fixture orchestration boundary' not in out and 'SENTINEL_SECRET' not in out
             if case in ('divergence', 'collision', 'ignored-collision'):
                 assert git(r[0], 'rev-parse', 'HEAD') != old[0]
             else:
@@ -162,7 +166,7 @@ try:
             (r[1] / '.git/info/exclude').write_text('*\n')
             rc, out = run(b, r)
             assert rc == 1 and 'Unsafe untracked path collision' in out
-            assert 'activation not implemented' not in out
+            assert 'fixture orchestration boundary' not in out
             assert git(r[0], 'rev-parse', 'HEAD') != old[0]
             assert git(r[1], 'rev-parse', 'HEAD') == old[1]
             assert all((r[1] / path).read_bytes() == data for path, data in foreign.items())
@@ -195,15 +199,15 @@ try:
         assert rc == 1 and 'already locked' in out
         output = first.communicate(timeout=30)[0]
         print(output); print('INVOCATION_EXIT_STATUS=' + str(first.returncode))
-        assert first.returncode == 1 and 'activation not implemented' in output
+        assert first.returncode == 1 and 'fixture orchestration boundary' in output
         rc, out = run(b, r)
-        assert rc == 1 and 'activation not implemented' in out and 'already locked' not in out
+        assert rc == 1 and 'fixture orchestration boundary' in out and 'already locked' not in out
         print('PASS concurrent mutation excluded; lock released after failure')
         b, r = fixture('self-update')
         seed = r[0].parent / 'diplomacy-seed'
         code = (seed / 'deploy/source.py').read_text().replace("print('SELF_UPDATE_RESUMED", "print('PULLED_IMPLEMENTATION\\nSELF_UPDATE_RESUMED")
-        code = code.replace("        raise RuntimeError('activation not implemented')",
-                            "        (client.parent / 'resumed').touch()\n        __import__('time').sleep(2)\n        raise RuntimeError('activation not implemented')", 1)
+        code = code.replace("        return finish(client, server)",
+                            "        (client.parent / 'resumed').touch()\n        __import__('time').sleep(2)\n        raise RuntimeError('fixture orchestration boundary')", 1)
         advance(r[0], 'deploy/source.py', code)
         updated = run(b, r, wait=False)
         deadline = time.monotonic() + 15
@@ -216,7 +220,7 @@ try:
         print(out); print('INVOCATION_EXIT_STATUS=' + str(rc))
         assert all(p.read_text() == 'untouched' for p in (b / 'live').iterdir())
         assert rc == 1 and out.count('PULLED_IMPLEMENTATION') == 1 and out.count('SELF_UPDATE_RESUMED') == 1
-        assert out.count('"after_branch"') == 2 and 'activation not implemented' in out
+        assert out.count('"after_branch"') == 2 and 'fixture orchestration boundary' in out
         rc, out = run(b, r)
         assert 'already locked' not in out
         print('PASS self-update pulled implementation exactly once; inherited lock; no recursive pulls')

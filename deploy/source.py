@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 
@@ -83,8 +84,27 @@ def preflight(roots, dry):
     print('Preflight: tools, Node 20, disk and noninteractive sudo OK', flush=True)
 
 
+def finish(client, server):
+    # Retain flock while the privileged child recovers from interruption.
+    child = subprocess.Popen(['sudo', '-n', 'python3', '-B', str(client / 'deploy/orchestrate.py'), str(client), str(server)], start_new_session=True)
+    handlers = {}
+    interrupted = False
+    def forward(signum, frame):
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            child.send_signal(signum)  # sudo forwards signals to its command
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM): handlers[sig] = signal.signal(sig, forward)
+        code = child.wait()
+    finally:
+        for sig, handler in handlers.items(): signal.signal(sig, handler)
+    if code or interrupted: raise RuntimeError('Release orchestration failed')
+    return 0
+
+
 def main(argv=None, client=None):
-    parser = argparse.ArgumentParser(description='Prepare current upstream branches; activation not implemented')
+    parser = argparse.ArgumentParser(description='Deploy current upstream branches with complete verification')
     parser.add_argument('--dry-run', action='store_true', help='Read-only report; no fetch, pull or lock')
     parser.add_argument('--server-repo', type=Path, help='Default: sibling diplomacy_server')
     args = parser.parse_args(argv)
@@ -106,7 +126,7 @@ def main(argv=None, client=None):
         if [git(r, 'rev-parse', 'HEAD') for r in (client, server)] != state['heads']:
             raise RuntimeError('Source changed during continuation')
         print('SELF_UPDATE_RESUMED exactly once; lock retained', flush=True)
-        raise RuntimeError('activation not implemented')
+        return finish(client, server)
     preflight((client, server), args.dry_run)
     if args.dry_run:
         for root in (client, server):
@@ -132,7 +152,7 @@ def main(argv=None, client=None):
                 heads=[git(r, 'rev-parse', 'HEAD') for r in (client, server)]))
             os.execv(str(client / 'deploy/deploy.sh'), [str(client / 'deploy/deploy.sh'),
                                                       '--server-repo', str(server)])
-        raise RuntimeError('activation not implemented')
+        return finish(client, server)
 
 
 if __name__ == '__main__':
@@ -142,4 +162,7 @@ if __name__ == '__main__':
         # Only our bounded messages, not raw OS paths/URLs or exception details.
         message = str(exc) if isinstance(exc, RuntimeError) else 'Deployment preflight/continuation failed'
         print('ERROR: ' + message, file=sys.stderr)
+        print(json.dumps({'status': 'failed', 'failure': {'stage': 'source/preflight/orchestration', 'reason': message},
+                          'cleanup': 'see release result if orchestration started; otherwise not-needed',
+                          'rollback': 'see release result if orchestration started; sources never reset'}), file=sys.stderr)
         sys.exit(1)

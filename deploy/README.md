@@ -1,4 +1,4 @@
-# Source preparation entrypoint
+# Verified deployment entrypoint
 
 Run as `bakharevns`: `/home/bakharevns/diplomacy/deploy/deploy.sh`.
 Use `--help`, `--dry-run`, or `--server-repo PATH` as needed. The client
@@ -14,10 +14,11 @@ Production defaults for the later activation stage are:
 - Exclusive host lock: `/home/bakharevns/.diplomacy-deploy.lock`.
 - Pinned executable: `/usr/local/bin/node20` (Node 20).
 
-This increment **always fails with `activation not implemented`** after successful
-source preparation. It never packages, changes releases, restarts services,
-updates the web link, or accesses the database. Untracked files are preserved;
-later packaging must use tracked Git objects, never copy the working directory.
+Normal execution continues through immutable packaging, isolated tests, read-only
+existing-game baseline, smoke namespace admission, quiesced validated backup,
+activation, live gameplay verification, smoke cleanup and final result. Every
+stage gates success. A healthy service alone is never complete verification.
+Untracked files are preserved; packaging uses committed Git blobs.
 
 Preflight checks tools, at least 1 GiB of free space in both repositories,
 pinned Node, the invoking user, noninteractive sudo authorization for the service,
@@ -46,7 +47,7 @@ update. Host tools may have their own system audit logging.
 If the two tracked runtime files change during pull, the process execs the
 updated tracked entrypoint once, inheriting the same flock file descriptor.
 Continuation validates roots, lock inode and commit identities, skips pulls,
-and stops at the activation boundary. The private continuation environment is
+and continues into orchestration without releasing the lock. The private continuation environment is
 an internal handoff, not a public CLI switch.
 
 Run the isolated integration test (no production access):
@@ -102,7 +103,7 @@ never in the candidate/archive. The verification-only `candidate_tls.js` preload
 redirects the two legacy dev-certificate reads to that generated pair only in
 an explicitly isolated local test process. Candidate hashes are checked before and after.
 
-`backup.js` is independent support, **not called by source preparation**. Only
+`backup.js` is called by activation after all service writers are quiescent. Only
 a caller that has already quiesced every writer may pass `--writes-quiesced`:
 
 ```sh
@@ -128,8 +129,7 @@ DIPLOMACY_SERVER_ROOT=/path/diplomacy_server /usr/local/bin/node20 deploy/test_b
 
 ## Standalone activation and code rollback
 
-`activate.py` is deliberately separate from `deploy.sh`; orchestration is later
-work. It targets `diplomacy-server.service`, its one owned
+`activate.py` is the transaction used by orchestration; its standalone CLI also supports recovery. It targets `diplomacy-server.service`, its one owned
 `99-zz-diplomacy-release.conf` drop-in and `/var/www/html`. Run with privileges
 for those targets and the existing exclusive host lock. Required arguments:
 `activate --candidate PATH --manifest PATH --record NEW_PRIVATE_FILE
@@ -181,3 +181,101 @@ preflight, atomic replacements, candidate inventory validation and real backup
 validation using fake Mongo command fixtures. Production systemd/process/runtime
 inspection is not exercised against a live host. These standalone deployment
 tests do not change the game reliability registry or rules manifest inputs.
+
+## Production orchestration configuration
+
+Production execution is reserved for the production deployment ticket. Configure
+`/home/bakharevns/.config/diplomacy/deploy.json` with absolute paths (no secrets
+inline):
+
+```json
+{
+  "releases": "/home/bakharevns/diplomacy_releases",
+  "backups": "/home/bakharevns/diplomacy_backups",
+  "node_dist": "/usr/local/lib/nodejs/node-v20.20.2-linux-x64",
+  "health_probe": "/home/bakharevns/.config/diplomacy/health-probe",
+  "existing_games_probe": "/home/bakharevns/.config/diplomacy/existing-games-probe",
+  "public_url": "https://playdiplomacy.online/",
+  "socket_url": "wss://playdiplomacy.online:8443",
+  "google_client_id": "/home/bakharevns/credentials/diplomacy/client_id",
+  "smoke_allowlist": "/home/bakharevns/credentials/diplomacy/smoke-allowlist.json",
+  "smoke_key": "/home/bakharevns/credentials/diplomacy/smoke_hmac_key"
+}
+```
+
+Use the host's actual endpoint and existing credential paths. Both probes must
+be installed, bounded, read-only and fail on an unavailable service/database or
+new compatibility regression. The health probe must test database readiness,
+not just a port. The deployment user needs existing noninteractive sudo rights
+for the tracked `python3 -B deploy/orchestrate.py CLIENT SERVER` command, which
+performs the privileged systemd/config/web/backup operations. Restrict that
+trust to operator-controlled checkouts. The parent retains the exclusive flock
+while this child runs. Existing SSH agent and known-host authentication are
+reused for the paired pulls; deployment never provisions or prints credentials.
+
+Run as bakharevns, using each repository's CURRENT branch/upstream:
+
+```sh
+/home/bakharevns/diplomacy/deploy/deploy.sh --dry-run
+/home/bakharevns/diplomacy/deploy/deploy.sh
+```
+
+No branch name is silently selected; client master/server demons are the
+expected operator checkouts. The runtime is exactly Node 20.20.2, client root
+is explicit, and tests use `TMPDIR=/mnt/storage/tmp-diplomacy` with
+`${TEST_JOBS:-6}` workers. Provide that temporary directory and installed
+MongoDB command tools before deployment.
+
+Each release attempt keeps `orchestration.log`, `result.json`, private
+`recovery.json`, per-suite original logs, gameplay outputs, baseline/after
+loader results, public asset hashes, journal and residue checks under its
+unique releases directory. Fresh validated backups live under `backups` and
+include collection counts at quiescence. The result identifies full client and
+server SHAs/branches, manifest/runtime, paths, start time, all stages, original
+failure, cleanup and rollback. Source/preflight failures are printed before a
+release directory exists; retain invocation stdout/stderr in operator logs.
+Exit 0 means every required check passed; exit 1 means failure even if rollback
+succeeded; argument errors exit 2. No real-traffic or 24-hour observation gate.
+
+Smoke uses a new random namespace and the established HMAC auth policy. A
+release-local allowlist preserves prior entries and adds only this run; the
+owned service override selects it after the backup. Existing keys are referenced,
+not copied. The service user must traverse the release directories and read the
+allowlist; retained evidence and recovery files stay private. Cleanup sends an
+operation only from an authenticated connected socket and always disconnects.
+A timeout/authentication failure is retained; no unauthenticated cleanup retry
+is issued. Retained game/account IDs make orphan turns/sessions detectable after
+cleanup. Global collection counts are reported, never required to remain equal
+during real traffic; no real records are deleted or restored.
+
+Post-activation verification failure restores the previous web/config/process
+and checks health plus existing-game compatibility. Database writes are never
+rolled back. New-format writes may be incompatible with old code; the recovery
+result reports this limitation. SIGKILL/power loss still require manual recovery
+using the private record. Existing-game coverage compares read-only saved-game
+loader/turn preparation to a pre-switch baseline, including packed v1/v2 rounds.
+It does not impersonate real accounts or exercise their browser UI. Concurrently
+deleted games are reported; new open failures fail deployment. Isolated fixture
+baselines use the same source revision and cannot prove cross-version production
+compatibility.
+
+## Isolated orchestration verification
+
+```sh
+export TMPDIR=/mnt/storage/tmp-diplomacy DIPLOMACY_CLIENT_ROOT=/root/diplomacy
+export NODE_PATH=/opt/diplomacy/node_modules:/root/diplomacy_server/node_modules
+python3 -B deploy/test_orchestrate.py /path/to/new-evidence
+/usr/local/bin/node20 deploy/test_live_fixture.js /path/to/new-live-evidence
+python3 -B deploy/test_journal.py
+/usr/local/bin/node20 deploy/test_cleanup.js
+python3 -B deploy/test_source.py /path/to/new-source-evidence
+python3 -B deploy/test_activate.py
+```
+
+The orchestration adapter mocks remote Git admission, packaging and systemd but
+uses real config/link transactions, BSON backup validation and actual HTTP asset
+fetches. The source suite separately runs real paired ff-only Git pulls/flock/
+self-update. The gameplay fixture runs the real shipped service, MongoDB, TLS,
+auth/lobby/action/undo/commit/diff/replay and cleanup. These layers are labeled
+in evidence; none claims an actual production deployment. Deploy tests are
+standalone, outside the game registry; no rules manifest or discovery pins change.
