@@ -270,11 +270,11 @@ class Grid extends SpritesGroup {
                 }
                 let cell = this.arr[i][j]
 
-                cell.building.draw(ctx)
-                if (cell.building.hasBar)
-                    tmpBuildings.push(cell.building)
-                // Production silhouette under the unit standing on the cell.
-                this.drawProductionSilhouette(ctx, cell.building)
+                if (!this.observedBuilding(cell)) {
+                    cell.building.draw(ctx)
+                    if (cell.building.hasBar) tmpBuildings.push(cell.building)
+                    this.drawProductionSilhouette(ctx, cell.building)
+                }
                 const unit = this.getStillUnit(cell)
                 if (unit) unit.draw(ctx)
             }
@@ -290,7 +290,11 @@ class Grid extends SpritesGroup {
             building.drawNextProduction(ctx)
     }
     isCacheableBuilding(building) {
-        return building.notEmpty() && !building.isInvisible && !building.isBuildingProduction()
+        return building.notEmpty() && !building.isInvisible && !building.isBuildingProduction() &&
+            !this.observedBuilding(this.getCell(building.coord))
+    }
+    observedBuilding(cell) {
+        return typeof onlineObservation !== 'undefined' && onlineObservation.hidesBuilding(cell)
     }
     getEntityBodyImageName(entity) {
         if (entity.isDemonPortal)
@@ -332,21 +336,23 @@ class Grid extends SpritesGroup {
                     continue
                 const cell = this.arr[i][j]
                 const building = cell.building
+                const observed = this.observedBuilding(cell)
                 let silhouette = false
-                if (building.isBuildingProduction())
-                    building.draw(ctx)
-                else if (building.isPreparingManufacture) {
-                    silhouette = building.unitProduction.notEmpty()
-                    building.unitProduction.draw(ctx)
-                } else if (building.isDemonPortal) {
-                    silhouette = !!building.nextProduction
-                    building.drawNextProduction(ctx)
+                if (!observed) {
+                    if (building.isBuildingProduction()) building.draw(ctx)
+                    else if (building.isPreparingManufacture) {
+                        silhouette = building.unitProduction.notEmpty()
+                        building.unitProduction.draw(ctx)
+                    } else if (building.isDemonPortal) {
+                        silhouette = !!building.nextProduction
+                        building.drawNextProduction(ctx)
+                    }
                 }
                 // The cached unit sits under the silhouette; repaint it on top.
                 const unit = this.getStillUnit(cell)
                 if (silhouette && unit)
                     this.drawEntityBody(ctx, unit)
-                if (building.hasBar)
+                if (!observed && building.hasBar)
                     buildingBars.push(building)
                 if (unit)
                     unit.drawBars(ctx)

@@ -62,23 +62,39 @@ class OnlineLogic {
 // grid/players or serialize them into actions, undo snapshots or stateHash().
 const onlineObservation = {
     board: null,
+    round: null,
     units: new Map(),
+    unitActors: new Map(),
+    buildings: new Map(),
     hexagons: new Map(),
     clear() {
         this.board = null
+        this.round = null
         this.units.clear()
+        this.unitActors.clear()
+        this.buildings.clear()
         this.hexagons.clear()
     },
     receive(message) {
-        if (this.board !== grid) {
+        if (this.board !== grid || this.round !== gameRound) {
             this.clear()
             this.board = grid
+            this.round = gameRound
         }
+        const changed = new Set((message.changedCells || []).map(cell => cell.x + ',' + cell.y))
         for (const cell of message.diff.cells || []) {
             if (!grid.arr[cell.x]?.[cell.y]) continue
             const key = cell.x + ',' + cell.y
             const localHex = grid.getHexagon(cell)
             const observedHex = this.hexagons.get(key)
+            const affected = changed.has(key)
+            const building = cell.building
+            if (Object.hasOwn(cell, 'building') && (affected || building?.owner === message.actorSeat ||
+                    this.buildings.get(key)?.actor === message.actorSeat)) {
+                const BuildingClass = building?.name === 'town' ? Town : building && getClass(building.name)
+                if (!building || BuildingClass) this.buildings.set(key, {actor: message.actorSeat,
+                    sprite: building ? this.sprite(building, cell, BuildingClass, basis.r * 1.4) : null})
+            }
             // Capture trails include cells without a unit. Keep their colours,
             // and remember the actor so undo can restore neutral/previous land.
             if (cell.colour === message.actorSeat || observedHex?.actor === message.actorSeat ||
@@ -94,29 +110,53 @@ const onlineObservation = {
             const previous = this.units.get(key) || grid.getUnit(cell)
             // Another seat's context may contain old copies of unrelated units.
             // Observe the acting seat's units and their vacated cells only.
-            if (record?.owner !== message.actorSeat && previous?.playerColor !== message.actorSeat) continue
+            if (!affected && record?.owner !== message.actorSeat && previous?.playerColor !== message.actorSeat) continue
             // Our own commands remain visible immediately, even if the peer's
             // isolated board still contains an older copy of our unit.
             if (record && record.owner === whooseTurn) {
                 this.units.delete(key)
+                this.unitActors.delete(key)
                 continue
             }
             let sprite = null
             const UnitClass = record && getClass(record.name)
             if (UnitClass && Number.isInteger(record.owner) && players[record.owner]) {
                 // Skip constructors: unit constructors mutate the rule board.
-                sprite = Object.create(UnitClass.prototype, Object.fromEntries(
-                    Object.entries({...record, coord: {x: cell.x, y: cell.y}})
-                        .map(([key, value]) => [key, {value, writable: true, configurable: true}])))
-                Object.defineProperty(sprite, 'playerColor', {value: record.owner})
-                sprite.pos = sprite.calcPos()
-                sprite.hpBar = new HealthBar({x: sprite.pos.x + assets.size / 2,
-                    y: sprite.pos.y + assets.size / 2 - basis.r * 0.125}, sprite.maxHP)
-                sprite.updateHPBar()
+                sprite = this.sprite(record, cell, UnitClass, -basis.r * 0.125)
             }
             this.units.set(key, sprite)
+            this.unitActors.set(key, message.actorSeat)
         }
         return {observation: true}
+    },
+    sprite(record, cell, Class, margin) {
+        const sprite = Object.create(Class.prototype, Object.fromEntries(
+            Object.entries({...record, coord: {x: cell.x, y: cell.y}})
+                .map(([key, value]) => [key, {value, writable: true, configurable: true}])))
+        Object.defineProperty(sprite, 'playerColor', {value: record.owner ?? cell.colour})
+        sprite.pos = sprite.calcPos()
+        sprite.hpBar = new HealthBar({x: sprite.pos.x + assets.size / 2,
+            y: sprite.pos.y + assets.size / 2 + margin}, sprite.maxHP)
+        sprite.updateHPBar()
+        return sprite
+    },
+    acceptBoard(board) {
+        const pending = board.coopCommit?.pendingSeats
+        if (board.gameRound !== this.round || !Array.isArray(pending) || board.gameSettings?.coop?.result) {
+            this.clear()
+            return
+        }
+        const keep = new Set(pending)
+        for (const [key, actor] of this.unitActors) if (!keep.has(actor)) {
+            this.units.delete(key)
+            this.unitActors.delete(key)
+        }
+        for (const map of [this.hexagons, this.buildings])
+            for (const [key, entry] of map) if (!keep.has(entry.actor)) map.delete(key)
+        this.board = grid
+    },
+    hidesBuilding(cell) {
+        return this.board === grid && this.buildings.has(cell.coord.x + ',' + cell.coord.y)
     },
     hidesUnit(cell) {
         return this.board === grid && this.units.has(cell.coord.x + ',' + cell.coord.y) &&
@@ -129,6 +169,12 @@ const onlineObservation = {
     },
     draw(ctx) {
         if (this.board !== grid) return
+        for (const {sprite} of this.buildings.values()) if (sprite) {
+            drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
+            Entity.prototype.drawBars.call(sprite, ctx)
+            const cell = grid.getCell(sprite.coord)
+            if (cell.unit.notEmpty() && !this.hidesUnit(cell) && !moveTween.isActive(cell.unit)) cell.unit.draw(ctx)
+        }
         for (const sprite of this.units.values()) {
             if (!sprite) continue
             const local = grid.getUnit(sprite.coord)
@@ -176,7 +222,7 @@ const gameDiffHandler = {
         if (typeof grid === 'undefined' || !grid)
             return null
         if (message.observation) return onlineObservation.receive(message)
-        onlineObservation.clear()
+        const observing = onlineObservation.board === grid
         const diff = {...message.diff}
         // The wire boardDiff tags entities by list/owner; applyCellDiff uses runtime layer tags.
         // In particular a town update must not be mistaken for an unsupported building and removed.
@@ -242,6 +288,7 @@ const gameDiffHandler = {
             if (unit.notEmpty() && !moveTween.isActive(unit))
                 moveTween.start(unit, hint.path)
         }
+        if (observing) onlineObservation.receive(message)
         return result
     },
     // {from, to, path} for applyCellDiff from {segments} (a hint already in that shape is kept):
@@ -592,7 +639,6 @@ function SetupServerCommunicationLogic(gameID) {
                 fail('The server sent an incomplete turn update.')
                 return false
             }
-            onlineObservation.clear()
             onlineActionStream().continueFrom(update, () => {
                 gameEvent.removeSelection()
                 gameEvent.hideAll()
@@ -619,6 +665,7 @@ function SetupServerCommunicationLogic(gameID) {
                 if (hiddenInfo) hiddenStatus = board.status
             })
             acceptedBoard = board
+            onlineObservation.acceptBoard(board)
             onlineCommit = commit
             return 'continued'
         }
@@ -629,8 +676,8 @@ function SetupServerCommunicationLogic(gameID) {
             gameEvent.removeSelection()
             gameEvent.hideAll()
         }
-        onlineObservation.clear()
         loadFromJson(JSON.stringify(board))
+        onlineObservation.acceptBoard(board)
         if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
