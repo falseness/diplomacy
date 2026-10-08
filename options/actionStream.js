@@ -136,9 +136,12 @@ const ActionStream = {
         } else {
             ++this.counters.acked
             this.accepted.push({action: entry.action, hash: entry.hash})
-            if (ack.hash !== entry.hash) {
+            // Hidden-info acks retain the full-board hash for replay. Compare the
+            // same filtered view, before this ack's reveals, as the recorded action.
+            const actionHash = ack.viewHash === undefined ? ack.hash : ack.viewHash
+            if (actionHash !== entry.hash) {
                 ++this.counters.hashMismatches
-                console.warn('game:action hash mismatch', entry.seq, entry.action.t, ack.hash, entry.hash)
+                console.warn('game:action hash mismatch', entry.seq, entry.action.t, actionHash, entry.hash)
             }
             if (Array.isArray(ack.revealed) && ack.revealed.length && typeof markRevealedCellsKnown === 'function')
                 this.revealedCells += markRevealedCellsKnown(ack.revealed)

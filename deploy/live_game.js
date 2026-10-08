@@ -189,6 +189,8 @@ async function main() {
         assert.equal(local.ok,true,JSON.stringify(local));
         const ack=await c.request('game:action',{gameID,seq:++seq,action:a});
         assert.match(ack.hash,/^[a-f0-9]{64}$/);
+        assert.equal(ack.viewHash === undefined ? ack.hash : ack.viewHash, local.hash,
+          `${a.t}: server and client action-view hashes agree before reveals`);
         truthHash=ack.hash;
         // Production has no test:seatState: commit validates filtered endHash; replay validates truth hash.
         if(ack.revealed?.length) run('cells => markRevealedCellsKnown(cells)',ack.revealed);
