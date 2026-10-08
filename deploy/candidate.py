@@ -41,7 +41,7 @@ def safe_link(root, path, target):
     if os.path.isabs(target):
         raise ValueError('Unsafe symlink')
     dest = (path.parent / target).resolve()
-    if not dest.is_relative_to(root.resolve()) or not dest.exists():
+    if root.resolve() not in (dest, *dest.parents) or not dest.exists():
         raise ValueError('Unsafe or missing symlink target')
 
 
@@ -131,7 +131,7 @@ def rules(root, node):
     run([node, root / 'diplomacy/tools/rules-manifest.js', '--check'], cwd=root / 'diplomacy', env=env)
     html = (root / 'diplomacy/index.html').read_text()
     for src in re.findall(r'<script\b[^>]*\bsrc=["\']([^"\']+)', html):
-        if '://' not in src and not (root / 'diplomacy' / safe_path(src.removeprefix('./').split('?')[0])).is_file():
+        if '://' not in src and not (root / 'diplomacy' / safe_path((src[2:] if src.startswith('./') else src).split('?')[0])).is_file():
             raise ValueError('Missing browser script closure')
     print('PASS committed client/server rules compatibility and browser/server closure')
 
@@ -172,7 +172,7 @@ def prepare(client, server, output, dist):
         for member in tar:
             if member.isdir():
                 continue
-            name = member.name.removeprefix('candidate/')
+            name = (member.name[10:] if member.name.startswith('candidate/') else member.name)
             safe_path(name)
             if name in observed:
                 raise ValueError('Duplicate archive entry')

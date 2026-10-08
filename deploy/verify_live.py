@@ -89,7 +89,8 @@ def assets(root, manifest, base, google_id, output):
     html = fetch('index.html')
     for src in re.findall(r'<script\b[^>]*\bsrc=["\']([^"\']+)', html):
         if urllib.parse.urlsplit(src).netloc: continue
-        fetch(urllib.parse.urlsplit(src).path.removeprefix('./').lstrip('/'))
+        relative = urllib.parse.urlsplit(src).path
+        fetch((relative[2:] if relative.startswith('./') else relative).lstrip('/'))
     auth = fetch('options/googleAuth.js')
     ids = re.findall(r"const GOOGLE_CLIENT_ID\s*=\s*['\"]([^'\"]+)", auth)
     if ids != [google_id.strip()]: raise RuntimeError('Google client ID mismatch')

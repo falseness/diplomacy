@@ -29,7 +29,7 @@ updates. Git diagnostics are withheld because they can contain credential URLs.
 Normal execution acquires a nonblocking flock before changing Git state. It
 checks both checkouts first, fetches each selected upstream, rejects untracked
 (including ignored) path collisions against that tree, then runs `git pull
---ff-only --no-rebase --no-autostash . <fetched-sha>` in that current branch.
+--ff-only --no-rebase . <fetched-sha>` in that current branch.
 Pulling the inspected immutable snapshot prevents a remote update between the
 collision check and pull from overwriting ignored files. Git auto-stash config
 is explicitly disabled. No reset, stash, forced checkout or cleanup is used.
@@ -230,8 +230,10 @@ a fresh reviewed pair; do not omit the pins to bypass a rejection.
 Production prerequisites must exist before activation. In particular, a Node
 binary inside an old release does not establish `/usr/local/bin/node20`, and
 the orchestration configuration and its read-only probes are not created by
-the entrypoint. The read-only sudo preflight currently requires `sudo -N`
-support. A host without these prerequisites must retain its running release
+the entrypoint. The read-only sudo preflight uses `sudo -n -k -l`, supported by sudo 1.8,
+to ignore cached credentials without updating timestamps. Git auto-stash is
+disabled through both merge/rebase configuration settings; no newer pull flag
+is needed. Helpers support the host's Python 3.8. A host without these prerequisites must retain its running release
 until they are configured and preflight passes.
 
 No branch name is silently selected; client master/server demons are the
@@ -303,3 +305,13 @@ child exit status, explicitly marking cleanup unconfirmed. Cancellation always
 fails verification, even if the child exits zero. The release result retains
 cleanup/residue and rollback outcomes; residue after forced termination is kept
 for operator investigation, never removed through unauthenticated operations.
+
+`host_probe.py health` checks the active service and read-only gameDB ping.
+`host_probe.py capture` emits a saved-game baseline for a private host file;
+`host_probe.py games --baseline FILE` compares current loader/turn preparation
+against it, failing on new errors while permitting known legacy errors and
+concurrent deletion. Install small executable wrappers selecting these modes
+as the configuration's probes. Each subprocess has a 45-second deadline and
+failure diagnostics omit raw command output. Refresh the baseline immediately
+before deployment; these probes never mutate the database or service.
+Run `python3 -B deploy/test_host_probe.py` for focused probe/preflight coverage.

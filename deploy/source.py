@@ -25,7 +25,7 @@ def git(root, *args):
     output = result.stdout.decode('utf-8', errors='surrogateescape')
     # NUL-delimited paths are exact names, including leading/trailing whitespace.
     # Other commands have one output newline; preserve any whitespace in values.
-    return output if '-z' in args else output.removesuffix('\n')
+    return output if '-z' in args else (output[:-1] if output.endswith('\n') else output)
 
 
 def inspect(root):
@@ -58,7 +58,7 @@ def pull(root, info):
                for t in filter(None, tracked)):
             raise RuntimeError('Unsafe untracked path collision')
     git(root, '-c', 'merge.autoStash=false', '-c', 'rebase.autoStash=false',
-        'pull', '--ff-only', '--no-rebase', '--no-autostash', '.', target)
+        'pull', '--ff-only', '--no-rebase', '.', target)
     after_branch = git(root, 'symbolic-ref', '--quiet', '--short', 'HEAD')
     if after_branch != info['branch']:
         raise RuntimeError('Branch changed during deployment')
@@ -76,8 +76,9 @@ def preflight(roots, dry):
     result = subprocess.run([NODE, '--version'], capture_output=True, text=True)
     if result.returncode or not result.stdout.startswith('v20.'):
         raise RuntimeError('Pinned Node 20 unavailable')
-    # -N prevents timestamp updates; -n prevents prompts, -l does not execute.
-    if subprocess.run(['sudo', '-n', '-N', '-l', 'systemctl', 'restart',
+    # -k with -l ignores cached credentials without updating the timestamp.
+    # Unlike -N this is supported by the production host's sudo 1.8.
+    if subprocess.run(['sudo', '-n', '-k', '-l', 'systemctl', 'restart',
                        'diplomacy-server.service'], capture_output=True).returncode:
         raise RuntimeError('Noninteractive sudo unavailable')
     for root in roots:

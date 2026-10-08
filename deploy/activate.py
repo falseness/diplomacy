@@ -150,7 +150,7 @@ class Host:
         helper = Path(__file__).with_name('backup.js')
         script = "const b=require(process.argv[1]);const {BSON}=require(process.argv[3]+'/diplomacy_server/server/node_modules/mongodb');const r=b.backup({directory:process.argv[2],quiesced:true,BSON});b.verifyBackup(r.path);console.log('BACKUP_RECEIPT '+JSON.stringify(r));"
         output = self.command([candidate / 'runtime/bin/node', '-e', script, helper, self.backups, candidate], timeout=1800)
-        self.backup_receipt = json.loads(next(line.removeprefix('BACKUP_RECEIPT ') for line in output.splitlines() if line.startswith('BACKUP_RECEIPT ')))
+        self.backup_receipt = json.loads(next(line[len('BACKUP_RECEIPT '):] for line in output.splitlines() if line.startswith('BACKUP_RECEIPT ')))
         self.quiescent()
 
     def probe(self, games=False):
