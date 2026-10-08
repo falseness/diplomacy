@@ -16,7 +16,7 @@
 // consumed on the server, so the next action is that seq + 1.
 // start(socket, gameID, onResync) attaches the stream to the open game (SetupServerCommunicationLogic); restart() runs when a
 // board is delivered (a new turn, a reconnect's reloaded turn) and on a transport reconnect: it drops the queue and
-// the in-flight action, starts seq again from 1 and restarts the action log from the board on screen; stop() detaches
+// the in-flight action and restores the delivered actionResume sequence/log/undo, or starts seq 1 for a new turn; stop() detaches
 // the stream. A late ack of a dropped entry is ignored.
 // Reveal on ack (TASK-700, hidden information): an ok ack may carry revealed, the cells the action made visible with
 // their contents; they are marked known (markRevealedCellsKnown, gameObjectSerialization.js), so the loading cells the
@@ -55,12 +55,17 @@ const ActionStream = {
         this.onResync = null
     },
     // The unsent and in-flight actions belong to a turn the page no longer shows.
-    restart() {
+    restart(resume = null) {
         if (!this.socket)
             return
         this.drop()
         ++this.counters.restarts
-        actionLog.start({player: whooseTurn, round: gameRound})
+        if (resume && Number.isSafeInteger(resume.lastSeq) && resume.lastSeq >= 0 && Array.isArray(resume.accepted)) {
+            this.seq = resume.lastSeq
+            this.accepted = JSON.parse(JSON.stringify(resume.accepted))
+            actionManager.arr = JSON.parse(JSON.stringify(resume.undo || []))
+        }
+        actionLog.start({player: whooseTurn, round: gameRound}, this.accepted)
     },
     drop() {
         this.flushed = null

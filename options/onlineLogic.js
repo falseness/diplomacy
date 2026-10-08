@@ -547,7 +547,12 @@ function SetupServerCommunicationLogic(gameID) {
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
         acceptedBoard = board
-        onlineActionStream()?.restart()
+        onlineActionStream()?.restart(board.actionResume)
+        if (active && board.actionResume?.ended) {
+            // End reached the server before the connection dropped; finish its commit.
+            socket.emit('nextTurn', JSON.stringify({gameID, endHash: stateHash()}))
+            return 'continued'
+        }
         if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
         onlineCommit = commit || null
         // A partial board's end comes from the server's status, not from the local lists.

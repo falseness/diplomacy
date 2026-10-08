@@ -196,6 +196,19 @@ async function main() {
         if(ack.revealed?.length) run('cells => markRevealedCellsKnown(cells)',ack.revealed);
         console.log(`PASS protocol=2 seat=${c.playerIndex} round=${board.gameRound} game:action ${a.t} truthHash=${ack.hash} recorded; client filtered stateHash=${local.hash}`);
         actions.push(a);
+        if(turn===2 && seq===2) {
+          const before=run('() => stateHash()'), from=c.inbox.length;
+          await c.request('game:open',{gameID,rulesVersion:serverRulesVersion()});
+          const at=c.inbox.findIndex((entry,i)=>i>=from && entry.event==='playYourTurn');
+          assert.ok(at>=from,'reopen delivered the active turn');
+          const resumed=c.inbox.splice(at,1)[0].board;
+          assert.equal(resumed.actionResume.lastSeq,seq);
+          assert.equal(resumed.actionResume.accepted.length,seq);
+          run('({board,terrain}) => {loadFromJson(JSON.stringify(boardWithTerrain(board,terrain))); actionManager.arr=board.actionResume.undo}',
+            {board:resumed,terrain:c.terrain});
+          assert.equal(run('() => stateHash()'),before,'reopen preserves accepted state');
+          console.log('PASS reopen accepted board and sequence; subsequent action uses lastSeq+1');
+        }
       }
       const endHash=run('() => stateHash()');
       c.socket.emit('nextTurn',JSON.stringify({gameID,endHash}));
