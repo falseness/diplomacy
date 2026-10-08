@@ -63,9 +63,11 @@ class OnlineLogic {
 const onlineObservation = {
     board: null,
     units: new Map(),
+    hexagons: new Map(),
     clear() {
         this.board = null
         this.units.clear()
+        this.hexagons.clear()
     },
     receive(message) {
         if (this.board !== grid) {
@@ -75,6 +77,19 @@ const onlineObservation = {
         for (const cell of message.diff.cells || []) {
             if (!grid.arr[cell.x]?.[cell.y]) continue
             const key = cell.x + ',' + cell.y
+            const localHex = grid.getHexagon(cell)
+            const observedHex = this.hexagons.get(key)
+            // Capture trails include cells without a unit. Keep their colours,
+            // and remember the actor so undo can restore neutral/previous land.
+            if (cell.colour === message.actorSeat || observedHex?.actor === message.actorSeat ||
+                    localHex.playerColor === message.actorSeat) {
+                if (cell.colour === null || (Number.isInteger(cell.colour) && players[cell.colour])) {
+                    const suburb = typeof cell.isSuburb === 'boolean' ? cell.isSuburb :
+                        cell.colour === localHex.playerColor && localHex.isSuburb
+                    this.hexagons.set(key, {actor: message.actorSeat,
+                        hexagon: new Hexagon(cell.x, cell.y, cell.colour, suburb)})
+                }
+            }
             const record = cell.unit
             const previous = this.units.get(key) || grid.getUnit(cell)
             // Another seat's context may contain old copies of unrelated units.
@@ -106,6 +121,11 @@ const onlineObservation = {
     hidesUnit(cell) {
         return this.board === grid && this.units.has(cell.coord.x + ',' + cell.coord.y) &&
             !(cell.unit.notEmpty() && cell.unit.playerColor === whooseTurn)
+    },
+    hexagonFor(cell) {
+        if (this.board !== grid || cell.hexagon.playerColor === whooseTurn ||
+                (cell.unit.notEmpty() && cell.unit.playerColor === whooseTurn)) return null
+        return this.hexagons.get(cell.coord.x + ',' + cell.coord.y)?.hexagon || null
     },
     draw(ctx) {
         if (this.board !== grid) return

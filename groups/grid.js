@@ -182,10 +182,11 @@ class Grid extends SpritesGroup {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
                     continue
-                if (isFogOfWar && !this.fogOfWar[i][j])
+                const observed = this.observedHexagon(this.arr[i][j])
+                if (isFogOfWar && !this.fogOfWar[i][j] && !observed)
                     continue
-                let cell = this.arr[i][j]
-                cell.hexagon.draw(ctx)
+                const hexagon = observed || this.arr[i][j].hexagon
+                hexagon.draw(ctx)
             }
         }
     }
@@ -359,7 +360,7 @@ class Grid extends SpritesGroup {
             for (let j = 0; j < this.fogOfWar[i].length; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
                     continue
-                if (!this.fogOfWar[i][j]) {
+                if (!this.fogOfWar[i][j] && !this.observedHexagon(this.arr[i][j])) {
                     let hexagon = new FogOfWarHexagon(i, j)
                     hexagon.draw(ctx)
                 }
@@ -379,7 +380,8 @@ class Grid extends SpritesGroup {
             return cells
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
-                if (this.isLoadingCell(i, j))
+                const observed = this.observedHexagon(this.arr[i][j])
+                if (this.isLoadingCell(i, j) && (!observed || observed.unknown))
                     cells.push({x: i, y: j})
             }
         }
@@ -426,11 +428,15 @@ class Grid extends SpritesGroup {
         }
     }
     getSurfaceStateValue(x, y) {
-        const hexagon = this.arr[x][y].hexagon
-        const fogVisible = !isFogOfWar || this.fogOfWar[x][y] ? 1 : 0
+        const observed = this.observedHexagon(this.arr[x][y])
+        const hexagon = observed || this.arr[x][y].hexagon
+        const fogVisible = observed ? (observed.unknown ? 0 : 1) : !isFogOfWar || this.fogOfWar[x][y] ? 1 : 0
         // Unknown cells (playerColor null) get their own value, apart from colour 0.
         return ((hexagon.unknown ? 0 : hexagon.playerColor + 1) << 2) |
             (hexagon.isSuburb ? 2 : 0) | fogVisible
+    }
+    observedHexagon(cell) {
+        return typeof onlineObservation !== 'undefined' ? onlineObservation.hexagonFor(cell) : null
     }
     surfaceStateMatches() {
         if (!this.surfaceCacheState ||
