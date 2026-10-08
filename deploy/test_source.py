@@ -148,6 +148,25 @@ try:
                 assert git(r[0], 'rev-parse', 'HEAD') == old[0]
             if 'collision' in case: assert (r[1] / 'collision').read_text() == 'foreign'
             print('PASS', case, 'rejected; live unchanged')
+        # Multiple entries matter: stripping the first NUL-delimited path used
+        # to corrupt a different path in each list and miss the real collision.
+        for label, name in (('space', ' collision'), ('tab', '\tcollision'),
+                            ('newline', '\ncollision'), ('trailing-space', 'collision ')):
+            b, r = fixture('whitespace-' + label)
+            old = [git(x, 'rev-parse', 'HEAD') for x in r]
+            advance(r[0])
+            advance(r[1], name, 'REMOTE')
+            foreign = {name: b'FOREIGN COLLISION', ' before': b'FOREIGN BEFORE'}
+            for path, data in foreign.items():
+                (r[1] / path).write_bytes(data)
+            (r[1] / '.git/info/exclude').write_text('*\n')
+            rc, out = run(b, r)
+            assert rc == 1 and 'Unsafe untracked path collision' in out
+            assert 'activation not implemented' not in out
+            assert git(r[0], 'rev-parse', 'HEAD') != old[0]
+            assert git(r[1], 'rev-parse', 'HEAD') == old[1]
+            assert all((r[1] / path).read_bytes() == data for path, data in foreign.items())
+            print('PASS whitespace-' + label + ' ignored collision rejected; multiple foreign files byte-identical; server HEAD unchanged; live unchanged')
         print('PASS second-repository pull failure leaves first advanced without activation')
     with log('dry-run.log'):
         b, r = fixture('dry')

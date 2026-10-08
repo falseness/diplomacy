@@ -21,7 +21,10 @@ def git(root, *args):
                             stderr=subprocess.PIPE, env=env)
     if result.returncode:
         raise RuntimeError('Git operation failed: ' + args[0])
-    return result.stdout.decode('utf-8', errors='surrogateescape').strip()
+    output = result.stdout.decode('utf-8', errors='surrogateescape')
+    # NUL-delimited paths are exact names, including leading/trailing whitespace.
+    # Other commands have one output newline; preserve any whitespace in values.
+    return output if '-z' in args else output.removesuffix('\n')
 
 
 def inspect(root):
