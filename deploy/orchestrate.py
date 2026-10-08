@@ -35,6 +35,13 @@ class Deployment:
         check_candidate.check(self.root, self.manifest, self.output / 'isolated', int(os.environ.get('TEST_JOBS', '6')))
         return {'status': 'pass'}
 
+    def endpoint(self):
+        env = dict(os.environ, NODE_PATH=str(self.root / 'diplomacy_server/node_modules'))
+        live.run([self.root / 'runtime/bin/node', Path(__file__).with_name('endpoint.js'),
+                  self.config['socket_url']], self.output / 'endpoint.log', env=env, timeout=15)
+        return {'status': 'pass', 'url': self.config['socket_url'],
+                'protocol': 'TLS/Engine.IO/Socket.IO', 'application_events': 0}
+
     def baseline(self):
         process = self.host.process()
         self.before = live.games(process['exe'], process['cwd'], self.output / 'existing-before.log')
@@ -120,7 +127,7 @@ def execute(deployment):
     try:
         for sig in (signal.SIGINT, signal.SIGTERM): handlers[sig] = signal.signal(sig, interrupt)
         for stage, method in [('package', 'prepare'), ('preactivation-smoke', 'isolated'),
-                              ('baseline', 'baseline'), ('smoke-admission', 'admission'), ('activation', 'activation'),
+                              ('endpoint', 'endpoint'), ('baseline', 'baseline'), ('smoke-admission', 'admission'), ('activation', 'activation'),
                               ('live-verification', 'verification')]:
             print('START ' + stage, flush=True)
             result['stages'][stage] = getattr(deployment, method)()

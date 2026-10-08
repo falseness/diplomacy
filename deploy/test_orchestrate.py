@@ -50,6 +50,10 @@ class Deployment(o.Deployment):
         if self.failure == 'preactivation-smoke': raise RuntimeError('injected preactivation smoke failure')
         return {'status': 'pass', 'mock': 'preactivation suite scheduling; original real suites independently tested'}
 
+    def endpoint(self):
+        if self.failure == 'endpoint': raise RuntimeError('injected endpoint failure')
+        return {'status': 'pass', 'mock': 'endpoint handshake tested separately by test_endpoint.js'}
+
     def baseline(self):
         self.before = {'fixture-existing': {'ok': True, 'documentHash': 'same'}}
         return {'status': 'pass', 'mock': 'existing game baseline; real service check separately recorded'}
@@ -95,7 +99,7 @@ class Tests(unittest.TestCase):
                 self.assertEqual(source.main([], Path('/root/diplomacy')), 0)
                 self.assertEqual(pull.call_count, 2)
             result = json.loads((d.output/'result.json').read_text())
-            self.assertEqual(list(result['stages']), ['package','preactivation-smoke','baseline','smoke-admission','activation','live-verification'])
+            self.assertEqual(list(result['stages']), ['package','preactivation-smoke','endpoint','baseline','smoke-admission','activation','live-verification'])
             self.assertEqual(result['status'], 'complete')
             self.assertEqual(d.host.active, d.root)
             receipt = next(d.host.backups.glob('gameDB-*/validated.json'))
@@ -104,7 +108,7 @@ class Tests(unittest.TestCase):
             print('PASS full fixture deployment: default source wiring paired pulls, exact manifest identities, all stages and cleanup; mocks explicitly labeled')
 
     def test_failures(self):
-        for failure in ['package','preactivation-smoke','backup','activation','live-verification','live-timeout']:
+        for failure in ['package','preactivation-smoke','endpoint','backup','activation','live-verification','live-timeout']:
             with tempfile.TemporaryDirectory() as tmp:
                 d = Deployment(Path(tmp), failure)
                 before = (os.readlink(d.host.web), d.host.owned.read_bytes(), d.host.db.read_bytes())
@@ -115,6 +119,11 @@ class Tests(unittest.TestCase):
                     self.assertEqual(result['rollback']['status'],'restored')
                     d.host.assert_restored(self)
                 else: self.assertEqual(result['rollback']['status'],'not-needed')
+                if failure == 'endpoint':
+                    self.assertEqual(list(result['stages']), ['package', 'preactivation-smoke'])
+                    self.assertFalse(list(d.host.backups.glob('gameDB-*')))
+                    self.assertFalse(d.record.exists())
+                    print('PASS wrong endpoint stops before baseline/admission/backup/service stop/activation')
                 self.assertEqual(result['cleanup']['status'],'pass')
                 print('PASS failure-matrix '+failure+' prior fixture unchanged; cleanup recorded; rollback='+result['rollback']['status']+' original='+json.dumps(result['failure']))
         for failure in ['source','pull']:

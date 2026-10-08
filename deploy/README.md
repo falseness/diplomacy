@@ -196,12 +196,18 @@ inline):
   "health_probe": "/home/bakharevns/.config/diplomacy/health-probe",
   "existing_games_probe": "/home/bakharevns/.config/diplomacy/existing-games-probe",
   "public_url": "https://playdiplomacy.online/",
-  "socket_url": "wss://playdiplomacy.online:8443",
+  "socket_url": "wss://playdiplomacy.online:8080",
   "google_client_id": "/home/bakharevns/credentials/diplomacy/client_id",
   "smoke_allowlist": "/home/bakharevns/credentials/diplomacy/smoke-allowlist.json",
   "smoke_key": "/home/bakharevns/credentials/diplomacy/smoke_hmac_key"
 }
 ```
+
+Before baseline capture, smoke admission, backup or service stop, the endpoint gate
+requires a TLS-validated Engine.IO/Socket.IO connection using the packaged Node
+and dependencies. It sends no authentication or game events; wrong endpoints
+fail without activation. This is separate from tool/DB/web preflight and does
+not replace authenticated postactivation verification.
 
 Use the host's actual endpoint and existing credential paths. Both probes must
 be installed, bounded, read-only and fail on an unavailable service/database or
