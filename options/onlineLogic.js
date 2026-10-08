@@ -126,6 +126,15 @@ const gameDiffHandler = {
             diff.paths = (Array.isArray(diff.paths) ? diff.paths : []).concat(hints)
         const before = remoteEffects.snapshot(diff.cells)
         const result = applyCellDiff(diff)
+        // Wire metadata uses boardDiff's fields envelope. The local viewer/turn
+        // and timer stay local; public round/settings and authoritative status advance.
+        const fields = diff.meta?.fields
+        if (fields) {
+            if (Number.isInteger(fields.gameRound)) gameRound = fields.gameRound
+            if (fields.gameSettings) gameSettings = fields.gameSettings
+            if (typeof fields.isFogOfWar === 'boolean') isFogOfWar = fields.isFogOfWar
+            if (hiddenInfo && fields.status) hiddenStatus = fields.status
+        }
         // Updating a child may recreate it at the end of its town's list. Restore the
         // wire order after all cells are applied, without recreating unchanged children.
         for (const cell of message.diff.cells || []) {
