@@ -3,8 +3,8 @@
     "short_name": "Diplomacy",
     "start_url": "../",
     "display": "standalone",
-    "background_color": "#182a34",
-    "theme_color": "#182a34",
+    "background_color": "#211a30",
+    "theme_color": "#211a30",
     "icons": [
         {"src": "favicon.svg", "sizes": "any", "type": "image/svg+xml"},
         {"src": "favicon-32.png", "sizes": "32x32", "type": "image/png"},
