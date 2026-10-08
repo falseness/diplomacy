@@ -44,9 +44,13 @@ function createTutorial1Map() {
             }
         ],
         [],
-        [],
-        [],
-        coordDictionary([[5, 0], [5, 1], [5, 2], [5, 4], [5, 5], [5, 6]])
+        // A western pond and two low ridges frame the fighting ground. Keep the
+        // central approach, firing gap and both melee pairs untouched.
+        coordDictionary([[1, 2], [1, 3], [2, 2], [2, 3]]),
+        coordDictionary([[2, 5], [3, 5], [3, 6], [7, 0], [7, 1], [8, 1]]),
+        // Thicken the hedge's ends, away from the lesson's targets and sight line.
+        coordDictionary([[5, 0], [5, 1], [5, 2], [5, 4], [5, 5], [5, 6],
+            [4, 0], [4, 1], [6, 5], [6, 6]])
     )
     map.testName = 'tutorial 1'
     return map
