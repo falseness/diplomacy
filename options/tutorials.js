@@ -407,12 +407,15 @@ function createTutorial7Map() {
             }
         ],
         [],
-        // Lakes close the map's corners.
-        coordDictionary([[0, 0], [0, 1], [0, 8], [1, 8], [11, 0], [11, 8]]),
-        // The ridge: only (5,3) and (5,4) lead onto red's plateau.
-        coordDictionary([[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8]]),
+        // Ponds spread along the plateau's rear banks, away from the archer deployment hexes.
+        coordDictionary([[0, 0], [0, 1], [0, 8], [1, 8], [11, 0], [11, 8],
+            [0, 2], [1, 1], [1, 2], [0, 6], [0, 7], [1, 7]]),
+        // Wider ridge shoulders frame the hills; only (5,3) and (5,4) lead onto red's plateau.
+        coordDictionary([[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8],
+            [4, 0], [4, 1], [4, 7], [4, 8], [6, 0], [6, 8]]),
         // Bushes hide blue's archers from the low ground, not from the tower or the hills.
-        coordDictionary([[8, 3], [8, 5], [9, 1], [9, 7]]),
+        coordDictionary([[8, 3], [8, 5], [9, 1], [9, 7], [8, 1], [10, 1], [10, 2],
+            [8, 7], [10, 7], [10, 6]]),
         coordDictionary([[4, 2], [4, 6]])
     )
     map.testName = 'tutorial 7'
