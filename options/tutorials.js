@@ -189,43 +189,6 @@ function createTutorial3Map() {
     return map
 }
 
-function createTutorial4Map() {
-    // A full 1v1 from the very beginning: each side has one town (with its spawned noob), but blue
-    // starts with a war chest of 250 gold against red's 100 and spends it on an army at once. The map
-    // is mirror-symmetric about column 7 (x -> 14 - x keeps the column parity, so hex neighbours
-    // mirror exactly): each town backs onto lakes and corner mountains and faces the centre behind a
-    // mountain ridge; two neutral towns sit on the centre column among bushes, with a lake between
-    // them (no hills: a Hill is drawn with the mountain picture). Buying units every turn and sending
-    // each one off at once trickles them into blue's bigger army and loses. Growing first (suburbs and
-    // a farm while the neutral towns are taken), gathering 8 units and only then attacking together
-    // wins.
-    let map = new GameMap(
-        {x: 15, y: 10},
-        [
-            {
-                rgb: {r: 208, g: 208, b: 208},
-                towns: [{x: 7, y: 1}, {x: 7, y: 8}]
-            },
-            {
-                rgb: {r: 255, g: 0, b: 0},
-                towns: [{x: 1, y: 4}]
-            },
-            {
-                rgb: {r: 98, g: 168, b: 222},
-                playerType: 'SimpleAiPlayerWithEconomy',
-                gold: 250,
-                towns: [{x: 13, y: 4}]
-            }
-        ],
-        [],
-        coordDictionary([[7, 4], [7, 5], [0, 1], [0, 7], [14, 1], [14, 7]]),
-        coordDictionary([[4, 4], [4, 5], [5, 5], [10, 4], [10, 5], [9, 5], [0, 0], [0, 9], [14, 0], [14, 9]]),
-        coordDictionary([[3, 7], [4, 8], [11, 7], [10, 8], [6, 7], [8, 7], [3, 1], [5, 2], [11, 1], [9, 2]])
-    )
-    map.testName = 'tutorial 4'
-    return map
-}
-
 function createTutorial5Map() {
     // Town defense against demons (co-op tutorial map). Red's town (1,4) owns the whole strip x <= 4 as
     // suburbs (a rich town: it pays for the army it builds after the first turns). Walls face the demons:
@@ -826,36 +789,13 @@ function createTutorial13Map() {
 }
 
 function createTutorial14Map() {
-    // Grow your economy: a 15x9 valley, mirror-symmetric around column 7. A ridge of mountains and lakes down
-    // column 7 splits the two home valleys; its only pass is (7,3)-(7,5), flanked by hills on both sides, so every
-    // army (and every lone raider) has to cross where the other side's units stand. Lakes and bushes only edge the
-    // home valleys' corners. Red's town (2,4) has only its noob but 100 gold; blue's town (12,4)
-    // (SimpleAiPlayerWithEconomy, 60 gold) has a head start of 2 noobs and an archer. Each side owns the land of
-    // its 5 home columns (red x 0..4, blue x 10..14), where suburbs are cheap (3 gold two hexes from the town, 5 at
-    // three hexes) and each pays +1 gold a turn; a farm (32 gold) pays +4. Spending the gold on noobs at once (what
-    // SimpleAiPlayerWithEconomy does for red) keeps red's income near 5 and its noobs die one by one in the pass;
-    // a lone noob sent at blue's town meets blue's army in the pass. Buying the cheap suburbs and farms first lifts
-    // red's income from 10 to over 40 in 4 turns; blue only moves through hexes red sees, so it waits; then red
-    // gathers 5 units at home, and the bigger income keeps barracks and a mixed army coming through the pass to
-    // wipe blue out before round 40.
-    let lakes = [[7, 2], [7, 6], [0, 0], [14, 0], [0, 8], [14, 8]]
-    let mountains = [[7, 0], [7, 1], [7, 7], [7, 8], [6, 0], [8, 0], [6, 8], [8, 8]]
-    let bushes = [[5, 1], [9, 1], [5, 7], [9, 7], [4, 0], [10, 0], [4, 8], [10, 8]]
+    // Start with only the town cells claimed. Capture neutral land with the starting noob,
+    // then pay for suburbs and farms before gathering an army. The central pass keeps
+    // the enemy head start meaningful; corner terrain leaves both home valleys usable.
+    let lakes = [[7, 2], [7, 6], [0, 0], [14, 0], [0, 8], [14, 8], [1, 0], [13, 0]]
+    let mountains = [[7, 0], [7, 1], [7, 7], [7, 8], [6, 0], [8, 0], [6, 8], [8, 8], [1, 8], [13, 8]]
+    let bushes = [[5, 1], [9, 1], [5, 7], [9, 7], [4, 0], [10, 0], [4, 8], [10, 8], [3, 0], [11, 0]]
     let hills = [[6, 3], [8, 3], [6, 5], [8, 5]]
-    let band = (fromX, toX) => {
-        let cells = []
-        for (let x = fromX; x <= toX; ++x) {
-            for (let y = 0; y < 9; ++y) {
-                cells.push({x: x, y: y})
-            }
-        }
-        return cells
-    }
-    let townSuburbs = (x, y, expansionCells) => ({
-        town: {x: x, y: y},
-        cells: [{x: x, y: y}].concat(neighborhood[x & 1].map(offset => ({x: x + offset[0], y: y + offset[1]}))),
-        expansionCells: expansionCells
-    })
     let map = new GameMap(
         {x: 15, y: 9},
         [
@@ -866,15 +806,13 @@ function createTutorial14Map() {
             {
                 rgb: {r: 255, g: 0, b: 0},
                 gold: 100,
-                towns: [{x: 2, y: 4}],
-                suburbs: [townSuburbs(2, 4, band(0, 4))]
+                towns: [{x: 2, y: 4}]
             },
             {
                 rgb: {r: 98, g: 168, b: 222},
                 playerType: 'SimpleAiPlayerWithEconomy',
-                gold: 60,
+                gold: 180,
                 towns: [{x: 12, y: 4}],
-                suburbs: [townSuburbs(12, 4, band(10, 14))],
                 units: [
                     {x: 10, y: 3, type: Noob},
                     {x: 10, y: 5, type: Noob},
@@ -888,6 +826,7 @@ function createTutorial14Map() {
         coordDictionary(bushes),
         coordDictionary(hills)
     )
+    map.initialTerritory = 'towns-only'
     map.testName = 'tutorial 14'
     return map
 }
@@ -1039,7 +978,7 @@ const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
     {id: 'tutorial-3', title: 'Tutorial 3: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
-    {id: 'tutorial-4', title: 'Tutorial 4: First Duel', pass: 'enemyLost', get map() { return createTutorial4Map() }},
+    {id: 'tutorial-14', title: 'Tutorial 4: Grow Your Economy', pass: 'enemyLost', get map() { return createTutorial14Map() }},
     {id: 'tutorial-5', title: 'Tutorial 5: Hold the Walls', pass: 'coopVictory', get map() { return createTutorial5Map() }},
     {id: 'tutorial-6', title: 'Tutorial 6: Lose a Town, Win the War', pass: 'coopVictory', startRound: 20,
         get map() { return createTutorial6Map() }},
@@ -1053,10 +992,9 @@ const tutorials = [
     {id: 'tutorial-12', title: 'Tutorial 12: Scout First', pass: 'enemyUnitsDead', get map() { return createTutorial12Map() }},
     {id: 'tutorial-13', title: 'Tutorial 13: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-14', title: 'Tutorial 14: Grow Your Economy', pass: 'enemyLost', get map() { return createTutorial14Map() }},
-    {id: 'tutorial-15', title: 'Tutorial 15: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+    {id: 'tutorial-15', title: 'Tutorial 14: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-16', title: 'Tutorial 16: Close the Portals', pass: 'coopVictory', get map() { return createTutorial16Map() }}
+    {id: 'tutorial-16', title: 'Tutorial 15: Close the Portals', pass: 'coopVictory', get map() { return createTutorial16Map() }}
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
 // co-op wave schedule follow it) and suddenDeathRound (default the normal round 40).

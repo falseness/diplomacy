@@ -361,6 +361,18 @@ class GameMap {
         this.createGoldmines()
         this.createNature()
         this.createMapEdge()
+        if (this.initialTerritory === 'towns-only') {
+            // Constructors use tile ownership to assign units and spawn the town's noob.
+            // Normalize land only after those entities have acquired their owners.
+            for (const column of grid.arr) {
+                for (const cell of column) {
+                    const town = cell.building instanceof Town ? cell.building : null
+                    cell.hexagon.firstpaint(town ? town.playerColor : 0)
+                    cell.hexagon.isSuburb = !!town
+                    if (town) town.suburbs = [cell.hexagon]
+                }
+            }
+        }
         if (this.coop) {
             for (const placement of this.portals || []) {
                 const coord = this.getMapCoord(placement)
