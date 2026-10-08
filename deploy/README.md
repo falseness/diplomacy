@@ -130,7 +130,7 @@ DIPLOMACY_SERVER_ROOT=/path/diplomacy_server /usr/local/bin/node20 deploy/test_b
 ## Standalone activation and code rollback
 
 `activate.py` is the transaction used by orchestration; its standalone CLI also supports recovery. It targets `diplomacy-server.service`, its one owned
-`99-zz-diplomacy-release.conf` drop-in and `/var/www/html`. Run with privileges
+`99-zzz-diplomacy-release.conf` drop-in and `/var/www/html`. Run with privileges
 for those targets and the existing exclusive host lock. Required arguments:
 `activate --candidate PATH --manifest PATH --record NEW_PRIVATE_FILE
 --backups PRIVATE_DIRECTORY --health-probe EXECUTABLE
@@ -315,3 +315,9 @@ as the configuration's probes. Each subprocess has a 45-second deadline and
 failure diagnostics omit raw command output. Refresh the baseline immediately
 before deployment; these probes never mutate the database or service.
 Run `python3 -B deploy/test_host_probe.py` for focused probe/preflight coverage.
+
+The owned override sorts after legacy `99-zz-task680-release.conf` and
+`99-zz-diplomacy-release.conf`. Those legacy files remain untouched, preserving
+their unrelated directives. Rollback removes the new override when previously
+absent and verifies the exact prior effective configuration. The guard against
+any still-later competing drop-in remains in force.

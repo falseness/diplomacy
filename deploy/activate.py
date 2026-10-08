@@ -43,7 +43,7 @@ def atomic_link(path, target):
 
 class Host:
     def __init__(self, backups, health, games, web=Path('/var/www/html'),
-                 owned=Path('/etc/systemd/system/diplomacy-server.service.d/99-zz-diplomacy-release.conf')):
+                 owned=Path('/etc/systemd/system/diplomacy-server.service.d/99-zzz-diplomacy-release.conf')):
         self.backups, self.health, self.games = backups, health, games
         self.web, self.owned = web, owned
         self.service = 'diplomacy-server.service'

@@ -30,7 +30,7 @@ class Fixture(a.Host):
         web = root / 'html'; web.symlink_to('old/diplomacy')
         config = root / 'service.d'; config.mkdir()
         (config / '10-unrelated.conf').write_text('[Service]\nEnvironment=KEEP_SECRET=unchanged\nRestart=always\n')
-        super().__init__(root / 'backups', root / 'health', root / 'games', web, config / '99-zz-diplomacy-release.conf')
+        super().__init__(root / 'backups', root / 'health', root / 'games', web, config / '99-zzz-diplomacy-release.conf')
         if owned:
             self.owned.write_text('[Service]\n# prior owned settings\nEnvironment=OWNED_KEEP=private\nWorkingDirectory=' + str(self.old / 'diplomacy_server/server') + '\n')
             self.owned.chmod(0o640)
@@ -214,6 +214,30 @@ class RollbackTests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
+    def test_legacy_override_preserved(self):
+        for failure in (None, 'web-switch'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
+                h = Fixture(Path(temp), failure, owned=False)
+                default = a.Host(h.backups, h.health, h.games).owned.name
+                self.assertEqual(h.owned.name, default)
+                legacy = {}
+                for name in ('99-zz-task680-release.conf', '99-zz-diplomacy-release.conf'):
+                    path = h.owned.parent / name
+                    path.write_text('[Service]\nEnvironment=LEGACY_KEEP=yes\nWorkingDirectory=' + str(h.old / 'diplomacy_server/server') + '\n')
+                    path.chmod(0o640)
+                    legacy[path] = (path.read_bytes(), path.stat().st_mode)
+                    self.assertLess(name, default)
+                result = h.run()
+                if failure:
+                    self.assertEqual(result['rollback']['status'], 'restored')
+                    h.assert_restored(self)
+                else:
+                    self.assertEqual(result['status'], 'activated')
+                    self.assertEqual(h.active, h.candidate)
+                for path, state in legacy.items():
+                    self.assertEqual((path.read_bytes(), path.stat().st_mode), state)
+                print('PASS legacy drop-ins preserved; new override sorts last; ' + ('rollback restores absence and prior configuration' if failure else 'candidate activated'))
+
     def test_conflict(self):
         with tempfile.TemporaryDirectory() as temp:
             h = Fixture(Path(temp)); other = h.owned.parent / 'zz-foreign.conf'; other.write_text('[Service]\nExecStart=/foreign\n')
