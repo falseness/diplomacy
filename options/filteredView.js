@@ -17,10 +17,8 @@
 //                                            hiddenTownParts [{player, suburbs, buildings, buildingProduction}]: the
 //                                            known parts of towns standing on unknown cells (no town coord).
 //   terrainView()                         -> {nature}: the public terrain, sent once (sec. 6.3).
-//   boardFromFilteredView(view, terrain)  -> a board loadFromJson accepts: unknown colours neutral (0) (a portal's
-//                                            cell the demons' colour, as every portal cell is), hidden gold
-//                                            0, hidden timers a copy of the viewer's, terrain's nature;
-//                                            hiddenTownParts are dropped (a town object needs its coord).
+//   boardFromFilteredView(view, terrain)  -> a partial board loadFromJson accepts, with the public terrain restored.
+//                                            Keep unknown cells, suburb flags and detached town parts intact.
 //   terrainChanges(baseNature, nature)    -> [{x, y, nature}]: nature (a packed board's list) as cell changes against
 //                                            baseNature (the terrain sent once, game:terrain): nature null = the
 //                                            cell's entity is gone (a destroyed bush), else the cell's entity now (a
@@ -162,20 +160,10 @@ function filteredViewStatus() {
 
 function boardFromFilteredView(view, terrain) {
     let board = JSON.parse(JSON.stringify(view))
-    board.grid = board.grid.map(column => column.map(colour => colour === null ? 0 : colour))
-    for (let portal of board.external)
-        if (portal.name === 'demonPortal')
-            board.grid[portal.coord.x][portal.coord.y] = portal.ownerSlot
-    board.players.forEach(packed => {
-        if (packed.gold === null)
-            packed.gold = 0
-    })
+    // Groundwork callers can inspect another viewer while whooseTurn is unchanged;
+    // the loader still needs a timer for that active slot.
     let ownTimer = board.timers[view.viewer]
     board.timers = board.timers.map(packed => packed === null ? JSON.parse(JSON.stringify(ownTimer)) : packed)
     board.nature = JSON.parse(JSON.stringify(terrain.nature))
-    delete board.hiddenInfo
-    delete board.hiddenTownParts
-    delete board.viewer
-    delete board.status
     return board
 }

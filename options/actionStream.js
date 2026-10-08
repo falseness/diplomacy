@@ -97,6 +97,18 @@ const ActionStream = {
             return
         }
         const entry = this.inFlight = this.queue.shift()
+        if (entry.action.t === 'end') {
+            // Earlier acknowledgements can reveal cells after the player clicked End.
+            // Close the turn on that acknowledged view, not its pre-reveal snapshot.
+            entry.hash = stateHash()
+            entry.action.hash = entry.hash
+            const turn = actionLog.current() || actionLog.lastTurn()
+            const end = turn?.actions.at(-1)
+            if (end?.action.t === 'end') {
+                end.hash = entry.hash
+                end.action.hash = entry.hash
+            }
+        }
         ++this.counters.sent
         this.timer = setTimeout(() => this.settle(entry, {ok: false, seq: entry.seq, reason: 'TIMEOUT'}),
             ONLINE_ACK_TIMEOUT)

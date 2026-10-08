@@ -681,11 +681,13 @@ function SetupServerCommunicationLogic(gameID) {
         console.trace('SendNextTurn called')
         // Protocol 2 (TASK-687): no board, only the hash of the turn's 'end' (actionRecorder.js recordEnd); the server
         // commits its replay of the streamed actions (TASK-684), so send after the stream flushed.
-        const ended = actionLog.lastTurn()?.actions.at(-1)
-        const endHash = ended?.action.t === 'end' ? ended.hash : stateHash()
-        const message = JSON.stringify({gameID: gameID, endHash: endHash})
         const send = () => {
-            if (socket === onlineSocket && !failed) socket.emit('nextTurn', message)
+            if (socket === onlineSocket && !failed) {
+                // The queued end may have waited for reveal acknowledgements.
+                const ended = actionLog.lastTurn()?.actions.at(-1)
+                const endHash = ended?.action.t === 'end' ? ended.hash : stateHash()
+                socket.emit('nextTurn', JSON.stringify({gameID: gameID, endHash: endHash}))
+            }
         }
         const stream = onlineActionStream()
         if (stream) stream.afterFlush(send)
