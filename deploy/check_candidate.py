@@ -12,6 +12,7 @@ from candidate import verify, runtime, rules
 # private generated keys outside the candidate, disposable mongod, owned cleanup.
 SUITES = ['tests/online/lobby-start.test.js', 'tests/online/action-enforce-commit.test.js',
           'tests/online/coop-continuing.test.js',
+          'tests/client/test-action-streaming-queue.js',
           'tests/server/undo-diff.test.js', 'tests/legacy_round.test.js']
 
 

@@ -58,6 +58,69 @@ class OnlineLogic {
 // [{unitId, segments: [[{x, y}, ...], ...]}]; the last visible segment is drawn with the movement
 // tween (moveTween). seq numbers the messages of this socket in the game without gaps: a message
 // ahead of the next expected one is buffered until the gap is filled, an applied seq is dropped.
+// Speculative peer units are pictures, not rule entities. Never register them in
+// grid/players or serialize them into actions, undo snapshots or stateHash().
+const onlineObservation = {
+    board: null,
+    units: new Map(),
+    clear() {
+        this.board = null
+        this.units.clear()
+    },
+    receive(message) {
+        if (this.board !== grid) {
+            this.clear()
+            this.board = grid
+        }
+        for (const cell of message.diff.cells || []) {
+            if (!grid.arr[cell.x]?.[cell.y]) continue
+            const key = cell.x + ',' + cell.y
+            const record = cell.unit
+            const previous = this.units.get(key) || grid.getUnit(cell)
+            // Another seat's context may contain old copies of unrelated units.
+            // Observe the acting seat's units and their vacated cells only.
+            if (record?.owner !== message.actorSeat && previous?.playerColor !== message.actorSeat) continue
+            // Our own commands remain visible immediately, even if the peer's
+            // isolated board still contains an older copy of our unit.
+            if (record && record.owner === whooseTurn) {
+                this.units.delete(key)
+                continue
+            }
+            let sprite = null
+            const UnitClass = record && getClass(record.name)
+            if (UnitClass && Number.isInteger(record.owner) && players[record.owner]) {
+                // Skip constructors: unit constructors mutate the rule board.
+                sprite = Object.create(UnitClass.prototype, Object.fromEntries(
+                    Object.entries({...record, coord: {x: cell.x, y: cell.y}})
+                        .map(([key, value]) => [key, {value, writable: true, configurable: true}])))
+                Object.defineProperty(sprite, 'playerColor', {value: record.owner})
+                sprite.pos = sprite.calcPos()
+                sprite.hpBar = new HealthBar({x: sprite.pos.x + assets.size / 2,
+                    y: sprite.pos.y + assets.size / 2 - basis.r * 0.125}, sprite.maxHP)
+                sprite.updateHPBar()
+            }
+            this.units.set(key, sprite)
+        }
+        return {observation: true}
+    },
+    hidesUnit(cell) {
+        return this.board === grid && this.units.has(cell.coord.x + ',' + cell.coord.y) &&
+            !(cell.unit.notEmpty() && cell.unit.playerColor === whooseTurn)
+    },
+    draw(ctx) {
+        if (this.board !== grid) return
+        for (const sprite of this.units.values()) {
+            if (!sprite) continue
+            const local = grid.getUnit(sprite.coord)
+            if (local.notEmpty() && local.playerColor === whooseTurn) continue
+            // Only server-filtered unit records enter this layer. Its shared
+            // vision may reveal a peer beyond our turn-opening fog.
+            drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
+            Entity.prototype.drawBars.call(sprite, ctx)
+        }
+    }
+}
+
 const gameDiffHandler = {
     gameID: null,
     lastSeq: 0,
@@ -69,6 +132,7 @@ const gameDiffHandler = {
         this.lastSeq = lastSeq
         this.buffered.clear()
         remoteEffects.clear()
+        onlineObservation.clear()
     },
     // Takes one game:diff message; returns the applyCellDiff results of the messages applied now,
     // in seq order (empty when it was buffered, stale or for another game).
@@ -91,6 +155,8 @@ const gameDiffHandler = {
     apply(message) {
         if (typeof grid === 'undefined' || !grid)
             return null
+        if (message.observation) return onlineObservation.receive(message)
+        onlineObservation.clear()
         const diff = {...message.diff}
         // The wire boardDiff tags entities by list/owner; applyCellDiff uses runtime layer tags.
         // In particular a town update must not be mistaken for an unsupported building and removed.
@@ -506,6 +572,7 @@ function SetupServerCommunicationLogic(gameID) {
                 fail('The server sent an incomplete turn update.')
                 return false
             }
+            onlineObservation.clear()
             onlineActionStream().continueFrom(update, () => {
                 gameEvent.removeSelection()
                 gameEvent.hideAll()
@@ -542,6 +609,7 @@ function SetupServerCommunicationLogic(gameID) {
             gameEvent.removeSelection()
             gameEvent.hideAll()
         }
+        onlineObservation.clear()
         loadFromJson(JSON.stringify(board))
         if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
@@ -576,6 +644,7 @@ function SetupServerCommunicationLogic(gameID) {
         // The wall clock is local: the server's board carries the turn-start timers.
         const restored = {...board, timers: getGameObject().timers}
         const runningTimer = timer
+        onlineObservation.clear()
         if (grid) {
             gameEvent.removeSelection()
             gameEvent.hideAll()

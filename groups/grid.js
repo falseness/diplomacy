@@ -274,8 +274,8 @@ class Grid extends SpritesGroup {
                     tmpBuildings.push(cell.building)
                 // Production silhouette under the unit standing on the cell.
                 this.drawProductionSilhouette(ctx, cell.building)
-                if (!moveTween.isActive(cell.unit))
-                    cell.unit.draw(ctx)
+                const unit = this.getStillUnit(cell)
+                if (unit) unit.draw(ctx)
             }
         }
         for (let i = 0; i < tmpBuildings.length; ++i) {
@@ -305,6 +305,7 @@ class Grid extends SpritesGroup {
     }
     // The cell's unit as drawn in place: none while it is tweening (moveTween draws it).
     getStillUnit(cell) {
+        if (typeof onlineObservation !== 'undefined' && onlineObservation.hidesUnit(cell)) return undefined
         return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) ? cell.unit : undefined
     }
     drawEntityBodies(ctx) {
@@ -604,6 +605,8 @@ class Grid extends SpritesGroup {
         else
             this.drawOther(ctx)
         moveTween.draw(ctx)
+        if (typeof onlineObservation !== 'undefined')
+            onlineObservation.draw(ctx)
         if (typeof remoteEffects !== 'undefined')
             remoteEffects.draw(ctx)
         this.drawLoadingCells(ctx)
