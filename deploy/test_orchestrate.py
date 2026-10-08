@@ -58,6 +58,8 @@ class Deployment(o.Deployment):
         return {'status': 'pass', 'mock': 'namespace admission; real policy exercised by test_live_fixture'}
 
     def verification(self):
+        if self.failure == 'live-timeout':
+            o.live.run([sys.executable, '-c', 'import time;time.sleep(30)'], OUT/'timeout-child.log', timeout=0.2)
         if self.failure == 'live-verification': raise RuntimeError('injected live-verification failure')
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(self.root / 'diplomacy'))
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
@@ -102,14 +104,14 @@ class Tests(unittest.TestCase):
             print('PASS full fixture deployment: default source wiring paired pulls, exact manifest identities, all stages and cleanup; mocks explicitly labeled')
 
     def test_failures(self):
-        for failure in ['package','preactivation-smoke','backup','activation','live-verification']:
+        for failure in ['package','preactivation-smoke','backup','activation','live-verification','live-timeout']:
             with tempfile.TemporaryDirectory() as tmp:
                 d = Deployment(Path(tmp), failure)
                 before = (os.readlink(d.host.web), d.host.owned.read_bytes(), d.host.db.read_bytes())
                 result = o.execute(d)
                 self.assertEqual(result['status'],'failed')
                 self.assertEqual((os.readlink(d.host.web), d.host.owned.read_bytes(), d.host.db.read_bytes()), before)
-                if failure in ('backup','activation','live-verification'):
+                if failure in ('backup','activation','live-verification','live-timeout'):
                     self.assertEqual(result['rollback']['status'],'restored')
                     d.host.assert_restored(self)
                 else: self.assertEqual(result['rollback']['status'],'not-needed')

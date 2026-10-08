@@ -16,7 +16,7 @@ function child(argv,env=process.env){return new Promise((resolve,reject)=>{
  const run='deploy'+crypto.randomBytes(8).toString('hex'), expires=Date.now()+3600000;
  const key=path.join(temp,'key'), allow=path.join(temp,'allowlist.json');
  fs.writeFileSync(key,crypto.randomBytes(48),{mode:0o600});
- fs.writeFileSync(allow,JSON.stringify([{run,expiresAt:expires,identities:[1,2].map(i=>`prod_smoke_${run}_game_p${i}`)}]));
+ fs.writeFileSync(allow,JSON.stringify([run,run+'auth',run+'action'].map(run=>({run,expiresAt:expires,identities:[1,2].map(i=>`prod_smoke_${run}_game_p${i}`)}))));
  process.env.DIPLOMACY_SMOKE_AUTH_KEY_FILE=key;process.env.DIPLOMACY_SMOKE_ALLOWLIST=allow;
  let service;
  try{
@@ -43,6 +43,38 @@ function child(argv,env=process.env){return new Promise((resolve,reject)=>{
   assert.equal(await db.collection('accounts').countDocuments({accountId:'foreign-account'}),1);
   assert.equal(await db.collection('games').countDocuments({gameID:'foreign-game',marker:'preserve'}),1);
   console.log('PASS real Mongo smoke residue empty including retained game/account IDs; real sentinel accounts/games preserved');
+  // Stall protocol acknowledgements in the client only; real auth, DB and cleanup.
+  const stall=path.join(temp,'stall.js');
+  fs.writeFileSync(stall, `const lib=require('socket.io-client');const original=lib.io;
+lib.io=(...args)=>{const socket=original(...args),emit=socket.emitWithAck;
+socket.emitWithAck=function(event,...body){if(event===process.env.STALL_EVENT){console.log('STALL '+event);return new Promise(()=>{});}return emit.call(this,event,...body);};return socket;};`);
+  for (const event of ['auth:smoke','game:action']) {
+    const name=event.replace(':','-'), cancelledOut=path.join(out,name);
+    fs.mkdirSync(cancelledOut);
+    const cancelledRun=run+(event==='auth:smoke'?'auth':'action');
+    const argv=[...smokeArgs];argv.splice(1,0,'--require',stall);
+    argv[argv.indexOf('--run')+1]=cancelledRun;
+    argv[argv.indexOf('--out')+1]=cancelledOut;
+    const wrapper=`import sys;sys.path.insert(0,${JSON.stringify(__dirname)});from pathlib import Path;import verify_live as v
+try: v.run(${JSON.stringify(argv)},Path(${JSON.stringify(path.join(cancelledOut,'child.log'))}),timeout=5)
+except RuntimeError as e:
+ assert 'timeout' in str(e); print('PASS expected timeout:',e)
+else: raise AssertionError('timeout accepted')`;
+    await child(['python3','-B','-c',wrapper],{...process.env,STALL_EVENT:event});
+    const log=fs.readFileSync(path.join(cancelledOut,'child.log'),'utf8');console.log(log);
+    assert.ok(log.includes('STALL '+event));assert.ok(log.includes('TERMINATION graceful'));assert.ok(log.includes('EXIT_STATUS=1'));
+    const result=JSON.parse(fs.readFileSync(path.join(cancelledOut,'result.json')));
+    assert.equal(result.ok,false);assert.match(result.failure,/SIGTERM/);
+    assert.equal(result.cleanup.status,event==='auth:smoke'?'skipped':'complete');
+    const ids=JSON.parse(fs.readFileSync(path.join(cancelledOut,'owned.json')));
+    if(event==='game:action'){assert.equal(ids.accountIds.length,2);assert.equal(ids.gameIDs.length,1);}
+    for(const c of ['games','accounts','lobbies']) assert.equal(await db.collection(c).countDocuments({smokeRun:cancelledRun}),0);
+    for(const c of ['turns','gameRounds']) assert.equal(await db.collection(c).countDocuments({gameID:{$in:ids.gameIDs}}),0);
+    assert.equal(await db.collection('sessions').countDocuments({accountId:{$in:ids.accountIds}}),0);
+    assert.equal(await db.collection('accounts').countDocuments({accountId:'foreign-account'}),1);
+    assert.equal(await db.collection('games').countDocuments({gameID:'foreign-game',marker:'preserve'}),1);
+    console.log('PASS timeout '+event+' cleanup='+result.cleanup.status+' persisted owned IDs; residue empty; foreign records preserved; terminal EXIT_STATUS=1');
+  }
   fs.writeFileSync(path.join(out,'lifecycle.json'),JSON.stringify(service.lifecycle,null,2));
  }finally{
   if(service) console.log('FIXTURE_CLEANUP '+JSON.stringify(await service.stop()));

@@ -7,6 +7,45 @@ import orchestrate as o
 import verify_live as v
 
 class VerificationTests(unittest.TestCase):
+    def test_parent_cancellation(self):
+        import os, signal, sys, threading
+        def interrupt(sig, frame): raise RuntimeError('operator interruption')
+        prior=signal.signal(signal.SIGTERM,interrupt)
+        timer=threading.Timer(0.4,lambda:os.kill(os.getpid(),signal.SIGTERM))
+        repeated=threading.Timer(0.6,lambda:os.kill(os.getpid(),signal.SIGTERM))
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                log=Path(tmp)/'child.log'
+                timer.start(); repeated.start()
+                with self.assertRaisesRegex(RuntimeError,'Verification cancelled'):
+                    v.run([sys.executable,'-u','-c',
+                           'import signal,time,sys;signal.signal(signal.SIGTERM,lambda s,f:(time.sleep(0.5),print("CLEANUP complete"),sys.exit(1)));print("READY");time.sleep(30)'],log)
+                text=log.read_text()
+                self.assertIn('CLEANUP complete',text)
+                self.assertIn('EXIT_STATUS=1',text)
+                self.assertIs(signal.getsignal(signal.SIGTERM),interrupt)
+                print(text)
+                print('PASS parent cancellation and repeated signal wait for cleanup; handlers restored')
+        finally:
+            timer.cancel(); repeated.cancel(); timer.join(); repeated.join()
+            signal.signal(signal.SIGTERM,prior)
+
+    def test_forced_timeout(self):
+        import sys
+        with tempfile.TemporaryDirectory() as tmp:
+            log=Path(tmp)/'child.log'
+            with self.assertRaisesRegex(RuntimeError, 'timeout'):
+                v.run([sys.executable, '-u', '-c',
+                       'import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);print("READY");time.sleep(30)'],
+                      log, timeout=1, cancel_timeout=0.1)
+            text=log.read_text()
+            self.assertIn('READY',text)
+            self.assertIn('CANCELLATION timeout',text)
+            self.assertIn('TERMINATION forced; cleanup unconfirmed',text)
+            self.assertIn('EXIT_STATUS=-9',text)
+            print(text)
+            print('PASS forced timeout bounded; actual child SIGKILL status retained; cleanup unconfirmed')
+
     def test_baseline_traffic(self):
         old={'good':{'ok':True,'documentHash':'1'},'legacy':{'ok':False,'error':'old-format','documentHash':'2'},'removed':{'ok':True,'documentHash':'3'}}
         new={'good':{'ok':True,'documentHash':'changed'},'legacy':old['legacy'],'new':{'ok':True,'documentHash':'4'}}

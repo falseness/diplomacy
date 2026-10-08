@@ -86,6 +86,7 @@ class Deployment:
         finally:
             result = self.output / 'gameplay/result.json'
             if result.exists(): self.cleanup_status = json.loads(result.read_text())['cleanup']
+            else: self.cleanup_status = {'status': 'unconfirmed', 'reason': 'verifier terminated without cleanup result'}
         after = live.games(self.root / 'runtime/bin/node', self.root / 'diplomacy_server/server', self.output / 'existing-after.log')
         compatibility = live.compare_games(self.before, after)
         live.final_checks(self.started, self.output)

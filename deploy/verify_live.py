@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import urllib.parse
 import urllib.request
@@ -11,11 +12,41 @@ import journal
 from candidate import verify
 
 
-def run(argv, log, cwd=None, env=None, timeout=300):
+def run(argv, log, cwd=None, env=None, timeout=300, cancel_timeout=15):
+    failure = None
     with log.open('x') as out:
         out.write('COMMAND ' + json.dumps(list(map(str, argv))) + '\n'); out.flush()
-        p = subprocess.run(list(map(str, argv)), cwd=cwd, env=env, stdout=out, stderr=subprocess.STDOUT, timeout=timeout)
-        out.write('EXIT_STATUS=' + str(p.returncode) + '\n')
+        p = subprocess.Popen(list(map(str, argv)), cwd=cwd, env=env,
+                             stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            p.wait(timeout=timeout)
+        except BaseException as error:
+            failure = error
+            out.write('CANCELLATION ' + ('timeout' if isinstance(error, subprocess.TimeoutExpired)
+                                       else type(error).__name__) + '\n'); out.flush()
+            # Repeated operator signals must not interrupt the cleanup/reap window.
+            handlers = {sig: signal.signal(sig, signal.SIG_IGN)
+                        for sig in (signal.SIGTERM, signal.SIGINT)}
+            def send(sig):
+                try: os.killpg(p.pid, sig)
+                except ProcessLookupError: pass  # Child exited at the deadline.
+            try:
+                send(signal.SIGTERM)
+                try:
+                    p.wait(timeout=cancel_timeout)
+                    out.write('TERMINATION graceful\n')
+                except subprocess.TimeoutExpired:
+                    send(signal.SIGKILL)
+                    p.wait()
+                    out.write('TERMINATION forced; cleanup unconfirmed; retain residue evidence\n')
+            finally:
+                for sig, handler in handlers.items(): signal.signal(sig, handler)
+        finally:
+            out.write('EXIT_STATUS=' + str(p.returncode) + '\n'); out.flush()
+    if failure is not None:
+        raise RuntimeError('Verification cancelled: ' + log.name + ' (' +
+                           ('timeout' if isinstance(failure, subprocess.TimeoutExpired)
+                            else type(failure).__name__) + ')') from failure
     if p.returncode: raise RuntimeError('Verification failed: ' + log.name)
     return log.read_text()
 

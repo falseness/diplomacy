@@ -26,6 +26,30 @@ const TIMEOUT_MS = 60000;
 const BOARD_EVENTS = ['gameStarted', 'playYourTurn', 'waitYouTurn'];
 fs.mkdirSync(args.out, {recursive: true});
 
+// Cancellation wakes pending protocol waits so finally can clean authenticated sockets.
+let cancellation;
+let rejectCancellation;
+const cancelled = new Promise((_, reject) => { rejectCancellation = reject; });
+cancelled.catch(() => {});
+function cancel(signal) {
+    if (cancellation) return;
+    cancellation = new Error(`verification cancelled: ${signal}`);
+    rejectCancellation(cancellation);
+}
+process.on('SIGTERM', () => cancel('SIGTERM'));
+process.on('SIGINT', () => cancel('SIGINT'));
+function wait(promise) {
+    if (cancellation) return Promise.reject(cancellation);
+    return Promise.race([promise, cancelled]);
+}
+const owned = {gameIDs: [], accountIds: []};
+function persistOwned() {
+    const file = path.join(args.out, 'owned.json');
+    fs.writeFileSync(file + '.tmp', JSON.stringify(owned));
+    fs.renameSync(file + '.tmp', file);
+}
+persistOwned();
+
 const CLIENT_SETUP = `
   entityInterface = {visible: false, change() {}, hide() {}}
   townInterface = {visible: false, change() {}, hide() {}}
@@ -104,15 +128,21 @@ function connect(identity) {
         client.waiters.splice(0).forEach(resolve => resolve());
     });
     client.request = async (event, body) => {
-        const ack = await socket.timeout(TIMEOUT_MS).emitWithAck(event, body);
+        if (cancellation) throw cancellation;
+        const ack = await wait(socket.timeout(TIMEOUT_MS).emitWithAck(event, body));
         if (!ack || ack.ok !== true) throw new Error(`${event} failed for ${identity}: ${ack?.error || 'invalid acknowledgement'}`);
+        if (event === 'auth:smoke') {
+            client.authenticated = true; client.account = ack.account;
+            owned.accountIds.push(ack.account.accountId); persistOwned();
+        }
+        if (event === 'lobby:start') { owned.gameIDs.push(ack.gameID); persistOwned(); }
         return ack;
     };
     client.next = async label => {
         const deadline = Date.now() + TIMEOUT_MS;
         while (!client.inbox.length) {
             if (Date.now() > deadline) throw new Error(`${identity}: no board event (${label})`);
-            await new Promise(resolve => { client.waiters.push(resolve); setTimeout(resolve, 200); });
+            await wait(new Promise(resolve => { client.waiters.push(resolve); setTimeout(resolve, 200); }));
         }
         return client.inbox.shift();
     };
@@ -137,7 +167,7 @@ async function main() {
     assert.match(fs.readFileSync(args['server-log'],'utf8'), /^@@actionEnforce on$/m);
     assert.match(fs.readFileSync(args['server-log'],'utf8'), /^@@hiddenInfo on$/m);
     for(const c of clients) {
-      await c.connected;
+      await wait(c.connected);
       const credential={identity:c.identity,run:args.run,expiresAt};
       const signedIn=await c.request('auth:smoke',{...credential,signature:signSmoke(smokeKey,credential)});
       c.authenticated=true; c.account=signedIn.account;
@@ -183,10 +213,10 @@ async function main() {
     let replay;
     const until=Date.now()+30000;
     do {
-      replay=await clients[0].socket.timeout(10000).emitWithAck('game:replay',{gameID});
+      replay=await wait(clients[0].socket.timeout(10000).emitWithAck('game:replay',{gameID}));
       if(replay.ok) break;
       assert.equal(replay.error,'NOT_FINISHED');
-      await new Promise(r=>setTimeout(r,100));
+      await wait(new Promise(r=>setTimeout(r,100)));
     } while(Date.now()<until);
     assert.equal(replay.ok,true,JSON.stringify(replay));
     const logged=replay.turns.filter(t=>t.actions.length);
@@ -210,14 +240,15 @@ async function main() {
     console.log(`PASS ENFORCE_REPLAY clients=2 turns=${logged.length} actions=${logged.reduce((n,t)=>n+t.actions.length,0)} snapshots=${replay.snapshots.length} stored actions/endHashes match`);
   } catch(e) {failure=e;console.error(e.stack);}
   finally {
-    result.owned={gameIDs:result.gameID ? [result.gameID] : [], accountIds:clients.filter(c=>c.account).map(c=>c.account.accountId)};
-    fs.writeFileSync(path.join(args.out,'owned.json'),JSON.stringify(result.owned));
+    result.owned=owned;
+    persistOwned();
     try {
-      result.cleanup=args['no-cleanup']==='true' ? {status:'deferred'} : await require('./cleanup').cleanup(clients);
+      result.cleanup=args['no-cleanup']==='true' && !failure && !cancellation ? {status:'deferred'} : await require('./cleanup').cleanup(clients);
       console.log('CLEANUP '+JSON.stringify(result.cleanup));
     } catch(e) {result.cleanup={status:'failed',reason:e.message};failure=failure||e;console.error(e.stack);}
     clients.forEach(c=>c.socket.disconnect());
   }
+  failure = failure || cancellation;
   fs.writeFileSync(path.join(args.out,'result.json'),JSON.stringify({...result, failure:failure?.message,ok:!failure},null,2));
   return !failure;
 }

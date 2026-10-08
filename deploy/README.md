@@ -279,3 +279,13 @@ self-update. The gameplay fixture runs the real shipped service, MongoDB, TLS,
 auth/lobby/action/undo/commit/diff/replay and cleanup. These layers are labeled
 in evidence; none claims an actual production deployment. Deploy tests are
 standalone, outside the game registry; no rules manifest or discovery pins change.
+
+Live verification has a 300-second deadline. Timeout or parent cancellation sends
+SIGTERM to the verifier process group and allows 15 seconds for bounded,
+authenticated cleanup (10 seconds). The client persists owned account/game IDs
+as acknowledgements arrive and cancels pending protocol waits on SIGTERM/SIGINT.
+If graceful termination fails, the wrapper sends SIGKILL and records the actual
+child exit status, explicitly marking cleanup unconfirmed. Cancellation always
+fails verification, even if the child exits zero. The release result retains
+cleanup/residue and rollback outcomes; residue after forced termination is kept
+for operator investigation, never removed through unauthenticated operations.
