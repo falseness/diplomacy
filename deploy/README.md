@@ -61,3 +61,67 @@ The suite creates and removes disposable local Git remotes/checkouts, replaces
 only production user/tool/sudo/disk preflight and the lock path, and exercises
 real Git, flock and self-exec behavior. It is a standalone Python deployment
 suite, outside the game reliability registry; no game rules inputs change.
+
+## Candidate and backup support
+
+After source preparation, call the standalone helper with explicit repository,
+output and validated runtime paths (a fresh output directory is mandatory):
+
+```sh
+python3 -B deploy/candidate.py --client /path/diplomacy \
+  --server /path/diplomacy_server --output /path/releases/unique-candidate \
+  --node-dist /usr/local/lib/nodejs/node-v20.20.2-linux-x64
+```
+
+This reads immutable Git blobs at the two captured HEADs, records branches,
+full revisions and blob/content hashes, excludes local changes and credentials,
+and checks both committed rules generators without rewriting them. It includes
+client assets, server script closure, and tracked ops/test/deploy helpers.
+Node must be exactly 20.20.2. Production dependencies are installed by its npm
+from the committed lockfile, loaded to check native dependencies, and included
+in the file/symlink manifest. Source and installed files are made read-only;
+the archive checksum identifies the candidate. This is filesystem read-only
+sealing, not protection from an administrator deliberately modifying it.
+`candidate.verify` must pass again before any later activation. Failed candidate
+directories remain diagnostic only and cannot be reused as fresh outputs.
+
+Run the committed test suites from the candidate, with the locked root test dependencies installed alongside the server dependencies:
+
+```sh
+NODE_PATH=/opt/diplomacy/node_modules TMPDIR=/path/private-test-temp \
+  python3 -B deploy/check_candidate.py /path/releases/unique-candidate/candidate \
+  /path/releases/unique-candidate/candidate-manifest.json /path/new-evidence \
+  --jobs "${TEST_JOBS:-6}"
+```
+
+The selected tracked suites cover authenticated lobbies, enforced actions and
+client replay, undo/diff, and legacy saved rounds. Their service launcher owns
+loopback ports, generated TLS/auth keys and disposable `diplomacy_test_*` databases;
+cleanup removes only owned resources. Keys remain in private temporary directories,
+never in the candidate/archive. The verification-only `candidate_tls.js` preload
+redirects the two legacy dev-certificate reads to that generated pair only in
+an explicitly isolated local test process. Candidate hashes are checked before and after.
+
+`backup.js` is independent support, **not called by source preparation**. Only
+a caller that has already quiesced every writer may pass `--writes-quiesced`:
+
+```sh
+/path/candidate/runtime/bin/node deploy/backup.js /path/private-backups \
+  /path/candidate --writes-quiesced
+```
+
+It dumps the full local `gameDB` into a unique directory, checks counts before
+and after, parses every BSON document and checks every collection's count and
+metadata, then writes a private `validated.json` receipt with hashes and sizes.
+Unsupported collection types fail closed. A failed dump gets no receipt. Later
+activation must call exported `verifyBackup(path)` and fail if the receipt or
+any file is missing/corrupt. Keep writers quiescent throughout; equal counts
+cannot prove that updates did not occur. Nothing here restores, wipes, activates,
+or removes previous releases/backups. Credentials are not accepted in URI arguments.
+
+Standalone deployment tests (outside the game test registry):
+
+```sh
+DIPLOMACY_CLIENT_ROOT=/path/diplomacy python3 -B deploy/test_candidate.py
+DIPLOMACY_SERVER_ROOT=/path/diplomacy_server /usr/local/bin/node20 deploy/test_backup.js
+```
