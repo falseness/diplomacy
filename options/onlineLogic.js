@@ -146,6 +146,8 @@ const onlineObservation = {
         sprite.pos = sprite.calcPos()
         sprite.hpBar = new HealthBar({x: sprite.pos.x + assets.size / 2,
             y: sprite.pos.y + assets.size / 2 + margin}, sprite.maxHP)
+        // Constructors are skipped above; retain the unit bar palette as well as its geometry.
+        if (sprite.isUnit) sprite.hpBar.healthColor = '#00e600'
         sprite.updateHPBar()
         return sprite
     },
@@ -180,7 +182,6 @@ const onlineObservation = {
         if (this.board !== grid) return
         for (const {sprite} of this.buildings.values()) if (sprite) {
             drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
-            Entity.prototype.drawBars.call(sprite, ctx)
             const cell = grid.getCell(sprite.coord)
             if (cell.unit.notEmpty() && !this.hidesUnit(cell) && !moveTween.isActive(cell.unit)) cell.unit.draw(ctx)
         }
@@ -193,6 +194,9 @@ const onlineObservation = {
             drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
             Entity.prototype.drawBars.call(sprite, ctx)
         }
+        // Match grid overlays: occupied building bars stay above every unit body.
+        for (const {sprite} of this.buildings.values()) if (sprite)
+            Entity.prototype.drawBars.call(sprite, ctx)
     }
 }
 
