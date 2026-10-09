@@ -25,9 +25,8 @@ function onlineActionStream() {
 }
 
 
-// The turn clock is not started here: it starts when the turn overlay is hidden
-// (nextTurnPauseInterface.visible = false calls timer.updateLastPause), so it
-// neither runs behind the overlay nor restarts when the overlay is dismissed.
+// The overlay controls local UI only. Online elapsed time comes from server
+// checkpoints and continues independently of overlay/menu visibility.
 function unfreezeGame() {
     gameEvent.waitingMode = false
     nextTurnButton.highlightButton = false
@@ -651,14 +650,23 @@ function SetupServerCommunicationLogic(gameID) {
     onlineGameClose = () => socket.emit('game:close', {gameID, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
     const listeners = onlineListeners
     let playerClock = null
+    let clockBoard = null
     const applyPlayerClock = () => {
-        if (!playerClock || typeof timer === 'undefined' || !timer) return
-        // Async expiry belongs to the server, including its grace and freeze state.
-        // Display the server checkpoint without rewriting the canonical board timer.
+        if (typeof timer === 'undefined' || !timer) return
+        // A board can precede its clock checkpoint. Never let that gap, a menu
+        // pause or a transport disconnect turn the display into an authority.
         timer.check = () => {}
-        Object.defineProperty(timer, 'timeLeft', {configurable: true, get: () =>
-            Math.max(0, playerClock.remainingMs - (playerClock.running && socket.connected
-                ? Date.now() - playerClock.receivedAt : 0))})
+        Object.defineProperty(timer, 'timeLeft', {configurable: true, get: () => {
+            if (!playerClock || (clockBoard && (playerClock.round !== clockBoard.round ||
+                    playerClock.playerIndex !== clockBoard.playerIndex))) return 0
+            const serverNow = performance.now() + playerClock.serverOffset
+            return Math.max(0, playerClock.remainingMs - (playerClock.running
+                ? Math.max(0, serverNow - playerClock.serverTimestamp) : 0))
+        }})
+    }
+    const reconcileClockBoard = board => {
+        clockBoard = {round: board.gameRound, playerIndex: board.whooseTurn}
+        applyPlayerClock()
     }
     // Every recorded action of this game is streamed as game:action (options/actionStream.js); a refusal's resync
     // board is loaded by resyncBoard.
@@ -674,7 +682,21 @@ function SetupServerCommunicationLogic(gameID) {
     })
     on(socket, 'game:clock', row => {
         if (socket !== onlineSocket || row.gameID !== gameID) return
-        playerClock = {...row, receivedAt: Date.now()}
+        const key = typeof row.key === 'string' ? row.key.split(':').map(Number) : []
+        if (key.length !== 4 || !key.every(n => Number.isSafeInteger(n) && n >= 0) ||
+                key[3] !== row.playerIndex || !Number.isSafeInteger(row.revision) || row.revision < 0 ||
+                !Number.isFinite(row.serverTimestamp) || !Number.isFinite(row.remainingMs) ||
+                row.remainingMs < 0 || typeof row.running !== 'boolean') return
+        const [round, component, turn] = key
+        if (clockBoard && (round < clockBoard.round || row.playerIndex !== clockBoard.playerIndex)) return
+        if (playerClock) {
+            if (row.playerIndex !== playerClock.playerIndex || round < playerClock.round || (round === playerClock.round &&
+                    (component !== playerClock.component || turn < playerClock.turn))) return
+            if (row.key === playerClock.key && (row.revision <= playerClock.revision ||
+                    row.serverTimestamp < playerClock.serverTimestamp)) return
+        }
+        playerClock = {...row, round, component, turn,
+            serverOffset: row.serverTimestamp - performance.now()}
         applyPlayerClock()
     })
     document.getElementById('online-recovery')?.remove()
@@ -817,6 +839,7 @@ function SetupServerCommunicationLogic(gameID) {
             } finally {
                 gameEvent.waitingMode = waiting
             }
+            reconcileClockBoard(board)
             acceptedBoard = board
             onlineObservation.acceptBoard(board)
             onlineAlliedGoldDelivery.snapshot(board)
@@ -832,7 +855,7 @@ function SetupServerCommunicationLogic(gameID) {
             gameEvent.hideAll()
         }
         loadFromJson(JSON.stringify(board))
-        applyPlayerClock()
+        reconcileClockBoard(board)
         onlineObservation.acceptBoard(board)
         onlineAlliedGoldDelivery.snapshot(board)
         restoreTownInspection()

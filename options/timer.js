@@ -44,6 +44,7 @@ class Timer {
         this.time = this.calcTime()
     }
     check() {
+        if (typeof gameSettings !== 'undefined' && gameSettings.isOnline) return
         if (Date.now() - this.lastPause > this.time) {
             nextTurn()
         }
