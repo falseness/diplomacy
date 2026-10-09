@@ -771,6 +771,9 @@ function SetupServerCommunicationLogic(gameID) {
             unfreezeGame()
             timer.updateLastPause()
         } else timer = runningTimer
+        // Loading an ended turn creates a new Timer; restore server authority
+        // before it can check local expiry, including frozen time and grace.
+        applyPlayerClock()
         showOnlineNotice('Move corrected by server')
         return true
     }
