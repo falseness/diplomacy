@@ -631,6 +631,21 @@ function closeOnlineGameSocket() {
     onlineListeners = []
 }
 
+// Account boundaries discard only this page's subscriptions and private caches.
+function resetOnlineIdentity() {
+    if (!onlineSocket) return
+    onlineGameFreeze?.()
+    gameEvent.removeSelection()
+    gameEvent.hideAll()
+    menu.back()
+    closeOnlineGameSocket()
+    onlineLobby = null
+    onlineCommit = null
+    gameDiffHandler.reset()
+    onlineTerrains.clear()
+    SendNextTurn = () => {}
+}
+
 // A lobby game (lobby:started or a 'your games' row): game:open on the signed-in
 // session socket; the first board enters the game, with no save-slot picker.
 function openLobbyGame(gameID) {
@@ -762,8 +777,11 @@ function SetupServerCommunicationLogic(gameID) {
         requestCurrentGame()
     })
     const on = (target, event, handler) => {
-        target.on(event, handler)
-        listeners.push([target, event, handler])
+        const currentHandler = (...args) => {
+            if (socket === onlineSocket && listeners === onlineListeners) handler(...args)
+        }
+        target.on(event, currentHandler)
+        listeners.push([target, event, currentHandler])
     }
     on(socket, 'game:clockState', acceptPause)
     renderPause()

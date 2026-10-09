@@ -42,6 +42,8 @@ class OnlineSession {
         this.tutorialSync = null
         this.lastSignInError = null
         this.signInAttempt = 0
+        this.generation = 0
+        this.sessionToken = null
     }
     connect() {
         if (this.socket) return this.socket
@@ -52,7 +54,7 @@ class OnlineSession {
         // then re-open the game on screen. A failed resume keeps the account and
         // token (unless UNAUTHENTICATED), so the next reconnect tries again.
         socket.io.on('reconnect', async () => {
-            if (!this.account || !await this.resume()) return
+            if (socket !== this.socket || !this.account || !await this.resume() || socket !== this.socket) return
             if (this.openGameID) this.openGame(this.openGameID)
         })
         return socket
@@ -60,14 +62,16 @@ class OnlineSession {
     // Resolves the ack, or {ok: false, error: 'TIMEOUT'} when none arrives within timeoutMs.
     request(event, payload, timeoutMs = ONLINE_ACK_TIMEOUT, isCurrent = () => true) {
         const socket = this.connect()
+        const generation = this.generation
+        const current = () => generation === this.generation && isCurrent()
         return new Promise(resolve => {
             let settled = false
-            const timer = setTimeout(() => { settled = true; resolve({ok: false, error: 'TIMEOUT'}) }, timeoutMs)
+            const timer = setTimeout(() => { settled = true; resolve({ok: false, error: current() ? 'TIMEOUT' : 'CANCELLED'}) }, timeoutMs)
             socket.emit(event, payload, ack => {
                 if (settled) return
                 settled = true
                 clearTimeout(timer)
-                if (!isCurrent()) return resolve({ok: false, error: 'CANCELLED'})
+                if (!current()) return resolve({ok: false, error: 'CANCELLED'})
                 const reply = ack && typeof ack === 'object' && !Array.isArray(ack) && typeof ack.ok === 'boolean' ? ack : {ok: false, error: 'BAD_ACK'}
                 if (reply.error === 'RULES_VERSION_MISMATCH' && typeof showRulesVersionPanel === 'function')
                     showRulesVersionPanel(reply.expected, event === 'auth:google')
@@ -77,6 +81,23 @@ class OnlineSession {
             })
         })
     }
+    // A new identity gets a new transport. In-flight work keeps its original
+    // authenticated socket, and only this page's game state is discarded.
+    replaceConnection() {
+        this.generation++
+        this.signInAttempt++
+        if (typeof resetOnlineIdentity === 'function') resetOnlineIdentity()
+        this.socket?.disconnect?.()
+        this.socket = null
+        this.account = null
+        this.openGameID = null
+        this.sessionToken = null
+        this.tutorialSync = null
+    }
+    logout() {
+        this.replaceConnection()
+        clearStoredSession()
+    }
     get hasStoredSession() {
         return !!readStoredSession()
     }
@@ -85,21 +106,28 @@ class OnlineSession {
     // TIMEOUT, BAD_ACK and other failures keep both, so a later reconnect retries.
     async resume() {
         const sessionToken = readStoredSession()
-        if (!sessionToken) return null
+        if (!sessionToken) {
+            if (this.account) this.replaceConnection()
+            return null
+        }
+        if (this.sessionToken && sessionToken !== this.sessionToken) this.replaceConnection()
+        const generation = this.generation
         let ack = await this.request('auth:session', {sessionToken, rulesVersion: ONLINE_RULES_VERSION})
         for (const delay of ONLINE_RETRY_DELAYS) {
             if (ack.error !== 'UNAVAILABLE') break
             await new Promise(resolve => setTimeout(resolve, delay))
+            if (generation !== this.generation) return null
             ack = await this.request('auth:session', {sessionToken, rulesVersion: ONLINE_RULES_VERSION})
         }
+        if (generation !== this.generation) return null
         if (ack.ok) {
+            this.sessionToken = sessionToken
             this.account = ack.account
             this.tutorialSync = this.syncTutorialProgress()
             return this.account
         }
         if (ack.error === 'UNAUTHENTICATED') {
-            clearStoredSession()
-            this.account = null
+            this.logout()
         }
         return null
     }
@@ -108,6 +136,7 @@ class OnlineSession {
         this.lastSignInError = null
     }
     async signInWithGoogle(idToken) {
+        if (this.socket && typeof idToken === 'string' && idToken.trim()) this.replaceConnection()
         const attempt = ++this.signInAttempt
         this.lastSignInError = null
         const fail = (source, code) => {
@@ -127,6 +156,7 @@ class OnlineSession {
                 return fail(code === 'TIMEOUT' ? 'connection' : code === 'BAD_ACK' ? 'protocol' : 'server', code)
             }
             storeSession(ack.sessionToken)
+            this.sessionToken = ack.sessionToken
             this.account = ack.account
             this.tutorialSync = this.syncTutorialProgress()
             return this.account
