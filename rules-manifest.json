@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "716acffeb01b72e6057e5b63752a9a9e3478a1fb3423c9b64d4909d2b164eaa3",
+  "rulesVersion": "db892937c48bf71dcdf0b80d2d42b4717650fef5c7e0521f549ce0b1ed4ec092",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "c7c2dbc402120c13f4eb64bec8003a4c54ffe1113e53e3f07e4338367c3ec19b",
-      "bytes": 9527
+      "sha256": "6b905926087e63a67750661f073aacacb782696008853b6eb1575ca8c7c857bf",
+      "bytes": 12157
     },
     {
       "path": "interface/barrackinterface.js",

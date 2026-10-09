@@ -141,6 +141,7 @@ class EntityInterface {
         this.change(info, portal.player.fullColor, portal, description)
     }
     change(entity, color, portal = null, description = false) {
+        this.townInspection = null
         this.portal = portal
         this.portalDescription = description
         this.portalStatsButton.canClick = Boolean(portal && portal.nextProduction && !description)
@@ -160,10 +161,56 @@ class EntityInterface {
         this.renderCacheDirty = true
         this.visible = true
     }
+    // Resolve by coordinate on every frame: captures and snapshots can replace the
+    // building object. Only the gold token is projected; income stays untouched.
+    refreshTown(coord = this.townInspection || gameEvent.selected?.coord) {
+        if (!coord || !grid) return
+        if (isFogOfWar && !grid.fogOfWar[coord.x]?.[coord.y]) {
+            this.visible = false
+            townInterface.visible = false
+            return
+        }
+        const town = grid.getCell(coord)?.building
+        if (!town?.isTown?.()) {
+            if (this.townInspection) this.visible = false
+            return
+        }
+        const cell = grid.getCell(coord)
+        const observed = typeof onlineObservation !== 'undefined' && grid.observedBuilding(cell) ?
+            onlineObservation.buildings.get(coord.x + ',' + coord.y) : null
+        if (observed && !observed.sprite?.isTown?.()) { this.visible = false; townInterface.visible = false; return }
+        const owner = observed ? observed.sprite.playerColor : town.playerColor
+        const ownerPlayer = players[owner]
+        const gold = !gameSettings.isOnline || owner === whooseTurn ? ownerPlayer.gold :
+            players[whooseTurn]?.isAlliedWith(ownerPlayer) ? onlineAlliedGold.get(owner) : null
+        const token = typeof gold === 'number' && Number.isFinite(gold) ? String(gold) : 'Hidden'
+        // Preserve the existing income row and suffix, including on reconnect.
+        this.visible = true
+        const text = this.entity.info.text.replace(/(gold: )\S+(?= \()/, (_, label) => label + token)
+        if (this.entity.info.text !== text || this.background.color !== ownerPlayer.fullColor.hex) {
+            this.entity.info.text = text
+            this.background.color = ownerPlayer.fullColor.hex
+            this.updateSizes(false)
+            this.renderCacheDirty = true
+        }
+        const goldText = text.match(/(?:^|\n)gold: ([^\n]*)/)?.[1]
+        this.townInspection = {...coord}
+        if (townInterface.visible) {
+            if (owner !== whooseTurn || gameEvent.waitingMode) townInterface.visible = false
+            else if (townInterface.goldText.text !== goldText) {
+                townInterface.goldText.text = goldText
+                townInterface.invalidateRenderCache()
+            }
+        }
+    }
+    townInspectionCoord() {
+        return this.visible && this.entity.name.text === 'town' ?
+            this.townInspection || gameEvent.selected?.coord : null
+    }
     set visible(boolean) {
         if (boolean && !this.#visible)
             this.renderCacheDirty = true
-        if (!boolean) { this.portal = null; this.portalDescription = false }
+        if (!boolean) { this.townInspection = null; this.portal = null; this.portalDescription = false }
         this.#visible = boolean
         undoButton.selected = boolean
     }
@@ -236,6 +283,8 @@ class EntityInterface {
     draw(ctx) {
         if (!this.visible)
             return
+        if (this.entity.name.text === 'town') this.refreshTown()
+        if (!this.visible) return
         if ((this.renderCacheDirty || !this.renderCache) && !this.createRenderCache()) {
             this.drawContents(ctx)
             return

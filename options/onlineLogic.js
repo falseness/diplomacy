@@ -298,6 +298,7 @@ const gameDiffHandler = {
         if (hints.length || Array.isArray(diff.paths))
             diff.paths = (Array.isArray(diff.paths) ? diff.paths : []).concat(hints)
         const before = remoteEffects.snapshot(diff.cells)
+        const inspectedTown = entityInterface.townInspectionCoord?.()
         const result = applyCellDiff(diff)
         // Wire metadata uses boardDiff's fields envelope. The local viewer/turn
         // and timer stay local; public round/settings and authoritative status advance.
@@ -321,6 +322,7 @@ const gameDiffHandler = {
                     (order.get(cellDiffKey(b.coord)) ?? Infinity))
             }
         }
+        if (inspectedTown) entityInterface.refreshTown?.(inspectedTown)
         remoteEffects.play(before, hints)
         // A unit whose path left the fog has no visible start to match: it slides along the last
         // visible segment, from where it came into view.
@@ -582,6 +584,7 @@ function enterLobbyGame() {
 
 // Plays the lobby game gameID over the signed-in session socket.
 function SetupServerCommunicationLogic(gameID) {
+    let reconnectTown = gameDiffHandler.gameID === gameID ? entityInterface.townInspectionCoord?.() : null
     closeOnlineGameSocket()
     const socket = onlineSocket = onlineSession.connect()
     onlineGameClose = () => socket.emit('game:close', {gameID, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
@@ -705,6 +708,11 @@ function SetupServerCommunicationLogic(gameID) {
                         (competitiveDelivery.active || !active)))) return false
         }
         // Protocol 2 supplies an authoritative filtered snapshot and accepted prefix.
+        const inspectedTown = acceptedBoard ? entityInterface.townInspectionCoord?.() : reconnectTown
+        const restoreTownInspection = () => {
+            if (inspectedTown) entityInterface.refreshTown?.(inspectedTown)
+            reconnectTown = null
+        }
         const continuing = !!(board.gameSettings?.coop && (!board.hiddenInfo || board.coopContinuing) && acceptedBoard && active &&
             (!gameEvent.waitingMode || onlineActionStream()?.flushed) && board.gameRound === acceptedBoard.gameRound &&
             board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
@@ -751,6 +759,7 @@ function SetupServerCommunicationLogic(gameID) {
             acceptedBoard = board
             onlineObservation.acceptBoard(board)
             onlineAlliedGoldDelivery.snapshot(board)
+            restoreTownInspection()
             onlineCommit = commit
             return 'continued'
         }
@@ -765,6 +774,7 @@ function SetupServerCommunicationLogic(gameID) {
         applyPlayerClock()
         onlineObservation.acceptBoard(board)
         onlineAlliedGoldDelivery.snapshot(board)
+        restoreTownInspection()
         if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
@@ -894,6 +904,7 @@ function SetupServerCommunicationLogic(gameID) {
         // A transport reconnect keeps this socket and its listeners. Resume
         // only from the saved turn requested below; local uncommitted actions
         // must not survive an ambiguous disconnect.
+        reconnectTown = entityInterface.townInspectionCoord?.() || reconnectTown
         failed = false
         document.getElementById('online-recovery')?.remove()
         onlineCommit = null
