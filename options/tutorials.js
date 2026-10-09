@@ -499,9 +499,10 @@ function createTutorial9Map() {
     for (let x = 2; x <= 12; ++x) {
         mountains.push([x, 4])
     }
-    mountains.push([6, 0], [7, 0], [0, 8])
-    let lakes = [[10, 0], [11, 0], [3, 8], [4, 8], [12, 8]]
-    let bushes = [[3, 1], [4, 1], [4, 2], [8, 1], [9, 2], [10, 2], [6, 6], [10, 7], [11, 5]]
+    // Broaden the northern peak and ridge shoulders without narrowing either end pass.
+    mountains.push([6, 0], [7, 0], [0, 8], [7, 1], [5, 3], [10, 3])
+    let lakes = [[10, 0], [11, 0], [3, 8], [4, 8], [12, 8], [11, 1], [13, 8], [3, 7]]
+    let bushes = [[3, 1], [4, 1], [4, 2], [8, 1], [9, 2], [10, 2], [6, 6], [10, 7], [11, 5], [3, 2], [5, 1], [8, 2], [11, 6], [12, 6]]
     let map = new GameMap(
         {x: 15, y: 9},
         [
