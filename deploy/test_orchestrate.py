@@ -89,6 +89,18 @@ class Deployment(o.Deployment):
         return {'status': 'pass', 'scope': 'fixture DB and unrelated records preserved; real smoke cleanup separately tested'}
 
 class Tests(unittest.TestCase):
+    def test_recovery_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Deployment(Path(tmp)); d.host.recovery_hold = True
+            result = o.execute(d)
+            self.assertEqual(result['status'], 'maintenance')
+            self.assertEqual(result['stages']['activation']['status'], 'maintenance')
+            self.assertEqual(result['stages']['live-verification']['status'], 'deferred')
+            self.assertFalse(d.host.running)
+            self.assertNotIn('start', d.host.events)
+            self.assertEqual(result['rollback']['status'], 'not-needed')
+            print('PASS TASK-860 handoff remains closed; live verification deferred to TASK-861')
+
     def test_success(self):
         with tempfile.TemporaryDirectory() as tmp:
             d = Deployment(Path(tmp))

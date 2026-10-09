@@ -23,6 +23,10 @@ class Deployment:
         self.manifest = self.package / 'candidate-manifest.json'
         self.record = output / 'recovery.json'
         self.host = activate.Host(Path(config['backups']), Path(config['health_probe']), Path(config['existing_games_probe']))
+        hold = os.environ.get('DIPLOMACY_RECOVERY_HOLD')
+        if hold and hold != '2e456b63-6c57-4014-8025-0ea0a16d4505':
+            raise RuntimeError('Unknown recovery maintenance target')
+        self.host.recovery_hold = bool(hold)
         self.run_id = 'deploy' + uuid.uuid4().hex[:20]
         self.cleanup_status = {'status': 'not-started'}
 
@@ -69,7 +73,7 @@ class Deployment:
     def activation(self):
         self.started = datetime.now(timezone.utc)
         self.activation_result = activate.activate(self.host, self.root, self.manifest, self.record)
-        if self.activation_result['status'] != 'activated':
+        if self.activation_result['status'] not in ('activated', 'maintenance'):
             raise RuntimeError('Activation failed')
         return self.activation_result
 
@@ -129,13 +133,17 @@ def execute(deployment):
         for stage, method in [('package', 'prepare'), ('preactivation-smoke', 'isolated'),
                               ('endpoint', 'endpoint'), ('baseline', 'baseline'), ('smoke-admission', 'admission'), ('activation', 'activation'),
                               ('live-verification', 'verification')]:
+            if stage == 'live-verification' and getattr(deployment.host, 'recovery_hold', False):
+                deployment.host.quiescent()
+                result['stages'][stage] = {'status': 'deferred', 'reason': 'TASK-861 recovery validation; write admission closed'}
+                continue
             print('START ' + stage, flush=True)
             result['stages'][stage] = getattr(deployment, method)()
             if stage == 'activation': activated = True
             print('PASS ' + stage, flush=True)
         stage = 'cleanup'
         result['cleanup'] = deployment.cleanup()
-        result['status'] = 'complete'
+        result['status'] = 'maintenance' if getattr(deployment.host, 'recovery_hold', False) else 'complete'
     except Exception as error:
         result['failure'] = {'stage': stage, 'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}
         for sig in handlers: signal.signal(sig, signal.SIG_IGN)
@@ -170,7 +178,7 @@ def deploy(client, server, config_file=DEFAULT_CONFIG):
     with (output / 'orchestration.log').open('x') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
         result = execute(Deployment(client, server, config, output))
     print('Release result: ' + str(output / 'result.json'))
-    if result['status'] != 'complete': raise RuntimeError('Deployment failed; retained result: ' + str(output / 'result.json'))
+    if result['status'] not in ('complete', 'maintenance'): raise RuntimeError('Deployment failed; retained result: ' + str(output / 'result.json'))
     return 0
 
 

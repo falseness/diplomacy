@@ -325,6 +325,21 @@ class ConfigTests(unittest.TestCase):
             finally: manifest.unlink(missing_ok=True)
             print('PASS shipped candidate validator checks complete inventory/source hashes, repository and runtime identities before stop')
 
+    def test_recovery_holds_admission_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            h = Fixture(Path(temp)); h.recovery_hold = True
+            result = h.run()
+            self.assertEqual(result['status'], 'maintenance')
+            self.assertFalse(h.running)
+            self.assertEqual(h.events.count('stop'), 1)
+            self.assertNotIn('start', h.events)
+            self.assertIn('validated-backup', h.events)
+            h.quiescent()
+            self.assertEqual(h.db.read_bytes(), h.db_initial)
+            restored = a.restore(h, json.loads(h.record.read_text()))
+            self.assertEqual(restored['status'], 'restored')
+            print('PASS recovery maintenance: stop -> final backup -> switch -> remain stopped; rollback restores service')
+
     def test_corrupt_manifest(self):
         with tempfile.TemporaryDirectory() as temp:
             h = Fixture(Path(temp)); (h.candidate / 'runtime/bin/node').write_text('corrupt')

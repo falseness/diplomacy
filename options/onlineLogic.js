@@ -557,7 +557,7 @@ function enterLobbyGame() {
 function SetupServerCommunicationLogic(gameID) {
     closeOnlineGameSocket()
     const socket = onlineSocket = onlineSession.connect()
-    onlineGameClose = () => socket.emit('game:close', {gameID})
+    onlineGameClose = () => socket.emit('game:close', {gameID, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
     const listeners = onlineListeners
     let playerClock = null
     const applyPlayerClock = () => {
@@ -576,6 +576,11 @@ function SetupServerCommunicationLogic(gameID) {
         target.on(event, handler)
         listeners.push([target, event, handler])
     }
+    on(socket, 'game:recovery', row => {
+        if (row.gameID !== gameID) return
+        (socket.recoveryEpochs ||= {})[gameID] = row.recoveryEpoch
+        onlineActionStream()?.restart()
+    })
     on(socket, 'game:clock', row => {
         if (socket !== onlineSocket || row.gameID !== gameID) return
         playerClock = {...row, receivedAt: Date.now()}
@@ -734,7 +739,7 @@ function SetupServerCommunicationLogic(gameID) {
         onlineActionStream()?.restart(board.actionResume)
         if (active && board.actionResume?.ended) {
             // End reached the server before the connection dropped; finish its commit.
-            socket.emit('nextTurn', JSON.stringify({gameID, endHash: stateHash()}))
+            socket.emit('nextTurn', JSON.stringify({gameID, endHash: stateHash(), recoveryEpoch: socket.recoveryEpochs?.[gameID]}))
             return 'continued'
         }
         if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
@@ -874,12 +879,13 @@ function SetupServerCommunicationLogic(gameID) {
         console.trace('SendNextTurn called')
         // Protocol 2 (TASK-687): no board, only the hash of the turn's 'end' (actionRecorder.js recordEnd); the server
         // commits its replay of the streamed actions (TASK-684), so send after the stream flushed.
+        const recoveryEpoch = socket.recoveryEpochs?.[gameID]
         const send = () => {
-            if (socket === onlineSocket && !failed) {
+            if (socket === onlineSocket && !failed && recoveryEpoch === socket.recoveryEpochs?.[gameID]) {
                 // The queued end may have waited for reveal acknowledgements.
                 const ended = (actionLog.current() || actionLog.lastTurn())?.actions.at(-1)
                 const endHash = ended?.action.t === 'end' ? ended.hash : stateHash()
-                socket.emit('nextTurn', JSON.stringify({gameID: gameID, endHash: endHash}))
+                socket.emit('nextTurn', JSON.stringify({gameID: gameID, endHash: endHash, recoveryEpoch}))
             }
         }
         const stream = onlineActionStream()

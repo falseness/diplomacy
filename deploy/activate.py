@@ -240,6 +240,11 @@ def activate(host, candidate, manifest, record):
         host.checkpoint(stage)
         stage = 'web-switch'; atomic_link(host.web, str(candidate / 'diplomacy')); host.checkpoint(stage)
         stage = 'daemon-reload'; host.reload(); host.checkpoint(stage)
+        if getattr(host, 'recovery_hold', False):
+            host.quiescent()
+            result.update(status='maintenance', backup=getattr(host, 'backup_receipt', None),
+                          admission='closed; service stopped until TASK-861 validation or rollback')
+            return result
         stage = 'start'; host.ctl('start'); host.checkpoint(stage)
         stage = 'identity'
         if host.process() != {'cwd': str(candidate / 'diplomacy_server/server'), 'exe': str((candidate / 'runtime/bin/node').resolve())}:

@@ -79,7 +79,7 @@ const ActionStream = {
     enqueue(action, hash) {
         if (!this.socket)
             return
-        this.queue.push({seq: ++this.seq, action: JSON.parse(JSON.stringify(action)), hash: hash})
+        this.queue.push({seq: ++this.seq, action: JSON.parse(JSON.stringify(action)), hash: hash, recoveryEpoch: this.socket.recoveryEpochs?.[this.gameID]})
         this.pump()
     },
     // Calls send once every queued action has been acked (at once when nothing is pending or no stream is attached);
@@ -117,7 +117,7 @@ const ActionStream = {
         ++this.counters.sent
         this.timer = setTimeout(() => this.settle(entry, {ok: false, seq: entry.seq, reason: 'TIMEOUT'}),
             ONLINE_ACK_TIMEOUT)
-        this.socket.emit('game:action', {gameID: this.gameID, seq: entry.seq, action: entry.action, hash: entry.hash},
+        this.socket.emit('game:action', {gameID: this.gameID, seq: entry.seq, action: entry.action, hash: entry.hash, recoveryEpoch: entry.recoveryEpoch},
             ack => this.settle(entry, ack))
     },
     settle(entry, ack) {
