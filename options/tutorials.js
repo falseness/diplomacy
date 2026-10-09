@@ -863,69 +863,6 @@ function createTutorial15Map() {
     return map
 }
 
-function createTutorial16Map() {
-    // Close the Portals (co-op tutorial map). A river (lakes in column 7, rows 0..7) splits the map; its only
-    // ford is (7,8) at the bottom, hidden by a bush (8,8) on the far bank. Behind it three melee portals (10,1),
-    // (11,4), (10,6) send a Brute every 4 rounds from round 4 and three Imps wait in front of them; the far side
-    // is closed by a pond (13,4)(14,4) and mountains in its corners. Red's town (1,4) has 2 catapults (2,3),
-    // (2,5) behind 3 normchels (3,3), (3,4), (3,5) and 30 gold (the army costs a little more than the town
-    // earns). Chasing the demons through the ford bleeds the army while the far portal keeps spawning; marching
-    // the normchels up to the river bank with the catapults behind them destroys every portal from across the
-    // water (range 2-5, 4 damage to a 12 hp portal), after which the remaining demons can be cleaned up. The hill
-    // (6,7) by the ford is a lookout: a unit standing on a hill sees over bushes, so from there red spots the Imp
-    // waiting at (9,8) behind the ford's bush (hills give range only to archers, not to catapults). Bushes stay
-    // off the fire lines to the portals.
-    let lakes = [[0, 0], [0, 8], [8, 0], [13, 4], [14, 4]]
-    for (let y = 0; y <= 7; ++y) {
-        lakes.push([7, y])
-    }
-    let mountains = [[4, 0], [4, 8], [5, 8], [13, 0], [14, 0], [14, 1], [14, 7], [14, 8]]
-    let bushes = [[1, 1], [1, 7], [2, 0], [2, 8], [5, 1], [8, 8], [12, 2], [12, 8], [13, 6]]
-    let hills = [[6, 7]]
-    let map = new GameMap(
-        {x: 15, y: 9},
-        [
-            {
-                rgb: {r: 208, g: 208, b: 208},
-                towns: []
-            },
-            {
-                rgb: {r: 255, g: 0, b: 0},
-                gold: 30,
-                towns: [{x: 1, y: 4}],
-                units: [
-                    {x: 2, y: 3, type: Catapult},
-                    {x: 2, y: 5, type: Catapult},
-                    {x: 3, y: 3, type: Normchel},
-                    {x: 3, y: 4, type: Normchel},
-                    {x: 3, y: 5, type: Normchel}
-                ]
-            }
-        ],
-        [],
-        coordDictionary(lakes),
-        coordDictionary(mountains),
-        coordDictionary(bushes),
-        coordDictionary(hills),
-        {type: 'rectangular'},
-        {
-            tutorial: true,
-            units: [
-                {x: 9, y: 2, type: Imp},
-                {x: 9, y: 8, type: Imp},
-                {x: 11, y: 7, type: Imp}
-            ]
-        }
-    )
-    map.portals = [
-        {x: 10, y: 1, category: 'melee'},
-        {x: 11, y: 4, category: 'melee'},
-        {x: 10, y: 6, category: 'melee'}
-    ]
-    map.testName = 'tutorial 16'
-    return map
-}
-
 const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
@@ -945,7 +882,6 @@ const tutorials = [
         get map() { return createTutorial13Map() }},
     {id: 'tutorial-15', title: 'Tutorial 13: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-16', title: 'Tutorial 14: Close the Portals', pass: 'coopVictory', get map() { return createTutorial16Map() }}
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
 // co-op wave schedule follow it) and suddenDeathRound (default the normal round 40).
