@@ -492,9 +492,15 @@ let onlineGameFreeze = null
 function showRulesVersionPanel(expected, signIn = false) {
     if (onlineGameFreeze) onlineGameFreeze()
     const button = showOnlinePanel('New version available',
-        'A new version of the game is available. ' +
-        (signIn ? 'Sign-in failed (server): RULES_VERSION_MISMATCH. ' : '') +
-        'Reload the page to keep playing online.')
+        signIn ? 'Server version mismatch (RULES_VERSION_MISMATCH). Reload the page to sign in.'
+            : 'A new version of the game is available. Reload the page to keep playing online.')
+    if (signIn) {
+        const panel = document.getElementById('online-recovery')
+        panel.style.top = '48%'
+        panel.style.padding = '12px'
+        panel.style.font = '16px/1.4 sans-serif'
+        panel.querySelector('p').style.margin = '0 0 8px'
+    }
     button('Reload', () => location.reload()).focus()
 }
 

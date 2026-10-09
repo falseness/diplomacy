@@ -834,10 +834,12 @@ class SignInTree {
         if (attempt !== this.attempt || this.menu.selectedTree !== this) return
         if (!account) {
             const error = onlineSession.lastSignInError || {source: 'client', code: 'CLIENT_ERROR'}
-            this.setStatus(`Sign-in failed (${error.source}): ${error.code}. ` +
-                (error.code === 'RULES_VERSION_MISMATCH' ? 'Reload the page to try again.' : 'Go back and reopen to retry.'))
+            this.setStatus(error.code === 'RULES_VERSION_MISMATCH'
+                ? 'Server version mismatch (RULES_VERSION_MISMATCH). Reload the page to sign in.'
+                : `Sign-in failed (${error.source}): ${error.code}. Go back and reopen to retry.`)
             return
         }
+        document.getElementById('online-recovery')?.remove()
         this.setStatus('')
         this.menu.onlineHub.setAccount(account)
         this.menu.setTree(this.menu.onlineHub)
