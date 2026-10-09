@@ -36,13 +36,15 @@ const ActionStream = {
     accepted: [],
     // onResync(board, turnEnded) -> true when the board was loaded (set by start).
     onResync: null,
+    onConflict: null,
     counters: {sent: 0, acked: 0, failed: 0, timeouts: 0, hashMismatches: 0, restarts: 0, resyncs: 0},
     revealedCells: 0,
-    start(socket, gameID, onResync = null) {
+    start(socket, gameID, onResync = null, onConflict = null) {
         this.stop()
         this.socket = socket
         this.gameID = gameID
         this.onResync = onResync
+        this.onConflict = onConflict
         this.counters = {sent: 0, acked: 0, failed: 0, timeouts: 0, hashMismatches: 0, restarts: 0, resyncs: 0}
         this.revealedCells = 0
         actionLog.listener = (action, hash) => this.enqueue(action, hash)
@@ -53,6 +55,7 @@ const ActionStream = {
         this.socket = null
         this.gameID = null
         this.onResync = null
+        this.onConflict = null
     },
     // The unsent and in-flight actions belong to a turn the page no longer shows.
     restart(resume = null) {
@@ -126,6 +129,22 @@ const ActionStream = {
         clearTimeout(this.timer)
         this.timer = null
         this.inFlight = null
+        // A second page can consume our sequence. A cached ack then belongs to
+        // its command; later sequences can also be ahead of this page. Reload
+        // the full accepted prefix before allowing another command or commit.
+        const conflict = ack && (ack.reason === 'BAD_SEQ' ||
+            (ack.ok === true && (ack.viewHash === undefined ? ack.hash : ack.viewHash) !== entry.hash))
+        if (conflict && this.onConflict) {
+            if (ack.ok === true) {
+                ++this.counters.hashMismatches
+                console.warn('game:action hash mismatch', entry.seq, entry.action.t,
+                    ack.viewHash === undefined ? ack.hash : ack.viewHash, entry.hash)
+            }
+            ++this.counters.resyncs
+            this.drop()
+            this.onConflict()
+            return
+        }
         if (ack && typeof ack === 'object' && ack.ok === false && ack.resync && typeof ack.resync === 'object' &&
                 this.onResync) {
             this.resync(entry, ack)

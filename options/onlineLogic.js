@@ -750,7 +750,17 @@ function SetupServerCommunicationLogic(gameID) {
     }
     // Every recorded action of this game is streamed as game:action (options/actionStream.js); a refusal's resync
     // board is loaded by resyncBoard.
-    onlineActionStream()?.start(socket, gameID, resyncBoard)
+    onlineActionStream()?.start(socket, gameID, resyncBoard, () => {
+        if (socket !== onlineSocket || failed) return
+        gameEvent.waitingMode = true
+        nextTurnButton.disableClick()
+        undoButton.disableClick()
+        onlineCommit = null
+        competitiveDelivery = null
+        acceptedBoard = null
+        gameDiffHandler.reset(gameID)
+        requestCurrentGame()
+    })
     const on = (target, event, handler) => {
         target.on(event, handler)
         listeners.push([target, event, handler])
