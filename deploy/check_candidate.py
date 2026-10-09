@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 """Read-only candidate verification and isolated shipped-suite execution."""
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
 import subprocess
 from candidate import verify, runtime, rules
 
-# Each live suite uses reliability/helpers/services: unique loopback ports,
-# private generated keys outside the candidate, disposable mongod, owned cleanup.
-SUITES = ['tests/online/lobby-start.test.js', 'tests/online/action-enforce-commit.test.js',
-          'tests/online/coop-continuing.test.js',
-          'tests/client/test-action-streaming-queue.js',
-          'tests/server/undo-diff.test.js', 'tests/legacy_round.test.js']
 
 
 def check(root, manifest, output, jobs):
@@ -28,30 +21,14 @@ def check(root, manifest, output, jobs):
         if name.startswith(('RELIABILITY_', 'DIPLOMACY_SMOKE_', 'DIPLOMACY_TEST_', 'DIPLOMACY_LOCAL_')):
             env.pop(name)
     env['NODE_OPTIONS'] = '--require=' + str(root / 'diplomacy/deploy/candidate_tls.js')
-    output.mkdir(parents=True, exist_ok=False)
-    def suite(file):
-        name = Path(file).stem
-        evidence = output / name
-        evidence.mkdir()
-        child_env = dict(env, ONLINE_EVIDENCE_DIR=str(evidence),
-                         DIPLOMACY_SIBLING_LOCK=str(evidence / 'sibling.lock'))
-        args = [str(node), '--test', '--test-concurrency=1', '--test-reporter=tap', file]
-        print('COMMAND ' + json.dumps(args), flush=True)
-        # Run individual shipped suites: the general registry runner requires
-        # Git metadata, deliberately absent from a deployable candidate.
-        with (output / (name + '.log')).open('x') as log:
-            log.write('COMMAND ' + json.dumps(args) + '\n'); log.flush()
-            result = subprocess.run(args, cwd=root / 'diplomacy_server', env=child_env,
-                                    stdout=log, stderr=subprocess.STDOUT)
-            log.write('EXIT_STATUS=' + str(result.returncode) + '\n')
-        print(('PASS ' if result.returncode == 0 else 'FAIL ') + file, flush=True)
-        return result.returncode
-    with ThreadPoolExecutor(max_workers=jobs) as pool:
-        results = list(pool.map(suite, SUITES))
-    if any(results):
-        raise RuntimeError('Isolated candidate checks failed')
+    # Resolve the shared registry selection inside the package. This executor
+    # validates every required TAP case/marker and works without Git metadata.
+    args = [str(node), 'tests/helpers/runMultiplayerGate.js',
+            'multiplayer-fast', str(output), '--jobs', str(jobs)]
+    print('COMMAND ' + json.dumps(args), flush=True)
+    subprocess.run(args, cwd=root / 'diplomacy_server', env=env, check=True)
     verify(root, json.loads(manifest.read_text()))
-    print('PASS candidate lobby/auth action/undo/diff/replay old-format compatibility; isolated services owned cleanup')
+    print('PASS candidate multiplayer-fast; shared registered cases enforced; isolated services owned cleanup')
 
 
 if __name__ == '__main__':
