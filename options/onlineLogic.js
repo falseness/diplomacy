@@ -76,6 +76,11 @@ const onlineObservation = {
         this.hexagons.clear()
     },
     receive(message) {
+        // Consume stale sequence slots in gameDiffHandler, but never let their
+        // pictures return after authority has advanced or committed this peer.
+        if (Number.isInteger(message.gameRound) && message.gameRound !== gameRound) return null
+        const pending = onlineCommit?.pendingSeats
+        if (Array.isArray(pending) && !pending.includes(message.actorSeat)) return null
         if (this.board !== grid || this.round !== gameRound) {
             this.clear()
             this.board = grid
