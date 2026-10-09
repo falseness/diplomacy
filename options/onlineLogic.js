@@ -28,6 +28,7 @@ function onlineActionStream() {
 // The overlay controls local UI only. Online elapsed time comes from server
 // checkpoints and continues independently of overlay/menu visibility.
 function unfreezeGame() {
+    if (onlinePauseStatus === 'paused') return
     gameEvent.waitingMode = false
     nextTurnButton.highlightButton = false
     undoButton.enableClick()
@@ -589,6 +590,7 @@ function showOnlineNotice(message, duration = 3000) {
 
 // Freezes the open online game, if any (set by SetupServerCommunicationLogic).
 let onlineGameFreeze = null
+let onlinePauseStatus = 'running'
 
 // The server runs other rules code (an ack RULES_VERSION_MISMATCH, protocol doc
 // section 2.7): freeze the open game and offer a reload that fetches the new client.
@@ -622,6 +624,8 @@ function closeOnlineGameSocket() {
     onlineSocket = null
     onlineGameFreeze = null
     onlineActionStream()?.stop()
+    onlinePauseStatus = 'running'
+    document.getElementById('online-pause')?.remove()
     delete window.kick
     for (const [target, event, handler] of onlineListeners) target.off(event, handler)
     onlineListeners = []
@@ -649,6 +653,81 @@ function SetupServerCommunicationLogic(gameID) {
     const socket = onlineSocket = onlineSession.connect()
     onlineGameClose = () => socket.emit('game:close', {gameID, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
     const listeners = onlineListeners
+    let pauseState = null
+    const pausePanel = document.createElement('section')
+    pausePanel.id = 'online-pause'
+    // DOM controls must not also trigger the canvas game/menu shortcuts.
+    for (const event of ['click', 'mousemove', 'wheel', 'keydown', 'keyup', 'touchstart', 'touchmove', 'touchend', 'touchcancel'])
+        pausePanel['on' + event] = e => e.stopPropagation()
+    pausePanel.setAttribute('aria-label', 'Online pause controls')
+    pausePanel.style.cssText = 'position:fixed;top:8px;left:8px;z-index:9999;background:#182332;color:white;padding:10px;font:14px sans-serif;max-width:380px'
+    const pauseText = document.createElement('div')
+    pauseText.setAttribute('role', 'status')
+    pauseText.setAttribute('aria-live', 'polite')
+    const voteButton = document.createElement('button')
+    const voteError = document.createElement('div')
+    voteError.setAttribute('role', 'alert')
+    const clockText = document.createElement('div')
+    clockText.setAttribute('aria-label', 'Server turn clock')
+    const kicks = document.createElement('div')
+    pausePanel.append(pauseText, voteButton, voteError, clockText, kicks)
+    document.body.append(pausePanel)
+    const renderPause = () => {
+        if (!pauseState) { pauseText.textContent = 'Loading server pause status…'; voteButton.disabled = true; return }
+        const remaining = pauseState.required.filter(p => !pauseState.consent.includes(p))
+        pauseText.textContent = (pauseState.status === 'paused' ? 'Fully paused' : pauseState.status === 'pausePending'
+            ? 'Pause pending — finishing active turns' : 'Running') +
+            ` · ${pauseState.consent.length}/${pauseState.required.length} ${pauseState.phase} votes · Remaining voters: ${remaining.join(', ') || 'none'}`
+        voteButton.textContent = pauseState.phase === 'resume' ? 'Vote to resume' : 'Vote to pause'
+        voteButton.setAttribute('aria-label', voteButton.textContent)
+        voteButton.disabled = !pauseState.required.includes(clockBoard?.playerIndex) ||
+            pauseState.consent.includes(clockBoard?.playerIndex) || pauseState.status === 'pausePending'
+        kicks.textContent = ''
+        if (clockBoard?.playerIndex === 1 && pauseState.status === 'paused') {
+            for (const seat of pauseState.required.filter(p => p !== 1)) {
+                const button = document.createElement('button')
+                button.textContent = `Kick player ${seat}`
+                button.setAttribute('aria-label', button.textContent)
+                button.onclick = async () => {
+                    const ack = await onlineSession.kickPlayer(gameID, seat)
+                    if (socket !== onlineSocket) return
+                    voteError.textContent = ack.ok ? `Player ${seat} removed` : `Kick rejected: ${ack.error}`
+                }
+                kicks.append(button)
+            }
+        }
+    }
+    voteButton.onclick = async () => {
+        if (!pauseState || voteButton.disabled) return
+        voteButton.disabled = true
+        const ack = await onlineSession.request('game:pauseVote', {gameID, phase: pauseState.phase,
+            cycle: pauseState.cycle, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
+        if (socket !== onlineSocket) return
+        if (ack.ok) { voteError.textContent = ''; acceptPause(ack.state) }
+        else {
+            voteError.textContent = `Vote rejected: ${ack.error}. Refreshing server state…`
+            await onlineSession.openGame(gameID)
+        }
+        renderPause()
+    }
+    const acceptPause = row => {
+        if (socket !== onlineSocket || row?.gameID !== gameID || !Number.isSafeInteger(row.revision) ||
+                (pauseState && row.revision <= pauseState.revision) || !Array.isArray(row.required) ||
+                !Array.isArray(row.consent) || !['running', 'pausePending', 'paused'].includes(row.status)) return
+        pauseState = row
+        onlinePauseStatus = row.status
+        if (row.status === 'paused') {
+            playerClock = null
+            clockText.textContent = 'Server clock: 0.0 s · frozen (no active turns)'
+            applyPlayerClock()
+            gameEvent.waitingMode = true
+            nextTurnButton.disableClick()
+            undoButton.disableClick()
+            nextTurnPauseInterface.visible = false
+        }
+        if (row.status === 'running' && row.pendingTurns?.some(key => Number(key.split(':')[3]) === clockBoard?.playerIndex)) unfreezeGame()
+        renderPause()
+    }
     let playerClock = null
     let clockBoard = null
     const applyPlayerClock = () => {
@@ -667,6 +746,7 @@ function SetupServerCommunicationLogic(gameID) {
     const reconcileClockBoard = board => {
         clockBoard = {round: board.gameRound, playerIndex: board.whooseTurn}
         applyPlayerClock()
+        renderPause()
     }
     // Every recorded action of this game is streamed as game:action (options/actionStream.js); a refusal's resync
     // board is loaded by resyncBoard.
@@ -675,6 +755,8 @@ function SetupServerCommunicationLogic(gameID) {
         target.on(event, handler)
         listeners.push([target, event, handler])
     }
+    on(socket, 'game:clockState', acceptPause)
+    renderPause()
     on(socket, 'game:recovery', row => {
         if (row.gameID !== gameID) return
         (socket.recoveryEpochs ||= {})[gameID] = row.recoveryEpoch
@@ -698,6 +780,7 @@ function SetupServerCommunicationLogic(gameID) {
         playerClock = {...row, round, component, turn,
             serverOffset: row.serverTimestamp - performance.now()}
         applyPlayerClock()
+        clockText.textContent = `Server clock: ${(row.remainingMs / 1000).toFixed(1)} s · ${row.running ? 'running' : 'frozen'}`
     })
     document.getElementById('online-recovery')?.remove()
     // The host kicks a seat from the DevTools console: kick(playerIndex).
@@ -1002,7 +1085,7 @@ function SetupServerCommunicationLogic(gameID) {
     })
     requestCurrentGame()
     SendNextTurn = () => {
-        if (kicked) return
+        if (kicked || onlinePauseStatus === 'paused') return
         if (failed || !socket.connected) { fail('Connection lost.'); return }
         console.log('SendNextTurn')
         console.trace('SendNextTurn called')
