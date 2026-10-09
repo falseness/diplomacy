@@ -456,7 +456,7 @@ function showOnlinePanel(label, message) {
     panel.id = 'online-recovery'
     panel.setAttribute('role', 'alertdialog')
     panel.setAttribute('aria-label', label)
-    panel.style.cssText = 'position:fixed;inset:30% 10% auto;z-index:10000;padding:24px;background:white;color:black;text-align:center;border:2px solid #444;font:20px sans-serif'
+    panel.style.cssText = 'position:fixed;inset:30% 10% auto;z-index:10000;padding:24px;background:white;color:black;text-align:center;border:2px solid #444;font:20px sans-serif;overflow-wrap:anywhere'
     const text = document.createElement('p')
     text.textContent = message
     panel.append(text)
@@ -489,10 +489,12 @@ let onlineGameFreeze = null
 
 // The server runs other rules code (an ack RULES_VERSION_MISMATCH, protocol doc
 // section 2.7): freeze the open game and offer a reload that fetches the new client.
-function showRulesVersionPanel() {
+function showRulesVersionPanel(expected, signIn = false) {
     if (onlineGameFreeze) onlineGameFreeze()
     const button = showOnlinePanel('New version available',
-        'A new version of the game is available. Reload the page to keep playing online.')
+        'A new version of the game is available. ' +
+        (signIn ? 'Sign-in failed (server): RULES_VERSION_MISMATCH. ' : '') +
+        'Reload the page to keep playing online.')
     button('Reload', () => location.reload()).focus()
 }
 

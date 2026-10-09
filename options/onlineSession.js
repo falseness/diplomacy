@@ -26,6 +26,12 @@ function clearStoredSession() {
     try { localStorage.removeItem(ONLINE_SESSION_KEY) } catch (error) {}
 }
 
+// Only bounded identifiers may reach sign-in diagnostics or status text.
+function onlineErrorCode(code) {
+    return typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code) && code.trim() === code
+        ? code : 'UNKNOWN_ERROR'
+}
+
 class OnlineSession {
     constructor() {
         this.socket = null
@@ -34,6 +40,8 @@ class OnlineSession {
         this.openGameID = null
         // The account:mergeTutorial request of the last sign-in (resolves when it settles).
         this.tutorialSync = null
+        this.lastSignInError = null
+        this.signInAttempt = 0
     }
     connect() {
         if (this.socket) return this.socket
@@ -50,15 +58,19 @@ class OnlineSession {
         return socket
     }
     // Resolves the ack, or {ok: false, error: 'TIMEOUT'} when none arrives within timeoutMs.
-    request(event, payload, timeoutMs = ONLINE_ACK_TIMEOUT) {
+    request(event, payload, timeoutMs = ONLINE_ACK_TIMEOUT, isCurrent = () => true) {
         const socket = this.connect()
         return new Promise(resolve => {
-            const timer = setTimeout(() => resolve({ok: false, error: 'TIMEOUT'}), timeoutMs)
+            let settled = false
+            const timer = setTimeout(() => { settled = true; resolve({ok: false, error: 'TIMEOUT'}) }, timeoutMs)
             socket.emit(event, payload, ack => {
+                if (settled) return
+                settled = true
                 clearTimeout(timer)
-                const reply = ack && typeof ack === 'object' ? ack : {ok: false, error: 'BAD_ACK'}
+                if (!isCurrent()) return resolve({ok: false, error: 'CANCELLED'})
+                const reply = ack && typeof ack === 'object' && !Array.isArray(ack) && typeof ack.ok === 'boolean' ? ack : {ok: false, error: 'BAD_ACK'}
                 if (reply.error === 'RULES_VERSION_MISMATCH' && typeof showRulesVersionPanel === 'function')
-                    showRulesVersionPanel(reply.expected)
+                    showRulesVersionPanel(reply.expected, event === 'auth:google')
                 if (reply.error === 'OUTDATED_CLIENT' && typeof showOutdatedClientPanel === 'function')
                     showOutdatedClientPanel()
                 resolve(reply)
@@ -91,13 +103,36 @@ class OnlineSession {
         }
         return null
     }
+    cancelSignIn() {
+        this.signInAttempt++
+        this.lastSignInError = null
+    }
     async signInWithGoogle(idToken) {
-        const ack = await this.request('auth:google', {idToken, rulesVersion: ONLINE_RULES_VERSION})
-        if (!ack.ok) return null
-        storeSession(ack.sessionToken)
-        this.account = ack.account
-        this.tutorialSync = this.syncTutorialProgress()
-        return this.account
+        const attempt = ++this.signInAttempt
+        this.lastSignInError = null
+        const fail = (source, code) => {
+            if (attempt === this.signInAttempt) this.lastSignInError = {source, code}
+            return null
+        }
+        if (typeof idToken !== 'string' || !idToken.trim())
+            return fail('client-detected Google sign-in', 'GOOGLE_CREDENTIAL_MISSING')
+        try {
+            const ack = await this.request('auth:google', {idToken, rulesVersion: ONLINE_RULES_VERSION},
+                ONLINE_ACK_TIMEOUT, () => attempt === this.signInAttempt)
+            if (attempt !== this.signInAttempt) return null
+            if (!ack || typeof ack !== 'object' || Array.isArray(ack) || typeof ack.ok !== 'boolean')
+                return fail('protocol', 'BAD_ACK')
+            if (!ack.ok) {
+                const code = onlineErrorCode(ack.error)
+                return fail(code === 'TIMEOUT' ? 'connection' : code === 'BAD_ACK' ? 'protocol' : 'server', code)
+            }
+            storeSession(ack.sessionToken)
+            this.account = ack.account
+            this.tutorialSync = this.syncTutorialProgress()
+            return this.account
+        } catch (error) {
+            return fail('client', 'CLIENT_ERROR')
+        }
     }
     // Unites the passed tutorials of this browser and of the account (protocol doc 2.6).
     // Not awaited by sign-in: a server without account:mergeTutorial only times out here.
@@ -105,9 +140,9 @@ class OnlineSession {
         try {
             const ack = await this.request('account:mergeTutorial', {passed: readTutorialPassed()})
             if (ack.ok && Array.isArray(ack.passed)) mergeTutorialPassed(ack.passed)
-            else console.warn('tutorial progress sync failed:', ack.error)
+            else console.warn('tutorial progress sync failed:', onlineErrorCode(ack.error))
         } catch (error) {
-            console.warn('tutorial progress sync failed:', error)
+            console.warn('tutorial progress sync failed: CLIENT_ERROR')
         }
     }
     // Resolves the ack; a successful rename updates the signed-in account.

@@ -778,7 +778,7 @@ class SignInTree {
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         this.buttons = [Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', _menu.setTree, parent, true, _menu)]
     }
-    // Google's button is the only DOM element of the menu; it lives while this screen is shown.
+    // Google's button and the wrapping status live only while this screen is shown.
     enter() {
         this.leave()
         const div = this.container = document.createElement('div')
@@ -788,27 +788,57 @@ class SignInTree {
         // Clicks on Google's button must not reach the canvas menu below it.
         div.addEventListener('click', event => event.stopPropagation())
         document.body.append(div)
-        this.status.text = 'loading Google sign-in…'
+        const status = this.statusElement = document.createElement('div')
+        status.style.cssText = `position:absolute;left:5%;width:90%;top:${HEIGHT * 0.55 / devicePixelRatio}px;` +
+            'text-align:center;font:16px/1.4 sans-serif;color:#595959;overflow-wrap:anywhere;pointer-events:none'
+        status.setAttribute('role', 'status')
+        document.body.append(status)
+        this.setStatus('loading Google sign-in…')
         loadGoogleIdentity().then(() => {
             if (this.container !== div) return
-            this.status.text = ''
-            renderGoogleButton(div, credential => this.signIn(credential))
+            this.setStatus('')
+            try {
+                renderGoogleButton(div, credential => { if (this.container === div) this.signIn(credential) })
+            } catch (error) {
+                this.setStatus('Sign-in failed (client): CLIENT_ERROR. Go back and reopen to retry.')
+            }
         }, () => {
-            if (this.container === div) this.status.text = 'could not load Google sign-in'
+            if (this.container === div) this.setStatus('Sign-in failed (client-detected Google sign-in): GOOGLE_SCRIPT_LOAD_FAILED. Go back and reopen to retry.')
         })
     }
+    setStatus(text) {
+        this.status.text = text
+        if (this.statusElement) {
+            this.statusElement.textContent = text
+            // The actionable recovery panel carries the same code and reload guidance.
+            this.statusElement.style.visibility = text.includes('RULES_VERSION_MISMATCH') &&
+                document.getElementById('online-recovery') ? 'hidden' : 'visible'
+        }
+    }
     leave() {
+        this.attempt = (this.attempt || 0) + 1
+        onlineSession.cancelSignIn()
         this.container?.remove()
-        this.container = null
+        this.statusElement?.remove()
+        this.container = this.statusElement = null
     }
     async signIn(credential) {
-        this.status.text = 'signing in…'
-        const account = await onlineSession.signInWithGoogle(credential)
-        if (this.menu.selectedTree !== this) return
+        const attempt = this.attempt = (this.attempt || 0) + 1
+        this.setStatus('signing in…')
+        let account
+        try {
+            account = await onlineSession.signInWithGoogle(credential)
+        } catch (error) {
+            if (attempt === this.attempt) onlineSession.lastSignInError = {source: 'client', code: 'CLIENT_ERROR'}
+        }
+        if (attempt !== this.attempt || this.menu.selectedTree !== this) return
         if (!account) {
-            this.status.text = 'sign-in failed, try again'
+            const error = onlineSession.lastSignInError || {source: 'client', code: 'CLIENT_ERROR'}
+            this.setStatus(`Sign-in failed (${error.source}): ${error.code}. ` +
+                (error.code === 'RULES_VERSION_MISMATCH' ? 'Reload the page to try again.' : 'Go back and reopen to retry.'))
             return
         }
+        this.setStatus('')
         this.menu.onlineHub.setAccount(account)
         this.menu.setTree(this.menu.onlineHub)
     }
@@ -817,7 +847,6 @@ class SignInTree {
     }
     draw(ctx) {
         this.title.draw(ctx)
-        this.status.draw(ctx)
         for (const button of this.buttons) button.draw(ctx)
     }
 }
