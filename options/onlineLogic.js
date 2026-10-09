@@ -92,7 +92,11 @@ const onlineObservation = {
             const key = cell.x + ',' + cell.y
             const localHex = grid.getHexagon(cell)
             const observedHex = this.hexagons.get(key)
-            const affected = changed.has(key)
+            // Visibility transitions belong to the recipient, not necessarily to
+            // the actor's changed cells (e.g. an ally walks away from an enemy).
+            // Retire all pictures on a tombstone and restore newly disclosed cells.
+            const visibilityChanged = cell.colour === null || localHex.unknown || observedHex?.hexagon.unknown
+            const affected = changed.has(key) || visibilityChanged
             const building = cell.building
             if (Object.hasOwn(cell, 'building') && (affected || building?.owner === message.actorSeat ||
                     this.buildings.get(key)?.actor === message.actorSeat)) {
@@ -102,7 +106,7 @@ const onlineObservation = {
             }
             // Capture trails include cells without a unit. Keep their colours,
             // and remember the actor so undo can restore neutral/previous land.
-            if (cell.colour === message.actorSeat || observedHex?.actor === message.actorSeat ||
+            if (visibilityChanged || cell.colour === message.actorSeat || observedHex?.actor === message.actorSeat ||
                     localHex.playerColor === message.actorSeat) {
                 if (cell.colour === null || (Number.isInteger(cell.colour) && players[cell.colour])) {
                     const suburb = typeof cell.isSuburb === 'boolean' ? cell.isSuburb :
