@@ -89,7 +89,15 @@ def preflight(roots, dry):
 
 def finish(client, server):
     # Retain flock while the privileged child recovers from interruption.
-    child = subprocess.Popen(['sudo', '-n', 'python3', '-B', str(client / 'deploy/orchestrate.py'), str(client), str(server)], start_new_session=True)
+    command = ['sudo', '-n']
+    hold = os.environ.get('DIPLOMACY_RECOVERY_HOLD')
+    if hold:
+        if hold != '2e456b63-6c57-4014-8025-0ea0a16d4505':
+            raise RuntimeError('Unknown recovery maintenance target')
+        # sudo's env_reset otherwise silently turns this into a normal release.
+        command += ['env', 'DIPLOMACY_RECOVERY_HOLD=' + hold]
+    command += ['python3', '-B', str(client / 'deploy/orchestrate.py'), str(client), str(server)]
+    child = subprocess.Popen(command, start_new_session=True)
     handlers = {}
     interrupted = False
     def forward(signum, frame):
