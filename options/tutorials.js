@@ -674,68 +674,6 @@ function createTutorial11Map() {
     return map
 }
 
-function createTutorial12Map() {
-    // Scout first: blue's 3 archers stand on the plain (x=8) right behind a ridge of hills (x=7 rows 1..7) that hides
-    // them from red's units on the plain. No unit starts on a hill or a mountain (TASK-731: an archer there
-    // once read as one standing on a mountain). Under fog of war blue only moves through hexes red sees, so a
-    // hidden blue army waits. Marching at the ridge blind (what SimpleAiPlayer does for red) walks red into their range
-    // without a target and red loses everything by round 3. The KOHb (3,4) can ride 2 hexes onto the lone lookout hill
-    // (5,4), see over the ridge, and ride back out of range in the same turn; the revealed archers come down off the
-    // ridge into the open, where red's archers step onto the hills (3,3) and (3,5) and shoot them from 3 hexes, out of
-    // a plain archer's range. The economy is off for both sides: no towns, so the upkeep would bankrupt blue.
-    // Terrain (TASK-743): mountains cap both ends of the ridge (6..7, 0) and (6..7, 8), so the only way to see
-    // behind it is from a hill; lakes and a rock in the corners, a pond (11,8)/(12,8) behind blue; bushes on the
-    // flanks of red's plain (4,1)/(4,7)/(1,7) and behind blue's line, all off the hill posts' fire lines.
-    let hills = [[5, 4], [3, 3], [3, 5]]
-    for (let y = 1; y <= 7; ++y) {
-        hills.push([7, y])
-    }
-    let lakes = [[0, 0], [1, 0], [0, 8], [13, 0], [14, 0], [14, 1], [11, 8], [12, 8], [14, 8]]
-    let mountains = [[7, 0], [7, 8], [6, 0], [6, 8], [0, 1]]
-    let bushes = [[12, 2], [12, 6], [13, 4], [4, 1], [4, 7], [1, 7], [9, 0], [9, 8]]
-    let map = new GameMap(
-        {x: 15, y: 9},
-        [
-            {
-                rgb: {r: 208, g: 208, b: 208},
-                towns: []
-            },
-            {
-                rgb: {r: 255, g: 0, b: 0},
-                economyEnabled: false,
-                towns: [],
-                units: [
-                    {x: 3, y: 4, type: KOHb},
-                    {x: 2, y: 3, type: Archer},
-                    {x: 2, y: 5, type: Archer},
-                    {x: 1, y: 3, type: Normchel},
-                    {x: 1, y: 4, type: Normchel}
-                ]
-            },
-            {
-                rgb: {r: 98, g: 168, b: 222},
-                playerType: 'SimpleAiPlayer',
-                economyEnabled: false,
-                towns: [],
-                units: [
-                    {x: 8, y: 3, type: Archer},
-                    {x: 8, y: 4, type: Archer},
-                    {x: 8, y: 5, type: Archer},
-                    {x: 10, y: 3, type: Normchel},
-                    {x: 10, y: 5, type: Normchel}
-                ]
-            }
-        ],
-        [],
-        coordDictionary(lakes),
-        coordDictionary(mountains),
-        coordDictionary(bushes),
-        coordDictionary(hills)
-    )
-    map.testName = 'tutorial 12'
-    return map
-}
-
 function createTutorial13Map() {
     // Escort the catapults: blue's town (14,4) sits in a pocket of mountains closed on the west by three walls
     // (12,3)-(12,5). Archers on the towers (14,3) and (14,5) shoot 3 hexes over anything, so every hex in front of
@@ -1002,12 +940,11 @@ const tutorials = [
     {id: 'tutorial-10', title: 'Tutorial 10: Hold the Bridge', pass: 'enemyUnitsDead', get map() { return createTutorial10Map() }},
     {id: 'tutorial-11', title: 'Tutorial 11: Rotate and Heal', pass: 'surviveRounds', rounds: 12,
         get map() { return createTutorial11Map() }},
-    {id: 'tutorial-12', title: 'Tutorial 12: Scout First', pass: 'enemyUnitsDead', get map() { return createTutorial12Map() }},
-    {id: 'tutorial-13', title: 'Tutorial 13: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
+    {id: 'tutorial-13', title: 'Tutorial 12: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-15', title: 'Tutorial 14: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+    {id: 'tutorial-15', title: 'Tutorial 13: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-16', title: 'Tutorial 15: Close the Portals', pass: 'coopVictory', get map() { return createTutorial16Map() }}
+    {id: 'tutorial-16', title: 'Tutorial 14: Close the Portals', pass: 'coopVictory', get map() { return createTutorial16Map() }}
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
 // co-op wave schedule follow it) and suddenDeathRound (default the normal round 40).
