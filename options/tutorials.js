@@ -616,20 +616,16 @@ function createTutorial10Map() {
 }
 
 function createTutorial11Map() {
-    // Rotate and heal: red's town (1,4) heals every unit standing on it or its 6 suburbs, a normchel by 3 a
-    // round, but only in a round it was not hit. Red's 3 normchels start wounded (hp 2, 3, 3) on the suburbs (2,4), (1,3), (2,5).
-    // Blue's first wave (4 noobs and a normchel, columns 6..7) arrives at once; the second (2 noobs and a
-    // normchel, columns 14..15) arrives about round 4, after the first is worn down. Charging out with the
-    // wounded normchels (what SimpleAiPlayer does) leaves the suburbs, so nothing heals and red loses its units
-    // and then the town by round 7. Holding the suburbs, striking only what comes next to them, and pulling a
-    // unit at hp 2 or less back onto a quiet suburb hex keeps red's town past round 12. The economy is off for
-    // both sides: no production, and blue (no town) does not go bankrupt. Terrain (TASK-743): lakes behind the
-    // town's corners and mountain shoulders on the field's north and south edges bring both waves onto the town's
-    // front, so the back suburbs stay quiet for healing; bushes (2,1)/(2,7) beside the town, a wood on the field
-    // edges and a pond (10,4)/(11,4)/(11,5) on the second wave's road. Every suburb hex stays free.
-    let lakes = [[0, 0], [0, 1], [1, 0], [0, 7], [0, 8], [1, 8], [10, 4], [11, 4], [11, 5]]
-    let mountains = [[3, 0], [4, 0], [5, 0], [3, 8], [4, 8], [5, 8], [8, 0], [9, 0], [8, 8]]
-    let bushes = [[2, 1], [2, 7], [8, 1], [9, 1], [8, 7], [9, 7], [12, 2], [12, 6], [13, 6]]
+    // Rotate and heal: three wounded normchels and the town's noob face twelve enemies.
+    // Keep the six suburbs clear for healing. The inner rocks split the approach into
+    // a central fight and flank paths, giving injured fighters room to rotate behind
+    // fresh ones. Every blue unit can join under normal fog; no remote idle wave.
+    // Lakes behind town and the eastern pond, mountain shoulders and wooded flanks
+    // preserve the landscape. Economy stays off; survive twelve rounds with the
+    // original army. Charging and standing still both lose in the balance controls.
+    let lakes = [[0, 0], [0, 1], [1, 0], [0, 7], [0, 8], [1, 8], [10, 4], [11, 4], [11, 5], [10, 5], [12, 4]]
+    let mountains = [[3, 0], [4, 0], [5, 0], [3, 8], [4, 8], [5, 8], [8, 0], [9, 0], [8, 8], [9, 8], [10, 0], [3, 2], [3, 6], [3, 3], [2, 2], [2, 6]]
+    let bushes = [[2, 1], [2, 7], [8, 1], [9, 1], [8, 7], [9, 7], [12, 2], [12, 6], [13, 6], [7, 1], [7, 7], [10, 7]]
     let map = new GameMap(
         {x: 16, y: 9},
         [
@@ -658,9 +654,13 @@ function createTutorial11Map() {
                     {x: 6, y: 5, type: Noob},
                     {x: 6, y: 6, type: Noob},
                     {x: 7, y: 4, type: Normchel},
-                    {x: 14, y: 3, type: Noob},
-                    {x: 14, y: 4, type: Noob},
-                    {x: 15, y: 4, type: Normchel}
+                    {x: 6, y: 1, type: Noob},
+                    {x: 6, y: 2, type: Noob},
+                    {x: 7, y: 5, type: Normchel},
+                    {x: 5, y: 1, type: Noob},
+                    {x: 5, y: 7, type: Noob},
+                    {x: 6, y: 7, type: Noob},
+                    {x: 7, y: 3, type: Noob}
                 ]
             }
         ],
