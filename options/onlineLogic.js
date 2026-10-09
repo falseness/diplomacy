@@ -765,8 +765,9 @@ function SetupServerCommunicationLogic(gameID) {
     }
     // Every recorded action of this game is streamed as game:action (options/actionStream.js); a refusal's resync
     // board is loaded by resyncBoard.
-    onlineActionStream()?.start(socket, gameID, resyncBoard, () => {
+    const reopenTurn = () => {
         if (socket !== onlineSocket || failed) return
+        onlineActionStream()?.restart()
         gameEvent.waitingMode = true
         nextTurnButton.disableClick()
         undoButton.disableClick()
@@ -775,7 +776,8 @@ function SetupServerCommunicationLogic(gameID) {
         acceptedBoard = null
         gameDiffHandler.reset(gameID)
         requestCurrentGame()
-    })
+    }
+    onlineActionStream()?.start(socket, gameID, resyncBoard, reopenTurn)
     const on = (target, event, handler) => {
         const currentHandler = (...args) => {
             if (socket === onlineSocket && listeners === onlineListeners) handler(...args)
@@ -864,7 +866,7 @@ function SetupServerCommunicationLogic(gameID) {
         onlineAlliedGoldDelivery.clear(gameID)
         fail('Connection lost.')
     })
-    on(socket, 'error', error => error === 'KICKED' ? removedByHost()
+    on(socket, 'error', error => error === 'STALE_TURN' || error === 'STALE_RECOVERY' ? reopenTurn() : error === 'KICKED' ? removedByHost()
         : fail(error === 'OUTDATED_CLIENT' ? 'This page is outdated: please reload it.' : 'The server rejected the action.'))
     onlineCommit = null
     gameDiffHandler.reset(gameID)
@@ -909,7 +911,7 @@ function SetupServerCommunicationLogic(gameID) {
         }
         const continuing = !!(board.gameSettings?.coop && (!board.hiddenInfo || board.coopContinuing) && acceptedBoard && active &&
             (!gameEvent.waitingMode || onlineActionStream()?.flushed) && board.gameRound === acceptedBoard.gameRound &&
-            board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
+            board.whooseTurn === whooseTurn && board.turnIdentity === acceptedBoard.turnIdentity && !board.gameSettings.coop.result)
         if (continuing && typeof BROWSER_PROTOCOL !== 'undefined' && BROWSER_PROTOCOL === 2 && onlineActionStream()) {
             const update = board.coopContinuing
             if (!update || !Number.isSafeInteger(update.lastSeq) || !update.snapshot ||
@@ -974,10 +976,10 @@ function SetupServerCommunicationLogic(gameID) {
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
         acceptedBoard = board
-        onlineActionStream()?.restart(board.actionResume)
+        onlineActionStream()?.restart(board.actionResume, board.turnIdentity)
         if (active && board.actionResume?.ended) {
             // End reached the server before the connection dropped; finish its commit.
-            socket.emit('nextTurn', JSON.stringify({gameID, endHash: stateHash(), recoveryEpoch: socket.recoveryEpochs?.[gameID]}))
+            socket.emit('nextTurn', JSON.stringify({gameID, endHash: stateHash(), turnIdentity: board.turnIdentity, recoveryEpoch: socket.recoveryEpochs?.[gameID]}))
             return 'continued'
         }
         if (!board.gameSettings?.coop) competitiveDelivery = {round: board.gameRound, active}
@@ -1120,12 +1122,13 @@ function SetupServerCommunicationLogic(gameID) {
         // Protocol 2 (TASK-687): no board, only the hash of the turn's 'end' (actionRecorder.js recordEnd); the server
         // commits its replay of the streamed actions (TASK-684), so send after the stream flushed.
         const recoveryEpoch = socket.recoveryEpochs?.[gameID]
+        const turnIdentity = acceptedBoard?.turnIdentity
         const send = () => {
             if (socket === onlineSocket && !failed && recoveryEpoch === socket.recoveryEpochs?.[gameID]) {
                 // The queued end may have waited for reveal acknowledgements.
                 const ended = (actionLog.current() || actionLog.lastTurn())?.actions.at(-1)
                 const endHash = ended?.action.t === 'end' ? ended.hash : stateHash()
-                socket.emit('nextTurn', JSON.stringify({gameID: gameID, endHash: endHash, recoveryEpoch}))
+                socket.emit('nextTurn', JSON.stringify({gameID: gameID, endHash: endHash, recoveryEpoch, turnIdentity}))
             }
         }
         const stream = onlineActionStream()

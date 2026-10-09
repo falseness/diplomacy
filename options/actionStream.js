@@ -26,6 +26,7 @@ const ActionStream = {
     gameID: null,
     // The seq of the last queued action of this turn.
     seq: 0,
+    turnIdentity: null,
     // [{seq, action, hash}] not sent yet; inFlight: the one sent entry awaiting its ack.
     queue: [],
     inFlight: null,
@@ -58,10 +59,11 @@ const ActionStream = {
         this.onConflict = null
     },
     // The unsent and in-flight actions belong to a turn the page no longer shows.
-    restart(resume = null) {
+    restart(resume = null, turnIdentity = null) {
         if (!this.socket)
             return
         this.drop()
+        this.turnIdentity = turnIdentity
         ++this.counters.restarts
         if (resume && Number.isSafeInteger(resume.lastSeq) && resume.lastSeq >= 0 && Array.isArray(resume.accepted)) {
             this.seq = resume.lastSeq
@@ -71,6 +73,7 @@ const ActionStream = {
         actionLog.start({player: whooseTurn, round: gameRound}, this.accepted)
     },
     drop() {
+        this.turnIdentity = null
         this.flushed = null
         clearTimeout(this.timer)
         this.timer = null
@@ -82,7 +85,7 @@ const ActionStream = {
     enqueue(action, hash) {
         if (!this.socket)
             return
-        this.queue.push({seq: ++this.seq, action: JSON.parse(JSON.stringify(action)), hash: hash, recoveryEpoch: this.socket.recoveryEpochs?.[this.gameID]})
+        this.queue.push({seq: ++this.seq, action: JSON.parse(JSON.stringify(action)), hash: hash, turnIdentity: this.turnIdentity, recoveryEpoch: this.socket.recoveryEpochs?.[this.gameID]})
         this.pump()
     },
     // Calls send once every queued action has been acked (at once when nothing is pending or no stream is attached);
@@ -120,7 +123,7 @@ const ActionStream = {
         ++this.counters.sent
         this.timer = setTimeout(() => this.settle(entry, {ok: false, seq: entry.seq, reason: 'TIMEOUT'}),
             ONLINE_ACK_TIMEOUT)
-        this.socket.emit('game:action', {gameID: this.gameID, seq: entry.seq, action: entry.action, hash: entry.hash, recoveryEpoch: entry.recoveryEpoch},
+        this.socket.emit('game:action', {gameID: this.gameID, seq: entry.seq, action: entry.action, hash: entry.hash, turnIdentity: entry.turnIdentity, recoveryEpoch: entry.recoveryEpoch},
             ack => this.settle(entry, ack))
     },
     settle(entry, ack) {
@@ -132,7 +135,7 @@ const ActionStream = {
         // A second page can consume our sequence. A cached ack then belongs to
         // its command; later sequences can also be ahead of this page. Reload
         // the full accepted prefix before allowing another command or commit.
-        const conflict = ack && (ack.reason === 'BAD_SEQ' ||
+        const conflict = ack && (ack.reason === 'BAD_SEQ' || ack.reason === 'STALE_TURN' || ack.reason === 'STALE_RECOVERY' ||
             (ack.ok === true && (ack.viewHash === undefined ? ack.hash : ack.viewHash) !== entry.hash))
         if (conflict && this.onConflict) {
             if (ack.ok === true) {
@@ -215,7 +218,12 @@ const ActionStream = {
             }
             const hash = stateHash()
             kept.push({action: entry.action, hash})
-            if (entry === this.inFlight) continue
+            if (entry === this.inFlight) {
+                // This sequence was not in the server's accepted prefix. Its
+                // eventual ack describes the action on this rebased board.
+                entry.hash = hash
+                continue
+            }
             this.queue.push({...entry, seq: ++this.seq, hash})
         }
         actionLog.start({player: whooseTurn, round: gameRound}, [...this.accepted, ...kept])
