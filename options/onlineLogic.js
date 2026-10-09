@@ -3,6 +3,7 @@ const DEFAULT_ONLINE_SERVER = 'wss://playdiplomacy.online:8080'
 
 let onlineLobby = null
 let onlineSocket = null
+let onlineGameClose = null
 let onlineCommit = null
 // [target, event, handler] of the open game; a lobby game's socket is the
 // signed-in session socket, which outlives the game and only loses these.
@@ -527,6 +528,8 @@ function showOutdatedClientPanel() {
 // Stops the open online game: the signed-in session socket stays connected for
 // the hub and only loses the game's listeners.
 function closeOnlineGameSocket() {
+    onlineGameClose?.()
+    onlineGameClose = null
     onlineSocket = null
     onlineGameFreeze = null
     onlineActionStream()?.stop()
@@ -554,7 +557,18 @@ function enterLobbyGame() {
 function SetupServerCommunicationLogic(gameID) {
     closeOnlineGameSocket()
     const socket = onlineSocket = onlineSession.connect()
+    onlineGameClose = () => socket.emit('game:close', {gameID})
     const listeners = onlineListeners
+    let playerClock = null
+    const applyPlayerClock = () => {
+        if (!playerClock || typeof timer === 'undefined' || !timer) return
+        // Async expiry belongs to the server, including its grace and freeze state.
+        // Display the server checkpoint without rewriting the canonical board timer.
+        timer.check = () => {}
+        Object.defineProperty(timer, 'timeLeft', {configurable: true, get: () =>
+            Math.max(0, playerClock.remainingMs - (playerClock.running && socket.connected
+                ? Date.now() - playerClock.receivedAt : 0))})
+    }
     // Every recorded action of this game is streamed as game:action (options/actionStream.js); a refusal's resync
     // board is loaded by resyncBoard.
     onlineActionStream()?.start(socket, gameID, resyncBoard)
@@ -562,6 +576,11 @@ function SetupServerCommunicationLogic(gameID) {
         target.on(event, handler)
         listeners.push([target, event, handler])
     }
+    on(socket, 'game:clock', row => {
+        if (socket !== onlineSocket || row.gameID !== gameID) return
+        playerClock = {...row, receivedAt: Date.now()}
+        applyPlayerClock()
+    })
     document.getElementById('online-recovery')?.remove()
     // The host kicks a seat from the DevTools console: kick(playerIndex).
     window.kick = async playerIndex => {
@@ -706,6 +725,7 @@ function SetupServerCommunicationLogic(gameID) {
             gameEvent.hideAll()
         }
         loadFromJson(JSON.stringify(board))
+        applyPlayerClock()
         onlineObservation.acceptBoard(board)
         if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
