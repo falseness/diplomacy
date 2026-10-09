@@ -677,7 +677,7 @@ function createTutorial11Map() {
 function createTutorial13Map() {
     // Escort the catapults: blue's town (14,4) sits in a pocket of mountains closed on the west by three walls
     // (12,3)-(12,5). Archers on the towers (14,3) and (14,5) shoot 3 hexes over anything, so every hex in front of
-    // the walls is under their arrows, and two noobs wait behind the walls. Three KOHb raiders (speed 4) wait in
+    // the walls is under their arrows, with two more tower archers behind the walls. Three KOHb raiders (speed 4) wait in
     // the fog east of a mountain ridge whose only pass is (6,3)-(6,5). Catapults are the only red units that hurt
     // buildings from range (2..5 hexes, 4 damage), but they have 1 hp and never hit units; nobody heals (red has
     // no town). Marching everything at the town (what SimpleAiPlayer does for red) sends the catapults and the
@@ -686,9 +686,9 @@ function createTutorial13Map() {
     // the catapults behind them kills the raiders where they cannot reach the catapults; then the catapults shoot
     // the towers from 5 hexes (out of the archers' reach), knock the walls down and bring the town to 0 hp, and a
     // normchel walks in. The economy is off for both sides: no production, and red (no town) does not go bankrupt.
-    let lakes = [[0, 0], [0, 1], [0, 8], [6, 2], [6, 6], [11, 8], [12, 8]]
-    let mountains = [[6, 0], [6, 1], [6, 7], [6, 8], [13, 2], [14, 2], [15, 2], [13, 5], [14, 6], [15, 5], [15, 0], [15, 8]]
-    let bushes = [[3, 0], [3, 8], [8, 1], [8, 7], [10, 0], [10, 8]]
+    let lakes = [[0, 0], [0, 1], [0, 8], [6, 2], [6, 6], [11, 8], [12, 8], [1, 0]]
+    let mountains = [[6, 0], [6, 1], [6, 7], [6, 8], [13, 2], [14, 2], [15, 2], [13, 5], [14, 6], [15, 5], [15, 0], [15, 8], [5, 0]]
+    let bushes = [[3, 0], [3, 8], [8, 1], [8, 7], [10, 0], [10, 8], [4, 8]]
     let map = new GameMap(
         {x: 16, y: 9},
         [
@@ -717,15 +717,15 @@ function createTutorial13Map() {
                 economyEnabled: false,
                 towns: [{x: 14, y: 4}],
                 walls: [{x: 12, y: 3}, {x: 12, y: 4}, {x: 12, y: 5}],
-                towers: [{x: 14, y: 3}, {x: 14, y: 5}],
+                towers: [{x: 14, y: 3}, {x: 14, y: 5}, {x: 15, y: 3}, {x: 15, y: 4}],
                 units: [
                     {x: 9, y: 3, type: KOHb},
                     {x: 9, y: 5, type: KOHb},
                     {x: 10, y: 4, type: KOHb},
                     {x: 14, y: 3, type: Archer},
                     {x: 14, y: 5, type: Archer},
-                    {x: 13, y: 3, type: Noob},
-                    {x: 13, y: 4, type: Noob}
+                    {x: 15, y: 3, type: Archer},
+                    {x: 15, y: 4, type: Archer}
                 ]
             }
         ],
