@@ -80,15 +80,13 @@ class Unit extends Entity {
         if (this.constructor.type)
             unit.displayName = DEMON_TYPES[this.constructor.type].name
         unit.info.dmg = this.dmg
-        // Foreign units have no moves row, so show their full speed instead.
+        // Preserve the independent speed row for foreign units.
         if (!this.isMyTurn)
             unit.info.speed = this.speed
 
         unit.canSkipMoves = this.isMyTurn && this.moves != 0
 
-        if (this.isMyTurn) {
-            unit.info.moves = this.moves + ' / ' + this.speed    
-        }
+        unit.info.moves = this.moves + ' / ' + this.speed
         if (this.player.showsUnitSalary)
             unit.info.salary = this.salary
         return unit
@@ -172,7 +170,7 @@ class Unit extends Entity {
     drawBars(ctx) {
         super.drawBars(ctx)
 
-        if (this.isMyTurn && (otherSettings.alwaysDisplayMovesBar || !this.isFullMoves))
+        if (otherSettings.alwaysDisplayMovesBar || !this.isFullMoves)
             this.movesBar.draw(ctx)
     }
     createCommandsFromDestinations(coords) {
