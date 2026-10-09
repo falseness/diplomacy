@@ -638,7 +638,7 @@ function SetupServerCommunicationLogic(gameID) {
         }
         // Protocol 2 supplies an authoritative filtered snapshot and accepted prefix.
         const continuing = !!(board.gameSettings?.coop && (!board.hiddenInfo || board.coopContinuing) && acceptedBoard && active &&
-            !gameEvent.waitingMode && board.gameRound === acceptedBoard.gameRound &&
+            (!gameEvent.waitingMode || onlineActionStream()?.flushed) && board.gameRound === acceptedBoard.gameRound &&
             board.whooseTurn === whooseTurn && !board.gameSettings.coop.result)
         if (continuing && typeof BROWSER_PROTOCOL !== 'undefined' && BROWSER_PROTOCOL === 2 && onlineActionStream()) {
             const update = board.coopContinuing
@@ -647,31 +647,39 @@ function SetupServerCommunicationLogic(gameID) {
                 fail('The server sent an incomplete turn update.')
                 return false
             }
-            onlineActionStream().continueFrom(update, () => {
-                gameEvent.removeSelection()
-                gameEvent.hideAll()
-                const cells = update.snapshot.cells.filter(cell =>
-                    JSON.stringify(packCellRecord(cell.x, cell.y)) !== JSON.stringify(cell))
-                applyCellDiff({...update.snapshot, cells})
-                // Cell application preserves object identity; restore authoritative
-                // list order too, since order participates in the state hash.
-                const order = (live, packed) => {
-                    const byCoord = new Map(live.map(value => [cellDiffKey(value.coord), value]))
-                    live.splice(0, live.length, ...packed.map(value => byCoord.get(cellDiffKey(value.coord))))
-                }
-                board.players.forEach((player, i) => {
-                    order(players[i].units, player.units)
-                    order(players[i].towns, player.towns)
-                    player.towns.forEach((town, j) => {
-                        order(players[i].towns[j].buildings, town.buildings)
-                        order(players[i].towns[j].buildingProduction, town.buildingProduction)
+            // Next Turn disables input while its end is still queued. Replay those
+            // commands as active, then retain the caller's waiting state.
+            const waiting = gameEvent.waitingMode
+            gameEvent.waitingMode = false
+            try {
+                onlineActionStream().continueFrom(update, () => {
+                    gameEvent.removeSelection()
+                    gameEvent.hideAll()
+                    const cells = update.snapshot.cells.filter(cell =>
+                        JSON.stringify(packCellRecord(cell.x, cell.y)) !== JSON.stringify(cell))
+                    applyCellDiff({...update.snapshot, cells})
+                    // Cell application preserves object identity; restore authoritative
+                    // list order too, since order participates in the state hash.
+                    const order = (live, packed) => {
+                        const byCoord = new Map(live.map(value => [cellDiffKey(value.coord), value]))
+                        live.splice(0, live.length, ...packed.map(value => byCoord.get(cellDiffKey(value.coord))))
+                    }
+                    board.players.forEach((player, i) => {
+                        order(players[i].units, player.units)
+                        order(players[i].towns, player.towns)
+                        player.towns.forEach((town, j) => {
+                            order(players[i].towns[j].buildings, town.buildings)
+                            order(players[i].towns[j].buildingProduction, town.buildingProduction)
+                        })
                     })
+                    for (const [live, packed] of [[external, board.external], [externalProduction, board.externalProduction],
+                        [nature, board.nature], [goldmines, board.goldmines]]) order(live, packed)
+                    gameSettings = board.gameSettings
+                    if (hiddenInfo) hiddenStatus = board.status
                 })
-                for (const [live, packed] of [[external, board.external], [externalProduction, board.externalProduction],
-                    [nature, board.nature], [goldmines, board.goldmines]]) order(live, packed)
-                gameSettings = board.gameSettings
-                if (hiddenInfo) hiddenStatus = board.status
-            })
+            } finally {
+                gameEvent.waitingMode = waiting
+            }
             acceptedBoard = board
             onlineObservation.acceptBoard(board)
             onlineCommit = commit
@@ -833,7 +841,7 @@ function SetupServerCommunicationLogic(gameID) {
         const send = () => {
             if (socket === onlineSocket && !failed) {
                 // The queued end may have waited for reveal acknowledgements.
-                const ended = actionLog.lastTurn()?.actions.at(-1)
+                const ended = (actionLog.current() || actionLog.lastTurn())?.actions.at(-1)
                 const endHash = ended?.action.t === 'end' ? ended.hash : stateHash()
                 socket.emit('nextTurn', JSON.stringify({gameID: gameID, endHash: endHash}))
             }
