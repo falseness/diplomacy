@@ -5,6 +5,20 @@
 // 'captureTowns' red owns every town of `targets` [{x, y}], 'surviveRounds' gameRound
 // reaches `rounds` while red still owns a town (a unit if the map gives red no town).
 // Unit classes load after this file, so each map is built on access.
+// First contact teaches moving through fog and concentrating two attacks.
+// Border scenery leaves the entire interior approach and combat area open.
+function createTutorial0Map() {
+    const map = new GameMap({x: 9, y: 7}, [
+        {rgb: {r: 208, g: 208, b: 208}, towns: []},
+        {rgb: {r: 255, g: 0, b: 0}, economyEnabled: false, towns: [],
+            units: [{x: 2, y: 3, type: Noob}, {x: 2, y: 4, type: Noob}]},
+        {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayer',
+            economyEnabled: false, towns: [], units: [{x: 7, y: 3, type: KOHb}]}
+    ], [], coordDictionary([[0, 0], [1, 0]]), coordDictionary([[7, 6], [8, 6]]), [])
+    map.testName = 'tutorial 0'
+    return map
+}
+
 function createTutorial1Map() {
     // Red stands on the left, blue on the right, along a hedge of bushes (column 5) with a
     // single gap at (5,3). Blue's two normchels stand in the hedge, its noob blocks the gap
@@ -864,6 +878,7 @@ function createTutorial15Map() {
 }
 
 const tutorials = [
+    {id: 'tutorial-0', title: 'Tutorial 0: First Contact', pass: 'enemyUnitsDead', get map() { return createTutorial0Map() }},
     {id: 'tutorial-1', title: 'Tutorial 1: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
     {id: 'tutorial-3', title: 'Tutorial 3: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
