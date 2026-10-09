@@ -556,17 +556,17 @@ function createTutorial10Map() {
     // Crossing the bridge (what SimpleAiPlayer does for red) gets red surrounded by the noobs on the open far
     // bank. Holding the exit with one normchel (the other relieves it when wounded) means only the unit on the
     // bridge can strike it, while red's archers shoot whoever queues on the bridge; once blue's numbers are
-    // gone red crosses and finishes the rest. Bushes and rocky corners frame both banks away from the bridge, so
+    // gone red crosses and finishes the rest. Broad river pools, short ridges and linked thickets frame both banks away from the bridge, so
     // the archers' lines of fire onto the bridge stay open. The economy is off for both sides: without towns the
     // upkeep would bankrupt blue's 10 units by round 8 and win the map for a red that just waits.
-    let lakes = [[4, 5], [6, 0], [6, 8], [4, 8]]
+    let lakes = [[4, 5], [6, 0], [6, 8], [4, 8], [4, 0], [4, 1], [4, 7], [6, 7]]
     for (let y = 0; y < 9; ++y) {
         if (y != 4) {
             lakes.push([5, y])
         }
     }
-    let mountains = [[0, 0], [1, 0], [0, 8], [10, 0], [10, 8]]
-    let bushes = [[1, 2], [2, 6], [1, 7], [8, 0], [9, 1], [8, 7], [9, 8]]
+    let mountains = [[0, 0], [1, 0], [0, 8], [10, 0], [10, 8], [1, 1], [1, 8], [2, 8], [10, 1], [10, 7]]
+    let bushes = [[1, 2], [2, 6], [1, 7], [8, 0], [9, 1], [8, 7], [9, 8], [0, 2], [1, 3], [1, 6], [2, 7], [8, 1], [9, 0], [8, 8], [9, 7]]
     let hills = [[3, 3]]
     let map = new GameMap(
         {x: 11, y: 9},
