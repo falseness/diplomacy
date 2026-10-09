@@ -234,11 +234,13 @@ class Town extends PreparingManufacture {
         return this.isRecentlyCaptured
     }
     destroy() {
+        // Flooding can replace a dependency before reaching the town. Its killed
+        // entry remains here until cleanup; destroying it again clears the new cell.
         for (let i = 0; i < this.buildings.length; ++i) {
-            this.buildings[i].destroy()
+            if (!this.buildings[i].killed) this.buildings[i].destroy()
         }
         for (let i = 0; i < this.buildingProduction.length; ++i) {
-            this.buildingProduction[i].destroy()
+            if (!this.buildingProduction[i].killed) this.buildingProduction[i].destroy()
         }
         for (let i = 0; i < this.suburbs.length; ++i) {
             this.suburbs[i].isSuburb = false

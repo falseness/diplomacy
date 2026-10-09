@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "43b063ef78b7aa78d08e611a24977d4897937d37684750355632bc9d035e3451",
+  "rulesVersion": "7298f26bc20a5234c265b8b5bd4cc747008d63d984794906685a90dae851cc0f",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -465,8 +465,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/town.js",
-      "sha256": "a40b2e521986cfaa62a06c236881484d8ffbdb7657735602e82725778f1bb1ad",
-      "bytes": 15699
+      "sha256": "6fd7af3a4f5f4ef6f0245999c71c00a700175cf4c1a604a24fee335ecbb48448",
+      "bytes": 15938
     },
     {
       "path": "ai/demon-config.js",
