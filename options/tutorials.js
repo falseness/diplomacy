@@ -794,7 +794,8 @@ function createTutorial15Map() {
     // walls, and the town still stands at round 16. Lakes guard the town's back corners; the mountain line
     // thickens at its ends (6,0),(6,8) and lakes (9..10,1),(9..10,7) funnel the field towards the road, so the wave
     // comes straight at the gate; bushes lie off the road (never in the towers' fire lines), and mountains close
-    // the far corners.
+    // the far corners. Connected ponds and thickets frame both sides of the open approach;
+    // short ridge spurs stay outside the towers' three-hex fire lanes.
     let band = (fromX, toX) => {
         let cells = []
         for (let x = fromX; x <= toX; ++x) {
@@ -804,9 +805,9 @@ function createTutorial15Map() {
         }
         return cells
     }
-    let mountains = [[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8], [17, 0], [17, 8], [6, 0], [6, 8]]
-    let lakes = [[0, 0], [0, 1], [0, 7], [0, 8], [9, 1], [10, 1], [9, 7], [10, 7]]
-    let bushes = [[1, 0], [1, 8], [8, 1], [7, 7], [12, 1], [12, 7], [13, 1]]
+    let mountains = [[5, 0], [5, 1], [5, 2], [5, 5], [5, 6], [5, 7], [5, 8], [17, 0], [17, 8], [6, 0], [6, 8], [7, 0], [7, 8], [16, 0], [16, 8]]
+    let lakes = [[0, 0], [0, 1], [0, 7], [0, 8], [9, 1], [10, 1], [9, 7], [10, 7], [9, 0], [10, 0], [11, 1], [9, 8], [10, 8], [11, 7]]
+    let bushes = [[1, 0], [1, 8], [8, 1], [7, 7], [12, 1], [12, 7], [13, 1], [12, 0], [13, 0], [13, 7], [12, 8], [13, 8]]
     let hills = []
     let road = []
     for (let x = 6; x <= 13; ++x) {
