@@ -201,6 +201,31 @@ const onlineObservation = {
     }
 }
 
+// Display-only allied balances. This closure never writes players or serialized rules state.
+const onlineAlliedGoldDelivery = (() => {
+    let gameID = null, round = null, revision = null, values = new Map()
+    const clear = id => { gameID = id; round = null; revision = null; values.clear() }
+    const accept = (data, owner) => {
+        if (!data || data.gameID !== gameID || data.gameRound !== round || data.revision !== revision) return
+        for (const [key, gold] of Object.entries(data.values || {})) {
+            const index = Number(key)
+            if (index === whooseTurn || (owner !== undefined && index !== owner) ||
+                    !players[index] || !players[whooseTurn]?.isAlliedWith(players[index])) continue
+            if (typeof gold === 'number' && Number.isFinite(gold)) values.set(index, gold)
+        }
+    }
+    const snapshot = board => {
+        round = board.gameRound; revision = board.coopCommit?.revision ?? null
+        values.clear(); accept(board.alliedGold)
+    }
+    return {cache: Object.freeze({get: index => values.has(index) ? values.get(index) : null}), clear, snapshot,
+        receive: message => {
+            if (Number.isSafeInteger(message.seq) && Number.isSafeInteger(message.actorSeat))
+                accept(message.alliedGold, message.actorSeat)
+        }}
+})()
+const onlineAlliedGold = onlineAlliedGoldDelivery.cache
+
 const gameDiffHandler = {
     gameID: null,
     lastSeq: 0,
@@ -211,6 +236,7 @@ const gameDiffHandler = {
         this.gameID = gameID
         this.lastSeq = lastSeq
         this.buffered.clear()
+        onlineAlliedGoldDelivery.clear(gameID)
         remoteEffects.clear()
         onlineObservation.clear()
     },
@@ -235,6 +261,7 @@ const gameDiffHandler = {
     apply(message) {
         if (typeof grid === 'undefined' || !grid)
             return null
+        onlineAlliedGoldDelivery.receive(message)
         if (message.observation) return onlineObservation.receive(message)
         const observing = onlineObservation.board === grid
         const diff = {...message.diff}
@@ -635,7 +662,11 @@ function SetupServerCommunicationLogic(gameID) {
     // The shipped Socket.IO 3.0 client reports transport startup errors on its manager.
     on(socket.io, 'error', () => fail(socket.connected ? 'Connection lost.' : 'Could not connect. Check your connection.'))
     on(socket, 'connect_error', () => fail('Could not connect. Check your connection.'))
-    on(socket, 'disconnect', () => fail('Connection lost.'))
+    on(socket, 'disconnect', () => {
+        if (socket !== onlineSocket) return
+        onlineAlliedGoldDelivery.clear(gameID)
+        fail('Connection lost.')
+    })
     on(socket, 'error', error => error === 'KICKED' ? removedByHost()
         : fail(error === 'OUTDATED_CLIENT' ? 'This page is outdated: please reload it.' : 'The server rejected the action.'))
     onlineCommit = null
@@ -719,6 +750,7 @@ function SetupServerCommunicationLogic(gameID) {
             }
             acceptedBoard = board
             onlineObservation.acceptBoard(board)
+            onlineAlliedGoldDelivery.snapshot(board)
             onlineCommit = commit
             return 'continued'
         }
@@ -732,6 +764,7 @@ function SetupServerCommunicationLogic(gameID) {
         loadFromJson(JSON.stringify(board))
         applyPlayerClock()
         onlineObservation.acceptBoard(board)
+        onlineAlliedGoldDelivery.snapshot(board)
         if (menu.visible) enterLobbyGame()
         // Waiting and newly joined recipients need bounds for the received map too.
         GameManager.updateCameraBorders()
@@ -771,6 +804,7 @@ function SetupServerCommunicationLogic(gameID) {
             gameEvent.hideAll()
         }
         loadFromJson(JSON.stringify(restored))
+        onlineAlliedGoldDelivery.snapshot(board)
         if (turnEnded) {
             // onlineNextTurn saved the remaining time into timers; the reloaded timer resumes from it.
             unfreezeGame()
