@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "7298f26bc20a5234c265b8b5bd4cc747008d63d984794906685a90dae851cc0f",
+  "rulesVersion": "716acffeb01b72e6057e5b63752a9a9e3478a1fb3423c9b64d4909d2b164eaa3",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -280,8 +280,8 @@
     },
     {
       "path": "options/onlineHubRows.js",
-      "sha256": "51f70a113f660f73865a91ad5f4b60adfcc97157ad8e1d57807186a9e2160768",
-      "bytes": 5016
+      "sha256": "f2d4af1a4375143027973126a1b8c66969029ed677ed289b2e09d4dce6e4d7f7",
+      "bytes": 5087
     },
     {
       "path": "menu/slotManager.js",
@@ -295,8 +295,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "0ae2679db98c46b3ef151aa1e8bf625645b1c9d6a075752fbe19639237bd04ff",
-      "bytes": 57722
+      "sha256": "a15a490cdca57978ea8c840bb80c95b0c139acb9c46bcf94cdb9d271c5c17f34",
+      "bytes": 58276
     },
     {
       "path": "sprites/hexagon.js",

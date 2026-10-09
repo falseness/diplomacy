@@ -8,6 +8,7 @@ function hubSettingsText(settings) {
         ? `co-op: humans ${settings.coop?.humans}, seed ${settings.coop?.seed}, size ${settings.coop?.size}`
         : `competitive: ${settings.mapName}, ${settings.players} players`]
     if (settings.fogOfWar) parts.push('fog')
+    if (settings.asyncMoves === true) parts.push('asynchronous moves')
     const timers = [...new Set(settings.timer || [])]
     if (timers.length) parts.push(timers.join('/') + ' timer')
     return parts.join(' · ')

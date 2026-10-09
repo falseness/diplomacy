@@ -21,6 +21,7 @@ function createLobbyStartOptions(controls) {
 // Status text for a lobby:create error code.
 const CREATE_LOBBY_ERROR_TEXT = {
     ALREADY_IN_LOBBY: 'you are already in a lobby',
+    INVALID_SETTINGS: 'the server rejected these settings',
     INVALID_BOARD: 'the server rejected this map',
     UNAUTHENTICATED: 'signed out, sign in again',
     TIMEOUT: 'no answer from the server',

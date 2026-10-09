@@ -573,6 +573,11 @@ class CreateLobbyTree extends OnlineGameSettings {
         super(_menu)
         this.menu = _menu
         this.creating = false
+        this.asyncMovesCheckBox = new ImageCheckBox('checkMark',
+            new Text(NaN, NaN, WIDTH * 0.03, 'asynchronous moves', 'black'), WIDTH * 0.025,
+            WIDTH * 0.28, this.firstY + this.intervalY * 2, WIDTH * 0.05, WIDTH * 0.05,
+            [4, 4, 4, 4], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+        this.asyncMovesCheckBox.mark = false
         this.status = new Text(WIDTH / 2, this.firstY + this.intervalY * 2.5, 0.03 * WIDTH, '', 'black')
         this.playButton = Menu.getButton(this.actionButtonPos, 'create', this.create, undefined, true, this)
         this.updateButtonsList()
@@ -580,6 +585,10 @@ class CreateLobbyTree extends OnlineGameSettings {
     enter() {
         this.creating = false
         this.status.text = ''
+    }
+    updateButtonsList() {
+        super.updateButtonsList()
+        if (this.asyncMovesCheckBox) this.buttons.push(this.asyncMovesCheckBox)
     }
     // The slider and checkbox values createLobbyStartOptions maps.
     get controls() {
@@ -604,7 +613,7 @@ class CreateLobbyTree extends OnlineGameSettings {
         try {
             const options = this.startOptions
             const board = GameManager.buildOnlineBoard(CreateLobbyTree.mapOf(options.selectedMap), options.fog)
-            ack = await onlineSession.createLobby(board, options.mapName)
+            ack = await onlineSession.createLobby(board, options.mapName, this.asyncMovesCheckBox.mark)
         } catch (error) {
             console.error(error)
             ack = {ok: false, error: 'CLIENT_ERROR'}

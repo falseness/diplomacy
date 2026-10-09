@@ -152,8 +152,8 @@ class OnlineSession {
         return ack
     }
     // lobby:create with a host-built initial board; mapName is null for co-op.
-    createLobby(board, mapName) {
-        return this.request('lobby:create', {board, mapName})
+    createLobby(board, mapName, asyncMoves = false) {
+        return this.request('lobby:create', {board, mapName, asyncMoves})
     }
     joinLobby(lobbyId) {
         return this.request('lobby:join', {lobbyId})
