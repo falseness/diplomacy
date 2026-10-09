@@ -69,6 +69,7 @@ const onlineObservation = {
     buildings: new Map(),
     hexagons: new Map(),
     clear() {
+        this.clearInspection()
         this.board = null
         this.round = null
         this.units.clear()
@@ -137,6 +138,7 @@ const onlineObservation = {
             this.units.set(key, sprite)
             this.unitActors.set(key, message.actorSeat)
         }
+        this.refreshInspection()
         return {observation: true}
     },
     sprite(record, cell, Class, margin) {
@@ -148,7 +150,18 @@ const onlineObservation = {
         sprite.hpBar = new HealthBar({x: sprite.pos.x + assets.size / 2,
             y: sprite.pos.y + assets.size / 2 + margin}, sprite.maxHP)
         // Constructors are skipped above; retain the unit bar palette as well as its geometry.
-        if (sprite.isUnit) sprite.hpBar.healthColor = '#00e600'
+        if (sprite.isUnit) {
+            sprite.hpBar.healthColor = '#00e600'
+            // Define data directly, never call Unit.moves (its setter needs rules interaction).
+            const moves = Number.isFinite(record.moves) && record.moves >= 0 ? record.moves : null
+            Object.defineProperty(sprite, 'moves', {value: moves, configurable: true})
+            if (moves !== null) {
+                sprite.movesBar = new Bar({x: sprite.pos.x + assets.size / 2,
+                    y: sprite.pos.y + assets.size / 2 + basis.r * 0.1},
+                    sprite.speed, '#ffa500', undefined, basis.r * 0.4, basis.r * 0.225)
+                sprite.movesBar.repaintRects(moves)
+            }
+        }
         sprite.updateHPBar()
         return sprite
     },
@@ -166,6 +179,52 @@ const onlineObservation = {
         for (const map of [this.hexagons, this.buildings])
             for (const [key, entry] of map) if (!keep.has(entry.actor)) map.delete(key)
         this.board = grid
+        this.refreshInspection(true)
+    },
+    clearInspection() {
+        if (typeof gameEvent !== 'undefined' && gameEvent?.selected?.isObservedInspection) {
+            gameEvent.removeSelection()
+            gameEvent.hideAll()
+        }
+    },
+    inspectionFor(cell) {
+        if (!this.hidesUnit(cell)) return null
+        const sprite = this.units.get(cell.coord.x + ',' + cell.coord.y)
+        if (!sprite) return null
+        // Only this read-only view enters selection; the sprite never gains an interaction.
+        return {
+            isObservedInspection: true, isUnit: true, coord: {...sprite.coord}, playerColor: sprite.playerColor,
+            notEmpty() { return true },
+            needInstructions() { return false }, sendInstructions() { return true },
+            removeSelect() { entityInterface.visible = false },
+            select() {
+                const info = sprite.info
+                info.canSkipMoves = false
+                info.isDestroyable = false
+                if (sprite.moves === null) info.info.moves = 'Hidden / ' + sprite.speed
+                entityInterface.change(info, sprite.player.fullColor)
+                border.clean()
+                grid.drawLogicText = false
+            }
+        }
+    },
+    refreshInspection(authority = false) {
+        if (typeof gameEvent === 'undefined' || !gameEvent?.selected?.isUnit) return
+        const selected = gameEvent.selected
+        if (selected.playerColor === whooseTurn) return
+        const cell = grid.getCell(selected.coord)
+        if (!selected.isObservedInspection && !this.hidesUnit(cell)) {
+            if (authority) {
+                if (cell.unit === selected && (!isFogOfWar || grid.fogOfWar[cell.coord.x][cell.coord.y])) selected.select()
+                else { gameEvent.removeSelection(); gameEvent.hideAll() }
+            }
+            return
+        }
+        const view = this.inspectionFor(cell)
+        // Without a stable wire identity, clearing on a move/death avoids selecting a replacement.
+        gameEvent.removeSelection()
+        if (view) { gameEvent.selected = view; view.select() }
+        else gameEvent.hideAll()
     },
     hidesBuilding(cell) {
         return this.board === grid && this.buildings.has(cell.coord.x + ',' + cell.coord.y)
@@ -194,6 +253,8 @@ const onlineObservation = {
             // vision may reveal a peer beyond our turn-opening fog.
             drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
             Entity.prototype.drawBars.call(sprite, ctx)
+            if (sprite.movesBar && (otherSettings.alwaysDisplayMovesBar || !sprite.isFullMoves))
+                sprite.movesBar.draw(ctx)
         }
         // Match grid overlays: occupied building bars stay above every unit body.
         for (const {sprite} of this.buildings.values()) if (sprite)

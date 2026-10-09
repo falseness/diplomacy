@@ -425,7 +425,12 @@ class Events {
         this.selected = new Empty()
     }
     selectSomethingOnCell(cell) {
-        if (cell.unit.notEmpty()) {
+        const observed = typeof onlineObservation !== 'undefined' && onlineObservation.inspectionFor(cell)
+        if (observed) {
+            this.selected = observed
+            observed.select()
+        }
+        else if (cell.unit.notEmpty() && !(typeof onlineObservation !== 'undefined' && onlineObservation.hidesUnit(cell))) {
             cell.unit.select()
             this.selected = cell.unit
         } 
@@ -489,7 +494,9 @@ class Events {
             return
         }
         
-        const hidden = isFogOfWar && !grid.fogOfWar[coord.x][coord.y]
+        const observed = typeof onlineObservation !== 'undefined' &&
+            onlineObservation.inspectionFor(grid.getCell(coord))
+        const hidden = isFogOfWar && !grid.fogOfWar[coord.x][coord.y] && !observed
         if (!hidden && coordsEqually(this.selected.coord, coord)) {
             this.selected.removeSelect()
             if (this.selected.isUnit) {

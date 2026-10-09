@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "c6b89167651d646c45f440da627fbacebc03fd4d9e654090f19842ca88eb73d1",
+  "rulesVersion": "2204ac1cb7d188e6dd1efbff9cd2cb6055e22d5235b7c82f9cb8a8b2b32e3dd9",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -275,8 +275,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "1c9071327ec0448ffe51d3844d13f25d9f50a8ef051e1da8fe9edb316b79f447",
-      "bytes": 24200
+      "sha256": "713c437f7243d8a9de4128f88e73d3c5e1498bca7413884cb5602decfbaa9253",
+      "bytes": 24644
     },
     {
       "path": "options/onlineHubRows.js",
