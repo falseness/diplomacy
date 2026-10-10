@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 from candidate import verify, runtime, rules
+from candidate_owned import owned_environment
 
 
 
@@ -21,14 +22,21 @@ def check(root, manifest, output, jobs):
         if name.startswith(('RELIABILITY_', 'DIPLOMACY_SMOKE_', 'DIPLOMACY_TEST_', 'DIPLOMACY_LOCAL_')):
             env.pop(name)
     env['NODE_OPTIONS'] = '--require=' + str(root / 'diplomacy/deploy/candidate_tls.js')
-    # Resolve the shared registry selection inside the package. This executor
-    # validates every required TAP case/marker and works without Git metadata.
-    args = [str(node), 'tests/helpers/runMultiplayerGate.js',
-            'multiplayer-fast', str(output), '--jobs', str(jobs)]
-    print('COMMAND ' + json.dumps(args), flush=True)
-    subprocess.run(args, cwd=root / 'diplomacy_server', env=env, check=True)
+    output.mkdir(parents=True, exist_ok=False)
+    with owned_environment(env, output) as env:
+        # Browser first: reject a broken visible Destroy action before other checks.
+        browser_args = [str(node), str(root / 'diplomacy/deploy/destroy_gate.js'),
+                        str(output / 'destroy-browser')]
+        print('COMMAND ' + json.dumps(browser_args), flush=True)
+        subprocess.run(browser_args, cwd=root / 'diplomacy_server', env=env, check=True)
+        # Resolve the shared registry selection inside the package. This executor
+        # validates every required TAP case/marker and works without Git metadata.
+        args = [str(node), 'tests/helpers/runMultiplayerGate.js',
+                'multiplayer-fast', str(output / 'multiplayer-fast'), '--jobs', str(jobs)]
+        print('COMMAND ' + json.dumps(args), flush=True)
+        subprocess.run(args, cwd=root / 'diplomacy_server', env=env, check=True)
     verify(root, json.loads(manifest.read_text()))
-    print('PASS candidate multiplayer-fast; shared registered cases enforced; isolated services owned cleanup')
+    print('PASS candidate focused Destroy browser and multiplayer-fast; shared registered cases enforced; isolated services owned cleanup')
 
 
 if __name__ == '__main__':
