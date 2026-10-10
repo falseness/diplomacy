@@ -101,10 +101,7 @@ class LongTimer extends Timer {
         return t + this.timeAdd
     }
     pause() {
-        this.isTick = false
-        if (!isNaN(this.lastPause))
-            this.time -= Math.floor(Date.now() - this.lastPause)
-        this.time = Math.max(this.time, 0)
+        super.pause()
     }
     pauseAndSaveTime() {
         if (this.isTick) {
