@@ -90,6 +90,10 @@ function destroyEntityWithUndo(entity) {
         actionManager.lastAction.natureIndex = nature.filter(other => !other.killed).indexOf(entity)
 
     entity.destroy()
+    // Removing a bush or hill opens sight lines in competitive games too.
+    // The undo entry already saved the prior mask before destruction.
+    if (entity.isNature)
+        refreshUndoVision()
 }
 
 const ActionApi = {
