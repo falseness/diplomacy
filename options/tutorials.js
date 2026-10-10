@@ -71,7 +71,7 @@ function createTutorial1Map() {
 }
 
 function createTutorial2Map() {
-    // Blue's army (5 normchels in front of 5 archers) stands 3 hexes left of red's
+    // Blue's army (5 normchels, 5 rear archers and 4 flank archers) stands left of red's
     // 2 normchels and 2 archers in an open field; red's town with a barrack is 7 hexes behind
     // red's army. The way home is a road between a lake (north) and mountains (south) that
     // ends at a gate: mountain spurs in column 11 leave only rows 3-5 open, 2 hexes in front
@@ -113,7 +113,12 @@ function createTutorial2Map() {
                     {x: 1, y: 3, type: Archer},
                     {x: 1, y: 4, type: Archer},
                     {x: 1, y: 5, type: Archer},
-                    {x: 1, y: 6, type: Archer}
+                    {x: 1, y: 6, type: Archer},
+                    // Reserves approach around the original line through open flanks.
+                    {x: 3, y: 2, type: Archer},
+                    {x: 3, y: 0, type: Archer},
+                    {x: 1, y: 0, type: Archer},
+                    {x: 1, y: 7, type: Archer}
                 ]
             }
         ],
