@@ -88,6 +88,19 @@ const onlineObservation = {
             this.board = grid
             this.round = gameRound
         }
+        if (Array.isArray(message.visibility)) {
+            // Retire cells no longer in the server's shared vision without
+            // mutating this active seat's canonical rule board or fog mask.
+            for (let x = 0; x < grid.arr.length; x++) for (let y = 0; y < grid.arr[x].length; y++) {
+                const key = x + ',' + y, observed = this.hexagons.get(key)
+                if (!message.visibility[x]?.[y] && (grid.fogOfWar[x]?.[y] || (observed && !observed.hexagon.unknown))) {
+                    this.hexagons.set(key, {actor: message.actorSeat, hexagon: new Hexagon(x, y, null, false)})
+                    this.units.set(key, null)
+                    this.unitActors.set(key, message.actorSeat)
+                    this.buildings.set(key, {actor: message.actorSeat, sprite: null})
+                }
+            }
+        }
         const changed = new Set((message.changedCells || []).map(cell => cell.x + ',' + cell.y))
         for (const cell of message.diff.cells || []) {
             if (!grid.arr[cell.x]?.[cell.y]) continue
@@ -97,7 +110,8 @@ const onlineObservation = {
             // Visibility transitions belong to the recipient, not necessarily to
             // the actor's changed cells (e.g. an ally walks away from an enemy).
             // Retire all pictures on a tombstone and restore newly disclosed cells.
-            const visibilityChanged = cell.colour === null || localHex.unknown || observedHex?.hexagon.unknown
+            const visibilityChanged = cell.colour === null || localHex.unknown || observedHex?.hexagon.unknown ||
+                (isFogOfWar && !grid.fogOfWar[cell.x][cell.y] && !observedHex && cell.colour !== null)
             const affected = changed.has(key) || visibilityChanged
             const building = cell.building
             if (Object.hasOwn(cell, 'building') && (affected || building?.owner === message.actorSeat ||
