@@ -1163,6 +1163,90 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
     }
 }
 
+// A fortress garrison: the economy bot's purchases and combat priorities, but every unit command
+// stays inside the defended area x <= defendedMaxX along its whole route (the move way's parent
+// chain, which is the path the unit actually walks). A unit on an intact own tower holds it and
+// only shoots; once the tower falls it may move inside the area. Melee attacks need the route
+// and the target hex inside; a ranged shot that does not move the unit may target any hex.
+// Recruits come only from producers inside the area. With no legal command a unit waits.
+class TutorialDefenderAiPlayer extends SimpleAiPlayerWithEconomy {
+    static defendedMaxX = 5
+    isInsideDefendedArea(coord) {
+        return coord.x <= TutorialDefenderAiPlayer.defendedMaxX
+    }
+    isOnIntactOwnTower(unit) {
+        let building = grid.getBuilding(unit.coord)
+        return !!(building && building.name == 'tower' && !building.killed &&
+            building.playerColor === unit.playerColor)
+    }
+    isStationaryShot(unit, coord) {
+        let interaction = unit.interaction
+        return interaction instanceof InteractionWithRangeUnit &&
+            !interaction.cantRangeInteract(coord, unit) &&
+            unit.canHitSomethingOnCell(grid.getCell(coord))
+    }
+    // Hexes walked from the unit to `coord`, `coord` included, along the unit's current move way.
+    getCommandRoute(unit, coord) {
+        let way = unit.interaction.way
+        let route = []
+        let current = {x: coord.x, y: coord.y}
+        for (let steps = 0; !areCoordsEqual(current, unit.coord); ++steps) {
+            let parent = way.getParent(current)
+            if (!parent || areCoordsEqual(parent, current) || steps > grid.arr.length * grid.arr[0].length) {
+                return null
+            }
+            route.unshift(current)
+            current = {x: parent.x, y: parent.y}
+        }
+        return route
+    }
+    isDefendedCommand(unit, command) {
+        let to = command.destinationCoord
+        if (areCoordsEqual(to, unit.coord) || this.isStationaryShot(unit, to)) {
+            return true
+        }
+        if (this.isOnIntactOwnTower(unit)) {
+            return false
+        }
+        let route = this.getCommandRoute(unit, to)
+        return !!route && route.every(coord => this.isInsideDefendedArea(coord))
+    }
+    // Runs an inherited decision with the unit's command lists narrowed to defended commands
+    // (nested decisions, e.g. unitDoMoves -> findUnitAttackCommand, reuse the outer narrowing).
+    withDefendedCommands(unit, decide) {
+        if (Object.prototype.hasOwnProperty.call(unit, 'getAvailableCommands')) {
+            return decide()
+        }
+        let ownCommands = unit.getAvailableCommands
+        let ownMoveCommands = unit.getAvailableMoveCommands
+        unit.getAvailableCommands = () => ownCommands.call(unit)
+            .filter(command => this.isDefendedCommand(unit, command))
+        unit.getAvailableMoveCommands = () => ownMoveCommands.call(unit)
+            .filter(command => this.isDefendedCommand(unit, command))
+        try {
+            return decide()
+        }
+        finally {
+            delete unit.getAvailableCommands
+            delete unit.getAvailableMoveCommands
+        }
+    }
+    findUnitAttackCommand(unit) {
+        return this.withDefendedCommands(unit, () => super.findUnitAttackCommand(unit))
+    }
+    unitDoMoves(unit, remainingActions = Infinity) {
+        return this.withDefendedCommands(unit, () => super.unitDoMoves(unit, remainingActions))
+    }
+    getProducerHexExitCommand(unit) {
+        return this.withDefendedCommands(unit, () => super.getProducerHexExitCommand(unit))
+    }
+    addProductionChoices(choices, producer, products) {
+        if (!producer.coord || this.isInsideDefendedArea(producer.coord)) {
+            super.addProductionChoices(choices, producer, products)
+        }
+    }
+}
+
 function weightedRandomIndex(weights) {
     assert(weights.length > 0)
     let total = 0.0
