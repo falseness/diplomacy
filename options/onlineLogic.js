@@ -116,7 +116,7 @@ const onlineObservation = {
             const building = cell.building
             if (Object.hasOwn(cell, 'building') && (affected || building?.owner === message.actorSeat ||
                     this.buildings.get(key)?.actor === message.actorSeat)) {
-                const BuildingClass = building?.name === 'town' ? Town : building && getClass(building.name)
+                const BuildingClass = building?.name === 'town' ? Town : building?.name === 'demonPortal' ? DemonPortal : building && getClass(building.name)
                 if (!building || BuildingClass) this.buildings.set(key, {actor: message.actorSeat,
                     sprite: building ? this.sprite(building, cell, BuildingClass, basis.r * 1.4) : null})
             }
@@ -406,7 +406,10 @@ const gameDiffHandler = {
             if (unit.notEmpty() && !moveTween.isActive(unit))
                 moveTween.start(unit, hint.path)
         }
-        if (observing) onlineObservation.receive(message)
+        // Waiting views also need pictures of uncommitted co-op actions: a
+        // different peer's commit can replace their rule board before this actor ends.
+        if (observing || (gameSettings.coop && onlineCommit?.pendingSeats?.includes(message.actorSeat)))
+            onlineObservation.receive({...message, changedCells: message.changedCells || message.diff.cells})
         return result
     },
     // {from, to, path} for applyCellDiff from {segments} (a hint already in that shape is kept):
