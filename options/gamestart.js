@@ -100,6 +100,9 @@ class GameMap {
             playerSettings.playerType == 'SimpleAiPlayerWithEconomy') {
             return SimpleAiPlayerWithEconomy
         }
+        if (playerSettings.playerType == 'TutorialDefenderAiPlayer') {
+            return TutorialDefenderAiPlayer
+        }
         if (playerSettings.playerType == 'ai-economy' ||
             playerSettings.playerType == 'AIPlayerWithEconomy') {
             return AIPlayerWithEconomy
