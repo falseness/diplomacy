@@ -174,7 +174,7 @@ function createTutorial3Map() {
             },
             {
                 rgb: {r: 98, g: 168, b: 222},
-                playerType: 'SimpleAiPlayerWithEconomy',
+                playerType: 'TutorialDefenderAiPlayer',
                 gold: 40,
                 towns: [{x: 2, y: 4}],
                 suburbs: [{

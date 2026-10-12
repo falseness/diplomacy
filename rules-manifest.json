@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "50bde629bf319e8c4ab81dcbdea1081850973c540e53a56717d69e73cbda2488",
+  "rulesVersion": "242731258eb5cda414bc3cad1a8b63e9d8d713335cba08c0169103db3d162e46",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,13 +30,13 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "beb4860d5a485fc8cb3f76b015eb8174072fff42651fc8809d89da43a8b76fa6",
-      "bytes": 68945
+      "sha256": "9efabd21efbed2e7b20c7c47aefcf5f47f9878a71108b0a31fe510954d559466",
+      "bytes": 69070
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "c91bde10f5db57460be09674cbf406e953f05062c42de78ce2b15c9f0def6a93",
-      "bytes": 41977
+      "sha256": "ab31fa415e8edf5a840fc274f20745f77c4516340dc341f27833ba7f82631898",
+      "bytes": 41976
     },
     {
       "path": "options/tutorialProgress.js",
@@ -500,8 +500,8 @@
     },
     {
       "path": "ai/players.js",
-      "sha256": "519be3519a975b50194dac150db8aa9e0e2084cb8bc1e084de74e9d91bf1b3e2",
-      "bytes": 100043
+      "sha256": "93b29aa55c45cee58b31561c07cb199fe03d807f807cfbc79a881eade764fe1b",
+      "bytes": 103918
     },
     {
       "path": "nextTurn.js",
