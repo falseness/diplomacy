@@ -762,9 +762,10 @@ function createTutorial13Map() {
 }
 
 function createTutorial14Map() {
-    // Start with only the town cells claimed. Capture neutral land with the starting noob,
-    // then pay for suburbs and farms before gathering an army. The central pass keeps
-    // the enemy head start meaningful; corner terrain leaves both home valleys usable.
+    // Town Duel: each town starts with its six neighbouring suburbs (the default first ring); a
+    // field unit owns only the hex it stands on. Capture neutral land with the starting noob, then
+    // pay for suburbs and farms before gathering an army. The central pass keeps the enemy head
+    // start meaningful; corner terrain leaves both home valleys usable.
     let lakes = [[7, 2], [7, 6], [0, 0], [14, 0], [0, 8], [14, 8], [1, 0], [13, 0]]
     let mountains = [[7, 0], [7, 1], [7, 7], [7, 8], [6, 0], [8, 0], [6, 8], [8, 8], [1, 8], [13, 8]]
     let bushes = [[5, 1], [9, 1], [5, 7], [9, 7], [4, 0], [10, 0], [4, 8], [10, 8], [3, 0], [11, 0]]
@@ -799,7 +800,6 @@ function createTutorial14Map() {
         coordDictionary(bushes),
         coordDictionary(hills)
     )
-    map.initialTerritory = 'towns-only'
     map.testName = 'tutorial 14'
     return map
 }
@@ -890,7 +890,7 @@ const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 1: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-2', title: 'Tutorial 2: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
     {id: 'tutorial-3', title: 'Tutorial 3: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
-    {id: 'tutorial-14', title: 'Tutorial 4: Grow Your Economy', pass: 'enemyLost', get map() { return createTutorial14Map() }},
+    {id: 'tutorial-14', title: 'Tutorial 4: Town Duel', pass: 'enemyLost', get map() { return createTutorial14Map() }},
     {id: 'tutorial-5', title: 'Tutorial 5: Hold the Walls', pass: 'coopVictory', get map() { return createTutorial5Map() }},
     {id: 'tutorial-6', title: 'Tutorial 6: Lose a Town, Win the War', pass: 'coopVictory', startRound: 20,
         get map() { return createTutorial6Map() }},
