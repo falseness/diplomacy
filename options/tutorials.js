@@ -216,11 +216,12 @@ function createTutorial5Map() {
     // suburbs (a rich town: it pays for the army it builds after the first turns). Walls face the demons:
     // the column x = 4 with two gates (4,3) and (4,5) the KOHb sortie through, (3,1)/(3,2) and (2,7)/(2,8) on
     // the flanks and (2,4) right in front of the town. Red starts with 2 KOHb, the town's noob, a barrack and
-    // 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. 6 ember archers and a bulwark
-    // stand 3-6 hexes from the walls; two ranged portals and a heavy one keep sending more. Attacking at once
-    // loses; ordering 2 KOHb (town + barrack) and waiting behind the walls until round 4, then attacking with
-    // 4 KOHb, wins. Mountains on the flanks of the field and the walls' open ends are left free: the sortie
-    // needs them (closing (4,0)/(4,8) makes the intended plan lose).
+    // 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. 6 ember archers, a bulwark and two
+    // Bombards stand 3-6 hexes from the walls; two ranged portals, a heavy one and a siege one keep sending more.
+    // The Bombards (building damage only) breach the walls within a few rounds, so merely waiting behind them
+    // loses, and so does attacking at once. Training KOHb every round while holding until round 4, striking the
+    // Bombards first in the sortie and bringing catapults against the portals wins. Mountains on the flanks of
+    // the field and the walls' open ends are left free: the sortie needs them.
     let redSide = []
     for (let x = 0; x <= 4; ++x) {
         for (let y = 0; y < 9; ++y) {
@@ -278,14 +279,17 @@ function createTutorial5Map() {
                 {x: 10, y: 8, type: EmberArcher},
                 {x: 10, y: 6, type: EmberArcher},
                 {x: 8, y: 5, type: EmberArcher},
-                {x: 8, y: 2, type: Bulwark}
+                {x: 8, y: 2, type: Bulwark},
+                {x: 8, y: 3, type: Bombard},
+                {x: 9, y: 6, type: Bombard}
             ]
         }
     )
     map.portals = [
         {x: 12, y: 2, category: 'ranged'},
         {x: 12, y: 4, category: 'ranged'},
-        {x: 12, y: 7, category: 'heavy'}
+        {x: 12, y: 7, category: 'heavy'},
+        {x: 12, y: 5, category: 'siege'}
     ]
     map.testName = 'tutorial 5'
     return map
