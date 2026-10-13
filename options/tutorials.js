@@ -296,9 +296,11 @@ function createTutorial5Map() {
 }
 
 function createTutorial6Map() {
-    // Fighting withdrawal: ten portals north/east of the front town leave the center road open.
-    // Nine Imps and a Bombard engage immediately; the melee portal sustains Brute pressure every
-    // four rounds. Chaos portals contribute their initial defenders (their tutorial wave was round 8).
+    // Fighting withdrawal against round-20 typed portal defenders. Twelve portals: four heavy (Bulwark), two melee
+    // (Brute), four mage (Hexcaster), one chaos (empty: chaos only spawns at round 8) and one siege (Bombard). Nine
+    // defenders stand on a north-edge portal row (2,0)-(8,0), (2,1), (8,1) behind a lake and mountain seal, inside the
+    // front town's catapult reach; they hold their portals, so those portals skip their waves until red breaches them.
+    // The melee portal (9,2) and the siege portal (10,6) stay open: their Brutes and Bombards break the front town.
     // Preserve both towns, 400 gold, the starting army, round 20 and the round-40 deadline.
     // Trade the exposed front town for time to regroup at the rear and build a siege counterattack.
     let size = {x: 16, y: 9}
@@ -344,10 +346,10 @@ function createTutorial6Map() {
             }
         ],
         [],
-        // Lakes guard the back town's corners and close the demons' rear.
-        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [15, 4], [15, 5], [12, 8], [13, 8], [15, 6]]),
-        // Mountains narrow the ground between the towns and the field's edges in front of the portals.
-        coordDictionary([[3, 0], [4, 0], [3, 8], [4, 8], [8, 0], [8, 8], [9, 8], [15, 0]]),
+        // Lakes seal the north portal row; one still closes the demons' south-east rear.
+        coordDictionary([[13, 8], [1, 0], [1, 1], [3, 1], [4, 1], [6, 1], [7, 1], [8, 2], [9, 0]]),
+        // Mountains finish the seal and narrow the field's southern edge.
+        coordDictionary([[3, 8], [4, 8], [8, 8], [9, 8], [15, 0], [2, 2], [5, 1], [9, 1]]),
         // Bushes around the front town give the returning archers cover.
         coordDictionary([[5, 2], [7, 5], [5, 6], [4, 2], [4, 6]]),
         [],
@@ -356,30 +358,33 @@ function createTutorial6Map() {
             tutorial: true,
             // The demons start standing on their portals; a portal spawns only once its hex is free.
             units: [
-                {x: 8, y: 1, type: Imp},
-                {x: 9, y: 5, type: Imp},
-                {x: 8, y: 2, type: Bombard},
-                {x: 9, y: 1, type: Imp},
-                {x: 9, y: 2, type: Imp},
-                {x: 10, y: 1, type: Imp},
-                {x: 12, y: 2, type: Imp},
-                {x: 12, y: 1, type: Imp},
-                {x: 11, y: 1, type: Imp},
-                {x: 10, y: 5, type: Imp}
+                {x: 2, y: 0, type: Hexcaster},
+                {x: 2, y: 1, type: Bulwark},
+                {x: 3, y: 0, type: Bulwark},
+                {x: 4, y: 0, type: Hexcaster},
+                {x: 5, y: 0, type: Brute},
+                {x: 6, y: 0, type: Hexcaster},
+                {x: 7, y: 0, type: Bulwark},
+                {x: 8, y: 0, type: Hexcaster},
+                {x: 8, y: 1, type: Bulwark},
+                {x: 10, y: 6, type: Bombard},
+                {x: 9, y: 2, type: Brute}
             ]
         }
     )
     map.portals = [
-        {x: 8, y: 1, category: 'melee'},
-        {x: 9, y: 5, category: 'chaos'},
-        {x: 8, y: 2, category: 'chaos'},
-        {x: 9, y: 1, category: 'chaos'},
-        {x: 9, y: 2, category: 'chaos'},
-        {x: 10, y: 1, category: 'chaos'},
-        {x: 12, y: 2, category: 'chaos'},
-        {x: 12, y: 1, category: 'chaos'},
-        {x: 11, y: 1, category: 'chaos'},
-        {x: 10, y: 5, category: 'chaos'}
+        {x: 2, y: 0, category: 'mage'},
+        {x: 2, y: 1, category: 'heavy'},
+        {x: 3, y: 0, category: 'heavy'},
+        {x: 4, y: 0, category: 'mage'},
+        {x: 5, y: 0, category: 'melee'},
+        {x: 6, y: 0, category: 'mage'},
+        {x: 7, y: 0, category: 'heavy'},
+        {x: 8, y: 0, category: 'mage'},
+        {x: 8, y: 1, category: 'heavy'},
+        {x: 10, y: 6, category: 'siege'},
+        {x: 9, y: 2, category: 'melee'},
+        {x: 7, y: 7, category: 'chaos'}
     ]
     map.testName = 'tutorial 6'
     return map
