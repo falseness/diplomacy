@@ -1,0 +1,161 @@
+// Diagnostic-only instrumentation. No sampler, wrappers or listeners in ordinary play.
+(() => {
+    if (new URLSearchParams(location.search).get('visualsPerf') !== '1') return
+    const query = new URLSearchParams(location.search)
+    const sourceIdentity = Promise.all([{src:location.href},...document.scripts].filter(s=>s.src).map(async script=>{
+        const bytes=await (await fetch(script.src)).arrayBuffer()
+        const digest=await crypto.subtle.digest('SHA-256',bytes)
+        return [new URL(script.src).pathname,[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,'0')).join('')]
+    })).then(Object.fromEntries).catch(error=>({error:String(error)}))
+    const boardIdentity = () => { const state=getGameObject(); delete state.timers; return JSON.stringify(state) }
+    const camera = () => ({scale: canvas.scale, offset: {...canvas.offset}})
+    const counters = {canvasAllocations: 0, gradients: 0, spriteLoads: 0}
+    let report, active = false, segment = 'idle-before', frame, saved, cancelled = false, lastInput = null
+    const originalLoop = gameLoop, originalDraw = drawAll
+    gameLoop = function(timestamp) {
+        if (!active) return originalLoop(timestamp)
+        const start = performance.now()
+        const observedSegment = saved ? segment : lastInput === null ? 'idle-before' : start-lastInput<250 ? 'zooming' : 'settled-after'
+        frame = {timestamp, start, segment:observedSegment, visible: !document.hidden, focused: document.hasFocus(), camera: camera(), renderMs: 0, ...counters,
+            surfaceCacheRevision:grid.surfaceCacheRevision, surfaceCacheThreshold:grid.getSurfaceCacheGeometry().scale, rasterizations: atmosphericBackground.rasterizations, cacheBytes: atmosphericBackground.bytes()}
+        try { return originalLoop(timestamp) }
+        finally {
+            Object.assign(frame,counters,{surfaceCacheRevision:grid.surfaceCacheRevision,rasterizations:atmosphericBackground.rasterizations,cacheBytes:atmosphericBackground.bytes()})
+            frame.end = performance.now()
+            frame.updateMs = Math.max(0, frame.end - start - frame.renderMs)
+            frame.gapMs = report.samples.length ? timestamp - report.samples.at(-1).timestamp : null
+            if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
+            report.samples.push(frame)
+            if (document.hidden) report.invalidReasons.push('hidden-tab')
+            frame = null
+        }
+    }
+    drawAll = function(...args) {
+        if (!frame) return originalDraw.apply(this, args)
+        frame.camera = camera() // Camera after the existing update, actually used by this draw.
+        const start = performance.now()
+        try { return originalDraw.apply(this, args) }
+        finally { frame.renderMs += performance.now() - start }
+    }
+    const create = document.createElement.bind(document)
+    document.createElement = function(name, ...args) {
+        if (active && name.toLowerCase() === 'canvas') counters.canvasAllocations++
+        return create(name, ...args)
+    }
+    for (const name of ['createLinearGradient', 'createRadialGradient']) {
+        const original = CanvasRenderingContext2D.prototype[name]
+        CanvasRenderingContext2D.prototype[name] = function(...args) {
+            if (active) counters.gradients++
+            return original.apply(this, args)
+        }
+    }
+    const originalLoad = loadSprites
+    loadSprites = function(...args) { if (active) counters.spriteLoads++; return originalLoad.apply(this, args) }
+    for (const type of ['visibilitychange', 'focus', 'blur']) window.addEventListener(type, () => {
+        if (!active) return
+        report.visibility.push({type, timestamp: performance.now(), hidden: document.hidden, focused: document.hasFocus()})
+        if (document.hidden || type === 'blur') report.invalidReasons.push(type)
+    })
+    for (const type of ['wheel', 'touchstart', 'touchmove', 'touchend']) document.addEventListener(type, event => {
+        if (active && (type==='wheel' || type==='touchmove')) lastInput=performance.now()
+        if (active) report.inputs.push({type, timestamp: performance.now(), eventTimestamp: event.timeStamp, trusted: event.isTrusted,
+            deltaY: event.deltaY, points: event.touches ? [...event.touches].map(t => ({x:t.clientX,y:t.clientY})) : undefined})
+    }, {capture:true, passive:true})
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+    const restore = () => {
+        if (!saved) return
+        gameEvent.screen.zoomBy({x:WIDTH/2,y:HEIGHT/2}, saved.camera.scale/canvas.scale)
+        gameEvent.screen.moveTo({x:saved.camera.offset.x+width/2,y:saved.camera.offset.y+height/2})
+        otherSettings.atmosphericVisuals = saved.flag
+        loadSprites()
+        saved = null
+    }
+    function start(metadata = {}) {
+        if (active) throw Error('Capture already active')
+        report = {schemaVersion:1, environment:'user-browser', performanceStatus:'user-device-performance-unverified',
+            sourceCommits:{client:query.get('clientCommit'),server:query.get('serverCommit'),provenance:'user-supplied URL; verify against source hashes'}, ...metadata, userAgent:navigator.userAgent, viewport:[innerWidth,innerHeight], dpr:devicePixelRatio,
+            renderer:'Canvas2D', refreshInterval:{method:'median of consecutive visible RAF timestamps; not hardware refresh rate'},
+            board:boardIdentity(), flag:otherSettings.atmosphericVisuals, initialCamera:camera(),
+            samples:[], inputs:[], visibility:[], longGaps:[], invalidReasons:[]}
+        if (document.hidden || !document.hasFocus()) report.invalidReasons.push('initial visibility/focus')
+        lastInput=null
+        const target=report
+        sourceIdentity.then(sources=>{target.sourceHashes=sources})
+        active = true
+        return report
+    }
+    function stop() {
+        active = false
+        if (!report) return null
+        const gaps = report.samples.filter(s=>s.visible && s.gapMs>0).map(s=>s.gapMs).sort((a,b)=>a-b)
+        report.refreshInterval.observedMedianMs = gaps[Math.floor(gaps.length/2)] ?? null
+        report.valid = report.samples.length>1 && report.invalidReasons.length===0
+        return report
+    }
+    function compare(a,b) {
+        const sameCamera=(x,y)=>x && y && Math.abs(x.scale-y.scale)<1e-9 && Math.abs(x.offset.x-y.offset.x)<1e-7 && Math.abs(x.offset.y-y.offset.y)<1e-7
+        const left=a.workload?.trajectory,right=b.workload?.trajectory
+        return a.valid && b.valid && a.board===b.board && JSON.stringify(a.viewport)===JSON.stringify(b.viewport) && a.dpr===b.dpr &&
+            sameCamera(a.initialCamera,b.initialCamera) && a.workload.input===b.workload.input &&
+            Array.isArray(left) && left.length>1 && left.length===right?.length && left.every((p,i)=>sameCamera(p,right[i]) && Math.abs(p.elapsedMs-right[i].elapsedMs)<1000)
+    }
+    async function paired({testOwned=false, input=mobilePhone?'pinch':'wheel', metadata={}} = {}) {
+        if (!testOwned || gameSettings.isOnline || menu.visible) throw Error('Replay requires a local test-owned game')
+        if (input!==(mobilePhone?'pinch':'wheel')) throw Error('Choose the input supported by this browser')
+        if (active || saved) throw Error('Capture already active')
+        saved = {camera:camera(),flag:otherSettings.atmosphericVisuals}
+        cancelled = false
+        const runs=[]
+        api.progress={runs}
+        try {
+            for (const flag of [false,true,true,false,false,true]) {
+                if (cancelled) break
+                gameEvent.screen.zoomBy({x:WIDTH/2,y:HEIGHT/2}, saved.camera.scale/canvas.scale)
+                gameEvent.screen.moveTo({x:saved.camera.offset.x+width/2,y:saved.camera.offset.y+height/2})
+                otherSettings.atmosphericVisuals=flag; loadSprites()
+                segment='warm-up';start(metadata)
+                await sleep(10000)
+                segment='idle-before';await sleep(5000)
+                const trajectory=[]
+                segment='zooming'
+                const rect=mainCanvas.getBoundingClientRect(), x=rect.x+rect.width/2,y=rect.y+rect.height/2
+                const touch=(type,distance)=>mainCanvas.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,
+                    touches:type==='touchend'?[]:[-1,1].map((sign,i)=>new Touch({identifier:i,target:mainCanvas,clientX:x+sign*distance,clientY:y}))}))
+                if(input==='pinch') touch('touchstart',160)
+                const started=performance.now()
+                for(let i=0;i<120 && !cancelled;i++) {
+                    // Identical ordered inputs; wall-clock scheduling never bypasses the game's handlers.
+                    if(input==='wheel') mainCanvas.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:x,clientY:y,deltaY:i<60?12:-12}))
+                    else {
+                        // Four bounded pinch gestures each way keep both fingers inside a portrait viewport.
+                        if(i && i%15===0){touch('touchend',0);touch('touchstart',i<60?160:40)}
+                        touch('touchmove',i<60?160-(i%15+1)*8:40+(i%15+1)*8)
+                    }
+                    trajectory.push({index:i,elapsedMs:performance.now()-started,...camera()})
+                    await sleep(Math.max(0,started+(i+1)*20000/120-performance.now()))
+                }
+                if(input==='pinch') touch('touchend',160)
+                segment='settled-after';await sleep(5000)
+                const run=stop();if(boardIdentity()!==run.board){run.valid=false;run.invalidReasons.push('board-changed')}run.workload={input,warmupMs:10000,measuredMs:30000,trajectory};runs.push(run)
+            }
+        } finally { stop();restore() }
+        const pairs=[0,2,4].map(i=>runs[i+1] ? compare(runs[i],runs[i+1]) : false)
+        api.lastExport={schemaVersion:1,environment:metadata.environment||'user-browser',runs,pairs,valid:pairs.every(Boolean),cancelled}
+        return api.lastExport
+    }
+    const api=window.visualsPerf={start,stop,paired,compare,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
+    window.addEventListener('load',()=>{
+        const panel=create('section');panel.id='visuals-perf-controls'
+        panel.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;background:#182333;color:white;padding:8px;font:12px sans-serif;max-width:calc(100vw - 32px)'
+        const status=create('div');status.textContent='Visual capture — local diagnostics; device FPS unverified';panel.append(status)
+        const owned=create('input');owned.type='checkbox';const label=create('label');label.append(owned,' Local test-owned game');panel.append(label)
+        const select=create('select');for(const value of ['wheel','pinch']){const o=create('option');o.value=o.textContent=value;select.append(o)}select.value=mobilePhone?'pinch':'wheel';panel.append(select)
+        const button=(text,fn)=>{const b=create('button');b.textContent=text;b.style.cssText='min-height:32px;padding:5px;margin:2px';b.onclick=async()=>{try{await fn()}catch(e){status.textContent=e.message}};panel.append(b)}
+        button('Start',()=>{api.lastExport=null;start();status.textContent='Recording live RAF'})
+        button('Stop',()=>{cancelled=true;stop();status.textContent='Stopped; paired replay restores after current window'})
+        button('3 paired captures',async()=>{status.textContent='Capturing 3 pairs (4 minutes)';await paired({testOwned:owned.checked,input:select.value});status.textContent='Capture complete; export report'})
+        button('Export',()=>{const blob=new Blob([JSON.stringify(api.export(),null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=create('a');a.href=url;a.download='visuals-performance.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})
+        for(const type of ['click','mousedown','mousemove','wheel','touchstart','touchmove','touchend']) panel.addEventListener(type,event=>event.stopPropagation())
+        document.body.append(panel)
+    })
+})()
