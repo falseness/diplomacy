@@ -28,14 +28,25 @@ for name in NAMES:
             index += 1
             rgb = [int(c[0][i:i+2],16) for i in (1,3,5)]
             if portal and ident == 'rift':
-                # Same hue, restrained brightening of the existing light source.
-                rgb = [round(v+(255-v)*0.10) for v in rgb]
+                # Bright core, warm inner ring; keep the category hue at the rim.
+                target = (255, 255, 235) if t == 0 else (255, 237, 174)
+                strength = .96 if t == 0 else .72 if t < .5 else .16
+                rgb = [round(v+(max(v,w)-v)*strength) for v,w in zip(rgb,target)]
             elif (name == 'town' and ident in ('town-paint-door','town-paint-window')) or (name == 'goldmine' and ident == 'cave'):
-                target = ((255, 250, 185) if t < .5 else (255, 206, 108)) if 'window' in ident else ((255, 224, 132) if t < .5 else (180, 112, 48))
-                strength = .85 if name == 'goldmine' else .55
-                rgb = [round(v*(1-strength)+w*strength) for v,w in zip(rgb,target)]
+                target = (255, 255, 231) if t == 0 else (255, 226, 139) if t < .75 else (239, 158, 63)
+                rgb = list(target)
+            elif ident in ('reveal', 'floor', 'arch'):
+                # Existing entrance surround catches warm near-source light.
+                target = (255, 211, 126) if t == 0 else (148, 95, 63)
+                rgb = [round(v*.55+w*.45) for v,w in zip(rgb,target)]
+            elif ('side' in ident and ident != 'canvas-side') or ident in ('right', 'arch-right', 'right-flap'):
+                # Opposing planes keep their material hue under cool ambient light.
+                rgb = [round(v*k+d) for v,k,d in zip(rgb,(.53,.62,.80),(0,5,15))]
+            elif name == 'tower' and ident in ('top', 'edge'):
+                rgb = [round(v+d) for v,d in zip(rgb,(30,5,-55))]
             else:
-                delta = (20-28*t, 7-12*t, -15+24*t)
+                # Broad surface contrast, baked into existing gradient coordinates.
+                delta = (48-100*t, 20-60*t, -25+24*t)
                 rgb = [round(v+d) for v,d in zip(rgb,delta)]
             return '#' + ''.join(f'{max(0,min(255,v)):02x}' for v in rgb)
         return re.sub(r'#[0-9a-fA-F]{6}\b', paint, block)
