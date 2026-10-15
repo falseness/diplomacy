@@ -4,6 +4,7 @@ class Settings {
         this.alwaysDisplayMovesBar = false
         this.moveCameraToUndoTarget = true
         this.usePolishedSprites = true
+        this.atmosphericVisuals = true
         this.animateMoves = true
         // The 'replays' menu entry, hidden until the server serves game:replay.
         this.showReplays = false
@@ -19,6 +20,7 @@ class Settings {
         this.alwaysDisplayMovesBar = dict.alwaysDisplayMovesBar
         this.moveCameraToUndoTarget = dict.moveCameraToUndoTarget
         this.usePolishedSprites = dict.usePolishedSprites !== false
+        this.atmosphericVisuals = dict.atmosphericVisuals !== false
         this.animateMoves = dict.animateMoves !== false
         this.showReplays = dict.showReplays === true
         this.autoscout = dict.autoscout !== false
@@ -29,6 +31,7 @@ class Settings {
             alwaysDisplayMovesBar: this.alwaysDisplayMovesBar,
             moveCameraToUndoTarget: this.moveCameraToUndoTarget,
             usePolishedSprites: this.usePolishedSprites,
+            atmosphericVisuals: this.atmosphericVisuals,
             animateMoves: this.animateMoves,
             showReplays: this.showReplays,
             autoscout: this.autoscout
@@ -38,6 +41,7 @@ class Settings {
             alwaysDisplayMovesBar: this.alwaysDisplayMovesBar,
             moveCameraToUndoTarget: this.moveCameraToUndoTarget,
             usePolishedSprites: this.usePolishedSprites,
+            atmosphericVisuals: this.atmosphericVisuals,
             animateMoves: this.animateMoves,
             showReplays: this.showReplays,
             autoscout: this.autoscout

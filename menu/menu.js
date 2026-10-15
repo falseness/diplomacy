@@ -91,8 +91,8 @@ menuOptions.marginLeft = 0.5 * menuOptions.rectSize
 menuOptions.cornerR = 0.1 * menuOptions.rectSize
 
 class OtherSettingsTree {
-    FIRST_Y = 0.35 * HEIGHT
-    INTERVAL_Y = 0.1 * HEIGHT
+    FIRST_Y = 0.32 * HEIGHT
+    INTERVAL_Y = 0.08 * HEIGHT
     constructor() {
         const firstY = this.FIRST_Y
         const intervalY = this.INTERVAL_Y
@@ -123,9 +123,14 @@ class OtherSettingsTree {
             WIDTH * 0.7, firstY + 4 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
+        this.atmosphericVisualsCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize,
+            'Atmospheric visuals', 'black'), menuOptions.marginLeft,
+            WIDTH * 0.7, firstY + 5 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
+            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+
         this.buttons = []
         this.buttons.push(this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox, this.polishedSpritesCheckBox,
-            this.autoscoutCheckBox)
+            this.autoscoutCheckBox, this.atmosphericVisualsCheckBox)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         let y = this.FIRST_Y + this.buttons.length * this.INTERVAL_Y
@@ -145,11 +150,17 @@ class OtherSettingsTree {
     }
     __updateOtherSettings() {
         let usePolishedSprites = otherSettings.usePolishedSprites
+        const atmosphericVisuals = otherSettings.atmosphericVisuals
         otherSettings.alwaysDisplayHPBar = this.hpBarCheckBox.mark
         otherSettings.alwaysDisplayMovesBar = this.movesBarCheckBox.mark
         otherSettings.moveCameraToUndoTarget = this.undoCheckBox.mark
         otherSettings.usePolishedSprites = this.polishedSpritesCheckBox.mark
         otherSettings.autoscout = this.autoscoutCheckBox.mark
+        otherSettings.atmosphericVisuals = this.atmosphericVisualsCheckBox.mark
+        if (atmosphericVisuals !== otherSettings.atmosphericVisuals && grid) {
+            // Rebuild the board display on the next frame, without changing game state.
+            grid.surfaceCacheState = undefined
+        }
 
         if (usePolishedSprites != otherSettings.usePolishedSprites)
             loadSprites()
@@ -162,6 +173,7 @@ class OtherSettingsTree {
         this.undoCheckBox.mark = otherSettings.moveCameraToUndoTarget
         this.polishedSpritesCheckBox.mark = otherSettings.usePolishedSprites
         this.autoscoutCheckBox.mark = otherSettings.autoscout
+        this.atmosphericVisualsCheckBox.mark = otherSettings.atmosphericVisuals
     }
     draw(ctx) {
         this.__updateButtonsByOtherSettings()
