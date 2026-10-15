@@ -1,6 +1,35 @@
 // Optional decoration never participates in the required sprite startup counter.
 const atmosphericBackground = {
     state: 'idle', image: null, raster: null, rasterizations: 0,
+    // Only these two canvases are additional atmospheric backing stores. Terrain,
+    // buildings and spill share the pre-existing grid/sprite caches.
+    maxBytes: 33554432, lightBytes: 128 * 128 * 4, fallbacks: 0,
+    releaseRaster() {
+        if (this.raster) this.raster.width = this.raster.height = 0
+        this.raster = null
+    },
+    invalidate() {
+        this.releaseRaster()
+        if (atmosphericLighting.texture) {
+            atmosphericLighting.texture.width = atmosphericLighting.texture.height = 0
+            atmosphericLighting.texture = null
+        }
+    },
+    bytes() {
+        const bytes = c => c ? c.width * c.height * 4 : 0
+        return bytes(this.raster) + bytes(atmosphericLighting.texture)
+    },
+    watched: new WeakSet(),
+    watch(surface) {
+        if (this.watched.has(surface)) return
+        this.watched.add(surface)
+        surface.addEventListener('contextlost', event => {
+            event.preventDefault()
+            this.invalidate()
+            if (typeof grid !== 'undefined' && grid) grid.surfaceCacheState = undefined
+        })
+        surface.addEventListener('contextrestored', restoreImageCaches)
+    },
     load() {
         if (this.state !== 'idle') return
         this.state = 'loading'
@@ -18,30 +47,47 @@ const atmosphericBackground = {
         image.src = 'assets/atmosphere/clouds.svg'
     },
     draw(ctx) {
+        // Bind independently of the optional sprite startup counter.
+        this.watch(ctx.canvas)
+        const key = [otherSettings.atmosphericVisuals, otherSettings.usePolishedSprites,
+            window.devicePixelRatio, canvas.scale].join(':')
+        if (this.key !== key || this.board !== grid) {
+            this.invalidate()
+            this.key = key
+            this.board = grid
+            if (grid) grid.surfaceCacheState = undefined
+        }
         if (!otherSettings.atmosphericVisuals) return
         this.load()
         if (this.state !== 'ready') return
         const w = ctx.canvas.width, h = ctx.canvas.height
         if (!w || !h) return
-        if (!this.raster || this.raster.width !== w || this.raster.height !== h) {
+        const scale = Math.max(w / this.image.naturalWidth, h / this.image.naturalHeight)
+        const dw = this.image.naturalWidth * scale, dh = this.image.naturalHeight * scale
+        const paint = target => target.drawImage(this.image, (w - dw) / 2, (h - dh) / 2, dw, dh)
+        if (this.raster && (this.raster.width !== w || this.raster.height !== h))
+            this.releaseRaster()
+        if (!this.raster && w * h * 4 + this.lightBytes <= this.maxBytes) {
+            const raster = document.createElement('canvas')
             try {
-                const raster = document.createElement('canvas')
                 raster.width = w
                 raster.height = h
-                const scale = Math.max(w / this.image.naturalWidth, h / this.image.naturalHeight)
-                const dw = this.image.naturalWidth * scale, dh = this.image.naturalHeight * scale
-                raster.getContext('2d').drawImage(this.image, (w - dw) / 2, (h - dh) / 2, dw, dh)
+                paint(raster.getContext('2d'))
+                this.watch(raster)
                 this.raster = raster
                 ++this.rasterizations
             } catch (_) {
-                this.state = 'failed'
-                this.raster = null
-                return
+                raster.width = raster.height = 0
             }
         }
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.drawImage(this.raster, 0, 0)
+        if (this.raster) ctx.drawImage(this.raster, 0, 0)
+        else {
+            // Decoded static image: no per-frame gradient or blur regeneration.
+            paint(ctx)
+            ++this.fallbacks
+        }
         ctx.restore()
     }
 }
