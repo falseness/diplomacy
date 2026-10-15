@@ -42,6 +42,7 @@ for (const name of undeadSpriteImages) assets[name] = new Image()
 let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
 for (let i = 0; i < grassHexImages.length; ++i)
     assets[grassHexImages[i]] = new Image()
+const atmosphericNatureImages = ['bush', 'hill', 'mountain', 'lake', 'sea']
 let imagesCountLoaded = 0
 let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
@@ -55,8 +56,15 @@ for (let i = 0; i < images.length; ++i) {
         failedImages.delete(images[i])
         ++imagesCountLoaded
         cachedImages[images[i]] = cacheImage(images[i])
+        if (atmosphericNatureImages.includes(images[i]) && typeof grid != 'undefined' && grid)
+            grid.surfaceCacheState = undefined
     }
     assets[images[i]].onerror = function() {
+        // A missing optional variant must not become a blank terrain sprite.
+        if (assets[images[i]].src.includes('/atmosphere/nature/')) {
+            assets[images[i]].src = 'assets/sprites/' + images[i] + '.svg'
+            return
+        }
         console.error('failed to load asset ' + images[i] + ': ' + assets[images[i]].src)
         failedImages.add(images[i])
         ++imagesCountLoaded
@@ -149,6 +157,11 @@ function loadSprites() {
     for (let i = 0; i < spriteImages.length; ++i) {
         if (undeadSpriteImages.includes(spriteImages[i])) {
             assets[spriteImages[i]].src = "assets/" + spriteImages[i] + ".svg"
+            continue
+        }
+        if (otherSettings.usePolishedSprites && otherSettings.atmosphericVisuals !== false &&
+            atmosphericNatureImages.includes(spriteImages[i])) {
+            assets[spriteImages[i]].src = "assets/atmosphere/nature/" + spriteImages[i] + ".svg"
             continue
         }
         const folder = demonSpriteImages.includes(spriteImages[i]) ? "sprites" : spritesFolder
