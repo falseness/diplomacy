@@ -162,7 +162,8 @@ class OtherSettingsTree {
             grid.surfaceCacheState = undefined
         }
 
-        if (usePolishedSprites != otherSettings.usePolishedSprites)
+        if (usePolishedSprites != otherSettings.usePolishedSprites ||
+            atmosphericVisuals !== otherSettings.atmosphericVisuals)
             loadSprites()
 
         saveOtherSettings()
