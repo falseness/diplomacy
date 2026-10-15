@@ -2,23 +2,23 @@
 <title id="title">Painted miniature hill</title>
 <desc id="desc">A rounded grassy hill with a lit crest, a few stones and a worn path; transparent background. Archers on it shoot one hex further. 512 by 512.</desc>
 <defs>
-<radialGradient id="ground" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#172a2a" stop-opacity="0.4"/><stop offset="0.6" stop-color="#1b2f37" stop-opacity="0.2"/><stop offset="1" stop-color="#1b2f37" stop-opacity="0"/></radialGradient>
-<linearGradient id="slope" x1="0.15" y1="0.1" x2="0.85" y2="0.95"><stop stop-color="#c0d659"/><stop offset="0.45" stop-color="#83ac46"/><stop offset="1" stop-color="#417543"/></linearGradient>
-<linearGradient id="shade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#538a4c" stop-opacity="0"/><stop offset="1" stop-color="#234a34" stop-opacity="0.75"/></linearGradient>
-<linearGradient id="crest" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#eff289"/><stop offset="1" stop-color="#c0d659" stop-opacity="0"/></linearGradient>
-<linearGradient id="path" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fad68b"/><stop offset="1" stop-color="#bb985f"/></linearGradient>
+<radialGradient id="ground" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#172a2a" stop-opacity="0.4"/><stop offset="0.6" stop-color="#112833" stop-opacity="0.2"/><stop offset="1" stop-color="#112833" stop-opacity="0"/></radialGradient>
+<linearGradient id="slope" x1="0.15" y1="0.1" x2="0.85" y2="0.95"><stop stop-color="#cbd847"/><stop offset="0.45" stop-color="#8fae36"/><stop offset="1" stop-color="#376e3f"/></linearGradient>
+<linearGradient id="shade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#498348" stop-opacity="0"/><stop offset="1" stop-color="#194330" stop-opacity="0.75"/></linearGradient>
+<linearGradient id="crest" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#faf477"/><stop offset="1" stop-color="#cbd847" stop-opacity="0"/></linearGradient>
+<linearGradient id="path" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffd879"/><stop offset="1" stop-color="#c79a4f"/></linearGradient>
 </defs>
 <ellipse cx="256" cy="372" rx="226" ry="70" fill="url(#ground)"/>
-<path d="M44 372 C70 250 150 160 256 150 C362 160 442 250 468 372 C400 404 112 404 44 372 Z" fill="url(#slope)" stroke="#2a503a" stroke-width="8" stroke-linejoin="round"/>
+<path d="M44 372 C70 250 150 160 256 150 C362 160 442 250 468 372 C400 404 112 404 44 372 Z" fill="url(#slope)" stroke="#204936" stroke-width="8" stroke-linejoin="round"/>
 <path d="M256 150 C362 160 442 250 468 372 C430 390 360 400 300 402 C360 330 350 230 256 150 Z" fill="url(#shade)"/>
 <path d="M150 214 C190 172 230 160 262 160 C300 166 330 182 352 204 C300 190 220 190 150 214 Z" fill="url(#crest)"/>
 <path d="M226 396 C240 340 262 290 248 240 C244 222 252 200 262 186" stroke="url(#path)" stroke-width="16" stroke-linecap="round" fill="none"/>
-<g stroke="#3e554a" stroke-width="5" stroke-linejoin="round">
-<path d="M128 330 L146 312 L170 316 L176 334 L150 342 Z" fill="#cfbb8f"/>
-<path d="M330 300 L346 288 L366 296 L362 312 L338 314 Z" fill="#bea97b"/>
-<path d="M376 350 L392 340 L410 348 L404 362 L384 364 Z" fill="#a0957e"/>
+<g stroke="#344e46" stroke-width="5" stroke-linejoin="round">
+<path d="M128 330 L146 312 L170 316 L176 334 L150 342 Z" fill="#dabd7d"/>
+<path d="M330 300 L346 288 L366 296 L362 312 L338 314 Z" fill="#c9ab69"/>
+<path d="M376 350 L392 340 L410 348 L404 362 L384 364 Z" fill="#ac976e"/>
 </g>
-<g stroke="#33653c" stroke-width="6" stroke-linecap="round">
+<g stroke="#295e38" stroke-width="6" stroke-linecap="round">
 <path d="M100 352 l-6 -18 M108 352 l2 -20 M116 352 l8 -16"/>
 <path d="M296 250 l-5 -15 M303 250 l2 -17 M310 250 l7 -13"/>
 <path d="M196 268 l-5 -14 M203 268 l2 -16 M210 268 l7 -12"/>
