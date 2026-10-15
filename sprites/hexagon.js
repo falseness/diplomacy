@@ -139,12 +139,21 @@ class Hexagon extends Sprite {
             ? `rgb(${Math.round(225 - 69 * across)}, ${Math.round(193 - 19 * across)}, ${Math.round(151 + 46 * across)})`
             : '#dedede'
         ctx.fill()
-        const light = ctx.createLinearGradient(center.x - basis.r, center.y - basis.r,
-            center.x + basis.r, center.y + basis.r)
-        light.addColorStop(0, this.playerColor === 0 ? '#fff0d7' : '#fafafa')
-        light.addColorStop(0.45, this.playerColor === 0 ? '#e8e2dc' : '#e2e2e2')
-        light.addColorStop(1, this.playerColor === 0 ? '#78869c' : '#858585')
-        ctx.fillStyle = light
+        // Gradients use world coordinates and follow the draw transform. Keep one
+        // per live context/hex rather than recreating it each frame or zoom event.
+        this.atmosphericGradients ||= new WeakMap()
+        const gradientKey = [center.x, center.y, basis.r, this.playerColor === 0].join(':')
+        let cached = this.atmosphericGradients.get(ctx)
+        if (!cached || cached.key !== gradientKey) {
+            const light = ctx.createLinearGradient(center.x - basis.r, center.y - basis.r,
+                center.x + basis.r, center.y + basis.r)
+            light.addColorStop(0, this.playerColor === 0 ? '#fff0d7' : '#fafafa')
+            light.addColorStop(0.45, this.playerColor === 0 ? '#e8e2dc' : '#e2e2e2')
+            light.addColorStop(1, this.playerColor === 0 ? '#78869c' : '#858585')
+            cached = {key: gradientKey, light}
+            this.atmosphericGradients.set(ctx, cached)
+        }
+        ctx.fillStyle = cached.light
         ctx.fill()
         // Inset bevels stay clipped to the existing hex, including at fog edges.
         ctx.globalCompositeOperation = 'source-over'
