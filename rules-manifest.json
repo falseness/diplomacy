@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "b922325bebe9c455b5a4eb322f6127b4688240099d8e349f7e10740d1f21690d",
+  "rulesVersion": "1617686477e694d9327b4aae8b8a1e3fdb7cf945e6dd069682e10db975775b17",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -35,8 +35,8 @@
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "c5bd15fb975f71f0c9657cf7825a0ee82cc4e0852cc599043cec0bf42877b7ef",
-      "bytes": 43460
+      "sha256": "c4474572d5ae9fd9eaca431f534dffc48196e5efe0ce729cb6c56b0877cba472",
+      "bytes": 42668
     },
     {
       "path": "options/tutorialProgress.js",

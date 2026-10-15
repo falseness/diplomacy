@@ -296,13 +296,8 @@ function createTutorial5Map() {
 }
 
 function createTutorial6Map() {
-    // Fighting withdrawal against round-20 typed portal defenders. Twelve portals: four heavy (Bulwark), two melee
-    // (Brute), four mage (Hexcaster), one chaos (empty: chaos only spawns at round 8) and one siege (Bombard). Nine
-    // defenders stand on a north-edge portal row (2,0)-(8,0), (2,1), (8,1) behind a lake and mountain seal, inside the
-    // front town's catapult reach; they hold their portals, so those portals skip their waves until red breaches them.
-    // The melee portal (9,2) and the siege portal (10,6) stay open: their Brutes and Bombards break the front town.
-    // Preserve both towns, 400 gold, the starting army, round 20 and the round-40 deadline.
-    // Trade the exposed front town for time to regroup at the rear and build a siege counterattack.
+    // Ten typed portals share the open eastern battlefield. Starting defenders occupy
+    // their own portals; chaos retains its existing empty startup and spawn behavior.
     let size = {x: 16, y: 9}
     let towns = [{x: 1, y: 4}, {x: 6, y: 4}]
     // Hex distance in the x-parity offset layout of sprites/sprite.js.
@@ -346,9 +341,9 @@ function createTutorial6Map() {
             }
         ],
         [],
-        // Lakes seal the north portal row; one still closes the demons' south-east rear.
+        // Preserve the northern lakes and the lake at the south-east edge.
         coordDictionary([[13, 8], [1, 0], [1, 1], [3, 1], [4, 1], [6, 1], [7, 1], [8, 2], [9, 0]]),
-        // Mountains finish the seal and narrow the field's southern edge.
+        // Preserve the northern mountains and the southern edge.
         coordDictionary([[3, 8], [4, 8], [8, 8], [9, 8], [15, 0], [2, 2], [5, 1], [9, 1]]),
         // Bushes around the front town give the returning archers cover.
         coordDictionary([[5, 2], [7, 5], [5, 6], [4, 2], [4, 6]]),
@@ -358,30 +353,26 @@ function createTutorial6Map() {
             tutorial: true,
             // The demons start standing on their portals; a portal spawns only once its hex is free.
             units: [
-                {x: 2, y: 0, type: Hexcaster},
-                {x: 2, y: 1, type: Bulwark},
-                {x: 3, y: 0, type: Bulwark},
-                {x: 4, y: 0, type: Hexcaster},
-                {x: 5, y: 0, type: Brute},
-                {x: 6, y: 0, type: Hexcaster},
-                {x: 7, y: 0, type: Bulwark},
-                {x: 8, y: 0, type: Hexcaster},
-                {x: 8, y: 1, type: Bulwark},
+                {x: 10, y: 1, type: Hexcaster},
+                {x: 10, y: 2, type: Bulwark},
+                {x: 11, y: 2, type: Bulwark},
+                {x: 12, y: 2, type: Hexcaster},
+                {x: 12, y: 5, type: Brute},
+                {x: 11, y: 6, type: Hexcaster},
+                {x: 12, y: 6, type: Bulwark},
                 {x: 10, y: 6, type: Bombard},
                 {x: 9, y: 2, type: Brute}
             ]
         }
     )
     map.portals = [
-        {x: 2, y: 0, category: 'mage'},
-        {x: 2, y: 1, category: 'heavy'},
-        {x: 3, y: 0, category: 'heavy'},
-        {x: 4, y: 0, category: 'mage'},
-        {x: 5, y: 0, category: 'melee'},
-        {x: 6, y: 0, category: 'mage'},
-        {x: 7, y: 0, category: 'heavy'},
-        {x: 8, y: 0, category: 'mage'},
-        {x: 8, y: 1, category: 'heavy'},
+        {x: 10, y: 1, category: 'mage'},
+        {x: 10, y: 2, category: 'heavy'},
+        {x: 11, y: 2, category: 'heavy'},
+        {x: 12, y: 2, category: 'mage'},
+        {x: 12, y: 5, category: 'melee'},
+        {x: 11, y: 6, category: 'mage'},
+        {x: 12, y: 6, category: 'heavy'},
         {x: 10, y: 6, category: 'siege'},
         {x: 9, y: 2, category: 'melee'},
         {x: 7, y: 7, category: 'chaos'}
