@@ -92,7 +92,28 @@ class Hexagon extends Sprite {
             drawCachedImage(ctx, this.player.hexagon, pos)
         }
         drawCachedImage(ctx, this.grassHex, pos)
+        this.drawAtmosphericSurface(ctx)
     }
+    drawAtmosphericSurface(ctx) {
+        if (!otherSettings.atmosphericVisuals) return
+        const center = this.calcPos()
+        const vertices = mapDepth.getVertices(center)
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(vertices[0].x, vertices[0].y)
+        for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, vertex.y)
+        ctx.closePath()
+        ctx.clip()
+        const light = ctx.createLinearGradient(center.x - basis.r, center.y - basis.r,
+            center.x + basis.r, center.y + basis.r)
+        light.addColorStop(0, 'rgba(255, 211, 150, 0.20)')
+        light.addColorStop(0.45, 'rgba(255, 226, 182, 0.03)')
+        light.addColorStop(1, 'rgba(19, 39, 73, 0.24)')
+        ctx.fillStyle = light
+        ctx.fill()
+        ctx.restore()
+    }
+
 }
 class Suburb {
     static income = 1

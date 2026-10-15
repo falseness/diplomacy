@@ -377,6 +377,28 @@ class MapDepth {
         for (let region of this.cacheRegions)
             this.drawCacheRegion(ctx, region)
     }
+    renderAtmosphericSides(ctx) {
+        if (!otherSettings.atmosphericVisuals) return
+        // Only exposed edges have faces. Paint before terrain/fog so no face can
+        // cover a foreground neighbour. Keep existing depth, bounds and hit areas.
+        ctx.save()
+        for (const face of this.faces) {
+            if (face.side < 2 || face.side > 4) continue
+            const depth = Math.min(this.depth, basis.r * 0.12)
+            const shade = ctx.createLinearGradient(0, face.begin.y, 0, face.sortY)
+            shade.addColorStop(0, face.side === 3 ? '#8994a1' : '#697789')
+            shade.addColorStop(1, '#303c50')
+            ctx.fillStyle = shade
+            ctx.beginPath()
+            ctx.moveTo(face.begin.x, face.begin.y)
+            ctx.lineTo(face.end.x, face.end.y)
+            ctx.lineTo(face.end.x, face.end.y + depth)
+            ctx.lineTo(face.begin.x, face.begin.y + depth)
+            ctx.closePath()
+            ctx.fill()
+        }
+        ctx.restore()
+    }
     renderRim(ctx) {
         if (!this.rim)
             return
