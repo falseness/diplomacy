@@ -188,8 +188,6 @@ function createTutorial3Map() {
                     {x: 5, y: 3, type: Archer},
                     {x: 5, y: 5, type: Archer},
                     {x: 4, y: 3, type: Normchel},
-                    {x: 4, y: 5, type: Normchel},
-                    {x: 3, y: 4, type: Archer},
                     {x: 5, y: 4, type: Archer}
                 ]
             }
