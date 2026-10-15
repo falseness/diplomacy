@@ -78,8 +78,21 @@ class Hexagon extends Sprite {
         }
         refreshCoopVision()
     }
-    draw(ctx) {
+    draw(ctx, atmosphericTransform) {
         let pos = this.pos
+        // The atmospheric path already knows this pass's transform. Cull the
+        // whole offscreen tile, including its unchanged base raster, rather than
+        // submitting base draws that cannot contribute visible pixels.
+        const t = atmosphericTransform
+        if (otherSettings.atmosphericVisuals && t &&
+                t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0) {
+            const x = pos.x * t.a + t.e, y = pos.y * t.d + t.f
+            const w = basis.hexHalfRectWithStrokeOffset.width * 2 * t.a
+            const h = basis.hexHalfRectWithStrokeOffset.height * 2 * t.d
+            if (x + w < -1 || y + h < -1 ||
+                    x > ctx.canvas.width + 1 || y > ctx.canvas.height + 1)
+                return
+        }
 
         if (this.unknown) {
             drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
@@ -92,11 +105,23 @@ class Hexagon extends Sprite {
             drawCachedImage(ctx, this.player.hexagon, pos)
         }
         drawCachedImage(ctx, this.grassHex, pos)
-        this.drawAtmosphericSurface(ctx)
+        this.drawAtmosphericSurface(ctx, atmosphericTransform)
     }
-    drawAtmosphericSurface(ctx) {
+    drawAtmosphericSurface(ctx, atmosphericTransform) {
         if (!otherSettings.atmosphericVisuals) return
         const center = this.calcPos()
+        // Atmospheric gradients are visual-only. Skip decoration whose entire
+        // hex lies outside the current viewport or offscreen cache target.
+        const transform = atmosphericTransform || ctx.getTransform()
+        if (transform.b === 0 && transform.c === 0 && transform.a > 0 && transform.d > 0) {
+            const x = center.x * transform.a + transform.e
+            const y = center.y * transform.d + transform.f
+            const rx = basis.r * transform.a + 1
+            const ry = basis.r * transform.d + 1
+            if (x + rx < 0 || y + ry < 0 ||
+                    x - rx > ctx.canvas.width || y - ry > ctx.canvas.height)
+                return
+        }
         const vertices = mapDepth.getVertices(center)
         ctx.save()
         ctx.beginPath()

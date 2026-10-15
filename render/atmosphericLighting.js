@@ -17,7 +17,7 @@ const atmosphericLighting = {
         this.texture = image
         return image
     },
-    collect(board) {
+    collect(board, includeKey = true, includeCells = true) {
         const cells = [], sources = []
         if (!otherSettings.atmosphericVisuals) return {cells, sources, key: ''}
         for (const row of board.arr) for (const cell of row) {
@@ -29,17 +29,32 @@ const atmosphericLighting = {
             const observation = board.observedBuilding(cell)
             const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
             if (building?.isMapEdge) continue
+            const emitsLight = building && !building.killed &&
+                (building.name === 'town' || building.name === 'goldmine' || building.isDemonPortal || building.name === 'demonPortal')
+            if (!includeCells && !emitsLight) continue
             const pos = hex.calcPos()
-            cells.push({x, y, pos})
-            if (building && !building.killed &&
-                (building.name === 'town' || building.name === 'goldmine' || building.isDemonPortal || building.name === 'demonPortal'))
-                sources.push({x, y, pos, name: building.name})
+            if (includeCells) cells.push({x, y, pos})
+            if (emitsLight) sources.push({x, y, pos, name: building.name})
         }
-        return {cells, sources, key: JSON.stringify([cells, sources])}
+        return {cells, sources, key: includeKey ? JSON.stringify([cells, sources]) : ''}
     },
     clip(ctx, cells) {
         ctx.beginPath()
+        const transform = ctx.getTransform()
+        const axisAligned = transform.b === 0 && transform.c === 0 &&
+            transform.a > 0 && transform.d > 0
         for (const cell of cells) {
+            // Cull only paths wholly outside this target, including offscreen
+            // cache targets. Keep a device-pixel margin for antialiasing.
+            if (axisAligned) {
+                const x = cell.pos.x * transform.a + transform.e
+                const y = cell.pos.y * transform.d + transform.f
+                const rx = basis.r * transform.a + 1
+                const ry = basis.r * transform.d + 1
+                if (x + rx < 0 || y + ry < 0 ||
+                        x - rx > ctx.canvas.width || y - ry > ctx.canvas.height)
+                    continue
+            }
             const points = mapDepth.getVertices(cell.pos)
             ctx.moveTo(points[0].x, points[0].y)
             for (const point of points.slice(1)) ctx.lineTo(point.x, point.y)
@@ -47,21 +62,39 @@ const atmosphericLighting = {
         }
         ctx.clip()
     },
+    visibleSources(ctx, sources, radius) {
+        const t = ctx.getTransform()
+        if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return sources
+        return sources.filter(({pos}) => {
+            const x = pos.x * t.a + t.e, y = pos.y * t.d + t.f
+            const rx = radius * t.a + 1, ry = radius * t.d + 1
+            return x + rx >= 0 && y + ry >= 0 &&
+                x - rx <= ctx.canvas.width && y - ry <= ctx.canvas.height
+        })
+    },
     draw(ctx, board) {
-        const {cells, sources} = this.collect(board)
-        if (!sources.length) return
-        ctx.save()
-        this.clip(ctx, cells)
+        const collected = this.collect(board, false)
         const radius = basis.r * 2.1
+        const sources = this.visibleSources(ctx, collected.sources, radius)
+        if (!sources.length) return
+        const cells = collected.cells
+        ctx.save()
+        // Cells outside every light's bounds cannot contribute pixels. Avoid a
+        // full-board clip path on each frame, retaining the same authorized cells.
+        const reach = radius + basis.r
+        this.clip(ctx, cells.filter(cell => sources.some(source =>
+            Math.abs(cell.pos.x - source.pos.x) <= reach &&
+            Math.abs(cell.pos.y - source.pos.y) <= reach)))
         for (const {pos} of sources)
             ctx.drawImage(this.prepare(), pos.x - radius, pos.y - radius, radius * 2, radius * 2)
         ctx.restore()
     },
     glow(ctx, board) {
-        const {cells, sources} = this.collect(board)
+        const sources = this.visibleSources(ctx, this.collect(board, false, false).sources, basis.r * 0.4)
         if (!sources.length) return
         ctx.save()
-        this.clip(ctx, cells)
+        // Each small center glow lies wholly inside its own visible source hex.
+        this.clip(ctx, sources)
         for (const {x, y, pos} of sources) {
             // Keep units completely readable when standing on a source.
             if (board.getStillUnit(board.arr[x][y])) continue
