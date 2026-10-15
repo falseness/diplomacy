@@ -8,8 +8,12 @@ const atmosphericLighting = {
         image.width = image.height = 128
         const ctx = image.getContext('2d')
         const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64)
-        gradient.addColorStop(0, 'rgba(255,192,78,0.32)')
-        gradient.addColorStop(0.35, 'rgba(255,174,54,0.16)')
+        // A bright threshold rolls into broad amber ground illumination.
+        // The transparent edge avoids a visible ring or hard disk.
+        gradient.addColorStop(0, 'rgba(255,220,126,0.78)')
+        gradient.addColorStop(0.18, 'rgba(255,196,77,0.62)')
+        gradient.addColorStop(0.48, 'rgba(255,174,48,0.34)')
+        gradient.addColorStop(0.78, 'rgba(255,158,40,0.09)')
         gradient.addColorStop(1, 'rgba(255,158,40,0)')
         ctx.fillStyle = gradient
         ctx.fillRect(0, 0, 128, 128)
@@ -74,19 +78,19 @@ const atmosphericLighting = {
     },
     draw(ctx, board) {
         const collected = this.collect(board, false)
-        const radius = basis.r * 2.1
-        const sources = this.visibleSources(ctx, collected.sources, radius)
+        const radius = basis.r * 2.3
+        const sources = this.visibleSources(ctx, collected.sources, radius + basis.r * 0.23)
         if (!sources.length) return
         const cells = collected.cells
         ctx.save()
         // Cells outside every light's bounds cannot contribute pixels. Avoid a
         // full-board clip path on each frame, retaining the same authorized cells.
-        const reach = radius + basis.r
+        const reach = radius + basis.r * 1.23
         this.clip(ctx, cells.filter(cell => sources.some(source =>
             Math.abs(cell.pos.x - source.pos.x) <= reach &&
             Math.abs(cell.pos.y - source.pos.y) <= reach)))
         for (const {pos} of sources)
-            ctx.drawImage(this.prepare(), pos.x - radius, pos.y - radius, radius * 2, radius * 2)
+            ctx.drawImage(this.prepare(), pos.x - radius, pos.y + basis.r * 0.23 - radius, radius * 2, radius * 2)
         ctx.restore()
     },
     glow(ctx, board) {
