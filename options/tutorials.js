@@ -71,14 +71,10 @@ function createTutorial1Map() {
 }
 
 function createTutorial2Map() {
-    // Blue's army (6 normchels, 5 rear archers and 5 flank archers) stands left of red's
-    // 2 normchels and 2 archers in an open field; red's town with a barrack is 7 hexes behind
-    // red's army. The way home is a road between a lake (north) and mountains (south) that
-    // ends at a gate: mountain spurs in column 11 leave only rows 3-5 open, 2 hexes in front
-    // of the town. Fighting in the field at once loses. Retreating along the road to the gate
-    // for 6 rounds (archers shooting whatever comes in range) while the town orders noobs and
-    // the barrack archers, then meeting blue at the gate with the new units, wins. Blue has no town, so its economy is off
-    // (salaries would bankrupt it and disband its army).
+    // Blue's 5 normchels and 8 archers face red's 2 normchels and 2 archers.
+    // Red can retreat along the clear road to its town and barrack, through the
+    // mountain gate in column 11 (rows 3-5). Blue has no town, so its economy is
+    // disabled to prevent salaries from disbanding its army.
     let map = new GameMap(
         {x: 16, y: 9},
         [
@@ -118,10 +114,6 @@ function createTutorial2Map() {
                     {x: 3, y: 2, type: Archer},
                     {x: 3, y: 0, type: Archer},
                     {x: 1, y: 0, type: Archer},
-                    {x: 1, y: 7, type: Archer},
-                    // A second wave: a normchel on the southern flank and an archer behind the rear line.
-                    {x: 3, y: 6, type: Normchel},
-                    {x: 0, y: 4, type: Archer}
                 ]
             }
         ],
