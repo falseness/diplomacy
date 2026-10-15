@@ -170,6 +170,7 @@ class Grid extends SpritesGroup {
     }
     //todo: refactor
     drawHexagons(ctx) {
+        const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
@@ -178,7 +179,7 @@ class Grid extends SpritesGroup {
                 if (isFogOfWar && !this.fogOfWar[i][j] && !observed)
                     continue
                 const hexagon = observed || this.arr[i][j].hexagon
-                hexagon.draw(ctx)
+                hexagon.draw(ctx, atmosphericTransform)
             }
         }
     }

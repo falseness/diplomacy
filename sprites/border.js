@@ -382,9 +382,17 @@ class MapDepth {
         // Only exposed edges have faces. Paint before terrain/fog so no face can
         // cover a foreground neighbour. Keep existing depth, bounds and hit areas.
         ctx.save()
+        const t = ctx.getTransform()
+        const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
         for (const face of this.faces) {
             if (face.side < 2 || face.side > 4) continue
             const depth = this.depth
+            if (axisAligned && (
+                    Math.max(face.begin.x, face.end.x) * t.a + t.e < -1 ||
+                    Math.min(face.begin.x, face.end.x) * t.a + t.e > ctx.canvas.width + 1 ||
+                    (Math.max(face.begin.y, face.end.y) + depth) * t.d + t.f < -1 ||
+                    Math.min(face.begin.y, face.end.y) * t.d + t.f > ctx.canvas.height + 1))
+                continue
             // Face geometry is replaced on rebuild; context keys do not retain
             // discarded canvases. Camera transforms need no new gradient.
             face.atmosphericGradients ||= new WeakMap()
