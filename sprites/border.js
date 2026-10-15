@@ -386,16 +386,16 @@ class MapDepth {
         const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
         for (const face of this.faces) {
             if (face.side < 2 || face.side > 4) continue
-            const depth = Math.min(this.depth, basis.r * 0.12)
+            const depth = this.depth
             if (axisAligned && (
                     Math.max(face.begin.x, face.end.x) * t.a + t.e < -1 ||
                     Math.min(face.begin.x, face.end.x) * t.a + t.e > ctx.canvas.width + 1 ||
                     (Math.max(face.begin.y, face.end.y) + depth) * t.d + t.f < -1 ||
                     Math.min(face.begin.y, face.end.y) * t.d + t.f > ctx.canvas.height + 1))
                 continue
-            const shade = ctx.createLinearGradient(0, face.begin.y, 0, face.sortY)
-            shade.addColorStop(0, face.side === 3 ? '#8994a1' : '#697789')
-            shade.addColorStop(1, '#303c50')
+            const shade = ctx.createLinearGradient(0, Math.min(face.begin.y, face.end.y), 0, Math.max(face.begin.y, face.end.y) + depth)
+            shade.addColorStop(0, face.side === 4 ? '#a18d73' : '#596a82')
+            shade.addColorStop(1, '#263347')
             ctx.fillStyle = shade
             ctx.beginPath()
             ctx.moveTo(face.begin.x, face.begin.y)

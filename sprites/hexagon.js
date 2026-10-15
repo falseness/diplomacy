@@ -129,13 +129,33 @@ class Hexagon extends Sprite {
         for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, vertex.y)
         ctx.closePath()
         ctx.clip()
+        // Multiply preserves ownership hue while giving even white neutral tiles
+        // a stone midtone. The world-space wash follows the board, not the camera.
+        const bounds = mapDepth.surfaceBounds
+        const span = bounds ? Math.max(1, bounds.right - bounds.left) : 1
+        const across = bounds ? Math.max(0, Math.min(1, (center.x - bounds.left) / span)) : 0.5
+        ctx.globalCompositeOperation = 'multiply'
+        ctx.fillStyle = this.playerColor === 0
+            ? `rgb(${Math.round(225 - 69 * across)}, ${Math.round(193 - 19 * across)}, ${Math.round(151 + 46 * across)})`
+            : '#dedede'
+        ctx.fill()
         const light = ctx.createLinearGradient(center.x - basis.r, center.y - basis.r,
             center.x + basis.r, center.y + basis.r)
-        light.addColorStop(0, 'rgba(255, 211, 150, 0.20)')
-        light.addColorStop(0.45, 'rgba(255, 226, 182, 0.03)')
-        light.addColorStop(1, 'rgba(19, 39, 73, 0.24)')
+        light.addColorStop(0, this.playerColor === 0 ? '#fff0d7' : '#fafafa')
+        light.addColorStop(0.45, this.playerColor === 0 ? '#e8e2dc' : '#e2e2e2')
+        light.addColorStop(1, this.playerColor === 0 ? '#78869c' : '#858585')
         ctx.fillStyle = light
         ctx.fill()
+        // Inset bevels stay clipped to the existing hex, including at fog edges.
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.lineWidth = basis.r * 0.045
+        for (let i = 0; i < vertices.length; i++) {
+            ctx.strokeStyle = i === 0 || i === 5 ? 'rgba(255,232,190,0.65)' : 'rgba(27,39,58,0.5)'
+            ctx.beginPath()
+            ctx.moveTo(vertices[i].x, vertices[i].y)
+            ctx.lineTo(vertices[(i + 1) % 6].x, vertices[(i + 1) % 6].y)
+            ctx.stroke()
+        }
         ctx.restore()
     }
 
