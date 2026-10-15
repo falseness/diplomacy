@@ -43,6 +43,23 @@ let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + 
 for (let i = 0; i < grassHexImages.length; ++i)
     assets[grassHexImages[i]] = new Image()
 const atmosphericNatureImages = ['bush', 'hill', 'mountain', 'lake', 'sea']
+// Semantic keys shared by board drawing and production previews. No draw-time filename inference.
+const atmosphericBuildingImages = Object.freeze({
+    town: 'assets/atmosphere/buildings/town.svg',
+    farm: 'assets/atmosphere/buildings/farm.svg',
+    barrack: 'assets/atmosphere/buildings/barrack.svg',
+    wall: 'assets/atmosphere/buildings/wall.svg',
+    bastion: 'assets/atmosphere/buildings/bastion.svg',
+    tower: 'assets/atmosphere/buildings/tower.svg',
+    goldmine: 'assets/atmosphere/buildings/goldmine.svg',
+    demonPortalMelee: 'assets/atmosphere/buildings/demonPortalMelee.svg',
+    demonPortalRanged: 'assets/atmosphere/buildings/demonPortalRanged.svg',
+    demonPortalSiege: 'assets/atmosphere/buildings/demonPortalSiege.svg',
+    demonPortalHeavy: 'assets/atmosphere/buildings/demonPortalHeavy.svg',
+    demonPortalCavalry: 'assets/atmosphere/buildings/demonPortalCavalry.svg',
+    demonPortalChaos: 'assets/atmosphere/buildings/demonPortalChaos.svg',
+    demonPortalMage: 'assets/atmosphere/buildings/demonPortalMage.svg',
+})
 let imagesCountLoaded = 0
 let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
@@ -56,12 +73,13 @@ for (let i = 0; i < images.length; ++i) {
         failedImages.delete(images[i])
         ++imagesCountLoaded
         cachedImages[images[i]] = cacheImage(images[i])
-        if (atmosphericNatureImages.includes(images[i]) && typeof grid != 'undefined' && grid)
+        if ((atmosphericNatureImages.includes(images[i]) || atmosphericBuildingImages[images[i]]) && typeof grid != 'undefined' && grid)
             grid.surfaceCacheState = undefined
     }
     assets[images[i]].onerror = function() {
-        // A missing optional variant must not become a blank terrain sprite.
-        if (assets[images[i]].src.includes('/atmosphere/nature/')) {
+        // A missing optional variant must not become a blank sprite.
+        if (assets[images[i]].src.includes('/atmosphere/nature/') ||
+                assets[images[i]].src.includes('/atmosphere/buildings/')) {
             assets[images[i]].src = 'assets/sprites/' + images[i] + '.svg'
             return
         }
@@ -162,6 +180,11 @@ function loadSprites() {
         if (otherSettings.usePolishedSprites && otherSettings.atmosphericVisuals !== false &&
             atmosphericNatureImages.includes(spriteImages[i])) {
             assets[spriteImages[i]].src = "assets/atmosphere/nature/" + spriteImages[i] + ".svg"
+            continue
+        }
+        if (otherSettings.usePolishedSprites && otherSettings.atmosphericVisuals !== false &&
+            atmosphericBuildingImages[spriteImages[i]]) {
+            assets[spriteImages[i]].src = atmosphericBuildingImages[spriteImages[i]]
             continue
         }
         const folder = demonSpriteImages.includes(spriteImages[i]) ? "sprites" : spritesFolder
