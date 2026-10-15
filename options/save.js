@@ -79,7 +79,8 @@ class JsonUnpackManager {
             grid.setUnit(empty, packedUnit.coord)
             return empty
         }
-        let unit = new _unit(packedUnit.coord.x, packedUnit.coord.y)
+        let unit = Unit.withTutorialOwner(packedUnit.tutorialOwner,
+            () => new _unit(packedUnit.coord.x, packedUnit.coord.y))
         if (Object.prototype.hasOwnProperty.call(packedUnit, 'id')) unit.id = packedUnit.id
         unit.hp = packedUnit.hp
         unit.wasHitted = packedUnit.wasHitted

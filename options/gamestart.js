@@ -354,6 +354,13 @@ class GameMap {
         if (competitiveHotseat && !this.coop) gameSettings.pendingHotseatOpeningEconomy = []
         this.createPlayers(competitiveHotseat && !this.coop)
         this.createTowns()
+        if (this.tutorial?.id === 'tutorial-14') {
+            // Only town rings own opening land. Unit ownership was captured during
+            // construction, so the authored field forces remain blue on neutral land.
+            for (const column of grid.arr)
+                for (const cell of column)
+                    if (!cell.hexagon.isSuburb) cell.hexagon.firstpaint(0)
+        }
         this.createConfiguredSuburbs()
         this.createConfiguredBarracks()
         this.createConfiguredFarms()

@@ -2,6 +2,10 @@ class Unit extends Entity {
     static visionRange = 3
     constructor(x, y, name) {
         super(x, y, new.target.type || name)
+        // Town Duel keeps field units on neutral opening cells. Capture their owner
+        // before registration; every other map continues to derive it from territory.
+        if (gameSettings.tutorial?.id === 'tutorial-14')
+            this.tutorialOwner = Unit.restoringTutorialOwner ?? super.playerColor
         //this.moves = speed
         grid.setUnit(this, this.coord)
         this.player.units.push(this)
@@ -23,6 +27,19 @@ class Unit extends Entity {
 
         this.trimBars()
         refreshCoopVision()
+    }
+    static withTutorialOwner(owner, construct) {
+        const previous = Unit.restoringTutorialOwner
+        try {
+            Unit.restoringTutorialOwner = gameSettings.tutorial?.id === 'tutorial-14' &&
+                Number.isInteger(owner) && players[owner] ? owner : undefined
+            return construct()
+        } finally {
+            Unit.restoringTutorialOwner = previous
+        }
+    }
+    get playerColor() {
+        return this.tutorialOwner ?? super.playerColor
     }
     static get description() {
         let res = super.description
@@ -67,6 +84,7 @@ class Unit extends Entity {
     toJSON() {
         let res = super.toJSON()
         res.moves = this.moves
+        if (this.tutorialOwner !== undefined) res.tutorialOwner = this.tutorialOwner
         // Older saves have no IDs; retain their wire format while preserving
         // identities supplied by a scenario or multiplayer controller.
         if (this.id !== undefined) res.id = this.id
