@@ -445,7 +445,8 @@ class Grid extends SpritesGroup {
         return typeof onlineObservation !== 'undefined' ? onlineObservation.hexagonFor(cell) : null
     }
     surfaceStateMatches() {
-        if (!this.surfaceCacheState ||
+        if (this.surfaceCacheAtmospheric !== otherSettings.atmosphericVisuals ||
+            !this.surfaceCacheState ||
             !this.surfaceCacheBuildings ||
             !this.surfaceCacheUnits ||
             !this.surfaceCacheBuildingImages ||
@@ -500,6 +501,7 @@ class Grid extends SpritesGroup {
                 ++index
             }
         }
+        this.surfaceCacheAtmospheric = otherSettings.atmosphericVisuals
         this.surfaceCacheState = state
         this.surfaceCacheBuildings = buildings
         this.surfaceCacheUnits = units
@@ -542,6 +544,7 @@ class Grid extends SpritesGroup {
         cacheCtx.scale(geometry.scale, geometry.scale)
         cacheCtx.translate(-mapDepth.bounds.left, -mapDepth.bounds.top)
         mapDepth.renderUnderlay(cacheCtx, geometry.scale)
+        mapDepth.renderAtmosphericSides(cacheCtx)
         this.drawHexagons(cacheCtx)
         if (isFogOfWar)
             this.drawFogOfWar(cacheCtx)
@@ -604,6 +607,7 @@ class Grid extends SpritesGroup {
             return true
 
         mapDepth.drawUnderlay(ctx, this)
+        mapDepth.renderAtmosphericSides(ctx)
         this.drawHexagons(ctx)
         if (isFogOfWar)
             this.drawFogOfWar(ctx)
