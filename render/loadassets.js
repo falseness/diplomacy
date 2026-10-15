@@ -120,6 +120,7 @@ function paintCachedImage(tmpCanvas, image) {
 // Repaints the existing cached canvases in place, so hexagon.grassHexImage and the grid
 // surface cache image refs stay valid, then makes the next frame rebuild the surface cache.
 function restoreImageCaches() {
+    atmosphericBackground.invalidate()
     for (const name in cachedImages) {
         const image = assets[name]
         if (cachedImages[name] && image && image.complete && image.naturalWidth > 0)

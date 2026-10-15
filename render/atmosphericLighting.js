@@ -13,6 +13,7 @@ const atmosphericLighting = {
         gradient.addColorStop(1, 'rgba(255,158,40,0)')
         ctx.fillStyle = gradient
         ctx.fillRect(0, 0, 128, 128)
+        atmosphericBackground.watch(image)
         this.texture = image
         return image
     },
