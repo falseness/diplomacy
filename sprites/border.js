@@ -385,9 +385,16 @@ class MapDepth {
         for (const face of this.faces) {
             if (face.side < 2 || face.side > 4) continue
             const depth = this.depth
-            const shade = ctx.createLinearGradient(0, Math.min(face.begin.y, face.end.y), 0, Math.max(face.begin.y, face.end.y) + depth)
-            shade.addColorStop(0, face.side === 4 ? '#a18d73' : '#596a82')
-            shade.addColorStop(1, '#263347')
+            // Face geometry is replaced on rebuild; context keys do not retain
+            // discarded canvases. Camera transforms need no new gradient.
+            face.atmosphericGradients ||= new WeakMap()
+            let shade = face.atmosphericGradients.get(ctx)
+            if (!shade) {
+                shade = ctx.createLinearGradient(0, Math.min(face.begin.y, face.end.y), 0, Math.max(face.begin.y, face.end.y) + depth)
+                shade.addColorStop(0, face.side === 4 ? '#a18d73' : '#596a82')
+                shade.addColorStop(1, '#263347')
+                face.atmosphericGradients.set(ctx, shade)
+            }
             ctx.fillStyle = shade
             ctx.beginPath()
             ctx.moveTo(face.begin.x, face.begin.y)

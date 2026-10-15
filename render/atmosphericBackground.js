@@ -49,8 +49,10 @@ const atmosphericBackground = {
     draw(ctx) {
         // Bind independently of the optional sprite startup counter.
         this.watch(ctx.canvas)
+        // Viewport clouds and the fixed light kernel are camera-scale independent.
+        // Reuse them through wheel/pinch gestures; world layers use the draw transform.
         const key = [otherSettings.atmosphericVisuals, otherSettings.usePolishedSprites,
-            window.devicePixelRatio, canvas.scale].join(':')
+            window.devicePixelRatio].join(':')
         if (this.key !== key || this.board !== grid) {
             this.invalidate()
             this.key = key
