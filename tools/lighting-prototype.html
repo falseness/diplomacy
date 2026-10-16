@@ -50,7 +50,6 @@ const IMAGES = {
     i: 'assets/i.svg',
     undo: 'assets/undo.svg'
 }
-for (let i = 1; i <= 6; ++i) IMAGES['grass' + i] = 'assets/grass-hex/grass-hex-' + i + '.svg'
 
 // Light model parameters (light map units: 0..255 per channel, 255 = full light).
 const AMBIENT = [92, 97, 117]             // cool ambient, about rgb 0.36, 0.38, 0.46
@@ -58,9 +57,9 @@ const AMBIENT = [92, 97, 117]             // cool ambient, about rgb 0.36, 0.38,
 // core: where the emitting part of the unchanged sprite sits (cave mouth, town windows),
 // as a fraction of the sprite size from its centre.
 const LAMP = {
-    goldmine: {color: [255, 96, 16], power: 1.35, core: {x: 0.01, y: 0.14}},
-    town: {color: [255, 104, 22], power: 1.45, core: {x: -0.06, y: 0.12}},
-    demonPortal: {color: [255, 96, 52], power: 1.05, core: {x: 0, y: 0.1}}
+    goldmine: {color: [255, 92, 26], power: 1.1, core: {x: 0.01, y: 0.14}},
+    town: {color: [255, 96, 28], power: 1.2, core: {x: -0.06, y: 0.12}},
+    demonPortal: {color: [255, 150, 96], power: 0.9, core: {x: 0, y: 0.1}}
 }
 const TAIL_RADII = 2.5                    // light tail reaches about 2.5 hex radii (basis.r)
 
@@ -189,12 +188,59 @@ function boardCells() {
     return cells
 }
 
-// Unlit albedo: existing tile colours and grass-hex textures (desaturated into stone
-// grain), the board's side faces, then shadows and the unchanged object sprites.
+// Marble grain: a deterministic value-noise mask (shading only, no tile art). Veins are
+// thin dark bands of a turbulent sine, the mottling is low-frequency noise.
+let marbleCanvas = null
+function marble() {
+    if (marbleCanvas) return marbleCanvas
+    const N = 256, c = canvasOf(N, N), g = c.getContext('2d'), img = g.createImageData(N, N)
+    const rand = prng(7)
+    const lattice = []
+    for (let i = 0; i < 4; ++i) lattice.push(Array.from({length: 33 * 33}, rand))
+    const smooth = t => t * t * (3 - 2 * t)
+    const noise = (x, y, o) => {      // periodic value noise on a 32x32 lattice
+        const xi = Math.floor(x), yi = Math.floor(y), fx = smooth(x - xi), fy = smooth(y - yi)
+        const at = (i, j) => lattice[o][((j & 31) * 33) + (i & 31)]
+        const a = at(xi, yi), b = at(xi + 1, yi), d = at(xi, yi + 1), e = at(xi + 1, yi + 1)
+        return a + (b - a) * fx + (d - a) * fy + (a - b - d + e) * fx * fy
+    }
+    const fbm = (x, y) => noise(x, y, 0) * 0.5 + noise(2 * x, 2 * y, 1) * 0.25 +
+        noise(4 * x, 4 * y, 2) * 0.15 + noise(8 * x, 8 * y, 3) * 0.1
+    for (let y = 0; y < N; ++y) for (let x = 0; x < N; ++x) {
+        const u = x / N * 32, v = y / N * 32
+        const turb = fbm(u * 0.25, v * 0.25)
+        const vein = Math.pow(Math.abs(Math.sin((u * 0.55 + v * 0.3 + turb * 7) )), 0.28)
+        const mottle = 0.9 + 0.1 * fbm(u * 0.5 + 9, v * 0.5 + 3)
+        const k = Math.round(255 * Math.min(1, (0.9 + 0.1 * vein) * (0.04 + mottle)))
+        const i = (y * N + x) * 4
+        img.data[i] = k; img.data[i + 1] = k; img.data[i + 2] = Math.min(255, k + 3); img.data[i + 3] = 255
+    }
+    g.putImageData(img, 0, 0)
+    return marbleCanvas = c
+}
+
+// Bevel band of one hex edge: the strip between the tile outline and an inset outline.
+const BEVEL = 0.17
+function bevelPath(ctx, pos, v, i, width = BEVEL) {
+    const a = v[i], b = v[(i + 1) % 6], k = 1 - width
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y)
+    ctx.lineTo(pos.x + (b.x - pos.x) * k, pos.y + (b.y - pos.y) * k)
+    ctx.lineTo(pos.x + (a.x - pos.x) * k, pos.y + (a.y - pos.y) * k)
+    ctx.closePath()
+}
+function edgeNormal(pos, v, i) {
+    const a = v[i], b = v[(i + 1) % 6]
+    const mx = (a.x + b.x) / 2 - pos.x, my = (a.y + b.y) / 2 - pos.y, ml = Math.hypot(mx, my)
+    return {x: mx / ml, y: my / ml}
+}
+
+// Unlit albedo: existing tile colours tinted towards pale cream stone, a marble grain
+// mask, the raised-tile bevel shaded by the key light, the board's side faces, joints.
 function drawAlbedo(ctx, board, cells) {
     world(ctx)
     // Side faces: outline edges facing down are extruded by MapDepth.depth.
-    ctx.fillStyle = '#8e8a86'
+    ctx.fillStyle = '#9a948c'
     for (const c of cells) {
         const v = depth.getVertices(c.pos), parity = c.coord.x & 1
         for (let i = 2; i <= 4; ++i) {
@@ -207,7 +253,7 @@ function drawAlbedo(ctx, board, cells) {
             ctx.closePath(); ctx.fill()
         }
     }
-    const grassSize = {w: (R + basis.strokeWidth) * 2, h: (R * Math.sqrt(3) / 2 + basis.strokeWidth) * 2}
+    const grain = marble()
     for (const c of cells) {
         const o = board.owner.get(key(c.coord))
         const rgb = o === undefined ? [208, 208, 208] : MAP.players[o].rgb
@@ -215,32 +261,41 @@ function drawAlbedo(ctx, board, cells) {
         ctx.fillStyle = `rgb(${rgb})`
         ctx.fill()
         if (o === undefined) {
-            // Neutral stone is lifted towards cream (a tint over the existing tile colour)
-            // so the light map keeps headroom for warm lamp pools.
+            // (f) Neutral grey lifted to pale cream stone by a tint, not by new tile art.
             ctx.globalCompositeOperation = 'screen'
-            ctx.fillStyle = 'rgb(150,132,118)'
-            ctx.fill()
-            ctx.globalCompositeOperation = 'source-over'
-            // Marble grain: the existing grass-hex texture, grey and faint.
-            const h = Math.imul(c.coord.x + 1, 73856093) ^ Math.imul(c.coord.y + 1, 19349663)
-            ctx.save()
-            ctx.filter = 'grayscale(1) contrast(1.6)'
-            ctx.globalAlpha = 0.42
-            ctx.drawImage(images['grass' + ((h >>> 0) % 6 + 1)], c.pos.x - grassSize.w / 2, c.pos.y - grassSize.h / 2,
-                grassSize.w, grassSize.h)
-            ctx.restore()
-            // Polished stone: a faint lighter centre per tile.
-            const g = ctx.createRadialGradient(c.pos.x, c.pos.y, 0, c.pos.x, c.pos.y, R)
-            g.addColorStop(0, 'rgba(255,255,255,0.14)')
-            g.addColorStop(1, 'rgba(255,255,255,0)')
-            hexPath(ctx, c.pos)
-            ctx.fillStyle = g
+            ctx.fillStyle = 'rgb(214,196,160)'
             ctx.fill()
         }
+        // Marble grain: a random window of the mask, multiplied inside the tile.
+        const h = (Math.imul(c.coord.x + 1, 73856093) ^ Math.imul(c.coord.y + 1, 19349663)) >>> 0
+        ctx.save()
+        hexPath(ctx, c.pos)
+        ctx.clip()
+        ctx.globalCompositeOperation = 'multiply'
+        ctx.globalAlpha = o === undefined ? 1 : 0.5
+        const sx = h % 160, sy = (h >>> 8) % 160
+        ctx.drawImage(grain, sx, sy, 72, 72, c.pos.x - R, c.pos.y - R, 2 * R, 2 * R)
+        ctx.restore()
+        ctx.globalCompositeOperation = 'source-over'
+        // (d) Raised tile: bevel faces turned to the key light are bright, others darker.
+        const v = depth.getVertices(c.pos)
+        for (let i = 0; i < 6; ++i) {
+            const n = edgeNormal(c.pos, v, i), f = n.x * KEY_DIR.x + n.y * KEY_DIR.y
+            bevelPath(ctx, c.pos, v, i)
+            if (f > 0) {
+                ctx.globalCompositeOperation = 'screen'
+                ctx.fillStyle = `rgba(255,246,228,${(0.42 * f).toFixed(3)})`
+            } else {
+                ctx.globalCompositeOperation = 'multiply'
+                ctx.fillStyle = `rgba(160,148,142,${(0.55 * -f).toFixed(3)})`
+            }
+            ctx.fill()
+        }
+        ctx.globalCompositeOperation = 'source-over'
     }
     // Joints between tiles.
-    ctx.lineWidth = 0.035 * R
-    ctx.strokeStyle = 'rgba(58,50,52,0.7)'
+    ctx.lineWidth = 0.045 * R
+    ctx.strokeStyle = 'rgba(78,70,70,0.75)'
     for (const c of cells) { hexPath(ctx, c.pos); ctx.stroke() }
 }
 
@@ -255,28 +310,30 @@ function silhouette(name) {
     g.fillRect(0, 0, 256, 256)
     return silhouettes[name] = c
 }
-// Soft shadow: the sprite silhouette flattened onto the ground, sheared away from the
-// dominant light (key light plus nearby lamps), blurred, multiplied.
+// (e) Soft shadow: the sprite silhouette cast onto the ground plane away from the
+// dominant light (key light plus nearby lamps): its height is laid along the shadow
+// direction, then it is blurred and multiplied into the albedo.
 function drawShadows(ctx, board) {
     const size = 1.6 * R
     for (const o of board.objects) {
         if (o.image === 'lake') continue
         const lamp = lightVector(o.pos, board.lights, board.lights.find(l => l.pos === o.pos))
-        let dx = KEY_DIR.x * 0.8 + lamp.x * 1.4, dy = KEY_DIR.y * 0.8 + lamp.y * 1.4
+        let dx = KEY_DIR.x + lamp.x * 0.8, dy = KEY_DIR.y + lamp.y * 0.8
         const len = Math.hypot(dx, dy) || 1
         dx /= -len; dy /= -len                // away from the light
-        const reach = 0.9 * size
-        const baseY = o.pos.y + size * (o.unit ? 0.42 : 0.36)
+        const s = o.unit ? size * 0.9 : size
+        const reach = (o.unit ? 0.9 : 1.15) * s
+        const baseY = o.pos.y + s * 0.3
         world(ctx)
         ctx.save()
         ctx.globalCompositeOperation = 'multiply'
-        ctx.globalAlpha = o.unit ? 0.6 : 0.8
-        ctx.filter = `blur(${Math.max(1.5, 0.09 * size * camera.scale)}px)`
-        // Ground plane: anchor at the sprite base, squash height, shear along the shadow.
+        ctx.globalAlpha = 0.55
+        ctx.filter = `blur(${Math.max(2, 0.08 * s * camera.scale).toFixed(2)}px)`
+        // Image point (x, -t*s) lands at (x + t*reach*dx, t*reach*dy) on the ground.
+        ctx.setTransform(camera.scale, 0, 0, camera.scale, camera.x, camera.y)
         ctx.translate(o.pos.x, baseY)
-        ctx.transform(1, 0, dx * 1.3, 0.5, 0, 0)
-        ctx.translate(dx * reach * 0.45, dy * reach * 0.3)
-        ctx.drawImage(silhouette(o.image), -size / 2, -size, size, size)
+        ctx.transform(1, 0, -dx * reach / s, -dy * reach / s, 0, 0)
+        ctx.drawImage(silhouette(o.image), -s / 2, -s, s, s)
         ctx.restore()
     }
 }
@@ -291,123 +348,150 @@ function drawObjects(ctx, board) {
     }
 }
 
-// (a) Light map: cool ambient, plus (c) the broad warm key light, plus every lamp as a
-// warm radial falloff with a bright core and a long soft tail, all added with 'lighter'.
-function buildLightMap(board) {
+// (a) Light map: cool ambient, plus (c) the broad warm key light and its shafts, plus
+// every lamp as a warm radial falloff with a bright core and a long soft tail, all added
+// with 'lighter'. It is multiplied over the board afterwards.
+function buildLightMap(board, lamps = true) {
     const map = canvasOf(), g = map.getContext('2d')
     g.fillStyle = `rgb(${AMBIENT})`
     g.fillRect(0, 0, W, H)
     g.globalCompositeOperation = 'lighter'
-    // Key light: a broad cream wash, strongest at the board's upper left.
-    const ul = {x: camera.x - 2 * SPACING * camera.scale, y: camera.y - 2 * SPACING * camera.scale}
-    const keyLight = g.createLinearGradient(ul.x, ul.y, ul.x + W * 0.75, ul.y + W * 0.75)
-    keyLight.addColorStop(0, 'rgb(150,118,72)')
-    keyLight.addColorStop(0.5, 'rgb(96,80,56)')
-    keyLight.addColorStop(1, 'rgb(34,28,20)')
+    // Key light: a broad cream wash over the whole board, fading towards the lower right,
+    // plus a warmer lobe where it enters at the board's upper left.
+    const ul = {x: camera.x, y: camera.y}
+    // Where the warm key light falls, the cool ambient is filtered warm first ('multiply'),
+    // so the lit stone turns gold rather than pink.
+    g.globalCompositeOperation = 'multiply'
+    const warm = g.createRadialGradient(ul.x, ul.y, 0, ul.x, ul.y, 0.7 * W)
+    warm.addColorStop(0, 'rgb(255,236,214)')
+    warm.addColorStop(0.6, 'rgb(255,246,226)')
+    warm.addColorStop(1, 'rgb(255,255,255)')
+    g.fillStyle = warm
+    g.fillRect(0, 0, W, H)
+    g.globalCompositeOperation = 'lighter'
+    const keyLight = g.createLinearGradient(ul.x, ul.y, W, H)
+    keyLight.addColorStop(0, 'rgb(44,36,22)')
+    keyLight.addColorStop(0.5, 'rgb(70,63,50)')
+    keyLight.addColorStop(1, 'rgb(12,12,16)')
     g.fillStyle = keyLight
     g.fillRect(0, 0, W, H)
-    // Soft diagonal shafts of the same key light, as in the concept.
+    const lobeR = 0.55 * W
+    const lobe = g.createRadialGradient(ul.x, ul.y, 0, ul.x, ul.y, lobeR)
+    lobe.addColorStop(0, 'rgb(118,56,24)')
+    lobe.addColorStop(0.5, 'rgb(60,28,12)')
+    lobe.addColorStop(1, 'rgb(0,0,0)')
+    g.fillStyle = lobe
+    g.fillRect(0, 0, W, H)
+    // Diagonal shafts of the same key light falling from the upper left.
     g.save()
-    g.translate(ul.x, ul.y)
+    g.translate(ul.x - 0.1 * W, ul.y - 0.25 * W)
     g.rotate(Math.atan2(-KEY_DIR.y, -KEY_DIR.x) - Math.PI / 2)
-    for (const [offset, width, alpha] of [[-0.12, 0.08, 0.12], [0.05, 0.12, 0.1], [0.24, 0.07, 0.08], [0.4, 0.1, 0.06]]) {
+    for (const [offset, width, alpha] of [[-0.3, 0.03, 0.24], [-0.17, 0.045, 0.3], [-0.05, 0.025, 0.22],
+        [0.08, 0.05, 0.26], [0.22, 0.03, 0.18], [0.34, 0.04, 0.14]]) {
         const x = offset * W, w = width * W
         const shaft = g.createLinearGradient(x - w, 0, x + w, 0)
-        shaft.addColorStop(0, 'rgba(255,214,160,0)')
-        shaft.addColorStop(0.5, `rgba(255,214,160,${alpha})`)
-        shaft.addColorStop(1, 'rgba(255,214,160,0)')
+        shaft.addColorStop(0, 'rgba(255,172,90,0)')
+        shaft.addColorStop(0.5, `rgba(255,172,90,${(0.8 * alpha).toFixed(3)})`)
+        shaft.addColorStop(1, 'rgba(255,172,90,0)')
         g.fillStyle = shaft
-        g.fillRect(x - w, 0, 2 * w, 2 * W)
+        g.fillRect(x - w, 0, 2 * w, 2.2 * W)
     }
     g.restore()
+    if (!lamps) return map
     world(g)
     // Near a lamp its warm light dominates: the cool ambient and key are filtered warm
     // ('multiply') before the lamp itself is added, so the pool keeps its colour.
     g.globalCompositeOperation = 'multiply'
     for (const l of board.lights) {
-        const c = {x: l.core.x, y: l.core.y + 0.5 * R}, r = 1.9 * R
+        const c = {x: l.core.x, y: l.core.y + 0.8 * R}, r = TAIL_RADII * R
         const filter = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, r)
-        filter.addColorStop(0, 'rgb(255,192,118)')
-        filter.addColorStop(0.5, 'rgb(255,232,196)')
+        filter.addColorStop(0, 'rgb(255,222,150)')
+        filter.addColorStop(0.5, 'rgb(255,238,205)')
         filter.addColorStop(1, 'rgb(255,255,255)')
         g.fillStyle = filter
         g.fillRect(c.x - r, c.y - r, 2 * r, 2 * r)
     }
     g.globalCompositeOperation = 'lighter'
     for (const l of board.lights) {
-        // The pool spills forward (down the board) from the emitting core: the falloff is
-        // stretched downwards, so the tail reaches about 2.5 radii below the lamp.
-        const c = {x: l.core.x, y: l.core.y + 0.45 * R}
+        // The pool spills forward (down the board) from the emitting core over the
+        // neighbouring tiles; the soft tail reaches about 2.5 hex radii.
+        const c = {x: l.core.x, y: l.core.y + 0.8 * R}
         const r = TAIL_RADII * R, [cr, cg, cb] = l.color
         g.save()
         g.translate(c.x, c.y)
-        g.scale(0.85, 1.25)
+        g.scale(0.95, 1.3)
         const lamp = g.createRadialGradient(0, 0, 0, 0, 0, r)
         const stop = (t, a) => lamp.addColorStop(t, `rgba(${cr},${cg},${cb},${Math.min(1, a * l.power).toFixed(3)})`)
-        stop(0, 1.0); stop(0.08, 0.88); stop(0.2, 0.58); stop(0.36, 0.32); stop(0.55, 0.15); stop(0.78, 0.05); stop(1, 0)
+        stop(0, 1.0); stop(0.12, 0.82); stop(0.28, 0.55); stop(0.48, 0.3); stop(0.7, 0.12); stop(0.88, 0.035); stop(1, 0)
         g.fillStyle = lamp
         g.fillRect(-r, -r, 2 * r, 2 * r)
         g.restore()
     }
+    // Where lamp and key light together clip to white, a warm 'multiply' pulls the pool
+    // back to gold (red stays above green), so the lit stone reads as lamplight.
+    g.globalCompositeOperation = 'multiply'
+    for (const l of board.lights) {
+        const c = {x: l.core.x, y: l.core.y + 0.8 * R}, r = 1.8 * R
+        const tone = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, r)
+        tone.addColorStop(0, 'rgb(255,204,140)')
+        tone.addColorStop(0.5, 'rgb(255,228,190)')
+        tone.addColorStop(1, 'rgb(255,255,255)')
+        g.fillStyle = tone
+        g.fillRect(c.x - r, c.y - r, 2 * r, 2 * r)
+    }
     return map
 }
 
-// (d) Bevel: each tile's edges facing the strongest nearby light catch a thin warm
-// highlight ('lighter'); edges turned away get a faint dark lip ('multiply').
+// (d) Lamp bevels: the bevel faces of each tile turned towards the strongest nearby
+// lamp catch its warm light ('lighter'), scaled by the lamp's falloff at the tile.
 function drawBevels(ctx, board, cells) {
     world(ctx)
-    ctx.lineCap = 'round'
+    ctx.globalCompositeOperation = 'lighter'
     for (const c of cells) {
         const lamp = lightVector(c.pos, board.lights)
-        const lx = lamp.x * 2.6 + KEY_DIR.x * 0.18, ly = lamp.y * 2.6 + KEY_DIR.y * 0.18
-        const strength = Math.min(1, Math.hypot(lx, ly))
-        const len = Math.hypot(lx, ly) || 1
+        if (lamp.strength < 0.02) continue
+        const lx = lamp.x / lamp.strength, ly = lamp.y / lamp.strength
+        const strength = Math.min(1, lamp.best * 1.6)
         const v = depth.getVertices(c.pos)
         for (let i = 0; i < 6; ++i) {
-            const a = v[i], b = v[(i + 1) % 6]
-            const mx = (a.x + b.x) / 2 - c.pos.x, my = (a.y + b.y) / 2 - c.pos.y
-            const ml = Math.hypot(mx, my)
-            const facing = (mx / ml) * (lx / len) + (my / ml) * (ly / len)
-            const inset = 0.93
-            const ax = c.pos.x + (a.x - c.pos.x) * inset, ay = c.pos.y + (a.y - c.pos.y) * inset
-            const bx = c.pos.x + (b.x - c.pos.x) * inset, by = c.pos.y + (b.y - c.pos.y) * inset
-            ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
-            if (facing > 0.3) {
-                ctx.globalCompositeOperation = 'lighter'
-                ctx.strokeStyle = `rgba(255,176,82,${(0.7 * strength * (facing - 0.3) / 0.7).toFixed(3)})`
-                ctx.lineWidth = 0.055 * R
-            } else if (facing < -0.3) {
-                ctx.globalCompositeOperation = 'multiply'
-                ctx.strokeStyle = `rgba(120,100,110,${(0.35 * strength * (-facing - 0.3) / 0.7).toFixed(3)})`
-                ctx.lineWidth = 0.05 * R
-            } else continue
-            ctx.stroke()
+            const n = edgeNormal(c.pos, v, i), f = n.x * lx + n.y * ly
+            if (f <= 0.2) continue
+            bevelPath(ctx, c.pos, v, i, 0.14)
+            ctx.fillStyle = `rgba(255,190,96,${(0.75 * strength * (f - 0.2) / 0.8).toFixed(3)})`
+            ctx.fill()
         }
     }
     ctx.globalCompositeOperation = 'source-over'
 }
 
-// (b) Bloom, added with 'screen' after lighting. The wide glow and halo go on the ground
-// under the sprites; only the small saturated core (cave mouth, windows) goes on top, so
-// the unchanged sprite stays readable around its glowing opening.
+// (b) Bloom, added with 'screen' after lighting. A faint warm glow lifts the pool on the
+// ground under the sprites; only a small core goes on top, at the cave mouth or window,
+// so the unchanged sprite stays readable around its glowing opening.
 function drawGlow(ctx, board) {
     world(ctx)
     ctx.globalCompositeOperation = 'screen'
     for (const l of board.lights) {
-        const c = l.core
-        // Wide, faint glow: lifts the lit pool above the albedo with saturated warmth.
-        const glow = ctx.createRadialGradient(c.x, c.y + 0.45 * R, 0, c.x, c.y + 0.45 * R, 1.25 * R)
-        glow.addColorStop(0, 'rgba(255,192,72,0.88)')
-        glow.addColorStop(0.5, 'rgba(255,150,40,0.28)')
-        glow.addColorStop(1, 'rgba(255,130,30,0)')
+        const c = {x: l.core.x, y: l.core.y + 0.5 * R}, r = 1.5 * R
+        const glow = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r)
+        glow.addColorStop(0, 'rgba(255,196,96,0.7)')
+        glow.addColorStop(0.22, 'rgba(255,180,84,0.3)')
+        glow.addColorStop(0.6, 'rgba(255,180,90,0.05)')
+        glow.addColorStop(1, 'rgba(255,170,80,0)')
         ctx.fillStyle = glow
-        ctx.fillRect(c.x - 1.25 * R, c.y - 0.8 * R, 2.5 * R, 2.5 * R)
-        const halo = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 0.9 * R)
-        halo.addColorStop(0, 'rgba(255,160,44,0.55)')
-        halo.addColorStop(0.4, 'rgba(255,140,40,0.25)')
-        halo.addColorStop(1, 'rgba(255,120,30,0)')
-        ctx.fillStyle = halo
-        ctx.fillRect(c.x - R, c.y - R, 2 * R, 2 * R)
+        ctx.fillRect(c.x - r, c.y - r, 2 * r, 2 * r)
+        // Bright spill on the floor just in front of the opening.
+        const f = {x: l.core.x, y: l.core.y + 0.95 * R}
+        ctx.save()
+        ctx.translate(f.x, f.y)
+        ctx.scale(1, 0.75)
+        const spill = ctx.createRadialGradient(0, 0, 0, 0, 0, 0.85 * R)
+        spill.addColorStop(0, 'rgba(255,240,130,1)')
+        spill.addColorStop(0.2, 'rgba(255,234,120,0.9)')
+        spill.addColorStop(0.45, 'rgba(255,220,110,0.55)')
+        spill.addColorStop(1, 'rgba(255,190,100,0)')
+        ctx.fillStyle = spill
+        ctx.fillRect(-0.85 * R, -0.85 * R, 1.7 * R, 1.7 * R)
+        ctx.restore()
     }
     ctx.globalCompositeOperation = 'source-over'
 }
@@ -415,14 +499,21 @@ function drawCores(ctx, board) {
     world(ctx)
     ctx.globalCompositeOperation = 'screen'
     for (const l of board.lights) {
-        const c = l.core
-        const core = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 0.45 * R)
-        core.addColorStop(0, 'rgba(255,246,160,1)')
-        core.addColorStop(0.45, 'rgba(255,228,100,0.95)')
-        core.addColorStop(0.75, 'rgba(255,180,50,0.5)')
-        core.addColorStop(1, 'rgba(255,150,40,0)')
+        const c = l.core, r = 0.36 * R
+        const core = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r)
+        core.addColorStop(0, 'rgba(255,250,200,1)')
+        core.addColorStop(0.25, 'rgba(255,240,140,1)')
+        core.addColorStop(0.5, 'rgba(255,230,104,0.95)')
+        core.addColorStop(0.75, 'rgba(255,196,60,0.45)')
+        core.addColorStop(1, 'rgba(255,160,40,0)')
         ctx.fillStyle = core
-        ctx.fillRect(c.x - 0.45 * R, c.y - 0.45 * R, 0.9 * R, 0.9 * R)
+        ctx.fillRect(c.x - r, c.y - r, 2 * r, 2 * r)
+        // Wider faint halo around the opening.
+        const halo = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 0.7 * R)
+        halo.addColorStop(0, 'rgba(255,190,80,0.35)')
+        halo.addColorStop(1, 'rgba(255,150,40,0)')
+        ctx.fillStyle = halo
+        ctx.fillRect(c.x - 0.7 * R, c.y - 0.7 * R, 1.4 * R, 1.4 * R)
     }
     ctx.globalCompositeOperation = 'source-over'
 }
@@ -448,10 +539,8 @@ function light(layer, lightMap) {
     const g = layer.getContext('2d'), mask = canvasOf()
     mask.getContext('2d').drawImage(layer, 0, 0)
     g.setTransform(1, 0, 0, 1, 0, 0)
-    // (f) Cream marble comes from this warm tint and the warm light, not from new tile art.
+    // (f) Cream marble: the cream-tinted stone under the warm light, not new tile art.
     g.globalCompositeOperation = 'multiply'
-    g.fillStyle = 'rgb(255,238,224)'
-    g.fillRect(0, 0, W, H)
     g.drawImage(lightMap, 0, 0)
     // Multiply also painted the empty surroundings; keep only the layer's pixels.
     g.globalCompositeOperation = 'destination-in'
@@ -479,10 +568,14 @@ function render() {
     g.globalCompositeOperation = 'source-over'
 
     // Objects take a softened copy of the same light (sprites keep their own colours).
+    // Sprites stand in front of their own lamp: they take the ambient and key light and
+    // only part of the lamp light, so their colours are not washed out.
     const soft = canvasOf(), s = soft.getContext('2d')
     s.fillStyle = '#fff'
     s.fillRect(0, 0, W, H)
     s.globalAlpha = 0.82
+    s.drawImage(buildLightMap(board, false), 0, 0)
+    s.globalAlpha = 0.3
     s.drawImage(lightMap, 0, 0)
     const objects = canvasOf()
     drawObjects(objects.getContext('2d'), board)
