@@ -75,6 +75,9 @@ const atmosphericLighting = {
     collect(board, includeKey = true, includeCells = true) {
         const cells = [], sources = []
         if (!otherSettings.atmosphericVisuals) return {cells, sources, key: ''}
+        // The key lists the collected cells and sources by coordinate (positions follow from
+        // the coordinates and the hex radius); a plain string, cheap to compare every frame.
+        let key = includeKey ? basis.r + '|' : ''
         for (const row of board.arr) for (const cell of row) {
             const {x, y} = cell.coord
             // Never inspect a hidden building, including public fog landmarks.
@@ -87,10 +90,13 @@ const atmosphericLighting = {
             const emitsLight = building && !building.killed && this.emitsLight(building)
             if (!includeCells && !emitsLight) continue
             const pos = hex.calcPos()
-            if (includeCells) cells.push({x, y, pos, owned: hex.playerColor !== 0})
-            if (emitsLight) sources.push({x, y, pos, name: building.isDemonPortal ? 'demonPortal' : building.name})
+            const name = emitsLight ? building.isDemonPortal ? 'demonPortal' : building.name : ''
+            const owned = hex.playerColor !== 0
+            if (includeCells) cells.push({x, y, pos, owned})
+            if (emitsLight) sources.push({x, y, pos, name})
+            if (includeKey) key += x + ',' + y + (owned ? ',o' : '') + (emitsLight ? ',' + name : '') + ';'
         }
-        return {cells, sources, key: includeKey ? JSON.stringify([cells, sources]) : ''}
+        return {cells, sources, key}
     },
     emitsLight(building) {
         return building.name === 'town' || building.name === 'goldmine' || building.isDemonPortal || building.name === 'demonPortal'
@@ -104,22 +110,22 @@ const atmosphericLighting = {
             ctx.closePath()
         }
     },
-    // Light map resolution follows the zoom, bounded in size.
-    resolution(bounds) {
+    // Light map resolution follows the zoom (or a fixed raster's scale), bounded in size.
+    resolution(bounds, cap = canvas.scale) {
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
-        return Math.min(canvas.scale, this.maxDimension / w, this.maxDimension / h,
+        return Math.min(cap, this.maxDimension / w, this.maxDimension / h,
             Math.sqrt(this.maxPixels / (w * h)))
     },
     // The light map is rebuilt only when visible cells/sources (fog), board size or the
     // settled zoom change. Panning draws the same map through the camera transform,
     // and a zoom gesture reuses it scaled until the gesture settles.
-    lightMap(board) {
+    lightMap(board, cap) {
         mapDepth.ensureGeometry(board)
         const bounds = mapDepth.surfaceBounds
         if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return null
         const collected = this.collect(board)
         const key = collected.key + JSON.stringify(bounds)
-        const scale = this.resolution(bounds)
+        const scale = this.resolution(bounds, cap)
         const zooming = performance.now() < gameEvent.screen.surfaceZoomUntil
         if (this.map && this.mapKey === key && (this.mapScale === scale || zooming))
             return this.map
@@ -428,10 +434,32 @@ const atmosphericLighting = {
                 x - rx <= ctx.canvas.width && y - ry <= ctx.canvas.height
         })
     },
+    // Lights the board surface cache once, when it is built (world transform, cache scale):
+    // the same multiply and color-dodge as draw(), clipped to the lit cells (the map is
+    // neutral and the gain empty everywhere else), then the lamp bloom, so cached frames
+    // skip the full-screen composite and the per-lamp overlays (units still come after).
+    // The light map resolution follows the cache scale, not the zoom.
+    bake(ctx, board, scale) {
+        if (!otherSettings.atmosphericVisuals) return false
+        const map = this.lightMap(board, scale)
+        if (!map) return false
+        const bounds = mapDepth.surfaceBounds
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        ctx.save()
+        this.hexPath(ctx, this.collect(board, false).cells)
+        ctx.clip()
+        ctx.globalCompositeOperation = 'multiply'
+        ctx.drawImage(map, bounds.left, bounds.top, w, h)
+        ctx.globalCompositeOperation = 'color-dodge'
+        ctx.drawImage(this.gain, bounds.left, bounds.top, w, h)
+        ctx.restore()
+        this.bloom(ctx, board)
+        return true
+    },
     // Multiplies the light map over the already drawn terrain and buildings
-    // (world transform), then adds the small bright lamp cores with 'screen'.
-    draw(ctx, board) {
-        if (!otherSettings.atmosphericVisuals) return
+    // (world transform) and adds the lamp bloom, unless both come from a lit cache.
+    draw(ctx, board, baked = false) {
+        if (!otherSettings.atmosphericVisuals || baked) return
         const map = this.lightMap(board)
         if (!map) return
         const bounds = mapDepth.surfaceBounds
