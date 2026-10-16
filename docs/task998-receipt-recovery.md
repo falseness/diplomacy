@@ -128,3 +128,31 @@ maximum are also reported and neither is an upper bound. No native writer is
 installed, so additional collection reports and write/cleanup staging remain
 unresolved and the planner cannot admit capacity. Candidate payloads remain in
 memory; only measurements and original proof references are retained.
+
+A subsequent pack experiment reuses those exact checkpoint inputs and baseline
+costs, checking their hashes before comparison:
+
+```sh
+# Use a new inward OUT and an outer 590-second deadline for every group.
+bash tools/task998-packed-proof-plan.sh "$OUT" 0
+# Explicitly measure groups 1 through 11, retaining group-N-execution.json.
+bash tools/task998-packed-proof-summary.sh "$OUT"
+```
+
+Each immutable pack holds at most 1 MiB of decoded blob data, except a single
+larger indivisible blob. Its separately compressed index records exact offsets,
+lengths, content hashes and a pack hash. Per-proof manifests identify their root
+and pack references. Reconstruction verifies the pack, slices, and original CAS
+semantics; controls reject corrupted packs, altered offsets and missing blobs.
+The experiment writes one pack/index pair beneath OUT, reads it back, removes
+it in a finally block, and records the maximum simultaneous stored bytes.
+This is offline pack staging, not service-writer staging or a full-volume bound.
+
+Sharing is bounded to each six-case checkpoint. Pack costs are allocated by raw
+blob size and sample users; this is an accounting convention, not predicted
+population reuse. The summary retains all 18 module weights and the saved
+unsampled fine strata, and distinguishes payload, compressed offset/hash index,
+per-case roots, sidecars, receipts and originals. Native writer staging and
+additional collection-report reserves remain unresolved. Neither a favorable
+sample mean nor passing reconstruction admits capacity or certifies gameplay.
+The runtime codec and active receipt index are unchanged by these tools.
