@@ -9,7 +9,7 @@ out.mkdir(parents=True,exist_ok=True)
 inputs={}
 def read(relative):
  p=task/relative; b=p.read_bytes(); inputs[str(p)]={'sha256':hashlib.sha256(b).hexdigest(),'bytes':len(b)}; return json.loads(b)
-ledger=read('recovery-13/ledger-completed.json'); measurements=read('recovery-24/measurements.json'); controls=read('recovery-25/after-results.json')
+ledger=read('recovery-13/ledger-completed.json'); measurements=read(sys.argv[2] if len(sys.argv)>2 else 'recovery-27/measurements.json'); controls=read('recovery-25/after-results.json')
 server=pathlib.Path('/root/diplomacy_server')
 selection=json.loads(subprocess.check_output(['/usr/local/bin/node20','-e',"console.log(JSON.stringify(require('./tests/helpers/runUndoCoverage').selection()))"],cwd=server))
 rows=selection['included']; ids={r['id'] for r in rows}; assert len(ids)==len(rows)==3900
@@ -36,11 +36,29 @@ for c in controls:
 module_rows=[]
 for module,n in sorted(population.items()):
  sample=by_module[module]; assert historical[sample['matrixID']]['moduleID']==module
- module_rows.append({'moduleID':module,'population':n,'sampleMatrixID':sample['matrixID'],'standaloneHistoricalProofBytes':sample['baselineBytes'],'weightedStandaloneProofBytes':n*sample['baselineBytes'],'measuredHistoricalIDs':sum(r['measured'] for r in ledger['rows'] if r['moduleID']==module)})
-# Never transfer dictionary savings measured with one shared seed to independent roots.
-proof=sum(r['weightedStandaloneProofBytes'] for r in module_rows)
-metadata=len(launches)*4096
+ module_rows.append({'moduleID':module,'population':n,'sampleMatrixID':sample['matrixID'],'historicalRootBytes':sample['storedBytes'],'weightedHistoricalRootBytes':n*sample['storedBytes'],'encoding':sample['encoding'],'samplePeakBytes':sample['peakBytes'],'measuredHistoricalIDs':sum(r['measured'] for r in ledger['rows'] if r['moduleID']==module)})
+# Native singleton measurements include their actual seed and metadata charges.
+proof=sum(r['weightedHistoricalRootBytes'] for r in module_rows)
+metadata=0 # Native measured roots already include their 4096-byte metadata.
 receipt=sum(r['receiptBytes'] for r in ledger['rows'])
+# Inventory real retained launch sidecars without inventing service log sizes.
+# Paths may overlap between historical receipts; charge unique files once here.
+sidecars={}; observed=collections.Counter(); missing=[]
+for row in ledger['rows']:
+ if not row['measured']: continue
+ for original in row['originalHashes']:
+  root=pathlib.Path(original['proofPath']).parent
+  for p in root.rglob('*'):
+   if not p.is_file() or p.is_symlink() or p.name=='scenario.json': continue
+   resolved=p.resolve()
+   if not resolved.is_relative_to(base):
+    missing.append({'matrixID':row['matrixID'],'external':str(p)}); continue
+   name=str(resolved)
+   if name in sidecars: continue
+   b=p.read_bytes()
+   kind=('workerProviderLogs' if any(k in p.name.lower() for k in ['worker','mongo','provider']) else 'serviceActivityLogs' if p.suffix=='.log' else 'executionCleanupReports' if any(k in p.name.lower() for k in ['execution','cleanup']) else 'indexesReceipts' if any(k in p.name.lower() for k in ['index','receipt']) else 'otherSidecars')
+   sidecars[name]={'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'category':kind}; observed[kind]+=len(b)
+reconciliation={'historicalMeasuredIDs':sum(r['measured'] for r in ledger['rows']),'unmeasuredIDs':sum(not r['measured'] for r in ledger['rows']),'ledgerSidecarBytes':sum(r['sidecarBytes'] for r in ledger['rows']),'measuredLedgerSidecarBytes':sum(r['sidecarBytes'] for r in ledger['rows'] if r['measured']),'derivedUnmeasuredLedgerSidecarBytes':sum(r['sidecarBytes'] for r in ledger['rows'] if not r['measured']),'missingStrataByModule':{m:sum(not r['measured'] for r in ledger['rows'] if r['moduleID']==m) for m in population},'uniqueObservedSidecars':dict(observed),'missingObservedCategories':[k for k in ['workerProviderLogs','serviceActivityLogs','executionCleanupReports','indexesReceipts'] if not observed[k]],'files':sidecars,'unresolvedPaths':missing,'populationProjection':None,'reason':'Historical sidecars are observations only; native codec/log changes invalidate size transfer. Service logs outside proof roots, future output strata, final aggregate indexes, extra fragment launches and active writer/report staging have no full-volume bound.'}
 seen=set(); stored=0
 for d,ds,files in os.walk(base,followlinks=False):
  ds[:]=[n for n in ds if not os.path.ismount(os.path.join(d,n))]
@@ -48,11 +66,11 @@ for d,ds,files in os.walk(base,followlinks=False):
   s=os.lstat(os.path.join(d,n)); key=(s.st_dev,s.st_ino)
   if stat.S_ISREG(s.st_mode) and key not in seen: seen.add(key); stored+=s.st_size
 assert stored<40*1024**3
-plan={'admitted':False,'scope':'offline singleton-launch cost plan; no gameplay proof','population':len(ids),'moduleCount':len(population),'launchCount':len(launches),'launches':launches,'modules':module_rows,'controls':control_costs,'canonicalStoredBytes':stored,'headroomBytes':40*1024**3-stored,'weightedHistoricalStandaloneProofBytes':proof,'budgetMetadataBytes':metadata,'historicalReceiptBytes':receipt,'knownIllustrativeSubtotalBytes':proof+metadata+receipt,'illustrativeDeficitBytes':proof+metadata+receipt-(40*1024**3-stored),'dictionaryPolicy':'No cross-launch seed reuse. Standalone projection uses baselineBytes; current dictionary mode costs require independent-root measurement per stratum. Two measured seeds cannot bound 3900 seeds.','unresolved':['Future successful proof upper bounds for all strata (69 historical IDs, 3831 unmeasured)','Independent dictionary seed and proof costs for every launch stratum','Native service/activity logs; control logs are synthetic','Final reports/index/receipts and replacement overlap at population scale','Additional fragment launches after deterministic sequence/variant splitting','Startup-through-cleanup timing of each proposed launch'],'sequentialStaging':'Only one launch active. Measured overlap is historical, not an admitted bound. Retained totals accumulate; overlap must not be multiplied as permanent padding.','inputs':inputs,'sourceHashes':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [server/'tests/helpers/runUndoCoverage.js',server/'tests/helpers/evidenceBudget.js',server/'tests/helpers/proofCodec.js']}}
+plan={'admitted':False,'scope':'offline singleton-launch native root cost plan; no gameplay proof','population':len(ids),'moduleCount':len(population),'launchCount':len(launches),'launches':launches,'modules':module_rows,'controls':control_costs,'costReconciliation':reconciliation,'canonicalStoredBytes':stored,'headroomBytes':40*1024**3-stored,'weightedHistoricalRootBytes':proof,'additionalBudgetMetadataBytes':metadata,'metadataAlreadyInRootsBytes':len(launches)*4096,'historicalReceiptBytes':receipt,'knownIllustrativeSubtotalBytes':proof+metadata+receipt,'illustrativeDeficitBytes':proof+metadata+receipt-(40*1024**3-stored),'dictionaryPolicy':'No cross-launch seed reuse. Native measured independent roots include actual dictionary and metadata costs; sample hashes and encoding are bound. Historical samples are not future bounds.','unresolved':['Future successful proof upper bounds for all strata (69 historical IDs, 3831 unmeasured)','Native service/activity logs; control logs are synthetic','Final reports/index/receipts and replacement overlap at population scale','Additional fragment launches after deterministic sequence/variant splitting','Startup-through-cleanup timing of each proposed launch'],'sequentialStaging':'Only one launch active. Measured overlap is historical, not an admitted bound. Retained totals accumulate; overlap must not be multiplied as permanent padding.','measurementSourceHashes':measurements['sourceHashes'],'inputs':inputs,'sourceHashes':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [server/'tests/helpers/runUndoCoverage.js',server/'tests/helpers/evidenceBudget.js',server/'tests/helpers/proofCodec.js',server/'tests/helpers/sharedProofStorage.js']}}
 (out/'launch-plan.json').write_text(json.dumps(plan,separators=(',',':'))+'\n')
 print('PASS exact inventory: 3900 IDs / 18 modules / 3900 independent launch roots; deadline 590000ms')
 print('PASS sealed control totals and source file sizes/hash references reconciled')
 print('PASS canonical storedBytes='+str(stored)+' <42949672960')
-print('NOT ADMITTED: illustrative standalone subtotal='+str(plan['knownIllustrativeSubtotalBytes'])+' headroom='+str(plan['headroomBytes'])+' deficit='+str(plan['illustrativeDeficitBytes']))
-print('UNRESOLVED service/activity, reports/index, future proof bounds, dictionary roots, fragment count and staging; no gameplay executed')
+print('NOT ADMITTED: illustrative native-root subtotal='+str(plan['knownIllustrativeSubtotalBytes'])+' headroom='+str(plan['headroomBytes'])+' deficit='+str(plan['illustrativeDeficitBytes']))
+print('UNRESOLVED service/activity, reports/index, future proof bounds, fragment count and staging; no gameplay executed')
 PY
