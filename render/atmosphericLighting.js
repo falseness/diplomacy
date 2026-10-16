@@ -7,10 +7,12 @@ const atmosphericLighting = {
     AMBIENT: [172, 174, 194],
     // Lamp light added to the ambient (no blue: the warm filter below removes some).
     LAMP: {
-        town: {color: [255, 132, 60], power: 1},
-        goldmine: {color: [255, 128, 52], power: 1},
+        town: {color: [255, 150, 84], power: 1},
+        goldmine: {color: [255, 146, 78], power: 1},
         demonPortal: {color: [255, 120, 90], power: 0.9}
     },
+    // Color-dodge gain at the lamp: x2 red, x1.65 green, x1.35 blue (peach, like the concept's lit stone) on the lit stone.
+    GAIN: '126,100,66',
     TAIL_RADII: 2.5,
     maxDimension: 2048,
     maxPixels: 2 * 1024 * 1024,
@@ -93,10 +95,10 @@ const atmosphericLighting = {
     pool(g, source, radius, stops, color) {
         const c = this.core(source)
         g.save()
-        // The pool spills forward (down the board) from the opening over the neighbours.
-        g.translate(c.x, c.y + 0.55 * basis.r)
-        g.scale(1, 1.2)
-        const gradient = g.createRadialGradient(0, 0, 0, 0, 0, radius)
+        // The pool sits on the opening and spills forward (down the board) as a soft cone.
+        g.translate(c.x, c.y + 0.8 * basis.r)
+        g.scale(1, 1.3)
+        const gradient = g.createRadialGradient(0, -0.1 * radius, 0, 0, 0, radius)
         for (const [t, alpha] of stops)
             gradient.addColorStop(t, `rgba(${color},${alpha.toFixed(3)})`)
         g.fillStyle = gradient
@@ -118,41 +120,46 @@ const atmosphericLighting = {
         // Near a lamp its warm light dominates: the cool ambient is filtered warm first.
         g.globalCompositeOperation = 'multiply'
         for (const source of sources)
-            this.pool(g, source, r, [[0, 1], [0.5, 0.6], [1, 0]], '255,196,170')
-        // Each lamp is added: bright core, long soft tail of about 2.5 hex radii.
+            this.pool(g, source, r, [[0, 1], [0.5, 0.5], [1, 0]], '255,228,212')
+        // Each lamp is added: smooth falloff over about 2.5 hex radii, no hard rim.
         g.globalCompositeOperation = 'lighter'
         for (const source of sources) {
             const lamp = this.LAMP[source.name] || this.LAMP.goldmine
-            this.pool(g, source, r, [[0, 0.62], [0.12, 0.52], [0.28, 0.4], [0.48, 0.26],
-                [0.7, 0.13], [0.88, 0.04], [1, 0]].map(([t, a]) => [t, a * lamp.power]), lamp.color)
+            this.pool(g, source, r, [[0, 0.85], [0.15, 0.72], [0.32, 0.5], [0.5, 0.3],
+                [0.7, 0.13], [0.86, 0.04], [1, 0]].map(([t, a]) => [t, a * lamp.power]), lamp.color)
         }
-        // Bloom cores: the light around each opening saturates to full warm brightness.
-        g.globalCompositeOperation = 'screen'
-        for (const source of sources) {
-            const c = this.core(source), cr = 0.8 * basis.r
-            const bloom = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, cr)
-            bloom.addColorStop(0, 'rgba(255,236,190,1)')
-            bloom.addColorStop(0.4, 'rgba(255,226,170,0.6)')
-            bloom.addColorStop(1, 'rgba(255,220,160,0)')
-            g.fillStyle = bloom
-            g.fillRect(c.x - cr, c.y - cr, 2 * cr, 2 * cr)
+        // The lamp's own building is lit warm tan (its art kept), not bleached.
+        g.globalCompositeOperation = 'multiply'
+        for (const {pos} of sources) {
+            const tint = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 0.8 * basis.r)
+            tint.addColorStop(0, 'rgba(255,214,160,1)')
+            tint.addColorStop(0.6, 'rgba(255,214,160,0.7)')
+            tint.addColorStop(1, 'rgba(255,214,160,0)')
+            g.fillStyle = tint
+            g.fillRect(pos.x - basis.r, pos.y - basis.r, 2 * basis.r, 2 * basis.r)
         }
         g.restore()
-        // (2) Gain map, 'color-dodge' after the multiply: lamplight above 1, so the lit
-        // stone near a lamp is brighter than its unlit texture, grain and joints kept.
+        // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
+        // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
+        // a low, near-neutral cream-gold so no channel saturates into flat paint.
         const k = this.canvasFor('gain', bounds, scale)
         k.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         this.hexPath(k, cells)
         k.save()
         k.clip()
         for (const source of sources)
-            this.pool(k, source, 0.75 * r, [[0, 0.9], [0.32, 0.8], [0.62, 0.34], [1, 0]], '255,164,118')
-        // The lamp's own sprite keeps its art: no gain over the building itself.
+            this.pool(k, source, 0.8 * r, [[0, 1], [0.25, 0.85], [0.5, 0.45], [0.75, 0.14], [1, 0]],
+                this.GAIN)
+        // The hottest spot just in front of the opening goes towards cream-gold.
+        k.globalCompositeOperation = 'lighter'
+        for (const source of sources)
+            this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '14,22,18')
+        // The lamp's own sprite keeps its art: no gain over the building.
         k.globalCompositeOperation = 'destination-out'
         for (const {pos} of sources) {
-            const hole = k.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 0.75 * basis.r)
+            const hole = k.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 0.7 * basis.r)
             hole.addColorStop(0, 'rgba(0,0,0,1)')
-            hole.addColorStop(0.55, 'rgba(0,0,0,0.85)')
+            hole.addColorStop(0.6, 'rgba(0,0,0,0.8)')
             hole.addColorStop(1, 'rgba(0,0,0,0)')
             k.fillStyle = hole
             k.fillRect(pos.x - basis.r, pos.y - basis.r, 2 * basis.r, 2 * basis.r)
@@ -201,8 +208,9 @@ const atmosphericLighting = {
         ctx.restore()
         this.bloom(ctx, board)
     },
+    // A small gold glow inside the opening; the sprite around it stays readable.
     bloom(ctx, board) {
-        const r = basis.r * 0.46
+        const r = basis.r * 0.4
         const sources = this.visibleSources(ctx, this.collect(board, false, false).sources, r, basis.r * 0.23)
         if (!sources.length) return
         ctx.save()
@@ -210,10 +218,11 @@ const atmosphericLighting = {
         for (const source of sources) {
             const c = this.core(source)
             const core = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r)
-            core.addColorStop(0, 'rgba(255,252,228,1)')
-            core.addColorStop(0.4, 'rgba(255,238,170,1)')
-            core.addColorStop(0.7, 'rgba(255,200,96,0.4)')
-            core.addColorStop(1, 'rgba(255,170,60,0)')
+            core.addColorStop(0, 'rgba(255,244,196,1)')
+            core.addColorStop(0.25, 'rgba(255,234,160,1)')
+            core.addColorStop(0.45, 'rgba(255,200,90,0.8)')
+            core.addColorStop(0.75, 'rgba(240,150,40,0.3)')
+            core.addColorStop(1, 'rgba(230,130,40,0)')
             ctx.fillStyle = core
             ctx.fillRect(c.x - r, c.y - r, 2 * r, 2 * r)
         }
