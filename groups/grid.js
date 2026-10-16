@@ -571,7 +571,13 @@ class Grid extends SpritesGroup {
         mapDepth.ensureGeometry(this)
         const cacheScale = this.surfaceCache ? this.surfaceCacheScale :
             this.getSurfaceCacheGeometry().scale
-        return canvas.scale <= cacheScale
+        // Above the raster's native scale, briefly transform the warmed texture
+        // through a gesture instead of redrawing every tile and asset. Settled
+        // frames return to the original sharp path. drawSurfaceCache still checks
+        // the complete fog/source/entity state before submitting any cached pixels.
+        const scaling = otherSettings.atmosphericVisuals && this.surfaceCache &&
+            performance.now() < gameEvent.screen.surfaceZoomUntil
+        return canvas.scale <= cacheScale || !!scaling
     }
     drawSurfaceCache(ctx) {
         if ((!this.surfaceCache || !this.surfaceStateMatches()) &&

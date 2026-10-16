@@ -111,6 +111,11 @@ class Screen {
         if (!Number.isFinite(zoom) || zoom <= 0 || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y))
             return
 
+        // Reuse the existing board raster while scaling. This is only a render
+        // hint: input anchors, sensitivity and limits remain unchanged.
+        if (zoom !== 1 && otherSettings.atmosphericVisuals)
+            this.surfaceZoomUntil = performance.now() + 160
+
         mainCtx.translate(canvas.offset.x, canvas.offset.y)
 
         canvas.offset.x -= pos.x / (canvas.scale * zoom) - pos.x / canvas.scale
