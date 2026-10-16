@@ -1,24 +1,20 @@
 // Optional decoration never participates in the required sprite startup counter.
 const atmosphericBackground = {
     state: 'idle', image: null, raster: null, rasterizations: 0,
-    // Only the viewport raster and the two 128x128 spill textures are additional
-    // atmospheric backing stores. Terrain, buildings and spill share the
-    // pre-existing grid/sprite caches.
-    maxBytes: 33554432, lightBytes: 2 * 128 * 128 * 4, fallbacks: 0,
+    // Only the cloud raster and the light map are additional atmospheric backing
+    // stores; terrain and buildings share the pre-existing grid/sprite caches.
+    maxBytes: 33554432, lightBytes: 2 * 2 * 1024 * 1024 * 4, fallbacks: 0,
     releaseRaster() {
         if (this.raster) this.raster.width = this.raster.height = 0
         this.raster = null
     },
     invalidate() {
         this.releaseRaster()
-        for (const texture of Object.values(atmosphericLighting.textures))
-            texture.width = texture.height = 0
-        atmosphericLighting.textures = {}
+        atmosphericLighting.release()
     },
     bytes() {
         const bytes = c => c ? c.width * c.height * 4 : 0
-        return Object.values(atmosphericLighting.textures).reduce(
-            (sum, texture) => sum + bytes(texture), bytes(this.raster))
+        return bytes(this.raster) + bytes(atmosphericLighting.map) + bytes(atmosphericLighting.gain)
     },
     watched: new WeakSet(),
     watch(surface) {
