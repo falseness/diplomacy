@@ -104,3 +104,27 @@ index entries. Count additional retained service logs, comparison checkpoints
 and lifecycle sidecars separately before capacity admission. Recovery-7's
 `sidecar-inventory.json` and `combined-storage-plan.json` demonstrate that
 additional accounting without copying the original files.
+
+The compressed shared-CAS comparison is checkpointed separately:
+
+```sh
+# OUT must resolve beneath the real artifacts/TASK-998 directory.
+# Invoke each group with a 590-second outer timeout, retaining its actual exit.
+bash tools/task998-compressed-shared-plan.sh "$OUT" 0
+# Repeat explicitly for groups 1 through 11, then:
+bash tools/task998-compressed-shared-summary.sh "$OUT"
+```
+
+Groups measure six cases each (the last measures the added town-capture-coop
+case), reuse recovery-9 sidecar and per-proof baseline measurements only after
+hash checks, and reconstruct each candidate proof with the existing codec.
+Missing and corrupt blobs must fail decoding. The 67 exact sample IDs cover all
+18 modules; fine player/fog/sequence strata remain explicit in the summary.
+Per-blob compression, compressed manifests including reference IDs, blob lookup
+IDs/content hashes, exact sidecars, index entries, and retained originals are
+charged separately. Equal allocation of shared blobs supports module-weighted
+comparison but is not a prediction of population reuse. The sample mean and
+maximum are also reported and neither is an upper bound. No native writer is
+installed, so additional collection reports and write/cleanup staging remain
+unresolved and the planner cannot admit capacity. Candidate payloads remain in
+memory; only measurements and original proof references are retained.
