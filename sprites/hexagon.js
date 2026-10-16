@@ -78,7 +78,7 @@ class Hexagon extends Sprite {
         }
         refreshCoopVision()
     }
-    draw(ctx, atmosphericTransform) {
+    draw(ctx, atmosphericTransform, edgeSources) {
         let pos = this.pos
         // The atmospheric path already knows this pass's transform. Cull the
         // whole offscreen tile, including its unchanged base raster, rather than
@@ -105,9 +105,9 @@ class Hexagon extends Sprite {
             drawCachedImage(ctx, this.player.hexagon, pos)
         }
         drawCachedImage(ctx, this.grassHex, pos)
-        this.drawAtmosphericSurface(ctx, atmosphericTransform)
+        this.drawAtmosphericSurface(ctx, atmosphericTransform, edgeSources)
     }
-    drawAtmosphericSurface(ctx, atmosphericTransform) {
+    drawAtmosphericSurface(ctx, atmosphericTransform, edgeSources) {
         if (!otherSettings.atmosphericVisuals) return
         const center = this.calcPos()
         // Atmospheric gradients are visual-only. Skip decoration whose entire
@@ -155,16 +155,10 @@ class Hexagon extends Sprite {
         }
         ctx.fillStyle = cached.light
         ctx.fill()
-        // Inset bevels stay clipped to the existing hex, including at fog edges.
+        // Inset bevels stay clipped to the existing hex, including at fog edges: the
+        // pre-rendered edge variant facing this tile's strongest visible light.
         ctx.globalCompositeOperation = 'source-over'
-        ctx.lineWidth = basis.r * 0.045
-        for (let i = 0; i < vertices.length; i++) {
-            ctx.strokeStyle = i === 0 || i === 5 ? 'rgba(255,232,190,0.65)' : 'rgba(27,39,58,0.5)'
-            ctx.beginPath()
-            ctx.moveTo(vertices[i].x, vertices[i].y)
-            ctx.lineTo(vertices[(i + 1) % 6].x, vertices[(i + 1) % 6].y)
-            ctx.stroke()
-        }
+        atmosphericLighting.drawEdges(ctx, center, edgeSources)
         ctx.restore()
     }
 
