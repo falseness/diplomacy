@@ -460,9 +460,9 @@ const atmosphericLighting = {
     // Bloom: a bright gold core inside the opening with a soft warm halo around it, from one
     // cached sprite (built once) drawn with 'screen'; the sprite around it stays readable.
     BLOOM: {
-        radius: 1.1,
-        stops: [[0, '255,246,200', 1], [0.08, '255,228,130', 1], [0.17, '255,190,60', 0.95],
-            [0.3, '255,140,30', 0.6], [0.48, '245,120,30', 0.22], [0.75, '235,110,30', 0.06], [1, '230,100,30', 0]]
+        radius: 0.9,
+        stops: [[0, '255,244,190', 1], [0.1, '255,214,100', 1], [0.22, '255,165,40', 0.9],
+            [0.4, '250,125,25', 0.4], [0.65, '240,110,25', 0.1], [1, '230,100,30', 0]]
     },
     bloomSprite: null,
     bloomSpriteBuilds: 0,
