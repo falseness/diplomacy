@@ -572,6 +572,7 @@ class Grid extends SpritesGroup {
             this.drawFogOfWar(cacheCtx)
         mapDepth.renderRim(cacheCtx)
         this.drawEntityBodies(cacheCtx)
+        this.surfaceCacheLit = atmosphericLighting.bake(cacheCtx, this, geometry.scale)
 
         this.surfaceCache = cache
         this.surfaceCacheScale = geometry.scale
@@ -650,7 +651,7 @@ class Grid extends SpritesGroup {
             // bars come after it, so the multiply never darkens them.
             if (!cachedScene)
                 this.drawOther(ctx, 'buildings')
-            atmosphericLighting.draw(ctx, this)
+            atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
             if (cachedScene) {
                 this.drawStillUnits(ctx)
                 this.drawEntityOverlays(ctx)
