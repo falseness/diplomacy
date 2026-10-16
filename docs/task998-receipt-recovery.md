@@ -38,3 +38,26 @@ validator explicitly with `--validate-collection --receipt-index`; never start
 an implicit service-backed full collection. Registered gate tests and negative
 controls do not substitute for the complete receipt audit. Keep the task pending
 when any proof or storage reservation is unresolved.
+
+For the recovery-4 unresolved paths, run the metadata-only reference resolver:
+
+```sh
+timeout 590 tools/task998-proof-references.sh artifacts/TASK-998/<new-attempt>
+```
+
+It checks original execution hashes, locates inward plain or gzip proof references,
+and verifies the SHA-256 of the original uncompressed bytes before classifying the
+recorded identity. It does not copy other tickets' proof, rewrite receipts, restore
+filesystem aliases, or start services. A resolved compressed reference is not yet
+a readable original path for `validateExactReceipt`, and a stale identity still
+requires fresh execution. Preserve its reference index as a recovery map; avoid
+expanding stale historical proof merely to reach the already-known identity failure.
+
+Plan historical-path restoration separately from new execution storage. Sum the
+reference index's `originalBytes` for compressed references to measure the cost of
+restoring plain paths; a gzip file's stored size is not that cost. Pending task
+outputs must remain uncompressed. Estimate new proof using current pilot sizes,
+include logs and transient peak usage, and do not admit a full refresh based on
+one small case or filesystem free space alone. When no full-volume plan fits the
+canonical 40 GiB budget, retain pending and state the measured shortfall without
+claiming a gameplay failure or full coverage.
