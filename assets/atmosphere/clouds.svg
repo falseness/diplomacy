@@ -1,38 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
   <!-- Original procedural cloud study. Static SVG filters are baked into the
-       background canvas on load/resize, never animated or rebuilt per frame. -->
+       background canvas on load/resize, never animated or rebuilt per frame.
+       Deep navy sky, a warm glow behind the upper-left beams, soft billows
+       (blurred noise, lit from the upper left) tinted amber above and blue below. -->
   <defs>
-    <linearGradient id="night" x2=".8" y2="1"><stop stop-color="#101b2d"/><stop offset=".5" stop-color="#071221"/><stop offset="1" stop-color="#10233c"/></linearGradient>
-    <radialGradient id="bank"><stop stop-color="white"/><stop offset=".55" stop-color="white" stop-opacity=".65"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
+    <linearGradient id="night" x2=".8" y2="1"><stop stop-color="#0e1a36"/><stop offset=".45" stop-color="#060e22"/><stop offset="1" stop-color="#0c1d40"/></linearGradient>
+    <radialGradient id="glow" cx="420" cy="-80" r="620" gradientUnits="userSpaceOnUse"><stop stop-color="#ffb060" stop-opacity=".8"/><stop offset=".3" stop-color="#e8853f" stop-opacity=".38"/><stop offset=".65" stop-color="#9a4f2c" stop-opacity=".1"/><stop offset="1" stop-color="#d9783a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="bank"><stop stop-color="white"/><stop offset=".55" stop-color="white" stop-opacity=".7"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient>
     <mask id="banks">
       <rect width="1600" height="1000" fill="black"/>
-      <ellipse cx="380" cy="50" rx="650" ry="280" fill="url(#bank)"/>
-      <ellipse cx="220" cy="800" rx="550" ry="340" fill="url(#bank)"/>
-      <ellipse cx="1050" cy="1040" rx="740" ry="340" fill="url(#bank)"/>
-      <ellipse cx="1510" cy="550" rx="370" ry="540" fill="url(#bank)"/>
+      <ellipse cx="380" cy="40" rx="650" ry="260" fill="url(#bank)"/>
+      <ellipse cx="220" cy="820" rx="600" ry="340" fill="url(#bank)"/>
+      <ellipse cx="1050" cy="1040" rx="760" ry="340" fill="url(#bank)"/>
+      <ellipse cx="1510" cy="550" rx="380" ry="560" fill="url(#bank)"/>
     </mask>
-    <linearGradient id="light" x1=".15" y1="0" x2=".65" y2=".85">
-      <stop stop-color="#e7a05d"/><stop offset=".25" stop-color="#94765f"/>
-      <stop offset=".52" stop-color="#3d587c"/><stop offset="1" stop-color="#6892bd"/>
+    <linearGradient id="light" x1=".1" y1="0" x2=".6" y2=".9">
+      <stop stop-color="#ffb468"/><stop offset=".28" stop-color="#d88c58"/>
+      <stop offset=".45" stop-color="#4468a8"/><stop offset="1" stop-color="#86b6f4"/>
     </linearGradient>
-    <filter id="cloud" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency=".006 .009" numOctaves="6" seed="39" result="billows"/>
-      <feColorMatrix in="billows" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  2.4 0 0 0 -.82" result="density"/>
-      <feDiffuseLighting in="billows" surfaceScale="22" diffuseConstant="1.15" lighting-color="#ffffff" result="ridges">
-        <feDistantLight azimuth="225" elevation="32"/>
+    <filter id="cloud" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".005 .008" numOctaves="4" seed="39" result="noise"/>
+      <feGaussianBlur in="noise" stdDeviation="3.5" result="billows"/>
+      <feColorMatrix in="billows" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3.2 0 0 0 -1.15" result="density"/>
+      <feDiffuseLighting in="billows" surfaceScale="12" diffuseConstant="1.5" lighting-color="#ffffff" result="ridges">
+        <feDistantLight azimuth="225" elevation="26"/>
       </feDiffuseLighting>
-      <feComposite in="SourceGraphic" in2="ridges" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="lit"/>
+      <feComposite in="SourceGraphic" in2="ridges" operator="arithmetic" k1="1" k2="0.12" k3="0" k4="0" result="lit"/>
       <feComposite in="lit" in2="density" operator="in"/>
     </filter>
-    <filter id="wisps" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency=".014 .022" numOctaves="4" seed="107" result="detail"/>
-      <feColorMatrix in="detail" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  2.8 0 0 0 -1.4" result="density"/>
+    <filter id="wisps" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".012 .02" numOctaves="4" seed="107" result="detail"/>
+      <feGaussianBlur in="detail" stdDeviation="3" result="soft"/>
+      <feColorMatrix in="soft" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3.2 0 0 0 -1.5" result="density"/>
       <feComposite in="SourceGraphic" in2="density" operator="in"/>
     </filter>
   </defs>
   <path fill="url(#night)" d="M0 0h1600v1000H0z"/>
+  <path fill="url(#glow)" d="M0 0h1600v1000H0z"/>
   <g mask="url(#banks)">
     <path fill="url(#light)" filter="url(#cloud)" d="M0 0h1600v1000H0z"/>
-    <path fill="url(#light)" filter="url(#wisps)" opacity=".42" d="M0 0h1600v1000H0z"/>
+    <path fill="url(#light)" filter="url(#wisps)" opacity=".4" d="M0 0h1600v1000H0z"/>
   </g>
 </svg>

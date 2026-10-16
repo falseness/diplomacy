@@ -457,23 +457,38 @@ const atmosphericLighting = {
         ctx.restore()
         this.bloom(ctx, board)
     },
-    // A small gold glow inside the opening; the sprite around it stays readable.
+    // Bloom: a bright gold core inside the opening with a soft warm halo around it, from one
+    // cached sprite (built once) drawn with 'screen'; the sprite around it stays readable.
+    BLOOM: {
+        radius: 1.1,
+        stops: [[0, '255,246,200', 1], [0.08, '255,228,130', 1], [0.17, '255,190,60', 0.95],
+            [0.3, '255,140,30', 0.6], [0.48, '245,120,30', 0.22], [0.75, '235,110,30', 0.06], [1, '230,100,30', 0]]
+    },
+    bloomSprite: null,
+    bloomSpriteBuilds: 0,
+    bloomImage() {
+        if (this.bloomSprite) return this.bloomSprite
+        const size = 256, sprite = document.createElement('canvas')
+        sprite.width = sprite.height = size
+        const g = sprite.getContext('2d'), c = size / 2
+        const glow = g.createRadialGradient(c, c, 0, c, c, c)
+        for (const [t, color, alpha] of this.BLOOM.stops)
+            glow.addColorStop(t, `rgba(${color},${alpha})`)
+        g.fillStyle = glow
+        g.fillRect(0, 0, size, size)
+        ++this.bloomSpriteBuilds
+        return this.bloomSprite = sprite
+    },
     bloom(ctx, board) {
-        const r = basis.r * 0.4
+        const r = basis.r * this.BLOOM.radius
         const sources = this.visibleSources(ctx, this.collect(board, false, false).sources, r, basis.r * 0.23)
         if (!sources.length) return
+        const sprite = this.bloomImage()
         ctx.save()
         ctx.globalCompositeOperation = 'screen'
         for (const source of sources) {
             const c = this.core(source)
-            const core = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r)
-            core.addColorStop(0, 'rgba(255,244,196,1)')
-            core.addColorStop(0.25, 'rgba(255,234,160,1)')
-            core.addColorStop(0.45, 'rgba(255,200,90,0.8)')
-            core.addColorStop(0.75, 'rgba(240,150,40,0.3)')
-            core.addColorStop(1, 'rgba(230,130,40,0)')
-            ctx.fillStyle = core
-            ctx.fillRect(c.x - r, c.y - r, 2 * r, 2 * r)
+            ctx.drawImage(sprite, c.x - r, c.y - r, 2 * r, 2 * r)
         }
         ctx.restore()
     }
