@@ -261,22 +261,25 @@ class Grid extends SpritesGroup {
         if (isFogLandmark(building))
             drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(building)], building.pos)
     }
-    drawOther(ctx) {
+    // layer: undefined draws everything in place; atmospheric lighting draws the
+    // 'buildings' before its light map and the 'units' (with silhouettes and bars) after.
+    drawOther(ctx, layer) {
+        const buildings = layer !== 'units', units = layer !== 'buildings'
         let tmpBuildings = []
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
-                    this.drawFogLandmark(ctx, this.arr[i][j].building)
+                    if (buildings) this.drawFogLandmark(ctx, this.arr[i][j].building)
                     continue
                 }
                 let cell = this.arr[i][j]
 
                 if (!this.observedBuilding(cell)) {
-                    cell.building.draw(ctx)
-                    if (cell.building.hasBar) tmpBuildings.push(cell.building)
-                    this.drawProductionSilhouette(ctx, cell.building)
+                    if (buildings) cell.building.draw(ctx)
+                    if (units && cell.building.hasBar) tmpBuildings.push(cell.building)
+                    if (units) this.drawProductionSilhouette(ctx, cell.building)
                 }
-                const unit = this.getStillUnit(cell)
+                const unit = units && this.getStillUnit(cell)
                 if (unit) unit.draw(ctx)
             }
         }
@@ -324,8 +327,20 @@ class Grid extends SpritesGroup {
                 const cell = this.arr[i][j]
                 if (this.isCacheableBuilding(cell.building))
                     this.drawEntityBody(ctx, cell.building)
-                if (this.getStillUnit(cell))
+                // Atmospheric units are drawn after the light map (drawStillUnits).
+                if (this.getStillUnit(cell) && !otherSettings.atmosphericVisuals)
                     this.drawEntityBody(ctx, cell.unit)
+            }
+        }
+    }
+    drawStillUnits(ctx) {
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < this.arr[i].length; ++j) {
+                if (isFogOfWar && !this.fogOfWar[i][j])
+                    continue
+                const unit = this.getStillUnit(this.arr[i][j])
+                if (unit)
+                    this.drawEntityBody(ctx, unit)
             }
         }
     }
@@ -551,7 +566,6 @@ class Grid extends SpritesGroup {
         this.drawHexagons(cacheCtx)
         if (isFogOfWar)
             this.drawFogOfWar(cacheCtx)
-        atmosphericLighting.draw(cacheCtx, this)
         mapDepth.renderRim(cacheCtx)
         this.drawEntityBodies(cacheCtx)
 
@@ -621,17 +635,28 @@ class Grid extends SpritesGroup {
         this.drawHexagons(ctx)
         if (isFogOfWar)
             this.drawFogOfWar(ctx)
-        atmosphericLighting.draw(ctx, this)
         mapDepth.drawRim(ctx, this)
         return false
     }
     draw(ctx) {
         const cachedScene = this.drawMapSurface(ctx)
-        if (cachedScene)
+        if (otherSettings.atmosphericVisuals) {
+            // The light map lights terrain and buildings; units, silhouettes and
+            // bars come after it, so the multiply never darkens them.
+            if (!cachedScene)
+                this.drawOther(ctx, 'buildings')
+            atmosphericLighting.draw(ctx, this)
+            if (cachedScene) {
+                this.drawStillUnits(ctx)
+                this.drawEntityOverlays(ctx)
+            }
+            else
+                this.drawOther(ctx, 'units')
+        }
+        else if (cachedScene)
             this.drawEntityOverlays(ctx)
         else
             this.drawOther(ctx)
-        atmosphericLighting.glow(ctx, this)
         moveTween.draw(ctx)
         if (typeof onlineObservation !== 'undefined')
             onlineObservation.draw(ctx)
