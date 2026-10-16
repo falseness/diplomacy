@@ -38,7 +38,7 @@ const atmosphericLighting = {
         keyIntensity: 0.75,
         reachRadii: 3,
         width: 0.10,
-        rasterScale: 2
+        rasterScale: 1.5
     },
     edgeVariants: null,
     edgeVariantBuilds: 0,
@@ -247,6 +247,11 @@ const atmosphericLighting = {
                 const inset = 1 - this.EDGE.width * 2 / Math.sqrt(3)
                 const inner = outer.map(({x, y}) => ({x: x * inset, y: y * inset}))
                 const light = k * 2 * Math.PI / this.EDGE.directions
+                // Clipped to the hex here, so tiles draw the variant without a clip of their own.
+                g.beginPath()
+                outer.forEach(({x, y}, i) => i ? g.lineTo(x, y) : g.moveTo(x, y))
+                g.closePath()
+                g.clip()
                 for (let i = 0; i < 6; i++) {
                     const j = (i + 1) % 6
                     const facing = Math.cos((-90 + 60 * i) * Math.PI / 180 - light)
@@ -300,15 +305,15 @@ const atmosphericLighting = {
             intensity: best ? Math.min(1, this.EDGE.keyIntensity + 0.6 * strength) : this.EDGE.keyIntensity
         }
     },
-    // Draws the chosen pre-rendered edge variant over a tile (world transform).
+    // Draws the chosen pre-rendered edge variant over a tile (world transform, no clip needed).
     drawEdges(ctx, center, sources) {
         const {index, intensity} = this.edgeLight(center, sources)
         const variant = this.edgeVariant(index)
         const size = variant.width / this.EDGE.rasterScale
-        ctx.save()
-        ctx.globalAlpha = intensity
+        const alpha = ctx.globalAlpha
+        ctx.globalAlpha = alpha * intensity
         ctx.drawImage(variant, center.x - size / 2, center.y - size / 2, size, size)
-        ctx.restore()
+        ctx.globalAlpha = alpha
     },
     core(source) {
         return {x: source.pos.x, y: source.pos.y + basis.r * 0.23}

@@ -155,11 +155,10 @@ class Hexagon extends Sprite {
         }
         ctx.fillStyle = cached.light
         ctx.fill()
-        // Inset bevels stay clipped to the existing hex, including at fog edges: the
-        // pre-rendered edge variant facing this tile's strongest visible light.
-        ctx.globalCompositeOperation = 'source-over'
-        atmosphericLighting.drawEdges(ctx, center, edgeSources)
         ctx.restore()
+        // Inset bevels stay inside the existing hex, including at fog edges: the
+        // pre-rendered (hex-clipped) edge variant facing this tile's strongest visible light.
+        atmosphericLighting.drawEdges(ctx, center, edgeSources)
     }
 
 }
