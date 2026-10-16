@@ -457,15 +457,34 @@ const atmosphericLighting = {
         ctx.restore()
         this.bloom(ctx, board)
     },
-    // Bloom: a bright gold core inside the opening with a soft warm halo around it, from one
-    // cached sprite (built once) drawn with 'screen'; the sprite around it stays readable.
+    // Bloom: the lamp's own stone is shaded (its sprite silhouette multiplied darker, the
+    // doorway left untouched), then a small white-hot core clipped to the doorway and a
+    // warm halo kept off the stone are added with 'screen'. Both overlays are built once
+    // per sprite raster; the old round sprite is the fallback for a missing raster.
     BLOOM: {
         radius: 0.9,
         stops: [[0, '255,244,190', 1], [0.1, '255,214,100', 1], [0.22, '255,165,40', 0.9],
-            [0.4, '250,125,25', 0.4], [0.65, '240,110,25', 0.1], [1, '230,100,30', 0]]
+            [0.4, '250,125,25', 0.4], [0.65, '240,110,25', 0.1], [1, '230,100,30', 0]],
+        shade: '200,140,104',
+        halo: 0.75,
+        haloStops: [[0, '255,190,90', 0.75], [0.3, '255,150,50', 0.45], [0.6, '245,120,35', 0.15],
+            [1, '230,100,30', 0]],
+        coreStops: [[0, '255,253,240', 1], [0.3, '255,244,190', 1], [0.55, '255,205,90', 1],
+            [0.8, '250,150,40', 1], [1, '225,105,30', 1]],
+        coreReach: 1.7,
+        // The halo kept on the stone: a warm rim around the doorway.
+        haloOnStone: 0.4
+    },
+    // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
+    DOOR: {
+        goldmine: {x: 0.495, y: 0.65, w: 0.1, h: 0.155},
+        town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085},
+        demonPortal: {x: 0.49, y: 0.66, w: 0.13, h: 0.2}
     },
     bloomSprite: null,
     bloomSpriteBuilds: 0,
+    lampOverlays: new WeakMap(),
+    lampOverlayBuilds: 0,
     bloomImage() {
         if (this.bloomSprite) return this.bloomSprite
         const size = 256, sprite = document.createElement('canvas')
@@ -479,16 +498,90 @@ const atmosphericLighting = {
         ++this.bloomSpriteBuilds
         return this.bloomSprite = sprite
     },
+    // Round-topped doorway path in raster pixels, offset by (ox, oy).
+    doorPath(g, door, image, ox = 0, oy = 0) {
+        const cx = ox + door.x * image.width, rw = door.w * image.width
+        const top = oy + (door.y - door.h) * image.height, bottom = oy + (door.y + door.h) * image.height
+        g.beginPath()
+        g.moveTo(cx - rw, bottom)
+        g.lineTo(cx - rw, top + rw)
+        g.arc(cx, top + rw, rw, Math.PI, 0)
+        g.lineTo(cx + rw, bottom)
+        g.closePath()
+    },
+    lampOverlay(image, name) {
+        let overlay = this.lampOverlays.get(image)
+        if (overlay && overlay.radius === basis.r && overlay.name === name) return overlay
+        const door = this.DOOR[name] || this.DOOR.goldmine
+        // Shade: the sprite's silhouette in the stone tint, the doorway white (unchanged by multiply).
+        const shade = document.createElement('canvas')
+        shade.width = image.width
+        shade.height = image.height
+        let g = shade.getContext('2d')
+        g.drawImage(image, 0, 0)
+        g.globalCompositeOperation = 'source-in'
+        g.fillStyle = `rgb(${this.BLOOM.shade})`
+        g.fillRect(0, 0, shade.width, shade.height)
+        g.globalCompositeOperation = 'source-atop'
+        g.fillStyle = '#fff'
+        this.doorPath(g, door, image)
+        g.fill()
+        // Glow: the halo around the doorway with the stone cut out, then the hot core in the doorway.
+        const pad = Math.ceil(this.BLOOM.halo * basis.r)
+        const glow = document.createElement('canvas')
+        glow.width = image.width + 2 * pad
+        glow.height = image.height + 2 * pad
+        g = glow.getContext('2d')
+        const cx = pad + door.x * image.width, cy = pad + (door.y + 0.4 * door.h) * image.height
+        const halo = g.createRadialGradient(cx, cy, 0, cx, cy, pad)
+        for (const [t, color, alpha] of this.BLOOM.haloStops)
+            halo.addColorStop(t, `rgba(${color},${alpha})`)
+        g.fillStyle = halo
+        g.fillRect(0, 0, glow.width, glow.height)
+        g.globalCompositeOperation = 'destination-out'
+        g.globalAlpha = 1 - this.BLOOM.haloOnStone
+        g.drawImage(image, pad, pad)
+        g.globalAlpha = 1
+        g.globalCompositeOperation = 'source-over'
+        this.doorPath(g, door, image, pad, pad)
+        g.save()
+        g.clip()
+        const reach = this.BLOOM.coreReach * door.w * image.width
+        const core = g.createRadialGradient(cx, cy, 0, cx, cy, reach)
+        for (const [t, color, alpha] of this.BLOOM.coreStops)
+            core.addColorStop(t, `rgba(${color},${alpha})`)
+        g.fillStyle = core
+        g.fillRect(0, 0, glow.width, glow.height)
+        g.restore()
+        overlay = {radius: basis.r, name, shade, glow, pad}
+        this.lampOverlays.set(image, overlay)
+        ++this.lampOverlayBuilds
+        return overlay
+    },
+    // The lamp building's sprite as drawn (an observed building's last seen sprite).
+    lampBuilding(board, {x, y}) {
+        const cell = board.arr[x][y]
+        return board.observedBuilding(cell) ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
+    },
     bloom(ctx, board) {
         const r = basis.r * this.BLOOM.radius
         const sources = this.visibleSources(ctx, this.collect(board, false, false).sources, r, basis.r * 0.23)
         if (!sources.length) return
-        const sprite = this.bloomImage()
         ctx.save()
-        ctx.globalCompositeOperation = 'screen'
         for (const source of sources) {
-            const c = this.core(source)
-            ctx.drawImage(sprite, c.x - r, c.y - r, 2 * r, 2 * r)
+            const building = this.lampBuilding(board, source)
+            const image = building && cachedImages[board.getEntityBodyImageName(building)]
+            if (!image || !image.width || !building.pos) {
+                const c = this.core(source)
+                ctx.globalCompositeOperation = 'screen'
+                ctx.drawImage(this.bloomImage(), c.x - r, c.y - r, 2 * r, 2 * r)
+                continue
+            }
+            const {shade, glow, pad} = this.lampOverlay(image, source.name)
+            ctx.globalCompositeOperation = 'multiply'
+            ctx.drawImage(shade, building.pos.x, building.pos.y)
+            ctx.globalCompositeOperation = 'screen'
+            ctx.drawImage(glow, building.pos.x - pad, building.pos.y - pad)
         }
         ctx.restore()
     }
