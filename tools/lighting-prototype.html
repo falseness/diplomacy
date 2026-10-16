@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Lighting prototype (standalone, no game integration)</title>
+<style>html, body { margin: 0; background: #071221; overflow: hidden } canvas { display: block }</style>
+<!-- Real hex geometry: basis/biasToTransition (gameCoords), Sprite.calcPos and
+     neighborhood (sprite), MapDepth.getVertices (border). -->
+<script src="../options/gameCoords.js"></script>
+<script src="../sprites/sprite.js"></script>
+<script src="../sprites/border.js"></script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script>
+'use strict'
+// Fixed board: maps['fight forever'][0] from options/gamestart.js, camera as in
+// artifacts/TASK-1050/screenshots/desktop-final.png (scale 0.3, cell 0,0 at 420,151
+// on a 1440 px wide view). Everything below is visual only.
+const MAP = {
+    size: {x: 40, y: 30},
+    neutralTowns: [{x: 12, y: 15}, {x: 27, y: 14}, {x: 31, y: 24}, {x: 18, y: 24}, {x: 8, y: 5}, {x: 21, y: 5}],
+    players: [
+        {rgb: [255, 0, 0], towns: [{x: 15, y: 28}, {x: 17, y: 1}, {x: 38, y: 23}]},
+        {rgb: [139, 0, 255], towns: [{x: 24, y: 1}, {x: 22, y: 28}, {x: 1, y: 6}]}
+    ],
+    goldmines: [{x: 18, y: 15}, {x: 18, y: 21}, {x: 13, y: 27}, {x: 21, y: 14}, {x: 21, y: 8}, {x: 26, y: 2},
+        {x: 4, y: 11}, {x: 6, y: 22}, {x: 3, y: 26}, {x: 7, y: 24}, {x: 2, y: 23}, {x: 5, y: 17}, {x: 10, y: 9},
+        {x: 35, y: 18}, {x: 33, y: 7}, {x: 36, y: 3}, {x: 32, y: 5}, {x: 37, y: 6}, {x: 34, y: 12}, {x: 29, y: 20},
+        {x: 2, y: 4}, {x: 13, y: 5}, {x: 37, y: 25}, {x: 26, y: 24}, {x: 32, y: 16}, {x: 11, y: 18},
+        {x: 7, y: 13}, {x: 28, y: 11}, {x: 2, y: 16}, {x: 1, y: 13}, {x: 37, y: 13}, {x: 38, y: 16}],
+    lakes: [{x: 15, y: 11}, {x: 16, y: 11}, {x: 17, y: 11}, {x: 18, y: 11}, {x: 24, y: 18}, {x: 23, y: 18},
+        {x: 22, y: 18}, {x: 21, y: 18}, {x: 9, y: 21}, {x: 30, y: 8}, {x: 17, y: 24}, {x: 18, y: 25},
+        {x: 22, y: 5}, {x: 21, y: 4}, {x: 14, y: 21}, {x: 13, y: 20}, {x: 13, y: 19}, {x: 12, y: 19},
+        {x: 25, y: 8}, {x: 26, y: 9}, {x: 26, y: 10}, {x: 27, y: 10}, {x: 3, y: 15}, {x: 5, y: 15},
+        {x: 5, y: 14}, {x: 36, y: 14}, {x: 34, y: 14}, {x: 34, y: 15}],
+    mountains: [{x: 20, y: 12}, {x: 21, y: 12}, {x: 22, y: 12}, {x: 23, y: 11}, {x: 19, y: 17}, {x: 18, y: 17},
+        {x: 17, y: 17}, {x: 16, y: 18}, {x: 5, y: 20}, {x: 6, y: 20}, {x: 7, y: 20}, {x: 8, y: 21},
+        {x: 34, y: 9}, {x: 33, y: 9}, {x: 32, y: 9}, {x: 31, y: 8}, {x: 30, y: 21}, {x: 31, y: 20},
+        {x: 32, y: 20}, {x: 33, y: 19}, {x: 9, y: 8}, {x: 8, y: 9}, {x: 7, y: 9}, {x: 6, y: 10},
+        {x: 27, y: 25}, {x: 28, y: 26}, {x: 28, y: 27}, {x: 12, y: 4}, {x: 11, y: 3}, {x: 11, y: 2}]
+}
+const IMAGES = {
+    town: 'assets/atmosphere/buildings/town.svg',
+    goldmine: 'assets/atmosphere/buildings/goldmine.svg',
+    lake: 'assets/atmosphere/nature/lake.svg',
+    mountain: 'assets/atmosphere/nature/mountain.svg',
+    noob: 'assets/sprites/noob.svg',
+    clouds: 'assets/atmosphere/clouds.svg',
+    i: 'assets/i.svg',
+    undo: 'assets/undo.svg'
+}
+for (let i = 1; i <= 6; ++i) IMAGES['grass' + i] = 'assets/grass-hex/grass-hex-' + i + '.svg'
+
+// Light model parameters (light map units: 0..255 per channel, 255 = full light).
+const AMBIENT = [92, 97, 117]             // cool ambient, about rgb 0.36, 0.38, 0.46
+// Lamp colours stay below white in green/blue so the pools read warm, not bleached.
+// core: where the emitting part of the unchanged sprite sits (cave mouth, town windows),
+// as a fraction of the sprite size from its centre.
+const LAMP = {
+    goldmine: {color: [255, 96, 16], power: 1.35, core: {x: 0.01, y: 0.14}},
+    town: {color: [255, 104, 22], power: 1.45, core: {x: -0.06, y: 0.12}},
+    demonPortal: {color: [255, 96, 52], power: 1.05, core: {x: 0, y: 0.1}}
+}
+const TAIL_RADII = 2.5                    // light tail reaches about 2.5 hex radii (basis.r)
+
+const W = window.innerWidth, H = window.innerHeight
+const view = document.getElementById('view')
+view.width = W; view.height = H
+// basis.r follows the device width (gameCoords WIDTH); 0.3 is the TASK-1050 camera scale.
+const camera = {scale: 0.3 * W / WIDTH, x: 420 * W / 1440, y: 151 * W / 1440}
+const R = basis.r                          // world hex radius
+const SPACING = Math.sqrt(3) * R           // centre-to-centre distance between neighbours
+const depth = new MapDepth()
+
+function canvasOf(w = W, h = H) {
+    const c = document.createElement('canvas')
+    c.width = w; c.height = h
+    return c
+}
+function cell(x, y) { return new Sprite(x, y).calcPos() }  // real hex centre in world units
+function hexPath(ctx, pos, inset = 0) {
+    const v = depth.getVertices(pos)
+    const k = 1 - inset
+    ctx.beginPath()
+    v.forEach((p, i) => {
+        const x = pos.x + (p.x - pos.x) * k, y = pos.y + (p.y - pos.y) * k
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)
+    })
+    ctx.closePath()
+}
+function world(ctx) { ctx.setTransform(camera.scale, 0, 0, camera.scale, camera.x, camera.y) }
+function prng(seed) { return () => ((seed = Math.imul(seed, 1664525) + 1013904223 >>> 0) / 4294967296) }
+function key(p) { return p.x + ':' + p.y }
+
+const images = {}
+function load() {
+    return Promise.all(Object.entries(IMAGES).map(([name, src]) => new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => { images[name] = img; resolve() }
+        img.onerror = () => reject(new Error('failed to load ' + src))
+        img.src = '../' + src
+    })))
+}
+
+// ----- board content -------------------------------------------------------
+function buildBoard() {
+    const owner = new Map(), objects = [], lights = []
+    for (const [i, p] of MAP.players.entries()) for (const t of p.towns) {
+        owner.set(key(t), i)
+        for (const n of new Sprite(t.x, t.y).neighbours) owner.set(key(n), i)
+    }
+    const add = (list, image, lamp) => { for (const c of list) {
+        const pos = cell(c.x, c.y)
+        objects.push({image, pos, coord: c, lamp: !!lamp})
+        if (lamp) {
+            const size = 1.6 * R, core = LAMP[image].core
+            lights.push({pos, kind: image, ...LAMP[image],
+                core: {x: pos.x + core.x * size, y: pos.y + core.y * size}})
+        }
+    } }
+    add(MAP.lakes, 'lake'); add(MAP.mountains, 'mountain')
+    add(MAP.goldmines, 'goldmine', true)
+    add(MAP.neutralTowns, 'town', true)
+    for (const p of MAP.players) add(p.towns, 'town', true)
+    for (const p of MAP.players) for (const t of p.towns)
+        objects.push({image: 'noob', pos: cell(t.x, t.y), coord: t, unit: true})
+    return {owner, objects, lights}
+}
+
+// Strongest lamp influence at a point: direction (unit vector towards the light) and weight.
+function lampFalloff(d) {
+    const t = Math.max(0, 1 - d / (TAIL_RADII * R))
+    return t * t
+}
+function lightVector(pos, lights, exclude) {
+    let x = 0, y = 0, best = 0
+    for (const l of lights) {
+        if (l === exclude) continue
+        const dx = l.pos.x - pos.x, dy = l.pos.y - pos.y, d = Math.hypot(dx, dy)
+        if (d < 1) continue
+        const w = lampFalloff(d) * l.power
+        x += dx / d * w; y += dy / d * w
+        best = Math.max(best, w)
+    }
+    return {x, y, strength: Math.hypot(x, y), best}
+}
+const KEY_DIR = {x: -0.62, y: -0.78}       // towards the key light (upper left)
+
+// ----- layers --------------------------------------------------------------
+function drawBackground(ctx) {
+    ctx.drawImage(images.clouds, 0, 0, W, H)
+    // Deeper navy night, as in the concept.
+    ctx.save()
+    ctx.globalCompositeOperation = 'multiply'
+    ctx.fillStyle = 'rgb(118,128,170)'
+    ctx.fillRect(0, 0, W, H)
+    ctx.restore()
+    // Warm amber light band falling from the upper left, like the concept sky.
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    const band = ctx.createLinearGradient(0, 0, W * 0.55, H * 0.75)
+    band.addColorStop(0, 'rgba(230,130,50,0.75)')
+    band.addColorStop(0.45, 'rgba(140,76,38,0.25)')
+    band.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = band
+    ctx.fillRect(0, 0, W, H)
+    ctx.restore()
+    // Deterministic embers.
+    const rand = prng(1104)
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    for (let i = 0; i < 110; ++i) {
+        const x = rand() * W, y = rand() * H, r = (1 + rand() * 1.6) * W / 1440
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r * 3)
+        g.addColorStop(0, 'rgba(255,200,120,0.95)')
+        g.addColorStop(0.35, 'rgba(255,150,60,0.45)')
+        g.addColorStop(1, 'rgba(255,120,40,0)')
+        ctx.fillStyle = g
+        ctx.fillRect(x - r * 3, y - r * 3, r * 6, r * 6)
+    }
+    ctx.restore()
+}
+
+function boardCells() {
+    const cells = []
+    for (let x = 0; x < MAP.size.x; ++x) for (let y = 0; y < MAP.size.y; ++y)
+        cells.push({coord: {x, y}, pos: cell(x, y)})
+    return cells
+}
+
+// Unlit albedo: existing tile colours and grass-hex textures (desaturated into stone
+// grain), the board's side faces, then shadows and the unchanged object sprites.
+function drawAlbedo(ctx, board, cells) {
+    world(ctx)
+    // Side faces: outline edges facing down are extruded by MapDepth.depth.
+    ctx.fillStyle = '#8e8a86'
+    for (const c of cells) {
+        const v = depth.getVertices(c.pos), parity = c.coord.x & 1
+        for (let i = 2; i <= 4; ++i) {
+            const n = {x: c.coord.x + neighborhood[parity][i][0], y: c.coord.y + neighborhood[parity][i][1]}
+            if (n.x >= 0 && n.y >= 0 && n.x < MAP.size.x && n.y < MAP.size.y) continue
+            const a = v[i], b = v[(i + 1) % 6]
+            ctx.beginPath()
+            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y)
+            ctx.lineTo(b.x, b.y + depth.depth); ctx.lineTo(a.x, a.y + depth.depth)
+            ctx.closePath(); ctx.fill()
+        }
+    }
+    const grassSize = {w: (R + basis.strokeWidth) * 2, h: (R * Math.sqrt(3) / 2 + basis.strokeWidth) * 2}
+    for (const c of cells) {
+        const o = board.owner.get(key(c.coord))
+        const rgb = o === undefined ? [208, 208, 208] : MAP.players[o].rgb
+        hexPath(ctx, c.pos)
+        ctx.fillStyle = `rgb(${rgb})`
+        ctx.fill()
+        if (o === undefined) {
+            // Neutral stone is lifted towards cream (a tint over the existing tile colour)
+            // so the light map keeps headroom for warm lamp pools.
+            ctx.globalCompositeOperation = 'screen'
+            ctx.fillStyle = 'rgb(150,132,118)'
+            ctx.fill()
+            ctx.globalCompositeOperation = 'source-over'
+            // Marble grain: the existing grass-hex texture, grey and faint.
+            const h = Math.imul(c.coord.x + 1, 73856093) ^ Math.imul(c.coord.y + 1, 19349663)
+            ctx.save()
+            ctx.filter = 'grayscale(1) contrast(1.6)'
+            ctx.globalAlpha = 0.42
+            ctx.drawImage(images['grass' + ((h >>> 0) % 6 + 1)], c.pos.x - grassSize.w / 2, c.pos.y - grassSize.h / 2,
+                grassSize.w, grassSize.h)
+            ctx.restore()
+            // Polished stone: a faint lighter centre per tile.
+            const g = ctx.createRadialGradient(c.pos.x, c.pos.y, 0, c.pos.x, c.pos.y, R)
+            g.addColorStop(0, 'rgba(255,255,255,0.14)')
+            g.addColorStop(1, 'rgba(255,255,255,0)')
+            hexPath(ctx, c.pos)
+            ctx.fillStyle = g
+            ctx.fill()
+        }
+    }
+    // Joints between tiles.
+    ctx.lineWidth = 0.035 * R
+    ctx.strokeStyle = 'rgba(58,50,52,0.7)'
+    for (const c of cells) { hexPath(ctx, c.pos); ctx.stroke() }
+}
+
+// Silhouette of a sprite, used for its blurred ground shadow.
+const silhouettes = {}
+function silhouette(name) {
+    if (silhouettes[name]) return silhouettes[name]
+    const c = canvasOf(256, 256), g = c.getContext('2d')
+    g.drawImage(images[name], 0, 0, 256, 256)
+    g.globalCompositeOperation = 'source-in'
+    g.fillStyle = '#000'
+    g.fillRect(0, 0, 256, 256)
+    return silhouettes[name] = c
+}
+// Soft shadow: the sprite silhouette flattened onto the ground, sheared away from the
+// dominant light (key light plus nearby lamps), blurred, multiplied.
+function drawShadows(ctx, board) {
+    const size = 1.6 * R
+    for (const o of board.objects) {
+        if (o.image === 'lake') continue
+        const lamp = lightVector(o.pos, board.lights, board.lights.find(l => l.pos === o.pos))
+        let dx = KEY_DIR.x * 0.8 + lamp.x * 1.4, dy = KEY_DIR.y * 0.8 + lamp.y * 1.4
+        const len = Math.hypot(dx, dy) || 1
+        dx /= -len; dy /= -len                // away from the light
+        const reach = 0.9 * size
+        const baseY = o.pos.y + size * (o.unit ? 0.42 : 0.36)
+        world(ctx)
+        ctx.save()
+        ctx.globalCompositeOperation = 'multiply'
+        ctx.globalAlpha = o.unit ? 0.6 : 0.8
+        ctx.filter = `blur(${Math.max(1.5, 0.09 * size * camera.scale)}px)`
+        // Ground plane: anchor at the sprite base, squash height, shear along the shadow.
+        ctx.translate(o.pos.x, baseY)
+        ctx.transform(1, 0, dx * 1.3, 0.5, 0, 0)
+        ctx.translate(dx * reach * 0.45, dy * reach * 0.3)
+        ctx.drawImage(silhouette(o.image), -size / 2, -size, size, size)
+        ctx.restore()
+    }
+}
+function drawObjects(ctx, board) {
+    const size = 1.6 * R
+    world(ctx)
+    const order = [...board.objects].sort((a, b) => (a.unit - b.unit) || (a.pos.y - b.pos.y))
+    for (const o of order) {
+        const s = o.unit ? size * 0.9 : size
+        const y = o.unit ? o.pos.y + 0.05 * R : o.pos.y
+        ctx.drawImage(images[o.image], o.pos.x - s / 2, y - s / 2, s, s)
+    }
+}
+
+// (a) Light map: cool ambient, plus (c) the broad warm key light, plus every lamp as a
+// warm radial falloff with a bright core and a long soft tail, all added with 'lighter'.
+function buildLightMap(board) {
+    const map = canvasOf(), g = map.getContext('2d')
+    g.fillStyle = `rgb(${AMBIENT})`
+    g.fillRect(0, 0, W, H)
+    g.globalCompositeOperation = 'lighter'
+    // Key light: a broad cream wash, strongest at the board's upper left.
+    const ul = {x: camera.x - 2 * SPACING * camera.scale, y: camera.y - 2 * SPACING * camera.scale}
+    const keyLight = g.createLinearGradient(ul.x, ul.y, ul.x + W * 0.75, ul.y + W * 0.75)
+    keyLight.addColorStop(0, 'rgb(150,118,72)')
+    keyLight.addColorStop(0.5, 'rgb(96,80,56)')
+    keyLight.addColorStop(1, 'rgb(34,28,20)')
+    g.fillStyle = keyLight
+    g.fillRect(0, 0, W, H)
+    // Soft diagonal shafts of the same key light, as in the concept.
+    g.save()
+    g.translate(ul.x, ul.y)
+    g.rotate(Math.atan2(-KEY_DIR.y, -KEY_DIR.x) - Math.PI / 2)
+    for (const [offset, width, alpha] of [[-0.12, 0.08, 0.12], [0.05, 0.12, 0.1], [0.24, 0.07, 0.08], [0.4, 0.1, 0.06]]) {
+        const x = offset * W, w = width * W
+        const shaft = g.createLinearGradient(x - w, 0, x + w, 0)
+        shaft.addColorStop(0, 'rgba(255,214,160,0)')
+        shaft.addColorStop(0.5, `rgba(255,214,160,${alpha})`)
+        shaft.addColorStop(1, 'rgba(255,214,160,0)')
+        g.fillStyle = shaft
+        g.fillRect(x - w, 0, 2 * w, 2 * W)
+    }
+    g.restore()
+    world(g)
+    // Near a lamp its warm light dominates: the cool ambient and key are filtered warm
+    // ('multiply') before the lamp itself is added, so the pool keeps its colour.
+    g.globalCompositeOperation = 'multiply'
+    for (const l of board.lights) {
+        const c = {x: l.core.x, y: l.core.y + 0.5 * R}, r = 1.9 * R
+        const filter = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, r)
+        filter.addColorStop(0, 'rgb(255,192,118)')
+        filter.addColorStop(0.5, 'rgb(255,232,196)')
+        filter.addColorStop(1, 'rgb(255,255,255)')
+        g.fillStyle = filter
+        g.fillRect(c.x - r, c.y - r, 2 * r, 2 * r)
+    }
+    g.globalCompositeOperation = 'lighter'
+    for (const l of board.lights) {
+        // The pool spills forward (down the board) from the emitting core: the falloff is
+        // stretched downwards, so the tail reaches about 2.5 radii below the lamp.
+        const c = {x: l.core.x, y: l.core.y + 0.45 * R}
+        const r = TAIL_RADII * R, [cr, cg, cb] = l.color
+        g.save()
+        g.translate(c.x, c.y)
+        g.scale(0.85, 1.25)
+        const lamp = g.createRadialGradient(0, 0, 0, 0, 0, r)
+        const stop = (t, a) => lamp.addColorStop(t, `rgba(${cr},${cg},${cb},${Math.min(1, a * l.power).toFixed(3)})`)
+        stop(0, 1.0); stop(0.08, 0.88); stop(0.2, 0.58); stop(0.36, 0.32); stop(0.55, 0.15); stop(0.78, 0.05); stop(1, 0)
+        g.fillStyle = lamp
+        g.fillRect(-r, -r, 2 * r, 2 * r)
+        g.restore()
+    }
+    return map
+}
+
+// (d) Bevel: each tile's edges facing the strongest nearby light catch a thin warm
+// highlight ('lighter'); edges turned away get a faint dark lip ('multiply').
+function drawBevels(ctx, board, cells) {
+    world(ctx)
+    ctx.lineCap = 'round'
+    for (const c of cells) {
+        const lamp = lightVector(c.pos, board.lights)
+        const lx = lamp.x * 2.6 + KEY_DIR.x * 0.18, ly = lamp.y * 2.6 + KEY_DIR.y * 0.18
+        const strength = Math.min(1, Math.hypot(lx, ly))
+        const len = Math.hypot(lx, ly) || 1
+        const v = depth.getVertices(c.pos)
+        for (let i = 0; i < 6; ++i) {
+            const a = v[i], b = v[(i + 1) % 6]
+            const mx = (a.x + b.x) / 2 - c.pos.x, my = (a.y + b.y) / 2 - c.pos.y
+            const ml = Math.hypot(mx, my)
+            const facing = (mx / ml) * (lx / len) + (my / ml) * (ly / len)
+            const inset = 0.93
+            const ax = c.pos.x + (a.x - c.pos.x) * inset, ay = c.pos.y + (a.y - c.pos.y) * inset
+            const bx = c.pos.x + (b.x - c.pos.x) * inset, by = c.pos.y + (b.y - c.pos.y) * inset
+            ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
+            if (facing > 0.3) {
+                ctx.globalCompositeOperation = 'lighter'
+                ctx.strokeStyle = `rgba(255,176,82,${(0.7 * strength * (facing - 0.3) / 0.7).toFixed(3)})`
+                ctx.lineWidth = 0.055 * R
+            } else if (facing < -0.3) {
+                ctx.globalCompositeOperation = 'multiply'
+                ctx.strokeStyle = `rgba(120,100,110,${(0.35 * strength * (-facing - 0.3) / 0.7).toFixed(3)})`
+                ctx.lineWidth = 0.05 * R
+            } else continue
+            ctx.stroke()
+        }
+    }
+    ctx.globalCompositeOperation = 'source-over'
+}
+
+// (b) Bloom, added with 'screen' after lighting. The wide glow and halo go on the ground
+// under the sprites; only the small saturated core (cave mouth, windows) goes on top, so
+// the unchanged sprite stays readable around its glowing opening.
+function drawGlow(ctx, board) {
+    world(ctx)
+    ctx.globalCompositeOperation = 'screen'
+    for (const l of board.lights) {
+        const c = l.core
+        // Wide, faint glow: lifts the lit pool above the albedo with saturated warmth.
+        const glow = ctx.createRadialGradient(c.x, c.y + 0.45 * R, 0, c.x, c.y + 0.45 * R, 1.25 * R)
+        glow.addColorStop(0, 'rgba(255,192,72,0.88)')
+        glow.addColorStop(0.5, 'rgba(255,150,40,0.28)')
+        glow.addColorStop(1, 'rgba(255,130,30,0)')
+        ctx.fillStyle = glow
+        ctx.fillRect(c.x - 1.25 * R, c.y - 0.8 * R, 2.5 * R, 2.5 * R)
+        const halo = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 0.9 * R)
+        halo.addColorStop(0, 'rgba(255,160,44,0.55)')
+        halo.addColorStop(0.4, 'rgba(255,140,40,0.25)')
+        halo.addColorStop(1, 'rgba(255,120,30,0)')
+        ctx.fillStyle = halo
+        ctx.fillRect(c.x - R, c.y - R, 2 * R, 2 * R)
+    }
+    ctx.globalCompositeOperation = 'source-over'
+}
+function drawCores(ctx, board) {
+    world(ctx)
+    ctx.globalCompositeOperation = 'screen'
+    for (const l of board.lights) {
+        const c = l.core
+        const core = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, 0.45 * R)
+        core.addColorStop(0, 'rgba(255,246,160,1)')
+        core.addColorStop(0.45, 'rgba(255,228,100,0.95)')
+        core.addColorStop(0.75, 'rgba(255,180,50,0.5)')
+        core.addColorStop(1, 'rgba(255,150,40,0)')
+        ctx.fillStyle = core
+        ctx.fillRect(c.x - 0.45 * R, c.y - 0.45 * R, 0.9 * R, 0.9 * R)
+    }
+    ctx.globalCompositeOperation = 'source-over'
+}
+
+
+function drawInterface(ctx) {
+    const k = W / 1440
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.fillStyle = '#fff'
+    for (let i = 0; i < 3; ++i) {
+        const y = (44 + i * 28) * k
+        ctx.beginPath(); ctx.roundRect(24 * k, y - 7 * k, 96 * k, 14 * k, 7 * k); ctx.fill()
+    }
+    ctx.drawImage(images.i, W - 140 * k, 0, 140 * k, 140 * k)
+    ctx.drawImage(images.undo, 8 * k, H - 140 * k, 130 * k, 130 * k)
+    ctx.fillStyle = '#f66'
+    ctx.beginPath(); ctx.moveTo(W - 152 * k, H - 152 * k); ctx.lineTo(W - 4 * k, H - 78 * k)
+    ctx.lineTo(W - 152 * k, H - 4 * k); ctx.closePath(); ctx.fill()
+}
+
+// Multiplies a layer by a light map and keeps only the layer's own pixels.
+function light(layer, lightMap) {
+    const g = layer.getContext('2d'), mask = canvasOf()
+    mask.getContext('2d').drawImage(layer, 0, 0)
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    // (f) Cream marble comes from this warm tint and the warm light, not from new tile art.
+    g.globalCompositeOperation = 'multiply'
+    g.fillStyle = 'rgb(255,238,224)'
+    g.fillRect(0, 0, W, H)
+    g.drawImage(lightMap, 0, 0)
+    // Multiply also painted the empty surroundings; keep only the layer's pixels.
+    g.globalCompositeOperation = 'destination-in'
+    g.drawImage(mask, 0, 0)
+    g.globalCompositeOperation = 'source-over'
+    return mask
+}
+
+function render() {
+    const board = buildBoard(), cells = boardCells()
+    const ctx = view.getContext('2d')
+    drawBackground(ctx)
+    const lightMap = buildLightMap(board)
+
+    // Ground layer: albedo and soft shadows (e), lit by the light map; then bevels.
+    const ground = canvasOf(), g = ground.getContext('2d')
+    drawAlbedo(g, board, cells)
+    drawShadows(g, board)
+    const groundMask = light(ground, lightMap)
+    drawBevels(g, board, cells)
+    drawGlow(g, board)
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.globalCompositeOperation = 'destination-in'
+    g.drawImage(groundMask, 0, 0)
+    g.globalCompositeOperation = 'source-over'
+
+    // Objects take a softened copy of the same light (sprites keep their own colours).
+    const soft = canvasOf(), s = soft.getContext('2d')
+    s.fillStyle = '#fff'
+    s.fillRect(0, 0, W, H)
+    s.globalAlpha = 0.82
+    s.drawImage(lightMap, 0, 0)
+    const objects = canvasOf()
+    drawObjects(objects.getContext('2d'), board)
+    light(objects, soft)
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(ground, 0, 0)
+    ctx.drawImage(objects, 0, 0)
+    drawCores(ctx, board)
+    drawInterface(ctx)
+    window.prototypeInfo = {width: W, height: H, scale: camera.scale, origin: {x: camera.x, y: camera.y},
+        lights: board.lights.length, objects: board.objects.length, ambient: AMBIENT, tailRadii: TAIL_RADII}
+}
+
+
+load().then(() => { render(); window.prototypeReady = true })
+    .catch(error => { window.prototypeError = String(error && error.message || error) })
+</script>
+</body>
+</html>
