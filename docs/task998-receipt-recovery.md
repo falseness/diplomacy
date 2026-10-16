@@ -61,3 +61,46 @@ include logs and transient peak usage, and do not admit a full refresh based on
 one small case or filesystem free space alone. When no full-volume plan fits the
 canonical 40 GiB budget, retain pending and state the measured shortfall without
 claiming a gameplay failure or full coverage.
+
+Measure cross-proof sharing separately from existing per-proof `cas-v1` savings:
+
+```sh
+timeout 590 tools/task998-shared-proof-plan.sh "$(realpath artifacts)/TASK-998/<new-attempt>"
+```
+
+This offline tool reads original indexed proofs and the hash-checked compressed
+reference map. It includes both compatible pilots, the eight largest readable
+saved cases, and a deterministic sample covering modules, player counts, fog
+and sequence/recovery variants. It checks original execution/proof hashes and
+lossless codec round trips, without writing blobs or rewriting original evidence.
+The checkpoint records every completed sample; a failed or interrupted run is
+not a completed capacity plan.
+
+The proposed layout keeps each proof's manifest and blob-ID list and shares
+identical existing codec blob values across proofs. `crossProofSavingsOnly`
+compares that layout with compact **already encoded** proofs; it does not count
+within-proof encoding savings again. The blob manifest records serialized sizes,
+content hashes and reuse counts, not copied proof payloads. Logs, execution
+receipts and receipt-index entries are counted separately. Retained original
+bytes stay in canonical accounting; they are never subtracted as future savings.
+
+The report provides optimistic and linear full-volume projections, not statistical
+confidence bounds. The optimistic estimate assumes all unsampled blobs already
+exist; the linear estimate repeats the sample's sharing rate. Neither proves an
+upper bound for dynamic future states. Runtime staging remains explicitly
+unmeasured, so the tool never reserves capacity or authorizes execution. Use the
+reported component costs and uncovered dimensions to design the next bounded
+experiment; do not treat a favorable average as storage admission. A native
+shared reader/writer still needs missing/corrupt-blob and provenance controls
+before any fresh proof uses that representation.
+
+For a bounded follow-up, pass an inward JSON array of at most 48 exact matrix IDs
+as the second argument. Requested unavailable or duplicate IDs fail closed. Keep
+separate reports and merge their blob manifests by ID/content hash with disjoint
+sample IDs; adding the two unique-byte totals would count shared blobs twice.
+
+The codec tool's overhead subtotal includes worker logs, execution receipts and
+index entries. Count additional retained service logs, comparison checkpoints
+and lifecycle sidecars separately before capacity admission. Recovery-7's
+`sidecar-inventory.json` and `combined-storage-plan.json` demonstrate that
+additional accounting without copying the original files.
