@@ -41,6 +41,23 @@ const atmosphericLighting = {
     },
     edgeVariants: null,
     edgeVariantBuilds: 0,
+    // Soft object shadows: a darkened, blurred silhouette of the board object's own sprite,
+    // turned about the object's base to point away from its strongest visible light (a lamp
+    // within reach, else the upper-left key) and fading towards its tip.
+    SHADOW: {
+        color: '38,28,46',
+        keyAlpha: 0.62,
+        lampAlpha: 0.3,
+        length: 1.5,
+        width: 0.9,
+        blur: 0.05,
+        tipAlpha: 0.15,
+        reachRadii: 3.5
+    },
+    // Flat objects cast no shadow.
+    flatObjects: ['lake', 'sea'],
+    shadowSilhouettes: new WeakMap(),
+    shadowSilhouetteBuilds: 0,
     maxDimension: 2048,
     maxPixels: 2 * 1024 * 1024,
     map: null,
@@ -66,14 +83,16 @@ const atmosphericLighting = {
             const observation = board.observedBuilding(cell)
             const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
             if (building?.isMapEdge) continue
-            const emitsLight = building && !building.killed &&
-                (building.name === 'town' || building.name === 'goldmine' || building.isDemonPortal || building.name === 'demonPortal')
+            const emitsLight = building && !building.killed && this.emitsLight(building)
             if (!includeCells && !emitsLight) continue
             const pos = hex.calcPos()
             if (includeCells) cells.push({x, y, pos})
             if (emitsLight) sources.push({x, y, pos, name: building.isDemonPortal ? 'demonPortal' : building.name})
         }
         return {cells, sources, key: includeKey ? JSON.stringify([cells, sources]) : ''}
+    },
+    emitsLight(building) {
+        return building.name === 'town' || building.name === 'goldmine' || building.isDemonPortal || building.name === 'demonPortal'
     },
     hexPath(ctx, cells) {
         ctx.beginPath()
@@ -257,9 +276,9 @@ const atmosphericLighting = {
         }
         return this.edgeVariants[index]
     },
-    // Variant index and intensity for a tile centre, from visible light sources only.
-    edgeLight(center, sources) {
-        const reach = this.EDGE.reachRadii * basis.r
+    // The strongest visible lamp within reach of a point (its own lamp excluded) and its strength.
+    strongestLamp(center, sources, reachRadii) {
+        const reach = reachRadii * basis.r
         let best = null, strength = 0
         for (const source of sources || []) {
             const c = this.core(source)
@@ -271,6 +290,11 @@ const atmosphericLighting = {
                 best = c
             }
         }
+        return {best, strength}
+    },
+    // Variant index and intensity for a tile centre, from visible light sources only.
+    edgeLight(center, sources) {
+        const {best, strength} = this.strongestLamp(center, sources, this.EDGE.reachRadii)
         const n = this.EDGE.directions
         const angle = best ? Math.atan2(best.y - center.y, best.x - center.x) * 180 / Math.PI
             : this.EDGE.keyAngle
@@ -288,6 +312,82 @@ const atmosphericLighting = {
         ctx.globalAlpha = alpha * intensity
         ctx.drawImage(variant, center.x - size / 2, center.y - size / 2, size, size)
         ctx.globalAlpha = alpha
+    },
+    // Built once per sprite raster: the sprite's alpha, blurred, filled with the shadow
+    // colour and faded from its base (lowest opaque row) to its top.
+    shadowSilhouette(image) {
+        let silhouette = this.shadowSilhouettes.get(image)
+        if (silhouette) return silhouette
+        const pad = Math.ceil(this.SHADOW.blur * basis.r * 2) + 2
+        const surface = document.createElement('canvas')
+        surface.width = image.width + 2 * pad
+        surface.height = image.height + 2 * pad
+        const g = surface.getContext('2d')
+        g.drawImage(image, pad, pad)
+        let base = pad + Math.round(image.height * 0.8)
+        try {
+            const alpha = g.getImageData(0, 0, surface.width, surface.height).data
+            for (let i = 3; i < alpha.length; i += 4) if (alpha[i] > 64) base = Math.floor(i / 4 / surface.width)
+        } catch (_) {}
+        g.clearRect(0, 0, surface.width, surface.height)
+        g.filter = `blur(${(this.SHADOW.blur * basis.r).toFixed(2)}px)`
+        g.drawImage(image, pad, pad)
+        g.filter = 'none'
+        g.globalCompositeOperation = 'source-in'
+        g.fillStyle = `rgb(${this.SHADOW.color})`
+        g.fillRect(0, 0, surface.width, surface.height)
+        g.globalCompositeOperation = 'destination-in'
+        const fade = g.createLinearGradient(0, base, 0, pad)
+        fade.addColorStop(0, 'rgba(0,0,0,1)')
+        fade.addColorStop(1, `rgba(0,0,0,${this.SHADOW.tipAlpha})`)
+        g.fillStyle = fade
+        g.fillRect(0, 0, surface.width, surface.height)
+        silhouette = {surface, pad, base: base - pad}
+        this.shadowSilhouettes.set(image, silhouette)
+        ++this.shadowSilhouetteBuilds
+        return silhouette
+    },
+    // Board objects (not units or lamps) on authorized visible cells cast their shadows, clipped to
+    // the visible cells, under the fog and before any sprite is drawn.
+    drawShadows(ctx, board) {
+        if (!otherSettings.atmosphericVisuals) return
+        const {cells, sources} = this.collect(board, false)
+        const t = ctx.getTransform()
+        const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
+        const casters = []
+        for (const {x, y, pos} of cells) {
+            const building = board.arr[x][y].building
+            if (!building.notEmpty() || building.killed || building.isInvisible || building.isMapEdge ||
+                building.isBuildingProduction() || board.observedBuilding(board.arr[x][y]) ||
+                this.flatObjects.includes(building.name) || this.emitsLight(building)) continue
+            if (axisAligned) {
+                const sx = pos.x * t.a + t.e, sy = pos.y * t.d + t.f
+                const rx = 2.5 * basis.r * t.a, ry = 2.5 * basis.r * t.d
+                if (sx + rx < 0 || sy + ry < 0 || sx - rx > ctx.canvas.width || sy - ry > ctx.canvas.height) continue
+            }
+            const image = cachedImages[board.getEntityBodyImageName(building)]
+            if (image && image.width) casters.push({building, image, pos})
+        }
+        if (!casters.length) return
+        ctx.save()
+        this.hexPath(ctx, cells)
+        ctx.clip()
+        for (const {building, image, pos} of casters) {
+            const {best, strength} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
+            // Direction from the light to the object: the shadow points away from the light.
+            const angle = best ? Math.atan2(pos.y - best.y, pos.x - best.x) : (this.EDGE.keyAngle + 180) * Math.PI / 180
+            const dir = {x: Math.cos(angle), y: Math.sin(angle)}
+            const {surface, pad, base} = this.shadowSilhouette(image)
+            const L = this.SHADOW.length, W = this.SHADOW.width
+            // Sprite up (-y) -> L * dir, sprite right (+x) -> W * perpendicular, about the base.
+            const ox = building.pos.x + image.width / 2, oy = building.pos.y + base
+            ctx.save()
+            ctx.globalAlpha = this.SHADOW.keyAlpha + this.SHADOW.lampAlpha * strength
+            ctx.transform(-W * dir.y, W * dir.x, -L * dir.x, -L * dir.y, ox, oy)
+            ctx.drawImage(surface, -image.width / 2 - pad, -base - pad)
+            ctx.restore()
+        }
+        ctx.restore()
     },
     core(source) {
         return {x: source.pos.x, y: source.pos.y + basis.r * 0.23}
