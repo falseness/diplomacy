@@ -6,15 +6,17 @@
 const atmosphericLighting = {
     // Light map units: 0..255 per channel, 255 = the unchanged surface.
     // A broad key light from the upper left. Stops along the board diagonal:
-    // [t, ambient, gain], overall lift = ambient / (255 - gain): warm peach-cream
-    // marble near the key light, cooler grey-lilac stone far from it.
+    // [t, ambient, gain], overall lift = ambient / (255 - gain): warm pale cream
+    // marble near the key light (blue lifted most so the tan tile art turns cream,
+    // not peach), falling off to a dimmer warm greige far from it.
     KEY: [
-        [0, [195, 206, 211], [125, 110, 104]],
-        [0.15, [212, 211, 209], [110, 100, 100]],
-        [0.35, [186, 179, 183], [100, 92, 96]],
-        [0.6, [199, 195, 189], [80, 78, 92]],
-        [0.85, [200, 198, 190], [70, 70, 90]],
-        [1, [200, 198, 190], [70, 70, 90]]
+        [0, [205, 205, 205], [124, 112, 117]],
+        [0.15, [205, 205, 205], [122, 111, 115]],
+        [0.35, [205, 205, 205], [91, 86, 102]],
+        [0.5, [205, 205, 205], [81, 72, 81]],
+        [0.65, [205, 205, 205], [74, 65, 75]],
+        [0.85, [205, 205, 205], [65, 58, 72]],
+        [1, [205, 205, 205], [65, 58, 72]]
     ],
     // Lamp light added to the ambient (no blue: the warm filter below removes some).
     LAMP: {
@@ -22,8 +24,9 @@ const atmosphericLighting = {
         goldmine: {color: [255, 146, 78], power: 1},
         demonPortal: {color: [255, 120, 90], power: 0.9}
     },
-    // Color-dodge gain at the lamp: x2 red, x1.47 green, x1.13 blue (gold, like the concept's lit stone).
-    GAIN: '128,82,30',
+    // Color-dodge gain at the lamp: x2.4 red, x1.86 green, x1.12 blue (gold, like the concept's lit stone),
+    // brighter than the key-lit cream so the pools stay above it.
+    GAIN: '150,118,28',
     OWNED_GAIN: '51,51,51',
     TAIL_RADII: 2.5,
     maxDimension: 2048,
@@ -177,7 +180,7 @@ const atmosphericLighting = {
         // The hottest spot just in front of the opening goes towards cream-gold.
         k.globalCompositeOperation = 'lighter'
         for (const source of sources)
-            this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '28,20,0')
+            this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '28,24,0')
         // Owned ground gets a neutral gain of at most x1.25 instead: a per-channel or
         // clipping lift would push team colours off hue.
         if (owned.length) {
