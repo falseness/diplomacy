@@ -1,18 +1,29 @@
 // Stationary decoration, derived only from currently authorized visible cells.
-// A cached world-space light map (cool ambient, warm lamps added with 'lighter',
-// 'screen' bloom cores) is multiplied over the board's terrain and buildings.
+// A cached world-space light map (an upper-left key light falling off to a cool
+// ambient, warm lamps added with 'lighter') is multiplied over the board's terrain
+// and buildings, then a color-dodge gain map lifts it to warm cream marble.
 // Units, overlays and UI are drawn after it, so they are never darkened.
 const atmosphericLighting = {
     // Light map units: 0..255 per channel, 255 = the unchanged surface.
-    AMBIENT: [172, 174, 194],
+    // A broad key light from the upper left. Stops along the board diagonal:
+    // [t, ambient, gain], overall lift = ambient / (255 - gain): warm peach-cream
+    // marble near the key light, cooler grey-lilac stone far from it.
+    KEY: [
+        [0, [195, 206, 211], [125, 110, 104]],
+        [0.15, [212, 211, 209], [110, 100, 100]],
+        [0.35, [186, 179, 183], [100, 92, 96]],
+        [0.6, [199, 195, 189], [80, 78, 92]],
+        [0.85, [200, 198, 190], [70, 70, 90]],
+        [1, [200, 198, 190], [70, 70, 90]]
+    ],
     // Lamp light added to the ambient (no blue: the warm filter below removes some).
     LAMP: {
         town: {color: [255, 150, 84], power: 1},
         goldmine: {color: [255, 146, 78], power: 1},
         demonPortal: {color: [255, 120, 90], power: 0.9}
     },
-    // Color-dodge gain at the lamp: x2 red, x1.65 green, x1.35 blue (peach, like the concept's lit stone) on the lit stone.
-    GAIN: '126,100,66',
+    // Color-dodge gain at the lamp: x2 red, x1.47 green, x1.13 blue (gold, like the concept's lit stone).
+    GAIN: '128,82,30',
     OWNED_GAIN: '51,51,51',
     TAIL_RADII: 2.5,
     maxDimension: 2048,
@@ -116,12 +127,8 @@ const atmosphericLighting = {
         this.hexPath(g, cells)
         g.save()
         g.clip()
-        g.fillStyle = `rgb(${this.AMBIENT})`
+        g.fillStyle = this.keyGradient(g, bounds, 'ambient')
         g.fill()
-        // Near a lamp its warm light dominates: the cool ambient is filtered warm first.
-        g.globalCompositeOperation = 'multiply'
-        for (const source of sources)
-            this.pool(g, source, r, [[0, 1], [0.5, 0.5], [1, 0]], '255,228,212')
         // Each lamp is added: smooth falloff over about 2.5 hex radii, no hard rim.
         g.globalCompositeOperation = 'lighter'
         for (const source of sources) {
@@ -129,8 +136,12 @@ const atmosphericLighting = {
             this.pool(g, source, r, [[0, 0.85], [0.15, 0.72], [0.32, 0.5], [0.5, 0.3],
                 [0.7, 0.13], [0.86, 0.04], [1, 0]].map(([t, a]) => [t, a * lamp.power]), lamp.color)
         }
-        // The lamp's own building is lit warm tan (its art kept), not bleached.
+        // The bright key-lit ambient saturates the lamps to white, so the pool is filtered
+        // gold afterwards: lamp-lit stone stays golden instead of pale.
         g.globalCompositeOperation = 'multiply'
+        for (const source of sources)
+            this.pool(g, source, r, [[0, 1], [0.5, 0.5], [1, 0]], '255,222,184')
+        // The lamp's own building is lit warm tan (its art kept), not bleached.
         for (const {pos} of sources) {
             const tint = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 0.8 * basis.r)
             tint.addColorStop(0, 'rgba(255,214,160,1)')
@@ -166,7 +177,7 @@ const atmosphericLighting = {
         // The hottest spot just in front of the opening goes towards cream-gold.
         k.globalCompositeOperation = 'lighter'
         for (const source of sources)
-            this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '14,22,18')
+            this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '28,20,0')
         // Owned ground gets a neutral gain of at most x1.25 instead: a per-channel or
         // clipping lift would push team colours off hue.
         if (owned.length) {
@@ -192,7 +203,18 @@ const atmosphericLighting = {
             k.fillStyle = hole
             k.fillRect(pos.x - basis.r, pos.y - basis.r, 2 * basis.r, 2 * basis.r)
         }
+        // The key light's lift lies under the lamp pools (and fills the sprite holes).
+        k.globalCompositeOperation = 'destination-over'
+        k.fillStyle = this.keyGradient(k, bounds, 'gain')
+        k.fill()
         k.restore()
+    },
+    // World-space diagonal gradient, so panning never changes the light.
+    keyGradient(g, bounds, part) {
+        const gradient = g.createLinearGradient(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        for (const [t, ambient, gain] of this.KEY)
+            gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : gain})`)
+        return gradient
     },
     core(source) {
         return {x: source.pos.x, y: source.pos.y + basis.r * 0.23}
