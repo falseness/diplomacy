@@ -6,17 +6,17 @@
 const atmosphericLighting = {
     // Light map units: 0..255 per channel, 255 = the unchanged surface.
     // A broad key light from the upper left. Stops along the board diagonal:
-    // [t, ambient, gain], overall lift = ambient / (255 - gain): warm pale cream
-    // marble near the key light (blue lifted most so the tan tile art turns cream,
-    // not peach), falling off to a dimmer warm greige far from it.
+    // [t, ambient, gain], overall lift = ambient / (255 - gain): the yellow-tan tile
+    // art becomes the concept's peach-cream marble (red lifted most, blue above
+    // green), bright near the key light, falling off to a slightly lavender grey.
     KEY: [
-        [0, [205, 205, 205], [115, 116, 124]],
-        [0.15, [205, 205, 205], [113, 115, 122]],
-        [0.35, [205, 205, 205], [86, 86, 92]],
-        [0.5, [205, 205, 205], [77, 77, 80]],
-        [0.65, [205, 205, 205], [70, 70, 72]],
-        [0.85, [205, 205, 205], [60, 60, 60]],
-        [1, [205, 205, 205], [60, 60, 60]]
+        [0, [205, 205, 205], [115, 105, 117]],
+        [0.15, [205, 205, 205], [115, 105, 117]],
+        [0.35, [205, 205, 205], [93, 74, 84]],
+        [0.5, [205, 205, 205], [83, 65, 75]],
+        [0.65, [205, 205, 205], [72, 57, 69]],
+        [0.85, [205, 205, 205], [53, 48, 62]],
+        [1, [205, 205, 205], [53, 48, 62]]
     ],
     // Lamp light added to the ambient (no blue: the warm filter below removes some).
     LAMP: {
