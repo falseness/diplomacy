@@ -179,6 +179,9 @@ class Grid extends SpritesGroup {
     //todo: refactor
     drawHexagons(ctx) {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
+        // Visible lamps pick each tile's edge-light variant (fog rules of collect()).
+        const edgeSources = otherSettings.atmosphericVisuals ?
+            atmosphericLighting.collect(this, false, false).sources : undefined
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
@@ -187,7 +190,7 @@ class Grid extends SpritesGroup {
                 if (isFogOfWar && !this.fogOfWar[i][j] && !observed)
                     continue
                 const hexagon = observed || this.arr[i][j].hexagon
-                hexagon.draw(ctx, atmosphericTransform)
+                hexagon.draw(ctx, atmosphericTransform, edgeSources)
             }
         }
     }

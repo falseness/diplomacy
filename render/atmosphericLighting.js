@@ -28,6 +28,19 @@ const atmosphericLighting = {
     // brighter than the key-lit cream so the pools stay above it.
     GAIN: '150,118,28',
     TAIL_RADII: 2.5,
+    // Hex edge bevels: 12 pre-rendered variants of the tile rim, lit from 0, 30, ... 330
+    // degrees (screen space, y down). Each tile draws the variant facing its strongest
+    // light: the nearest-strongest visible lamp within reach, else the upper-left key.
+    EDGE: {
+        directions: 12,
+        keyAngle: -120,
+        keyIntensity: 0.75,
+        reachRadii: 3,
+        width: 0.10,
+        rasterScale: 2
+    },
+    edgeVariants: null,
+    edgeVariantBuilds: 0,
     maxDimension: 2048,
     maxPixels: 2 * 1024 * 1024,
     map: null,
@@ -190,6 +203,86 @@ const atmosphericLighting = {
         for (const [t, ambient, gain] of this.KEY)
             gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : gain})`)
         return gradient
+    },
+    // One variant per light direction, built once (same geometry as getVertices): a thin
+    // dark joint on every edge, a warm lit band on the edges facing the light and a shaded
+    // band on the edges turned away, each fading towards the tile's centre.
+    edgeVariant(index) {
+        if (!this.edgeVariants || this.edgeVariants.radius !== basis.r) {
+            this.edgeVariants = Object.assign(new Array(this.EDGE.directions), {radius: basis.r})
+            ++this.edgeVariantBuilds
+            const r = basis.r, s = this.EDGE.rasterScale, size = Math.ceil(2 * r * s) + 4
+            for (let k = 0; k < this.EDGE.directions; k++) {
+                const surface = document.createElement('canvas')
+                surface.width = surface.height = size
+                const g = surface.getContext('2d')
+                g.setTransform(s, 0, 0, s, size / 2, size / 2)
+                const outer = mapDepth.getVertices({x: 0, y: 0})
+                const inset = 1 - this.EDGE.width * 2 / Math.sqrt(3)
+                const inner = outer.map(({x, y}) => ({x: x * inset, y: y * inset}))
+                const light = k * 2 * Math.PI / this.EDGE.directions
+                for (let i = 0; i < 6; i++) {
+                    const j = (i + 1) % 6
+                    const facing = Math.cos((-90 + 60 * i) * Math.PI / 180 - light)
+                    const color = facing > 0 ? `255,206,136,${(0.95 * facing).toFixed(3)}`
+                        : `46,34,40,${(0.5 * -facing).toFixed(3)}`
+                    const a = {x: (outer[i].x + outer[j].x) / 2, y: (outer[i].y + outer[j].y) / 2}
+                    const b = {x: (inner[i].x + inner[j].x) / 2, y: (inner[i].y + inner[j].y) / 2}
+                    const band = g.createLinearGradient(a.x, a.y, b.x, b.y)
+                    band.addColorStop(0, `rgba(${color})`)
+                    band.addColorStop(0.5, `rgba(${color.replace(/[^,]+$/, x => (x * 0.8).toFixed(3))})`)
+                    band.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
+                    g.fillStyle = band
+                    g.beginPath()
+                    g.moveTo(outer[i].x, outer[i].y)
+                    g.lineTo(outer[j].x, outer[j].y)
+                    g.lineTo(inner[j].x, inner[j].y)
+                    g.lineTo(inner[i].x, inner[i].y)
+                    g.closePath()
+                    g.fill()
+                }
+                g.strokeStyle = 'rgba(27,39,58,0.4)'
+                g.lineWidth = r * 0.03
+                g.beginPath()
+                outer.forEach(({x, y}, i) => i ? g.lineTo(x, y) : g.moveTo(x, y))
+                g.closePath()
+                g.stroke()
+                this.edgeVariants[k] = surface
+            }
+        }
+        return this.edgeVariants[index]
+    },
+    // Variant index and intensity for a tile centre, from visible light sources only.
+    edgeLight(center, sources) {
+        const reach = this.EDGE.reachRadii * basis.r
+        let best = null, strength = 0
+        for (const source of sources || []) {
+            const c = this.core(source)
+            const d = Math.hypot(c.x - center.x, c.y - center.y)
+            if (d < 0.5 * basis.r || d >= reach) continue
+            const s = (this.LAMP[source.name] || this.LAMP.goldmine).power * (1 - (d / reach) ** 2)
+            if (s > strength) {
+                strength = s
+                best = c
+            }
+        }
+        const n = this.EDGE.directions
+        const angle = best ? Math.atan2(best.y - center.y, best.x - center.x) * 180 / Math.PI
+            : this.EDGE.keyAngle
+        return {
+            index: ((Math.round(angle / (360 / n)) % n) + n) % n,
+            intensity: best ? Math.min(1, this.EDGE.keyIntensity + 0.6 * strength) : this.EDGE.keyIntensity
+        }
+    },
+    // Draws the chosen pre-rendered edge variant over a tile (world transform).
+    drawEdges(ctx, center, sources) {
+        const {index, intensity} = this.edgeLight(center, sources)
+        const variant = this.edgeVariant(index)
+        const size = variant.width / this.EDGE.rasterScale
+        ctx.save()
+        ctx.globalAlpha = intensity
+        ctx.drawImage(variant, center.x - size / 2, center.y - size / 2, size, size)
+        ctx.restore()
     },
     core(source) {
         return {x: source.pos.x, y: source.pos.y + basis.r * 0.23}
