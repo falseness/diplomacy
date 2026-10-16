@@ -156,3 +156,31 @@ per-case roots, sidecars, receipts and originals. Native writer staging and
 additional collection-report reserves remain unresolved. Neither a favorable
 sample mean nor passing reconstruction admits capacity or certifies gameplay.
 The runtime codec and active receipt index are unchanged by these tools.
+
+Measure a disk-backed transaction before installing the pack format:
+
+```sh
+# Separate 590-second outer deadlines and execution receipts are required.
+bash tools/task998-writer-staging.sh "$OUT" largest-pack
+bash tools/task998-writer-staging.sh "$OUT" largest-sidecars
+bash tools/task998-writer-reservation.sh "$OUT"
+```
+
+These select the largest candidate and largest sidecar samples from recovery-11,
+then use their complete recovery-10 inventories and hash-checked recovery-9
+classifications. Packs, indices, proof roots, exact compressed sidecars and the
+transaction manifest coexist on disk. One plain sidecar also coexists during
+replacement; atomic rename does not duplicate its compressed bytes. Reconstruction
+reads the saved packs and indices. Corrupt or absent packs and absent blobs fail.
+The largest-pack transaction injects a failure after writing the complete
+transaction and removes owned files during stack unwinding; largest-sidecars
+checks normal cleanup. Originals remain references, and disposable candidate
+files live inside the task output directory.
+
+The reservation report inventories existing collection reports and proposes twice
+those bytes for report replacement. It also calculates population-weighted and
+per-module sample-maximum projections. Neither historical sample maxima nor
+rejected-collection report sizes bound future successful output. Unsampled strata,
+actual service-writer staging and report growth remain admission conditions. This
+prototype does not change runtime identity, install a native codec, or certify
+fresh service receipts.
