@@ -10,11 +10,37 @@ const task = fs.realpathSync('/root/diplomacy/artifacts/TASK-998');
 const out = fs.realpathSync(process.argv[2]);
 assert(out.startsWith(task + path.sep), 'output must be inside TASK-998');
 const headroom = JSON.parse(fs.readFileSync(process.argv[3]));
+// 'production' measures the wired proofCodec.serializeEvidence writer instead of the offline candidate.
+const production = process.argv[4] === 'production';
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const load = rel => { const b = fs.readFileSync(path.join(task, rel)); return {rel, sha256: sha(b), value: JSON.parse(b)}; };
 const ledger = load('recovery-13/ledger-completed.json'), proofs = load('recovery-28/measurements.json');
 const success = load('recovery-37/success-finalization.json');
 const configs = {current: load('recovery-36/current/sidecar-lifecycle.json'), candidate: load('recovery-36/candidate/sidecar-lifecycle.json')};
+// Production wiring (server TASK-998): 17 modules frame every service log; the
+// foreign demon-ranged module frames only the runner-named logs, so its raw-read
+// server logs keep the measured plain (current) stored bytes.
+if (production) {
+    const runner = require('/root/diplomacy_server/tests/helpers/runUndoCoverage'), FOREIGN = 'demon-ranged-kill-coop-v1';
+    const runnerNamed = new Set(runner.FRAMED_SERVICE_LOGS.split(','));
+    const plain = new Map(configs.current.value.fragments.flatMap(f => f.fileHashes.map(h => [f.matrixID + '\0' + h.source, h])));
+    const fragments = configs.candidate.value.fragments.map(f => {
+        if (f.moduleID !== FOREIGN) return f;
+        const fileHashes = f.fileHashes.map(h => {
+            if (h.writer.category !== 'serviceActivityLogs' || runnerNamed.has(path.basename(h.source))) return h;
+            const p = plain.get(f.matrixID + '\0' + h.source); assert(p && !p.framed, 'missing plain measurement ' + h.source);
+            return {...p, wiredAs: 'plain: foreign raw reader'};
+        });
+        const delta = fileHashes.reduce((n, h, i) => n + h.storedBytes - f.fileHashes[i].storedBytes, 0);
+        return {...f, fileHashes, retainedSidecarBytes: f.retainedSidecarBytes + delta};
+    });
+    const modules = configs.candidate.value.modules.map(m => {
+        const per = {}; for (const f of fragments.filter(f => f.moduleID === m.moduleID)) per[f.matrixID] = (per[f.matrixID] || 0) + f.retainedSidecarBytes;
+        return {...m, sampleMaxBytes: Math.max(...Object.values(per))};
+    });
+    configs.wired = {rel: 'derived:candidate+current(' + FOREIGN + ' raw-read service logs)', sha256: null,
+        value: {configuration: 'production-wired: 17 modules framed; ' + FOREIGN + ' frames ' + runner.FRAMED_SERVICE_LOGS + ' only', modules, fragments}};
+}
 assert.equal(ledger.value.rows.length, 3900);
 assert.equal(success.value.successfulParentFinalizationExercised, true);
 const strata = id => { const m = id.match(/-([234])-fog([01])-(undo|chain|redo|redirect|empty|committed)-([a-z-]+)$/);
@@ -26,12 +52,24 @@ function reduce(h) {
     if (reductions.has(h.source)) return reductions.get(h.source);
     const raw = fs.readFileSync(h.source), logical = h.source.endsWith('.gz') ? zlib.gunzipSync(raw) : raw;
     assert.equal(sha(logical), h.inputLogicalSHA256, 'saved input changed ' + h.source);
-    const candidates = [logical, codec.compressEvidence(logical), codec.compressEvidence(logical, codec.BROTLI_ENCODING)].map(Buffer.from);
-    const best = candidates.reduce((a, b) => b.length < a.length ? b : a);
-    // Byte-exact: the strict reader must reproduce the original logical bytes.
-    assert.equal(sha(codec.decodeEvidenceBytes(best)), h.inputLogicalSHA256, 'lossy reduction ' + h.source);
-    const r = {source: h.source, logicalBytes: logical.length, storedBefore: h.storedBytes, storedAfter: best.length,
-        encoding: best === candidates[0] ? 'plain' : JSON.parse(best).proofEncoding};
+    let best, encoding;
+    if (production) {
+        // The wired production writer: serializeEvidence(name, value) on the parsed sidecar.
+        const name = path.basename(h.source).replace(/\.gz$/, ''), value = JSON.parse(logical);
+        assert(codec.COMPRESSED_SIDECARS.test(name), 'unwired eligible sidecar ' + name);
+        best = Buffer.from(codec.serializeEvidence(name, value, '/nonexistent/' + name));
+        const decoded = codec.decodeEvidenceBytes(best);
+        assert.equal(decoded.toString(), JSON.stringify(value) + '\n', 'production writer not byte-exact ' + h.source);
+        assert.equal(JSON.stringify(JSON.parse(decoded)), JSON.stringify(JSON.parse(logical)), 'lossy production writer ' + h.source);
+        encoding = JSON.parse(best).proofEncoding || 'plain';
+    } else {
+        const candidates = [logical, codec.compressEvidence(logical), codec.compressEvidence(logical, codec.BROTLI_ENCODING)].map(Buffer.from);
+        best = candidates.reduce((a, b) => b.length < a.length ? b : a);
+        // Byte-exact: the strict reader must reproduce the original logical bytes.
+        assert.equal(sha(codec.decodeEvidenceBytes(best)), h.inputLogicalSHA256, 'lossy reduction ' + h.source);
+        encoding = best === candidates[0] ? 'plain' : JSON.parse(best).proofEncoding;
+    }
+    const r = {source: h.source, logicalBytes: logical.length, storedBefore: h.storedBytes, storedAfter: best.length, encoding};
     reductions.set(h.source, r); return r;
 }
 const population = {}, measuredStrata = {};
@@ -59,10 +97,10 @@ const entry = Math.max(...fin.map(f => f.indexEntryBytes));
 // Final index replacement holds old+new aggregate during rename staging.
 const indexBytes = 3900 * entry, indexStagingBytes = 2 * indexBytes;
 const result = {admitted: false, measuredIDs: 69, unmeasuredIDs: 3831, moduleCount: 18,
-    inputs: Object.fromEntries([ledger, proofs, success, ...Object.values(configs)].map(x => [x.rel, x.sha256])),
+    inputs: Object.fromEntries([ledger, proofs, success, ...Object.values(configs)].filter(x => x.sha256).map(x => [x.rel, x.sha256])),
     headroom, finalization: {fixtures: fin, maxResidualBytes: residual, maxTransientBytes: transient, maxIndexEntryBytes: entry},
     reduction: {policy: 'byte-exact proofCodec.compressEvidence (gzip|brotli, smallest incl. plain) for completed plain JSON worker sidecars; storage-* ownership manifests stay plain',
-        wiredInProduction: false}, configurations: {}, strata: population,
+        wiredInProduction: production, writer: production ? 'proofCodec.serializeEvidence(COMPRESSED_SIDECARS)' : 'offline compressEvidence candidate'}, configurations: {}, strata: population,
     uncertainty: 'Per-module maxima from 69 historical IDs (1-11 per module) weighted by population; 3831 IDs unmeasured; future outputs and strata absent from the sample may exceed these maxima. Not a proven bound.'};
 for (const [name, cfg] of Object.entries(configs)) {
     const modules = [];
@@ -108,4 +146,4 @@ for (const [mod, p] of Object.entries(population)) for (const [k, vals] of Objec
 result.unmeasuredStrata = missing;
 fs.writeFileSync(path.join(out, 'capacity.json'), JSON.stringify(result, null, 2) + '\n');
 console.log(`EXPLICIT unmeasured strata (${missing.length}): ${missing.slice(0, 12).join(' ')}${missing.length > 12 ? ' ...' : ''}`);
-console.log('NOT ADMITTED: sample maxima are not future bounds; reduction is not wired in production');
+console.log('NOT ADMITTED: sample maxima are not future bounds' + (production ? '; sidecar reduction measured through the wired production writer' : '; reduction is not wired in production'));
