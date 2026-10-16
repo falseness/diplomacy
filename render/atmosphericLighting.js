@@ -66,11 +66,11 @@ const atmosphericLighting = {
         }
         ctx.clip()
     },
-    visibleSources(ctx, sources, radius) {
+    visibleSources(ctx, sources, radius, offsetY = 0) {
         const t = ctx.getTransform()
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return sources
         return sources.filter(({pos}) => {
-            const x = pos.x * t.a + t.e, y = pos.y * t.d + t.f
+            const x = pos.x * t.a + t.e, y = (pos.y + offsetY) * t.d + t.f
             const rx = radius * t.a + 1, ry = radius * t.d + 1
             return x + rx >= 0 && y + ry >= 0 &&
                 x - rx <= ctx.canvas.width && y - ry <= ctx.canvas.height
@@ -79,7 +79,7 @@ const atmosphericLighting = {
     draw(ctx, board) {
         const collected = this.collect(board, false)
         const radius = basis.r * 2.3
-        const sources = this.visibleSources(ctx, collected.sources, radius + basis.r * 0.23)
+        const sources = this.visibleSources(ctx, collected.sources, radius, basis.r * 0.23)
         if (!sources.length) return
         const cells = collected.cells
         ctx.save()
