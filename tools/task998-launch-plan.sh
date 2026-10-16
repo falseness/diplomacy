@@ -11,6 +11,9 @@ def read(relative):
  p=task/relative; b=p.read_bytes(); inputs[str(p)]={'sha256':hashlib.sha256(b).hexdigest(),'bytes':len(b)}; return json.loads(b)
 ledger=read('recovery-13/ledger-completed.json'); measurements=read(sys.argv[2] if len(sys.argv)>2 else 'recovery-27/measurements.json'); controls=read('recovery-25/after-results.json')
 server=pathlib.Path('/root/diplomacy_server')
+for relative,expected in measurements['sourceHashes'].items():
+ p=server/'tests/helpers'/relative
+ assert hashlib.sha256(p.read_bytes()).hexdigest()==expected,'stale native measurement source: '+str(p)
 selection=json.loads(subprocess.check_output(['/usr/local/bin/node20','-e',"console.log(JSON.stringify(require('./tests/helpers/runUndoCoverage').selection()))"],cwd=server))
 rows=selection['included']; ids={r['id'] for r in rows}; assert len(ids)==len(rows)==3900
 historical={r['matrixID']:r for r in ledger['rows']}; assert set(historical)==ids
@@ -56,7 +59,7 @@ for row in ledger['rows']:
    name=str(resolved)
    if name in sidecars: continue
    b=p.read_bytes()
-   kind=('workerProviderLogs' if any(k in p.name.lower() for k in ['worker','mongo','provider']) else 'serviceActivityLogs' if p.suffix=='.log' else 'executionCleanupReports' if any(k in p.name.lower() for k in ['execution','cleanup']) else 'indexesReceipts' if any(k in p.name.lower() for k in ['index','receipt']) else 'otherSidecars')
+   kind=('workerProviderLogs' if any(k in p.name.lower() for k in ['worker','mongo','provider']) or p.name=='tests.log' else 'serviceActivityLogs' if p.suffix=='.log' or p.name=='activity.jsonl' else 'executionCleanupReports' if any(k in p.name.lower() for k in ['execution','cleanup']) else 'indexesReceipts' if any(k in p.name.lower() for k in ['index','receipt']) else 'otherSidecars')
    sidecars[name]={'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest(),'category':kind}; observed[kind]+=len(b)
 reconciliation={'historicalMeasuredIDs':sum(r['measured'] for r in ledger['rows']),'unmeasuredIDs':sum(not r['measured'] for r in ledger['rows']),'ledgerSidecarBytes':sum(r['sidecarBytes'] for r in ledger['rows']),'measuredLedgerSidecarBytes':sum(r['sidecarBytes'] for r in ledger['rows'] if r['measured']),'derivedUnmeasuredLedgerSidecarBytes':sum(r['sidecarBytes'] for r in ledger['rows'] if not r['measured']),'missingStrataByModule':{m:sum(not r['measured'] for r in ledger['rows'] if r['moduleID']==m) for m in population},'uniqueObservedSidecars':dict(observed),'missingObservedCategories':[k for k in ['workerProviderLogs','serviceActivityLogs','executionCleanupReports','indexesReceipts'] if not observed[k]],'files':sidecars,'unresolvedPaths':missing,'populationProjection':None,'reason':'Historical sidecars are observations only; native codec/log changes invalidate size transfer. Service logs outside proof roots, future output strata, final aggregate indexes, extra fragment launches and active writer/report staging have no full-volume bound.'}
 seen=set(); stored=0
@@ -67,6 +70,23 @@ for d,ds,files in os.walk(base,followlinks=False):
   if stat.S_ISREG(s.st_mode) and key not in seen: seen.add(key); stored+=s.st_size
 assert stored<40*1024**3
 plan={'admitted':False,'scope':'offline singleton-launch native root cost plan; no gameplay proof','population':len(ids),'moduleCount':len(population),'launchCount':len(launches),'launches':launches,'modules':module_rows,'controls':control_costs,'costReconciliation':reconciliation,'canonicalStoredBytes':stored,'headroomBytes':40*1024**3-stored,'weightedHistoricalRootBytes':proof,'additionalBudgetMetadataBytes':metadata,'metadataAlreadyInRootsBytes':len(launches)*4096,'historicalReceiptBytes':receipt,'knownIllustrativeSubtotalBytes':proof+metadata+receipt,'illustrativeDeficitBytes':proof+metadata+receipt-(40*1024**3-stored),'dictionaryPolicy':'No cross-launch seed reuse. Native measured independent roots include actual dictionary and metadata costs; sample hashes and encoding are bound. Historical samples are not future bounds.','unresolved':['Future successful proof upper bounds for all strata (69 historical IDs, 3831 unmeasured)','Native service/activity logs; control logs are synthetic','Final reports/index/receipts and replacement overlap at population scale','Additional fragment launches after deterministic sequence/variant splitting','Startup-through-cleanup timing of each proposed launch'],'sequentialStaging':'Only one launch active. Measured overlap is historical, not an admitted bound. Retained totals accumulate; overlap must not be multiplied as permanent padding.','measurementSourceHashes':measurements['sourceHashes'],'inputs':inputs,'sourceHashes':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in [server/'tests/helpers/runUndoCoverage.js',server/'tests/helpers/evidenceBudget.js',server/'tests/helpers/proofCodec.js',server/'tests/helpers/sharedProofStorage.js']}}
+if len(sys.argv)>3:
+ lifecycle=read(sys.argv[3])
+ assert lifecycle['admitted'] is False
+ assert {r['moduleID']:r['population'] for r in lifecycle['modules']}==dict(population)
+ assert lifecycle['measuredIDs']==reconciliation['historicalMeasuredIDs']
+ assert lifecycle['unmeasuredIDs']==reconciliation['unmeasuredIDs']
+ for relative,expected in lifecycle['sourceHashes'].items():
+  assert hashlib.sha256((server/relative).read_bytes()).hexdigest()==expected,'stale lifecycle source: '+relative
+ for original,expected in lifecycle['inputs'].items():
+  assert hashlib.sha256(pathlib.Path(original).read_bytes()).hexdigest()==expected['sha256'],'stale lifecycle input: '+original
+ plan['sidecarLifecycle']={'source':str(task/sys.argv[3]),'modules':lifecycle['modules'],'weightedHistoricalSidecarMaxBytes':lifecycle['weightedHistoricalSidecarMaxBytes'],'maxObservedReplayPeakBytes':lifecycle['maxObservedReplayPeakBytes'],'unresolved':lifecycle['unresolved'],'scope':lifecycle['scope'],'fragments':len(lifecycle['fragments'])}
+ # Native replay includes observed per-case receipt files. Keep this alternative
+ # subtotal separate so historicalReceiptBytes is never charged twice.
+ plan['illustrativeRootsAndSidecarsBytes']=proof+lifecycle['weightedHistoricalSidecarMaxBytes']
+ plan['illustrativeRootsAndSidecarsDeficitBytes']=plan['illustrativeRootsAndSidecarsBytes']-plan['headroomBytes']
+ print('PASS lifecycle inputs/source hashes and 18 module populations reconciled')
+ print('NOT ADMITTED roots plus historical sidecar maxima='+str(plan['illustrativeRootsAndSidecarsBytes'])+' deficit='+str(plan['illustrativeRootsAndSidecarsDeficitBytes']))
 (out/'launch-plan.json').write_text(json.dumps(plan,separators=(',',':'))+'\n')
 print('PASS exact inventory: 3900 IDs / 18 modules / 3900 independent launch roots; deadline 590000ms')
 print('PASS sealed control totals and source file sizes/hash references reconciled')
