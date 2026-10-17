@@ -28,14 +28,16 @@ const atmosphericLighting = {
         goldmine: {power: 1},
         demonPortal: {power: 0.9}
     },
-    // Lamp spill: a soft cream-gold halo around each doorway that lights the building and
-    // the stone beside it, then amber pools on the stone in front of (below) the doorway,
+    // Lamp spill: a low amber wash on the lamp's own cell and its neighbours, a soft
+    // cream-gold halo around each doorway that lights the building and the stone beside
+    // it, then amber pools on the stone in front of (below) the doorway,
     // broad and fading down the board, like the concept. Each layer is an ellipse
     // [centre below the cell centre, half width, half height] (hex radii) blended over the
     // key light (source-over), so a pool looks the same on both sides of the board and fades
     // into the key-lit stone with no rim. map: multiply colour (blue held back -> amber,
     // outer layers paler cream), gain: color-dodge lift. Hot layer last, just below the door.
     SPILL: [
+        {dy: 0.05, rx: 1.2, ry: 1.05, alpha: 0.6, map: [255, 232, 196], gain: [36, 20, 4]},
         {dy: 0.55, rx: 1.8, ry: 1.4, alpha: 0.85, map: [255, 236, 210], gain: [80, 54, 28]},
         {dy: 1.35, rx: 1.5, ry: 1.35, alpha: 0.9, map: [255, 224, 170], gain: [100, 58, 8]},
         {dy: 1.05, rx: 1.05, ry: 0.85, alpha: 0.95, map: [255, 226, 144], gain: [108, 68, 0]},
@@ -570,35 +572,49 @@ const atmosphericLighting = {
         ctx.restore()
         this.bloom(ctx, board)
     },
-    // Bloom: the lamp sprite is shaded (its silhouette multiplied by a light warm tint, the
-    // doorway gold), then a white-hot core clipped to the doorway and a warm halo that also
-    // lights the arch are added with 'screen'. Both overlays are built once per sprite
-    // raster; the old round sprite is the fallback for a missing raster.
+    // Bloom: the lamp sprite is shaded (multiply) light warm near the doorway and grey-tan
+    // towards its rim, with a soft dark edge away from the key light, a gold band on the arch
+    // around the opening and the doorway a deep orange recess. Then 'screen' adds the same
+    // band as a rim light, a flare over the rim, a white-gold flame in the opening and an
+    // amber halo on the stone. Both overlays are built once per sprite raster; the old round
+    // sprite is the fallback for a missing raster.
     BLOOM: {
         radius: 0.9,
         stops: [[0, '255,244,190', 1], [0.1, '255,214,100', 1], [0.22, '255,165,40', 0.9],
             [0.4, '250,125,25', 0.4], [0.65, '240,110,25', 0.1], [1, '230,100,30', 0]],
-        // Sprite tint about the doorway: lit warm on the arch beside it, dark stone on the rim.
-        shadeStops: [[0, '255,200,130'], [0.3, '236,166,112'], [0.55, '168,128,124'], [1, '124,100,114']],
+        // Sprite shade about the doorway: light warm near it, grey-tan at the rim (no darker
+        // than about 0.7, so the dome stays light stone).
+        shadeStops: [[0, '255,248,230'], [0.3, '244,218,184'], [0.65, '208,186,168'], [1, '176,158,146']],
         shadeReach: 0.6,
-        door: '255,168,70',
+        // Edge: a soft dark band inside the silhouette, thicker away from the key light
+        // (band width and its shift towards the lower right in raster widths).
+        edge: {color: '124,104,92', width: 0.06, shift: 0.035},
+        // Doorway recess: deep orange at the sides and foot, gold in the middle.
+        recessStops: [[0, '214,92,24'], [0.3, '246,150,52'], [0.5, '255,196,96'], [0.7, '246,150,52'],
+            [1, '214,92,24']],
         halo: 1,
         haloStops: [[0, '255,210,130', 0.9], [0.25, '252,184,96', 0.6], [0.55, '245,152,72', 0.24],
             [1, '235,130,60', 0]],
-        flareStops: [[0, '255,252,230', 1], [0.25, '255,220,130', 0.85], [0.55, '255,160,55', 0.45],
+        // Rim light: a soft gold ring on the arch just outside the opening (width and offset
+        // in door half widths; blur in the same unit).
+        ring: {color: '255,190,80', alpha: 1, shade: '255,158,48', width: 1.3, offset: 0.6, blur: 0.2},
+        flareStops: [[0, '255,252,230', 0.9], [0.3, '255,220,130', 0.6], [0.6, '255,160,55', 0.25],
             [1, '240,120,40', 0]],
-        flareReach: 3,
-        coreStops: [[0, '255,255,240', 1], [0.18, '255,240,170', 1], [0.4, '255,196,80', 1],
-            [0.72, '252,146,36', 1], [1, '224,104,28', 1]],
-        coreReach: 1.6,
-        // The halo kept on the sprite (none: the arch keeps its dark stone contrast).
+        flareReach: 2.4,
+        // Flame: an upright ellipse in the opening (half width x half height in door half sizes),
+        // white-gold in the middle, orange at its edge, leaving the recess at the sides and foot.
+        flame: {rx: 0.95, ry: 0.9, dy: -0.1},
+        coreStops: [[0, '255,255,250', 1], [0.5, '255,253,230', 1], [0.7, '255,228,136', 1],
+            [0.8, '255,176,64', 0.7], [1, '250,140,40', 0]],
+        // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
         goldmine: {x: 0.495, y: 0.65, w: 0.1, h: 0.155},
-        // A town keeps its warm lit walls: a lighter tint than the cave's dark stone.
-        town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085,
+        // A town keeps its warm lit walls: a lighter tint than the cave's grey-tan rim, no
+        // arch band or dark edge.
+        town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085, ring: null, edge: null,
             shadeStops: [[0, '255,222,170'], [0.4, '250,206,160'], [1, '214,180,160']]},
         demonPortal: {x: 0.49, y: 0.66, w: 0.13, h: 0.2}
     },
@@ -630,35 +646,85 @@ const atmosphericLighting = {
         g.lineTo(cx + rw, bottom)
         g.closePath()
     },
+    // The edge band: the silhouette in the edge colour less a blurred copy shifted up-left.
+    edgeCanvas(image, edge) {
+        const band = document.createElement('canvas')
+        band.width = image.width
+        band.height = image.height
+        const b = band.getContext('2d'), shift = edge.shift * image.width
+        b.drawImage(image, 0, 0)
+        b.globalCompositeOperation = 'source-in'
+        b.fillStyle = `rgb(${edge.color})`
+        b.fillRect(0, 0, band.width, band.height)
+        b.globalCompositeOperation = 'destination-out'
+        b.filter = `blur(${(edge.width * image.width).toFixed(2)}px)`
+        b.drawImage(image, -shift, -shift)
+        b.drawImage(image, -shift, -shift)
+        b.filter = 'none'
+        return band
+    },
+    // The rim-light ring: a soft arch stroke just outside the opening (open at its foot),
+    // on the sprite only, in a canvas the sprite's size plus pad on every side.
+    ringCanvas(image, door, ring, pad, style) {
+        const rw = door.w * image.width, off = ring.offset * rw, cx = pad + door.x * image.width
+        const top = pad + (door.y - door.h) * image.height, bottom = pad + (door.y + door.h) * image.height
+        const arc = document.createElement('canvas')
+        arc.width = image.width + 2 * pad
+        arc.height = image.height + 2 * pad
+        const a = arc.getContext('2d')
+        a.strokeStyle = style
+        a.lineWidth = ring.width * rw
+        a.lineCap = 'round'
+        a.filter = `blur(${(ring.blur * rw).toFixed(2)}px)`
+        a.beginPath()
+        a.moveTo(cx - rw - off, bottom)
+        a.lineTo(cx - rw - off, top + rw)
+        a.arc(cx, top + rw, rw + off, Math.PI, 0)
+        a.lineTo(cx + rw + off, bottom)
+        a.stroke()
+        a.filter = 'none'
+        a.globalCompositeOperation = 'destination-in'
+        a.drawImage(image, pad, pad)
+        return arc
+    },
     lampOverlay(image, name) {
         let overlay = this.lampOverlays.get(image)
         if (overlay && overlay.radius === basis.r && overlay.name === name) return overlay
         const door = this.DOOR[name] || this.DOOR.goldmine
-        // Shade: the sprite's silhouette in the stone tint, the doorway gold (a white doorway
-        // under the screen core reads pale cream; gold leaves it a flame of white in amber).
+        const W = image.width, H = image.height, rw = door.w * W
+        const dx = door.x * W, dy = (door.y + 0.4 * door.h) * H
+        // Shade (multiply): the sprite's silhouette in a light tint about the doorway, the
+        // doorway a recess, deep orange at its sides and foot.
         const shade = document.createElement('canvas')
-        shade.width = image.width
-        shade.height = image.height
+        shade.width = W
+        shade.height = H
         let g = shade.getContext('2d')
         g.drawImage(image, 0, 0)
         g.globalCompositeOperation = 'source-in'
-        const dx = door.x * image.width, dy = (door.y + 0.4 * door.h) * image.height
-        const tint = g.createRadialGradient(dx, dy, 0, dx, dy, this.BLOOM.shadeReach * image.width)
+        const tint = g.createRadialGradient(dx, dy, 0, dx, dy, this.BLOOM.shadeReach * W)
         for (const [t, color] of door.shadeStops || this.BLOOM.shadeStops)
             tint.addColorStop(t, `rgb(${color})`)
         g.fillStyle = tint
-        g.fillRect(0, 0, shade.width, shade.height)
+        g.fillRect(0, 0, W, H)
         g.globalCompositeOperation = 'source-atop'
-        g.fillStyle = `rgb(${this.BLOOM.door})`
+        const recess = g.createLinearGradient(dx - rw, 0, dx + rw, 0)
+        for (const [t, color] of this.BLOOM.recessStops)
+            recess.addColorStop(t, `rgb(${color})`)
+        g.fillStyle = recess
         this.doorPath(g, door, image)
         g.fill()
-        // Glow: the halo around the doorway with the stone cut out, then the hot core in the doorway.
+        const edge = door.edge === undefined ? this.BLOOM.edge : door.edge
+        if (edge) g.drawImage(this.edgeCanvas(image, edge), 0, 0)
+        const ring = door.ring === undefined ? this.BLOOM.ring : door.ring
+        if (ring) g.drawImage(this.ringCanvas(image, door, ring, 0, `rgb(${ring.shade})`), 0, 0)
+        // Glow ('screen'): the halo around the doorway with the stone cut out, the rim-light
+        // ring on the arch, the flare over the rim, and the flame in the opening.
         const pad = Math.ceil(this.BLOOM.halo * basis.r)
         const glow = document.createElement('canvas')
-        glow.width = image.width + 2 * pad
-        glow.height = image.height + 2 * pad
+        glow.width = W + 2 * pad
+        glow.height = H + 2 * pad
         g = glow.getContext('2d')
-        const cx = pad + door.x * image.width, cy = pad + (door.y + 0.4 * door.h) * image.height
+        const cx = pad + dx, cy = pad + dy
         const halo = g.createRadialGradient(cx, cy, 0, cx, cy, pad)
         for (const [t, color, alpha] of this.BLOOM.haloStops)
             halo.addColorStop(t, `rgba(${color},${alpha})`)
@@ -669,8 +735,9 @@ const atmosphericLighting = {
         g.drawImage(image, pad, pad)
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
+        if (ring) g.drawImage(this.ringCanvas(image, door, ring, pad, `rgba(${ring.color},${ring.alpha})`), 0, 0)
         // Flare: the doorway's light spilling over its rim onto the arch.
-        const flareReach = this.BLOOM.flareReach * door.w * image.width
+        const flareReach = this.BLOOM.flareReach * rw
         const flare = g.createRadialGradient(cx, cy, 0, cx, cy, flareReach)
         for (const [t, color, alpha] of this.BLOOM.flareStops)
             flare.addColorStop(t, `rgba(${color},${alpha})`)
@@ -679,13 +746,15 @@ const atmosphericLighting = {
         this.doorPath(g, door, image, pad, pad)
         g.save()
         g.clip()
-        // A flame: white near the top of the opening, deepening to orange at its foot and sides.
-        const reach = this.BLOOM.coreReach * door.w * image.width, fy = pad + (door.y - 0.15 * door.h) * image.height
-        const core = g.createRadialGradient(cx, fy, 0, cx, fy, reach)
+        // The flame: an upright white-gold ellipse, leaving the recess at the sides and foot.
+        const {rx, ry, dy: fdy} = this.BLOOM.flame
+        g.translate(cx, pad + (door.y + fdy * door.h) * H)
+        g.scale(rx * rw, ry * door.h * H)
+        const core = g.createRadialGradient(0, 0, 0, 0, 0, 1)
         for (const [t, color, alpha] of this.BLOOM.coreStops)
             core.addColorStop(t, `rgba(${color},${alpha})`)
         g.fillStyle = core
-        g.fillRect(0, 0, glow.width, glow.height)
+        g.fillRect(-1, -1, 2, 2)
         g.restore()
         overlay = {radius: basis.r, name, shade, glow, pad}
         this.lampOverlays.set(image, overlay)
