@@ -28,16 +28,18 @@ const atmosphericLighting = {
         goldmine: {power: 1},
         demonPortal: {power: 0.9}
     },
-    // Lamp spill: soft amber pools on the stone in front of (below) each doorway, a narrow
-    // cone that widens as it runs down the board, like the concept. Each layer is an ellipse
+    // Lamp spill: a soft cream-gold halo around each doorway that lights the building and
+    // the stone beside it, then amber pools on the stone in front of (below) the doorway,
+    // broad and fading down the board, like the concept. Each layer is an ellipse
     // [centre below the cell centre, half width, half height] (hex radii) blended over the
     // key light (source-over), so a pool looks the same on both sides of the board and fades
-    // into the key-lit stone with no rim. map: multiply colour (blue held back -> amber),
-    // gain: color-dodge lift. Hot layer last: yellow-white just below the door.
+    // into the key-lit stone with no rim. map: multiply colour (blue held back -> amber,
+    // outer layers paler cream), gain: color-dodge lift. Hot layer last, just below the door.
     SPILL: [
-        {dy: 1.5, rx: 1.0, ry: 1.25, alpha: 0.85, map: [255, 236, 178], gain: [104, 60, 0]},
-        {dy: 1.2, rx: 0.7, ry: 0.85, alpha: 0.88, map: [255, 244, 156], gain: [118, 80, 0]},
-        {dy: 0.95, rx: 0.4, ry: 0.5, alpha: 0.92, map: [255, 255, 196], gain: [118, 104, 0]}
+        {dy: 0.55, rx: 1.8, ry: 1.4, alpha: 0.85, map: [255, 236, 210], gain: [80, 54, 28]},
+        {dy: 1.2, rx: 1.5, ry: 1.15, alpha: 0.8, map: [255, 236, 182], gain: [96, 66, 10]},
+        {dy: 1.0, rx: 1.05, ry: 0.8, alpha: 0.85, map: [255, 236, 150], gain: [106, 76, 0]},
+        {dy: 0.8, rx: 0.7, ry: 0.55, alpha: 0.9, map: [255, 244, 180], gain: [118, 98, 4]}
     ],
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
@@ -567,24 +569,24 @@ const atmosphericLighting = {
         ctx.restore()
         this.bloom(ctx, board)
     },
-    // Bloom: the lamp's own stone is shaded (its sprite silhouette multiplied darker, the
-    // doorway left untouched), then a small white-hot core clipped to the doorway and a
-    // warm halo kept off the stone are added with 'screen'. Both overlays are built once
-    // per sprite raster; the old round sprite is the fallback for a missing raster.
+    // Bloom: the lamp sprite is shaded (its silhouette multiplied by a light warm tint, the
+    // doorway gold), then a white-hot core clipped to the doorway and a warm halo that also
+    // lights the arch are added with 'screen'. Both overlays are built once per sprite
+    // raster; the old round sprite is the fallback for a missing raster.
     BLOOM: {
         radius: 0.9,
         stops: [[0, '255,244,190', 1], [0.1, '255,214,100', 1], [0.22, '255,165,40', 0.9],
             [0.4, '250,125,25', 0.4], [0.65, '240,110,25', 0.1], [1, '230,100,30', 0]],
-        shade: '200,140,104',
-        door: '255,196,96',
-        halo: 0.75,
-        haloStops: [[0, '255,190,90', 0.75], [0.3, '255,150,50', 0.45], [0.6, '245,120,35', 0.15],
-            [1, '230,100,30', 0]],
-        coreStops: [[0, '255,253,240', 1], [0.25, '255,242,175', 1], [0.5, '255,205,85', 1],
-            [0.75, '250,152,40', 1], [1, '225,105,30', 1]],
-        coreReach: 1.45,
-        // The halo kept on the stone: a warm rim around the doorway.
-        haloOnStone: 0.4
+        shade: '222,192,166',
+        door: '255,200,100',
+        halo: 0.8,
+        haloStops: [[0, '255,236,180', 0.85], [0.25, '255,214,140', 0.55], [0.55, '250,190,110', 0.22],
+            [1, '240,170,90', 0]],
+        coreStops: [[0, '255,255,250', 1], [0.2, '255,250,215', 1], [0.45, '255,222,125', 1],
+            [0.75, '255,170,55', 1], [1, '235,120,35', 1]],
+        coreReach: 1.3,
+        // The halo kept on the sprite: lights the arch and walls around the doorway.
+        haloOnSprite: 0.5
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
@@ -651,7 +653,7 @@ const atmosphericLighting = {
         g.fillStyle = halo
         g.fillRect(0, 0, glow.width, glow.height)
         g.globalCompositeOperation = 'destination-out'
-        g.globalAlpha = 1 - this.BLOOM.haloOnStone
+        g.globalAlpha = 1 - this.BLOOM.haloOnSprite
         g.drawImage(image, pad, pad)
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
