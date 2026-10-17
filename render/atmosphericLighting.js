@@ -604,8 +604,8 @@ const atmosphericLighting = {
         // Flame: an upright ellipse in the opening (half width x half height in door half sizes),
         // white-gold in the middle, orange at its edge, leaving the recess at the sides and foot.
         flame: {rx: 0.95, ry: 0.9, dy: -0.1},
-        coreStops: [[0, '255,255,250', 1], [0.5, '255,253,230', 1], [0.7, '255,228,136', 1],
-            [0.8, '255,176,64', 0.7], [1, '250,140,40', 0]],
+        coreStops: [[0, '255,255,250', 1], [0.6, '255,253,232', 1], [0.78, '255,228,136', 1],
+            [0.88, '255,176,64', 0.7], [1, '250,140,40', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0
     },
