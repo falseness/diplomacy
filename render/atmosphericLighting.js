@@ -597,7 +597,9 @@ const atmosphericLighting = {
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
         goldmine: {x: 0.495, y: 0.65, w: 0.1, h: 0.155},
-        town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085},
+        // A town keeps its warm lit walls: a lighter tint than the cave's dark stone.
+        town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085,
+            shadeStops: [[0, '255,222,170'], [0.4, '250,206,160'], [1, '214,180,160']]},
         demonPortal: {x: 0.49, y: 0.66, w: 0.13, h: 0.2}
     },
     bloomSprite: null,
@@ -642,7 +644,7 @@ const atmosphericLighting = {
         g.globalCompositeOperation = 'source-in'
         const dx = door.x * image.width, dy = (door.y + 0.4 * door.h) * image.height
         const tint = g.createRadialGradient(dx, dy, 0, dx, dy, this.BLOOM.shadeReach * image.width)
-        for (const [t, color] of this.BLOOM.shadeStops)
+        for (const [t, color] of door.shadeStops || this.BLOOM.shadeStops)
             tint.addColorStop(t, `rgb(${color})`)
         g.fillStyle = tint
         g.fillRect(0, 0, shade.width, shade.height)
