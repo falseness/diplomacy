@@ -28,20 +28,21 @@ const atmosphericLighting = {
         goldmine: {power: 1},
         demonPortal: {power: 0.9}
     },
-    // Lamp spill: a broad, low warm wash around each source (beside and above it too), a
-    // low amber wash on the lamp's own cell, then a wide, short amber fan on the stone in
-    // front of (below) the doorway, brightest at its foot. Each layer is an ellipse
+    // Lamp spill: a low warm wash around each source and a faint one on the lamp's own cell,
+    // then an amber fan falling about two hexes down from the doorway, widening as it goes
+    // and brightest at the doorway's foot. Each layer is an ellipse
     // [centre below the cell centre, half width, half height] (hex radii) blended over the
     // key light (source-over), so a pool looks the same on both sides of the board and fades
     // into the key-lit stone with no rim. map: multiply colour (blue held back -> amber,
-    // outer layers paler cream), gain: color-dodge lift. Hot layers last, just below the door.
+    // outer layers paler cream), gain: color-dodge lift (green held well under red, or the
+    // doorway's foot dodges to lemon yellow). Hot layers last, just below the door.
     SPILL: [
-        {dy: 0.4, rx: 2.5, ry: 2.1, alpha: 0.9, map: [255, 236, 210], gain: [92, 60, 26]},
-        {dy: 0.05, rx: 1.3, ry: 1.1, alpha: 0.6, map: [255, 234, 204], gain: [56, 34, 10]},
-        {dy: 1.2, rx: 2.0, ry: 1.5, alpha: 0.9, map: [255, 232, 196], gain: [100, 66, 28]},
-        {dy: 1.0, rx: 1.4, ry: 0.95, alpha: 0.9, map: [255, 230, 176], gain: [112, 76, 22]},
-        {dy: 0.75, rx: 1.0, ry: 0.55, alpha: 0.95, map: [255, 238, 186], gain: [124, 94, 30]},
-        {dy: 0.5, rx: 0.65, ry: 0.4, alpha: 0.95, map: [255, 240, 180], gain: [134, 108, 34]}
+        {dy: 0.8, rx: 1.8, ry: 1.9, alpha: 0.7, map: [255, 236, 210], gain: [80, 50, 16]},
+        {dy: 0.1, rx: 1.0, ry: 0.9, alpha: 0.35, map: [255, 236, 210], gain: [48, 30, 8]},
+        {dy: 1.8, rx: 1.6, ry: 1.3, alpha: 0.9, map: [255, 234, 206], gain: [112, 68, 18]},
+        {dy: 1.15, rx: 1.05, ry: 0.95, alpha: 0.95, map: [255, 228, 178], gain: [136, 90, 24]},
+        {dy: 0.75, rx: 0.75, ry: 0.6, alpha: 1, map: [255, 232, 178], gain: [152, 100, 28]},
+        {dy: 0.5, rx: 0.55, ry: 0.4, alpha: 1, map: [255, 236, 184], gain: [160, 104, 32]}
     ],
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
@@ -593,12 +594,12 @@ const atmosphericLighting = {
         ctx.restore()
         this.bloom(ctx, board)
     },
-    // Bloom: a cave is graded per pixel (grade below) to warm brown stone, darker towards its
-    // rim, with a gold lit arch around a deep orange recess. Other lamp sprites are shaded
+    // Bloom: a cave is graded per pixel (grade below) to grey-taupe stone, darker towards its
+    // rim, with a gold lit arch around an orange recess. Other lamp sprites are shaded
     // (multiply) light warm near the doorway and grey-tan towards the rim, with a soft dark
     // edge away from the key light, a gold band on the arch and the doorway a deep orange
     // recess. Then 'screen' adds the cave grade's lift (or the band as a rim light), a flare
-    // over the rim, a white-gold flame in the opening and an amber halo on the stone. Both
+    // over the rim, a white-gold flame in the top of the opening and an amber halo on the stone. Both
     // overlays are built once per sprite raster; the old round sprite is the fallback for a
     // missing raster.
     BLOOM: {
@@ -613,9 +614,9 @@ const atmosphericLighting = {
         // (band width and the shrink centre's shift up-left in raster widths; steps are
         // [fraction of the width, alpha] of each shrunk copy taken out).
         edge: {color: '124,104,92', width: 0.12, shift: 0.02, steps: [[0.35, 0.5], [0.6, 0.6], [1, 1]]},
-        // Doorway recess: deep orange at the sides and foot, gold in the middle.
-        recessStops: [[0, '214,92,24'], [0.3, '246,150,52'], [0.5, '255,196,96'], [0.7, '246,150,52'],
-            [1, '214,92,24']],
+        // Doorway recess: deep orange at the sides, gold in the middle.
+        recessStops: [[0, '206,90,20'], [0.22, '240,140,38'], [0.5, '255,196,76'], [0.78, '240,140,38'],
+            [1, '206,90,20']],
         halo: 1,
         haloStops: [[0, '255,210,130', 0.9], [0.25, '252,184,96', 0.6], [0.55, '245,152,72', 0.24],
             [1, '235,130,60', 0]],
@@ -626,23 +627,25 @@ const atmosphericLighting = {
         flareStops: [[0, '255,252,230', 0.9], [0.3, '255,220,130', 0.6], [0.6, '255,160,55', 0.25],
             [1, '240,120,40', 0]],
         flareReach: 2.4,
-        // Flame: an upright ellipse in the opening (half width x half height in door half sizes),
-        // white-gold in the middle, orange at its edge, leaving the recess at the sides and foot.
-        flame: {rx: 0.95, ry: 0.9, dy: -0.1},
-        coreStops: [[0, '255,255,250', 1], [0.6, '255,253,232', 1], [0.78, '255,228,136', 1],
-            [0.88, '255,176,64', 0.7], [1, '250,140,40', 0]],
+        // Flame: an upright ellipse in the top of the opening (half width x half height in door
+        // half sizes), white-gold in the middle, gold to orange at its edge, leaving the recess
+        // at the sides and foot.
+        flame: {rx: 0.8, ry: 0.7, dy: -0.35},
+        coreStops: [[0, '255,255,244', 1], [0.35, '255,248,206', 1], [0.65, '255,216,112', 0.9],
+            [1, '255,170,60', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0,
         // Cave grade, per pixel of the sprite raster: grey-taupe stone from the sprite's own
-        // luminance (stone: channel factors), a gold lit inner arch fading over goldWidth door
-        // half widths from the opening, the opening an orange recess. Reached by the shade
+        // luminance (stone: channel factors), a bright gold lit inner arch (nearly flat in the
+        // sprite's luminance, so the dark jambs turn gold, not olive) fading over goldWidth
+        // door half widths from the opening, the opening an orange recess. Reached by the shade
         // multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.96, 0.68, 0.55], gold: [255, 192, 92], goldAmount: 0.95, goldWidth: 2.0,
-            goldPower: 1.2, rimDark: 0.35, flareReach: 1.6}
+        grade: {stone: [0.86, 0.72, 0.66], gold: [255, 200, 96], goldAmount: 1, goldWidth: 1.2,
+            goldPower: 0.7, rimDark: 0.35, flareReach: 1.3}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
-        goldmine: {x: 0.495, y: 0.65, w: 0.1, h: 0.155, grade: true},
+        goldmine: {x: 0.5, y: 0.645, w: 0.125, h: 0.165, grade: true},
         // A town keeps its warm lit walls: a lighter tint than the cave's grey-tan rim, no
         // arch band or dark edge.
         town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085, ring: null, edge: null,
@@ -760,7 +763,7 @@ const atmosphericLighting = {
                 for (let c = 0; c < 3; c++) target[c] = c0[c] + (c1[c] - c0[c]) * f
             } else {
                 // The stone darkens towards the dome's rim, away from the lit opening.
-                const w = goldAmount * Math.max(0, 1 - d / goldWidth) ** goldPower, light = 0.55 + 0.45 * lum / 255
+                const w = goldAmount * Math.max(0, 1 - d / goldWidth) ** goldPower, light = 0.8 + 0.2 * lum / 255
                 const rim = 1 - rimDark * Math.min(1, Math.hypot(px - cx, py - top) / (0.45 * W))
                 for (let c = 0; c < 3; c++) target[c] = lum * stone[c] * rim * (1 - w) + gold[c] * light * w
             }
