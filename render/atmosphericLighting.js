@@ -37,9 +37,10 @@ const atmosphericLighting = {
     // outer layers paler cream), gain: color-dodge lift. Hot layer last, just below the door.
     SPILL: [
         {dy: 0.55, rx: 1.8, ry: 1.4, alpha: 0.85, map: [255, 236, 210], gain: [80, 54, 28]},
-        {dy: 1.2, rx: 1.5, ry: 1.15, alpha: 0.8, map: [255, 236, 182], gain: [96, 66, 10]},
-        {dy: 1.0, rx: 1.05, ry: 0.8, alpha: 0.85, map: [255, 236, 150], gain: [106, 76, 0]},
-        {dy: 0.8, rx: 0.7, ry: 0.55, alpha: 0.9, map: [255, 244, 180], gain: [118, 98, 4]}
+        {dy: 1.35, rx: 1.5, ry: 1.35, alpha: 0.9, map: [255, 224, 170], gain: [100, 58, 8]},
+        {dy: 1.05, rx: 1.05, ry: 0.85, alpha: 0.95, map: [255, 226, 144], gain: [108, 68, 0]},
+        {dy: 0.8, rx: 0.75, ry: 0.6, alpha: 1, map: [255, 238, 170], gain: [124, 96, 6]},
+        {dy: 0.55, rx: 0.5, ry: 0.3, alpha: 0.9, map: [255, 226, 150], gain: [128, 90, 4]}
     ],
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
@@ -577,16 +578,21 @@ const atmosphericLighting = {
         radius: 0.9,
         stops: [[0, '255,244,190', 1], [0.1, '255,214,100', 1], [0.22, '255,165,40', 0.9],
             [0.4, '250,125,25', 0.4], [0.65, '240,110,25', 0.1], [1, '230,100,30', 0]],
-        shade: '222,192,166',
-        door: '255,200,100',
-        halo: 0.8,
-        haloStops: [[0, '255,236,180', 0.85], [0.25, '255,214,140', 0.55], [0.55, '250,190,110', 0.22],
-            [1, '240,170,90', 0]],
-        coreStops: [[0, '255,255,250', 1], [0.2, '255,250,215', 1], [0.45, '255,222,125', 1],
-            [0.75, '255,170,55', 1], [1, '235,120,35', 1]],
-        coreReach: 1.3,
-        // The halo kept on the sprite: lights the arch and walls around the doorway.
-        haloOnSprite: 0.5
+        // Sprite tint about the doorway: lit warm on the arch beside it, dark stone on the rim.
+        shadeStops: [[0, '255,200,130'], [0.3, '236,166,112'], [0.55, '168,128,124'], [1, '124,100,114']],
+        shadeReach: 0.6,
+        door: '255,168,70',
+        halo: 1,
+        haloStops: [[0, '255,210,130', 0.9], [0.25, '252,184,96', 0.6], [0.55, '245,152,72', 0.24],
+            [1, '235,130,60', 0]],
+        flareStops: [[0, '255,252,230', 1], [0.25, '255,220,130', 0.85], [0.55, '255,160,55', 0.45],
+            [1, '240,120,40', 0]],
+        flareReach: 3,
+        coreStops: [[0, '255,255,240', 1], [0.18, '255,240,170', 1], [0.4, '255,196,80', 1],
+            [0.72, '252,146,36', 1], [1, '224,104,28', 1]],
+        coreReach: 1.6,
+        // The halo kept on the sprite (none: the arch keeps its dark stone contrast).
+        haloOnSprite: 0
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
@@ -634,7 +640,11 @@ const atmosphericLighting = {
         let g = shade.getContext('2d')
         g.drawImage(image, 0, 0)
         g.globalCompositeOperation = 'source-in'
-        g.fillStyle = `rgb(${this.BLOOM.shade})`
+        const dx = door.x * image.width, dy = (door.y + 0.4 * door.h) * image.height
+        const tint = g.createRadialGradient(dx, dy, 0, dx, dy, this.BLOOM.shadeReach * image.width)
+        for (const [t, color] of this.BLOOM.shadeStops)
+            tint.addColorStop(t, `rgb(${color})`)
+        g.fillStyle = tint
         g.fillRect(0, 0, shade.width, shade.height)
         g.globalCompositeOperation = 'source-atop'
         g.fillStyle = `rgb(${this.BLOOM.door})`
@@ -657,11 +667,19 @@ const atmosphericLighting = {
         g.drawImage(image, pad, pad)
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
+        // Flare: the doorway's light spilling over its rim onto the arch.
+        const flareReach = this.BLOOM.flareReach * door.w * image.width
+        const flare = g.createRadialGradient(cx, cy, 0, cx, cy, flareReach)
+        for (const [t, color, alpha] of this.BLOOM.flareStops)
+            flare.addColorStop(t, `rgba(${color},${alpha})`)
+        g.fillStyle = flare
+        g.fillRect(cx - flareReach, cy - flareReach, 2 * flareReach, 2 * flareReach)
         this.doorPath(g, door, image, pad, pad)
         g.save()
         g.clip()
-        const reach = this.BLOOM.coreReach * door.w * image.width
-        const core = g.createRadialGradient(cx, cy, 0, cx, cy, reach)
+        // A flame: white near the top of the opening, deepening to orange at its foot and sides.
+        const reach = this.BLOOM.coreReach * door.w * image.width, fy = pad + (door.y - 0.15 * door.h) * image.height
+        const core = g.createRadialGradient(cx, fy, 0, cx, fy, reach)
         for (const [t, color, alpha] of this.BLOOM.coreStops)
             core.addColorStop(t, `rgba(${color},${alpha})`)
         g.fillStyle = core
