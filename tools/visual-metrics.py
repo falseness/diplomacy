@@ -24,7 +24,8 @@ artifacts/reference/concept-regions.json): the "concept" profile for CONCEPT and
 the profile whose "size" equals the OURS image size (or --profile NAME). Per region: mean
 CIE Lab (sRGB D65, mean of per-pixel Lab), deltaE76 against the concept, mean luminance L
 (plus, for information, the deltaE76 of each matched box pair and their mean).
-Derived: grout/stone luminance ratio (grout boxes over the stone boxes), slab margins
+Derived: grout/stone luminance ratio (mean of the grout-box luminance clipped at the stone mean,
+over the stone mean, so bright bevels do not mask dark outlines), slab margins
 (stone L - boardEdge L, boardEdge L - skyBelowBoard L) and the earth mover's distance between
 the whole-image luminance histograms (64 bins over 0..1, unit = full luminance range).
 --thresholds checks "region.metric" rules and exits 1 on any failure.
@@ -229,7 +230,12 @@ def region_compare(concept_rgb, ours_rgb, concept_profile, ours_profile):
         result['regions'][name] = {'concept': c[name], 'ours': o[name], 'deltaE': round(de, 3),
                                    'boxDeltaE': [round(v, 2) for v in boxes], 'meanBoxDeltaE': round(float(np.mean(boxes)), 3)}
     for side, stats in (('concept', c), ('ours', o)):
-        result['regions']['grout'][side]['groutStoneRatio'] = round(stats['grout']['L'] / stats['stone']['L'], 4)
+        # Grout darkness: grout pixels are clipped at the stone mean before averaging, so a bright bevel
+        # highlight next to a dark outline cannot cancel it out.
+        rgb, profile = (concept_rgb, concept_profile) if side == 'concept' else (ours_rgb, ours_profile)
+        grout_l = np.minimum(luminance(region_pixels(rgb, profile['regions']['grout'])), stats['stone']['L']).mean()
+        stats['grout']['groutClippedL'] = round(float(grout_l), 4)
+        result['regions']['grout'][side]['groutStoneRatio'] = round(float(grout_l) / stats['stone']['L'], 4)
         result['regions']['boardEdge'][side]['belowStone'] = round(stats['stone']['L'] - stats['boardEdge']['L'], 4)
         result['regions']['boardEdge'][side]['aboveSky'] = round(stats['boardEdge']['L'] - stats['skyBelowBoard']['L'], 4)
     result['histogram'] = {'bins': HIST_BINS, 'emd': round(lum_histogram_emd(concept_rgb, ours_rgb), 5)}
