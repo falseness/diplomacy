@@ -587,8 +587,9 @@ const atmosphericLighting = {
         shadeStops: [[0, '255,248,230'], [0.3, '244,218,184'], [0.65, '208,186,168'], [1, '176,158,146']],
         shadeReach: 0.6,
         // Edge: a soft dark band inside the silhouette, thicker away from the key light
-        // (band width and its shift towards the lower right in raster widths).
-        edge: {color: '124,104,92', width: 0.06, shift: 0.035},
+        // (band width and the shrink centre's shift up-left in raster widths; steps are
+        // [fraction of the width, alpha] of each shrunk copy taken out).
+        edge: {color: '124,104,92', width: 0.12, shift: 0.02, steps: [[0.35, 0.5], [0.6, 0.6], [1, 1]]},
         // Doorway recess: deep orange at the sides and foot, gold in the middle.
         recessStops: [[0, '214,92,24'], [0.3, '246,150,52'], [0.5, '255,196,96'], [0.7, '246,150,52'],
             [1, '214,92,24']],
@@ -596,8 +597,9 @@ const atmosphericLighting = {
         haloStops: [[0, '255,210,130', 0.9], [0.25, '252,184,96', 0.6], [0.55, '245,152,72', 0.24],
             [1, '235,130,60', 0]],
         // Rim light: a soft gold ring on the arch just outside the opening (width and offset
-        // in door half widths; blur in the same unit).
-        ring: {color: '255,190,80', alpha: 1, shade: '255,158,48', width: 1.3, offset: 0.6, blur: 0.2},
+        // in door half widths; strokes are [fraction of the width, alpha], wide to narrow).
+        ring: {color: '255,190,80', shade: '255,158,48', width: 1.3, offset: 0.6,
+            strokes: [[1.5, 0.3], [1.2, 0.5], [0.9, 0.8], [0.6, 1]]},
         flareStops: [[0, '255,252,230', 0.9], [0.3, '255,220,130', 0.6], [0.6, '255,160,55', 0.25],
             [1, '240,120,40', 0]],
         flareReach: 2.4,
@@ -646,43 +648,47 @@ const atmosphericLighting = {
         g.lineTo(cx + rw, bottom)
         g.closePath()
     },
-    // The edge band: the silhouette in the edge colour less a blurred copy shifted up-left.
+    // The edge band: the silhouette in the edge colour, less copies of it shrunk about a
+    // point up-left of its centre in a few soft steps (no canvas filter: a filtered canvas
+    // slows every later frame that draws the overlays).
     edgeCanvas(image, edge) {
         const band = document.createElement('canvas')
         band.width = image.width
         band.height = image.height
-        const b = band.getContext('2d'), shift = edge.shift * image.width
+        const b = band.getContext('2d'), W = image.width, H = image.height
         b.drawImage(image, 0, 0)
         b.globalCompositeOperation = 'source-in'
         b.fillStyle = `rgb(${edge.color})`
-        b.fillRect(0, 0, band.width, band.height)
+        b.fillRect(0, 0, W, H)
         b.globalCompositeOperation = 'destination-out'
-        b.filter = `blur(${(edge.width * image.width).toFixed(2)}px)`
-        b.drawImage(image, -shift, -shift)
-        b.drawImage(image, -shift, -shift)
-        b.filter = 'none'
+        for (const [inset, alpha] of edge.steps) {
+            const k = 1 - inset * edge.width, ox = (W - k * W) / 2 - edge.shift * W, oy = (H - k * H) / 2 - edge.shift * H
+            b.globalAlpha = alpha
+            b.drawImage(image, ox, oy, k * W, k * H)
+        }
         return band
     },
-    // The rim-light ring: a soft arch stroke just outside the opening (open at its foot),
-    // on the sprite only, in a canvas the sprite's size plus pad on every side.
-    ringCanvas(image, door, ring, pad, style) {
+    // The rim-light ring: a soft arch just outside the opening (open at its foot), stacked
+    // strokes from wide and faint to narrow and full, on the sprite only, in a canvas the
+    // sprite's size plus pad on every side.
+    ringCanvas(image, door, ring, pad, color) {
         const rw = door.w * image.width, off = ring.offset * rw, cx = pad + door.x * image.width
         const top = pad + (door.y - door.h) * image.height, bottom = pad + (door.y + door.h) * image.height
         const arc = document.createElement('canvas')
         arc.width = image.width + 2 * pad
         arc.height = image.height + 2 * pad
         const a = arc.getContext('2d')
-        a.strokeStyle = style
-        a.lineWidth = ring.width * rw
         a.lineCap = 'round'
-        a.filter = `blur(${(ring.blur * rw).toFixed(2)}px)`
         a.beginPath()
         a.moveTo(cx - rw - off, bottom)
         a.lineTo(cx - rw - off, top + rw)
         a.arc(cx, top + rw, rw + off, Math.PI, 0)
         a.lineTo(cx + rw + off, bottom)
-        a.stroke()
-        a.filter = 'none'
+        for (const [width, alpha] of ring.strokes) {
+            a.strokeStyle = `rgba(${color},${alpha})`
+            a.lineWidth = width * ring.width * rw
+            a.stroke()
+        }
         a.globalCompositeOperation = 'destination-in'
         a.drawImage(image, pad, pad)
         return arc
@@ -716,7 +722,7 @@ const atmosphericLighting = {
         const edge = door.edge === undefined ? this.BLOOM.edge : door.edge
         if (edge) g.drawImage(this.edgeCanvas(image, edge), 0, 0)
         const ring = door.ring === undefined ? this.BLOOM.ring : door.ring
-        if (ring) g.drawImage(this.ringCanvas(image, door, ring, 0, `rgb(${ring.shade})`), 0, 0)
+        if (ring) g.drawImage(this.ringCanvas(image, door, ring, 0, ring.shade), 0, 0)
         // Glow ('screen'): the halo around the doorway with the stone cut out, the rim-light
         // ring on the arch, the flare over the rim, and the flame in the opening.
         const pad = Math.ceil(this.BLOOM.halo * basis.r)
@@ -735,7 +741,7 @@ const atmosphericLighting = {
         g.drawImage(image, pad, pad)
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
-        if (ring) g.drawImage(this.ringCanvas(image, door, ring, pad, `rgba(${ring.color},${ring.alpha})`), 0, 0)
+        if (ring) g.drawImage(this.ringCanvas(image, door, ring, pad, ring.color), 0, 0)
         // Flare: the doorway's light spilling over its rim onto the arch.
         const flareReach = this.BLOOM.flareReach * rw
         const flare = g.createRadialGradient(cx, cy, 0, cx, cy, flareReach)
