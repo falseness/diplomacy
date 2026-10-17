@@ -8,17 +8,17 @@ const atmosphericLighting = {
     // A broad key light from the left, falling mostly across the board (DIRECTION, world
     // space) and a little down it. Stops along that axis: [t, ambient, gain], overall
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
-    // peach-cream near the key light, then pale grey, then cool lavender-grey on the far side.
+    // peach-cream near the key light, then pale cream-grey, then a pale neutral grey-white on the far side.
     KEY: [
-        [0, [205, 205, 205], [113, 77, 25]],
-        [0.15, [205, 205, 205], [113, 77, 25]],
-        [0.26, [205, 205, 205], [107, 63, 29]],
-        [0.38, [205, 205, 205], [90, 55, 27]],
-        [0.5, [205, 205, 205], [81, 49, 29]],
-        [0.62, [205, 205, 205], [37, 36, 43]],
-        [0.75, [205, 205, 205], [21, 30, 57]],
-        [0.85, [205, 205, 205], [19, 28, 52]],
-        [1, [205, 205, 205], [19, 28, 52]]
+        [0, [205, 205, 205], [108, 74, 25]],
+        [0.15, [205, 205, 205], [108, 74, 25]],
+        [0.26, [205, 205, 205], [98, 61, 28]],
+        [0.38, [205, 205, 205], [80, 52, 28]],
+        [0.5, [205, 205, 205], [64, 46, 31]],
+        [0.62, [205, 205, 205], [44, 40, 36]],
+        [0.75, [205, 205, 205], [32, 34, 40]],
+        [0.85, [205, 205, 205], [30, 33, 40]],
+        [1, [205, 205, 205], [30, 33, 40]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.6],
@@ -45,11 +45,13 @@ const atmosphericLighting = {
         variants: 8,
         rasterScale: 1.5,
         // Near neutral before the light map, which warms it on the key side (about 1.45 red)
-        // and cools it on the far side (about 0.93 red).
-        grout: '#5f5850',
+        // and leaves it a pale neutral grey on the far side (about 0.91 red, 0.95 blue).
+        grout: '#615658',
         groutWidth: 0.065,
-        stone: [150, 146, 150],
-        sheen: 0.1
+        stone: [153, 147, 155],
+        sheen: 0.1,
+        // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
+        polish: 0.16
     },
     tileVariants: null,
     tileVariantBuilds: 0,
@@ -328,9 +330,9 @@ const atmosphericLighting = {
         // Clouds: broad, low contrast mottling.
         for (let i = 0; i < 26; i++) {
             const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r, radius = (0.25 + 0.5 * rand()) * r
-            const tone = rand() < 0.55 ? 1.12 : 0.9
+            const tone = rand() < 0.6 ? 1.07 : 0.95
             const color = `${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
-                (0.2 + 0.3 * rand()).toFixed(3)
+                (0.15 + 0.2 * rand()).toFixed(3)
             const cloud = g.createRadialGradient(x, y, 0, x, y, radius)
             cloud.addColorStop(0, `rgba(${color})`)
             cloud.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
@@ -352,9 +354,9 @@ const atmosphericLighting = {
             }
             points.push({x: Math.cos(b) * r, y: Math.sin(b) * r})
             const strength = v === 0 ? 1 : 0.6
-            // Cool grey, wide enough to read at the normal zoom.
-            for (const [width, alpha] of [[0.14, 0.05], [0.05, 0.07], [0.02, 0.09]]) {
-                g.strokeStyle = `rgba(${Math.round(sr * 0.62)},${Math.round(sg * 0.64)},${Math.round(sb * 0.7)},${(alpha * strength).toFixed(3)})`
+            // Soft, feathery warm grey: wide faint bands under a fine light-grey core, no crack line.
+            for (const [width, alpha] of [[0.3, 0.05], [0.14, 0.055], [0.06, 0.06], [0.025, 0.065]]) {
+                g.strokeStyle = `rgba(${Math.round(sr * 0.8)},${Math.round(sg * 0.79)},${Math.round(sb * 0.8)},${(alpha * strength).toFixed(3)})`
                 g.lineWidth = width * r
                 g.beginPath()
                 g.moveTo(points[0].x, points[0].y)
@@ -378,6 +380,13 @@ const atmosphericLighting = {
         g.lineTo(lip / 2, -h)
         g.lineTo(lip, 0)
         g.stroke()
+        // Polish: a soft highlight towards the upper left, so the slab reads as polished marble.
+        const polish = g.createRadialGradient(-0.35 * r, -0.4 * r, 0, -0.35 * r, -0.4 * r, 1.2 * r)
+        polish.addColorStop(0, `rgba(255,252,246,${this.TILE.polish})`)
+        polish.addColorStop(0.5, `rgba(255,252,246,${(this.TILE.polish * 0.35).toFixed(3)})`)
+        polish.addColorStop(1, 'rgba(255,252,246,0)')
+        g.fillStyle = polish
+        g.fillRect(-r, -r, 2 * r, 2 * r)
         this.drawSheen(g, 0, 0, this.TILE.sheen)
         return this.tileVariants[index] = surface
     },
