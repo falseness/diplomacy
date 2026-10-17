@@ -22,16 +22,26 @@ const atmosphericLighting = {
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.6],
-    // Lamp light added to the ambient (no blue: the warm filter below removes some).
+    // Lamps: power weighs each lamp for shadow direction. Light is the SPILL below.
     LAMP: {
-        town: {color: [255, 150, 84], power: 1},
-        goldmine: {color: [255, 146, 78], power: 1},
-        demonPortal: {color: [255, 120, 90], power: 0.9}
+        town: {power: 1},
+        goldmine: {power: 1},
+        demonPortal: {power: 0.9}
     },
-    // Color-dodge gain at the lamp: x2.4 red, x1.86 green, x1.12 blue (gold, like the concept's lit stone),
-    // brighter than the key-lit cream so the pools stay above it.
-    GAIN: '150,118,28',
-    TAIL_RADII: 2.5,
+    // Lamp spill: soft amber pools on the stone in front of (below) each doorway, a narrow
+    // cone that widens as it runs down the board, like the concept. Each layer is an ellipse
+    // [centre below the cell centre, half width, half height] (hex radii) blended over the
+    // key light (source-over), so a pool looks the same on both sides of the board and fades
+    // into the key-lit stone with no rim. map: multiply colour (blue held back -> amber),
+    // gain: color-dodge lift. Hot layer last: yellow-white just below the door.
+    SPILL: [
+        {dy: 1.5, rx: 1.0, ry: 1.25, alpha: 0.85, map: [255, 236, 178], gain: [104, 60, 0]},
+        {dy: 1.2, rx: 0.7, ry: 0.85, alpha: 0.88, map: [255, 244, 156], gain: [118, 80, 0]},
+        {dy: 0.95, rx: 0.4, ry: 0.5, alpha: 0.92, map: [255, 255, 196], gain: [118, 104, 0]}
+    ],
+    // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
+    SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
+        [0.7, 0.33], [0.8, 0.18], [0.9, 0.06], [1, 0]],
     // Glow of owned tiles on the stone next to them: reach in hex radii, colour mixed towards white.
     // Owned tiles: colour gamma (deeper) and a stone mix [r, g, b, amount].
     TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12]},
@@ -161,21 +171,19 @@ const atmosphericLighting = {
         this[name] = surface
         return g
     },
-    pool(g, source, radius, stops, color) {
-        const c = this.core(source)
+    // One spill layer of a lamp: an elliptical radial gradient of colour, alpha by SPILL_STOPS.
+    spill(g, source, layer, color) {
         g.save()
-        // The pool sits on the opening and spills forward (down the board) as a soft cone.
-        g.translate(c.x, c.y + 0.8 * basis.r)
-        g.scale(1, 1.3)
-        const gradient = g.createRadialGradient(0, -0.1 * radius, 0, 0, 0, radius)
-        for (const [t, alpha] of stops)
-            gradient.addColorStop(t, `rgba(${color},${alpha.toFixed(3)})`)
+        g.translate(source.pos.x, source.pos.y + layer.dy * basis.r)
+        g.scale(layer.rx * basis.r, layer.ry * basis.r)
+        const gradient = g.createRadialGradient(0, 0, 0, 0, 0, 1)
+        for (const [t, alpha] of this.SPILL_STOPS)
+            gradient.addColorStop(t, `rgba(${color},${(alpha * layer.alpha).toFixed(3)})`)
         g.fillStyle = gradient
-        g.fillRect(-radius, -radius, 2 * radius, 2 * radius)
+        g.fillRect(-1, -1, 2, 2)
         g.restore()
     },
     build({cells, sources}, bounds, scale) {
-        const r = this.TAIL_RADII * basis.r
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
         // the authorized visible cells, which get the cool ambient plus warm lamps.
         const g = this.canvasFor('map', bounds, scale)
@@ -199,27 +207,10 @@ const atmosphericLighting = {
             g.fillStyle = glow
             g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
         }
-        // Each lamp is added: smooth falloff over about 2.5 hex radii, no hard rim.
-        g.globalCompositeOperation = 'lighter'
-        for (const source of sources) {
-            const lamp = this.LAMP[source.name] || this.LAMP.goldmine
-            this.pool(g, source, r, [[0, 0.85], [0.15, 0.72], [0.32, 0.5], [0.5, 0.3],
-                [0.7, 0.13], [0.86, 0.04], [1, 0]].map(([t, a]) => [t, a * lamp.power]), lamp.color)
-        }
-        // The bright key-lit ambient saturates the lamps to white, so the pool is filtered
-        // gold afterwards: lamp-lit stone stays golden instead of pale.
-        g.globalCompositeOperation = 'multiply'
-        for (const source of sources)
-            this.pool(g, source, r, [[0, 1], [0.5, 0.5], [1, 0]], '255,222,184')
-        // The lamp's own building is lit warm tan (its art kept), not bleached.
-        for (const {pos} of sources) {
-            const tint = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 0.8 * basis.r)
-            tint.addColorStop(0, 'rgba(255,214,160,1)')
-            tint.addColorStop(0.6, 'rgba(255,214,160,0.7)')
-            tint.addColorStop(1, 'rgba(255,214,160,0)')
-            g.fillStyle = tint
-            g.fillRect(pos.x - basis.r, pos.y - basis.r, 2 * basis.r, 2 * basis.r)
-        }
+        // Lamp spill (multiply part): the blue is held back towards amber.
+        g.globalCompositeOperation = 'source-over'
+        for (const layer of this.SPILL)
+            for (const source of sources) this.spill(g, source, layer, layer.map)
         g.restore()
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
@@ -229,27 +220,11 @@ const atmosphericLighting = {
         this.hexPath(k, stone)
         k.save()
         k.clip()
-        for (const source of sources)
-            this.pool(k, source, 0.8 * r, [[0, 1], [0.25, 0.85], [0.5, 0.45], [0.75, 0.14], [1, 0]],
-                this.GAIN)
-        // The hottest spot just in front of the opening goes towards cream-gold.
-        k.globalCompositeOperation = 'lighter'
-        for (const source of sources)
-            this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '28,24,0')
-        // The lamp's own sprite keeps its art: no gain over the building.
-        k.globalCompositeOperation = 'destination-out'
-        for (const {pos} of sources) {
-            const hole = k.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 0.7 * basis.r)
-            hole.addColorStop(0, 'rgba(0,0,0,1)')
-            hole.addColorStop(0.6, 'rgba(0,0,0,0.8)')
-            hole.addColorStop(1, 'rgba(0,0,0,0)')
-            k.fillStyle = hole
-            k.fillRect(pos.x - basis.r, pos.y - basis.r, 2 * basis.r, 2 * basis.r)
-        }
-        // The key light's lift lies under the lamp pools (and fills the sprite holes).
-        k.globalCompositeOperation = 'destination-over'
+        // The key light's lift, then each lamp's spill blended over it.
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
+        for (const layer of this.SPILL)
+            for (const source of sources) this.spill(k, source, layer, layer.gain)
         k.restore()
     },
     // World-space gradient along DIRECTION, from the top left corner to the farthest corner,
@@ -601,12 +576,13 @@ const atmosphericLighting = {
         stops: [[0, '255,244,190', 1], [0.1, '255,214,100', 1], [0.22, '255,165,40', 0.9],
             [0.4, '250,125,25', 0.4], [0.65, '240,110,25', 0.1], [1, '230,100,30', 0]],
         shade: '200,140,104',
+        door: '255,196,96',
         halo: 0.75,
         haloStops: [[0, '255,190,90', 0.75], [0.3, '255,150,50', 0.45], [0.6, '245,120,35', 0.15],
             [1, '230,100,30', 0]],
-        coreStops: [[0, '255,253,240', 1], [0.3, '255,244,190', 1], [0.55, '255,205,90', 1],
-            [0.8, '250,150,40', 1], [1, '225,105,30', 1]],
-        coreReach: 1.7,
+        coreStops: [[0, '255,253,240', 1], [0.25, '255,242,175', 1], [0.5, '255,205,85', 1],
+            [0.75, '250,152,40', 1], [1, '225,105,30', 1]],
+        coreReach: 1.45,
         // The halo kept on the stone: a warm rim around the doorway.
         haloOnStone: 0.4
     },
@@ -648,7 +624,8 @@ const atmosphericLighting = {
         let overlay = this.lampOverlays.get(image)
         if (overlay && overlay.radius === basis.r && overlay.name === name) return overlay
         const door = this.DOOR[name] || this.DOOR.goldmine
-        // Shade: the sprite's silhouette in the stone tint, the doorway white (unchanged by multiply).
+        // Shade: the sprite's silhouette in the stone tint, the doorway gold (a white doorway
+        // under the screen core reads pale cream; gold leaves it a flame of white in amber).
         const shade = document.createElement('canvas')
         shade.width = image.width
         shade.height = image.height
@@ -658,7 +635,7 @@ const atmosphericLighting = {
         g.fillStyle = `rgb(${this.BLOOM.shade})`
         g.fillRect(0, 0, shade.width, shade.height)
         g.globalCompositeOperation = 'source-atop'
-        g.fillStyle = '#fff'
+        g.fillStyle = `rgb(${this.BLOOM.door})`
         this.doorPath(g, door, image)
         g.fill()
         // Glow: the halo around the doorway with the stone cut out, then the hot core in the doorway.
