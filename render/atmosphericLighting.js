@@ -5,19 +5,23 @@
 // Units, overlays and UI are drawn after it, so they are never darkened.
 const atmosphericLighting = {
     // Light map units: 0..255 per channel, 255 = the unchanged surface.
-    // A broad key light from the upper left. Stops along the board diagonal:
-    // [t, ambient, gain], overall lift = ambient / (255 - gain): the marble tiles (TILE)
-    // become the concept's warm cream (red lifted most, blue above green), bright near
-    // the key light, falling off to a slightly lavender grey.
+    // A broad key light from the left, falling mostly across the board (DIRECTION, world
+    // space) and a little down it. Stops along that axis: [t, ambient, gain], overall
+    // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
+    // peach-cream near the key light, then pale grey, then cool lavender-grey on the far side.
     KEY: [
-        [0, [205, 205, 205], [115, 105, 117]],
-        [0.15, [205, 205, 205], [115, 105, 117]],
-        [0.35, [205, 205, 205], [93, 74, 84]],
-        [0.5, [205, 205, 205], [83, 65, 75]],
-        [0.65, [205, 205, 205], [72, 57, 69]],
-        [0.85, [205, 205, 205], [53, 48, 62]],
-        [1, [205, 205, 205], [53, 48, 62]]
+        [0, [205, 205, 205], [113, 77, 25]],
+        [0.15, [205, 205, 205], [113, 77, 25]],
+        [0.26, [205, 205, 205], [107, 63, 29]],
+        [0.38, [205, 205, 205], [90, 55, 27]],
+        [0.5, [205, 205, 205], [81, 49, 29]],
+        [0.62, [205, 205, 205], [37, 36, 43]],
+        [0.75, [205, 205, 205], [21, 30, 57]],
+        [0.85, [205, 205, 205], [19, 28, 52]],
+        [1, [205, 205, 205], [19, 28, 52]]
     ],
+    // Key light axis (x, y); y per unit of x.
+    DIRECTION: [1, 0.6],
     // Lamp light added to the ambient (no blue: the warm filter below removes some).
     LAMP: {
         town: {color: [255, 150, 84], power: 1},
@@ -27,8 +31,10 @@ const atmosphericLighting = {
     // Color-dodge gain at the lamp: x2.4 red, x1.86 green, x1.12 blue (gold, like the concept's lit stone),
     // brighter than the key-lit cream so the pools stay above it.
     GAIN: '150,118,28',
-    OWNED_GAIN: '51,51,51',
     TAIL_RADII: 2.5,
+    // Glow of owned tiles on the stone next to them: reach in hex radii, colour mixed towards white.
+    // Owned tiles: colour gamma (deeper) and a stone mix [r, g, b, amount].
+    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12]},
     // Upper-left key light direction (degrees, screen space, y down) for shadows.
     KEY_ANGLE: -120,
     // Tile look: pale cream marble tiles set in thin light grout. Each visible cell is
@@ -38,10 +44,11 @@ const atmosphericLighting = {
     TILE: {
         variants: 8,
         rasterScale: 1.5,
-        // Before the light map, which lifts the stone by about 1.1-1.5 (more to the upper left).
+        // Near neutral before the light map, which warms it on the key side (about 1.45 red)
+        // and cools it on the far side (about 0.93 red).
         grout: '#5f5850',
         groutWidth: 0.065,
-        stone: [150, 140, 125],
+        stone: [150, 146, 150],
         sheen: 0.1
     },
     tileVariants: null,
@@ -96,10 +103,12 @@ const atmosphericLighting = {
             if (!includeCells && !emitsLight) continue
             const pos = hex.calcPos()
             const name = emitsLight ? building.isDemonPortal ? 'demonPortal' : building.name : ''
-            const owned = hex.playerColor !== 0
-            if (includeCells) cells.push({x, y, pos, owned})
+            // Owned tiles keep their player colour: no stone lighting, a soft glow of it instead.
+            const owner = hex.playerColor ? hex.player?.color : null
+            if (includeCells) cells.push({x, y, pos, owner})
             if (emitsLight) sources.push({x, y, pos, name})
-            if (includeKey) key += x + ',' + y + (owned ? ',o' : '') + (emitsLight ? ',' + name : '') + ';'
+            if (includeKey) key += x + ',' + y + (emitsLight ? ',' + name : '') +
+                (owner ? ',o' + hex.playerColor : '') + ';'
         }
         return {cells, sources, key}
     },
@@ -170,11 +179,24 @@ const atmosphericLighting = {
         const g = this.canvasFor('map', bounds, scale)
         g.fillStyle = '#fff'
         g.fillRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        this.hexPath(g, cells)
+        const stone = cells.filter(cell => !cell.owner)
+        this.hexPath(g, stone)
         g.save()
         g.clip()
         g.fillStyle = this.keyGradient(g, bounds, 'ambient')
         g.fill()
+        // Territory glow: each owned tile tints the stone around it with its colour.
+        g.globalCompositeOperation = 'multiply'
+        for (const {pos, owner} of cells) {
+            if (!owner) continue
+            const reach = this.TERRITORY.reach * basis.r, mix = c => Math.round(c + (255 - c) * this.TERRITORY.mix)
+            const glow = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, reach)
+            glow.addColorStop(0, `rgba(${mix(owner.r)},${mix(owner.g)},${mix(owner.b)},1)`)
+            glow.addColorStop(0.45, `rgba(${mix(owner.r)},${mix(owner.g)},${mix(owner.b)},0.55)`)
+            glow.addColorStop(1, `rgba(${mix(owner.r)},${mix(owner.g)},${mix(owner.b)},0)`)
+            g.fillStyle = glow
+            g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
+        }
         // Each lamp is added: smooth falloff over about 2.5 hex radii, no hard rim.
         g.globalCompositeOperation = 'lighter'
         for (const source of sources) {
@@ -197,24 +219,12 @@ const atmosphericLighting = {
             g.fillRect(pos.x - basis.r, pos.y - basis.r, 2 * basis.r, 2 * basis.r)
         }
         g.restore()
-        // Owned ground keeps its team colour: there the map is made neutral grey (same
-        // luminosity), so the multiply only darkens or keeps it, never retints it.
-        const owned = cells.filter(cell => cell.owned)
-        if (owned.length) {
-            g.save()
-            this.hexPath(g, owned)
-            g.clip()
-            g.globalCompositeOperation = 'saturation'
-            g.fillStyle = '#808080'
-            g.fill()
-            g.restore()
-        }
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
         // a low, near-neutral cream-gold so no channel saturates into flat paint.
         const k = this.canvasFor('gain', bounds, scale)
         k.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        this.hexPath(k, cells)
+        this.hexPath(k, stone)
         k.save()
         k.clip()
         for (const source of sources)
@@ -238,26 +248,17 @@ const atmosphericLighting = {
         k.globalCompositeOperation = 'destination-over'
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
-        // Owned ground gets a neutral gain of at most x1.25 instead (key and lamps), which
-        // undoes the ambient: a per-channel or clipping lift would push team colours off hue.
-        if (owned.length) {
-            this.hexPath(k, owned)
-            k.clip()
-            k.globalCompositeOperation = 'copy'
-            k.fillStyle = this.keyGradient(k, bounds, 'owned')
-            k.fill()
-            k.globalCompositeOperation = 'lighten'
-            for (const source of sources)
-                this.pool(k, source, 0.8 * r, [[0, 1], [0.25, 0.85], [0.5, 0.45], [0.75, 0.14], [1, 0]],
-                    this.OWNED_GAIN)
-        }
         k.restore()
     },
-    // World-space diagonal gradient, so panning never changes the light.
+    // World-space gradient along DIRECTION, from the top left corner to the farthest corner,
+    // so panning never changes the light.
     keyGradient(g, bounds, part) {
-        const gradient = g.createLinearGradient(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        const [dx, dy] = this.DIRECTION
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        const k = (w * dx + h * dy) / (dx * dx + dy * dy)
+        const gradient = g.createLinearGradient(bounds.left, bounds.top, bounds.left + k * dx, bounds.top + k * dy)
         for (const [t, ambient, gain] of this.KEY)
-            gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : part === 'gain' ? gain : Array(3).fill(Math.min(...gain, parseInt(this.OWNED_GAIN)))})`)
+            gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : gain})`)
         return gradient
     },
     // The strongest visible lamp within reach of a point (its own lamp excluded) and its strength.
@@ -320,16 +321,16 @@ const atmosphericLighting = {
         g.clip()
         const rand = this.random(0x9e3779b9 * (index + 1))
         // Each slab is a little lighter or darker than its neighbours.
-        const shade = 0.96 + 0.08 * rand()
+        const shade = 0.94 + 0.12 * rand()
         const [sr, sg, sb] = this.TILE.stone.map(v => Math.round(v * shade))
         g.fillStyle = `rgb(${sr},${sg},${sb})`
         g.fillRect(-r, -r, 2 * r, 2 * r)
-        // Clouds: broad, very low contrast mottling.
+        // Clouds: broad, low contrast mottling.
         for (let i = 0; i < 26; i++) {
             const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r, radius = (0.25 + 0.5 * rand()) * r
             const tone = rand() < 0.55 ? 1.12 : 0.9
             const color = `${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
-                (0.15 + 0.25 * rand()).toFixed(3)
+                (0.2 + 0.3 * rand()).toFixed(3)
             const cloud = g.createRadialGradient(x, y, 0, x, y, radius)
             cloud.addColorStop(0, `rgba(${color})`)
             cloud.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
@@ -351,8 +352,9 @@ const atmosphericLighting = {
             }
             points.push({x: Math.cos(b) * r, y: Math.sin(b) * r})
             const strength = v === 0 ? 1 : 0.6
-            for (const [width, alpha] of [[0.12, 0.03], [0.04, 0.035], [0.012, 0.05]]) {
-                g.strokeStyle = `rgba(${Math.round(sr * 0.7)},${Math.round(sg * 0.7)},${Math.round(sb * 0.7)},${(alpha * strength).toFixed(3)})`
+            // Cool grey, wide enough to read at the normal zoom.
+            for (const [width, alpha] of [[0.14, 0.05], [0.05, 0.07], [0.02, 0.09]]) {
+                g.strokeStyle = `rgba(${Math.round(sr * 0.62)},${Math.round(sg * 0.64)},${Math.round(sb * 0.7)},${(alpha * strength).toFixed(3)})`
                 g.lineWidth = width * r
                 g.beginPath()
                 g.moveTo(points[0].x, points[0].y)
@@ -389,14 +391,17 @@ const atmosphericLighting = {
         g.fillStyle = sheen
         g.fillRect(x - r, y - r, 2 * r, 2 * r)
     },
-    // Owned tile colour as the classic tile shows it: full colour on suburbs, lightened elsewhere.
+    // Owned tile colour, deepened like coloured stone (TERRITORY.depth gamma, a little stone
+    // mixed in), then as the classic tile shows it: full on suburbs, lightened elsewhere.
     tileFill(hexagon) {
         const {r, g, b} = hexagon.player.color
         const key = r + ',' + g + ',' + b + (hexagon.isSuburb ? ',s' : '')
         let fill = this.tileFills.get(key)
         if (!fill) {
-            const mix = c => Math.round(hexagon.isSuburb ? c : c + (255 - c) * 0.4)
-            fill = `rgb(${mix(r)},${mix(g)},${mix(b)})`
+            const {depth, stone} = this.TERRITORY
+            const deep = (c, i) => 255 * (c / 255) ** depth * (1 - stone[3]) + stone[i] * stone[3]
+            const mix = (c, i) => Math.round(hexagon.isSuburb ? deep(c, i) : deep(c, i) + (255 - deep(c, i)) * 0.4)
+            fill = `rgb(${mix(r, 0)},${mix(g, 1)},${mix(b, 2)})`
             this.tileFills.set(key, fill)
         }
         return fill
@@ -428,6 +433,13 @@ const atmosphericLighting = {
         ctx.fillStyle = this.tileFill(hexagon)
         ctx.fill()
         ctx.clip()
+        // Lit at the centre, a little deeper towards the grout.
+        const shade = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, basis.r)
+        shade.addColorStop(0, 'rgba(255,255,255,0.1)')
+        shade.addColorStop(0.5, 'rgba(255,255,255,0)')
+        shade.addColorStop(1, 'rgba(10,10,40,0.24)')
+        ctx.fillStyle = shade
+        ctx.fillRect(c.x - basis.r, c.y - basis.r, 2 * basis.r, 2 * basis.r)
         this.drawSheen(ctx, c.x, c.y, this.TILE.sheen)
         ctx.restore()
     },
