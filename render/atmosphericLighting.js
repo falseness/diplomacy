@@ -28,21 +28,20 @@ const atmosphericLighting = {
         goldmine: {power: 1},
         demonPortal: {power: 0.9}
     },
-    // Lamp spill: a low amber wash on the lamp's own cell and its neighbours, a soft
-    // cream-gold halo around each doorway that lights the building and the stone beside
-    // it, then amber pools on the stone in front of (below) the doorway,
-    // broad and fading down the board, like the concept. Each layer is an ellipse
+    // Lamp spill: a broad, low warm wash around each source (beside and above it too), a
+    // low amber wash on the lamp's own cell, then a wide, short amber fan on the stone in
+    // front of (below) the doorway, brightest at its foot. Each layer is an ellipse
     // [centre below the cell centre, half width, half height] (hex radii) blended over the
     // key light (source-over), so a pool looks the same on both sides of the board and fades
     // into the key-lit stone with no rim. map: multiply colour (blue held back -> amber,
-    // outer layers paler cream), gain: color-dodge lift. Hot layer last, just below the door.
+    // outer layers paler cream), gain: color-dodge lift. Hot layers last, just below the door.
     SPILL: [
-        {dy: 0.05, rx: 1.2, ry: 1.05, alpha: 0.6, map: [255, 232, 196], gain: [36, 20, 4]},
-        {dy: 0.55, rx: 1.8, ry: 1.4, alpha: 0.85, map: [255, 236, 210], gain: [80, 54, 28]},
-        {dy: 1.35, rx: 1.5, ry: 1.35, alpha: 0.9, map: [255, 224, 170], gain: [100, 58, 8]},
-        {dy: 1.05, rx: 1.05, ry: 0.85, alpha: 0.95, map: [255, 226, 144], gain: [108, 68, 0]},
-        {dy: 0.8, rx: 0.75, ry: 0.6, alpha: 1, map: [255, 238, 170], gain: [124, 96, 6]},
-        {dy: 0.55, rx: 0.5, ry: 0.3, alpha: 0.9, map: [255, 226, 150], gain: [128, 90, 4]}
+        {dy: 0.4, rx: 2.5, ry: 2.1, alpha: 0.9, map: [255, 236, 210], gain: [92, 60, 26]},
+        {dy: 0.05, rx: 1.3, ry: 1.1, alpha: 0.6, map: [255, 234, 204], gain: [56, 34, 10]},
+        {dy: 1.2, rx: 2.0, ry: 1.5, alpha: 0.9, map: [255, 232, 196], gain: [100, 66, 28]},
+        {dy: 1.0, rx: 1.4, ry: 0.95, alpha: 0.9, map: [255, 230, 176], gain: [112, 76, 22]},
+        {dy: 0.75, rx: 1.0, ry: 0.55, alpha: 0.95, map: [255, 238, 186], gain: [124, 94, 30]},
+        {dy: 0.5, rx: 0.65, ry: 0.4, alpha: 0.95, map: [255, 240, 180], gain: [134, 108, 34]}
     ],
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
@@ -188,6 +187,30 @@ const atmosphericLighting = {
         g.fillRect(-1, -1, 2, 2)
         g.restore()
     },
+    // Every lamp's spill layers, composited once per light map scale into a sprite (source-over
+    // is associative, so drawing the sprite equals drawing its layers), then one image per lamp.
+    spillSprites: new Map(),
+    spillSpriteBuilds: 0,
+    drawSpill(g, sources, part, scale) {
+        if (!sources.length) return
+        const r = basis.r, key = part + ',' + r + ',' + scale
+        let sprite = this.spillSprites.get(part)
+        if (!sprite || sprite.key !== key) {
+            const left = Math.min(...this.SPILL.map(l => -l.rx)) * r, right = Math.max(...this.SPILL.map(l => l.rx)) * r
+            const top = Math.min(...this.SPILL.map(l => l.dy - l.ry)) * r, bottom = Math.max(...this.SPILL.map(l => l.dy + l.ry)) * r
+            const surface = sprite ? sprite.surface : document.createElement('canvas')
+            surface.width = Math.max(1, Math.ceil((right - left) * scale))
+            surface.height = Math.max(1, Math.ceil((bottom - top) * scale))
+            const s = surface.getContext('2d')
+            s.setTransform(scale, 0, 0, scale, -left * scale, -top * scale)
+            for (const layer of this.SPILL) this.spill(s, {pos: {x: 0, y: 0}}, layer, layer[part])
+            sprite = {key, surface, left, top, width: surface.width / scale, height: surface.height / scale}
+            this.spillSprites.set(part, sprite)
+            ++this.spillSpriteBuilds
+        }
+        for (const {pos} of sources)
+            g.drawImage(sprite.surface, pos.x + sprite.left, pos.y + sprite.top, sprite.width, sprite.height)
+    },
     build({cells, sources}, bounds, scale) {
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
         // the authorized visible cells, which get the cool ambient plus warm lamps.
@@ -214,8 +237,7 @@ const atmosphericLighting = {
         }
         // Lamp spill (multiply part): the blue is held back towards amber.
         g.globalCompositeOperation = 'source-over'
-        for (const layer of this.SPILL)
-            for (const source of sources) this.spill(g, source, layer, layer.map)
+        this.drawSpill(g, sources, 'map', scale)
         g.restore()
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
@@ -228,8 +250,7 @@ const atmosphericLighting = {
         // The key light's lift, then each lamp's spill blended over it.
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
-        for (const layer of this.SPILL)
-            for (const source of sources) this.spill(k, source, layer, layer.gain)
+        this.drawSpill(k, sources, 'gain', scale)
         k.restore()
     },
     // World-space gradient along DIRECTION, from the top left corner to the farthest corner,
@@ -572,12 +593,14 @@ const atmosphericLighting = {
         ctx.restore()
         this.bloom(ctx, board)
     },
-    // Bloom: the lamp sprite is shaded (multiply) light warm near the doorway and grey-tan
-    // towards its rim, with a soft dark edge away from the key light, a gold band on the arch
-    // around the opening and the doorway a deep orange recess. Then 'screen' adds the same
-    // band as a rim light, a flare over the rim, a white-gold flame in the opening and an
-    // amber halo on the stone. Both overlays are built once per sprite raster; the old round
-    // sprite is the fallback for a missing raster.
+    // Bloom: a cave is graded per pixel (grade below) to warm brown stone, darker towards its
+    // rim, with a gold lit arch around a deep orange recess. Other lamp sprites are shaded
+    // (multiply) light warm near the doorway and grey-tan towards the rim, with a soft dark
+    // edge away from the key light, a gold band on the arch and the doorway a deep orange
+    // recess. Then 'screen' adds the cave grade's lift (or the band as a rim light), a flare
+    // over the rim, a white-gold flame in the opening and an amber halo on the stone. Both
+    // overlays are built once per sprite raster; the old round sprite is the fallback for a
+    // missing raster.
     BLOOM: {
         radius: 0.9,
         stops: [[0, '255,244,190', 1], [0.1, '255,214,100', 1], [0.22, '255,165,40', 0.9],
@@ -609,11 +632,17 @@ const atmosphericLighting = {
         coreStops: [[0, '255,255,250', 1], [0.6, '255,253,232', 1], [0.78, '255,228,136', 1],
             [0.88, '255,176,64', 0.7], [1, '250,140,40', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
-        haloOnSprite: 0
+        haloOnSprite: 0,
+        // Cave grade, per pixel of the sprite raster: grey-taupe stone from the sprite's own
+        // luminance (stone: channel factors), a gold lit inner arch fading over goldWidth door
+        // half widths from the opening, the opening an orange recess. Reached by the shade
+        // multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
+        grade: {stone: [0.96, 0.68, 0.55], gold: [255, 192, 92], goldAmount: 0.95, goldWidth: 2.0,
+            goldPower: 1.2, rimDark: 0.35, flareReach: 1.6}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
-        goldmine: {x: 0.495, y: 0.65, w: 0.1, h: 0.155},
+        goldmine: {x: 0.495, y: 0.65, w: 0.1, h: 0.155, grade: true},
         // A town keeps its warm lit walls: a lighter tint than the cave's grey-tan rim, no
         // arch band or dark edge.
         town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085, ring: null, edge: null,
@@ -693,6 +722,69 @@ const atmosphericLighting = {
         a.drawImage(image, pad, pad)
         return arc
     },
+    // The cave grade's shade (multiply factors) and lift ('screen') canvases, or null when
+    // the raster's pixels can't be read.
+    gradeCanvases(image, door) {
+        const W = image.width, H = image.height, rw = door.w * W, cx = door.x * W
+        const top = (door.y - door.h) * H + rw, bottom = (door.y + door.h) * H
+        const {stone, gold, goldAmount, goldWidth, goldPower, rimDark} = this.BLOOM.grade
+        const shade = document.createElement('canvas'), lift = document.createElement('canvas')
+        shade.width = lift.width = W
+        shade.height = lift.height = H
+        const g = shade.getContext('2d')
+        g.drawImage(image, 0, 0)
+        let pixels
+        try {
+            pixels = g.getImageData(0, 0, W, H)
+        } catch (_) {
+            return null
+        }
+        const l = lift.getContext('2d'), raised = l.createImageData(W, H)
+        const src = pixels.data, up = raised.data, recess = this.BLOOM.recessStops.map(([t, c]) => [t, c.split(',').map(Number)])
+        const target = [0, 0, 0]
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+            // Faint pixels (the contact shadow on the ground) keep their look, so the grade
+            // never reaches the stone beside the sprite.
+            const i = 4 * (y * W + x), a = Math.round(src[i + 3] * Math.min(1, Math.max(0, (src[i + 3] / 255 - 0.6) / 0.3)))
+            src[i + 3] = a
+            if (!a) continue
+            const px = x + 0.5, py = y + 0.5
+            // Signed distance from the opening's outline, in door half widths.
+            const d = (py < top ? Math.hypot(px - cx, py - top) - rw : Math.max(Math.abs(px - cx) - rw, py - bottom)) / rw
+            const lum = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]
+            if (d < 0) {
+                const t = Math.min(1, Math.max(0, (px - cx + rw) / (2 * rw)))
+                let k = 1
+                while (k < recess.length - 1 && recess[k][0] < t) k++
+                const [t0, c0] = recess[k - 1], [t1, c1] = recess[k], f = (t - t0) / (t1 - t0 || 1)
+                for (let c = 0; c < 3; c++) target[c] = c0[c] + (c1[c] - c0[c]) * f
+            } else {
+                // The stone darkens towards the dome's rim, away from the lit opening.
+                const w = goldAmount * Math.max(0, 1 - d / goldWidth) ** goldPower, light = 0.55 + 0.45 * lum / 255
+                const rim = 1 - rimDark * Math.min(1, Math.hypot(px - cx, py - top) / (0.45 * W))
+                for (let c = 0; c < 3; c++) target[c] = lum * stone[c] * rim * (1 - w) + gold[c] * light * w
+            }
+            for (let c = 0; c < 3; c++) {
+                const o = src[i + c], t = Math.min(255, target[c])
+                src[i + c] = t >= o ? 255 : Math.round(255 * t / o)
+                up[i + c] = t > o ? Math.round(255 * (t - o) / (255 - o)) : 0
+            }
+            up[i + 3] = a
+        }
+        g.putImageData(pixels, 0, 0)
+        l.putImageData(raised, 0, 0)
+        // Copies that are never read back: a canvas read with getImageData may be kept in
+        // software, which slows every frame that draws it.
+        return {shade: this.copyCanvas(shade), lift: this.copyCanvas(lift)}
+    },
+    copyCanvas(source) {
+        const copy = document.createElement('canvas')
+        copy.width = source.width
+        copy.height = source.height
+        copy.getContext('2d').drawImage(source, 0, 0)
+        source.width = source.height = 0
+        return copy
+    },
     lampOverlay(image, name) {
         let overlay = this.lampOverlays.get(image)
         if (overlay && overlay.radius === basis.r && overlay.name === name) return overlay
@@ -701,27 +793,32 @@ const atmosphericLighting = {
         const dx = door.x * W, dy = (door.y + 0.4 * door.h) * H
         // Shade (multiply): the sprite's silhouette in a light tint about the doorway, the
         // doorway a recess, deep orange at its sides and foot.
-        const shade = document.createElement('canvas')
-        shade.width = W
-        shade.height = H
-        let g = shade.getContext('2d')
-        g.drawImage(image, 0, 0)
-        g.globalCompositeOperation = 'source-in'
-        const tint = g.createRadialGradient(dx, dy, 0, dx, dy, this.BLOOM.shadeReach * W)
-        for (const [t, color] of door.shadeStops || this.BLOOM.shadeStops)
-            tint.addColorStop(t, `rgb(${color})`)
-        g.fillStyle = tint
-        g.fillRect(0, 0, W, H)
-        g.globalCompositeOperation = 'source-atop'
-        const recess = g.createLinearGradient(dx - rw, 0, dx + rw, 0)
-        for (const [t, color] of this.BLOOM.recessStops)
-            recess.addColorStop(t, `rgb(${color})`)
-        g.fillStyle = recess
-        this.doorPath(g, door, image)
-        g.fill()
-        const edge = door.edge === undefined ? this.BLOOM.edge : door.edge
+        const graded = door.grade && this.gradeCanvases(image, door)
+        let shade, g
+        if (graded) shade = graded.shade
+        else {
+            shade = document.createElement('canvas')
+            shade.width = W
+            shade.height = H
+            g = shade.getContext('2d')
+            g.drawImage(image, 0, 0)
+            g.globalCompositeOperation = 'source-in'
+            const tint = g.createRadialGradient(dx, dy, 0, dx, dy, this.BLOOM.shadeReach * W)
+            for (const [t, color] of door.shadeStops || this.BLOOM.shadeStops)
+                tint.addColorStop(t, `rgb(${color})`)
+            g.fillStyle = tint
+            g.fillRect(0, 0, W, H)
+            g.globalCompositeOperation = 'source-atop'
+            const recess = g.createLinearGradient(dx - rw, 0, dx + rw, 0)
+            for (const [t, color] of this.BLOOM.recessStops)
+                recess.addColorStop(t, `rgb(${color})`)
+            g.fillStyle = recess
+            this.doorPath(g, door, image)
+            g.fill()
+        }
+        const edge = graded ? null : door.edge === undefined ? this.BLOOM.edge : door.edge
         if (edge) g.drawImage(this.edgeCanvas(image, edge), 0, 0)
-        const ring = door.ring === undefined ? this.BLOOM.ring : door.ring
+        const ring = graded ? null : door.ring === undefined ? this.BLOOM.ring : door.ring
         if (ring) g.drawImage(this.ringCanvas(image, door, ring, 0, ring.shade), 0, 0)
         // Glow ('screen'): the halo around the doorway with the stone cut out, the rim-light
         // ring on the arch, the flare over the rim, and the flame in the opening.
@@ -741,9 +838,10 @@ const atmosphericLighting = {
         g.drawImage(image, pad, pad)
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
+        if (graded) g.drawImage(graded.lift, pad, pad)
         if (ring) g.drawImage(this.ringCanvas(image, door, ring, pad, ring.color), 0, 0)
         // Flare: the doorway's light spilling over its rim onto the arch.
-        const flareReach = this.BLOOM.flareReach * rw
+        const flareReach = (graded ? this.BLOOM.grade.flareReach : this.BLOOM.flareReach) * rw
         const flare = g.createRadialGradient(cx, cy, 0, cx, cy, flareReach)
         for (const [t, color, alpha] of this.BLOOM.flareStops)
             flare.addColorStop(t, `rgba(${color},${alpha})`)
