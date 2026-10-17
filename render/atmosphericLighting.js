@@ -6,9 +6,9 @@
 const atmosphericLighting = {
     // Light map units: 0..255 per channel, 255 = the unchanged surface.
     // A broad key light from the upper left. Stops along the board diagonal:
-    // [t, ambient, gain], overall lift = ambient / (255 - gain): the yellow-tan tile
-    // art becomes the concept's peach-cream marble (red lifted most, blue above
-    // green), bright near the key light, falling off to a slightly lavender grey.
+    // [t, ambient, gain], overall lift = ambient / (255 - gain): the marble tiles (TILE)
+    // become the concept's warm cream (red lifted most, blue above green), bright near
+    // the key light, falling off to a slightly lavender grey.
     KEY: [
         [0, [205, 205, 205], [115, 105, 117]],
         [0.15, [205, 205, 205], [115, 105, 117]],
@@ -28,19 +28,24 @@ const atmosphericLighting = {
     // brighter than the key-lit cream so the pools stay above it.
     GAIN: '150,118,28',
     TAIL_RADII: 2.5,
-    // Hex edge bevels: 12 pre-rendered variants of the tile rim, lit from 0, 30, ... 330
-    // degrees (screen space, y down). Each tile draws the variant facing its strongest
-    // light: the nearest-strongest visible lamp within reach, else the upper-left key.
-    EDGE: {
-        directions: 12,
-        keyAngle: -120,
-        keyIntensity: 0.75,
-        reachRadii: 3,
-        width: 0.10,
-        rasterScale: 1.5
+    // Upper-left key light direction (degrees, screen space, y down) for shadows.
+    KEY_ANGLE: -120,
+    // Tile look: pale cream marble tiles set in thin light grout. Each visible cell is
+    // inset by half the grout width over a grout fill of the visible cells, so there
+    // are no outlines or seams. Neutral tiles draw one of a few procedurally generated,
+    // cached marble variants; owned tiles keep their colour under a faint sheen.
+    TILE: {
+        variants: 8,
+        rasterScale: 1.5,
+        // Before the light map, which lifts the stone by about 1.1-1.5 (more to the upper left).
+        grout: '#5f5850',
+        groutWidth: 0.065,
+        stone: [150, 140, 125],
+        sheen: 0.1
     },
-    edgeVariants: null,
-    edgeVariantBuilds: 0,
+    tileVariants: null,
+    tileVariantBuilds: 0,
+    tileFills: new Map(),
     // Soft object shadows: a darkened, blurred silhouette of the board object's own sprite,
     // turned about the object's base to point away from its strongest visible light (a lamp
     // within reach, else the upper-left key) and fading towards its tip.
@@ -228,59 +233,6 @@ const atmosphericLighting = {
             gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : gain})`)
         return gradient
     },
-    // One variant per light direction, built once (same geometry as getVertices): a thin
-    // dark joint on every edge, a warm lit band on the edges facing the light and a shaded
-    // band on the edges turned away, each fading towards the tile's centre.
-    edgeVariant(index) {
-        if (!this.edgeVariants || this.edgeVariants.radius !== basis.r) {
-            this.edgeVariants = Object.assign(new Array(this.EDGE.directions), {radius: basis.r})
-            ++this.edgeVariantBuilds
-            const r = basis.r, s = this.EDGE.rasterScale, size = Math.ceil(2 * r * s) + 4
-            for (let k = 0; k < this.EDGE.directions; k++) {
-                const surface = document.createElement('canvas')
-                surface.width = surface.height = size
-                const g = surface.getContext('2d')
-                g.setTransform(s, 0, 0, s, size / 2, size / 2)
-                const outer = mapDepth.getVertices({x: 0, y: 0})
-                const inset = 1 - this.EDGE.width * 2 / Math.sqrt(3)
-                const inner = outer.map(({x, y}) => ({x: x * inset, y: y * inset}))
-                const light = k * 2 * Math.PI / this.EDGE.directions
-                // Clipped to the hex here, so tiles draw the variant without a clip of their own.
-                g.beginPath()
-                outer.forEach(({x, y}, i) => i ? g.lineTo(x, y) : g.moveTo(x, y))
-                g.closePath()
-                g.clip()
-                for (let i = 0; i < 6; i++) {
-                    const j = (i + 1) % 6
-                    const facing = Math.cos((-90 + 60 * i) * Math.PI / 180 - light)
-                    const color = facing > 0 ? `255,206,136,${(0.95 * facing).toFixed(3)}`
-                        : `46,34,40,${(0.5 * -facing).toFixed(3)}`
-                    const a = {x: (outer[i].x + outer[j].x) / 2, y: (outer[i].y + outer[j].y) / 2}
-                    const b = {x: (inner[i].x + inner[j].x) / 2, y: (inner[i].y + inner[j].y) / 2}
-                    const band = g.createLinearGradient(a.x, a.y, b.x, b.y)
-                    band.addColorStop(0, `rgba(${color})`)
-                    band.addColorStop(0.5, `rgba(${color.replace(/[^,]+$/, x => (x * 0.8).toFixed(3))})`)
-                    band.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
-                    g.fillStyle = band
-                    g.beginPath()
-                    g.moveTo(outer[i].x, outer[i].y)
-                    g.lineTo(outer[j].x, outer[j].y)
-                    g.lineTo(inner[j].x, inner[j].y)
-                    g.lineTo(inner[i].x, inner[i].y)
-                    g.closePath()
-                    g.fill()
-                }
-                g.strokeStyle = 'rgba(27,39,58,0.4)'
-                g.lineWidth = r * 0.03
-                g.beginPath()
-                outer.forEach(({x, y}, i) => i ? g.lineTo(x, y) : g.moveTo(x, y))
-                g.closePath()
-                g.stroke()
-                this.edgeVariants[k] = surface
-            }
-        }
-        return this.edgeVariants[index]
-    },
     // The strongest visible lamp within reach of a point (its own lamp excluded) and its strength.
     strongestLamp(center, sources, reachRadii) {
         const reach = reachRadii * basis.r
@@ -297,26 +249,160 @@ const atmosphericLighting = {
         }
         return {best, strength}
     },
-    // Variant index and intensity for a tile centre, from visible light sources only.
-    edgeLight(center, sources) {
-        const {best, strength} = this.strongestLamp(center, sources, this.EDGE.reachRadii)
-        const n = this.EDGE.directions
-        const angle = best ? Math.atan2(best.y - center.y, best.x - center.x) * 180 / Math.PI
-            : this.EDGE.keyAngle
-        return {
-            index: ((Math.round(angle / (360 / n)) % n) + n) % n,
-            intensity: best ? Math.min(1, this.EDGE.keyIntensity + 0.6 * strength) : this.EDGE.keyIntensity
+    // Hexagon of radius r about (x, y), as getVertices.
+    hexagonPath(g, x, y, r) {
+        const h = r * Math.sqrt(3) / 2
+        g.moveTo(x - r / 2, y - h)
+        g.lineTo(x + r / 2, y - h)
+        g.lineTo(x + r, y)
+        g.lineTo(x + r / 2, y + h)
+        g.lineTo(x - r / 2, y + h)
+        g.lineTo(x - r, y)
+        g.closePath()
+    },
+    // Inset tile radius: the grout shows half its width on each side of an edge.
+    tileRadius() {
+        return basis.r * (1 - this.TILE.groutWidth / Math.sqrt(3))
+    },
+    // A small deterministic generator, so every variant looks the same on every load.
+    random(seed) {
+        let a = seed >>> 0
+        return () => {
+            a = (a + 0x6D2B79F5) >>> 0
+            let t = Math.imul(a ^ (a >>> 15), 1 | a)
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296
         }
     },
-    // Draws the chosen pre-rendered edge variant over a tile (world transform, no clip needed).
-    drawEdges(ctx, center, sources) {
-        const {index, intensity} = this.edgeLight(center, sources)
-        const variant = this.edgeVariant(index)
-        const size = variant.width / this.EDGE.rasterScale
-        const alpha = ctx.globalAlpha
-        ctx.globalAlpha = alpha * intensity
-        ctx.drawImage(variant, center.x - size / 2, center.y - size / 2, size, size)
-        ctx.globalAlpha = alpha
+    // Marble variants, built once per hex radius: cream stone with soft light and warm
+    // grey clouds, a few thin grey veins with faint halos, and a soft sheen from the
+    // upper left. Clipped to the inset tile, centred in the raster.
+    tileVariant(index) {
+        if (!this.tileVariants || this.tileVariants.radius !== basis.r) {
+            this.tileVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
+            ++this.tileVariantBuilds
+        }
+        if (this.tileVariants[index]) return this.tileVariants[index]
+        const r = basis.r, s = this.TILE.rasterScale, size = Math.ceil(2 * r * s) + 4
+        const surface = document.createElement('canvas')
+        surface.width = surface.height = size
+        const g = surface.getContext('2d')
+        g.setTransform(s, 0, 0, s, size / 2, size / 2)
+        g.beginPath()
+        this.hexagonPath(g, 0, 0, this.tileRadius())
+        g.clip()
+        const rand = this.random(0x9e3779b9 * (index + 1))
+        // Each slab is a little lighter or darker than its neighbours.
+        const shade = 0.96 + 0.08 * rand()
+        const [sr, sg, sb] = this.TILE.stone.map(v => Math.round(v * shade))
+        g.fillStyle = `rgb(${sr},${sg},${sb})`
+        g.fillRect(-r, -r, 2 * r, 2 * r)
+        // Clouds: broad, very low contrast mottling.
+        for (let i = 0; i < 26; i++) {
+            const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r, radius = (0.25 + 0.5 * rand()) * r
+            const tone = rand() < 0.55 ? 1.12 : 0.9
+            const color = `${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
+                (0.15 + 0.25 * rand()).toFixed(3)
+            const cloud = g.createRadialGradient(x, y, 0, x, y, radius)
+            cloud.addColorStop(0, `rgba(${color})`)
+            cloud.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
+            g.fillStyle = cloud
+            g.fillRect(x - radius, y - radius, 2 * radius, 2 * radius)
+        }
+        // Veins: wandering curves across the tile, a faint wide halo under a fine line.
+        g.lineCap = 'round'
+        const veins = 1 + Math.floor(rand() * 2)
+        for (let v = 0; v < veins; v++) {
+            const a = rand() * 2 * Math.PI, b = a + Math.PI * (0.6 + 0.6 * rand())
+            const points = [{x: Math.cos(a) * r, y: Math.sin(a) * r}]
+            for (let k = 1; k < 4; k++) {
+                const t = k / 4
+                points.push({
+                    x: (1 - t) * Math.cos(a) * r + t * Math.cos(b) * r + (rand() - 0.5) * 0.45 * r,
+                    y: (1 - t) * Math.sin(a) * r + t * Math.sin(b) * r + (rand() - 0.5) * 0.45 * r
+                })
+            }
+            points.push({x: Math.cos(b) * r, y: Math.sin(b) * r})
+            const strength = v === 0 ? 1 : 0.6
+            for (const [width, alpha] of [[0.12, 0.03], [0.04, 0.035], [0.012, 0.05]]) {
+                g.strokeStyle = `rgba(${Math.round(sr * 0.7)},${Math.round(sg * 0.7)},${Math.round(sb * 0.7)},${(alpha * strength).toFixed(3)})`
+                g.lineWidth = width * r
+                g.beginPath()
+                g.moveTo(points[0].x, points[0].y)
+                for (let k = 1; k < points.length - 1; k++) {
+                    const m = {x: (points[k].x + points[k + 1].x) / 2, y: (points[k].y + points[k + 1].y) / 2}
+                    g.quadraticCurveTo(points[k].x, points[k].y, m.x, m.y)
+                }
+                g.lineTo(points[points.length - 1].x, points[points.length - 1].y)
+                g.stroke()
+            }
+        }
+        // A fine lit lip inside the upper edges, under the grout's shadow line.
+        const lip = this.tileRadius() - 0.02 * r
+        const h = lip * Math.sqrt(3) / 2
+        g.strokeStyle = 'rgba(255,250,240,0.22)'
+        g.lineWidth = 0.03 * r
+        g.lineJoin = 'round'
+        g.beginPath()
+        g.moveTo(-lip, 0)
+        g.lineTo(-lip / 2, -h)
+        g.lineTo(lip / 2, -h)
+        g.lineTo(lip, 0)
+        g.stroke()
+        this.drawSheen(g, 0, 0, this.TILE.sheen)
+        return this.tileVariants[index] = surface
+    },
+    // A soft polished sheen from the upper left, fading out before the far corner.
+    drawSheen(g, x, y, alpha) {
+        const r = basis.r
+        const sheen = g.createLinearGradient(x - r, y - r, x + r, y + r)
+        sheen.addColorStop(0, `rgba(255,255,255,${alpha})`)
+        sheen.addColorStop(0.45, 'rgba(255,255,255,0)')
+        sheen.addColorStop(1, `rgba(90,80,90,${(alpha / 3).toFixed(3)})`)
+        g.fillStyle = sheen
+        g.fillRect(x - r, y - r, 2 * r, 2 * r)
+    },
+    // Owned tile colour as the classic tile shows it: full colour on suburbs, lightened elsewhere.
+    tileFill(hexagon) {
+        const {r, g, b} = hexagon.player.color
+        const key = r + ',' + g + ',' + b + (hexagon.isSuburb ? ',s' : '')
+        let fill = this.tileFills.get(key)
+        if (!fill) {
+            const mix = c => Math.round(hexagon.isSuburb ? c : c + (255 - c) * 0.4)
+            fill = `rgb(${mix(r)},${mix(g)},${mix(b)})`
+            this.tileFills.set(key, fill)
+        }
+        return fill
+    },
+    // The grout: one fill of the drawn, known cells, before their inset tiles.
+    drawGrout(ctx, hexagons) {
+        ctx.save()
+        ctx.beginPath()
+        for (const hexagon of hexagons) {
+            if (hexagon.unknown) continue
+            const c = hexagon.calcPos()
+            this.hexagonPath(ctx, c.x, c.y, basis.r)
+        }
+        ctx.fillStyle = this.TILE.grout
+        ctx.fill()
+        ctx.restore()
+    },
+    drawTile(ctx, hexagon) {
+        const c = hexagon.calcPos()
+        if (hexagon.playerColor === 0) {
+            const variant = this.tileVariant(hexagon.tileHash % this.TILE.variants)
+            const size = variant.width / this.TILE.rasterScale
+            ctx.drawImage(variant, c.x - size / 2, c.y - size / 2, size, size)
+            return
+        }
+        ctx.save()
+        ctx.beginPath()
+        this.hexagonPath(ctx, c.x, c.y, this.tileRadius())
+        ctx.fillStyle = this.tileFill(hexagon)
+        ctx.fill()
+        ctx.clip()
+        this.drawSheen(ctx, c.x, c.y, this.TILE.sheen)
+        ctx.restore()
     },
     // Built once per sprite raster: the sprite's alpha, blurred, filled with the shadow
     // colour and faded from its base (lowest opaque row) to its top.
@@ -380,7 +466,7 @@ const atmosphericLighting = {
         for (const {building, image, pos} of casters) {
             const {best, strength} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
             // Direction from the light to the object: the shadow points away from the light.
-            const angle = best ? Math.atan2(pos.y - best.y, pos.x - best.x) : (this.EDGE.keyAngle + 180) * Math.PI / 180
+            const angle = best ? Math.atan2(pos.y - best.y, pos.x - best.x) : (this.KEY_ANGLE + 180) * Math.PI / 180
             const dir = {x: Math.cos(angle), y: Math.sin(angle)}
             const {surface, pad, base} = this.shadowSilhouette(image)
             const L = this.SHADOW.length, W = this.SHADOW.width
