@@ -21,14 +21,16 @@ class Hexagon extends Sprite {
             return players[0]
         return players[this.playerColor]
     }
+    // Deterministic per-cell choice among the variants of a tile overlay.
+    get tileHash() {
+        return (Math.imul(this.coord.x + 1, 73856093) ^
+            Math.imul(this.coord.y + 1, 19349663) ^
+            Math.imul(grid.arr.length, 83492791) ^
+            Math.imul(grid.arr[0].length, 2654435761)) >>> 0
+    }
     get grassHex() {
-        if (!this.grassHexImage) {
-            let hash = Math.imul(this.coord.x + 1, 73856093) ^
-                Math.imul(this.coord.y + 1, 19349663) ^
-                Math.imul(grid.arr.length, 83492791) ^
-                Math.imul(grid.arr[0].length, 2654435761)
-            this.grassHexImage = cachedImages[grassHexImages[(hash >>> 0) % grassHexImages.length]]
-        }
+        if (!this.grassHexImage)
+            this.grassHexImage = cachedImages[grassHexImages[this.tileHash % grassHexImages.length]]
         return this.grassHexImage
     }
     firstpaint(_player) {
@@ -78,7 +80,7 @@ class Hexagon extends Sprite {
         }
         refreshCoopVision()
     }
-    draw(ctx, atmosphericTransform, edgeSources) {
+    draw(ctx, atmosphericTransform) {
         let pos = this.pos
         // The atmospheric path already knows this pass's transform. Cull the
         // whole offscreen tile, including its unchanged base raster, rather than
@@ -98,6 +100,12 @@ class Hexagon extends Sprite {
             drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
             return
         }
+        // Atmospheric tiles: marble or the owner's colour, inset in the grout that
+        // Grid.drawHexagons lays under the visible cells. No outline, no grass.
+        if (otherSettings.atmosphericVisuals) {
+            atmosphericLighting.drawTile(ctx, this)
+            return
+        }
         if (this.isSuburb) {
             drawCachedImage(ctx, this.player.suburbHexagon, pos)
         } 
@@ -105,60 +113,6 @@ class Hexagon extends Sprite {
             drawCachedImage(ctx, this.player.hexagon, pos)
         }
         drawCachedImage(ctx, this.grassHex, pos)
-        this.drawAtmosphericSurface(ctx, atmosphericTransform, edgeSources)
-    }
-    drawAtmosphericSurface(ctx, atmosphericTransform, edgeSources) {
-        if (!otherSettings.atmosphericVisuals) return
-        const center = this.calcPos()
-        // Atmospheric gradients are visual-only. Skip decoration whose entire
-        // hex lies outside the current viewport or offscreen cache target.
-        const transform = atmosphericTransform || ctx.getTransform()
-        if (transform.b === 0 && transform.c === 0 && transform.a > 0 && transform.d > 0) {
-            const x = center.x * transform.a + transform.e
-            const y = center.y * transform.d + transform.f
-            const rx = basis.r * transform.a + 1
-            const ry = basis.r * transform.d + 1
-            if (x + rx < 0 || y + ry < 0 ||
-                    x - rx > ctx.canvas.width || y - ry > ctx.canvas.height)
-                return
-        }
-        const vertices = mapDepth.getVertices(center)
-        ctx.save()
-        ctx.beginPath()
-        ctx.moveTo(vertices[0].x, vertices[0].y)
-        for (const vertex of vertices.slice(1)) ctx.lineTo(vertex.x, vertex.y)
-        ctx.closePath()
-        ctx.clip()
-        // Multiply preserves ownership hue while giving even white neutral tiles
-        // a stone midtone. The world-space wash follows the board, not the camera.
-        const bounds = mapDepth.surfaceBounds
-        const span = bounds ? Math.max(1, bounds.right - bounds.left) : 1
-        const across = bounds ? Math.max(0, Math.min(1, (center.x - bounds.left) / span)) : 0.5
-        ctx.globalCompositeOperation = 'multiply'
-        ctx.fillStyle = this.playerColor === 0
-            ? `rgb(${Math.round(225 - 69 * across)}, ${Math.round(193 - 19 * across)}, ${Math.round(151 + 46 * across)})`
-            : '#dedede'
-        ctx.fill()
-        // Gradients use world coordinates and follow the draw transform. Keep one
-        // per live context/hex rather than recreating it each frame or zoom event.
-        this.atmosphericGradients ||= new WeakMap()
-        const gradientKey = [center.x, center.y, basis.r, this.playerColor === 0].join(':')
-        let cached = this.atmosphericGradients.get(ctx)
-        if (!cached || cached.key !== gradientKey) {
-            const light = ctx.createLinearGradient(center.x - basis.r, center.y - basis.r,
-                center.x + basis.r, center.y + basis.r)
-            light.addColorStop(0, this.playerColor === 0 ? '#fff0d7' : '#fafafa')
-            light.addColorStop(0.45, this.playerColor === 0 ? '#e8e2dc' : '#e2e2e2')
-            light.addColorStop(1, this.playerColor === 0 ? '#78869c' : '#858585')
-            cached = {key: gradientKey, light}
-            this.atmosphericGradients.set(ctx, cached)
-        }
-        ctx.fillStyle = cached.light
-        ctx.fill()
-        ctx.restore()
-        // Inset bevels stay inside the existing hex, including at fog edges: the
-        // pre-rendered (hex-clipped) edge variant facing this tile's strongest visible light.
-        atmosphericLighting.drawEdges(ctx, center, edgeSources)
     }
 
 }

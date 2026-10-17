@@ -230,6 +230,8 @@ class MapDepth {
         if (this.gridWidth != _grid.arr.length ||
             this.gridHeight != _grid.arr[0].length || !this.outline)
             this.rebuild(_grid)
+        else if (this.underlayAtmospheric !== otherSettings.atmosphericVisuals)
+            this.createUnderlayCache()
     }
     getFaceColors(side) {
         if (side == 3)
@@ -265,12 +267,16 @@ class MapDepth {
             ctx.closePath()
             ctx.fillStyle = gradient
             ctx.fill()
+            // Atmospheric faces are repainted without outlines (renderAtmosphericSides).
+            if (otherSettings.atmosphericVisuals)
+                continue
             ctx.strokeStyle = 'rgba(25, 29, 30, 0.78)'
             ctx.lineWidth = 0.025 * basis.r
             ctx.stroke()
         }
     }
     createUnderlayCache() {
+        this.underlayAtmospheric = otherSettings.atmosphericVisuals
         this.underlayCache = undefined
         this.cacheBounds = undefined
         this.cacheRegions = []
@@ -415,7 +421,8 @@ class MapDepth {
         ctx.restore()
     }
     renderRim(ctx) {
-        if (!this.rim)
+        // Atmospheric tiles end in their own light grout: no black board outline.
+        if (!this.rim || otherSettings.atmosphericVisuals)
             return
 
         ctx.save()

@@ -171,9 +171,7 @@ class Grid extends SpritesGroup {
     //todo: refactor
     drawHexagons(ctx) {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
-        // Visible lamps pick each tile's edge-light variant (fog rules of collect()).
-        const edgeSources = otherSettings.atmosphericVisuals ?
-            atmosphericLighting.collect(this, false, false).sources : undefined
+        const hexagons = []
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
@@ -181,10 +179,14 @@ class Grid extends SpritesGroup {
                 const observed = this.observedHexagon(this.arr[i][j])
                 if (isFogOfWar && !this.fogOfWar[i][j] && !observed)
                     continue
-                const hexagon = observed || this.arr[i][j].hexagon
-                hexagon.draw(ctx, atmosphericTransform, edgeSources)
+                hexagons.push(observed || this.arr[i][j].hexagon)
             }
         }
+        // Grout under the drawn cells only: hidden cells keep their fog tile.
+        if (otherSettings.atmosphericVisuals)
+            atmosphericLighting.drawGrout(ctx, hexagons)
+        for (const hexagon of hexagons)
+            hexagon.draw(ctx, atmosphericTransform)
     }
     drawCellText(ctx) {
         for (let i = 0; i < this.arr.length; ++i) {
