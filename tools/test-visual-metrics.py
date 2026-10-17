@@ -87,5 +87,24 @@ with tempfile.TemporaryDirectory() as tmp:
     expect('cli_threshold_fail', bad.returncode == 1 and 'THRESHOLDS_FAILED block_std' in bad.stderr,
            f'exit={bad.returncode} stderr_tail={bad.stderr.strip().splitlines()[-1]!r}')
 
+# Region grout ratio: a soft line passes; a black dotted outline beside a bright bevel (same box mean)
+# fails, because grout pixels are clipped at the stone mean before averaging.
+def grout_image(kind):
+    im = np.full((40, 40), 0.6)
+    if kind == 'soft':
+        im[20:22, 0:20] = 0.36
+    else:
+        im[19:22, 0:20:2] = 0.06
+        im[22:24, 0:20] = 0.765
+    return gray(im)
+prof = {'regions': {'stone': [[20, 40, 0, 20]], 'grout': [[0, 20, 16, 26]], 'lampPool': [[20, 40, 30, 40]],
+                    'boardEdge': [[20, 40, 30, 40]], 'skyBelowBoard': [[20, 40, 30, 40]]}}
+soft, dotted = grout_image('soft'), grout_image('dotted')
+rs, rd = vm.region_compare(soft, soft, prof, prof), vm.region_compare(soft, dotted, prof, prof)
+same_mean = abs(rs['regions']['grout']['ours']['L'] - rd['regions']['grout']['ours']['L']) < 0.005
+gs, gd = rs['regions']['grout']['ours']['groutStoneRatio'], rd['regions']['grout']['ours']['groutStoneRatio']
+expect('grout_clip', same_mean and gs >= 0.9 > gd,
+       f"soft={gs} dotted={gd} boxMeanL soft={rs['regions']['grout']['ours']['L']} dotted={rd['regions']['grout']['ours']['L']}")
+
 print(f'UNIT_RESULT {"PASS" if failures == 0 else "FAIL"} failures={failures}')
 sys.exit(1 if failures else 0)
