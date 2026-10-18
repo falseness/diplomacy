@@ -25,24 +25,26 @@ const atmosphericLighting = {
     // Lamps: power weighs each lamp for shadow direction; spill scales its SPILL below (a
     // town's small doorway lights a softer pool than a cave mouth).
     LAMP: {
-        town: {power: 1, spill: 0.75},
+        town: {power: 1, spill: 0.95},
         goldmine: {power: 1, spill: 1},
         demonPortal: {power: 0.9, spill: 1}
     },
-    // Lamp spill: mostly warmth, little lift. A broad wash (map only: red up, blue held back)
-    // warms the lamp's own hex, beside and above the source; a warm layer round the doorway's
-    // foot; a pool filling the hex below; then a bright cream-gold band at the door threshold.
-    // Each layer is an ellipse [centre below the cell centre, half width, half height] (hex
-    // radii). map: multiply colour, blended over the key light (source-over). gain: color-dodge
+    // Lamp spill: mostly warmth, little lift. A broad wash (red up, blue held back, a low red
+    // lift) warms the lamp's own hex, beside and above the source, a little more on its left as
+    // in the concept; a warm layer round the doorway's foot; a cream pool filling the hex below;
+    // then a bright cream-gold band at the door threshold. Each layer is an ellipse [offset
+    // from the cell centre, half width, half height] (hex radii); lamps: only those lamp kinds.
+    // map: multiply colour, blended over the key light (source-over). gain: color-dodge
     // lift, blended with 'lighten' over the key light's, so a lamp lights its pool the same on
     // the cool far side of the board as on the key-lit side (no gain: map only). Alpha per part
     // (gainAlpha) where the lift should be lower than the warmth.
     SPILL: [
-        {dy: 0.1, rx: 1.95, ry: 1.85, alpha: 0.82, map: [228, 188, 136], gain: null},
-        {dy: 0.5, rx: 1.5, ry: 1.4, alpha: 0.85, map: [238, 190, 126], gain: [92, 52, 8], gainAlpha: 0.6},
-        {dy: 1.45, rx: 1.15, ry: 1.2, alpha: 0.85, map: [255, 206, 136], gain: [118, 76, 14], gainAlpha: 0.8},
-        {dy: 1.05, rx: 0.95, ry: 0.7, alpha: 0.9, map: [255, 216, 150], gain: [120, 80, 26]},
-        {dy: 1.05, rx: 0.65, ry: 0.55, alpha: 1, map: [255, 232, 180], gain: [136, 96, 40]}
+        {dx: -0.6, dy: 0.3, rx: 2.4, ry: 2.25, alpha: 0.85, map: [250, 206, 146], gain: [70, 38, 0], gainAlpha: 0.6},
+        {dy: 0.5, rx: 1.5, ry: 1.4, alpha: 0.85, map: [248, 212, 156], gain: [96, 64, 18], gainAlpha: 0.6},
+        {dy: 1.6, rx: 1.3, ry: 1.35, alpha: 0.75, map: [255, 222, 168], gain: [112, 84, 34], gainAlpha: 0.75},
+        {dy: 1.05, rx: 1.15, ry: 0.75, alpha: 0.9, map: [255, 212, 138], gain: [120, 80, 20]},
+        {dy: 1.0, rx: 0.85, ry: 0.6, alpha: 1, map: [255, 228, 156], gain: [134, 98, 28]},
+        {lamps: ['town'], dx: -0.75, dy: 0.25, rx: 1.0, ry: 0.9, alpha: 0.85, map: [255, 222, 164], gain: [112, 80, 30]}
     ],
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
@@ -179,7 +181,7 @@ const atmosphericLighting = {
     // One spill layer of a lamp: an elliptical radial gradient of colour, alpha by SPILL_STOPS.
     spill(g, source, layer, color, alpha = layer.alpha) {
         g.save()
-        g.translate(source.pos.x, source.pos.y + layer.dy * basis.r)
+        g.translate(source.pos.x + (layer.dx || 0) * basis.r, source.pos.y + layer.dy * basis.r)
         g.scale(layer.rx * basis.r, layer.ry * basis.r)
         const gradient = g.createRadialGradient(0, 0, 0, 0, 0, 1)
         for (const [t, a] of this.SPILL_STOPS)
@@ -188,33 +190,40 @@ const atmosphericLighting = {
         g.fillRect(-1, -1, 2, 2)
         g.restore()
     },
-    // Every lamp's spill layers, composited once per light map scale into a sprite, then one
-    // image per lamp, scaled by the lamp's LAMP spill.
+    // Every lamp's spill layers, composited once into a sprite per lamp kind, then one image
+    // per lamp, scaled by the lamp's LAMP spill.
     spillSprites: new Map(),
     spillSpriteBuilds: 0,
-    drawSpill(g, sources, part, scale) {
-        if (!sources.length) return
-        const r = basis.r, key = part + ',' + r + ',' + scale
-        let sprite = this.spillSprites.get(part)
-        if (!sprite || sprite.key !== key) {
-            const left = Math.min(...this.SPILL.map(l => -l.rx)) * r, right = Math.max(...this.SPILL.map(l => l.rx)) * r
-            const top = Math.min(...this.SPILL.map(l => l.dy - l.ry)) * r, bottom = Math.max(...this.SPILL.map(l => l.dy + l.ry)) * r
-            const surface = sprite ? sprite.surface : document.createElement('canvas')
-            surface.width = Math.max(1, Math.ceil((right - left) * scale))
-            surface.height = Math.max(1, Math.ceil((bottom - top) * scale))
-            const s = surface.getContext('2d')
-            s.setTransform(scale, 0, 0, scale, -left * scale, -top * scale)
-            for (const layer of this.SPILL)
-                if (layer[part]) this.spill(s, {pos: {x: 0, y: 0}}, layer, layer[part], layer[part + 'Alpha'] ?? layer.alpha)
-            sprite = {key, surface, left, top, width: surface.width / scale, height: surface.height / scale}
-            this.spillSprites.set(part, sprite)
-            ++this.spillSpriteBuilds
-        }
+    drawSpill(g, sources, part) {
         for (const {pos, name} of sources) {
+            const sprite = this.spillSprite(part, name)
             g.globalAlpha = (this.LAMP[name] || this.LAMP.goldmine).spill
             g.drawImage(sprite.surface, pos.x + sprite.left, pos.y + sprite.top, sprite.width, sprite.height)
         }
         g.globalAlpha = 1
+    },
+    // The composited spill of one lamp kind (layers with a lamps list are only that kind's), at
+    // a fixed SPILL_RASTER pixels per hex radius: the layers are smooth, so the light map scales
+    // the sprite and a zoom never rebuilds it.
+    SPILL_RASTER: 24,
+    spillSprite(part, name) {
+        const r = basis.r, layers = this.SPILL.filter(l => !l.lamps || l.lamps.includes(name))
+        const id = part + ',' + (layers.some(l => l.lamps) ? name : ''), key = id + ',' + r, scale = this.SPILL_RASTER / r
+        let sprite = this.spillSprites.get(id)
+        if (sprite && sprite.key === key) return sprite
+        const left = Math.min(...layers.map(l => (l.dx || 0) - l.rx)) * r, right = Math.max(...layers.map(l => (l.dx || 0) + l.rx)) * r
+        const top = Math.min(...layers.map(l => l.dy - l.ry)) * r, bottom = Math.max(...layers.map(l => l.dy + l.ry)) * r
+        const surface = sprite ? sprite.surface : document.createElement('canvas')
+        surface.width = Math.max(1, Math.ceil((right - left) * scale))
+        surface.height = Math.max(1, Math.ceil((bottom - top) * scale))
+        const s = surface.getContext('2d')
+        s.setTransform(scale, 0, 0, scale, -left * scale, -top * scale)
+        for (const layer of layers)
+            if (layer[part]) this.spill(s, {pos: {x: 0, y: 0}}, layer, layer[part], layer[part + 'Alpha'] ?? layer.alpha)
+        sprite = {key, surface, left, top, width: surface.width / scale, height: surface.height / scale}
+        this.spillSprites.set(id, sprite)
+        ++this.spillSpriteBuilds
+        return sprite
     },
     build({cells, sources}, bounds, scale) {
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
@@ -242,7 +251,7 @@ const atmosphericLighting = {
         }
         // Lamp spill (multiply part): the blue is held back towards amber.
         g.globalCompositeOperation = 'source-over'
-        this.drawSpill(g, sources, 'map', scale)
+        this.drawSpill(g, sources, 'map')
         g.restore()
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
@@ -256,7 +265,7 @@ const atmosphericLighting = {
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
         k.globalCompositeOperation = 'lighten'
-        this.drawSpill(k, sources, 'gain', scale)
+        this.drawSpill(k, sources, 'gain')
         k.restore()
     },
     // World-space gradient along DIRECTION, from the top left corner to the farthest corner,
@@ -623,7 +632,7 @@ const atmosphericLighting = {
         recessStops: [[0, '242,154,48'], [0.22, '252,188,72'], [0.5, '255,214,110'], [0.78, '252,188,72'],
             [1, '242,154,48']],
         halo: 1,
-        haloStops: [[0, '255,210,130', 0.15], [0.25, '252,184,96', 0.1], [0.55, '245,152,72', 0.04],
+        haloStops: [[0, '255,214,140', 0.3], [0.25, '252,190,104', 0.2], [0.55, '245,160,80', 0.08],
             [1, '235,130,60', 0]],
         // Rim light: a soft gold ring on the arch just outside the opening (width and offset
         // in door half widths; strokes are [fraction of the width, alpha], wide to narrow).
@@ -644,13 +653,13 @@ const atmosphericLighting = {
             [1, '255,170,60', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0,
-        // Cave grade, per pixel of the sprite raster: grey-taupe stone from the sprite's own
+        // Cave grade, per pixel of the sprite raster: warm grey-brown stone from the sprite's own
         // luminance (stone: channel factors), a bright gold lit inner arch (nearly flat in the
-        // sprite's luminance, so the dark jambs turn gold, not olive) fading over goldWidth
-        // door half widths from the opening, the opening an orange recess. Reached by the shade
+        // sprite's luminance) deepening to warm brown as it fades over goldWidth door half
+        // widths from the opening, the opening an orange recess. Reached by the shade
         // multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.84, 0.71, 0.68], sideDark: 0.3, gold: [255, 200, 96], goldAmount: 1, goldWidth: 1.2,
-            goldPower: 0.7, rimDark: 0.35, flareReach: 1.3, rimLine: [255, 230, 140], rimLineWidth: 0.3}
+        grade: {stone: [0.94, 0.71, 0.69], sideDark: 0.3, gold: [255, 200, 96], brown: [150, 78, 34], goldAmount: 1, goldWidth: 0.85,
+            goldPower: 1, rimDark: 0.3, flareReach: 1.3, rimLine: [255, 230, 140], rimLineWidth: 0.3}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
@@ -741,7 +750,7 @@ const atmosphericLighting = {
     gradeCanvases(image, door) {
         const W = image.width, H = image.height, rw = door.w * W, cx = door.x * W
         const top = (door.y - door.h) * H + rw, bottom = (door.y + door.h) * H
-        const {stone, sideDark, gold, goldAmount, goldWidth, goldPower, rimDark, rimLine, rimLineWidth} = this.BLOOM.grade
+        const {stone, sideDark, gold, brown, goldAmount, goldWidth, goldPower, rimDark, rimLine, rimLineWidth} = this.BLOOM.grade
         const shade = document.createElement('canvas'), lift = document.createElement('canvas')
         shade.width = lift.width = W
         shade.height = lift.height = H
@@ -758,8 +767,10 @@ const atmosphericLighting = {
         const target = [0, 0, 0]
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
             // Faint pixels (the contact shadow on the ground) keep their look, so the grade
-            // never reaches the stone beside the sprite.
-            const i = 4 * (y * W + x), a = Math.round(src[i + 3] * Math.min(1, Math.max(0, (src[i + 3] / 255 - 0.6) / 0.3)))
+            // never reaches the stone beside the sprite; faint green moss is graded anyway, so no
+            // mossy fringe shows round the dome.
+            const i = 4 * (y * W + x), moss = src[i + 1] > src[i] && src[i + 1] > src[i + 2] + 25
+            const a = moss ? Math.min(255, Math.round(1.6 * src[i + 3])) : Math.round(src[i + 3] * Math.min(1, Math.max(0, (src[i + 3] / 255 - 0.6) / 0.3)))
             src[i + 3] = a
             if (!a) continue
             const px = x + 0.5, py = y + 0.5
@@ -780,8 +791,10 @@ const atmosphericLighting = {
                     (1 - sideDark * Math.min(1, Math.max(0, (px - cx - rw) / (0.4 * W))))
                 // A thin bright rim line traces the opening's edge.
                 const line = Math.max(0, 1 - d / rimLineWidth) ** 1.5
+                // The gold deepens to warm brown as it fades (gold over grey stone would read olive).
                 for (let c = 0; c < 3; c++)
-                    target[c] = (lum * stone[c] * rim * (1 - w) + gold[c] * light * w) * (1 - line) + rimLine[c] * line
+                    target[c] = (lum * stone[c] * rim * (1 - w) + (brown[c] + (gold[c] - brown[c]) * w) * light * w) *
+                        (1 - line) + rimLine[c] * line
             }
             for (let c = 0; c < 3; c++) {
                 const o = src[i + c], t = Math.min(255, target[c])
