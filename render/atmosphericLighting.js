@@ -613,7 +613,7 @@ const atmosphericLighting = {
         this.bloom(ctx, board)
     },
     // Bloom: a cave is graded per pixel (grade below) to grey-beige stone, darker towards its
-    // far side, round one glowing doorway and its flame, with a cream rim on the arch and a soft cream halo round it. Other lamp sprites are shaded
+    // far side, round one glowing doorway and its flame, its carved arch traced by dark grooves and a lit crest. Other lamp sprites are shaded
     // (multiply) light warm near the doorway and grey-tan towards the rim, with a soft dark
     // edge away from the key light, a gold band on the arch and the doorway a deep orange
     // recess. Then 'screen' adds the cave grade's lift (or the band as a rim light), a flare
@@ -671,18 +671,20 @@ const atmosphericLighting = {
         // warm-white teardrop flame at the anchor (flame: half width and height in opening half
         // widths, low: its height below the anchor as a share of that); mask edges feathered (raster widths). Reached by the shade multiply plus a
         // 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.72, 0.6, 0.49], form: {lit: 1.35, dark: 0.72, slope: [0.6, 0.3], power: 1.6},
+        grade: {stone: [0.68, 0.56, 0.44], form: {lit: 1.35, dark: 0.72, slope: [0.6, 0.3], power: 1.6},
             warm: [240, 186, 134], warmJoint: 0.5, warmLift: 0.25, warmReach: 0.22,
-            near: [252, 218, 150], nearLift: 0.85, nearReach: 0.07, ringTone: [236, 180, 110], ringLift: 0.4,
-            share: 0.12, joint: 0.18, anchor: 0.3, foot: 0.9, rim: [246, 178, 70],
-            fill: [[0, '255,240,170'], [0.35, '252,206,88'], [0.65, '236,162,52'], [0.86, '156,94,40'], [1, '104,66,34']],
+            near: [255, 206, 96], nearLift: 0.85, nearReach: 0.09, nearOut: 0.35, ringTone: [236, 180, 110], ringLift: 0.4,
+            share: 0.12, joint: 0.18, anchor: 0.3, foot: 0.75, rim: [246, 178, 70],
+            fill: [[0, '255,240,170'], [0.3, '252,200,80'], [0.52, '230,146,36'], [0.68, '184,96,20'], [1, '112,54,14']],
             lip: 0, lipColor: [255, 232, 170], flame: {rx: 0.9, ry: 1.5, low: 0.55, color: [255, 250, 208]},
             feather: 0.01, flareReach: 1.3, flareAlpha: 0.3,
-            // The arch's rim catching the light: a cream highlight just inside the silhouette
-            // (edge: color, lift, width in raster widths, weighted to the lit upper side) and a
-            // soft cream halo on the stone just outside it (halo: color, alpha, width).
-            edge: {color: [255, 244, 215], lift: 0.85, width: 0.02},
-            halo: {color: '255,230,175', alpha: 0.6, width: 0.04}}
+            // The carved arch's form picked out by light along its own outlines: a thin dark
+            // dark brown groove where the ring meets the dome (groove: blend, width in raster widths, colour), a
+            // warm crest on the ring's upper inner face on the lit side (crest: colour, lift,
+            // width; bevel: the same light just inside the ring's outer edge, over the groove) and a dark contact contour inside the silhouette, strongest on its far side and foot
+            // (contour: darkening, width, share on the lit side); never a pale outline.
+            groove: {depth: 0.6, width: 0.016, color: [92, 60, 38]}, crest: {color: [255, 222, 150], lift: 0.6, width: 0.01, bevel: 0.45},
+            contour: {depth: 0.4, width: 0.012, lit: 0.4}}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
@@ -815,7 +817,7 @@ const atmosphericLighting = {
     // the raster's pixels can't be read.
     gradeCanvases(image, door) {
         const W = image.width, H = image.height
-        const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, ringTone, ringLift, share, joint, anchor, foot, rim, fill, lip, lipColor, flame, feather, edge, halo} = this.BLOOM.grade
+        const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, nearOut, ringTone, ringLift, share, joint, anchor, foot, rim, fill, lip, lipColor, flame, feather, groove, crest, contour} = this.BLOOM.grade
         const ring = this.outline(door.ring, W, H), opening = this.outline(door.opening, W, H), arch = this.outline(door.arch, W, H)
         const cx = door.x * W, bottom = opening.bottom, soft = Math.max(0.5, feather * W), warmth = warmReach * W
         const lipWidth = Math.max(0.75, lip * W)
@@ -836,14 +838,14 @@ const atmosphericLighting = {
         } catch (_) {
             return null
         }
-        // Distances from the silhouette (the sprite's solid pixels) on a grid padded for the halo:
-        // inside to its edge, outside to the sprite.
-        const P = Math.ceil(3 * halo.width * W), PW = W + 2 * P, PH = H + 2 * P
-        const solid = new Uint8Array(PW * PH)
+        // Distance inside the silhouette (the sprite's solid pixels) to its edge, on a grid padded
+        // by a pixel so the raster's border counts as outside.
+        const PW = W + 2, PH = H + 2, solid = new Uint8Array(PW * PH)
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
-            solid[(y + P) * PW + x + P] = pixels.data[4 * (y * W + x) + 3] >= 128 ? 1 : 0
-        const inner = this.chamfer(solid, PW, PH, 1), outer = this.chamfer(solid, PW, PH, 0)
-        const solidBottom = this.outline(door.arch, W, H).bottom, edgeWidth = Math.max(1, edge.width * W)
+            solid[(y + 1) * PW + x + 1] = pixels.data[4 * (y * W + x) + 3] >= 128 ? 1 : 0
+        const inner = this.chamfer(solid, PW, PH, 1)
+        const grooveWidth = Math.max(0.75, groove.width * W), crestWidth = Math.max(0.75, crest.width * W)
+        const contourWidth = Math.max(0.75, contour.width * W)
         const l = lift.getContext('2d'), raised = l.createImageData(W, H)
         const src = pixels.data, up = raised.data, stops = fill.map(([t, c]) => [t, c.split(',').map(Number)])
         const target = [0, 0, 0], hole = [0, 0, 0]
@@ -863,7 +865,8 @@ const atmosphericLighting = {
             const reach = dOpen >= 0 ? dArch + dOpen : share * dArch + (1 - share) * dOpen
             const inDoor = Math.min(1, Math.max(0, 0.5 + reach / (2 * soft)))
             const onLip = lip ? Math.max(0, 1 - Math.abs(reach) / lipWidth) : 0
-            const inRing = Math.min(1, Math.max(0, 0.5 + this.outlineDistance(ring, px, py, soft) / (2 * soft))) * (dOpen < 0 ? 1 : 0)
+            const dRing = this.outlineDistance(ring, px, py, 4 * grooveWidth)
+            const inRing = Math.min(1, Math.max(0, 0.5 + dRing / (2 * soft))) * (dOpen < 0 ? 1 : 0)
             // One gradient over the doorway, from the anchor out; the flame a small teardrop
             // (narrowing upwards) at the anchor.
             const fx = (px - ox) / across, fy = (py - oy) / (py < oy ? above : below)
@@ -887,17 +890,27 @@ const atmosphericLighting = {
             // The doorway's warm light on the stone round it, falling off with the distance
             // from the doorway, so the top and the far side stay grey stone.
             const glow = warmLift * (reach < 0 ? Math.exp(reach / warmth) : 1), tone = 1 - warmJoint + warmJoint * lum / 255
-            const close = nearLift * (reach < 0 ? Math.exp(reach / (nearReach * W)) : 1)
-            // The rim highlight: near the silhouette's edge, on its lit upper side, not at its foot.
-            const rimLight = edge.lift * Math.exp(-inner[(y + P) * PW + x + P] / edgeWidth) * (1 - 0.6 * side) *
-                Math.min(1, Math.max(0, (solidBottom - py) / (0.12 * H)))
+            // Kept to the ring's inner shell: past the ring's outer edge (the groove) only nearOut of it.
+            const shell = nearOut + (1 - nearOut) * Math.min(1, Math.max(0, 0.5 + dRing / (2 * grooveWidth)))
+            const close = nearLift * (reach < 0 ? shell * Math.exp(reach / (nearReach * W)) : 1)
+            // The groove: a thin shadow on the dome just outside the ring's outer edge (away from
+            // the opening). The crest: the ring's upper inner face lit next to the opening, on the
+            // lit side. The contour: shadow just inside the silhouette, on its far side and foot.
+            const grooved = dOpen < -crestWidth ? groove.depth * Math.exp(-(((dRing + 0.6 * grooveWidth) / grooveWidth) ** 2)) : 0
+            const upper = py < bottom - 0.3 * (bottom - opening.top) ? 1 - side : 0
+            const crested = dOpen < 0 ? upper * Math.max(crest.lift * Math.exp(-(((dOpen + crestWidth) / crestWidth) ** 2)),
+                crest.bevel * Math.exp(-(((dRing - crestWidth) / crestWidth) ** 2))) : 0
+            const contact = Math.min(1, contour.lit + Math.max(0, (side - 0.45) / 0.35) + Math.max(0, (py - bottom) / (0.04 * H)))
+            const contoured = contour.depth * contact * Math.exp(-inner[(y + 1) * PW + x + 1] / contourWidth)
+            const darken = 1 - contoured
             for (let c = 0; c < 3; c++) {
                 const rock = lum * stone[c] * lit, broad = rock + (warm[c] * tone - rock) * glow
                 const carved = broad + (ringTone[c] * tone - broad) * ringLift * inRing
                 const warmed = carved + (near[c] * tone - carved) * close
                 const outside = warmed + (lipColor[c] - warmed) * onLip
-                const edged = outside + (edge.color[c] * tone - outside) * rimLight
-                target[c] = hole[c] * inDoor + edged * (1 - inDoor)
+                const crestLit = outside + (crest.color[c] * tone - outside) * crested
+                const cut = crestLit + (groove.color[c] - crestLit) * grooved
+                target[c] = hole[c] * inDoor + cut * darken * (1 - inDoor)
             }
             for (let c = 0; c < 3; c++) {
                 const o = src[i + c], t = Math.min(255, target[c])
@@ -908,26 +921,9 @@ const atmosphericLighting = {
         }
         g.putImageData(pixels, 0, 0)
         l.putImageData(raised, 0, 0)
-        // The halo: a soft cream glow on the stone hugging the silhouette, fading out towards its foot.
-        const haloCanvas = document.createElement('canvas')
-        haloCanvas.width = PW
-        haloCanvas.height = PH
-        const h = haloCanvas.getContext('2d'), glowing = h.createImageData(PW, PH), out = glowing.data
-        const [hr, hg, hb] = halo.color.split(',').map(Number), haloWidth = halo.width * W
-        for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
-            const d = outer[y * PW + x]
-            if (!d) continue
-            const i = 4 * (y * PW + x)
-            out[i] = hr
-            out[i + 1] = hg
-            out[i + 2] = hb
-            out[i + 3] = Math.round(255 * halo.alpha * Math.exp(-d / haloWidth) *
-                Math.min(1, Math.max(0, (solidBottom - (y - P)) / (0.15 * H))))
-        }
-        h.putImageData(glowing, 0, 0)
         // Copies that are never read back: a canvas read with getImageData may be kept in
         // software, which slows every frame that draws it.
-        return {shade: this.copyCanvas(shade), lift: this.copyCanvas(lift), halo: this.copyCanvas(haloCanvas), haloPad: P}
+        return {shade: this.copyCanvas(shade), lift: this.copyCanvas(lift)}
     },
     // Chamfer distance (in pixels, 3-4 weights) from every pixel to the nearest one whose
     // mask value is not 'from' (0 where the pixel itself isn't 'from').
@@ -1018,7 +1014,6 @@ const atmosphericLighting = {
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
         if (graded) g.drawImage(graded.lift, pad, pad)
-        if (graded) g.drawImage(graded.halo, pad - graded.haloPad, pad - graded.haloPad)
         if (ring) g.drawImage(this.ringCanvas(image, door, ring, pad, ring.color), 0, 0)
         // Flare: the doorway's light spilling over its rim onto the arch.
         const flareReach = (graded ? this.BLOOM.grade.flareReach : this.BLOOM.flareReach) * rw
