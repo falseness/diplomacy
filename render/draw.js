@@ -2,6 +2,8 @@ function drawMain() {
     mainCtx.clearRect(canvas.offset.x, canvas.offset.y,
         width, height)
 
+    atmosphericBackground.draw(mainCtx)
+
     // Border.draw sets round joins/caps and never restores them, so every frame after the first strokes
     // text and bars with them. Start each frame in that state, so the first frame draws the same.
     mainCtx.lineJoin = 'round'
