@@ -1310,6 +1310,24 @@ maps = {
         )
     ]
 }
+// The camera centres once on the local player when a game starts or loads (TASK-1164): on its own town with the
+// highest income, else on its own unit with the smallest coordinate; ties go to the smallest coordinate (x, then y).
+// Without towns and units the camera stays. Later turns and tutorials do not call this.
+function playerStartFocusTarget(player) {
+    const byCoord = (a, b) => a.coord.x - b.coord.x || a.coord.y - b.coord.y
+    const towns = player.towns.filter(town => !player.isTownKilled(town))
+    if (towns.length) {
+        const incomes = new Map(towns.map(town => [town, town.income]))
+        return towns.sort((a, b) => incomes.get(b) - incomes.get(a) || byCoord(a, b))[0]
+    }
+    return player.units.filter(unit => !unit.killed).sort(byCoord)[0] || null
+}
+function focusCameraOnPlayerStart(player) {
+    const target = player && playerStartFocusTarget(player)
+    if (target)
+        gameEvent.screen.moveTo(Sprite.prototype.calcPos.call(target))
+    return target
+}
 class GameManager {
 	static clearValues() {
         external = []
@@ -1377,6 +1395,8 @@ class GameManager {
 
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
         nextTurnPauseInterface.visible = true
+        if (!gameSettings.tutorial)
+            focusCameraOnPlayerStart(players[whooseTurn])
 
         lastGameFrameTime = undefined
         framesPerSecond = 60
@@ -1439,6 +1459,9 @@ class GameManager {
     static start(map, _isFogOfWar, isClassicTimer = false) {
         this.setUpBoard(map, _isFogOfWar, isClassicTimer, false)
         startTurn()
+        // A tutorial keeps the camera of its first turn.
+        if (!gameSettings.tutorial)
+            focusCameraOnPlayerStart(players[whooseTurn])
 
         lastGameFrameTime = undefined
         framesPerSecond = 60

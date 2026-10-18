@@ -690,6 +690,14 @@ function SetupServerCommunicationLogic(gameID) {
     onlineGameClose = () => socket.emit('game:close', {gameID, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
     const listeners = onlineListeners
     let pauseState = null
+    // The first board after joining or reconnecting centres the camera on this seat once (TASK-1164); later rounds
+    // leave it where the player put it. Every board's whooseTurn is the recipient's seat.
+    let cameraFocusPending = true
+    const focusCameraOnJoin = () => {
+        if (!cameraFocusPending) return
+        cameraFocusPending = false
+        focusCameraOnPlayerStart(players[whooseTurn])
+    }
     const pausePanel = document.createElement('section')
     pausePanel.id = 'online-pause'
     // DOM controls must not also trigger the canvas game/menu shortcuts.
@@ -1072,7 +1080,7 @@ function SetupServerCommunicationLogic(gameID) {
 
         nextTurnPauseInterface.visible = false
         unfreezeGame()
-        gameEvent.screen.moveToPlayer(players[whooseTurn])
+        focusCameraOnJoin()
 
     });
     on(socket, 'playYourTurn', game => {
@@ -1084,7 +1092,7 @@ function SetupServerCommunicationLogic(gameID) {
 
         unfreezeGame()
 
-        gameEvent.screen.moveToPlayer(players[whooseTurn])
+        focusCameraOnJoin()
 
     });
     on(socket, 'waitYouTurn', game => {
@@ -1099,6 +1107,7 @@ function SetupServerCommunicationLogic(gameID) {
         if (isFogOfWar) {
             players[whooseTurn].changeFogOfWarByVision()
         }
+        focusCameraOnJoin()
 
         gameEvent.waitingMode = true
         nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
@@ -1132,6 +1141,7 @@ function SetupServerCommunicationLogic(gameID) {
         // must not survive an ambiguous disconnect.
         reconnectTown = entityInterface.townInspectionCoord?.() || reconnectTown
         failed = false
+        cameraFocusPending = true
         document.getElementById('online-recovery')?.remove()
         onlineCommit = null
         onlineParallelPending = null

@@ -143,7 +143,9 @@ function advanceOfflineTurn() {
     if (isFogOfWar) {
         players[whooseTurn].changeFogOfWarByVision()
     }
-    gameEvent.screen.moveToPlayer(players[whooseTurn]) // перемещение экрана к городам игрока
+    // Only a tutorial moves the camera on each turn; other games centre it once at start (focusCameraOnPlayerStart).
+    if (gameSettings.tutorial)
+        gameEvent.screen.moveToPlayer(players[whooseTurn]) // перемещение экрана к городам игрока
 
     nextTurnButton.setNextPlayerColor(players[whooseTurn].hexColor)
 
