@@ -671,11 +671,12 @@ const atmosphericLighting = {
         // warm-white teardrop flame at the anchor (flame: half width and height in opening half
         // widths, low: its height below the anchor as a share of that); mask edges feathered (raster widths). Reached by the shade multiply plus a
         // 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.61, 0.53, 0.47], form: {lit: 1.3, dark: 0.85, slope: [0.6, 0.3], power: 1.6},
-            warm: [226, 164, 112], warmJoint: 0.5, warmLift: 0.48, warmReach: 0.12,
-            share: 0.55, joint: 0.18, anchor: 0.3, foot: 0.4, rim: [205, 138, 72],
-            fill: [[0, '255,238,165'], [0.4, '252,204,84'], [0.66, '234,152,44'], [0.85, '182,94,20'], [1, '150,72,16']],
-            lip: 0.03, lipColor: [255, 232, 170], flame: {rx: 0.9, ry: 1.5, low: 0.55, color: [255, 250, 208]},
+        grade: {stone: [0.68, 0.56, 0.44], form: {lit: 1.35, dark: 0.72, slope: [0.6, 0.3], power: 1.6},
+            warm: [240, 186, 134], warmJoint: 0.5, warmLift: 0.25, warmReach: 0.22,
+            near: [255, 206, 96], nearLift: 0.85, nearReach: 0.05, ringTone: [236, 180, 110], ringLift: 0.4,
+            share: 0.12, joint: 0.18, anchor: 0.3, foot: 0.75, rim: [246, 178, 70],
+            fill: [[0, '255,240,170'], [0.3, '252,200,80'], [0.55, '232,150,38'], [0.8, '170,80,14'], [1, '120,52,8']],
+            lip: 0, lipColor: [255, 232, 170], flame: {rx: 0.9, ry: 1.5, low: 0.55, color: [255, 250, 208]},
             feather: 0.01, flareReach: 1.3, flareAlpha: 0.3}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
@@ -809,7 +810,7 @@ const atmosphericLighting = {
     // the raster's pixels can't be read.
     gradeCanvases(image, door) {
         const W = image.width, H = image.height
-        const {stone, form, warm, warmJoint, warmLift, warmReach, share, joint, anchor, foot, rim, fill, lip, lipColor, flame, feather} = this.BLOOM.grade
+        const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, ringTone, ringLift, share, joint, anchor, foot, rim, fill, lip, lipColor, flame, feather} = this.BLOOM.grade
         const ring = this.outline(door.ring, W, H), opening = this.outline(door.opening, W, H), arch = this.outline(door.arch, W, H)
         const cx = door.x * W, bottom = opening.bottom, soft = Math.max(0.5, feather * W), warmth = warmReach * W
         const lipWidth = Math.max(0.75, lip * W)
@@ -848,7 +849,7 @@ const atmosphericLighting = {
             const dOpen = this.outlineDistance(opening, px, py, 6 * warmth), dArch = this.outlineDistance(arch, px, py, 6 * warmth)
             const reach = dOpen >= 0 ? dArch + dOpen : share * dArch + (1 - share) * dOpen
             const inDoor = Math.min(1, Math.max(0, 0.5 + reach / (2 * soft)))
-            const onLip = Math.max(0, 1 - Math.abs(reach) / lipWidth)
+            const onLip = lip ? Math.max(0, 1 - Math.abs(reach) / lipWidth) : 0
             const inRing = Math.min(1, Math.max(0, 0.5 + this.outlineDistance(ring, px, py, soft) / (2 * soft))) * (dOpen < 0 ? 1 : 0)
             // One gradient over the doorway, from the anchor out; the flame a small teardrop
             // (narrowing upwards) at the anchor.
@@ -873,8 +874,11 @@ const atmosphericLighting = {
             // The doorway's warm light on the stone round it, falling off with the distance
             // from the doorway, so the top and the far side stay grey stone.
             const glow = warmLift * (reach < 0 ? Math.exp(reach / warmth) : 1), tone = 1 - warmJoint + warmJoint * lum / 255
+            const close = nearLift * (reach < 0 ? Math.exp(reach / (nearReach * W)) : 1)
             for (let c = 0; c < 3; c++) {
-                const rock = lum * stone[c] * lit, warmed = rock + (warm[c] * tone - rock) * glow
+                const rock = lum * stone[c] * lit, broad = rock + (warm[c] * tone - rock) * glow
+                const carved = broad + (ringTone[c] * tone - broad) * ringLift * inRing
+                const warmed = carved + (near[c] * tone - carved) * close
                 const outside = warmed + (lipColor[c] - warmed) * onLip
                 target[c] = hole[c] * inDoor + outside * (1 - inDoor)
             }
