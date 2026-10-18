@@ -312,12 +312,9 @@ class Events {
                 if (isRepeat)
                     return
                 if (isShiftPressed) {
-                    // the same 1-second guard as the mouse next-turn button
-                    if (nextTurnButton.unactive)
-                        return
+                    // Separate presses end turns back-to-back: no 1-second guard, unlike the mouse button.
                     nextTurnPauseInterface.hideButDontUpdateTimer()
                     nextTurn()
-                    nextTurnButton.deactivate()
                     return
                 }
                 // Behind the 'Player N' overlay Enter only dismisses it, as a click does.
