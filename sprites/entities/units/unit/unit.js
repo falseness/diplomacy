@@ -1,3 +1,17 @@
+// Moves bars belong to units whose owner moves in parallel with the local viewer:
+// online the local seat or a seat still pending this round, offline whooseTurn.
+// Demons, AI, neutral and unknown owners never qualify, even with alwaysDisplayMovesBar.
+function shouldShowMovesBar(unit) {
+    if (!unit?.isUnit) return false
+    const owner = players[unit.playerColor]
+    if (!owner || owner.constructor !== Player) return false
+    if (!otherSettings.alwaysDisplayMovesBar && unit.isFullMoves) return false
+    if (unit.playerColor === whooseTurn) return true
+    if (!gameSettings.isOnline) return false
+    const pending = typeof onlineCommit === 'undefined' ? null : onlineCommit?.pendingSeats
+    return Array.isArray(pending) && pending.includes(unit.playerColor)
+}
+
 class Unit extends Entity {
     static visionRange = 3
     constructor(x, y, name) {
@@ -188,7 +202,7 @@ class Unit extends Entity {
     drawBars(ctx) {
         super.drawBars(ctx)
 
-        if (otherSettings.alwaysDisplayMovesBar || !this.isFullMoves)
+        if (shouldShowMovesBar(this))
             this.movesBar.draw(ctx)
     }
     createCommandsFromDestinations(coords) {
