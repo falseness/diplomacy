@@ -1109,9 +1109,11 @@ const atmosphericLighting = {
                 g.fill()
             }
         }
-        const edge = graded ? null : door.edge === undefined ? this.BLOOM.edge : door.edge
+        // A door wanting the cave grade whose pixels can't be read (a tainted canvas, as under
+        // file://) gets the default edge and rim light: its own ring is the grade's outline path.
+        const edge = graded ? null : door.grade || door.edge === undefined ? this.BLOOM.edge : door.edge
         if (edge) g.drawImage(this.edgeCanvas(image, edge), 0, 0)
-        const ring = graded ? null : door.ring === undefined ? this.BLOOM.ring : door.ring
+        const ring = graded ? null : door.grade || door.ring === undefined ? this.BLOOM.ring : door.ring
         if (ring) g.drawImage(this.ringCanvas(image, door, ring, 0, ring.shade), 0, 0)
         // Glow ('screen'): the halo around the doorway with the stone cut out, the rim-light
         // ring on the arch, the flare over the rim, and the flame in the opening.
