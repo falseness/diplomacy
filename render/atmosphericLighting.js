@@ -168,6 +168,10 @@ const atmosphericLighting = {
         if (hex.unknown) return 0
         const observation = observing && board.observedBuilding(cell)
         const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
+        return this.shownLightValue(hex, building)
+    },
+    // lightValue of a cell in view (not fogged) whose shown hexagon hex is known, with building.
+    shownLightValue(hex, building) {
         if (building?.isMapEdge) return 0
         const emitsLight = building && !building.killed && this.emitsLight(building)
         const kind = emitsLight ? this.LAMP_KINDS.indexOf(building.isDemonPortal ? 'demonPortal' : building.name) : 0

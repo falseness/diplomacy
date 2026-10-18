@@ -574,6 +574,9 @@ class Grid extends SpritesGroup {
         const observed = observing ? this.observedHexagon(this.arr[x][y]) : null
         const hexagon = observed || this.arr[x][y].hexagon
         const fogVisible = observed ? (observed.unknown ? 0 : 1) : !isFogOfWar || this.fogOfWar[x][y] ? 1 : 0
+        return this.surfaceStateOf(hexagon, fogVisible)
+    }
+    surfaceStateOf(hexagon, fogVisible) {
         // Unknown cells (playerColor null) get their own value, apart from colour 0.
         return ((hexagon.unknown ? 0 : hexagon.playerColor + 1) << 2) |
             (hexagon.isSuburb ? 2 : 0) | fogVisible
@@ -612,18 +615,23 @@ class Grid extends SpritesGroup {
         // The same pass lists this frame's overlay cells (surfaceOverlayCells). An unobserved cell
         // with no unit and an inert building (isInertBuilding) has no cached or overlay entity
         // (captureSurfaceState stored none, and no images), so only its state and light values are compared.
+        // Its state and light values are getSurfaceStateValue's and lightValue's for an unobserved cell.
         const overlayCells = this.surfaceOverlayCells
         overlayCells.length = 0
-        const observing = this.isObserving()
+        const observing = this.isObserving(), atmospheric = otherSettings.atmosphericVisuals
+        const states = this.surfaceCacheState, buildings = this.surfaceCacheBuildings, units = this.surfaceCacheUnits
+        const buildingImages = this.surfaceCacheBuildingImages, unitImages = this.surfaceCacheUnitImages
         let index = 0
         for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
-                const cell = this.arr[i][j]
+            const row = this.arr[i], fogRow = isFogOfWar ? this.fogOfWar[i] : undefined
+            for (let j = 0; j < row.length; ++j) {
+                const cell = row[j]
                 if (!observing && cell.unit.constructor === Empty && this.isInertBuilding(cell.building)) {
-                    if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j, false) ||
-                        lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, false) ||
-                        this.surfaceCacheBuildings[index] !== undefined ||
-                        this.surfaceCacheUnits[index] !== undefined)
+                    const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
+                    if (states[index] != this.surfaceStateOf(hexagon, shown) ||
+                        lighting[index + 1] !== (!atmospheric || !shown || hexagon.unknown ? 0 :
+                            atmosphericLighting.shownLightValue(hexagon, cell.building)) ||
+                        buildings[index] !== undefined || units[index] !== undefined)
                         return false
                     ++index
                     continue
@@ -633,13 +641,12 @@ class Grid extends SpritesGroup {
                 const building = this.isCacheableBuilding(cell.building) ?
                     cell.building : undefined
                 const unit = this.getStillUnit(cell)
-                if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j, observing) ||
+                if (buildings[index] != building || units[index] != unit ||
+                    states[index] != this.getSurfaceStateValue(i, j, observing) ||
                     lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, observing) ||
-                    this.surfaceCacheBuildings[index] != building ||
-                    this.surfaceCacheUnits[index] != unit ||
-                    this.surfaceCacheBuildingImages[index] != (building ?
+                    buildingImages[index] != (building ?
                         cachedImages[this.getEntityBodyImageName(building)] : undefined) ||
-                    this.surfaceCacheUnitImages[index] != (unit ?
+                    unitImages[index] != (unit ?
                         cachedImages[this.getEntityBodyImageName(unit)] : undefined))
                     return false
                 ++index
