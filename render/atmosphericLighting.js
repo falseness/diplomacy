@@ -29,21 +29,24 @@ const atmosphericLighting = {
         goldmine: {power: 1, spill: 1},
         demonPortal: {power: 0.9, spill: 1}
     },
-    // Lamp spill: mostly warmth, little lift. A broad wash (red up, blue held back, a low red
-    // lift) warms the lamp's own hex, beside and above the source, a little more on its left as
-    // in the concept; a warm layer round the doorway's foot; a cream pool filling the hex below;
-    // then a bright cream-gold band at the door threshold. Each layer is an ellipse [offset
+    // Lamp spill: mostly warmth, little lift. A broad map-only wash (blue held back) warms the
+    // stone evenly round the source; a warm layer on the lamp's own hex (a low red lift); a warm
+    // layer round the doorway's foot; a cream pool filling the hex below; a yellow-gold
+    // threshold band under a compact near-white cream hot spot; and a soft shade on the side
+    // away from the upper-left key light (map only), where the source's body blocks it. Each layer is an ellipse [offset
     // from the cell centre, half width, half height] (hex radii); lamps: only those lamp kinds.
     // map: multiply colour, blended over the key light (source-over). gain: color-dodge
     // lift, blended with 'lighten' over the key light's, so a lamp lights its pool the same on
     // the cool far side of the board as on the key-lit side (no gain: map only). Alpha per part
     // (gainAlpha) where the lift should be lower than the warmth.
     SPILL: [
-        {dx: -0.6, dy: 0.3, rx: 2.4, ry: 2.25, alpha: 0.85, map: [250, 206, 146], gain: [70, 38, 0], gainAlpha: 0.6},
-        {dy: 0.5, rx: 1.5, ry: 1.4, alpha: 0.85, map: [248, 212, 156], gain: [96, 64, 18], gainAlpha: 0.6},
+        {dy: 0.4, rx: 2.3, ry: 2.0, alpha: 0.8, map: [214, 196, 166]},
+        {dy: 0.3, rx: 1.7, ry: 1.6, alpha: 0.85, map: [246, 198, 128], gain: [30, 8, 0], gainAlpha: 0.6},
+        {dy: 0.5, rx: 1.4, ry: 1.3, alpha: 0.7, map: [248, 218, 166], gain: [90, 64, 22], gainAlpha: 0.6},
         {dy: 1.6, rx: 1.3, ry: 1.35, alpha: 0.75, map: [255, 222, 168], gain: [112, 84, 34], gainAlpha: 0.75},
-        {dy: 1.05, rx: 1.15, ry: 0.75, alpha: 0.9, map: [255, 212, 138], gain: [120, 80, 20]},
-        {dy: 1.0, rx: 0.85, ry: 0.6, alpha: 1, map: [255, 228, 156], gain: [134, 98, 28]},
+        {dy: 1.05, rx: 1.15, ry: 0.75, alpha: 0.9, map: [255, 220, 146], gain: [120, 88, 26]},
+        {dy: 0.95, rx: 0.8, ry: 0.6, alpha: 1, map: [255, 232, 168], gain: [138, 106, 42]},
+        {dx: 1.0, dy: 0.45, rx: 0.6, ry: 0.75, alpha: 0.55, map: [172, 152, 158]},
         {lamps: ['town'], dx: -0.75, dy: 0.25, rx: 1.0, ry: 0.9, alpha: 0.85, map: [255, 222, 164], gain: [112, 80, 30]}
     ],
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
@@ -628,9 +631,9 @@ const atmosphericLighting = {
         // (band width and the shrink centre's shift up-left in raster widths; steps are
         // [fraction of the width, alpha] of each shrunk copy taken out).
         edge: {color: '124,104,92', width: 0.12, shift: 0.02, steps: [[0.35, 0.5], [0.6, 0.6], [1, 1]]},
-        // Doorway recess: orange-gold at the sides, gold in the middle.
-        recessStops: [[0, '242,154,48'], [0.22, '252,188,72'], [0.5, '255,214,110'], [0.78, '252,188,72'],
-            [1, '242,154,48']],
+        // Doorway recess: deep orange at the sides, orange-gold in the middle.
+        recessStops: [[0, '196,112,38'], [0.25, '232,148,48'], [0.5, '246,170,58'], [0.75, '232,148,48'],
+            [1, '196,112,38']],
         halo: 1,
         haloStops: [[0, '255,214,140', 0.3], [0.25, '252,190,104', 0.2], [0.55, '245,160,80', 0.08],
             [1, '235,130,60', 0]],
@@ -645,21 +648,22 @@ const atmosphericLighting = {
         // (radii in window half sizes).
         window: {reach: 1.8, stops: [[0, '255,250,220', 1], [0.35, '255,226,130', 0.95], [0.55, '255,180,70', 0.55],
             [1, '245,140,50', 0]]},
-        // Flame: an upright ellipse in the top of the opening (half width x half height in door
+        // Flame: a narrow upright ellipse in the top of the opening (half width x half height in door
         // half sizes), white-gold in the middle, gold to orange at its edge, leaving the recess
         // at the sides and foot.
-        flame: {rx: 0.9, ry: 0.9, dy: -0.25},
-        coreStops: [[0, '255,255,244', 1], [0.55, '255,250,214', 1], [0.65, '255,216,112', 0.9],
-            [1, '255,170,60', 0]],
+        flame: {rx: 0.75, ry: 0.9, dy: -0.3},
+        coreStops: [[0, '255,255,240', 1], [0.6, '255,252,214', 1], [0.74, '253,218,96', 0.9],
+            [1, '250,170,40', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0,
-        // Cave grade, per pixel of the sprite raster: warm grey-brown stone from the sprite's own
-        // luminance (stone: channel factors), a bright gold lit inner arch (nearly flat in the
+        // Cave grade, per pixel of the sprite raster: stone from the sprite's own luminance
+        // (stone: channel factors, blue over green so the warm key light's dodge leaves it
+        // grey-beige, not khaki), lit a little towards its top (topLight), a bright gold lit inner arch (nearly flat in the
         // sprite's luminance) deepening to warm brown as it fades over goldWidth door half
-        // widths from the opening, the opening an orange recess. Reached by the shade
+        // widths from the opening, the opening a deep orange-gold recess. Reached by the shade
         // multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.94, 0.71, 0.69], sideDark: 0.3, gold: [255, 200, 96], brown: [150, 78, 34], goldAmount: 1, goldWidth: 0.85,
-            goldPower: 1, rimDark: 0.3, flareReach: 1.3, rimLine: [255, 230, 140], rimLineWidth: 0.3}
+        grade: {stone: [0.8, 0.63, 0.7], sideDark: 0.55, topLight: 0.15, gold: [255, 200, 96], brown: [150, 78, 34], goldAmount: 1, goldWidth: 1.5,
+            goldPower: 1, rimDark: 0.15, flareReach: 1.3, flareAlpha: 0.45, rimLine: [255, 238, 160], rimLineWidth: 0.6}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
@@ -750,7 +754,7 @@ const atmosphericLighting = {
     gradeCanvases(image, door) {
         const W = image.width, H = image.height, rw = door.w * W, cx = door.x * W
         const top = (door.y - door.h) * H + rw, bottom = (door.y + door.h) * H
-        const {stone, sideDark, gold, brown, goldAmount, goldWidth, goldPower, rimDark, rimLine, rimLineWidth} = this.BLOOM.grade
+        const {stone, sideDark, topLight, gold, brown, goldAmount, goldWidth, goldPower, rimDark, rimLine, rimLineWidth} = this.BLOOM.grade
         const shade = document.createElement('canvas'), lift = document.createElement('canvas')
         shade.width = lift.width = W
         shade.height = lift.height = H
@@ -788,7 +792,8 @@ const atmosphericLighting = {
                 // The stone darkens towards the dome's rim, away from the lit opening, and on
                 // the side away from the upper-left key light.
                 const rim = (1 - rimDark * Math.min(1, Math.hypot(px - cx, py - top) / (0.45 * W))) *
-                    (1 - sideDark * Math.min(1, Math.max(0, (px - cx - rw) / (0.4 * W))))
+                    (1 - sideDark * Math.min(1, Math.max(0, (px - cx - rw) / (0.4 * W)))) *
+                    (1 + topLight * Math.min(1, Math.max(0, 1 - py / bottom)))
                 // A thin bright rim line traces the opening's edge.
                 const line = Math.max(0, 1 - d / rimLineWidth) ** 1.5
                 // The gold deepens to warm brown as it fades (gold over grey stone would read olive).
@@ -878,7 +883,9 @@ const atmosphericLighting = {
         for (const [t, color, alpha] of this.BLOOM.flareStops)
             flare.addColorStop(t, `rgba(${color},${alpha})`)
         g.fillStyle = flare
+        g.globalAlpha = graded ? this.BLOOM.grade.flareAlpha : 1
         g.fillRect(cx - flareReach, cy - flareReach, 2 * flareReach, 2 * flareReach)
+        g.globalAlpha = 1
         for (const lit of door.windows || []) {
             const {reach, stops} = this.BLOOM.window
             g.save()
