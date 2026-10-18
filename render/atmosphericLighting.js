@@ -110,14 +110,18 @@ const atmosphericLighting = {
         if (this.gain) this.gain.width = this.gain.height = 0
         this.map = this.gain = null
         this.mapKey = ''
+        this.mapState = null
     },
-    collect(board, includeKey = true, includeCells = true) {
+    // range (board.drawRange) limits the walk to those cells.
+    collect(board, includeKey = true, includeCells = true, range = null) {
         const cells = [], sources = []
         if (!otherSettings.atmosphericVisuals) return {cells, sources, key: ''}
         // The key lists the collected cells and sources by coordinate (positions follow from
         // the coordinates and the hex radius); a plain string, cheap to compare every frame.
         let key = includeKey ? basis.r + '|' : ''
-        for (const row of board.arr) for (const cell of row) {
+        const {i0, i1, j0, j1} = range || {i0: 0, i1: board.arr.length, j0: 0, j1: board.arr.length ? board.arr[0].length : 0}
+        for (let i = i0; i < i1; ++i) for (let j = j0; j < j1; ++j) {
+            const cell = board.arr[i][j]
             const {x, y} = cell.coord
             // Never inspect a hidden building, including public fog landmarks.
             if (isFogOfWar && !board.fogOfWar[x][y]) continue
@@ -139,8 +143,59 @@ const atmosphericLighting = {
         }
         return {cells, sources, key}
     },
+    // The information of collect(board).key as numbers, in a reused array: basis.r, then per cell
+    // (in collect's order) 0 when not collected, else 1 + 2 * lamp kind + 8 * (owner colour + 1)
+    // for an owned tile. The per-frame cache checks compare it (sameLightState) instead of
+    // building and comparing a string of every cell, which loaded every frame with garbage.
+    LAMP_KINDS: ['', 'town', 'goldmine', 'demonPortal'],
+    lightState(board) {
+        const w = board.arr.length, h = w ? board.arr[0].length : 0
+        let state = this.lightStateScratch
+        if (!state || state.length !== w * h + 1) state = this.lightStateScratch = new Float64Array(w * h + 1)
+        state.fill(0)
+        if (!otherSettings.atmosphericVisuals) return state
+        state[0] = basis.r
+        let k = 0
+        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) {
+            ++k
+            const cell = board.arr[i][j], {x, y} = cell.coord
+            // As collect: never inspect a hidden building, including public fog landmarks.
+            if (isFogOfWar && !board.fogOfWar[x][y]) continue
+            const hex = board.observedHexagon(cell) || cell.hexagon
+            if (hex.unknown) continue
+            const observation = board.observedBuilding(cell)
+            const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
+            if (building?.isMapEdge) continue
+            const emitsLight = building && !building.killed && this.emitsLight(building)
+            const kind = emitsLight ? this.LAMP_KINDS.indexOf(building.isDemonPortal ? 'demonPortal' : building.name) : 0
+            state[k] = 1 + 2 * kind + (hex.playerColor && hex.player?.color ? 8 * (hex.playerColor + 1) : 0)
+        }
+        return state
+    },
+    // Whether the board's light state equals stored (a lightState copy).
+    sameLightState(board, stored) {
+        const state = this.lightState(board)
+        if (!stored || stored.length !== state.length) return false
+        for (let k = 0; k < state.length; ++k) if (stored[k] !== state[k]) return false
+        return true
+    },
     emitsLight(building) {
         return building.name === 'town' || building.name === 'goldmine' || building.isDemonPortal || building.name === 'demonPortal'
+    },
+    // The cells whose hexagon (radius basis.r, plus 2 device pixels of antialiasing) reaches the
+    // rows of ctx's canvas under its axis-aligned transform (all of them otherwise): a grout fill
+    // or a clip built from these covers exactly the canvas pixels of the whole board's, without
+    // tracing thousands of off-screen hexagons every frame when a large board is zoomed in.
+    // Whole rows: the hexagons left and right of the canvas still shape the antialiasing of
+    // its edge columns, while edges above and below it play no part.
+    onCanvas(ctx, cells, center = cell => cell.pos) {
+        const t = ctx.getTransform()
+        if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return cells
+        const ry = basis.r * t.d + 2, h = ctx.canvas.height
+        return cells.filter(cell => {
+            const y = center(cell).y * t.d + t.f
+            return y + ry >= 0 && y - ry <= h
+        })
     },
     hexPath(ctx, cells) {
         ctx.beginPath()
@@ -164,13 +219,14 @@ const atmosphericLighting = {
         mapDepth.ensureGeometry(board)
         const bounds = mapDepth.surfaceBounds
         if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return null
-        const collected = this.collect(board)
-        const key = collected.key + JSON.stringify(bounds)
+        const key = JSON.stringify(bounds)
         const scale = this.resolution(bounds, cap)
         const zooming = performance.now() < gameEvent.screen.surfaceZoomUntil
-        if (this.map && this.mapKey === key && (this.mapScale === scale || zooming))
+        if (this.map && this.mapKey === key && this.sameLightState(board, this.mapState) &&
+                (this.mapScale === scale || zooming))
             return this.map
-        this.build(collected, bounds, scale)
+        this.build(this.collect(board), bounds, scale)
+        this.mapState = this.lightState(board).slice()
         this.mapKey = key
         this.mapScale = scale
         ++this.rebuilds
@@ -443,7 +499,7 @@ const atmosphericLighting = {
     drawGrout(ctx, hexagons) {
         ctx.save()
         ctx.beginPath()
-        for (const hexagon of hexagons) {
+        for (const hexagon of this.onCanvas(ctx, hexagons, hexagon => hexagon.calcPos())) {
             if (hexagon.unknown) continue
             const c = hexagon.calcPos()
             this.hexagonPath(ctx, c.x, c.y, basis.r)
@@ -514,11 +570,16 @@ const atmosphericLighting = {
     // the visible cells, under the fog and before any sprite is drawn.
     drawShadows(ctx, board) {
         if (!otherSettings.atmosphericVisuals) return
-        const {cells, sources} = this.collect(board, false)
+        // The clip's cells from the canvas rows (onCanvas), the casters from the drawn range; lamps
+        // from the whole board, as an off-screen lamp still turns an on-screen shadow.
+        const {cells} = this.collect(board, false, true, board.drawRange(ctx, true))
+        const range = board.drawRange(ctx)
+        const {sources} = this.collect(board, false, false)
         const t = ctx.getTransform()
         const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
         const casters = []
         for (const {x, y, pos} of cells) {
+            if (x < range.i0 || x >= range.i1 || y < range.j0 || y >= range.j1) continue
             const building = board.arr[x][y].building
             if (!building.notEmpty() || building.killed || building.isInvisible || building.isMapEdge ||
                 building.isBuildingProduction() || board.observedBuilding(board.arr[x][y]) ||
@@ -533,7 +594,7 @@ const atmosphericLighting = {
         }
         if (!casters.length) return
         ctx.save()
-        this.hexPath(ctx, cells)
+        this.hexPath(ctx, this.onCanvas(ctx, cells))
         ctx.clip()
         for (const {building, image, pos} of casters) {
             const {best, strength} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)

@@ -169,28 +169,37 @@ class Grid extends SpritesGroup {
         }
     }
     //todo: refactor
+    // The grout path holds whole rows of cells across the canvas (atmosphericLighting.onCanvas);
+    // the tiles drawn are those of the drawn range (each also culls itself).
     drawHexagons(ctx) {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
-        const hexagons = []
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
+        const hexagons = [], tiles = []
+        const range = this.drawRange(ctx, true), drawn = this.drawRange(ctx)
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
                     continue
                 const observed = this.observedHexagon(this.arr[i][j])
                 if (isFogOfWar && !this.fogOfWar[i][j] && !observed)
                     continue
-                hexagons.push(observed || this.arr[i][j].hexagon)
+                const hexagon = observed || this.arr[i][j].hexagon
+                hexagons.push(hexagon)
+                if (i >= drawn.i0 && i < drawn.i1)
+                    tiles.push(hexagon)
             }
         }
         // Grout under the drawn cells only: hidden cells keep their fog tile.
         if (otherSettings.atmosphericVisuals)
             atmosphericLighting.drawGrout(ctx, hexagons)
-        for (const hexagon of hexagons)
+        for (const hexagon of tiles)
             hexagon.draw(ctx, atmosphericTransform)
     }
+    // Cell texts are set while their cells are drawn (production previews), within the same
+    // drawn range, so the range also holds every text to draw and clear.
     drawCellText(ctx) {
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
+        const range = this.drawRange(ctx)
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
                 let cell = this.arr[i][j]
                 if (cell.building.isMapEdge)
                     continue
@@ -272,8 +281,9 @@ class Grid extends SpritesGroup {
         // Moves bars hang below the hex (Unit.movesBarMarginY): draw them after every
         // body, as the cached pass does, so the next cell's art never covers them.
         let movesBarUnits = []
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
+        const range = this.drawRange(ctx)
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
                     if (buildings) this.drawFogLandmark(ctx, this.arr[i][j].building)
                     continue
@@ -300,6 +310,8 @@ class Grid extends SpritesGroup {
         for (let i = 0; i < tmpBuildings.length; ++i) {
             tmpBuildings[i].drawBars(ctx)
         }
+        if (units)
+            this.refreshCulledPortal(range)
     }
     drawProductionSilhouette(ctx, building) {
         if (building.isPreparingManufacture)
@@ -332,8 +344,9 @@ class Grid extends SpritesGroup {
         return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) ? cell.unit : undefined
     }
     drawEntityBodies(ctx) {
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
+        const range = this.drawRange(ctx)
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
                     this.drawFogLandmark(ctx, this.arr[i][j].building)
                     continue
@@ -348,8 +361,9 @@ class Grid extends SpritesGroup {
         }
     }
     drawStillUnits(ctx) {
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
+        const range = this.drawRange(ctx)
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j])
                     continue
                 const unit = this.getStillUnit(this.arr[i][j])
@@ -360,8 +374,9 @@ class Grid extends SpritesGroup {
     }
     drawEntityOverlays(ctx) {
         const buildingBars = []
-        for (let i = 0; i < this.arr.length; ++i) {
-            for (let j = 0; j < this.arr[i].length; ++j) {
+        const range = this.drawRange(ctx)
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j])
                     continue
                 const cell = this.arr[i][j]
@@ -390,10 +405,50 @@ class Grid extends SpritesGroup {
         }
         for (let i = 0; i < buildingBars.length; ++i)
             buildingBars[i].drawBars(ctx)
+        this.refreshCulledPortal(range)
+    }
+    // The cell index range whose drawing can reach ctx's canvas: with atmospheric visuals and an
+    // axis-aligned transform, the cells centred within a margin of the canvas that holds any
+    // hexagon, sprite, shadow, silhouette or bar drawn for a cell; the whole board otherwise
+    // (and for the surface cache, whose raster holds the whole board). Per-frame loops skip the
+    // other cells, so a zoomed-in large board does not walk every cell every frame.
+    // fullWidth keeps every column (whole rows).
+    drawRange(ctx, fullWidth = false) {
+        const all = {i0: 0, i1: this.arr.length, j0: 0, j1: this.arr.length ? this.arr[0].length : 0}
+        if (!otherSettings.atmosphericVisuals)
+            return all
+        const t = ctx.getTransform()
+        if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0)
+            return all
+        const margin = 4 * basis.r + assets.size
+        const left = -t.e / t.a - margin, right = (ctx.canvas.width - t.e) / t.a + margin
+        const top = -t.f / t.d - margin, bottom = (ctx.canvas.height - t.f) / t.d + margin
+        // Cell centres: x = i * offset.x, y = (2 * j + (i & 1)) * offset.y.
+        return {
+            i0: fullWidth ? 0 : Math.max(0, Math.floor(left / basis.offset.x)),
+            i1: fullWidth ? all.i1 : Math.min(all.i1, Math.ceil(right / basis.offset.x) + 1),
+            j0: Math.max(0, Math.floor((top / basis.offset.y - 1) / 2)),
+            j1: Math.min(all.j1, Math.ceil(bottom / basis.offset.y / 2) + 1)
+        }
+    }
+    // A demon portal's drawNextProduction also keeps its information panel current while it
+    // is selected; a selected portal outside the drawn range still gets that refresh.
+    refreshCulledPortal(range) {
+        const portal = gameEvent.selected
+        if (!portal?.isDemonPortal || portal.killed || !portal.nextProduction)
+            return
+        const {x, y} = portal.coord
+        if (x >= range.i0 && x < range.i1 && y >= range.j0 && y < range.j1)
+            return
+        if (!this.arr[x] || this.arr[x][y]?.building !== portal ||
+                (isFogOfWar && !this.fogOfWar[x][y]) || this.observedBuilding(this.arr[x][y]))
+            return
+        entityInterface.refreshPortal(portal)
     }
     drawFogOfWar(ctx) {
-        for (let i = 0; i < this.fogOfWar.length; ++i) {
-            for (let j = 0; j < this.fogOfWar[i].length; ++j) {
+        const range = this.drawRange(ctx)
+        for (let i = range.i0; i < Math.min(range.i1, this.fogOfWar.length); ++i) {
+            for (let j = range.j0; j < Math.min(range.j1, this.fogOfWar[i].length); ++j) {
                 if (this.arr[i][j].building.isMapEdge)
                     continue
                 if (!this.fogOfWar[i][j] && !this.observedHexagon(this.arr[i][j])) {
@@ -475,7 +530,7 @@ class Grid extends SpritesGroup {
         return typeof onlineObservation !== 'undefined' ? onlineObservation.hexagonFor(cell) : null
     }
     surfaceStateMatches() {
-        if (this.surfaceCacheLighting !== atmosphericLighting.collect(this).key ||
+        if (!atmosphericLighting.sameLightState(this, this.surfaceCacheLighting) ||
             this.surfaceCacheAtmospheric !== otherSettings.atmosphericVisuals ||
             !this.surfaceCacheState ||
             !this.surfaceCacheBuildings ||
@@ -532,7 +587,7 @@ class Grid extends SpritesGroup {
                 ++index
             }
         }
-        this.surfaceCacheLighting = atmosphericLighting.collect(this).key
+        this.surfaceCacheLighting = atmosphericLighting.lightState(this).slice()
         this.surfaceCacheAtmospheric = otherSettings.atmosphericVisuals
         this.surfaceCacheState = state
         this.surfaceCacheBuildings = buildings
