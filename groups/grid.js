@@ -521,7 +521,10 @@ class Grid extends SpritesGroup {
         return typeof onlineObservation !== 'undefined' ? onlineObservation.hexagonFor(cell) : null
     }
     surfaceStateMatches() {
-        if (!atmosphericLighting.sameLightState(this, this.surfaceCacheLighting) ||
+        // The light state (atmosphericLighting.lightState) is compared cell by cell in the same pass.
+        const lighting = this.surfaceCacheLighting
+        if (!lighting || lighting.length != this.arr.length * this.arr[0].length + 1 ||
+            lighting[0] !== (otherSettings.atmosphericVisuals ? basis.r : 0) ||
             this.surfaceCacheAtmospheric !== otherSettings.atmosphericVisuals ||
             !this.surfaceCacheState ||
             !this.surfaceCacheBuildings ||
@@ -543,6 +546,7 @@ class Grid extends SpritesGroup {
                     cell.building : undefined
                 const unit = this.getStillUnit(cell)
                 if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j) ||
+                    lighting[index + 1] !== atmosphericLighting.lightValue(this, cell) ||
                     this.surfaceCacheBuildings[index] != building ||
                     this.surfaceCacheUnits[index] != unit ||
                     this.surfaceCacheBuildingImages[index] != (building ?

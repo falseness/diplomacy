@@ -152,25 +152,25 @@ const atmosphericLighting = {
         const w = board.arr.length, h = w ? board.arr[0].length : 0
         let state = this.lightStateScratch
         if (!state || state.length !== w * h + 1) state = this.lightStateScratch = new Float64Array(w * h + 1)
-        state.fill(0)
-        if (!otherSettings.atmosphericVisuals) return state
-        state[0] = basis.r
+        state[0] = otherSettings.atmosphericVisuals ? basis.r : 0
         let k = 0
-        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) {
-            ++k
-            const cell = board.arr[i][j], {x, y} = cell.coord
-            // As collect: never inspect a hidden building, including public fog landmarks.
-            if (isFogOfWar && !board.fogOfWar[x][y]) continue
-            const hex = board.observedHexagon(cell) || cell.hexagon
-            if (hex.unknown) continue
-            const observation = board.observedBuilding(cell)
-            const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
-            if (building?.isMapEdge) continue
-            const emitsLight = building && !building.killed && this.emitsLight(building)
-            const kind = emitsLight ? this.LAMP_KINDS.indexOf(building.isDemonPortal ? 'demonPortal' : building.name) : 0
-            state[k] = 1 + 2 * kind + (hex.playerColor && hex.player?.color ? 8 * (hex.playerColor + 1) : 0)
-        }
+        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) state[++k] = this.lightValue(board, board.arr[i][j])
         return state
+    },
+    // One cell's lightState entry (grid.surfaceStateMatches compares them in its own cell pass).
+    lightValue(board, cell) {
+        if (!otherSettings.atmosphericVisuals) return 0
+        const {x, y} = cell.coord
+        // As collect: never inspect a hidden building, including public fog landmarks.
+        if (isFogOfWar && !board.fogOfWar[x][y]) return 0
+        const hex = board.observedHexagon(cell) || cell.hexagon
+        if (hex.unknown) return 0
+        const observation = board.observedBuilding(cell)
+        const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
+        if (building?.isMapEdge) return 0
+        const emitsLight = building && !building.killed && this.emitsLight(building)
+        const kind = emitsLight ? this.LAMP_KINDS.indexOf(building.isDemonPortal ? 'demonPortal' : building.name) : 0
+        return 1 + 2 * kind + (hex.playerColor && hex.player?.color ? 8 * (hex.playerColor + 1) : 0)
     },
     // Whether the board's light state equals stored (a lightState copy).
     sameLightState(board, stored) {
