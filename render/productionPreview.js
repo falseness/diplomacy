@@ -15,8 +15,8 @@ function drawProductionPreview(ctx, imageName, pos, coord, turns) {
     // we set text here and after each draw of cell it sets to empty text
     // a bit stupid, but we dont have destructors in js so...
     const cell = grid.getCell(coord)
-    cell.infoText = new CoordText(coord.x, coord.y, turns,
-        cell.hexColor, CoordText.defaultFontSize, 'white', kAllProductionStrokeWidth)
+    grid.setInfoText(coord, new CoordText(coord.x, coord.y, turns,
+        cell.hexColor, CoordText.defaultFontSize, 'white', kAllProductionStrokeWidth))
 }
 
 function addProductionPreviewInfo(info, name, turns) {

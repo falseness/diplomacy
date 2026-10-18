@@ -102,8 +102,16 @@ class HealthBar {
             x += rect.width + gap
         }
     }
+    // The layout is redone only when what it reads changed (the rects themselves only change
+    // in repaintRects and layout), not on every draw of every bar every frame.
     draw(ctx) {
-        this.layout()
+        const pos = this.pos, key = this.laidOut
+        if (!key || key.rects !== this.rects || key.x !== pos.x || key.y !== pos.y || key.r !== basis.r ||
+                key.healthColor !== this.healthColor || key.dmgColor !== this.dmgColor) {
+            this.layout()
+            this.laidOut = {rects: this.rects, x: pos.x, y: pos.y, r: basis.r,
+                healthColor: this.healthColor, dmgColor: this.dmgColor}
+        }
         for (const rect of this.rects) rect.draw(ctx)
     }
 }
