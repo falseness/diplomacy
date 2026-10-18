@@ -8,7 +8,10 @@ function shouldShowMovesBar(unit) {
     if (!otherSettings.alwaysDisplayMovesBar && unit.isFullMoves) return false
     if (unit.playerColor === whooseTurn) return true
     if (!gameSettings.isOnline) return false
-    const pending = typeof onlineCommit === 'undefined' ? null : onlineCommit?.pendingSeats
+    const pending = gameSettings.coop
+        ? (typeof onlineCommit === 'undefined' ? null : onlineCommit?.pendingSeats)
+        : (typeof onlineParallelPending === 'undefined' || onlineParallelPending?.gameRound !== gameRound
+            ? null : onlineParallelPending.pendingSeats)
     return Array.isArray(pending) && pending.includes(unit.playerColor)
 }
 

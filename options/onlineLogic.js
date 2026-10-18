@@ -5,6 +5,8 @@ let onlineLobby = null
 let onlineSocket = null
 let onlineGameClose = null
 let onlineCommit = null
+// Competitive seats still moving this round (game:pendingSeats); co-op reads onlineCommit.
+let onlineParallelPending = null
 // [target, event, handler] of the open game; a lobby game's socket is the
 // signed-in session socket, which outlives the game and only loses these.
 let onlineListeners = []
@@ -659,6 +661,7 @@ function resetOnlineIdentity() {
     closeOnlineGameSocket()
     onlineLobby = null
     onlineCommit = null
+    onlineParallelPending = null
     gameDiffHandler.reset()
     onlineTerrains.clear()
     SendNextTurn = () => {}
@@ -790,6 +793,7 @@ function SetupServerCommunicationLogic(gameID) {
         nextTurnButton.disableClick()
         undoButton.disableClick()
         onlineCommit = null
+        onlineParallelPending = null
         competitiveDelivery = null
         acceptedBoard = null
         gameDiffHandler.reset(gameID)
@@ -887,6 +891,7 @@ function SetupServerCommunicationLogic(gameID) {
     on(socket, 'error', error => error === 'STALE_TURN' || error === 'STALE_RECOVERY' ? reopenTurn() : error === 'KICKED' ? removedByHost()
         : fail(error === 'OUTDATED_CLIENT' ? 'This page is outdated: please reload it.' : 'The server rejected the action.'))
     onlineCommit = null
+    onlineParallelPending = null
     gameDiffHandler.reset(gameID)
     // Competitive scheduling gives each player one active turn per round.
     // A waiting connection may become active in that same round when its
@@ -1104,6 +1109,12 @@ function SetupServerCommunicationLogic(gameID) {
         timer.pause()
     });
 
+    on(socket, 'game:pendingSeats', message => {
+        if (socket !== onlineSocket || failed || message?.gameID !== gameID ||
+            !Number.isSafeInteger(message.gameRound) || !Array.isArray(message.pendingSeats)) return
+        onlineParallelPending = {gameRound: message.gameRound, pendingSeats: message.pendingSeats}
+    })
+
     // Other players' actions as this seat sees them, applied live (waiting or mid-turn).
     on(socket, 'game:diff', message => {
         if (socket !== onlineSocket || failed) return
@@ -1123,6 +1134,7 @@ function SetupServerCommunicationLogic(gameID) {
         failed = false
         document.getElementById('online-recovery')?.remove()
         onlineCommit = null
+        onlineParallelPending = null
         competitiveDelivery = null
         acceptedBoard = null
         // Unacked and unsent actions belong to the dropped local turn; the reloaded board restarts the log.
