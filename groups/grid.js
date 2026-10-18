@@ -254,7 +254,13 @@ class Grid extends SpritesGroup {
     }
     // Public landmarks reveal only their artwork, never an occupying unit or
     // overlays. Fog/vision state remains authoritative for everything else.
+    // Lake, sea and mountain art is map layout: drawn above the fog too (TASK-1160).
     drawFogLandmark(ctx, building) {
+        if (typeof StaticNature !== 'undefined' && building instanceof StaticNature) {
+            if (!building.isMapEdge)
+                drawCachedImage(ctx, cachedImages[building.bodyImageName], building.pos)
+            return
+        }
         if (gameSettings.drawFogLandmarks !== true)
             return
         if (isFogLandmark(building))
