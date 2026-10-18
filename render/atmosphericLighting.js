@@ -23,11 +23,15 @@ const atmosphericLighting = {
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.6],
     // Lamps: power weighs each lamp for shadow direction; spill scales its SPILL below (a
-    // town's small doorway lights a softer pool than a cave mouth).
+    // town's small doorway lights a softer pool than a cave mouth). A demon portal is no lamp:
+    // its own layers (in place of SPILL) are a dim red-violet glow at its foot, about 40% of a
+    // cave's pool in strength and reach.
     LAMP: {
         town: {power: 1, spill: 0.95},
         goldmine: {power: 1, spill: 1},
-        demonPortal: {power: 0.9, spill: 1}
+        demonPortal: {power: 0.4, spill: 1, layers: [
+            {dy: 1.0, rx: 0.6, ry: 0.42, alpha: 1, map: [238, 160, 190], gain: [150, 14, 74], gainAlpha: 1}
+        ]}
     },
     // Lamp spill: mostly warmth, little lift. A broad map-only wash (blue held back) warms the
     // stone evenly round the source; two narrow warm layers from the doorway's foot down (so
@@ -211,8 +215,8 @@ const atmosphericLighting = {
     // the sprite and a zoom never rebuilds it.
     SPILL_RASTER: 24,
     spillSprite(part, name) {
-        const r = basis.r, layers = this.SPILL.filter(l => !l.lamps || l.lamps.includes(name))
-        const id = part + ',' + (layers.some(l => l.lamps) ? name : ''), key = id + ',' + r, scale = this.SPILL_RASTER / r
+        const own = this.LAMP[name]?.layers, r = basis.r, layers = own || this.SPILL.filter(l => !l.lamps || l.lamps.includes(name))
+        const id = part + ',' + (own || layers.some(l => l.lamps) ? name : ''), key = id + ',' + r, scale = this.SPILL_RASTER / r
         let sprite = this.spillSprites.get(id)
         if (sprite && sprite.key === key) return sprite
         const left = Math.min(...layers.map(l => (l.dx || 0) - l.rx)) * r, right = Math.max(...layers.map(l => (l.dx || 0) + l.rx)) * r
@@ -717,7 +721,13 @@ const atmosphericLighting = {
             shadeStops: [[0, '255,240,214'], [0.4, '250,232,206'], [1, '226,212,202']],
             // Lit windows (centre, half width, half height), glowing onto the wall round them.
             windows: [{x: 0.43, y: 0.572, w: 0.042, h: 0.038}, {x: 0.733, y: 0.719, w: 0.026, h: 0.042}]},
-        demonPortal: {x: 0.49, y: 0.66, w: 0.13, h: 0.2}
+        // A portal keeps its own violet stone and rift (a faint tint, no recess, edge, rim
+        // light or flame), under a dim red-violet glow at its foot and over its rift.
+        demonPortal: {x: 0.49, y: 0.66, w: 0.13, h: 0.2, ring: null, edge: null, recessStops: null, flame: null,
+            shadeStops: [[0, '255,240,250'], [0.5, '250,242,250'], [1, '242,236,244']],
+            haloReach: 0.6, haloStops: [[0, '200,60,150', 0.3], [0.4, '170,40,140', 0.16], [1, '120,20,110', 0]],
+            lift: {color: '112,64,112', alpha: 0.25},
+            flareReach: 1.4, flareAlpha: 0.5, flareStops: [[0, '210,70,160', 0.4], [0.5, '160,40,130', 0.15], [1, '120,20,110', 0]]}
     },
     bloomSprite: null,
     bloomSpriteBuilds: 0,
@@ -978,6 +988,18 @@ const atmosphericLighting = {
         for (let k = 0; k < W * H; k++) d[k] /= 3
         return d
     },
+    // The sprite's silhouette in one colour at an alpha (a 'screen' lift of the whole sprite).
+    silhouette(image, {color, alpha}) {
+        const s = document.createElement('canvas')
+        s.width = image.width
+        s.height = image.height
+        const g = s.getContext('2d')
+        g.drawImage(image, 0, 0)
+        g.globalCompositeOperation = 'source-in'
+        g.fillStyle = `rgba(${color},${alpha})`
+        g.fillRect(0, 0, s.width, s.height)
+        return s
+    },
     copyCanvas(source) {
         const copy = document.createElement('canvas')
         copy.width = source.width
@@ -1011,13 +1033,15 @@ const atmosphericLighting = {
                 tint.addColorStop(t, `rgb(${color})`)
             g.fillStyle = tint
             g.fillRect(0, 0, W, H)
-            g.globalCompositeOperation = 'source-atop'
-            const recess = g.createLinearGradient(dx - rw, 0, dx + rw, 0)
-            for (const [t, color] of this.BLOOM.recessStops)
-                recess.addColorStop(t, `rgb(${color})`)
-            g.fillStyle = recess
-            this.doorPath(g, door, image)
-            g.fill()
+            if (door.recessStops !== null) {
+                g.globalCompositeOperation = 'source-atop'
+                const recess = g.createLinearGradient(dx - rw, 0, dx + rw, 0)
+                for (const [t, color] of door.recessStops || this.BLOOM.recessStops)
+                    recess.addColorStop(t, `rgb(${color})`)
+                g.fillStyle = recess
+                this.doorPath(g, door, image)
+                g.fill()
+            }
         }
         const edge = graded ? null : door.edge === undefined ? this.BLOOM.edge : door.edge
         if (edge) g.drawImage(this.edgeCanvas(image, edge), 0, 0)
@@ -1031,8 +1055,8 @@ const atmosphericLighting = {
         glow.height = H + 2 * pad
         g = glow.getContext('2d')
         const cx = pad + dx, cy = pad + dy
-        const halo = g.createRadialGradient(cx, cy, 0, cx, cy, pad)
-        for (const [t, color, alpha] of this.BLOOM.haloStops)
+        const halo = g.createRadialGradient(cx, cy, 0, cx, cy, (door.haloReach || 1) * pad)
+        for (const [t, color, alpha] of door.haloStops || this.BLOOM.haloStops)
             halo.addColorStop(t, `rgba(${color},${alpha})`)
         g.fillStyle = halo
         g.fillRect(0, 0, glow.width, glow.height)
@@ -1042,14 +1066,15 @@ const atmosphericLighting = {
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
         if (graded) g.drawImage(graded.lift, pad, pad)
+        if (door.lift) g.drawImage(this.silhouette(image, door.lift), pad, pad)
         if (ring) g.drawImage(this.ringCanvas(image, door, ring, pad, ring.color), 0, 0)
         // Flare: the doorway's light spilling over its rim onto the arch.
-        const flareReach = (graded ? this.BLOOM.grade.flareReach : this.BLOOM.flareReach) * rw
+        const flareReach = (graded ? this.BLOOM.grade.flareReach : door.flareReach || this.BLOOM.flareReach) * rw
         const flare = g.createRadialGradient(cx, cy, 0, cx, cy, flareReach)
-        for (const [t, color, alpha] of this.BLOOM.flareStops)
+        for (const [t, color, alpha] of door.flareStops || this.BLOOM.flareStops)
             flare.addColorStop(t, `rgba(${color},${alpha})`)
         g.fillStyle = flare
-        g.globalAlpha = graded ? this.BLOOM.grade.flareAlpha : 1
+        g.globalAlpha = graded ? this.BLOOM.grade.flareAlpha : door.flareAlpha ?? 1
         g.fillRect(cx - flareReach, cy - flareReach, 2 * flareReach, 2 * flareReach)
         g.globalAlpha = 1
         for (const lit of door.windows || []) {
@@ -1063,7 +1088,7 @@ const atmosphericLighting = {
             g.fillRect(-1, -1, 2, 2)
             g.restore()
         }
-        if (!graded) {
+        if (!graded && door.flame !== null) {
             // The flame: an upright white-gold ellipse in the doorway, leaving the recess at
             // the sides and foot.
             this.doorPath(g, door, image, pad, pad)
