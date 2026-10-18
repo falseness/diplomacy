@@ -47,6 +47,10 @@ class Grid extends SpritesGroup {
         this.surfaceCacheBuildingImages = undefined
         this.surfaceCacheUnitImages = undefined
         this.surfaceCacheRevision = 0
+        // Cells of the surface-cache frame that drawStillUnits and drawEntityOverlays may draw on
+        // (see isOverlayCell), and the cells whose infoText may hold a text (setInfoText).
+        this.surfaceOverlayCells = []
+        this.infoTextCells = new Set()
 
         if (size) 
             this.fill(size.x, size.y)
@@ -118,6 +122,7 @@ class Grid extends SpritesGroup {
     }
     fill(n, m) {
         this.createArr(n, this.arr)
+        this.infoTextCells.clear()
         for (let i = 0; i < n; ++i) {
             for (let j = 0; j < m; ++j) {
                 this.arr[i][j] = new Cell(new Hexagon(i, j, 0), new Empty(), new Empty(),
@@ -206,6 +211,10 @@ class Grid extends SpritesGroup {
     // drawn range, so the range also holds every text to draw and clear.
     drawCellText(ctx) {
         const range = this.drawRange(ctx)
+        if (!debug && !this.drawLogicText) {
+            this.drawInfoTexts(ctx, range)
+            return
+        }
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
                 let cell = this.arr[i][j]
@@ -231,6 +240,29 @@ class Grid extends SpritesGroup {
                 cell.infoText.text = ''
             }
         }
+    }
+    // drawCellText without debug or logic texts: only infoTexts draw, and only setInfoText sets
+    // one, so the cells it noted are the only ones to visit (in the same order, same rules).
+    drawInfoTexts(ctx, range) {
+        if (!this.infoTextCells.size)
+            return
+        const h = this.arr[0].length
+        for (const index of [...this.infoTextCells].sort((a, b) => a - b)) {
+            const i = Math.floor(index / h), j = index % h
+            if (i < range.i0 || i >= range.i1 || j < range.j0 || j >= range.j1)
+                continue
+            const cell = this.arr[i][j]
+            if (cell.building.isMapEdge || (isFogOfWar && !this.fogOfWar[i][j]))
+                continue
+            if (cell.infoText.text != '')
+                cell.infoText.draw(ctx)
+            cell.infoText.text = ''
+            this.infoTextCells.delete(index)
+        }
+    }
+    setInfoText(coord, infoText) {
+        this.arr[coord.x][coord.y].infoText = infoText
+        this.infoTextCells.add(coord.x * this.arr[0].length + coord.y)
     }
     drawChanceOfWinningText(ctx) {
         for (let i = 0; i < this.chanceOfWinning.length; ++i) {
@@ -351,52 +383,71 @@ class Grid extends SpritesGroup {
             }
         }
     }
-    drawStillUnits(ctx) {
-        const range = this.drawRange(ctx)
-        for (let i = range.i0; i < range.i1; ++i) {
-            for (let j = range.j0; j < range.j1; ++j) {
-                if (isFogOfWar && !this.fogOfWar[i][j])
-                    continue
-                const unit = this.getStillUnit(this.arr[i][j])
-                if (unit)
-                    this.drawEntityBody(ctx, unit)
-            }
-        }
+    // cells: the frame's surfaceOverlayCells (indices in board order), else every cell in range.
+    drawStillUnits(ctx, cells) {
+        this.forEachDrawnCell(ctx, cells, (cell, i, j) => {
+            if (isFogOfWar && !this.fogOfWar[i][j])
+                return
+            const unit = this.getStillUnit(cell)
+            if (unit)
+                this.drawEntityBody(ctx, unit)
+        })
     }
-    drawEntityOverlays(ctx) {
+    drawEntityOverlays(ctx, cells) {
         const buildingBars = []
-        const range = this.drawRange(ctx)
-        for (let i = range.i0; i < range.i1; ++i) {
-            for (let j = range.j0; j < range.j1; ++j) {
-                if (isFogOfWar && !this.fogOfWar[i][j])
-                    continue
-                const cell = this.arr[i][j]
-                const building = cell.building
-                const observed = this.observedBuilding(cell)
-                let silhouette = false
-                if (!observed) {
-                    if (building.isBuildingProduction()) building.draw(ctx)
-                    else if (building.isPreparingManufacture) {
-                        silhouette = building.unitProduction.notEmpty()
-                        building.unitProduction.draw(ctx)
-                    } else if (building.isDemonPortal) {
-                        silhouette = !!building.nextProduction
-                        building.drawNextProduction(ctx)
-                    }
+        const range = this.forEachDrawnCell(ctx, cells, (cell, i, j) => {
+            if (isFogOfWar && !this.fogOfWar[i][j])
+                return
+            const building = cell.building
+            const observed = this.observedBuilding(cell)
+            let silhouette = false
+            if (!observed) {
+                if (building.isBuildingProduction()) building.draw(ctx)
+                else if (building.isPreparingManufacture) {
+                    silhouette = building.unitProduction.notEmpty()
+                    building.unitProduction.draw(ctx)
+                } else if (building.isDemonPortal) {
+                    silhouette = !!building.nextProduction
+                    building.drawNextProduction(ctx)
                 }
-                // The cached unit sits under the silhouette; repaint it on top.
-                const unit = this.getStillUnit(cell)
-                if (silhouette && unit)
-                    this.drawEntityBody(ctx, unit)
-                if (!observed && building.hasBar)
-                    buildingBars.push(building)
-                if (unit)
-                    unit.drawBars(ctx)
             }
-        }
+            // The cached unit sits under the silhouette; repaint it on top.
+            const unit = this.getStillUnit(cell)
+            if (silhouette && unit)
+                this.drawEntityBody(ctx, unit)
+            if (!observed && building.hasBar)
+                buildingBars.push(building)
+            if (unit)
+                unit.drawBars(ctx)
+        })
         for (let i = 0; i < buildingBars.length; ++i)
             buildingBars[i].drawBars(ctx)
         this.refreshCulledPortal(range)
+    }
+    // Calls visit(cell, i, j) for the cells of the drawn range in board order: those listed in
+    // cells (board indices, ascending) when given, else all of them. Returns the range.
+    forEachDrawnCell(ctx, cells, visit) {
+        const range = this.drawRange(ctx)
+        if (cells) {
+            const h = this.arr[0].length
+            for (let k = 0; k < cells.length; ++k) {
+                const i = Math.floor(cells[k] / h), j = cells[k] - i * h
+                if (i >= range.i0 && i < range.i1 && j >= range.j0 && j < range.j1)
+                    visit(this.arr[i][j], i, j)
+            }
+            return range
+        }
+        for (let i = range.i0; i < range.i1; ++i)
+            for (let j = range.j0; j < range.j1; ++j)
+                visit(this.arr[i][j], i, j)
+        return range
+    }
+    // Whether drawStillUnits or drawEntityOverlays can draw anything on the cell: a unit, a
+    // production, a demon portal or a building with bars. Every other cell is skipped by them.
+    isOverlayCell(cell) {
+        const building = cell.building
+        return cell.unit.notEmpty() || !!building.hasBar || !!building.isPreparingManufacture ||
+            !!building.isDemonPortal || building.isBuildingProduction()
     }
     // The cell index range whose drawing can reach ctx's canvas: with atmospheric visuals and an
     // axis-aligned transform, the cells centred within a margin of the canvas that holds any
@@ -509,13 +560,19 @@ class Grid extends SpritesGroup {
             }
         }
     }
-    getSurfaceStateValue(x, y) {
-        const observed = this.observedHexagon(this.arr[x][y])
+    // observing: false when isObserving() is (no observed hexagon then).
+    getSurfaceStateValue(x, y, observing = true) {
+        const observed = observing ? this.observedHexagon(this.arr[x][y]) : null
         const hexagon = observed || this.arr[x][y].hexagon
         const fogVisible = observed ? (observed.unknown ? 0 : 1) : !isFogOfWar || this.fogOfWar[x][y] ? 1 : 0
         // Unknown cells (playerColor null) get their own value, apart from colour 0.
         return ((hexagon.unknown ? 0 : hexagon.playerColor + 1) << 2) |
             (hexagon.isSuburb ? 2 : 0) | fogVisible
+    }
+    // Whether an online observation can hide or replace anything on this board: when it cannot,
+    // observedHexagon and observedBuilding are null and getStillUnit hides no unit.
+    isObserving() {
+        return typeof onlineObservation !== 'undefined' && onlineObservation.board === grid
     }
     observedHexagon(cell) {
         return typeof onlineObservation !== 'undefined' ? onlineObservation.hexagonFor(cell) : null
@@ -538,15 +595,32 @@ class Grid extends SpritesGroup {
             this.surfaceCacheUnitImages.length != this.surfaceCacheState.length)
             return false
 
+        // The same pass lists this frame's overlay cells (surfaceOverlayCells). A cell with
+        // neither building nor unit, unobserved, has no cached or overlay entity (captureSurfaceState
+        // stored none, and no images), so only its state and light values are compared.
+        const overlayCells = this.surfaceOverlayCells
+        overlayCells.length = 0
+        const observing = this.isObserving()
         let index = 0
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 const cell = this.arr[i][j]
+                if (!observing && cell.building.constructor === Empty && cell.unit.constructor === Empty) {
+                    if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j, false) ||
+                        lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, false) ||
+                        this.surfaceCacheBuildings[index] !== undefined ||
+                        this.surfaceCacheUnits[index] !== undefined)
+                        return false
+                    ++index
+                    continue
+                }
+                if (this.isOverlayCell(cell))
+                    overlayCells.push(index)
                 const building = this.isCacheableBuilding(cell.building) ?
                     cell.building : undefined
                 const unit = this.getStillUnit(cell)
-                if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j) ||
-                    lighting[index + 1] !== atmosphericLighting.lightValue(this, cell) ||
+                if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j, observing) ||
+                    lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, observing) ||
                     this.surfaceCacheBuildings[index] != building ||
                     this.surfaceCacheUnits[index] != unit ||
                     this.surfaceCacheBuildingImages[index] != (building ?
@@ -565,10 +639,14 @@ class Grid extends SpritesGroup {
         const units = new Array(state.length)
         const buildingImages = new Array(state.length)
         const unitImages = new Array(state.length)
+        const overlayCells = this.surfaceOverlayCells
+        overlayCells.length = 0
         let index = 0
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 const cell = this.arr[i][j]
+                if (this.isOverlayCell(cell))
+                    overlayCells.push(index)
                 const building = this.isCacheableBuilding(cell.building) ?
                     cell.building : undefined
                 const unit = this.getStillUnit(cell)
@@ -714,14 +792,14 @@ class Grid extends SpritesGroup {
                 this.drawOther(ctx, 'buildings')
             atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
             if (cachedScene) {
-                this.drawStillUnits(ctx)
-                this.drawEntityOverlays(ctx)
+                this.drawStillUnits(ctx, this.surfaceOverlayCells)
+                this.drawEntityOverlays(ctx, this.surfaceOverlayCells)
             }
             else
                 this.drawOther(ctx, 'units')
         }
         else if (cachedScene)
-            this.drawEntityOverlays(ctx)
+            this.drawEntityOverlays(ctx, this.surfaceOverlayCells)
         else
             this.drawOther(ctx)
         moveTween.draw(ctx)

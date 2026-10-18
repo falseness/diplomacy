@@ -40,9 +40,16 @@ class DemonPortal extends Building {
     get canBeDestroyed() { return false }
     // Each category has its own artwork (assets/sprites/demonPortal<Category>.svg);
     // the entity name stays 'demonPortal' for saves and ledgers.
+    // Named once per category: the surface cache checks read it for every portal every frame.
+    static IMAGE_NAMES = new Map()
     get imageName() {
         const category = this.category
-        return 'demonPortal' + category[0].toUpperCase() + category.slice(1)
+        let name = DemonPortal.IMAGE_NAMES.get(category)
+        if (name === undefined) {
+            name = 'demonPortal' + category[0].toUpperCase() + category.slice(1)
+            DemonPortal.IMAGE_NAMES.set(category, name)
+        }
+        return name
     }
     // Next scheduled wave production from the same pure lookup spawning uses
     // (ai/wave-config.js). It depends only on category and completed rounds, so

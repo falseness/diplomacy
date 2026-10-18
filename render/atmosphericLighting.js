@@ -158,14 +158,15 @@ const atmosphericLighting = {
         return state
     },
     // One cell's lightState entry (grid.surfaceStateMatches compares them in its own cell pass).
-    lightValue(board, cell) {
+    // observing: false when board.isObserving() is (nothing observed then).
+    lightValue(board, cell, observing = true) {
         if (!otherSettings.atmosphericVisuals) return 0
         const {x, y} = cell.coord
         // As collect: never inspect a hidden building, including public fog landmarks.
         if (isFogOfWar && !board.fogOfWar[x][y]) return 0
-        const hex = board.observedHexagon(cell) || cell.hexagon
+        const hex = (observing && board.observedHexagon(cell)) || cell.hexagon
         if (hex.unknown) return 0
-        const observation = board.observedBuilding(cell)
+        const observation = observing && board.observedBuilding(cell)
         const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
         if (building?.isMapEdge) return 0
         const emitsLight = building && !building.killed && this.emitsLight(building)

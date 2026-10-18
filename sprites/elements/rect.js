@@ -77,18 +77,20 @@ class Rect {
         ]
         return points
     }
+    // The rectPoints corners, without allocating them (bars draw many rects every frame).
     drawShape(ctx) {
-        let p = this.rectPoints
+        const x0 = this.x, y0 = this.y, x1 = this.x + this.width, y1 = this.y + this.height
+        const c = this.cornerRadius
 
-        ctx.moveTo(p[0].x + this.cornerRadius[0], p[0].y)
-        ctx.lineTo(p[1].x - this.cornerRadius[1], p[1].y)
-        ctx.arcTo(p[1].x, p[1].y, p[1].x, p[1].y + this.cornerRadius[1], this.cornerRadius[1])
-        ctx.lineTo(p[2].x, p[2].y - this.cornerRadius[2])
-        ctx.arcTo(p[2].x, p[2].y, p[2].x - this.cornerRadius[2], p[2].y, this.cornerRadius[2])
-        ctx.lineTo(p[3].x + this.cornerRadius[3], p[3].y)
-        ctx.arcTo(p[3].x, p[3].y, p[3].x, p[3].y - this.cornerRadius[3], this.cornerRadius[3])
-        ctx.lineTo(p[0].x, p[0].y + this.cornerRadius[0])
-        ctx.arcTo(p[0].x, p[0].y, p[0].x + this.cornerRadius[0], p[0].y, this.cornerRadius[0])
+        ctx.moveTo(x0 + c[0], y0)
+        ctx.lineTo(x1 - c[1], y0)
+        ctx.arcTo(x1, y0, x1, y0 + c[1], c[1])
+        ctx.lineTo(x1, y1 - c[2])
+        ctx.arcTo(x1, y1, x1 - c[2], y1, c[2])
+        ctx.lineTo(x0 + c[3], y1)
+        ctx.arcTo(x0, y1, x0, y1 - c[3], c[3])
+        ctx.lineTo(x0, y0 + c[0])
+        ctx.arcTo(x0, y0, x0 + c[0], y0, c[0])
     }
     isInside(point) {
         return (this.x <= point.x && point.x <= this.x + this.width &&
