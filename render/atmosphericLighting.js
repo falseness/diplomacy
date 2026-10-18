@@ -23,15 +23,17 @@ const atmosphericLighting = {
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.6],
     // Lamps: power weighs each lamp for shadow direction; spill scales its SPILL below (a
-    // town's small doorway lights a softer pool than a cave mouth). A demon portal is no lamp:
-    // its own layers (in place of SPILL) are a dim red-violet glow at its foot, about 40% of a
-    // cave's pool in strength and reach.
+    // town's small doorway lights a softer pool than a cave mouth). A lamp like another lamp kind
+    // takes that kind's spill layers, scaled by reach about its foot (the lamp hex's lower edge,
+    // where the pool meets the stone below; scaled about the centre it would fall inside the
+    // lamp's own unlit hex), colours recoloured by tint (each layer's colour becomes the tint at
+    // the layer colour's luminance). A demon portal is no lamp: the town's soft pool at about
+    // 40% of a cave's reach and strength, dim red-violet.
     LAMP: {
         town: {power: 1, spill: 0.95},
         goldmine: {power: 1, spill: 1},
-        demonPortal: {power: 0.4, spill: 1, layers: [
-            {dy: 1.0, rx: 0.6, ry: 0.42, alpha: 1, map: [238, 160, 190], gain: [150, 14, 74], gainAlpha: 1}
-        ]}
+        demonPortal: {power: 0.4, spill: 0.32, like: 'town', reach: 0.37, foot: Math.sqrt(3) / 2,
+            tint: {map: [255, 200, 225], gain: [140, 95, 130]}}
     },
     // Lamp spill: mostly warmth, little lift. A broad map-only wash (blue held back) warms the
     // stone evenly round the source; two narrow warm layers from the doorway's foot down (so
@@ -276,10 +278,11 @@ const atmosphericLighting = {
     // the sprite and a zoom never rebuilds it.
     SPILL_RASTER: 24,
     spillSprite(part, name) {
-        const own = this.LAMP[name]?.layers, r = basis.r, layers = own || this.SPILL.filter(l => !l.lamps || l.lamps.includes(name))
-        const id = part + ',' + (own || layers.some(l => l.lamps) ? name : ''), key = id + ',' + r, scale = this.SPILL_RASTER / r
+        const own = this.LAMP[name]?.like || this.SPILL.some(l => l.lamps?.includes(name)), r = basis.r
+        const id = part + ',' + (own ? name : ''), key = id + ',' + r, scale = this.SPILL_RASTER / r
         let sprite = this.spillSprites.get(id)
         if (sprite && sprite.key === key) return sprite
+        const layers = this.spillLayers(name)
         const left = Math.min(...layers.map(l => (l.dx || 0) - l.rx)) * r, right = Math.max(...layers.map(l => (l.dx || 0) + l.rx)) * r
         const top = Math.min(...layers.map(l => l.dy - l.ry)) * r, bottom = Math.max(...layers.map(l => l.dy + l.ry)) * r
         const surface = sprite ? sprite.surface : document.createElement('canvas')
@@ -293,6 +296,17 @@ const atmosphericLighting = {
         this.spillSprites.set(id, sprite)
         ++this.spillSpriteBuilds
         return sprite
+    },
+    // A lamp kind's spill layers: SPILL's (layers with a lamps list are only that kind's), or
+    // for a lamp like another kind, that kind's layers scaled by reach about the foot and
+    // recoloured by tint.
+    spillLayers(name) {
+        const lamp = this.LAMP[name]
+        if (!lamp?.like) return this.SPILL.filter(l => !l.lamps || l.lamps.includes(name))
+        const {reach, foot, tint} = lamp, lum = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+        const recolor = (color, to) => color && to.map(c => Math.min(255, Math.round(c * lum(color) / lum(to))))
+        return this.spillLayers(lamp.like).map(l => ({...l, dx: (l.dx || 0) * reach, dy: foot + (l.dy - foot) * reach,
+            rx: l.rx * reach, ry: l.ry * reach, map: recolor(l.map, tint.map), gain: recolor(l.gain, tint.gain)}))
     },
     build({cells, sources}, bounds, scale) {
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
