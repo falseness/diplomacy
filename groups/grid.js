@@ -348,14 +348,15 @@ class Grid extends SpritesGroup {
                         building.drawNextProduction(ctx)
                     }
                 }
-                // The cached unit sits under the silhouette; repaint it on top.
+                // Same order as Unit.draw: the unit's bars, then its body. The cached body sits
+                // under the silhouette and under its own moves bar; repaint it on top of both.
                 const unit = this.getStillUnit(cell)
-                if (silhouette && unit)
+                if (unit)
+                    unit.drawBars(ctx)
+                if (unit && (silhouette || shouldShowMovesBar(unit)))
                     this.drawEntityBody(ctx, unit)
                 if (!observed && building.hasBar)
                     buildingBars.push(building)
-                if (unit)
-                    unit.drawBars(ctx)
             }
         }
         for (let i = 0; i < buildingBars.length; ++i)
