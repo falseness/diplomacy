@@ -15,8 +15,25 @@ function shouldShowMovesBar(unit) {
     return Array.isArray(pending) && pending.includes(unit.playerColor)
 }
 
+// Zoomed out, the band under a unit's feet is under a pixel tall: step the bar down
+// so that 2.5 device pixels (a clear row, even resampled) stay between the feet
+// (0.715r with anti-aliasing) and the bar's top stroke (0.735r).
+// Bars are drawn on mainCtx, whose scale is the camera's canvas.scale.
+function drawMovesBar(ctx, bar) {
+    const shift = Math.max(0, 2.5 / canvas.scale - basis.r * 0.02)
+    ctx.translate(0, shift)
+    bar.draw(ctx)
+    ctx.translate(0, -shift)
+}
+
 class Unit extends Entity {
     static visionRange = 3
+    // Moves bar anchor below the sprite centre. With Bar's -0.9r the bar box spans
+    // 0.75r..0.975r (0.735r..0.99r with its stroke), centred in the band between every
+    // unit sprite's feet (0.715r) and the head of a unit in the hex below (1.01r).
+    static get movesBarMarginY() {
+        return basis.r * 1.65
+    }
     constructor(x, y, name) {
         super(x, y, new.target.type || name)
         // Town Duel keeps field units on neutral opening cells. Capture their owner
@@ -29,7 +46,7 @@ class Unit extends Entity {
 
         this.interaction = new InterationWithUnit(this.speed)
         this.hpBarMarginY = -basis.r * 0.125
-        this.movesBarMarginY = basis.r * 0.1
+        this.movesBarMarginY = Unit.movesBarMarginY
 
         const movesBarW = basis.r * 0.4
         const movesBarH = basis.r * 0.225
@@ -204,9 +221,11 @@ class Unit extends Entity {
     }
     drawBars(ctx) {
         super.drawBars(ctx)
-
+        this.drawMovesBar(ctx)
+    }
+    drawMovesBar(ctx) {
         if (shouldShowMovesBar(this))
-            this.movesBar.draw(ctx)
+            drawMovesBar(ctx, this.movesBar)
     }
     createCommandsFromDestinations(coords) {
         let result = []

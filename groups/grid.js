@@ -262,6 +262,9 @@ class Grid extends SpritesGroup {
     }
     drawOther(ctx) {
         let tmpBuildings = []
+        // Moves bars hang below the hex (Unit.movesBarMarginY): draw them after every
+        // body, as the cached pass does, so the next cell's art never covers them.
+        let movesBarUnits = []
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
@@ -276,8 +279,16 @@ class Grid extends SpritesGroup {
                     this.drawProductionSilhouette(ctx, cell.building)
                 }
                 const unit = this.getStillUnit(cell)
-                if (unit) unit.draw(ctx)
+                if (unit) {
+                    // Unit.draw without its moves bar: HP bar, then the body.
+                    Entity.prototype.drawBars.call(unit, ctx)
+                    this.drawEntityBody(ctx, unit)
+                    movesBarUnits.push(unit)
+                }
             }
+        }
+        for (let i = 0; i < movesBarUnits.length; ++i) {
+            movesBarUnits[i].drawMovesBar(ctx)
         }
         for (let i = 0; i < tmpBuildings.length; ++i) {
             tmpBuildings[i].drawBars(ctx)
@@ -348,15 +359,14 @@ class Grid extends SpritesGroup {
                         building.drawNextProduction(ctx)
                     }
                 }
-                // Same order as Unit.draw: the unit's bars, then its body. The cached body sits
-                // under the silhouette and under its own moves bar; repaint it on top of both.
+                // The cached unit sits under the silhouette; repaint it on top.
                 const unit = this.getStillUnit(cell)
-                if (unit)
-                    unit.drawBars(ctx)
-                if (unit && (silhouette || shouldShowMovesBar(unit)))
+                if (silhouette && unit)
                     this.drawEntityBody(ctx, unit)
                 if (!observed && building.hasBar)
                     buildingBars.push(building)
+                if (unit)
+                    unit.drawBars(ctx)
             }
         }
         for (let i = 0; i < buildingBars.length; ++i)
