@@ -6,6 +6,12 @@ class Screen {
         this.pendingOffset = { x: 0, y: 0 }
         this.integratedUntil = undefined
     }
+    // A zoom gesture, for the surface cache and the light map: 160 ms after a zoom input, and in
+    // any case the first two board frames drawn after it (Grid.draw counts them), so frames slower
+    // than the window on a loaded device do not drop a continuing gesture onto the direct path.
+    get surfaceZooming() {
+        return performance.now() < this.surfaceZoomUntil || this.surfaceZoomFrames > 0
+    }
     static kFrameDuration = 1000 / 60
     static kMaxFrameDuration = 100
     // keyboard, edge-scroll and drag panning move the camera this many times slower; zoom is unaffected
@@ -118,8 +124,10 @@ class Screen {
         // hint: input anchors, sensitivity and limits remain unchanged. A gesture held
         // against a zoom limit is still a gesture: it keeps the raster too, rather than
         // drawing the whole board directly between its steps.
-        if (requested !== 1 && otherSettings.atmosphericVisuals)
+        if (requested !== 1 && otherSettings.atmosphericVisuals) {
             this.surfaceZoomUntil = performance.now() + 160
+            this.surfaceZoomFrames = 2
+        }
 
         mainCtx.translate(canvas.offset.x, canvas.offset.y)
 

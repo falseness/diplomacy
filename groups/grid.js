@@ -578,6 +578,11 @@ class Grid extends SpritesGroup {
         return ((hexagon.unknown ? 0 : hexagon.playerColor + 1) << 2) |
             (hexagon.isSuburb ? 2 : 0) | fogVisible
     }
+    // No building (Empty) or a map edge (InvisibleMountain): never cached (isCacheableBuilding) nor
+    // drawn by the overlays (isOverlayCell), whatever its state.
+    isInertBuilding(building) {
+        return building.constructor === Empty || building.constructor === InvisibleMountain
+    }
     // Whether an online observation can hide or replace anything on this board: when it cannot,
     // observedHexagon and observedBuilding are null and getStillUnit hides no unit.
     isObserving() {
@@ -604,9 +609,9 @@ class Grid extends SpritesGroup {
             this.surfaceCacheUnitImages.length != this.surfaceCacheState.length)
             return false
 
-        // The same pass lists this frame's overlay cells (surfaceOverlayCells). A cell with
-        // neither building nor unit, unobserved, has no cached or overlay entity (captureSurfaceState
-        // stored none, and no images), so only its state and light values are compared.
+        // The same pass lists this frame's overlay cells (surfaceOverlayCells). An unobserved cell
+        // with no unit and an inert building (isInertBuilding) has no cached or overlay entity
+        // (captureSurfaceState stored none, and no images), so only its state and light values are compared.
         const overlayCells = this.surfaceOverlayCells
         overlayCells.length = 0
         const observing = this.isObserving()
@@ -614,7 +619,7 @@ class Grid extends SpritesGroup {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 const cell = this.arr[i][j]
-                if (!observing && cell.building.constructor === Empty && cell.unit.constructor === Empty) {
+                if (!observing && cell.unit.constructor === Empty && this.isInertBuilding(cell.building)) {
                     if (this.surfaceCacheState[index] != this.getSurfaceStateValue(i, j, false) ||
                         lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, false) ||
                         this.surfaceCacheBuildings[index] !== undefined ||
@@ -743,7 +748,7 @@ class Grid extends SpritesGroup {
         // frames return to the original sharp path. drawSurfaceCache still checks
         // the complete fog/source/entity state before submitting any cached pixels.
         const scaling = otherSettings.atmosphericVisuals && this.surfaceCache &&
-            performance.now() < gameEvent.screen.surfaceZoomUntil
+            gameEvent.screen.surfaceZooming
         return canvas.scale <= cacheScale || !!scaling
     }
     drawSurfaceCache(ctx) {
@@ -826,6 +831,9 @@ class Grid extends SpritesGroup {
 
         attackBorder.draw(ctx)
         border.draw(ctx)
+        // One of the frames that follow a zoom input as part of its gesture (Screen.surfaceZooming).
+        if (typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceZoomFrames > 0)
+            --gameEvent.screen.surfaceZoomFrames
     }
 }
 

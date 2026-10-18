@@ -222,7 +222,7 @@ const atmosphericLighting = {
         if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return null
         const key = JSON.stringify(bounds)
         const scale = this.resolution(bounds, cap)
-        const zooming = performance.now() < gameEvent.screen.surfaceZoomUntil
+        const zooming = gameEvent.screen.surfaceZooming
         if (this.map && this.mapKey === key && this.sameLightState(board, this.mapState) &&
                 (this.mapScale === scale || zooming))
             return this.map
