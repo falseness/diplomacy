@@ -8,6 +8,8 @@ class Screen {
     }
     static kFrameDuration = 1000 / 60
     static kMaxFrameDuration = 100
+    // keyboard, edge-scroll and drag panning move the camera this many times slower; zoom is unaffected
+    static kCameraPanSlowdown = 1.5
     // call before a speed change so a press released between frames still moves the camera
     advanceTo(time) {
         if (time === undefined)
@@ -152,7 +154,7 @@ class MobileScreen extends Screen {
     constructor() {
         super()
         this.ACCELERATION = 0.001 * HEIGHT
-        this.speedRatio = 1
+        this.speedRatio = 1 / Screen.kCameraPanSlowdown
     }
     // touchmoves between two frames add up; move() applies the total once and clears it
     setSpeedX(speedX) {
@@ -186,7 +188,7 @@ class ComputerScreen extends Screen {
         this.leftBorder = margin
         this.rightBorder = width - margin
         this.bottomBorder = height - margin
-        this.speed = speed
+        this.speed = speed / Screen.kCameraPanSlowdown
     }
     goLeft() {
         this.setSpeedX(this.speed)
