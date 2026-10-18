@@ -85,9 +85,6 @@ class Building extends Entity {
     get isStaticNature() {
         return false;
     }
-    get isAlwaysVisible() {
-        return false
-    }
     get info() {
         let res = super.info
         res.isDestroyable = this.isDestroyable

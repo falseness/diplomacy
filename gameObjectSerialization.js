@@ -114,7 +114,7 @@ function markCellsKnown(cells) {
             unpacker.fullUnpackUnit(cell.unit)
         ++filled
     }
-    // New contents can be vision barriers or always-visible nature: recompute the fog.
+    // New contents can be vision barriers: recompute the fog.
     if (filled && isFogOfWar) {
         if (gameSettings.coop) refreshCoopVision()
         else players[whooseTurn].changeFogOfWarByVision()

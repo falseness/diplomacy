@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "32067db2c2c77b64b0f5d50862e16fa042282408d750100a9a9e78966065e96d",
+  "rulesVersion": "2b28d0f37d73250708809c1876fb7f2755e813f6023c18d0941f464a6b8deacc",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -90,13 +90,13 @@
     },
     {
       "path": "options/reveal.js",
-      "sha256": "8869b326567d4a98e930c3971f5562768efb9fd034cfb7a2c941687b84863fed",
-      "bytes": 28854
+      "sha256": "607ad73caeb9b37e27438700199be7a5ffcb0e39a458b91161bbbb37bcd4f487",
+      "bytes": 28811
     },
     {
       "path": "options/filteredView.js",
-      "sha256": "60029ff19f88988eae692218d1c5ca516ce686f7284e5760f300a613afe21163",
-      "bytes": 9188
+      "sha256": "1856a47b58efde3716f576945c06b89973baafd38456a3ec288f15d9198d8b13",
+      "bytes": 9186
     },
     {
       "path": "ai/coop-map-scaling.js",
@@ -305,8 +305,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "c191e7d75e5abba3d2f2f7c1a6c74aaea0360959dbcd699dfbc5da43c34d8e34",
-      "bytes": 25404
+      "sha256": "f971b414e58c0c20967e8211d80352af5d775df06b88b267d1ff773e3cf8fdf0",
+      "bytes": 25470
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -400,8 +400,8 @@
     },
     {
       "path": "sprites/entities/buildings/building.js",
-      "sha256": "e573ca53a05087c825d951a15961a376a37a0e881fb4f945bdcf3394bacd5bb3",
-      "bytes": 2674
+      "sha256": "b5f6599ce95c8f09d595672c4a2e11abbdec501b99006bcffdba984d8f0bbdf0",
+      "bytes": 2619
     },
     {
       "path": "sprites/entities/buildings/nature/goldmine.js",
@@ -410,8 +410,8 @@
     },
     {
       "path": "sprites/entities/buildings/nature/nature.js",
-      "sha256": "d1ba1269648c5d98f4e87082d4eafe8acf86fff45d2b19a7cbab3dc74db1f9bd",
-      "bytes": 1128
+      "sha256": "f632f7cb9f9eec9487026c3c2bbe09ae37a2a7a8aa26b3f914581852927487bc",
+      "bytes": 1073
     },
     {
       "path": "sprites/entities/buildings/nature/lake.js",
@@ -515,8 +515,8 @@
     },
     {
       "path": "gameObjectSerialization.js",
-      "sha256": "ff7598075d0f0431a1fd0374c0b1b9f600aaa98449ce5f130f33b02f6e1b58c9",
-      "bytes": 28249
+      "sha256": "c8ec635af6f710ad8acbd033bbbb49c6c645e39d406304952b14da18836b0149",
+      "bytes": 28224
     }
   ]
 }

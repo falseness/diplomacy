@@ -45,10 +45,6 @@ class StaticNature extends Nature {
     get hasBar() {
         return false
     }
-    get isAlwaysVisible() {
-        return true
-    }
-
     get isStaticNature() {
         return true;
     }

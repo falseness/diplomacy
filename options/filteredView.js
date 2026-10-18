@@ -2,7 +2,7 @@
 //
 //   computeFogFor(playerIndex)            -> fog grid ([x][y] counts, > 0 = visible) of ANY player, the same mask
 //                                            Player.changeFogOfWarByVision builds (co-op humans share the vision of
-//                                            their allied humans; isAlwaysVisible cells count 1), without touching
+//                                            their allied humans; lake/sea/mountain cells too), without touching
 //                                            grid.fogOfWar of the current viewer. Fog of war off -> every cell 1.
 //   filteredView(playerIndex, knownCells) -> a board in the getGameObject() shape holding only what the player may
 //                                            know: known = cells visible in computeFogFor(playerIndex), the given

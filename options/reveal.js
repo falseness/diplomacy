@@ -149,7 +149,7 @@ const RevealScout = {
         for (let x = 0; x < scout.n; ++x) {
             let column = ownMask ? grid.fogOfWar[x] : null
             for (let y = 0; y < scout.m; ++y)
-                visible[x * scout.m + y] = (column ? column[y] > 0 : grid.arr[x][y].building.isAlwaysVisible) ? 1 : 0
+                visible[x * scout.m + y] = column && column[y] > 0 ? 1 : 0
         }
         let sources = scout.unitSources.concat(scout.suburbSources).map(source =>
             RevealScout.withIgnore(scout, source, null))
