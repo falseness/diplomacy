@@ -103,6 +103,7 @@ class Screen {
     }
     // multiplies canvas.scale by zoom within the map limits, keeping the world point under pos
     zoomBy(pos, zoom) {
+        const requested = zoom
         if (canvas.scale * zoom > mapBorder.scale.max)
             zoom = mapBorder.scale.max / canvas.scale
         if (canvas.scale * zoom < mapBorder.scale.min)
@@ -112,8 +113,10 @@ class Screen {
             return
 
         // Reuse the existing board raster while scaling. This is only a render
-        // hint: input anchors, sensitivity and limits remain unchanged.
-        if (zoom !== 1 && otherSettings.atmosphericVisuals)
+        // hint: input anchors, sensitivity and limits remain unchanged. A gesture held
+        // against a zoom limit is still a gesture: it keeps the raster too, rather than
+        // drawing the whole board directly between its steps.
+        if (requested !== 1 && otherSettings.atmosphericVisuals)
             this.surfaceZoomUntil = performance.now() + 160
 
         mainCtx.translate(canvas.offset.x, canvas.offset.y)
