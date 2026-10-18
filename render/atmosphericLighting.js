@@ -662,28 +662,34 @@ const atmosphericLighting = {
         // upper left facing the key light, falling to dark on the lower right) and warmed by the
         // doorway (warm, toned by the sprite's luminance with weight warmJoint, by up to warmLift,
         // falling off over warmReach raster widths from the doorway). The doorway is one lit
-        // region: the asset's opening plus the inner share of its carved arch ring, filled with
-        // one smooth gradient about a point anchor of the opening's height below its top
-        // (fill: stops by the distance from it, the union's half width across and its height
-        // above or below: warm white, gold, orange towards the sides, deep orange at the foot),
-        // the ring's voussoir joints kept at low contrast (joint: share of the sprite's
-        // luminance), a thin cream-gold lip (lip raster widths) on its outer edge and a small
-        // warm-white teardrop flame at the anchor (flame: half width and height in opening half
-        // widths, low: its height below the anchor as a share of that); mask edges feathered (raster widths). Reached by the shade multiply plus a
-        // 'screen' lift in the glow, so the same two draws per lamp.
+        // region: the asset's opening plus the inner share of its carved arch ring, lit by its
+        // own light (frame and interior below), the ring's voussoir joints kept at low contrast
+        // (joint: share of the sprite's luminance), a thin cream-gold lip (lip raster widths) on
+        // its outer edge and a small warm-white teardrop flame at a point anchor of the opening's
+        // height below its top (flame: half width and height in opening half widths, low: its
+        // height below the anchor as a share of that); mask edges feathered (raster widths).
+        // Reached by the shade multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
         grade: {stone: [0.68, 0.56, 0.44], form: {lit: 1.35, dark: 0.72, slope: [0.6, 0.3], power: 1.6},
             warm: [240, 186, 134], warmJoint: 0.5, warmLift: 0.25, warmReach: 0.22,
-            near: [255, 206, 96], nearLift: 0.85, nearReach: 0.09, nearOut: 0.35, ringTone: [236, 180, 110], ringLift: 0.4,
-            share: 0.12, joint: 0.18, anchor: 0.3, foot: 0.75, rim: [246, 178, 70],
-            fill: [[0, '255,240,170'], [0.3, '252,200,80'], [0.52, '230,146,36'], [0.68, '184,96,20'], [1, '112,54,14']],
-            lip: 0, lipColor: [255, 232, 170], flame: {rx: 0.9, ry: 1.5, low: 0.55, color: [255, 250, 208]},
+            near: [250, 190, 110], nearLift: 0.7, nearReach: 0.11, nearOut: 0.35, ringTone: [232, 176, 124], ringLift: 0.4,
+            share: 0.12, joint: 0.18, anchor: 0.28,
+            // The doorway as a lit frame round a dark interior: the gold inner arch face (frame:
+            // width and feather in opening half widths from the shaft's edge, colours at its outer
+            // edge and its inner face) round a deep amber interior (interior: stops down from the
+            // anchor to the foot), the flame and its glow at the top of the interior.
+            frame: {width: 0.34, soft: 0.1, outer: [214, 120, 24], inner: [248, 168, 40]},
+            interior: [[0, '250,172,52'], [0.2, '222,120,26'], [0.45, '176,88,16'], [1, '130,62,12']], flameGlow: {reach: 2.8, below: 0.4, color: [255, 196, 70]},
+            // Warm colours darkened by the sprite's luminance turn orange-brown, not olive
+            // (per-channel exponents of the luminance tone).
+            toneBias: [1, 1.3, 1.6],
+            lip: 0, lipColor: [255, 232, 170], flame: {rx: 0.6, ry: 1.1, low: 0.55, color: [255, 250, 208]},
             feather: 0.01, flareReach: 1.3, flareAlpha: 0.3,
             // The carved arch's form picked out by light along its own outlines: a thin dark
             // dark brown groove where the ring meets the dome (groove: blend, width in raster widths, colour), a
             // warm crest on the ring's upper inner face on the lit side (crest: colour, lift,
             // width; bevel: the same light just inside the ring's outer edge, over the groove) and a dark contact contour inside the silhouette, strongest on its far side and foot
             // (contour: darkening, width, share on the lit side); never a pale outline.
-            groove: {depth: 0.6, width: 0.016, color: [92, 60, 38]}, crest: {color: [255, 222, 150], lift: 0.6, width: 0.01, bevel: 0.45},
+            groove: {depth: 0.6, width: 0.016, color: [92, 60, 38]}, crest: {color: [250, 206, 162], lift: 0.6, width: 0.01, bevel: 0.45},
             contour: {depth: 0.4, width: 0.012, lit: 0.4}}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
@@ -695,7 +701,9 @@ const atmosphericLighting = {
             ring: 'M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 ' +
                 'L348 436 L311 439 L307 331 Q305 286 285 260 Q269 237 245 237 Q221 237 202 261 Q179 291 178 336 L176 439 L149 441 Z',
             arch: 'M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 L348 436 L311 439 L272 447 L212 447 L176 439 L149 441 Z',
-            opening: 'M171 436 L174 325 Q178 252 207 234 Q223 222 243 223 Q276 223 296 257 Q314 288 314 340 L315 438 L272 447 L212 447 Z'},
+            opening: 'M171 436 L174 325 Q178 252 207 234 Q223 222 243 223 Q276 223 296 257 Q314 288 314 340 L315 438 L272 447 L212 447 Z',
+            // The opening without its foot (sides carried down past the raster), for the frame's distance.
+            shaft: 'M171 640 L174 325 Q178 252 207 234 Q223 222 243 223 Q276 223 296 257 Q314 288 314 340 L315 640 Z'},
         // A town keeps its warm lit walls: a lighter tint than the cave's grey-tan rim, no
         // arch band or dark edge.
         town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085, ring: null, edge: null,
@@ -817,16 +825,14 @@ const atmosphericLighting = {
     // the raster's pixels can't be read.
     gradeCanvases(image, door) {
         const W = image.width, H = image.height
-        const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, nearOut, ringTone, ringLift, share, joint, anchor, foot, rim, fill, lip, lipColor, flame, feather, groove, crest, contour} = this.BLOOM.grade
+        const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, nearOut, ringTone, ringLift, share, joint, anchor, lip, lipColor, flame, feather, groove, crest, contour, frame, interior, flameGlow, toneBias} = this.BLOOM.grade
         const ring = this.outline(door.ring, W, H), opening = this.outline(door.opening, W, H), arch = this.outline(door.arch, W, H)
+        const shaft = this.outline(door.shaft, W, H)
         const cx = door.x * W, bottom = opening.bottom, soft = Math.max(0.5, feather * W), warmth = warmReach * W
         const lipWidth = Math.max(0.75, lip * W)
-        // The doorway's gradient: about the anchor, scaled by the union's half width across and
-        // its height above and below the anchor.
+        // The flame's anchor and the opening's half width.
         const ox = (opening.left + opening.right) / 2, oy = opening.top + anchor * (opening.bottom - opening.top)
         const halfOpen = (opening.right - opening.left) / 2
-        const across = halfOpen + share * ((arch.right - arch.left) / 2 - halfOpen)
-        const above = oy - (opening.top - share * (opening.top - arch.top)), below = foot * (opening.bottom - oy)
         const shade = document.createElement('canvas'), lift = document.createElement('canvas')
         shade.width = lift.width = W
         shade.height = lift.height = H
@@ -847,7 +853,9 @@ const atmosphericLighting = {
         const grooveWidth = Math.max(0.75, groove.width * W), crestWidth = Math.max(0.75, crest.width * W)
         const contourWidth = Math.max(0.75, contour.width * W)
         const l = lift.getContext('2d'), raised = l.createImageData(W, H)
-        const src = pixels.data, up = raised.data, stops = fill.map(([t, c]) => [t, c.split(',').map(Number)])
+        const src = pixels.data, up = raised.data, stops = interior.map(([t, c]) => [t, c.split(',').map(Number)])
+        // A warm colour darkened by the luminance tone, towards orange-brown.
+        const toned = (color, c, tone) => color[c] * tone ** toneBias[c]
         const target = [0, 0, 0], hole = [0, 0, 0]
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
             // Faint pixels (the contact shadow on the ground) keep their look, so the grade
@@ -867,21 +875,25 @@ const atmosphericLighting = {
             const onLip = lip ? Math.max(0, 1 - Math.abs(reach) / lipWidth) : 0
             const dRing = this.outlineDistance(ring, px, py, 4 * grooveWidth)
             const inRing = Math.min(1, Math.max(0, 0.5 + dRing / (2 * soft))) * (dOpen < 0 ? 1 : 0)
-            // One gradient over the doorway, from the anchor out; the flame a small teardrop
-            // (narrowing upwards) at the anchor.
-            const fx = (px - ox) / across, fy = (py - oy) / (py < oy ? above : below)
-            const t = Math.min(1, Math.hypot(fx, fy))
+            // The doorway: the gold inner arch face (frame) by the distance inside the shaft, round
+            // a deep amber interior graded down from the anchor to the foot; the flame a small
+            // teardrop (narrowing upwards) at the anchor in a gold glow.
+            const q = this.outlineDistance(shaft, px, py, 6 * warmth) / halfOpen
+            const within = Math.min(1, Math.max(0, (q - frame.width + frame.soft) / (2 * frame.soft)))
+            const face = Math.min(1, Math.max(0, (q + frame.soft) / frame.width))
+            const t = Math.min(1, Math.max(0, (py - oy) / (bottom - oy)))
             let k = 1
             while (k < stops.length - 1 && stops[k][0] < t) k++
             const [t0, c0] = stops[k - 1], [t1, c1] = stops[k], f = Math.min(1, Math.max(0, (t - t0) / (t1 - t0 || 1)))
             const narrow = 1 + 0.6 * Math.max(0, oy - py) / (flame.ry * halfOpen)
             const tear = Math.hypot(narrow * (px - ox) / (flame.rx * halfOpen), (py - oy) / ((py > oy ? flame.low : 1) * flame.ry * halfOpen))
             const flare = Math.min(1, 1.6 * Math.max(0, 1 - tear)), light = 1 - joint * inRing * (1 - lum / 160)
-            // Towards the sides and the top the light is duller (rim), the foot stays deep orange.
-            const dull = Math.min(1, Math.max(0, (Math.hypot(fx, Math.min(0, fy)) - 0.45) / 0.55)) ** 2
+            const glowing = (py > oy ? flameGlow.below : 1) * Math.max(0, 1 - (tear - 1) / (flameGlow.reach - 1)) ** 2
             for (let c = 0; c < 3; c++) {
-                const bright = c0[c] + (c1[c] - c0[c]) * f, glowing = (bright + (rim[c] - bright) * dull) * light
-                hole[c] = glowing + (flame.color[c] - glowing) * flare
+                const faceLit = (frame.outer[c] + (frame.inner[c] - frame.outer[c]) * face) * light
+                const deep = c0[c] + (c1[c] - c0[c]) * f, room = deep + (flameGlow.color[c] - deep) * glowing
+                const base = faceLit + (room - faceLit) * within
+                hole[c] = base + (flame.color[c] - base) * flare
             }
             // Form shading: the stone is lit on the upper-left side facing the key light and
             // shaded across the dome to its lower right.
@@ -904,18 +916,21 @@ const atmosphericLighting = {
             const contoured = contour.depth * contact * Math.exp(-inner[(y + 1) * PW + x + 1] / contourWidth)
             const darken = 1 - contoured
             for (let c = 0; c < 3; c++) {
-                const rock = lum * stone[c] * lit, broad = rock + (warm[c] * tone - rock) * glow
-                const carved = broad + (ringTone[c] * tone - broad) * ringLift * inRing
-                const warmed = carved + (near[c] * tone - carved) * close
+                const rock = lum * stone[c] * lit, broad = rock + (toned(warm, c, tone) - rock) * glow
+                const carved = broad + (toned(ringTone, c, tone) - broad) * ringLift * inRing
+                const warmed = carved + (toned(near, c, tone) - carved) * close
                 const outside = warmed + (lipColor[c] - warmed) * onLip
-                const crestLit = outside + (crest.color[c] * tone - outside) * crested
+                const crestLit = outside + (toned(crest.color, c, tone) - outside) * crested
                 const cut = crestLit + (groove.color[c] - crestLit) * grooved
                 target[c] = hole[c] * inDoor + cut * darken * (1 - inDoor)
             }
+            // The doorway gives its own light: there the shade goes to black and the lift is the
+            // colour itself, so neither the sprite's pixels nor the light on the board tint it.
             for (let c = 0; c < 3; c++) {
                 const o = src[i + c], t = Math.min(255, target[c])
-                src[i + c] = t >= o ? 255 : Math.round(255 * t / o)
-                up[i + c] = t > o ? Math.round(255 * (t - o) / (255 - o)) : 0
+                const shaded = t >= o ? 255 : 255 * t / o, raised = t > o ? 255 * (t - o) / (255 - o) : 0
+                src[i + c] = Math.round(shaded * (1 - inDoor))
+                up[i + c] = Math.round(raised + (t - raised) * inDoor)
             }
             up[i + 3] = a
         }
