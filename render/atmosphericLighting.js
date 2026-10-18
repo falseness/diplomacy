@@ -617,7 +617,7 @@ const atmosphericLighting = {
     // (multiply) light warm near the doorway and grey-tan towards the rim, with a soft dark
     // edge away from the key light, a gold band on the arch and the doorway a deep orange
     // recess. Then 'screen' adds the cave grade's lift (or the band as a rim light), a flare
-    // over the rim, a white-gold flame in the top of the opening, lit windows and a faint amber
+    // over the rim, a white-gold flame in the opening (a soft round bloom in a cave), lit windows and a faint amber
     // halo on the stone. Both overlays are built once per sprite raster; the old round sprite
     // is the fallback for a missing raster.
     BLOOM: {
@@ -649,9 +649,9 @@ const atmosphericLighting = {
         // (radii in window half sizes).
         window: {reach: 1.8, stops: [[0, '255,250,220', 1], [0.35, '255,226,130', 0.95], [0.55, '255,180,70', 0.55],
             [1, '245,140,50', 0]]},
-        // Flame: an upright ellipse in the middle of the opening (half width x half height in door
-        // half sizes), white-gold in the middle, gold to orange at its edge, leaving the orange
-        // recess at the sides and foot.
+        // Flame (sprites without a cave grade): an upright ellipse in the middle of the opening
+        // (half width x half height in door half sizes), white-gold in the middle, gold to orange
+        // at its edge, leaving the orange recess at the sides and foot.
         flame: {rx: 0.82, ry: 0.78, dy: -0.06},
         coreStops: [[0, '255,255,240', 1], [0.7, '255,250,214', 1], [0.86, '255,222,110', 0.65],
             [1, '255,196,70', 0]],
@@ -659,28 +659,35 @@ const atmosphericLighting = {
         haloOnSprite: 0,
         // Cave grade, per pixel of the sprite raster: stone from the sprite's own luminance
         // (stone: channel factors, a warm grey-taupe), shaded for its form (form: lit on the
-        // upper left facing the key light, falling to dark on the lower right); the sprite's
-        // carved arch ring gold under the same form (ringLit to ringDark, joint: share of the
-        // sprite's luminance kept so the voussoir joints show), lifted to inner near the opening
-        // (innerReach: raster widths); the opening orange-gold at its top to a deeper orange at its
-        // foot (openingStops, top to foot; openingSide: darkening at its sides); mask edges
-        // feathered (raster widths). Reached by the shade multiply plus a 'screen' lift in the
-        // glow, so the same two draws per lamp.
-        grade: {stone: [0.68, 0.54, 0.43], form: {lit: 1.25, dark: 0.64, slope: [0.6, 0.3], power: 1.6},
-            ringLit: [255, 206, 108], ringDark: [238, 170, 80], joint: 0.2, inner: [255, 236, 170], innerReach: 0.04,
-            openingStops: [[0, '255,190,80'], [0.5, '248,160,52'], [0.85, '232,138,44'], [1, '214,122,42']], openingSide: 0.35,
-            feather: 0.01, flareReach: 1.3, flareAlpha: 0.45}
+        // upper left facing the key light, falling to dark on the lower right) and warmed by the
+        // doorway (warm, toned by the sprite's luminance with weight warmJoint, by up to warmLift,
+        // falling off over warmReach raster widths from the opening); the sprite's carved arch
+        // ring gold under the same form (ringLit to ringDark, joint: share of the sprite's
+        // luminance kept so the voussoir joints show) at its inner edge, lifted to inner near the
+        // opening (innerReach), fading to the stone over ringFade raster widths; the opening
+        // orange-gold at its top to a deep orange-brown at its foot (openingStops, top to foot;
+        // openingSide: darkening at its sides); mask edges feathered (raster widths). Reached by
+        // the shade multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
+        grade: {stone: [0.64, 0.52, 0.43], form: {lit: 1.55, dark: 0.42, slope: [0.6, 0.3], power: 1.6},
+            ringLit: [255, 200, 112], ringDark: [230, 150, 78], joint: 0.2, inner: [250, 204, 112], innerReach: 0.02,
+            ringFade: 0.09, warm: [222, 150, 96], warmJoint: 0.5, warmLift: 0.55, warmReach: 0.1,
+            openingStops: [[0, '255,200,96'], [0.4, '240,146,50'], [0.75, '190,94,32'], [1, '136,62,22']], openingSide: 0.7,
+            feather: 0.01, flareReach: 1.3, flareAlpha: 0.45,
+            // The flame: a round bloom in the top of the opening (centre at dy of the opening's
+            // height below its top, radius r in opening half widths), white only in its middle,
+            // spilling past the opening onto the inner ring.
+            bloom: {dy: 0.4, r: 1.0, stops: [[0, '255,255,240', 1], [0.35, '255,250,200', 1], [0.6, '255,222,90', 0.95],
+                [0.85, '255,170,50', 0.4], [1, '250,140,40', 0]]}}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
         // The cave's own carved stone arch (a horseshoe round the opening) and its recessed
         // opening (the reveal jambs plus the lit cave), outlines in the asset's 512-unit space;
-        // the grade lights the ring gold and fills the opening (flame box: the lit cave).
+        // the grade lights the ring gold and fills the opening.
         goldmine: {x: 0.5, y: 0.645, w: 0.125, h: 0.165, grade: true,
             ring: 'M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 ' +
                 'L348 436 L311 439 L307 331 Q305 286 285 260 Q269 237 245 237 Q221 237 202 261 Q179 291 178 336 L176 439 L149 441 Z',
-            opening: 'M171 436 L174 325 Q178 252 207 234 Q223 222 243 223 Q276 223 296 257 Q314 288 314 340 L315 438 L272 447 L212 447 Z',
-            flameBox: {x: 0.485, y: 0.672, w: 0.106, h: 0.199}},
+            opening: 'M171 436 L174 325 Q178 252 207 234 Q223 222 243 223 Q276 223 296 257 Q314 288 314 340 L315 438 L272 447 L212 447 Z'},
         // A town keeps its warm lit walls: a lighter tint than the cave's grey-tan rim, no
         // arch band or dark edge.
         town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085, ring: null, edge: null,
@@ -802,9 +809,11 @@ const atmosphericLighting = {
     // the raster's pixels can't be read.
     gradeCanvases(image, door) {
         const W = image.width, H = image.height
-        const {stone, form, ringLit, ringDark, joint, inner, innerReach, openingStops, openingSide, feather} = this.BLOOM.grade
+        const {stone, form, ringLit, ringDark, joint, inner, innerReach, ringFade, warm, warmJoint, warmLift, warmReach,
+            openingStops, openingSide, feather} = this.BLOOM.grade
         const ring = this.outline(door.ring, W, H), opening = this.outline(door.opening, W, H)
         const cx = door.x * W, bottom = opening.bottom, soft = Math.max(0.5, feather * W), reach = innerReach * W
+        const fade = ringFade * W, warmth = warmReach * W
         const shade = document.createElement('canvas'), lift = document.createElement('canvas')
         shade.width = lift.width = W
         shade.height = lift.height = H
@@ -830,7 +839,7 @@ const atmosphericLighting = {
             const px = x + 0.5, py = y + 0.5
             const lum = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]
             // Soft masks (feathered by soft pixels) of the opening and the carved arch ring.
-            const dOpen = this.outlineDistance(opening, px, py, reach + soft)
+            const dOpen = this.outlineDistance(opening, px, py, 6 * warmth)
             const inOpen = Math.min(1, Math.max(0, 0.5 + dOpen / (2 * soft)))
             const inRing = Math.min(1, Math.max(0, 0.5 + this.outlineDistance(ring, px, py, soft) / (2 * soft)))
             // The opening: orange-gold at its top, deepening to a darker orange at its
@@ -845,13 +854,18 @@ const atmosphericLighting = {
             // shaded across the dome to its lower right.
             const side = Math.min(1, Math.max(0, 0.5 + form.slope[0] * (px - cx) / (0.45 * W) + form.slope[1] * (2 * py / bottom - 1)))
             const lit = form.lit + (form.dark - form.lit) * side ** form.power
-            // The ring is gold lit by the same form (joint lines kept from the sprite's
-            // luminance), brightest along its inner edge where the opening's light falls.
+            // The doorway's light on the stone round it: the ring gold at its inner edge, fading
+            // to the stone at its outer edge (joint lines kept from the sprite's luminance), and
+            // a warm lift on the dome falling off with the distance from the opening, so the
+            // top and the far side stay grey stone.
             const glow = dOpen < 0 ? Math.exp(dOpen / reach) : 1, light = 1 - joint + joint * lum / 255
+            const gilt = dOpen < 0 ? Math.exp(dOpen / fade) : 1, lift = warmLift * (dOpen < 0 ? Math.exp(dOpen / warmth) : 1)
+            const tone = 1 - warmJoint + warmJoint * lum / 255
             for (let c = 0; c < 3; c++) {
+                const rock = lum * stone[c] * lit, warmed = rock + (warm[c] * tone - rock) * lift
                 const gold = (ringLit[c] + (ringDark[c] - ringLit[c]) * side ** form.power) * light
-                const arch = gold + (inner[c] - gold) * glow * inRing
-                target[c] = hole[c] * inOpen + (1 - inOpen) * (arch * inRing + lum * stone[c] * lit * (1 - inRing))
+                const arch = warmed + (gold + (inner[c] - gold) * glow - warmed) * gilt
+                target[c] = hole[c] * inOpen + (1 - inOpen) * (arch * inRing + warmed * (1 - inRing))
             }
             for (let c = 0; c < 3; c++) {
                 const o = src[i + c], t = Math.min(255, target[c])
@@ -951,21 +965,31 @@ const atmosphericLighting = {
             g.fillRect(-1, -1, 2, 2)
             g.restore()
         }
-        // The flame: an upright white-gold ellipse in the lit cave (the doorway unless the
-        // sprite names its own flame box), leaving the recess at the sides and foot.
-        const box = door.flameBox || door
-        this.doorPath(g, box, image, pad, pad)
-        g.save()
-        g.clip()
-        const {rx, ry, dy: fdy} = this.BLOOM.flame
-        g.translate(pad + box.x * W, pad + (box.y + fdy * box.h) * H)
-        g.scale(rx * box.w * W, ry * box.h * H)
-        const core = g.createRadialGradient(0, 0, 0, 0, 0, 1)
-        for (const [t, color, alpha] of this.BLOOM.coreStops)
-            core.addColorStop(t, `rgba(${color},${alpha})`)
-        g.fillStyle = core
-        g.fillRect(-1, -1, 2, 2)
-        g.restore()
+        if (graded) {
+            // The cave's flame: a soft round bloom in the top of the opening, over its rim.
+            const opening = this.outline(door.opening, W, H), {dy: bdy, r: br, stops} = this.BLOOM.grade.bloom
+            const bx = pad + (opening.left + opening.right) / 2, by = pad + opening.top + bdy * (opening.bottom - opening.top)
+            const radius = br * (opening.right - opening.left) / 2
+            const core = g.createRadialGradient(bx, by, 0, bx, by, radius)
+            for (const [t, color, alpha] of stops) core.addColorStop(t, `rgba(${color},${alpha})`)
+            g.fillStyle = core
+            g.fillRect(bx - radius, by - radius, 2 * radius, 2 * radius)
+        } else {
+            // The flame: an upright white-gold ellipse in the doorway, leaving the recess at
+            // the sides and foot.
+            this.doorPath(g, door, image, pad, pad)
+            g.save()
+            g.clip()
+            const {rx, ry, dy: fdy} = this.BLOOM.flame
+            g.translate(pad + door.x * W, pad + (door.y + fdy * door.h) * H)
+            g.scale(rx * door.w * W, ry * door.h * H)
+            const core = g.createRadialGradient(0, 0, 0, 0, 0, 1)
+            for (const [t, color, alpha] of this.BLOOM.coreStops)
+                core.addColorStop(t, `rgba(${color},${alpha})`)
+            g.fillStyle = core
+            g.fillRect(-1, -1, 2, 2)
+            g.restore()
+        }
         overlay = {radius: basis.r, name, shade, glow, pad}
         this.lampOverlays.set(image, overlay)
         ++this.lampOverlayBuilds
