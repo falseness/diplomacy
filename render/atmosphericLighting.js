@@ -649,12 +649,12 @@ const atmosphericLighting = {
         // (radii in window half sizes).
         window: {reach: 1.8, stops: [[0, '255,250,220', 1], [0.35, '255,226,130', 0.95], [0.55, '255,180,70', 0.55],
             [1, '245,140,50', 0]]},
-        // Flame: a narrow upright ellipse in the top of the opening (half width x half height in door
-        // half sizes), white-gold in the middle, gold to orange at its edge, leaving the recess
-        // at the sides and foot.
-        flame: {rx: 0.85, ry: 0.62, dy: -0.28},
-        coreStops: [[0, '255,255,240', 1], [0.74, '255,252,222', 1], [0.86, '255,222,100', 0.6],
-            [1, '255,190,60', 0]],
+        // Flame: an upright ellipse in the middle of the opening (half width x half height in door
+        // half sizes), white-gold in the middle, gold to orange at its edge, leaving the orange
+        // recess at the sides and foot.
+        flame: {rx: 0.82, ry: 0.78, dy: -0.06},
+        coreStops: [[0, '255,255,240', 1], [0.7, '255,250,214', 1], [0.86, '255,222,110', 0.65],
+            [1, '255,196,70', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0,
         // Cave grade, per pixel of the sprite raster: stone from the sprite's own luminance
@@ -662,13 +662,13 @@ const atmosphericLighting = {
         // upper left facing the key light, falling to dark on the lower right); the sprite's
         // carved arch ring gold under the same form (ringLit to ringDark, joint: share of the
         // sprite's luminance kept so the voussoir joints show), lifted to inner near the opening
-        // (innerReach: raster widths); the opening gold at its top to a deep recess at its foot
-        // (openingStops, top to foot; openingSide: darkening at its sides); mask edges
+        // (innerReach: raster widths); the opening orange-gold at its top to a deeper orange at its
+        // foot (openingStops, top to foot; openingSide: darkening at its sides); mask edges
         // feathered (raster widths). Reached by the shade multiply plus a 'screen' lift in the
         // glow, so the same two draws per lamp.
-        grade: {stone: [0.78, 0.62, 0.5], form: {lit: 1.3, dark: 0.8, slope: [0.6, 0.3], power: 1.6},
-            ringLit: [246, 186, 92], ringDark: [246, 180, 90], joint: 0.2, inner: [255, 228, 150], innerReach: 0.04,
-            openingStops: [[0, '255,214,110'], [0.45, '250,172,62'], [0.8, '196,112,42'], [1, '112,62,30']], openingSide: 0.15,
+        grade: {stone: [0.68, 0.54, 0.43], form: {lit: 1.25, dark: 0.64, slope: [0.6, 0.3], power: 1.6},
+            ringLit: [255, 206, 108], ringDark: [238, 170, 80], joint: 0.2, inner: [255, 236, 170], innerReach: 0.04,
+            openingStops: [[0, '255,190,80'], [0.5, '248,160,52'], [0.85, '232,138,44'], [1, '214,122,42']], openingSide: 0.35,
             feather: 0.01, flareReach: 1.3, flareAlpha: 0.45}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
@@ -833,7 +833,7 @@ const atmosphericLighting = {
             const dOpen = this.outlineDistance(opening, px, py, reach + soft)
             const inOpen = Math.min(1, Math.max(0, 0.5 + dOpen / (2 * soft)))
             const inRing = Math.min(1, Math.max(0, 0.5 + this.outlineDistance(ring, px, py, soft) / (2 * soft)))
-            // The opening: gold at its top, deepening to a dark orange-brown recess at its
+            // The opening: orange-gold at its top, deepening to a darker orange at its
             // foot, a little darker at its sides.
             const t = Math.min(1, Math.max(0, (py - opening.top) / (opening.bottom - opening.top)))
             const edge = 1 - openingSide * (2 * Math.abs(px - (opening.left + opening.right) / 2) / (opening.right - opening.left)) ** 2
