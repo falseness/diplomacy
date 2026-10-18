@@ -267,7 +267,8 @@ const onlineObservation = {
             // vision may reveal a peer beyond our turn-opening fog.
             drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
             Entity.prototype.drawBars.call(sprite, ctx)
-            if (sprite.movesBar && (otherSettings.alwaysDisplayMovesBar || !sprite.isFullMoves))
+            // Same owner rule as Unit.drawBars: a peer's bar goes once it leaves pendingSeats.
+            if (sprite.movesBar && shouldShowMovesBar(sprite))
                 sprite.movesBar.draw(ctx)
         }
         // Match grid overlays: occupied building bars stay above every unit body.
