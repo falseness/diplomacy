@@ -679,9 +679,16 @@ const atmosphericLighting = {
             // anchor to the foot), the flame and its glow at the top of the interior.
             frame: {width: 0.34, soft: 0.1, outer: [214, 120, 24], inner: [248, 168, 40]},
             interior: [[0, '250,172,52'], [0.2, '222,120,26'], [0.45, '176,88,16'], [1, '130,62,12']], flameGlow: {reach: 2.8, below: 0.4, color: [255, 196, 70]},
+            // The upper doorway filled with gold light across its whole width, frame and interior
+            // (upperGlow: full down to 'to' and fading over 'soft', in shares of the opening's height
+            // from its top, the frame's gold jambs only down to 'frame'), so the glow still reads when the board is drawn small.
+            upperGlow: {to: 0.36, frame: 0.16, soft: 0.24, amount: 1, color: [255, 222, 90]},
             // Warm colours darkened by the sprite's luminance turn orange-brown, not olive
             // (per-channel exponents of the luminance tone).
             toneBias: [1, 1.3, 1.6],
+            // The stone held to a warm tan hue (green at most ringHue of the red), so the board's
+            // gold light over the dome and the carved ring never turns them olive.
+            ringHue: 0.75,
             lip: 0, lipColor: [255, 232, 170], flame: {rx: 0.6, ry: 1.1, low: 0.55, color: [255, 250, 208]},
             feather: 0.01, flareReach: 1.3, flareAlpha: 0.3,
             // The carved arch's form picked out by light along its own outlines: a thin dark
@@ -825,7 +832,7 @@ const atmosphericLighting = {
     // the raster's pixels can't be read.
     gradeCanvases(image, door) {
         const W = image.width, H = image.height
-        const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, nearOut, ringTone, ringLift, share, joint, anchor, lip, lipColor, flame, feather, groove, crest, contour, frame, interior, flameGlow, toneBias} = this.BLOOM.grade
+        const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, nearOut, ringTone, ringLift, share, joint, anchor, lip, lipColor, flame, feather, groove, crest, contour, frame, interior, flameGlow, toneBias, upperGlow, ringHue} = this.BLOOM.grade
         const ring = this.outline(door.ring, W, H), opening = this.outline(door.opening, W, H), arch = this.outline(door.arch, W, H)
         const shaft = this.outline(door.shaft, W, H)
         const cx = door.x * W, bottom = opening.bottom, soft = Math.max(0.5, feather * W), warmth = warmReach * W
@@ -889,10 +896,15 @@ const atmosphericLighting = {
             const tear = Math.hypot(narrow * (px - ox) / (flame.rx * halfOpen), (py - oy) / ((py > oy ? flame.low : 1) * flame.ry * halfOpen))
             const flare = Math.min(1, 1.6 * Math.max(0, 1 - tear)), light = 1 - joint * inRing * (1 - lum / 160)
             const glowing = (py > oy ? flameGlow.below : 1) * Math.max(0, 1 - (tear - 1) / (flameGlow.reach - 1)) ** 2
+            const fill = to => {
+                const u = Math.min(1, Math.max(0, (to + upperGlow.soft - (py - opening.top) / (bottom - opening.top)) / upperGlow.soft))
+                return upperGlow.amount * u * u * (3 - 2 * u)
+            }
+            const filled = fill(upperGlow.frame) + (fill(upperGlow.to) - fill(upperGlow.frame)) * within
             for (let c = 0; c < 3; c++) {
                 const faceLit = (frame.outer[c] + (frame.inner[c] - frame.outer[c]) * face) * light
                 const deep = c0[c] + (c1[c] - c0[c]) * f, room = deep + (flameGlow.color[c] - deep) * glowing
-                const base = faceLit + (room - faceLit) * within
+                const framed = faceLit + (room - faceLit) * within, base = framed + (upperGlow.color[c] - framed) * filled
                 hole[c] = base + (flame.color[c] - base) * flare
             }
             // Form shading: the stone is lit on the upper-left side facing the key light and
@@ -924,6 +936,7 @@ const atmosphericLighting = {
                 const cut = crestLit + (groove.color[c] - crestLit) * grooved
                 target[c] = hole[c] * inDoor + cut * darken * (1 - inDoor)
             }
+            target[1] -= (1 - inDoor) * Math.max(0, target[1] - ringHue * target[0])
             // The doorway gives its own light: there the shade goes to black and the lift is the
             // colour itself, so neither the sprite's pixels nor the light on the board tint it.
             for (let c = 0; c < 3; c++) {
