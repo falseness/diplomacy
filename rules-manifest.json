@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "a8974571e91afca1c903de84b183f0c56806d7ea2ca85819849bb32471e26700",
+  "rulesVersion": "480e74df93d74a2d9ee7601893b96138a414cfa32815e6c939dbce6621184c7d",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -475,8 +475,8 @@
     },
     {
       "path": "ai/wave-config.js",
-      "sha256": "cf0103b853cccc08b6f2497a258b91336eb09d8af1293a428f6653639629a0b4",
-      "bytes": 4501
+      "sha256": "3bab81d9833528b0a239dc09a2366b96a35558ff74eccd754300b6c7ea576671",
+      "bytes": 4582
     },
     {
       "path": "ai/wave-composition.js",

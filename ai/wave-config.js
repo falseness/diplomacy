@@ -1,8 +1,8 @@
-// Current portal durability; wave production uses the six-category schedule below.
-const COOP_PORTAL_HEALTH = 30;
-// Common (melee/ranged) portals are weaker than elite ones.
-const COOP_COMMON_PORTAL_HEALTH = 12;
-const COOP_ELITE_PORTAL_HEALTH = 30;
+// Default portal durability (uncategorized portals, DemonPortal.maxHP); wave production uses the six-category schedule below.
+const COOP_PORTAL_HEALTH = 15;
+// Common (melee/ranged) portals have 9 HP; elite (siege/heavy/chaos/mage/cavalry) portals have 15.
+const COOP_COMMON_PORTAL_HEALTH = 9;
+const COOP_ELITE_PORTAL_HEALTH = 15;
 const COOP_COMMON_PORTAL_CATEGORIES = Object.freeze(['melee', 'ranged']);
 const COOP_ELITE_PORTAL_CATEGORIES = Object.freeze(['siege', 'heavy', 'chaos', 'mage', 'cavalry']);
 
