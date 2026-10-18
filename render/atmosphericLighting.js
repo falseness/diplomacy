@@ -652,24 +652,35 @@ const atmosphericLighting = {
         // Flame: a narrow upright ellipse in the top of the opening (half width x half height in door
         // half sizes), white-gold in the middle, gold to orange at its edge, leaving the recess
         // at the sides and foot.
-        flame: {rx: 0.62, ry: 0.62, dy: -0.05},
+        flame: {rx: 0.85, ry: 0.62, dy: -0.28},
         coreStops: [[0, '255,255,240', 1], [0.74, '255,252,222', 1], [0.86, '255,222,100', 0.6],
             [1, '255,190,60', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0,
         // Cave grade, per pixel of the sprite raster: stone from the sprite's own luminance
-        // (stone: channel factors, blue over green so the warm key light's dodge leaves it
-        // grey-beige, not khaki), shaded for its form (form: lit on the upper left facing the key
-        // light, falling to dark on the lower right), a bright gold lit inner arch (nearly flat in the
-        // sprite's luminance) deepening to warm brown as it fades over goldWidth door half
-        // widths from the opening, a gold rim line, the opening a deep orange-gold recess. Reached by the shade
-        // multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.84, 0.66, 0.54], form: {lit: 1.35, dark: 0.5, slope: [0.6, 0.3], power: 1.6}, gold: [255, 196, 104], brown: [206, 136, 76], goldAmount: 1, goldFlat: 0.45, goldWidth: 0.8,
-            goldPower: 1.5, rimDark: 0, flareReach: 1.3, flareAlpha: 0.45, rimLine: [255, 212, 116], rimLineWidth: 0.7}
+        // (stone: channel factors, a warm grey-taupe), shaded for its form (form: lit on the
+        // upper left facing the key light, falling to dark on the lower right); the sprite's
+        // carved arch ring gold under the same form (ringLit to ringDark, joint: share of the
+        // sprite's luminance kept so the voussoir joints show), lifted to inner near the opening
+        // (innerReach: raster widths); the opening gold at its top to a deep recess at its foot
+        // (openingStops, top to foot; openingSide: darkening at its sides); mask edges
+        // feathered (raster widths). Reached by the shade multiply plus a 'screen' lift in the
+        // glow, so the same two draws per lamp.
+        grade: {stone: [0.78, 0.62, 0.5], form: {lit: 1.3, dark: 0.8, slope: [0.6, 0.3], power: 1.6},
+            ringLit: [246, 186, 92], ringDark: [246, 180, 90], joint: 0.2, inner: [255, 228, 150], innerReach: 0.04,
+            openingStops: [[0, '255,214,110'], [0.45, '250,172,62'], [0.8, '196,112,42'], [1, '112,62,30']], openingSide: 0.15,
+            feather: 0.01, flareReach: 1.3, flareAlpha: 0.45}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
-        goldmine: {x: 0.5, y: 0.645, w: 0.125, h: 0.165, grade: true},
+        // The cave's own carved stone arch (a horseshoe round the opening) and its recessed
+        // opening (the reveal jambs plus the lit cave), outlines in the asset's 512-unit space;
+        // the grade lights the ring gold and fills the opening (flame box: the lit cave).
+        goldmine: {x: 0.5, y: 0.645, w: 0.125, h: 0.165, grade: true,
+            ring: 'M123 423 L128 337 Q130 257 169 211 Q200 173 245 170 Q291 170 325 211 Q359 254 365 328 L371 422 ' +
+                'L348 436 L311 439 L307 331 Q305 286 285 260 Q269 237 245 237 Q221 237 202 261 Q179 291 178 336 L176 439 L149 441 Z',
+            opening: 'M171 436 L174 325 Q178 252 207 234 Q223 222 243 223 Q276 223 296 257 Q314 288 314 340 L315 438 L272 447 L212 447 Z',
+            flameBox: {x: 0.485, y: 0.672, w: 0.106, h: 0.199}},
         // A town keeps its warm lit walls: a lighter tint than the cave's grey-tan rim, no
         // arch band or dark edge.
         town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085, ring: null, edge: null,
@@ -681,6 +692,7 @@ const atmosphericLighting = {
     bloomSprite: null,
     bloomSpriteBuilds: 0,
     lampOverlays: new WeakMap(),
+    gradedImages: new WeakMap(),
     lampOverlayBuilds: 0,
     bloomImage() {
         if (this.bloomSprite) return this.bloomSprite
@@ -751,12 +763,48 @@ const atmosphericLighting = {
         a.drawImage(image, pad, pad)
         return arc
     },
+    // An outline (SVG path of M, L, Q and Z in the asset's 512-unit space) as a polygon in
+    // raster pixels, curves flattened, with its bounds.
+    outline(path, W, H) {
+        const n = path.match(/[MLQZ]|-?[\d.]+/g), points = []
+        let i = 0, cmd, x = 0, y = 0
+        const num = () => +n[i++]
+        while (i < n.length) {
+            if (/[MLQZ]/.test(n[i])) cmd = n[i++]
+            if (cmd === 'Z') continue
+            if (cmd === 'Q') {
+                const qx = num(), qy = num(), ex = num(), ey = num()
+                for (let k = 1; k <= 8; k++) {
+                    const t = k / 8, u = 1 - t
+                    points.push([u * u * x + 2 * u * t * qx + t * t * ex, u * u * y + 2 * u * t * qy + t * t * ey])
+                }
+                x = ex
+                y = ey
+            } else points.push([x = num(), y = num()])
+        }
+        const poly = points.map(([px, py]) => [px * W / 512, py * H / 512])
+        const xs = poly.map(q => q[0]), ys = poly.map(q => q[1])
+        return {poly, left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys)}
+    },
+    // Signed distance in pixels from an outline (positive inside), capped at reach outside its bounds.
+    outlineDistance({poly, left, right, top, bottom}, px, py, reach) {
+        if (px < left - reach || px > right + reach || py < top - reach || py > bottom + reach) return -reach
+        let inside = false, best = Infinity
+        for (let k = 0, j = poly.length - 1; k < poly.length; j = k++) {
+            const [ax, ay] = poly[j], [bx, by] = poly[k]
+            if ((ay > py) !== (by > py) && px < ax + (py - ay) * (bx - ax) / (by - ay)) inside = !inside
+            const ex = bx - ax, ey = by - ay, t = Math.min(1, Math.max(0, ((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey || 1)))
+            best = Math.min(best, (px - ax - t * ex) ** 2 + (py - ay - t * ey) ** 2)
+        }
+        return (inside ? 1 : -1) * Math.sqrt(best)
+    },
     // The cave grade's shade (multiply factors) and lift ('screen') canvases, or null when
     // the raster's pixels can't be read.
     gradeCanvases(image, door) {
-        const W = image.width, H = image.height, rw = door.w * W, cx = door.x * W
-        const top = (door.y - door.h) * H + rw, bottom = (door.y + door.h) * H
-        const {stone, form, gold, brown, goldAmount, goldFlat, goldWidth, goldPower, rimDark, rimLine, rimLineWidth} = this.BLOOM.grade
+        const W = image.width, H = image.height
+        const {stone, form, ringLit, ringDark, joint, inner, innerReach, openingStops, openingSide, feather} = this.BLOOM.grade
+        const ring = this.outline(door.ring, W, H), opening = this.outline(door.opening, W, H)
+        const cx = door.x * W, bottom = opening.bottom, soft = Math.max(0.5, feather * W), reach = innerReach * W
         const shade = document.createElement('canvas'), lift = document.createElement('canvas')
         shade.width = lift.width = W
         shade.height = lift.height = H
@@ -769,8 +817,8 @@ const atmosphericLighting = {
             return null
         }
         const l = lift.getContext('2d'), raised = l.createImageData(W, H)
-        const src = pixels.data, up = raised.data, recess = this.BLOOM.recessStops.map(([t, c]) => [t, c.split(',').map(Number)])
-        const target = [0, 0, 0]
+        const src = pixels.data, up = raised.data, recess = openingStops.map(([t, c]) => [t, c.split(',').map(Number)])
+        const target = [0, 0, 0], hole = [0, 0, 0]
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
             // Faint pixels (the contact shadow on the ground) keep their look, so the grade
             // never reaches the stone beside the sprite; faint green moss is graded anyway, so no
@@ -780,28 +828,30 @@ const atmosphericLighting = {
             src[i + 3] = a
             if (!a) continue
             const px = x + 0.5, py = y + 0.5
-            // Signed distance from the opening's outline, in door half widths.
-            const d = (py < top ? Math.hypot(px - cx, py - top) - rw : Math.max(Math.abs(px - cx) - rw, py - bottom)) / rw
             const lum = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]
-            if (d < 0) {
-                const t = Math.min(1, Math.max(0, (px - cx + rw) / (2 * rw)))
-                let k = 1
-                while (k < recess.length - 1 && recess[k][0] < t) k++
-                const [t0, c0] = recess[k - 1], [t1, c1] = recess[k], f = (t - t0) / (t1 - t0 || 1)
-                for (let c = 0; c < 3; c++) target[c] = c0[c] + (c1[c] - c0[c]) * f
-            } else {
-                const w = goldAmount * Math.max(0, 1 - Math.max(0, d - goldFlat) / goldWidth) ** goldPower, light = 0.8 + 0.2 * lum / 255
-                // Form shading: the stone is lit on the upper-left side facing the key light and
-                // shaded across the dome to its lower right, and darkens towards the rim.
-                const side = Math.min(1, Math.max(0, 0.5 + form.slope[0] * (px - cx) / (0.45 * W) + form.slope[1] * (2 * py / bottom - 1)))
-                const rim = (1 - rimDark * Math.min(1, Math.hypot(px - cx, py - top) / (0.45 * W))) *
-                    (form.lit + (form.dark - form.lit) * side ** form.power)
-                // A thin bright rim line traces the opening's edge.
-                const line = rimLineWidth ? Math.max(0, 1 - d / rimLineWidth) ** 1.5 : 0
-                // The gold deepens to warm brown as it fades (gold over grey stone would read olive).
-                for (let c = 0; c < 3; c++)
-                    target[c] = ((lum * stone[c] * rim * (1 - w) + (brown[c] + (gold[c] - brown[c]) * w) * light * w) *
-                        (1 - line) + rimLine[c] * line)
+            // Soft masks (feathered by soft pixels) of the opening and the carved arch ring.
+            const dOpen = this.outlineDistance(opening, px, py, reach + soft)
+            const inOpen = Math.min(1, Math.max(0, 0.5 + dOpen / (2 * soft)))
+            const inRing = Math.min(1, Math.max(0, 0.5 + this.outlineDistance(ring, px, py, soft) / (2 * soft)))
+            // The opening: gold at its top, deepening to a dark orange-brown recess at its
+            // foot, a little darker at its sides.
+            const t = Math.min(1, Math.max(0, (py - opening.top) / (opening.bottom - opening.top)))
+            const edge = 1 - openingSide * (2 * Math.abs(px - (opening.left + opening.right) / 2) / (opening.right - opening.left)) ** 2
+            let k = 1
+            while (k < recess.length - 1 && recess[k][0] < t) k++
+            const [t0, c0] = recess[k - 1], [t1, c1] = recess[k], f = (t - t0) / (t1 - t0 || 1)
+            for (let c = 0; c < 3; c++) hole[c] = (c0[c] + (c1[c] - c0[c]) * f) * edge
+            // Form shading: the stone is lit on the upper-left side facing the key light and
+            // shaded across the dome to its lower right.
+            const side = Math.min(1, Math.max(0, 0.5 + form.slope[0] * (px - cx) / (0.45 * W) + form.slope[1] * (2 * py / bottom - 1)))
+            const lit = form.lit + (form.dark - form.lit) * side ** form.power
+            // The ring is gold lit by the same form (joint lines kept from the sprite's
+            // luminance), brightest along its inner edge where the opening's light falls.
+            const glow = dOpen < 0 ? Math.exp(dOpen / reach) : 1, light = 1 - joint + joint * lum / 255
+            for (let c = 0; c < 3; c++) {
+                const gold = (ringLit[c] + (ringDark[c] - ringLit[c]) * side ** form.power) * light
+                const arch = gold + (inner[c] - gold) * glow * inRing
+                target[c] = hole[c] * inOpen + (1 - inOpen) * (arch * inRing + lum * stone[c] * lit * (1 - inRing))
             }
             for (let c = 0; c < 3; c++) {
                 const o = src[i + c], t = Math.min(255, target[c])
@@ -832,7 +882,9 @@ const atmosphericLighting = {
         const dx = door.x * W, dy = (door.y + 0.4 * door.h) * H
         // Shade (multiply): the sprite's silhouette in a light tint about the doorway, the
         // doorway a recess, deep orange at its sides and foot.
-        const graded = door.grade && this.gradeCanvases(image, door)
+        // The grade doesn't depend on the radius: built once per sprite image.
+        let graded = door.grade && this.gradedImages.get(image)
+        if (door.grade && graded === undefined) this.gradedImages.set(image, graded = this.gradeCanvases(image, door))
         let shade, g
         if (graded) shade = graded.shade
         else {
@@ -899,13 +951,15 @@ const atmosphericLighting = {
             g.fillRect(-1, -1, 2, 2)
             g.restore()
         }
-        this.doorPath(g, door, image, pad, pad)
+        // The flame: an upright white-gold ellipse in the lit cave (the doorway unless the
+        // sprite names its own flame box), leaving the recess at the sides and foot.
+        const box = door.flameBox || door
+        this.doorPath(g, box, image, pad, pad)
         g.save()
         g.clip()
-        // The flame: an upright white-gold ellipse, leaving the recess at the sides and foot.
         const {rx, ry, dy: fdy} = this.BLOOM.flame
-        g.translate(cx, pad + (door.y + fdy * door.h) * H)
-        g.scale(rx * rw, ry * door.h * H)
+        g.translate(pad + box.x * W, pad + (box.y + fdy * box.h) * H)
+        g.scale(rx * box.w * W, ry * box.h * H)
         const core = g.createRadialGradient(0, 0, 0, 0, 0, 1)
         for (const [t, color, alpha] of this.BLOOM.coreStops)
             core.addColorStop(t, `rgba(${color},${alpha})`)
