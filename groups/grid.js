@@ -51,6 +51,10 @@ class Grid extends SpritesGroup {
         // (see isOverlayCell), and the cells whose infoText may hold a text (setInfoText).
         this.surfaceOverlayCells = []
         this.infoTextCells = new Set()
+        // Raster of the overlays during a zoom gesture (drawOverlayLayer).
+        this.overlayLayer = undefined
+        this.overlayLayerCanvas = undefined
+        this.overlayLayerQueued = false
 
         if (size) 
             this.fill(size.x, size.y)
@@ -791,6 +795,120 @@ class Grid extends SpritesGroup {
         )
         return true
     }
+    // During a zoom gesture on the surface-cache path, the overlays drawn after the light map (still
+    // units, bars, production previews and production texts) come from a raster of them, the
+    // overlay layer, drawn scaled like the surface cache under it. A frame without a usable layer
+    // draws them directly and queues one: a task after the frame draws them at that frame's
+    // transform for the canvas and a quarter of it on each side, and has the drawing rasterized
+    // there (between frames, where the canvas itself is rasterized), not inside a later frame. A
+    // layer is used while the surface cache is unchanged, the zoom within 2x of its scale, the
+    // view inside it and for at most a second; the next one is queued ahead, once the zoom is
+    // 1.25x from its scale or the view comes within a tenth of its size of the layer's edge.
+    // Frames outside a gesture always draw the overlays directly (a settled frame is unchanged),
+    // and so do frames whose layer would exceed OVERLAY_LAYER_MAX_PIXELS: drawing a raster that
+    // large from a canvas costs more per frame than the overlays (a desktop canvas zoomed in).
+    // Returns whether it drew the overlays.
+    drawOverlayLayer(ctx) {
+        const layer = this.overlayLayer
+        const t = ctx.getTransform()
+        if (!gameEvent.screen.surfaceZooming || debug || this.drawLogicText || typeof createImageBitmap !== 'function' ||
+                t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) {
+            this.dropOverlayLayer()
+            return false
+        }
+        // The part of the view the overlays can reach (the board and their margin around it).
+        const margin = 4 * basis.r + assets.size, b = this.surfaceCacheBounds
+        const viewLeft = Math.max(-t.e / t.a, b.left - margin), viewTop = Math.max(-t.f / t.d, b.top - margin)
+        const viewRight = Math.min((ctx.canvas.width - t.e) / t.a, b.left + b.width + margin)
+        const viewBottom = Math.min((ctx.canvas.height - t.f) / t.d, b.top + b.height + margin)
+        const rect = this.overlayLayerRect(ctx.canvas.width, ctx.canvas.height, t)
+        if (rect.width * rect.height > OVERLAY_LAYER_MAX_PIXELS) {
+            this.dropOverlayLayer()
+            return false
+        }
+        const drift = Math.max(t.a / layer?.a, layer?.a / t.a, t.d / layer?.d, layer?.d / t.d)
+        if (!layer || layer.revision !== this.surfaceCacheRevision ||
+                performance.now() - layer.time > 1000 || !(drift <= 2) ||
+                viewLeft < layer.left || viewTop < layer.top || viewRight > layer.right || viewBottom > layer.bottom) {
+            this.queueOverlayLayer(ctx, t)
+            return false
+        }
+        // The view grown by a tenth of its size each way, within the board and margin.
+        const nearX = (viewRight - viewLeft) / 10, nearY = (viewBottom - viewTop) / 10
+        if (drift > 1.25 || Math.max(viewLeft - nearX, b.left - margin) < layer.left ||
+                Math.max(viewTop - nearY, b.top - margin) < layer.top ||
+                Math.min(viewRight + nearX, b.left + b.width + margin) > layer.right ||
+                Math.min(viewBottom + nearY, b.top + b.height + margin) > layer.bottom)
+            this.queueOverlayLayer(ctx, t)
+        if (viewLeft < viewRight && viewTop < viewBottom)
+            ctx.drawImage(layer.canvas,
+                (viewLeft - layer.left) * layer.a, (viewTop - layer.top) * layer.d,
+                (viewRight - viewLeft) * layer.a, (viewBottom - viewTop) * layer.d,
+                viewLeft, viewTop, viewRight - viewLeft, viewBottom - viewTop)
+        return true
+    }
+    dropOverlayLayer() {
+        this.overlayLayer = undefined
+    }
+    // Queues the overlay layer for transform t of ctx (one at a time). It is not built if the
+    // surface cache changed or the gesture ended before the task runs.
+    queueOverlayLayer(ctx, t) {
+        if (this.overlayLayerQueued)
+            return
+        this.overlayLayerQueued = true
+        const cw = ctx.canvas.width, ch = ctx.canvas.height, revision = this.surfaceCacheRevision
+        setTimeout(() => {
+            this.overlayLayerQueued = false
+            if (revision !== this.surfaceCacheRevision || !gameEvent.screen.surfaceZooming)
+                return
+            const layer = this.drawOverlayLayerRaster(cw, ch, t)
+            // A snapshot rasterizes the recorded drawing now; the frames then draw the canvas.
+            createImageBitmap(layer.canvas, 0, 0, 1, 1).then(bitmap => bitmap.close(), () => {})
+            this.overlayLayer = {...layer.bounds, canvas: layer.canvas, a: t.a, d: t.d, revision, time: performance.now()}
+        })
+    }
+    // The device-pixel rectangle of the overlay layer for a cw x ch canvas at transform t: that
+    // canvas and a quarter of it on each side, within the board and the overlays' margin around it.
+    overlayLayerRect(cw, ch, t) {
+        const margin = 4 * basis.r + assets.size, b = this.surfaceCacheBounds
+        const x0 = Math.floor(Math.max(-cw / 4, t.a * (b.left - margin) + t.e))
+        const y0 = Math.floor(Math.max(-ch / 4, t.d * (b.top - margin) + t.f))
+        const x1 = Math.ceil(Math.min(cw * 1.25, t.a * (b.left + b.width + margin) + t.e))
+        const y1 = Math.ceil(Math.min(ch * 1.25, t.d * (b.top + b.height + margin) + t.f))
+        return {x0, y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0)}
+    }
+    // The overlays as the overlay pass draws them on a cw x ch canvas at transform t, within
+    // overlayLayerRect and on the same pixel grid; drawn into a reused canvas, its corner of
+    // width x height.
+    drawOverlayLayerRaster(cw, ch, t) {
+        const {x0, y0, width, height} = this.overlayLayerRect(cw, ch, t)
+        let canvas = this.overlayLayerCanvas
+        if (!canvas || canvas.width < width || canvas.height < height) {
+            // A quarter more room, up to the largest layer of this canvas, so a zoom does not
+            // allocate one at every step; the canvas stays near the size it is drawn at.
+            canvas = this.overlayLayerCanvas = document.createElement('canvas')
+            canvas.width = Math.max(width, Math.min(Math.ceil(width * 1.25), Math.ceil(cw * 1.5)))
+            canvas.height = Math.max(height, Math.min(Math.ceil(height * 1.25), Math.ceil(ch * 1.5)))
+        }
+        const lctx = canvas.getContext('2d')
+        // Only the width x height corner is drawn (clipped) and read.
+        lctx.setTransform(1, 0, 0, 1, 0, 0)
+        lctx.clearRect(0, 0, width, height)
+        lctx.save()
+        lctx.beginPath()
+        lctx.rect(0, 0, width, height)
+        lctx.clip()
+        lctx.setTransform(t.a, 0, 0, t.d, t.e - x0, t.f - y0)
+        // As drawMain sets them on the main canvas.
+        lctx.lineJoin = 'round'
+        lctx.lineCap = 'round'
+        this.drawStillUnits(lctx, this.surfaceOverlayCells)
+        this.drawEntityOverlays(lctx, this.surfaceOverlayCells)
+        this.drawInfoTexts(lctx, this.drawRange(lctx))
+        lctx.restore()
+        return {canvas, width, height, bounds: {left: (x0 - t.e) / t.a, top: (y0 - t.f) / t.d,
+            right: (x0 + width - t.e) / t.a, bottom: (y0 + height - t.f) / t.d}}
+    }
     drawMapSurface(ctx) {
         if (this.canUseSurfaceCache() && this.drawSurfaceCache(ctx))
             return true
@@ -806,18 +924,23 @@ class Grid extends SpritesGroup {
     }
     draw(ctx) {
         const cachedScene = this.drawMapSurface(ctx)
+        // The overlay layer holds the production texts too (drawInfoTexts).
+        let layered = false
         if (otherSettings.atmosphericVisuals) {
             // The light map lights terrain and buildings; units, silhouettes and
             // bars come after it, so the multiply never darkens them.
             if (!cachedScene)
                 this.drawOther(ctx, 'buildings')
             atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
-            if (cachedScene) {
+            layered = cachedScene && this.drawOverlayLayer(ctx)
+            if (!cachedScene) {
+                this.dropOverlayLayer()
+                this.drawOther(ctx, 'units')
+            }
+            else if (!layered) {
                 this.drawStillUnits(ctx, this.surfaceOverlayCells)
                 this.drawEntityOverlays(ctx, this.surfaceOverlayCells)
             }
-            else
-                this.drawOther(ctx, 'units')
         }
         else if (cachedScene)
             this.drawEntityOverlays(ctx, this.surfaceOverlayCells)
@@ -834,7 +957,8 @@ class Grid extends SpritesGroup {
             this.drawChanceOfWinningText(ctx)
         }
 
-        this.drawCellText(ctx)
+        if (!layered)
+            this.drawCellText(ctx)
 
         attackBorder.draw(ctx)
         border.draw(ctx)
@@ -847,6 +971,9 @@ class Grid extends SpritesGroup {
 // Hook for a cell-contents request (PRD 7.4): the cells the local fog just uncovered on a
 // hidden-information board without contents. No network yet; markCellsKnown answers it.
 function onLoadingCellsNeeded(cells) {}
+
+// Largest overlay layer (device pixels) a zoom gesture draws its overlays from (Grid.drawOverlayLayer).
+const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024
 
 function isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray) {
     return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray
