@@ -43,12 +43,11 @@ const atmosphericLighting = {
         {dy: 0.4, rx: 2.3, ry: 2.0, alpha: 0.8, map: [214, 196, 166]},
         {dy: 0.3, rx: 1.7, ry: 1.6, alpha: 0.85, map: [246, 198, 128], gain: [30, 8, 0], gainAlpha: 0.6},
         {dy: 0.5, rx: 1.4, ry: 1.3, alpha: 0.7, map: [248, 218, 166], gain: [90, 64, 22], gainAlpha: 0.6},
-        {dy: 1.6, rx: 1.3, ry: 1.35, alpha: 0.75, map: [255, 222, 168], gain: [112, 84, 34], gainAlpha: 0.75},
-        {dy: 1.05, rx: 1.15, ry: 0.75, alpha: 0.9, map: [255, 220, 146], gain: [120, 88, 26]},
-        {dy: 0.95, rx: 0.8, ry: 0.6, alpha: 1, map: [255, 232, 168], gain: [138, 106, 42]},
+        {dy: 1.5, rx: 1.3, ry: 1.2, alpha: 0.7, map: [255, 216, 160], gain: [112, 76, 30], gainAlpha: 0.75},
+        {dy: 1.05, rx: 1.15, ry: 0.75, alpha: 0.9, map: [255, 212, 140], gain: [120, 80, 22]},
+        {dy: 0.95, rx: 0.8, ry: 0.6, alpha: 1, map: [255, 226, 160], gain: [138, 98, 38]},
         {dx: 1.0, dy: 0.45, rx: 0.6, ry: 0.75, alpha: 0.55, map: [172, 152, 158]},
-        {dx: -1.2, dy: 0.3, rx: 0.7, ry: 0.75, alpha: 0.6, map: [230, 196, 150]},
-        {dx: 1.5, dy: 0.3, rx: 0.65, ry: 0.75, alpha: 0.65, map: [184, 172, 172]},
+        {dx: 1.5, dy: 0.3, rx: 0.8, ry: 0.85, alpha: 0.45, map: [192, 180, 178]},
         {lamps: ['town'], dx: -0.75, dy: 0.25, rx: 1.0, ry: 0.9, alpha: 0.85, map: [255, 222, 164], gain: [112, 80, 30]}
     ],
     // Smooth (near-Gaussian) radial falloff of every spill layer, so no rim or hex edge shows.
@@ -634,8 +633,8 @@ const atmosphericLighting = {
         // [fraction of the width, alpha] of each shrunk copy taken out).
         edge: {color: '124,104,92', width: 0.12, shift: 0.02, steps: [[0.35, 0.5], [0.6, 0.6], [1, 1]]},
         // Doorway recess: deep orange at the sides, orange-gold in the middle.
-        recessStops: [[0, '226,140,50'], [0.25, '250,178,60'], [0.5, '254,204,72'], [0.75, '250,178,60'],
-            [1, '226,140,50']],
+        recessStops: [[0, '150,66,22'], [0.25, '218,124,40'], [0.5, '248,176,60'], [0.75, '218,124,40'],
+            [1, '150,66,22']],
         halo: 1,
         haloStops: [[0, '255,214,140', 0.3], [0.25, '252,190,104', 0.2], [0.55, '245,160,80', 0.08],
             [1, '235,130,60', 0]],
@@ -653,8 +652,8 @@ const atmosphericLighting = {
         // Flame: a narrow upright ellipse in the top of the opening (half width x half height in door
         // half sizes), white-gold in the middle, gold to orange at its edge, leaving the recess
         // at the sides and foot.
-        flame: {rx: 0.75, ry: 0.8, dy: 0.15},
-        coreStops: [[0, '255,255,240', 1], [0.68, '255,252,222', 1], [0.86, '255,222,100', 0.6],
+        flame: {rx: 0.66, ry: 0.72, dy: 0.05},
+        coreStops: [[0, '255,255,240', 1], [0.74, '255,252,222', 1], [0.86, '255,222,100', 0.6],
             [1, '255,190,60', 0]],
         // The halo kept on the sprite (none: the arch keeps its stone contrast).
         haloOnSprite: 0,
@@ -664,8 +663,9 @@ const atmosphericLighting = {
         // sprite's luminance) deepening to warm brown as it fades over goldWidth door half
         // widths from the opening, the opening a deep orange-gold recess. Reached by the shade
         // multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.65, 0.52, 0.53], sideDark: 0.55, topLight: 0.35, gold: [255, 205, 100], brown: [190, 118, 56], goldAmount: 1, goldFlat: 0.6, goldWidth: 0.9,
-            goldPower: 1.5, rimDark: 0.15, flareReach: 1.3, flareAlpha: 0.45, rimLine: [255, 238, 160], rimLineWidth: 0.6}
+        grade: {stone: [0.84, 0.66, 0.54], sideDark: 0.62, topLight: 0.5, gold: [255, 196, 104], brown: [206, 136, 76], goldAmount: 1, goldFlat: 0.45, goldWidth: 0.8,
+            goldPower: 1.5, rimDark: 0.15, flareReach: 1.3, flareAlpha: 0.45, rimLine: [255, 238, 160], rimLineWidth: 0.6,
+            edgeLight: {color: [255, 236, 196], reach: 0.08, amount: 0.95}}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
@@ -673,7 +673,7 @@ const atmosphericLighting = {
         // A town keeps its warm lit walls: a lighter tint than the cave's grey-tan rim, no
         // arch band or dark edge.
         town: {x: 0.44, y: 0.83, w: 0.045, h: 0.085, ring: null, edge: null,
-            shadeStops: [[0, '255,222,170'], [0.4, '250,206,160'], [1, '214,180,160']],
+            shadeStops: [[0, '255,240,214'], [0.4, '250,232,206'], [1, '226,212,202']],
             // Lit windows (centre, half width, half height), glowing onto the wall round them.
             windows: [{x: 0.43, y: 0.572, w: 0.042, h: 0.038}, {x: 0.733, y: 0.719, w: 0.026, h: 0.042}]},
         demonPortal: {x: 0.49, y: 0.66, w: 0.13, h: 0.2}
@@ -756,7 +756,7 @@ const atmosphericLighting = {
     gradeCanvases(image, door) {
         const W = image.width, H = image.height, rw = door.w * W, cx = door.x * W
         const top = (door.y - door.h) * H + rw, bottom = (door.y + door.h) * H
-        const {stone, sideDark, topLight, gold, brown, goldAmount, goldFlat, goldWidth, goldPower, rimDark, rimLine, rimLineWidth} = this.BLOOM.grade
+        const {stone, sideDark, topLight, gold, brown, goldAmount, goldFlat, goldWidth, goldPower, rimDark, rimLine, rimLineWidth, edgeLight} = this.BLOOM.grade
         const shade = document.createElement('canvas'), lift = document.createElement('canvas')
         shade.width = lift.width = W
         shade.height = lift.height = H
@@ -770,7 +770,18 @@ const atmosphericLighting = {
         }
         const l = lift.getContext('2d'), raised = l.createImageData(W, H)
         const src = pixels.data, up = raised.data, recess = this.BLOOM.recessStops.map(([t, c]) => [t, c.split(',').map(Number)])
-        const target = [0, 0, 0]
+        const target = [0, 0, 0], alpha = new Uint8Array(W * H), reach = edgeLight.reach * W
+        for (let j = 0; j < W * H; j++) alpha[j] = src[4 * j + 3]
+        // Share of the sprite missing up-left of a pixel (three steps out to reach): 1 on the
+        // dome's outline facing the key light, fading inwards.
+        const open = (x, y) => {
+            let n = 0
+            for (const k of [1 / 3, 2 / 3, 1]) {
+                const qx = Math.round(x - 0.7 * k * reach), qy = Math.round(y - k * reach)
+                n += qx < 0 || qy < 0 || alpha[qy * W + qx] < 128 ? 1 : 0
+            }
+            return n / 3
+        }
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
             // Faint pixels (the contact shadow on the ground) keep their look, so the grade
             // never reaches the stone beside the sprite; faint green moss is graded anyway, so no
@@ -798,10 +809,12 @@ const atmosphericLighting = {
                     (1 + topLight * Math.min(1, Math.max(0, 1 - py / bottom)))
                 // A thin bright rim line traces the opening's edge.
                 const line = Math.max(0, 1 - d / rimLineWidth) ** 1.5
+                // The outline facing the key light catches it: a cream highlight on the stone.
+                const edge = edgeLight.amount * open(x, y) * (1 - w)
                 // The gold deepens to warm brown as it fades (gold over grey stone would read olive).
                 for (let c = 0; c < 3; c++)
-                    target[c] = (lum * stone[c] * rim * (1 - w) + (brown[c] + (gold[c] - brown[c]) * w) * light * w) *
-                        (1 - line) + rimLine[c] * line
+                    target[c] = ((lum * stone[c] * rim * (1 - w) + (brown[c] + (gold[c] - brown[c]) * w) * light * w) *
+                        (1 - line) + rimLine[c] * line) * (1 - edge) + edgeLight.color[c] * edge
             }
             for (let c = 0; c < 3; c++) {
                 const o = src[i + c], t = Math.min(255, target[c])
