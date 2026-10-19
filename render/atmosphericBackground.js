@@ -49,17 +49,19 @@ const atmosphericBackground = {
     // viewport; a fixed particle count keeps a thin strip of visible sky lively.
     SKY: {
         seed: 1109,
-        // The key light breaks in at the upper left as a broad curved swath of soft orange light: a
-        // fan of wide soft arcs entering along the top from 0.18 to 0.34 of the width (wide enough to
-        // merge into one swath at any aspect), over a broad soft underlay; each bends down towards the
-        // board's upper-left edge (the left ones lower, the right ones higher) and fades out late along
+        // The key light breaks in at the upper left as a broad curved swath of orange-gold light: a
+        // fan of fine rays entering along the top from 0.18 to 0.34 of the width over broad soft
+        // underlays (so it reads as one radiant swath with rays at any aspect), and a few brighter rays
+        // falling steeply down the board's upper-left edge; each bends down towards the board's
+        // upper-left edge (the left ones lower, the right ones higher) and fades out late along
         // its length, the top-left corner and the sky further left staying dark. Arcs (fractions of w, h): [top x,
         // end y, radius, half width, alpha], each a circle arc from (top x, 0) to (end, end y) about a
         // centre on its lower left, faded from its top to over its own length past the end.
         arc: {end: 0.385, over: 1},
-        arcs: [[0.18, 0.5, 1.2, 0.03, 0.24], [0.2021, 0.4429, 1.1143, 0.03, 0.264], [0.2243, 0.3857, 1.0286, 0.03, 0.336],
-            [0.2464, 0.3286, 0.9429, 0.03, 0.36], [0.2686, 0.2714, 0.8571, 0.03, 0.312], [0.2907, 0.2143, 0.7714, 0.03, 0.288],
-            [0.3129, 0.1571, 0.6857, 0.03, 0.24], [0.335, 0.1, 0.6, 0.03, 0.216], [0.2575, 0.35, 0.75, 0.09, 0.26]],
+        arcs: [[0.18, 0.5, 1.2, 0.012, 0.12], [0.2021, 0.4429, 1.1143, 0.01, 0.132], [0.2243, 0.3857, 1.0286, 0.014, 0.168],
+            [0.2464, 0.3286, 0.9429, 0.01, 0.18], [0.2686, 0.2714, 0.8571, 0.014, 0.156], [0.2907, 0.2143, 0.7714, 0.01, 0.144],
+            [0.3129, 0.1571, 0.6857, 0.014, 0.12], [0.335, 0.1, 0.6, 0.012, 0.108], [0.2575, 0.35, 0.75, 0.1, 0.48],
+            [0.22, 0.42, 1, 0.06, 0.22], [0.3, 0.46, 0.95, 0.02, 0.44], [0.315, 0.42, 0.85, 0.012, 0.48], [0.325, 0.5, 1.1, 0.03, 0.32]],
         // Two faint soft streaks cross the sky right of the board: [angle, half width, alpha, origin,
         // length] (no length: to the edge); origin (off screen, upper left) is the default origin and
         // the centre of the fade of all the sky's light.
@@ -68,24 +70,23 @@ const atmosphericBackground = {
         beamColor: '255,130,40',
         stars: 15,
         embers: 60,
-        // Grade towards the concept's night: a deep navy veil, an ellipse about the board (at and
+        // Grade towards the concept's night: a deep saturated navy veil, an ellipse about the board (at and
         // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
-        // board and deep at the screen edges; warm glows ([x, y] and radius in viewport fractions,
+        // board and deepening smoothly to the screen edges; glows ([x, y] and radius in viewport fractions,
         // stretched along angle into a band, alpha strength; 'screen' by default), here all 'lit' (the
         // clouds' own luminance in the glow colour, added strength times): along the swath at
-        // the top left, on the clouds left of the board, a dusky warm haze with lit cloud edges down the
-        // board's left edge at mid height ('screen', then 'lit'), and as a narrow orange rim
-        // along the lower-left cloud bank and the bank right of the board; a gentle vignette (multiply,
-        // darkening up to vignette from 0.55 of the half diagonal to the corners).
-        navy: [10, 22, 46],
-        veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.55, 0.25], [0.8, 0.7], [1, 0.92]]},
+        // the top left, on the clouds left of the board, as an orange rim along the lower-left cloud
+        // bank and the bank right of the board, and a cool blue light on the lowest clouds at the
+        // bottom left; a gentle vignette (multiply, darkening up to vignette from 0.55 of the half
+        // diagonal to the corners).
+        navy: [4, 16, 48],
+        veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.3, 0.18], [0.5, 0.38], [0.7, 0.64], [0.85, 0.8], [1, 0.92]]},
         glows: [{at: [0.27, 0.1], radius: 0.04, stretch: 4, angle: 66, color: [230, 120, 50], mode: 'lit', strength: 0.8},
             {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [230, 140, 90], mode: 'lit'},
-            {at: [0.24, 0.82], radius: 0.03, stretch: 6, angle: 57, color: [255, 110, 20], mode: 'lit', strength: 2},
-            {at: [0.3, 0.93], radius: 0.03, stretch: 4, angle: 57, color: [255, 110, 20], mode: 'lit', strength: 1.4},
-            {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 110, 20], mode: 'lit', strength: 0.8},
-            {at: [0.25, 0.41], radius: 0.06, stretch: 2, angle: 20, color: [30, 18, 15]},
-            {at: [0.25, 0.41], radius: 0.06, stretch: 2, angle: 20, color: [255, 150, 80], mode: 'lit', strength: 0.4}],
+            {at: [0.24, 0.82], radius: 0.03, stretch: 6, angle: 57, color: [255, 140, 50], mode: 'lit', strength: 1.1},
+            {at: [0.3, 0.93], radius: 0.03, stretch: 4, angle: 57, color: [255, 140, 50], mode: 'lit'},
+            {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 110, 20], mode: 'lit', strength: 1.4},
+            {at: [0.1, 0.93], radius: 0.09, stretch: 2.5, angle: 15, color: [80, 120, 210], mode: 'lit', strength: 0.8}],
         vignette: 0.3
     },
     decorations: 0,

@@ -8,38 +8,38 @@ const atmosphericLighting = {
     // A broad key light from the left, falling mostly across the board (DIRECTION, world
     // space) and a little down it. Stops along that axis: [t, ambient, gain], overall
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
-    // peach-cream near the key light, then a warm pale cream, then a rose-neutral grey-cream on the far side.
+    // peach-cream near the key light, then a light neutral cream, then a pale grey-cream on the far side.
     // The ambient is warm on the near half (red kept, blue held back) with a bright golden gain in the
-    // upper-left corner and a paler cream gain (blue lifted) towards the centre; a warm pale cream
-    // just past the centre (green held back, so it stays peach rather than grey) and a rose-neutral
-    // grey-cream far side (no blue cast: the cool light there is the blue territory's spill,
-    // TERRITORY.cool), dimming to a slate blue only along the far edge.
+    // upper-left corner; past it the ambient is near neutral (red held back, green and blue kept, so
+    // the stone never turns mauve) and light, a neutral cream just past the centre and a pale
+    // grey-cream far side (the cool light there is the blue territory's spill, TERRITORY.cool),
+    // turning a light slate blue only along the far edge.
     KEY: [
-        [0, [212, 196, 188], [112, 80, 26]],
-        [0.15, [212, 196, 188], [104, 74, 24]],
-        [0.26, [212, 196, 188], [92, 64, 34]],
-        [0.38, [212, 196, 188], [82, 58, 38]],
-        [0.5, [212, 196, 188], [66, 52, 42]],
-        [0.62, [218, 198, 192], [42, 34, 32]],
-        [0.75, [204, 194, 202], [34, 34, 38]],
-        [0.85, [196, 192, 204], [32, 33, 38]],
-        [1, [180, 188, 212], [28, 34, 44]]
+        [0, [223, 206, 197], [112, 80, 26]],
+        [0.15, [223, 206, 197], [104, 74, 24]],
+        [0.26, [223, 206, 197], [92, 64, 34]],
+        [0.38, [216, 207, 202], [82, 58, 38]],
+        [0.5, [216, 207, 202], [66, 52, 42]],
+        [0.62, [223, 209, 206], [42, 34, 32]],
+        [0.75, [208, 205, 216], [34, 34, 38]],
+        [0.85, [200, 203, 218], [32, 33, 38]],
+        [1, [183, 198, 227], [28, 34, 44]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
-    // Three long, faint golden shafts of the key light, continuing the sky's swath: each a group of
+    // Three visible golden shafts of the key light, continuing the sky's swath: each a group of
     // five fine soft streaks (Gaussian across) fanning from a point left of the board's top
     // (fractions of the board bounds), each streak [angle in degrees, half width in fractions of the
-    // longer side, gain], all fading out late with the distance from that point (fade: fraction of
-    // the bounds diagonal), so they cross the board past its centre, low in contrast.
+    // longer side, gain], all fading out with the distance from that point (fade: fraction of the
+    // bounds diagonal), so they cross the upper-left half of the board and die out past its centre.
     // Added to the gain map, so they lift the visible stone only. Baked once per board size into a
     // small raster (raster: pixels per longer side).
     BEAMS: {
         origin: [-0.25, -0.2],
-        beams: [30, 38, 46].flatMap(angle => [[-1.2, 0.008], [-0.6, 0.012], [0, 0.016], [0.6, 0.012], [1.2, 0.008]]
-            .map(([offset, half]) => [angle + offset, half, 0.17])),
-        color: [80, 70, 24],
-        fade: 1.6,
+        beams: [27, 36, 45].flatMap(angle => [[-1.6, 0.008], [-0.8, 0.012], [0, 0.016], [0.8, 0.012], [1.6, 0.008]]
+            .map(([offset, half]) => [angle + offset, half, 0.44])),
+        color: [100, 80, 10],
+        fade: 1,
         raster: 256
     },
     beamRaster: null,
@@ -100,14 +100,16 @@ const atmosphericLighting = {
     TILE: {
         variants: 8,
         rasterScale: 1.5,
-        // Near neutral before the light map, which warms it on the key side (about 1.45 red)
-        // and leaves it a pale neutral grey on the far side (about 0.91 red, 0.95 blue).
-        grout: '#615658',
+        // Near neutral before the light map, which warms it on the key side (about 1.5 red)
+        // and leaves it a pale neutral grey on the far side (about 0.94 red, 1 blue). A neutral grey grout.
+        grout: '#6c686e',
         groutWidth: 0.065,
         stone: [153, 147, 155],
         sheen: 0.1,
         // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
-        polish: 0.3
+        polish: 0.3,
+        // Polished face: a soft cool reflection of the sky towards the lower right [r, g, b, alpha].
+        reflect: [170, 185, 225, 0.3]
     },
     tileVariants: null,
     tileVariantBuilds: 0,
@@ -631,6 +633,16 @@ const atmosphericLighting = {
         polish.addColorStop(1, 'rgba(255,252,246,0)')
         g.fillStyle = polish
         g.fillRect(-r, -r, 2 * r, 2 * r)
+        // Reflection: the polished face mirrors the cool sky towards its lower right.
+        if (this.TILE.reflect) {
+            const [red, green, blue, alpha] = this.TILE.reflect
+            const reflection = g.createLinearGradient(-0.6 * r, -0.6 * r, 0.7 * r, 0.7 * r)
+            reflection.addColorStop(0, `rgba(${red},${green},${blue},0)`)
+            reflection.addColorStop(0.45, `rgba(${red},${green},${blue},0)`)
+            reflection.addColorStop(1, `rgba(${red},${green},${blue},${alpha})`)
+            g.fillStyle = reflection
+            g.fillRect(-r, -r, 2 * r, 2 * r)
+        }
         this.drawSheen(g, 0, 0, this.TILE.sheen)
         return this.tileVariants[index] = surface
     },
