@@ -37,7 +37,7 @@ const atmosphericLighting = {
     BEAMS: {
         origin: [-0.25, -0.2],
         beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.024], [0, 0.034], [1.3, 0.024]]
-            .map(([offset, half]) => [angle + offset, half, 0.4])),
+            .map(([offset, half]) => [angle + offset, half, 0.32])),
         color: [100, 92, 48],
         // Shade between the shafts: soft multiply bands [angle, half width, alpha] of shade colour on the
         // light map, so light and shadow alternate gently across the board; a warm neutral, so no lilac stripes.
