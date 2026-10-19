@@ -94,6 +94,25 @@ class Border {
 }
 
 class MapDepth {
+    // Atmospheric slab sides: grey stone faces [lit top edge, face, foot] by side (2 lower right,
+    // away from the upper-left key light; 3 bottom; 4 lower left, towards it); a bottom face in a
+    // notch between protruding cells is shaded by them. The lit edge fades into the face over
+    // ATMOSPHERIC_FACE_EDGE of the face's height.
+    static ATMOSPHERIC_FACES = {
+        2: ['#8c8288', '#44434c', '#2c2d36'],
+        3: ['#b2a4a2', '#58525a', '#463f42'],
+        4: ['#c8b4a8', '#706260', '#54484a'],
+        notch: ['#7c7278', '#46444d', '#24252e']
+    }
+    static ATMOSPHERIC_FACE_EDGE = 0.16
+    // Atmospheric drop shadow: the slab (top face and sides) casts a soft dark halo onto the sky,
+    // reaching further below it than above: a broad layer and a denser near one (blur and offset
+    // in hex radii). A small cached raster (raster pixels per hex radius), drawn scaled under the board.
+    static ATMOSPHERIC_SHADOW = {
+        color: 'rgba(4, 8, 20, 0.95)',
+        layers: [{blur: 1.4, offset: 0.6}, {blur: 0.5, offset: 0.3}],
+        raster: 4
+    }
     constructor() {
         this.faces = []
         this.edges = []
@@ -180,6 +199,7 @@ class MapDepth {
                 const pos = _grid.arr[x][y].hexagon.calcPos()
                 const vertices = this.getVertices(pos)
                 const parity = x & 1
+                const cellFaces = []
 
                 for (let i = 0; i < vertices.length; ++i) {
                     minX = Math.min(minX, vertices[i].x)
@@ -201,20 +221,28 @@ class MapDepth {
                         side: i
                     }
                     this.edges.push(edge)
-                    this.faces.push({
+                    const face = {
                         begin: edge.begin,
                         end: edge.end,
                         bottomBegin: {x: edge.begin.x, y: edge.begin.y + this.depth},
                         bottomEnd: {x: edge.end.x, y: edge.end.y + this.depth},
                         side: i,
                         sortY: Math.max(edge.begin.y, edge.end.y) + this.depth
-                    })
+                    }
+                    this.faces.push(face)
+                    cellFaces.push(face)
                 }
+                // A bottom face whose cell has no slanted lower face sits in a notch between the
+                // protruding neighbours, which shade it (atmospheric sides).
+                const bottom = cellFaces.find(face => face.side == 3)
+                if (bottom && !cellFaces.some(face => face.side == 2 || face.side == 4))
+                    bottom.notch = true
             }
         }
 
         this.faces.sort((a, b) => a.sortY - b.sortY)
         this.createOutline()
+        this.releaseAtmosphericShadow()
 
         const shadowPadding = this.shadowBlur * 2
         this.bounds = {
@@ -404,9 +432,11 @@ class MapDepth {
             face.atmosphericGradients ||= new WeakMap()
             let shade = face.atmosphericGradients.get(ctx)
             if (!shade) {
+                const colors = MapDepth.ATMOSPHERIC_FACES[face.notch ? 'notch' : face.side]
                 shade = ctx.createLinearGradient(0, Math.min(face.begin.y, face.end.y), 0, Math.max(face.begin.y, face.end.y) + depth)
-                shade.addColorStop(0, face.side === 4 ? '#a18d73' : '#596a82')
-                shade.addColorStop(1, '#263347')
+                shade.addColorStop(0, colors[0])
+                shade.addColorStop(MapDepth.ATMOSPHERIC_FACE_EDGE, colors[1])
+                shade.addColorStop(1, colors[2])
                 face.atmosphericGradients.set(ctx, shade)
             }
             ctx.fillStyle = shade
@@ -419,6 +449,45 @@ class MapDepth {
             ctx.fill()
         }
         ctx.restore()
+    }
+    releaseAtmosphericShadow() {
+        if (this.atmosphericShadow) this.atmosphericShadow.canvas.width = this.atmosphericShadow.canvas.height = 0
+        this.atmosphericShadow = undefined
+    }
+    createAtmosphericShadow() {
+        const config = MapDepth.ATMOSPHERIC_SHADOW
+        const b = this.surfaceBounds
+        const pad = Math.max(...config.layers.map(layer => layer.blur * 1.5 + layer.offset)) * basis.r
+        const left = b.left - pad, top = b.top - pad
+        const w = b.right - b.left + 2 * pad, h = b.bottom - b.top + this.depth + 2 * pad
+        const k = config.raster / basis.r
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.ceil(w * k))
+        canvas.height = Math.max(1, Math.ceil(h * k))
+        const ctx = canvas.getContext('2d')
+        ctx.setTransform(k, 0, 0, k, -left * k, -top * k)
+        // Canvas shadow sizes are in raster pixels. The slab is its top face and that face moved
+        // down by the side depth; the board covers the slab itself.
+        ctx.fillStyle = ctx.shadowColor = config.color
+        for (const layer of config.layers) {
+            ctx.shadowBlur = 2 * layer.blur * config.raster
+            ctx.shadowOffsetY = layer.offset * config.raster
+            ctx.fill(this.outline)
+            ctx.translate(0, this.depth)
+            ctx.fill(this.outline)
+            ctx.translate(0, -this.depth)
+        }
+        this.atmosphericShadow = {canvas, left, top, width: w, height: h}
+        ++MapDepth.atmosphericShadowBuilds
+    }
+    static atmosphericShadowBuilds = 0
+    drawAtmosphericShadow(ctx, _grid) {
+        if (!otherSettings.atmosphericVisuals) return
+        this.ensureGeometry(_grid)
+        if (!this.outline) return
+        if (!this.atmosphericShadow) this.createAtmosphericShadow()
+        const shadow = this.atmosphericShadow
+        ctx.drawImage(shadow.canvas, shadow.left, shadow.top, shadow.width, shadow.height)
     }
     renderRim(ctx) {
         // Atmospheric tiles end in their own light grout: no black board outline.

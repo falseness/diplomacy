@@ -930,6 +930,8 @@ class Grid extends SpritesGroup {
         return false
     }
     draw(ctx) {
+        // The slab's soft drop shadow on the sky, under the board.
+        mapDepth.drawAtmosphericShadow(ctx, this)
         const cachedScene = this.drawMapSurface(ctx)
         // The overlay layer holds the production texts too (drawInfoTexts).
         let layered = false

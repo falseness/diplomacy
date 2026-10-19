@@ -379,6 +379,7 @@ class GameMap {
             }
         }
         _gameManager.updateCameraBorders()
+        _gameManager.fitCamera?.()
         // A map may start later in the game (tutorials entry startRound): round
         // counters and the co-op wave schedule continue from it.
         gameRound = this.startRound || 0
@@ -1355,6 +1356,36 @@ class GameManager {
 	        }
 	    }
     }
+    // Atmospheric visuals open the board like the concept: the whole slab (top face and sides) fitted and
+    // centred with a sky margin (CAMERA_FIT.margin of the shorter screen side), when that leaves hexes
+    // no smaller than at the map's zoom-out limit, nor than the minimum readable size: the hex radius at
+    // the zoom-out limit of the standard 21-cell board in landscape (5/21 of basis.r = the longer screen
+    // side / 18), in either orientation. Otherwise, and with atmospheric visuals off, the camera stays as
+    // it is (the map's top-left corner at full zoom). Zoom and pan limits are unchanged.
+    static CAMERA_FIT = {margin: 0.04, readableRadius: 5 / 21 / 18}
+    static fitCamera() {
+        const b = mapDepth.surfaceBounds
+        if (!otherSettings.atmosphericVisuals || !b || !(b.right > b.left))
+            return this.cameraFit = {fitted: false, reason: 'off'}
+        const margin = this.CAMERA_FIT.margin * Math.min(WIDTH, HEIGHT)
+        const boardWidth = b.right - b.left, boardHeight = b.bottom - b.top + mapDepth.depth
+        const fit = Math.min((WIDTH - 2 * margin) / boardWidth, (HEIGHT - 2 * margin) / boardHeight)
+        const readable = Math.max(mapBorder.scale.min,
+            this.CAMERA_FIT.readableRadius * Math.max(WIDTH, HEIGHT) / basis.r)
+        const decision = {fitScale: fit, readableScale: readable, fitHexRadius: fit * basis.r,
+            readableHexRadius: readable * basis.r}
+        if (!(fit >= readable))
+            return this.cameraFit = {fitted: false, reason: 'too small', ...decision}
+        const scale = Math.min(fit, mapBorder.scale.max)
+        canvas.scale = scale
+        width = WIDTH / scale
+        height = HEIGHT / scale
+        canvas.offset = {x: (b.left + b.right) / 2 - width / 2, y: (b.top + b.bottom + mapDepth.depth) / 2 - height / 2}
+        // Within the unchanged pan limits (a tall portrait screen may shift the board up).
+        gameEvent.screen?.correctCanvas?.()
+        mainCtx.setTransform(scale, 0, 0, scale, -canvas.offset.x * scale, -canvas.offset.y * scale)
+        return this.cameraFit = {fitted: true, scale, offset: {...canvas.offset}, hexRadius: scale * basis.r, ...decision}
+    }
     static clearBasisValues() {
         gameExit = false
         menu.visible = false
@@ -1373,6 +1404,7 @@ class GameManager {
         gameEvent.screen.stop()
         gameEvent.resetKeyboardZoom()
         this.updateCameraBorders()
+        this.fitCamera()
         this.clearWaitingMode()
 
 	    createEvents()
