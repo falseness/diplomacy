@@ -24,16 +24,18 @@ const atmosphericLighting = {
     DIRECTION: [1, 0.6],
     // Lamps: power weighs each lamp for shadow direction; spill scales its SPILL below (a
     // town's small doorway lights a softer pool than a cave mouth). A lamp like another lamp kind
-    // takes that kind's spill layers, scaled by reach about its foot (the lamp hex's lower edge,
-    // where the pool meets the stone below; scaled about the centre it would fall inside the
-    // lamp's own unlit hex), colours recoloured by tint (each layer's colour becomes the tint at
-    // the layer colour's luminance). A demon portal is no lamp: the town's soft pool at about
-    // 40% of a cave's reach and strength, dim red-violet.
+    // takes that kind's pool, scaled by reach about its foot (the lamp hex's lower edge, where the
+    // pool meets the stone below; scaled about the centre it would fall inside the lamp's own unlit
+    // hex): the like kind's light on the stone (its map and gain at its own spill over the far side's
+    // key light, on stone of colour stone), cast on the light map only (lift colour added where it
+    // lights, shade colour multiplied where it shades), so the pool keeps the like kind's shape at any
+    // strength and on any side of the board. A demon portal is no lamp: the town's soft pool at about 40% of a cave's
+    // reach and strength, dim red-violet.
     LAMP: {
         town: {power: 1, spill: 0.95},
         goldmine: {power: 1, spill: 1},
-        demonPortal: {power: 0.4, spill: 0.32, like: 'town', reach: 0.37, foot: Math.sqrt(3) / 2,
-            tint: {map: [255, 200, 225], gain: [140, 95, 130]}}
+        demonPortal: {power: 0.4, spill: 1, like: 'town', reach: 0.37, foot: Math.sqrt(3) / 2,
+            lift: [255, 238, 253], shade: [150, 150, 150], stone: [173, 165, 144]}
     },
     // Lamp spill: mostly warmth, little lift. A broad map-only wash (blue held back) warms the
     // stone evenly round the source; two narrow warm layers from the doorway's foot down (so
@@ -265,21 +267,32 @@ const atmosphericLighting = {
     // per lamp, scaled by the lamp's LAMP spill.
     spillSprites: new Map(),
     spillSpriteBuilds: 0,
+    // A lamp like another kind lights the light map only: its lift added ('lighter') and its shade
+    // 'multiply' (liftSprite), so the pool adds the same light over a territory's tint as over
+    // neutral stone, where it is the like kind's light times spill.
     drawSpill(g, sources, part) {
+        const op = g.globalCompositeOperation
         for (const {pos, name} of sources) {
-            const sprite = this.spillSprite(part, name)
-            g.globalAlpha = (this.LAMP[name] || this.LAMP.goldmine).spill
-            g.drawImage(sprite.surface, pos.x + sprite.left, pos.y + sprite.top, sprite.width, sprite.height)
+            const lamp = this.LAMP[name] || this.LAMP.goldmine
+            if (lamp.like && part === 'gain') continue
+            for (const [p, o] of lamp.like ? [['map', 'lighter'], ['gain', 'multiply']] : [[part, op]]) {
+                const sprite = this.spillSprite(p, name)
+                g.globalAlpha = lamp.spill
+                g.globalCompositeOperation = o
+                g.drawImage(sprite.surface, pos.x + sprite.left, pos.y + sprite.top, sprite.width, sprite.height)
+            }
         }
         g.globalAlpha = 1
+        g.globalCompositeOperation = op
     },
     // The composited spill of one lamp kind (layers with a lamps list are only that kind's), at
     // a fixed SPILL_RASTER pixels per hex radius: the layers are smooth, so the light map scales
     // the sprite and a zoom never rebuilds it.
     SPILL_RASTER: 24,
     spillSprite(part, name) {
-        const own = this.LAMP[name]?.like || this.SPILL.some(l => l.lamps?.includes(name)), r = basis.r
-        const id = part + ',' + (own ? name : ''), key = id + ',' + r, scale = this.SPILL_RASTER / r
+        const lamp = this.LAMP[name], own = lamp?.like || this.SPILL.some(l => l.lamps?.includes(name)), r = basis.r
+        // A lamp like another kind keeps that kind's pixels per pool (its sprite as sharp).
+        const id = part + ',' + (own ? name : ''), key = id + ',' + r, scale = this.SPILL_RASTER / r / (lamp?.like ? lamp.reach : 1)
         let sprite = this.spillSprites.get(id)
         if (sprite && sprite.key === key) return sprite
         const layers = this.spillLayers(name)
@@ -289,24 +302,64 @@ const atmosphericLighting = {
         surface.width = Math.max(1, Math.ceil((right - left) * scale))
         surface.height = Math.max(1, Math.ceil((bottom - top) * scale))
         const s = surface.getContext('2d')
-        s.setTransform(scale, 0, 0, scale, -left * scale, -top * scale)
-        for (const layer of layers)
-            if (layer[part]) this.spill(s, {pos: {x: 0, y: 0}}, layer, layer[part], layer[part + 'Alpha'] ?? layer.alpha)
+        const paint = (g, part) => {
+            g.setTransform(scale, 0, 0, scale, -left * scale, -top * scale)
+            for (const layer of layers)
+                if (layer[part]) this.spill(g, {pos: {x: 0, y: 0}}, layer, layer[part], layer[part + 'Alpha'] ?? layer.alpha)
+        }
+        if (!lamp?.like) paint(s, part)
+        else this.liftSprite(s, lamp, paint, part)
         sprite = {key, surface, left, top, width: surface.width / scale, height: surface.height / scale}
         this.spillSprites.set(id, sprite)
         ++this.spillSpriteBuilds
         return sprite
     },
+    // The sprites of a lamp like another kind, both drawn on the light map (drawSpill): the like
+    // kind's layers (already scaled) painted as its map and gain parts, composited at its spill over
+    // the ambient and the far side's key gain, as the light map does; per pixel the luminance of the
+    // light on stone less the key light's alone, normalised to its peak, v. The map sprite lifts
+    // where v > 0: alpha v, colour the lift colour less the ambient (added to the map); the gain
+    // sprite shades where v < 0: the multiply that takes the ambient to the shade colour, at the
+    // alpha that darkens the luminance as much. At the lamp's spill over the ambient the pool is
+    // the like kind's light times spill, with no gain floor or dodge to bend it.
+    liftSprite(s, {like, lift, shade, stone = this.TILE.stone}, paint, sprite) {
+        const {width, height} = s.canvas, part = name => {
+            const c = document.createElement('canvas')
+            c.width = width
+            c.height = height
+            paint(c.getContext('2d'), name)
+            return c.getContext('2d').getImageData(0, 0, width, height).data
+        }
+        const map = part('map'), gain = part('gain'), a = (this.LAMP[like] || this.LAMP.goldmine).spill
+        const ambient = this.KEY[this.KEY.length - 1][1], key = this.KEY[this.KEY.length - 1][2], W = [0.2126, 0.7152, 0.0722]
+        const lum = m => W.reduce((sum, w, c) => sum + w * Math.min(255, stone[c] * m[c] / (255 - key[c])), 0)
+        const base = lum(ambient)
+        const light = new Float32Array(width * height)
+        let peak = 0
+        for (let i = 0; i < light.length; ++i) {
+            const am = a * map[4 * i + 3] / 255, ag = a * gain[4 * i + 3] / 255
+            light[i] = W.reduce((sum, w, c) => sum + w * Math.min(255, stone[c] * (ambient[c] + am * (map[4 * i + c] - ambient[c])) /
+                (255 - key[c] - ag * Math.max(0, gain[4 * i + c] - key[c]))), 0) - base
+            peak = Math.max(peak, light[i])
+        }
+        const up = lum(lift) - base, down = base - lum(shade), image = s.createImageData(width, height), d = image.data
+        const color = sprite === 'map' ? lift.map((c, n) => Math.max(0, c - ambient[n]))
+            : shade.map((c, n) => Math.round(Math.min(255, 255 * c / ambient[n])))
+        for (let i = 0; i < light.length; ++i) {
+            const v = light[i] / peak
+            d.set(color, 4 * i)
+            d[4 * i + 3] = Math.round(255 * Math.min(1, sprite === 'map' ? Math.max(0, v) : Math.max(0, -v * up / down)))
+        }
+        s.putImageData(image, 0, 0)
+    },
     // A lamp kind's spill layers: SPILL's (layers with a lamps list are only that kind's), or
-    // for a lamp like another kind, that kind's layers scaled by reach about the foot and
-    // recoloured by tint.
+    // for a lamp like another kind, that kind's layers scaled by reach about the foot.
     spillLayers(name) {
         const lamp = this.LAMP[name]
         if (!lamp?.like) return this.SPILL.filter(l => !l.lamps || l.lamps.includes(name))
-        const {reach, foot, tint} = lamp, lum = c => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
-        const recolor = (color, to) => color && to.map(c => Math.min(255, Math.round(c * lum(color) / lum(to))))
+        const {reach, foot} = lamp
         return this.spillLayers(lamp.like).map(l => ({...l, dx: (l.dx || 0) * reach, dy: foot + (l.dy - foot) * reach,
-            rx: l.rx * reach, ry: l.ry * reach, map: recolor(l.map, tint.map), gain: recolor(l.gain, tint.gain)}))
+            rx: l.rx * reach, ry: l.ry * reach}))
     },
     build({cells, sources}, bounds, scale) {
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
