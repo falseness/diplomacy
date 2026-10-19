@@ -1314,6 +1314,7 @@ maps = {
 // The camera centres once on the local player when a game starts or loads (TASK-1164): on its own town with the
 // highest income, else on its own unit with the smallest coordinate; ties go to the smallest coordinate (x, then y).
 // Without towns and units the camera stays. Later turns and tutorials do not call this.
+// An untouched fitted board (GameManager.fitCamera, TASK-1115) also stays: the whole board, the target included, is in view.
 function playerStartFocusTarget(player) {
     const byCoord = (a, b) => a.coord.x - b.coord.x || a.coord.y - b.coord.y
     const towns = player.towns.filter(town => !player.isTownKilled(town))
@@ -1325,7 +1326,8 @@ function playerStartFocusTarget(player) {
 }
 function focusCameraOnPlayerStart(player) {
     const target = player && playerStartFocusTarget(player)
-    if (target)
+    const screen = gameEvent.screen
+    if (target && !(screen.isFittedView?.() && screen.showsWholeBoard?.()))
         gameEvent.screen.moveTo(Sprite.prototype.calcPos.call(target))
     return target
 }
