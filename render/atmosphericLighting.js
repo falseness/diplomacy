@@ -9,30 +9,33 @@ const atmosphericLighting = {
     // space) and a little down it. Stops along that axis: [t, ambient, gain], overall
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
     // peach-cream near the key light, then pale cream-grey, then a pale neutral grey-white on the far side.
+    // The ambient is warm on the near half (red kept, blue held back: warmer at the same lightness)
+    // and a touch cool on the far side.
     KEY: [
-        [0, [205, 205, 205], [108, 74, 25]],
-        [0.15, [205, 205, 205], [108, 74, 25]],
-        [0.26, [205, 205, 205], [98, 61, 28]],
-        [0.38, [205, 205, 205], [80, 52, 28]],
-        [0.5, [205, 205, 205], [64, 46, 31]],
-        [0.62, [205, 205, 205], [44, 40, 36]],
-        [0.75, [205, 205, 205], [32, 34, 40]],
-        [0.85, [205, 205, 205], [30, 33, 40]],
-        [1, [205, 205, 205], [30, 33, 40]]
+        [0, [214, 203, 196], [92, 63, 21]],
+        [0.15, [214, 203, 196], [92, 63, 21]],
+        [0.26, [214, 203, 196], [83, 52, 24]],
+        [0.38, [214, 203, 196], [80, 52, 28]],
+        [0.5, [214, 203, 196], [64, 46, 31]],
+        [0.62, [208, 202, 201], [44, 40, 36]],
+        [0.75, [203, 202, 206], [32, 34, 40]],
+        [0.85, [203, 202, 206], [30, 33, 40]],
+        [1, [203, 202, 206], [30, 33, 40]]
     ],
     // Key light axis (x, y); y per unit of x.
-    DIRECTION: [1, 0.6],
+    DIRECTION: [1, 0.3],
     // Soft diagonal beams of the key light sweeping across the board, continuing the sky's
     // beams: warm bands fanning from a point above-left of the board (fractions of the board
     // bounds), each [angle in degrees, half width in fractions of the longer side, gain],
     // fading out with the distance from that point (fade: fraction of the bounds diagonal).
     // Added to the gain map, so they lift the visible stone only. Baked once per board size
-    // into a small raster (raster: pixels per longer side), the beams being soft.
+    // into a small raster (raster: pixels per longer side), the beams being soft. Golden (green
+    // lifted most, as red is already near full on the warm stone); the first, broad band is a warm haze.
     BEAMS: {
-        origin: [-0.3, -0.25],
-        beams: [[26, 0.025, 0.8], [31, 0.02, 0.6], [36, 0.03, 0.9], [41, 0.02, 0.6], [46, 0.03, 0.8], [52, 0.02, 0.6]],
-        color: [60, 54, 38],
-        fade: 1.1,
+        origin: [-0.3, -0.4],
+        beams: [[45, 0.3, 0.3], [40, 0.03, 0.5], [47, 0.025, 0.425], [54, 0.03, 0.5], [61, 0.025, 0.425]],
+        color: [56, 66, 44],
+        fade: 1.6,
         raster: 256
     },
     beamRaster: null,
