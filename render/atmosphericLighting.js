@@ -10,17 +10,17 @@ const atmosphericLighting = {
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
     // peach-cream near the key light, then pale cream-grey, then a pale neutral grey-white on the far side.
     // The ambient is warm on the near half (red kept, blue held back: warmer at the same lightness)
-    // and a touch cool on the far side.
+    // and a neutral cream on the far side (green kept, blue held back, so it never turns mauve).
     KEY: [
         [0, [214, 203, 196], [92, 63, 21]],
         [0.15, [214, 203, 196], [92, 63, 21]],
         [0.26, [214, 203, 196], [83, 52, 24]],
         [0.38, [214, 203, 196], [80, 52, 28]],
         [0.5, [214, 203, 196], [64, 46, 31]],
-        [0.62, [208, 202, 201], [44, 40, 36]],
-        [0.75, [203, 202, 206], [32, 34, 40]],
-        [0.85, [203, 202, 206], [30, 33, 40]],
-        [1, [203, 202, 206], [30, 33, 40]]
+        [0.62, [207, 204, 197], [38, 38, 33]],
+        [0.75, [200, 206, 198], [32, 35, 30]],
+        [0.85, [200, 206, 198], [32, 35, 30]],
+        [1, [200, 206, 198], [32, 35, 30]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
@@ -29,13 +29,13 @@ const atmosphericLighting = {
     // bounds), each [angle in degrees, half width in fractions of the longer side, gain],
     // fading out with the distance from that point (fade: fraction of the bounds diagonal).
     // Added to the gain map, so they lift the visible stone only. Baked once per board size
-    // into a small raster (raster: pixels per longer side), the beams being soft. Golden (green
-    // lifted most, as red is already near full on the warm stone); the first, broad band is a warm haze.
+    // into a small raster (raster: pixels per longer side), the beams being soft. Golden (red and
+    // green lifted, blue held back), strong and long enough to read down to the lower board.
     BEAMS: {
         origin: [-0.3, -0.4],
-        beams: [[45, 0.3, 0.3], [40, 0.03, 0.5], [47, 0.025, 0.425], [54, 0.03, 0.5], [61, 0.025, 0.425]],
-        color: [56, 66, 44],
-        fade: 1.6,
+        beams: [[36, 0.032, 0.7], [44, 0.024, 0.595], [51, 0.036, 0.7], [58, 0.024, 0.595], [65, 0.032, 0.56]],
+        color: [60, 46, 6],
+        fade: 3,
         raster: 256
     },
     beamRaster: null,

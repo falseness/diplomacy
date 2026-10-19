@@ -49,27 +49,32 @@ const atmosphericBackground = {
     // viewport; a fixed particle count keeps a thin strip of visible sky lively.
     SKY: {
         seed: 1109,
-        // Narrow orange beams fan out from a point above the upper left of the viewport towards
-        // the board (in fractions of w, h: origin, angle and half width), [angle, half width, alpha].
-        origin: [0.1, -0.3],
-        beams: [[50, 0.02, 0.35], [56, 0.03, 0.35], [62, 0.02, 0.33], [68, 0.025, 0.3]],
-        beamColor: '255,160,80',
+        // Orange beams fan out from a point high above the upper left of the viewport onto the
+        // board, a broad dim band under narrow bright rays (in fractions of w, h: origin, angle and
+        // half width), [angle, half width, alpha, origin]; the last few, from their own origins,
+        // are thin streaks crossing the sky right of the board.
+        origin: [0.08, -0.6],
+        beams: [[64, 0.16, 0.4], [55, 0.02, 0.4], [58, 0.025, 0.45], [61, 0.02, 0.55], [64, 0.03, 0.6], [67, 0.02, 0.6],
+            [70, 0.025, 0.5], [72.5, 0.015, 0.4],
+            [44, 0.015, 0.4, [0.45, -0.05]], [44, 0.02, 0.32, [0.45, 0.12]], [42, 0.012, 0.28, [0.5, 0.3]]],
+        beamColor: '255,120,30',
         stars: 15,
         embers: 60,
         // Grade towards the concept's night: a deep navy veil, an ellipse about the board (at and
         // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
         // board and deep at the screen edges; warm glows ([x, y] and radius in viewport fractions,
-        // stretched along angle into a band): 'screen' where the key light breaks in at the upper
-        // left, 'lit' (the clouds' own luminance in the glow colour, added strength times) where it
+        // stretched along angle into a band, alpha strength): 'screen' where the key light breaks in
+        // along the top left, 'lit' (the clouds' own luminance in the glow colour, added strength times) where it
         // catches the cloud banks below and right of the board; a gentle vignette (multiply,
         // darkening up to vignette from 0.55 of the half diagonal to the corners).
         navy: [10, 22, 46],
         veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.55, 0.25], [0.8, 0.7], [1, 0.92]]},
-        glows: [{at: [0.32, 0.04], radius: 0.07, stretch: 2.5, angle: 70, color: [180, 90, 32]},
-            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [170, 170, 230], mode: 'lit'},
-            {at: [0.32, 0.9], radius: 0.08, stretch: 2.2, angle: -15, color: [255, 140, 60], mode: 'lit', strength: 1.8},
-            {at: [0.37, 0.8], radius: 0.05, stretch: 2.2, angle: -15, color: [255, 140, 60], mode: 'lit', strength: 1.8},
-            {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 160, 90], mode: 'lit', strength: 1.4}],
+        glows: [{at: [0.36, 0.02], radius: 0.08, stretch: 2.5, angle: 60, color: [200, 95, 30]},
+            {at: [0.2, 0], radius: 0.07, stretch: 3, angle: 15, color: [150, 70, 20]},
+            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [230, 140, 90], mode: 'lit'},
+            {at: [0.32, 0.9], radius: 0.08, stretch: 2.2, angle: -30, color: [255, 135, 30], mode: 'lit', strength: 1.1},
+            {at: [0.37, 0.8], radius: 0.05, stretch: 2.2, angle: -30, color: [255, 135, 30], mode: 'lit', strength: 1.1},
+            {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 135, 30], mode: 'lit', strength: 0.7}],
         vignette: 0.3
     },
     decorations: 0,
@@ -108,9 +113,9 @@ const atmosphericBackground = {
         const b = beams.getContext('2d')
         b.globalCompositeOperation = 'lighter'
         // In viewport fractions (angle and width too), like the glows.
-        for (const [angle, half, alpha] of sky.beams) {
+        for (const [angle, half, alpha, at = sky.origin] of sky.beams) {
             b.save()
-            b.translate(ox, oy)
+            b.translate(at[0] * w, at[1] * h)
             b.scale(w, h)
             b.rotate(angle * Math.PI / 180)
             const band = b.createLinearGradient(0, -half, 0, half)
@@ -196,6 +201,7 @@ const atmosphericBackground = {
                 lit.width = lit.height = 0
             } else {
                 g.globalCompositeOperation = mode || 'screen'
+                g.globalAlpha = Math.min(1, strength)
                 place(g)
             }
             g.restore()
