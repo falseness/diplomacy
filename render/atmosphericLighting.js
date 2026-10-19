@@ -10,25 +10,25 @@ const atmosphericLighting = {
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
     // peach-cream near the key light, then a light neutral cream, then a pale grey-cream on the far side.
     // The ambient is warm on the near half (red kept, blue held back) with a bright golden gain in the
-    // upper-left corner; past it the ambient is near neutral (red held back further, green and blue
-    // kept, so the stone never turns pink or mauve) and light, a neutral warm grey-cream past the centre
+    // upper-left corner; across the middle of the board a peach-cream (a little red added to ambient and gain,
+    // green and blue held back, so the stone keeps its warmth instead of reading grey), then a neutral warm grey-cream
     // and on the far side (the cool light there is the blue territory's spill, TERRITORY.cool),
     // turning a light grey-blue only along the far edge.
     KEY: [
         [0, [216, 200, 191], [112, 80, 26]],
         [0.15, [216, 200, 191], [104, 74, 24]],
         [0.26, [216, 200, 191], [92, 64, 34]],
-        [0.38, [205, 200, 196], [82, 58, 38]],
-        [0.5, [197, 198, 196], [66, 52, 42]],
-        [0.62, [203, 200, 200], [42, 34, 32]],
-        [0.75, [200, 198, 200], [34, 34, 38]],
+        [0.38, [207, 199, 195], [86, 59, 38]],
+        [0.5, [200, 197, 194], [72, 53, 42]],
+        [0.62, [205, 199, 199], [46, 35, 32]],
+        [0.75, [201, 197, 199], [36, 35, 38]],
         [0.85, [206, 200, 196], [32, 33, 38]],
         [1, [196, 196, 204], [28, 34, 44]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
-    // Three broad soft golden (yellow, not orange) shafts of the key light, continuing the sky's swath: each a group of
-    // three soft streaks (Gaussian across) fanning from a point left of the board's top
+    // Three broad soft golden shafts of the key light, continuing the sky's swath: each a group of
+    // three wide overlapping soft streaks (Gaussian across, so the band has no hard edge) fanning from a point left of the board's top
     // (fractions of the board bounds), each streak [angle in degrees, half width in fractions of the
     // longer side, gain], all fading out late with the distance from that point (fade: fraction of the
     // bounds diagonal), so low-contrast bands sweep across the board past its centre into its right and lower half.
@@ -36,9 +36,12 @@ const atmosphericLighting = {
     // small raster (raster: pixels per longer side).
     BEAMS: {
         origin: [-0.25, -0.2],
-        beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.01876], [0, 0.028], [1.3, 0.01876]]
-            .map(([offset, half]) => [angle + offset, half, 0.34])),
-        color: [84, 84, 18],
+        beams: [25, 34, 43].flatMap(angle => [[-1.9, 0.02546], [0, 0.038], [1.9, 0.02546]]
+            .map(([offset, half]) => [angle + offset, half, 0.28])),
+        // Soft glows of the key light past the shafts' ends, over the board's lower half and right:
+        // [x, y (fractions of the bounds), radius x, radius y (fractions of the longer side), gain].
+        glows: [[0.55, 0.75, 0.35, 0.25, 0.1], [0.85, 0.45, 0.2, 0.3, 0.06]],
+        color: [88, 80, 28],
         fade: 2.2,
         raster: 256
     },
@@ -467,7 +470,7 @@ const atmosphericLighting = {
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
         const key = w + 'x' + h
         if (this.beamRaster && this.beamKey === key) return this.beamRaster
-        const {origin, beams, color, fade, raster} = this.BEAMS
+        const {origin, beams, glows = [], color, fade, raster} = this.BEAMS
         const s = raster / Math.max(w, h)
         const surface = this.beamRaster || document.createElement('canvas')
         surface.width = Math.max(1, Math.ceil(w * s))
@@ -492,6 +495,19 @@ const atmosphericLighting = {
         falloff.addColorStop(1, 'rgba(0,0,0,0)')
         g.fillStyle = falloff
         g.fillRect(0, 0, W, H)
+        // The key light's soft glow where the shafts end: near-Gaussian ellipses, not faded.
+        g.globalCompositeOperation = 'lighter'
+        for (const [x, y, rx, ry, gain] of glows) {
+            const glow = g.createRadialGradient(0, 0, 0, 0, 0, 3)
+            for (let i = 0; i <= 6; i++)
+                glow.addColorStop(i / 6, `rgba(${color},${(gain * Math.exp(-((i / 2) ** 2) / 2)).toFixed(4)})`)
+            g.save()
+            g.translate(x * W, y * H)
+            g.scale(rx * side / 3, ry * side / 3)
+            g.fillStyle = glow
+            g.fillRect(-3, -3, 6, 6)
+            g.restore()
+        }
         atmosphericBackground.watch(surface)
         this.beamRaster = surface
         this.beamKey = key
