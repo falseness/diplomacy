@@ -112,7 +112,7 @@ const atmosphericLighting = {
         // that reads as crisp lines between the polished tiles.
         grout: '#6c686e',
         groutWidth: 0.065,
-        stone: [156, 150, 158],
+        stone: [153, 147, 155],
         sheen: 0.1,
         // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
         polish: 0.3,
