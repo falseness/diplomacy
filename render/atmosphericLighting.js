@@ -8,34 +8,34 @@ const atmosphericLighting = {
     // A broad key light from the left, falling mostly across the board (DIRECTION, world
     // space) and a little down it. Stops along that axis: [t, ambient, gain], overall
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
-    // peach-cream near the key light, then pale cream-grey, then a pale neutral grey-white on the far side.
-    // The ambient is warm on the near half (red kept, blue held back: warmer at the same lightness)
-    // and a neutral cream on the far side (green kept, blue held back, so it never turns mauve).
+    // peach-cream near the key light, then pale cream, then a cool lavender cream on the far side.
+    // The ambient is warm on the near half (red kept, blue held back) with a golden gain in the
+    // upper-left corner and a paler cream gain (blue lifted) towards the centre; the far side is a
+    // cool lavender cream (blue kept, red held back), the hue drifting smoothly between them.
     KEY: [
-        [0, [214, 203, 196], [92, 63, 21]],
-        [0.15, [214, 203, 196], [92, 63, 21]],
-        [0.26, [214, 203, 196], [83, 52, 24]],
-        [0.38, [214, 203, 196], [80, 52, 28]],
-        [0.5, [214, 203, 196], [64, 46, 31]],
-        [0.62, [207, 204, 197], [38, 38, 33]],
-        [0.75, [200, 206, 198], [32, 35, 30]],
-        [0.85, [200, 206, 198], [32, 35, 30]],
-        [1, [200, 206, 198], [32, 35, 30]]
+        [0, [212, 203, 193], [98, 68, 20]],
+        [0.15, [212, 203, 193], [98, 68, 20]],
+        [0.26, [212, 203, 193], [90, 62, 34]],
+        [0.38, [212, 203, 193], [82, 58, 38]],
+        [0.5, [212, 203, 193], [66, 52, 42]],
+        [0.62, [202, 202, 203], [37, 36, 37]],
+        [0.75, [192, 200, 214], [30, 31, 39]],
+        [0.85, [192, 200, 214], [30, 31, 39]],
+        [1, [192, 200, 214], [30, 31, 39]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
-    // Soft diagonal beams of the key light sweeping across the board, continuing the sky's
-    // beams: warm bands fanning from a point above-left of the board (fractions of the board
-    // bounds), each [angle in degrees, half width in fractions of the longer side, gain],
-    // fading out with the distance from that point (fade: fraction of the bounds diagonal).
-    // Added to the gain map, so they lift the visible stone only. Baked once per board size
-    // into a small raster (raster: pixels per longer side), the beams being soft. Golden (red and
-    // green lifted, blue held back), strong and long enough to read down to the lower board.
+    // A few thin, faint golden streaks of the key light over the board's upper-left part,
+    // continuing the sky's streaks: bands fanning from a point left of the board's top (fractions
+    // of the board bounds), each [angle in degrees, half width in fractions of the longer side,
+    // gain], fading out with the distance from that point (fade: fraction of the bounds diagonal),
+    // so they die out before the board's centre. Added to the gain map, so they lift the visible
+    // stone only. Baked once per board size into a small raster (raster: pixels per longer side).
     BEAMS: {
-        origin: [-0.3, -0.4],
-        beams: [[36, 0.032, 0.7], [44, 0.024, 0.595], [51, 0.036, 0.7], [58, 0.024, 0.595], [65, 0.032, 0.56]],
-        color: [60, 46, 6],
-        fade: 3,
+        origin: [-0.3, -0.12],
+        beams: [[26, 0.018, 0.45], [33, 0.018, 0.45], [40, 0.018, 0.45]],
+        color: [60, 54, 12],
+        fade: 0.6,
         raster: 256
     },
     beamRaster: null,

@@ -49,32 +49,39 @@ const atmosphericBackground = {
     // viewport; a fixed particle count keeps a thin strip of visible sky lively.
     SKY: {
         seed: 1109,
-        // Orange beams fan out from a point high above the upper left of the viewport onto the
-        // board, a broad dim band under narrow bright rays (in fractions of w, h: origin, angle and
-        // half width), [angle, half width, alpha, origin]; the last few, from their own origins,
-        // are thin streaks crossing the sky right of the board.
-        origin: [0.08, -0.6],
-        beams: [[64, 0.16, 0.4], [55, 0.02, 0.4], [58, 0.025, 0.45], [61, 0.02, 0.55], [64, 0.03, 0.6], [67, 0.02, 0.6],
-            [70, 0.025, 0.5], [72.5, 0.015, 0.4],
-            [44, 0.015, 0.4, [0.45, -0.05]], [44, 0.02, 0.32, [0.45, 0.12]], [42, 0.012, 0.28, [0.5, 0.3]]],
-        beamColor: '255,120,30',
+        // The key light breaks in at the upper left: a soft broad band under a dozen thin, near
+        // parallel orange streaks entering across the top left of the screen (from 0.22 to 0.35 of
+        // the width) and falling steeply onto the board's upper-left edge, the top centre and the
+        // sky further left staying dark; the last few are faint streaks crossing the sky right of
+        // the board. In fractions of w, h: [angle, half width, alpha, origin]; origin (off screen,
+        // upper left) is the default origin and the centre of their fade.
+        origin: [-0.1, -0.8],
+        beams: [[77, 0.06, 0.2, [0.2885, -0.05]],
+            [75, 0.007, 0.22, [0.2216, -0.05]], [75.4, 0.0112, 0.165, [0.2345, -0.05]], [75.8, 0.007, 0.22, [0.2473, -0.05]],
+            [76.2, 0.007, 0.165, [0.2602, -0.05]], [76.6, 0.0112, 0.22, [0.2731, -0.05]], [77, 0.007, 0.165, [0.286, -0.05]],
+            [76.6, 0.007, 0.22, [0.2981, -0.05]], [76.2, 0.0112, 0.165, [0.3102, -0.05]], [75.8, 0.007, 0.22, [0.3223, -0.05]],
+            [75.4, 0.007, 0.165, [0.3345, -0.05]], [75, 0.0112, 0.22, [0.3466, -0.05]],
+            [44, 0.01, 0.08, [0.47, 0.1]], [44, 0.012, 0.064, [0.5, 0.22]], [42, 0.008, 0.056, [0.55, 0.35]]],
+        beamColor: '255,130,40',
         stars: 15,
         embers: 60,
         // Grade towards the concept's night: a deep navy veil, an ellipse about the board (at and
         // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
         // board and deep at the screen edges; warm glows ([x, y] and radius in viewport fractions,
         // stretched along angle into a band, alpha strength): 'screen' where the key light breaks in
-        // along the top left, 'lit' (the clouds' own luminance in the glow colour, added strength times) where it
-        // catches the cloud banks below and right of the board; a gentle vignette (multiply,
+        // at the top left, 'lit' (the clouds' own luminance in the glow colour, added strength times)
+        // where it warms the clouds along the top left and the streaks, and as a narrow orange rim
+        // along the lower-left cloud bank and the bank right of the board; a gentle vignette (multiply,
         // darkening up to vignette from 0.55 of the half diagonal to the corners).
         navy: [10, 22, 46],
         veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.55, 0.25], [0.8, 0.7], [1, 0.92]]},
-        glows: [{at: [0.36, 0.02], radius: 0.08, stretch: 2.5, angle: 60, color: [200, 95, 30]},
-            {at: [0.2, 0], radius: 0.07, stretch: 3, angle: 15, color: [150, 70, 20]},
+        glows: [{at: [0.31, 0], radius: 0.07, stretch: 2.5, angle: 70, color: [100, 45, 15]},
+            {at: [0.17, 0.03], radius: 0.05, stretch: 3, angle: 15, color: [220, 100, 40], mode: 'lit', strength: 0.8},
+            {at: [0.32, 0.1], radius: 0.03, stretch: 5, angle: 70, color: [255, 130, 40], mode: 'lit', strength: 1.5},
             {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [230, 140, 90], mode: 'lit'},
-            {at: [0.32, 0.9], radius: 0.08, stretch: 2.2, angle: -30, color: [255, 135, 30], mode: 'lit', strength: 1.1},
-            {at: [0.37, 0.8], radius: 0.05, stretch: 2.2, angle: -30, color: [255, 135, 30], mode: 'lit', strength: 1.1},
-            {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 135, 30], mode: 'lit', strength: 0.7}],
+            {at: [0.24, 0.82], radius: 0.03, stretch: 6, angle: 57, color: [255, 110, 20], mode: 'lit', strength: 2},
+            {at: [0.3, 0.93], radius: 0.03, stretch: 4, angle: 57, color: [255, 110, 20], mode: 'lit', strength: 1.4},
+            {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 110, 20], mode: 'lit', strength: 0.8}],
         vignette: 0.3
     },
     decorations: 0,
