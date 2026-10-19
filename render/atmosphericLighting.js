@@ -12,18 +12,18 @@ const atmosphericLighting = {
     // The ambient is warm on the near half (red kept, blue held back) with a bright golden gain in the
     // upper-left corner; across the middle of the board a peach-cream (a little red added to ambient and gain,
     // green and blue held back, so the stone keeps its warmth instead of reading grey), then a neutral warm grey-cream
-    // and on the far side (the cool light there is the blue territory's spill, TERRITORY.cool),
-    // turning a light grey-blue only along the far edge.
+    // and on the far side (the cool light there is the blue territory's spill, TERRITORY.cool), a near-neutral
+    // grey-cream. From the middle on the ambient holds blue back (not adding red), so the stone reads cream, not pink or lilac.
     KEY: [
         [0, [216, 200, 191], [112, 80, 26]],
         [0.15, [216, 200, 191], [104, 74, 24]],
         [0.26, [216, 200, 191], [92, 64, 34]],
-        [0.38, [207, 199, 195], [86, 59, 38]],
-        [0.5, [200, 197, 194], [72, 53, 42]],
-        [0.62, [205, 199, 199], [46, 35, 32]],
-        [0.75, [201, 197, 199], [36, 35, 38]],
-        [0.85, [206, 200, 196], [32, 33, 38]],
-        [1, [196, 196, 204], [28, 34, 44]]
+        [0.38, [207, 198, 185], [86, 59, 38]],
+        [0.5, [200, 196, 184], [72, 53, 42]],
+        [0.62, [205, 198, 189], [46, 35, 32]],
+        [0.75, [201, 196, 189], [36, 35, 38]],
+        [0.85, [206, 199, 186], [32, 33, 38]],
+        [1, [196, 195, 194], [28, 34, 44]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
@@ -36,14 +36,14 @@ const atmosphericLighting = {
     // small raster (raster: pixels per longer side).
     BEAMS: {
         origin: [-0.25, -0.2],
-        beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.01876], [0, 0.028], [1.3, 0.01876]]
-            .map(([offset, half]) => [angle + offset, half, 0.42])),
-        color: [96, 90, 52],
+        beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.024], [0, 0.034], [1.3, 0.024]]
+            .map(([offset, half]) => [angle + offset, half, 0.4])),
+        color: [100, 92, 48],
         // Shade between the shafts: soft multiply bands [angle, half width, alpha] of shade colour on the
-        // light map, so light and shadow alternate across the board.
-        shades: [20.5, 29.5, 38.5, 47.5].map(angle => [angle, 0.035, 0.85]),
-        shade: [190, 180, 188],
-        fade: 2.2,
+        // light map, so light and shadow alternate gently across the board; a warm neutral, so no lilac stripes.
+        shades: [20.5, 29.5, 38.5, 47.5].map(angle => [angle, 0.045, 0.3]),
+        shade: [206, 196, 176],
+        fade: 2.6,
         raster: 256
     },
     beamRaster: null,
@@ -118,7 +118,7 @@ const atmosphericLighting = {
         polish: 0.3,
         // Marble: a few broad soft clouds (count, alpha scale) under fine grain specks (count, alpha), no veins.
         clouds: 10,
-        cloudAlpha: 0.5,
+        cloudAlpha: 0.3,
         grain: 220,
         grainAlpha: 0.16
     },

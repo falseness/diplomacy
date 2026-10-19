@@ -88,20 +88,20 @@ const atmosphericBackground = {
         // the top left (lighting the clouds there orange along the top edge and beside the board's upper-left edge, with an orange
         // screen fill under them), a cool light on the clouds left of the board (structure, not orange), as a
         // thin diagonal orange rim along the top edge of the lower-left cloud bank (no orange blob beside the board), and a cool blue light on the lowest clouds at the
-        // bottom left, orange light on the clouds at the board's top right under its rays (no orange cloud
+        // bottom left, a faint orange light on one cloud at the board's top right under its rays, the sky there staying deep navy (no orange cloud
         // mid-right of the board); two 'screen' glows fill the sky between the fan and the board's left edge with
         // warm light down to its middle (the upper one lies behind the board on a desktop and fills the
         // narrower gap beside it on a phone), so no dark void sits inside the swath, and a faint warm haze
         // lies on the sky right of the board under the swath's far end; a warm multiply glow takes the
-        // blue out of the lit lower-left cloud bank, so its rim reads orange; a gentle vignette
-        // (multiply, darkening up to vignette from 0.55 of the half diagonal to the corners).
+        // blue out of the lit lower-left cloud bank, so its rim reads orange; a
+        // vignette that keeps the corners deep navy (multiply, darkening up to vignette from 0.55 of the half diagonal to the corners).
         navy: [4, 16, 48],
         veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.3, 0.18], [0.5, 0.38], [0.7, 0.64], [0.85, 0.8], [1, 0.92]]},
         glows: [{at: [0.27, 0.1], radius: 0.04, stretch: 4, angle: 66, color: [230, 120, 50], mode: 'lit', strength: 0.8},
             {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [120, 140, 190], mode: 'lit', strength: 0.6},
             {at: [0.22, 0.76], radius: 0.018, stretch: 8, angle: 55, color: [255, 140, 50], mode: 'lit', strength: 2.2},
             {at: [0.3, 0.88], radius: 0.015, stretch: 6, angle: 55, color: [255, 140, 50], mode: 'lit', strength: 1.8},
-            {at: [0.1, 0.93], radius: 0.11, stretch: 2.5, angle: 30, color: [80, 120, 210], mode: 'lit', strength: 1.6},
+            {at: [0.1, 0.93], radius: 0.11, stretch: 2.5, angle: 30, color: [80, 120, 210], mode: 'lit'},
             {at: [0.345, 0.36], radius: 0.035, stretch: 3.5, angle: 82, color: [140, 70, 28], strength: 0.7},
             {at: [0.37, 0.18], radius: 0.03, stretch: 4, angle: 80, color: [140, 70, 28], strength: 0.7},
             {at: [0.83, 0.17], radius: 0.07, stretch: 1.6, angle: 90, color: [24, 16, 0]},
@@ -109,10 +109,9 @@ const atmosphericBackground = {
             {at: [0.26, 0.05], radius: 0.05, stretch: 3.5, angle: 20, color: [255, 140, 50], mode: 'lit'},
             {at: [0.37, 0.24], radius: 0.03, stretch: 3, angle: 70, color: [255, 140, 50], mode: 'lit', strength: 0.6},
             {at: [0.27, 0.04], radius: 0.045, stretch: 3.5, angle: 20, color: [30, 12, 0]},
-            {at: [0.2, 0.95], radius: 0.06, stretch: 3, angle: 30, color: [90, 130, 220], mode: 'lit'},
-            {at: [0.92, 0.2], radius: 0.04, stretch: 3, angle: 40, color: [255, 140, 50], mode: 'lit'},
-            {at: [0.85, 0.3], radius: 0.04, stretch: 4, angle: 50, color: [255, 140, 50], mode: 'lit', strength: 1.2}],
-        vignette: 0.3
+            {at: [0.2, 0.95], radius: 0.06, stretch: 3, angle: 30, color: [90, 130, 220], mode: 'lit', strength: 0.6},
+            {at: [0.85, 0.3], radius: 0.04, stretch: 4, angle: 50, color: [255, 140, 50], mode: 'lit', strength: 0.4}],
+        vignette: 0.45
     },
     decorations: 0,
     random(seed) {
