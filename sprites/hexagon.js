@@ -97,7 +97,10 @@ class Hexagon extends Sprite {
         }
 
         if (this.unknown) {
-            drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
+            if (otherSettings.atmosphericVisuals)
+                atmosphericLighting.drawFog(ctx, [this])
+            else
+                drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
             return
         }
         // Atmospheric tiles: marble or the owner's colour, inset in the grout that
@@ -139,9 +142,14 @@ class FogOfWarHexagon extends Hexagon {
         super(x, y)
         
     }
+    // Atmospheric fog: a dark misty marble variant chosen from the cell's coordinates
+    // (Grid.drawFogOfWar draws all fogged cells together through atmosphericLighting.drawFog).
     draw(ctx) {
         let pos = this.pos
 
-        drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
+        if (otherSettings.atmosphericVisuals)
+            atmosphericLighting.drawFog(ctx, [this])
+        else
+            drawCachedImage(ctx, players[0].fogOfWarHexagon, pos)
     }
 }

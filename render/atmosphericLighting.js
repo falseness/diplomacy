@@ -84,6 +84,21 @@ const atmosphericLighting = {
     },
     tileVariants: null,
     tileVariantBuilds: 0,
+    // Fogged cells: the same marble variants (TILE) in their grout, darkened and cooled to a
+    // blue-grey by a multiply (tint, times a per-variant shade) and veiled by a soft mist (drifting wisps of colour mist at
+    // up to mistAlpha, times a per-variant density). The light map leaves fogged cells unlit, so the variant is the cell.
+    // Its index comes from the cell's coordinates only, never from what the fog hides.
+    FOG: {
+        tint: [86, 96, 116],
+        grout: '#2c2c36',
+        mist: '150,162,184',
+        mistAlpha: 0.2,
+        shade: [0.86, 1.14],
+        density: [0.3, 1.9],
+        wisps: 9
+    },
+    fogVariants: null,
+    fogVariantBuilds: 0,
     tileFills: new Map(),
     // Soft object shadows: a darkened, blurred silhouette of the board object's own sprite,
     // turned about the object's base to point away from its strongest visible light (a lamp
@@ -541,6 +556,86 @@ const atmosphericLighting = {
         g.fillRect(-r, -r, 2 * r, 2 * r)
         this.drawSheen(g, 0, 0, this.TILE.sheen)
         return this.tileVariants[index] = surface
+    },
+    // Fog variants, built once per hex radius from the marble variant of the same index: the
+    // cell in dark grout, the inset marble over it, both multiplied by FOG.tint, then the mist
+    // wisps on top.
+    fogVariant(index) {
+        if (!this.fogVariants || this.fogVariants.radius !== basis.r)
+            this.fogVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
+        if (this.fogVariants[index]) return this.fogVariants[index]
+        const r = basis.r, s = this.TILE.rasterScale, tile = this.tileVariant(index)
+        const size = Math.ceil(2 * r * s) + 4
+        const surface = document.createElement('canvas')
+        surface.width = surface.height = size
+        const g = surface.getContext('2d')
+        g.setTransform(s, 0, 0, s, size / 2, size / 2)
+        g.beginPath()
+        this.hexagonPath(g, 0, 0, r)
+        g.fillStyle = this.FOG.grout
+        g.fill()
+        g.clip()
+        const tileSize = tile.width / s
+        g.drawImage(tile, -tileSize / 2, -tileSize / 2, tileSize, tileSize)
+        // Each fogged slab a little lighter or darker than its neighbours (shade), and its mist
+        // thicker over some cells than others (density), so the fog drifts in patches.
+        const rand = this.random(0x85ebca6b * (index + 1))
+        const shade = this.FOG.shade[0] + (this.FOG.shade[1] - this.FOG.shade[0]) * rand()
+        g.globalCompositeOperation = 'multiply'
+        g.fillStyle = `rgb(${this.FOG.tint.map(v => Math.round(v * shade)).join(',')})`
+        g.fillRect(-r, -r, 2 * r, 2 * r)
+        g.globalCompositeOperation = 'source-over'
+        // Mist: soft elongated wisps, a little lighter than the darkened stone.
+        const density = this.FOG.density[0] + (this.FOG.density[1] - this.FOG.density[0]) * rand()
+        for (let i = 0; i < this.FOG.wisps; i++) {
+            const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r
+            const length = (0.5 + 0.7 * rand()) * r, depth = (0.2 + 0.2 * rand()) * r
+            g.save()
+            g.translate(x, y)
+            g.rotate((rand() - 0.5) * 0.6)
+            g.scale(length, depth)
+            const wisp = g.createRadialGradient(0, 0, 0, 0, 0, 1)
+            const alpha = this.FOG.mistAlpha * density * (0.5 + 0.5 * rand())
+            wisp.addColorStop(0, `rgba(${this.FOG.mist},${alpha.toFixed(3)})`)
+            wisp.addColorStop(0.5, `rgba(${this.FOG.mist},${(alpha * 0.45).toFixed(3)})`)
+            wisp.addColorStop(1, `rgba(${this.FOG.mist},0)`)
+            g.fillStyle = wisp
+            g.fillRect(-1, -1, 2, 2)
+            g.restore()
+        }
+        ++this.fogVariantBuilds
+        return this.fogVariants[index] = surface
+    },
+    // Fogged cells (hexagons with coord): one dark grout fill of them all a hair past their edges, so
+    // no seam between them shows what lies under, then each cell's variant. Under an axis-aligned
+    // transform every variant is drawn at the same device size on whole device pixels, so two cells
+    // of one variant look exactly alike.
+    drawFog(ctx, hexagons) {
+        const t = ctx.getTransform(), r = basis.r
+        ctx.save()
+        ctx.beginPath()
+        for (const hexagon of this.onCanvas(ctx, hexagons, hexagon => hexagon.calcPos())) {
+            const c = hexagon.calcPos()
+            this.hexagonPath(ctx, c.x, c.y, 1.02 * r)
+        }
+        ctx.fillStyle = this.FOG.grout
+        ctx.fill()
+        const snap = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
+        if (snap) ctx.setTransform(1, 0, 0, 1, 0, 0)
+        for (const hexagon of hexagons) {
+            const c = hexagon.calcPos()
+            const variant = this.fogVariant(hexagon.tileHash % this.TILE.variants)
+            const size = variant.width / this.TILE.rasterScale
+            if (!snap) {
+                ctx.drawImage(variant, c.x - size / 2, c.y - size / 2, size, size)
+                continue
+            }
+            const w = Math.round(size * t.a), h = Math.round(size * t.d)
+            const x = Math.round(c.x * t.a + t.e - w / 2), y = Math.round(c.y * t.d + t.f - h / 2)
+            if (x + w < 0 || y + h < 0 || x > ctx.canvas.width || y > ctx.canvas.height) continue
+            ctx.drawImage(variant, x, y, w, h)
+        }
+        ctx.restore()
     },
     // A soft polished sheen from the upper left, fading out before the far corner.
     drawSheen(g, x, y, alpha) {

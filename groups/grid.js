@@ -493,16 +493,23 @@ class Grid extends SpritesGroup {
     }
     drawFogOfWar(ctx) {
         const range = this.drawRange(ctx)
+        const fogged = []
         for (let i = range.i0; i < Math.min(range.i1, this.fogOfWar.length); ++i) {
             for (let j = range.j0; j < Math.min(range.j1, this.fogOfWar[i].length); ++j) {
                 if (this.arr[i][j].building.isMapEdge)
                     continue
                 if (!this.fogOfWar[i][j] && !this.observedHexagon(this.arr[i][j])) {
                     let hexagon = new FogOfWarHexagon(i, j)
-                    hexagon.draw(ctx)
+                    if (otherSettings.atmosphericVisuals)
+                        fogged.push(hexagon)
+                    else
+                        hexagon.draw(ctx)
                 }
             }
         }
+        // Atmospheric fog: all fogged cells in one pass (one grout fill under their variants).
+        if (fogged.length)
+            atmosphericLighting.drawFog(ctx, fogged)
     }
     // Two layers on a hidden-information board (PRD 7.3-7.4): the fog (visible now) and the
     // known contents (cells whose colour is known). A loading cell is uncovered by the local
