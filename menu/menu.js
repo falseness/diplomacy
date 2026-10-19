@@ -91,49 +91,58 @@ menuOptions.marginLeft = 0.5 * menuOptions.rectSize
 menuOptions.cornerR = 0.1 * menuOptions.rectSize
 
 class OtherSettingsTree {
-    FIRST_Y = 0.32 * HEIGHT
-    INTERVAL_Y = 0.08 * HEIGHT
+    // Rows form a two-column grid: labels left-aligned at one x, boxes in one column to their right.
+    // The rows and the back button below them are scaled to fit between the logo and the screen bottom.
+    LABELS = ['always display hp bar', 'always display moves bar', 'move camera to undo target',
+        'use polished sprites', 'autoscout (online fog)', 'Atmospheric visuals']
+    BACK_HEIGHT = HEIGHT * 0.1
+    FIRST_Y = Math.max(HEIGHT * 0.27, HEIGHT * 0.17 + WIDTH * 0.055)
+    INTERVAL_Y = Math.min(HEIGHT * 0.08,
+        (HEIGHT * 0.97 - this.BACK_HEIGHT - this.FIRST_Y) / (this.LABELS.length + 0.25))
     constructor() {
-        const firstY = this.FIRST_Y
+        const count = this.LABELS.length
         const intervalY = this.INTERVAL_Y
-        const cornerR = menuOptions.cornerR
-
-        this.hpBarCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, menuOptions.fontSize, 'always display hp bar', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.65, firstY, menuOptions.rectSize, menuOptions.rectSize,
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-
-        this.movesBarCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, menuOptions.fontSize, 'always display moves bar', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.7, firstY + intervalY, menuOptions.rectSize, menuOptions.rectSize,
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-
-        this.undoCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize,
-            'move camera to undo target', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.7, firstY + 2 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-
-        this.polishedSpritesCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize,
-            'use polished sprites', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.7, firstY + 3 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-
-        this.autoscoutCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize,
-            'autoscout (online fog)', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.7, firstY + 4 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-
-        this.atmosphericVisualsCheckBox = new ImageCheckBox('checkMark', new Text(NaN, NaN, menuOptions.fontSize,
-            'Atmospheric visuals', 'black'), menuOptions.marginLeft,
-            WIDTH * 0.7, firstY + 5 * intervalY, menuOptions.rectSize, menuOptions.rectSize,
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+        let rectSize = Math.min(menuOptions.rectSize, intervalY * 0.7)
+        let fontSize = Math.min(menuOptions.fontSize, intervalY * 0.7)
+        const labels = this.LABELS.map(label => new Text(NaN, NaN, fontSize, label, 'black', 'left'))
+        // The main canvas context does not exist yet when the menu is built; measure as Text draws.
+        const measureCtx = document.createElement('canvas').getContext('2d')
+        const measure = () => Math.max(...labels.map(text => {
+            measureCtx.font = text.fontSize + 'px Times New Roman'
+            return measureCtx.measureText(text.text).width
+        }))
+        let labelWidth = measure()
+        // Shrink the whole grid if it would not fit the screen width.
+        const fit = WIDTH * 0.92 / (labelWidth + 1.5 * rectSize)
+        if (fit < 1) {
+            rectSize *= fit
+            fontSize *= fit
+            labels.forEach(text => text.fontSize = fontSize)
+            labelWidth = measure()
+        }
+        const gap = rectSize * 0.5
+        const labelX = (WIDTH - labelWidth - gap - rectSize) / 2
+        const boxX = labelX + labelWidth + gap
+        const cornerR = rectSize * 0.1
+        const strokeWidth = Math.min(menuOptions.checkBox.strokeWidth, rectSize * 0.06)
+        const boxes = labels.map((text, i) => {
+            const box = new ImageCheckBox('checkMark', text, gap,
+                boxX, this.FIRST_Y + (i + 0.5) * intervalY, rectSize, rectSize,
+                [cornerR, cornerR, cornerR, cornerR], strokeWidth, menuOptions.checkBox.color)
+            text.textAlign = 'left'
+            text.x = labelX
+            return box
+        })
+        this.rowsBottom = this.FIRST_Y + count * intervalY
+        ;[this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox, this.polishedSpritesCheckBox,
+            this.autoscoutCheckBox, this.atmosphericVisualsCheckBox] = boxes
 
         this.buttons = []
         this.buttons.push(this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox, this.polishedSpritesCheckBox,
             this.autoscoutCheckBox, this.atmosphericVisualsCheckBox)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
-        let y = this.FIRST_Y + this.buttons.length * this.INTERVAL_Y
+        let y = this.rowsBottom + this.INTERVAL_Y * 0.25
         this.backButton = Menu.getButton({x: pos0X, y: y},
             'back', _menu.setTree, parent, true, _menu)
         this.buttons.push(this.backButton)
