@@ -13,6 +13,7 @@ const atmosphericLighting = {
     },
     // Color-dodge gain at the lamp: x2 red, x1.65 green, x1.35 blue (peach, like the concept's lit stone) on the lit stone.
     GAIN: '126,100,66',
+    OWNED_GAIN: '51,51,51',
     TAIL_RADII: 2.5,
     maxDimension: 2048,
     maxPixels: 2 * 1024 * 1024,
@@ -43,7 +44,7 @@ const atmosphericLighting = {
                 (building.name === 'town' || building.name === 'goldmine' || building.isDemonPortal || building.name === 'demonPortal')
             if (!includeCells && !emitsLight) continue
             const pos = hex.calcPos()
-            if (includeCells) cells.push({x, y, pos})
+            if (includeCells) cells.push({x, y, pos, owned: hex.playerColor !== 0})
             if (emitsLight) sources.push({x, y, pos, name: building.isDemonPortal ? 'demonPortal' : building.name})
         }
         return {cells, sources, key: includeKey ? JSON.stringify([cells, sources]) : ''}
@@ -139,6 +140,18 @@ const atmosphericLighting = {
             g.fillRect(pos.x - basis.r, pos.y - basis.r, 2 * basis.r, 2 * basis.r)
         }
         g.restore()
+        // Owned ground keeps its team colour: there the map is made neutral grey (same
+        // luminosity), so the multiply only darkens or keeps it, never retints it.
+        const owned = cells.filter(cell => cell.owned)
+        if (owned.length) {
+            g.save()
+            this.hexPath(g, owned)
+            g.clip()
+            g.globalCompositeOperation = 'saturation'
+            g.fillStyle = '#808080'
+            g.fill()
+            g.restore()
+        }
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
         // a low, near-neutral cream-gold so no channel saturates into flat paint.
@@ -154,6 +167,21 @@ const atmosphericLighting = {
         k.globalCompositeOperation = 'lighter'
         for (const source of sources)
             this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '14,22,18')
+        // Owned ground gets a neutral gain of at most x1.25 instead: a per-channel or
+        // clipping lift would push team colours off hue.
+        if (owned.length) {
+            k.save()
+            this.hexPath(k, owned)
+            k.clip()
+            k.globalCompositeOperation = 'destination-out'
+            k.fillStyle = '#000'
+            k.fill()
+            k.globalCompositeOperation = 'source-over'
+            for (const source of sources)
+                this.pool(k, source, 0.8 * r, [[0, 1], [0.25, 0.85], [0.5, 0.45], [0.75, 0.14], [1, 0]],
+                    this.OWNED_GAIN)
+            k.restore()
+        }
         // The lamp's own sprite keeps its art: no gain over the building.
         k.globalCompositeOperation = 'destination-out'
         for (const {pos} of sources) {
