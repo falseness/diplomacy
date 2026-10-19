@@ -181,21 +181,6 @@ const atmosphericLighting = {
         k.globalCompositeOperation = 'lighter'
         for (const source of sources)
             this.pool(k, source, 0.9 * basis.r, [[0, 1], [0.4, 0.7], [1, 0]], '28,24,0')
-        // Owned ground gets a neutral gain of at most x1.25 instead: a per-channel or
-        // clipping lift would push team colours off hue.
-        if (owned.length) {
-            k.save()
-            this.hexPath(k, owned)
-            k.clip()
-            k.globalCompositeOperation = 'destination-out'
-            k.fillStyle = '#000'
-            k.fill()
-            k.globalCompositeOperation = 'source-over'
-            for (const source of sources)
-                this.pool(k, source, 0.8 * r, [[0, 1], [0.25, 0.85], [0.5, 0.45], [0.75, 0.14], [1, 0]],
-                    this.OWNED_GAIN)
-            k.restore()
-        }
         // The lamp's own sprite keeps its art: no gain over the building.
         k.globalCompositeOperation = 'destination-out'
         for (const {pos} of sources) {
@@ -210,13 +195,26 @@ const atmosphericLighting = {
         k.globalCompositeOperation = 'destination-over'
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
+        // Owned ground gets a neutral gain of at most x1.25 instead (key and lamps), which
+        // undoes the ambient: a per-channel or clipping lift would push team colours off hue.
+        if (owned.length) {
+            this.hexPath(k, owned)
+            k.clip()
+            k.globalCompositeOperation = 'copy'
+            k.fillStyle = this.keyGradient(k, bounds, 'owned')
+            k.fill()
+            k.globalCompositeOperation = 'lighten'
+            for (const source of sources)
+                this.pool(k, source, 0.8 * r, [[0, 1], [0.25, 0.85], [0.5, 0.45], [0.75, 0.14], [1, 0]],
+                    this.OWNED_GAIN)
+        }
         k.restore()
     },
     // World-space diagonal gradient, so panning never changes the light.
     keyGradient(g, bounds, part) {
         const gradient = g.createLinearGradient(bounds.left, bounds.top, bounds.right, bounds.bottom)
         for (const [t, ambient, gain] of this.KEY)
-            gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : gain})`)
+            gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : part === 'gain' ? gain : Array(3).fill(Math.min(...gain, parseInt(this.OWNED_GAIN)))})`)
         return gradient
     },
     core(source) {
