@@ -51,21 +51,25 @@ const atmosphericBackground = {
         seed: 1109,
         // Narrow orange beams fan out from a point above the upper left of the viewport towards
         // the board (in fractions of w, h: origin, angle and half width), [angle, half width, alpha].
-        origin: [0.05, -0.3],
-        beams: [[44, 0.025, 0.25], [51, 0.02, 0.3], [57, 0.03, 0.22], [62, 0.02, 0.26]],
-        beamColor: '255,150,70',
-        stars: 130,
+        origin: [0.1, -0.3],
+        beams: [[50, 0.02, 0.35], [56, 0.03, 0.35], [62, 0.02, 0.33], [68, 0.025, 0.3]],
+        beamColor: '255,160,80',
+        stars: 15,
         embers: 60,
-        // Grade towards the concept's night: the clouds sink under a deep navy veil (alphas evenly
-        // spaced from the top to the bottom of the viewport, so the lower cloud bank keeps more of
-        // its light); warm glows where the key light breaks in at the upper left and catches the
-        // lower cloud bank ('screen'; [x, y] and radius in viewport fractions, stretched along
-        // angle into a band); a gentle vignette (multiply, darkening up to vignette from 0.55 of
-        // the half diagonal to the corners).
+        // Grade towards the concept's night: a deep navy veil, an ellipse about the board (at and
+        // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
+        // board and deep at the screen edges; warm glows ([x, y] and radius in viewport fractions,
+        // stretched along angle into a band): 'screen' where the key light breaks in at the upper
+        // left, 'lit' (the clouds' own luminance in the glow colour, added strength times) where it
+        // catches the cloud banks below and right of the board; a gentle vignette (multiply,
+        // darkening up to vignette from 0.55 of the half diagonal to the corners).
         navy: [10, 22, 46],
-        veil: [0.9, 0.85, 0.6, 0.3],
-        glows: [{at: [0.3, 0.06], radius: 0.07, stretch: 2.5, angle: 70, color: [180, 90, 32]},
-            {at: [0.18, 0.8], radius: 0.08, stretch: 2.5, angle: -15, color: [38, 26, 18]}],
+        veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.55, 0.25], [0.8, 0.7], [1, 0.92]]},
+        glows: [{at: [0.32, 0.04], radius: 0.07, stretch: 2.5, angle: 70, color: [180, 90, 32]},
+            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [170, 170, 230], mode: 'lit'},
+            {at: [0.32, 0.9], radius: 0.08, stretch: 2.2, angle: -15, color: [255, 140, 60], mode: 'lit', strength: 1.8},
+            {at: [0.37, 0.8], radius: 0.05, stretch: 2.2, angle: -15, color: [255, 140, 60], mode: 'lit', strength: 1.8},
+            {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 160, 90], mode: 'lit', strength: 1.4}],
         vignette: 0.3
     },
     decorations: 0,
@@ -81,11 +85,21 @@ const atmosphericBackground = {
         const sky = this.SKY, px = window.devicePixelRatio || 1
         const random = this.random(sky.seed)
         const ox = sky.origin[0] * w, oy = sky.origin[1] * h, reach = 1.25 * Math.hypot(w, h)
+        // The clouds as painted, before the grade: 'lit' glows warm their own structure.
+        const clouds = sky.glows.some(glow => glow.mode === 'lit') ? document.createElement('canvas') : null
+        if (clouds) {
+            clouds.width = w
+            clouds.height = h
+            clouds.getContext('2d').drawImage(g.canvas, 0, 0)
+        }
+        // Veil: an ellipse about the board, thin over the clouds next to it and deep at the edges.
         g.save()
-        const veil = g.createLinearGradient(0, 0, 0, h)
-        sky.veil.forEach((alpha, i) => veil.addColorStop(i / (sky.veil.length - 1), `rgba(${sky.navy},${alpha})`))
+        g.translate(sky.veil.at[0] * w, sky.veil.at[1] * h)
+        g.scale(sky.veil.radius[0] * w, sky.veil.radius[1] * h)
+        const veil = g.createRadialGradient(0, 0, 0, 0, 0, 1)
+        for (const [t, alpha] of sky.veil.stops) veil.addColorStop(t, `rgba(${sky.navy},${alpha})`)
         g.fillStyle = veil
-        g.fillRect(0, 0, w, h)
+        g.fillRect(-4, -4, 8, 8)
         g.restore()
         // Beams: bands across their width, faded with the distance from the origin.
         const beams = document.createElement('canvas')
@@ -142,20 +156,51 @@ const atmosphericBackground = {
         }
         // Warm glows: a near-Gaussian radial falloff (exp(-d^2/2) per third of the radius).
         // In viewport fractions, so each falls on the same part of the sky at any aspect ratio.
-        for (const {at, radius, stretch, angle, color} of sky.glows) {
+        for (const {at, radius, stretch, angle, color, mode, strength = 1} of sky.glows) {
             const r = 3 * radius
             const glow = g.createRadialGradient(0, 0, 0, 0, 0, r)
             for (let i = 0; i <= 6; i++)
                 glow.addColorStop(i / 6, `rgba(${color},${Math.exp(-((i / 2) ** 2) / 2)})`)
+            const place = target => {
+                target.translate(at[0] * w, at[1] * h)
+                target.scale(w, h)
+                target.rotate(angle * Math.PI / 180)
+                target.scale(stretch, 1)
+                target.fillStyle = glow
+                target.fillRect(-r, -r, 2 * r, 2 * r)
+            }
             g.save()
-            g.translate(at[0] * w, at[1] * h)
-            g.scale(w, h)
-            g.rotate(angle * Math.PI / 180)
-            g.scale(stretch, 1)
-            g.fillStyle = glow
-            g.fillRect(-r, -r, 2 * r, 2 * r)
+            if (mode === 'lit') {
+                // The clouds' luminance tinted by the glow colour, kept only under the glow, added:
+                // bright cloud edges catch the light and the gaps between them stay dark.
+                const lit = document.createElement('canvas')
+                lit.width = w
+                lit.height = h
+                const l = lit.getContext('2d')
+                l.drawImage(clouds, 0, 0)
+                // Grey first (the blue clouds would multiply the warm colour to grey).
+                l.globalCompositeOperation = 'saturation'
+                l.fillStyle = 'rgb(128,128,128)'
+                l.fillRect(0, 0, w, h)
+                l.globalCompositeOperation = 'multiply'
+                l.fillStyle = `rgb(${color})`
+                l.fillRect(0, 0, w, h)
+                l.globalCompositeOperation = 'destination-in'
+                place(l)
+                // Added strength times (the last time at its fraction), so dim clouds can glow.
+                g.globalCompositeOperation = 'lighter'
+                for (let left = strength; left > 0; left--) {
+                    g.globalAlpha = Math.min(1, left)
+                    g.drawImage(lit, 0, 0)
+                }
+                lit.width = lit.height = 0
+            } else {
+                g.globalCompositeOperation = mode || 'screen'
+                place(g)
+            }
             g.restore()
         }
+        if (clouds) clouds.width = clouds.height = 0
         // Vignette: multiply grey rising towards the corners.
         g.globalCompositeOperation = 'multiply'
         const half = Math.hypot(w, h) / 2
