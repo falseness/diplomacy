@@ -10,24 +10,24 @@ const atmosphericLighting = {
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
     // peach-cream near the key light, then a light neutral cream, then a pale grey-cream on the far side.
     // The ambient is warm on the near half (red kept, blue held back) with a bright golden gain in the
-    // upper-left corner; past it the ambient is near neutral (red held back, green and blue kept, so
-    // the stone never turns mauve) and light, a neutral cream just past the centre and a pale
-    // grey-cream far side (the cool light there is the blue territory's spill, TERRITORY.cool),
-    // turning a light slate blue only along the far edge.
+    // upper-left corner; past it the ambient is near neutral (red held back further, green and blue
+    // kept, so the stone never turns pink or mauve) and light, a neutral warm grey-cream past the centre
+    // and on the far side (the cool light there is the blue territory's spill, TERRITORY.cool),
+    // turning a light grey-blue only along the far edge.
     KEY: [
         [0, [216, 200, 191], [112, 80, 26]],
         [0.15, [216, 200, 191], [104, 74, 24]],
         [0.26, [216, 200, 191], [92, 64, 34]],
-        [0.38, [210, 201, 196], [82, 58, 38]],
-        [0.5, [210, 201, 196], [66, 52, 42]],
-        [0.62, [216, 203, 200], [42, 34, 32]],
-        [0.75, [202, 199, 210], [34, 34, 38]],
-        [0.85, [194, 197, 211], [32, 33, 38]],
-        [1, [178, 192, 220], [28, 34, 44]]
+        [0.38, [205, 200, 196], [82, 58, 38]],
+        [0.5, [197, 198, 196], [66, 52, 42]],
+        [0.62, [203, 200, 200], [42, 34, 32]],
+        [0.75, [200, 198, 200], [34, 34, 38]],
+        [0.85, [206, 200, 196], [32, 33, 38]],
+        [1, [196, 196, 204], [28, 34, 44]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
-    // Three broad soft golden shafts of the key light, continuing the sky's swath: each a group of
+    // Three broad soft golden (yellow, not orange) shafts of the key light, continuing the sky's swath: each a group of
     // three soft streaks (Gaussian across) fanning from a point left of the board's top
     // (fractions of the board bounds), each streak [angle in degrees, half width in fractions of the
     // longer side, gain], all fading out late with the distance from that point (fade: fraction of the
@@ -37,8 +37,8 @@ const atmosphericLighting = {
     BEAMS: {
         origin: [-0.25, -0.2],
         beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.01876], [0, 0.028], [1.3, 0.01876]]
-            .map(([offset, half]) => [angle + offset, half, 0.28])),
-        color: [100, 78, 20],
+            .map(([offset, half]) => [angle + offset, half, 0.34])),
+        color: [84, 84, 18],
         fade: 2.2,
         raster: 256
     },

@@ -59,42 +59,47 @@ const atmosphericBackground = {
         // origin is the default origin and the centre of the fade of all the sky's light.
         origin: [-0.1, -0.8],
         beams: [[50, 0.02, 0.1, [0.8, 0.02]], [48, 0.025, 0.08, [0.85, 0.15]],
-            ...[[67, 0.05, 0.4], [64, 0.06, 0.24], [70, 0.035, 0.22], [60.87, 0.0042, 0.129], [61.65, 0.0045, 0.093],
-                [61.96, 0.0053, 0.116], [62.67, 0.006, 0.141], [63.57, 0.0039, 0.161], [63.83, 0.0045, 0.188],
-                [64.61, 0.005, 0.165], [64.98, 0.005, 0.155], [65.7, 0.0021, 0.188], [66.39, 0.0049, 0.19],
-                [67.11, 0.0057, 0.132], [67.75, 0.0038, 0.196], [68.39, 0.0024, 0.101], [68.66, 0.0059, 0.137],
-                [69.46, 0.0032, 0.145], [69.94, 0.0034, 0.155], [70.64, 0.0056, 0.166], [71.41, 0.0054, 0.203],
-                [71.89, 0.0027, 0.187]].map(([angle, half, alpha]) => [angle, half, alpha, [-0.1, -0.8], 1.7]),
+            // Three faint orange streaks right of the board's top, falling with the key light.
+            [35, 0.012, 0.3, [0.8, 0.1], 0.3], [33, 0.01, 0.24, [0.8, 0.2], 0.3], [37, 0.01, 0.2, [0.82, 0.32], 0.25],
+            ...[[67, 0.07, 0.45], [61, 0.06, 0.2], [73, 0.06, 0.25], [60.87, 0.0042, 0.0645], [61.65, 0.0045, 0.0465],
+                [61.96, 0.0053, 0.058], [62.67, 0.006, 0.0705], [63.57, 0.0039, 0.0805], [63.83, 0.0045, 0.094],
+                [64.61, 0.005, 0.0825], [64.98, 0.005, 0.0775], [65.7, 0.0021, 0.094], [66.39, 0.0049, 0.095],
+                [67.11, 0.0057, 0.066], [67.75, 0.0038, 0.098], [68.39, 0.0024, 0.0505], [68.66, 0.0059, 0.0685],
+                [69.46, 0.0032, 0.0725], [69.94, 0.0034, 0.0775], [70.64, 0.0056, 0.083], [71.41, 0.0054, 0.1015],
+                [71.89, 0.0027, 0.0935]].map(([angle, half, alpha]) => [angle, half, alpha, [-0.1, -0.8], 1.7]),
             // The swath continues along the top behind the board towards the upper right: a broad
             // shallow underlay and three soft rays starting inside the fan, fading out by 0.8 of the width.
             ...[[4, 0.065, 1], [2, 0.012, 0.12], [4.5, 0.016, 0.14], [7, 0.012, 0.12]]
                 .map(([angle, half, alpha]) => [angle, half, alpha, [0.14, -0.035], 0.66])],
         beamColor: '255,130,40',
         stars: 15,
-        embers: 60,
+        embers: 110,
         // Grade towards the concept's night: a deep saturated navy veil, an ellipse about the board (at and
         // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
         // board and deepening smoothly to the screen edges; glows ([x, y] and radius in viewport fractions,
         // stretched along angle into a band, alpha strength; 'screen' by default), mostly 'lit' (the
         // clouds' own luminance in the glow colour, added strength times): along the swath at
-        // the top left, faintly on the clouds left of the board, as an orange rim along the lower-left cloud
-        // bank and the bank right of the board, and a cool blue light on the lowest clouds at the
+        // the top left, a neutral light on the clouds left of the board (structure, not orange), as an
+        // orange rim along the lower-left cloud bank and the bank right of the board, and a cool blue light on the lowest clouds at the
         // bottom left; two 'screen' glows fill the sky between the fan and the board's left edge with
         // warm light down to its middle (the upper one lies behind the board on a desktop and fills the
         // narrower gap beside it on a phone), so no dark void sits inside the swath, and a faint warm haze
-        // lies on the sky right of the board under the swath's far end; a gentle vignette
+        // lies on the sky right of the board under the swath's far end; two warm multiply glows take the
+        // blue out of the lit lower-left and right cloud banks, so their rims read orange; a gentle vignette
         // (multiply, darkening up to vignette from 0.55 of the half diagonal to the corners).
         navy: [4, 16, 48],
         veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.3, 0.18], [0.5, 0.38], [0.7, 0.64], [0.85, 0.8], [1, 0.92]]},
         glows: [{at: [0.27, 0.1], radius: 0.04, stretch: 4, angle: 66, color: [230, 120, 50], mode: 'lit', strength: 0.8},
-            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [230, 140, 90], mode: 'lit', strength: 0.2},
+            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [150, 140, 170], mode: 'lit', strength: 0.6},
             {at: [0.24, 0.82], radius: 0.03, stretch: 6, angle: 57, color: [255, 140, 50], mode: 'lit', strength: 1.1},
             {at: [0.3, 0.93], radius: 0.03, stretch: 4, angle: 57, color: [255, 140, 50], mode: 'lit'},
             {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 110, 20], mode: 'lit', strength: 1.4},
             {at: [0.1, 0.93], radius: 0.09, stretch: 2.5, angle: 15, color: [80, 120, 210], mode: 'lit', strength: 0.8},
-            {at: [0.345, 0.36], radius: 0.035, stretch: 3.5, angle: 82, color: [140, 70, 28]},
-            {at: [0.37, 0.18], radius: 0.03, stretch: 4, angle: 80, color: [140, 70, 28], strength: 1.1},
-            {at: [0.83, 0.17], radius: 0.07, stretch: 1.6, angle: 90, color: [24, 16, 0]}],
+            {at: [0.345, 0.36], radius: 0.035, stretch: 3.5, angle: 82, color: [140, 70, 28], strength: 0.7},
+            {at: [0.37, 0.18], radius: 0.03, stretch: 4, angle: 80, color: [140, 70, 28], strength: 0.7},
+            {at: [0.83, 0.17], radius: 0.07, stretch: 1.6, angle: 90, color: [24, 16, 0]},
+            {at: [0.26, 0.84], radius: 0.07, stretch: 3, angle: 20, color: [255, 185, 130], mode: 'multiply'},
+            {at: [0.88, 0.55], radius: 0.07, stretch: 2.5, angle: 30, color: [255, 185, 130], mode: 'multiply'}],
         vignette: 0.3
     },
     decorations: 0,
