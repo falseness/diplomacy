@@ -105,12 +105,13 @@ class MapDepth {
         notch: ['#7c7278', '#46444d', '#24252e']
     }
     static ATMOSPHERIC_FACE_EDGE = 0.16
-    // Atmospheric drop shadow: the slab (top face and sides) casts a soft dark halo onto the sky,
-    // reaching further below it than above: a broad layer and a denser near one (blur and offset
-    // in hex radii). A small cached raster (raster pixels per hex radius), drawn scaled under the board.
+    // Atmospheric drop shadow: the slab (top face and sides) casts a soft shadow onto the sky away
+    // from the upper-left key light, only below and right of it: a broad layer and a near one (blur
+    // and offset in hex radii; each offset exceeds the blur reach so nothing spills left or above).
+    // A small cached raster (raster pixels per hex radius), drawn scaled under the board.
     static ATMOSPHERIC_SHADOW = {
-        color: 'rgba(4, 8, 20, 0.95)',
-        layers: [{blur: 1.4, offset: 0.6}, {blur: 0.5, offset: 0.3}],
+        color: 'rgba(4, 8, 20, 0.8)',
+        layers: [{blur: 0.6, x: 0.9, y: 1.2}, {blur: 0.2, x: 0.35, y: 0.45}],
         raster: 4
     }
     constructor() {
@@ -457,7 +458,7 @@ class MapDepth {
     createAtmosphericShadow() {
         const config = MapDepth.ATMOSPHERIC_SHADOW
         const b = this.surfaceBounds
-        const pad = Math.max(...config.layers.map(layer => layer.blur * 1.5 + layer.offset)) * basis.r
+        const pad = Math.max(...config.layers.map(layer => layer.blur * 1.5 + Math.max(layer.x, layer.y))) * basis.r
         const left = b.left - pad, top = b.top - pad
         const w = b.right - b.left + 2 * pad, h = b.bottom - b.top + this.depth + 2 * pad
         const k = config.raster / basis.r
@@ -471,7 +472,8 @@ class MapDepth {
         ctx.fillStyle = ctx.shadowColor = config.color
         for (const layer of config.layers) {
             ctx.shadowBlur = 2 * layer.blur * config.raster
-            ctx.shadowOffsetY = layer.offset * config.raster
+            ctx.shadowOffsetX = layer.x * config.raster
+            ctx.shadowOffsetY = layer.y * config.raster
             ctx.fill(this.outline)
             ctx.translate(0, this.depth)
             ctx.fill(this.outline)
