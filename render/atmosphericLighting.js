@@ -8,37 +8,38 @@ const atmosphericLighting = {
     // A broad key light from the left, falling mostly across the board (DIRECTION, world
     // space) and a little down it. Stops along that axis: [t, ambient, gain], overall
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
-    // peach-cream near the key light, then a warm pale cream, then a cool periwinkle-lavender on the far side.
+    // peach-cream near the key light, then a warm pale cream, then a rose-neutral grey-cream on the far side.
     // The ambient is warm on the near half (red kept, blue held back) with a bright golden gain in the
     // upper-left corner and a paler cream gain (blue lifted) towards the centre; a warm pale cream
-    // just past the centre and a cool periwinkle-lavender far side (blue kept, red held back), the
-    // hue drifting smoothly between them.
+    // just past the centre (green held back, so it stays peach rather than grey) and a rose-neutral
+    // grey-cream far side (no blue cast: the cool light there is the blue territory's spill,
+    // TERRITORY.cool), dimming to a slate blue only along the far edge.
     KEY: [
-        [0, [212, 203, 193], [112, 80, 26]],
-        [0.15, [212, 203, 193], [104, 74, 24]],
-        [0.26, [212, 203, 193], [92, 64, 34]],
-        [0.38, [212, 203, 193], [82, 58, 38]],
-        [0.5, [212, 203, 193], [66, 52, 42]],
-        [0.62, [218, 206, 198], [42, 38, 34]],
-        [0.75, [180, 192, 214], [36, 42, 46]],
-        [0.85, [180, 192, 214], [36, 42, 46]],
-        [1, [180, 192, 214], [36, 42, 46]]
+        [0, [212, 196, 188], [112, 80, 26]],
+        [0.15, [212, 196, 188], [104, 74, 24]],
+        [0.26, [212, 196, 188], [92, 64, 34]],
+        [0.38, [212, 196, 188], [82, 58, 38]],
+        [0.5, [212, 196, 188], [66, 52, 42]],
+        [0.62, [218, 198, 192], [42, 34, 32]],
+        [0.75, [204, 194, 202], [34, 34, 38]],
+        [0.85, [196, 192, 204], [32, 33, 38]],
+        [1, [180, 188, 212], [28, 34, 44]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
-    // Three soft golden shafts of the key light over the board's upper-left part, continuing the
-    // sky's swath: each a group of five soft streaks (Gaussian across) fanning from a point left of
-    // the board's top (fractions of the board bounds), each streak [angle in degrees, half width in
-    // fractions of the longer side, gain], all fading out with the distance from that point (fade:
-    // fraction of the bounds diagonal), so they reach towards the board's centre, low in contrast.
+    // Three long, faint golden shafts of the key light, continuing the sky's swath: each a group of
+    // five fine soft streaks (Gaussian across) fanning from a point left of the board's top
+    // (fractions of the board bounds), each streak [angle in degrees, half width in fractions of the
+    // longer side, gain], all fading out late with the distance from that point (fade: fraction of
+    // the bounds diagonal), so they cross the board past its centre, low in contrast.
     // Added to the gain map, so they lift the visible stone only. Baked once per board size into a
     // small raster (raster: pixels per longer side).
     BEAMS: {
         origin: [-0.25, -0.2],
-        beams: [28, 34, 40].flatMap(angle => [[-1.4, 0.01], [-0.7, 0.014], [0, 0.02], [0.7, 0.014], [1.4, 0.01]]
-            .map(([offset, half]) => [angle + offset, half, 0.3])),
+        beams: [30, 38, 46].flatMap(angle => [[-1.2, 0.008], [-0.6, 0.012], [0, 0.016], [0.6, 0.012], [1.2, 0.008]]
+            .map(([offset, half]) => [angle + offset, half, 0.17])),
         color: [80, 70, 24],
-        fade: 1,
+        fade: 1.6,
         raster: 256
     },
     beamRaster: null,
@@ -83,8 +84,13 @@ const atmosphericLighting = {
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
         [0.7, 0.33], [0.8, 0.18], [0.9, 0.06], [1, 0]],
     // Glow of owned tiles on the stone next to them: reach in hex radii, colour mixed towards white.
-    // Owned tiles: colour gamma (deeper) and a stone mix [r, g, b, amount].
-    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12]},
+    // Owned tiles: colour gamma (deeper) and a stone mix [r, g, b, amount]. A cool colour shows far
+    // over the warm stone, so it also spills wide as cool light (cool: a pale blue multiply and a
+    // blue lift, at alpha times how much bluer than red the owner is, over reach with stops [t, alpha]):
+    // the stone round the blue territory turns silver-blue and the far side keeps no blue cast.
+    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12],
+        cool: {reach: 7, alpha: 0.38, stops: [[0, 1], [0.25, 0.6], [0.5, 0.3], [0.75, 0.1], [1, 0]],
+            map: [185, 222, 255], gain: [0, 34, 74]}},
     // Upper-left key light direction (degrees, screen space, y down) for shadows.
     KEY_ANGLE: -120,
     // Tile look: pale cream marble tiles set in thin light grout. Each visible cell is
@@ -414,13 +420,9 @@ const atmosphericLighting = {
         g.globalCompositeOperation = 'multiply'
         for (const {pos, owner} of cells) {
             if (!owner) continue
-            const reach = this.TERRITORY.reach * basis.r, mix = c => Math.round(c + (255 - c) * this.TERRITORY.mix)
-            const glow = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, reach)
-            glow.addColorStop(0, `rgba(${mix(owner.r)},${mix(owner.g)},${mix(owner.b)},1)`)
-            glow.addColorStop(0.45, `rgba(${mix(owner.r)},${mix(owner.g)},${mix(owner.b)},0.55)`)
-            glow.addColorStop(1, `rgba(${mix(owner.r)},${mix(owner.g)},${mix(owner.b)},0)`)
-            g.fillStyle = glow
-            g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
+            this.territoryGlow(g, pos, this.TERRITORY, owner)
+            // A cool colour shows far over the warm stone, so it also spills wide (TERRITORY.cool).
+            if (this.TERRITORY.cool?.map) this.territoryGlow(g, pos, this.TERRITORY.cool, owner, 'map')
         }
         // Lamp spill (multiply part): the blue is held back towards amber.
         g.globalCompositeOperation = 'source-over'
@@ -439,9 +441,24 @@ const atmosphericLighting = {
         k.fill()
         k.globalCompositeOperation = 'lighter'
         k.drawImage(this.beams(bounds), bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
+        if (this.TERRITORY.cool?.gain)
+            for (const {pos, owner} of cells) if (owner) this.territoryGlow(k, pos, this.TERRITORY.cool, owner, 'gain')
         k.globalCompositeOperation = 'lighten'
         this.drawSpill(k, sources, 'gain')
         k.restore()
+    },
+    // An owned tile's glow on the stone round it, a radial gradient over reach (hex radii) with stops
+    // [t, alpha]: its colour mixed towards white (mix), or for a cool spill part (map: multiply colour,
+    // gain: lift colour) that colour at alpha times how much bluer than red the owner is.
+    territoryGlow(g, pos, {reach: radii, mix: amount, alpha = 1, stops = [[0, 1], [0.45, 0.55], [1, 0]], ...spill}, owner, part) {
+        const strength = part ? alpha * Math.max(0, owner.b - owner.r) / 255 : alpha
+        if (!strength) return
+        const mix = c => Math.round(c + (255 - c) * amount), reach = radii * basis.r
+        const color = part ? spill[part].join(',') : `${mix(owner.r)},${mix(owner.g)},${mix(owner.b)}`
+        const glow = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, reach)
+        for (const [t, a] of stops) glow.addColorStop(t, `rgba(${color},${+(a * strength).toFixed(4)})`)
+        g.fillStyle = glow
+        g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
     },
     // The BEAMS gain over the board bounds, in a small raster built once per bounds size.
     beams(bounds) {
