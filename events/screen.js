@@ -141,7 +141,22 @@ class Screen {
     }
     setMoveMain() {}
     draw() {}
+    // The whole board top face is on screen.
+    showsWholeBoard() {
+        const b = mapDepth.surfaceBounds
+        return !!b && b.left >= canvas.offset.x && b.right <= canvas.offset.x + width &&
+            b.top >= canvas.offset.y && b.bottom <= canvas.offset.y + height
+    }
+    // The camera is still the fitted one GameManager.fitCamera opened the board with (not zoomed or moved since).
+    isFittedView() {
+        const fit = typeof GameManager != 'undefined' && GameManager.cameraFit
+        return !!fit && fit.fitted && canvas.scale === fit.scale &&
+            canvas.offset.x === fit.offset.x && canvas.offset.y === fit.offset.y
+    }
     moveToPlayer(player) {
+        // An untouched fitted board stays where it is: the player's towns are in view.
+        if (this.isFittedView() && this.showsWholeBoard())
+            return
         let pos
         if (player.towns.length) {
             pos = player.towns[0].pos
