@@ -22,6 +22,21 @@ const atmosphericLighting = {
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.6],
+    // Soft diagonal beams of the key light sweeping across the board, continuing the sky's
+    // beams: warm bands fanning from a point above-left of the board (fractions of the board
+    // bounds), each [angle in degrees, half width in fractions of the longer side, gain],
+    // fading out with the distance from that point (fade: fraction of the bounds diagonal).
+    // Added to the gain map, so they lift the visible stone only. Baked once per board size
+    // into a small raster (raster: pixels per longer side), the beams being soft.
+    BEAMS: {
+        origin: [-0.3, -0.25],
+        beams: [[26, 0.025, 0.8], [31, 0.02, 0.6], [36, 0.03, 0.9], [41, 0.02, 0.6], [46, 0.03, 0.8], [52, 0.02, 0.6]],
+        color: [60, 54, 38],
+        fade: 1.1,
+        raster: 256
+    },
+    beamRaster: null,
+    beamBuilds: 0,
     // Lamps: power weighs each lamp for shadow direction; spill scales its SPILL below (a
     // town's small doorway lights a softer pool than a cave mouth). A lamp like another lamp kind
     // takes that kind's pool, scaled by reach about its foot (the lamp hex's lower edge, where the
@@ -127,7 +142,8 @@ const atmosphericLighting = {
     release() {
         if (this.map) this.map.width = this.map.height = 0
         if (this.gain) this.gain.width = this.gain.height = 0
-        this.map = this.gain = null
+        if (this.beamRaster) this.beamRaster.width = this.beamRaster.height = 0
+        this.map = this.gain = this.beamRaster = null
         this.mapKey = ''
         this.mapState = null
     },
@@ -415,9 +431,51 @@ const atmosphericLighting = {
         // The key light's lift, then each lamp's spill: the lighter of the two per channel.
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
+        k.globalCompositeOperation = 'lighter'
+        k.drawImage(this.beams(bounds), bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         k.globalCompositeOperation = 'lighten'
         this.drawSpill(k, sources, 'gain')
         k.restore()
+    },
+    // The BEAMS gain over the board bounds, in a small raster built once per bounds size.
+    beams(bounds) {
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        const key = w + 'x' + h
+        if (this.beamRaster && this.beamKey === key) return this.beamRaster
+        const {origin, beams, color, fade, raster} = this.BEAMS
+        const s = raster / Math.max(w, h)
+        const surface = this.beamRaster || document.createElement('canvas')
+        surface.width = Math.max(1, Math.ceil(w * s))
+        surface.height = Math.max(1, Math.ceil(h * s))
+        const g = surface.getContext('2d')
+        const W = surface.width, H = surface.height, side = Math.max(W, H)
+        const ox = origin[0] * W, oy = origin[1] * H, reach = fade * Math.hypot(W, H) + Math.hypot(ox, oy)
+        g.globalCompositeOperation = 'lighter'
+        for (const [angle, width, gain] of beams) {
+            const half = width * side
+            g.save()
+            g.translate(ox, oy)
+            g.rotate(angle * Math.PI / 180)
+            const band = g.createLinearGradient(0, -half, 0, half)
+            band.addColorStop(0, `rgba(${color},0)`)
+            band.addColorStop(0.5, `rgba(${color},${gain})`)
+            band.addColorStop(1, `rgba(${color},0)`)
+            g.fillStyle = band
+            g.fillRect(0, -half, reach, 2 * half)
+            g.restore()
+        }
+        g.globalCompositeOperation = 'destination-in'
+        const falloff = g.createRadialGradient(ox, oy, 0, ox, oy, reach)
+        falloff.addColorStop(0, 'rgba(0,0,0,1)')
+        falloff.addColorStop(0.4, 'rgba(0,0,0,0.85)')
+        falloff.addColorStop(1, 'rgba(0,0,0,0)')
+        g.fillStyle = falloff
+        g.fillRect(0, 0, W, H)
+        atmosphericBackground.watch(surface)
+        this.beamRaster = surface
+        this.beamKey = key
+        ++this.beamBuilds
+        return surface
     },
     // World-space gradient along DIRECTION, from the top left corner to the farthest corner,
     // so panning never changes the light.

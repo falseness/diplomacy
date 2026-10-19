@@ -49,12 +49,24 @@ const atmosphericBackground = {
     // viewport; a fixed particle count keeps a thin strip of visible sky lively.
     SKY: {
         seed: 1109,
-        // Beams fan out from a point above-left of the viewport (fractions of w, h).
-        origin: [-0.16, -0.26],
-        beams: [[38, 0.07, 0.2], [47, 0.05, 0.26], [55, 0.08, 0.2], [63, 0.045, 0.24], [71, 0.07, 0.16]],
-        beamColor: '255,172,92',
+        // Narrow orange beams fan out from a point above the upper left of the viewport towards
+        // the board (in fractions of w, h: origin, angle and half width), [angle, half width, alpha].
+        origin: [0.05, -0.3],
+        beams: [[44, 0.025, 0.25], [51, 0.02, 0.3], [57, 0.03, 0.22], [62, 0.02, 0.26]],
+        beamColor: '255,150,70',
         stars: 130,
-        embers: 60
+        embers: 60,
+        // Grade towards the concept's night: the clouds sink under a deep navy veil (alphas evenly
+        // spaced from the top to the bottom of the viewport, so the lower cloud bank keeps more of
+        // its light); warm glows where the key light breaks in at the upper left and catches the
+        // lower cloud bank ('screen'; [x, y] and radius in viewport fractions, stretched along
+        // angle into a band); a gentle vignette (multiply, darkening up to vignette from 0.55 of
+        // the half diagonal to the corners).
+        navy: [10, 22, 46],
+        veil: [0.9, 0.85, 0.6, 0.3],
+        glows: [{at: [0.3, 0.06], radius: 0.07, stretch: 2.5, angle: 70, color: [180, 90, 32]},
+            {at: [0.18, 0.8], radius: 0.08, stretch: 2.5, angle: -15, color: [38, 26, 18]}],
+        vignette: 0.3
     },
     decorations: 0,
     random(seed) {
@@ -69,23 +81,30 @@ const atmosphericBackground = {
         const sky = this.SKY, px = window.devicePixelRatio || 1
         const random = this.random(sky.seed)
         const ox = sky.origin[0] * w, oy = sky.origin[1] * h, reach = 1.25 * Math.hypot(w, h)
+        g.save()
+        const veil = g.createLinearGradient(0, 0, 0, h)
+        sky.veil.forEach((alpha, i) => veil.addColorStop(i / (sky.veil.length - 1), `rgba(${sky.navy},${alpha})`))
+        g.fillStyle = veil
+        g.fillRect(0, 0, w, h)
+        g.restore()
         // Beams: bands across their width, faded with the distance from the origin.
         const beams = document.createElement('canvas')
         beams.width = w
         beams.height = h
         const b = beams.getContext('2d')
         b.globalCompositeOperation = 'lighter'
-        for (const [angle, width, alpha] of sky.beams) {
-            const half = width * Math.max(w, h)
+        // In viewport fractions (angle and width too), like the glows.
+        for (const [angle, half, alpha] of sky.beams) {
             b.save()
             b.translate(ox, oy)
+            b.scale(w, h)
             b.rotate(angle * Math.PI / 180)
             const band = b.createLinearGradient(0, -half, 0, half)
             band.addColorStop(0, `rgba(${sky.beamColor},0)`)
             band.addColorStop(0.5, `rgba(${sky.beamColor},${alpha})`)
             band.addColorStop(1, `rgba(${sky.beamColor},0)`)
             b.fillStyle = band
-            b.fillRect(0, -half, reach, 2 * half)
+            b.fillRect(0, -half, 3, 2 * half)
             b.restore()
         }
         b.globalCompositeOperation = 'destination-in'
@@ -121,6 +140,33 @@ const atmosphericBackground = {
             g.fillStyle = glow
             g.fillRect(x - halo, y - halo, 2 * halo, 2 * halo)
         }
+        // Warm glows: a near-Gaussian radial falloff (exp(-d^2/2) per third of the radius).
+        // In viewport fractions, so each falls on the same part of the sky at any aspect ratio.
+        for (const {at, radius, stretch, angle, color} of sky.glows) {
+            const r = 3 * radius
+            const glow = g.createRadialGradient(0, 0, 0, 0, 0, r)
+            for (let i = 0; i <= 6; i++)
+                glow.addColorStop(i / 6, `rgba(${color},${Math.exp(-((i / 2) ** 2) / 2)})`)
+            g.save()
+            g.translate(at[0] * w, at[1] * h)
+            g.scale(w, h)
+            g.rotate(angle * Math.PI / 180)
+            g.scale(stretch, 1)
+            g.fillStyle = glow
+            g.fillRect(-r, -r, 2 * r, 2 * r)
+            g.restore()
+        }
+        // Vignette: multiply grey rising towards the corners.
+        g.globalCompositeOperation = 'multiply'
+        const half = Math.hypot(w, h) / 2
+        const vignette = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, half)
+        vignette.addColorStop(0, 'rgb(255,255,255)')
+        for (let i = 0; i <= 5; i++) {
+            const t = 0.55 + 0.45 * i / 5, v = Math.round(255 * (1 - sky.vignette * (i / 5) ** 2))
+            vignette.addColorStop(t, `rgb(${v},${v},${v})`)
+        }
+        g.fillStyle = vignette
+        g.fillRect(0, 0, w, h)
         g.restore()
         ++this.decorations
     },
