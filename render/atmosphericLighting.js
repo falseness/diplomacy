@@ -112,12 +112,20 @@ const atmosphericLighting = {
         // that reads as crisp lines between the polished tiles.
         grout: '#6c686e',
         groutWidth: 0.065,
-        stone: [153, 147, 155],
+        stone: [158, 152, 160],
+        // Owned tiles' sheen. Neutral tiles have no per-tile highlight (polish, sheen 0): their light
+        // varies only with the board's light map, across many tiles.
         sheen: 0.1,
-        // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
-        polish: 0.3,
+        neutralSheen: 0,
+        polish: 0,
+        // Each neutral slab a little lighter or darker than its neighbours, within this range.
+        shade: [0.97, 1.03],
+        // Key-lit chamfer just inside the grout: a bright warm lip along the upper edges and a
+        // darker lip along the lower ones (width in hex radii, alpha, colour).
+        lip: {width: 0.05, alpha: 0.3, color: [255, 246, 228]},
+        lowLip: {width: 0.03, alpha: 0.15, color: [96, 86, 88]},
         // Marble: a few broad soft clouds (count, alpha scale) under fine grain specks (count, alpha), no veins.
-        clouds: 10,
+        clouds: 6,
         cloudAlpha: 0.3,
         grain: 220,
         grainAlpha: 0.16
@@ -598,7 +606,7 @@ const atmosphericLighting = {
         g.clip()
         const rand = this.random(0x9e3779b9 * (index + 1))
         // Each slab is a little lighter or darker than its neighbours.
-        const shade = 0.94 + 0.12 * rand()
+        const shade = this.TILE.shade[0] + (this.TILE.shade[1] - this.TILE.shade[0]) * rand()
         const [sr, sg, sb] = this.TILE.stone.map(v => Math.round(v * shade))
         g.fillStyle = `rgb(${sr},${sg},${sb})`
         g.fillRect(-r, -r, 2 * r, 2 * r)
@@ -625,27 +633,36 @@ const atmosphericLighting = {
             g.arc(x, y, radius, 0, 2 * Math.PI)
             g.fill()
         }
-        // A fine lit lip inside the upper edges, under the grout's shadow line.
-        const lip = this.tileRadius() - 0.02 * r
-        const h = lip * Math.sqrt(3) / 2
-        g.strokeStyle = 'rgba(255,250,240,0.22)'
-        g.lineWidth = 0.03 * r
-        g.lineJoin = 'round'
+        // Polish: a soft highlight towards the upper left (off by default, see TILE.polish).
+        if (this.TILE.polish > 0) {
+            const polish = g.createRadialGradient(-0.35 * r, -0.4 * r, 0, -0.35 * r, -0.4 * r, 1.2 * r)
+            polish.addColorStop(0, `rgba(255,252,246,${this.TILE.polish})`)
+            polish.addColorStop(0.5, `rgba(255,252,246,${(this.TILE.polish * 0.35).toFixed(3)})`)
+            polish.addColorStop(1, 'rgba(255,252,246,0)')
+            g.fillStyle = polish
+            g.fillRect(-r, -r, 2 * r, 2 * r)
+        }
+        if (this.TILE.neutralSheen > 0) this.drawSheen(g, 0, 0, this.TILE.neutralSheen)
+        // The chamfer: a lit lip inside the upper edges and a darker lip inside the lower ones.
+        this.drawLip(g, r, this.TILE.lip, -1)
+        this.drawLip(g, r, this.TILE.lowLip, 1)
+        return this.tileVariants[index] = surface
+    },
+    // One chamfer lip (TILE.lip or lowLip) along the inset tile's three upper (side -1) or lower
+    // (side 1) edges, its outer side on the tile's edge.
+    drawLip(g, r, {width, alpha, color}, side) {
+        if (!(alpha > 0 && width > 0)) return
+        const lip = this.tileRadius() - width * r / Math.sqrt(3)
+        const h = side * lip * Math.sqrt(3) / 2
+        g.strokeStyle = `rgba(${color.join(',')},${alpha})`
+        g.lineWidth = width * r
+        g.lineJoin = 'miter'
         g.beginPath()
         g.moveTo(-lip, 0)
-        g.lineTo(-lip / 2, -h)
-        g.lineTo(lip / 2, -h)
+        g.lineTo(-lip / 2, h)
+        g.lineTo(lip / 2, h)
         g.lineTo(lip, 0)
         g.stroke()
-        // Polish: a soft highlight towards the upper left, so the slab reads as polished marble.
-        const polish = g.createRadialGradient(-0.35 * r, -0.4 * r, 0, -0.35 * r, -0.4 * r, 1.2 * r)
-        polish.addColorStop(0, `rgba(255,252,246,${this.TILE.polish})`)
-        polish.addColorStop(0.5, `rgba(255,252,246,${(this.TILE.polish * 0.35).toFixed(3)})`)
-        polish.addColorStop(1, 'rgba(255,252,246,0)')
-        g.fillStyle = polish
-        g.fillRect(-r, -r, 2 * r, 2 * r)
-        this.drawSheen(g, 0, 0, this.TILE.sheen)
-        return this.tileVariants[index] = surface
     },
     // Fog variants, built once per hex radius from the marble variant of the same index: the
     // cell in dark grout, the inset marble over it, both multiplied by FOG.tint, then the mist
