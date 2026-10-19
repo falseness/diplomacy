@@ -8,35 +8,37 @@ const atmosphericLighting = {
     // A broad key light from the left, falling mostly across the board (DIRECTION, world
     // space) and a little down it. Stops along that axis: [t, ambient, gain], overall
     // lift = ambient / (255 - gain): the near-neutral marble tiles (TILE) become warm
-    // peach-cream near the key light, then pale cream, then a light cool blue-grey on the far side.
-    // The ambient is warm on the near half (red kept, blue held back) with a golden gain in the
-    // upper-left corner and a paler cream gain (blue lifted) towards the centre; a light neutral
-    // cream past the centre and a light blue-grey far side (green and blue kept and lifted, red held
-    // back, so it reads whitish rather than mauve), the hue drifting smoothly between them.
+    // peach-cream near the key light, then a warm pale cream, then a cool periwinkle-lavender on the far side.
+    // The ambient is warm on the near half (red kept, blue held back) with a bright golden gain in the
+    // upper-left corner and a paler cream gain (blue lifted) towards the centre; a warm pale cream
+    // just past the centre and a cool periwinkle-lavender far side (blue kept, red held back), the
+    // hue drifting smoothly between them.
     KEY: [
-        [0, [212, 203, 193], [98, 68, 20]],
-        [0.15, [212, 203, 193], [98, 68, 20]],
-        [0.26, [212, 203, 193], [90, 62, 34]],
+        [0, [212, 203, 193], [112, 80, 26]],
+        [0.15, [212, 203, 193], [104, 74, 24]],
+        [0.26, [212, 203, 193], [92, 64, 34]],
         [0.38, [212, 203, 193], [82, 58, 38]],
         [0.5, [212, 203, 193], [66, 52, 42]],
-        [0.62, [214, 213, 210], [38, 40, 40]],
-        [0.75, [202, 213, 222], [36, 42, 46]],
-        [0.85, [202, 213, 222], [36, 42, 46]],
-        [1, [202, 213, 222], [36, 42, 46]]
+        [0.62, [218, 206, 198], [42, 38, 34]],
+        [0.75, [180, 192, 214], [36, 42, 46]],
+        [0.85, [180, 192, 214], [36, 42, 46]],
+        [1, [180, 192, 214], [36, 42, 46]]
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
-    // Three soft golden shafts of the key light, about a cell wide, over the board's upper-left part,
-    // continuing the sky's streaks: bands fanning from a point left of the board's top (fractions
-    // of the board bounds), each [angle in degrees, half width in fractions of the longer side,
-    // gain], fading out with the distance from that point (fade: fraction of the bounds diagonal),
-    // so they die out before the board's centre. Added to the gain map, so they lift the visible
-    // stone only. Baked once per board size into a small raster (raster: pixels per longer side).
+    // Three soft golden shafts of the key light over the board's upper-left part, continuing the
+    // sky's swath: each a group of five soft streaks (Gaussian across) fanning from a point left of
+    // the board's top (fractions of the board bounds), each streak [angle in degrees, half width in
+    // fractions of the longer side, gain], all fading out with the distance from that point (fade:
+    // fraction of the bounds diagonal), so they reach towards the board's centre, low in contrast.
+    // Added to the gain map, so they lift the visible stone only. Baked once per board size into a
+    // small raster (raster: pixels per longer side).
     BEAMS: {
         origin: [-0.25, -0.2],
-        beams: [[28, 0.035, 1], [36, 0.035, 1], [44, 0.035, 1]],
+        beams: [28, 34, 40].flatMap(angle => [[-1.4, 0.01], [-0.7, 0.014], [0, 0.02], [0.7, 0.014], [1.4, 0.01]]
+            .map(([offset, half]) => [angle + offset, half, 0.3])),
         color: [80, 70, 24],
-        fade: 0.5,
+        fade: 1,
         raster: 256
     },
     beamRaster: null,
@@ -99,7 +101,7 @@ const atmosphericLighting = {
         stone: [153, 147, 155],
         sheen: 0.1,
         // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
-        polish: 0.22
+        polish: 0.3
     },
     tileVariants: null,
     tileVariantBuilds: 0,
@@ -460,11 +462,7 @@ const atmosphericLighting = {
             g.save()
             g.translate(ox, oy)
             g.rotate(angle * Math.PI / 180)
-            const band = g.createLinearGradient(0, -half, 0, half)
-            band.addColorStop(0, `rgba(${color},0)`)
-            band.addColorStop(0.5, `rgba(${color},${gain})`)
-            band.addColorStop(1, `rgba(${color},0)`)
-            g.fillStyle = band
+            g.fillStyle = atmosphericBackground.softBand(g.createLinearGradient(0, -half, 0, half), color, gain)
             g.fillRect(0, -half, reach, 2 * half)
             g.restore()
         }
