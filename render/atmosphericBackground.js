@@ -49,44 +49,46 @@ const atmosphericBackground = {
     // viewport; a fixed particle count keeps a thin strip of visible sky lively.
     SKY: {
         seed: 1109,
-        // The key light breaks in at the upper left as a broad curved swath of orange-gold light: a
-        // fan of fine rays entering along the top from 0.18 to 0.34 of the width over broad soft
-        // underlays (so it reads as one radiant swath with rays at any aspect), and a few brighter rays
-        // falling steeply down the board's upper-left edge; each bends down towards the board's
-        // upper-left edge (the left ones lower, the right ones higher) and fades out late along
-        // its length, the top-left corner and the sky further left staying dark. Arcs (fractions of w, h): [top x,
-        // end y, radius, half width, alpha], each a circle arc from (top x, 0) to (end, end y) about a
-        // centre on its lower left, faded from its top to over its own length past the end.
-        arc: {end: 0.385, over: 1},
-        arcs: [[0.18, 0.5, 1.2, 0.012, 0.12], [0.2021, 0.4429, 1.1143, 0.01, 0.132], [0.2243, 0.3857, 1.0286, 0.014, 0.168],
-            [0.2464, 0.3286, 0.9429, 0.01, 0.18], [0.2686, 0.2714, 0.8571, 0.014, 0.156], [0.2907, 0.2143, 0.7714, 0.01, 0.144],
-            [0.3129, 0.1571, 0.6857, 0.014, 0.12], [0.335, 0.1, 0.6, 0.012, 0.108], [0.2575, 0.35, 0.75, 0.1, 0.48],
-            [0.22, 0.42, 1, 0.06, 0.22], [0.3, 0.46, 0.95, 0.02, 0.44], [0.315, 0.42, 0.85, 0.012, 0.48], [0.325, 0.5, 1.1, 0.03, 0.32]],
-        // Two faint soft streaks cross the sky right of the board: [angle, half width, alpha, origin,
-        // length] (no length: to the edge); origin (off screen, upper left) is the default origin and
-        // the centre of the fade of all the sky's light.
+        // The key light breaks in at the upper left as a diverging fan of orange-gold rays from an
+        // origin off screen above the upper left (no curved arcs, which read as a hard ring): three
+        // broad soft underlays (so it reads as one radiant swath with rays at any aspect) under
+        // nineteen fine rays, each falling down towards the board's upper-left edge and fading out
+        // along its length, the top-left corner and the sky further left staying dark. Beams (in
+        // viewport fractions, angle and width too): [angle, half width, alpha, origin, length] (no
+        // length: to the edge), here also two faint soft streaks crossing the sky right of the board;
+        // origin is the default origin and the centre of the fade of all the sky's light.
         origin: [-0.1, -0.8],
-        beams: [[50, 0.02, 0.1, [0.8, 0.02]], [48, 0.025, 0.08, [0.85, 0.15]]],
+        beams: [[50, 0.02, 0.1, [0.8, 0.02]], [48, 0.025, 0.08, [0.85, 0.15]],
+            ...[[67, 0.05, 0.4], [64, 0.06, 0.24], [70, 0.035, 0.22], [60.87, 0.0042, 0.129], [61.65, 0.0045, 0.093],
+                [61.96, 0.0053, 0.116], [62.67, 0.006, 0.141], [63.57, 0.0039, 0.161], [63.83, 0.0045, 0.188],
+                [64.61, 0.005, 0.165], [64.98, 0.005, 0.155], [65.7, 0.0021, 0.188], [66.39, 0.0049, 0.19],
+                [67.11, 0.0057, 0.132], [67.75, 0.0038, 0.196], [68.39, 0.0024, 0.101], [68.66, 0.0059, 0.137],
+                [69.46, 0.0032, 0.145], [69.94, 0.0034, 0.155], [70.64, 0.0056, 0.166], [71.41, 0.0054, 0.203],
+                [71.89, 0.0027, 0.187]].map(([angle, half, alpha]) => [angle, half, alpha, [-0.1, -0.8], 1.7])],
         beamColor: '255,130,40',
         stars: 15,
         embers: 60,
         // Grade towards the concept's night: a deep saturated navy veil, an ellipse about the board (at and
         // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
         // board and deepening smoothly to the screen edges; glows ([x, y] and radius in viewport fractions,
-        // stretched along angle into a band, alpha strength; 'screen' by default), here all 'lit' (the
+        // stretched along angle into a band, alpha strength; 'screen' by default), mostly 'lit' (the
         // clouds' own luminance in the glow colour, added strength times): along the swath at
-        // the top left, on the clouds left of the board, as an orange rim along the lower-left cloud
+        // the top left, faintly on the clouds left of the board, as an orange rim along the lower-left cloud
         // bank and the bank right of the board, and a cool blue light on the lowest clouds at the
-        // bottom left; a gentle vignette (multiply, darkening up to vignette from 0.55 of the half
-        // diagonal to the corners).
+        // bottom left; two 'screen' glows fill the sky between the fan and the board's left edge with
+        // warm light down to its middle (the upper one lies behind the board on a desktop and fills the
+        // narrower gap beside it on a phone), so no dark void sits inside the swath; a gentle vignette
+        // (multiply, darkening up to vignette from 0.55 of the half diagonal to the corners).
         navy: [4, 16, 48],
         veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.3, 0.18], [0.5, 0.38], [0.7, 0.64], [0.85, 0.8], [1, 0.92]]},
         glows: [{at: [0.27, 0.1], radius: 0.04, stretch: 4, angle: 66, color: [230, 120, 50], mode: 'lit', strength: 0.8},
-            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [230, 140, 90], mode: 'lit'},
+            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [230, 140, 90], mode: 'lit', strength: 0.2},
             {at: [0.24, 0.82], radius: 0.03, stretch: 6, angle: 57, color: [255, 140, 50], mode: 'lit', strength: 1.1},
             {at: [0.3, 0.93], radius: 0.03, stretch: 4, angle: 57, color: [255, 140, 50], mode: 'lit'},
             {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 110, 20], mode: 'lit', strength: 1.4},
-            {at: [0.1, 0.93], radius: 0.09, stretch: 2.5, angle: 15, color: [80, 120, 210], mode: 'lit', strength: 0.8}],
+            {at: [0.1, 0.93], radius: 0.09, stretch: 2.5, angle: 15, color: [80, 120, 210], mode: 'lit', strength: 0.8},
+            {at: [0.345, 0.36], radius: 0.035, stretch: 3.5, angle: 82, color: [140, 70, 28]},
+            {at: [0.37, 0.18], radius: 0.03, stretch: 4, angle: 80, color: [140, 70, 28], strength: 1.1}],
         vignette: 0.3
     },
     decorations: 0,
@@ -136,7 +138,7 @@ const atmosphericBackground = {
         b.globalCompositeOperation = 'lighter'
         // In viewport fractions (angle and width too), like the glows. A beam with a length fades
         // out along it (drawn on its own layer first), so the band's lit edge curves.
-        const ray = sky.beams.some(beam => beam[4]) || sky.arcs ? document.createElement('canvas') : null
+        const ray = sky.beams.some(beam => beam[4]) ? document.createElement('canvas') : null
         if (ray) {
             ray.width = w
             ray.height = h
@@ -161,34 +163,6 @@ const atmosphericBackground = {
             }
             target.restore()
             if (length) b.drawImage(ray, 0, 0)
-        }
-        // Arcs: soft curved bands, each a ring about its centre with a Gaussian profile across it.
-        for (const [x1, y2, radius, width, alpha] of sky.arcs || []) {
-            const x2 = sky.arc.end, dx = x2 - x1, dy = y2, d = Math.hypot(dx, dy)
-            const rise = Math.sqrt(Math.max(0, radius * radius - d * d / 4))
-            const at = [(x1 + x2) / 2 - dy / d * rise, y2 / 2 + dx / d * rise], half = width / radius
-            const [fx, fy] = [x2 + sky.arc.over * dx, y2 + sky.arc.over * dy]
-            const target = ray.getContext('2d')
-            target.clearRect(0, 0, w, h)
-            target.save()
-            target.translate(at[0] * w, at[1] * h)
-            target.scale(radius * w, radius * h)
-            const ring = target.createRadialGradient(0, 0, 0, 0, 0, 1 + half)
-            ring.addColorStop(0, `rgba(${sky.beamColor},0)`)
-            this.softBand({addColorStop: (t, color) => ring.addColorStop(Math.min(1, (1 - half + 2 * half * t) / (1 + half)), color)},
-                sky.beamColor, alpha)
-            target.fillStyle = ring
-            target.fillRect(-1 - half, -1 - half, 2 + 2 * half, 2 + 2 * half)
-            target.restore()
-            const along = target.createLinearGradient(x1 * w, -0.05 * h, fx * w, fy * h)
-            along.addColorStop(0, 'rgba(0,0,0,1)')
-            along.addColorStop(0.5, 'rgba(0,0,0,0.6)')
-            along.addColorStop(1, 'rgba(0,0,0,0)')
-            target.globalCompositeOperation = 'destination-in'
-            target.fillStyle = along
-            target.fillRect(0, 0, w, h)
-            target.globalCompositeOperation = 'source-over'
-            b.drawImage(ray, 0, 0)
         }
         if (ray) ray.width = ray.height = 0
         b.globalCompositeOperation = 'destination-in'
