@@ -60,8 +60,10 @@ const atmosphericBackground = {
         // underlays carry the swath down the left of the screen.
         origin: [-0.1, -0.8],
         beams: [[50, 0.02, 0.1, [0.8, 0.02]], [48, 0.025, 0.08, [0.85, 0.15]],
-            // Three faint orange streaks right of the board's top, falling with the key light.
+            // Three faint orange streaks right of the board's top, falling with the key light,
             [35, 0.012, 0.3, [0.8, 0.1], 0.3], [33, 0.01, 0.24, [0.8, 0.2], 0.3], [37, 0.01, 0.2, [0.82, 0.32], 0.25],
+            // and thin orange rays at the board's top right, under the swath's far end.
+            [38, 0.02, 0.25, [0.8, 0], 0.35], [34, 0.008, 0.3, [0.86, 0.05], 0.3], [40, 0.008, 0.25, [0.9, 0.12], 0.25],
             ...[[67, 0.07, 0.6], [61, 0.06, 0.3], [73, 0.06, 0.35], [78, 0.05, 0.35], [82, 0.04, 0.25], [60.87, 0.0042, 0.0645], [61.65, 0.0045, 0.0465],
                 [61.96, 0.0053, 0.058], [62.67, 0.006, 0.0705], [63.57, 0.0039, 0.0805], [63.83, 0.0045, 0.094],
                 [64.61, 0.005, 0.0825], [64.98, 0.005, 0.0775], [65.7, 0.0021, 0.094], [66.39, 0.0049, 0.095],
@@ -86,7 +88,8 @@ const atmosphericBackground = {
         // the top left (lighting the clouds there orange along the top edge and beside the board's upper-left edge, with an orange
         // screen fill under them), a cool light on the clouds left of the board (structure, not orange), as an
         // orange rim along the lower-left cloud bank, and a cool blue light on the lowest clouds at the
-        // bottom left (no orange cloud right of the board: its light is the faint streaks there); two 'screen' glows fill the sky between the fan and the board's left edge with
+        // bottom left, a small orange light on the clouds at the board's top right under its rays (no orange cloud
+        // mid-right of the board); two 'screen' glows fill the sky between the fan and the board's left edge with
         // warm light down to its middle (the upper one lies behind the board on a desktop and fills the
         // narrower gap beside it on a phone), so no dark void sits inside the swath, and a faint warm haze
         // lies on the sky right of the board under the swath's far end; a warm multiply glow takes the
@@ -106,7 +109,8 @@ const atmosphericBackground = {
             {at: [0.26, 0.05], radius: 0.05, stretch: 3.5, angle: 20, color: [255, 140, 50], mode: 'lit'},
             {at: [0.37, 0.24], radius: 0.03, stretch: 3, angle: 70, color: [255, 140, 50], mode: 'lit', strength: 0.6},
             {at: [0.27, 0.04], radius: 0.045, stretch: 3.5, angle: 20, color: [30, 12, 0]},
-            {at: [0.2, 0.95], radius: 0.06, stretch: 3, angle: 30, color: [90, 130, 220], mode: 'lit'}],
+            {at: [0.2, 0.95], radius: 0.06, stretch: 3, angle: 30, color: [90, 130, 220], mode: 'lit'},
+            {at: [0.92, 0.2], radius: 0.04, stretch: 3, angle: 40, color: [255, 140, 50], mode: 'lit', strength: 0.6}],
         vignette: 0.3
     },
     decorations: 0,
