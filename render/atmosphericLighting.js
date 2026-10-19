@@ -669,37 +669,39 @@ const atmosphericLighting = {
         // height below its top (flame: half width and height in opening half widths, low: its
         // height below the anchor as a share of that); mask edges feathered (raster widths).
         // Reached by the shade multiply plus a 'screen' lift in the glow, so the same two draws per lamp.
-        grade: {stone: [0.74, 0.66, 0.58], form: {lit: 1.35, dark: 0.72, slope: [0.6, 0.3], power: 1.6},
-            warm: [236, 220, 196], warmJoint: 0.5, warmLift: 0.25, warmReach: 0.22,
-            near: [246, 222, 182], nearLift: 0.6, nearReach: 0.11, nearOut: 0.35, ringTone: [222, 210, 192], ringLift: 0.45,
-            share: 0.12, joint: 0.18, anchor: 0.28,
+        grade: {stone: [0.7, 0.67, 0.64], form: {lit: 1.25, dark: 0.72, slope: [0.6, 0.3], power: 1.6},
+            warm: [236, 164, 84], warmJoint: 0.5, warmLift: 0.5, warmReach: 0.16,
+            near: [250, 176, 46], nearLift: 0.75, nearReach: 0.15, nearOut: 0.35, ringTone: [196, 186, 174], ringLift: 0.45,
+            share: 0.35, joint: 0.18, anchor: 0.28,
             // The doorway as the brightest part of the cave: the gold inner arch face (frame:
             // width and feather in opening half widths from the shaft's edge, colours at its outer
-            // edge and its inner face) round a glowing interior, yellow-white at the anchor graded
-            // to warm gold at the foot with no dark foot (interior: stops), the flame and its broad
-            // glow at the top of the interior.
-            frame: {width: 0.3, soft: 0.1, outer: [222, 130, 28], inner: [255, 196, 80]},
-            interior: [[0, '255,222,118'], [0.45, '255,196,72'], [1, '246,166,44']], flameGlow: {reach: 3.6, below: 0.6, color: [255, 246, 200]},
+            // edge and its inner face) round a glowing saturated interior, yellow-gold at the anchor
+            // graded to orange-gold at the foot with no dark foot (interior: stops), the near-white
+            // flame and its compact gold glow at the top of the interior.
+            frame: {width: 0.3, soft: 0.1, outer: [252, 172, 28], inner: [255, 212, 52]},
+            interior: [[0, '255,228,66'], [0.5, '255,206,42'], [1, '252,176,30']], flameGlow: {reach: 2, below: 0.45, color: [255, 228, 100]},
             // The upper doorway filled with gold light across its whole width, frame and interior
             // (upperGlow: full down to 'to' and fading over 'soft', in shares of the opening's height
             // from its top, the frame's gold jambs only down to 'frame'), so the glow still reads when the board is drawn small.
-            upperGlow: {to: 0.36, frame: 0.16, soft: 0.24, amount: 1, color: [255, 214, 104]},
+            upperGlow: {to: 0.36, frame: 0.16, soft: 0.24, amount: 1, color: [255, 222, 58]},
             // Warm colours darkened by the sprite's luminance turn orange-brown, not olive
             // (per-channel exponents of the luminance tone).
             toneBias: [1, 1.3, 1.6],
-            // The dome and the carved ring pale grey-tan stone, apart in hue from the gold doorway;
+            // The dome and the carved ring mid grey stone, apart in hue from the gold doorway;
             // held to a warm hue (green at most ringHue of the red), so the board's gold light over
             // them never turns them olive.
-            ringHue: 0.86,
-            lip: 0, lipColor: [255, 232, 170], flame: {rx: 0.75, ry: 1.25, low: 0.6, color: [255, 252, 224]},
+            ringHue: 0.92,
+            lip: 0, lipColor: [255, 232, 170], flame: {rx: 0.8, ry: 1.35, low: 0.55, color: [255, 244, 168]},
             feather: 0.01, flareReach: 1.3, flareAlpha: 0.3,
+            // The cave's own flare over the rim: saturated gold, never a cream wash over the doorway.
+            flareStops: [[0, '255,214,96', 0.9], [0.3, '255,184,64', 0.6], [0.6, '250,142,40', 0.25], [1, '240,120,40', 0]],
             // The carved arch's form picked out by light along its own outlines: a thin dark
             // dark brown groove where the ring meets the dome (groove: blend, width in raster widths, colour), a
             // warm crest on the ring's upper inner face on the lit side (crest: colour, lift,
             // width; bevel: the same light just inside the ring's outer edge, over the groove) and a dark contact contour inside the silhouette, strongest on its far side and foot
             // (contour: darkening, width, share on the lit side); never a pale outline.
-            groove: {depth: 0.6, width: 0.016, color: [86, 74, 64]}, crest: {color: [244, 232, 212], lift: 0.6, width: 0.01, bevel: 0.45},
-            contour: {depth: 0.55, width: 0.014, lit: 0.45}}
+            groove: {depth: 0.6, width: 0.016, color: [86, 74, 64]}, crest: {color: [226, 210, 188], lift: 0.6, width: 0.01, bevel: 0.45},
+            contour: {depth: 0.62, width: 0.018, lit: 0.5}}
     },
     // Doorway of each lamp sprite as fractions of its raster: centre, half width, half height.
     DOOR: {
@@ -1048,7 +1050,7 @@ const atmosphericLighting = {
         // Flare: the doorway's light spilling over its rim onto the arch.
         const flareReach = (graded ? this.BLOOM.grade.flareReach : this.BLOOM.flareReach) * rw
         const flare = g.createRadialGradient(cx, cy, 0, cx, cy, flareReach)
-        for (const [t, color, alpha] of this.BLOOM.flareStops)
+        for (const [t, color, alpha] of graded ? this.BLOOM.grade.flareStops : this.BLOOM.flareStops)
             flare.addColorStop(t, `rgba(${color},${alpha})`)
         g.fillStyle = flare
         g.globalAlpha = graded ? this.BLOOM.grade.flareAlpha : 1
