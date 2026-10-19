@@ -27,21 +27,18 @@ const atmosphericLighting = {
     ],
     // Key light axis (x, y); y per unit of x.
     DIRECTION: [1, 0.3],
-    // Three broad soft golden shafts of the key light, continuing the sky's swath: each a group of
-    // three wide overlapping soft streaks (Gaussian across, so the band has no hard edge) fanning from a point left of the board's top
+    // Three broad soft golden (yellow, not orange) shafts of the key light, continuing the sky's swath: each a group of
+    // three soft streaks (Gaussian across) fanning from a point left of the board's top
     // (fractions of the board bounds), each streak [angle in degrees, half width in fractions of the
     // longer side, gain], all fading out late with the distance from that point (fade: fraction of the
-    // bounds diagonal), so low-contrast bands sweep across the board past its centre into its right and lower half.
+    // bounds diagonal), so distinct bands sweep across the board past its centre into its right and lower half.
     // Added to the gain map, so they lift the visible stone only. Baked once per board size into a
     // small raster (raster: pixels per longer side).
     BEAMS: {
         origin: [-0.25, -0.2],
-        beams: [25, 34, 43].flatMap(angle => [[-1.9, 0.02546], [0, 0.038], [1.9, 0.02546]]
-            .map(([offset, half]) => [angle + offset, half, 0.28])),
-        // Soft glows of the key light past the shafts' ends, over the board's lower half and right:
-        // [x, y (fractions of the bounds), radius x, radius y (fractions of the longer side), gain].
-        glows: [[0.55, 0.75, 0.35, 0.25, 0.1], [0.85, 0.45, 0.2, 0.3, 0.06]],
-        color: [88, 80, 28],
+        beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.01876], [0, 0.028], [1.3, 0.01876]]
+            .map(([offset, half]) => [angle + offset, half, 0.34])),
+        color: [84, 84, 18],
         fade: 2.2,
         raster: 256
     },
@@ -95,8 +92,9 @@ const atmosphericLighting = {
     TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12],
         cool: {reach: 2.4, alpha: 0.8, stops: [[0, 1], [0.3, 0.55], [0.6, 0.18], [1, 0]],
             map: [180, 205, 250], gain: [0, 40, 100]}},
-    // Upper-left key light direction (degrees, screen space, y down) for shadows.
-    KEY_ANGLE: -120,
+    // Upper-left key light direction (degrees, screen space, y down) for shadows: objects cast
+    // down-right, about 40 degrees below the horizontal.
+    KEY_ANGLE: -140,
     // Tile look: pale cream marble tiles set in crisp dark grout. Each visible cell is
     // inset by half the grout width over a grout fill of the visible cells, so there
     // are no outlines or seams. Neutral tiles draw one of a few procedurally generated,
@@ -133,18 +131,24 @@ const atmosphericLighting = {
     fogVariantBuilds: 0,
     tileFills: new Map(),
     // Soft object shadows: a darkened, blurred silhouette of the board object's own sprite,
-    // turned about the object's base to point away from its strongest visible light (a lamp
-    // within reach, else the upper-left key) and fading towards its tip.
+    // turned about the object's base and fading towards its tip. Every object casts along the
+    // upper-left key light, so the shadows lie short, soft and parallel, attached at the base;
+    // only a lamp right beside the object (within reachRadii, not straight above or below it) turns its shadow away from it,
+    // darker and longer (lampAlpha and lampLength instead of keyAlpha and length), as the lamp's
+    // light is stronger than the key's there.
     SHADOW: {
-        color: '52,36,30',
-        keyAlpha: 0.5,
-        lampAlpha: 0.3,
-        length: 1.5,
-        width: 0.9,
-        blur: 0.05,
-        tipAlpha: 0.15,
-        reachRadii: 3.5
+        color: '44,32,30',
+        keyAlpha: 0.55,
+        lampAlpha: 1,
+        lampLength: 1.7,
+        length: 1.2,
+        width: 1.1,
+        blur: 0.08,
+        tipAlpha: 0.1,
+        reachRadii: 1.9
     },
+    // The last shadow pass's casters: {x, y, by: 'key' | 'lamp', angle (degrees), lampRadii}.
+    shadowLog: [],
     // Flat objects cast no shadow.
     flatObjects: ['lake', 'sea'],
     shadowSilhouettes: new WeakMap(),
@@ -470,7 +474,7 @@ const atmosphericLighting = {
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
         const key = w + 'x' + h
         if (this.beamRaster && this.beamKey === key) return this.beamRaster
-        const {origin, beams, glows = [], color, fade, raster} = this.BEAMS
+        const {origin, beams, color, fade, raster} = this.BEAMS
         const s = raster / Math.max(w, h)
         const surface = this.beamRaster || document.createElement('canvas')
         surface.width = Math.max(1, Math.ceil(w * s))
@@ -495,19 +499,6 @@ const atmosphericLighting = {
         falloff.addColorStop(1, 'rgba(0,0,0,0)')
         g.fillStyle = falloff
         g.fillRect(0, 0, W, H)
-        // The key light's soft glow where the shafts end: near-Gaussian ellipses, not faded.
-        g.globalCompositeOperation = 'lighter'
-        for (const [x, y, rx, ry, gain] of glows) {
-            const glow = g.createRadialGradient(0, 0, 0, 0, 0, 3)
-            for (let i = 0; i <= 6; i++)
-                glow.addColorStop(i / 6, `rgba(${color},${(gain * Math.exp(-((i / 2) ** 2) / 2)).toFixed(4)})`)
-            g.save()
-            g.translate(x * W, y * H)
-            g.scale(rx * side / 3, ry * side / 3)
-            g.fillStyle = glow
-            g.fillRect(-3, -3, 6, 6)
-            g.restore()
-        }
         atmosphericBackground.watch(surface)
         this.beamRaster = surface
         this.beamKey = key
@@ -852,23 +843,28 @@ const atmosphericLighting = {
                 if (sx + rx < 0 || sy + ry < 0 || sx - rx > ctx.canvas.width || sy - ry > ctx.canvas.height) continue
             }
             const image = cachedImages[board.getEntityBodyImageName(building)]
-            if (image && image.width) casters.push({building, image, pos})
+            if (image && image.width) casters.push({x, y, building, image, pos})
         }
         if (!casters.length) return
         ctx.save()
         this.hexPath(ctx, this.onCanvas(ctx, cells))
         ctx.clip()
-        for (const {building, image, pos} of casters) {
-            const {best, strength} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
+        const log = this.shadowLog = []
+        for (const {x, y, building, image, pos} of casters) {
+            // A lamp straight above or below the object (its pool, or the stone behind it) leaves the key's shadow.
+            let {best} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
+            if (best && Math.abs(pos.x - best.x) < 0.5 * basis.r) best = null
             // Direction from the light to the object: the shadow points away from the light.
             const angle = best ? Math.atan2(pos.y - best.y, pos.x - best.x) : (this.KEY_ANGLE + 180) * Math.PI / 180
+            log.push({x, y, by: best ? 'lamp' : 'key', angle: Math.round(angle * 180 / Math.PI),
+                lampRadii: best ? +(Math.hypot(pos.x - best.x, pos.y - best.y) / basis.r).toFixed(2) : null})
             const dir = {x: Math.cos(angle), y: Math.sin(angle)}
             const {surface, pad, base} = this.shadowSilhouette(image)
-            const L = this.SHADOW.length, W = this.SHADOW.width
+            const L = best ? this.SHADOW.lampLength : this.SHADOW.length, W = this.SHADOW.width
             // Sprite up (-y) -> L * dir, sprite right (+x) -> W * perpendicular, about the base.
             const ox = building.pos.x + image.width / 2, oy = building.pos.y + base
             ctx.save()
-            ctx.globalAlpha = this.SHADOW.keyAlpha + this.SHADOW.lampAlpha * strength
+            ctx.globalAlpha = best ? this.SHADOW.lampAlpha : this.SHADOW.keyAlpha
             ctx.transform(-W * dir.y, W * dir.x, -L * dir.x, -L * dir.y, ox, oy)
             ctx.drawImage(surface, -image.width / 2 - pad, -base - pad)
             ctx.restore()
