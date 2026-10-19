@@ -95,14 +95,15 @@ class Border {
 
 class MapDepth {
     // Atmospheric slab sides: grey stone faces [lit top edge, face, foot] by side (2 lower right,
-    // away from the upper-left key light; 3 bottom; 4 lower left, towards it); a bottom face in a
+    // away from the upper-left key light; 3 bottom; 4 lower left, towards it), the faces away from
+    // the key cooled by the blue sky's fill (atmosphericLighting.RIM); a bottom face in a
     // notch between protruding cells is shaded by them. The lit edge fades into the face over
     // ATMOSPHERIC_FACE_EDGE of the face's height.
     static ATMOSPHERIC_FACES = {
-        2: ['#8c8288', '#44434c', '#2c2d36'],
-        3: ['#b2a4a2', '#58525a', '#463f42'],
+        2: ['#7f8496', '#3c4256', '#262b3a'],
+        3: ['#a6a6b8', '#4e5468', '#3a3e50'],
         4: ['#c8b4a8', '#706260', '#54484a'],
-        notch: ['#7c7278', '#46444d', '#24252e']
+        notch: ['#70758a', '#3e4458', '#20252f']
     }
     static ATMOSPHERIC_FACE_EDGE = 0.16
     // Atmospheric drop shadow: the slab (top face and sides) casts a soft shadow onto the sky away
