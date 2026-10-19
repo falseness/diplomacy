@@ -31,15 +31,15 @@ const atmosphericLighting = {
     // three soft streaks (Gaussian across) fanning from a point left of the board's top
     // (fractions of the board bounds), each streak [angle in degrees, half width in fractions of the
     // longer side, gain], all fading out late with the distance from that point (fade: fraction of the
-    // bounds diagonal), so low-contrast bands sweep across the board's upper half to its centre and right.
+    // bounds diagonal), so low-contrast bands sweep across the board past its centre into its right and lower half.
     // Added to the gain map, so they lift the visible stone only. Baked once per board size into a
     // small raster (raster: pixels per longer side).
     BEAMS: {
         origin: [-0.25, -0.2],
-        beams: [30, 38, 46].flatMap(angle => [[-1.3, 0.01876], [0, 0.028], [1.3, 0.01876]]
+        beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.01876], [0, 0.028], [1.3, 0.01876]]
             .map(([offset, half]) => [angle + offset, half, 0.28])),
         color: [100, 78, 20],
-        fade: 1.5,
+        fade: 2.2,
         raster: 256
     },
     beamRaster: null,
@@ -94,7 +94,7 @@ const atmosphericLighting = {
             map: [180, 205, 250], gain: [0, 40, 100]}},
     // Upper-left key light direction (degrees, screen space, y down) for shadows.
     KEY_ANGLE: -120,
-    // Tile look: pale cream marble tiles set in thin light grout. Each visible cell is
+    // Tile look: pale cream marble tiles set in crisp dark grout. Each visible cell is
     // inset by half the grout width over a grout fill of the visible cells, so there
     // are no outlines or seams. Neutral tiles draw one of a few procedurally generated,
     // cached marble variants; owned tiles keep their colour under a faint sheen.
@@ -102,9 +102,10 @@ const atmosphericLighting = {
         variants: 8,
         rasterScale: 1.5,
         // Near neutral before the light map, which warms it on the key side (about 1.5 red)
-        // and leaves it a pale neutral grey on the far side (about 0.94 red, 1 blue). A thin light grey grout.
-        grout: '#8c8486',
-        groutWidth: 0.05,
+        // and leaves it a pale neutral grey on the far side (about 0.94 red, 1 blue). A dark warm grey grout
+        // that reads as crisp lines between the polished tiles.
+        grout: '#6c686e',
+        groutWidth: 0.065,
         stone: [153, 147, 155],
         sheen: 0.1,
         // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
