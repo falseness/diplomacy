@@ -64,7 +64,11 @@ const atmosphericBackground = {
                 [64.61, 0.005, 0.165], [64.98, 0.005, 0.155], [65.7, 0.0021, 0.188], [66.39, 0.0049, 0.19],
                 [67.11, 0.0057, 0.132], [67.75, 0.0038, 0.196], [68.39, 0.0024, 0.101], [68.66, 0.0059, 0.137],
                 [69.46, 0.0032, 0.145], [69.94, 0.0034, 0.155], [70.64, 0.0056, 0.166], [71.41, 0.0054, 0.203],
-                [71.89, 0.0027, 0.187]].map(([angle, half, alpha]) => [angle, half, alpha, [-0.1, -0.8], 1.7])],
+                [71.89, 0.0027, 0.187]].map(([angle, half, alpha]) => [angle, half, alpha, [-0.1, -0.8], 1.7]),
+            // The swath continues along the top behind the board towards the upper right: a broad
+            // shallow underlay and three soft rays starting inside the fan, fading out by 0.8 of the width.
+            ...[[4, 0.065, 1], [2, 0.012, 0.12], [4.5, 0.016, 0.14], [7, 0.012, 0.12]]
+                .map(([angle, half, alpha]) => [angle, half, alpha, [0.14, -0.035], 0.66])],
         beamColor: '255,130,40',
         stars: 15,
         embers: 60,
@@ -77,7 +81,8 @@ const atmosphericBackground = {
         // bank and the bank right of the board, and a cool blue light on the lowest clouds at the
         // bottom left; two 'screen' glows fill the sky between the fan and the board's left edge with
         // warm light down to its middle (the upper one lies behind the board on a desktop and fills the
-        // narrower gap beside it on a phone), so no dark void sits inside the swath; a gentle vignette
+        // narrower gap beside it on a phone), so no dark void sits inside the swath, and a faint warm haze
+        // lies on the sky right of the board under the swath's far end; a gentle vignette
         // (multiply, darkening up to vignette from 0.55 of the half diagonal to the corners).
         navy: [4, 16, 48],
         veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.3, 0.18], [0.5, 0.38], [0.7, 0.64], [0.85, 0.8], [1, 0.92]]},
@@ -88,7 +93,8 @@ const atmosphericBackground = {
             {at: [0.84, 0.5], radius: 0.05, stretch: 2.2, angle: 40, color: [255, 110, 20], mode: 'lit', strength: 1.4},
             {at: [0.1, 0.93], radius: 0.09, stretch: 2.5, angle: 15, color: [80, 120, 210], mode: 'lit', strength: 0.8},
             {at: [0.345, 0.36], radius: 0.035, stretch: 3.5, angle: 82, color: [140, 70, 28]},
-            {at: [0.37, 0.18], radius: 0.03, stretch: 4, angle: 80, color: [140, 70, 28], strength: 1.1}],
+            {at: [0.37, 0.18], radius: 0.03, stretch: 4, angle: 80, color: [140, 70, 28], strength: 1.1},
+            {at: [0.83, 0.17], radius: 0.07, stretch: 1.6, angle: 90, color: [24, 16, 0]}],
         vignette: 0.3
     },
     decorations: 0,
