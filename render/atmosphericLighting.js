@@ -37,12 +37,17 @@ const atmosphericLighting = {
     BEAMS: {
         origin: [-0.25, -0.2],
         beams: [25, 34, 43].flatMap(angle => [[-1.3, 0.01876], [0, 0.028], [1.3, 0.01876]]
-            .map(([offset, half]) => [angle + offset, half, 0.34])),
-        color: [84, 84, 18],
+            .map(([offset, half]) => [angle + offset, half, 0.42])),
+        color: [96, 90, 52],
+        // Shade between the shafts: soft multiply bands [angle, half width, alpha] of shade colour on the
+        // light map, so light and shadow alternate across the board.
+        shades: [20.5, 29.5, 38.5, 47.5].map(angle => [angle, 0.035, 0.85]),
+        shade: [190, 180, 188],
         fade: 2.2,
         raster: 256
     },
     beamRaster: null,
+    beamShade: null,
     beamBuilds: 0,
     // Lamps: power weighs each lamp for shadow direction; spill scales its SPILL below (a
     // town's small doorway lights a softer pool than a cave mouth). A lamp like another lamp kind
@@ -107,10 +112,15 @@ const atmosphericLighting = {
         // that reads as crisp lines between the polished tiles.
         grout: '#6c686e',
         groutWidth: 0.065,
-        stone: [153, 147, 155],
+        stone: [156, 150, 158],
         sheen: 0.1,
         // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
-        polish: 0.3
+        polish: 0.3,
+        // Marble: a few broad soft clouds (count, alpha scale) under fine grain specks (count, alpha), no veins.
+        clouds: 10,
+        cloudAlpha: 0.5,
+        grain: 220,
+        grainAlpha: 0.16
     },
     tileVariants: null,
     tileVariantBuilds: 0,
@@ -164,7 +174,8 @@ const atmosphericLighting = {
         if (this.map) this.map.width = this.map.height = 0
         if (this.gain) this.gain.width = this.gain.height = 0
         if (this.beamRaster) this.beamRaster.width = this.beamRaster.height = 0
-        this.map = this.gain = this.beamRaster = null
+        if (this.beamShade) this.beamShade.width = this.beamShade.height = 0
+        this.map = this.gain = this.beamRaster = this.beamShade = null
         this.mapKey = ''
         this.mapState = null
     },
@@ -433,6 +444,11 @@ const atmosphericLighting = {
             // A cool colour shows far over the warm stone, so it also spills wide (TERRITORY.cool).
             if (this.TERRITORY.cool?.map) this.territoryGlow(g, pos, this.TERRITORY.cool, owner, 'map')
         }
+        // Shade between the key light's shafts.
+        if (this.BEAMS.shades.length) {
+            this.beams(bounds)
+            g.drawImage(this.beamShade, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
+        }
         // Lamp spill (multiply part): the blue is held back towards amber.
         g.globalCompositeOperation = 'source-over'
         this.drawSpill(g, sources, 'map')
@@ -469,26 +485,35 @@ const atmosphericLighting = {
         g.fillStyle = glow
         g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
     },
-    // The BEAMS gain over the board bounds, in a small raster built once per bounds size.
+    // The BEAMS gain over the board bounds, in a small raster built once per bounds size, with the
+    // shade between the shafts (beamShade, its multiply colour) built alongside.
     beams(bounds) {
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
         const key = w + 'x' + h
         if (this.beamRaster && this.beamKey === key) return this.beamRaster
-        const {origin, beams, color, fade, raster} = this.BEAMS
+        const {beams, color, shades, shade} = this.BEAMS
+        this.beamRaster = this.beamBands(this.beamRaster, w, h, beams, color)
+        this.beamShade = shades.length ? this.beamBands(this.beamShade, w, h, shades, shade) : null
+        this.beamKey = key
+        ++this.beamBuilds
+        return this.beamRaster
+    },
+    beamBands(surface, w, h, bands, color) {
+        const {origin, fade, raster} = this.BEAMS
         const s = raster / Math.max(w, h)
-        const surface = this.beamRaster || document.createElement('canvas')
+        surface = surface || document.createElement('canvas')
         surface.width = Math.max(1, Math.ceil(w * s))
         surface.height = Math.max(1, Math.ceil(h * s))
         const g = surface.getContext('2d')
         const W = surface.width, H = surface.height, side = Math.max(W, H)
         const ox = origin[0] * W, oy = origin[1] * H, reach = fade * Math.hypot(W, H) + Math.hypot(ox, oy)
         g.globalCompositeOperation = 'lighter'
-        for (const [angle, width, gain] of beams) {
+        for (const [angle, width, alpha] of bands) {
             const half = width * side
             g.save()
             g.translate(ox, oy)
             g.rotate(angle * Math.PI / 180)
-            g.fillStyle = atmosphericBackground.softBand(g.createLinearGradient(0, -half, 0, half), color, gain)
+            g.fillStyle = atmosphericBackground.softBand(g.createLinearGradient(0, -half, 0, half), color, alpha)
             g.fillRect(0, -half, reach, 2 * half)
             g.restore()
         }
@@ -500,9 +525,6 @@ const atmosphericLighting = {
         g.fillStyle = falloff
         g.fillRect(0, 0, W, H)
         atmosphericBackground.watch(surface)
-        this.beamRaster = surface
-        this.beamKey = key
-        ++this.beamBuilds
         return surface
     },
     // World-space gradient along DIRECTION, from the top left corner to the farthest corner,
@@ -557,9 +579,9 @@ const atmosphericLighting = {
             return ((t ^ (t >>> 14)) >>> 0) / 4294967296
         }
     },
-    // Marble variants, built once per hex radius: cream stone with soft light and warm
-    // grey clouds, a few thin grey veins with faint halos, and a soft sheen from the
-    // upper left. Clipped to the inset tile, centred in the raster.
+    // Marble variants, built once per hex radius: cream stone with a few soft light and warm
+    // grey clouds, fine light and dark grain, and a soft sheen from the upper left. Clipped to
+    // the inset tile, centred in the raster.
     tileVariant(index) {
         if (!this.tileVariants || this.tileVariants.radius !== basis.r) {
             this.tileVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
@@ -581,45 +603,27 @@ const atmosphericLighting = {
         g.fillStyle = `rgb(${sr},${sg},${sb})`
         g.fillRect(-r, -r, 2 * r, 2 * r)
         // Clouds: broad, low contrast mottling.
-        for (let i = 0; i < 26; i++) {
+        for (let i = 0; i < this.TILE.clouds; i++) {
             const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r, radius = (0.25 + 0.5 * rand()) * r
             const tone = rand() < 0.6 ? 1.07 : 0.95
             const color = `${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
-                (0.15 + 0.2 * rand()).toFixed(3)
+                ((0.15 + 0.2 * rand()) * this.TILE.cloudAlpha).toFixed(3)
             const cloud = g.createRadialGradient(x, y, 0, x, y, radius)
             cloud.addColorStop(0, `rgba(${color})`)
             cloud.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
             g.fillStyle = cloud
             g.fillRect(x - radius, y - radius, 2 * radius, 2 * radius)
         }
-        // Veins: wandering curves across the tile, a faint wide halo under a fine line.
-        g.lineCap = 'round'
-        const veins = 1 + Math.floor(rand() * 2)
-        for (let v = 0; v < veins; v++) {
-            const a = rand() * 2 * Math.PI, b = a + Math.PI * (0.6 + 0.6 * rand())
-            const points = [{x: Math.cos(a) * r, y: Math.sin(a) * r}]
-            for (let k = 1; k < 4; k++) {
-                const t = k / 4
-                points.push({
-                    x: (1 - t) * Math.cos(a) * r + t * Math.cos(b) * r + (rand() - 0.5) * 0.45 * r,
-                    y: (1 - t) * Math.sin(a) * r + t * Math.sin(b) * r + (rand() - 0.5) * 0.45 * r
-                })
-            }
-            points.push({x: Math.cos(b) * r, y: Math.sin(b) * r})
-            const strength = v === 0 ? 1 : 0.6
-            // Soft, feathery warm grey: wide faint bands under a fine light-grey core, no crack line.
-            for (const [width, alpha] of [[0.3, 0.05], [0.14, 0.055], [0.06, 0.06], [0.025, 0.065]]) {
-                g.strokeStyle = `rgba(${Math.round(sr * 0.8)},${Math.round(sg * 0.79)},${Math.round(sb * 0.8)},${(alpha * strength).toFixed(3)})`
-                g.lineWidth = width * r
-                g.beginPath()
-                g.moveTo(points[0].x, points[0].y)
-                for (let k = 1; k < points.length - 1; k++) {
-                    const m = {x: (points[k].x + points[k + 1].x) / 2, y: (points[k].y + points[k + 1].y) / 2}
-                    g.quadraticCurveTo(points[k].x, points[k].y, m.x, m.y)
-                }
-                g.lineTo(points[points.length - 1].x, points[points.length - 1].y)
-                g.stroke()
-            }
+        // Grain: fine light and dark specks, so the polished stone has a fine mottled texture.
+        const grain = this.random(0x27d4eb2f * (index + 1))
+        for (let i = 0; i < this.TILE.grain; i++) {
+            const x = (grain() * 2 - 1) * r, y = (grain() * 2 - 1) * r, radius = (0.015 + 0.04 * grain()) * r
+            const tone = grain() < 0.5 ? 1.1 : 0.9
+            g.fillStyle = `rgba(${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
+                `${(this.TILE.grainAlpha * (0.4 + 0.6 * grain())).toFixed(3)})`
+            g.beginPath()
+            g.arc(x, y, radius, 0, 2 * Math.PI)
+            g.fill()
         }
         // A fine lit lip inside the upper edges, under the grout's shadow line.
         const lip = this.tileRadius() - 0.02 * r
