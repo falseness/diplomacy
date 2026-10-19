@@ -89,12 +89,12 @@ const atmosphericLighting = {
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
         [0.7, 0.33], [0.8, 0.18], [0.9, 0.06], [1, 0]],
     // Glow of owned tiles on the stone next to them: reach in hex radii, colour mixed towards white.
-    // Owned tiles: colour gamma (deeper), a stone mix [r, g, b, amount] and the shade at their edge (edge alpha). A cool colour shows far
+    // Owned tiles: colour gamma (deeper), a stone mix [r, g, b, amount]. A cool colour shows far
     // over the warm stone, so it also spills as cool light (cool: a blue multiply and a blue lift, at
     // alpha times how much bluer than red the owner is, over reach with stops [t, alpha]): the stone
     // next to the blue territory glows a luminous blue that fades out over about three cells and
     // joins the cool rim (RIM), while the board's interior keeps no blue haze.
-    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12], edge: 0.45,
+    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12],
         cool: {reach: 5, alpha: 0.75, stops: [[0, 1], [0.3, 0.75], [0.6, 0.35], [1, 0]],
             map: [170, 200, 250], gain: [0, 35, 85]}},
     // Cool sky fill on the side away from the key light: the sky's blue lights the board's right
@@ -856,13 +856,6 @@ const atmosphericLighting = {
         ctx.fillStyle = this.tileFill(hexagon)
         ctx.fill()
         ctx.clip()
-        // Lit at the centre, a little deeper towards the grout.
-        const shade = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, basis.r)
-        shade.addColorStop(0, 'rgba(255,255,255,0.1)')
-        shade.addColorStop(0.5, 'rgba(255,255,255,0)')
-        shade.addColorStop(1, `rgba(10,10,40,${this.TERRITORY.edge})`)
-        ctx.fillStyle = shade
-        ctx.fillRect(c.x - basis.r, c.y - basis.r, 2 * basis.r, 2 * basis.r)
         this.drawSheen(ctx, c.x, c.y, this.TILE.sheen)
         ctx.restore()
     },
