@@ -89,14 +89,26 @@ const atmosphericLighting = {
     SPILL_STOPS: [[0, 1], [0.1, 0.985], [0.2, 0.94], [0.3, 0.87], [0.4, 0.77], [0.5, 0.64], [0.6, 0.49],
         [0.7, 0.33], [0.8, 0.18], [0.9, 0.06], [1, 0]],
     // Glow of owned tiles on the stone next to them: reach in hex radii, colour mixed towards white.
-    // Owned tiles: colour gamma (deeper) and a stone mix [r, g, b, amount]. A cool colour shows far
+    // Owned tiles: colour gamma (deeper), a stone mix [r, g, b, amount] and the shade at their edge (edge alpha). A cool colour shows far
     // over the warm stone, so it also spills as cool light (cool: a blue multiply and a blue lift, at
     // alpha times how much bluer than red the owner is, over reach with stops [t, alpha]): the stone
-    // next to the blue territory glows a luminous blue that dies out within about two cells, so the
-    // rest of the board keeps no blue haze.
-    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12],
-        cool: {reach: 2.4, alpha: 0.8, stops: [[0, 1], [0.3, 0.55], [0.6, 0.18], [1, 0]],
-            map: [180, 205, 250], gain: [0, 40, 100]}},
+    // next to the blue territory glows a luminous blue that fades out over about three cells and
+    // joins the cool rim (RIM), while the board's interior keeps no blue haze.
+    TERRITORY: {reach: 2.2, mix: 0.5, depth: 2.1, stone: [215, 200, 190, 0.12], edge: 0.45,
+        cool: {reach: 5, alpha: 0.75, stops: [[0, 1], [0.3, 0.75], [0.6, 0.35], [1, 0]],
+            map: [170, 200, 250], gain: [0, 35, 85]}},
+    // Cool sky fill on the side away from the key light: the sky's blue lights the board's right
+    // edge (its full height) and its bottom edge, fading out along the bottom towards the key side
+    // (from fade[1] to fade[0], fractions of the board width), the right edge fading out towards the
+    // key-lit top (from rightFade[1] to rightFade[0], fractions of the height). Full strength over inner (hex radii)
+    // from the edge, then a Gaussian falloff over fall, times sides ([right, bottom]); a multiply colour on the light map and a
+    // lift on the gain map, so only the visible stone takes it. Baked once per board size into a
+    // small raster (raster: pixels per longer side).
+    RIM: {inner: 0.9, fall: 1.6, sides: [0.7, 1], alpha: 0.75, gainAlpha: 0.6, fade: [0.1, 0.65], rightFade: [0, 0.45],
+        map: [180, 205, 250], gain: [0, 30, 80], raster: 256},
+    rimRaster: null,
+    rimGain: null,
+    rimBuilds: 0,
     // Upper-left key light direction (degrees, screen space, y down) for shadows: objects cast
     // down-right, about 40 degrees below the horizontal.
     KEY_ANGLE: -140,
@@ -110,8 +122,8 @@ const atmosphericLighting = {
         // Near neutral before the light map, which warms it on the key side (about 1.5 red)
         // and leaves it a pale neutral grey on the far side (about 0.94 red, 1 blue). A dark warm grey grout
         // that reads as crisp lines between the polished tiles.
-        grout: '#6c686e',
-        groutWidth: 0.065,
+        grout: '#57535b',
+        groutWidth: 0.055,
         stone: [158, 152, 160],
         // Owned tiles' sheen. Neutral tiles have no per-tile highlight (polish, sheen 0): their light
         // varies only with the board's light map, across many tiles.
@@ -122,8 +134,8 @@ const atmosphericLighting = {
         shade: [0.97, 1.03],
         // Key-lit chamfer just inside the grout: a bright warm lip along the upper edges and a
         // darker lip along the lower ones (width in hex radii, alpha, colour).
-        lip: {width: 0.05, alpha: 0.3, color: [255, 246, 228]},
-        lowLip: {width: 0.03, alpha: 0.15, color: [96, 86, 88]},
+        lip: {width: 0.05, alpha: 0.35, color: [255, 246, 228]},
+        lowLip: {width: 0.05, alpha: 0.28, color: [96, 86, 88]},
         // Marble: a few broad soft clouds (count, alpha scale) under fine grain specks (count, alpha), no veins.
         clouds: 6,
         cloudAlpha: 0.3,
@@ -155,15 +167,21 @@ const atmosphericLighting = {
     // darker and longer (lampAlpha and lampLength instead of keyAlpha and length), as the lamp's
     // light is stronger than the key's there.
     SHADOW: {
-        color: '44,32,30',
-        keyAlpha: 0.55,
+        color: '30,22,22',
+        keyAlpha: 0.95,
         lampAlpha: 1,
         lampLength: 1.7,
         length: 1.2,
         width: 1.1,
         blur: 0.08,
         tipAlpha: 0.1,
-        reachRadii: 1.9
+        reachRadii: 1.9,
+        // Contact shade under every shadow caster's base: a soft dark ellipse, radius in hex
+        // radii, flattened to flat of its width, alpha at its core.
+        contact: {radius: 0.55, flat: 0.5, alpha: 0.7},
+        // A flat object (a pond) sits in a dark bank: its own blurred silhouette, grown by grow and
+        // moved away from the key light by offset (hex radii), under the sprite.
+        bank: {grow: 1.12, offset: 0.06, alpha: 0.8}
     },
     // The last shadow pass's casters: {x, y, by: 'key' | 'lamp', angle (degrees), lampRadii}.
     shadowLog: [],
@@ -171,6 +189,7 @@ const atmosphericLighting = {
     flatObjects: ['lake', 'sea'],
     shadowSilhouettes: new WeakMap(),
     shadowSilhouetteBuilds: 0,
+    bankSilhouettes: new WeakMap(),
     maxDimension: 2048,
     maxPixels: 2 * 1024 * 1024,
     map: null,
@@ -183,7 +202,9 @@ const atmosphericLighting = {
         if (this.gain) this.gain.width = this.gain.height = 0
         if (this.beamRaster) this.beamRaster.width = this.beamRaster.height = 0
         if (this.beamShade) this.beamShade.width = this.beamShade.height = 0
-        this.map = this.gain = this.beamRaster = this.beamShade = null
+        if (this.rimRaster) this.rimRaster.width = this.rimRaster.height = 0
+        if (this.rimGain) this.rimGain.width = this.rimGain.height = 0
+        this.map = this.gain = this.beamRaster = this.beamShade = this.rimRaster = this.rimGain = null
         this.mapKey = ''
         this.mapState = null
     },
@@ -452,6 +473,11 @@ const atmosphericLighting = {
             // A cool colour shows far over the warm stone, so it also spills wide (TERRITORY.cool).
             if (this.TERRITORY.cool?.map) this.territoryGlow(g, pos, this.TERRITORY.cool, owner, 'map')
         }
+        // The cool sky fill along the far edges.
+        if (this.RIM.alpha > 0) {
+            this.rim(bounds)
+            g.drawImage(this.rimRaster, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
+        }
         // Shade between the key light's shafts.
         if (this.BEAMS.shades.length) {
             this.beams(bounds)
@@ -476,6 +502,8 @@ const atmosphericLighting = {
         k.drawImage(this.beams(bounds), bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         if (this.TERRITORY.cool?.gain)
             for (const {pos, owner} of cells) if (owner) this.territoryGlow(k, pos, this.TERRITORY.cool, owner, 'gain')
+        if (this.RIM.gainAlpha > 0)
+            k.drawImage(this.rim(bounds, 'rimGain'), bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         k.globalCompositeOperation = 'lighten'
         this.drawSpill(k, sources, 'gain')
         k.restore()
@@ -534,6 +562,38 @@ const atmosphericLighting = {
         g.fillRect(0, 0, W, H)
         atmosphericBackground.watch(surface)
         return surface
+    },
+    // The RIM fill over the board bounds: its multiply colour (rimRaster, the default) or its lift
+    // (rimGain), both built once per bounds size and hex radius.
+    rim(bounds, name = 'rimRaster') {
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        const key = w + 'x' + h + ',' + basis.r
+        if (!this.rimRaster || this.rimKey !== key) {
+            const {inner, fall, sides: [right, bottom], alpha, gainAlpha, fade: [f0, f1], rightFade: [r0, r1], map, gain, raster} = this.RIM
+            const smooth = t => (t = Math.min(1, Math.max(0, t))) * t * (3 - 2 * t)
+            const s = raster / Math.max(w, h), W = Math.max(1, Math.ceil(w * s)), H = Math.max(1, Math.ceil(h * s))
+            const r = basis.r * s
+            const strength = d => d <= inner * r ? 1 : Math.exp(-(((d - inner * r) / (fall * r)) ** 2))
+            for (const [name, color, a] of [['rimRaster', map, alpha], ['rimGain', gain, gainAlpha]]) {
+                const surface = this[name] || document.createElement('canvas')
+                surface.width = W
+                surface.height = H
+                const g = surface.getContext('2d'), image = g.createImageData(W, H), d = image.data
+                for (let y = 0; y < H; ++y) for (let x = 0; x < W; ++x) {
+                    const v = Math.max(right * strength(W - x - 0.5) * smooth(((y + 0.5) / H - r0) / (r1 - r0)),
+                        bottom * strength(H - y - 0.5) * smooth(((x + 0.5) / W - f0) / (f1 - f0)))
+                    const i = 4 * (y * W + x)
+                    d.set(color, i)
+                    d[i + 3] = Math.round(255 * a * v)
+                }
+                g.putImageData(image, 0, 0)
+                atmosphericBackground.watch(surface)
+                this[name] = surface
+            }
+            this.rimKey = key
+            ++this.rimBuilds
+        }
+        return this[name]
     },
     // World-space gradient along DIRECTION, from the top left corner to the farthest corner,
     // so panning never changes the light.
@@ -800,7 +860,7 @@ const atmosphericLighting = {
         const shade = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, basis.r)
         shade.addColorStop(0, 'rgba(255,255,255,0.1)')
         shade.addColorStop(0.5, 'rgba(255,255,255,0)')
-        shade.addColorStop(1, 'rgba(10,10,40,0.24)')
+        shade.addColorStop(1, `rgba(10,10,40,${this.TERRITORY.edge})`)
         ctx.fillStyle = shade
         ctx.fillRect(c.x - basis.r, c.y - basis.r, 2 * basis.r, 2 * basis.r)
         this.drawSheen(ctx, c.x, c.y, this.TILE.sheen)
@@ -840,6 +900,25 @@ const atmosphericLighting = {
         ++this.shadowSilhouetteBuilds
         return silhouette
     },
+    // A flat object's bank (SHADOW.bank): its sprite blurred and filled with the shadow colour, cached per sprite.
+    bankSilhouette(image) {
+        let bank = this.bankSilhouettes.get(image)
+        if (bank) return bank
+        const pad = Math.ceil(this.SHADOW.blur * basis.r * 2) + 2
+        const surface = document.createElement('canvas')
+        surface.width = image.width + 2 * pad
+        surface.height = image.height + 2 * pad
+        const g = surface.getContext('2d')
+        g.filter = `blur(${(this.SHADOW.blur * basis.r).toFixed(2)}px)`
+        g.drawImage(image, pad, pad)
+        g.filter = 'none'
+        g.globalCompositeOperation = 'source-in'
+        g.fillStyle = `rgb(${this.SHADOW.color})`
+        g.fillRect(0, 0, surface.width, surface.height)
+        bank = {surface, pad}
+        this.bankSilhouettes.set(image, bank)
+        return bank
+    },
     // Board objects (not units or lamps) on authorized visible cells cast their shadows, clipped to
     // the visible cells, under the fog and before any sprite is drawn.
     drawShadows(ctx, board) {
@@ -851,26 +930,51 @@ const atmosphericLighting = {
         const {sources} = this.collect(board, false, false)
         const t = ctx.getTransform()
         const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
-        const casters = []
+        const casters = [], banks = []
         for (const {x, y, pos} of cells) {
             if (x < range.i0 || x >= range.i1 || y < range.j0 || y >= range.j1) continue
             const building = board.arr[x][y].building
             if (!building.notEmpty() || building.killed || building.isInvisible || building.isMapEdge ||
                 building.isBuildingProduction() || board.observedBuilding(board.arr[x][y]) ||
-                this.flatObjects.includes(building.name) || this.emitsLight(building)) continue
+                this.emitsLight(building)) continue
+            const flat = this.flatObjects.includes(building.name)
             if (axisAligned) {
                 const sx = pos.x * t.a + t.e, sy = pos.y * t.d + t.f
                 const rx = 2.5 * basis.r * t.a, ry = 2.5 * basis.r * t.d
                 if (sx + rx < 0 || sy + ry < 0 || sx - rx > ctx.canvas.width || sy - ry > ctx.canvas.height) continue
             }
             const image = cachedImages[board.getEntityBodyImageName(building)]
-            if (image && image.width) casters.push({x, y, building, image, pos})
+            if (image && image.width) (flat ? banks : casters).push({x, y, building, image, pos})
         }
-        if (!casters.length) return
+        if (!casters.length && !banks.length) return
         ctx.save()
         this.hexPath(ctx, this.onCanvas(ctx, cells))
         ctx.clip()
+        const {grow, offset, alpha: bankAlpha} = this.SHADOW.bank
+        if (bankAlpha > 0) for (const {building, image} of banks) {
+            const {surface, pad} = this.bankSilhouette(image), d = offset * basis.r
+            const cx = building.pos.x + image.width / 2, cy = building.pos.y + image.height / 2
+            ctx.globalAlpha = bankAlpha
+            ctx.drawImage(surface, cx + d - grow * (image.width / 2 + pad), cy + d - grow * (image.height / 2 + pad),
+                grow * surface.width, grow * surface.height)
+            ctx.globalAlpha = 1
+        }
         const log = this.shadowLog = []
+        // Contact shade first, under the cast shadows.
+        const {radius, flat, alpha} = this.SHADOW.contact
+        if (alpha > 0) for (const {building, image} of casters) {
+            const {base} = this.shadowSilhouette(image), rx = radius * basis.r
+            ctx.save()
+            ctx.translate(building.pos.x + image.width / 2, building.pos.y + base)
+            ctx.scale(1, flat)
+            const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, rx)
+            shade.addColorStop(0, `rgba(${this.SHADOW.color},${alpha})`)
+            shade.addColorStop(0.5, `rgba(${this.SHADOW.color},${(alpha * 0.55).toFixed(3)})`)
+            shade.addColorStop(1, `rgba(${this.SHADOW.color},0)`)
+            ctx.fillStyle = shade
+            ctx.fillRect(-rx, -rx, 2 * rx, 2 * rx)
+            ctx.restore()
+        }
         for (const {x, y, building, image, pos} of casters) {
             // A lamp straight above or below the object (its pool, or the stone behind it) leaves the key's shadow.
             let {best} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
