@@ -73,7 +73,10 @@ const atmosphericBackground = {
                 .map(([angle, half, alpha]) => [angle, half, alpha, [0.14, -0.035], 0.66])],
         beamColor: '255,130,40',
         stars: 15,
+        // Embers on a desktop sky (1691x930 CSS pixels), scaled by the square root of the viewport's area
+        // and never below minEmbers, so a phone's small sky is not crowded.
         embers: 110,
+        minEmbers: 60,
         // Grade towards the concept's night: a deep saturated navy veil, an ellipse about the board (at and
         // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
         // board and deepening smoothly to the screen edges; glows ([x, y] and radius in viewport fractions,
@@ -198,7 +201,8 @@ const atmosphericBackground = {
         }
         // Embers: warm glowing points, more of them lower down where they rise from.
         g.globalCompositeOperation = 'screen'
-        for (let i = 0; i < sky.embers; i++) {
+        const embers = Math.round(Math.min(sky.embers, Math.max(sky.minEmbers, sky.embers * Math.sqrt(w * h / (px * px * 1691 * 930)))))
+        for (let i = 0; i < embers; i++) {
             const x = random() * w, y = (1 - random() ** 1.6) * h
             const core = (1 + 1.1 * random()) * px, halo = 3.2 * core
             const glow = g.createRadialGradient(x, y, 0, x, y, halo)
