@@ -1082,7 +1082,7 @@ class Grid extends SpritesGroup {
             this.dropLitView()
             view = this.litView = this.newLitView(t, ctx.canvas)
         }
-        const rest = screen.surfaceMoving ? null : this.litRest(view, t, cw, ch)
+        const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
         if (rest && rest.done === LIT_REST_BANDS) {
             ctx.save()
             ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -1244,9 +1244,9 @@ class Grid extends SpritesGroup {
         }
         return {edges, outline}
     }
-    // view's rest snapshot at transform t for a cw x ch canvas: kept while the camera stays at t
+    // view's rest snapshot at transform t of ctx (a cw x ch canvas): kept while the camera stays at t
     // and the sky raster is the same, else a fresh one (its canvas reused).
-    litRest(view, t, cw, ch) {
+    litRest(ctx, view, t, cw, ch) {
         const rest = view.rest
         if (rest && rest.e === t.e && rest.f === t.f && rest.canvas.width === cw && rest.canvas.height === ch &&
                 rest.sky === atmosphericBackground.raster)
@@ -1256,7 +1256,8 @@ class Grid extends SpritesGroup {
             canvas.width = cw
             canvas.height = ch
         }
-        return view.rest = {e: t.e, f: t.f, canvas, sky: atmosphericBackground.raster, done: 0}
+        const camera = typeof cameraTransform !== 'undefined' && typeof mainCtx !== 'undefined' && ctx === mainCtx ? cameraTransform.capture(t) : null
+        return view.rest = {e: t.e, f: t.f, canvas, sky: atmosphericBackground.raster, done: 0, camera}
     }
     // Step k of view's rest snapshot: first the canvas as drawMain and draw() leave it before the
     // light (sky, slab shadow, surface and buildings; drawn whole, as a clip changes how paths
@@ -1271,7 +1272,7 @@ class Grid extends SpritesGroup {
             atmosphericBackground.draw(g)
             g.lineJoin = 'round'
             g.lineCap = 'round'
-            g.setTransform(view.a, 0, 0, view.d, rest.e, rest.f)
+            this.setLitRestTransform(g, view, rest)
             mapDepth.drawAtmosphericShadow(g, this)
             this.drawLitScene(g)
         }
@@ -1288,10 +1289,18 @@ class Grid extends SpritesGroup {
         g.rect(-2, -2, 1, 1)
         g.rect(cw + 1, ch + 1, 1, 1)
         g.clip()
-        g.setTransform(view.a, 0, 0, view.d, rest.e, rest.f)
+        this.setLitRestTransform(g, view, rest)
         atmosphericLighting.drawRows(g, this, y0, y1)
         g.restore()
         ++rest.done
+    }
+    // The camera's transform on the rest snapshot's canvas g, made as the main canvas's was
+    // (cameraTransform), so its pixels round as the direct draw's.
+    setLitRestTransform(g, view, rest) {
+        if (rest.camera)
+            cameraTransform.apply(g, rest.camera)
+        else
+            g.setTransform(view.a, 0, 0, view.d, rest.e, rest.f)
     }
     // The direct draw's surface and buildings on g (before the light). underlay: the world
     // rectangle of the underlay cache drawn (the camera's view by default).
