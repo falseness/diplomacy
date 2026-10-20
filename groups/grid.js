@@ -913,7 +913,11 @@ class Grid extends SpritesGroup {
     // of its size of the layer's edge. Frames outside a gesture or pan and its hold always draw the
     // overlays directly (a settled frame is unchanged), and so do frames whose layer would exceed
     // OVERLAY_LAYER_MAX_PIXELS: drawing a raster that large from a canvas costs more per frame
-    // than the overlays (a desktop canvas zoomed in).
+    // than the overlays (a desktop canvas zoomed in). Outside a zoom gesture (a pan, or the hold
+    // after either) a frame with fewer than OVERLAY_LAYER_MIN_CELLS overlay cells draws them
+    // directly and queues nothing, and in a zoom gesture such a frame queues no layer ahead for its
+    // age: there the direct overlays cost less than building layers in tasks between the frames
+    // (a small board).
     // Returns whether it drew the overlays.
     drawOverlayLayer(ctx) {
         const layer = this.overlayLayer
@@ -933,6 +937,9 @@ class Grid extends SpritesGroup {
             this.dropOverlayLayer()
             return false
         }
+        const few = this.surfaceOverlayCells.length < OVERLAY_LAYER_MIN_CELLS
+        if (few && !gameEvent.screen.surfaceZooming)
+            return false
         const drift = Math.max(t.a / layer?.a, layer?.a / t.a, t.d / layer?.d, layer?.d / t.d)
         if (!layer || layer.revision !== this.surfaceCacheRevision ||
                 performance.now() - layer.time > 1000 || !(drift <= 2) ||
@@ -942,7 +949,7 @@ class Grid extends SpritesGroup {
         }
         // The view grown by a tenth of its size each way, within the board and margin.
         const nearX = (viewRight - viewLeft) / 10, nearY = (viewBottom - viewTop) / 10
-        if (drift > 1.25 || performance.now() - layer.time > 750 || Math.max(viewLeft - nearX, b.left - margin) < layer.left ||
+        if (drift > 1.25 || (!few && performance.now() - layer.time > 750) || Math.max(viewLeft - nearX, b.left - margin) < layer.left ||
                 Math.max(viewTop - nearY, b.top - margin) < layer.top ||
                 Math.min(viewRight + nearX, b.left + b.width + margin) > layer.right ||
                 Math.min(viewBottom + nearY, b.top + b.height + margin) > layer.bottom)
@@ -1102,6 +1109,8 @@ const SURFACE_CHECK_REACH = 8
 
 // Largest overlay layer (device pixels) a zoom gesture draws its overlays from (Grid.drawOverlayLayer).
 const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024
+// Fewest overlay cells in a frame for which a pan draws its overlays from the layer (Grid.drawOverlayLayer).
+const OVERLAY_LAYER_MIN_CELLS = 64
 
 function isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray) {
     return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray
