@@ -370,16 +370,17 @@ class MapDepth {
             }
         ]
     }
-    drawCacheRegion(ctx, region) {
-        const visibleLeft = Math.max(region.left, canvas.offset.x)
-        const visibleTop = Math.max(region.top, canvas.offset.y)
+    // view: the world rectangle drawn ({left, top, right, bottom}), the camera's view by default.
+    drawCacheRegion(ctx, region, view) {
+        const visibleLeft = Math.max(region.left, view ? view.left : canvas.offset.x)
+        const visibleTop = Math.max(region.top, view ? view.top : canvas.offset.y)
         const visibleRight = Math.min(
             region.right,
-            canvas.offset.x + width
+            view ? view.right : canvas.offset.x + width
         )
         const visibleBottom = Math.min(
             region.bottom,
-            canvas.offset.y + height
+            view ? view.bottom : canvas.offset.y + height
         )
         if (visibleLeft >= visibleRight || visibleTop >= visibleBottom)
             return
@@ -398,7 +399,8 @@ class MapDepth {
             visibleBottom - visibleTop
         )
     }
-    drawUnderlay(ctx, _grid) {
+    // view: as drawCacheRegion (a lit tile's part of the world, Grid.buildLitTile).
+    drawUnderlay(ctx, _grid, view) {
         this.ensureGeometry(_grid)
         if (!this.underlayCache)
             return
@@ -411,7 +413,7 @@ class MapDepth {
         ctx.restore()
 
         for (let region of this.cacheRegions)
-            this.drawCacheRegion(ctx, region)
+            this.drawCacheRegion(ctx, region, view)
     }
     renderAtmosphericSides(ctx) {
         if (!otherSettings.atmosphericVisuals) return

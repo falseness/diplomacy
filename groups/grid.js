@@ -63,6 +63,13 @@ class Grid extends SpritesGroup {
         this.overlayLayer = undefined
         this.overlayLayerCanvas = undefined
         this.overlayLayerQueued = false
+        // Lit tiles and the rest snapshot above the surface cache's scale (drawLitView): the view,
+        // the snapshot's canvas, spare tile canvases and what the frame drew.
+        this.litView = undefined
+        this.litRestCanvas = undefined
+        this.litTilePool = []
+        this.litTilesQueued = false
+        this.litFrame = undefined
 
         if (size) 
             this.fill(size.x, size.y)
@@ -467,7 +474,10 @@ class Grid extends SpritesGroup {
     // (and for the surface cache, whose raster holds the whole board). Per-frame loops skip the
     // other cells, so a zoomed-in large board does not walk every cell every frame.
     // fullWidth keeps every column (whole rows).
-    drawRange(ctx, fullWidth = false) {
+    // A lit tile's canvas (buildLitTile) has a window, its part of the camera's canvas: whole rows
+    // (fullWidth) and the cells of windowed ranges are those of the window, so the board's union
+    // paths (grout, fog, the shadows' clip) hold the cells they hold on the camera's canvas.
+    drawRange(ctx, fullWidth = false, windowed = false) {
         const all = {i0: 0, i1: this.arr.length, j0: 0, j1: this.arr.length ? this.arr[0].length : 0}
         if (!otherSettings.atmosphericVisuals)
             return all
@@ -475,8 +485,9 @@ class Grid extends SpritesGroup {
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0)
             return all
         const margin = 4 * basis.r + assets.size
-        const left = -t.e / t.a - margin, right = (ctx.canvas.width - t.e) / t.a + margin
-        const top = -t.f / t.d - margin, bottom = (ctx.canvas.height - t.f) / t.d + margin
+        const w = (fullWidth || windowed) && ctx.canvas.litWindow
+        const left = ((w ? w.left : 0) - t.e) / t.a - margin, right = ((w ? w.right : ctx.canvas.width) - t.e) / t.a + margin
+        const top = ((w ? w.top : 0) - t.f) / t.d - margin, bottom = ((w ? w.bottom : ctx.canvas.height) - t.f) / t.d + margin
         // Cell centres: x = i * offset.x, y = (2 * j + (i & 1)) * offset.y.
         return {
             i0: fullWidth ? 0 : Math.max(0, Math.floor(left / basis.offset.x)),
@@ -500,7 +511,7 @@ class Grid extends SpritesGroup {
         entityInterface.refreshPortal(portal)
     }
     drawFogOfWar(ctx) {
-        const range = this.drawRange(ctx)
+        const range = this.drawRange(ctx, false, true)
         const fogged = []
         for (let i = range.i0; i < Math.min(range.i1, this.fogOfWar.length); ++i) {
             for (let j = range.j0; j < Math.min(range.j1, this.fogOfWar[i].length); ++j) {
@@ -1035,9 +1046,402 @@ class Grid extends SpritesGroup {
         return {canvas, width, height, x0, y0, bounds: {left: (x0 - t.e) / t.a, top: (y0 - t.f) / t.d,
             right: (x0 + width - t.e) / t.a, bottom: (y0 + height - t.f) / t.d}}
     }
-    drawMapSurface(ctx) {
-        if (this.canUseSurfaceCache() && this.drawSurfaceCache(ctx))
+    // Above the surface cache's scale, pan frames and frames with the camera at rest draw the
+    // board's surface, its buildings and the light over them (atmosphericLighting.draw's
+    // multiply, color-dodge and bloom) already lit, at the camera's own scale (full resolution).
+    // With the camera at rest (not Screen.surfaceMoving) that is the rest snapshot: the canvas
+    // as the direct draw leaves it before the units (sky, slab shadow, surface, buildings and
+    // light), drawn at the camera's exact transform into a canvas of its size, its light in
+    // LIT_REST_BANDS bands of rows one task between frames each, then drawn whole while the
+    // camera stays. A pan draws lit tiles: LIT_TILE device-pixel squares on a grid fixed to the
+    // transform their view was made at, moved by the camera's shift rounded to whole pixels,
+    // built in a task between frames, at most LIT_TILE_BUDGET a frame (those within a tile of the
+    // canvas, nearest first; a visible one still missing is built in the frame; none while the
+    // snapshot's bands are built). Tiles hold no sky: where the board's
+    // lit cells end (the antialiased edge, the light map's spill onto the sky and the fog) they
+    // are left unlit in whole LIT_EDGE_BLOCK blocks, which the frame lights over its own pixels
+    // (drawLitEdges). A zoom gesture keeps its live light (the direct draw or the surface cache)
+    // and builds nothing; the first frame after it at a new scale builds the visible tiles of a
+    // view at that scale. A view holds while the board state the surface cache checks is
+    // unchanged (its own captured copy, surfaceStateMatches) and the light map raster is the
+    // same; a building under construction in view (drawn with its production preview and text)
+    // keeps the direct draw.
+    // Returns whether it drew the surface; the frame then draws drawLitEdges and the units.
+    drawLitView(ctx) {
+        const t = ctx.getTransform()
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceZooming ||
+                t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(ctx)) {
+            if (this.litView && (this.litView.a !== t.a || this.litView.d !== t.d))
+                this.dropLitView()
+            return false
+        }
+        const cw = ctx.canvas.width, ch = ctx.canvas.height
+        let view = this.litView
+        if (!view || !this.litViewHolds(ctx, view, t)) {
+            this.dropLitView()
+            view = this.litView = this.newLitView(t, ctx.canvas)
+        }
+        const rest = screen.surfaceMoving ? null : this.litRest(view, t, cw, ch)
+        if (rest && rest.done === LIT_REST_BANDS) {
+            ctx.save()
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.drawImage(rest.canvas, 0, 0)
+            ctx.restore()
+            this.litFrame = {view, rest: true}
+            this.queueLitTiles(view, t, cw, ch)
             return true
+        }
+        const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
+        const range = this.litTileRange(cw, ch, ox, oy, 0)
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        for (let v = range.v0; v <= range.v1; ++v) {
+            for (let u = range.u0; u <= range.u1; ++u) {
+                const tile = this.litTile(view, u, v)
+                if (tile)
+                    ctx.drawImage(tile, LIT_TILE_PAD, LIT_TILE_PAD, LIT_TILE, LIT_TILE,
+                        u * LIT_TILE + ox, v * LIT_TILE + oy, LIT_TILE, LIT_TILE)
+            }
+        }
+        ctx.restore()
+        // Tiles more than a tile off the canvas go back to the pool.
+        for (const [key, tile] of view.tiles) {
+            const [u, v] = key.split(',').map(Number)
+            if (u < range.u0 - 1 || u > range.u1 + 1 || v < range.v0 - 1 || v > range.v1 + 1) {
+                view.tiles.delete(key)
+                this.releaseLitTile(tile)
+            }
+        }
+        this.litFrame = {view, ox, oy, rest: false}
+        this.queueLitTiles(view, t, cw, ch)
+        return true
+    }
+    // Whether view still draws this board at transform t's scale: the same scale, light map
+    // raster and board state (its own captured copy, compared as the surface cache's).
+    litViewHolds(ctx, view, t) {
+        return view.a === t.a && view.d === t.d && view.rebuilds === atmosphericLighting.rebuilds &&
+            view.mapScale === atmosphericLighting.mapScale &&
+            this.withLitState(view, () => this.surfaceStateMatches(ctx))
+    }
+    // A building under construction drawn on ctx's canvas (not fogged, not observed).
+    constructionInView(ctx) {
+        const range = this.drawRange(ctx)
+        for (let i = range.i0; i < range.i1; ++i) {
+            for (let j = range.j0; j < range.j1; ++j) {
+                const cell = this.arr[i][j]
+                if (cell.building.isBuildingProduction() && (!isFogOfWar || this.fogOfWar[i][j]) &&
+                        !this.observedBuilding(cell))
+                    return true
+            }
+        }
+        return false
+    }
+    // Runs fn with view's copy of the surface state in the surface cache's fields.
+    withLitState(view, fn) {
+        const saved = SURFACE_STATE_FIELDS.map(name => this[name]), overlayCells = this.surfaceOverlayCells
+        SURFACE_STATE_FIELDS.forEach((name, k) => { this[name] = view.state[k] })
+        this.surfaceOverlayCells = view.overlayCells
+        try {
+            return fn()
+        } finally {
+            SURFACE_STATE_FIELDS.forEach((name, k) => {
+                view.state[k] = this[name]
+                this[name] = saved[k]
+            })
+            this.surfaceOverlayCells = overlayCells
+        }
+    }
+    // A view at transform t of the camera's canvas main (no tiles yet): the board state now, the
+    // light map at the camera's scale and the edge of its lit cells.
+    newLitView(t, main) {
+        mapDepth.ensureGeometry(this)
+        atmosphericLighting.lightMap(this)
+        const view = {a: t.a, d: t.d, e: t.e, f: t.f, cw: main.width, ch: main.height, tiles: new Map(),
+            rest: null, state: [], overlayCells: [], rebuilds: atmosphericLighting.rebuilds,
+            mapScale: atmosphericLighting.mapScale}
+        this.withLitState(view, () => this.captureSurfaceState())
+        Object.assign(view, this.litEdges(view))
+        return view
+    }
+    // The edge of the board's lit cells: the hexagon sides with a lit cell on one side only, as
+    // closed outlines (world points, filled even-odd: the lit cells without the sides and
+    // vertices they share inside) and in view's tile pixels as whole LIT_EDGE_BLOCK blocks within
+    // the light map's reach (MAP_GROW plus one of its pixels, plus 2 device pixels of
+    // antialiasing) of those sides; blocks of a row less than three blocks apart joined, and
+    // equal runs of consecutive rows merged (the runs do not overlap).
+    litEdges(view) {
+        const sides = new Map()
+        for (const {pos} of atmosphericLighting.collect(this, false).cells) {
+            const points = mapDepth.getVertices(pos)
+            for (let k = 0; k < 6; ++k) {
+                const p = points[k], q = points[(k + 1) % 6]
+                const a = mapDepth.pointKey(p), b = mapDepth.pointKey(q)
+                const key = a < b ? a + '|' + b : b + '|' + a
+                const side = sides.get(key)
+                if (side) ++side.n
+                else sides.set(key, {p, q, a, b, n: 1})
+            }
+        }
+        // Outlines: the sides chained end to end (even-odd needs only closed loops of them).
+        const ends = new Map(), outline = []
+        for (const side of sides.values()) {
+            if (side.n !== 1) continue
+            for (const key of [side.a, side.b]) {
+                if (!ends.has(key)) ends.set(key, [])
+                ends.get(key).push(side)
+            }
+        }
+        for (const first of sides.values()) {
+            if (first.n !== 1 || first.used) continue
+            const loop = [first.p]
+            let side = first, at = first.b
+            while (side && !side.used) {
+                side.used = true
+                loop.push(side.a === at ? side.p : side.q)
+                side = ends.get(at).find(other => !other.used)
+                if (side) at = side.a === at ? side.b : side.a
+            }
+            outline.push(loop)
+        }
+        const B = LIT_EDGE_BLOCK
+        const margin = (atmosphericLighting.MAP_GROW + 1) * view.a / atmosphericLighting.mapScale + 2
+        const rows = new Map()
+        for (const {p, q, n} of sides.values()) {
+            if (n !== 1) continue
+            const x0 = Math.floor((Math.min(p.x, q.x) * view.a + view.e - margin) / B)
+            const x1 = Math.floor((Math.max(p.x, q.x) * view.a + view.e + margin) / B)
+            const y0 = Math.floor((Math.min(p.y, q.y) * view.d + view.f - margin) / B)
+            const y1 = Math.floor((Math.max(p.y, q.y) * view.d + view.f + margin) / B)
+            for (let y = y0; y <= y1; ++y) {
+                let row = rows.get(y)
+                if (!row) rows.set(y, row = new Set())
+                for (let x = x0; x <= x1; ++x) row.add(x)
+            }
+        }
+        const edges = [], open = new Map()
+        for (const y of [...rows.keys()].sort((a, b) => a - b)) {
+            const spans = []
+            for (const x of [...rows.get(y)].sort((a, b) => a - b)) {
+                const last = spans[spans.length - 1]
+                if (last && x - last[1] <= 3) last[1] = x
+                else spans.push([x, x])
+            }
+            const still = new Map()
+            for (const [x0, x1] of spans) {
+                const key = x0 + ',' + x1, run = open.get(key)
+                if (run && run.y + run.h === y * B) {
+                    run.h += B
+                    still.set(key, run)
+                } else {
+                    const fresh = {x: x0 * B, y: y * B, w: (x1 - x0 + 1) * B, h: B}
+                    edges.push(fresh)
+                    still.set(key, fresh)
+                }
+            }
+            open.clear()
+            for (const [key, run] of still) open.set(key, run)
+        }
+        return {edges, outline}
+    }
+    // view's rest snapshot at transform t for a cw x ch canvas: kept while the camera stays at t
+    // and the sky raster is the same, else a fresh one (its canvas reused).
+    litRest(view, t, cw, ch) {
+        const rest = view.rest
+        if (rest && rest.e === t.e && rest.f === t.f && rest.canvas.width === cw && rest.canvas.height === ch &&
+                rest.sky === atmosphericBackground.raster)
+            return rest
+        const canvas = this.litRestCanvas ||= document.createElement('canvas')
+        if (canvas.width !== cw || canvas.height !== ch) {
+            canvas.width = cw
+            canvas.height = ch
+        }
+        return view.rest = {e: t.e, f: t.f, canvas, sky: atmosphericBackground.raster, done: 0}
+    }
+    // Step k of view's rest snapshot: first the canvas as drawMain and draw() leave it before the
+    // light (sky, slab shadow, surface and buildings; drawn whole, as a clip changes how paths
+    // are rasterized), then band k of rows lit: draw()'s multiply, color-dodge and bloom
+    // (drawRows).
+    buildLitRestBand(view, rest, k) {
+        const canvas = rest.canvas, g = canvas.getContext('2d'), cw = canvas.width, ch = canvas.height
+        g.save()
+        if (k === 0) {
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.clearRect(0, 0, cw, ch)
+            atmosphericBackground.draw(g)
+            g.lineJoin = 'round'
+            g.lineCap = 'round'
+            g.setTransform(view.a, 0, 0, view.d, rest.e, rest.f)
+            mapDepth.drawAtmosphericShadow(g, this)
+            this.drawLitScene(g)
+        }
+        // The band's rows, and two pixels off the canvas: the clip's bounds stay the canvas's, so
+        // the light map's quad is not cut to the band (a cut quad samples the map a hair apart
+        // from the direct draw's whole quad, which color-dodge shows as steps of a few levels).
+        // Clipped (or on another canvas than the camera's) the blends still round apart from the
+        // direct draw's at an odd pixel by up to a few levels; only one unclipped draw over the
+        // whole camera canvas, the cost this snapshot saves, matches it at every pixel.
+        const y0 = Math.floor(k * ch / LIT_REST_BANDS), y1 = Math.floor((k + 1) * ch / LIT_REST_BANDS)
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.beginPath()
+        g.rect(0, y0, cw, y1 - y0)
+        g.rect(-2, -2, 1, 1)
+        g.rect(cw + 1, ch + 1, 1, 1)
+        g.clip()
+        g.setTransform(view.a, 0, 0, view.d, rest.e, rest.f)
+        atmosphericLighting.drawRows(g, this, y0, y1)
+        g.restore()
+        ++rest.done
+    }
+    // The direct draw's surface and buildings on g (before the light). underlay: the world
+    // rectangle of the underlay cache drawn (the camera's view by default).
+    drawLitScene(g, underlay) {
+        mapDepth.drawUnderlay(g, this, underlay)
+        mapDepth.renderAtmosphericSides(g)
+        this.drawHexagons(g)
+        atmosphericLighting.drawShadows(g, this)
+        if (isFogOfWar)
+            this.drawFogOfWar(g)
+        mapDepth.drawRim(g, this)
+        this.drawOther(g, 'buildings')
+    }
+    // The tile index range covering a cw x ch canvas drawn with tiles moved by (ox, oy), grown
+    // by ring tiles each way.
+    litTileRange(cw, ch, ox, oy, ring) {
+        return {u0: Math.floor(-ox / LIT_TILE) - ring, u1: Math.floor((cw - 1 - ox) / LIT_TILE) + ring,
+            v0: Math.floor(-oy / LIT_TILE) - ring, v1: Math.floor((ch - 1 - oy) / LIT_TILE) + ring}
+    }
+    // Tile (u, v) of view, built now if missing; null when the board does not reach it.
+    litTile(view, u, v) {
+        const key = u + ',' + v
+        if (!view.tiles.has(key))
+            view.tiles.set(key, this.buildLitTile(view, u, v))
+        return view.tiles.get(key)
+    }
+    // One task between frames: a band of the rest snapshot while the camera is at rest, else up
+    // to LIT_TILE_BUDGET of the tiles within a tile of the canvas, nearest its centre first.
+    queueLitTiles(view, t, cw, ch) {
+        if (this.litTilesQueued)
+            return
+        const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
+        const range = this.litTileRange(cw, ch, ox, oy, 1), missing = []
+        const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
+        for (let v = range.v0; v <= range.v1; ++v)
+            for (let u = range.u0; u <= range.u1; ++u)
+                if (!view.tiles.has(u + ',' + v)) missing.push({u, v, far: Math.hypot(u - cu, v - cv)})
+        const rest = view.rest
+        const banding = rest && rest.done < LIT_REST_BANDS && rest.e === t.e && rest.f === t.f
+        if (!banding && !missing.length)
+            return
+        missing.sort((a, b) => a.far - b.far)
+        this.litTilesQueued = true
+        setTimeout(() => {
+            this.litTilesQueued = false
+            // Nothing is built inside a zoom gesture (its frames keep their live light).
+            if (view !== this.litView || gameEvent.screen.surfaceZooming)
+                return
+            if (banding && !gameEvent.screen.surfaceMoving) {
+                if (view.rest === rest && rest.done < LIT_REST_BANDS)
+                    this.buildLitRestBand(view, rest, rest.done)
+                return
+            }
+            for (const {u, v} of missing.slice(0, LIT_TILE_BUDGET))
+                this.litTile(view, u, v)
+        })
+    }
+    // Draws tile (u, v) of view as the direct draw draws the canvas there, without the sky: the
+    // surface, the buildings and the light but in view's edge runs (drawLitEdges lights them in
+    // the frame). Its canvas holds LIT_TILE_PAD more pixels each way, never drawn: rasterized
+    // paths and samples next to a canvas's edge are not quite those of the same place inside it.
+    buildLitTile(view, u, v) {
+        const P = LIT_TILE_PAD, S = LIT_TILE + 2 * P, b = mapDepth.bounds
+        const x = u * LIT_TILE - P, y = v * LIT_TILE - P
+        const left = (x - view.e) / view.a, top = (y - view.f) / view.d
+        const right = (x + S - view.e) / view.a, bottom = (y + S - view.f) / view.d
+        if (right < b.left || left > b.right || bottom < b.top || top > b.bottom)
+            return null
+        const canvas = this.litTilePool.pop() || document.createElement('canvas')
+        if (canvas.width !== S || canvas.height !== S) {
+            canvas.width = S
+            canvas.height = S
+        }
+        canvas.litWindow = {left: Math.min(0, -x), top: Math.min(0, -y),
+            right: Math.max(S, view.cw - x), bottom: Math.max(S, view.ch - y)}
+        const g = canvas.getContext('2d')
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(0, 0, S, S)
+        // As drawMain leaves the main canvas before the board.
+        g.lineJoin = 'round'
+        g.lineCap = 'round'
+        g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
+        // The underlay cache's part grown by two of its pixels, so the tile's edge pixels sample
+        // it as one draw over the canvas does.
+        const cache = mapDepth.underlayCache, grow = cache ? 2 * mapDepth.cacheBounds.width / cache.width : 0
+        this.drawLitScene(g, {left: left - grow, top: top - grow, right: right + grow, bottom: bottom + grow})
+        // The light everywhere on the tile but in the edge runs (even-odd: they do not overlap).
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.beginPath()
+        g.rect(0, 0, S, S)
+        for (const run of view.edges) {
+            const x0 = Math.max(run.x - x, 0), y0 = Math.max(run.y - y, 0)
+            const x1 = Math.min(run.x + run.w - x, S), y1 = Math.min(run.y + run.h - y, S)
+            if (x0 < x1 && y0 < y1) g.rect(x0, y0, x1 - x0, y1 - y0)
+        }
+        g.clip('evenodd')
+        g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
+        atmosphericLighting.lightTile(g, this, view.outline)
+        g.restore()
+        return canvas
+    }
+    // The frame's light where the lit tiles left the board's edge unlit (litEdges), after the
+    // tiles and before the units; none over the rest snapshot.
+    drawLitEdges(ctx) {
+        const {view, ox, oy, rest} = this.litFrame
+        if (rest)
+            return
+        const cw = ctx.canvas.width, ch = ctx.canvas.height, runs = []
+        for (const run of view.edges) {
+            const x0 = Math.max(run.x + ox, 0), y0 = Math.max(run.y + oy, 0)
+            const x1 = Math.min(run.x + run.w + ox, cw), y1 = Math.min(run.y + run.h + oy, ch)
+            if (x0 < x1 && y0 < y1) runs.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+        }
+        atmosphericLighting.drawEdges(ctx, this, runs)
+    }
+    releaseLitTile(tile) {
+        if (tile && this.litTilePool.length < LIT_TILE_POOL)
+            this.litTilePool.push(tile)
+    }
+    dropLitView() {
+        if (this.litView)
+            for (const tile of this.litView.tiles.values())
+                this.releaseLitTile(tile)
+        this.litView = undefined
+    }
+    // Releases every lit canvas (the surface cache draws the board).
+    releaseLitCanvases() {
+        this.dropLitView()
+        this.litTilePool.length = 0
+        if (this.litRestCanvas)
+            this.litRestCanvas.width = this.litRestCanvas.height = 0
+        this.litRestCanvas = undefined
+    }
+    // Bytes of the lit canvases: the view's tiles, the pool and the rest snapshot.
+    litTileBytes() {
+        let tiles = this.litTilePool.length
+        if (this.litView)
+            for (const tile of this.litView.tiles.values()) if (tile) ++tiles
+        const rest = this.litRestCanvas ? this.litRestCanvas.width * this.litRestCanvas.height * 4 : 0
+        return tiles * (LIT_TILE + 2 * LIT_TILE_PAD) ** 2 * 4 + rest
+    }
+    drawMapSurface(ctx) {
+        if (this.canUseSurfaceCache() && this.drawSurfaceCache(ctx)) {
+            if (this.litView || this.litRestCanvas)
+                this.releaseLitCanvases()
+            return true
+        }
+        if (this.drawLitView(ctx))
+            return 'lit'
 
         mapDepth.drawUnderlay(ctx, this)
         mapDepth.renderAtmosphericSides(ctx)
@@ -1051,15 +1455,20 @@ class Grid extends SpritesGroup {
     draw(ctx) {
         // The slab's soft drop shadow on the sky, under the board.
         mapDepth.drawAtmosphericShadow(ctx, this)
-        const cachedScene = this.drawMapSurface(ctx)
+        const surface = this.drawMapSurface(ctx)
+        // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
+        const lit = surface === 'lit', cachedScene = surface === true
         // The overlay layer holds the production texts too (drawInfoTexts).
         let layered = false
         if (otherSettings.atmosphericVisuals) {
             // The light map lights terrain and buildings; units, silhouettes and
             // bars come after it, so the multiply never darkens them.
-            if (!cachedScene)
+            if (!cachedScene && !lit)
                 this.drawOther(ctx, 'buildings')
-            atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
+            if (lit)
+                this.drawLitEdges(ctx)
+            else
+                atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
             layered = cachedScene && this.drawOverlayLayer(ctx)
             if (!cachedScene) {
                 this.dropOverlayLayer()
@@ -1106,6 +1515,19 @@ function onLoadingCellsNeeded(cells) {}
 // How far (hex radii) a cell's state reaches into the surface cache's pixels, beyond its drawn
 // sprite (Grid.checkRange).
 const SURFACE_CHECK_REACH = 8
+// The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).
+const SURFACE_STATE_FIELDS = ['surfaceCacheLighting', 'surfaceCacheAtmospheric', 'surfaceCacheState',
+    'surfaceCacheBuildings', 'surfaceCacheUnits', 'surfaceCacheBuildingImages', 'surfaceCacheUnitImages',
+    'surfaceCacheInert', 'surfaceCacheInertUnits', 'surfaceCacheInertBuildings', 'surfaceCacheNatureNames']
+// Lit tiles (Grid.drawLitView): side in device pixels (and the margin round it), tiles built
+// between two frames, spare canvases kept, the side of the edge blocks the frame lights and the
+// rest snapshot's bands.
+const LIT_TILE = 256
+const LIT_TILE_PAD = 8
+const LIT_TILE_BUDGET = 5
+const LIT_TILE_POOL = 16
+const LIT_EDGE_BLOCK = 16
+const LIT_REST_BANDS = 12
 
 // Largest overlay layer (device pixels) a zoom gesture draws its overlays from (Grid.drawOverlayLayer).
 const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024

@@ -65,19 +65,30 @@
         }
     }
     // Blends and uploads. A draw with a globalCompositeOperation other than 'source-over' adds its
-    // destination rectangle (transformed bounding box, cut to the target canvas) to blendedMegapixels;
-    // a blended path or text draw has no rectangle and is counted with its whole canvas as the bound
-    // (pathBlends). Every draw call bumps its canvas's content version; drawing a canvas over 1
-    // megapixel whose version changed since it was last drawn is a large upload.
+    // destination rectangle (transformed bounding box, cut to the target canvas and to the context's
+    // clip rectangles) to blendedMegapixels; a blended path or text draw has no rectangle and is
+    // counted with its whole canvas as the bound (pathBlends). Every draw call bumps its canvas's
+    // content version; drawing a canvas over 1 megapixel whose version changed since it was last
+    // drawn is a large upload.
     const versions = new WeakMap(), uploaded = new WeakMap()
+    // Clip rectangles per context (device pixels, kept across save and restore): a clip() of a path
+    // made only of rect() calls under an axis-aligned transform cuts them to those rectangles; any
+    // other clip leaves them as they were (the count stays an upper bound). None: the whole canvas.
+    const clips = new WeakMap(), clipStacks = new WeakMap(), paths = new WeakMap()
     const boxArea = (g, x, y, w, h) => {
         const t = g.getTransform(), xs = [], ys = []
         for (const [px, py] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
             xs.push(t.a * px + t.c * py + t.e); ys.push(t.b * px + t.d * py + t.f)
         }
         const cw = g.canvas.width, ch = g.canvas.height
-        return Math.max(0, Math.min(cw, Math.max(...xs)) - Math.max(0, Math.min(...xs))) *
-            Math.max(0, Math.min(ch, Math.max(...ys)) - Math.max(0, Math.min(...ys))) / 1e6
+        const x0 = Math.max(0, Math.min(...xs)), x1 = Math.min(cw, Math.max(...xs))
+        const y0 = Math.max(0, Math.min(...ys)), y1 = Math.min(ch, Math.max(...ys))
+        const rects = clips.get(g)
+        if (!rects) return Math.max(0, x1 - x0) * Math.max(0, y1 - y0) / 1e6
+        let area = 0
+        for (const r of rects)
+            area += Math.max(0, Math.min(x1, r.x1) - Math.max(x0, r.x0)) * Math.max(0, Math.min(y1, r.y1) - Math.max(y0, r.y0))
+        return area / 1e6
     }
     const blend = (g, area) => {
         const op = g.globalCompositeOperation
@@ -125,6 +136,56 @@
                 return original.apply(this, arguments)
             }
         }
+        proto.save = (save => function() {
+            if (active) {
+                if (!clipStacks.has(this)) clipStacks.set(this, [])
+                clipStacks.get(this).push(clips.get(this))
+            }
+            return save.apply(this, arguments)
+        })(proto.save)
+        proto.restore = (restore => function() {
+            const stack = clipStacks.get(this)
+            if (stack && stack.length) {
+                const rects = stack.pop()
+                if (rects) clips.set(this, rects)
+                else clips.delete(this)
+            }
+            return restore.apply(this, arguments)
+        })(proto.restore)
+        proto.beginPath = (beginPath => function() {
+            if (active) paths.set(this, [])
+            return beginPath.apply(this, arguments)
+        })(proto.beginPath)
+        proto.rect = (rect => function(x, y, w, h) {
+            const path = active && paths.get(this)
+            if (path) {
+                const t = this.getTransform()
+                if (t.b !== 0 || t.c !== 0) paths.delete(this)
+                else {
+                    const xa = t.a * x + t.e, xb = t.a * (x + w) + t.e, ya = t.d * y + t.f, yb = t.d * (y + h) + t.f
+                    path.push({x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0: Math.min(ya, yb), y1: Math.max(ya, yb)})
+                }
+            }
+            return rect.apply(this, arguments)
+        })(proto.rect)
+        for (const name of ['moveTo', 'lineTo', 'arc', 'arcTo', 'bezierCurveTo', 'quadraticCurveTo', 'ellipse', 'roundRect']) {
+            const original = proto[name]
+            if (!original) continue
+            proto[name] = function() {
+                if (active) paths.delete(this)
+                return original.apply(this, arguments)
+            }
+        }
+        proto.clip = (clip => function(...args) {
+            const path = active && paths.get(this)
+            if (path && path.length && !(args[0] instanceof Path2D)) {
+                const old = clips.get(this)
+                const rects = old ? old.flatMap(o => path.map(r => ({x0: Math.max(o.x0, r.x0), x1: Math.min(o.x1, r.x1),
+                    y0: Math.max(o.y0, r.y0), y1: Math.min(o.y1, r.y1)}))).filter(r => r.x0 < r.x1 && r.y0 < r.y1) : path.slice()
+                clips.set(this, rects)
+            }
+            return clip.apply(this, args)
+        })(proto.clip)
         for (const name of ['clearRect', 'putImageData']) {
             const original = proto[name]
             proto[name] = function() {
@@ -140,7 +201,7 @@
         const surface = proto.drawMapSurface, layer = proto.drawOverlayLayer
         proto.drawMapSurface = function(...args) {
             const cached = surface.apply(this, args)
-            if (active) work.renderPath = cached ? 'surface-cache' : 'direct'
+            if (active) work.renderPath = cached === 'lit' ? 'lit-tiles' : cached ? 'surface-cache' : 'direct'
             return cached
         }
         proto.drawMapSurface.visualsPerf = true
