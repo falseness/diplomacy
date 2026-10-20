@@ -296,10 +296,12 @@ const atmosphericLighting = {
     onCanvas(ctx, cells, center = cell => cell.pos) {
         const t = ctx.getTransform()
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return cells
-        const ry = basis.r * t.d + 2, h = ctx.canvas.height
+        // A lit tile's window (Grid.drawRange): the camera canvas's rows.
+        const w = ctx.canvas.litWindow
+        const ry = basis.r * t.d + 2, top = w ? w.top : 0, h = w ? w.bottom : ctx.canvas.height
         return cells.filter(cell => {
             const y = center(cell).y * t.d + t.f
-            return y + ry >= 0 && y - ry <= h
+            return y + ry >= top && y - ry <= h
         })
     },
     hexPath(ctx, cells) {
@@ -1035,7 +1037,6 @@ const atmosphericLighting = {
         const map = this.lightMap(board)
         if (!map) return
         const bounds = mapDepth.surfaceBounds
-        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
         const t = ctx.getTransform()
         // Only the on-screen part of the map is submitted.
         let left = bounds.left, top = bounds.top, right = bounds.right, bottom = bounds.bottom
@@ -1046,6 +1047,20 @@ const atmosphericLighting = {
             bottom = Math.min(bottom, (ctx.canvas.height - t.f) / t.d)
         }
         if (left >= right || top >= bottom) return
+        this.drawMapPart(ctx, map, left, top, right, bottom)
+        this.bloom(ctx, board)
+    },
+    // The multiply and color-dodge of the light map over the world rectangle left..right x
+    // top..bottom (cut to the map's bounds), each sampled through the same world-to-map mapping
+    // whatever the rectangle.
+    drawMapPart(ctx, map, left, top, right, bottom) {
+        const bounds = mapDepth.surfaceBounds
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        left = Math.max(left, bounds.left)
+        top = Math.max(top, bounds.top)
+        right = Math.min(right, bounds.right)
+        bottom = Math.min(bottom, bounds.bottom)
+        if (left >= right || top >= bottom) return
         const sx = map.width / w, sy = map.height / h
         ctx.save()
         ctx.globalCompositeOperation = 'multiply'
@@ -1055,7 +1070,80 @@ const atmosphericLighting = {
         ctx.drawImage(this.gain, (left - bounds.left) * sx, (top - bounds.top) * sy,
             (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
         ctx.restore()
-        this.bloom(ctx, board)
+    },
+    // Lights a lit tile (Grid.buildLitTile, the camera's transform moved to the tile): draw()'s
+    // multiply and color-dodge clipped to outline, the lit cells' outlines (Grid.litEdges; off
+    // the board the tile is transparent, where the neutral map would paint), the map's part grown
+    // by MAP_GROW of its pixels so the tile's edge pixels sample the map as one draw over the
+    // canvas does; then the bloom of every lamp within BLOOM_TILE_REACH of the tile. Where the
+    // clip's edge or the map's spill past the lit cells shows, the tile is unlit again and the
+    // frame lights it (drawEdges).
+    MAP_GROW: 2,
+    BLOOM_TILE_REACH: 3,
+    lightTile(ctx, board, outline) {
+        if (!otherSettings.atmosphericVisuals || !outline.length) return
+        const map = this.lightMap(board)
+        if (!map) return
+        const t = ctx.getTransform(), grow = this.MAP_GROW / this.mapScale
+        const left = -t.e / t.a, top = -t.f / t.d
+        const right = (ctx.canvas.width - t.e) / t.a, bottom = (ctx.canvas.height - t.f) / t.d
+        ctx.save()
+        ctx.beginPath()
+        for (const loop of outline) {
+            ctx.moveTo(loop[0].x, loop[0].y)
+            for (let k = 1; k < loop.length; ++k) ctx.lineTo(loop[k].x, loop[k].y)
+            ctx.closePath()
+        }
+        ctx.clip('evenodd')
+        this.drawMapPart(ctx, map, left - grow, top - grow, right + grow, bottom + grow)
+        ctx.restore()
+        this.bloom(ctx, board, {reach: this.BLOOM_TILE_REACH * basis.r})
+    },
+    // draw() for a band of the rest snapshot (Grid.buildLitRestBand; its clip keeps the band's
+    // rows y0..y1): the same on-screen part of the map as draw(), so its pixels are draw()'s,
+    // then the bloom of the lamps reaching the band.
+    drawRows(ctx, board, y0, y1) {
+        if (!otherSettings.atmosphericVisuals) return
+        const map = this.lightMap(board)
+        if (!map) return
+        const bounds = mapDepth.surfaceBounds, t = ctx.getTransform()
+        const left = Math.max(bounds.left, -t.e / t.a), right = Math.min(bounds.right, (ctx.canvas.width - t.e) / t.a)
+        const top = Math.max(bounds.top, -t.f / t.d), bottom = Math.min(bounds.bottom, (ctx.canvas.height - t.f) / t.d)
+        if (left >= right || top >= bottom) return
+        this.drawMapPart(ctx, map, left, top, right, bottom)
+        this.bloom(ctx, board, {runs: [{x: 0, y: y0, w: ctx.canvas.width, h: y1 - y0}]})
+    },
+    // The light of the lit tiles' edge blocks (Grid.drawLitEdges): runs, whole device-pixel
+    // rectangles of ctx's canvas, get draw()'s multiply and color-dodge, each clipped to its run
+    // (its map part grown as in lightTile, but within draw()'s on-screen part, whose edge draw()'s
+    // sampling clamps at), then the bloom of the lamps reaching them clipped to all the runs, over
+    // the frame's own pixels (the sky under the board's edge), as draw() lights them.
+    drawEdges(ctx, board, runs) {
+        if (!otherSettings.atmosphericVisuals || !runs.length) return
+        const map = this.lightMap(board)
+        if (!map) return
+        const t = ctx.getTransform(), grow = this.MAP_GROW / this.mapScale
+        const viewLeft = -t.e / t.a, viewTop = -t.f / t.d
+        const viewRight = (ctx.canvas.width - t.e) / t.a, viewBottom = (ctx.canvas.height - t.f) / t.d
+        const clip = list => {
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.beginPath()
+            for (const run of list) ctx.rect(run.x, run.y, run.w, run.h)
+            ctx.setTransform(t)
+            ctx.clip()
+        }
+        for (const run of runs) {
+            ctx.save()
+            clip([run])
+            this.drawMapPart(ctx, map,
+                Math.max(viewLeft, (run.x - t.e) / t.a - grow), Math.max(viewTop, (run.y - t.f) / t.d - grow),
+                Math.min(viewRight, (run.x + run.w - t.e) / t.a + grow), Math.min(viewBottom, (run.y + run.h - t.f) / t.d + grow))
+            ctx.restore()
+        }
+        ctx.save()
+        clip(runs)
+        this.bloom(ctx, board, {runs})
+        ctx.restore()
     },
     // Bloom: a cave is graded per pixel (grade below) to grey-beige stone, darker towards its
     // far side, round one glowing doorway and its flame, its carved arch traced by dark grooves and a lit crest. Other lamp sprites are shaded
@@ -1557,9 +1645,17 @@ const atmosphericLighting = {
         const cell = board.arr[x][y]
         return board.observedBuilding(cell) ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
     },
-    bloom(ctx, board) {
+    // reach: the radius a lamp is drawn within of the canvas (the bloom's own by default); runs:
+    // only the lamps within BLOOM_TILE_REACH of one of these device rectangles (drawEdges).
+    bloom(ctx, board, {reach, runs} = {}) {
         const r = basis.r * this.BLOOM.radius
-        const sources = this.visibleSources(ctx, this.collect(board, false, false).sources, r, basis.r * 0.23)
+        let sources = this.visibleSources(ctx, this.collect(board, false, false).sources, reach || r, basis.r * 0.23)
+        if (runs) {
+            const t = ctx.getTransform(), far = this.BLOOM_TILE_REACH * basis.r
+            sources = sources.filter(({pos}) => runs.some(run =>
+                (pos.x + far) * t.a + t.e >= run.x && (pos.x - far) * t.a + t.e <= run.x + run.w &&
+                (pos.y + far) * t.d + t.f >= run.y && (pos.y - far) * t.d + t.f <= run.y + run.h))
+        }
         if (!sources.length) return
         ctx.save()
         for (const source of sources) {
