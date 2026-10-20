@@ -70,6 +70,16 @@ class Grid extends SpritesGroup {
         this.litTilePool = []
         this.litTilesQueued = false
         this.litFrame = undefined
+        // The surface cache built between frames (prepareSurfaceCache): the build in progress,
+        // whether a stage is queued, when the cache was last compared with the whole board,
+        // whether a frame found it not matching, stages run (a count) and a 1x1 canvas the
+        // stages draw the raster on.
+        this.surfaceCacheBuild = undefined
+        this.surfaceCacheQueued = false
+        this.surfaceCacheChecked = 0
+        this.surfaceCacheDirty = false
+        this.surfaceCacheStages = 0
+        this.surfaceCacheFlush = undefined
 
         if (size) 
             this.fill(size.x, size.y)
@@ -822,66 +832,144 @@ class Grid extends SpritesGroup {
         )
         return {cacheWidth, cacheHeight, scale}
     }
+    // The surface cache's raster, drawn by SURFACE_CACHE_STAGES in order: every stage at once in a
+    // frame (createSurfaceCache, classic visuals), or one stage a task between frames with the
+    // camera idle (prepareSurfaceCache, atmospheric visuals).
     createSurfaceCache() {
+        const build = this.startSurfaceCacheBuild(this.surfaceCache)
+        if (!build)
+            return false
+        for (const stage of SURFACE_CACHE_STAGES)
+            stage(this, build)
+        this.finishSurfaceCacheBuild(build)
+        this.captureSurfaceState()
+        return true
+    }
+    // A build of the cache raster into canvas (reused at the same size) at the board's geometry now.
+    startSurfaceCacheBuild(canvas) {
         mapDepth.ensureGeometry(this)
         const geometry = this.getSurfaceCacheGeometry()
         if (geometry.cacheWidth <= 0 || geometry.cacheHeight <= 0)
-            return false
+            return null
 
         const rasterWidth = Math.max(1, Math.ceil(geometry.cacheWidth * geometry.scale))
         const rasterHeight = Math.max(1, Math.ceil(geometry.cacheHeight * geometry.scale))
-        let cache = this.surfaceCache
-        if (!cache || cache.width != rasterWidth || cache.height != rasterHeight) {
-            cache = document.createElement('canvas')
-            cache.width = rasterWidth
-            cache.height = rasterHeight
+        if (!canvas || canvas.width != rasterWidth || canvas.height != rasterHeight) {
+            canvas = document.createElement('canvas')
+            canvas.width = rasterWidth
+            canvas.height = rasterHeight
         }
-        const cacheCtx = cache.getContext('2d')
-        if (!cacheCtx)
-            return false
-
-        cacheCtx.setTransform(1, 0, 0, 1, 0, 0)
-        cacheCtx.clearRect(0, 0, cache.width, cache.height)
-        cacheCtx.scale(geometry.scale, geometry.scale)
-        cacheCtx.translate(-mapDepth.bounds.left, -mapDepth.bounds.top)
-        mapDepth.renderUnderlay(cacheCtx, geometry.scale)
-        mapDepth.renderAtmosphericSides(cacheCtx)
-        this.drawHexagons(cacheCtx)
-        atmosphericLighting.drawShadows(cacheCtx, this)
-        if (isFogOfWar)
-            this.drawFogOfWar(cacheCtx)
-        mapDepth.renderRim(cacheCtx)
-        this.drawEntityBodies(cacheCtx)
-        this.surfaceCacheLit = atmosphericLighting.bake(cacheCtx, this, geometry.scale)
-
-        this.surfaceCache = cache
-        this.surfaceCacheScale = geometry.scale
+        const ctx = canvas.getContext('2d')
+        if (!ctx)
+            return null
+        return {canvas, ctx, geometry, left: mapDepth.bounds.left, top: mapDepth.bounds.top, stage: 0, lit: false,
+            atmospheric: otherSettings.atmosphericVisuals, state: [], overlayCells: []}
+    }
+    finishSurfaceCacheBuild(build) {
+        this.surfaceCacheLit = build.lit
+        this.surfaceCache = build.canvas
+        this.surfaceCacheScale = build.geometry.scale
         this.surfaceCacheBounds = {
-            left: mapDepth.bounds.left,
-            top: mapDepth.bounds.top,
-            width: geometry.cacheWidth,
-            height: geometry.cacheHeight
+            left: build.left,
+            top: build.top,
+            width: build.geometry.cacheWidth,
+            height: build.geometry.cacheHeight
         }
-        this.captureSurfaceState()
         ++this.surfaceCacheRevision
-        return true
+    }
+    // With atmospheric visuals no frame builds the surface cache: a frame that finds it missing or
+    // not matching the board draws the board directly (full resolution, live light) and the cache
+    // is built one SURFACE_CACHE_STAGES stage a task between frames while the camera is idle (no
+    // zoom gesture or pan, Screen.surfaceMoving), beside the lit view's rest snapshot and tiles.
+    // So it is ready before a zoom gesture crosses below its scale and nothing is built, resized or
+    // first drawn inside one (its raster's GPU work is flushed in the stage tasks). An idle
+    // frame also compares the cache with the whole board every SURFACE_CACHE_CHECK_MS (a frame
+    // compares only the cells its view can show), so a change anywhere rebuilds it then. A build
+    // draws into the stale cache's canvas (dropped from use at its start) and holds its own
+    // copy of the board state, compared with the whole board before each stage (any change
+    // starts it over), which becomes the cache's at its end.
+    prepareSurfaceCache() {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceMoving || this.surfaceCacheQueued)
+            return
+        if (!this.surfaceCacheBuild && this.surfaceCache && !this.surfaceCacheDirty &&
+                performance.now() - this.surfaceCacheChecked < SURFACE_CACHE_CHECK_MS)
+            return
+        this.surfaceCacheQueued = true
+        setTimeout(() => {
+            this.surfaceCacheQueued = false
+            if (otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
+                this.surfaceCacheBuildStep()
+        })
+    }
+    surfaceCacheBuildStep() {
+        let build = this.surfaceCacheBuild
+        if (!build) {
+            this.surfaceCacheChecked = performance.now()
+            this.surfaceCacheDirty = false
+            if (this.surfaceCache && this.wholeSurfaceMatches())
+                return
+            build = this.startSurfaceCacheBuild(this.surfaceCache)
+            if (!build)
+                return
+            // The stale raster is no longer drawn; its canvas is drawn over.
+            this.surfaceCache = undefined
+            this.surfaceCacheBuild = build
+            this.withLitState(build, () => this.captureSurfaceState())
+        }
+        else if (!this.surfaceCacheBuildHolds(build)) {
+            this.surfaceCacheBuild = undefined
+            this.surfaceCacheBuildStep()
+            return
+        }
+        ++this.surfaceCacheStages
+        SURFACE_CACHE_STAGES[build.stage++](this, build)
+        // Drawing the canvas has its recorded drawing rasterized now, in this task.
+        const flush = this.surfaceCacheFlush ||= document.createElement('canvas')
+        flush.width = flush.height = 1
+        flush.getContext('2d').drawImage(build.canvas, 0, 0, 1, 1, 0, 0, 1, 1)
+        if (build.stage < SURFACE_CACHE_STAGES.length)
+            return
+        this.surfaceCacheBuild = undefined
+        this.finishSurfaceCacheBuild(build)
+        SURFACE_STATE_FIELDS.forEach((name, k) => { this[name] = build.state[k] })
+    }
+    // Whether build still draws this board: the same geometry, visuals and board state (its copy).
+    surfaceCacheBuildHolds(build) {
+        mapDepth.ensureGeometry(this)
+        const geometry = this.getSurfaceCacheGeometry()
+        return build.atmospheric === otherSettings.atmosphericVisuals && build.left === mapDepth.bounds.left &&
+            build.top === mapDepth.bounds.top && geometry.scale === build.geometry.scale &&
+            geometry.cacheWidth === build.geometry.cacheWidth && geometry.cacheHeight === build.geometry.cacheHeight &&
+            this.withLitState(build, () => this.surfaceStateMatches())
+    }
+    // Whether the surface cache matches the whole board (not only a view's cells).
+    wholeSurfaceMatches() {
+        const overlayCells = this.surfaceOverlayCells
+        this.surfaceOverlayCells = []
+        try {
+            return this.surfaceStateMatches()
+        } finally {
+            this.surfaceOverlayCells = overlayCells
+        }
     }
     canUseSurfaceCache() {
         mapDepth.ensureGeometry(this)
         const cacheScale = this.surfaceCache ? this.surfaceCacheScale :
             this.getSurfaceCacheGeometry().scale
-        // Above the raster's native scale, briefly transform the warmed texture
-        // through a gesture instead of redrawing every tile and asset. Settled
-        // frames return to the original sharp path. drawSurfaceCache still checks
-        // the complete fog/source/entity state before submitting any cached pixels.
-        const scaling = otherSettings.atmosphericVisuals && this.surfaceCache &&
-            gameEvent.screen.surfaceZooming
-        return canvas.scale <= cacheScale || !!scaling
+        // Never above the raster's own scale (it would be drawn magnified, below full resolution).
+        return canvas.scale <= cacheScale
     }
     drawSurfaceCache(ctx) {
-        if ((!this.surfaceCache || !this.surfaceStateMatches(ctx)) &&
-            !this.createSurfaceCache())
-            return false
+        if (!this.surfaceCache || !this.surfaceStateMatches(ctx)) {
+            // With atmospheric visuals no frame builds it (prepareSurfaceCache).
+            if (otherSettings.atmosphericVisuals) {
+                this.surfaceCacheDirty = true
+                return false
+            }
+            if (!this.createSurfaceCache())
+                return false
+        }
 
         const visibleLeft = Math.max(this.surfaceCacheBounds.left, canvas.offset.x)
         const visibleTop = Math.max(this.surfaceCacheBounds.top, canvas.offset.y)
@@ -1444,12 +1532,14 @@ class Grid extends SpritesGroup {
         return tiles * (LIT_TILE + 2 * LIT_TILE_PAD) ** 2 * 4 + rest
     }
     drawMapSurface(ctx) {
-        if (this.canUseSurfaceCache() && this.drawSurfaceCache(ctx)) {
+        // At or below the cache's scale a frame without the cache draws directly.
+        const cached = this.canUseSurfaceCache()
+        if (cached && this.drawSurfaceCache(ctx)) {
             if (this.litView || this.litRestCanvas)
                 this.releaseLitCanvases()
             return true
         }
-        if (this.drawLitView(ctx))
+        if (!cached && this.drawLitView(ctx))
             return 'lit'
 
         mapDepth.drawUnderlay(ctx, this)
@@ -1508,6 +1598,7 @@ class Grid extends SpritesGroup {
 
         attackBorder.draw(ctx)
         border.draw(ctx)
+        this.prepareSurfaceCache()
         // One of the frames that follow a zoom input as part of its gesture (Screen.surfaceZooming),
         // or a camera move (Screen.surfaceMoving).
         if (typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceZoomFrames > 0)
@@ -1524,6 +1615,30 @@ function onLoadingCellsNeeded(cells) {}
 // How far (hex radii) a cell's state reaches into the surface cache's pixels, beyond its drawn
 // sprite (Grid.checkRange).
 const SURFACE_CHECK_REACH = 8
+// The surface cache's raster in stages (Grid.createSurfaceCache, Grid.prepareSurfaceCache): the
+// calls of a whole build, in its order, on the cache canvas.
+const SURFACE_CACHE_STAGES = [
+    (grid, build) => {
+        const cacheCtx = build.ctx, scale = build.geometry.scale
+        cacheCtx.setTransform(1, 0, 0, 1, 0, 0)
+        cacheCtx.clearRect(0, 0, build.canvas.width, build.canvas.height)
+        cacheCtx.scale(scale, scale)
+        cacheCtx.translate(-build.left, -build.top)
+        mapDepth.renderUnderlay(cacheCtx, scale)
+        mapDepth.renderAtmosphericSides(cacheCtx)
+    },
+    (grid, build) => grid.drawHexagons(build.ctx),
+    (grid, build) => {
+        atmosphericLighting.drawShadows(build.ctx, grid)
+        if (isFogOfWar)
+            grid.drawFogOfWar(build.ctx)
+        mapDepth.renderRim(build.ctx)
+    },
+    (grid, build) => grid.drawEntityBodies(build.ctx),
+    (grid, build) => { build.lit = atmosphericLighting.bake(build.ctx, grid, build.geometry.scale) }
+]
+// How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
+const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).
 const SURFACE_STATE_FIELDS = ['surfaceCacheLighting', 'surfaceCacheAtmospheric', 'surfaceCacheState',
     'surfaceCacheBuildings', 'surfaceCacheUnits', 'surfaceCacheBuildingImages', 'surfaceCacheUnitImages',

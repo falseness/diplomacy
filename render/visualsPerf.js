@@ -22,10 +22,10 @@
         const start = performance.now()
         const observedSegment = saved ? segment : lastInput === null ? 'idle-before' : start-lastInput<250 ? 'zooming' : 'settled-after'
         frame = {timestamp, start, segment:observedSegment, input: lastInput !== null && start-lastInput<250 ? lastInputType : null, visible: !document.hidden, focused: document.hasFocus(), camera: camera(), renderMs: 0, ...counters,
-            surfaceCacheRevision:grid.surfaceCacheRevision, surfaceCacheThreshold:grid.getSurfaceCacheGeometry().scale, rasterizations: atmosphericBackground.rasterizations, cacheBytes: atmosphericBackground.bytes()}
+            surfaceCacheRevision:grid.surfaceCacheRevision, surfaceCacheStages:grid.surfaceCacheStages, surfaceCacheThreshold:grid.getSurfaceCacheGeometry().scale, rasterizations: atmosphericBackground.rasterizations, cacheBytes: atmosphericBackground.bytes()}
         try { return originalLoop(timestamp) }
         finally {
-            Object.assign(frame,counters,{surfaceCacheRevision:grid.surfaceCacheRevision,rasterizations:atmosphericBackground.rasterizations,cacheBytes:atmosphericBackground.bytes()})
+            Object.assign(frame,counters,{surfaceCacheRevision:grid.surfaceCacheRevision,surfaceCacheStages:grid.surfaceCacheStages,rasterizations:atmosphericBackground.rasterizations,cacheBytes:atmosphericBackground.bytes()})
             frame.end = performance.now()
             frame.updateMs = Math.max(0, frame.end - start - frame.renderMs)
             const previous = report.samples.at(-1)
@@ -108,31 +108,38 @@
     const contexts = [CanvasRenderingContext2D, typeof OffscreenCanvasRenderingContext2D !== 'undefined' && OffscreenCanvasRenderingContext2D].filter(Boolean)
     for (const Context of contexts) {
         const proto = Context.prototype, drawImage = proto.drawImage
+        // Versions and uploads are followed while not recording too (a canvas drawn and then drawn
+        // from before Start is not uploaded again by its first draw in the recording); only
+        // recorded frames count them.
         proto.drawImage = function(source, ...args) {
+            const sw = source.width, sh = source.height
             if (active) {
-                const sw = source.width, sh = source.height
                 const [x, y, w = sw, h = sh] = args.length === 8 ? args.slice(4) : args
                 blend(this, boxArea(this, x, y, w, h))
-                if (isCanvas(source) && sw * sh > 1e6 && uploaded.get(source) !== (versions.get(source) || 0)) {
-                    uploaded.set(source, versions.get(source) || 0)
+            }
+            if (isCanvas(source) && sw * sh > 1e6 && uploaded.get(source) !== (versions.get(source) || 0)) {
+                uploaded.set(source, versions.get(source) || 0)
+                if (active) {
                     work.uploads.push({width: sw, height: sh, target: this.canvas === mainCanvas ? 'main' : 'offscreen'})
                     work.uploadMegapixels += sw * sh / 1e6
                 }
-                drawn(this)
             }
+            drawn(this)
             return drawImage.call(this, source, ...args)
         }
         for (const name of ['fillRect', 'strokeRect']) {
             const original = proto[name]
             proto[name] = function(x, y, w, h) {
-                if (active) { blend(this, boxArea(this, x, y, w, h)); drawn(this) }
+                if (active) blend(this, boxArea(this, x, y, w, h))
+                drawn(this)
                 return original.apply(this, arguments)
             }
         }
         for (const name of ['fill', 'stroke', 'fillText', 'strokeText']) {
             const original = proto[name]
             proto[name] = function() {
-                if (active) { blend(this, null); drawn(this) }
+                if (active) blend(this, null)
+                drawn(this)
                 return original.apply(this, arguments)
             }
         }
