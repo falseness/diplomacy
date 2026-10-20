@@ -10,20 +10,35 @@
     const boardIdentity = () => { const state=getGameObject(); delete state.timers; return JSON.stringify(state) }
     const camera = () => ({scale: canvas.scale, offset: {...canvas.offset}})
     const counters = {canvasAllocations: 0, gradients: 0, spriteLoads: 0}
-    let report, active = false, segment = 'idle-before', frame, saved, cancelled = false, lastInput = null
+    let report, active = false, segment = 'idle-before', frame, saved, cancelled = false, lastInput = null, lastInputType = null
+    // Compositor-side work of a frame (and of the tasks since the previous one): blended destination
+    // pixels, large canvas uploads and the board's render path. Reset after every sample.
+    const freshWork = () => ({blendedMegapixels: 0, blendedDraws: 0, blendedMainMegapixels: 0, blendedByOp: {},
+        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false})
+    let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
     gameLoop = function(timestamp) {
         if (!active) return originalLoop(timestamp)
         const start = performance.now()
         const observedSegment = saved ? segment : lastInput === null ? 'idle-before' : start-lastInput<250 ? 'zooming' : 'settled-after'
-        frame = {timestamp, start, segment:observedSegment, visible: !document.hidden, focused: document.hasFocus(), camera: camera(), renderMs: 0, ...counters,
+        frame = {timestamp, start, segment:observedSegment, input: lastInput !== null && start-lastInput<250 ? lastInputType : null, visible: !document.hidden, focused: document.hasFocus(), camera: camera(), renderMs: 0, ...counters,
             surfaceCacheRevision:grid.surfaceCacheRevision, surfaceCacheThreshold:grid.getSurfaceCacheGeometry().scale, rasterizations: atmosphericBackground.rasterizations, cacheBytes: atmosphericBackground.bytes()}
         try { return originalLoop(timestamp) }
         finally {
             Object.assign(frame,counters,{surfaceCacheRevision:grid.surfaceCacheRevision,rasterizations:atmosphericBackground.rasterizations,cacheBytes:atmosphericBackground.bytes()})
             frame.end = performance.now()
             frame.updateMs = Math.max(0, frame.end - start - frame.renderMs)
-            frame.gapMs = report.samples.length ? timestamp - report.samples.at(-1).timestamp : null
+            const previous = report.samples.at(-1)
+            frame.gapMs = previous ? timestamp - previous.timestamp : null
+            // What the camera did in this frame (camera after the update against the previous frame's).
+            frame.motion = !previous ? 'still' : frame.camera.scale !== previous.camera.scale ? 'zoom' :
+                frame.camera.offset.x !== previous.camera.offset.x || frame.camera.offset.y !== previous.camera.offset.y ? 'pan' : 'still'
+            if (!saved) frame.segment = frame.motion
+            const round = v => Math.round(v * 1e4) / 1e4
+            frame.work = {...work, blendedMegapixels: round(work.blendedMegapixels), blendedMainMegapixels: round(work.blendedMainMegapixels),
+                blendedByOp: Object.fromEntries(Object.entries(work.blendedByOp).map(([k, v]) => [k, round(v)])),
+                pathBlends: {draws: work.pathBlends.draws, canvasMegapixels: round(work.pathBlends.canvasMegapixels)}, uploadMegapixels: round(work.uploadMegapixels)}
+            work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
             if (document.hidden) report.invalidReasons.push('hidden-tab')
@@ -49,6 +64,92 @@
             return original.apply(this, args)
         }
     }
+    // Blends and uploads. A draw with a globalCompositeOperation other than 'source-over' adds its
+    // destination rectangle (transformed bounding box, cut to the target canvas) to blendedMegapixels;
+    // a blended path or text draw has no rectangle and is counted with its whole canvas as the bound
+    // (pathBlends). Every draw call bumps its canvas's content version; drawing a canvas over 1
+    // megapixel whose version changed since it was last drawn is a large upload.
+    const versions = new WeakMap(), uploaded = new WeakMap()
+    const boxArea = (g, x, y, w, h) => {
+        const t = g.getTransform(), xs = [], ys = []
+        for (const [px, py] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+            xs.push(t.a * px + t.c * py + t.e); ys.push(t.b * px + t.d * py + t.f)
+        }
+        const cw = g.canvas.width, ch = g.canvas.height
+        return Math.max(0, Math.min(cw, Math.max(...xs)) - Math.max(0, Math.min(...xs))) *
+            Math.max(0, Math.min(ch, Math.max(...ys)) - Math.max(0, Math.min(...ys))) / 1e6
+    }
+    const blend = (g, area) => {
+        const op = g.globalCompositeOperation
+        if (op === 'source-over') return
+        if (area === null) {
+            work.pathBlends.draws++
+            work.pathBlends.canvasMegapixels += g.canvas.width * g.canvas.height / 1e6
+            return
+        }
+        work.blendedDraws++
+        work.blendedMegapixels += area
+        work.blendedByOp[op] = (work.blendedByOp[op] || 0) + area
+        if (g.canvas === mainCanvas) work.blendedMainMegapixels += area
+    }
+    const drawn = g => versions.set(g.canvas, (versions.get(g.canvas) || 0) + 1)
+    const isCanvas = source => source instanceof HTMLCanvasElement || typeof OffscreenCanvas !== 'undefined' && source instanceof OffscreenCanvas
+    const contexts = [CanvasRenderingContext2D, typeof OffscreenCanvasRenderingContext2D !== 'undefined' && OffscreenCanvasRenderingContext2D].filter(Boolean)
+    for (const Context of contexts) {
+        const proto = Context.prototype, drawImage = proto.drawImage
+        proto.drawImage = function(source, ...args) {
+            if (active) {
+                const sw = source.width, sh = source.height
+                const [x, y, w = sw, h = sh] = args.length === 8 ? args.slice(4) : args
+                blend(this, boxArea(this, x, y, w, h))
+                if (isCanvas(source) && sw * sh > 1e6 && uploaded.get(source) !== (versions.get(source) || 0)) {
+                    uploaded.set(source, versions.get(source) || 0)
+                    work.uploads.push({width: sw, height: sh, target: this.canvas === mainCanvas ? 'main' : 'offscreen'})
+                    work.uploadMegapixels += sw * sh / 1e6
+                }
+                drawn(this)
+            }
+            return drawImage.call(this, source, ...args)
+        }
+        for (const name of ['fillRect', 'strokeRect']) {
+            const original = proto[name]
+            proto[name] = function(x, y, w, h) {
+                if (active) { blend(this, boxArea(this, x, y, w, h)); drawn(this) }
+                return original.apply(this, arguments)
+            }
+        }
+        for (const name of ['fill', 'stroke', 'fillText', 'strokeText']) {
+            const original = proto[name]
+            proto[name] = function() {
+                if (active) { blend(this, null); drawn(this) }
+                return original.apply(this, arguments)
+            }
+        }
+        for (const name of ['clearRect', 'putImageData']) {
+            const original = proto[name]
+            proto[name] = function() {
+                if (active) drawn(this)
+                return original.apply(this, arguments)
+            }
+        }
+    }
+    // The board's render path: the surface cache or the direct draw, and the overlay layer.
+    const wrapGrid = () => {
+        const proto = typeof Grid !== 'undefined' && Grid.prototype
+        if (!proto || proto.drawMapSurface.visualsPerf) return
+        const surface = proto.drawMapSurface, layer = proto.drawOverlayLayer
+        proto.drawMapSurface = function(...args) {
+            const cached = surface.apply(this, args)
+            if (active) work.renderPath = cached ? 'surface-cache' : 'direct'
+            return cached
+        }
+        proto.drawMapSurface.visualsPerf = true
+        proto.drawOverlayLayer = function(...args) {
+            const layered = layer.apply(this, args)
+            if (active && layered) work.overlayLayer = true
+            return layered
+        }
+    }
     const originalLoad = loadSprites
     loadSprites = function(...args) { if (active) counters.spriteLoads++; return originalLoad.apply(this, args) }
     for (const type of ['visibilitychange', 'focus', 'blur']) window.addEventListener(type, () => {
@@ -56,10 +157,30 @@
         report.visibility.push({type, timestamp: performance.now(), hidden: document.hidden, focused: document.hasFocus()})
         if (document.hidden || type === 'blur') report.invalidReasons.push(type)
     })
-    for (const type of ['wheel', 'touchstart', 'touchmove', 'touchend']) document.addEventListener(type, event => {
-        if (active && (type==='wheel' || type==='touchmove')) lastInput=performance.now()
-        if (active) report.inputs.push({type, timestamp: performance.now(), eventTimestamp: event.timeStamp, trusted: event.isTrusted,
-            deltaY: event.deltaY, points: event.touches ? [...event.touches].map(t => ({x:t.clientX,y:t.clientY})) : undefined})
+    // Camera input: wheel and keyboard zoom, keyboard pan, mouse edge scroll and drags, touch pinch and drag.
+    // A mousemove is recorded only when its buttons or the edge-scroll direction it sets change.
+    let pointerState = null
+    const edgeOf = event => {
+        try { const d = gameEvent.screen.getEdgeDirection?.(getEventPos(event)); return d ? d.x + ',' + d.y : '0,0' }
+        catch (_) { return '0,0' }
+    }
+    for (const type of ['wheel', 'keydown', 'keyup', 'mousedown', 'mouseup', 'mousemove', 'touchstart', 'touchmove', 'touchend']) document.addEventListener(type, event => {
+        if (!active || event.target?.closest?.('#visuals-perf-controls')) return
+        const now = performance.now()
+        let entry = {type, timestamp: now, eventTimestamp: event.timeStamp, trusted: event.isTrusted}
+        if (type === 'wheel') Object.assign(entry, {deltaY: event.deltaY, ctrlKey: event.ctrlKey})
+        else if (type.startsWith('key')) Object.assign(entry, {key: event.key, code: event.code, repeat: event.repeat})
+        else if (type.startsWith('mouse')) {
+            const state = event.buttons + '|' + edgeOf(event)
+            if (type === 'mousemove' && state === pointerState) entry = null
+            else Object.assign(entry, {x: event.clientX, y: event.clientY, buttons: event.buttons, edge: edgeOf(event)})
+            pointerState = state
+        }
+        else entry.points = [...event.touches].map(t => ({x:t.clientX,y:t.clientY}))
+        const cameraInput = type === 'wheel' && !event.ctrlKey || type === 'keydown' || type === 'touchmove' ||
+            type.startsWith('mouse') && (event.buttons !== 0 || edgeOf(event) !== '0,0')
+        if (cameraInput) { lastInput = now; lastInputType = type === 'keydown' ? 'keyboard' : type === 'wheel' ? 'wheel' : type.startsWith('touch') ? 'touch' : 'mouse' }
+        if (entry) report.inputs.push(entry)
     }, {capture:true, passive:true})
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
     const restore = () => {
@@ -72,13 +193,15 @@
     }
     function start(metadata = {}) {
         if (active) throw Error('Capture already active')
-        report = {schemaVersion:1, environment:'user-browser', performanceStatus:'user-device-performance-unverified',
+        wrapGrid()
+        work = freshWork()
+        report = {schemaVersion:2, environment:'user-browser', performanceStatus:'user-device-performance-unverified',
             sourceCommits:{client:query.get('clientCommit'),server:query.get('serverCommit'),provenance:'user-supplied URL; verify against source hashes'}, ...metadata, userAgent:navigator.userAgent, viewport:[innerWidth,innerHeight], dpr:devicePixelRatio,
             renderer:'Canvas2D', refreshInterval:{method:'median of consecutive visible RAF timestamps; not hardware refresh rate'},
             board:boardIdentity(), flag:otherSettings.atmosphericVisuals, initialCamera:camera(),
             samples:[], inputs:[], visibility:[], longGaps:[], invalidReasons:[]}
         if (document.hidden || !document.hasFocus()) report.invalidReasons.push('initial visibility/focus')
-        lastInput=null
+        lastInput=null;lastInputType=null;pointerState=null
         const target=report
         sourceIdentity.then(sources=>{target.sourceHashes=sources})
         active = true
