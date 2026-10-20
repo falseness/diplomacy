@@ -47,10 +47,13 @@ class Grid extends SpritesGroup {
         this.surfaceCacheBuildingImages = undefined
         this.surfaceCacheUnitImages = undefined
         // Per cell, unobserved and inert when captured (isInertBuilding, no unit): 1 an Empty
-        // building, 2 a map edge, 0 otherwise; with the unit and building objects it had then.
+        // building, 2 a map edge; unobserved with no unit and a cached nature building (bush,
+        // hill, mountain, lake, sea) whose image key is its name: 3, 4 when an overlay cell; 0
+        // otherwise. With the unit and building objects it had then, and the nature's name.
         this.surfaceCacheInert = undefined
         this.surfaceCacheInertUnits = undefined
         this.surfaceCacheInertBuildings = undefined
+        this.surfaceCacheNatureNames = undefined
         this.surfaceCacheRevision = 0
         // Cells of the surface-cache frame that drawStillUnits and drawEntityOverlays may draw on
         // (see isOverlayCell), and the cells whose infoText may hold a text (setInfoText).
@@ -634,6 +637,7 @@ class Grid extends SpritesGroup {
         const states = this.surfaceCacheState, buildings = this.surfaceCacheBuildings, units = this.surfaceCacheUnits
         const buildingImages = this.surfaceCacheBuildingImages, unitImages = this.surfaceCacheUnitImages
         const inert = this.surfaceCacheInert, inertUnits = this.surfaceCacheInertUnits, inertBuildings = this.surfaceCacheInertBuildings
+        const natureNames = this.surfaceCacheNatureNames
         const range = observing ? this.checkRange() : this.checkRange(ctx), h = this.arr[0].length
         // Visibility is compared on the whole board all the same (each cell's fog bit, a typed
         // array read): a cell hidden or uncovered anywhere rebuilds the cache, as it always has.
@@ -657,13 +661,23 @@ class Grid extends SpritesGroup {
                 // and building objects, so still inert (an Empty or map-edge building's light value
                 // is shownLightValue's: 0 for a map edge, 1 plus the owner's light for Empty). Object
                 // identity spares the per-class property reads of the general inert check below.
+                // A nature building (kinds 3 and 4) still of the same name is still cached with the
+                // image of its name, holds no lamp (lightValue 1 plus the owner's light) and is an
+                // overlay cell or not by its class alone (hasBar), as captureSurfaceState found it.
                 const kind = inert[index]
-                if (kind !== 0 && !observing && cell.unit === inertUnits[index] && cell.building === inertBuildings[index]) {
+                if (kind !== 0 && !observing && cell.unit === inertUnits[index] && cell.building === inertBuildings[index] &&
+                        (kind < 3 || cell.building.name === natureNames[index])) {
                     const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
                         lighting[index + 1] !== (!atmospheric || !shown || kind === 2 || hexagon.unknown ? 0 :
                             1 + atmosphericLighting.ownerLight(hexagon)))
                         return false
+                    if (kind >= 3) {
+                        if (buildingImages[index] != cachedImages[natureNames[index]])
+                            return false
+                        if (kind === 4)
+                            overlayCells.push(index)
+                    }
                     ++index
                     continue
                 }
@@ -735,6 +749,7 @@ class Grid extends SpritesGroup {
         const unitImages = new Array(state.length)
         const inert = new Uint8Array(state.length)
         const inertUnits = new Array(state.length), inertBuildings = new Array(state.length)
+        const natureNames = new Array(state.length)
         const observing = this.isObserving()
         const overlayCells = this.surfaceOverlayCells
         overlayCells.length = 0
@@ -746,6 +761,15 @@ class Grid extends SpritesGroup {
                     inert[index] = cell.building.constructor === Empty ? 1 : 2
                     inertUnits[index] = cell.unit
                     inertBuildings[index] = cell.building
+                }
+                else if (!observing && cell.unit.constructor === Empty && cell.building instanceof Nature &&
+                        this.isCacheableBuilding(cell.building) &&
+                        this.getEntityBodyImageName(cell.building) === cell.building.name &&
+                        !atmosphericLighting.emitsLight(cell.building)) {
+                    inert[index] = this.isOverlayCell(cell) ? 4 : 3
+                    inertUnits[index] = cell.unit
+                    inertBuildings[index] = cell.building
+                    natureNames[index] = cell.building.name
                 }
                 if (this.isOverlayCell(cell))
                     overlayCells.push(index)
@@ -772,6 +796,7 @@ class Grid extends SpritesGroup {
         this.surfaceCacheInert = inert
         this.surfaceCacheInertUnits = inertUnits
         this.surfaceCacheInertBuildings = inertBuildings
+        this.surfaceCacheNatureNames = natureNames
     }
     getSurfaceCacheGeometry() {
         const cacheWidth = mapDepth.bounds.right - mapDepth.bounds.left
@@ -884,9 +909,9 @@ class Grid extends SpritesGroup {
     // has the drawing rasterized there (between frames, where the canvas itself is rasterized),
     // not inside a later frame. A layer is used while the surface cache is unchanged, the zoom
     // within 2x of its scale, the view inside it and for at most a second; the next one is queued
-    // ahead, once the zoom is 1.25x from its scale or the view comes within a tenth of its size of
-    // the layer's edge. Frames outside a gesture or pan always draw the overlays directly (a
-    // settled frame is unchanged), and so do frames whose layer would exceed
+    // ahead, once the zoom is 1.25x from its scale, the layer 750 ms old or the view within a tenth
+    // of its size of the layer's edge. Frames outside a gesture or pan and its hold always draw the
+    // overlays directly (a settled frame is unchanged), and so do frames whose layer would exceed
     // OVERLAY_LAYER_MAX_PIXELS: drawing a raster that large from a canvas costs more per frame
     // than the overlays (a desktop canvas zoomed in).
     // Returns whether it drew the overlays.
@@ -917,7 +942,7 @@ class Grid extends SpritesGroup {
         }
         // The view grown by a tenth of its size each way, within the board and margin.
         const nearX = (viewRight - viewLeft) / 10, nearY = (viewBottom - viewTop) / 10
-        if (drift > 1.25 || Math.max(viewLeft - nearX, b.left - margin) < layer.left ||
+        if (drift > 1.25 || performance.now() - layer.time > 750 || Math.max(viewLeft - nearX, b.left - margin) < layer.left ||
                 Math.max(viewTop - nearY, b.top - margin) < layer.top ||
                 Math.min(viewRight + nearX, b.left + b.width + margin) > layer.right ||
                 Math.min(viewBottom + nearY, b.top + b.height + margin) > layer.bottom)
