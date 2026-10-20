@@ -13,11 +13,14 @@ class Screen {
         return performance.now() < this.surfaceZoomUntil || this.surfaceZoomFrames > 0
     }
     // A zoom gesture, or a camera pan in the same window (160 ms after a move of the view, and the
-    // first two board frames drawn after it): the overlays may come from their layer
-    // (Grid.drawOverlayLayer). Settled frames draw them directly.
+    // first two board frames drawn after it), and the SURFACE_LAYER_HOLD ms after either, when a
+    // gesture often goes on: the overlays may come from their layer (Grid.drawOverlayLayer).
+    // Settled frames draw them directly.
     get surfaceMoving() {
-        return this.surfaceZooming || performance.now() < this.surfacePanUntil || this.surfacePanFrames > 0
+        return this.surfaceZooming || performance.now() < this.surfacePanUntil || this.surfacePanFrames > 0 ||
+            performance.now() < this.surfaceLayerUntil
     }
+    static SURFACE_LAYER_HOLD = 600
     static kFrameDuration = 1000 / 60
     static kMaxFrameDuration = 100
     // keyboard, edge-scroll and drag panning move the camera this many times slower; zoom is unaffected
@@ -111,6 +114,7 @@ class Screen {
         if ((canvas.offset.x !== old_value_x || canvas.offset.y !== old_value_y) && otherSettings.atmosphericVisuals) {
             this.surfacePanUntil = performance.now() + 160
             this.surfacePanFrames = 2
+            this.surfaceLayerUntil = performance.now() + Screen.SURFACE_LAYER_HOLD
         }
         mainCtx.translate(old_value_x - canvas.offset.x, old_value_y - canvas.offset.y)
     }
@@ -137,6 +141,7 @@ class Screen {
         if (requested !== 1 && otherSettings.atmosphericVisuals) {
             this.surfaceZoomUntil = performance.now() + 160
             this.surfaceZoomFrames = 2
+            this.surfaceLayerUntil = performance.now() + Screen.SURFACE_LAYER_HOLD
         }
 
         mainCtx.translate(canvas.offset.x, canvas.offset.y)
