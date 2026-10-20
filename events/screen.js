@@ -1,3 +1,50 @@
+// The camera's translate and scale calls on the main canvas, logged so another canvas can be given
+// the very transform the main canvas draws with (Grid's rest snapshot, apply). The canvas concatenates
+// each call in single precision, so one setTransform of getTransform()'s values rounds a hair apart
+// from the calls' product, and the light map's color-dodge shows that as a few levels at odd pixels.
+// The log starts from getTransform() at its first call after any other change of the transform (a
+// setTransform elsewhere, which that reproduces exactly); past MAX_OPS calls it starts again so.
+const cameraTransform = {
+    MAX_OPS: 30000,
+    log: null,
+    translate(x, y) {
+        this.call('translate', x, y)
+    },
+    scale(x, y) {
+        this.call('scale', x, y)
+    },
+    call(name, x, y) {
+        if (typeof mainCtx.getTransform !== 'function') {
+            mainCtx[name](x, y)
+            return
+        }
+        const t = mainCtx.getTransform()
+        if (!this.log || !this.same(t, this.log.after) || this.log.ops.length >= this.MAX_OPS)
+            this.log = {base: [t.a, t.b, t.c, t.d, t.e, t.f], ops: []}
+        mainCtx[name](x, y)
+        this.log.ops.push([name, x, y])
+        this.log.after = mainCtx.getTransform()
+    },
+    same(a, b) {
+        return a.a === b.a && a.b === b.b && a.c === b.c && a.d === b.d && a.e === b.e && a.f === b.f
+    },
+    // The calls that make the main canvas's transform t (taken now): the log, or t itself when
+    // the transform has been set since.
+    capture(t) {
+        const log = this.log
+        if (log && this.same(t, log.after))
+            return {base: log.base, ops: log.ops.slice(), t}
+        return {base: [t.a, t.b, t.c, t.d, t.e, t.f], ops: [], t}
+    },
+    // Gives g the captured transform: its calls replayed, or setTransform should they not reach it.
+    apply(g, camera) {
+        g.setTransform(...camera.base)
+        for (const [name, x, y] of camera.ops) g[name](x, y)
+        if (!this.same(g.getTransform(), camera.t))
+            g.setTransform(camera.t)
+    },
+}
+
 class Screen {
     constructor() {
         this.speedX = 0
@@ -116,7 +163,7 @@ class Screen {
             this.surfacePanFrames = 2
             this.surfaceLayerUntil = performance.now() + Screen.SURFACE_LAYER_HOLD
         }
-        mainCtx.translate(old_value_x - canvas.offset.x, old_value_y - canvas.offset.y)
+        cameraTransform.translate(old_value_x - canvas.offset.x, old_value_y - canvas.offset.y)
     }
     scale(pos, scale) {
         const ratio = 0.001
@@ -144,13 +191,13 @@ class Screen {
             this.surfaceLayerUntil = performance.now() + Screen.SURFACE_LAYER_HOLD
         }
 
-        mainCtx.translate(canvas.offset.x, canvas.offset.y)
+        cameraTransform.translate(canvas.offset.x, canvas.offset.y)
 
         canvas.offset.x -= pos.x / (canvas.scale * zoom) - pos.x / canvas.scale
         canvas.offset.y -= pos.y / (canvas.scale * zoom) - pos.y / canvas.scale
 
-        mainCtx.scale(zoom, zoom)
-        mainCtx.translate(-canvas.offset.x, -canvas.offset.y)
+        cameraTransform.scale(zoom, zoom)
+        cameraTransform.translate(-canvas.offset.x, -canvas.offset.y)
 
         canvas.scale *= zoom
         width = WIDTH / canvas.scale
