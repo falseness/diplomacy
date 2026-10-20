@@ -46,6 +46,11 @@ class Grid extends SpritesGroup {
         this.surfaceCacheUnits = undefined
         this.surfaceCacheBuildingImages = undefined
         this.surfaceCacheUnitImages = undefined
+        // Per cell, unobserved and inert when captured (isInertBuilding, no unit): 1 an Empty
+        // building, 2 a map edge, 0 otherwise; with the unit and building objects it had then.
+        this.surfaceCacheInert = undefined
+        this.surfaceCacheInertUnits = undefined
+        this.surfaceCacheInertBuildings = undefined
         this.surfaceCacheRevision = 0
         // Cells of the surface-cache frame that drawStillUnits and drawEntityOverlays may draw on
         // (see isOverlayCell), and the cells whose infoText may hold a text (setInfoText).
@@ -605,7 +610,10 @@ class Grid extends SpritesGroup {
     observedHexagon(cell) {
         return typeof onlineObservation !== 'undefined' ? onlineObservation.hexagonFor(cell) : null
     }
-    surfaceStateMatches() {
+    // ctx: the canvas the cache is drawn on. With atmospheric visuals, its axis-aligned transform
+    // and no online observation, only the cells that can change its pixels are compared in full
+    // (checkRange), and the others' visibility; otherwise every cell.
+    surfaceStateMatches(ctx) {
         // The light state (atmosphericLighting.lightState) is compared cell by cell in the same pass.
         const lighting = this.surfaceCacheLighting
         if (!lighting || lighting.length != this.arr.length * this.arr[0].length + 1 ||
@@ -620,7 +628,9 @@ class Grid extends SpritesGroup {
             this.surfaceCacheBuildings.length != this.surfaceCacheState.length ||
             this.surfaceCacheUnits.length != this.surfaceCacheState.length ||
             this.surfaceCacheBuildingImages.length != this.surfaceCacheState.length ||
-            this.surfaceCacheUnitImages.length != this.surfaceCacheState.length)
+            this.surfaceCacheUnitImages.length != this.surfaceCacheState.length ||
+            !this.surfaceCacheInert ||
+            this.surfaceCacheInert.length != this.surfaceCacheState.length)
             return false
 
         // The same pass lists this frame's overlay cells (surfaceOverlayCells). An unobserved cell
@@ -632,11 +642,40 @@ class Grid extends SpritesGroup {
         const observing = this.isObserving(), atmospheric = otherSettings.atmosphericVisuals
         const states = this.surfaceCacheState, buildings = this.surfaceCacheBuildings, units = this.surfaceCacheUnits
         const buildingImages = this.surfaceCacheBuildingImages, unitImages = this.surfaceCacheUnitImages
-        let index = 0
-        for (let i = 0; i < this.arr.length; ++i) {
+        const inert = this.surfaceCacheInert, inertUnits = this.surfaceCacheInertUnits, inertBuildings = this.surfaceCacheInertBuildings
+        const range = observing ? this.checkRange() : this.checkRange(ctx), h = this.arr[0].length
+        // Visibility is compared on the whole board all the same (each cell's fog bit, a typed
+        // array read): a cell hidden or uncovered anywhere rebuilds the cache, as it always has.
+        if (isFogOfWar && (range.i0 > 0 || range.i1 < this.arr.length || range.j0 > 0 || range.j1 < h)) {
+            for (let i = 0; i < this.arr.length; ++i) {
+                const fogRow = this.fogOfWar[i], inside = i >= range.i0 && i < range.i1
+                for (let j = 0, index = i * h; j < h; ++j, ++index) {
+                    if (inside && j >= range.j0 && j < range.j1)
+                        continue
+                    if ((states[index] & 1) !== (fogRow[j] ? 1 : 0))
+                        return false
+                }
+            }
+        }
+        for (let i = range.i0; i < range.i1; ++i) {
             const row = this.arr[i], fogRow = isFogOfWar ? this.fogOfWar[i] : undefined
-            for (let j = 0; j < row.length; ++j) {
+            let index = i * h + range.j0
+            for (let j = range.j0; j < range.j1; ++j) {
                 const cell = row[j]
+                // Most cells of a large board: inert when captured and still holding the same unit
+                // and building objects, so still inert (an Empty or map-edge building's light value
+                // is shownLightValue's: 0 for a map edge, 1 plus the owner's light for Empty). Object
+                // identity spares the per-class property reads of the general inert check below.
+                const kind = inert[index]
+                if (kind !== 0 && !observing && cell.unit === inertUnits[index] && cell.building === inertBuildings[index]) {
+                    const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
+                    if (states[index] != this.surfaceStateOf(hexagon, shown) ||
+                        lighting[index + 1] !== (!atmospheric || !shown || kind === 2 || hexagon.unknown ? 0 :
+                            1 + atmosphericLighting.ownerLight(hexagon)))
+                        return false
+                    ++index
+                    continue
+                }
                 if (!observing && cell.unit.constructor === Empty && this.isInertBuilding(cell.building)) {
                     const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
@@ -665,18 +704,58 @@ class Grid extends SpritesGroup {
         }
         return true
     }
+    // The cells surfaceStateMatches compares in full for a cache drawn on ctx: those within reach
+    // of the canvas, reach the farther of drawRange's margin (a cell's hexagon, sprite, shadow and
+    // bars) and SURFACE_CHECK_REACH hex radii (the farthest a cell's state reaches into the
+    // cache's pixels: a blue tile's cool spill 5, a lamp's pool about 4.2 radii); during a zoom
+    // gesture or a pan (Screen.surfaceMoving) also those whose overlays reach the overlay layer,
+    // a quarter of the canvas beyond each side (its overlays come from the same pass's
+    // surfaceOverlayCells). A cell outside may differ from the cache unseen (except in
+    // visibility, compared on the whole board); once its pixels can show it is compared, and a
+    // difference rebuilds the cache from the whole board. Every cell without ctx, with classic
+    // visuals (whose overlays and cache are the whole board's) or a rotated transform.
+    checkRange(ctx) {
+        const all = {i0: 0, i1: this.arr.length, j0: 0, j1: this.arr[0].length}
+        if (!ctx || !otherSettings.atmosphericVisuals)
+            return all
+        const t = ctx.getTransform(), a = t.a, d = t.d, e = t.e, f = t.f
+        if (t.b !== 0 || t.c !== 0 || a <= 0 || d <= 0)
+            return all
+        const W = ctx.canvas.width, H = ctx.canvas.height
+        const drawn = 4 * basis.r + assets.size, reach = Math.max(drawn, SURFACE_CHECK_REACH * basis.r)
+        const layered = typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceMoving
+        const reachX = Math.max(reach, layered ? drawn + W / 4 / a : 0)
+        const reachY = Math.max(reach, layered ? drawn + H / 4 / d : 0)
+        const left = -e / a - reachX, right = (W - e) / a + reachX
+        const top = -f / d - reachY, bottom = (H - f) / d + reachY
+        // Cell centres: x = i * offset.x, y = (2 * j + (i & 1)) * offset.y (as drawRange).
+        return {
+            i0: Math.max(0, Math.floor(left / basis.offset.x)),
+            i1: Math.min(all.i1, Math.ceil(right / basis.offset.x) + 1),
+            j0: Math.max(0, Math.floor((top / basis.offset.y - 1) / 2)),
+            j1: Math.min(all.j1, Math.ceil(bottom / basis.offset.y / 2) + 1)
+        }
+    }
     captureSurfaceState() {
         const state = new Uint16Array(this.arr.length * this.arr[0].length)
         const buildings = new Array(state.length)
         const units = new Array(state.length)
         const buildingImages = new Array(state.length)
         const unitImages = new Array(state.length)
+        const inert = new Uint8Array(state.length)
+        const inertUnits = new Array(state.length), inertBuildings = new Array(state.length)
+        const observing = this.isObserving()
         const overlayCells = this.surfaceOverlayCells
         overlayCells.length = 0
         let index = 0
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 const cell = this.arr[i][j]
+                if (!observing && cell.unit.constructor === Empty && this.isInertBuilding(cell.building)) {
+                    inert[index] = cell.building.constructor === Empty ? 1 : 2
+                    inertUnits[index] = cell.unit
+                    inertBuildings[index] = cell.building
+                }
                 if (this.isOverlayCell(cell))
                     overlayCells.push(index)
                 const building = this.isCacheableBuilding(cell.building) ?
@@ -699,6 +778,9 @@ class Grid extends SpritesGroup {
         this.surfaceCacheUnits = units
         this.surfaceCacheBuildingImages = buildingImages
         this.surfaceCacheUnitImages = unitImages
+        this.surfaceCacheInert = inert
+        this.surfaceCacheInertUnits = inertUnits
+        this.surfaceCacheInertBuildings = inertBuildings
     }
     getSurfaceCacheGeometry() {
         const cacheWidth = mapDepth.bounds.right - mapDepth.bounds.left
@@ -770,7 +852,7 @@ class Grid extends SpritesGroup {
         return canvas.scale <= cacheScale || !!scaling
     }
     drawSurfaceCache(ctx) {
-        if ((!this.surfaceCache || !this.surfaceStateMatches()) &&
+        if ((!this.surfaceCache || !this.surfaceStateMatches(ctx)) &&
             !this.createSurfaceCache())
             return false
 
@@ -802,23 +884,25 @@ class Grid extends SpritesGroup {
         )
         return true
     }
-    // During a zoom gesture on the surface-cache path, the overlays drawn after the light map (still
-    // units, bars, production previews and production texts) come from a raster of them, the
-    // overlay layer, drawn scaled like the surface cache under it. A frame without a usable layer
-    // draws them directly and queues one: a task after the frame draws them at that frame's
-    // transform for the canvas and a quarter of it on each side, and has the drawing rasterized
-    // there (between frames, where the canvas itself is rasterized), not inside a later frame. A
-    // layer is used while the surface cache is unchanged, the zoom within 2x of its scale, the
-    // view inside it and for at most a second; the next one is queued ahead, once the zoom is
-    // 1.25x from its scale or the view comes within a tenth of its size of the layer's edge.
-    // Frames outside a gesture always draw the overlays directly (a settled frame is unchanged),
-    // and so do frames whose layer would exceed OVERLAY_LAYER_MAX_PIXELS: drawing a raster that
-    // large from a canvas costs more per frame than the overlays (a desktop canvas zoomed in).
+    // During a zoom gesture or a camera pan on the surface-cache path (Screen.surfaceMoving), the
+    // overlays drawn after the light map (still units, bars, production previews and production
+    // texts) come from a raster of them, the overlay layer, drawn scaled like the surface cache
+    // under it (at its own scale, its pixels copied whole at the nearest whole-pixel shift). A
+    // frame without a usable layer draws them directly and queues one: a task after the frame
+    // draws them at that frame's transform for the canvas and a quarter of it on each side, and
+    // has the drawing rasterized there (between frames, where the canvas itself is rasterized),
+    // not inside a later frame. A layer is used while the surface cache is unchanged, the zoom
+    // within 2x of its scale, the view inside it and for at most a second; the next one is queued
+    // ahead, once the zoom is 1.25x from its scale or the view comes within a tenth of its size of
+    // the layer's edge. Frames outside a gesture or pan always draw the overlays directly (a
+    // settled frame is unchanged), and so do frames whose layer would exceed
+    // OVERLAY_LAYER_MAX_PIXELS: drawing a raster that large from a canvas costs more per frame
+    // than the overlays (a desktop canvas zoomed in).
     // Returns whether it drew the overlays.
     drawOverlayLayer(ctx) {
         const layer = this.overlayLayer
         const t = ctx.getTransform()
-        if (!gameEvent.screen.surfaceZooming || debug || this.drawLogicText || typeof createImageBitmap !== 'function' ||
+        if (!gameEvent.screen.surfaceMoving || debug || this.drawLogicText || typeof createImageBitmap !== 'function' ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) {
             this.dropOverlayLayer()
             return false
@@ -847,7 +931,16 @@ class Grid extends SpritesGroup {
                 Math.min(viewRight + nearX, b.left + b.width + margin) > layer.right ||
                 Math.min(viewBottom + nearY, b.top + b.height + margin) > layer.bottom)
             this.queueOverlayLayer(ctx, t)
-        if (viewLeft < viewRight && viewTop < viewBottom)
+        if (t.a === layer.a && t.d === layer.d) {
+            // At the layer's scale (a pan, or a zoom held at its limit): its pixels copied whole, moved
+            // by the camera's shift rounded to whole pixels (under half a pixel off while moving).
+            ctx.save()
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.drawImage(layer.canvas, 0, 0, layer.width, layer.height,
+                layer.x0 + Math.round(t.e - layer.e), layer.y0 + Math.round(t.f - layer.f), layer.width, layer.height)
+            ctx.restore()
+        }
+        else if (viewLeft < viewRight && viewTop < viewBottom)
             ctx.drawImage(layer.canvas,
                 (viewLeft - layer.left) * layer.a, (viewTop - layer.top) * layer.d,
                 (viewRight - viewLeft) * layer.a, (viewBottom - viewTop) * layer.d,
@@ -866,12 +959,15 @@ class Grid extends SpritesGroup {
         const cw = ctx.canvas.width, ch = ctx.canvas.height, revision = this.surfaceCacheRevision
         setTimeout(() => {
             this.overlayLayerQueued = false
-            if (revision !== this.surfaceCacheRevision || !gameEvent.screen.surfaceZooming)
+            if (revision !== this.surfaceCacheRevision || !gameEvent.screen.surfaceMoving)
                 return
             const layer = this.drawOverlayLayerRaster(cw, ch, t)
-            // A snapshot rasterizes the recorded drawing now; the frames then draw the canvas.
-            createImageBitmap(layer.canvas, 0, 0, 1, 1).then(bitmap => bitmap.close(), () => {})
-            this.overlayLayer = {...layer.bounds, canvas: layer.canvas, a: t.a, d: t.d, revision, time: performance.now()}
+            // A one-pixel read rasterizes the recorded drawing now, in this task between frames (an
+            // image-bitmap snapshot left it to the first frame drawing the canvas: a 20-55 ms frame
+            // on a throttled phone); the frames then draw the canvas.
+            layer.canvas.getContext('2d').getImageData(0, 0, 1, 1)
+            this.overlayLayer = {...layer.bounds, canvas: layer.canvas, a: t.a, d: t.d, e: t.e, f: t.f,
+                x0: layer.x0, y0: layer.y0, width: layer.width, height: layer.height, revision, time: performance.now()}
         })
     }
     // The device-pixel rectangle of the overlay layer for a cw x ch canvas at transform t: that
@@ -913,7 +1009,7 @@ class Grid extends SpritesGroup {
         this.drawEntityOverlays(lctx, this.surfaceOverlayCells)
         this.drawInfoTexts(lctx, this.drawRange(lctx))
         lctx.restore()
-        return {canvas, width, height, bounds: {left: (x0 - t.e) / t.a, top: (y0 - t.f) / t.d,
+        return {canvas, width, height, x0, y0, bounds: {left: (x0 - t.e) / t.a, top: (y0 - t.f) / t.d,
             right: (x0 + width - t.e) / t.a, bottom: (y0 + height - t.f) / t.d}}
     }
     drawMapSurface(ctx) {
@@ -930,8 +1026,8 @@ class Grid extends SpritesGroup {
         return false
     }
     draw(ctx) {
-        // The slab's soft drop shadow on the sky, under the board.
-        mapDepth.drawAtmosphericShadow(ctx, this)
+        // The slab's soft drop shadow on the sky, under the board (not where the board covers it).
+        mapDepth.drawUncoveredShadow(ctx, this)
         const cachedScene = this.drawMapSurface(ctx)
         // The overlay layer holds the production texts too (drawInfoTexts).
         let layered = false
@@ -971,15 +1067,22 @@ class Grid extends SpritesGroup {
 
         attackBorder.draw(ctx)
         border.draw(ctx)
-        // One of the frames that follow a zoom input as part of its gesture (Screen.surfaceZooming).
+        // One of the frames that follow a zoom input as part of its gesture (Screen.surfaceZooming),
+        // or a camera move (Screen.surfaceMoving).
         if (typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceZoomFrames > 0)
             --gameEvent.screen.surfaceZoomFrames
+        if (typeof gameEvent !== 'undefined' && gameEvent.screen?.surfacePanFrames > 0)
+            --gameEvent.screen.surfacePanFrames
     }
 }
 
 // Hook for a cell-contents request (PRD 7.4): the cells the local fog just uncovered on a
 // hidden-information board without contents. No network yet; markCellsKnown answers it.
 function onLoadingCellsNeeded(cells) {}
+
+// How far (hex radii) a cell's state reaches into the surface cache's pixels, beyond its drawn
+// sprite (Grid.checkRange).
+const SURFACE_CHECK_REACH = 8
 
 // Largest overlay layer (device pixels) a zoom gesture draws its overlays from (Grid.drawOverlayLayer).
 const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024

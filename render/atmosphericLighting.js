@@ -271,7 +271,11 @@ const atmosphericLighting = {
         if (building?.isMapEdge) return 0
         const emitsLight = building && !building.killed && this.emitsLight(building)
         const kind = emitsLight ? this.LAMP_KINDS.indexOf(building.isDemonPortal ? 'demonPortal' : building.name) : 0
-        return 1 + 2 * kind + (hex.playerColor && hex.player?.color ? 8 * (hex.playerColor + 1) : 0)
+        return 1 + 2 * kind + this.ownerLight(hex)
+    },
+    // The owner's part of shownLightValue (hex known).
+    ownerLight(hex) {
+        return hex.playerColor && hex.player?.color ? 8 * (hex.playerColor + 1) : 0
     },
     // Whether the board's light state equals stored (a lightState copy).
     sameLightState(board, stored) {

@@ -1,4 +1,6 @@
 const UNDEAD_UNIT_NAMES = ['noob', 'archer', 'KOHb', 'normchel', 'catapult']
+// Entity.bodyImageName's keys by entity name.
+const BODY_IMAGE_NAMES = new Map()
 class Entity extends Sprite {
     constructor(x, y, name) {
         super(x, y)
@@ -160,10 +162,18 @@ class Entity extends Sprite {
     // Image key: mirrored classes (KOHb, Catapult) add 'Left'; ordinary units
     // owned by the demon slot use the undead art. Demon variants keep their own.
     get bodyImageName() {
-        const name = this.mirrorX && this.hasMirroredImage ? this.name + 'Left' : this.name
-        if (UNDEAD_UNIT_NAMES.includes(this.name) && this.player?.role === 'DEMONS')
-            return 'undead/' + name
-        return name
+        // The keys are built once per name: frames look them up for every cell (no new strings).
+        let keys = BODY_IMAGE_NAMES.get(this.name)
+        if (!keys) {
+            const name = this.name
+            keys = {plain: name, left: name + 'Left', undead: UNDEAD_UNIT_NAMES.includes(name),
+                undeadPlain: 'undead/' + name, undeadLeft: 'undead/' + name + 'Left'}
+            BODY_IMAGE_NAMES.set(name, keys)
+        }
+        const left = this.mirrorX && this.hasMirroredImage
+        if (keys.undead && this.player?.role === 'DEMONS')
+            return left ? keys.undeadLeft : keys.undeadPlain
+        return left ? keys.left : keys.plain
     }
     draw(ctx) {
         drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)
