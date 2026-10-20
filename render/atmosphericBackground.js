@@ -283,10 +283,7 @@ const atmosphericBackground = {
         g.restore()
         ++this.decorations
     },
-    // parts: the canvas rectangles to draw (whole device pixels; MapDepth.uncoveredOf), the
-    // whole canvas when undefined. The raster is copied 1:1 there, so those pixels are exactly
-    // the whole copy's.
-    draw(ctx, parts) {
+    draw(ctx) {
         // Bind independently of the optional sprite startup counter.
         this.watch(ctx.canvas)
         // Viewport clouds and the fixed light kernel are camera-scale independent.
@@ -325,11 +322,7 @@ const atmosphericBackground = {
         }
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        if (this.raster && parts) {
-            for (const {x, y, w, h} of parts)
-                ctx.drawImage(this.raster, x, y, w, h, x, y, w, h)
-        }
-        else if (this.raster) ctx.drawImage(this.raster, 0, 0)
+        if (this.raster) ctx.drawImage(this.raster, 0, 0)
         else {
             // Decoded static image: no per-frame gradient or blur regeneration
             // (and no sky decoration, which is only baked into the raster).
