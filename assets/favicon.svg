@@ -1,8 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none"><g transform="translate(-590 -30) scale(3.3)"><circle cx="256" cy="91" r="62.5" fill="#d64e64" stroke="#211a30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-    <path d="M219 69 L248 77 L246 91 L223 87Z M264 77 L294 68 L290 87 L266 91Z" fill="#211a30" stroke="#211a30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-    <path d="M226 77 L243 81 L240 87 L228 84Z M270 81 L287 76 L284 84 L272 87Z" fill="#fff0c8" stroke="#211a30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-    <path d="M242 113 Q257 121 272 111" fill="none" stroke="#fff0c8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-    <path d="M244 114 L247 125 L253 118 M263 118 L267 124 L271 113" fill="#fff0c8" stroke="#211a30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-  </g><g transform="translate(-590 -30) scale(3.3)"><path d="M206 62 Q177 49 185 21 Q198 40 221 36 L230 53Z" fill="#ffc86a" stroke="#211a30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-      <path d="M285 49 L293 35 Q315 38 329 19 Q334 47 307 63Z" fill="#ffc86a" stroke="#211a30" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-    </g></svg>
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none"><title>Bulwark shield</title><defs><radialGradient id="bulwark-plate" cx="76%" cy="20%" r="94%">
+      <stop stop-color="#9faeb1" /><stop offset=".36" stop-color="#71878e" /><stop offset=".72" stop-color="#465b66" /><stop offset="1" stop-color="#28373f" />
+    </radialGradient>
+    <radialGradient id="bulwark-shield" cx="77%" cy="18%" r="98%">
+      <stop stop-color="#82979e" /><stop offset=".4" stop-color="#526b77" /><stop offset="1" stop-color="#243943" />
+    </radialGradient>
+    <linearGradient id="bulwark-bronze" x1="0%" y1="80%" x2="100%" y2="15%">
+      <stop stop-color="#695335" /><stop offset=".45" stop-color="#af9059" /><stop offset=".78" stop-color="#d8bd82" /><stop offset="1" stop-color="#e8d6a8" />
+    </linearGradient>
+    </defs><g transform="translate(256 256) scale(1.0251716247139588) translate(-255.0 -255.5)"><g transform="translate(256 256) rotate(0) scale(1.7) translate(-364 -304)"><g id="bulwark-tower-shield">
+    <path d="M275 194 Q365 161 452 194 L446 347 Q432 395 364 430 Q296 395 282 347Z" fill="url(#bulwark-bronze)" stroke="#4e5146" stroke-width="4" stroke-linejoin="round" />
+    <path d="M290 205 Q365 177 437 205 L431 344 Q418 382 364 412 Q310 382 297 344Z" fill="url(#bulwark-shield)" />
+    <path d="M364 187 Q408 188 437 205 L431 344 Q418 382 364 412Z" fill="#b1c0bb" opacity=".12" />
+    <path d="M358 190 H370 V405 L364 412 L358 405Z" fill="url(#bulwark-bronze)" />
+    <path d="M337 272 L364 252 L391 272 L384 309 L364 327 L344 309Z" fill="url(#bulwark-bronze)" />
+    <path d="M350 278 L364 267 L378 278 L374 301 L364 311 L354 301Z" fill="url(#bulwark-plate)" />
+    <g fill="#e2cea0">
+      <circle cx="286" cy="201" r="4" /><circle cx="442" cy="201" r="4" />
+      <circle cx="291" cy="294" r="4" /><circle cx="437" cy="294" r="4" />
+      <circle cx="320" cy="382" r="4" /><circle cx="408" cy="382" r="4" />
+    </g>
+  </g>
+</g></g></svg>
