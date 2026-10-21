@@ -190,6 +190,9 @@ function createRuntimeContext(seed) {
     cancelAnimationFrame() {},
     Image: class Image {},
     navigator: { userAgent: 'node' },
+    // render/visualsPerf.js reads the page query; an empty one keeps it off.
+    location: { search: '', href: 'http://localhost/' },
+    URLSearchParams,
     innerWidth: 800,
     innerHeight: 600,
     document: {

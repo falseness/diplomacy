@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "2b28d0f37d73250708809c1876fb7f2755e813f6023c18d0941f464a6b8deacc",
+  "rulesVersion": "f61186a336e6b9bceb4fdd733e42459f40c50bd4bce45711029ab7bbefd88873",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,13 +30,13 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "9efabd21efbed2e7b20c7c47aefcf5f47f9878a71108b0a31fe510954d559466",
-      "bytes": 69070
+      "sha256": "32112d7755fae663a354bce6435d69926f7c2ae694bd07438926512c2c3da526",
+      "bytes": 72790
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "d31618b7f9670450b2b2b2019c8993b0f811474af367d0b2fafdf7d9a11c5725",
-      "bytes": 41395
+      "sha256": "ba17096ce2a0f5fb608e0fe7caf2d063ecf0b1507765439bcf59010029f89281",
+      "bytes": 41164
     },
     {
       "path": "options/tutorialProgress.js",
@@ -70,8 +70,8 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "988032c3982f244042cf70300c369c454555d9c92f934eea46ad64414fb4dfcc",
-      "bytes": 2053
+      "sha256": "7d5cdb86a288969c989bbfb78764eb2edde006e7908e874998f1d89586e6386a",
+      "bytes": 2274
     },
     {
       "path": "options/actionApi.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "bdf3e20c49b2cb24daafd869324a9e690cd3f634dd5828ac639331a179f1d6da",
-      "bytes": 6743
+      "sha256": "fdffaa6e363519bf45b9b0d680c3007ce5cc5559445f0f595ec0be0cb80b20fe",
+      "bytes": 8962
     },
     {
       "path": "render/image.js",
@@ -135,8 +135,8 @@
     },
     {
       "path": "render/productionPreview.js",
-      "sha256": "c040fb6dd8bf9516446dce39e752b7f9acd29e1c7def067cd078249ed7b2148c",
-      "bytes": 1109
+      "sha256": "f1d02070b3a3210281e55cd76657b7f83d2bc7009110c286b0cafb1cc95e1779",
+      "bytes": 1118
     },
     {
       "path": "render/moveTween.js",
@@ -145,8 +145,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "8afcf36d604ef2fd5e149c75c58cf8447184b3dbd2dc076a8b06422bb11828f8",
-      "bytes": 3616
+      "sha256": "646526774e6e63e4cd370665a7ba40a138152ea8d75aefdda63b9248b902dd8f",
+      "bytes": 4200
     },
     {
       "path": "interface/entityinterface.js",
@@ -195,8 +195,8 @@
     },
     {
       "path": "sprites/elements/rect.js",
-      "sha256": "c4f90bb93434c35103a388285d9f1e070d8d800ad5d14e501f9b027c2b0044b3",
-      "bytes": 3854
+      "sha256": "f374bf444a2758660ba21e10c981112aca15677efe50c102ba9a7f9a5cd32ea7",
+      "bytes": 3729
     },
     {
       "path": "sprites/elements/button.js",
@@ -260,8 +260,8 @@
     },
     {
       "path": "sprites/border.js",
-      "sha256": "4cf0fd33f24ea44e6d24cc36544e30ce4504cb2d39960464345479aa97490973",
-      "bytes": 14037
+      "sha256": "6d66062491a3c3f3b4d90f0b59b9d2b808e999113a7f8d389d3c46b7a9445c51",
+      "bytes": 20876
     },
     {
       "path": "events/geteventpos.js",
@@ -270,8 +270,8 @@
     },
     {
       "path": "events/screen.js",
-      "sha256": "b5718d4a0f7c1b62bf3efd4d4dc6d645d630ed66df8dba7f1e4aa98ffe0c17f1",
-      "bytes": 7577
+      "sha256": "05011f9c237d711977aeda5275c6c07a8be92ddd9c04cdfadb015f90a64b343d",
+      "bytes": 12600
     },
     {
       "path": "events/events.js",
@@ -295,28 +295,28 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "a15a490cdca57978ea8c840bb80c95b0c139acb9c46bcf94cdb9d271c5c17f34",
-      "bytes": 58276
+      "sha256": "40c52e6e64aeef559abf180cc5ddc37508e3f78cf340fb1ac254fc4ae5e04343",
+      "bytes": 59322
     },
     {
       "path": "sprites/hexagon.js",
-      "sha256": "39b371d56d116e79a1530caead02ccc418aa610adfaa6c7fd8f1a7d63302d8d4",
-      "bytes": 3840
+      "sha256": "c50d40d927d2ccd5a54d7695a338d6a33b52df2b816fd6c7af5f218c3a04365c",
+      "bytes": 5411
     },
     {
       "path": "groups/grid.js",
-      "sha256": "f971b414e58c0c20967e8211d80352af5d775df06b88b267d1ff773e3cf8fdf0",
-      "bytes": 25470
+      "sha256": "9eb1a4823a1efccf29f8745ae3587f602fc77bb66ade88e60324ce9dca2ce9ca",
+      "bytes": 89420
     },
     {
       "path": "sprites/entities/hpBar.js",
-      "sha256": "707c038641a9350e0c15d4e997ee88ee89d7e59be0dfb545cf9c1582f1cab15c",
-      "bytes": 3786
+      "sha256": "0b5653d348527a42ed3fa8306454081320c9d0855ba9e05583d2796090b67ab6",
+      "bytes": 4371
     },
     {
       "path": "sprites/entities/entity.js",
-      "sha256": "c9eb79e691da2077ee673dcdde8355293dd7a16872eb35fecc19c2018486f3b0",
-      "bytes": 4170
+      "sha256": "9d0bd337ad30ca1944e0d3dec9f01a9e974c1a1cc5b3d26ae1b725df06ad52d1",
+      "bytes": 4685
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
@@ -485,8 +485,8 @@
     },
     {
       "path": "sprites/entities/buildings/demonPortal.js",
-      "sha256": "8232976bdcda5de509dfb76e0e1a884ec6144aa164f219bcfbe61a6babcaae1c",
-      "bytes": 5527
+      "sha256": "5682f93c5b317c15e3c98a5899614928e512c172dc6ba289c63a7c3d995e4d1d",
+      "bytes": 5838
     },
     {
       "path": "ai/wave-placement.js",
@@ -505,8 +505,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "72fdc5038c2a7e450651c19eedec0b883243ffc1a79a55b1f2aa287ab5070a84",
-      "bytes": 7673
+      "sha256": "9c2e2539c6c551c0f1a3777e5b1341e4d40d368b4c34e01c8fd3328c1c03be4c",
+      "bytes": 7826
     },
     {
       "path": "managers.js",
