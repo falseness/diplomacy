@@ -63,6 +63,10 @@ class Building extends Entity {
         if (isNeedToChangeBorder)
             this.changeBorder()
     }
+    // Selection of a public building on a fogged cell (Events.click)
+    selectFogged() {
+        this.select()
+    }
     removeSelect() {
         border.visible = false
         entityInterface.visible = false

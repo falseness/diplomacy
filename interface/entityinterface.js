@@ -140,8 +140,13 @@ class EntityInterface {
                 this.entity.info.text === text) return
         this.change(info, portal.player.fullColor, portal, description)
     }
+    showFogTown(town) {
+        this.change(town.fogInfo, town.player.fullColor)
+        this.fogTown = {...town.coord}
+    }
     change(entity, color, portal = null, description = false) {
         this.townInspection = null
+        this.fogTown = null
         this.portal = portal
         this.portalDescription = description
         this.portalStatsButton.canClick = Boolean(portal && portal.nextProduction && !description)
@@ -166,6 +171,9 @@ class EntityInterface {
     refreshTown(coord = this.townInspection || gameEvent.selected?.coord) {
         if (!coord || !grid) return
         if (isFogOfWar && !grid.fogOfWar[coord.x]?.[coord.y]) {
+            // A fogged neutral town keeps its public panel (showFogTown)
+            if (this.fogTown && coordsEqually(this.fogTown, coord) &&
+                    isFogLandmark(grid.getCell(coord)?.building)) return
             this.visible = false
             townInterface.visible = false
             return
@@ -210,7 +218,7 @@ class EntityInterface {
     set visible(boolean) {
         if (boolean && !this.#visible)
             this.renderCacheDirty = true
-        if (!boolean) { this.townInspection = null; this.portal = null; this.portalDescription = false }
+        if (!boolean) { this.townInspection = null; this.fogTown = null; this.portal = null; this.portalDescription = false }
         this.#visible = boolean
         undoButton.selected = boolean
     }

@@ -520,11 +520,12 @@ class Events {
             this.hideAll()
             this.selected.removeSelect()
             this.selected = new Empty()
-            // Public landmarks may be inspected without consulting the hidden
-            // occupant. Keep this after the normal instruction/legality path.
+            // Public landmarks and map terrain (lake, sea, mountain) may be
+            // inspected without consulting the hidden occupant. Keep this after
+            // the normal instruction/legality path.
             const building = grid.arr[coord.x][coord.y].building
-            if (isFogLandmark(building)) {
-                building.select()
+            if (isFogLandmark(building) || building.isStaticNature) {
+                building.selectFogged()
                 this.selected = building
             }
 

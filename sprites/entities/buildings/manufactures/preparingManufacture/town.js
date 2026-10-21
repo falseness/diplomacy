@@ -345,6 +345,15 @@ class Town extends PreparingManufacture {
         if (this.isMyTurn)
             townInterface.change(this.info, this.player.fullColor)
     }
+    // A fogged neutral town shows only what the fog shows: no hp, gold,
+    // income or production
+    get fogInfo() {
+        return {name: this.name, info: {'range increase': this.rangeIncrease}}
+    }
+    selectFogged() {
+        entityInterface.showFogTown(this)
+        this.changeBorder()
+    }
     removeSelect() {
         border.visible = false
         grid.drawLogicText = false

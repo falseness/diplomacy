@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "b36bb0929ff46df7a0adeac93e61cba9c21c9a698c4f21a26fc296a766c512ff",
+  "rulesVersion": "d02500cfc85fe0e6c7f2ca3d8b2df5670d28677847b08970da35677cec7d481a",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "6b905926087e63a67750661f073aacacb782696008853b6eb1575ca8c7c857bf",
-      "bytes": 12157
+      "sha256": "c0c7a6d87ab98eda0987910b1973af9eb80f8376ed4ddbb8eb51588472919e64",
+      "bytes": 12549
     },
     {
       "path": "interface/barrackinterface.js",
@@ -275,8 +275,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "981c3b4cdba0ecb05cd08b89813416c08f8797128abb0be09ff4b0ef53852fee",
-      "bytes": 24547
+      "sha256": "b5e02d33531297b21d021a7386aab17936df28e95c627072886594e51daa3fa5",
+      "bytes": 24633
     },
     {
       "path": "options/onlineHubRows.js",
@@ -400,8 +400,8 @@
     },
     {
       "path": "sprites/entities/buildings/building.js",
-      "sha256": "b5f6599ce95c8f09d595672c4a2e11abbdec501b99006bcffdba984d8f0bbdf0",
-      "bytes": 2619
+      "sha256": "ed6076f7ba8514268c38709f1e10384970e9a4051d5fbd379452c4e8581fc33c",
+      "bytes": 2738
     },
     {
       "path": "sprites/entities/buildings/nature/goldmine.js",
@@ -465,8 +465,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/town.js",
-      "sha256": "6fd7af3a4f5f4ef6f0245999c71c00a700175cf4c1a604a24fee335ecbb48448",
-      "bytes": 15938
+      "sha256": "893fcc36fad48ed64504eb985f397792e7af81ef6d6f06ac4ea51faab162529e",
+      "bytes": 16241
     },
     {
       "path": "ai/demon-config.js",
