@@ -339,9 +339,6 @@ class Grid extends SpritesGroup {
     drawOther(ctx, layer) {
         const buildings = layer !== 'units', units = layer !== 'buildings'
         let tmpBuildings = []
-        // Moves bars hang below the hex (Unit.movesBarMarginY): draw them after every
-        // body, as the cached pass does, so the next cell's art never covers them.
-        let movesBarUnits = []
         const range = this.drawRange(ctx)
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
@@ -357,16 +354,8 @@ class Grid extends SpritesGroup {
                     if (units) this.drawProductionSilhouette(ctx, cell.building)
                 }
                 const unit = units && this.getStillUnit(cell)
-                if (unit) {
-                    // Unit.draw without its moves bar: HP bar, then the body.
-                    Entity.prototype.drawBars.call(unit, ctx)
-                    this.drawEntityBody(ctx, unit)
-                    movesBarUnits.push(unit)
-                }
+                if (unit) unit.draw(ctx)
             }
-        }
-        for (let i = 0; i < movesBarUnits.length; ++i) {
-            movesBarUnits[i].drawMovesBar(ctx)
         }
         for (let i = 0; i < tmpBuildings.length; ++i) {
             tmpBuildings[i].drawBars(ctx)
@@ -449,14 +438,15 @@ class Grid extends SpritesGroup {
                     building.drawNextProduction(ctx)
                 }
             }
-            // The cached unit sits under the silhouette; repaint it on top.
+            // Same order as Unit.draw: the unit's bars, then its body. The cached body sits
+            // under the silhouette and under its own moves bar; repaint it on top of both.
             const unit = this.getStillUnit(cell)
-            if (silhouette && unit)
+            if (unit)
+                unit.drawBars(ctx)
+            if (unit && (silhouette || shouldShowMovesBar(unit)))
                 this.drawEntityBody(ctx, unit)
             if (!observed && building.hasBar)
                 buildingBars.push(building)
-            if (unit)
-                unit.drawBars(ctx)
         })
         for (let i = 0; i < buildingBars.length; ++i)
             buildingBars[i].drawBars(ctx)

@@ -78,11 +78,12 @@ const moveTween = {
             const state = this.state(unit, now)
             if (!state || !this.isVisible(state))
                 continue
-            drawCachedImage(ctx, cachedImages[grid.getEntityBodyImageName(unit)], state.pos)
+            // Bars first, as in Unit.draw: the moves bar stays under the unit's own body.
             ctx.save()
             ctx.translate(state.pos.x - unit.pos.x, state.pos.y - unit.pos.y)
             unit.drawBars(ctx)
             ctx.restore()
+            drawCachedImage(ctx, cachedImages[grid.getEntityBodyImageName(unit)], state.pos)
         }
     }
 }

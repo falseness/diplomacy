@@ -173,7 +173,7 @@ const onlineObservation = {
             Object.defineProperty(sprite, 'moves', {value: moves, configurable: true})
             if (moves !== null) {
                 sprite.movesBar = new Bar({x: sprite.pos.x + assets.size / 2,
-                    y: sprite.pos.y + assets.size / 2 + Unit.movesBarMarginY},
+                    y: sprite.pos.y + assets.size / 2 + basis.r * 0.1},
                     sprite.speed, '#ffa500', undefined, basis.r * 0.4, basis.r * 0.225)
                 sprite.movesBar.repaintRects(moves)
             }
@@ -267,11 +267,12 @@ const onlineObservation = {
             if (local.notEmpty() && local.playerColor === whooseTurn) continue
             // Only server-filtered unit records enter this layer. Its shared
             // vision may reveal a peer beyond our turn-opening fog.
-            drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
+            // Bars first, as in Unit.draw: the moves bar stays under the unit's own body.
             Entity.prototype.drawBars.call(sprite, ctx)
             // Same owner rule as Unit.drawBars: a peer's bar goes once it leaves pendingSeats.
             if (sprite.movesBar && shouldShowMovesBar(sprite))
-                drawMovesBar(ctx, sprite.movesBar)
+                sprite.movesBar.draw(ctx)
+            drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
         }
         // Match grid overlays: occupied building bars stay above every unit body.
         for (const {sprite} of this.buildings.values()) if (sprite)
