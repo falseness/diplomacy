@@ -126,12 +126,7 @@ const atmosphericLighting = {
         stone: [153, 147, 155],
         sheen: 0.1,
         // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
-        polish: 0.3,
-        // Marble: a few broad soft clouds (count, alpha scale) under fine grain specks (count, alpha), no veins.
-        clouds: 10,
-        cloudAlpha: 0.3,
-        grain: 220,
-        grainAlpha: 0.16
+        polish: 0.3
     },
     tileVariants: null,
     tileVariantBuilds: 0,
@@ -640,9 +635,9 @@ const atmosphericLighting = {
             return ((t ^ (t >>> 14)) >>> 0) / 4294967296
         }
     },
-    // Marble variants, built once per hex radius: cream stone with a few soft light and warm
-    // grey clouds, fine light and dark grain, and a soft sheen from the upper left. Clipped to
-    // the inset tile, centred in the raster.
+    // Marble variants, built once per hex radius: cream stone with soft light and warm
+    // grey clouds, a few thin grey veins with faint halos, and a soft sheen from the
+    // upper left. Clipped to the inset tile, centred in the raster.
     tileVariant(index) {
         if (!this.tileVariants || this.tileVariants.radius !== basis.r) {
             this.tileVariants = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
@@ -664,27 +659,45 @@ const atmosphericLighting = {
         g.fillStyle = `rgb(${sr},${sg},${sb})`
         g.fillRect(-r, -r, 2 * r, 2 * r)
         // Clouds: broad, low contrast mottling.
-        for (let i = 0; i < this.TILE.clouds; i++) {
+        for (let i = 0; i < 26; i++) {
             const x = (rand() * 2 - 1) * r, y = (rand() * 2 - 1) * r, radius = (0.25 + 0.5 * rand()) * r
             const tone = rand() < 0.6 ? 1.07 : 0.95
             const color = `${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
-                ((0.15 + 0.2 * rand()) * this.TILE.cloudAlpha).toFixed(3)
+                (0.15 + 0.2 * rand()).toFixed(3)
             const cloud = g.createRadialGradient(x, y, 0, x, y, radius)
             cloud.addColorStop(0, `rgba(${color})`)
             cloud.addColorStop(1, `rgba(${color.replace(/[^,]+$/, '0')})`)
             g.fillStyle = cloud
             g.fillRect(x - radius, y - radius, 2 * radius, 2 * radius)
         }
-        // Grain: fine light and dark specks, so the polished stone has a fine mottled texture.
-        const grain = this.random(0x27d4eb2f * (index + 1))
-        for (let i = 0; i < this.TILE.grain; i++) {
-            const x = (grain() * 2 - 1) * r, y = (grain() * 2 - 1) * r, radius = (0.015 + 0.04 * grain()) * r
-            const tone = grain() < 0.5 ? 1.1 : 0.9
-            g.fillStyle = `rgba(${[sr, sg, sb].map(v => Math.min(255, Math.round(v * tone))).join(',')},` +
-                `${(this.TILE.grainAlpha * (0.4 + 0.6 * grain())).toFixed(3)})`
-            g.beginPath()
-            g.arc(x, y, radius, 0, 2 * Math.PI)
-            g.fill()
+        // Veins: wandering curves across the tile, a faint wide halo under a fine line.
+        g.lineCap = 'round'
+        const veins = 1 + Math.floor(rand() * 2)
+        for (let v = 0; v < veins; v++) {
+            const a = rand() * 2 * Math.PI, b = a + Math.PI * (0.6 + 0.6 * rand())
+            const points = [{x: Math.cos(a) * r, y: Math.sin(a) * r}]
+            for (let k = 1; k < 4; k++) {
+                const t = k / 4
+                points.push({
+                    x: (1 - t) * Math.cos(a) * r + t * Math.cos(b) * r + (rand() - 0.5) * 0.45 * r,
+                    y: (1 - t) * Math.sin(a) * r + t * Math.sin(b) * r + (rand() - 0.5) * 0.45 * r
+                })
+            }
+            points.push({x: Math.cos(b) * r, y: Math.sin(b) * r})
+            const strength = v === 0 ? 1 : 0.6
+            // Soft, feathery warm grey: wide faint bands under a fine light-grey core, no crack line.
+            for (const [width, alpha] of [[0.3, 0.05], [0.14, 0.055], [0.06, 0.06], [0.025, 0.065]]) {
+                g.strokeStyle = `rgba(${Math.round(sr * 0.8)},${Math.round(sg * 0.79)},${Math.round(sb * 0.8)},${(alpha * strength).toFixed(3)})`
+                g.lineWidth = width * r
+                g.beginPath()
+                g.moveTo(points[0].x, points[0].y)
+                for (let k = 1; k < points.length - 1; k++) {
+                    const m = {x: (points[k].x + points[k + 1].x) / 2, y: (points[k].y + points[k + 1].y) / 2}
+                    g.quadraticCurveTo(points[k].x, points[k].y, m.x, m.y)
+                }
+                g.lineTo(points[points.length - 1].x, points[points.length - 1].y)
+                g.stroke()
+            }
         }
         // A fine lit lip inside the upper edges, under the grout's shadow line.
         const lip = this.tileRadius() - 0.02 * r
