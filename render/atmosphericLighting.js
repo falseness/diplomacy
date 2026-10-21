@@ -109,9 +109,8 @@ const atmosphericLighting = {
     rimRaster: null,
     rimGain: null,
     rimBuilds: 0,
-    // Upper-left key light direction (degrees, screen space, y down) for shadows: objects cast
-    // down-right, about 40 degrees below the horizontal.
-    KEY_ANGLE: -140,
+    // Upper-left key light direction (degrees, screen space, y down) for shadows.
+    KEY_ANGLE: -120,
     // Tile look: pale cream marble tiles set in crisp dark grout. Each visible cell is
     // inset by half the grout width over a grout fill of the visible cells, so there
     // are no outlines or seams. Neutral tiles draw one of a few procedurally generated,
@@ -161,29 +160,25 @@ const atmosphericLighting = {
     fogVariantBuilds: 0,
     tileFills: new Map(),
     // Soft object shadows: a darkened, blurred silhouette of the board object's own sprite,
-    // turned about the object's base and fading towards its tip. Every object casts along the
-    // upper-left key light, so the shadows lie short, soft and parallel, attached at the base;
-    // only a lamp right beside the object (within reachRadii, not straight above or below it) turns its shadow away from it,
-    // darker and longer (lampAlpha and lampLength instead of keyAlpha and length), as the lamp's
-    // light is stronger than the key's there.
+    // turned about the object's base to point away from its strongest visible light (a lamp
+    // within reach, else the upper-left key) and fading towards its tip.
     SHADOW: {
-        color: '30,22,22',
-        keyAlpha: 0.95,
-        lampAlpha: 1,
-        lampLength: 1.7,
-        length: 1.2,
-        width: 1.1,
-        blur: 0.08,
-        tipAlpha: 0.1,
-        reachRadii: 1.9,
+        color: '52,36,30',
+        keyAlpha: 0.5,
+        lampAlpha: 0.3,
+        length: 1.5,
+        width: 0.9,
+        blur: 0.05,
+        tipAlpha: 0.15,
+        reachRadii: 3.5,
         // Contact shade under every shadow caster's base: a soft dark ellipse, radius in hex
-        // radii, flattened to flat of its width, alpha at its core.
-        contact: {radius: 0.55, flat: 0.5, alpha: 0.7},
-        // A flat object (a pond) sits in a dark bank: its own blurred silhouette, grown by grow and
-        // moved away from the key light by offset (hex radii), under the sprite.
-        bank: {grow: 1.12, offset: 0.06, alpha: 0.8}
+        // radii, flattened to flat of its width, alpha at its core, in color.
+        contact: {radius: 0.55, flat: 0.5, alpha: 0.7, color: '30,22,22'},
+        // A flat object (a pond) sits in a dark bank: its own silhouette blurred by blur (hex radii) in color,
+        // grown by grow and moved away from the key light by offset (hex radii), under the sprite.
+        bank: {grow: 1.12, offset: 0.06, alpha: 0.8, color: '30,22,22', blur: 0.08}
     },
-    // The last shadow pass's casters: {x, y, by: 'key' | 'lamp', angle (degrees), lampRadii}.
+    // The last shadow pass's casters: {x, y, by: 'key' | 'lamp', angle (degrees), lampRadii, strength, alpha}.
     shadowLog: [],
     // Flat objects cast no shadow.
     flatObjects: ['lake', 'sea'],
@@ -903,16 +898,17 @@ const atmosphericLighting = {
     bankSilhouette(image) {
         let bank = this.bankSilhouettes.get(image)
         if (bank) return bank
-        const pad = Math.ceil(this.SHADOW.blur * basis.r * 2) + 2
+        const {blur, color} = this.SHADOW.bank
+        const pad = Math.ceil(blur * basis.r * 2) + 2
         const surface = document.createElement('canvas')
         surface.width = image.width + 2 * pad
         surface.height = image.height + 2 * pad
         const g = surface.getContext('2d')
-        g.filter = `blur(${(this.SHADOW.blur * basis.r).toFixed(2)}px)`
+        g.filter = `blur(${(blur * basis.r).toFixed(2)}px)`
         g.drawImage(image, pad, pad)
         g.filter = 'none'
         g.globalCompositeOperation = 'source-in'
-        g.fillStyle = `rgb(${this.SHADOW.color})`
+        g.fillStyle = `rgb(${color})`
         g.fillRect(0, 0, surface.width, surface.height)
         bank = {surface, pad}
         this.bankSilhouettes.set(image, bank)
@@ -960,35 +956,35 @@ const atmosphericLighting = {
         }
         const log = this.shadowLog = []
         // Contact shade first, under the cast shadows.
-        const {radius, flat, alpha} = this.SHADOW.contact
+        const {radius, flat, alpha, color} = this.SHADOW.contact
         if (alpha > 0) for (const {building, image} of casters) {
             const {base} = this.shadowSilhouette(image), rx = radius * basis.r
             ctx.save()
             ctx.translate(building.pos.x + image.width / 2, building.pos.y + base)
             ctx.scale(1, flat)
             const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, rx)
-            shade.addColorStop(0, `rgba(${this.SHADOW.color},${alpha})`)
-            shade.addColorStop(0.5, `rgba(${this.SHADOW.color},${(alpha * 0.55).toFixed(3)})`)
-            shade.addColorStop(1, `rgba(${this.SHADOW.color},0)`)
+            shade.addColorStop(0, `rgba(${color},${alpha})`)
+            shade.addColorStop(0.5, `rgba(${color},${(alpha * 0.55).toFixed(3)})`)
+            shade.addColorStop(1, `rgba(${color},0)`)
             ctx.fillStyle = shade
             ctx.fillRect(-rx, -rx, 2 * rx, 2 * rx)
             ctx.restore()
         }
         for (const {x, y, building, image, pos} of casters) {
-            // A lamp straight above or below the object (its pool, or the stone behind it) leaves the key's shadow.
-            let {best} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
-            if (best && Math.abs(pos.x - best.x) < 0.5 * basis.r) best = null
+            const {best, strength} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
             // Direction from the light to the object: the shadow points away from the light.
             const angle = best ? Math.atan2(pos.y - best.y, pos.x - best.x) : (this.KEY_ANGLE + 180) * Math.PI / 180
+            const shadowAlpha = this.SHADOW.keyAlpha + this.SHADOW.lampAlpha * strength
             log.push({x, y, by: best ? 'lamp' : 'key', angle: Math.round(angle * 180 / Math.PI),
-                lampRadii: best ? +(Math.hypot(pos.x - best.x, pos.y - best.y) / basis.r).toFixed(2) : null})
+                lampRadii: best ? +(Math.hypot(pos.x - best.x, pos.y - best.y) / basis.r).toFixed(2) : null,
+                strength: +strength.toFixed(4), alpha: +shadowAlpha.toFixed(4)})
             const dir = {x: Math.cos(angle), y: Math.sin(angle)}
             const {surface, pad, base} = this.shadowSilhouette(image)
-            const L = best ? this.SHADOW.lampLength : this.SHADOW.length, W = this.SHADOW.width
+            const L = this.SHADOW.length, W = this.SHADOW.width
             // Sprite up (-y) -> L * dir, sprite right (+x) -> W * perpendicular, about the base.
             const ox = building.pos.x + image.width / 2, oy = building.pos.y + base
             ctx.save()
-            ctx.globalAlpha = best ? this.SHADOW.lampAlpha : this.SHADOW.keyAlpha
+            ctx.globalAlpha = shadowAlpha
             ctx.transform(-W * dir.y, W * dir.x, -L * dir.x, -L * dir.y, ox, oy)
             ctx.drawImage(surface, -image.width / 2 - pad, -base - pad)
             ctx.restore()
