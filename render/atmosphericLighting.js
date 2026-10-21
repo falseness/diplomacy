@@ -114,7 +114,7 @@ const atmosphericLighting = {
     // Tile look: pale cream marble tiles set in crisp dark grout. Each visible cell is
     // inset by half the grout width over a grout fill of the visible cells, so there
     // are no outlines or seams. Neutral tiles draw one of a few procedurally generated,
-    // cached marble variants; owned tiles keep their colour under a faint sheen.
+    // cached marble variants; owned tiles their colour with the same marble pattern, under a faint sheen.
     TILE: {
         variants: 8,
         rasterScale: 1.5,
@@ -125,11 +125,17 @@ const atmosphericLighting = {
         groutWidth: 0.055,
         stone: [153, 147, 155],
         sheen: 0.1,
+        // Owned tiles carry the marble too: the variant's luminance about its mean, times owned, added to the colour.
+        owned: 1.4,
         // Polished slab sheen: a soft highlight towards the upper left of each neutral tile.
         polish: 0.3
     },
     tileVariants: null,
     tileVariantBuilds: 0,
+    tileDetails: null,
+    tileDetailBuilds: 0,
+    ownedTiles: null,
+    ownedTileBuilds: 0,
     // Fogged cells: the same marble variants (TILE) in their grout, darkened and cooled to a
     // blue-grey by a multiply (tint, times a per-variant shade) and veiled by a soft mist (drifting wisps of colour mist at
     // up to mistAlpha, times a per-variant density). The light map leaves fogged cells unlit, so the variant is the cell.
@@ -847,14 +853,93 @@ const atmosphericLighting = {
             ctx.drawImage(variant, c.x - size / 2, c.y - size / 2, size, size)
             return
         }
-        ctx.save()
-        ctx.beginPath()
-        this.hexagonPath(ctx, c.x, c.y, this.tileRadius())
-        ctx.fillStyle = this.tileFill(hexagon)
-        ctx.fill()
-        ctx.clip()
-        this.drawSheen(ctx, c.x, c.y, this.TILE.sheen)
-        ctx.restore()
+        const marble = this.ownedTile(hexagon.tileHash % this.TILE.variants, this.tileFill(hexagon))
+        const size = marble.width / this.TILE.rasterScale
+        ctx.drawImage(marble, c.x - size / 2, c.y - size / 2, size, size)
+    },
+    // Marble detail, built once per hex radius from the variant of the same index: each pixel's luminance
+    // minus the tile's mean (alpha weighted), so the pattern adds nothing on average.
+    tileDetail(index) {
+        if (!this.tileDetails || this.tileDetails.radius !== basis.r) {
+            this.tileDetails = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
+            ++this.tileDetailBuilds
+        }
+        if (this.tileDetails[index]) return this.tileDetails[index]
+        const tile = this.tileVariant(index)
+        const {data} = tile.getContext('2d').getImageData(0, 0, tile.width, tile.height)
+        const offset = new Float32Array(data.length / 4)
+        let sum = 0, weight = 0
+        for (let i = 0; i < offset.length; i++) {
+            const a = data[4 * i + 3]
+            offset[i] = 0.299 * data[4 * i] + 0.587 * data[4 * i + 1] + 0.114 * data[4 * i + 2]
+            sum += offset[i] * a
+            weight += a
+        }
+        const mean = sum / weight
+        // Alpha-weighted histogram of the offsets (half-level bins), for the clipping check in buildOwnedTile.
+        const histogram = new Map()
+        for (let i = 0; i < offset.length; i++) {
+            offset[i] -= mean
+            const a = data[4 * i + 3]
+            if (!a) continue
+            const bin = Math.round(offset[i] * 2) / 2
+            histogram.set(bin, (histogram.get(bin) || 0) + a / weight)
+        }
+        return this.tileDetails[index] = {size: tile.width, offset, alpha: data, histogram: [...histogram]}
+    },
+    // Owned marble, built once per hex radius and tile colour, all variants at once (a territory coming into
+    // view costs one frame, not one per variant): the colour plus the variant's detail, with the variant's
+    // alpha (the inset tile), under the sheen; an owned cell is one drawImage, as a neutral one.
+    ownedTile(index, fill) {
+        if (!this.ownedTiles || this.ownedTiles.radius !== basis.r) {
+            this.ownedTiles = Object.assign(new Map(), {radius: basis.r})
+            ++this.ownedTileBuilds
+        }
+        let tiles = this.ownedTiles.get(fill)
+        if (!tiles) {
+            tiles = Array.from({length: this.TILE.variants}, (_, i) => this.buildOwnedTile(i, fill))
+            this.ownedTiles.set(fill, tiles)
+        }
+        return tiles[index]
+    },
+    buildOwnedTile(index, fill) {
+        const {size, offset, alpha, histogram} = this.tileDetail(index)
+        const color = fill.match(/\d+/g).map(Number)
+        // A channel near 0 or 255 would clip and shift the colour's mean: each channel takes the largest gain up to
+        // its target that keeps its mean within half a level, and the channels with room make up the luminance.
+        const bias = (c, gain) => {
+            let sum = 0
+            for (const [bin, share] of histogram) sum += (Math.min(255, Math.max(0, c + gain * bin)) - c) * share
+            return Math.abs(sum)
+        }
+        const fit = (c, target) => {
+            if (bias(c, target) <= 0.5) return target
+            let low = 0, high = target
+            for (let k = 0; k < 12; k++) {
+                const mid = (low + high) / 2
+                if (bias(c, mid) <= 0.5) low = mid
+                else high = mid
+            }
+            return low
+        }
+        const owned = this.TILE.owned, weights = [0.299, 0.587, 0.114]
+        let gains = color.map(c => fit(c, owned))
+        const boost = owned / gains.reduce((sum, gain, i) => sum + weights[i] * gain, 0)
+        if (boost > 1) gains = gains.map((gain, i) => gain < owned ? gain : fit(color[i], owned * boost))
+        const surface = document.createElement('canvas')
+        surface.width = surface.height = size
+        const g = surface.getContext('2d'), image = g.createImageData(size, size), data = image.data
+        for (let i = 0; i < offset.length; i++) {
+            data[4 * i] = color[0] + gains[0] * offset[i]
+            data[4 * i + 1] = color[1] + gains[1] * offset[i]
+            data[4 * i + 2] = color[2] + gains[2] * offset[i]
+            data[4 * i + 3] = alpha[4 * i + 3]
+        }
+        g.putImageData(image, 0, 0)
+        g.setTransform(this.TILE.rasterScale, 0, 0, this.TILE.rasterScale, size / 2, size / 2)
+        g.globalCompositeOperation = 'source-atop'
+        this.drawSheen(g, 0, 0, this.TILE.sheen)
+        return surface
     },
     // Built once per sprite raster: the sprite's alpha, blurred, filled with the shadow
     // colour and faded from its base (lowest opaque row) to its top.
