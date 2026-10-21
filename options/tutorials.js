@@ -130,10 +130,11 @@ function createTutorial2Map() {
 function createTutorial3Map() {
     // The three adjacent archer towers cover the approach and protect one another.
     // The center tower replaces a wall and uses the existing reserve archer: forces,
-    // gold and economy are unchanged. Catapults can break each tower from range five
+    // gold and economy are unchanged. Red's army starts in one column x = 9, symmetric
+    // about the open row 4, four hexes from the towers: catapults break the towers
     // while the army holds, then advance through the breach to capture the town.
-    // Lakes shelter the rear corners, mountain shoulders frame the field, and bushes
-    // mark the flanks without blocking the central siege/withdrawal routes.
+    // The map is 11 wide; lakes shelter the rear corners, mountain shoulders frame
+    // the field, and bushes mark the flanks without blocking the central siege/withdrawal routes.
     let wallLine = []
     for (let y = 0; y < 9; ++y) {
         if (y != 3 && y != 4 && y != 5) {
@@ -147,7 +148,7 @@ function createTutorial3Map() {
         }
     }
     let map = new GameMap(
-        {x: 14, y: 9},
+        {x: 11, y: 9},
         [
             {
                 rgb: {r: 208, g: 208, b: 208},
@@ -158,14 +159,14 @@ function createTutorial3Map() {
                 economyEnabled: false,
                 towns: [],
                 units: [
-                    {x: 10, y: 3, type: Catapult},
-                    {x: 10, y: 5, type: Catapult},
-                    {x: 11, y: 3, type: Normchel},
-                    {x: 11, y: 5, type: Normchel},
-                    {x: 12, y: 3, type: Archer},
-                    {x: 12, y: 5, type: Archer},
-                    {x: 11, y: 4, type: KOHb},
-                    {x: 12, y: 4, type: KOHb}
+                    {x: 9, y: 0, type: Archer},
+                    {x: 9, y: 1, type: Normchel},
+                    {x: 9, y: 2, type: KOHb},
+                    {x: 9, y: 3, type: Catapult},
+                    {x: 9, y: 5, type: Catapult},
+                    {x: 9, y: 6, type: KOHb},
+                    {x: 9, y: 7, type: Normchel},
+                    {x: 9, y: 8, type: Archer}
                 ]
             },
             {
@@ -194,8 +195,8 @@ function createTutorial3Map() {
         ],
         [],
         coordDictionary([[0, 0], [1, 0], [0, 1], [0, 7], [0, 8], [1, 8], [1, 1], [1, 7]]),
-        coordDictionary([[8, 0], [9, 0], [8, 1], [8, 7], [8, 8], [9, 8], [7, 0], [7, 8]]),
-        coordDictionary([[2, 0], [3, 1], [2, 8], [3, 7], [6, 1], [6, 7], [11, 0], [11, 8]])
+        coordDictionary([[8, 0], [8, 1], [8, 7], [8, 8], [7, 0], [7, 8]]),
+        coordDictionary([[2, 0], [3, 1], [2, 8], [3, 7], [6, 1], [6, 7]])
     )
     map.testName = 'tutorial 3'
     return map
