@@ -154,6 +154,7 @@ class MapDepth {
     createOutline() {
         if (!this.edges.length) {
             this.outline = undefined
+            this.outlineLoop = undefined
             this.rim = undefined
             return
         }
@@ -176,6 +177,8 @@ class MapDepth {
         for (let i = 0; i < orderedEdges.length; ++i)
             this.outline.lineTo(orderedEdges[i].end.x, orderedEdges[i].end.y)
         this.outline.closePath()
+        // The outline's points, as the path above (closed back to the first).
+        this.outlineLoop = [orderedEdges[0].begin, ...orderedEdges.map(edge => edge.end)]
 
         this.rim = new Path2D()
         for (let i = 0; i < this.edges.length; ++i) {

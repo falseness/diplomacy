@@ -283,6 +283,16 @@ const atmosphericBackground = {
         g.restore()
         ++this.decorations
     },
+    // The page's own background (index.html), which shows wherever the canvas is transparent.
+    PAGE_BACKGROUND: '#182a34',
+    // Whether draw(ctx) now draws the opaque raster over all of ctx's canvas (the same key, board
+    // and size as the raster's).
+    opaqueOver(ctx) {
+        const w = ctx.canvas.width, h = ctx.canvas.height
+        return !!this.raster && this.raster.width === w && this.raster.height === h &&
+            this.state === 'ready' && this.board === grid && otherSettings.atmosphericVisuals &&
+            this.key === [otherSettings.atmosphericVisuals, otherSettings.usePolishedSprites, window.devicePixelRatio].join(':')
+    },
     draw(ctx) {
         // Bind independently of the optional sprite startup counter.
         this.watch(ctx.canvas)
@@ -313,6 +323,16 @@ const atmosphericBackground = {
                 raster.height = h
                 paint(raster.getContext('2d'))
                 this.decorate(raster.getContext('2d'), w, h)
+                // Opaque by construction (opaqueOver): any pixel the clouds leave translucent is backed
+                // with the page background it showed over on the cleared canvas.
+                const g = raster.getContext('2d')
+                g.save()
+                g.setTransform(1, 0, 0, 1, 0, 0)
+                g.globalAlpha = 1
+                g.globalCompositeOperation = 'destination-over'
+                g.fillStyle = this.PAGE_BACKGROUND
+                g.fillRect(0, 0, w, h)
+                g.restore()
                 this.watch(raster)
                 this.raster = raster
                 ++this.rasterizations

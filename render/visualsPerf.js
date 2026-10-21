@@ -14,7 +14,8 @@
     // Compositor-side work of a frame (and of the tasks since the previous one): blended destination
     // pixels, large canvas uploads and the board's render path. Reset after every sample.
     const freshWork = () => ({blendedMegapixels: 0, blendedDraws: 0, blendedMainMegapixels: 0, blendedByOp: {},
-        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false})
+        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false,
+        drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
     gameLoop = function(timestamp) {
@@ -37,7 +38,9 @@
             const round = v => Math.round(v * 1e4) / 1e4
             frame.work = {...work, blendedMegapixels: round(work.blendedMegapixels), blendedMainMegapixels: round(work.blendedMainMegapixels),
                 blendedByOp: Object.fromEntries(Object.entries(work.blendedByOp).map(([k, v]) => [k, round(v)])),
-                pathBlends: {draws: work.pathBlends.draws, canvasMegapixels: round(work.pathBlends.canvasMegapixels)}, uploadMegapixels: round(work.uploadMegapixels)}
+                pathBlends: {draws: work.pathBlends.draws, canvasMegapixels: round(work.pathBlends.canvasMegapixels)}, uploadMegapixels: round(work.uploadMegapixels),
+                drawnMegapixels: round(work.drawnMegapixels), drawnMainMegapixels: round(work.drawnMainMegapixels),
+                drawnByLayer: Object.fromEntries(Object.entries(work.drawnByLayer).map(([k, [mp, calls]]) => [k, [round(mp), calls]]))}
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
@@ -80,9 +83,12 @@
         for (const [px, py] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
             xs.push(t.a * px + t.c * py + t.e); ys.push(t.b * px + t.d * py + t.f)
         }
+        return deviceArea(g, Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys))
+    }
+    // Area (megapixels) of the device rectangle x0..x1 x y0..y1 cut to g's canvas and its clip rectangles.
+    const deviceArea = (g, x0, x1, y0, y1) => {
         const cw = g.canvas.width, ch = g.canvas.height
-        const x0 = Math.max(0, Math.min(...xs)), x1 = Math.min(cw, Math.max(...xs))
-        const y0 = Math.max(0, Math.min(...ys)), y1 = Math.min(ch, Math.max(...ys))
+        x0 = Math.max(0, x0); x1 = Math.min(cw, x1); y0 = Math.max(0, y0); y1 = Math.min(ch, y1)
         const rects = clips.get(g)
         if (!rects) return Math.max(0, x1 - x0) * Math.max(0, y1 - y0) / 1e6
         let area = 0
@@ -103,6 +109,111 @@
         work.blendedByOp[op] = (work.blendedByOp[op] || 0) + area
         if (g.canvas === mainCanvas) work.blendedMainMegapixels += area
     }
+    // Drawn work (TASK-1174): every drawImage, fillRect, strokeRect, clearRect, putImageData, fill, stroke
+    // and text draw, source-over included, adds its destination area (device pixels cut to the canvas and
+    // its clip rectangles; paths and text by their transformed bounding box, a stroke grown by half its
+    // line width) to drawnMegapixels and one to drawCalls, by layer: the drawing function the call is
+    // made in (sky, shadow, surface, buildings, light, units, text, borders, interface; frame: drawMain's
+    // own calls, between-frames: tasks outside a frame), offscreen/ before it when the target is not the
+    // main canvas. A path or text whose bounds are unknown (a Path2D made before recording) counts its
+    // whole canvas (unboundedDraws).
+    let layer = 'between-frames'
+    const draw = (g, area) => {
+        if (area === null) { work.unboundedDraws++; area = g.canvas.width * g.canvas.height / 1e6 }
+        work.drawCalls++
+        work.drawnMegapixels += area
+        const main = g.canvas === mainCanvas
+        if (main) work.drawnMainMegapixels += area
+        const key = main || g.canvas === interfaceCanvasElement() ? layer : 'offscreen/' + layer
+        const entry = work.drawnByLayer[key] ||= [0, 0]
+        entry[0] += area; entry[1]++
+    }
+    const interfaceCanvasElement = () => typeof interfaceCtx !== 'undefined' ? interfaceCtx.canvas : null
+    // Path bounds: device points of the context's current path (beginPath resets), and world points of
+    // each Path2D (transformed when it is filled or stroked).
+    const pathBoxes = new WeakMap(), path2DBoxes = new WeakMap()
+    const grow = (box, x, y) => {
+        if (x < box.x0) box.x0 = x
+        if (x > box.x1) box.x1 = x
+        if (y < box.y0) box.y0 = y
+        if (y > box.y1) box.y1 = y
+    }
+    const emptyBox = () => ({x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity})
+    // Points (x, y pairs, the extent of each path call's geometry) of path call name with args.
+    const pathPoints = (name, a) => {
+        switch (name) {
+        case 'arc': return [a[0] - a[2], a[1] - a[2], a[0] + a[2], a[1] + a[2]]
+        case 'ellipse': { const r = Math.max(a[2], a[3]); return [a[0] - r, a[1] - r, a[0] + r, a[1] + r] }
+        case 'rect': case 'roundRect': return [a[0], a[1], a[0] + a[2], a[1] + a[3]]
+        default: return Array.prototype.slice.call(a, 0, name === 'arcTo' ? 4 : undefined).filter(v => typeof v === 'number')
+        }
+    }
+    const trackPath = (g, name, args) => {
+        let box = pathBoxes.get(g)
+        if (!box) pathBoxes.set(g, box = emptyBox())
+        const t = g.getTransform(), p = pathPoints(name, args)
+        for (let k = 0; k + 1 < p.length; k += 2) {
+            const x = p[k], y = p[k + 1]
+            if (name === 'arc' || name === 'ellipse' || name === 'rect' || name === 'roundRect') {
+                // A box: all four corners.
+                for (const [px, py] of [[p[0], p[1]], [p[2], p[1]], [p[0], p[3]], [p[2], p[3]]])
+                    grow(box, t.a * px + t.c * py + t.e, t.b * px + t.d * py + t.f)
+                break
+            }
+            grow(box, t.a * x + t.c * y + t.e, t.b * x + t.d * y + t.f)
+        }
+    }
+    // Device area of a fill or stroke of g's current path or of the Path2D path.
+    const pathArea = (g, path, stroke) => {
+        let box
+        if (path instanceof Path2D) {
+            const w = path2DBoxes.get(path)
+            if (!w || w.x0 > w.x1) return null
+            const t = g.getTransform()
+            box = emptyBox()
+            for (const [px, py] of [[w.x0, w.y0], [w.x1, w.y0], [w.x0, w.y1], [w.x1, w.y1]])
+                grow(box, t.a * px + t.c * py + t.e, t.b * px + t.d * py + t.f)
+        }
+        else box = pathBoxes.get(g)
+        if (!box || box.x0 > box.x1) return 0
+        let pad = 0
+        if (stroke) { const t = g.getTransform(); pad = g.lineWidth / 2 * Math.max(Math.hypot(t.a, t.b), Math.hypot(t.c, t.d)) }
+        return deviceArea(g, box.x0 - pad, box.x1 + pad, box.y0 - pad, box.y1 + pad)
+    }
+    const textArea = (g, text, x, y, stroke) => {
+        const m = g.measureText(text), t = g.getTransform(), box = emptyBox()
+        const pad = stroke ? g.lineWidth / 2 : 0
+        const x0 = x - m.actualBoundingBoxLeft - pad, x1 = x + m.actualBoundingBoxRight + pad
+        const y0 = y - m.actualBoundingBoxAscent - pad, y1 = y + m.actualBoundingBoxDescent + pad
+        for (const [px, py] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]])
+            grow(box, t.a * px + t.c * py + t.e, t.b * px + t.d * py + t.f)
+        return deviceArea(g, box.x0, box.x1, box.y0, box.y1)
+    }
+    for (const name of ['moveTo', 'lineTo', 'arc', 'arcTo', 'bezierCurveTo', 'quadraticCurveTo', 'ellipse', 'rect', 'roundRect']) {
+        const original = Path2D.prototype[name]
+        if (!original) continue
+        Path2D.prototype[name] = function() {
+            let box = path2DBoxes.get(this)
+            if (!box) path2DBoxes.set(this, box = emptyBox())
+            const p = pathPoints(name, arguments)
+            for (let k = 0; k + 1 < p.length; k += 2) grow(box, p[k], p[k + 1])
+            return original.apply(this, arguments)
+        }
+    }
+    // Labels the drawing calls made inside fn's calls (label: a name, or a function of the call's arguments).
+    const labelled = (fn, label) => {
+        if (fn.visualsPerfLayer) return fn
+        const wrapped = function(...args) {
+            const outer = layer
+            layer = typeof label === 'function' ? label(args) : label
+            try { return fn.apply(this, args) }
+            finally { layer = outer }
+        }
+        wrapped.visualsPerfLayer = true
+        return wrapped
+    }
+    drawMain = labelled(drawMain, 'frame')
+    drawInterface = labelled(drawInterface, 'interface')
     const drawn = g => versions.set(g.canvas, (versions.get(g.canvas) || 0) + 1)
     const isCanvas = source => source instanceof HTMLCanvasElement || typeof OffscreenCanvas !== 'undefined' && source instanceof OffscreenCanvas
     const contexts = [CanvasRenderingContext2D, typeof OffscreenCanvasRenderingContext2D !== 'undefined' && OffscreenCanvasRenderingContext2D].filter(Boolean)
@@ -115,7 +226,9 @@
             const sw = source.width, sh = source.height
             if (active) {
                 const [x, y, w = sw, h = sh] = args.length === 8 ? args.slice(4) : args
-                blend(this, boxArea(this, x, y, w, h))
+                const area = boxArea(this, x, y, w, h)
+                blend(this, area)
+                draw(this, area)
             }
             if (isCanvas(source) && sw * sh > 1e6 && uploaded.get(source) !== (versions.get(source) || 0)) {
                 uploaded.set(source, versions.get(source) || 0)
@@ -130,7 +243,11 @@
         for (const name of ['fillRect', 'strokeRect']) {
             const original = proto[name]
             proto[name] = function(x, y, w, h) {
-                if (active) blend(this, boxArea(this, x, y, w, h))
+                if (active) {
+                    const area = boxArea(this, x, y, w, h)
+                    blend(this, area)
+                    draw(this, name === 'strokeRect' ? boxArea(this, x - this.lineWidth / 2, y - this.lineWidth / 2, w + this.lineWidth, h + this.lineWidth) : area)
+                }
                 drawn(this)
                 return original.apply(this, arguments)
             }
@@ -138,7 +255,12 @@
         for (const name of ['fill', 'stroke', 'fillText', 'strokeText']) {
             const original = proto[name]
             proto[name] = function() {
-                if (active) blend(this, null)
+                if (active) {
+                    blend(this, null)
+                    const stroke = name.startsWith('stroke')
+                    draw(this, name.endsWith('Text') ? textArea(this, arguments[0], arguments[1], arguments[2], stroke) :
+                        pathArea(this, arguments[0], stroke))
+                }
                 drawn(this)
                 return original.apply(this, arguments)
             }
@@ -160,10 +282,11 @@
             return restore.apply(this, arguments)
         })(proto.restore)
         proto.beginPath = (beginPath => function() {
-            if (active) paths.set(this, [])
+            if (active) { paths.set(this, []); pathBoxes.delete(this) }
             return beginPath.apply(this, arguments)
         })(proto.beginPath)
         proto.rect = (rect => function(x, y, w, h) {
+            if (active) trackPath(this, 'rect', arguments)
             const path = active && paths.get(this)
             if (path) {
                 const t = this.getTransform()
@@ -179,7 +302,7 @@
             const original = proto[name]
             if (!original) continue
             proto[name] = function() {
-                if (active) paths.delete(this)
+                if (active) { paths.delete(this); trackPath(this, name, arguments) }
                 return original.apply(this, arguments)
             }
         }
@@ -193,13 +316,20 @@
             }
             return clip.apply(this, args)
         })(proto.clip)
-        for (const name of ['clearRect', 'putImageData']) {
-            const original = proto[name]
-            proto[name] = function() {
-                if (active) drawn(this)
-                return original.apply(this, arguments)
+        proto.clearRect = (clearRect => function(x, y, w, h) {
+            if (active) {
+                drawn(this)
+                draw(this, boxArea(this, x, y, w, h))
             }
-        }
+            return clearRect.apply(this, arguments)
+        })(proto.clearRect)
+        proto.putImageData = (putImageData => function(image, x, y) {
+            if (active) {
+                drawn(this)
+                draw(this, deviceArea(this, x, x + image.width, y, y + image.height))
+            }
+            return putImageData.apply(this, arguments)
+        })(proto.putImageData)
     }
     // The board's render path: the surface cache or the direct draw, and the overlay layer.
     const wrapGrid = () => {
@@ -217,6 +347,22 @@
             if (active && layered) work.overlayLayer = true
             return layered
         }
+        // Drawing layers (drawn work by layer).
+        proto.drawMapSurface = labelled(proto.drawMapSurface, 'surface')
+        proto.drawOverlayLayer = labelled(proto.drawOverlayLayer, 'units')
+        for (const name of ['drawStillUnits', 'drawEntityOverlays']) if (proto[name]) proto[name] = labelled(proto[name], 'units')
+        for (const name of ['drawCellText', 'drawChanceOfWinningText', 'drawLoadingCells']) if (proto[name]) proto[name] = labelled(proto[name], 'text')
+        if (proto.drawLitEdges) proto.drawLitEdges = labelled(proto.drawLitEdges, 'light')
+        proto.drawOther = labelled(proto.drawOther, args => args[1] || 'entities')
+        atmosphericBackground.draw = labelled(atmosphericBackground.draw, 'sky')
+        atmosphericLighting.draw = labelled(atmosphericLighting.draw, 'light')
+        MapDepth.prototype.drawAtmosphericShadow = labelled(MapDepth.prototype.drawAtmosphericShadow, 'shadow')
+        for (const target of [typeof moveTween !== 'undefined' && moveTween, typeof onlineObservation !== 'undefined' && onlineObservation,
+            typeof remoteEffects !== 'undefined' && remoteEffects])
+            if (target && target.draw) target.draw = labelled(target.draw, 'units')
+        for (const target of [typeof border !== 'undefined' && border, typeof attackBorder !== 'undefined' && attackBorder])
+            if (target && target.draw) target.draw = labelled(target.draw, 'borders')
+        proto.drawMapSurface.visualsPerf = true
     }
     const originalLoad = loadSprites
     loadSprites = function(...args) { if (active) counters.spriteLoads++; return originalLoad.apply(this, args) }

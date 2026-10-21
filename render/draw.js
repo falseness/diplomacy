@@ -1,8 +1,20 @@
 function drawMain() {
-    mainCtx.clearRect(canvas.offset.x, canvas.offset.y,
-        width, height)
-
-    atmosphericBackground.draw(mainCtx)
+    // An opaque sky raster covers the whole canvas, so it needs no clear under it; the board's lit
+    // images may hide most of the canvas (Grid.frameCover): then the sky is drawn only where they
+    // leave it open.
+    const cover = grid.frameCover(mainCtx)
+    if (!cover) {
+        if (!atmosphericBackground.opaqueOver(mainCtx))
+            mainCtx.clearRect(canvas.offset.x, canvas.offset.y,
+                width, height)
+        atmosphericBackground.draw(mainCtx)
+    }
+    else if (cover.open.length) {
+        mainCtx.save()
+        clipToDeviceRects(mainCtx, cover.open)
+        atmosphericBackground.draw(mainCtx)
+        mainCtx.restore()
+    }
 
     // Border.draw sets round joins/caps and never restores them, so every frame after the first strokes
     // text and bars with them. Start each frame in that state, so the first frame draws the same.

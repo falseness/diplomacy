@@ -1165,22 +1165,18 @@ class Grid extends SpritesGroup {
     // keeps the direct draw.
     // Returns whether it drew the surface; the frame then draws drawLitEdges and the units.
     drawLitView(ctx) {
+        // The plan frameCover made for this frame at this transform, else a new one.
         const t = ctx.getTransform()
-        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceZooming ||
-                t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(ctx)) {
-            if (this.litView && (this.litView.a !== t.a || this.litView.d !== t.d))
-                this.dropLitView()
+        let plan = this.litPlan
+        this.litPlan = undefined
+        if (plan === undefined || plan && (plan.t.a !== t.a || plan.t.d !== t.d || plan.t.e !== t.e || plan.t.f !== t.f ||
+                plan.t.b !== t.b || plan.t.c !== t.c))
+            plan = this.planLitView(ctx)
+        if (!plan)
             return false
-        }
         const cw = ctx.canvas.width, ch = ctx.canvas.height
-        let view = this.litView
-        if (!view || !this.litViewHolds(ctx, view, t)) {
-            this.dropLitView()
-            view = this.litView = this.newLitView(t, ctx.canvas)
-        }
-        const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
-        if (rest && rest.done === LIT_REST_BANDS) {
+        const {view, rest} = plan
+        if (rest) {
             ctx.save()
             ctx.setTransform(1, 0, 0, 1, 0, 0)
             ctx.drawImage(rest.canvas, 0, 0)
@@ -1213,6 +1209,111 @@ class Grid extends SpritesGroup {
         this.litFrame = {view, ox, oy, rest: false}
         this.queueLitTiles(view, t, cw, ch)
         return true
+    }
+    // Whether ctx's frame draws lit images, and which: false (the live light), else {t, view, rest}
+    // with view the lit view at ctx's transform t (made now if it does not hold) and rest its
+    // finished rest snapshot (null: the frame draws the tiles).
+    planLitView(ctx) {
+        const t = ctx.getTransform()
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceZooming ||
+                t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(ctx)) {
+            if (this.litView && (this.litView.a !== t.a || this.litView.d !== t.d))
+                this.dropLitView()
+            return false
+        }
+        const cw = ctx.canvas.width, ch = ctx.canvas.height
+        let view = this.litView
+        if (!view || !this.litViewHolds(ctx, view, t)) {
+            this.dropLitView()
+            view = this.litView = this.newLitView(t, ctx.canvas)
+        }
+        const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
+        return {t, view, rest: rest && rest.done === LIT_REST_BANDS ? rest : null}
+    }
+    // The part of ctx's canvas (the main canvas, at the camera's transform, before drawMain draws
+    // anything) that this frame's board images leave uncovered, so the sky is drawn only there and
+    // the slab shadow only when it reaches there (they are hidden elsewhere): null when the frame
+    // draws the board live or from the surface cache (both drawn whole), else {open}, whole device
+    // pixel rectangles. The rest snapshot (sky included) covers the canvas; a lit tile covers its
+    // square when it is opaque there (litOpaque), so open is the squares of the other tiles and the
+    // canvas the tiles do not reach. Only with the opaque sky raster, which then covers the open
+    // part with no clear under it. The lit view plan is kept for drawLitView.
+    frameCover(ctx) {
+        this.litPlan = undefined
+        this.coverOpen = undefined
+        // The sky's check first: a sky drawn with another key or board invalidates the light first.
+        if (!otherSettings.atmosphericVisuals || !atmosphericBackground.opaqueOver(ctx) || this.canUseSurfaceCache())
+            return null
+        const plan = this.litPlan = this.planLitView(ctx)
+        if (!plan)
+            return null
+        if (plan.rest)
+            return {open: this.coverOpen = []}
+        const {t, view} = plan, cw = ctx.canvas.width, ch = ctx.canvas.height
+        const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
+        const range = this.litTileRange(cw, ch, ox, oy, 0), open = []
+        // Rows of tiles cut to the canvas: the runs of tiles without an opaque square, and the
+        // canvas above, below, left and right of the tile range (none: the range covers it).
+        for (let v = range.v0; v <= range.v1; ++v) {
+            const y0 = Math.max(0, v * LIT_TILE + oy), y1 = Math.min(ch, (v + 1) * LIT_TILE + oy)
+            let run = null
+            for (let u = range.u0; u <= range.u1; ++u) {
+                const tile = view.tiles.get(u + ',' + v)
+                if (tile && tile.litOpaque === mapDepth.outline && mapDepth.outline) {
+                    run = null
+                    continue
+                }
+                const x0 = Math.max(0, u * LIT_TILE + ox), x1 = Math.min(cw, (u + 1) * LIT_TILE + ox)
+                if (run)
+                    run.w = x1 - run.x
+                else
+                    open.push(run = {x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+            }
+        }
+        return {open: this.coverOpen = open}
+    }
+    // Whether the device rectangle x0..x1 x y0..y1 of view's tile pixels is opaque on a lit tile:
+    // inside the board outline's loop (with a margin of two device pixels), where the underlay's
+    // opaque fill under the surface has full coverage and every later draw on the tile keeps the
+    // alpha (source-over, multiply, color-dodge, screen). A loop side whose bounds meet the
+    // rectangle counts as crossing it.
+    litSquareOpaque(view, x0, y0, x1, y1) {
+        const loop = mapDepth.outlineLoop
+        if (!loop || !mapDepth.underlayCache)
+            return false
+        const m = 2
+        const left = (x0 - m - view.e) / view.a, right = (x1 + m - view.e) / view.a
+        const top = (y0 - m - view.f) / view.d, bottom = (y1 + m - view.f) / view.d
+        const cx = (left + right) / 2, cy = (top + bottom) / 2
+        let inside = false
+        for (let k = 0; k < loop.length; ++k) {
+            const p = loop[k], q = loop[(k + 1) % loop.length]
+            if (Math.max(p.x, q.x) >= left && Math.min(p.x, q.x) <= right &&
+                    Math.max(p.y, q.y) >= top && Math.min(p.y, q.y) <= bottom)
+                return false
+            if ((p.y > cy) !== (q.y > cy) && cx < p.x + (cy - p.y) * (q.x - p.x) / (q.y - p.y))
+                inside = !inside
+        }
+        return inside
+    }
+    // The slab's soft drop shadow on the sky (drawn before the surface): skipped when frameCover
+    // left no open part of the canvas over it this frame (none over the rest snapshot), else drawn
+    // whole, since a clipped scaled draw samples its raster a level apart from the whole one.
+    drawSlabShadow(ctx) {
+        const open = this.coverOpen
+        this.coverOpen = undefined
+        if (open)
+            mapDepth.ensureGeometry(this)
+        const shadow = mapDepth.atmosphericShadow
+        if (open && shadow) {
+            const t = ctx.getTransform()
+            const x0 = t.a * shadow.left + t.e, x1 = x0 + t.a * shadow.width
+            const y0 = t.d * shadow.top + t.f, y1 = y0 + t.d * shadow.height
+            if (!open.some(r => r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0))
+                return
+        }
+        mapDepth.drawAtmosphericShadow(ctx, this)
     }
     // Whether view still draws this board at transform t's scale: the same scale, light map
     // raster and board state (its own captured copy, compared as the surface cache's).
@@ -1498,6 +1599,8 @@ class Grid extends SpritesGroup {
         g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
         atmosphericLighting.lightTile(g, this, view.outline)
         g.restore()
+        // The board outline the tile's drawn square is opaque under (frameCover), if any.
+        canvas.litOpaque = this.litSquareOpaque(view, x + P, y + P, x + P + LIT_TILE, y + P + LIT_TILE) ? mapDepth.outline : null
         return canvas
     }
     // The frame's light where the lit tiles left the board's edge unlit (litEdges), after the
@@ -1562,7 +1665,7 @@ class Grid extends SpritesGroup {
     }
     draw(ctx) {
         // The slab's soft drop shadow on the sky, under the board.
-        mapDepth.drawAtmosphericShadow(ctx, this)
+        this.drawSlabShadow(ctx)
         const surface = this.drawMapSurface(ctx)
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
         const lit = surface === 'lit', cachedScene = surface === true
@@ -1620,6 +1723,15 @@ class Grid extends SpritesGroup {
 // Hook for a cell-contents request (PRD 7.4): the cells the local fog just uncovered on a
 // hidden-information board without contents. No network yet; markCellsKnown answers it.
 function onLoadingCellsNeeded(cells) {}
+
+// Clips ctx to rects (whole device pixel rectangles {x, y, w, h}); leaves the identity transform.
+function clipToDeviceRects(ctx, rects) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.beginPath()
+    for (const r of rects)
+        ctx.rect(r.x, r.y, r.w, r.h)
+    ctx.clip()
+}
 
 // How far (hex radii) a cell's state reaches into the surface cache's pixels, beyond its drawn
 // sprite (Grid.checkRange).
