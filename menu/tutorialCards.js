@@ -238,8 +238,10 @@ class TutorialCardsTree {
         ctx.strokeStyle = entry.next ? colours.gold : colours.rim
         ctx.lineWidth = rim
         ctx.stroke()
-        // The medallion: at most 82% of the card's height and 30% of its width.
-        const pad = 1.6 * u, disc = Math.min(0.82 * r.height, 0.3 * r.width), cx = r.x + pad + disc / 2, cy = r.y + r.height / 2
+        // The medallion: at most 82% of the card's height and 30% of its width, and small enough that its ring and
+        // shade (0.7 u past the disc) stay 0.2 u inside the card on short cards (wide or low screens).
+        const pad = 1.6 * u, disc = Math.min(0.82 * r.height, r.height - 1.8 * u, 0.3 * r.width)
+        const cx = r.x + pad + disc / 2, cy = r.y + r.height / 2
         this.drawMedallion(ctx, cx, cy, disc / 2, u)
         button.medallion = this.drawMedallionImage(ctx, entry.id, cx, cy, disc / 2)
         // The corner mark: Next's tag or the check badge.
@@ -310,11 +312,12 @@ class TutorialCardsTree {
         ctx.lineJoin = 'round'
         ctx.stroke()
     }
-    // The gold "Next" tag in the card's top-right corner; returns its box.
+    // The gold "Next" tag in the card's top-right corner; returns its box. Its font is in the hub's font unit (as
+    // hubFont: the 1.5 units are 12 px on a 667x375 screen) and the tag grows with it.
     drawNextTag(ctx, r, u) {
-        const colours = TutorialCardsTree.CARD, font = `800 ${1.5 * u}px ${Text.titleFamily}`
+        const colours = TutorialCardsTree.CARD, f = u * hubFontScale(), font = `800 ${1.5 * f}px ${Text.titleFamily}`
         ctx.font = font
-        const height = 2.2 * u, width = ctx.measureText('Next').width + 1.8 * u
+        const height = 2.2 * f, width = ctx.measureText('Next').width + 1.8 * f
         const box = {x: r.x + r.width - 0.9 * u - width, y: r.y + 0.9 * u, width, height}
         const fill = ctx.createLinearGradient(0, box.y, 0, box.y + height)
         fill.addColorStop(0, colours.tag[0])

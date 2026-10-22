@@ -902,7 +902,8 @@ class Grid extends SpritesGroup {
         this.surfaceCacheQueued = true
         setTimeout(() => {
             this.surfaceCacheQueued = false
-            if (otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
+            // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
+            if (this === grid && otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
                 this.surfaceCacheBuildStep()
         })
     }
