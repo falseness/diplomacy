@@ -1025,7 +1025,7 @@ function hubDrawIcon(ctx, name, x, y, size, color) {
 
 // A tag's icon: people for the seat count, a cloud for fog, arrows for async moves, a die for the co-op seed.
 function hubTagIcon(tag) {
-    if (/players|humans/.test(tag)) return 'people'
+    if (/player|human/.test(tag)) return 'people'
     if (tag === 'fog') return 'fog'
     if (tag === 'async') return 'async'
     if (tag.startsWith('seed')) return 'seed'
@@ -1197,6 +1197,34 @@ function hubDrawTitle(ctx, row, x, y, maxWidth, color, weight = 700, size = 2.05
     const width = hubText(ctx, title, x, y, titleFont, color)
     if (withMode) return width + 0.8 * u + hubText(ctx, mode, x + width + 0.8 * u, y, modeFont, HUB_CARD.dim)
     return width
+}
+
+// A card's glass box in rect r (hub concept): a finished card dimmed, your turn warm with a gold rim, the selected
+// card a light rim.
+function hubDrawCardBox(ctx, r, u, {selected = false, yourTurn = false, finished = false} = {}) {
+    const box = new Rect(r.x, r.y, r.width, r.height, Array(4).fill(0.8 * u))
+    ctx.save()
+    ctx.beginPath()
+    box.drawShape(ctx)
+    ctx.closePath()
+    ctx.fillStyle = finished ? HUB_CARD.finishedGlass : HUB_CARD.glass
+    if (yourTurn) {
+        ctx.shadowColor = 'rgba(242, 180, 90, 0.35)'
+        ctx.shadowBlur = 1.4 * u
+    }
+    ctx.fill()
+    ctx.shadowColor = 'transparent'
+    if (yourTurn) {
+        const warm = ctx.createLinearGradient(r.x, 0, r.x + 0.7 * r.width, 0)
+        warm.addColorStop(0, HUB_CARD.warm[0])
+        warm.addColorStop(1, HUB_CARD.warm[1])
+        ctx.fillStyle = warm
+        ctx.fill()
+    }
+    ctx.strokeStyle = selected ? MENU_THEME.selectedRim : yourTurn ? HUB_CARD.gold : finished ? HUB_CARD.finishedRim : HUB_CARD.rim
+    ctx.lineWidth = (selected || yourTurn ? 0.25 : 0.12) * u
+    ctx.stroke()
+    ctx.restore()
 }
 
 // A hub button placed by the hub's layout: a plaque (gold when primary) with a small-caps label.
@@ -1457,29 +1485,7 @@ class HubPanel {
     // selected card has a light rim.
     drawCard(ctx, row, r, u) {
         const theme = MENU_THEME, selected = row.id === this.lists.selectedId, finished = row.kind === 'finished'
-        const box = new Rect(r.x, r.y, r.width, r.height, Array(4).fill(0.8 * u))
-        ctx.save()
-        ctx.beginPath()
-        box.drawShape(ctx)
-        ctx.closePath()
-        ctx.fillStyle = finished ? HUB_CARD.finishedGlass : HUB_CARD.glass
-        if (row.yourTurn) {
-            ctx.shadowColor = 'rgba(242, 180, 90, 0.35)'
-            ctx.shadowBlur = 1.4 * u
-        }
-        ctx.fill()
-        ctx.shadowColor = 'transparent'
-        if (row.yourTurn) {
-            const warm = ctx.createLinearGradient(r.x, 0, r.x + 0.7 * r.width, 0)
-            warm.addColorStop(0, HUB_CARD.warm[0])
-            warm.addColorStop(1, HUB_CARD.warm[1])
-            ctx.fillStyle = warm
-            ctx.fill()
-        }
-        ctx.strokeStyle = selected ? theme.selectedRim : row.yourTurn ? HUB_CARD.gold : finished ? HUB_CARD.finishedRim : HUB_CARD.rim
-        ctx.lineWidth = (selected || row.yourTurn ? 0.25 : 0.12) * u
-        ctx.stroke()
-        ctx.restore()
+        hubDrawCardBox(ctx, r, u, {selected, yourTurn: row.yourTurn, finished})
         const centerY = r.y + r.height / 2, pad = 1.1 * u, badge = 4.2 * u
         const right = r.x + r.width - pad, tall = HubPanel.cardHeight(row) === HubPanel.TALL_CARD
         const lines = tall ? [0.24, 0.5, 0.76].map(k => r.y + k * r.height) : [0.33, 0.7].map(k => r.y + k * r.height)
@@ -1573,6 +1579,142 @@ class HubLists {
             return {x: r.x + r.width / 2, y: r.y + r.height / 2}
         }
         return null
+    }
+}
+
+// The load game screen's save slots (TASK-1205) as hub cards in one panel that scrolls like the hub's: a saved game's
+// card (loadSlotRow) is a tall one with the slot number, the mode badge, the title and the mode, the tag chips, and at
+// its right the player to move, the round and the players' colour dots; an empty slot is a dimmed card that does
+// nothing. A click on a saved game's card calls clickFunc(slot index).
+class LoadSlotsPanel extends HubPanel {
+    constructor(slotsCount, clickFunc) {
+        super({selectedId: null, lastPanel: null, choose: row => clickFunc(row.slot)}, 'Saved games',
+            n => n === 1 ? '1 saved game' : `${n} saved games`, 'save')
+        this.slotsCount = slotsCount
+        // Empty until update() reads the saves.
+        this.setRows([...Array(slotsCount).keys()].map(i => loadSlotRow(i, {whooseTurn: -1})))
+    }
+    static cardHeight(row) {
+        return row.kind === 'save' ? HubPanel.TALL_CARD : HubPanel.CARD
+    }
+    update() {
+        this.setRows([...Array(this.slotsCount).keys()].map(i => loadSlotRow(i, loadSlotInfo(i))))
+    }
+    // Slot index's card on screen, the panel scrolled to show it whole (tests aim at it).
+    slotRect(index) {
+        this.scroll.reveal(index)
+        const r = this.rowRect(index)
+        return new Rect(r.x, r.y, r.width, r.height)
+    }
+    setRows(rows) {
+        const u = hubUnit()
+        this.rows = rows
+        this.scroll.setHeights(rows.map(row => (LoadSlotsPanel.cardHeight(row) + HubPanel.CARD_GAP) * u))
+    }
+    drawCard(ctx, row, r, u) {
+        const empty = row.kind !== 'save', centerY = r.y + r.height / 2, pad = 1.1 * u, number = 2.4 * u, badge = 4.2 * u
+        const right = r.x + r.width - pad
+        hubDrawCardBox(ctx, r, u, {finished: empty})
+        ctx.save()
+        if (empty) ctx.globalAlpha = HUB_CARD.finishedAlpha
+        hubText(ctx, String(row.slot + 1), r.x + pad + number / 2, centerY, hubFont(2.05 * u, 800, true), HUB_CARD.round,
+            'center')
+        let left = r.x + pad + number + 0.6 * u
+        if (empty) {
+            // The label in the dim text colour but opaque, readable on the dimmed card.
+            ctx.globalAlpha = 1
+            hubText(ctx, 'empty slot', left, centerY, hubFont(1.6 * u, 'italic 500'), MENU_THEME.disabled.text)
+            ctx.restore()
+            return
+        }
+        hubDrawBadge(ctx, row.mode, left + badge / 2, centerY, badge)
+        left += badge + pad
+        // The right block as on a your-turn hub card: the player to move, the round, the players; the title beside
+        // the upper two, the chips beside the lower two.
+        const inner = right - left, lines = [0.24, 0.5, 0.76].map(k => r.y + k * r.height)
+        const moverWidth = hubDrawMoverTag(ctx, row.mover, right, lines[0])
+        const roundWidth = hubText(ctx, 'Round ' + row.round, right, lines[1], hubFont(1.5 * u, 800, true), HUB_CARD.round, 'right')
+        const dotsWidth = hubDrawTurnDots(ctx, row.players, right, lines[2])
+        hubDrawTitle(ctx, row, left, r.y + 0.33 * r.height, inner - Math.max(moverWidth, roundWidth) - pad, MENU_THEME.text)
+        hubDrawChips(ctx, row.tags, left, r.y + 0.7 * r.height, inner - Math.max(roundWidth, dotsWidth) - pad)
+        ctx.restore()
+    }
+}
+
+// The gold tag of the player to move, right-aligned at right on line y: a dot in its colour and 'to move' (or
+// 'demons to move'); returns its width.
+function hubDrawMoverTag(ctx, mover, right, y) {
+    const u = hubUnit(), font = hubFont(1.5 * u, 800, true), dot = 1.15 * u, pad = 0.6 * u, gap = 0.4 * u
+    ctx.font = font
+    const width = 2 * pad + dot + gap + ctx.measureText(mover.text).width
+    hubFillRounded(ctx, {x: right - width, y: y - 1.05 * u, width, height: 2.1 * u}, 0.3 * u, HUB_CARD.gold)
+    hubDrawDot(ctx, right - width + pad + dot / 2, y, mover.colour)
+    hubText(ctx, mover.text, right - width + pad + dot + gap, y, font, HUB_CARD.darkText)
+    return width
+}
+
+// The players' colour dots right-aligned at right on line y, the player to move's in a gold ring; returns the width.
+function hubDrawTurnDots(ctx, players, right, y) {
+    const u = hubUnit(), dot = 1.15 * u, step = 1.45 * u, ring = 0.3 * u
+    let x = right - ring - players.length * step + (step - dot)
+    for (const player of players) {
+        hubDrawDot(ctx, x + dot / 2, y, player.colour)
+        if (player.toMove) {
+            ctx.save()
+            ctx.beginPath()
+            ctx.arc(x + dot / 2, y, dot / 2 + 0.2 * u, 0, Math.PI * 2)
+            ctx.strokeStyle = HUB_CARD.gold
+            ctx.lineWidth = 0.2 * u
+            ctx.stroke()
+            ctx.restore()
+        }
+        x += step
+    }
+    return players.length ? players.length * step - (step - dot) + 2 * ring : 0
+}
+
+// 'load game': the save slots panel under the logo, 'Back' under it (hub layout units).
+class LoadTree {
+    constructor(_menu, slotsCount) {
+        this.menu = _menu
+        this.panel = new LoadSlotsPanel(slotsCount, load)
+        this.backButton = new Empty()
+        this.buttons = [this.panel]
+        this.unit = null
+    }
+    setParent(parent, _menu) {
+        this.backButton = new HubButton('Back', _menu.setTree, parent, _menu)
+        this.buttons = [this.panel, this.backButton]
+    }
+    // The panel at most 80 units wide between the logo and the bottom row with Back, as the hub's.
+    layout() {
+        const u = hubUnit(), logo = this.menu.logo.bounds, width = Math.min(WIDTH - 4.8 * u, 80 * u)
+        const top = logo.y + logo.height + u, bottom = HEIGHT - 5.8 * u
+        if (this.unit !== u) {
+            this.unit = u
+            this.panel.setRows(this.panel.rows)
+        }
+        this.panel.place(WIDTH / 2 - width / 2, top, width, bottom - u - top)
+        this.backButton.place?.(WIDTH / 2 - 5.5 * u, bottom, 11 * u, 4.6 * u, 2 * u)
+    }
+    enter() {
+        this.panel.update()
+        this.panel.scroll.scrollTo(0)
+        this.layout()
+    }
+    click(pos) {
+        for (const button of this.buttons) button.click(pos)
+    }
+    wheel(pos, deltaY) {
+        this.panel.wheel(pos, deltaY)
+    }
+    scrollKey(key) {
+        this.panel.scrollKey(key)
+    }
+    draw(ctx) {
+        this.layout()
+        this.panel.draw(ctx)
+        this.backButton.draw(ctx)
     }
 }
 
@@ -2790,9 +2932,7 @@ class Menu {
 
         this.replays = new ReplayTree(this)
 
-        this.load = new Tree([
-            new SlotManager(slotsCount, startPos.y, load)
-        ], this)
+        this.load = new LoadTree(this, slotsCount)
 
         this.hotseatChoice = new HotseatChoiceTree(this, startPos, slotsCount)
 
