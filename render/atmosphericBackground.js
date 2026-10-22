@@ -1,12 +1,12 @@
 // Optional decoration never participates in the required sprite startup counter.
 const atmosphericBackground = {
-    state: 'idle', image: null, raster: null, rasterizations: 0,
-    // Only the cloud raster and the light map are additional atmospheric backing
+    state: 'idle', image: null, raster: null, rasterizations: 0, fallbackRasterizations: 0,
+    // Only the sky raster and the light map are additional atmospheric backing
     // stores; terrain and buildings share the pre-existing grid/sprite caches.
-    maxBytes: 33554432, lightBytes: 2 * 2 * 1024 * 1024 * 4, fallbacks: 0,
+    maxBytes: 33554432, lightBytes: 2 * 2 * 1024 * 1024 * 4, minRasterScale: 0.75, fallbacks: 0,
     releaseRaster() {
         if (this.raster) this.raster.width = this.raster.height = 0
-        this.raster = null
+        this.raster = this.rasterView = null
     },
     invalidate() {
         this.releaseRaster()
@@ -27,6 +27,8 @@ const atmosphericBackground = {
         })
         surface.addEventListener('contextrestored', restoreImageCaches)
     },
+    // The painted night sky (clouds, no sun light: the beams below are the game's own).
+    SRC: 'assets/atmosphere/sky.webp',
     load() {
         if (this.state !== 'idle') return
         this.state = 'loading'
@@ -41,9 +43,9 @@ const atmosphericBackground = {
         const deadline = setTimeout(() => finish(false), 8000)
         image.onload = () => finish(image.naturalWidth > 0 && image.naturalHeight > 0)
         image.onerror = () => finish(false)
-        image.src = 'assets/atmosphere/clouds.svg'
+        image.src = this.SRC
     },
-    // Sky decoration baked into the cloud raster with the clouds: soft diagonal light
+    // Sky decoration baked into the sky raster over the image: soft diagonal light
     // beams from the upper left, small cool stars and warm floating embers. Placement
     // comes from a private seeded generator (never Math.random), in fractions of the
     // viewport; a fixed particle count keeps a thin strip of visible sky lively.
@@ -80,38 +82,10 @@ const atmosphericBackground = {
         // and never below minEmbers, so a phone's small sky is not crowded.
         embers: 55,
         minEmbers: 30,
-        // Grade towards the concept's night: a deep saturated navy veil, an ellipse about the board (at and
-        // radius in viewport fractions, stops [distance, alpha]) thin over the clouds beside the
-        // board and deepening smoothly to the screen edges; glows ([x, y] and radius in viewport fractions,
-        // stretched along angle into a band, alpha strength; 'screen' by default), mostly 'lit' (the
-        // clouds' own luminance in the glow colour, added strength times): along the swath at
-        // the top left (lighting the clouds there orange along the top edge and beside the board's upper-left edge, with an orange
-        // screen fill under them), a cool light on the clouds left of the board (structure, not orange), as a
-        // thin diagonal orange rim along the top edge of the lower-left cloud bank (no orange blob beside the board), and a cool blue light on the lowest clouds at the
-        // bottom left, a faint orange light on one cloud at the board's top right under its rays, the sky there staying deep navy (no orange cloud
-        // mid-right of the board); two 'screen' glows fill the sky between the fan and the board's left edge with
-        // warm light down to its middle (the upper one lies behind the board on a desktop and fills the
-        // narrower gap beside it on a phone), so no dark void sits inside the swath, and a faint warm haze
-        // lies on the sky right of the board under the swath's far end; a warm multiply glow takes the
-        // blue out of the lit lower-left cloud bank, so its rim reads orange; a
-        // vignette that keeps the corners deep navy (multiply, darkening up to vignette from 0.55 of the half diagonal to the corners).
-        navy: [4, 16, 48],
-        veil: {at: [0.48, 0.6], radius: [0.6, 0.9], stops: [[0, 0.1], [0.3, 0.18], [0.5, 0.38], [0.7, 0.64], [0.85, 0.8], [1, 0.92]]},
-        glows: [{at: [0.27, 0.1], radius: 0.04, stretch: 4, angle: 66, color: [230, 120, 50], mode: 'lit', strength: 0.8},
-            {at: [0.22, 0.33], radius: 0.09, stretch: 2.2, angle: 25, color: [120, 140, 190], mode: 'lit', strength: 0.6},
-            {at: [0.22, 0.76], radius: 0.018, stretch: 8, angle: 55, color: [255, 140, 50], mode: 'lit', strength: 2.2},
-            {at: [0.3, 0.88], radius: 0.015, stretch: 6, angle: 55, color: [255, 140, 50], mode: 'lit', strength: 1.8},
-            {at: [0.1, 0.93], radius: 0.11, stretch: 2.5, angle: 30, color: [80, 120, 210], mode: 'lit'},
-            {at: [0.345, 0.36], radius: 0.035, stretch: 3.5, angle: 82, color: [140, 70, 28], strength: 0.7},
-            {at: [0.37, 0.18], radius: 0.03, stretch: 4, angle: 80, color: [140, 70, 28], strength: 0.7},
-            {at: [0.83, 0.17], radius: 0.07, stretch: 1.6, angle: 90, color: [24, 16, 0]},
-            {at: [0.26, 0.84], radius: 0.04, stretch: 3, angle: 20, color: [255, 185, 130], mode: 'multiply'},
-            {at: [0.26, 0.05], radius: 0.05, stretch: 3.5, angle: 20, color: [255, 140, 50], mode: 'lit'},
-            {at: [0.37, 0.24], radius: 0.03, stretch: 3, angle: 70, color: [255, 140, 50], mode: 'lit', strength: 0.6},
-            {at: [0.27, 0.04], radius: 0.045, stretch: 3.5, angle: 20, color: [30, 12, 0]},
-            {at: [0.2, 0.95], radius: 0.06, stretch: 3, angle: 30, color: [90, 130, 220], mode: 'lit', strength: 0.6},
-            {at: [0.85, 0.3], radius: 0.04, stretch: 4, angle: 50, color: [255, 140, 50], mode: 'lit', strength: 0.4}],
-        vignette: 0.45
+        // Until the sky image has loaded, and if it fails, the beams and sparks lie on this plain deep navy
+        // (near the painted sky's corners). The image carries its own clouds, their light and its darker
+        // corners, so nothing here paints or lights clouds and there is no vignette (it took the corners black).
+        navy: [6, 22, 54]
     },
     decorations: 0,
     random(seed) {
@@ -136,22 +110,6 @@ const atmosphericBackground = {
         const sky = this.SKY, px = window.devicePixelRatio || 1
         const random = this.random(sky.seed)
         const ox = sky.origin[0] * w, oy = sky.origin[1] * h, reach = 1.25 * Math.hypot(w, h)
-        // The clouds as painted, before the grade: 'lit' glows warm their own structure.
-        const clouds = sky.glows.some(glow => glow.mode === 'lit') ? document.createElement('canvas') : null
-        if (clouds) {
-            clouds.width = w
-            clouds.height = h
-            clouds.getContext('2d').drawImage(g.canvas, 0, 0)
-        }
-        // Veil: an ellipse about the board, thin over the clouds next to it and deep at the edges.
-        g.save()
-        g.translate(sky.veil.at[0] * w, sky.veil.at[1] * h)
-        g.scale(sky.veil.radius[0] * w, sky.veil.radius[1] * h)
-        const veil = g.createRadialGradient(0, 0, 0, 0, 0, 1)
-        for (const [t, alpha] of sky.veil.stops) veil.addColorStop(t, `rgba(${sky.navy},${alpha})`)
-        g.fillStyle = veil
-        g.fillRect(-4, -4, 8, 8)
-        g.restore()
         // Beams: bands across their width, faded with the distance from the origin.
         const beams = document.createElement('canvas')
         beams.width = w
@@ -221,109 +179,125 @@ const atmosphericBackground = {
             g.fillStyle = glow
             g.fillRect(x - halo, y - halo, 2 * halo, 2 * halo)
         }
-        // Warm glows: a near-Gaussian radial falloff (exp(-d^2/2) per third of the radius).
-        // In viewport fractions, so each falls on the same part of the sky at any aspect ratio.
-        for (const {at, radius, stretch, angle, color, mode, strength = 1} of sky.glows) {
-            const r = 3 * radius
-            const glow = g.createRadialGradient(0, 0, 0, 0, 0, r)
-            for (let i = 0; i <= 6; i++)
-                glow.addColorStop(i / 6, `rgba(${color},${Math.exp(-((i / 2) ** 2) / 2)})`)
-            const place = target => {
-                target.translate(at[0] * w, at[1] * h)
-                target.scale(w, h)
-                target.rotate(angle * Math.PI / 180)
-                target.scale(stretch, 1)
-                target.fillStyle = glow
-                target.fillRect(-r, -r, 2 * r, 2 * r)
-            }
-            g.save()
-            if (mode === 'lit') {
-                // The clouds' luminance tinted by the glow colour, kept only under the glow, added:
-                // bright cloud edges catch the light and the gaps between them stay dark.
-                const lit = document.createElement('canvas')
-                lit.width = w
-                lit.height = h
-                const l = lit.getContext('2d')
-                l.drawImage(clouds, 0, 0)
-                // Grey first (the blue clouds would multiply the warm colour to grey).
-                l.globalCompositeOperation = 'saturation'
-                l.fillStyle = 'rgb(128,128,128)'
-                l.fillRect(0, 0, w, h)
-                l.globalCompositeOperation = 'multiply'
-                l.fillStyle = `rgb(${color})`
-                l.fillRect(0, 0, w, h)
-                l.globalCompositeOperation = 'destination-in'
-                place(l)
-                // Added strength times (the last time at its fraction), so dim clouds can glow.
-                g.globalCompositeOperation = 'lighter'
-                for (let left = strength; left > 0; left--) {
-                    g.globalAlpha = Math.min(1, left)
-                    g.drawImage(lit, 0, 0)
-                }
-                lit.width = lit.height = 0
-            } else {
-                g.globalCompositeOperation = mode || 'screen'
-                g.globalAlpha = Math.min(1, strength)
-                place(g)
-            }
-            g.restore()
-        }
-        if (clouds) clouds.width = clouds.height = 0
-        // Vignette: multiply grey rising towards the corners.
-        g.globalCompositeOperation = 'multiply'
-        const half = Math.hypot(w, h) / 2
-        const vignette = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, half)
-        vignette.addColorStop(0, 'rgb(255,255,255)')
-        for (let i = 0; i <= 5; i++) {
-            const t = 0.55 + 0.45 * i / 5, v = Math.round(255 * (1 - sky.vignette * (i / 5) ** 2))
-            vignette.addColorStop(t, `rgb(${v},${v},${v})`)
-        }
-        g.fillStyle = vignette
-        g.fillRect(0, 0, w, h)
         g.restore()
         ++this.decorations
     },
     // The page's own background (index.html), which shows wherever the canvas is transparent.
     PAGE_BACKGROUND: '#182a34',
-    // Whether draw(ctx) now draws the opaque raster over all of ctx's canvas (the same key, board
-    // and size as the raster's).
+    // Whether draw(ctx) now draws the opaque raster over all of ctx's canvas (the same key, board,
+    // size and viewport as the raster's, the image raster).
     opaqueOver(ctx) {
         const w = ctx.canvas.width, h = ctx.canvas.height
-        return !!this.raster && this.raster.width === w && this.raster.height === h &&
-            this.state === 'ready' && this.board === grid && otherSettings.atmosphericVisuals &&
-            this.key === [otherSettings.atmosphericVisuals, otherSettings.usePolishedSprites, window.devicePixelRatio].join(':')
+        return !!this.raster && this.state === 'ready' && this.viewMatches(this.rasterView, w, h) && this.board === grid &&
+            otherSettings.atmosphericVisuals && this.keyMatches()
+    },
+    // Whether the settings the sky depends on are still the key's (compared field by field: no string per frame).
+    keyMatches() {
+        return this.keyOn === otherSettings.atmosphericVisuals && this.keyPolished === otherSettings.usePolishedSprites &&
+            this.keyDpr === window.devicePixelRatio
+    },
+    // The window size, kept from resize events: reading innerWidth/innerHeight in every frame's view check can
+    // force a style and layout pass (it raised the zoom frames' 95th percentile).
+    windowSize() {
+        if (!this.viewport) {
+            this.viewport = [window.innerWidth, window.innerHeight]
+            window.addEventListener('resize', () => this.viewport = [window.innerWidth, window.innerHeight])
+        }
+        return this.viewport
+    },
+    // What the raster shows for a w x h canvas: the image (once loaded) or the navy fallback, and the window
+    // size, which places the image (see layout). Compared field by field, so a frame allocates nothing.
+    viewFor(w, h) {
+        const size = this.windowSize()
+        return {image: this.state === 'ready', w, h, vw: size[0], vh: size[1]}
+    },
+    viewMatches(view, w, h) {
+        const size = this.windowSize()
+        return !!view && view.image === (this.state === 'ready') && view.w === w && view.h === h &&
+            view.vw === size[0] && view.vh === size[1]
+    },
+    // The image cover-fitted to the window (scaled to cover it, never stretched, centred), in the w x h canvas's
+    // pixels. The canvas keeps its load-time size and its box is fitted into the window (index.html
+    // fitCanvasToWindow, at the top left); after a resize the page behind it shows the same cover-fitted
+    // image (syncPage), so the sky runs on seamlessly into the bars beside the canvas.
+    layout(w, h) {
+        const iw = this.image.naturalWidth, ih = this.image.naturalHeight
+        const vw = this.windowSize()[0] || w, vh = this.windowSize()[1] || h
+        const box = Math.min(vw, vh * w / h), unit = w / box
+        const scale = Math.max(vw / iw, vh / ih)
+        return {x: (vw - iw * scale) / 2 * unit, y: (vh - ih * scale) / 2 * unit,
+            scaleX: scale * unit, scaleY: scale * unit, width: iw * scale * unit, height: ih * scale * unit}
+    },
+    // The page behind the canvas, set only when the view changes: the cover-fitted image while the sky shows
+    // and the canvas leaves bars beside it (a page image under a covering canvas still costs the compositor
+    // every frame), else the plain navy (the page background with the sky off).
+    syncPage(on, w, h) {
+        if (on ? this.viewMatches(this.pageView, w, h) : this.pageView === null) return
+        if (typeof document === 'undefined' || !document.body) return
+        const view = this.pageView = on ? this.viewFor(w, h) : null
+        const style = document.body.style, vw = this.windowSize()[0], vh = this.windowSize()[1]
+        const box = Math.min(vw, vh * w / h), bars = box < vw - 0.5 || box * h / w < vh - 0.5
+        if (view && this.state === 'ready' && bars) {
+            style.backgroundColor = `rgb(${this.SKY.navy})`
+            style.backgroundImage = `url("${this.SRC}")`
+            style.backgroundSize = 'cover'
+            style.backgroundPosition = 'center'
+            style.backgroundRepeat = 'no-repeat'
+            style.backgroundAttachment = 'fixed'
+        }
+        else {
+            style.backgroundImage = style.backgroundSize = style.backgroundPosition = style.backgroundRepeat = style.backgroundAttachment = ''
+            style.backgroundColor = view ? `rgb(${this.SKY.navy})` : ''
+        }
+    },
+    // The sky under the beams and sparks: the image placed by layout, or the plain navy fallback.
+    paint(target, w, h) {
+        if (this.state === 'ready') {
+            const at = this.layout(w, h)
+            target.drawImage(this.image, at.x, at.y, at.width, at.height)
+            this.drawn = at
+        }
+        else {
+            target.fillStyle = `rgb(${this.SKY.navy})`
+            target.fillRect(0, 0, w, h)
+        }
     },
     draw(ctx) {
         // Bind independently of the optional sprite startup counter.
         this.watch(ctx.canvas)
-        // Viewport clouds and the fixed light kernel are camera-scale independent.
+        // The viewport sky and the fixed light kernel are camera-scale independent.
         // Reuse them through wheel/pinch gestures; world layers use the draw transform.
-        const key = [otherSettings.atmosphericVisuals, otherSettings.usePolishedSprites,
-            window.devicePixelRatio].join(':')
-        if (this.key !== key || this.board !== grid) {
+        if (!this.keyMatches() || this.board !== grid) {
             this.invalidate()
-            this.key = key
+            this.keyOn = otherSettings.atmosphericVisuals
+            this.keyPolished = otherSettings.usePolishedSprites
+            this.keyDpr = window.devicePixelRatio
+            this.key = [this.keyOn, this.keyPolished, this.keyDpr].join(':')
             this.board = grid
             if (grid) grid.surfaceCacheState = undefined
         }
-        if (!otherSettings.atmosphericVisuals) return
+        if (!otherSettings.atmosphericVisuals) {
+            this.syncPage(false)
+            return
+        }
         this.load()
-        if (this.state !== 'ready') return
         const w = ctx.canvas.width, h = ctx.canvas.height
         if (!w || !h) return
-        const scale = Math.max(w / this.image.naturalWidth, h / this.image.naturalHeight)
-        const dw = this.image.naturalWidth * scale, dh = this.image.naturalHeight * scale
-        const paint = target => target.drawImage(this.image, (w - dw) / 2, (h - dh) / 2, dw, dh)
-        if (this.raster && (this.raster.width !== w || this.raster.height !== h))
+        // One raster per canvas size, window size and image state (the navy fallback until the image loads).
+        if (this.raster && !this.viewMatches(this.rasterView, w, h))
             this.releaseRaster()
-        if (!this.raster && w * h * 4 + this.lightBytes <= this.maxBytes) {
+        this.syncPage(true, w, h)
+        // A canvas over the budget gets a raster of up to minRasterScale less resolution, drawn scaled up
+        // (the soft sky does not show it); beyond that, the image or navy is drawn directly.
+        const fit = Math.min(1, Math.sqrt((this.maxBytes - this.lightBytes) / (w * h * 4)))
+        if (!this.raster && fit >= this.minRasterScale) {
             const raster = document.createElement('canvas')
             try {
-                raster.width = w
-                raster.height = h
-                paint(raster.getContext('2d'))
-                this.decorate(raster.getContext('2d'), w, h)
-                // Opaque by construction (opaqueOver): any pixel the clouds leave translucent is backed
+                const rw = raster.width = fit < 1 ? Math.floor(w * fit) : w
+                const rh = raster.height = fit < 1 ? Math.floor(h * fit) : h
+                this.paint(raster.getContext('2d'), rw, rh)
+                this.decorate(raster.getContext('2d'), rw, rh)
+                // Opaque by construction (opaqueOver): any pixel the image leaves translucent is backed
                 // with the page background it showed over on the cleared canvas.
                 const g = raster.getContext('2d')
                 g.save()
@@ -331,22 +305,25 @@ const atmosphericBackground = {
                 g.globalAlpha = 1
                 g.globalCompositeOperation = 'destination-over'
                 g.fillStyle = this.PAGE_BACKGROUND
-                g.fillRect(0, 0, w, h)
+                g.fillRect(0, 0, rw, rh)
                 g.restore()
                 this.watch(raster)
                 this.raster = raster
-                ++this.rasterizations
+                this.rasterView = this.viewFor(w, h)
+                if (this.state === 'ready') ++this.rasterizations
+                else ++this.fallbackRasterizations
             } catch (_) {
                 raster.width = raster.height = 0
             }
         }
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        if (this.raster) ctx.drawImage(this.raster, 0, 0)
+        if (this.raster && this.raster.width === w) ctx.drawImage(this.raster, 0, 0)
+        else if (this.raster) ctx.drawImage(this.raster, 0, 0, w, h)
         else {
-            // Decoded static image: no per-frame gradient or blur regeneration
+            // Decoded static image or navy: no per-frame gradient or blur regeneration
             // (and no sky decoration, which is only baked into the raster).
-            paint(ctx)
+            this.paint(ctx, w, h)
             ++this.fallbacks
         }
         ctx.restore()
