@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "d02500cfc85fe0e6c7f2ca3d8b2df5670d28677847b08970da35677cec7d481a",
+  "rulesVersion": "12a088ab6da4d7f53698e0a5551e875eee291aa72bf9460e744110da70840abe",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -165,8 +165,8 @@
     },
     {
       "path": "interface/statisticsinterface.js",
-      "sha256": "08ee562bca15197af2c49db9469bfaa68f90fa2aebf5519e8e435998edf9115b",
-      "bytes": 6781
+      "sha256": "f698b9357c2bac0bcbd831332b1ff742b6514b2954d69a1f2ade179842cdd8bc",
+      "bytes": 10377
     },
     {
       "path": "interface/nextTurnPause.js",
@@ -295,8 +295,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "28868cd22406795e9cf251ba62a1aaf09bb615efca665c3ee748e683ae82293a",
-      "bytes": 128350
+      "sha256": "b147bd4c4188848d5f6dd670c2051c7710458d8d32bba85c7076626689fd554d",
+      "bytes": 128656
     },
     {
       "path": "sprites/hexagon.js",

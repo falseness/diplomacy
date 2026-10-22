@@ -198,6 +198,10 @@ class OnlineSession {
     kickPlayer(gameID, playerIndex) {
         return this.request('game:kick', {gameID, playerIndex, recoveryEpoch: this.socket?.recoveryEpochs?.[gameID]})
     }
+    // game:forfeit: this account gives up its seat; the server's AI plays it on (protocol doc 4.10).
+    forfeit(gameID) {
+        return this.request('game:forfeit', {gameID, recoveryEpoch: this.socket?.recoveryEpochs?.[gameID]})
+    }
     startLobby(lobbyId) {
         return this.request('lobby:start', {lobbyId})
     }

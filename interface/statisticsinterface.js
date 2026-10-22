@@ -34,6 +34,62 @@ class StatisticsInterface {
             this.pos.y + this.roundtextMarginY, bigTextSize, undefined, 'black', 'right')
 
         this.roundTextSuddenDeathTextMinMargin = 0.075 * WIDTH
+
+        // An online game's forfeit row under the players (onlineForfeit, options/onlineLogic.js): 'forfeit', then
+        // 'Are you sure?' with 'yes' and 'no'. forfeitState: 'idle' | 'confirm' | 'sending' | 'error'.
+        this.forfeitShown = false
+        this.forfeitState = 'idle'
+        this.forfeitText = new Text(NaN, NaN, 16, 'Are you sure?', 'black')
+        const forfeitButton = (text, clickFunc) => new Button(new Rect(NaN, NaN, 0, 0,
+            [0, 0, 0, 0], stroke * 2, 'white'), new Text(NaN, NaN, 16, text, 'black'), clickFunc, undefined, true, this)
+        this.forfeitButton = forfeitButton('forfeit', this.askForfeit)
+        this.yesButton = forfeitButton('yes', this.confirmForfeit)
+        this.noButton = forfeitButton('no', this.cancelForfeit)
+    }
+    get forfeitRowHeight() {
+        return this.forfeitShown ? Math.max(70, HEIGHT * 0.18) : 0
+    }
+    // Lays out the forfeit row at the bottom of the panel (updateSizes made room for it).
+    updateForfeitRow() {
+        const h = this.forfeitRowHeight
+        const top = this.pos.y + this.height - h
+        const buttonHeight = Math.max(28, HEIGHT * 0.06)
+        const buttonWidth = Math.max(70, WIDTH * 0.08)
+        const fontSize = Math.max(14, buttonHeight * 0.55)
+        for (const button of [this.forfeitButton, this.yesButton, this.noButton]) {
+            button.rect.width = buttonWidth
+            button.rect.height = buttonHeight
+            button.rect.cornerRadius = Array(4).fill(buttonHeight * 0.25)
+            button.text.fontSize = fontSize
+        }
+        this.forfeitText.fontSize = fontSize
+        this.forfeitText.pos = {x: this.centerX, y: top + h * 0.3}
+        const buttonsY = top + h * (this.forfeitState === 'idle' ? 0.5 : 0.68) - buttonHeight / 2
+        this.forfeitButton.pos = {x: this.centerX - buttonWidth / 2, y: buttonsY}
+        this.yesButton.pos = {x: this.centerX - buttonWidth * 1.15, y: buttonsY}
+        this.noButton.pos = {x: this.centerX + buttonWidth * 0.15, y: buttonsY}
+        this.forfeitButton.canClick = this.forfeitState === 'idle'
+        this.yesButton.canClick = this.noButton.canClick = this.forfeitState === 'confirm'
+    }
+    setForfeitState(state, text = 'Are you sure?') {
+        this.forfeitState = state
+        this.forfeitText.text = text
+        this.updateForfeitRow()
+    }
+    askForfeit() {
+        this.setForfeitState('confirm')
+    }
+    cancelForfeit() {
+        this.setForfeitState('idle')
+    }
+    // 'yes': game:forfeit; on ok onlineForfeit closes the game to the menu, an error stays on this panel.
+    async confirmForfeit() {
+        const forfeit = onlineForfeit
+        this.setForfeitState('sending', 'forfeiting…')
+        const ack = await forfeit.send()
+        if (ack.ok || forfeit !== onlineForfeit) return
+        this.setForfeitState('error', 'Forfeit failed: ' + onlineErrorCode(ack.error))
+        this.forfeitButton.canClick = true
     }
     get maxWidth() {
         let countInColumn = Math.min(this.playersCountInRow, players.length - 1)
@@ -79,7 +135,7 @@ class StatisticsInterface {
         this.background.width = this.width
         this.background.x = this.pos.x
 
-        this.height = this.maxHeight
+        this.height = this.maxHeight + this.forfeitRowHeight
         this.background.height = this.height
     }
     updatePlayersInfo() {
@@ -155,7 +211,11 @@ class StatisticsInterface {
         this.roundtext.text = 'round ' + gameRound
         this.updateSuddenDeathText()
 
+        this.forfeitShown = typeof onlineForfeit !== 'undefined' && !!onlineForfeit && gameSettings.isOnline &&
+            onlineForfeit.available()
+        this.forfeitState = 'idle'
         this.updateSizes()
+        if (this.forfeitShown) this.setForfeitState('idle')
         this.updatePlayersInfo()
     }
     hide() {
@@ -172,6 +232,8 @@ class StatisticsInterface {
             this.hide()
             return false
         }
+        if (this.forfeitShown && this.forfeitState !== 'sending')
+            this.forfeitButton.click(pos) || this.yesButton.click(pos) || this.noButton.click(pos)
         return true
     }
     draw(ctx) {
@@ -182,5 +244,12 @@ class StatisticsInterface {
         this.roundtext.draw(ctx)
         this.suddenDeathText.draw(ctx)
         this.drawPlayersInfo(ctx)
+        if (!this.forfeitShown)
+            return
+        if (this.forfeitState !== 'idle')
+            this.forfeitText.draw(ctx)
+        this.forfeitButton.draw(ctx)
+        this.yesButton.draw(ctx)
+        this.noButton.draw(ctx)
     }
 }

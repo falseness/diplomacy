@@ -612,6 +612,18 @@ function showOnlineNotice(message, duration = 3000) {
 // Freezes the open online game, if any (set by SetupServerCommunicationLogic).
 let onlineGameFreeze = null
 let onlinePauseStatus = 'running'
+// The open online game's forfeit (the (i) panel's 'forfeit', interface/statisticsinterface.js; set by
+// SetupServerCommunicationLogic): available() while this seat still plays, send() resolves the game:forfeit ack.
+let onlineForfeit = null
+const FORFEIT_MESSAGE = 'You forfeited. The AI plays your side. You can watch the replay when the game ends.'
+
+// The loaded online board's game is over: the server's status on a partial board, else the co-op result or fewer
+// than two players left (server/lobby/gameReplay.js isTerminalBoard).
+function onlineGameFinished() {
+    if (hiddenInfo) return hiddenGameStatus().ended
+    if (gameSettings.coop) return players[0].coopResult !== null
+    return players.slice(1).filter(player => !player.isLost).length < 2
+}
 
 // The server runs other rules code (an ack RULES_VERSION_MISMATCH, protocol doc
 // section 2.7): freeze the open game and offer a reload that fetches the new client.
@@ -644,6 +656,7 @@ function closeOnlineGameSocket() {
     onlineGameClose = null
     onlineSocket = null
     onlineGameFreeze = null
+    onlineForfeit = null
     onlineActionStream()?.stop()
     onlinePauseStatus = 'running'
     document.getElementById('online-pause')?.remove()
@@ -853,6 +866,8 @@ function SetupServerCommunicationLogic(gameID) {
     let failed = false
     // Set by an 'error' KICKED or a kicked: true board; this seat sends no more turns.
     let kicked = false
+    // Set by an ok game:forfeit or a forfeited: true board: the server's AI plays this seat.
+    let forfeited = false
     // Freezes the board (no more turns from this socket).
     const freeze = () => {
         failed = true
@@ -864,6 +879,23 @@ function SetupServerCommunicationLogic(gameID) {
         if (typeof timer !== 'undefined' && timer) timer.pause()
     }
     onlineGameFreeze = () => { if (socket === onlineSocket) freeze() }
+    onlineForfeit = {
+        available: () => socket === onlineSocket && !failed && !kicked && !forfeited && !!acceptedBoard &&
+            !gameSettings.tutorial && !players[whooseTurn]?.isLost && !onlineGameFinished(),
+        // On ok the game closes to the menu with FORFEIT_MESSAGE; an error leaves the game as it is.
+        async send() {
+            const ack = await onlineSession.forfeit(gameID)
+            if (!ack.ok || socket !== onlineSocket) return ack
+            forfeited = true
+            freeze()
+            gameEvent.removeSelection()
+            gameEvent.hideAll()
+            // The hub's status line shows the message until the hub is left.
+            menu.onlineHub.notice = FORFEIT_MESSAGE
+            menu.back()
+            return ack
+        },
+    }
     // Freezes the board and shows a panel with the message; returns the panel's button factory.
     const showPanel = (label, message) => {
         freeze()
@@ -1104,6 +1136,7 @@ function SetupServerCommunicationLogic(gameID) {
         if (!delivery || delivery === 'ended') return
         // game:open answers a kicked seat with its board marked kicked: true.
         if (board.kicked) { removedByHost(); return }
+        if (board.forfeited) forfeited = true
 
         if (isFogOfWar) {
             players[whooseTurn].changeFogOfWarByVision()

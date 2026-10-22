@@ -1618,7 +1618,12 @@ class OnlineHubTree {
     setAccount(account) {
         this.account = account
         this.status.text = account ? 'Signed in as ' + account.nickname : 'signing in…'
-        if (account && this.notice) this.status.text += ' · ' + this.notice
+        this.status.fontSize = 2 * hubUnit() * hubFontScale()
+        if (account && this.notice) {
+            this.status.text += ' · ' + this.notice
+            // A long notice (the forfeit message, options/onlineLogic.js) shrinks the line to the screen width.
+            if (this.status.width > WIDTH * 0.96) this.status.fontSize *= WIDTH * 0.96 / this.status.width
+        }
         this.buttons = account ? [...this.list.panels, this.list.bar, this.nicknameButton, this.createButton,
             this.backButton] : [this.backButton]
         this.layout()
