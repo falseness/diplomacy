@@ -52,7 +52,27 @@ class MenuButton extends Button {
     removeSelect() {
         this.selected = false
     }
+    // In the menu theme: plain, primary (this.primary) or disabled. A slot with ownFill keeps its colour once set.
+    drawThemed(ctx, theme, enabled = this.canClick) {
+        const rect = this.selected ? this.selectedRect : this.rect
+        const text = this.selected ? this.selectedText : this.text
+        let style = !enabled ? theme.disabled : this.primary ? theme.primary : theme.plain
+        if (this.ownFill && this.rect.color !== 'white') style = {...style, fill: this.rect.color, alpha: 1}
+        rect.drawPlaque(ctx, style)
+        text.drawAs(ctx, style.text, theme.fontWeight)
+    }
+    // A button that ignores clicks, drawn greyed out instead of hidden.
+    drawDisabled(ctx) {
+        if (Text.menuTheme)
+            return this.drawThemed(ctx, Text.menuTheme, false)
+        this.rect.draw(ctx)
+        this.text.draw(ctx)
+    }
     draw(ctx) {
+        if (Text.menuTheme) {
+            if (this.canClick) this.drawThemed(ctx, Text.menuTheme)
+            return
+        }
         if (this.selected) {
             this.selectedRect.draw(ctx)
             this.selectedText.draw(ctx)

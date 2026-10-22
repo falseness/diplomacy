@@ -4,7 +4,7 @@ class Slot {
         this.isEmpty = true
         this.slotNumberText = new Text(
             this.rect.centerX, this.rect.y + this.rect.height * 0.15, 
-            this.rect.width * 0.2, '(' + (slotNumber + 1) + ')', 'black',
+            this.rect.width * 0.2, '(' + (slotNumber + 1) + ')', MENU_THEME.text,
             undefined, undefined, this.rect.selectedRatio)
 
         this.text = {
@@ -98,12 +98,14 @@ class SlotManager {
         const firstX = this.x
         const cornerR = rectSize * 0.1
         for (let i = 0; i < slotsCount; ++i) {
-            slots.push(new Slot(
-                new MenuButton(new Rect(
+            const button = new MenuButton(new Rect(
                     firstX + i * rectSize + i * marginX, firstY, 
                     rectSize, rectSize, [cornerR, cornerR, cornerR, cornerR], 
                     0.0035 * WIDTH, 'white', undefined, 0.4
-            ), new Text(NaN, NaN, NaN, ''), clickFunc, i), i))
+            ), new Text(NaN, NaN, NaN, ''), clickFunc, i)
+            // A saved slot keeps its player colour in the menu theme.
+            button.ownFill = true
+            slots.push(new Slot(button, i))
         }
         this.step = rectSize + marginX
         let maximumOffset = firstX * 2 + (rectSize * slotsCount + marginX * (slotsCount - 1)) - WIDTH

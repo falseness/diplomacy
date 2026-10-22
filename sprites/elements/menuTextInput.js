@@ -90,13 +90,16 @@ class MenuTextInput {
             this.value += key
     }
     draw(ctx) {
-        this.rect.draw(ctx)
+        const theme = Text.menuTheme
+        if (theme) this.rect.drawPlaque(ctx, theme.plain)
+        else this.rect.draw(ctx)
         this.text.text = this.value
-        this.text.draw(ctx)
+        if (theme) this.text.drawAs(ctx, theme.plain.text, theme.fontWeight)
+        else this.text.draw(ctx)
         if (!this.focused) return
         const x = this.rect.centerX + ctx.measureText(this.value).width / 2 + 0.1 * this.text.fontSize
         const half = 0.5 * this.text.fontSize
-        ctx.strokeStyle = 'black'
+        ctx.strokeStyle = theme ? theme.plain.text : 'black'
         ctx.lineWidth = Math.max(1, 0.08 * this.text.fontSize)
         ctx.beginPath()
         ctx.moveTo(x, this.rect.centerY - half)

@@ -652,8 +652,8 @@ class ReplayTree {
     constructor(_menu) {
         this.menu = _menu
         this.container = null
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.04 * WIDTH, 'replays', 'black')
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.6, 0.025 * WIDTH, '', '#747474')
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.04 * WIDTH, 'replays', MENU_THEME.text)
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.6, 0.025 * WIDTH, '', MENU_THEME.mutedText)
         this.buttons = []
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {

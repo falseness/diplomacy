@@ -40,11 +40,28 @@ class CheckBox extends Rect {
         }
         return false
     }
+    // The check mark of assets/checkMark.svg (512 x 512) as a path, size wide around the centre.
+    static CHECK_MARK = [[459.371, 60.6995], [242.084, 501.068], [55.304, 236.043], [120.696, 189.957],
+        [229.916, 344.932], [387.629, 25.3005]]
+    static drawMark(ctx, center, size, color) {
+        const scale = size / 512
+        ctx.save()
+        ctx.fillStyle = color
+        ctx.beginPath()
+        for (const [x, y] of CheckBox.CHECK_MARK)
+            ctx.lineTo(center.x + (x - 256) * scale, center.y + (y - 256) * scale)
+        ctx.closePath()
+        ctx.fill()
+        ctx.restore()
+    }
+    get box() {
+        return this.selected ? this.selectedRect : this
+    }
     draw(ctx) {
-        if (this.selected)
-            this.selectedRect.draw(ctx)
+        if (Text.menuTheme)
+            this.box.drawPlaque(ctx, Text.menuTheme.plain)
         else
-            super.draw(ctx)
+            Rect.prototype.draw.call(this.box, ctx)
         this.text.draw(ctx)
     }
 }
@@ -57,7 +74,11 @@ class ImageCheckBox extends CheckBox {
     }
     draw(ctx) {
         super.draw(ctx)
-        if (this.mark) {
+        if (this.mark && Text.menuTheme) {
+            const box = this.box
+            CheckBox.drawMark(ctx, box.center, box.width * 0.72, Text.menuTheme.text)
+        }
+        else if (this.mark) {
             const ratio = 1
             let w = this.width
             let h = this.height

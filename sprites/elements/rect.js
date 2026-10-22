@@ -92,6 +92,26 @@ class Rect {
         ctx.lineTo(x0, y0 + c[0])
         ctx.arcTo(x0, y0, x0 + c[0], y0, c[0])
     }
+    // A menu theme plaque (MENU_THEME.plain, primary or disabled) in this rect's shape: translucent fill, thin rim.
+    // Corners are at most half the shorter side, so low plaques stay pills.
+    drawPlaque(ctx, style, lineWidth = Math.max(1, this.strokeWidth * MENU_THEME.rimRatio)) {
+        const radius = this.cornerRadius, limit = Math.min(this.width, this.height) / 2
+        ctx.save()
+        ctx.beginPath()
+        this.cornerRadius = radius.map(r => Math.min(r, limit))
+        this.drawShape(ctx)
+        this.cornerRadius = radius
+        ctx.closePath()
+        ctx.globalAlpha = style.alpha
+        ctx.fillStyle = style.fill
+        ctx.fill()
+        ctx.globalAlpha = 1
+        ctx.strokeStyle = style.rim
+        ctx.lineWidth = lineWidth
+        if (style.dash) ctx.setLineDash([lineWidth * 3, lineWidth * 2])
+        ctx.stroke()
+        ctx.restore()
+    }
     isInside(point) {
         return (this.x <= point.x && point.x <= this.x + this.width &&
             this.y <= point.y && point.y <= this.y + this.height)

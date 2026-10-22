@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "0eaf8c6610c6b8e488b4c9f166df95a0c10a08afe0a8c1cb303c30bc6e87d0a9",
+  "rulesVersion": "09e45e5fce3c0575e2d68fca2b81409515f867ff5c0d8daea95e204858239880",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -190,13 +190,13 @@
     },
     {
       "path": "sprites/elements/text.js",
-      "sha256": "96f18f647757dac3ec8f4a51445df6ad68339d159eed20ed99377b2879a93afd",
-      "bytes": 4062
+      "sha256": "2c5135c02435298a0a5befd93f8e909ab50dbfc03127b92f2f0c399e0d89e55c",
+      "bytes": 5271
     },
     {
       "path": "sprites/elements/rect.js",
-      "sha256": "f374bf444a2758660ba21e10c981112aca15677efe50c102ba9a7f9a5cd32ea7",
-      "bytes": 3729
+      "sha256": "a8b06b165521e3a3d26d51125c2037f3fe2a4f258d70f0a69f010641dfcbaddd",
+      "bytes": 4610
     },
     {
       "path": "sprites/elements/button.js",
@@ -205,13 +205,13 @@
     },
     {
       "path": "sprites/elements/menuButton.js",
-      "sha256": "bcfc18f11ebd13bcb1098f9a57b7b38cda5b4babf684f7f31b7e68f322a2ef58",
-      "bytes": 2175
+      "sha256": "43064c5b02075479fee6b88b39a52be7eefc750e771ef0af99fd0acc3ca867b6",
+      "bytes": 3153
     },
     {
       "path": "sprites/elements/menuTextInput.js",
-      "sha256": "4adc7f104c948360abe75249ef56b27888e9cafec8437fd93ac9876ec3eeaf39",
-      "bytes": 4139
+      "sha256": "93b389411d4168ec0e1af767dc1405e61b1abc07af7865f6d230995948c86c40",
+      "bytes": 4348
     },
     {
       "path": "sprites/elements/temporaryWindow.js",
@@ -245,8 +245,8 @@
     },
     {
       "path": "sprites/elements/checkBox.js",
-      "sha256": "d6d7c9f9edd80f486eaa89bb7e1a3d5a9692882acf34ae87e4d9cc9994a29cf5",
-      "bytes": 2037
+      "sha256": "2ae19216639d6a29844dd71f033b9926ecedc9b1f9206f56234cefc6473cf30f",
+      "bytes": 2944
     },
     {
       "path": "sprites/elements/slider.js",
@@ -255,8 +255,8 @@
     },
     {
       "path": "sprites/elements/menuSlider.js",
-      "sha256": "24cb3b82d48970cc9ab4c4133cb2d85dfc962df4ffdd5a8093912c3e68dc1b86",
-      "bytes": 607
+      "sha256": "ba612939bc406b22af4b9cdafbf5301c86734b9076f1853d5651d5a4be9ad0d9",
+      "bytes": 2123
     },
     {
       "path": "sprites/border.js",
@@ -285,18 +285,18 @@
     },
     {
       "path": "menu/slotManager.js",
-      "sha256": "c503893cd4476b6bfa09101358d0540ed2457d5e4346a3ef341af01848dfd9da",
-      "bytes": 5476
+      "sha256": "5b241cdcf8d558c161f3d1c1d10f2650b37e202222f0d6a6c790dd5d2920c93e",
+      "bytes": 5606
     },
     {
       "path": "menu/replay.js",
-      "sha256": "ce701ce7df29c0322f130aa3a77a153a91ab1736903f6c6b11877a2258a0c1b0",
-      "bytes": 35287
+      "sha256": "7a7baf96237bf6799cfafdaab781e2789dd492ac999e37a13a27b530fc0d2bc3",
+      "bytes": 35306
     },
     {
       "path": "menu/menu.js",
-      "sha256": "76fc1b9aabfffffd528e24589c8d3dcdef503ec904a16f8c0b213ec9b4819031",
-      "bytes": 93117
+      "sha256": "d70fe75d33f6b18438cad6c9d98c1a0fd532ea02a1507ddf026a516f72a14f9a",
+      "bytes": 93396
     },
     {
       "path": "sprites/hexagon.js",

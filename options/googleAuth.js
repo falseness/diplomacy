@@ -32,5 +32,5 @@ function loadGoogleIdentity() {
 function renderGoogleButton(container, onCredential) {
     const id = window.google.accounts.id
     id.initialize({client_id: GOOGLE_CLIENT_ID, callback: response => onCredential(response?.credential)})
-    id.renderButton(container, {type: 'standard', theme: 'outline', size: 'large', text: 'signin_with'})
+    id.renderButton(container, {type: 'standard', theme: 'filled_black', size: 'large', text: 'signin_with'})
 }

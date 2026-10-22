@@ -1,6 +1,21 @@
+// The menu controls on the night sky: dark translucent plaques with a thin gold rim and light text, primary
+// actions in gold with dark text, disabled ones dimmed. Menu.draw sets Text.menuTheme to it while it draws, so
+// menu controls drawn anywhere else (the in-game tutorial result) keep their own look.
+const MENU_THEME = {
+    text: '#f3ead8',
+    mutedText: '#cdc3b0',
+    fontWeight: 500,
+    plain: {fill: '#1a2342', alpha: 0.85, rim: '#c99a4e', text: '#f3ead8'},
+    primary: {fill: '#c99a4e', alpha: 1, rim: '#f0d394', text: '#1a2342'},
+    disabled: {fill: '#1a2342', alpha: 0.4, rim: '#6f6656', text: '#948d7e', dash: true},
+    // The rim width as a fraction of the control's own stroke width.
+    rimRatio: 0.6,
+}
 class Text {
     // Family of a Text without its own; the menu switches it while it draws (menu/menu.js Menu.draw).
     static defaultFamily = 'Times New Roman'
+    // MENU_THEME while the menu draws, else null.
+    static menuTheme = null
     constructor(x, y, fontSize = Math.round(basis.r * 9.8625 * 0.05), text = 'error', color = 'white',
         textAlign = 'center', textBaseline = 'middle', ratio = 1.2, fontFamily = undefined, fontWeight = undefined) {
         this.pos = {
@@ -63,6 +78,18 @@ class Text {
     }
     set y(val) {
         this.pos.y = val
+    }
+    // Draws in another colour and weight, keeping this Text's own.
+    drawAs(ctx, color, fontWeight = this.fontWeight) {
+        const {color: ownColor, fontWeight: ownWeight} = this
+        this.color = color
+        this.fontWeight = fontWeight
+        try {
+            this.draw(ctx)
+        } finally {
+            this.color = ownColor
+            this.fontWeight = ownWeight
+        }
     }
     select() {
         this.selected = true

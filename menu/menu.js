@@ -108,7 +108,7 @@ class OtherSettingsTree {
         const intervalY = this.INTERVAL_Y
         let rectSize = Math.min(menuOptions.rectSize, intervalY * 0.7)
         let fontSize = Math.min(menuOptions.fontSize, intervalY * 0.7)
-        const labels = this.LABELS.map(label => new Text(NaN, NaN, fontSize, label, 'black', 'left'))
+        const labels = this.LABELS.map(label => new Text(NaN, NaN, fontSize, label, MENU_THEME.text, 'left'))
         // The main canvas context does not exist yet when the menu is built; measure as Text draws.
         const measureCtx = document.createElement('canvas').getContext('2d')
         const measure = () => Math.max(...labels.map(text => {
@@ -204,7 +204,7 @@ function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
     let sliderMarginX = WIDTH * 0.18
     return new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
         0, sliderMarginX,
-    new Text(slidePosX, firstY + intervalY, fontSize),
+    new Text(slidePosX, firstY + intervalY, fontSize, undefined, MENU_THEME.text),
             {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
 }
@@ -224,7 +224,7 @@ class GameSettingsTree {
 
         const fontSize = 0.04 * WIDTH
         this.playersText = new Text(posX - Menu.getButton().width / 2,
-            firstY, fontSize, 'players', 'black', 'left')
+            firstY, fontSize, 'players', MENU_THEME.text, 'left')
 
         const slidePosX = posX + WIDTH * 0.1
 
@@ -236,21 +236,21 @@ class GameSettingsTree {
         this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers,
             getKeyPlayers, this.mapSlider,
             0, WIDTH * 0.04,
-        new Text(slidePosX, firstY, fontSize),
+        new Text(slidePosX, firstY, fontSize, undefined, MENU_THEME.text),
                 {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
 
         this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2,
-            firstY + intervalY, fontSize, 'map', 'black', 'left')
+            firstY + intervalY, fontSize, 'map', MENU_THEME.text, 'left')
 
 
         this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, fontSize, 'fog of war', 'black'), marginLeft,
+            new Text(NaN, NaN, fontSize, 'fog of war', MENU_THEME.text), marginLeft,
             WIDTH * 0.58, firstY + intervalY * 2, rectSize, rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
         this.timerCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
+            new Text(NaN, NaN, fontSize, 'dynamic timer', MENU_THEME.text), marginLeft,
             WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize,
             [cornerR, cornerR, cornerR, cornerR],menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
@@ -262,6 +262,7 @@ class GameSettingsTree {
         this.playButton = Menu.getButton(
             {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: firstY + intervalY * 4}, 'start',
                 _menu.setTree, _menu.startGame, true, _menu)
+        this.playButton.primary = true
 
         this.updateButtonsList()
     }
@@ -326,9 +327,9 @@ class GameSettingsTree {
 
 function drawCoopDimensions(settings, ctx) {
     const {mapSize} = getCoopMapScaling(settings.playersSlider.value, settings.sizeSlider.realValue.toLowerCase())
-    new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', 'black', 'left').draw(ctx)
+    new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', MENU_THEME.text, 'left').draw(ctx)
     settings.dimensionsText = new Text(WIDTH * 0.6, HEIGHT * 0.23,
-        Math.max(15, WIDTH * 0.022), `${mapSize.x}×${mapSize.y}`, 'black')
+        Math.max(15, WIDTH * 0.022), `${mapSize.x}×${mapSize.y}`, MENU_THEME.mutedText)
     settings.dimensionsText.draw(ctx)
 }
 
@@ -337,7 +338,7 @@ function createCoopSizeSlider() {
     const side = Math.min(HEIGHT * 0.08, WIDTH * 0.1)
     return new MenuSlider(() => 0, () => 2, value => ['Tiny', 'Normal', 'Big'][value],
         undefined, 1, WIDTH * 0.18,
-        new Text(WIDTH * 0.6, HEIGHT * 0.18, WIDTH * 0.04, 'Normal', 'black'),
+        new Text(WIDTH * 0.6, HEIGHT * 0.18, WIDTH * 0.04, 'Normal', MENU_THEME.text),
         {width: side, height: side})
 }
 
@@ -362,7 +363,7 @@ class CoopSettingsTree extends GameSettingsTree {
         this.sizeSlider = createCoopSizeSlider()
         // Width-bound arrows keep portrait controls clear of labels and values.
         for (const slider of [this.playersSlider, this.mapSlider]) {
-            slider.text.color = 'black'
+            slider.text.color = MENU_THEME.text
             for (const button of [slider.leftButton, slider.rightButton]) {
                 button.rect.width = button.rect.height = Math.min(HEIGHT * 0.1, WIDTH * 0.09)
                 button.img.width = button.img.height = button.rect.width
@@ -442,7 +443,7 @@ class OnlineGameSettings {
 
         const fontSize = 0.04 * WIDTH
         this.playersText = new Text(posX - Menu.getButton().width / 2,
-            firstY, fontSize, 'players', 'black', 'left')
+            firstY, fontSize, 'players', MENU_THEME.text, 'left')
 
         const slidePosX = posX + WIDTH * 0.1
 
@@ -454,12 +455,12 @@ class OnlineGameSettings {
         this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers,
             getKeyPlayers, this.mapSlider,
             0, WIDTH * 0.04,
-        new Text(slidePosX, firstY, fontSize),
+        new Text(slidePosX, firstY, fontSize, undefined, MENU_THEME.text),
                 {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
 
 
         this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2,
-            firstY + intervalY, fontSize, 'map', 'black', 'left')
+            firstY + intervalY, fontSize, 'map', MENU_THEME.text, 'left')
 
         // let minimumValueMap = function() { return 0 }
         // let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
@@ -484,7 +485,7 @@ class OnlineGameSettings {
 
 
         this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, fontSize, 'fog of war', 'black'), marginLeft,
+            new Text(NaN, NaN, fontSize, 'fog of war', MENU_THEME.text), marginLeft,
             WIDTH * 0.28, firstY, rectSize, rectSize,
             [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
 
@@ -600,12 +601,13 @@ class CreateLobbyTree extends OnlineGameSettings {
         this.menu = _menu
         this.creating = false
         this.asyncMovesCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, WIDTH * 0.03, 'asynchronous moves', 'black'), WIDTH * 0.025,
+            new Text(NaN, NaN, WIDTH * 0.03, 'asynchronous moves', MENU_THEME.text), WIDTH * 0.025,
             WIDTH * 0.28, this.firstY + this.intervalY * 2, WIDTH * 0.05, WIDTH * 0.05,
             [4, 4, 4, 4], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
         this.asyncMovesCheckBox.mark = false
-        this.status = new Text(WIDTH / 2, this.firstY + this.intervalY * 2.5, 0.03 * WIDTH, '', 'black')
+        this.status = new Text(WIDTH / 2, this.firstY + this.intervalY * 2.5, 0.03 * WIDTH, '', MENU_THEME.text)
         this.playButton = Menu.getButton(this.actionButtonPos, 'create', this.create, undefined, true, this)
+        this.playButton.primary = true
         this.updateButtonsList()
     }
     enter() {
@@ -672,13 +674,14 @@ class LobbyRoomTree {
         this.busy = false
         this.rowTop = HEIGHT * 0.38
         this.rowHeight = HEIGHT * 0.065
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.28, 0.028 * WIDTH, '', 'black')
-        this.count = new Text(WIDTH / 2, HEIGHT * 0.33, 0.028 * WIDTH, '', '#747474')
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.8, 0.025 * WIDTH, '', 'black')
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.28, 0.028 * WIDTH, '', MENU_THEME.text)
+        this.count = new Text(WIDTH / 2, HEIGHT * 0.33, 0.028 * WIDTH, '', MENU_THEME.mutedText)
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.8, 0.025 * WIDTH, '', MENU_THEME.text)
         this.rowTexts = []
         this.kickButtons = []
         this.leaveButton = Menu.getButton({x: WIDTH * 0.2, y: HEIGHT * 0.85}, 'leave', this.leaveLobby, undefined, true, this)
         this.startButton = Menu.getButton({x: WIDTH * 0.55, y: HEIGHT * 0.85}, 'start', this.startLobby, undefined, true, this)
+        this.startButton.primary = true
         this.buttons = [this.leaveButton]
     }
     setParent() {}
@@ -728,7 +731,7 @@ class LobbyRoomTree {
         this.count.text = view.countText
         const fontSize = 0.03 * WIDTH
         this.rowTexts = view.rows.map((row, i) => new Text(WIDTH * 0.3, this.rowTop + (i + 0.5) * this.rowHeight,
-            fontSize, row.text, row.kind === 'waiting' ? '#747474' : 'black', 'left'))
+            fontSize, row.text, row.kind === 'waiting' ? MENU_THEME.mutedText : MENU_THEME.text, 'left'))
         this.kickButtons = []
         view.rows.forEach((row, i) => {
             if (!row.kick) return
@@ -736,17 +739,14 @@ class LobbyRoomTree {
             rect.width = WIDTH * 0.12
             rect.height = this.rowHeight * 0.8
             const text = Menu.getButtonText('kick')
-            text.fontSize = fontSize
+            // Low rows (landscape phones) would clip the label.
+            text.fontSize = Math.min(fontSize, rect.height * 0.9)
             const button = new MenuButton(rect, text, this.kick, row.accountId, true, this)
             button.accountId = row.accountId
             this.kickButtons.push(button)
         })
         // A disabled start is drawn greyed and ignores clicks.
-        const enabled = view.start.enabled
-        this.startButton.canClick = enabled
-        this.startButton.color = enabled ? 'white' : '#bdbdbd'
-        this.startButton.textColor = enabled ? 'black' : '#747474'
-        this.startButton.selectedText.color = this.startButton.textColor
+        this.startButton.canClick = view.start.enabled
         this.buttons = [this.leaveButton, ...this.kickButtons]
         if (view.start.visible) this.buttons.push(this.startButton)
     }
@@ -794,10 +794,7 @@ class LobbyRoomTree {
         for (const text of this.rowTexts) text.draw(ctx)
         this.status.draw(ctx)
         for (const button of this.buttons) button.draw(ctx)
-        if (this.view.start.visible && !this.startButton.canClick) {
-            this.startButton.rect.draw(ctx)
-            this.startButton.text.draw(ctx)
-        }
+        if (this.view.start.visible && !this.startButton.canClick) this.startButton.drawDisabled(ctx)
     }
 }
 
@@ -806,8 +803,8 @@ class SignInTree {
     constructor(_menu) {
         this.menu = _menu
         this.container = null
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.33, 0.04 * WIDTH, 'sign in to play online', 'black')
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.58, 0.025 * WIDTH, '', '#747474')
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.33, 0.04 * WIDTH, 'sign in to play online', MENU_THEME.text)
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.58, 0.025 * WIDTH, '', MENU_THEME.mutedText)
         this.buttons = []
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
@@ -825,7 +822,7 @@ class SignInTree {
         document.body.append(div)
         const status = this.statusElement = document.createElement('div')
         status.style.cssText = `position:absolute;left:5%;width:90%;top:${HEIGHT * 0.55 / devicePixelRatio}px;` +
-            'text-align:center;font:16px/1.4 sans-serif;color:#595959;overflow-wrap:anywhere;pointer-events:none'
+            `text-align:center;font:16px/1.4 sans-serif;color:${MENU_THEME.mutedText};overflow-wrap:anywhere;pointer-events:none`
         status.setAttribute('role', 'status')
         document.body.append(status)
         this.setStatus('loading Google sign-in…')
@@ -980,7 +977,7 @@ class OnlineHubTree {
         // A one-off message after the status line, e.g. a lobby:join error or
         // 'you were removed from the lobby'; cleared on leave.
         this.notice = ''
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', 'black')
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', MENU_THEME.text)
         this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
         this.list.onRow = row => {
             // lobby:join of my own lobby returns it, so both open the room.
@@ -1069,13 +1066,13 @@ class NicknameTree {
     constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         this.menu = _menu
         this.saving = false
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.04 * WIDTH, 'change nickname', 'black')
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.04 * WIDTH, 'change nickname', MENU_THEME.text)
         // Wider than a button so 16 characters fit.
         const inputRect = Menu.getButtonRect({x: WIDTH * 0.3, y: HEIGHT * 0.36})
         inputRect.width = WIDTH * 0.4
         this.input = new MenuTextInput(inputRect, 0.04 * WIDTH,
             {maxLength: 16, onSubmit: () => this.save(), onCancel: () => this.back()})
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.51, 0.025 * WIDTH, '', '#747474')
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.51, 0.025 * WIDTH, '', MENU_THEME.mutedText)
         this.buttons = [
             Menu.getButton({x: pos0X, y: HEIGHT * 0.56}, 'save', this.save, undefined, true, this),
             Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', this.back, undefined, true, this),
@@ -1190,7 +1187,11 @@ class TutorialTree {
     }
     draw(ctx) {
         for (const button of this.buttons) button.draw(ctx)
-        for (const entry of this.entries) entry.checkMark?.draw(ctx)
+        for (const entry of this.entries) {
+            const mark = entry.checkMark
+            if (mark && Text.menuTheme) CheckBox.drawMark(ctx, mark.pos, mark.width, Text.menuTheme.text)
+            else mark?.draw(ctx)
+        }
     }
 }
 
@@ -1199,6 +1200,7 @@ class TutorialTree {
 class HotseatChoiceTree extends Tree {
     constructor(_menu, pos, slotsCount) {
         const newGame = Menu.getButton(pos, 'new game', _menu.setTree, _menu.play, true, _menu)
+        newGame.primary = true
         const loadGame = Menu.getButton(pos, 'load game', _menu.setTree, _menu.load, true, _menu)
         super([newGame, loadGame], _menu)
         this.loadButton = loadGame
@@ -1210,18 +1212,11 @@ class HotseatChoiceTree extends Tree {
         return false
     }
     enter() {
-        const enabled = this.hasSave()
-        this.loadButton.canClick = enabled
-        this.loadButton.color = enabled ? 'white' : '#bdbdbd'
-        this.loadButton.textColor = enabled ? 'black' : '#747474'
-        this.loadButton.selectedText.color = this.loadButton.textColor
+        this.loadButton.canClick = this.hasSave()
     }
     draw(ctx) {
         super.draw(ctx)
-        if (!this.loadButton.canClick) {
-            this.loadButton.rect.draw(ctx)
-            this.loadButton.text.draw(ctx)
-        }
+        if (!this.loadButton.canClick) this.loadButton.drawDisabled(ctx)
     }
 }
 // The menu look on every menu screen, whatever the visuals settings: a night sky, the logo with a light halo and a
@@ -2228,6 +2223,8 @@ class Menu {
         // Menu texts draw in the menu font; the game's texts keep Text's own default.
         const gameFamily = Text.defaultFamily
         Text.defaultFamily = MENU_FONT_FAMILY
+        // Menu controls draw in the menu theme (sprites/elements/text.js MENU_THEME).
+        Text.menuTheme = MENU_THEME
         try {
             this.sky.draw(ctx)
             // Co-op uses the header space for its size selector.
@@ -2237,6 +2234,7 @@ class Menu {
             errorWindow.draw(ctx)
         } finally {
             Text.defaultFamily = gameFamily
+            Text.menuTheme = null
             ctx.restore()
         }
     }
