@@ -1190,6 +1190,36 @@ class TutorialTree {
     }
 }
 
+// Hot seat entry: start a new game or load a saved one. 'load game' is greyed out
+// and ignores clicks while every save slot is empty.
+class HotseatChoiceTree extends Tree {
+    constructor(_menu, pos, slotsCount) {
+        const newGame = Menu.getButton(pos, 'new game', _menu.setTree, _menu.play, true, _menu)
+        const loadGame = Menu.getButton(pos, 'load game', _menu.setTree, _menu.load, true, _menu)
+        super([newGame, loadGame], _menu)
+        this.loadButton = loadGame
+        this.slotsCount = slotsCount
+    }
+    hasSave() {
+        for (let i = 0; i < this.slotsCount; ++i)
+            if (loadSlotInfo(i).whooseTurn != -1) return true
+        return false
+    }
+    enter() {
+        const enabled = this.hasSave()
+        this.loadButton.canClick = enabled
+        this.loadButton.color = enabled ? 'white' : '#bdbdbd'
+        this.loadButton.textColor = enabled ? 'black' : '#747474'
+        this.loadButton.selectedText.color = this.loadButton.textColor
+    }
+    draw(ctx) {
+        super.draw(ctx)
+        if (!this.loadButton.canClick) {
+            this.loadButton.rect.draw(ctx)
+            this.loadButton.text.draw(ctx)
+        }
+    }
+}
 class Menu {
     #visible
     static getButtonRect(pos) {
@@ -1283,9 +1313,11 @@ class Menu {
             new SlotManager(slotsCount, startPos.y, load)
         ], this)
 
+        this.hotseatChoice = new HotseatChoiceTree(this, startPos, slotsCount)
+
         this.main = new Tree([
             this.constructor.getButton(startPos, 'hot seat',
-                this.setTree, this.play, true, this),
+                this.setTree, this.hotseatChoice, true, this),
             this.constructor.getButton(startPos, 'play online',
                 this.openOnline, undefined, true, this),
             // 'play AI' button hidden for now; startAI is still available.
@@ -1293,8 +1325,6 @@ class Menu {
             //     startAI, 0),
             this.constructor.getButton(startPos, 'settings',
                 this.setTree, this.settings, true, this),
-            this.constructor.getButton(startPos, 'load game',
-                this.setTree, this.load, true, this),
             this.constructor.getButton(startPos, 'tutorial',
                 this.setTree, this.tutorial, true, this),
         ], this)
@@ -1306,13 +1336,14 @@ class Menu {
             button.pos = {x: startPos.x, y: HEIGHT * (0.27 + index * 0.12)}
         })
         this.updateMainButtons()
-        this.play.setParent(this.main, this)
+        this.hotseatChoice.setParent(this.main, this)
+        this.play.setParent(this.hotseatChoice, this)
         this.onlineHub.setParent(this.main, this)
         this.createLobby.setParent(this.onlineHub, this)
         this.signIn.setParent(this.main, this)
         this.settings.setParent(this.main, this)
         this.startGame.setParent(this.play, this)
-        this.load.setParent(this.main, this)
+        this.load.setParent(this.hotseatChoice, this)
         this.tutorial.setParent(this.main, this)
         this.replays.setParent(this.main, this)
         this.selectedTree = this.main
