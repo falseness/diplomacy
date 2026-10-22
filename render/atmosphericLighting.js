@@ -166,10 +166,7 @@ const atmosphericLighting = {
         reachRadii: 3.5,
         // Contact shade under every shadow caster's base: a soft dark ellipse, radius in hex
         // radii, flattened to flat of its width, alpha at its core, in color.
-        contact: {radius: 0.55, flat: 0.5, alpha: 0.7, color: '30,22,22'},
-        // A flat object (a pond) sits in a dark bank: its own silhouette blurred by blur (hex radii) in color,
-        // grown by grow and moved away from the key light by offset (hex radii), under the sprite.
-        bank: {grow: 1.12, offset: 0.06, alpha: 0.8, color: '30,22,22', blur: 0.08}
+        contact: {radius: 0.55, flat: 0.5, alpha: 0.7, color: '30,22,22'}
     },
     // The last shadow pass's casters: {x, y, by: 'key' | 'lamp', angle (degrees), lampRadii, strength, alpha}.
     shadowLog: [],
@@ -177,7 +174,6 @@ const atmosphericLighting = {
     flatObjects: ['lake', 'sea'],
     shadowSilhouettes: new WeakMap(),
     shadowSilhouetteBuilds: 0,
-    bankSilhouettes: new WeakMap(),
     maxDimension: 2048,
     maxPixels: 2 * 1024 * 1024,
     map: null,
@@ -975,26 +971,6 @@ const atmosphericLighting = {
         ++this.shadowSilhouetteBuilds
         return silhouette
     },
-    // A flat object's bank (SHADOW.bank): its sprite blurred and filled with the shadow colour, cached per sprite.
-    bankSilhouette(image) {
-        let bank = this.bankSilhouettes.get(image)
-        if (bank) return bank
-        const {blur, color} = this.SHADOW.bank
-        const pad = Math.ceil(blur * basis.r * 2) + 2
-        const surface = document.createElement('canvas')
-        surface.width = image.width + 2 * pad
-        surface.height = image.height + 2 * pad
-        const g = surface.getContext('2d')
-        g.filter = `blur(${(blur * basis.r).toFixed(2)}px)`
-        g.drawImage(image, pad, pad)
-        g.filter = 'none'
-        g.globalCompositeOperation = 'source-in'
-        g.fillStyle = `rgb(${color})`
-        g.fillRect(0, 0, surface.width, surface.height)
-        bank = {surface, pad}
-        this.bankSilhouettes.set(image, bank)
-        return bank
-    },
     // Board objects (not units or lamps) on authorized visible cells cast their shadows, clipped to
     // the visible cells, under the fog and before any sprite is drawn.
     drawShadows(ctx, board) {
@@ -1006,35 +982,25 @@ const atmosphericLighting = {
         const {sources} = this.collect(board, false, false)
         const t = ctx.getTransform()
         const axisAligned = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
-        const casters = [], banks = []
+        const casters = []
         for (const {x, y, pos} of cells) {
             if (x < range.i0 || x >= range.i1 || y < range.j0 || y >= range.j1) continue
             const building = board.arr[x][y].building
             if (!building.notEmpty() || building.killed || building.isInvisible || building.isMapEdge ||
                 building.isBuildingProduction() || board.observedBuilding(board.arr[x][y]) ||
-                this.emitsLight(building)) continue
-            const flat = this.flatObjects.includes(building.name)
+                this.flatObjects.includes(building.name) || this.emitsLight(building)) continue
             if (axisAligned) {
                 const sx = pos.x * t.a + t.e, sy = pos.y * t.d + t.f
                 const rx = 2.5 * basis.r * t.a, ry = 2.5 * basis.r * t.d
                 if (sx + rx < 0 || sy + ry < 0 || sx - rx > ctx.canvas.width || sy - ry > ctx.canvas.height) continue
             }
             const image = cachedImages[board.getEntityBodyImageName(building)]
-            if (image && image.width) (flat ? banks : casters).push({x, y, building, image, pos})
+            if (image && image.width) casters.push({x, y, building, image, pos})
         }
-        if (!casters.length && !banks.length) return
+        if (!casters.length) return
         ctx.save()
         this.hexPath(ctx, this.onCanvas(ctx, cells))
         ctx.clip()
-        const {grow, offset, alpha: bankAlpha} = this.SHADOW.bank
-        if (bankAlpha > 0) for (const {building, image} of banks) {
-            const {surface, pad} = this.bankSilhouette(image), d = offset * basis.r
-            const cx = building.pos.x + image.width / 2, cy = building.pos.y + image.height / 2
-            ctx.globalAlpha = bankAlpha
-            ctx.drawImage(surface, cx + d - grow * (image.width / 2 + pad), cy + d - grow * (image.height / 2 + pad),
-                grow * surface.width, grow * surface.height)
-            ctx.globalAlpha = 1
-        }
         const log = this.shadowLog = []
         // Contact shade first, under the cast shadows.
         const {radius, flat, alpha, color} = this.SHADOW.contact
