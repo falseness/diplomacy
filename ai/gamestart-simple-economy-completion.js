@@ -125,6 +125,17 @@ function createCanvasContext() {
     canvas: { width: 800, height: 600 },
     measureText(text) {
       return { width: String(text).length * 8 };
+    },
+    // The renderer reads the current transform (atmospheric culling); no drawing is recorded.
+    getTransform() {
+      return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    },
+    // ...and reads pixels back (transparent, as an empty canvas).
+    getImageData(x, y, width, height) {
+      return { width, height, data: new Uint8ClampedArray(Math.max(0, width * height * 4) || 0) };
+    },
+    createImageData(width, height) {
+      return { width, height, data: new Uint8ClampedArray(Math.max(0, width * height * 4) || 0) };
     }
   }, {
     get(target, property) {
@@ -186,6 +197,7 @@ function createRuntimeContext(seed) {
     NaN,
     setTimeout,
     clearTimeout,
+    performance,
     requestAnimationFrame() { return 0; },
     cancelAnimationFrame() {},
     Image: class Image {},
