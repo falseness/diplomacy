@@ -5,7 +5,8 @@
 // shrunk, ellipsis past them) at the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed,
 // re-read on every enter) carry a gold check badge; the first lesson in menu order that is not passed is Next: a thick
 // gold rim, a gold glow and a "Next" tag. The cards are sized for 3 rows; more rows scroll by whole rows (wheel, touch
-// drag, arrow keys) with a gold track at the right. Sizes are in hub units (hubUnit).
+// drag, arrow keys) with a gold track at the right. Sizes are in hub units (hubUnit). The medallion shows the lesson's
+// picture (TutorialCardsTree.IMAGES, by tutorial id) from the game's own assets.
 
 // A lesson card: its whole rect starts the lesson. Menu.touchStart/Move/End hand every touch to every button of the
 // tree, so each card forwards it to the tree, where repeated calls with one position change nothing.
@@ -35,6 +36,35 @@ class TutorialCardsTree {
         heading: '#f6e2b8', glow: 'rgba(242, 180, 90, 0.45)', warm: ['rgba(242, 180, 90, 0.18)', 'rgba(242, 180, 90, 0.04)'],
         disc: ['#f6ecdc', '#cbb79a'], discRing: '#d4a85a', discShade: 'rgba(0, 0, 0, 0.25)',
         badge: ['#ffe3a3', '#d9962f'], tag: ['#ffe3a3', '#e9a948'], dark: '#2a1a06',
+    }
+    // Medallion pictures by tutorial id (not the display number): the file and its fit, as in the concept: 'unit'
+    // sprites a little larger and lowered, 'low' buildings raised so their art is centred. The menu loads them as its
+    // own images from these paths, so the sprite and visuals settings (which switch the shared assets' folders, see
+    // render/loadassets.js loadSprites) never change them. An id without an entry keeps the empty medallion.
+    static IMAGES = {
+        'tutorial-0': {src: 'assets/sprites/noob.svg', fit: 'unit'},
+        'tutorial-1': {src: 'assets/sprites/archer.svg', fit: 'unit'},
+        'tutorial-7': {src: 'assets/atmosphere/buildings/tower.svg'},
+        'tutorial-3': {src: 'assets/atmosphere/buildings/wall.svg', fit: 'low'},
+        'tutorial-2': {src: 'assets/atmosphere/buildings/barrack.svg'},
+        'tutorial-5': {src: 'assets/sprites/emberArcher.svg', fit: 'unit'},
+        'tutorial-15': {src: 'assets/atmosphere/buildings/bastion.svg', fit: 'low'},
+        'tutorial-13': {src: 'assets/sprites/catapult.svg'},
+        'tutorial-6': {src: 'assets/atmosphere/buildings/town.svg'},
+    }
+    // The picture's box as a share of the medallion's diameter and its shift down as a share of that box.
+    static IMAGE_FIT = {plain: {size: 0.86, shift: 0}, unit: {size: 0.92, shift: 0.06}, low: {size: 0.86, shift: -0.14}}
+    static images = {}
+    // The loaded picture of a tutorial id (created on first use), or null while it loads or without an entry.
+    static image(id) {
+        const entry = TutorialCardsTree.IMAGES[id]
+        if (!entry) return null
+        let image = TutorialCardsTree.images[entry.src]
+        if (!image) {
+            image = TutorialCardsTree.images[entry.src] = new Image()
+            image.src = entry.src
+        }
+        return image.complete && image.naturalWidth > 0 ? image : null
     }
     constructor(_menu) {
         this.menu = _menu
@@ -75,6 +105,7 @@ class TutorialCardsTree {
         this.passed = readTutorialPassed()
         this.nextId = tutorials.find(tutorial => !this.passed.includes(tutorial.id))?.id ?? null
         this.entries = tutorials.map(tutorial => {
+            TutorialCardsTree.image(tutorial.id)
             const button = new TutorialCard(this, tutorial)
             const checkMark = this.passed.includes(tutorial.id) ? {pos: {x: 0, y: 0}, width: 0, height: 0,
                 get x() { return this.pos.x }, get y() { return this.pos.y }} : null
@@ -210,6 +241,7 @@ class TutorialCardsTree {
         // The medallion: at most 82% of the card's height and 30% of its width.
         const pad = 1.6 * u, disc = Math.min(0.82 * r.height, 0.3 * r.width), cx = r.x + pad + disc / 2, cy = r.y + r.height / 2
         this.drawMedallion(ctx, cx, cy, disc / 2, u)
+        button.medallion = this.drawMedallionImage(ctx, entry.id, cx, cy, disc / 2)
         // The corner mark: Next's tag or the check badge.
         let corner = null
         if (entry.next) corner = this.drawNextTag(ctx, r, u)
@@ -240,6 +272,22 @@ class TutorialCardsTree {
         ctx.strokeStyle = colours.discRing
         ctx.lineWidth = 0.45 * u
         ctx.stroke()
+    }
+    // The tutorial's picture contained in its fit box, clipped to the disc; returns what was drawn (or null).
+    drawMedallionImage(ctx, id, x, y, radius) {
+        const image = TutorialCardsTree.image(id)
+        if (!image) return null
+        const fit = TutorialCardsTree.IMAGE_FIT[TutorialCardsTree.IMAGES[id].fit ?? 'plain']
+        const size = fit.size * 2 * radius, scale = Math.min(size / image.naturalWidth, size / image.naturalHeight)
+        const width = image.naturalWidth * scale, height = image.naturalHeight * scale
+        const box = {x: x - width / 2, y: y + fit.shift * size - height / 2, width, height}
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.clip()
+        ctx.drawImage(image, box.x, box.y, box.width, box.height)
+        ctx.restore()
+        return {src: TutorialCardsTree.IMAGES[id].src, box, disc: {x, y, radius}}
     }
     drawCheckBadge(ctx, x, y, radius) {
         const colours = TutorialCardsTree.CARD
