@@ -987,7 +987,8 @@ class HubList {
     }
 }
 
-// The signed-in hub: 'return to my lobby', your games and open lobbies from lobby:list, re-fetched on lobby:listChanged.
+// The signed-in hub: 'return to my lobby', your games and open lobbies from lobby:list and the finished games from
+// game:myFinished, both re-fetched on lobby:listChanged.
 class OnlineHubTree {
     constructor(_menu) {
         this.menu = _menu
@@ -1065,9 +1066,9 @@ class OnlineHubTree {
         if (this.menu.selectedTree !== this || onlineSession.openGameID !== null) return
         openLobbyGame(gameID)
     }
-    // Row texts in list order, for tests and diagnostics.
+    // Row texts in list order, for tests and diagnostics: the plain-text summaries of the structured rows.
     get rowTexts() {
-        return this.list.rows.map(row => row.text)
+        return this.list.rows.map(hubRowText)
     }
     wheel(pos, deltaY) {
         if (this.account) this.list.wheel(pos, deltaY)
