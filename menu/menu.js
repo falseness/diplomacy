@@ -899,31 +899,260 @@ class SignInTree {
     }
 }
 
-// The scrolling list of the hub: rows from buildHubRows, drawn on the canvas.
-class HubList {
-    constructor(rect) {
-        this.rect = rect
-        this.rows = []
-        this.selectedId = null
-        this.scroll = new HubScrollModel(HEIGHT * 0.055, rect.height)
-        this.dragY = null
+// The hub's unit (hub concept: min(1% of the width, 2.3% of the height)); every size of the hub is a multiple of it.
+function hubUnit() {
+    return Math.min(0.01 * WIDTH, 0.023 * HEIGHT)
+}
+
+// A canvas font of the hub in the menu family, or in the small-caps title family.
+function hubFont(size, weight = MENU_THEME.fontWeight, title = false) {
+    return `${weight} ${size}px ${title ? Text.titleFamily : Text.defaultFamily}`
+}
+
+// Draws text at (x, y) on a middle baseline and returns its width.
+function hubText(ctx, text, x, y, font, color, align = 'left') {
+    ctx.font = font
+    ctx.fillStyle = color
+    ctx.textAlign = align
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, x, y)
+    return ctx.measureText(text).width
+}
+
+// text cut to maxWidth in ctx's font, ending with an ellipsis: hub texts are never shrunk to fit.
+function hubEllipsis(ctx, text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return text
+    let fits = 0, over = text.length
+    while (over - fits > 1) {
+        const middle = (fits + over) >> 1
+        if (ctx.measureText(text.slice(0, middle).trimEnd() + '…').width <= maxWidth) fits = middle
+        else over = middle
     }
-    setRows(rows) {
-        this.rows = rows
-        this.scroll.setRowCount(rows.length)
+    return fits ? text.slice(0, fits).trimEnd() + '…' : ''
+}
+
+// Player names within maxWidth in ctx's font: as many names as fit, then "+N" for the others.
+function hubPlayersText(ctx, names, maxWidth) {
+    for (let shown = names.length; shown >= 1; --shown) {
+        const text = names.slice(0, shown).join(', ') + (shown < names.length ? ' +' + (names.length - shown) : '')
+        if (ctx.measureText(text).width <= maxWidth) return text
     }
-    isInside(pos) {
-        return pos.x >= this.rect.x && pos.x <= this.rect.x + this.rect.width &&
-            pos.y >= this.rect.y && pos.y <= this.rect.y + this.rect.height
+    const more = names.length > 1 ? ' +' + (names.length - 1) : ''
+    return names.length ? hubEllipsis(ctx, names[0], maxWidth - ctx.measureText(more).width) + more : ''
+}
+
+function hubFillRounded(ctx, box, radius, color) {
+    ctx.beginPath()
+    new Rect(box.x, box.y, box.width, box.height, [radius, radius, radius, radius]).drawShape(ctx)
+    ctx.closePath()
+    ctx.fillStyle = color
+    ctx.fill()
+}
+
+// A row title as shown: map names start in lower case.
+function hubTitle(title) {
+    return title ? title[0].toUpperCase() + title.slice(1) : ''
+}
+
+// The right-hand status of a card's first line.
+function hubCardStatus(row) {
+    if (row.kind === 'game') return (row.yourTurn ? 'Your turn · ' : '') + 'Round ' + row.round
+    if (row.kind === 'finished')
+        return [row.result, row.rounds != null ? `${row.rounds} rounds` : null].filter(Boolean).join(' · ')
+    return `${row.seats.filled}/${row.seats.capacity} joined`
+}
+
+// A hub button placed by the hub's layout: a plaque (gold when primary) with a small-caps label.
+class HubButton extends MenuButton {
+    constructor(label, clickFunc, parameters, callThis, primary = false) {
+        super(new Rect(0, 0, 0, 0), new Text(0, 0, 0, label), clickFunc, parameters, true, callThis)
+        this.primary = primary
     }
-    wheel(pos, deltaY) {
-        if (!this.isInside(pos)) return false
-        this.scroll.scrollBy(Math.sign(deltaY) * this.scroll.rowHeight)
+    place(x, y, width, height, fontSize) {
+        Object.assign(this.rect, {x, y, width, height})
+        const corner = Math.min(0.8 * hubUnit(), height / 2)
+        this.rect.cornerRadius = [corner, corner, corner, corner]
+        this.text.fontSize = fontSize
+        this.trimText()
+    }
+    draw(ctx) {
+        const style = this.primary ? MENU_THEME.primary : MENU_THEME.plain
+        this.rect.drawPlaque(ctx, style, 0.16 * hubUnit())
+        this.text.fontFamily = Text.titleFamily
+        this.text.drawAs(ctx, style.text, 800)
+    }
+}
+
+// The account chip's round pencil button: opens the nickname screen.
+class HubPencilButton extends Button {
+    constructor(clickFunc, parameters, callThis) {
+        super(new Rect(0, 0, 0, 0), new Text(0, 0, 0, 'change nickname'), clickFunc, parameters, true, callThis)
+    }
+    place(centerX, centerY, radius) {
+        Object.assign(this.rect, {x: centerX - radius, y: centerY - radius, width: 2 * radius, height: 2 * radius})
+        this.trimText()
+    }
+    select() {
+    }
+    removeSelect() {
+    }
+    draw(ctx) {
+        const r = this.rect.width / 2, x = this.rect.centerX, y = this.rect.centerY, u = hubUnit()
+        ctx.save()
+        const fill = ctx.createRadialGradient(x - 0.3 * r, y - 0.4 * r, 0, x, y, r)
+        fill.addColorStop(0, '#3b4a72')
+        fill.addColorStop(1, '#1a2342')
+        ctx.fillStyle = fill
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = MENU_THEME.plain.rim
+        ctx.lineWidth = 0.18 * u
+        ctx.beginPath()
+        ctx.arc(x, y, r - 0.09 * u, 0, Math.PI * 2)
+        ctx.stroke()
+        // The pencil along the diagonal, its tip at the lower left.
+        const s = 0.55 * r
+        ctx.translate(x, y)
+        ctx.rotate(-Math.PI / 4)
+        ctx.strokeStyle = '#f0d39b'
+        ctx.lineWidth = 0.1 * r
+        ctx.lineJoin = ctx.lineCap = 'round'
+        ctx.beginPath()
+        ctx.moveTo(-0.95 * s, 0)
+        ctx.lineTo(-0.55 * s, -0.22 * s)
+        ctx.lineTo(0.85 * s, -0.22 * s)
+        ctx.lineTo(0.85 * s, 0.22 * s)
+        ctx.lineTo(-0.55 * s, 0.22 * s)
+        ctx.closePath()
+        ctx.moveTo(0.55 * s, -0.22 * s)
+        ctx.lineTo(0.55 * s, 0.22 * s)
+        ctx.stroke()
+        ctx.restore()
+    }
+}
+
+// The pinned 'Return to my lobby' bar over the panels: the lobby's summary and an Open button; a click anywhere on
+// the bar opens the room.
+class HubReturnBar {
+    constructor(onOpen) {
+        this.row = null
+        this.rect = new Rect(0, 0, 0, 0)
+        this.onOpen = onOpen
+        this.openButton = new HubButton('Open', () => {}, undefined, undefined, true)
+    }
+    place(x, y, width, height) {
+        const u = hubUnit(), buttonWidth = 7 * u, buttonHeight = 2.5 * u
+        Object.assign(this.rect, {x, y, width, height})
+        this.rect.cornerRadius = [0.8 * u, 0.8 * u, 0.8 * u, 0.8 * u]
+        this.openButton.place(x + width - 1.4 * u - buttonWidth, y + (height - buttonHeight) / 2, buttonWidth, buttonHeight,
+            1.55 * u)
+    }
+    // The lobby's title, mode, tags, seats and host ('' while my lobby is not in the list).
+    get summary() {
+        const row = this.row
+        return row?.title === undefined ? '' : [hubTitle(row.title), row.mode, ...row.tags,
+            `${row.seats.filled}/${row.seats.capacity} joined`, 'host ' + row.host].join(' · ')
+    }
+    click(pos) {
+        if (!this.row || !this.rect.isInside(pos)) return false
+        this.onOpen(this.row)
         return true
     }
-    // Touch drag of the list.
     select(pos) {
-        this.dragY = this.isInside(pos) ? pos.y : null
+    }
+    touchmove(pos) {
+    }
+    removeSelect() {
+    }
+    draw(ctx) {
+        if (!this.row) return
+        const u = hubUnit(), {x, y, height} = this.rect, centerY = y + height / 2
+        this.rect.drawPlaque(ctx, MENU_THEME.myLobby, 0.16 * u)
+        const labelWidth = hubText(ctx, 'Return to my lobby', x + 1.4 * u, centerY, hubFont(1.75 * u, 800, true), '#c9f5cd')
+        const left = x + 2.8 * u + labelWidth, font = hubFont(1.6 * u)
+        ctx.font = font
+        hubText(ctx, hubEllipsis(ctx, this.summary, this.openButton.rect.x - 1.4 * u - left), left, centerY, font,
+            MENU_THEME.text)
+        this.openButton.draw(ctx)
+    }
+}
+
+// One panel of the hub: a heading with its count over the rows, drawn as text cards, and a slim gold scroll track at
+// its right. It scrolls on its own: the wheel over it, a touch drag in it, the arrow keys (OnlineHubTree.scrollKey).
+class HubPanel {
+    // Row heights in hub units: a card with the gap under it, a section heading, an empty-section line.
+    static CARD = 5.6
+    static CARD_GAP = 0.8
+    static LINE = 3.4
+    constructor(lists, title, countText, countKind) {
+        this.lists = lists
+        this.title = title
+        this.countText = countText
+        this.countKind = countKind
+        this.rows = []
+        this.scroll = new HubPanelScroll()
+        this.rect = new Rect(0, 0, 0, 0)
+        this.view = new Rect(0, 0, 0, 0)
+        this.track = new Rect(0, 0, 0, 0)
+        this.dragY = null
+    }
+    static isCard(row) {
+        return row.kind !== 'header' && row.kind !== 'empty'
+    }
+    setRows(rows) {
+        const u = hubUnit()
+        this.rows = rows
+        this.scroll.setHeights(rows.map(row => (HubPanel.isCard(row) ? HubPanel.CARD + HubPanel.CARD_GAP : HubPanel.LINE) * u))
+    }
+    // The panel box; the rows scroll in the view under the heading, the track runs down the view's right edge.
+    place(x, y, width, height) {
+        const u = hubUnit()
+        Object.assign(this.rect, {x, y, width, height})
+        this.rect.cornerRadius = [u, u, u, u]
+        Object.assign(this.view, {x: x + u, y: y + 4 * u, width: width - 2 * u, height: height - 4.9 * u})
+        Object.assign(this.track, {x: this.view.right - 0.45 * u, y: this.view.y, width: 0.45 * u, height: this.view.height})
+        this.scroll.setViewHeight(this.view.height)
+    }
+    get count() {
+        return this.rows.filter(row => row.kind === this.countKind).length
+    }
+    // One wheel notch or arrow key: a card.
+    get step() {
+        return (HubPanel.CARD + HubPanel.CARD_GAP) * hubUnit()
+    }
+    // The card (or line) of row index on screen.
+    rowRect(index) {
+        const u = hubUnit(), card = HubPanel.isCard(this.rows[index])
+        return {x: this.view.x, y: this.view.y + this.scroll.tops[index] - this.scroll.offset,
+            width: this.view.width - 1.4 * u, height: this.scroll.heights[index] - (card ? HubPanel.CARD_GAP * u : 0)}
+    }
+    // The track's gold thumb on screen, or null when the rows fit.
+    get thumbRect() {
+        const thumb = this.scroll.thumb(this.track.height, 2 * hubUnit())
+        return thumb && {x: this.track.x, y: this.track.y + thumb.top, width: this.track.width, height: thumb.height}
+    }
+    isInside(pos) {
+        return this.rect.isInside(pos)
+    }
+    wheel(pos, deltaY) {
+        if (!deltaY || !this.isInside(pos)) return false
+        this.scroll.scrollBy(Math.sign(deltaY) * this.step)
+        return true
+    }
+    scrollKey(key) {
+        const page = Math.max(this.step, this.scroll.viewHeight - this.step)
+        const delta = {ArrowDown: this.step, ArrowUp: -this.step, PageDown: page, PageUp: -page}[key]
+        if (key === 'Home') this.scroll.scrollTo(0)
+        else if (key === 'End') this.scroll.scrollTo(this.scroll.maxOffset)
+        else if (delta) this.scroll.scrollBy(delta)
+        else return false
+        return true
+    }
+    // Touch drag in the view.
+    select(pos) {
+        this.dragY = this.view.isInside(pos) ? pos.y : null
+        if (this.dragY !== null) this.lists.lastPanel = this
     }
     touchmove(pos) {
         if (this.dragY === null) return
@@ -934,96 +1163,154 @@ class HubList {
         this.dragY = null
     }
     click(pos) {
-        if (!this.isInside(pos)) return false
-        const row = this.rows[this.scroll.rowAt(pos.y - this.rect.y)]
-        if (row && row.id !== null) {
-            this.selectedId = row.id
-            this.onRow?.(row)
-        }
+        if (!this.view.isInside(pos)) return false
+        this.lists.lastPanel = this
+        const index = this.scroll.rowAt(pos.y - this.view.y), row = this.rows[index]
+        if (!row || row.id === null || !HubPanel.isCard(row)) return true
+        // Not in the gap under a card or beside it on the track.
+        const r = this.rowRect(index)
+        if (pos.x <= r.x + r.width && pos.y <= r.y + r.height) this.lists.choose(row)
         return true
     }
-    // Rows are menu theme plaques: your turn gold, my lobby green, the others navy; headings gold text, empty dim.
     draw(ctx) {
-        const {x, y, width, height} = this.rect
-        const rowHeight = this.scroll.rowHeight
-        const pad = 0.01 * WIDTH
-        const theme = MENU_THEME
-        const corner = 0.25 * rowHeight
-        new Rect(x, y, width, height, [pad, pad, pad, pad]).drawPlaque(ctx, theme.panel, Math.max(1, 0.0012 * WIDTH))
+        const u = hubUnit(), theme = MENU_THEME, {x, y} = this.rect
+        this.rect.drawPlaque(ctx, theme.panel, 0.14 * u)
+        const headingY = y + 2.2 * u
+        const titleWidth = hubText(ctx, this.title, x + 1.4 * u, headingY, hubFont(2.1 * u, 800, true), theme.heading)
+        hubText(ctx, this.countText(this.count), x + 2.2 * u + titleWidth, headingY, hubFont(1.55 * u), theme.mutedText)
         ctx.save()
         ctx.beginPath()
-        ctx.rect(x, y, width, height)
+        ctx.rect(this.view.x, this.view.y, this.view.width, this.view.height)
         ctx.clip()
         const {first, last} = this.scroll.visibleRange
         for (let i = first; i <= last; ++i) {
-            const row = this.rows[i]
-            const top = y + i * rowHeight - this.scroll.offset
-            const header = row.kind === 'header'
-            let color = row.kind === 'empty' ? theme.disabled.text : header ? theme.heading : theme.text
-            if (row.kind === 'game' || row.kind === 'lobby' || row.kind === 'myLobby') {
-                const style = row.yourTurn ? theme.yourTurn : row.kind === 'myLobby' ? theme.myLobby : theme.plain
-                const selected = row.id === this.selectedId
-                new Rect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight, [corner, corner, corner, corner])
-                    .drawPlaque(ctx, selected ? {...style, rim: theme.selectedRim} : style,
-                        Math.max(1, (selected ? 0.003 : 0.001) * WIDTH))
-                color = style.text
-            }
-            // Long rows shrink to fit the list width.
-            const weight = header ? '700 ' : row.kind === 'empty' ? 'italic ' : theme.fontWeight + ' '
-            let fontSize = (header ? 0.55 : 0.45) * rowHeight
-            const maxWidth = width - 4 * pad
-            ctx.font = `${weight}${fontSize}px ${Text.defaultFamily}`
-            const textWidth = ctx.measureText(row.text).width
-            if (textWidth > maxWidth) {
-                fontSize *= maxWidth / textWidth
-                ctx.font = `${weight}${fontSize}px ${Text.defaultFamily}`
-            }
-            ctx.fillStyle = color
-            ctx.textAlign = 'left'
-            ctx.textBaseline = 'middle'
-            ctx.fillText(row.text, x + 2 * pad, top + rowHeight / 2)
+            const row = this.rows[i], r = this.rowRect(i)
+            if (HubPanel.isCard(row)) this.drawCard(ctx, row, r, u)
+            else if (row.kind === 'header') {
+                const count = this.rows.filter(other => other.kind === 'finished').length
+                const width = hubText(ctx, 'Finished', r.x + 0.4 * u, r.y + 0.55 * r.height, hubFont(1.75 * u, 800, true),
+                    theme.heading)
+                hubText(ctx, count === 1 ? '1 game' : `${count} games`, r.x + 1.2 * u + width, r.y + 0.55 * r.height,
+                    hubFont(1.5 * u), theme.mutedText)
+            } else hubText(ctx, row.text, r.x + 0.4 * u, r.y + r.height / 2, hubFont(1.6 * u, 'italic 500'),
+                theme.disabled.text)
         }
         ctx.restore()
+        hubFillRounded(ctx, this.track, this.track.width / 2, 'rgba(255, 255, 255, 0.08)')
+        const thumb = this.thumbRect
+        if (thumb) hubFillRounded(ctx, thumb, thumb.width / 2, theme.plain.rim)
+    }
+    // A text card: title and mode, the status at the right; the tags, the players (a lobby's host) at the right.
+    // Your turn is gold, the selected card has a light rim.
+    drawCard(ctx, row, r, u) {
+        const theme = MENU_THEME, selected = row.id === this.lists.selectedId
+        const style = row.yourTurn ? theme.yourTurn : theme.plain
+        const corner = 0.8 * u
+        new Rect(r.x, r.y, r.width, r.height, [corner, corner, corner, corner])
+            .drawPlaque(ctx, selected ? {...style, rim: theme.selectedRim} : style, (selected ? 0.25 : 0.12) * u)
+        const muted = row.yourTurn ? style.text : theme.mutedText
+        const left = r.x + 1.1 * u, right = r.x + r.width - 1.1 * u, inner = right - left
+        const top = r.y + 0.36 * r.height, bottom = r.y + 0.72 * r.height
+        const smallCaps = hubFont(1.5 * u, 800, true), titleFont = hubFont(2.05 * u, 700), textFont = hubFont(1.5 * u)
+        ctx.font = smallCaps
+        const status = hubEllipsis(ctx, hubCardStatus(row), inner * 0.45)
+        const statusWidth = hubText(ctx, status, right, top, smallCaps, row.yourTurn ? style.text : theme.heading, 'right')
+        ctx.font = smallCaps
+        const mode = row.mode ?? '', modeWidth = ctx.measureText(mode).width
+        // The mode is left out when the title would keep less than 6 units.
+        const titleRoom = inner - statusWidth - u, withMode = mode && titleRoom - modeWidth - 0.8 * u >= 6 * u
+        ctx.font = titleFont
+        const title = hubEllipsis(ctx, hubTitle(row.title), withMode ? titleRoom - modeWidth - 0.8 * u : titleRoom)
+        const titleWidth = hubText(ctx, title, left, top, titleFont, style.text)
+        if (withMode) hubText(ctx, mode, left + titleWidth + 0.8 * u, top, smallCaps, muted)
+        ctx.font = textFont
+        const people = row.kind === 'lobby' ? hubEllipsis(ctx, 'host ' + row.host, inner * 0.55)
+            : hubPlayersText(ctx, row.players.map(player => player.name), inner * 0.55)
+        const peopleWidth = hubText(ctx, people, right, bottom, textFont, muted, 'right')
+        ctx.font = textFont
+        hubText(ctx, hubEllipsis(ctx, row.tags.join(' · '), inner - peopleWidth - u), left, bottom, textFont, muted)
     }
 }
 
-// The signed-in hub: 'return to my lobby', your games and open lobbies from lobby:list and the finished games from
-// game:myFinished, both re-fetched on lobby:listChanged.
+// The hub's rows (menu.onlineHub.list): rows is the whole buildHubRows list, split over the return bar and the two
+// panels (hubPanelRows); a chosen row is selected and passed to onRow.
+class HubLists {
+    constructor() {
+        this.rows = []
+        this.selectedId = null
+        this.onRow = null
+        this.onRowsChanged = null
+        this.myLobby = null
+        this.games = new HubPanel(this, 'Your games', n => n === 1 ? '1 game' : `${n} games`, 'game')
+        this.lobbies = new HubPanel(this, 'Open lobbies', n => n === 1 ? '1 lobby' : `${n} lobbies`, 'lobby')
+        this.bar = new HubReturnBar(row => this.choose(row))
+        // The panel the arrow keys scroll when the mouse is over neither: the last one wheeled, touched or clicked.
+        this.lastPanel = this.games
+    }
+    get panels() {
+        return [this.games, this.lobbies]
+    }
+    setRows(rows) {
+        this.rows = rows
+        const {myLobby, games, lobbies} = hubPanelRows(rows)
+        this.myLobby = this.bar.row = myLobby
+        this.games.setRows(games)
+        this.lobbies.setRows(lobbies)
+        this.onRowsChanged?.()
+    }
+    choose(row) {
+        this.selectedId = row.id
+        this.onRow?.(row)
+    }
+    // Where a click opens row id (my lobby: the bar's Open button), its panel scrolled to show it whole; null when
+    // the row is not shown.
+    rowPoint(id) {
+        if (this.myLobby?.id === id) return {x: this.bar.openButton.centerX, y: this.bar.openButton.centerY}
+        for (const panel of this.panels) {
+            const index = panel.rows.findIndex(row => row.id === id)
+            if (index < 0) continue
+            panel.scroll.reveal(index)
+            const r = panel.rowRect(index)
+            return {x: r.x + r.width / 2, y: r.y + r.height / 2}
+        }
+        return null
+    }
+}
+
+// The signed-in hub (hub concept): the logo with the account chip at its right, 'return to my lobby' when I have a
+// lobby, my games (active, then finished) and the open lobbies side by side, create game and back. Rows come from
+// lobby:list and game:myFinished, both re-fetched on lobby:listChanged.
 class OnlineHubTree {
     constructor(_menu) {
         this.menu = _menu
         this.account = null
         this.feed = null
-        // A one-off message after the status line, e.g. a lobby:join error or
-        // 'you were removed from the lobby'; cleared on leave.
+        // A one-off message, e.g. a lobby:join error or 'you were removed from the lobby', on its own line over the
+        // panels; cleared on leave.
         this.notice = ''
-        // Between the logo and the list, its size capped by the height for wide screens.
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.29, Math.min(0.025 * WIDTH, 0.03 * HEIGHT), '', MENU_THEME.text)
-        this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
+        // 'Signed in as <nickname>' and the notice, for tests; drawn only while signing in (the chip and the notice line
+        // draw them once signed in).
+        this.status = new Text(WIDTH / 2, HEIGHT / 2, 2 * hubUnit(), '', MENU_THEME.text)
+        this.list = new HubLists()
         this.list.onRow = row => {
             // lobby:join of my own lobby returns it, so both open the room.
             if (row.kind === 'lobby' || row.kind === 'myLobby') this.joinLobby(row.id)
             else if (row.kind === 'game') this.openGame(row.id)
         }
+        this.list.onRowsChanged = () => this.layout()
         this.joining = false
-        const arrow = (y, text, direction) => new MenuButton(
-            new Rect(WIDTH * 0.875, y, WIDTH * 0.05, HEIGHT * 0.1, [0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH, 0.01 * WIDTH],
-                0.0035 * WIDTH, 'white'),
-            Menu.getButtonText(text), () => this.list.scroll.scrollBy(direction * this.list.scroll.pageStep))
-        this.scrollUpButton = arrow(HEIGHT * 0.31, '▲', -1)
-        this.scrollDownButton = arrow(HEIGHT * 0.68, '▼', 1)
-        const rowY = HEIGHT * 0.83
-        this.createButton = Menu.getButton({x: WIDTH * 0.1, y: rowY}, 'create game',
-            _menu.setTree, _menu.createLobby, true, _menu)
-        this.nicknameButton = Menu.getButton({x: WIDTH * 0.375, y: rowY}, 'change nickname',
-            _menu.setTree, _menu.nickname, true, _menu)
-        // The label is longer than the other menu buttons'.
-        for (const text of [this.nicknameButton.text, this.nicknameButton.selectedText]) text.fontSize *= 0.75
+        const u = hubUnit()
+        // The menu logo's shape, 6.5 units high.
+        this.logo = new HaloLogo('logo', {x: WIDTH / 2, y: 4.45 * u}, 6.5 * u * 0.5 / 0.11, 6.5 * u)
+        this.betaTag = undefined
+        this.nicknameButton = new HubPencilButton(_menu.setTree, _menu.nickname, _menu)
+        this.createButton = new HubButton('Create game', _menu.setTree, _menu.createLobby, _menu, true)
         this.backButton = new Empty()
+        this.hoveredPanel = null
         this.setAccount(null)
     }
     setParent(parent, _menu) {
-        this.backButton = Menu.getButton({x: WIDTH * 0.65, y: HEIGHT * 0.83}, 'back', _menu.setTree, parent, true, _menu)
+        this.backButton = new HubButton('Back', _menu.setTree, parent, _menu)
         this.setAccount(this.account)
     }
     // A null account means the stored session is still being checked.
@@ -1031,9 +1318,43 @@ class OnlineHubTree {
         this.account = account
         this.status.text = account ? 'Signed in as ' + account.nickname : 'signing in…'
         if (account && this.notice) this.status.text += ' · ' + this.notice
-        this.buttons = account ? [this.list, this.scrollUpButton, this.scrollDownButton,
-            this.createButton, this.nicknameButton, this.backButton] : [this.backButton]
+        this.buttons = account ? [...this.list.panels, this.list.bar, this.nicknameButton, this.createButton,
+            this.backButton] : [this.backButton]
+        this.layout()
         if (account && this.menu.selectedTree === this) this.startFeed()
+    }
+    // In hub units from the top: the logo row (the logo centred, the account chip and the beta tag at the right), the
+    // return bar when I have a lobby, the notice line when there is one, the two panels of equal width filling the
+    // rest, the bottom row with create game and back.
+    layout() {
+        const u = hubUnit(), side = 2.4 * u, logoY = this.logo.pos.y
+        let right = WIDTH - side
+        if (this.menu.betaTag) {
+            this.betaTag ??= new BetaTag()
+            this.betaTag.text.fontSize = 1.5 * u
+            this.betaTag.text.x = WIDTH
+            const width = this.betaTag.bounds.width
+            this.betaTag.text.x = right - width / 2
+            this.betaTag.text.y = logoY
+            right -= width + u
+        }
+        this.nicknameButton.place(right - 1.4 * u, logoY, 1.4 * u)
+        // The chip's texts end here.
+        this.chipRight = right - 3.5 * u
+        let y = 8.7 * u
+        if (this.list.myLobby) {
+            this.list.bar.place(side, y, WIDTH - 2 * side, 3.8 * u)
+            y += 4.8 * u
+        }
+        this.noticeY = y + 1.2 * u
+        if (this.account && this.notice) y += 3.4 * u
+        const bottom = HEIGHT - 5.8 * u
+        const panelWidth = (WIDTH - 2 * side - 1.6 * u) / 2
+        this.list.games.place(side, y, panelWidth, bottom - u - y)
+        this.list.lobbies.place(WIDTH - side - panelWidth, y, panelWidth, bottom - u - y)
+        const createWidth = 18 * u, backWidth = 11 * u, left = WIDTH / 2 - (createWidth + 2 * u + backWidth) / 2
+        this.createButton.place(left, bottom, createWidth, 4.6 * u, 2 * u)
+        this.backButton.place?.(left + createWidth + 2 * u, bottom, backWidth, 4.6 * u, 2 * u)
     }
     startFeed() {
         this.feed ||= new HubListFeed(onlineSession, rows => this.list.setRows(rows))
@@ -1047,7 +1368,7 @@ class OnlineHubTree {
         this.feed?.stop()
         this.notice = ''
     }
-    // lobby:join, then the room; LOBBY_FULL, ALREADY_IN_LOBBY etc. show on the status line.
+    // lobby:join, then the room; LOBBY_FULL, ALREADY_IN_LOBBY etc. show on the notice line.
     async joinLobby(lobbyId) {
         if (this.joining) return
         this.joining = true
@@ -1070,15 +1391,55 @@ class OnlineHubTree {
     get rowTexts() {
         return this.list.rows.map(hubRowText)
     }
+    // The wheel scrolls the panel under the mouse, the arrow keys the hovered panel, else the last one used.
     wheel(pos, deltaY) {
-        if (this.account) this.list.wheel(pos, deltaY)
+        if (!this.account) return
+        for (const panel of this.list.panels)
+            if (panel.wheel(pos, deltaY)) this.list.lastPanel = panel
+    }
+    hover(pos) {
+        this.hoveredPanel = this.list.panels.find(panel => panel.isInside(pos)) ?? null
+    }
+    scrollKey(key) {
+        if (this.account) (this.hoveredPanel ?? this.list.lastPanel).scrollKey(key)
     }
     click(pos) {
         for (const button of this.buttons) button.click(pos)
     }
+    // 'Signed in as <nickname>' right-aligned before the pencil and clear of the logo; a long nickname ends with an
+    // ellipsis.
+    drawChip(ctx) {
+        const u = hubUnit(), y = this.logo.pos.y, size = 1.6 * u, pencil = this.nicknameButton.rect
+        const logo = this.logo.bounds, prefix = 'Signed in as '
+        ctx.font = hubFont(size)
+        const prefixWidth = ctx.measureText(prefix).width
+        ctx.font = hubFont(size, 700)
+        const name = hubEllipsis(ctx, this.account.nickname, this.chipRight - (logo.x + logo.width + u) - prefixWidth)
+        const x = this.chipRight - ctx.measureText(name).width - prefixWidth
+        hubText(ctx, prefix, x, y, hubFont(size), MENU_THEME.mutedText)
+        hubText(ctx, name, x + prefixWidth, y, hubFont(size, 700), MENU_THEME.text)
+        this.chipRect = {x, y: pencil.y, width: pencil.right - x, height: pencil.height}
+        this.nicknameButton.draw(ctx)
+    }
     draw(ctx) {
-        this.status.draw(ctx)
-        for (const button of this.buttons) button.draw(ctx)
+        this.layout()
+        if (!this.account) {
+            this.status.draw(ctx)
+            this.backButton.draw(ctx)
+            return
+        }
+        const u = hubUnit()
+        this.drawChip(ctx)
+        if (this.notice) {
+            const font = hubFont(1.6 * u)
+            ctx.font = font
+            hubText(ctx, hubEllipsis(ctx, this.notice, WIDTH - 4.8 * u), WIDTH / 2, this.noticeY, font, MENU_THEME.mutedText,
+                'center')
+        }
+        this.list.bar.draw(ctx)
+        for (const panel of this.list.panels) panel.draw(ctx)
+        this.createButton.draw(ctx)
+        this.backButton.draw(ctx)
     }
 }
 
@@ -2246,19 +2607,23 @@ class Menu {
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         // Menu texts draw in the menu font; the game's texts keep Text's own default.
-        const gameFamily = Text.defaultFamily
+        const gameFamily = Text.defaultFamily, gameTitleFamily = Text.titleFamily
         Text.defaultFamily = MENU_FONT_FAMILY
+        Text.titleFamily = MENU_TITLE_FONT_FAMILY
         // Menu controls draw in the menu theme (sprites/elements/text.js MENU_THEME).
         Text.menuTheme = MENU_THEME
         try {
             this.sky.draw(ctx)
             // Co-op uses the header space for its size selector.
-            if (!this.selectedTree.isCoop) this.logo.draw(ctx)
-            this.betaTag.draw(ctx)
+            // A tree with its own logo and beta tag (the online hub) places them itself.
+            const logo = this.selectedTree.logo ?? this.logo, betaTag = this.selectedTree.betaTag ?? this.betaTag
+            if (!this.selectedTree.isCoop) logo.draw(ctx)
+            betaTag.draw(ctx)
             this.selectedTree.draw(ctx)
             errorWindow.draw(ctx)
         } finally {
             Text.defaultFamily = gameFamily
+            Text.titleFamily = gameTitleFamily
             Text.menuTheme = null
             ctx.restore()
         }

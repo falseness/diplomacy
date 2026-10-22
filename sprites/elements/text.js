@@ -25,6 +25,8 @@ function menuDomFontSize() {
 class Text {
     // Family of a Text without its own; the menu switches it while it draws (menu/menu.js Menu.draw).
     static defaultFamily = 'Times New Roman'
+    // The small-caps title family while the menu draws (MENU_TITLE_FONT_FAMILY), else Times New Roman.
+    static titleFamily = 'Times New Roman'
     // MENU_THEME while the menu draws, else null.
     static menuTheme = null
     constructor(x, y, fontSize = Math.round(basis.r * 9.8625 * 0.05), text = 'error', color = 'white',

@@ -153,6 +153,78 @@ class HubScrollModel {
     }
 }
 
+// The hub's places for the rows of buildHubRows: the 'return to my lobby' bar (the myLobby row or null), the left
+// panel (your games, then the 'finished' heading and the finished games) and the right panel (the open lobbies).
+// The 'your games' and 'lobbies' headings become the panel headings.
+function hubPanelRows(rows) {
+    const myLobby = rows.find(row => row.kind === 'myLobby') || null
+    const heading = text => rows.findIndex(row => row.kind === 'header' && row.text === text)
+    const games = heading('your games'), lobbies = heading('lobbies')
+    if (games < 0 || lobbies < games) return {myLobby, games: [], lobbies: []}
+    return {myLobby, games: rows.slice(games + 1, lobbies), lobbies: rows.slice(lobbies + 1)}
+}
+
+// A panel's vertical scroll over rows of their own heights in a view of viewHeight; offset is the scrolled
+// distance from the top.
+class HubPanelScroll {
+    constructor() {
+        this.heights = []
+        this.tops = []
+        this.viewHeight = 0
+        this.offset = 0
+    }
+    get contentHeight() {
+        return this.heights.reduce((sum, height) => sum + height, 0)
+    }
+    get maxOffset() {
+        return Math.max(0, this.contentHeight - this.viewHeight)
+    }
+    setHeights(heights) {
+        this.heights = heights
+        let top = 0
+        this.tops = heights.map(height => (top += height) - height)
+        this.scrollTo(this.offset)
+    }
+    setViewHeight(viewHeight) {
+        this.viewHeight = viewHeight
+        this.scrollTo(this.offset)
+    }
+    scrollTo(offset) {
+        this.offset = Math.min(this.maxOffset, Math.max(0, offset))
+    }
+    scrollBy(delta) {
+        this.scrollTo(this.offset + delta)
+    }
+    // The least scroll that shows row index whole (its top when it is taller than the view).
+    reveal(index) {
+        const top = this.tops[index], bottom = top + this.heights[index]
+        if (top < this.offset || bottom - top > this.viewHeight) this.scrollTo(top)
+        else if (bottom > this.offset + this.viewHeight) this.scrollTo(bottom - this.viewHeight)
+    }
+    // Indices of the rows at least partly inside the view.
+    get visibleRange() {
+        let first = 0
+        while (first < this.heights.length && this.tops[first] + this.heights[first] <= this.offset) ++first
+        let last = first - 1
+        while (last + 1 < this.heights.length && this.tops[last + 1] < this.offset + this.viewHeight) ++last
+        return {first, last}
+    }
+    // Row index under y (measured from the view's top), or -1.
+    rowAt(y) {
+        if (y < 0 || y > this.viewHeight) return -1
+        const at = y + this.offset
+        return this.tops.findIndex((top, i) => at >= top && at < top + this.heights[i])
+    }
+    // The thumb of a scroll track trackHeight long: offset 0 at the top, maxOffset at the bottom, its length the
+    // visible share of the content (at least minHeight); null when nothing overflows.
+    thumb(trackHeight, minHeight = 0) {
+        const maxOffset = this.maxOffset
+        if (maxOffset <= 0) return null
+        const height = Math.min(trackHeight, Math.max(minHeight, trackHeight * this.viewHeight / this.contentHeight))
+        return {top: (trackHeight - height) * this.offset / maxOffset, height}
+    }
+}
+
 // Requests lobby:list and game:myFinished while active and again on every lobby:listChanged push.
 // session: {connect() -> socket with on(), request(event, payload) -> ack promise, myFinishedGames() -> ack promise}.
 class HubListFeed {
