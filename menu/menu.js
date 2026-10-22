@@ -290,6 +290,7 @@ const SETUP_STYLE = {
     arrow: ['#2f3c63', '#161f3d'], switchOff: '#141c36', switchRim: 'rgba(201, 154, 78, 0.6)', knobOff: '#6f6a7e',
     knobOn: '#1a2342', unselectedAlpha: 0.6, limitAlpha: 0.35,
     panel: 'rgba(12, 18, 40, 0.62)', panelRim: 'rgba(201, 154, 78, 0.55)', row: 'rgba(255, 255, 255, 0.045)',
+    error: '#ff9d8f',
 }
 
 // A setup font of size pixels (setupLayout's fonts), in the menu family or the small-caps title family.
@@ -340,7 +341,9 @@ class SetupModeCard {
     }
     select(pos) {}
     removeSelect() {}
-    touchmove(pos) {}
+    // On two lines: server/loadGameCode.js rewrites a one-line touchmove(pos) {} into a global.touchmove call.
+    touchmove(pos) {
+    }
     click(pos) {
         if (!this.isInside(pos)) return false
         this.clickFunc.call(this.callThis, this.mode)
@@ -529,7 +532,9 @@ class SetupModeCards {
     }
     select(pos) {}
     removeSelect() {}
-    touchmove(pos) {}
+    // On two lines: server/loadGameCode.js rewrites a one-line touchmove(pos) {} into a global.touchmove call.
+    touchmove(pos) {
+    }
     draw(ctx) {
         for (const card of this.cards) card.draw(ctx)
     }
@@ -752,23 +757,28 @@ class CoopSettingsTree extends GameSettingsTree {
     }
 }
 
-// The hot seat 'new game' screen (create-game concept, setupLayout): logo, title, the two mode cards, one row per
-// setting (competitive: map, players, fog of war, dynamic timer; co-op: map size, humans, seed, fog of war, dynamic
-// timer) and 'start' / 'back'. Each mode keeps its own map/player selection; fog of war and the timer are shared.
-// No BETA tag on this screen.
-class HotseatSettingsTree extends GameSettingsTree {
+// The game setup screens (create-game concept, setupLayout): logo, title, the two mode cards, one row per setting
+// (competitive: map, players, fog of war and the screen's own switch; co-op: map size, humans, seed, fog of war and that
+// switch) and the primary / 'back' buttons. Each mode keeps its own map/player selection; fog of war and the last switch
+// are shared. No BETA tag on these screens.
+// setup: title, minimumHumans (co-op), primary (the primary button's label, click function, its parameters and this)
+// and option (the last row's switch: property name, control text, row name and hint).
+class SetupSettingsTree extends GameSettingsTree {
     betaTag = {draw() {}}
-    constructor(_menu) {
+    constructor(_menu, setup) {
         super(_menu)
+        this.title = setup.title
         this.isCoop = false
         this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
-        const coop = new CoopSettingsTree(_menu)
+        const coop = new CoopSettingsTree(_menu, setup.minimumHumans)
         this.coopSliders = {players: coop.playersSlider, map: coop.mapSlider, size: coop.sizeSlider}
         this.fogOfWarCheckBox = new SetupSwitch()
         this.fogOfWarCheckBox.text.text = 'fog of war'
-        this.timerCheckBox = new SetupSwitch()
-        this.timerCheckBox.text.text = 'dynamic timer'
-        this.playButton = new SetupButton('Start', _menu.setTree, _menu.startGame, _menu, true)
+        const {key, text, name, hint} = setup.option, option = this[key] = new SetupSwitch()
+        option.text.text = text
+        this.optionRow = {icon: 'clock', name, hint, control: option}
+        const {label, clickFunc, parameters, callThis} = setup.primary
+        this.playButton = new SetupButton(label, clickFunc, parameters, callThis, true)
         this.modeCards = new SetupModeCards(this.selectMode, this)
         this.dimensionsText = new Text(NaN, NaN, 1, '', HUB_CARD.dim)
         const logo = setupLayout(0).logo
@@ -779,10 +789,6 @@ class HotseatSettingsTree extends GameSettingsTree {
     get rowSpecs() {
         const sizeText = size => `${size.x}×${size.y}`
         const fog = {icon: 'fog', name: 'Fog of war', hint: 'See only what your units see', control: this.fogOfWarCheckBox}
-        // The dynamic timer is options/gamestart.js's classic Timer: each turn's time from the mover's units, towns
-        // and gold, instead of a long clock per player.
-        const timer = {icon: 'clock', name: 'Dynamic timer', hint: 'Turn time from your units, towns and gold',
-            control: this.timerCheckBox}
         if (this.isCoop) return [
             {icon: 'size', name: 'Map size', hint: 'Generated map', control: this.sizeSlider,
                 sub: () => this.dimensionsText.text = sizeText(getCoopMapScaling(this.playersSlider.value,
@@ -793,13 +799,14 @@ class HotseatSettingsTree extends GameSettingsTree {
                     return rgbToHex(r, g, b)
                 })},
             {icon: 'seed', name: 'Seed', hint: 'Same seed, same map', control: this.mapSlider},
-            fog, timer]
+            fog, this.optionRow]
+        const variant = () => maps[this.mapSlider.realValue][this.playersSlider.value]
         return [
             {icon: 'map', name: 'Map', hint: `${dictionaryLength(maps)} maps`, control: this.mapSlider, label: hubTitle,
-                sub: () => sizeText(super.selectedMap.mapSize)},
+                sub: () => sizeText(variant().mapSize)},
             {icon: 'people', name: 'Players', hint: 'Seats in this game', control: this.playersSlider,
-                dots: () => super.selectedMap.players.slice(1).map(({rgb}) => rgbToHex(rgb.r, rgb.g, rgb.b))},
-            fog, timer]
+                dots: () => variant().players.slice(1).map(({rgb}) => rgbToHex(rgb.r, rgb.g, rgb.b))},
+            fog, this.optionRow]
     }
     // Places every control of the current mode on setupLayout; playersText and mapText name the players/humans and
     // map/seed rows, dimensionsText is the size row's sub line.
@@ -823,8 +830,10 @@ class HotseatSettingsTree extends GameSettingsTree {
         this.updateButtonsList()
     }
     updateButtonsList() {
-        super.updateButtonsList()
-        // Keep the map slider last for GameSettingsTree.click's player refresh.
+        // GameSettingsTree's list with the screen's own switch; the map slider stays last for GameSettingsTree.click's
+        // player refresh.
+        this.buttons = [this.backButton, this.playButton, this.fogOfWarCheckBox, this.optionRow?.control ?? this.timerCheckBox,
+            this.playersSlider, this.mapSlider]
         if (this.modeCards) this.buttons.splice(2, 0, this.modeCards)
         if (this.isCoop) this.buttons.splice(2, 0, this.sizeSlider)
     }
@@ -851,209 +860,58 @@ class HotseatSettingsTree extends GameSettingsTree {
     }
     draw(ctx) {
         const layout = this.setup
-        setupDrawFrame(ctx, layout, 'New game')
+        setupDrawFrame(ctx, layout, this.title)
         for (const spec of this.rows) setupDrawRow(ctx, spec.box, layout, spec.icon, spec.name, spec.hint)
         for (const button of this.buttons) button.draw(ctx)
     }
 }
 
-// The online game controls of the lobby flow's create-lobby screen: mode toggle, competitive map/players or co-op
-// humans/seed/size sliders and 'fog of war'. Online always uses the long timer.
-class OnlineGameSettings {
-    isOnline = true
+// The hot seat 'new game' screen: 'dynamic timer' is the last row (options/gamestart.js's classic Timer: each turn's
+// time from the mover's units, towns and gold, instead of a long clock per player) and 'start' plays the game.
+class HotseatSettingsTree extends SetupSettingsTree {
     constructor(_menu) {
-        // As on a 16:9 screen when wider, so the first row's check box stays clear of the logo.
-        const rectSize = Math.min(WIDTH, HEIGHT * 16 / 9) * 0.05
-        const cornerR = rectSize * 0.1
-        const marginLeft = rectSize * 0.5
-        /*const firstY = HEIGHT * 0.3
-        let intervalY = HEIGHT * 0.15*/
-        const firstY = HEIGHT * 0.3
-        let intervalY = HEIGHT * 0.12
-        this.firstY = firstY
-        this.intervalY = intervalY
-        this.marginLeft = marginLeft
-        this.rectSize = rectSize
-
-        const posX = WIDTH * 0.5
-
-        // Capped by the height: on wide screens the first row would reach up into the logo.
-        const fontSize = Math.min(0.04 * WIDTH, 0.075 * HEIGHT)
-        this.playersText = new Text(posX - Menu.getButton().width / 2,
-            firstY, fontSize, 'players', MENU_THEME.text, 'left')
-
-        const slidePosX = posX + WIDTH * 0.1
-
-        this.mapSlider = CreateMapSlider(firstY, intervalY, fontSize, slidePosX)
-
-        let minimumValuePlayers = function() { return 0 }
-        let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
-        let getKeyPlayers = function(value) { return value + 2 }
-        this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers,
-            getKeyPlayers, this.mapSlider,
-            0, WIDTH * 0.04,
-        new Text(slidePosX, firstY, fontSize, undefined, MENU_THEME.text),
-                menuArrowSize())
-
-
-        this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2,
-            firstY + intervalY, fontSize, 'map', MENU_THEME.text, 'left')
-
-        // let minimumValueMap = function() { return 0 }
-        // let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
-        // let getKeyMap = function(value) { return getKeyByIndexDictionary(maps, value) }
-        // this.mapSlider = new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
-        //     0, WIDTH * 0.075,
-        // new Text(slidePosX, firstY + intervalY, fontSize),
-        //         {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
-
-        // let minimumValuePlayers = function() { return 0 }
-        // let maximumValuePlayers = function(mapSlider) { return maps[mapSlider.realValue].length - 1}
-        // let getKeyPlayers = function(value) { return value + 2 }
-        // this.playersSlider = new MenuSlider(minimumValuePlayers, maximumValuePlayers,
-        //     getKeyPlayers, this.mapSlider,
-        //     0, WIDTH * 0.04,
-        // new Text(slidePosX, firstY, fontSize),
-        //         {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
-
-
-        // this.mapText = new Text(posX - Menu.getButton().width / 2,
-        //     firstY + intervalY, fontSize, 'map', 'black', 'left')
-
-
-        this.fogOfWarCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, fontSize, 'fog of war', MENU_THEME.text), marginLeft,
-            WIDTH * 0.28, firstY, rectSize, rectSize,
-            [cornerR, cornerR, cornerR, cornerR], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-
-        // this.timerCheckBox = new ImageCheckBox('checkMark',
-        //     new Text(NaN, NaN, fontSize, 'dynamic timer', 'black'), marginLeft,
-        //     WIDTH * 0.61, firstY + intervalY * 3, rectSize, rectSize,
-        //     [cornerR, cornerR, cornerR, cornerR],menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-
-        this.backButton = new Empty()
-
-        const modeRect = Menu.getButtonRect({x: WIDTH * 0.02, y: HEIGHT * 0.04})
-        modeRect.width = WIDTH * 0.23
-        modeRect.height = HEIGHT * 0.08
-        const modeText = Menu.getButtonText('Competitive')
-        modeText.fontSize = WIDTH * 0.03
-        this.modeButton = new MenuButton(modeRect, modeText, this.toggleMode, undefined, true, this)
-        this.competitiveMapX = this.mapText.x
-        this.competitivePlayersX = this.playersText.x
-        this.playersText.fontSize = WIDTH * 0.032
-        this.isCoop = false
-        this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
-    }
-    // Where the screen's action button ('start' or 'create') goes.
-    get actionButtonPos() {
-        return {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: this.firstY + (this.intervalY - HEIGHT * 0.01) * 4}
-    }
-    toggleMode() {
-        this.isCoop = !this.isCoop
-        if (this.isCoop && !this.coopSliders) {
-            const settings = new CoopSettingsTree(menu, 2)
-            settings.playersSlider.text.x = WIDTH * 0.72
-            settings.playersSlider.trim()
-            this.coopSliders = {players: settings.playersSlider, map: settings.mapSlider, size: settings.sizeSlider}
-        }
-        const sliders = this.isCoop ? this.coopSliders : this.competitiveSliders
-        this.playersSlider = sliders.players
-        this.mapSlider = sliders.map
-        this.sizeSlider = sliders.size
-        this.playersText.text = this.isCoop ? 'humans' : 'players'
-        this.playersText.x = this.isCoop ? WIDTH * 0.4 : this.competitivePlayersX
-        this.mapText.text = this.isCoop ? 'seed' : 'map'
-        this.mapText.x = this.isCoop ? WIDTH * 0.12 : this.competitiveMapX
-        this.modeButton.text.text = this.isCoop ? 'Co-op' : 'Competitive'
-        this.modeButton.selectedText.text = this.modeButton.text.text
-        this.updateButtonsList()
-    }
-    updateButtonsList() {
-        this.buttons = [this.backButton, this.playButton, this.modeButton,
-            this.fogOfWarCheckBox/*, this.timerCheckBox*/, this.playersSlider, this.mapSlider]
-        if (this.isCoop) this.buttons.push(this.sizeSlider)
-    }
-    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
-        let y = HEIGHT * 0.3 + 4 * HEIGHT * 0.12
-        this.backButton = Menu.getButton({x: pos0X, y: y + HEIGHT * 0.08},
-            'back', _menu.setTree, parent, true, _menu)
-
-        this.updateButtonsList()
-    }
-    /*select(pos) {
-        this.fogOfWarCheckBox.select(pos)
-        this.backButton.select(pos)
-    }
-    removeSelect() {
-        this.fogOfWarCheckBox.removeSelect()
-        this.backButton.removeSelect()
-    }*/
-    get selectedMap() {
-        if (this.isCoop) {
-            if (!Number.isInteger(this.playersSlider.value) || this.playersSlider.value < 2 || this.playersSlider.value > 12)
-                throw new RangeError('Online co-op requires 2 to 12 humans')
-            return generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
-        }
-        let map = maps[this.mapSlider.realValue][this.playersSlider.value]
-        return map
-    }
-    get isFogOfWar() {
-        let res = this.fogOfWarCheckBox.mark
-        return res
-    }
-    get isDynamicTimer() {
-        let res = false
-        return res
-    }
-    click(pos) {
-        let ok = false
-        for (const button of this.buttons) {
-            const clicked = button.click(pos)
-            if (clicked && button === this.mapSlider) this.playersSlider.update()
-            ok ||= clicked
-        }
-        return ok
-    }
-    draw(ctx) {
-        this.playersText.draw(ctx)
-        this.mapText.draw(ctx)
-        if (this.isCoop) drawCoopDimensions(this, ctx)
-        for (let i = 0; i < this.buttons.length; ++i) {
-            this.buttons[i].draw(ctx)
-        }
-        /*this.fogOfWarCheckBox.draw(ctx)
-        this.backButton.draw(ctx)
-
-        this.mapSlider.draw(ctx)*/
+        super(_menu, {title: 'New game', minimumHumans: 1,
+            primary: {label: 'Start', clickFunc: _menu.setTree, parameters: _menu.startGame, callThis: _menu},
+            option: {key: 'timerCheckBox', text: 'dynamic timer', name: 'Dynamic timer',
+                hint: 'Turn time from your units, towns and gold'}})
     }
 }
 
-// The lobby flow's 'create game' screen: the online controls without a save-slot
-// picker. 'create' builds the initial online board with GameManager.buildOnlineBoard
-// (without entering the game) and sends it with lobby:create.
+// The online game controls of the lobby flow's create-lobby screen: the setup screen with at least 2 co-op humans and
+// 'asynchronous moves' as the last row. Online always uses the long timer.
+class OnlineGameSettings extends SetupSettingsTree {
+    isOnline = true
+    constructor(_menu, primary) {
+        super(_menu, {title: 'Create game', minimumHumans: 2, primary,
+            option: {key: 'asyncMovesCheckBox', text: 'asynchronous moves', name: 'Asynchronous moves',
+                hint: 'Each player has their own clock'}})
+    }
+    get selectedMap() {
+        if (this.isCoop && (!Number.isInteger(this.playersSlider.value) || this.playersSlider.value < 2 ||
+            this.playersSlider.value > 12))
+            throw new RangeError('Online co-op requires 2 to 12 humans')
+        return super.selectedMap
+    }
+    get isDynamicTimer() {
+        return false
+    }
+}
+
+// The lobby flow's 'create game' screen: the online controls without a save-slot picker. 'create game' builds the
+// initial online board with GameManager.buildOnlineBoard (without entering the game) and sends it with lobby:create;
+// while that is pending the button reads 'creating…' and ignores clicks. A lobby:create error is one line centred just
+// above the buttons.
 class CreateLobbyTree extends OnlineGameSettings {
     constructor(_menu) {
-        super(_menu)
+        super(_menu, {label: 'Create game', clickFunc: CreateLobbyTree.prototype.create})
+        this.playButton.callThis = this
         this.menu = _menu
         this.creating = false
-        this.asyncMovesCheckBox = new ImageCheckBox('checkMark',
-            new Text(NaN, NaN, WIDTH * 0.03, 'asynchronous moves', MENU_THEME.text), WIDTH * 0.025,
-            WIDTH * 0.28, this.firstY + this.intervalY * 2, this.rectSize, this.rectSize,
-            [WIDTH * 0.005, WIDTH * 0.005, WIDTH * 0.005, WIDTH * 0.005], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
-        this.asyncMovesCheckBox.mark = false
-        this.status = new Text(WIDTH / 2, this.firstY + this.intervalY * 2.5, 0.03 * WIDTH, '', MENU_THEME.text)
-        this.playButton = Menu.getButton(this.actionButtonPos, 'create', this.create, undefined, true, this)
-        this.playButton.primary = true
-        this.updateButtonsList()
+        this.errorText = new Text(NaN, NaN, 1, '', SETUP_STYLE.error)
     }
     enter() {
         this.creating = false
-        this.status.text = ''
-    }
-    updateButtonsList() {
-        super.updateButtonsList()
-        if (this.asyncMovesCheckBox) this.buttons.push(this.asyncMovesCheckBox)
+        this.errorText.text = ''
     }
     // The slider and checkbox values createLobbyStartOptions maps.
     get controls() {
@@ -1073,7 +931,7 @@ class CreateLobbyTree extends OnlineGameSettings {
     async create() {
         if (this.creating) return
         this.creating = true
-        this.status.text = 'creating…'
+        this.errorText.text = ''
         let ack
         try {
             const options = this.startOptions
@@ -1086,14 +944,24 @@ class CreateLobbyTree extends OnlineGameSettings {
         this.creating = false
         if (this.menu.selectedTree !== this) return
         if (!ack.ok) {
-            this.status.text = createLobbyErrorText(ack.error)
+            this.errorText.text = createLobbyErrorText(ack.error)
             return
         }
         this.menu.lobbyRoom.open(ack.lobby)
     }
+    // The error line: centred between the panel and the buttons, cut to the panel's width.
+    drawError(ctx) {
+        if (!this.errorText.text) return
+        const {panel, primary, fonts} = this.setup, font = setupFont(fonts.hint, 500)
+        ctx.font = font
+        const text = hubEllipsis(ctx, this.errorText.text, panel.width)
+        Object.assign(this.errorText, {x: WIDTH / 2, y: (panel.y + panel.height + primary.y) / 2, fontSize: fonts.hint})
+        hubText(ctx, text, this.errorText.x, this.errorText.y, font, SETUP_STYLE.error, 'center')
+    }
     draw(ctx) {
+        this.playButton.text.text = this.creating ? 'Creating…' : 'Create game'
         super.draw(ctx)
-        this.status.draw(ctx)
+        this.drawError(ctx)
     }
 }
 
