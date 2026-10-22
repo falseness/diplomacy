@@ -21,6 +21,11 @@ class Slot {
                 this.rect.width * 0.2,
                 undefined, undefined, undefined, undefined, this.rect.selectedRatio)
         }
+        this.emptyText = new Text(
+            this.rect.centerX, this.rect.y + this.rect.height * 0.55,
+            this.rect.width * 0.13, 'empty', MENU_THEME.mutedText,
+            undefined, undefined, this.rect.selectedRatio)
+        this.ownerColor = null
     }
     get bottom() {
         return this.rect.bottom
@@ -32,6 +37,7 @@ class Slot {
         let dt = val - this.rect.x
         this.rect.x = val
         this.slotNumberText.x += dt
+        this.emptyText.x += dt
         for (let key in this.text) {
             this.text[key].x += dt
         }
@@ -52,12 +58,14 @@ class Slot {
     set color(val) {
         this.isEmpty = false
         this.rect.color = val
+        this.ownerColor = val
         this.slotNumberText.color = 'white'
     }
     select(pos) {
         this.rect.select(pos)
         if (this.rect.selected) {
             this.slotNumberText.select()
+            this.emptyText.select()
             for (let key in this.text) {
                 this.text[key].select()
             }
@@ -66,6 +74,7 @@ class Slot {
     removeSelect() {
         this.rect.removeSelect()
         this.slotNumberText.removeSelect()
+        this.emptyText.removeSelect()
         for (let key in this.text) {
             this.text[key].removeSelect()
         }
@@ -73,7 +82,28 @@ class Slot {
     click(pos) {
         return this.rect.click(pos)
     }
+    // In the menu theme every slot is a dark plaque with a gold rim and light texts; a used slot has a band in its
+    // owner's colour along the bottom, below the texts, and an empty one says so.
+    drawThemed(ctx, theme) {
+        const button = this.rect, rect = button.selected ? button.selectedRect : button.rect
+        rect.drawPlaque(ctx, theme.plain)
+        const texts = [this.slotNumberText, ...(this.isEmpty ? [this.emptyText] : Object.values(this.text))]
+        if (!this.isEmpty) {
+            ctx.save()
+            ctx.beginPath()
+            rect.drawShape(ctx)
+            ctx.clip()
+            ctx.fillStyle = this.ownerColor
+            ctx.fillRect(rect.x, rect.y + rect.height * 0.86, rect.width, rect.height * 0.14)
+            ctx.restore()
+            rect.drawPlaque(ctx, {...theme.plain, alpha: 0})
+        }
+        for (const text of texts)
+            text.drawAs(ctx, text === this.emptyText ? theme.mutedText : theme.text, theme.fontWeight)
+    }
     draw(ctx) {
+        if (Text.menuTheme)
+            return this.drawThemed(ctx, Text.menuTheme)
         this.rect.draw(ctx)
         this.slotNumberText.draw(ctx)
         if (this.isEmpty)
@@ -103,8 +133,6 @@ class SlotManager {
                     rectSize, rectSize, [cornerR, cornerR, cornerR, cornerR], 
                     0.0035 * WIDTH, 'white', undefined, 0.4
             ), new Text(NaN, NaN, NaN, ''), clickFunc, i)
-            // A saved slot keeps its player colour in the menu theme.
-            button.ownFill = true
             slots.push(new Slot(button, i))
         }
         this.step = rectSize + marginX

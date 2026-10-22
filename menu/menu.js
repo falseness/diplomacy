@@ -928,40 +928,45 @@ class HubList {
         }
         return true
     }
+    // Rows are menu theme plaques: your turn gold, my lobby green, the others navy; headings gold text, empty dim.
     draw(ctx) {
         const {x, y, width, height} = this.rect
         const rowHeight = this.scroll.rowHeight
         const pad = 0.01 * WIDTH
+        const theme = MENU_THEME
+        const corner = 0.25 * rowHeight
+        new Rect(x, y, width, height, [pad, pad, pad, pad]).drawPlaque(ctx, theme.panel, Math.max(1, 0.0012 * WIDTH))
         ctx.save()
-        ctx.fillStyle = '#e8e8e8'
-        ctx.fillRect(x, y, width, height)
         ctx.beginPath()
         ctx.rect(x, y, width, height)
         ctx.clip()
-        ctx.textBaseline = 'middle'
         const {first, last} = this.scroll.visibleRange
         for (let i = first; i <= last; ++i) {
             const row = this.rows[i]
             const top = y + i * rowHeight - this.scroll.offset
             const header = row.kind === 'header'
+            let color = row.kind === 'empty' ? theme.disabled.text : header ? theme.heading : theme.text
             if (row.kind === 'game' || row.kind === 'lobby' || row.kind === 'myLobby') {
-                ctx.fillStyle = row.yourTurn ? '#ffd54f' : row.kind === 'myLobby' ? '#c8e6c9' : 'white'
-                ctx.fillRect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight)
-                ctx.strokeStyle = row.id === this.selectedId ? 'black' : '#747474'
-                ctx.lineWidth = (row.id === this.selectedId ? 0.003 : 0.001) * WIDTH
-                ctx.strokeRect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight)
+                const style = row.yourTurn ? theme.yourTurn : row.kind === 'myLobby' ? theme.myLobby : theme.plain
+                const selected = row.id === this.selectedId
+                new Rect(x + pad, top + 0.1 * rowHeight, width - 2 * pad, 0.8 * rowHeight, [corner, corner, corner, corner])
+                    .drawPlaque(ctx, selected ? {...style, rim: theme.selectedRim} : style,
+                        Math.max(1, (selected ? 0.003 : 0.001) * WIDTH))
+                color = style.text
             }
             // Long rows shrink to fit the list width.
+            const weight = header ? '700 ' : row.kind === 'empty' ? 'italic ' : theme.fontWeight + ' '
             let fontSize = (header ? 0.55 : 0.45) * rowHeight
             const maxWidth = width - 4 * pad
-            ctx.font = `${header ? 'bold ' : ''}${fontSize}px ${Text.defaultFamily}`
+            ctx.font = `${weight}${fontSize}px ${Text.defaultFamily}`
             const textWidth = ctx.measureText(row.text).width
             if (textWidth > maxWidth) {
                 fontSize *= maxWidth / textWidth
-                ctx.font = `${header ? 'bold ' : ''}${fontSize}px ${Text.defaultFamily}`
+                ctx.font = `${weight}${fontSize}px ${Text.defaultFamily}`
             }
-            ctx.fillStyle = row.kind === 'empty' ? '#747474' : 'black'
+            ctx.fillStyle = color
             ctx.textAlign = 'left'
+            ctx.textBaseline = 'middle'
             ctx.fillText(row.text, x + 2 * pad, top + rowHeight / 2)
         }
         ctx.restore()

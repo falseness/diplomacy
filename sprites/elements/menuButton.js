@@ -52,12 +52,11 @@ class MenuButton extends Button {
     removeSelect() {
         this.selected = false
     }
-    // In the menu theme: plain, primary (this.primary) or disabled. A slot with ownFill keeps its colour once set.
+    // In the menu theme: plain, primary (this.primary) or disabled.
     drawThemed(ctx, theme, enabled = this.canClick) {
         const rect = this.selected ? this.selectedRect : this.rect
         const text = this.selected ? this.selectedText : this.text
         let style = !enabled ? theme.disabled : this.primary ? theme.primary : theme.plain
-        if (this.ownFill && this.rect.color !== 'white') style = {...style, fill: this.rect.color, alpha: 1}
         rect.drawPlaque(ctx, style)
         text.drawAs(ctx, style.text, theme.fontWeight)
     }

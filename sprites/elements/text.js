@@ -8,6 +8,12 @@ const MENU_THEME = {
     plain: {fill: '#1a2342', alpha: 0.85, rim: '#c99a4e', text: '#f3ead8'},
     primary: {fill: '#c99a4e', alpha: 1, rim: '#f0d394', text: '#1a2342'},
     disabled: {fill: '#1a2342', alpha: 0.4, rim: '#6f6656', text: '#948d7e', dash: true},
+    // List screens (online hub): the panel behind the rows, section headings, the row states.
+    panel: {fill: '#0e1430', alpha: 0.6, rim: '#c99a4e', text: '#f3ead8'},
+    heading: '#f0d394',
+    yourTurn: {fill: '#c99a4e', alpha: 1, rim: '#f0d394', text: '#1a2342'},
+    myLobby: {fill: '#245c3c', alpha: 0.95, rim: '#8fd19e', text: '#f3ead8'},
+    selectedRim: '#f3ead8',
     // The rim width as a fraction of the control's own stroke width.
     rimRatio: 0.6,
 }
