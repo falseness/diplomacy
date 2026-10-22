@@ -57,16 +57,10 @@ const atmosphericBackground = {
         // nineteen fine rays, each falling down towards the board's upper-left edge and fading out
         // along its length, the top-left corner and the sky further left staying dark. Beams (in
         // viewport fractions, angle and width too): [angle, half width, alpha, origin, length] (no
-        // length: to the edge), here also two faint soft streaks crossing the sky right of the board;
-        // origin is the default origin and the centre of the fade of all the sky's light. Two steeper
-        // underlays carry the swath down the left of the screen.
+        // length: to the edge); origin is the default origin and the centre of the fade of all the sky's
+        // light. Two steeper underlays carry the swath down the left of the screen.
         origin: [-0.1, -0.8],
-        beams: [[50, 0.02, 0.1, [0.8, 0.02]], [48, 0.025, 0.08, [0.85, 0.15]],
-            // Three faint orange streaks right of the board's top, falling with the key light,
-            [35, 0.012, 0.75, [0.8, 0.1], 0.3], [33, 0.01, 0.6, [0.8, 0.2], 0.3], [37, 0.01, 0.5, [0.82, 0.32], 0.25],
-            // and thin orange rays at the board's top right, under the swath's far end.
-            [38, 0.02, 0.4, [0.8, 0], 0.35], [34, 0.008, 0.48, [0.86, 0.05], 0.3], [40, 0.008, 0.4, [0.9, 0.12], 0.25],
-            ...[[67, 0.07, 0.6], [61, 0.06, 0.3], [73, 0.06, 0.35], [78, 0.05, 0.35], [82, 0.04, 0.25], [60.87, 0.0042, 0.0645], [61.65, 0.0045, 0.0465],
+        beams: [...[[67, 0.07, 0.6], [61, 0.06, 0.3], [73, 0.06, 0.35], [78, 0.05, 0.35], [82, 0.04, 0.25], [60.87, 0.0042, 0.0645], [61.65, 0.0045, 0.0465],
                 [61.96, 0.0053, 0.058], [62.67, 0.006, 0.0705], [63.57, 0.0039, 0.0805], [63.83, 0.0045, 0.094],
                 [64.61, 0.005, 0.0825], [64.98, 0.005, 0.0775], [65.7, 0.0021, 0.094], [66.39, 0.0049, 0.095],
                 [67.11, 0.0057, 0.066], [67.75, 0.0038, 0.098], [68.39, 0.0024, 0.0505], [68.66, 0.0059, 0.0685],
