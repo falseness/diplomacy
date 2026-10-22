@@ -163,7 +163,7 @@ const atmosphericLighting = {
         width: 0.9,
         blur: 0.05,
         tipAlpha: 0.15,
-        reachRadii: 3.5,
+        reachRadii: 9,
         // Contact shade under every shadow caster's base: a soft dark ellipse, radius in hex
         // radii, flattened to flat of its width, alpha at its core, in color.
         contact: {radius: 0.55, flat: 0.5, alpha: 0.7, color: '30,22,22'}
