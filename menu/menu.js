@@ -1493,6 +1493,84 @@ class MenuBannerRod {
     }
 }
 
+// Banner emblems, painted inside the disc (already clipped to it). Geometry is in fractions of the disc radius r.
+// A plain assets key (e.g. 'noob') draws that sprite.
+const MENU_EMBLEMS = {
+    // Hot seat: two swordsmen face each other, swords crossing, on a red/blue background split at about 120 deg.
+    faceoff: {
+        assets: ['normchel'],
+        paint(ctx, disc) {
+            const {x, y, r} = disc
+            ctx.fillStyle = '#e8aaa2'
+            ctx.fillRect(x - r, y - r, r * 2, r * 2)
+            const dx = Math.cos(Math.PI * 2 / 3) * r * 2, dy = Math.sin(Math.PI * 2 / 3) * r * 2
+            ctx.fillStyle = '#a9c4e4'
+            ctx.beginPath()
+            ctx.moveTo(x - dx, y - dy)
+            ctx.lineTo(x + dx, y + dy)
+            ctx.lineTo(x + r * 2, y + r * 2)
+            ctx.lineTo(x + r * 2, y - r * 2)
+            ctx.closePath()
+            ctx.fill()
+            // The sprite holds its sword at 0.24 of its width; the hilts stand just apart so the blades cross above them.
+            const size = r * 1.3, centre = r * 0.055 + size * 0.26, centreY = y + r * 0.9 - size * 0.44
+            for (const side of [-1, 1]) {
+                ctx.save()
+                ctx.translate(x + side * centre, centreY)
+                ctx.scale(side, 1)
+                drawImage(ctx, 'normchel', {x: 0, y: 0}, size, size)
+                ctx.restore()
+            }
+        },
+    },
+    // Play online: a red and a green town cell, each with a glow in its player colour, linked by a dashed arc that
+    // leaves from behind one roof and enters behind the other.
+    towns: {
+        assets: ['menu/towncell-red', 'menu/towncell-green'],
+        layout(disc) {
+            const {x, y, r} = disc
+            const width = r * 0.86, height = width * 249 / 287, cy = y + r * 0.2
+            const cells = [
+                {image: 'menu/towncell-red', glow: 'rgba(255, 0, 0, 0.8)', x: x - r * 0.465, y: cy, width, height},
+                {image: 'menu/towncell-green', glow: 'rgba(0, 179, 0, 0.8)', x: x + r * 0.465, y: cy, width, height}]
+            // The arc's ends lie on the roofs to the inner side of the towers; its top is above the cells.
+            const endX = r * 0.465 - width * 0.2, endY = cy - height * 0.28, topY = cy - height / 2 - r * 0.2
+            const sag = endY - topY, radius = (endX * endX + sag * sag) / (2 * sag)
+            const half = Math.asin(endX / radius)
+            return {cells, arc: {x, y: topY + radius, radius, from: -Math.PI / 2 - half, to: -Math.PI / 2 + half,
+                width: r * 0.07, dash: [r * 0.12, r * 0.1]}}
+        },
+        paint(ctx, disc, {arc = true} = {}) {
+            const layout = this.layout(disc)
+            if (arc) {
+                const a = layout.arc
+                ctx.save()
+                ctx.strokeStyle = '#b07a2c'
+                ctx.lineWidth = a.width
+                ctx.lineCap = 'round'
+                ctx.setLineDash(a.dash)
+                ctx.beginPath()
+                ctx.arc(a.x, a.y, a.radius, a.from, a.to)
+                ctx.stroke()
+                ctx.restore()
+            }
+            for (const cell of layout.cells) {
+                ctx.save()
+                ctx.shadowColor = cell.glow
+                ctx.shadowBlur = disc.r * 0.2
+                drawImage(ctx, cell.image, cell, cell.width, cell.height)
+                ctx.restore()
+            }
+        },
+    },
+}
+function menuEmblem(name) {
+    return MENU_EMBLEMS[name] ?? {assets: [name], paint(ctx, disc) {
+        const size = disc.r * 1.75
+        drawImage(ctx, name, {x: disc.x, y: disc.y + disc.r * 0.08}, size, size)
+    }}
+}
+
 // One cloth banner. text.text is the menu entry's label (the tests find entries by it); name is what it shows.
 // The click target is the swallowtail polygon, rect only its bounding box.
 class MenuBanner extends Button {
@@ -1503,6 +1581,7 @@ class MenuBanner extends Button {
         this.baseColor = color
         this.featured = featured
         this.emblem = emblem
+        this.emblemOptions = {}
         this.hovered = false
         this.pressed = false
         this.activeSince = 0
@@ -1557,7 +1636,7 @@ class MenuBanner extends Button {
     }
     draw(ctx) {
         const {x, y, width: w} = this.rect
-        const key = `${x},${y},${w},${this.emblemReady()}`
+        const key = `${x},${y},${w},${this.emblemKey()}`
         if (this.rasterKey !== key) {
             this.rasterKey = key
             this.raster = this.rasterize()
@@ -1583,7 +1662,11 @@ class MenuBanner extends Button {
         ctx.restore()
     }
     emblemReady() {
-        return !this.emblem || !!(assets[this.emblem]?.complete && assets[this.emblem].naturalWidth)
+        return !this.emblem || menuEmblem(this.emblem).assets.every(key => assets[key]?.complete && assets[key].naturalWidth)
+    }
+    // Changes when an emblem image loads or is reloaded from another sprite folder (usePolishedSprites).
+    emblemKey() {
+        return this.emblem ? `${this.emblemReady()},${menuEmblem(this.emblem).assets.map(key => assets[key]?.src).join(',')}` : ''
     }
     canvasFor(paint) {
         const canvas = document.createElement('canvas')
@@ -1690,8 +1773,7 @@ class MenuBanner extends Button {
         ctx.fill()
         if (this.emblem && this.emblemReady()) {
             ctx.clip()
-            const size = disc.r * 1.75
-            drawImage(ctx, this.emblem, {x: disc.x, y: disc.y + disc.r * 0.08}, size, size)
+            menuEmblem(this.emblem).paint(ctx, disc, this.emblemOptions)
         }
         ctx.restore()
         this.boxes.disc = {x: disc.x - disc.r * 1.07, y: disc.y - disc.r * 1.07, width: disc.r * 2.14, height: disc.r * 2.14}
@@ -2008,9 +2090,9 @@ class Menu {
         // read hot seat, tutorial (centre), play online, with the icon buttons below.
         this.main = new MainTree([
             new MenuBanner('hot seat', 'Hot seat', 'Competitive or co-op, one device', '#c22d26',
-                this.setTree, this.hotseatChoice, this),
+                this.setTree, this.hotseatChoice, this, {emblem: 'faceoff'}),
             new MenuBanner('play online', 'Play online', 'Create or join a lobby', '#3c78b0',
-                this.openOnline, undefined, this),
+                this.openOnline, undefined, this, {emblem: 'towns'}),
             // 'play AI' button hidden for now; startAI is still available.
             new MenuIconButton('settings', 'Settings', 'gear', this.setTree, this.settings, this),
             new MenuBanner('tutorial', 'Tutorial', 'Learn the rules by playing', '#2f8f52',

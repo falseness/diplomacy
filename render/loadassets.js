@@ -39,6 +39,9 @@ for (const name of demonSpriteImages) assets[name] = new Image()
 const undeadSpriteImages = ['undead/noob', 'undead/archer', 'undead/KOHb', 'undead/KOHbLeft',
     'undead/normchel', 'undead/catapult', 'undead/catapultLeft']
 for (const name of undeadSpriteImages) assets[name] = new Image()
+// Main menu emblem pictures (town cells cut from in-game screenshots). The menu does not wait for them.
+const menuImages = ['menu/towncell-red', 'menu/towncell-green']
+for (const name of menuImages) assets[name] = new Image()
 let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
 for (let i = 0; i < grassHexImages.length; ++i)
     assets[grassHexImages[i]] = new Image()
@@ -195,6 +198,7 @@ function loadAssets() {
     assets.undo.src = "assets/undo.svg"
     
     assets.gold.src = "assets/gold.svg"
+    for (const name of menuImages) assets[name].src = "assets/" + name + ".png"
 
     loadSprites()
     for (let i = 0; i < grassHexImages.length; ++i) {
