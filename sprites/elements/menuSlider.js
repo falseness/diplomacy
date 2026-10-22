@@ -47,8 +47,14 @@ class MenuArrowButton extends ImageButton {
     }
 }
 class MenuSlider extends Slider {
+    // Set by setupPlaceStepper (menu/menu.js) when the slider is a setup row's stepper.
+    setup = null
     constructor(minimumValue, maximumValue, getKeyMap, parameters, startValue, marginX, text, size) {
         super(minimumValue, maximumValue, getKeyMap, parameters, startValue, marginX, text,
             new MenuArrowButton('left', size), new MenuArrowButton('right', size))
+    }
+    draw(ctx) {
+        if (this.setup) setupDrawStepper(ctx, this)
+        else super.draw(ctx)
     }
 }

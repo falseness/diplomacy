@@ -282,6 +282,214 @@ function setupLayout(rowCount) {
         back: box(buttonsX + s.primaryWidth + s.buttonGap, buttonsY, s.backWidth, s.buttonHeight)}
 }
 
+// The setup controls' colours beyond HUB_CARD and MENU_THEME (create-game concept CSS), and the opacity of a mode card
+// that is not selected and of a stepper arrow at its limit.
+const SETUP_STYLE = {
+    cardRim: 'rgba(201, 154, 78, 0.35)', glow: 'rgba(242, 180, 90, 0.35)',
+    warm: ['rgba(242, 180, 90, 0.22)', 'rgba(242, 180, 90, 0.05)'], checkRing: 'rgba(255, 255, 255, 0.35)',
+    arrow: ['#2f3c63', '#161f3d'], switchOff: '#141c36', switchRim: 'rgba(201, 154, 78, 0.6)', knobOff: '#6f6a7e',
+    knobOn: '#1a2342', unselectedAlpha: 0.6, limitAlpha: 0.35,
+}
+
+// A setup font of size pixels (setupLayout's fonts), in the menu family or the small-caps title family.
+function setupFont(size, weight, title = false) {
+    return `${weight} ${size}px ${title ? Text.titleFamily : Text.defaultFamily}`
+}
+
+// A rim of width lineWidth inside the rounded box (the concept's inset box-shadow).
+function setupInsetRim(ctx, box, radius, lineWidth, color) {
+    const inset = lineWidth / 2
+    ctx.save()
+    ctx.beginPath()
+    new Rect(box.x + inset, box.y + inset, box.width - lineWidth, box.height - lineWidth,
+        Array(4).fill(Math.max(0, radius - inset))).drawShape(ctx)
+    ctx.closePath()
+    ctx.strokeStyle = color
+    ctx.lineWidth = lineWidth
+    ctx.stroke()
+    ctx.restore()
+}
+
+// A mode card of the setup screens (create-game concept): the hub badge, the name in small caps, a one-line subtitle and
+// a check circle. The selected card has a gold rim, a warm gradient, a soft gold glow and a filled gold check with a dark
+// tick; the other is drawn at 60% opacity with an empty ring. Clicking the card calls clickFunc (with callThis).
+class SetupModeCard {
+    selected = false
+    constructor(mode, name, subtitle, clickFunc, callThis) {
+        this.mode = mode
+        this.name = name
+        this.subtitle = subtitle
+        this.clickFunc = clickFunc
+        this.callThis = callThis
+    }
+    // box: one of setupLayout(n).modes; layout: that setupLayout result.
+    place(box, layout) {
+        this.boxes = box
+        this.unit = layout.unit
+        this.fonts = layout.fonts
+    }
+    get rect() {
+        return this.boxes.card
+    }
+    get alpha() {
+        return this.selected ? 1 : SETUP_STYLE.unselectedAlpha
+    }
+    isInside(pos) {
+        return Rect.prototype.isInside.call(this.rect, pos)
+    }
+    select(pos) {}
+    removeSelect() {}
+    touchmove(pos) {}
+    click(pos) {
+        if (!this.isInside(pos)) return false
+        this.clickFunc.call(this.callThis, this.mode)
+        return true
+    }
+    draw(ctx) {
+        const {card, badge, name, subtitle, check} = this.boxes, u = this.unit, radius = 0.9 * u
+        ctx.save()
+        ctx.globalAlpha = this.alpha
+        if (this.selected) {
+            ctx.shadowColor = SETUP_STYLE.glow
+            ctx.shadowBlur = 1.4 * u
+        }
+        hubFillRounded(ctx, card, radius, HUB_CARD.glass)
+        ctx.shadowColor = 'transparent'
+        if (this.selected) {
+            const warm = ctx.createLinearGradient(card.x, 0, card.x + card.width, 0)
+            warm.addColorStop(0, SETUP_STYLE.warm[0])
+            warm.addColorStop(0.7, SETUP_STYLE.warm[1])
+            warm.addColorStop(1, SETUP_STYLE.warm[1])
+            hubFillRounded(ctx, card, radius, warm)
+        }
+        setupInsetRim(ctx, card, radius, (this.selected ? 0.25 : 0.12) * u, this.selected ? HUB_CARD.gold : SETUP_STYLE.cardRim)
+        hubDrawBadge(ctx, this.mode, badge.x + badge.width / 2, badge.y + badge.height / 2, badge.width, u)
+        const nameFont = setupFont(this.fonts.cardName, 800, true), subtitleFont = setupFont(this.fonts.cardSubtitle, 400)
+        ctx.font = nameFont
+        hubText(ctx, hubEllipsis(ctx, this.name, name.width), name.x, name.y + name.height / 2, nameFont, MENU_THEME.text)
+        ctx.font = subtitleFont
+        hubText(ctx, hubEllipsis(ctx, this.subtitle, subtitle.width), subtitle.x, subtitle.y + subtitle.height / 2,
+            subtitleFont, HUB_CARD.dim)
+        const cx = check.x + check.width / 2, cy = check.y + check.height / 2, r = check.width / 2
+        if (this.selected) {
+            ctx.beginPath()
+            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+            ctx.fillStyle = HUB_CARD.gold
+            ctx.fill()
+            hubDrawIcon(ctx, 'check', cx, cy, 0.62 * check.width, HUB_CARD.darkText, 3)
+        } else {
+            ctx.beginPath()
+            ctx.arc(cx, cy, r - 0.075 * u, 0, Math.PI * 2)
+            ctx.strokeStyle = SETUP_STYLE.checkRing
+            ctx.lineWidth = 0.15 * u
+            ctx.stroke()
+        }
+        ctx.restore()
+    }
+}
+
+// An ON/OFF pill switch in a setup row: an ImageCheckBox (mark, click(pos)) drawn as the concept's switch, gold with
+// 'on' and a dark knob at the right when marked, dark with a grey knob at the left and 'off' when not. The click rect
+// is the pill's box.
+class SetupSwitch extends ImageCheckBox {
+    constructor(mark = false) {
+        super('checkMark', new Text(0, 0, 1, ''), 0, 0, 0, 0, 0)
+        this.mark = mark
+    }
+    // box: a row's switch box of setupLayout(n); layout: that setupLayout result.
+    place(box, layout) {
+        Object.assign(this, {x: box.x, y: box.y, width: box.width, height: box.height})
+        this.cornerRadius = Array(4).fill(box.height / 2)
+        this.selectedRect = this
+        this.unit = layout.unit
+        this.fonts = layout.fonts
+        this.trimText()
+    }
+    draw(ctx) {
+        const u = this.unit, w = this.width, h = this.height, r = h / 2
+        ctx.save()
+        if (this.mark) {
+            const fill = ctx.createLinearGradient(0, this.y, 0, this.y + h)
+            fill.addColorStop(0, HUB_CARD.button[0])
+            fill.addColorStop(1, HUB_CARD.button[1])
+            hubFillRounded(ctx, this, r, fill)
+        } else {
+            hubFillRounded(ctx, this, r, SETUP_STYLE.switchOff)
+            setupInsetRim(ctx, this, r, 0.16 * u, SETUP_STYLE.switchRim)
+        }
+        const knobWidth = 2.45 * u, knobHeight = 0.76 * h
+        const knobX = this.mark ? this.x + w - 0.07 * w - knobWidth / 2 : this.x + 0.07 * w + knobWidth / 2
+        ctx.beginPath()
+        ctx.ellipse(knobX, this.y + 0.12 * h + knobHeight / 2, knobWidth / 2, knobHeight / 2, 0, 0, Math.PI * 2)
+        ctx.fillStyle = this.mark ? SETUP_STYLE.knobOn : SETUP_STYLE.knobOff
+        ctx.fill()
+        const font = setupFont(this.fonts.switchLabel, 800, true)
+        if (this.mark) hubText(ctx, 'on', this.x + 0.15 * w, this.centerY, font, HUB_CARD.darkText)
+        else hubText(ctx, 'off', this.x + w - 0.13 * w, this.centerY, font, HUB_CARD.dim, 'right')
+        ctx.restore()
+    }
+}
+
+// Places a MenuSlider in a setup row (setupLayout(n).rows[i]) as the concept's stepper: its arrows on the row's arrow
+// boxes (round navy buttons with a gold rim and a chevron), its value centred in the value box, under it the muted sub
+// line or the seat dots (player colours); sub and dots are values or functions of slider.value.
+function setupPlaceStepper(slider, row, layout, {sub = null, dots = null} = {}) {
+    for (const [button, box] of [[slider.leftButton, row.leftArrow], [slider.rightButton, row.rightArrow]]) {
+        Object.assign(button.rect, {x: box.x, y: box.y, width: box.width, height: box.height})
+        button.img.pos = button.rect.center
+    }
+    slider.text.pos = {x: row.value.x + row.value.width / 2, y: row.value.y + row.value.height / 2}
+    slider.setup = {value: row.value, unit: layout.unit, fonts: layout.fonts, sub, dots}
+}
+
+// The opacity of a stepper arrow: dim at the slider's limit (it still has its click rect; a click changes nothing).
+function setupArrowAlpha(arrow) {
+    return arrow.canClick ? 1 : SETUP_STYLE.limitAlpha
+}
+
+function setupDrawArrow(ctx, arrow, u) {
+    const {x, y} = arrow.rect.center, r = Math.min(arrow.rect.width, arrow.rect.height) / 2
+    ctx.save()
+    ctx.globalAlpha = setupArrowAlpha(arrow)
+    const fill = ctx.createRadialGradient(x - 0.3 * r, y - 0.4 * r, 0, x, y, r)
+    fill.addColorStop(0, SETUP_STYLE.arrow[0])
+    fill.addColorStop(1, SETUP_STYLE.arrow[1])
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fillStyle = fill
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, r - 0.08 * u, 0, Math.PI * 2)
+    ctx.strokeStyle = MENU_THEME.plain.rim
+    ctx.lineWidth = 0.16 * u
+    ctx.stroke()
+    hubDrawIcon(ctx, arrow.direction < 0 ? 'left' : 'right', x, y, r, MENU_THEME.text, 3)
+    ctx.restore()
+}
+
+// A MenuSlider placed by setupPlaceStepper: both arrows, the value (cut to the value box) and its sub line or seat dots,
+// the block centred in the value box.
+function setupDrawStepper(ctx, slider) {
+    const {value: box, unit: u, fonts} = slider.setup
+    setupDrawArrow(ctx, slider.leftButton, u)
+    setupDrawArrow(ctx, slider.rightButton, u)
+    const of = v => typeof v === 'function' ? v(slider.value) : v
+    const sub = of(slider.setup.sub), dots = of(slider.setup.dots) ?? []
+    const line = 1.05 * fonts.value, extra = sub ? 1.05 * fonts.valueSub : dots.length ? 1.35 * u : 0
+    const top = box.y + (box.height - line - extra) / 2, cx = box.x + box.width / 2
+    const valueFont = setupFont(fonts.value, 500)
+    ctx.font = valueFont
+    hubText(ctx, hubEllipsis(ctx, slider.text.text, box.width), cx, top + line / 2, valueFont, MENU_THEME.text, 'center')
+    if (sub) {
+        const subFont = setupFont(fonts.valueSub, 400)
+        ctx.font = subFont
+        hubText(ctx, hubEllipsis(ctx, sub, box.width), cx, top + line + extra / 2, subFont, HUB_CARD.dim, 'center')
+    } else if (dots.length) {
+        const step = 1.45 * u, width = dots.length * step - 0.35 * u
+        dots.forEach((colour, i) => hubDrawDot(ctx, cx - width / 2 + 0.55 * u + i * step, top + line + 0.8 * u, colour, u, 1.1))
+    }
+}
+
 function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
     let minimumValueMap = function() { return 0 }
     let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
@@ -1077,14 +1285,18 @@ const HUB_ICONS = {
     async: [['M', 4, 9], ['L', 17, 9], ['L', 14, 6], ['M', 20, 15], ['L', 7, 15], ['L', 10, 18]],
     seed: [['R', 4, 4, 16, 16, 3], ['O', 9, 9, 1], ['O', 15, 15, 1], ['O', 15, 9, 1], ['O', 9, 15, 1]],
     door: [['M', 6, 21], ['L', 6, 4], ['L', 16, 4], ['L', 16, 21], ['M', 3, 21], ['L', 21, 21], ['O', 13, 12, 0.4]],
+    // The setup screens' check mark and stepper chevrons (create-game concept symbols).
+    check: [['M', 5, 12], ['L', 10, 17], ['L', 19, 7]],
+    left: [['M', 15, 5], ['L', 8, 12], ['L', 15, 19]],
+    right: [['M', 9, 5], ['L', 16, 12], ['L', 9, 19]],
 }
 
-// Strokes icon name, size pixels square, centred on (x, y).
-function hubDrawIcon(ctx, name, x, y, size, color) {
+// Strokes icon name, size pixels square, centred on (x, y), lineWidth on the 24 x 24 grid.
+function hubDrawIcon(ctx, name, x, y, size, color, lineWidth = 2) {
     const k = size / 24, px = v => x + (v - 12) * k, py = v => y + (v - 12) * k
     ctx.save()
     ctx.strokeStyle = color
-    ctx.lineWidth = 2 * k
+    ctx.lineWidth = lineWidth * k
     ctx.lineCap = ctx.lineJoin = 'round'
     ctx.beginPath()
     for (const [op, ...a] of HUB_ICONS[name]) {
@@ -1111,9 +1323,9 @@ function hubTagIcon(tag) {
 }
 
 // The round mode badge of diameter size centred on (x, y): a red disc with crossed swords (competitive) or a green
-// one with a shield (co-op), in a gold ring.
-function hubDrawBadge(ctx, mode, x, y, size) {
-    const u = hubUnit(), r = size / 2, [light, dark, icon] = HUB_CARD.badge[mode] ?? HUB_CARD.badge.competitive
+// one with a shield (co-op), in a gold ring 0.18 u wide.
+function hubDrawBadge(ctx, mode, x, y, size, u = hubUnit()) {
+    const r = size / 2, [light, dark, icon] = HUB_CARD.badge[mode] ?? HUB_CARD.badge.competitive
     ctx.save()
     const fill = ctx.createRadialGradient(x - 0.3 * r, y - 0.4 * r, 0, x, y, r)
     fill.addColorStop(0, light)
@@ -1165,12 +1377,11 @@ function hubDrawChips(ctx, tags, x, y, maxWidth) {
     return Math.max(0, left - gap - x)
 }
 
-// A player's colour dot centred on (x, y).
-function hubDrawDot(ctx, x, y, colour) {
-    const u = hubUnit()
+// A player's colour dot of diameter 1.15 u centred on (x, y), in a 0.12 u ring.
+function hubDrawDot(ctx, x, y, colour, u = hubUnit(), diameter = 1.15) {
     ctx.save()
     ctx.beginPath()
-    ctx.arc(x, y, 0.575 * u, 0, Math.PI * 2)
+    ctx.arc(x, y, diameter / 2 * u, 0, Math.PI * 2)
     ctx.fillStyle = colour ?? HUB_CARD.noColour
     ctx.fill()
     ctx.strokeStyle = HUB_CARD.dotRing

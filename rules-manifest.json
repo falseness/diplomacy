@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "944e46be401c8ebcab330e179c258986730096ebe2fbad113e67318e3bae36cf",
+  "rulesVersion": "5218abf0e8506301168ccce86ac59ca4be5a5922672019ea05f2a149b43123b4",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -255,8 +255,8 @@
     },
     {
       "path": "sprites/elements/menuSlider.js",
-      "sha256": "ba612939bc406b22af4b9cdafbf5301c86734b9076f1853d5651d5a4be9ad0d9",
-      "bytes": 2123
+      "sha256": "982d6dbb16a936939acc94e1aca1a34ef27a96251cbb48774fbcaeecc13fd308",
+      "bytes": 2332
     },
     {
       "path": "sprites/border.js",
@@ -295,8 +295,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "c6445d86a746a893813fceda3a918a83584e168174a43fda03149ed7668403fe",
-      "bytes": 140903
+      "sha256": "f726c2e4e608a6b0e05faefe4d3617cc4103e2b238d70427bb1b45fada934360",
+      "bytes": 151021
     },
     {
       "path": "sprites/hexagon.js",
