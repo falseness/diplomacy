@@ -71,7 +71,7 @@ function createTutorial1Map() {
 }
 
 function createTutorial2Map() {
-    // Blue's 5 normchels and 5 archers face red's 2 normchels and 2 archers.
+    // Blue's 4 normchels and 8 archers face red's 2 normchels and 2 archers.
     // Red can retreat along the clear road to its town and barrack, through the
     // mountain gate in column 11 (rows 3-5). Blue has no town, so its economy is
     // disabled to prevent salaries from disbanding its army.
@@ -104,12 +104,14 @@ function createTutorial2Map() {
                     {x: 2, y: 3, type: Normchel},
                     {x: 2, y: 4, type: Normchel},
                     {x: 2, y: 5, type: Normchel},
-                    {x: 2, y: 6, type: Normchel},
                     {x: 1, y: 2, type: Archer},
                     {x: 1, y: 3, type: Archer},
                     {x: 1, y: 4, type: Archer},
                     {x: 1, y: 5, type: Archer},
                     {x: 1, y: 6, type: Archer},
+                    {x: 1, y: 1, type: Archer},
+                    {x: 1, y: 7, type: Archer},
+                    {x: 0, y: 4, type: Archer},
                 ]
             }
         ],
