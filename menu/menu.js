@@ -289,6 +289,7 @@ const SETUP_STYLE = {
     warm: ['rgba(242, 180, 90, 0.22)', 'rgba(242, 180, 90, 0.05)'], checkRing: 'rgba(255, 255, 255, 0.35)',
     arrow: ['#2f3c63', '#161f3d'], switchOff: '#141c36', switchRim: 'rgba(201, 154, 78, 0.6)', knobOff: '#6f6a7e',
     knobOn: '#1a2342', unselectedAlpha: 0.6, limitAlpha: 0.35,
+    panel: 'rgba(12, 18, 40, 0.62)', panelRim: 'rgba(201, 154, 78, 0.55)', row: 'rgba(255, 255, 255, 0.045)',
 }
 
 // A setup font of size pixels (setupLayout's fonts), in the menu family or the small-caps title family.
@@ -312,7 +313,7 @@ function setupInsetRim(ctx, box, radius, lineWidth, color) {
 
 // A mode card of the setup screens (create-game concept): the hub badge, the name in small caps, a one-line subtitle and
 // a check circle. The selected card has a gold rim, a warm gradient, a soft gold glow and a filled gold check with a dark
-// tick; the other is drawn at 60% opacity with an empty ring. Clicking the card calls clickFunc (with callThis).
+// tick; the other is drawn at 60% opacity with a light tick in a ring. Clicking the card calls clickFunc (with callThis).
 class SetupModeCard {
     selected = false
     constructor(mode, name, subtitle, clickFunc, callThis) {
@@ -368,8 +369,9 @@ class SetupModeCard {
         ctx.font = nameFont
         hubText(ctx, hubEllipsis(ctx, this.name, name.width), name.x, name.y + name.height / 2, nameFont, MENU_THEME.text)
         ctx.font = subtitleFont
+        // Lighter than the concept's dim grey: readable (contrast >= 4.5) on the dimmed card too.
         hubText(ctx, hubEllipsis(ctx, this.subtitle, subtitle.width), subtitle.x, subtitle.y + subtitle.height / 2,
-            subtitleFont, HUB_CARD.dim)
+            subtitleFont, HUB_CARD.chipText)
         const cx = check.x + check.width / 2, cy = check.y + check.height / 2, r = check.width / 2
         if (this.selected) {
             ctx.beginPath()
@@ -383,6 +385,7 @@ class SetupModeCard {
             ctx.strokeStyle = SETUP_STYLE.checkRing
             ctx.lineWidth = 0.15 * u
             ctx.stroke()
+            hubDrawIcon(ctx, 'check', cx, cy, 0.62 * check.width, MENU_THEME.text, 3)
         }
         ctx.restore()
     }
@@ -432,14 +435,16 @@ class SetupSwitch extends ImageCheckBox {
 
 // Places a MenuSlider in a setup row (setupLayout(n).rows[i]) as the concept's stepper: its arrows on the row's arrow
 // boxes (round navy buttons with a gold rim and a chevron), its value centred in the value box, under it the muted sub
-// line or the seat dots (player colours); sub and dots are values or functions of slider.value.
-function setupPlaceStepper(slider, row, layout, {sub = null, dots = null} = {}) {
+// line or the seat dots (player colours); sub and dots are values or functions of slider.value. label maps the slider's
+// text to the drawn value (map names start in lower case).
+function setupPlaceStepper(slider, row, layout, {sub = null, dots = null, label = null} = {}) {
     for (const [button, box] of [[slider.leftButton, row.leftArrow], [slider.rightButton, row.rightArrow]]) {
         Object.assign(button.rect, {x: box.x, y: box.y, width: box.width, height: box.height})
         button.img.pos = button.rect.center
     }
     slider.text.pos = {x: row.value.x + row.value.width / 2, y: row.value.y + row.value.height / 2}
-    slider.setup = {value: row.value, unit: layout.unit, fonts: layout.fonts, sub, dots}
+    slider.text.fontSize = layout.fonts.value
+    slider.setup = {value: row.value, unit: layout.unit, fonts: layout.fonts, sub, dots, label}
 }
 
 // The opacity of a stepper arrow: dim at the slider's limit (it still has its click rect; a click changes nothing).
@@ -479,15 +484,89 @@ function setupDrawStepper(ctx, slider) {
     const top = box.y + (box.height - line - extra) / 2, cx = box.x + box.width / 2
     const valueFont = setupFont(fonts.value, 500)
     ctx.font = valueFont
-    hubText(ctx, hubEllipsis(ctx, slider.text.text, box.width), cx, top + line / 2, valueFont, MENU_THEME.text, 'center')
+    // The slider's text box stays on the drawn value (layout checks read it): its line is above a sub line or dots.
+    slider.text.y = top + line / 2
+    const text = slider.setup.label ? slider.setup.label(slider.text.text) : slider.text.text
+    hubText(ctx, hubEllipsis(ctx, text, box.width), cx, top + line / 2, valueFont, MENU_THEME.text, 'center')
     if (sub) {
         const subFont = setupFont(fonts.valueSub, 400)
         ctx.font = subFont
         hubText(ctx, hubEllipsis(ctx, sub, box.width), cx, top + line + extra / 2, subFont, HUB_CARD.dim, 'center')
     } else if (dots.length) {
-        const step = 1.45 * u, width = dots.length * step - 0.35 * u
+        // 0.35 u apart, closer when that would leave the value box (12 co-op seats).
+        const step = Math.min(1.45 * u, (box.width - 1.1 * u) / Math.max(dots.length - 1, 1))
+        const width = (dots.length - 1) * step + 1.1 * u
         dots.forEach((colour, i) => hubDrawDot(ctx, cx - width / 2 + 0.55 * u + i * step, top + line + 0.8 * u, colour, u, 1.1))
     }
+}
+
+// The two mode cards of a setup screen as one control (the competitive card, then co-op): clicking the card of the
+// other mode calls clickFunc (with callThis) with its mode; clicking the selected card does nothing.
+class SetupModeCards {
+    constructor(clickFunc, callThis) {
+        this.cards = [new SetupModeCard('competitive', 'Competitive', 'Every player for themselves', clickFunc, callThis),
+            new SetupModeCard('co-op', 'Co-op', 'Together against the AI', clickFunc, callThis)]
+    }
+    // The card of the selected mode.
+    get selected() {
+        return this.cards.find(card => card.selected)
+    }
+    setMode(isCoop) {
+        this.cards.forEach((card, i) => card.selected = (i === 1) === isCoop)
+    }
+    // layout: a setupLayout result; each card's click rect is a Rect of its card box.
+    place(layout) {
+        this.cards.forEach((card, i) => {
+            const {x, y, width, height} = layout.modes[i].card
+            card.place({...layout.modes[i], card: new Rect(x, y, width, height)}, layout)
+        })
+    }
+    click(pos) {
+        const card = this.cards.find(card => card.isInside(pos))
+        if (!card) return false
+        if (!card.selected) card.click(pos)
+        return true
+    }
+    select(pos) {}
+    removeSelect() {}
+    touchmove(pos) {}
+    draw(ctx) {
+        for (const card of this.cards) card.draw(ctx)
+    }
+}
+
+// A setup row's background, icon, name and one-line hint (create-game concept): row is one of setupLayout(n).rows.
+function setupDrawRow(ctx, row, layout, icon, name, hint) {
+    const u = layout.unit, fonts = layout.fonts
+    hubFillRounded(ctx, row.row, 0.8 * u, SETUP_STYLE.row)
+    hubDrawIcon(ctx, icon, row.icon.x + row.icon.width / 2, row.icon.y + row.icon.height / 2, row.icon.width, HUB_CARD.icon)
+    const nameFont = setupFont(fonts.name, 500), hintFont = setupFont(fonts.hint, 400)
+    ctx.font = nameFont
+    hubText(ctx, hubEllipsis(ctx, name, row.name.width), row.name.x, row.name.y + row.name.height / 2, nameFont, MENU_THEME.text)
+    ctx.font = hintFont
+    hubText(ctx, hubEllipsis(ctx, hint, row.hint.width), row.hint.x, row.hint.y + row.hint.height / 2, hintFont, HUB_CARD.dim)
+}
+
+// Small-caps text with the concept's letter spacing (em) where the canvas supports it.
+function setupSpacedText(ctx, text, x, y, font, color, spacing, align = 'left') {
+    ctx.save()
+    ctx.font = font
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${spacing * parseFloat(font.split(' ')[1])}px`
+    hubText(ctx, text, x, y, font, color, align)
+    ctx.restore()
+}
+
+// A setup screen's frame (create-game concept): the title under the logo, the panel (translucent navy, thin gold rim)
+// and its 'MODE' and 'SETTINGS' labels.
+function setupDrawFrame(ctx, layout, title) {
+    const {title: titleBox, panel, modeLabel, settingsLabel, unit: u, fonts} = layout
+    setupSpacedText(ctx, title, titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2,
+        setupFont(fonts.title, 800, true), HUB_CARD.round, 0.08, 'center')
+    hubFillRounded(ctx, panel, 1.1 * u, SETUP_STYLE.panel)
+    setupInsetRim(ctx, panel, 1.1 * u, 0.14 * u, SETUP_STYLE.panelRim)
+    const labelFont = setupFont(fonts.label, 800, true)
+    for (const [label, box] of [['Mode', modeLabel], ['Settings', settingsLabel]])
+        setupSpacedText(ctx, label, box.x, box.y + box.height / 2, labelFont, HUB_CARD.dim, 0.08)
 }
 
 function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
@@ -673,29 +752,89 @@ class CoopSettingsTree extends GameSettingsTree {
     }
 }
 
-// Keep each mode's map/player selection while sharing the Hotseat options.
+// The hot seat 'new game' screen (create-game concept, setupLayout): logo, title, the two mode cards, one row per
+// setting (competitive: map, players, fog of war, dynamic timer; co-op: map size, humans, seed, fog of war, dynamic
+// timer) and 'start' / 'back'. Each mode keeps its own map/player selection; fog of war and the timer are shared.
+// No BETA tag on this screen.
 class HotseatSettingsTree extends GameSettingsTree {
+    betaTag = {draw() {}}
     constructor(_menu) {
         super(_menu)
         this.isCoop = false
         this.competitiveSliders = {players: this.playersSlider, map: this.mapSlider}
         const coop = new CoopSettingsTree(_menu)
         this.coopSliders = {players: coop.playersSlider, map: coop.mapSlider, size: coop.sizeSlider}
-        this.competitivePlayersX = this.playersText.x
-        this.competitiveMapX = this.mapText.x
-        const rect = Menu.getButtonRect({x: WIDTH * 0.02, y: HEIGHT * 0.04})
-        rect.width = WIDTH * 0.23
-        rect.height = HEIGHT * 0.08
-        const text = Menu.getButtonText('Competitive')
-        text.fontSize = WIDTH * 0.03
-        this.modeButton = new MenuButton(rect, text, this.toggleMode, undefined, true, this)
+        this.fogOfWarCheckBox = new SetupSwitch()
+        this.fogOfWarCheckBox.text.text = 'fog of war'
+        this.timerCheckBox = new SetupSwitch()
+        this.timerCheckBox.text.text = 'dynamic timer'
+        this.playButton = new SetupButton('Start', _menu.setTree, _menu.startGame, _menu, true)
+        this.modeCards = new SetupModeCards(this.selectMode, this)
+        this.dimensionsText = new Text(NaN, NaN, 1, '', HUB_CARD.dim)
+        const logo = setupLayout(0).logo
+        this.logo = new HaloLogo('logo', {x: logo.x + logo.width / 2, y: logo.y + logo.height / 2}, logo.width, logo.height)
+        this.layout()
+    }
+    // The setting rows of the current mode: icon, name, hint and control (a slider's stepper options too).
+    get rowSpecs() {
+        const sizeText = size => `${size.x}×${size.y}`
+        const fog = {icon: 'fog', name: 'Fog of war', hint: 'See only what your units see', control: this.fogOfWarCheckBox}
+        // The dynamic timer is options/gamestart.js's classic Timer: each turn's time from the mover's units, towns
+        // and gold, instead of a long clock per player.
+        const timer = {icon: 'clock', name: 'Dynamic timer', hint: 'Turn time from your units, towns and gold',
+            control: this.timerCheckBox}
+        if (this.isCoop) return [
+            {icon: 'size', name: 'Map size', hint: 'Generated map', control: this.sizeSlider,
+                sub: () => this.dimensionsText.text = sizeText(getCoopMapScaling(this.playersSlider.value,
+                    this.sizeSlider.realValue.toLowerCase()).mapSize)},
+            {icon: 'people', name: 'Humans', hint: 'Seats for people', control: this.playersSlider,
+                dots: humans => Array.from({length: humans}, (_, i) => {
+                    const {r, g, b} = coopPlayerColor(i + 1)
+                    return rgbToHex(r, g, b)
+                })},
+            {icon: 'seed', name: 'Seed', hint: 'Same seed, same map', control: this.mapSlider},
+            fog, timer]
+        return [
+            {icon: 'map', name: 'Map', hint: `${dictionaryLength(maps)} maps`, control: this.mapSlider, label: hubTitle,
+                sub: () => sizeText(super.selectedMap.mapSize)},
+            {icon: 'people', name: 'Players', hint: 'Seats in this game', control: this.playersSlider,
+                dots: () => super.selectedMap.players.slice(1).map(({rgb}) => rgbToHex(rgb.r, rgb.g, rgb.b))},
+            fog, timer]
+    }
+    // Places every control of the current mode on setupLayout; playersText and mapText name the players/humans and
+    // map/seed rows, dimensionsText is the size row's sub line.
+    layout() {
+        this.rows = this.rowSpecs
+        const layout = this.setup = setupLayout(this.rows.length)
+        this.modeCards.setMode(this.isCoop)
+        this.modeCards.place(layout)
+        this.rows.forEach((spec, i) => {
+            const row = spec.box = layout.rows[i]
+            if (spec.control instanceof SetupSwitch) spec.control.place(row.switch, layout)
+            else setupPlaceStepper(spec.control, row, layout, spec)
+            const name = spec.control === this.playersSlider ? this.playersText : spec.control === this.mapSlider ? this.mapText : null
+            if (name) Object.assign(name, {text: spec.name, x: row.name.x, y: row.name.y + row.name.height / 2,
+                fontSize: layout.fonts.name})
+            if (spec.control === this.sizeSlider) Object.assign(this.dimensionsText, {x: row.value.x + row.value.width / 2,
+                y: row.value.y + row.value.height / 2 + 0.525 * layout.fonts.value, fontSize: layout.fonts.valueSub})
+        })
+        this.playButton.place(layout.primary, layout)
+        if (this.backButton instanceof SetupButton) this.backButton.place(layout.back, layout)
         this.updateButtonsList()
     }
     updateButtonsList() {
         super.updateButtonsList()
         // Keep the map slider last for GameSettingsTree.click's player refresh.
-        if (this.modeButton) this.buttons.splice(2, 0, this.modeButton)
+        if (this.modeCards) this.buttons.splice(2, 0, this.modeCards)
         if (this.isCoop) this.buttons.splice(2, 0, this.sizeSlider)
+    }
+    setParent(parent, _menu) {
+        this.backButton = new SetupButton('Back', _menu.setTree, parent, _menu)
+        this.layout()
+    }
+    // A mode card's click: switches to that mode (the other card's; the selected card does not call this).
+    selectMode(mode) {
+        if ((mode === 'co-op') !== this.isCoop) this.toggleMode()
     }
     toggleMode() {
         this.isCoop = !this.isCoop
@@ -703,18 +842,18 @@ class HotseatSettingsTree extends GameSettingsTree {
         this.playersSlider = sliders.players
         this.mapSlider = sliders.map
         this.sizeSlider = sliders.size
-        this.playersText.text = this.isCoop ? 'humans' : 'players'
-        this.playersText.x = this.isCoop ? WIDTH * 0.12 : this.competitivePlayersX
-        this.mapText.text = this.isCoop ? 'seed' : 'map'
-        this.mapText.x = this.isCoop ? WIDTH * 0.12 : this.competitiveMapX
-        this.modeButton.text.text = this.isCoop ? 'Co-op' : 'Competitive'
-        this.modeButton.selectedText.text = this.modeButton.text.text
-        this.updateButtonsList()
+        this.layout()
     }
     get selectedMap() {
         return this.isCoop
             ? generateCoopGame(this.playersSlider.value, {seed: this.mapSlider.value, size: this.sizeSlider.realValue.toLowerCase()})
             : super.selectedMap
+    }
+    draw(ctx) {
+        const layout = this.setup
+        setupDrawFrame(ctx, layout, 'New game')
+        for (const spec of this.rows) setupDrawRow(ctx, spec.box, layout, spec.icon, spec.name, spec.hint)
+        for (const button of this.buttons) button.draw(ctx)
     }
 }
 
@@ -1289,6 +1428,12 @@ const HUB_ICONS = {
     check: [['M', 5, 12], ['L', 10, 17], ['L', 19, 7]],
     left: [['M', 15, 5], ['L', 8, 12], ['L', 15, 19]],
     right: [['M', 9, 5], ['L', 16, 12], ['L', 9, 19]],
+    // The setup rows' map, clock and map size icons.
+    map: [['M', 3, 6], ['L', 9, 4], ['L', 15, 6], ['L', 21, 4], ['L', 21, 18], ['L', 15, 20], ['L', 9, 18], ['L', 3, 20],
+        ['L', 3, 6], ['M', 9, 4], ['L', 9, 18], ['M', 15, 6], ['L', 15, 20]],
+    clock: [['O', 12, 12, 9], ['M', 12, 7], ['L', 12, 12], ['L', 15, 14]],
+    size: [['M', 4, 9], ['L', 4, 4], ['L', 9, 4], ['M', 20, 9], ['L', 20, 4], ['L', 15, 4], ['M', 4, 15], ['L', 4, 20],
+        ['L', 9, 20], ['M', 20, 15], ['L', 20, 20], ['L', 15, 20]],
 }
 
 // Strokes icon name, size pixels square, centred on (x, y), lineWidth on the 24 x 24 grid.
@@ -1532,6 +1677,25 @@ class HubButton extends MenuButton {
     draw(ctx) {
         const style = this.primary ? MENU_THEME.primary : MENU_THEME.plain
         this.rect.drawPlaque(ctx, style, 0.16 * hubUnit())
+        this.text.fontFamily = Text.titleFamily
+        this.text.drawAs(ctx, style.text, 800)
+    }
+}
+
+// A hub button on a setupLayout button box (primary or back): corners, rim and label in setup units, the rim inside the
+// box (the concept's inset rim), so the drawn plaque is the box.
+class SetupButton extends HubButton {
+    place(box, layout) {
+        Object.assign(this.rect, {x: box.x, y: box.y, width: box.width, height: box.height})
+        this.rect.cornerRadius = Array(4).fill(0.8 * layout.unit)
+        this.text.fontSize = layout.fonts.button
+        this.unit = layout.unit
+        this.trimText()
+    }
+    draw(ctx) {
+        const style = this.primary ? MENU_THEME.primary : MENU_THEME.plain, rim = 0.16 * this.unit, r = this.rect
+        new Rect(r.x + rim / 2, r.y + rim / 2, r.width - rim, r.height - rim, r.cornerRadius.map(c => Math.max(0, c - rim / 2)))
+            .drawPlaque(ctx, style, rim)
         this.text.fontFamily = Text.titleFamily
         this.text.drawAs(ctx, style.text, 800)
     }
@@ -3373,9 +3537,9 @@ class Menu {
         try {
             this.sky.draw(ctx)
             // Co-op uses the header space for its size selector.
-            // A tree with its own logo and beta tag (the online hub) places them itself.
+            // A tree with its own logo and beta tag (the online hub, the hot seat setup screen) places them itself.
             const logo = this.selectedTree.logo ?? this.logo, betaTag = this.selectedTree.betaTag ?? this.betaTag
-            if (!this.selectedTree.isCoop) logo.draw(ctx)
+            if (this.selectedTree.logo || !this.selectedTree.isCoop) logo.draw(ctx)
             betaTag.draw(ctx)
             this.selectedTree.draw(ctx)
             errorWindow.draw(ctx)
