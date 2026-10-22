@@ -816,13 +816,15 @@ const atmosphericLighting = {
     // Owned tile colour, deepened like coloured stone (TERRITORY.depth gamma, a little stone
     // mixed in), then as the classic tile shows it: full on suburbs, lightened elsewhere.
     tileFill(hexagon) {
-        const {r, g, b} = hexagon.player.color
-        const key = r + ',' + g + ',' + b + (hexagon.isSuburb ? ',s' : '')
+        return this.colourFill(hexagon.player.color, hexagon.isSuburb)
+    },
+    colourFill({r, g, b}, suburb) {
+        const key = r + ',' + g + ',' + b + (suburb ? ',s' : '')
         let fill = this.tileFills.get(key)
         if (!fill) {
             const {depth, stone} = this.TERRITORY
             const deep = (c, i) => 255 * (c / 255) ** depth * (1 - stone[3]) + stone[i] * stone[3]
-            const mix = (c, i) => Math.round(hexagon.isSuburb ? deep(c, i) : deep(c, i) + (255 - deep(c, i)) * 0.4)
+            const mix = (c, i) => Math.round(suburb ? deep(c, i) : deep(c, i) + (255 - deep(c, i)) * 0.4)
             fill = `rgb(${mix(r, 0)},${mix(g, 1)},${mix(b, 2)})`
             this.tileFills.set(key, fill)
         }
@@ -883,9 +885,10 @@ const atmosphericLighting = {
         }
         return this.tileDetails[index] = {size: tile.width, offset, alpha: data, histogram: [...histogram]}
     },
-    // Owned marble, built once per hex radius and tile colour, all variants at once (a territory coming into
-    // view costs one frame, not one per variant): the colour plus the variant's detail, with the variant's
-    // alpha (the inset tile), under the sheen; an owned cell is one drawImage, as a neutral one.
+    // Owned marble, built once per hex radius and tile colour, all variants at once: the colour plus the
+    // variant's detail, with the variant's alpha (the inset tile), under the sheen; an owned cell is one
+    // drawImage, as a neutral one. The first colour built for a radius builds every colour the board can
+    // show (ownedFills), so a move (a capture, a new suburb) never builds one inside its frames.
     ownedTile(index, fill) {
         if (!this.ownedTiles || this.ownedTiles.radius !== basis.r) {
             this.ownedTiles = Object.assign(new Map(), {radius: basis.r})
@@ -893,10 +896,29 @@ const atmosphericLighting = {
         }
         let tiles = this.ownedTiles.get(fill)
         if (!tiles) {
-            tiles = Array.from({length: this.TILE.variants}, (_, i) => this.buildOwnedTile(i, fill))
-            this.ownedTiles.set(fill, tiles)
+            for (const f of [fill, ...this.ownedFills()]) {
+                if (!this.ownedTiles.has(f))
+                    this.ownedTiles.set(f, Array.from({length: this.TILE.variants}, (_, i) => this.buildOwnedTile(i, f)))
+            }
+            tiles = this.ownedTiles.get(fill)
         }
         return tiles[index]
+    },
+    // The owned tile colours of every player holding a cell on the board, suburb and not: only a
+    // player on the board can own a cell later (captures and suburbs come from its own units and towns).
+    ownedFills() {
+        const fills = []
+        if (typeof grid === 'undefined' || !grid || !grid.arr || typeof players === 'undefined')
+            return fills
+        const owners = new Set()
+        for (const row of grid.arr)
+            for (const cell of row)
+                if (cell.hexagon.playerColor) owners.add(cell.hexagon.playerColor)
+        for (const owner of owners) {
+            const color = players[owner]?.color
+            if (color) fills.push(this.colourFill(color, false), this.colourFill(color, true))
+        }
+        return fills
     },
     buildOwnedTile(index, fill) {
         const {size, offset, alpha, histogram} = this.tileDetail(index)

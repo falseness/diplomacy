@@ -212,6 +212,14 @@
         wrapped.visualsPerfLayer = true
         return wrapped
     }
+    // A rest frame's recorded overlay calls (Grid.drawOverlayComposite) are made later in the layer they were recorded in.
+    if (typeof canvasCallLabels !== 'undefined')
+        canvasCallLabels = {current: () => layer, within: (label, fn) => {
+            const outer = layer
+            layer = label
+            try { return fn() }
+            finally { layer = outer }
+        }}
     drawMain = labelled(drawMain, 'frame')
     drawInterface = labelled(drawInterface, 'interface')
     const drawn = g => versions.set(g.canvas, (versions.get(g.canvas) || 0) + 1)
@@ -350,7 +358,7 @@
         // Drawing layers (drawn work by layer).
         proto.drawMapSurface = labelled(proto.drawMapSurface, 'surface')
         proto.drawOverlayLayer = labelled(proto.drawOverlayLayer, 'units')
-        for (const name of ['drawStillUnits', 'drawEntityOverlays']) if (proto[name]) proto[name] = labelled(proto[name], 'units')
+        for (const name of ['drawStillUnits', 'drawEntityOverlays', 'drawOverlaySnapshot']) if (proto[name]) proto[name] = labelled(proto[name], 'units')
         for (const name of ['drawCellText', 'drawChanceOfWinningText', 'drawLoadingCells']) if (proto[name]) proto[name] = labelled(proto[name], 'text')
         if (proto.drawLitEdges) proto.drawLitEdges = labelled(proto.drawLitEdges, 'light')
         proto.drawOther = labelled(proto.drawOther, args => args[1] || 'entities')
