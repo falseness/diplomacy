@@ -1,0 +1,321 @@
+// Browser-only (not in the server's rules script list, server/gameScriptList.js, so the rules version stays as it is):
+// the 'tutorial' screen as lesson cards, in place of menu/menu.js TutorialTree (installed at the end of this file).
+// A "Tutorial" heading under the logo, every entry of options/tutorials.js as a card in 3 equal columns between the
+// heading and Back: a round cream medallion at the left, the lesson number in gold and its name (at most 2 lines, never
+// shrunk, ellipsis past them) at the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed,
+// re-read on every enter) carry a gold check badge; the first lesson in menu order that is not passed is Next: a thick
+// gold rim, a gold glow and a "Next" tag. The cards are sized for 3 rows; more rows scroll by whole rows (wheel, touch
+// drag, arrow keys) with a gold track at the right. Sizes are in hub units (hubUnit).
+
+// A lesson card: its whole rect starts the lesson. Menu.touchStart/Move/End hand every touch to every button of the
+// tree, so each card forwards it to the tree, where repeated calls with one position change nothing.
+class TutorialCard extends MenuButton {
+    constructor(tree, tutorial) {
+        super(new Rect(0, 0, 0, 0), new Text(0, 0, 0, tutorial.title), TutorialManager.start, tutorial.id, true, TutorialManager)
+        this.tree = tree
+        Object.assign(this, TutorialCardsTree.parseTitle(tutorial.title))
+        this.label = null
+    }
+    select(pos) {
+        this.tree.touchStart(pos)
+    }
+    touchmove(pos) {
+        this.tree.touchMove(pos)
+    }
+    removeSelect() {
+        this.tree.touchEnd()
+    }
+}
+
+class TutorialCardsTree {
+    static COLUMNS = 3
+    static ROWS = 3
+    static CARD = {
+        glass: 'rgba(20, 28, 56, 0.82)', rim: 'rgba(201, 154, 78, 0.75)', gold: '#f2b45a', text: '#f3ead8',
+        heading: '#f6e2b8', glow: 'rgba(242, 180, 90, 0.45)', warm: ['rgba(242, 180, 90, 0.18)', 'rgba(242, 180, 90, 0.04)'],
+        disc: ['#f6ecdc', '#cbb79a'], discRing: '#d4a85a', discShade: 'rgba(0, 0, 0, 0.25)',
+        badge: ['#ffe3a3', '#d9962f'], tag: ['#ffe3a3', '#e9a948'], dark: '#2a1a06',
+    }
+    constructor(_menu) {
+        this.menu = _menu
+        this.backButton = new Empty()
+        this.entries = []
+        this.passed = []
+        this.nextId = null
+        this.firstRow = 0
+        this.dragY = null
+        this.grid = {x: 0, y: 0, width: 0, height: 0}
+        this.heading = {x: 0, y: 0, width: 0, height: 0}
+        this.track = null
+        this.buttons = [this.backButton]
+    }
+    get columns() {
+        return TutorialCardsTree.COLUMNS
+    }
+    get rows() {
+        return Math.ceil(this.entries.length / TutorialCardsTree.COLUMNS)
+    }
+    get maxFirstRow() {
+        return Math.max(0, this.rows - TutorialCardsTree.ROWS)
+    }
+    // "Tutorial N: Name" -> {number: 'N', name: 'Name'}; any other title is the whole name.
+    static parseTitle(title) {
+        const match = /^Tutorial\s+(\d+)\s*:\s*(.+)$/.exec(title)
+        return match ? {number: match[1], name: match[2].trim()} : {number: '', name: title}
+    }
+    setParent(parent, _menu) {
+        this.backButton = new HubButton('Back', _menu.setTree, parent, _menu)
+        this.update()
+    }
+    enter() {
+        this.firstRow = 0
+        this.update()
+    }
+    update() {
+        this.passed = readTutorialPassed()
+        this.nextId = tutorials.find(tutorial => !this.passed.includes(tutorial.id))?.id ?? null
+        this.entries = tutorials.map(tutorial => {
+            const button = new TutorialCard(this, tutorial)
+            const checkMark = this.passed.includes(tutorial.id) ? {pos: {x: 0, y: 0}, width: 0, height: 0,
+                get x() { return this.pos.x }, get y() { return this.pos.y }} : null
+            return {id: tutorial.id, button, checkMark, next: tutorial.id === this.nextId}
+        })
+        this.firstRow = Math.min(this.firstRow, this.maxFirstRow)
+        this.buttons = [...this.entries.map(entry => entry.button), this.backButton]
+        this.layout()
+    }
+    // The heading under the logo, Back at the bottom, the grid of 3 x 3 equal cards between them; rows above or below
+    // the shown ones are moved off the grid and ignore clicks.
+    layout() {
+        const u = hubUnit(), logo = this.menu.logo.bounds
+        const headingTop = logo.y + logo.height + 0.2 * u
+        Object.assign(this.heading, {x: WIDTH / 2 - 12 * u, y: headingTop, width: 24 * u, height: 3.4 * u})
+        const backHeight = 4.6 * u, backTop = HEIGHT - 1.4 * u - backHeight
+        this.backButton.place?.(WIDTH / 2 - 9 * u, backTop, 18 * u, backHeight, 2.2 * u)
+        if (this.backButton.rect) this.backButton.rect.cornerRadius = Array(4).fill(backHeight / 2)
+        const gap = 1.3 * u, top = headingTop + this.heading.height + 1.1 * u, bottom = backTop - 1.1 * u
+        Object.assign(this.grid, {x: 3 * u, y: top, width: WIDTH - 6 * u, height: bottom - top})
+        const width = (this.grid.width - gap * (TutorialCardsTree.COLUMNS - 1)) / TutorialCardsTree.COLUMNS
+        const height = (this.grid.height - gap * (TutorialCardsTree.ROWS - 1)) / TutorialCardsTree.ROWS
+        this.cardStep = height + gap
+        this.entries.forEach((entry, index) => {
+            const row = Math.floor(index / TutorialCardsTree.COLUMNS) - this.firstRow, column = index % TutorialCardsTree.COLUMNS
+            const shown = row >= 0 && row < TutorialCardsTree.ROWS
+            const rect = entry.button.rect
+            Object.assign(rect, {x: this.grid.x + column * (width + gap), y: shown ? this.grid.y + row * this.cardStep : -HEIGHT,
+                width, height, cornerRadius: Array(4).fill(u)})
+            entry.button.canClick = shown
+            entry.button.text.fontSize = 2 * u
+            entry.button.trimText()
+            const badge = 2.6 * u
+            if (entry.checkMark) Object.assign(entry.checkMark, {width: badge, height: badge,
+                pos: {x: rect.x + rect.width - 0.9 * u - badge / 2, y: rect.y + 0.9 * u + badge / 2}})
+        })
+        this.track = this.rows > TutorialCardsTree.ROWS ?
+            {x: this.grid.x + this.grid.width + 1.1 * u, y: this.grid.y, width: 0.45 * u, height: this.grid.height} : null
+    }
+    // The gold thumb on the track: the shown rows' share of every row.
+    get thumbRect() {
+        if (!this.track) return null
+        const t = this.track, height = t.height * TutorialCardsTree.ROWS / this.rows
+        return {x: t.x, y: t.y + (t.height - height) * this.firstRow / this.maxFirstRow, width: t.width, height}
+    }
+    scrollRows(rows) {
+        const firstRow = Math.max(0, Math.min(this.maxFirstRow, this.firstRow + rows))
+        if (firstRow === this.firstRow) return false
+        this.firstRow = firstRow
+        this.layout()
+        return true
+    }
+    click(pos) {
+        for (const button of this.buttons) if (button.click(pos)) return
+    }
+    wheel(pos, deltaY) {
+        if (deltaY) this.scrollRows(Math.sign(deltaY))
+    }
+    scrollKey(key) {
+        const rows = {ArrowDown: 1, ArrowUp: -1, PageDown: TutorialCardsTree.ROWS, PageUp: -TutorialCardsTree.ROWS,
+            Home: -this.rows, End: this.rows}[key]
+        if (rows) this.scrollRows(rows)
+    }
+    // Touch drag on the grid: a row per card step of travel (the anchor moves with each row, so a repeated call with
+    // the same position does nothing).
+    touchStart(pos) {
+        const g = this.grid
+        this.dragY = pos.x >= g.x && pos.x <= g.x + g.width + 3 * hubUnit() && pos.y >= g.y && pos.y <= g.y + g.height ? pos.y : null
+    }
+    touchMove(pos) {
+        if (this.dragY === null) return
+        const rows = Math.trunc((this.dragY - pos.y) / this.cardStep)
+        if (!rows) return
+        this.dragY -= rows * this.cardStep
+        this.scrollRows(rows)
+    }
+    touchEnd() {
+        this.dragY = null
+    }
+    draw(ctx) {
+        this.layout()
+        const u = hubUnit()
+        this.drawHeading(ctx, u)
+        for (const entry of this.entries) if (entry.button.canClick) this.drawCard(ctx, entry, u)
+        if (this.track) {
+            hubFillRounded(ctx, this.track, this.track.width / 2, 'rgba(255, 255, 255, 0.08)')
+            const thumb = this.thumbRect
+            hubFillRounded(ctx, thumb, thumb.width / 2, MENU_THEME.plain.rim)
+        }
+        this.backButton.draw(ctx)
+    }
+    // "Tutorial" between two gold lines fading outwards.
+    drawHeading(ctx, u) {
+        const h = this.heading, y = h.y + h.height / 2, colours = TutorialCardsTree.CARD
+        const width = hubText(ctx, 'Tutorial', WIDTH / 2, y, `800 ${2.6 * u}px ${Text.titleFamily}`, colours.heading, 'center')
+        for (const side of [-1, 1]) {
+            const inner = WIDTH / 2 + side * (width / 2 + 1.6 * u), outer = inner + side * 12 * u
+            const line = ctx.createLinearGradient(outer, 0, inner, 0)
+            line.addColorStop(0, 'rgba(201, 154, 78, 0)')
+            line.addColorStop(1, MENU_THEME.plain.rim)
+            ctx.fillStyle = line
+            ctx.fillRect(Math.min(inner, outer), Math.round(y), 12 * u, Math.max(1, 0.1 * u))
+        }
+    }
+    drawCard(ctx, entry, u) {
+        const colours = TutorialCardsTree.CARD, button = entry.button, r = button.rect
+        ctx.save()
+        ctx.beginPath()
+        r.drawShape(ctx)
+        ctx.closePath()
+        ctx.fillStyle = colours.glass
+        if (entry.next) {
+            ctx.shadowColor = colours.glow
+            ctx.shadowBlur = 2.2 * u
+        }
+        ctx.fill()
+        ctx.shadowColor = 'transparent'
+        if (entry.next) {
+            const warm = ctx.createLinearGradient(r.x, 0, r.x + 0.7 * r.width, 0)
+            warm.addColorStop(0, colours.warm[0])
+            warm.addColorStop(1, colours.warm[1])
+            ctx.fillStyle = warm
+            ctx.fill()
+        }
+        // The rim inside the card.
+        const rim = (entry.next ? 0.3 : 0.14) * u
+        ctx.beginPath()
+        new Rect(r.x + rim / 2, r.y + rim / 2, r.width - rim, r.height - rim, r.cornerRadius.map(c => c - rim / 2)).drawShape(ctx)
+        ctx.closePath()
+        ctx.strokeStyle = entry.next ? colours.gold : colours.rim
+        ctx.lineWidth = rim
+        ctx.stroke()
+        // The medallion: at most 82% of the card's height and 30% of its width.
+        const pad = 1.6 * u, disc = Math.min(0.82 * r.height, 0.3 * r.width), cx = r.x + pad + disc / 2, cy = r.y + r.height / 2
+        this.drawMedallion(ctx, cx, cy, disc / 2, u)
+        // The corner mark: Next's tag or the check badge.
+        let corner = null
+        if (entry.next) corner = this.drawNextTag(ctx, r, u)
+        else if (entry.checkMark) {
+            const m = entry.checkMark
+            this.drawCheckBadge(ctx, m.x, m.y, m.width / 2)
+            corner = {x: m.x - m.width / 2, y: m.y - m.height / 2, width: m.width, height: m.height}
+        }
+        this.drawLabel(ctx, button, r.x + pad + disc + pad, r.x + r.width - pad, cy, corner, u)
+        ctx.restore()
+    }
+    drawMedallion(ctx, x, y, radius, u) {
+        const colours = TutorialCardsTree.CARD
+        ctx.beginPath()
+        ctx.arc(x, y, radius + 0.45 * u, 0, Math.PI * 2)
+        ctx.strokeStyle = colours.discShade
+        ctx.lineWidth = 0.5 * u
+        ctx.stroke()
+        const fill = ctx.createRadialGradient(x, y - 0.2 * radius, 0, x, y, radius)
+        fill.addColorStop(0, colours.disc[0])
+        fill.addColorStop(1, colours.disc[1])
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.fillStyle = fill
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(x, y, radius + 0.225 * u, 0, Math.PI * 2)
+        ctx.strokeStyle = colours.discRing
+        ctx.lineWidth = 0.45 * u
+        ctx.stroke()
+    }
+    drawCheckBadge(ctx, x, y, radius) {
+        const colours = TutorialCardsTree.CARD
+        const fill = ctx.createRadialGradient(x - 0.3 * radius, y - 0.4 * radius, 0, x, y, radius)
+        fill.addColorStop(0, colours.badge[0])
+        fill.addColorStop(1, colours.badge[1])
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.fillStyle = fill
+        ctx.fill()
+        // The concept's tick on a 24 x 24 grid, 60% of the badge.
+        const k = radius * 1.2 / 24, px = v => x + (v - 12) * k, py = v => y + (v - 12) * k
+        ctx.beginPath()
+        ctx.moveTo(px(5), py(12.5))
+        ctx.lineTo(px(9.5), py(17))
+        ctx.lineTo(px(19), py(7.5))
+        ctx.strokeStyle = colours.dark
+        ctx.lineWidth = 3 * k
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.stroke()
+    }
+    // The gold "Next" tag in the card's top-right corner; returns its box.
+    drawNextTag(ctx, r, u) {
+        const colours = TutorialCardsTree.CARD, font = `800 ${1.5 * u}px ${Text.titleFamily}`
+        ctx.font = font
+        const height = 2.2 * u, width = ctx.measureText('Next').width + 1.8 * u
+        const box = {x: r.x + r.width - 0.9 * u - width, y: r.y + 0.9 * u, width, height}
+        const fill = ctx.createLinearGradient(0, box.y, 0, box.y + height)
+        fill.addColorStop(0, colours.tag[0])
+        fill.addColorStop(1, colours.tag[1])
+        hubFillRounded(ctx, box, 0.4 * u, fill)
+        hubText(ctx, 'Next', box.x + width / 2, box.y + height / 2, font, colours.dark, 'center')
+        return box
+    }
+    // The gold number, then the name in at most 2 lines beside it, centred on y between left and right; the lines stop
+    // short of the corner mark where they pass it. button.label keeps what was drawn (fonts, lines, box).
+    drawLabel(ctx, button, left, right, y, corner, u) {
+        const colours = TutorialCardsTree.CARD, numberFont = `800 ${3 * u}px ${Text.titleFamily}`
+        const nameSize = 2 * u, nameFont = `800 ${nameSize}px ${Text.titleFamily}`, lineHeight = 1.15 * nameSize
+        ctx.font = numberFont
+        const numberWidth = button.number ? ctx.measureText(button.number).width + u : 0
+        const nameLeft = left + numberWidth, top = y - lineHeight
+        // Each line's right end: clear of the corner mark when the line's band reaches it.
+        const ends = [0, 1].map(i => corner && top + i * lineHeight < corner.y + corner.height + 0.3 * u ?
+            Math.min(right - 2.4 * u, corner.x - 0.6 * u) : right - 2.4 * u)
+        ctx.font = nameFont
+        const lines = TutorialCardsTree.wrap(ctx, button.name, ends.map(end => end - nameLeft))
+        const blockTop = y - lines.length * lineHeight / 2
+        lines.forEach((line, i) => hubText(ctx, line, nameLeft, blockTop + (i + 0.5) * lineHeight, nameFont, colours.text))
+        if (button.number) hubText(ctx, button.number, left, blockTop + 0.5 * lineHeight, numberFont, colours.gold)
+        ctx.font = nameFont
+        const width = Math.max(0, ...lines.map(line => ctx.measureText(line).width))
+        button.label = {numberFontSize: 3 * u, nameFontSize: nameSize, lines,
+            nameBox: {x: nameLeft, y: blockTop, width, height: lines.length * lineHeight},
+            numberBox: {x: left, y: blockTop, width: numberWidth, height: 3 * u}}
+    }
+    // text in ctx's font as at most widths.length lines, word by word; what is left past the last line ends it with an
+    // ellipsis, as does a word wider than its line.
+    static wrap(ctx, text, widths) {
+        const words = text.split(/\s+/).filter(Boolean), lines = []
+        for (let i = 0; i < widths.length && words.length; ++i) {
+            let line = words.shift()
+            while (words.length && ctx.measureText(line + ' ' + words[0]).width <= widths[i]) line += ' ' + words.shift()
+            if (i === widths.length - 1 && words.length) line += ' ' + words.splice(0).join(' ')
+            lines.push(hubEllipsis(ctx, line, widths[i]))
+        }
+        return lines
+    }
+}
+
+// The menu (menu/menu.js) is built with its own tutorial list: the cards take its place, also as the Tutorial banner's
+// target.
+{
+    const list = menu.tutorial, cards = new TutorialCardsTree(menu)
+    menu.tutorial = cards
+    for (const button of menu.mainButtons) if (button.parameters === list) button.parameters = cards
+    cards.setParent(menu.main, menu)
+}
