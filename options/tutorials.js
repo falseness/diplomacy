@@ -286,8 +286,9 @@ function createTutorial5Map() {
 }
 
 function createTutorial6Map() {
-    // Ten typed portals share the open eastern battlefield. Starting defenders occupy
-    // their own portals; chaos retains its existing empty startup and spawn behavior.
+    // Twelve typed portals share the open eastern battlefield (five of them mage). Starting defenders occupy
+    // their own portals; chaos retains its existing empty startup and spawn behavior. Red's archers start
+    // further west at (8,7), (8,4) and (10,4), so they can retreat to the towns in time.
     let size = {x: 16, y: 9}
     let towns = [{x: 1, y: 4}, {x: 6, y: 4}]
     // Hex distance in the x-parity offset layout of sprites/sprite.js.
@@ -323,10 +324,10 @@ function createTutorial6Map() {
                 barracks: [{x: 1, y: 3, town: {x: 1, y: 4}}, {x: 6, y: 3, town: {x: 6, y: 4}}],
                 units: [
                     {x: 10, y: 3, type: Normchel},
-                    {x: 11, y: 7, type: Archer},
-                    {x: 11, y: 4, type: Archer},
+                    {x: 8, y: 7, type: Archer},
+                    {x: 8, y: 4, type: Archer},
                     {x: 10, y: 7, type: KOHb},
-                    {x: 13, y: 4, type: Archer}
+                    {x: 10, y: 4, type: Archer}
                 ]
             }
         ],
@@ -351,7 +352,9 @@ function createTutorial6Map() {
                 {x: 11, y: 6, type: Hexcaster},
                 {x: 12, y: 6, type: Bulwark},
                 {x: 10, y: 6, type: Bombard},
-                {x: 9, y: 2, type: Brute}
+                {x: 9, y: 2, type: Brute},
+                {x: 13, y: 2, type: Hexcaster},
+                {x: 13, y: 6, type: Hexcaster}
             ]
         }
     )
@@ -365,7 +368,9 @@ function createTutorial6Map() {
         {x: 12, y: 6, category: 'heavy'},
         {x: 10, y: 6, category: 'siege'},
         {x: 9, y: 2, category: 'melee'},
-        {x: 7, y: 7, category: 'chaos'}
+        {x: 7, y: 7, category: 'chaos'},
+        {x: 13, y: 2, category: 'mage'},
+        {x: 13, y: 6, category: 'mage'}
     ]
     map.testName = 'tutorial 6'
     return map
