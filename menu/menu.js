@@ -954,12 +954,229 @@ function hubTitle(title) {
     return title ? title[0].toUpperCase() + title.slice(1) : ''
 }
 
-// The right-hand status of a card's first line.
-function hubCardStatus(row) {
-    if (row.kind === 'game') return (row.yourTurn ? 'Your turn · ' : '') + 'Round ' + row.round
-    if (row.kind === 'finished')
-        return [row.result, row.rounds != null ? `${row.rounds} rounds` : null].filter(Boolean).join(' · ')
-    return `${row.seats.filled}/${row.seats.capacity} joined`
+// The hub card colours (hub concept): glass cards with a faint gold rim, your turn warm with a gold rim, finished
+// cards dimmed; mode badges, tag chips, seat dots, result tags and the gold Join button.
+const HUB_CARD = {
+    glass: 'rgba(20, 28, 56, 0.82)',
+    rim: 'rgba(201, 154, 78, 0.4)',
+    gold: '#f2b45a',
+    warm: ['rgba(242, 180, 90, 0.25)', 'rgba(242, 180, 90, 0.06)'],
+    finishedGlass: 'rgba(14, 20, 42, 0.7)',
+    finishedRim: 'rgba(201, 154, 78, 0.22)',
+    // The opacity of a finished card's texts and marks (its result tag stays bright).
+    finishedAlpha: 0.6,
+    dim: '#a9a3b8',
+    round: '#f6e2b8',
+    chip: 'rgba(255, 255, 255, 0.08)',
+    chipText: '#e4dccb',
+    icon: '#f0d39b',
+    darkText: '#2a1a06',
+    badge: {competitive: ['#d0443a', '#7a1813', 'swords'], 'co-op': ['#3a9a5c', '#155c30', 'shield']},
+    button: ['#ffe3a3', '#e9a948'],
+    dotRing: 'rgba(255, 255, 255, 0.55)',
+    seatRing: 'rgba(255, 255, 255, 0.45)',
+    noColour: '#8a8a96',
+}
+
+// The hub's line icons on a 24 x 24 grid, stroked (hub concept symbols): M/L/C path commands, O a circle, R a
+// rounded rect.
+const HUB_ICONS = {
+    swords: [['M', 4, 4], ['L', 14, 14], ['M', 4, 8], ['L', 4, 4], ['L', 8, 4], ['M', 20, 4], ['L', 10, 14], ['M', 20, 8],
+        ['L', 20, 4], ['L', 16, 4], ['M', 7, 17], ['L', 4, 20], ['M', 17, 17], ['L', 20, 20], ['M', 8, 13], ['L', 11, 16],
+        ['M', 16, 13], ['L', 13, 16]],
+    shield: [['M', 12, 3], ['L', 19, 6], ['L', 19, 11], ['C', 19, 16, 15.5, 19.5, 12, 21], ['C', 8.5, 19.5, 5, 16, 5, 11],
+        ['L', 5, 6], ['L', 12, 3], ['M', 9, 12], ['L', 11, 14], ['L', 15, 10]],
+    people: [['O', 9, 8, 3], ['M', 3, 20], ['C', 3, 16.5, 5.7, 14, 9, 14], ['C', 12.3, 14, 15, 16.5, 15, 20], ['O', 17, 9, 2.4],
+        ['M', 16, 14], ['C', 19, 14, 21, 16.2, 21, 19]],
+    fog: [['M', 7, 15], ['C', 3.5, 15, 3.5, 9, 7.5, 9.2], ['C', 8.2, 4.5, 15.5, 4, 16.6, 8.5], ['C', 20.6, 8.5, 20.6, 15, 17, 15],
+        ['L', 7, 15], ['M', 5, 19], ['L', 19, 19]],
+    async: [['M', 4, 9], ['L', 17, 9], ['L', 14, 6], ['M', 20, 15], ['L', 7, 15], ['L', 10, 18]],
+    seed: [['R', 4, 4, 16, 16, 3], ['O', 9, 9, 1], ['O', 15, 15, 1], ['O', 15, 9, 1], ['O', 9, 15, 1]],
+    door: [['M', 6, 21], ['L', 6, 4], ['L', 16, 4], ['L', 16, 21], ['M', 3, 21], ['L', 21, 21], ['O', 13, 12, 0.4]],
+}
+
+// Strokes icon name, size pixels square, centred on (x, y).
+function hubDrawIcon(ctx, name, x, y, size, color) {
+    const k = size / 24, px = v => x + (v - 12) * k, py = v => y + (v - 12) * k
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2 * k
+    ctx.lineCap = ctx.lineJoin = 'round'
+    ctx.beginPath()
+    for (const [op, ...a] of HUB_ICONS[name]) {
+        if (op === 'M') ctx.moveTo(px(a[0]), py(a[1]))
+        else if (op === 'L') ctx.lineTo(px(a[0]), py(a[1]))
+        else if (op === 'C') ctx.bezierCurveTo(px(a[0]), py(a[1]), px(a[2]), py(a[3]), px(a[4]), py(a[5]))
+        else if (op === 'O') {
+            ctx.moveTo(px(a[0] + a[2]), py(a[1]))
+            ctx.arc(px(a[0]), py(a[1]), a[2] * k, 0, Math.PI * 2)
+        } else if (op === 'R')
+            new Rect(px(a[0]), py(a[1]), a[2] * k, a[3] * k, Array(4).fill(a[4] * k)).drawShape(ctx)
+    }
+    ctx.stroke()
+    ctx.restore()
+}
+
+// A tag's icon: people for the seat count, a cloud for fog, arrows for async moves, a die for the co-op seed.
+function hubTagIcon(tag) {
+    if (/players|humans/.test(tag)) return 'people'
+    if (tag === 'fog') return 'fog'
+    if (tag === 'async') return 'async'
+    if (tag.startsWith('seed')) return 'seed'
+    return null
+}
+
+// The round mode badge of diameter size centred on (x, y): a red disc with crossed swords (competitive) or a green
+// one with a shield (co-op), in a gold ring.
+function hubDrawBadge(ctx, mode, x, y, size) {
+    const u = hubUnit(), r = size / 2, [light, dark, icon] = HUB_CARD.badge[mode] ?? HUB_CARD.badge.competitive
+    ctx.save()
+    const fill = ctx.createRadialGradient(x - 0.3 * r, y - 0.4 * r, 0, x, y, r)
+    fill.addColorStop(0, light)
+    fill.addColorStop(1, dark)
+    ctx.fillStyle = fill
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = MENU_THEME.plain.rim
+    ctx.lineWidth = 0.18 * u
+    ctx.stroke()
+    ctx.restore()
+    hubDrawIcon(ctx, icon, x, y, 0.58 * size, '#fff4dc')
+}
+
+// A filled pill of height h whose left end is at x, centred on y.
+function hubPill(ctx, x, y, width, h, color) {
+    hubFillRounded(ctx, {x, y: y - h / 2, width, height: h}, h / 2, color)
+}
+
+// Draws a label on a filled tag (your turn, a result) right-aligned at right, centred on y; returns its width.
+function hubDrawLabelTag(ctx, text, right, y, fill, color) {
+    const u = hubUnit(), font = hubFont(1.5 * u, 800, true)
+    ctx.font = font
+    const width = ctx.measureText(text).width + 1.2 * u
+    hubFillRounded(ctx, {x: right - width, y: y - 1.05 * u, width, height: 2.1 * u}, 0.3 * u, fill)
+    hubText(ctx, text, right - width / 2, y, font, color, 'center')
+    return width
+}
+
+// The tag chips (icon + text on a translucent pill) from x on line y within maxWidth: whole chips while they fit; only
+// the first one may end with an ellipsis. Returns the width drawn.
+function hubDrawChips(ctx, tags, x, y, maxWidth) {
+    const u = hubUnit(), font = hubFont(1.5 * u), h = 2.1 * u, pad = 0.55 * u, iconSize = 1.35 * u, gap = 0.5 * u
+    let left = x
+    for (const tag of tags) {
+        const icon = hubTagIcon(tag), iconRoom = icon ? iconSize + 0.3 * u : 0
+        ctx.font = font
+        const room = x + maxWidth - left - 2 * pad - iconRoom
+        const text = left === x ? hubEllipsis(ctx, tag, room) : tag
+        if (!text || text === '…' || ctx.measureText(text).width > room) break
+        const width = 2 * pad + iconRoom + ctx.measureText(text).width
+        hubPill(ctx, left, y, width, h, HUB_CARD.chip)
+        if (icon) hubDrawIcon(ctx, icon, left + pad + iconSize / 2, y, iconSize, HUB_CARD.icon)
+        hubText(ctx, text, left + pad + iconRoom, y, font, HUB_CARD.chipText)
+        left += width + gap
+        if (text !== tag) break
+    }
+    return Math.max(0, left - gap - x)
+}
+
+// A player's colour dot centred on (x, y).
+function hubDrawDot(ctx, x, y, colour) {
+    const u = hubUnit()
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(x, y, 0.575 * u, 0, Math.PI * 2)
+    ctx.fillStyle = colour ?? HUB_CARD.noColour
+    ctx.fill()
+    ctx.strokeStyle = HUB_CARD.dotRing
+    ctx.lineWidth = 0.12 * u
+    ctx.stroke()
+    ctx.restore()
+}
+
+// The players as colour dots each followed by its name, right-aligned at right on line y within maxWidth: as many as
+// fit, then "+N" for the others (a single long name ends with an ellipsis). Returns the width.
+function hubDrawPlayers(ctx, players, right, y, maxWidth, color) {
+    const u = hubUnit(), font = hubFont(1.5 * u), dot = 1.15 * u, afterDot = 0.3 * u, gap = 0.6 * u
+    ctx.font = font
+    const widthOf = names => names.reduce((sum, name) => sum + dot + afterDot + ctx.measureText(name).width, 0) +
+        gap * Math.max(0, names.length - 1)
+    const more = n => n ? '+' + n : ''
+    const all = players.map(player => player.name)
+    let shown = all.length
+    while (shown > 1 && widthOf(all.slice(0, shown)) + (shown < all.length ? gap + ctx.measureText(more(all.length - shown)).width : 0) > maxWidth)
+        --shown
+    const names = all.slice(0, shown), rest = more(all.length - shown)
+    const restWidth = rest ? gap + ctx.measureText(rest).width : 0
+    if (shown === 1) names[0] = hubEllipsis(ctx, names[0], maxWidth - restWidth - dot - afterDot)
+    let x = right - widthOf(names) - restWidth
+    for (let i = 0; i < names.length; ++i) {
+        hubDrawDot(ctx, x + dot / 2, y, players[i].colour)
+        x += dot + afterDot
+        x += hubText(ctx, names[i], x, y, font, color) + gap
+    }
+    if (rest) hubText(ctx, rest, x, y, font, color)
+    return widthOf(names) + restWidth
+}
+
+// Filled seat dots (in the members' colours) then empty ones and "n/m", right-aligned at right on line y; returns
+// the width.
+function hubDrawSeats(ctx, row, right, y, color) {
+    const u = hubUnit(), font = hubFont(1.5 * u), dot = 1.15 * u, step = 1.45 * u
+    const count = `${row.seats.filled}/${row.seats.capacity}`
+    const countWidth = hubText(ctx, count, right, y, font, color, 'right')
+    let x = right - countWidth - 0.5 * u - row.seats.capacity * step + (step - dot)
+    for (let i = 0; i < row.seats.capacity; ++i, x += step) {
+        if (i < row.seats.filled) hubDrawDot(ctx, x + dot / 2, y, row.players[i]?.colour)
+        else {
+            ctx.save()
+            ctx.beginPath()
+            ctx.arc(x + dot / 2, y, dot / 2 - 0.075 * u, 0, Math.PI * 2)
+            ctx.strokeStyle = HUB_CARD.seatRing
+            ctx.lineWidth = 0.15 * u
+            ctx.stroke()
+            ctx.restore()
+        }
+    }
+    return countWidth + 0.5 * u + row.seats.capacity * step - (step - dot)
+}
+
+// A finished game's result tag: Victory gold, Defeat red, Draw grey; co-op games were Defended (green) or Fell (grey).
+// null for old games without a result.
+function hubResultTag(row) {
+    const coop = row.mode === 'co-op'
+    return {
+        victory: coop ? {text: 'Defended', fill: '#3a9a5c', color: '#f3ead8'} : {text: 'Victory', fill: HUB_CARD.gold, color: HUB_CARD.darkText},
+        defeat: coop ? {text: 'Fell', fill: '#6b6878', color: '#f3ead8'} : {text: 'Defeat', fill: '#c0392b', color: '#f3ead8'},
+        draw: {text: 'Draw', fill: '#6b6878', color: '#f3ead8'},
+    }[row.result] ?? null
+}
+
+// The gold Join / Open button face over box (its label in small caps).
+function hubDrawGoldButton(ctx, box, label) {
+    const u = hubUnit()
+    ctx.save()
+    const fill = ctx.createLinearGradient(0, box.y, 0, box.y + box.height)
+    fill.addColorStop(0, HUB_CARD.button[0])
+    fill.addColorStop(1, HUB_CARD.button[1])
+    hubFillRounded(ctx, box, 0.4 * u, fill)
+    ctx.restore()
+    hubText(ctx, label, box.x + box.width / 2, box.y + box.height / 2, hubFont(1.55 * u, 800, true), HUB_CARD.darkText, 'center')
+}
+
+// The title in the display font, then the mode in small caps when the title keeps 6 units; returns their width.
+function hubDrawTitle(ctx, row, x, y, maxWidth, color, weight = 700, size = 2.05) {
+    const u = hubUnit(), titleFont = hubFont(size * hubUnit(), weight), modeFont = hubFont(1.5 * u, 800, true)
+    const mode = hubTitle(row.mode ?? '')
+    ctx.font = modeFont
+    const modeWidth = ctx.measureText(mode).width
+    const withMode = mode && maxWidth - modeWidth - 0.8 * u >= 6 * u
+    ctx.font = titleFont
+    const title = hubEllipsis(ctx, hubTitle(row.title), withMode ? maxWidth - modeWidth - 0.8 * u : maxWidth)
+    const width = hubText(ctx, title, x, y, titleFont, color)
+    if (withMode) return width + 0.8 * u + hubText(ctx, mode, x + width + 0.8 * u, y, modeFont, HUB_CARD.dim)
+    return width
 }
 
 // A hub button placed by the hub's layout: a plaque (gold when primary) with a small-caps label.
@@ -1048,12 +1265,6 @@ class HubReturnBar {
         this.openButton.place(x + width - 1.4 * u - buttonWidth, y + (height - buttonHeight) / 2, buttonWidth, buttonHeight,
             1.55 * u)
     }
-    // The lobby's title, mode, tags, seats and host ('' while my lobby is not in the list).
-    get summary() {
-        const row = this.row
-        return row?.title === undefined ? '' : [hubTitle(row.title), row.mode, ...row.tags,
-            `${row.seats.filled}/${row.seats.capacity} joined`, 'host ' + row.host].join(' · ')
-    }
     click(pos) {
         if (!this.row || !this.rect.isInside(pos)) return false
         this.onOpen(this.row)
@@ -1065,15 +1276,25 @@ class HubReturnBar {
     }
     removeSelect() {
     }
+    // The door icon and the label, then the lobby's summary as on its card: title and mode, tag chips, seat dots with
+    // n/m and the host, the gold Open button.
     draw(ctx) {
         if (!this.row) return
-        const u = hubUnit(), {x, y, height} = this.rect, centerY = y + height / 2
+        const u = hubUnit(), {x, y, height} = this.rect, centerY = y + height / 2, row = this.row
         this.rect.drawPlaque(ctx, MENU_THEME.myLobby, 0.16 * u)
-        const labelWidth = hubText(ctx, 'Return to my lobby', x + 1.4 * u, centerY, hubFont(1.75 * u, 800, true), '#c9f5cd')
-        const left = x + 2.8 * u + labelWidth, font = hubFont(1.6 * u)
-        ctx.font = font
-        hubText(ctx, hubEllipsis(ctx, this.summary, this.openButton.rect.x - 1.4 * u - left), left, centerY, font,
-            MENU_THEME.text)
+        hubDrawIcon(ctx, 'door', x + 2.5 * u, centerY, 2.2 * u, '#c9f5cd')
+        const labelWidth = hubText(ctx, 'Return to my lobby', x + 4.1 * u, centerY, hubFont(1.75 * u, 800, true), '#c9f5cd')
+        const left = x + 5.5 * u + labelWidth, end = this.openButton.rect.x - 1.4 * u
+        if (row.title !== undefined) {
+            const font = hubFont(1.5 * u)
+            ctx.font = font
+            const host = hubEllipsis(ctx, 'host ' + row.host, 12 * u)
+            const hostWidth = hubText(ctx, host, end, centerY, font, MENU_THEME.text, 'right')
+            const seatsWidth = hubDrawSeats(ctx, row, end - hostWidth - u, centerY, MENU_THEME.text)
+            const room = end - hostWidth - seatsWidth - 2 * u - left
+            const titleWidth = hubDrawTitle(ctx, row, left, centerY, Math.min(room, 24 * u), MENU_THEME.text, 700, 1.6)
+            hubDrawChips(ctx, row.tags, left + titleWidth + u, centerY, room - titleWidth - u)
+        }
         this.openButton.draw(ctx)
     }
 }
@@ -1081,8 +1302,10 @@ class HubReturnBar {
 // One panel of the hub: a heading with its count over the rows, drawn as text cards, and a slim gold scroll track at
 // its right. It scrolls on its own: the wheel over it, a touch drag in it, the arrow keys (OnlineHubTree.scrollKey).
 class HubPanel {
-    // Row heights in hub units: a card with the gap under it, a section heading, an empty-section line.
-    static CARD = 5.6
+    // Row heights in hub units: a card (a tall one has three lines at its right: your turn, finished) with the gap
+    // under it, a section heading, an empty-section line.
+    static CARD = 6.2
+    static TALL_CARD = 7.4
     static CARD_GAP = 0.8
     static LINE = 3.4
     constructor(lists, title, countText, countKind) {
@@ -1100,10 +1323,13 @@ class HubPanel {
     static isCard(row) {
         return row.kind !== 'header' && row.kind !== 'empty'
     }
+    static cardHeight(row) {
+        return row.yourTurn || row.kind === 'finished' ? HubPanel.TALL_CARD : HubPanel.CARD
+    }
     setRows(rows) {
         const u = hubUnit()
         this.rows = rows
-        this.scroll.setHeights(rows.map(row => (HubPanel.isCard(row) ? HubPanel.CARD + HubPanel.CARD_GAP : HubPanel.LINE) * u))
+        this.scroll.setHeights(rows.map(row => (HubPanel.isCard(row) ? HubPanel.cardHeight(row) + HubPanel.CARD_GAP : HubPanel.LINE) * u))
     }
     // The panel box; the rows scroll in the view under the heading, the track runs down the view's right edge.
     place(x, y, width, height) {
@@ -1200,35 +1426,79 @@ class HubPanel {
         const thumb = this.thumbRect
         if (thumb) hubFillRounded(ctx, thumb, thumb.width / 2, theme.plain.rim)
     }
-    // A text card: title and mode, the status at the right; the tags, the players (a lobby's host) at the right.
-    // Your turn is gold, the selected card has a light rim.
+    // A card (hub concept): the mode badge; the title with the mode, the tag chips under it; the right block: a game's
+    // round (under a YOUR TURN tag) and players, a finished game's rounds and result tag, its date, its players, a
+    // lobby's seats and host beside its gold Join button. Your turn: warm with a gold rim; finished: dimmed; the
+    // selected card has a light rim.
     drawCard(ctx, row, r, u) {
-        const theme = MENU_THEME, selected = row.id === this.lists.selectedId
-        const style = row.yourTurn ? theme.yourTurn : theme.plain
-        const corner = 0.8 * u
-        new Rect(r.x, r.y, r.width, r.height, [corner, corner, corner, corner])
-            .drawPlaque(ctx, selected ? {...style, rim: theme.selectedRim} : style, (selected ? 0.25 : 0.12) * u)
-        const muted = row.yourTurn ? style.text : theme.mutedText
-        const left = r.x + 1.1 * u, right = r.x + r.width - 1.1 * u, inner = right - left
-        const top = r.y + 0.36 * r.height, bottom = r.y + 0.72 * r.height
-        const smallCaps = hubFont(1.5 * u, 800, true), titleFont = hubFont(2.05 * u, 700), textFont = hubFont(1.5 * u)
-        ctx.font = smallCaps
-        const status = hubEllipsis(ctx, hubCardStatus(row), inner * 0.45)
-        const statusWidth = hubText(ctx, status, right, top, smallCaps, row.yourTurn ? style.text : theme.heading, 'right')
-        ctx.font = smallCaps
-        const mode = row.mode ?? '', modeWidth = ctx.measureText(mode).width
-        // The mode is left out when the title would keep less than 6 units.
-        const titleRoom = inner - statusWidth - u, withMode = mode && titleRoom - modeWidth - 0.8 * u >= 6 * u
-        ctx.font = titleFont
-        const title = hubEllipsis(ctx, hubTitle(row.title), withMode ? titleRoom - modeWidth - 0.8 * u : titleRoom)
-        const titleWidth = hubText(ctx, title, left, top, titleFont, style.text)
-        if (withMode) hubText(ctx, mode, left + titleWidth + 0.8 * u, top, smallCaps, muted)
-        ctx.font = textFont
-        const people = row.kind === 'lobby' ? hubEllipsis(ctx, 'host ' + row.host, inner * 0.55)
-            : hubPlayersText(ctx, row.players.map(player => player.name), inner * 0.55)
-        const peopleWidth = hubText(ctx, people, right, bottom, textFont, muted, 'right')
-        ctx.font = textFont
-        hubText(ctx, hubEllipsis(ctx, row.tags.join(' · '), inner - peopleWidth - u), left, bottom, textFont, muted)
+        const theme = MENU_THEME, selected = row.id === this.lists.selectedId, finished = row.kind === 'finished'
+        const box = new Rect(r.x, r.y, r.width, r.height, Array(4).fill(0.8 * u))
+        ctx.save()
+        ctx.beginPath()
+        box.drawShape(ctx)
+        ctx.closePath()
+        ctx.fillStyle = finished ? HUB_CARD.finishedGlass : HUB_CARD.glass
+        if (row.yourTurn) {
+            ctx.shadowColor = 'rgba(242, 180, 90, 0.35)'
+            ctx.shadowBlur = 1.4 * u
+        }
+        ctx.fill()
+        ctx.shadowColor = 'transparent'
+        if (row.yourTurn) {
+            const warm = ctx.createLinearGradient(r.x, 0, r.x + 0.7 * r.width, 0)
+            warm.addColorStop(0, HUB_CARD.warm[0])
+            warm.addColorStop(1, HUB_CARD.warm[1])
+            ctx.fillStyle = warm
+            ctx.fill()
+        }
+        ctx.strokeStyle = selected ? theme.selectedRim : row.yourTurn ? HUB_CARD.gold : finished ? HUB_CARD.finishedRim : HUB_CARD.rim
+        ctx.lineWidth = (selected || row.yourTurn ? 0.25 : 0.12) * u
+        ctx.stroke()
+        ctx.restore()
+        const centerY = r.y + r.height / 2, pad = 1.1 * u, badge = 4.2 * u
+        const right = r.x + r.width - pad, tall = HubPanel.cardHeight(row) === HubPanel.TALL_CARD
+        const lines = tall ? [0.24, 0.5, 0.76].map(k => r.y + k * r.height) : [0.33, 0.7].map(k => r.y + k * r.height)
+        ctx.save()
+        if (finished) ctx.globalAlpha = HUB_CARD.finishedAlpha
+        hubDrawBadge(ctx, row.mode, r.x + pad + badge / 2, centerY, badge)
+        const left = r.x + pad + badge + pad, inner = right - left
+        // The right block, then the title and chips in the room it leaves.
+        let blockWidth = 0
+        const font = hubFont(1.5 * u), roundFont = hubFont(1.5 * u, 800, true)
+        if (row.kind === 'lobby') {
+            const join = {x: right - 6.4 * u, y: centerY - 1.3 * u, width: 6.4 * u, height: 2.6 * u}
+            hubDrawGoldButton(ctx, join, 'Join')
+            const end = join.x - pad
+            ctx.font = font
+            const host = hubEllipsis(ctx, 'host ' + row.host, 0.35 * inner)
+            const hostWidth = hubText(ctx, host, end, lines[1], font, HUB_CARD.dim, 'right')
+            const seatsWidth = hubDrawSeats(ctx, row, end, lines[0], theme.text)
+            blockWidth = right - end + Math.max(hostWidth, seatsWidth)
+        } else {
+            const maxWidth = 0.5 * inner
+            let line = 0
+            if (row.yourTurn) blockWidth = hubDrawLabelTag(ctx, 'Your turn', right, lines[line++], HUB_CARD.gold, HUB_CARD.darkText)
+            if (finished) {
+                ctx.globalAlpha = 1
+                const result = hubResultTag(row)
+                const tagWidth = result ? hubDrawLabelTag(ctx, result.text, right, lines[0], result.fill, result.color) : 0
+                ctx.globalAlpha = HUB_CARD.finishedAlpha
+                ctx.font = font
+                const date = row.finishedAt ? 'finished ' + row.finishedAt.slice(0, 10) : ''
+                const datedWidth = date ? hubText(ctx, date, right, lines[1], font, HUB_CARD.dim, 'right') : 0
+                const rounds = row.rounds != null ? `${row.rounds} rounds` : ''
+                const roundsRight = right - tagWidth - (tagWidth ? 0.8 * u : 0)
+                const roundsWidth = rounds ? hubText(ctx, rounds, roundsRight, lines[0], roundFont, HUB_CARD.round, 'right') : 0
+                blockWidth = Math.max(right - roundsRight + roundsWidth, datedWidth)
+                line = 2
+            } else blockWidth = Math.max(blockWidth, hubText(ctx, 'Round ' + row.round, right, lines[line++], roundFont, HUB_CARD.round, 'right'))
+            blockWidth = Math.max(blockWidth, hubDrawPlayers(ctx, row.players, right, lines[line], maxWidth, HUB_CARD.dim))
+        }
+        const room = inner - blockWidth - pad
+        const textTop = tall ? r.y + 0.33 * r.height : lines[0], textBottom = tall ? r.y + 0.7 * r.height : lines[1]
+        hubDrawTitle(ctx, row, left, textTop, room, theme.text)
+        hubDrawChips(ctx, row.tags, left, textBottom, room)
+        ctx.restore()
     }
 }
 
