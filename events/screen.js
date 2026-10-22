@@ -134,11 +134,22 @@ class Screen {
         }
         return out
     }
+    // On an axis where the whole slab (mapBorder.slab, TASK-1219) is smaller than the screen the board stays
+    // centred; otherwise the camera may go mapBorderMargin past the board's edges.
     correctCanvas() {
-        canvas.offset.x = Math.min(canvas.offset.x, this.getScreenRight())
-        canvas.offset.x = Math.max(canvas.offset.x, this.getScreenLeft())
-        canvas.offset.y = Math.min(canvas.offset.y, this.getScreenBottom())
-        canvas.offset.y = Math.max(canvas.offset.y, this.getScreenTop())
+        const slab = mapBorder.slab
+        if (slab && slab.right - slab.left <= width)
+            canvas.offset.x = (slab.left + slab.right - width) / 2
+        else {
+            canvas.offset.x = Math.min(canvas.offset.x, this.getScreenRight())
+            canvas.offset.x = Math.max(canvas.offset.x, this.getScreenLeft())
+        }
+        if (slab && slab.bottom - slab.top <= height)
+            canvas.offset.y = (slab.top + slab.bottom - height) / 2
+        else {
+            canvas.offset.y = Math.min(canvas.offset.y, this.getScreenBottom())
+            canvas.offset.y = Math.max(canvas.offset.y, this.getScreenTop())
+        }
     }
     move(frameDuration = 1000 / 60, frameTime = undefined) {
         let old_value_x = canvas.offset.x

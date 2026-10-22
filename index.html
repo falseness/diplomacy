@@ -431,6 +431,7 @@
             mainCanvas.height = HEIGHT
             fitCanvasToWindow()
             window.addEventListener('resize', fitCanvasToWindow)
+            window.addEventListener('resize', () => GameManager.screenResized())
 
             loadOtherSettings()
             loadAssets()

@@ -1346,24 +1346,45 @@ class GameManager {
     }
     static updateCameraBorders() {
         mapDepth.rebuild(grid)
-        let grid_min_size = Math.min(grid.arr.length, grid.arr[0].length)
         mapBorder = {
 	        left: mapDepth.bounds.left,
 	        right: mapDepth.bounds.right,
 	        top: mapDepth.bounds.top,
 	        bottom: mapDepth.bounds.bottom,
-	        scale: {
-	            min: 1 / grid_min_size * 5, //0.275,
-	            max: 1
-	        }
+	        scale: {min: 1, max: 1}
 	    }
+        this.updateScaleLimits()
+    }
+    // Zoom limits from the screen and the whole board (TASK-1219): zooming out stops where the slab (top face
+    // and sides, the geometry fitCamera fits) fills CAMERA_LIMITS.fill of the screen on its tighter side (about
+    // 15% sky), but never below the readable hex size (CAMERA_FIT.readableRadius); zooming in stops at 1.
+    // mapBorder.slab is the slab's box, which the pan limits keep centred on an axis where it is smaller than the screen.
+    static CAMERA_LIMITS = {fill: 0.85, max: 1}
+    static updateScaleLimits() {
+        const b = mapDepth.surfaceBounds, max = this.CAMERA_LIMITS.max
+        const readable = this.CAMERA_FIT.readableRadius * Math.max(WIDTH, HEIGHT) / basis.r
+        mapBorder.slab = b && b.right > b.left ? {left: b.left, right: b.right, top: b.top, bottom: b.bottom + mapDepth.depth} : undefined
+        const s = mapBorder.slab
+        const fitAll = s ? Math.min(this.CAMERA_LIMITS.fill * WIDTH / (s.right - s.left),
+            this.CAMERA_LIMITS.fill * HEIGHT / (s.bottom - s.top)) : readable
+        mapBorder.scale = {min: Math.min(Math.max(fitAll, readable), max), max, fitAll, readable}
+    }
+    // The game draws in WIDTH x HEIGHT canvas pixels fixed at load (index.html scales the canvas box to the
+    // window), so after a resize or an orientation change the limits are recomputed for that screen and the
+    // camera is brought back inside them: the scale clamped about the screen centre, then the pan limits.
+    static screenResized() {
+        if (!mapBorder || menu.visible)
+            return
+        this.updateScaleLimits()
+        gameEvent.screen.zoomBy({x: WIDTH / 2, y: HEIGHT / 2}, 1)
+        gameEvent.screen.move(0)
     }
     // Atmospheric visuals open the board like the concept: the whole slab (top face and sides) fitted and
     // centred with a sky margin (CAMERA_FIT.margin of the shorter screen side), when that leaves hexes
     // no smaller than at the map's zoom-out limit, nor than the minimum readable size: the hex radius at
     // the zoom-out limit of the standard 21-cell board in landscape (5/21 of basis.r = the longer screen
     // side / 18), in either orientation. Otherwise, and with atmospheric visuals off, the camera stays as
-    // it is (the map's top-left corner at full zoom). Zoom and pan limits are unchanged.
+    // it is (the map's top-left corner at full zoom). Zoom limits: updateScaleLimits.
     static CAMERA_FIT = {margin: 0.04, readableRadius: 5 / 21 / 18}
     static fitCamera() {
         const b = mapDepth.surfaceBounds
