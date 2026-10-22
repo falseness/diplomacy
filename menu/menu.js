@@ -197,6 +197,13 @@ class OtherSettingsTree {
     }
 }
 
+// The settings sliders' arrow click targets: 10% of HEIGHT, at most 5.5% of WIDTH (4:3 screens), so the players
+// arrows stay clear of the value between them.
+function menuArrowSize() {
+    const side = Math.min(HEIGHT * 0.1, WIDTH * 0.055)
+    return {width: side, height: side}
+}
+
 function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
     let minimumValueMap = function() { return 0 }
     let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
@@ -205,14 +212,15 @@ function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
     return new MenuSlider(minimumValueMap, maximumValueMap, getKeyMap, undefined,
         0, sliderMarginX,
     new Text(slidePosX, firstY + intervalY, fontSize, undefined, MENU_THEME.text),
-            {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+            menuArrowSize())
 
 }
 
 class GameSettingsTree {
     isOnline = false
     constructor(_menu) {
-        const rectSize = WIDTH * 0.05
+        // As on a 16:9 screen when wider, so the first row's check box stays clear of the logo.
+        const rectSize = Math.min(WIDTH, HEIGHT * 16 / 9) * 0.05
         const cornerR = rectSize * 0.1
         const marginLeft = rectSize * 0.5
         /*const firstY = HEIGHT * 0.3
@@ -222,7 +230,8 @@ class GameSettingsTree {
 
         const posX = WIDTH * 0.5
 
-        const fontSize = 0.04 * WIDTH
+        // Capped by the height: on wide screens the first row would reach up into the logo.
+        const fontSize = Math.min(0.04 * WIDTH, 0.075 * HEIGHT)
         this.playersText = new Text(posX - Menu.getButton().width / 2,
             firstY, fontSize, 'players', MENU_THEME.text, 'left')
 
@@ -237,7 +246,7 @@ class GameSettingsTree {
             getKeyPlayers, this.mapSlider,
             0, WIDTH * 0.04,
         new Text(slidePosX, firstY, fontSize, undefined, MENU_THEME.text),
-                {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+                menuArrowSize())
 
 
         this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2,
@@ -329,7 +338,7 @@ function drawCoopDimensions(settings, ctx) {
     const {mapSize} = getCoopMapScaling(settings.playersSlider.value, settings.sizeSlider.realValue.toLowerCase())
     new Text(WIDTH * 0.12, HEIGHT * 0.18, WIDTH * 0.04, 'size', MENU_THEME.text, 'left').draw(ctx)
     settings.dimensionsText = new Text(WIDTH * 0.6, HEIGHT * 0.23,
-        Math.max(15, WIDTH * 0.022), `${mapSize.x}×${mapSize.y}`, MENU_THEME.mutedText)
+        Math.max(HEIGHT * 0.04, WIDTH * 0.022), `${mapSize.x}×${mapSize.y}`, MENU_THEME.mutedText)
     settings.dimensionsText.draw(ctx)
 }
 
@@ -428,7 +437,8 @@ class HotseatSettingsTree extends GameSettingsTree {
 class OnlineGameSettings {
     isOnline = true
     constructor(_menu) {
-        const rectSize = WIDTH * 0.05
+        // As on a 16:9 screen when wider, so the first row's check box stays clear of the logo.
+        const rectSize = Math.min(WIDTH, HEIGHT * 16 / 9) * 0.05
         const cornerR = rectSize * 0.1
         const marginLeft = rectSize * 0.5
         /*const firstY = HEIGHT * 0.3
@@ -438,10 +448,12 @@ class OnlineGameSettings {
         this.firstY = firstY
         this.intervalY = intervalY
         this.marginLeft = marginLeft
+        this.rectSize = rectSize
 
         const posX = WIDTH * 0.5
 
-        const fontSize = 0.04 * WIDTH
+        // Capped by the height: on wide screens the first row would reach up into the logo.
+        const fontSize = Math.min(0.04 * WIDTH, 0.075 * HEIGHT)
         this.playersText = new Text(posX - Menu.getButton().width / 2,
             firstY, fontSize, 'players', MENU_THEME.text, 'left')
 
@@ -456,7 +468,7 @@ class OnlineGameSettings {
             getKeyPlayers, this.mapSlider,
             0, WIDTH * 0.04,
         new Text(slidePosX, firstY, fontSize, undefined, MENU_THEME.text),
-                {width: HEIGHT * 0.1, height: HEIGHT * 0.1})
+                menuArrowSize())
 
 
         this.mapText = new Text(this.mapSlider.leftButton.x - HEIGHT * 0.2,
@@ -602,8 +614,8 @@ class CreateLobbyTree extends OnlineGameSettings {
         this.creating = false
         this.asyncMovesCheckBox = new ImageCheckBox('checkMark',
             new Text(NaN, NaN, WIDTH * 0.03, 'asynchronous moves', MENU_THEME.text), WIDTH * 0.025,
-            WIDTH * 0.28, this.firstY + this.intervalY * 2, WIDTH * 0.05, WIDTH * 0.05,
-            [4, 4, 4, 4], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
+            WIDTH * 0.28, this.firstY + this.intervalY * 2, this.rectSize, this.rectSize,
+            [WIDTH * 0.005, WIDTH * 0.005, WIDTH * 0.005, WIDTH * 0.005], menuOptions.checkBox.strokeWidth, menuOptions.checkBox.color)
         this.asyncMovesCheckBox.mark = false
         this.status = new Text(WIDTH / 2, this.firstY + this.intervalY * 2.5, 0.03 * WIDTH, '', MENU_THEME.text)
         this.playButton = Menu.getButton(this.actionButtonPos, 'create', this.create, undefined, true, this)
@@ -674,8 +686,9 @@ class LobbyRoomTree {
         this.busy = false
         this.rowTop = HEIGHT * 0.38
         this.rowHeight = HEIGHT * 0.065
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.28, 0.028 * WIDTH, '', MENU_THEME.text)
-        this.count = new Text(WIDTH / 2, HEIGHT * 0.33, 0.028 * WIDTH, '', MENU_THEME.mutedText)
+        // Title and count between the logo and the rows; sizes capped by the height for wide screens.
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.295, Math.min(0.028 * WIDTH, 0.035 * HEIGHT), '', MENU_THEME.text)
+        this.count = new Text(WIDTH / 2, HEIGHT * 0.335, Math.min(0.028 * WIDTH, 0.035 * HEIGHT), '', MENU_THEME.mutedText)
         this.status = new Text(WIDTH / 2, HEIGHT * 0.8, 0.025 * WIDTH, '', MENU_THEME.text)
         this.rowTexts = []
         this.kickButtons = []
@@ -729,7 +742,8 @@ class LobbyRoomTree {
         const view = this.view = buildRoomView(lobby, this.myAccountId)
         this.title.text = view.settingsText
         this.count.text = view.countText
-        const fontSize = 0.03 * WIDTH
+        // A row's text fits its row height on wide screens.
+        const fontSize = Math.min(0.03 * WIDTH, 0.7 * this.rowHeight)
         this.rowTexts = view.rows.map((row, i) => new Text(WIDTH * 0.3, this.rowTop + (i + 0.5) * this.rowHeight,
             fontSize, row.text, row.kind === 'waiting' ? MENU_THEME.mutedText : MENU_THEME.text, 'left'))
         this.kickButtons = []
@@ -822,7 +836,7 @@ class SignInTree {
         document.body.append(div)
         const status = this.statusElement = document.createElement('div')
         status.style.cssText = `position:absolute;left:5%;width:90%;top:${HEIGHT * 0.55 / devicePixelRatio}px;` +
-            `text-align:center;font:16px/1.4 sans-serif;color:${MENU_THEME.mutedText};overflow-wrap:anywhere;pointer-events:none`
+            `text-align:center;font:${menuDomFontSize()}px/1.4 sans-serif;color:${MENU_THEME.mutedText};overflow-wrap:anywhere;pointer-events:none`
         status.setAttribute('role', 'status')
         document.body.append(status)
         this.setStatus('loading Google sign-in…')
@@ -982,7 +996,8 @@ class OnlineHubTree {
         // A one-off message after the status line, e.g. a lobby:join error or
         // 'you were removed from the lobby'; cleared on leave.
         this.notice = ''
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.27, 0.025 * WIDTH, '', MENU_THEME.text)
+        // Between the logo and the list, its size capped by the height for wide screens.
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.29, Math.min(0.025 * WIDTH, 0.03 * HEIGHT), '', MENU_THEME.text)
         this.list = new HubList({x: WIDTH * 0.08, y: HEIGHT * 0.31, width: WIDTH * 0.78, height: HEIGHT * 0.47})
         this.list.onRow = row => {
             // lobby:join of my own lobby returns it, so both open the room.
@@ -1071,7 +1086,7 @@ class NicknameTree {
     constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         this.menu = _menu
         this.saving = false
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.04 * WIDTH, 'change nickname', MENU_THEME.text)
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, Math.min(0.04 * WIDTH, 0.07 * HEIGHT), 'change nickname', MENU_THEME.text)
         // Wider than a button so 16 characters fit.
         const inputRect = Menu.getButtonRect({x: WIDTH * 0.3, y: HEIGHT * 0.36})
         inputRect.width = WIDTH * 0.4
@@ -1814,7 +1829,8 @@ class MenuBanner extends Button {
     // The gold "Start here" tag at the top of the featured banner.
     paintTag(ctx) {
         const {x, y, width: w} = this.rect
-        const size = w * 0.055
+        // Never below the menu's smallest readable size (1.6% of HEIGHT).
+        const size = Math.max(w * 0.055, HEIGHT * 0.018)
         ctx.save()
         ctx.font = `700 ${size}px ${MENU_TITLE_FONT_FAMILY}`
         const width = ctx.measureText('Start here').width + size * 1.6, height = size * 1.75
@@ -2053,7 +2069,10 @@ class Menu {
             back
         */
         this.sky = new MenuSky()
-        this.logo = new HaloLogo('logo', { x: WIDTH / 2, y: HEIGHT * 0.15 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
+        // Sized by the width, on screens wider than 16:9 (2560x1080, phones) as on a 16:9 one, so the halo stays on
+        // screen and the first row below it stays clear.
+        const logoScale = Math.min(WIDTH, HEIGHT * 16 / 9)
+        this.logo = new HaloLogo('logo', { x: WIDTH / 2, y: HEIGHT * 0.15 }, logoScale * 0.5, logoScale * 0.55 * 0.2)
         this.betaTag = new BetaTag()
 
         let startPos = {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: HEIGHT * 0.3}

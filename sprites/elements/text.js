@@ -17,6 +17,11 @@ const MENU_THEME = {
     // The rim width as a fraction of the control's own stroke width.
     rimRatio: 0.6,
 }
+// Font size of the menu's DOM texts (sign-in status, replays panel) in CSS px: a fraction of the screen like the
+// canvas texts.
+function menuDomFontSize() {
+    return Math.min(WIDTH * 0.016, HEIGHT * 0.035) / devicePixelRatio
+}
 class Text {
     // Family of a Text without its own; the menu switches it while it draws (menu/menu.js Menu.draw).
     static defaultFamily = 'Times New Roman'

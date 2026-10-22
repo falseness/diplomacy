@@ -518,7 +518,8 @@ class ReplayControls {
         const bar = this.container = document.createElement('div')
         bar.id = 'replay-controls'
         bar.style.cssText = 'position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;flex-wrap:wrap;' +
-            'gap:6px;align-items:center;padding:6px;background:rgba(255,255,255,0.85);font:14px Arial'
+            `gap:${HEIGHT * 0.007 / devicePixelRatio}px;align-items:center;padding:${HEIGHT * 0.007 / devicePixelRatio}px;` +
+            `background:rgba(255,255,255,0.85);font:${menuDomFontSize() * 0.875}px Arial`
         bar.addEventListener('click', event => event.stopPropagation())
         const button = (id, text, handler) => {
             const element = document.createElement('button')
@@ -665,7 +666,7 @@ class ReplayTree {
         div.id = 'replay-open'
         div.style.cssText = `position:absolute;left:${WIDTH / 2 / devicePixelRatio}px;` +
             `top:${HEIGHT * 0.4 / devicePixelRatio}px;transform:translateX(-50%);z-index:1;` +
-            'display:flex;flex-direction:column;gap:8px;font:16px Arial'
+            `display:flex;flex-direction:column;gap:${HEIGHT * 0.009 / devicePixelRatio}px;font:${menuDomFontSize()}px Arial`
         div.addEventListener('click', event => event.stopPropagation())
         const file = document.createElement('input')
         file.type = 'file'
@@ -683,12 +684,12 @@ class ReplayTree {
         row.append(url, open)
         const finished = document.createElement('div')
         finished.id = 'replay-finished'
-        finished.style.cssText = 'display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow-y:auto'
+        finished.style.cssText = `display:flex;flex-direction:column;gap:${HEIGHT * 0.0045 / devicePixelRatio}px;max-height:40vh;overflow-y:auto`
         const heading = document.createElement('b')
         heading.textContent = 'My finished games'
         this.finishedList = document.createElement('div')
         this.finishedList.id = 'replay-finished-list'
-        this.finishedList.style.cssText = 'display:flex;flex-direction:column;gap:4px'
+        this.finishedList.style.cssText = `display:flex;flex-direction:column;gap:${HEIGHT * 0.0045 / devicePixelRatio}px`
         finished.append(heading, this.finishedList)
         div.append(file, row, finished)
         document.body.append(div)
