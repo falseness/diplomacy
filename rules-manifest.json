@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "12a088ab6da4d7f53698e0a5551e875eee291aa72bf9460e744110da70840abe",
+  "rulesVersion": "a74d7243729d6d012ae39e11b68ca332e13139bbefdef27ee913918c5f4e9f71",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -145,8 +145,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "646526774e6e63e4cd370665a7ba40a138152ea8d75aefdda63b9248b902dd8f",
-      "bytes": 4200
+      "sha256": "df64cf15f58230de5960ac99e1a7882d7451b014051abd2dc31678cb7465e01d",
+      "bytes": 4391
     },
     {
       "path": "interface/entityinterface.js",
@@ -165,8 +165,8 @@
     },
     {
       "path": "interface/statisticsinterface.js",
-      "sha256": "f698b9357c2bac0bcbd831332b1ff742b6514b2954d69a1f2ade179842cdd8bc",
-      "bytes": 10377
+      "sha256": "889c601b08589aea2fa2cb451f1af9daafbb36b18742802d8f5c7257f1bf3c4a",
+      "bytes": 15883
     },
     {
       "path": "interface/nextTurnPause.js",
@@ -275,8 +275,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "b5e02d33531297b21d021a7386aab17936df28e95c627072886594e51daa3fa5",
-      "bytes": 24633
+      "sha256": "5ac9be231fe1f9687c16252c7c081678231bb9edd5fd01739d26343ab56bf0c1",
+      "bytes": 24731
     },
     {
       "path": "options/onlineHubRows.js",
@@ -295,8 +295,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "b147bd4c4188848d5f6dd670c2051c7710458d8d32bba85c7076626689fd554d",
-      "bytes": 128656
+      "sha256": "862ef47d292b7045ac029f577e879e0e1eb4b9313fadaaaaa7eed31df7ccfe4d",
+      "bytes": 128810
     },
     {
       "path": "sprites/hexagon.js",

@@ -87,8 +87,10 @@ function drawInterface() {
     nextTurnPauseInterface.draw(interfaceCtx)
     if (gameSettings.tutorial)
         tutorialResultInterface.draw(interfaceCtx)
+    const onlineResult = typeof onlineResultInterface !== 'undefined' ? onlineResultInterface : null
+    onlineResult?.update()
     const outcome = gameSettings.coop && gameSettings.coop.result || hiddenGameEndText()
-    if (outcome) {
+    if (outcome && !onlineResult?.visible) {
         const labels = {victory: 'Victory — humans win', defeat: 'Defeat — demons win', draw: 'Draw — all sides eliminated'}
         interfaceCtx.save()
         interfaceCtx.font = Math.min(28 * window.devicePixelRatio, WIDTH / 24) + 'px Arial'
@@ -99,6 +101,7 @@ function drawInterface() {
         interfaceCtx.fillText(labels[outcome] || outcome, WIDTH / 2, HEIGHT * 0.37)
         interfaceCtx.restore()
     }
+    onlineResult?.draw(interfaceCtx)
     errorWindow.draw(interfaceCtx)
     drawDebugFps(interfaceCtx)
     interfaceCtx.restore()

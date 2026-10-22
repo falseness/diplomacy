@@ -1700,19 +1700,21 @@ class OnlineHubTree {
         const ack = await onlineSession.replayGame(gameID)
         this.replaying = false
         if (this.menu.selectedTree !== this) return
-        let error = ack.ok ? null : ack.error
-        if (!error) {
-            try {
-                new ReplayViewer(ack, this).open()
-                this.feed?.stop()
-            } catch (e) {
-                error = e.message
-            }
+        if (ack.ok) this.showReplay(ack)
+        else this.showReplayError(ack.error)
+    }
+    // A game:replay recording in the replay viewer, exit back to the hub (also the game-over screen's 'Watch replay').
+    showReplay(recording) {
+        try {
+            new ReplayViewer(recording, this).open()
+            this.feed?.stop()
+        } catch (e) {
+            this.showReplayError(e.message)
         }
-        if (error) {
-            this.notice = 'could not open the replay: ' + error
-            this.setAccount(this.account)
-        }
+    }
+    showReplayError(error) {
+        this.notice = 'could not open the replay: ' + error
+        this.setAccount(this.account)
     }
     // Row texts in list order, for tests and diagnostics: the plain-text summaries of the structured rows.
     get rowTexts() {

@@ -616,6 +616,18 @@ let onlinePauseStatus = 'running'
 // SetupServerCommunicationLogic): available() while this seat still plays, send() resolves the game:forfeit ack.
 let onlineForfeit = null
 const FORFEIT_MESSAGE = 'You forfeited. The AI plays your side. You can watch the replay when the game ends.'
+// The open online game is over on the last board the server sent (set by SetupServerCommunicationLogic): the game-over
+// screen (interface/statisticsinterface.js OnlineResultInterface) waits for it, not for a local end not yet committed.
+let onlineGameOver = null
+
+// A server board (packed, as received) is terminal: a partial board's status, a co-op result, or fewer than two
+// competitive players with a town or a unit (stored boards drop killed entities; server/lobby/gameReplay.js isTerminalBoard).
+function onlineBoardFinished(board) {
+    if (!board?.players) return false
+    if (board.hiddenInfo) return !!board.status?.ended
+    if (board.gameSettings?.coop) return board.gameSettings.coop.result != null
+    return board.players.slice(1).filter(player => player?.towns?.length || player?.units?.length).length < 2
+}
 
 // The loaded online board's game is over: the server's status on a partial board, else the co-op result or fewer
 // than two players left (server/lobby/gameReplay.js isTerminalBoard).
@@ -657,6 +669,7 @@ function closeOnlineGameSocket() {
     onlineSocket = null
     onlineGameFreeze = null
     onlineForfeit = null
+    onlineGameOver = null
     onlineActionStream()?.stop()
     onlinePauseStatus = 'running'
     document.getElementById('online-pause')?.remove()
@@ -896,6 +909,7 @@ function SetupServerCommunicationLogic(gameID) {
             return ack
         },
     }
+    onlineGameOver = () => socket === onlineSocket && !kicked && onlineBoardFinished(acceptedBoard)
     // Freezes the board and shows a panel with the message; returns the panel's button factory.
     const showPanel = (label, message) => {
         freeze()
@@ -1099,6 +1113,16 @@ function SetupServerCommunicationLogic(gameID) {
     onlineLobby = {mode: gameSettings.coop ? 'coop' : 'competitive', occupiedHumans: null}
     on(socket, 'game:terrain', message => {
         if (socket === onlineSocket && message?.gameID === gameID) cacheOnlineTerrain(message)
+    })
+    // A seat that waits gets no board when the game ends without another turn for it (a competitive seat eliminated
+    // by the last turn). On lobby:listChanged (a new round or a result) a waiting seat asks game:myFinished; once this
+    // game is listed there, game:open again, whose board shows the end.
+    on(socket, 'lobby:listChanged', async () => {
+        if (failed || kicked || !acceptedBoard || onlineBoardFinished(acceptedBoard) || !gameEvent.waitingMode) return
+        const ack = await onlineSession.myFinishedGames()
+        if (socket !== onlineSocket || failed || onlineBoardFinished(acceptedBoard) || !ack.ok ||
+            !ack.games.some(game => game.gameID === gameID)) return
+        requestCurrentGame()
     })
     on(socket, 'lobbyStatus', status => {
         if (socket !== onlineSocket) return

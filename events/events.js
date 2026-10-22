@@ -472,6 +472,7 @@ class Events {
     }
     click(pos, realPos) {
         let clickToButton = (gameSettings.tutorial && tutorialResultInterface.click(pos)) ||
+            (typeof onlineResultInterface !== 'undefined' && onlineResultInterface.click(pos)) ||
             this.interface.nextTurnPause.click(pos) ||
             undoButton.click(pos) || backToMenuButton.click(pos) || 
             this.interface.statistics.click(pos) || this.interface.entity.click(pos) || 

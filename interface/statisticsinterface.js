@@ -253,3 +253,113 @@ class StatisticsInterface {
         this.noButton.draw(ctx)
     }
 }
+// The game-over screen of a finished online game (options/onlineLogic.js onlineGameFinished): the result over the dimmed
+// board, 'Watch replay' (game:replay of this game in the replay viewer, menu/replay.js; leaving it returns to the online
+// hub) and 'Back to menu'. Shown once the last board the server sent is terminal (onlineGameOver): a winner's own
+// finishing turn first reaches the server.
+class OnlineResultInterface {
+    constructor() {
+        this.visible = false
+        this.gameID = null
+        this.loading = false
+        this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, 0, 'rgba(0, 0, 0, 0.4)')
+        this.panel = new Rect(WIDTH * 0.25, HEIGHT * 0.2, WIDTH * 0.5, HEIGHT * 0.6,
+            [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.0035 * WIDTH, 'white')
+        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, Math.min(0.06 * WIDTH, 0.09 * HEIGHT), 'Game over', 'black')
+        this.subtitle = new Text(WIDTH / 2, HEIGHT * 0.375, Math.min(0.025 * WIDTH, 0.045 * HEIGHT), '', 'black')
+        this.status = new Text(WIDTH / 2, HEIGHT * 0.755, Math.min(0.02 * WIDTH, 0.04 * HEIGHT), '', 'red')
+        this.replayButton = OnlineResultInterface.getButton(HEIGHT * 0.43, 'Watch replay', this.watchReplay, this)
+        this.backButton = OnlineResultInterface.getButton(HEIGHT * 0.58, 'Back to menu', menuBack, this)
+    }
+    static getButton(y, text, clickFunc, callThis) {
+        const width = WIDTH * 0.36
+        const rect = Menu.getButtonRect({x: WIDTH / 2 - width / 2, y: y})
+        rect.width = width
+        return new MenuButton(rect, Menu.getButtonText(text), clickFunc, undefined, true, callThis)
+    }
+    // This seat's result: co-op the shared result, else Victory for the last player standing, Defeat for a lost seat.
+    resultTexts() {
+        if (gameSettings.coop) {
+            const labels = {victory: ['Victory', 'humans win'], defeat: ['Defeat', 'demons win'], draw: ['Draw', 'all sides eliminated']}
+            return labels[players[0].coopResult] || ['Game over', '']
+        }
+        const alive = players.map((player, index) => index).filter(index => index > 0 && !players[index].isLost)
+        const winner = hiddenInfo ? hiddenGameStatus().winner : alive.length === 1 ? alive[0] : null
+        const wins = winner !== null && winner !== undefined ? `Player ${winner} wins` : ''
+        if (winner === whooseTurn) return ['Victory', wins]
+        if (players[whooseTurn]?.isLost) return ['Defeat', wins]
+        return ['Game over', wins]
+    }
+    // Called every frame of an online game: shows the screen once the server's board of the open game is terminal.
+    update() {
+        const gameID = typeof onlineSession === 'undefined' ? null : onlineSession.openGameID
+        if (!gameSettings.isOnline || gameSettings.tutorial || gameID === null || !onlineSocket || replayViewer) {
+            if (this.visible) this.hide()
+            return
+        }
+        if (this.visible && this.gameID === gameID) return
+        if (!grid || typeof onlineGameOver !== 'function' || !onlineGameOver()) return
+        this.show(gameID)
+    }
+    show(gameID) {
+        this.gameID = gameID
+        this.loading = false
+        const [title, subtitle] = this.resultTexts()
+        this.title.text = title
+        this.title.color = title === 'Victory' ? 'green' : title === 'Defeat' ? 'red' : 'black'
+        this.subtitle.text = subtitle
+        this.status.text = ''
+        this.replayButton.canClick = true
+        this.visible = true
+        statisticsInterface.hide()
+        nextTurnPauseInterface.visible = false
+    }
+    hide() {
+        this.visible = false
+        this.loading = false
+    }
+    // game:replay; a finishing turn the server still commits answers NOT_FINISHED for a moment, so that is retried.
+    async watchReplay() {
+        if (this.loading) return
+        const gameID = this.gameID
+        this.loading = true
+        this.status.text = 'loading…'
+        let ack = await onlineSession.replayGame(gameID)
+        for (let retry = 0; !ack.ok && ack.error === 'NOT_FINISHED' && retry < 10; ++retry) {
+            await new Promise(resolve => setTimeout(resolve, 500))
+            if (!this.visible || this.gameID !== gameID) return
+            ack = await onlineSession.replayGame(gameID)
+        }
+        if (!this.visible || this.gameID !== gameID) return
+        this.loading = false
+        if (!ack.ok) {
+            this.status.text = 'could not open the replay: ' + onlineErrorCode(ack.error)
+            return
+        }
+        this.hide()
+        menuBack()
+        menu.onlineHub.showReplay(ack)
+    }
+    // The (i) statistics panel opens over this screen (its own clicks, outside it closes it); outside the panel only
+    // the (i) and menu buttons take a click, the board none.
+    click(pos) {
+        if (!this.visible || statisticsInterface.visible)
+            return false
+        if (!this.panel.isInside(pos))
+            iButton.click(pos) || backToMenuButton.click(pos)
+        else if (!this.loading)
+            this.replayButton.click(pos) || this.backButton.click(pos)
+        return true
+    }
+    draw(ctx) {
+        if (!this.visible || statisticsInterface.visible)
+            return
+        this.background.draw(ctx)
+        this.panel.draw(ctx)
+        this.title.draw(ctx)
+        if (this.subtitle.text) this.subtitle.draw(ctx)
+        this.replayButton.draw(ctx)
+        this.backButton.draw(ctx)
+        if (this.status.text) this.status.draw(ctx)
+    }
+}
