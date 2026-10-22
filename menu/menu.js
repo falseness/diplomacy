@@ -204,6 +204,84 @@ function menuArrowSize() {
     return {width: side, height: side}
 }
 
+// The game setup screens' unit (create-game concept, assets/concepts/create-game): min(1% of the width, 1.6% of the
+// height), 14.4 px at 1440x900 where the screens are the concept exactly; the concept's 100 x 62.5 unit block fits
+// every landscape screen and shrinks as a whole on short ones.
+function setupUnit() {
+    return Math.min(0.01 * WIDTH, 0.016 * HEIGHT)
+}
+
+// The concept's measurements in setup units (create-game-concept.html, desktop rules); text heights are the line boxes
+// of its Alegreya Sans fonts at 1440x900.
+const SETUP = {
+    padding: 1.4, gap: 1.2, logoHeight: 5.6, logoAspect: 756 / 163, titleGap: 0.2, titleHeight: 2.92,
+    panelWidth: 76, panelPadX: 1.8, panelPadY: 1.4, panelGap: 1, labelHeight: 1.74,
+    cardGap: 1.2, cardPadX: 1.2, cardPadY: 0.9, badge: 4.4, cardGapX: 1.1, check: 2.2,
+    cardNameTop: 2.153, cardNameHeight: 2.57, cardSubtitleTop: 2.708, cardSubtitleHeight: 1.458,
+    rowGap: 0.7, rowPadX: 1.1, rowPadY: 0.4, iconColumn: 3, icon: 2.2, rowGapX: 1, nameHeight: 2.145, hintHeight: 1.667,
+    arrow: 3, valueWidth: 17, stepperGap: 0.6, switchWidth: 6, switchHeight: 3.2, switchMargin: 3.8,
+    buttonHeight: 4.6, buttonGap: 2, primaryWidth: 17.6, backWidth: 10.5,
+    // Font sizes in units; never below the menu's smallest readable size (1.6% of HEIGHT).
+    fonts: {title: 2.4, label: 1.5, cardName: 2.2, cardSubtitle: 1.5, name: 1.95, hint: 1.4, value: 2.1, valueSub: 1.35,
+        switchLabel: 1.15, button: 2},
+}
+
+// The boxes of the setup screen with rowCount setting rows, in pixels for the current WIDTH x HEIGHT: the concept at
+// 1440x900 scaled by setupUnit() / 14.4 about the screen's centre. Logo and title on top, the panel centred between them
+// and the buttons (the 'MODE' and 'SETTINGS' labels, two mode cards, the rows), the primary and back buttons at the
+// bottom. Every row has the boxes of both controls (a stepper: arrows and value box; a switch); the name and hint end
+// before the stepper, so the controls form one right-aligned column.
+function setupLayout(rowCount) {
+    const s = SETUP, u = setupUnit(), left = WIDTH / 2 - 50 * u, top = HEIGHT / 2 - 31.25 * u
+    const box = (x, y, width, height) => ({x: left + x * u, y: top + y * u, width: width * u, height: height * u})
+    const fonts = {}
+    for (const [name, size] of Object.entries(s.fonts)) fonts[name] = Math.max(size * u, 0.016 * HEIGHT)
+    const logoWidth = s.logoHeight * s.logoAspect, logoX = 50 - logoWidth / 2, titleY = s.padding + s.logoHeight + s.titleGap
+    const buttonsY = 62.5 - s.padding - s.buttonHeight
+    const rowHeight = 2 * s.rowPadY + s.nameHeight + s.hintHeight, cardHeight = s.badge + 2 * s.cardPadY
+    const panelHeight = 2 * s.panelPadY + 2 * s.labelHeight + 3 * s.panelGap + cardHeight +
+        rowCount * rowHeight + Math.max(rowCount - 1, 0) * s.rowGap
+    const freeTop = titleY + s.titleHeight + s.gap, freeBottom = buttonsY - s.gap
+    const panelX = 50 - s.panelWidth / 2, panelY = (freeTop + freeBottom - panelHeight) / 2
+    const innerX = panelX + s.panelPadX, innerWidth = s.panelWidth - 2 * s.panelPadX
+    let y = panelY + s.panelPadY
+    const modeLabel = box(innerX, y, innerWidth, s.labelHeight)
+    y += s.labelHeight + s.panelGap
+    const cardWidth = (innerWidth - s.cardGap) / 2, cardCentre = y + cardHeight / 2
+    const modes = [0, 1].map(i => {
+        const x = innerX + i * (cardWidth + s.cardGap), checkX = x + cardWidth - s.cardPadX - s.check
+        const textX = x + s.cardPadX + s.badge + s.cardGapX, textWidth = checkX - s.cardGapX - textX
+        const nameY = cardCentre - s.cardNameTop
+        return {card: box(x, y, cardWidth, cardHeight), badge: box(x + s.cardPadX, y + s.cardPadY, s.badge, s.badge),
+            name: box(textX, nameY, textWidth, s.cardNameHeight),
+            subtitle: box(textX, nameY + s.cardSubtitleTop, textWidth, s.cardSubtitleHeight),
+            check: box(checkX, cardCentre - s.check / 2, s.check, s.check)}
+    })
+    y += cardHeight + s.panelGap
+    const settingsLabel = box(innerX, y, innerWidth, s.labelHeight)
+    y += s.labelHeight + s.panelGap
+    const right = innerX + innerWidth - s.rowPadX, stepperX = right - 2 * s.arrow - 2 * s.stepperGap - s.valueWidth
+    const textX = innerX + s.rowPadX + s.iconColumn + s.rowGapX, textWidth = stepperX - s.rowGapX - textX
+    const rows = []
+    for (let i = 0; i < rowCount; ++i, y += rowHeight + s.rowGap) {
+        const centre = y + rowHeight / 2
+        rows.push({row: box(innerX, y, innerWidth, rowHeight),
+            icon: box(innerX + s.rowPadX, centre - s.icon / 2, s.icon, s.icon),
+            name: box(textX, y + s.rowPadY, textWidth, s.nameHeight),
+            hint: box(textX, y + s.rowPadY + s.nameHeight, textWidth, s.hintHeight),
+            leftArrow: box(stepperX, centre - s.arrow / 2, s.arrow, s.arrow),
+            value: box(stepperX + s.arrow + s.stepperGap, y + s.rowPadY, s.valueWidth, rowHeight - 2 * s.rowPadY),
+            rightArrow: box(right - s.arrow, centre - s.arrow / 2, s.arrow, s.arrow),
+            switch: box(right - s.switchMargin - s.switchWidth, centre - s.switchHeight / 2, s.switchWidth, s.switchHeight)})
+    }
+    const buttonsX = 50 - (s.primaryWidth + s.buttonGap + s.backWidth) / 2
+    return {unit: u, fonts, block: box(0, 0, 100, 62.5),
+        logo: box(logoX, s.padding, logoWidth, s.logoHeight), title: box(logoX, titleY, logoWidth, s.titleHeight),
+        panel: box(panelX, panelY, s.panelWidth, panelHeight), modeLabel, settingsLabel, modes, rows,
+        primary: box(buttonsX, buttonsY, s.primaryWidth, s.buttonHeight),
+        back: box(buttonsX + s.primaryWidth + s.buttonGap, buttonsY, s.backWidth, s.buttonHeight)}
+}
+
 function CreateMapSlider(firstY, intervalY, fontSize, slidePosX) {
     let minimumValueMap = function() { return 0 }
     let maximumValueMap = function() { return dictionaryLength(maps) - 1 }
