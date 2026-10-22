@@ -1,6 +1,8 @@
 class Text {
+    // Family of a Text without its own; the menu switches it while it draws (menu/menu.js Menu.draw).
+    static defaultFamily = 'Times New Roman'
     constructor(x, y, fontSize = Math.round(basis.r * 9.8625 * 0.05), text = 'error', color = 'white',
-        textAlign = 'center', textBaseline = 'middle', ratio = 1.2) {
+        textAlign = 'center', textBaseline = 'middle', ratio = 1.2, fontFamily = undefined, fontWeight = undefined) {
         this.pos = {
             x: x,
             y: y
@@ -13,6 +15,11 @@ class Text {
         this.textBaseline = textBaseline
         this.selected = false
         this.ratio = ratio
+        this.fontFamily = fontFamily
+        this.fontWeight = fontWeight
+    }
+    font(fontSize = this.fontSize) {
+        return (this.fontWeight ? this.fontWeight + ' ' : '') + fontSize + 'px ' + (this.fontFamily ?? Text.defaultFamily)
     }
     get right() {
         if (this.textAlign == 'left')
@@ -33,7 +40,7 @@ class Text {
         let lines = this.text.split('\n')
         
         let tmpCtx = mainCtx
-        tmpCtx.font = this.fontSize + 'px Times New Roman'
+        tmpCtx.font = this.font()
         for (let i = 0; i < lines.length; ++i) {
             if (tmpCtx.measureText(lines[i]).width > max)
                 max = tmpCtx.measureText(lines[i]).width
@@ -41,8 +48,9 @@ class Text {
         return max
     }
     get height() {
-        mainCtx.font = this.fontSize + 'px Times New Roman'
-        return parseInt(mainCtx.font.match(/\d+/), 10)
+        mainCtx.font = this.font()
+        // The size, not a leading weight
+        return parseInt(mainCtx.font.match(/(\d+)(\.\d+)?px/)?.[1], 10)
     }
     get x() {
         return this.pos.x
@@ -66,7 +74,7 @@ class Text {
         let fontSize = this.fontSize
         if (this.selected)
             fontSize *= this.ratio
-        ctx.font = fontSize + 'px Times New Roman'
+        ctx.font = this.font(fontSize)
         ctx.fillStyle = this.color
         ctx.textAlign = this.textAlign
         ctx.textBaseline = this.textBaseline

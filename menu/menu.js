@@ -953,11 +953,11 @@ class HubList {
             // Long rows shrink to fit the list width.
             let fontSize = (header ? 0.55 : 0.45) * rowHeight
             const maxWidth = width - 4 * pad
-            ctx.font = `${header ? 'bold ' : ''}${fontSize}px Times New Roman`
+            ctx.font = `${header ? 'bold ' : ''}${fontSize}px ${Text.defaultFamily}`
             const textWidth = ctx.measureText(row.text).width
             if (textWidth > maxWidth) {
                 fontSize *= maxWidth / textWidth
-                ctx.font = `${header ? 'bold ' : ''}${fontSize}px Times New Roman`
+                ctx.font = `${header ? 'bold ' : ''}${fontSize}px ${Text.defaultFamily}`
             }
             ctx.fillStyle = row.kind === 'empty' ? '#747474' : 'black'
             ctx.textAlign = 'left'
@@ -1220,6 +1220,189 @@ class HotseatChoiceTree extends Tree {
         }
     }
 }
+// The menu look on every menu screen, whatever the visuals settings: a night sky, the logo with a light halo and a
+// gold beta tag. Sizes and positions are fractions of WIDTH and HEIGHT.
+class MenuSky {
+    canvas = null
+    width = 0
+    height = 0
+    // How many times the sky was painted: once per viewport size, not per frame.
+    rasterizations = 0
+    // Covers every pixel with opaque colour, so the menu needs no clearRect.
+    draw(ctx) {
+        if (this.width !== WIDTH || this.height !== HEIGHT) this.rasterize()
+        if (this.canvas) ctx.drawImage(this.canvas, 0, 0)
+        else {
+            ctx.fillStyle = '#18264a'
+            ctx.fillRect(0, 0, WIDTH, HEIGHT)
+        }
+    }
+    rasterize() {
+        this.width = WIDTH
+        this.height = HEIGHT
+        ++this.rasterizations
+        const canvas = document.createElement('canvas')
+        canvas.width = WIDTH
+        canvas.height = HEIGHT
+        try {
+            this.paint(canvas.getContext('2d', {alpha: false}))
+            this.canvas = canvas
+        } catch (error) {
+            // Stub canvases of headless runtimes: the flat sky colour.
+            this.canvas = null
+        }
+    }
+    paint(ctx) {
+        const sky = ctx.createLinearGradient(0, 0, 0, HEIGHT)
+        sky.addColorStop(0, '#0f1a33')
+        sky.addColorStop(0.55, '#18264a')
+        sky.addColorStop(1, '#22223e')
+        ctx.fillStyle = sky
+        ctx.fillRect(0, 0, WIDTH, HEIGHT)
+        // Warm orange nebula at the top left, faint violet at the top right.
+        this.glow(ctx, WIDTH * 0.12, HEIGHT * 0.08, Math.max(WIDTH, HEIGHT) * 0.38, '214, 128, 64', 0.42)
+        this.glow(ctx, WIDTH * 0.9, HEIGHT * 0.12, Math.max(WIDTH, HEIGHT) * 0.3, '128, 96, 200', 0.2)
+        // Sparse small stars from a fixed seed, so every frame and every run has the same sky.
+        let seed = 1190
+        const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296
+        const radius = Math.min(WIDTH, HEIGHT) * 0.0018
+        for (let i = 0; i < 70; ++i) {
+            const x = random() * WIDTH, y = random() * HEIGHT, size = radius * (0.6 + random() * 0.9)
+            ctx.fillStyle = `rgba(235, 232, 255, ${(0.25 + random() * 0.5).toFixed(2)})`
+            ctx.beginPath()
+            ctx.arc(x, y, size, 0, Math.PI * 2)
+            ctx.fill()
+        }
+    }
+    glow(ctx, x, y, radius, rgb, alpha) {
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, radius)
+        glow.addColorStop(0, `rgba(${rgb}, ${alpha})`)
+        glow.addColorStop(0.45, `rgba(${rgb}, ${alpha * 0.4})`)
+        glow.addColorStop(1, `rgba(${rgb}, 0)`)
+        ctx.fillStyle = glow
+        ctx.fillRect(0, 0, WIDTH, HEIGHT)
+    }
+}
+
+// The logo with a thin light halo, so its dark bow-shaped "c" stays readable on the sky. Halo and logo are painted
+// once per logo size, after the logo image has loaded; each frame copies that raster.
+class HaloLogo {
+    halo = null
+    haloKey = ''
+    constructor(image, pos, w, h) {
+        this.image = image
+        this.pos = pos
+        this.w = w
+        this.h = h
+    }
+    get margin() {
+        return this.h * 0.12
+    }
+    get bounds() {
+        const margin = this.margin
+        return {x: this.pos.x - this.w / 2 - margin, y: this.pos.y - this.h / 2 - margin,
+            width: this.w + margin * 2, height: this.h + margin * 2}
+    }
+    draw(ctx) {
+        const image = assets[this.image]
+        const key = `${this.w}x${this.h}`
+        if (this.haloKey !== key && image?.complete && image.naturalWidth) {
+            this.haloKey = key
+            this.halo = this.paintHalo(image)
+        }
+        // Unscaled at whole pixels: a plain copy each frame.
+        if (this.halo) {
+            const bounds = this.bounds
+            ctx.drawImage(this.halo, Math.round(bounds.x), Math.round(bounds.y))
+        } else drawImage(ctx, this.image, this.pos, this.w, this.h)
+    }
+    paintHalo(image) {
+        try {
+            const margin = this.margin, width = Math.ceil(this.w + margin * 2), height = Math.ceil(this.h + margin * 2)
+            // The logo's shape in the halo colour.
+            const shape = document.createElement('canvas')
+            shape.width = width
+            shape.height = height
+            const shapeCtx = shape.getContext('2d')
+            shapeCtx.drawImage(image, margin, margin, this.w, this.h)
+            shapeCtx.globalCompositeOperation = 'source-in'
+            shapeCtx.fillStyle = '#f3ead8'
+            shapeCtx.fillRect(0, 0, width, height)
+            const halo = document.createElement('canvas')
+            halo.width = width
+            halo.height = height
+            const ctx = halo.getContext('2d')
+            // A soft glow, then a thin ring: the shape stamped around a small circle.
+            ctx.shadowColor = 'rgba(243, 234, 216, 0.55)'
+            ctx.shadowBlur = this.h * 0.1
+            ctx.drawImage(shape, 0, 0)
+            ctx.shadowColor = 'transparent'
+            ctx.shadowBlur = 0
+            const ring = this.h * 0.022
+            for (let i = 0; i < 16; ++i) {
+                const angle = Math.PI * 2 * i / 16
+                ctx.drawImage(shape, Math.cos(angle) * ring, Math.sin(angle) * ring)
+            }
+            ctx.drawImage(image, margin, margin, this.w, this.h)
+            return halo
+        } catch (error) {
+            // Stub canvases of headless runtimes: the logo without a halo.
+            return null
+        }
+    }
+}
+
+// A small gold "beta" tag at the top right, clear of the logo.
+class BetaTag {
+    constructor() {
+        this.text = new Text(WIDTH * 0.935, HEIGHT * 0.065, Math.min(WIDTH * 0.012, HEIGHT * 0.026), 'beta', '#3a2410',
+            'center', 'middle', 1, MENU_TITLE_FONT_FAMILY, 800)
+        this.angle = 0.05
+    }
+    // The tag's size around its centre, before the rotation (measured in its font once the font has loaded).
+    get size() {
+        const fontSize = this.text.fontSize
+        this.measure ??= document.createElement('canvas').getContext('2d')
+        this.measure.font = this.text.font()
+        return {width: this.measure.measureText(this.text.text).width + fontSize * 1.3, height: fontSize * 1.6}
+    }
+    // Axis-aligned box of the rotated tag.
+    get bounds() {
+        const {width, height} = this.size
+        const cos = Math.abs(Math.cos(this.angle)), sin = Math.abs(Math.sin(this.angle))
+        const boxWidth = width * cos + height * sin, boxHeight = width * sin + height * cos
+        return {x: this.text.x - boxWidth / 2, y: this.text.y - boxHeight / 2, width: boxWidth, height: boxHeight}
+    }
+    draw(ctx) {
+        const {width, height} = this.size
+        ctx.save()
+        ctx.translate(this.text.x, this.text.y)
+        ctx.rotate(this.angle)
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'
+        ctx.shadowBlur = height * 0.3
+        ctx.shadowOffsetY = height * 0.08
+        ctx.fillStyle = '#f2b45a'
+        const left = -width / 2, top = -height / 2, radius = height * 0.2
+        ctx.beginPath()
+        ctx.moveTo(left + radius, top)
+        ctx.arcTo(-left, top, -left, -top, radius)
+        ctx.arcTo(-left, -top, left, -top, radius)
+        ctx.arcTo(left, -top, left, top, radius)
+        ctx.arcTo(left, top, -left, top, radius)
+        ctx.closePath()
+        ctx.fill()
+        ctx.restore()
+        ctx.save()
+        ctx.translate(this.text.x, this.text.y)
+        ctx.rotate(this.angle)
+        const {x, y} = this.text.pos
+        this.text.pos = {x: 0, y: height * 0.04}
+        this.text.draw(ctx)
+        this.text.pos = {x, y}
+        ctx.restore()
+    }
+}
+
 class Menu {
     #visible
     static getButtonRect(pos) {
@@ -1280,10 +1463,9 @@ class Menu {
             copy
             back
         */
-        this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, undefined, '#d0d0d0')
-        this.logo = new JustImage('logo', { x: WIDTH / 2, y: HEIGHT * 0.15 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
-        this.alphaText = new Text(WIDTH * 0.73, WIDTH * 0.55 * 0.33 - HEIGHT * 0.05,
-            0.02 * WIDTH, 'beta', '#747474')
+        this.sky = new MenuSky()
+        this.logo = new HaloLogo('logo', { x: WIDTH / 2, y: HEIGHT * 0.15 }, WIDTH * 0.5, WIDTH * 0.55 * 0.2)
+        this.betaTag = new BetaTag()
 
         let startPos = {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: HEIGHT * 0.3}
 
@@ -1454,19 +1636,20 @@ class Menu {
     draw(ctx) {
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.clearRect(0, 0, WIDTH, HEIGHT)
-        this.background.draw(ctx)
-        // Co-op uses the header space for its size selector.
-        if (!this.selectedTree.isCoop) this.logo.draw(ctx)
-        this.alphaText.draw(ctx)
-        this.selectedTree.draw(ctx)
-        /*this.playButton1.draw(ctx)
-        this.playButton2.draw(ctx)
-        this.playButton3.draw(ctx)
-        this.loadButton.draw(ctx)*/
-
-        errorWindow.draw(ctx)
-        ctx.restore()
+        // Menu texts draw in the menu font; the game's texts keep Text's own default.
+        const gameFamily = Text.defaultFamily
+        Text.defaultFamily = MENU_FONT_FAMILY
+        try {
+            this.sky.draw(ctx)
+            // Co-op uses the header space for its size selector.
+            if (!this.selectedTree.isCoop) this.logo.draw(ctx)
+            this.betaTag.draw(ctx)
+            this.selectedTree.draw(ctx)
+            errorWindow.draw(ctx)
+        } finally {
+            Text.defaultFamily = gameFamily
+            ctx.restore()
+        }
     }
 }
 

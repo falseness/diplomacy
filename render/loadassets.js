@@ -153,7 +153,37 @@ function cacheAllImages() {
 }
 let cachedImages = {}
 
+// Menu fonts (assets/fonts, OFL.txt): the menu draws its texts in these families (menu/menu.js), the game keeps
+// Times New Roman. Each family lists Times New Roman after it, so a font that fails to load falls back to it.
+const MENU_FONT_FAMILY = "'Alegreya Sans', 'Times New Roman'"
+const MENU_TITLE_FONT_FAMILY = "'Alegreya Sans SC', 'Times New Roman'"
+const MENU_FONT_FILES = [
+    {family: 'Alegreya Sans', weight: 400, file: 'AlegreyaSans-400.woff2'},
+    {family: 'Alegreya Sans', weight: 500, file: 'AlegreyaSans-500.woff2'},
+    {family: 'Alegreya Sans SC', weight: 700, file: 'AlegreyaSansSC-700.woff2'},
+    {family: 'Alegreya Sans SC', weight: 800, file: 'AlegreyaSansSC-800.woff2'},
+]
+// The load result per font file; null until loadMenuFonts settles.
+let menuFontResults = null
+let menuFontsReady = null
+// Starts loading every menu font; the promise settles when all have loaded or failed, or after timeoutMs.
+// Without FontFace (headless contexts) there is nothing to load and the promise is null.
+function loadMenuFonts(timeoutMs = 4000) {
+    if (typeof FontFace !== 'function' || typeof document === 'undefined' || !document.fonts)
+        return null
+    const loads = MENU_FONT_FILES.map(({family, weight, file}) =>
+        new FontFace(family, `url(assets/fonts/${file})`, {weight: String(weight)}).load().then(face => {
+            document.fonts.add(face)
+            return {family, weight, file, status: 'loaded'}
+        }, error => ({family, weight, file, status: 'failed', error: String(error?.message ?? error)})))
+    const timeout = new Promise(resolve => setTimeout(() => resolve(null), timeoutMs))
+    return Promise.race([Promise.all(loads), timeout]).then(results => {
+        menuFontResults = results ?? MENU_FONT_FILES.map(({family, weight, file}) => ({family, weight, file, status: 'timeout'}))
+        return menuFontResults
+    })
+}
 function loadAssets() {
+    menuFontsReady = loadMenuFonts()
     assets.logo.src = "assets/logo.svg"
     assets.checkMark.src = "assets/checkMark.svg"
 
@@ -199,7 +229,9 @@ function waitForImagesLoad() {
             mainCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
             mainCanvas.addEventListener('contextrestored', restoreImageCaches)
         }
-        menu.start()
+        // The first menu frame waits for the menu fonts (they load in parallel with the images).
+        if (menuFontsReady) menuFontsReady.then(() => menu.start())
+        else menu.start()
         return 
     }
     //console.log(imagesCountLoaded)
