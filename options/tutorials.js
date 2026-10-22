@@ -202,11 +202,11 @@ function createTutorial3Map() {
 
 function createTutorial5Map() {
     // Town defense against demons (co-op tutorial map). Red's town (1,4) owns the whole strip x <= 4 as
-    // suburbs (a rich town: it pays for the army it builds after the first turns). Walls face the demons:
-    // the column x = 4 with two gates (4,3) and (4,5) the KOHb sortie through, (3,1)/(3,2) and (2,7)/(2,8) on
-    // the flanks and (2,4) right in front of the town. Red starts with 2 KOHb, the town's noob, a barrack and
-    // 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. 6 ember archers, a bulwark and two
-    // Bombards stand 3-6 hexes from the walls; two ranged portals, a heavy one and a siege one keep sending more.
+    // suburbs (a rich town: it pays for the army it builds after the first turns). Walls face the demons only
+    // on the column x = 4, with two gates (4,3) and (4,5) the KOHb sortie through. Red starts with 2 KOHb, the
+    // town's noob, a barrack and 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. 8 ember
+    // archers, a bulwark and two Bombards stand 3-6 hexes from the walls; two ranged portals, a heavy one and a
+    // siege one keep sending more.
     // The Bombards (building damage only) breach the walls within a few rounds, so merely waiting behind them
     // loses, and so does attacking at once. Training KOHb every round while holding until round 4, striking the
     // Bombards first in the sortie and bringing catapults against the portals wins. Mountains on the flanks of
@@ -242,8 +242,7 @@ function createTutorial5Map() {
                 suburbs: [{town: {x: 1, y: 4}, cells: suburbs, expansionCells: redSide}],
                 barracks: [{x: 1, y: 3, town: {x: 1, y: 4}}],
                 walls: [
-                    {x: 4, y: 1}, {x: 4, y: 2}, {x: 4, y: 4}, {x: 4, y: 6}, {x: 4, y: 7},
-                    {x: 3, y: 1}, {x: 3, y: 2}, {x: 2, y: 4}, {x: 2, y: 7}, {x: 2, y: 8}
+                    {x: 4, y: 1}, {x: 4, y: 2}, {x: 4, y: 4}, {x: 4, y: 6}, {x: 4, y: 7}
                 ],
                 units: [
                     {x: 1, y: 1, type: KOHb},
@@ -268,6 +267,8 @@ function createTutorial5Map() {
                 {x: 10, y: 8, type: EmberArcher},
                 {x: 10, y: 6, type: EmberArcher},
                 {x: 8, y: 5, type: EmberArcher},
+                {x: 9, y: 1, type: EmberArcher},
+                {x: 8, y: 7, type: EmberArcher},
                 {x: 8, y: 2, type: Bulwark},
                 {x: 8, y: 3, type: Bombard},
                 {x: 9, y: 6, type: Bombard}
