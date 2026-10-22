@@ -128,11 +128,11 @@ function createTutorial2Map() {
 }
 
 function createTutorial3Map() {
-    // The three adjacent archer towers cover the approach and protect one another.
-    // The center tower replaces a wall and uses the existing reserve archer: forces,
-    // gold and economy are unchanged. Red's army starts in one column x = 9, symmetric
-    // about the open row 4, four hexes from the towers: catapults break the towers
-    // while the army holds, then advance through the breach to capture the town.
+    // The three adjacent archer towers cover the approach and protect one another; blue
+    // holds them with three archers and a normchel behind them (no ember archers). Red's
+    // army starts in one column x = 9, four hexes from the towers: the upper four units on
+    // rows 0-3, the lower four on rows 4-7, row 8 empty. Catapults break the towers while
+    // the army holds, then advance through the breach to capture the town.
     // The map is 11 wide; lakes shelter the rear corners, mountain shoulders frame
     // the field, and bushes mark the flanks without blocking the central siege/withdrawal routes.
     let wallLine = []
@@ -163,10 +163,10 @@ function createTutorial3Map() {
                     {x: 9, y: 1, type: Normchel},
                     {x: 9, y: 2, type: KOHb},
                     {x: 9, y: 3, type: Catapult},
-                    {x: 9, y: 5, type: Catapult},
-                    {x: 9, y: 6, type: KOHb},
-                    {x: 9, y: 7, type: Normchel},
-                    {x: 9, y: 8, type: Archer}
+                    {x: 9, y: 4, type: Catapult},
+                    {x: 9, y: 5, type: KOHb},
+                    {x: 9, y: 6, type: Normchel},
+                    {x: 9, y: 7, type: Archer}
                 ]
             },
             {
@@ -185,11 +185,7 @@ function createTutorial3Map() {
                     {x: 5, y: 3, type: Archer},
                     {x: 5, y: 5, type: Archer},
                     {x: 4, y: 3, type: Normchel},
-                    {x: 5, y: 4, type: Archer},
-                    {x: 4, y: 2, type: EmberArcher},
-                    {x: 4, y: 4, type: EmberArcher},
-                    {x: 4, y: 6, type: EmberArcher},
-                    {x: 3, y: 4, type: EmberArcher}
+                    {x: 5, y: 4, type: Archer}
                 ]
             }
         ],
