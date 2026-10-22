@@ -8,6 +8,10 @@ function menuWheel(event) {
         return
     menu.wheel(getEventPos(event), event.deltaY, event.deltaX)
 }
+// Hover feedback on the main screen's banners and icon buttons.
+function menuMouseMove(event) {
+    menu.mouseMove(getEventPos(event))
+}
 function menuKeyDown(event) {
     menu.keydown(event)
 }
@@ -1403,6 +1407,472 @@ class BetaTag {
     }
 }
 
+// The main screen's faction banners (TASK-1191): a gold rod across the upper middle, three cloth banners hanging from
+// it and round icon buttons below them. Every size is a fraction of the banner width, which Menu.layoutMain derives
+// from WIDTH and HEIGHT; the layout scales by the smaller of the width and height budgets.
+function menuTime() {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now()
+}
+// Ray casting: whether point lies inside the polygon [{x, y}, ...].
+function pointInPolygon(point, polygon) {
+    let inside = false
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const a = polygon[i], b = polygon[j]
+        if ((a.y > point.y) !== (b.y > point.y) &&
+            point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) inside = !inside
+    }
+    return inside
+}
+function tracePolygon(ctx, polygon) {
+    ctx.beginPath()
+    ctx.moveTo(polygon[0].x, polygon[0].y)
+    for (let i = 1; i < polygon.length; ++i) ctx.lineTo(polygon[i].x, polygon[i].y)
+    ctx.closePath()
+}
+function shadeColor(hex, amount) {
+    const value = parseInt(hex.slice(1), 16)
+    const channel = shift => {
+        const c = (value >> shift) & 255
+        return Math.round(amount < 0 ? c * (1 + amount) : c + (255 - c) * amount)
+    }
+    return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`
+}
+function roundedRectPath(ctx, x, y, width, height, radius) {
+    ctx.beginPath()
+    ctx.moveTo(x + radius, y)
+    ctx.arcTo(x + width, y, x + width, y + height, radius)
+    ctx.arcTo(x + width, y + height, x, y + height, radius)
+    ctx.arcTo(x, y + height, x, y, radius)
+    ctx.arcTo(x, y, x + width, y, radius)
+    ctx.closePath()
+}
+// Draws text in one line if it fits maxWidth, else in two lines; returns the
+// box of what it drew.
+function drawFittedLines(ctx, text, x, y, fontSize, maxWidth, lineHeight) {
+    let lines = [text]
+    if (ctx.measureText(text).width > maxWidth && text.includes(' ')) {
+        // After a comma if there is one, else at the space nearest the middle.
+        const spaces = [...text.matchAll(/ /g)].map(match => match.index)
+        const middle = text.includes(', ') ? text.indexOf(', ') + 1 :
+            spaces.reduce((best, index) => Math.abs(index - text.length / 2) < Math.abs(best - text.length / 2) ? index : best)
+        lines = [text.slice(0, middle), text.slice(middle + 1)]
+    }
+    let width = 0
+    lines.forEach((line, index) => {
+        ctx.fillText(line, x, y + index * fontSize * lineHeight)
+        width = Math.max(width, ctx.measureText(line).width)
+    })
+    return {x: x - width / 2, y: y - fontSize * 0.5, width, height: fontSize * (1 + (lines.length - 1) * lineHeight), lines}
+}
+
+class MenuBannerRod {
+    constructor() {
+        this.left = this.right = this.y = this.thickness = this.knob = 0
+    }
+    get bounds() {
+        return {x: this.left - this.knob, y: this.y - this.knob, width: this.right - this.left + this.knob * 2, height: this.knob * 2}
+    }
+    draw(ctx) {
+        const bar = ctx.createLinearGradient(0, this.y - this.thickness / 2, 0, this.y + this.thickness / 2)
+        bar.addColorStop(0, '#f6dc98')
+        bar.addColorStop(0.5, '#c99a4a')
+        bar.addColorStop(1, '#8a6227')
+        ctx.fillStyle = bar
+        roundedRectPath(ctx, this.left, this.y - this.thickness / 2, this.right - this.left, this.thickness, this.thickness / 2)
+        ctx.fill()
+        for (const x of [this.left, this.right]) {
+            const knob = ctx.createRadialGradient(x - this.knob * 0.35, this.y - this.knob * 0.35, this.knob * 0.1, x, this.y, this.knob)
+            knob.addColorStop(0, '#fbe7b0')
+            knob.addColorStop(0.6, '#d3a656')
+            knob.addColorStop(1, '#8a6227')
+            ctx.fillStyle = knob
+            ctx.beginPath()
+            ctx.arc(x, this.y, this.knob, 0, Math.PI * 2)
+            ctx.fill()
+        }
+    }
+}
+
+// One cloth banner. text.text is the menu entry's label (the tests find entries by it); name is what it shows.
+// The click target is the swallowtail polygon, rect only its bounding box.
+class MenuBanner extends Button {
+    constructor(label, name, description, color, clickFunc, parameters, callThis, {featured = false, emblem = null} = {}) {
+        super(new Rect(0, 0, 0, 0), new Text(0, 0, 0, label), clickFunc, parameters, true, callThis)
+        this.name = name
+        this.description = description
+        this.baseColor = color
+        this.featured = featured
+        this.emblem = emblem
+        this.hovered = false
+        this.pressed = false
+        this.activeSince = 0
+        this.raster = null
+        this.rasterKey = ''
+        this.glow = null
+        this.boxes = {}
+    }
+    // Places the banner: top-left x, top y, width w, height h (to the swallowtail points).
+    place(x, y, w, h) {
+        this.rect = new Rect(x, y, w, h)
+        this.text.pos = this.rect.center
+        this.notch = w * 0.26
+        this.rasterKey = ''
+    }
+    get polygon() {
+        const {x, y, width: w, height: h} = this.rect
+        return [{x, y}, {x: x + w, y}, {x: x + w, y: y + h}, {x: x + w / 2, y: y + h - this.notch}, {x, y: y + h}]
+    }
+    isInside(point) {
+        return pointInPolygon(point, this.polygon)
+    }
+    get active() {
+        return this.hovered || this.pressed
+    }
+    setActive(hovered, pressed) {
+        const was = this.active
+        this.hovered = hovered
+        this.pressed = pressed
+        if (!was && this.active) this.activeSince = menuTime()
+    }
+    hover(pos) {
+        this.setActive(this.isInside(pos), this.pressed)
+    }
+    select(pos) {
+        this.setActive(this.hovered, this.isInside(pos))
+    }
+    removeSelect() {
+        this.setActive(this.hovered, false)
+    }
+    clearActive() {
+        this.setActive(false, false)
+    }
+    // A short damped swing about the rod after the pointer arrives.
+    get angle() {
+        if (!this.active) return 0
+        const t = (menuTime() - this.activeSince) / 1000
+        return 0.035 * Math.sin(t * Math.PI * 2 / 0.9) * Math.exp(-t / 0.7)
+    }
+    get margin() {
+        return this.rect.width * 0.25
+    }
+    draw(ctx) {
+        const {x, y, width: w} = this.rect
+        const key = `${x},${y},${w},${this.emblemReady()}`
+        if (this.rasterKey !== key) {
+            this.rasterKey = key
+            this.raster = this.rasterize()
+        }
+        ctx.save()
+        const pivotX = x + w / 2
+        ctx.translate(pivotX, y)
+        ctx.rotate(this.angle)
+        ctx.translate(-pivotX, -y)
+        if (this.featured && this.glow) {
+            // A slow soft gold pulse behind the Tutorial banner.
+            ctx.globalAlpha = 0.55 + 0.45 * Math.sin(menuTime() / 1000 * Math.PI * 2 / 2.8)
+            ctx.drawImage(this.glow, x - this.margin, y - this.margin)
+            ctx.globalAlpha = 1
+        }
+        if (this.raster) ctx.drawImage(this.raster, x - this.margin, y - this.margin)
+        else this.paint(ctx)
+        if (this.active) {
+            ctx.fillStyle = 'rgba(255, 246, 225, 0.12)'
+            tracePolygon(ctx, this.polygon)
+            ctx.fill()
+        }
+        ctx.restore()
+    }
+    emblemReady() {
+        return !this.emblem || !!(assets[this.emblem]?.complete && assets[this.emblem].naturalWidth)
+    }
+    canvasFor(paint) {
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.ceil(this.rect.width + this.margin * 2)
+        canvas.height = Math.ceil(this.rect.height + this.margin * 2)
+        const ctx = canvas.getContext('2d')
+        ctx.translate(this.margin - this.rect.x, this.margin - this.rect.y)
+        paint(ctx)
+        return canvas
+    }
+    rasterize() {
+        try {
+            if (this.featured) this.glow = this.canvasFor(ctx => {
+                ctx.shadowColor = 'rgba(246, 196, 96, 0.9)'
+                ctx.shadowBlur = this.rect.width * 0.16
+                ctx.fillStyle = 'rgba(246, 196, 96, 0.6)'
+                tracePolygon(ctx, this.polygon)
+                ctx.fill()
+            })
+            return this.canvasFor(ctx => this.paint(ctx))
+        } catch (error) {
+            // Stub canvases of headless runtimes draw the banner directly.
+            this.glow = null
+            return null
+        }
+    }
+    paint(ctx) {
+        const {x, y, width: w, height: h} = this.rect
+        const color = this.baseColor, polygon = this.polygon
+        // Cloth with vertical folds and a drop shadow.
+        ctx.save()
+        ctx.shadowColor = 'rgba(4, 8, 24, 0.55)'
+        ctx.shadowBlur = w * 0.09
+        ctx.shadowOffsetY = w * 0.035
+        const cloth = ctx.createLinearGradient(x, 0, x + w, 0)
+        cloth.addColorStop(0, shadeColor(color, -0.22))
+        cloth.addColorStop(0.16, color)
+        cloth.addColorStop(0.32, shadeColor(color, 0.12))
+        cloth.addColorStop(0.5, shadeColor(color, -0.08))
+        cloth.addColorStop(0.7, shadeColor(color, 0.1))
+        cloth.addColorStop(0.86, color)
+        cloth.addColorStop(1, shadeColor(color, -0.25))
+        ctx.fillStyle = cloth
+        tracePolygon(ctx, polygon)
+        ctx.fill()
+        ctx.restore()
+        // The cloth folded over the rod.
+        const fold = ctx.createLinearGradient(0, y, 0, y + w * 0.06)
+        fold.addColorStop(0, 'rgba(0, 0, 0, 0.35)')
+        fold.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        ctx.fillStyle = fold
+        ctx.fillRect(x, y, w, w * 0.06)
+        this.paintTrim(ctx)
+        this.paintEmblem(ctx)
+        this.paintTexts(ctx)
+    }
+    // A dashed light stitch inset along the sides and the swallowtail; the featured banner has a solid gold trim.
+    paintTrim(ctx) {
+        const {x, y, width: w, height: h} = this.rect
+        const inset = w * 0.045, slope = this.notch / (w / 2), lift = inset * Math.sqrt(1 + slope * slope)
+        const top = y + w * 0.05
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(x + inset, top)
+        ctx.lineTo(x + inset, y + h - slope * inset - lift)
+        ctx.lineTo(x + w / 2, y + h - this.notch - lift)
+        ctx.lineTo(x + w - inset, y + h - slope * inset - lift)
+        ctx.lineTo(x + w - inset, top)
+        if (this.featured) {
+            ctx.strokeStyle = '#e2b860'
+            ctx.lineWidth = w * 0.012
+        } else {
+            ctx.strokeStyle = 'rgba(255, 244, 224, 0.7)'
+            ctx.lineWidth = w * 0.006
+            ctx.setLineDash([w * 0.025, w * 0.02])
+        }
+        ctx.stroke()
+        ctx.restore()
+    }
+    get disc() {
+        const {x, y, width: w} = this.rect
+        return {x: x + w / 2, y: y + w * (this.featured ? 0.6 : 0.52), r: w * 0.33}
+    }
+    paintEmblem(ctx) {
+        const disc = this.disc
+        ctx.save()
+        ctx.fillStyle = shadeColor(this.baseColor, -0.3)
+        ctx.beginPath()
+        ctx.arc(disc.x, disc.y, disc.r * 1.07, 0, Math.PI * 2)
+        ctx.fill()
+        const ring = ctx.createLinearGradient(0, disc.y - disc.r, 0, disc.y + disc.r)
+        ring.addColorStop(0, '#f2d38c')
+        ring.addColorStop(1, '#b8873c')
+        ctx.fillStyle = ring
+        ctx.beginPath()
+        ctx.arc(disc.x, disc.y, disc.r, 0, Math.PI * 2)
+        ctx.fill()
+        const cream = ctx.createRadialGradient(disc.x, disc.y - disc.r * 0.3, disc.r * 0.1, disc.x, disc.y, disc.r * 0.92)
+        cream.addColorStop(0, '#f6eedb')
+        cream.addColorStop(1, '#dccbaa')
+        ctx.fillStyle = cream
+        ctx.beginPath()
+        ctx.arc(disc.x, disc.y, disc.r * 0.92, 0, Math.PI * 2)
+        ctx.fill()
+        if (this.emblem && this.emblemReady()) {
+            ctx.clip()
+            const size = disc.r * 1.75
+            drawImage(ctx, this.emblem, {x: disc.x, y: disc.y + disc.r * 0.08}, size, size)
+        }
+        ctx.restore()
+        this.boxes.disc = {x: disc.x - disc.r * 1.07, y: disc.y - disc.r * 1.07, width: disc.r * 2.14, height: disc.r * 2.14}
+    }
+    paintTexts(ctx) {
+        const {x, y, width: w} = this.rect
+        const inner = w * 0.82, cx = x + w / 2, disc = this.disc
+        ctx.save()
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+        ctx.shadowBlur = w * 0.02
+        ctx.shadowOffsetY = w * 0.008
+        // The name shrinks to fit the banner.
+        let nameSize = w * (this.featured ? 0.13 : 0.12)
+        ctx.font = `800 ${nameSize}px ${MENU_TITLE_FONT_FAMILY}`
+        const nameWidth = ctx.measureText(this.name).width
+        if (nameWidth > inner) {
+            nameSize *= inner / nameWidth
+            ctx.font = `800 ${nameSize}px ${MENU_TITLE_FONT_FAMILY}`
+        }
+        const nameY = disc.y + disc.r * 1.07 + w * 0.16
+        ctx.fillStyle = '#fff4e0'
+        ctx.fillText(this.name, cx, nameY)
+        const drawnName = Math.min(nameWidth, inner)
+        this.boxes.name = {x: cx - drawnName / 2, y: nameY - nameSize / 2, width: drawnName, height: nameSize}
+        const descriptionSize = w * 0.08
+        ctx.font = `500 ${descriptionSize}px ${MENU_FONT_FAMILY}`
+        if ('wordSpacing' in ctx) ctx.wordSpacing = `${descriptionSize * 0.12}px`
+        ctx.fillStyle = 'rgba(255, 244, 224, 0.88)'
+        const description = drawFittedLines(ctx, this.description, cx, nameY + nameSize * 0.6 + w * 0.08,
+            descriptionSize, inner, 1.3)
+        this.boxes.description = {x: description.x, y: description.y, width: description.width, height: description.height}
+        this.descriptionLines = description.lines
+        ctx.restore()
+        if (this.featured) this.paintTag(ctx)
+    }
+    // The gold "Start here" tag at the top of the featured banner.
+    paintTag(ctx) {
+        const {x, y, width: w} = this.rect
+        const size = w * 0.055
+        ctx.save()
+        ctx.font = `700 ${size}px ${MENU_TITLE_FONT_FAMILY}`
+        const width = ctx.measureText('Start here').width + size * 1.6, height = size * 1.75
+        const left = x + w / 2 - width / 2, top = y + w * 0.06
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'
+        ctx.shadowBlur = size * 0.5
+        ctx.shadowOffsetY = size * 0.12
+        const gold = ctx.createLinearGradient(0, top, 0, top + height)
+        gold.addColorStop(0, '#f8d58a')
+        gold.addColorStop(1, '#e0a84e')
+        ctx.fillStyle = gold
+        roundedRectPath(ctx, left, top, width, height, height * 0.22)
+        ctx.fill()
+        ctx.shadowColor = 'transparent'
+        ctx.fillStyle = '#3a2410'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('Start here', x + w / 2, top + height * 0.53)
+        ctx.restore()
+        this.boxes.tag = {x: left, y: top, width, height}
+    }
+}
+
+// A round dark-blue button with a gold ring, an icon and a caption to its right (Settings, Replays).
+class MenuIconButton extends Button {
+    constructor(label, caption, icon, clickFunc, parameters, callThis) {
+        super(new Rect(0, 0, 0, 0), new Text(0, 0, 0, label), clickFunc, parameters, true, callThis)
+        this.caption = caption
+        this.icon = icon
+        this.hovered = false
+        this.pressed = false
+        this.center = {x: 0, y: 0}
+        this.radius = 0
+    }
+    get captionSize() {
+        return this.radius * 0.72
+    }
+    // The caption's width, measured in the menu font.
+    captionWidth() {
+        try {
+            this.measure ??= document.createElement('canvas').getContext('2d')
+            this.measure.font = `500 ${this.captionSize}px ${MENU_FONT_FAMILY}`
+            const width = this.measure.measureText(this.caption).width
+            if (Number.isFinite(width) && width > 0) return width
+        } catch (error) {}
+        return this.captionSize * this.caption.length * 0.5
+    }
+    get groupWidth() {
+        return this.radius * 2.35 + this.captionWidth()
+    }
+    // Places the group (circle and caption) with its left edge at left and the circle centred on centerY.
+    place(left, centerY, radius) {
+        this.radius = radius
+        this.center = {x: left + radius, y: centerY}
+        this.rect = new Rect(left, centerY - radius, this.groupWidth, radius * 2)
+        this.text.pos = this.rect.center
+    }
+    get circleBounds() {
+        return {x: this.center.x - this.radius, y: this.center.y - this.radius, width: this.radius * 2, height: this.radius * 2}
+    }
+    hover(pos) {
+        this.hovered = this.isInside(pos)
+    }
+    select(pos) {
+        this.pressed = this.isInside(pos)
+    }
+    removeSelect() {
+        this.pressed = false
+    }
+    clearActive() {
+        this.hovered = this.pressed = false
+    }
+    draw(ctx) {
+        const {x, y} = this.center, active = this.hovered || this.pressed
+        const r = this.radius * (this.pressed ? 0.94 : 1)
+        ctx.save()
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'
+        ctx.shadowBlur = r * 0.35
+        ctx.shadowOffsetY = r * 0.08
+        ctx.fillStyle = active ? '#2b3d72' : '#1d2a55'
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.shadowColor = 'transparent'
+        ctx.strokeStyle = active ? '#f2cf7e' : '#d6a855'
+        ctx.lineWidth = r * 0.09
+        ctx.beginPath()
+        ctx.arc(x, y, r * 0.93, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.strokeStyle = ctx.fillStyle = active ? '#fbe6b4' : '#f0d9a6'
+        ctx.lineWidth = r * 0.07
+        if (this.icon === 'gear') this.drawGear(ctx, x, y, r * 0.4)
+        else this.drawPlay(ctx, x, y, r * 0.38)
+        ctx.font = `500 ${this.captionSize}px ${MENU_FONT_FAMILY}`
+        ctx.fillStyle = active ? '#ffffff' : '#e8e2d4'
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(this.caption, this.center.x + this.radius * 1.35, y)
+        ctx.restore()
+    }
+    drawGear(ctx, x, y, r) {
+        ctx.beginPath()
+        ctx.arc(x, y, r * 0.42, 0, Math.PI * 2)
+        ctx.stroke()
+        for (let i = 0; i < 8; ++i) {
+            const angle = Math.PI * 2 * i / 8, cos = Math.cos(angle), sin = Math.sin(angle)
+            ctx.beginPath()
+            ctx.moveTo(x + cos * r * 0.68, y + sin * r * 0.68)
+            ctx.lineTo(x + cos * r, y + sin * r)
+            ctx.stroke()
+        }
+    }
+    drawPlay(ctx, x, y, r) {
+        ctx.beginPath()
+        ctx.moveTo(x - r * 0.55, y - r * 0.8)
+        ctx.lineTo(x + r * 0.85, y)
+        ctx.lineTo(x - r * 0.55, y + r * 0.8)
+        ctx.closePath()
+        ctx.fill()
+    }
+}
+
+// The main screen: the rod, the banners hanging from it and the icon buttons.
+class MainTree extends Tree {
+    constructor(buttons, _menu) {
+        super(buttons, _menu)
+        this.rod = new MenuBannerRod()
+    }
+    hover(pos) {
+        for (const button of this.buttons) button.hover?.(pos)
+    }
+    leave() {
+        for (const button of this.buttons) button.clearActive?.()
+    }
+    draw(ctx) {
+        this.rod.draw(ctx)
+        super.draw(ctx)
+    }
+}
+
 class Menu {
     #visible
     static getButtonRect(pos) {
@@ -1424,6 +1894,43 @@ class Menu {
     updateMainButtons() {
         this.main.buttons = this.mainButtons.filter(button =>
             button.text.text !== 'replays' || otherSettings.showReplays)
+        this.layoutMain()
+    }
+    // Banner sizes in banner widths: side banners 1 x 1.94, Tutorial 1.16 x 2.18, gaps 0.2, the rod 0.24 past the
+    // outer banners. The banner width is the smaller of what the screen width and the height between the logo and
+    // the icon buttons allow.
+    layoutMain() {
+        const [hotseat, online, settings, tutorial, replays] = this.mainButtons
+        const iconRadius = Math.min(HEIGHT * 0.045, WIDTH * 0.03)
+        const iconY = HEIGHT * 0.965 - iconRadius
+        const logo = this.logo.bounds
+        const rodY = logo.y + logo.height + HEIGHT * 0.035
+        const bottom = iconY - iconRadius - HEIGHT * 0.035
+        const SIDE_HEIGHT = 1.94, TUTORIAL_WIDTH = 1.16, TUTORIAL_HEIGHT = 2.18, GAP = 0.2, OVERHANG = 0.24, KNOB = 0.05
+        const rowWidth = 2 + TUTORIAL_WIDTH + GAP * 2
+        const w = Math.min(WIDTH * 0.92 / (rowWidth + (OVERHANG + KNOB) * 2), (bottom - rodY) / TUTORIAL_HEIGHT)
+        const rod = this.main.rod
+        rod.thickness = w * 0.035
+        rod.knob = w * KNOB
+        rod.y = rodY
+        const top = rodY - rod.thickness / 2
+        let x = WIDTH / 2 - rowWidth * w / 2
+        rod.left = x - OVERHANG * w
+        hotseat.place(x, top, w, w * SIDE_HEIGHT)
+        x += w * (1 + GAP)
+        tutorial.place(x, top, w * TUTORIAL_WIDTH, w * TUTORIAL_HEIGHT)
+        x += w * (TUTORIAL_WIDTH + GAP)
+        online.place(x, top, w, w * SIDE_HEIGHT)
+        rod.right = x + w + OVERHANG * w
+        // Settings, and Replays next to it when listed, centred under the banners.
+        const icons = this.main.buttons.includes(replays) ? [settings, replays] : [settings]
+        const spacing = iconRadius * 1.2
+        const groups = icons.map(icon => { icon.radius = iconRadius; return icon.groupWidth })
+        let left = WIDTH / 2 - (groups.reduce((sum, width) => sum + width, 0) + spacing * (icons.length - 1)) / 2
+        icons.forEach((icon, index) => {
+            icon.place(left, iconY, iconRadius)
+            left += groups[index] + spacing
+        })
     }
     setTree(tree) {
         if (tree === this.main) this.updateMainButtons()
@@ -1497,26 +2004,21 @@ class Menu {
 
         this.hotseatChoice = new HotseatChoiceTree(this, startPos, slotsCount)
 
-        this.main = new Tree([
-            this.constructor.getButton(startPos, 'hot seat',
-                this.setTree, this.hotseatChoice, true, this),
-            this.constructor.getButton(startPos, 'play online',
-                this.openOnline, undefined, true, this),
+        // main.buttons keeps the order [hot seat, play online, settings, tutorial] (+ replays); on screen the banners
+        // read hot seat, tutorial (centre), play online, with the icon buttons below.
+        this.main = new MainTree([
+            new MenuBanner('hot seat', 'Hot seat', 'Competitive or co-op, one device', '#c22d26',
+                this.setTree, this.hotseatChoice, this),
+            new MenuBanner('play online', 'Play online', 'Create or join a lobby', '#3c78b0',
+                this.openOnline, undefined, this),
             // 'play AI' button hidden for now; startAI is still available.
-            // this.constructor.getButton(startPos, 'play AI',
-            //     startAI, 0),
-            this.constructor.getButton(startPos, 'settings',
-                this.setTree, this.settings, true, this),
-            this.constructor.getButton(startPos, 'tutorial',
-                this.setTree, this.tutorial, true, this),
+            new MenuIconButton('settings', 'Settings', 'gear', this.setTree, this.settings, this),
+            new MenuBanner('tutorial', 'Tutorial', 'Learn the rules by playing', '#2f8f52',
+                this.setTree, this.tutorial, this, {featured: true, emblem: 'noob'}),
         ], this)
 
-        // Main entries fit in the visible area on both desktop and mobile.
         this.mainButtons = this.main.buttons.concat([
-            this.constructor.getButton(startPos, 'replays', this.setTree, this.replays, true, this)])
-        this.mainButtons.forEach((button, index) => {
-            button.pos = {x: startPos.x, y: HEIGHT * (0.27 + index * 0.12)}
-        })
+            new MenuIconButton('replays', 'Replays', 'play', this.setTree, this.replays, this)])
         this.updateMainButtons()
         this.hotseatChoice.setParent(this.main, this)
         this.play.setParent(this.hotseatChoice, this)
@@ -1552,6 +2054,7 @@ class Menu {
             document.addEventListener('click', menuClick)
             document.addEventListener('wheel', menuWheel)
             document.addEventListener('keydown', menuKeyDown)
+            document.addEventListener('mousemove', menuMouseMove)
             if (mobilePhone) {
                 document.addEventListener('touchstart', menuTouchStart)
                 document.addEventListener('touchmove', menuTouchMove)
@@ -1561,6 +2064,7 @@ class Menu {
             document.removeEventListener('click', menuClick)
             document.removeEventListener('wheel', menuWheel)
             document.removeEventListener('keydown', menuKeyDown)
+            document.removeEventListener('mousemove', menuMouseMove)
             if (mobilePhone) {
                 document.removeEventListener('touchstart', menuTouchStart)
                 document.removeEventListener('touchmove', menuTouchMove)
@@ -1614,6 +2118,9 @@ class Menu {
     }
     wheel(pos, deltaY, deltaX) {
         this.selectedTree.wheel?.(pos, deltaY, deltaX)
+    }
+    mouseMove(pos) {
+        this.selectedTree.hover?.(pos)
     }
     keydown(event) {
         this.selectedTree.scrollKey?.(event.key)
