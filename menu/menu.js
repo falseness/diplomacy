@@ -904,9 +904,15 @@ function hubUnit() {
     return Math.min(0.01 * WIDTH, 0.023 * HEIGHT)
 }
 
-// A canvas font of the hub in the menu family, or in the small-caps title family.
+// The hub's fonts are drawn larger than their sizes in units by this factor: a font unit of min(1.2% of the width,
+// 2.3% of the height), so that the smallest font (1.5 units) is 12 px on a 667x375 screen; boxes keep the unit.
+function hubFontScale() {
+    return Math.min(0.012 * WIDTH, 0.023 * HEIGHT) / hubUnit()
+}
+
+// A canvas font of the hub in the menu family, or in the small-caps title family; size in hub units times hubUnit().
 function hubFont(size, weight = MENU_THEME.fontWeight, title = false) {
-    return `${weight} ${size}px ${title ? Text.titleFamily : Text.defaultFamily}`
+    return `${weight} ${size * hubFontScale()}px ${title ? Text.titleFamily : Text.defaultFamily}`
 }
 
 // Draws text at (x, y) on a middle baseline and returns its width.
@@ -1095,13 +1101,27 @@ function hubDrawDot(ctx, x, y, colour) {
     ctx.restore()
 }
 
+// The width hubDrawChips takes for every tag whole.
+function hubChipsWidth(ctx, tags) {
+    const u = hubUnit(), pad = 0.55 * u, iconSize = 1.35 * u, gap = 0.5 * u
+    ctx.font = hubFont(1.5 * u)
+    return tags.reduce((sum, tag) => sum + 2 * pad + (hubTagIcon(tag) ? iconSize + 0.3 * u : 0) + ctx.measureText(tag).width + gap,
+        0) - (tags.length ? gap : 0)
+}
+
+// The width of player names as hubDrawPlayers draws them (a dot before each), all shown.
+function hubPlayersWidth(ctx, names) {
+    const u = hubUnit(), dot = 1.15 * u, afterDot = 0.3 * u, gap = 0.6 * u
+    ctx.font = hubFont(1.5 * u)
+    return names.reduce((sum, name) => sum + dot + afterDot + ctx.measureText(name).width, 0) + gap * Math.max(0, names.length - 1)
+}
+
 // The players as colour dots each followed by its name, right-aligned at right on line y within maxWidth: as many as
 // fit, then "+N" for the others (a single long name ends with an ellipsis). Returns the width.
 function hubDrawPlayers(ctx, players, right, y, maxWidth, color) {
     const u = hubUnit(), font = hubFont(1.5 * u), dot = 1.15 * u, afterDot = 0.3 * u, gap = 0.6 * u
     ctx.font = font
-    const widthOf = names => names.reduce((sum, name) => sum + dot + afterDot + ctx.measureText(name).width, 0) +
-        gap * Math.max(0, names.length - 1)
+    const widthOf = names => hubPlayersWidth(ctx, names)
     const more = n => n ? '+' + n : ''
     const all = players.map(player => player.name)
     let shown = all.length
@@ -1189,7 +1209,7 @@ class HubButton extends MenuButton {
         Object.assign(this.rect, {x, y, width, height})
         const corner = Math.min(0.8 * hubUnit(), height / 2)
         this.rect.cornerRadius = [corner, corner, corner, corner]
-        this.text.fontSize = fontSize
+        this.text.fontSize = fontSize * hubFontScale()
         this.trimText()
     }
     draw(ctx) {
@@ -1322,6 +1342,11 @@ class HubPanel {
     }
     static isCard(row) {
         return row.kind !== 'header' && row.kind !== 'empty'
+    }
+    // A lobby card's gold Join button in its card rect r (the whole card joins; tests aim at the button).
+    static joinRect(r) {
+        const u = hubUnit(), right = r.x + r.width - 1.1 * u
+        return {x: right - 6.4 * u, y: r.y + r.height / 2 - 1.3 * u, width: 6.4 * u, height: 2.6 * u}
     }
     static cardHeight(row) {
         return row.yourTurn || row.kind === 'finished' ? HubPanel.TALL_CARD : HubPanel.CARD
@@ -1462,22 +1487,27 @@ class HubPanel {
         if (finished) ctx.globalAlpha = HUB_CARD.finishedAlpha
         hubDrawBadge(ctx, row.mode, r.x + pad + badge / 2, centerY, badge)
         const left = r.x + pad + badge + pad, inner = right - left
-        // The right block, then the title and chips in the room it leaves.
-        let blockWidth = 0
+        // The right block, then the title and the chips each in the room the block leaves on its own row: the title
+        // beside the upper lines (your turn, round, rounds and result, date, seats), the chips beside the bottom one
+        // (players, host).
+        let topWidth = 0, bottomWidth = 0
         const font = hubFont(1.5 * u), roundFont = hubFont(1.5 * u, 800, true)
         if (row.kind === 'lobby') {
-            const join = {x: right - 6.4 * u, y: centerY - 1.3 * u, width: 6.4 * u, height: 2.6 * u}
+            const join = HubPanel.joinRect(r)
             hubDrawGoldButton(ctx, join, 'Join')
             const end = join.x - pad
             ctx.font = font
             const host = hubEllipsis(ctx, 'host ' + row.host, 0.35 * inner)
-            const hostWidth = hubText(ctx, host, end, lines[1], font, HUB_CARD.dim, 'right')
-            const seatsWidth = hubDrawSeats(ctx, row, end, lines[0], theme.text)
-            blockWidth = right - end + Math.max(hostWidth, seatsWidth)
+            bottomWidth = right - end + hubText(ctx, host, end, lines[1], font, HUB_CARD.dim, 'right')
+            topWidth = right - end + hubDrawSeats(ctx, row, end, lines[0], theme.text)
         } else {
-            const maxWidth = 0.5 * inner
+            // The players share their row with the chips: every name when they all fit beside the first chip, else
+            // half of the row, or more when the chips leave it.
+            const allPlayers = hubPlayersWidth(ctx, row.players.map(player => player.name))
+            const maxWidth = allPlayers <= inner - pad - hubChipsWidth(ctx, row.tags.slice(0, 1)) ? allPlayers :
+                inner - pad - Math.min(hubChipsWidth(ctx, row.tags), 0.5 * inner)
             let line = 0
-            if (row.yourTurn) blockWidth = hubDrawLabelTag(ctx, 'Your turn', right, lines[line++], HUB_CARD.gold, HUB_CARD.darkText)
+            if (row.yourTurn) topWidth = hubDrawLabelTag(ctx, 'Your turn', right, lines[line++], HUB_CARD.gold, HUB_CARD.darkText)
             if (finished) {
                 ctx.globalAlpha = 1
                 const result = hubResultTag(row)
@@ -1489,15 +1519,14 @@ class HubPanel {
                 const rounds = row.rounds != null ? `${row.rounds} rounds` : ''
                 const roundsRight = right - tagWidth - (tagWidth ? 0.8 * u : 0)
                 const roundsWidth = rounds ? hubText(ctx, rounds, roundsRight, lines[0], roundFont, HUB_CARD.round, 'right') : 0
-                blockWidth = Math.max(right - roundsRight + roundsWidth, datedWidth)
+                topWidth = Math.max(right - roundsRight + roundsWidth, datedWidth)
                 line = 2
-            } else blockWidth = Math.max(blockWidth, hubText(ctx, 'Round ' + row.round, right, lines[line++], roundFont, HUB_CARD.round, 'right'))
-            blockWidth = Math.max(blockWidth, hubDrawPlayers(ctx, row.players, right, lines[line], maxWidth, HUB_CARD.dim))
+            } else topWidth = Math.max(topWidth, hubText(ctx, 'Round ' + row.round, right, lines[line++], roundFont, HUB_CARD.round, 'right'))
+            bottomWidth = hubDrawPlayers(ctx, row.players, right, lines[line], maxWidth, HUB_CARD.dim)
         }
-        const room = inner - blockWidth - pad
         const textTop = tall ? r.y + 0.33 * r.height : lines[0], textBottom = tall ? r.y + 0.7 * r.height : lines[1]
-        hubDrawTitle(ctx, row, left, textTop, room, theme.text)
-        hubDrawChips(ctx, row.tags, left, textBottom, room)
+        hubDrawTitle(ctx, row, left, textTop, inner - topWidth - pad, theme.text)
+        hubDrawChips(ctx, row.tags, left, textBottom, inner - bottomWidth - pad)
         ctx.restore()
     }
 }
@@ -1560,15 +1589,17 @@ class OnlineHubTree {
         this.notice = ''
         // 'Signed in as <nickname>' and the notice, for tests; drawn only while signing in (the chip and the notice line
         // draw them once signed in).
-        this.status = new Text(WIDTH / 2, HEIGHT / 2, 2 * hubUnit(), '', MENU_THEME.text)
+        this.status = new Text(WIDTH / 2, HEIGHT / 2, 2 * hubUnit() * hubFontScale(), '', MENU_THEME.text)
         this.list = new HubLists()
         this.list.onRow = row => {
             // lobby:join of my own lobby returns it, so both open the room.
             if (row.kind === 'lobby' || row.kind === 'myLobby') this.joinLobby(row.id)
             else if (row.kind === 'game') this.openGame(row.id)
+            else if (row.kind === 'finished') this.openReplay(row.id)
         }
         this.list.onRowsChanged = () => this.layout()
         this.joining = false
+        this.replaying = false
         const u = hubUnit()
         // The menu logo's shape, 6.5 units high.
         this.logo = new HaloLogo('logo', {x: WIDTH / 2, y: 4.45 * u}, 6.5 * u * 0.5 / 0.11, 6.5 * u)
@@ -1601,7 +1632,7 @@ class OnlineHubTree {
         let right = WIDTH - side
         if (this.menu.betaTag) {
             this.betaTag ??= new BetaTag()
-            this.betaTag.text.fontSize = 1.5 * u
+            this.betaTag.text.fontSize = 1.5 * u * hubFontScale()
             this.betaTag.text.x = WIDTH
             const width = this.betaTag.bounds.width
             this.betaTag.text.x = right - width / 2
@@ -1656,6 +1687,27 @@ class OnlineHubTree {
     openGame(gameID) {
         if (this.menu.selectedTree !== this || onlineSession.openGameID !== null) return
         openLobbyGame(gameID)
+    }
+    // game:replay of a finished game, then the replay viewer; exit comes back to the hub. Errors show on the notice line.
+    async openReplay(gameID) {
+        if (this.replaying) return
+        this.replaying = true
+        const ack = await onlineSession.replayGame(gameID)
+        this.replaying = false
+        if (this.menu.selectedTree !== this) return
+        let error = ack.ok ? null : ack.error
+        if (!error) {
+            try {
+                new ReplayViewer(ack, this).open()
+                this.feed?.stop()
+            } catch (e) {
+                error = e.message
+            }
+        }
+        if (error) {
+            this.notice = 'could not open the replay: ' + error
+            this.setAccount(this.account)
+        }
     }
     // Row texts in list order, for tests and diagnostics: the plain-text summaries of the structured rows.
     get rowTexts() {

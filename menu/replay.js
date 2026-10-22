@@ -584,9 +584,11 @@ class ReplayControls {
     }
 }
 
+// returnTree: the menu screen exit goes back to (the replays screen unless given, e.g. the online hub).
 class ReplayViewer {
-    constructor(source) {
+    constructor(source, returnTree = null) {
         this.session = new ReplaySession(source)
+        this.returnTree = returnTree
     }
     open() {
         this.savedMoveCamera = otherSettings.moveCameraToUndoTarget
@@ -624,9 +626,10 @@ class ReplayViewer {
         removeEvents()
         menu.visible = true
         menu.start()
-        // The replays screen stayed selected while the replay was shown: show its inputs again.
-        if (menu.selectedTree === menu.replays) menu.replays.enter()
-        else menu.setTree(menu.replays)
+        // The screen stayed selected while the replay was shown: enter it again (the replays inputs, the hub's feed).
+        const tree = this.returnTree ?? menu.replays
+        if (menu.selectedTree === tree) tree.enter()
+        else menu.setTree(tree)
     }
     drawOverlay(ctx) {
         const text = this.session.describe()
