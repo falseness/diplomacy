@@ -1355,19 +1355,18 @@ class GameManager {
 	    }
         this.updateScaleLimits()
     }
-    // Zoom limits from the screen and the whole board (TASK-1219): zooming out stops where the slab (top face
-    // and sides, the geometry fitCamera fits) fills CAMERA_LIMITS.fill of the screen on its tighter side (about
-    // 15% sky), but never below the readable hex size (CAMERA_FIT.readableRadius); zooming in stops at 1.
+    // Zoom limits from the screen and the whole board (TASK-1219, TASK-1281): zooming out stops where the slab (top
+    // face and sides, the geometry fitCamera fits) fills CAMERA_LIMITS.fill = 1/1.3 of the screen on its tighter side
+    // (about 30% sky), so the whole board can always be seen, however small its hexes get; zooming in stops at 1.
     // mapBorder.slab is the slab's box, which the pan limits keep centred on an axis where it is smaller than the screen.
-    static CAMERA_LIMITS = {fill: 0.85, max: 1}
+    static CAMERA_LIMITS = {fill: 1 / 1.3, max: 1}
     static updateScaleLimits() {
         const b = mapDepth.surfaceBounds, max = this.CAMERA_LIMITS.max
-        const readable = this.CAMERA_FIT.readableRadius * Math.max(WIDTH, HEIGHT) / basis.r
         mapBorder.slab = b && b.right > b.left ? {left: b.left, right: b.right, top: b.top, bottom: b.bottom + mapDepth.depth} : undefined
         const s = mapBorder.slab
         const fitAll = s ? Math.min(this.CAMERA_LIMITS.fill * WIDTH / (s.right - s.left),
-            this.CAMERA_LIMITS.fill * HEIGHT / (s.bottom - s.top)) : readable
-        mapBorder.scale = {min: Math.min(Math.max(fitAll, readable), max), max, fitAll, readable}
+            this.CAMERA_LIMITS.fill * HEIGHT / (s.bottom - s.top)) : max
+        mapBorder.scale = {min: Math.min(fitAll, max), max, fitAll}
     }
     // The game draws in WIDTH x HEIGHT canvas pixels fixed at load (index.html scales the canvas box to the
     // window), so after a resize or an orientation change the limits are recomputed for that screen and the
