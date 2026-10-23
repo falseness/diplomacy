@@ -120,9 +120,10 @@ function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-function createCanvasContext() {
+// canvas: the owning canvas (ctx.canvas, as in a browser: the atmospheric renderer watches it for context loss).
+function createCanvasContext(canvas = { width: 800, height: 600 }) {
   return new Proxy({
-    canvas: { width: 800, height: 600 },
+    canvas,
     measureText(text) {
       return { width: String(text).length * 8 };
     },
@@ -149,14 +150,16 @@ function createCanvasContext() {
 }
 
 function createCanvas() {
+  let context = null;
   return {
     width: 800,
     height: 600,
     clientWidth: 800,
     clientHeight: 600,
     style: {},
+    // One 2D context per canvas, as in a browser.
     getContext() {
-      return createCanvasContext();
+      return context || (context = createCanvasContext(this));
     },
     addEventListener() {},
     removeEventListener() {},
@@ -207,6 +210,9 @@ function createRuntimeContext(seed) {
     URLSearchParams,
     innerWidth: 800,
     innerHeight: 600,
+    // window listeners (the atmospheric renderer keeps the window size from resize events).
+    addEventListener() {},
+    removeEventListener() {},
     document: {
       createElement() { return createCanvas(); },
       getElementById() { return createCanvas(); },
