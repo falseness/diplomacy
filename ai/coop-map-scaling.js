@@ -32,6 +32,18 @@ function getCoopTutorialDemonType(category, round) {
     if (category === 'chaos') return round === COOP_TUTORIAL_CHAOS_ROUND ? COOP_TUTORIAL_PORTAL_TYPES.chaos : null
     return round > 0 && round % COOP_TUTORIAL_WAVE_INTERVAL === 0 ? COOP_TUTORIAL_PORTAL_TYPES[category] : null
 }
+
+// Tutorial counterpart of getCoopNextScheduledProduction (ai/wave-config.js) for portal previews: the first
+// round strictly after the completed round at which getCoopTutorialDemonType (the lookup spawning uses)
+// gives a type. Null once a chaos portal's single production is past.
+function getCoopTutorialNextProduction(category, completedRound) {
+    if (!Number.isSafeInteger(completedRound) || completedRound < 0) throw new RangeError('Invalid wave round')
+    if (category === 'chaos' && completedRound >= COOP_TUTORIAL_CHAOS_ROUND) return null
+    for (let round = completedRound + 1; ; round++) {
+        const type = getCoopTutorialDemonType(category, round)
+        if (type) return {round, type, roundsRemaining: round - completedRound}
+    }
+}
 const COOP_PORTALS_PER_HUMAN = Object.freeze({melee: 3, ranged: 3, siege: 1, heavy: 1, cavalry: 2, chaos: 1, mage: 3})
 
 function baselineRadius(initialHumanCount, size) {
@@ -83,5 +95,6 @@ function getCoopMapScalingFromMetadata(coop) {
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {getCoopMapScaling, getCoopMapScalingFromMetadata, COOP_PORTAL_CATEGORY_ORDER, COOP_EXTRA_HEAVY_PORTALS,
-        COOP_HEX_RADIUS, baselineRadius, hexCounts, COOP_TUTORIAL_PORTAL_TYPES, getCoopTutorialDemonType}
+        COOP_HEX_RADIUS, baselineRadius, hexCounts, COOP_TUTORIAL_PORTAL_TYPES, getCoopTutorialDemonType,
+        getCoopTutorialNextProduction}
 }

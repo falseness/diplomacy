@@ -55,12 +55,16 @@ class DemonPortal extends Building {
     // (ai/wave-config.js). It depends only on category and completed rounds, so
     // a blocked portal shows its next attempt and never a queued backlog. A
     // committed wave (typedWaves.lastRound) counts as completed before gameRound
-    // advances. Null for destroyed portals.
+    // advances. Hand-made tutorial maps (coop.tutorial) spawn from their fixed
+    // table (generateTutorialCoopWave), so they preview from it too
+    // (ai/coop-map-scaling.js). Null for destroyed portals.
     get nextProduction() {
         const coop = gameSettings.coop
         if (this.killed || !coop)
             return null
         const completed = Math.max(gameRound, coop.typedWaves ? coop.typedWaves.lastRound : 0)
+        if (coop.tutorial)
+            return getCoopTutorialNextProduction(this.category, completed)
         return getCoopNextScheduledProduction(this.category, completed)
     }
     get info() {

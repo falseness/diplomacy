@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "0c4bc9ca1a640a1941a5ed67e26eea2a1f99e97157a0d1ec2ed1a8591fca2fb7",
+  "rulesVersion": "33f03897b18b7862ddd7e2e147b2d751f3487b85447a1eb8d842912a9cde87e4",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -100,8 +100,8 @@
     },
     {
       "path": "ai/coop-map-scaling.js",
-      "sha256": "4ab06a6359cd53a6c287404ad3e099a42ac700013b10009e4d046172b9109b1b",
-      "bytes": 5404
+      "sha256": "306660199776da7733868880a88437a747fcbb88b9f881ed025af1c7fa2353f4",
+      "bytes": 6202
     },
     {
       "path": "ai/coop-hex-geometry.js",
@@ -485,8 +485,8 @@
     },
     {
       "path": "sprites/entities/buildings/demonPortal.js",
-      "sha256": "5682f93c5b317c15e3c98a5899614928e512c172dc6ba289c63a7c3d995e4d1d",
-      "bytes": 5838
+      "sha256": "29a76f8571c89b1d6427f63441e619619d9e92e0da744fa67048db5beda76705",
+      "bytes": 6105
     },
     {
       "path": "ai/wave-placement.js",
