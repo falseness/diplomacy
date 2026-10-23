@@ -297,6 +297,21 @@ const atmosphericLighting = {
             ctx.closePath()
         }
     },
+    // Gradients made once per context and key (the same geometry and stops draw the same pixels), so a
+    // rebuild of the light map or the surface cache, or a frame, draws again with the gradients it made
+    // before instead of making new ones; at most GRADIENT_CACHE a context (the oldest dropped first).
+    GRADIENT_CACHE: 4096,
+    gradients: new WeakMap(),
+    gradient(ctx, key, make) {
+        let made = this.gradients.get(ctx)
+        if (!made) this.gradients.set(ctx, made = new Map())
+        let gradient = made.get(key)
+        if (!gradient) {
+            if (made.size >= this.GRADIENT_CACHE) made.delete(made.keys().next().value)
+            made.set(key, gradient = make())
+        }
+        return gradient
+    },
     // Light map resolution follows the zoom (or a fixed raster's scale), bounded in size.
     resolution(bounds, cap = canvas.scale) {
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
@@ -317,6 +332,7 @@ const atmosphericLighting = {
                 (this.mapScale === scale || zooming))
             return this.map
         this.build(this.collect(board), bounds, scale)
+        this.prewarmGlows(board)
         this.mapState = this.lightState(board).slice()
         this.mapKey = key
         this.mapScale = scale
@@ -501,15 +517,41 @@ const atmosphericLighting = {
     // An owned tile's glow on the stone round it, a radial gradient over reach (hex radii) with stops
     // [t, alpha]: its colour mixed towards white (mix), or for a cool spill part (map: multiply colour,
     // gain: lift colour) that colour at alpha times how much bluer than red the owner is.
-    territoryGlow(g, pos, {reach: radii, mix: amount, alpha = 1, stops = [[0, 1], [0.45, 0.55], [1, 0]], ...spill}, owner, part) {
+    // fill false only makes its gradient (prewarmGlows).
+    territoryGlow(g, pos, {reach: radii, mix: amount, alpha = 1, stops = [[0, 1], [0.45, 0.55], [1, 0]], ...spill}, owner, part, fill = true) {
         const strength = part ? alpha * Math.max(0, owner.b - owner.r) / 255 : alpha
         if (!strength) return
         const mix = c => Math.round(c + (255 - c) * amount), reach = radii * basis.r
         const color = part ? spill[part].join(',') : `${mix(owner.r)},${mix(owner.g)},${mix(owner.b)}`
-        const glow = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, reach)
-        for (const [t, a] of stops) glow.addColorStop(t, `rgba(${color},${+(a * strength).toFixed(4)})`)
-        g.fillStyle = glow
-        g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
+        const colors = stops.map(([t, a]) => t + ':' + `rgba(${color},${+(a * strength).toFixed(4)})`)
+        g.fillStyle = this.gradient(g, 'glow,' + pos.x + ',' + pos.y + ',' + reach + ',' + colors.join(';'), () => {
+            const glow = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, reach)
+            for (const [t, a] of stops) glow.addColorStop(t, `rgba(${color},${+(a * strength).toFixed(4)})`)
+            return glow
+        })
+        if (fill) g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
+    },
+    // The territory glow gradients of every cell of the board in every player's colour, made with the light
+    // map's first whole build (its canvases' contexts), so a capture later reuses its cell's gradient instead
+    // of making one; not for a board whose glows would pass half of GRADIENT_CACHE (they are made as drawn).
+    prewarmGlows(board) {
+        const owners = (typeof players !== 'undefined' ? players : []).slice(1).map(p => p?.color).filter(Boolean)
+        if (!this.map || !this.gain || !owners.length || !board.arr.length) return
+        const cool = this.TERRITORY.cool, key = basis.r + '|' + owners.map(o => o.r + ',' + o.g + ',' + o.b).join(';')
+        if (this.prewarmed && this.prewarmed.map === this.map && this.prewarmed.key === key) return
+        const parts = 1 + (cool?.map ? 1 : 0) + (cool?.gain ? 1 : 0)
+        if (board.arr.length * board.arr[0].length * owners.length * parts > this.GRADIENT_CACHE / 2) return
+        const g = this.map.getContext('2d'), k = this.gain.getContext('2d')
+        for (const row of board.arr) for (const cell of row) {
+            if (cell.building?.isMapEdge) continue
+            const pos = cell.hexagon.calcPos()
+            for (const owner of owners) {
+                this.territoryGlow(g, pos, this.TERRITORY, owner, undefined, false)
+                if (cool?.map) this.territoryGlow(g, pos, cool, owner, 'map', false)
+                if (cool?.gain) this.territoryGlow(k, pos, cool, owner, 'gain', false)
+            }
+        }
+        this.prewarmed = {map: this.map, key}
     },
     // The BEAMS gain over the board bounds, in a small raster built once per bounds size, with the
     // shade between the shafts (beamShade, its multiply colour) built alongside.
@@ -591,10 +633,12 @@ const atmosphericLighting = {
         const [dx, dy] = this.DIRECTION
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
         const k = (w * dx + h * dy) / (dx * dx + dy * dy)
-        const gradient = g.createLinearGradient(bounds.left, bounds.top, bounds.left + k * dx, bounds.top + k * dy)
-        for (const [t, ambient, gain] of this.KEY)
-            gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : gain})`)
-        return gradient
+        return this.gradient(g, 'key,' + part + ',' + bounds.left + ',' + bounds.top + ',' + w + ',' + h, () => {
+            const gradient = g.createLinearGradient(bounds.left, bounds.top, bounds.left + k * dx, bounds.top + k * dy)
+            for (const [t, ambient, gain] of this.KEY)
+                gradient.addColorStop(t, `rgb(${part === 'ambient' ? ambient : gain})`)
+            return gradient
+        })
     },
     // The strongest visible lamp within reach of a point (its own lamp excluded) and its strength.
     strongestLamp(center, sources, reachRadii) {
@@ -1031,11 +1075,13 @@ const atmosphericLighting = {
             ctx.save()
             ctx.translate(building.pos.x + image.width / 2, building.pos.y + base)
             ctx.scale(1, flat)
-            const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, rx)
-            shade.addColorStop(0, `rgba(${color},${alpha})`)
-            shade.addColorStop(0.5, `rgba(${color},${(alpha * 0.55).toFixed(3)})`)
-            shade.addColorStop(1, `rgba(${color},0)`)
-            ctx.fillStyle = shade
+            ctx.fillStyle = this.gradient(ctx, 'contact,' + rx, () => {
+                const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, rx)
+                shade.addColorStop(0, `rgba(${color},${alpha})`)
+                shade.addColorStop(0.5, `rgba(${color},${(alpha * 0.55).toFixed(3)})`)
+                shade.addColorStop(1, `rgba(${color},0)`)
+                return shade
+            })
             ctx.fillRect(-rx, -rx, 2 * rx, 2 * rx)
             ctx.restore()
         }

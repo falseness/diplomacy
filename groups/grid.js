@@ -91,6 +91,7 @@ class Grid extends SpritesGroup {
         // the last frame's calls and key, the canvas of its snapshot and the frames drawn.
         this.overlayComposite = undefined
         this.overlaySnapshotCanvas = undefined
+        this.overlaySnapshots = 0
         this.drawSerial = 0
         // Lit tiles and the rest snapshot above the surface cache's scale (drawLitView): the view,
         // the snapshot's canvas, spare tile canvases and what the frame drew.
@@ -666,7 +667,9 @@ class Grid extends SpritesGroup {
     }
     // ctx: the canvas the cache is drawn on. With atmospheric visuals, its axis-aligned transform
     // and no online observation, only the cells that can change its pixels are compared in full
-    // (checkRange), and the others' visibility; otherwise every cell.
+    // (checkRange), and the others' visibility; otherwise every cell. With atmospheric visuals the
+    // units are not compared: they are drawn after the light map (drawStillUnits), never into the
+    // cache (drawEntityBodies), so a unit moving or selected leaves its pixels as they are.
     surfaceStateMatches(ctx) {
         // The light state (atmosphericLighting.lightState) is compared cell by cell in the same pass.
         const lighting = this.surfaceCacheLighting
@@ -724,20 +727,19 @@ class Grid extends SpritesGroup {
                 // A nature building (kinds 3 and 4) still of the same name is still cached with the
                 // image of its name, holds no lamp (lightValue 1 plus the owner's light) and is an
                 // overlay cell or not by its class alone (hasBar), as captureSurfaceState found it.
-                const kind = inert[index]
-                if (kind !== 0 && !observing && cell.unit === inertUnits[index] && cell.building === inertBuildings[index] &&
+                // With atmospheric visuals another unit (or one now) on such a cell changes only
+                // whether it is an overlay cell.
+                const kind = inert[index], sameUnit = cell.unit === inertUnits[index]
+                if (kind !== 0 && !observing && (sameUnit || atmospheric) && cell.building === inertBuildings[index] &&
                         (kind < 3 || cell.building.name === natureNames[index])) {
                     const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
                         lighting[index + 1] !== (!atmospheric || !shown || kind === 2 || hexagon.unknown ? 0 :
-                            1 + atmosphericLighting.ownerLight(hexagon)))
+                            1 + atmosphericLighting.ownerLight(hexagon)) ||
+                        kind >= 3 && buildingImages[index] != cachedImages[natureNames[index]])
                         return false
-                    if (kind >= 3) {
-                        if (buildingImages[index] != cachedImages[natureNames[index]])
-                            return false
-                        if (kind === 4)
-                            overlayCells.push(index)
-                    }
+                    if (sameUnit ? kind === 4 : this.isOverlayCell(cell))
+                        overlayCells.push(index)
                     ++index
                     continue
                 }
@@ -746,7 +748,7 @@ class Grid extends SpritesGroup {
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
                         lighting[index + 1] !== (!atmospheric || !shown || hexagon.unknown ? 0 :
                             atmosphericLighting.shownLightValue(hexagon, cell.building)) ||
-                        buildings[index] !== undefined || units[index] !== undefined)
+                        buildings[index] !== undefined || !atmospheric && units[index] !== undefined)
                         return false
                     ++index
                     continue
@@ -755,13 +757,13 @@ class Grid extends SpritesGroup {
                     overlayCells.push(index)
                 const building = this.isCacheableBuilding(cell.building) ?
                     cell.building : undefined
-                const unit = this.getStillUnit(cell)
-                if (buildings[index] != building || units[index] != unit ||
+                const unit = atmospheric ? undefined : this.getStillUnit(cell)
+                if (buildings[index] != building || !atmospheric && units[index] != unit ||
                     states[index] != this.getSurfaceStateValue(i, j, observing) ||
                     lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, observing) ||
                     buildingImages[index] != (building ?
                         cachedImages[this.getEntityBodyImageName(building)] : undefined) ||
-                    unitImages[index] != (unit ?
+                    !atmospheric && unitImages[index] != (unit ?
                         cachedImages[this.getEntityBodyImageName(unit)] : undefined))
                     return false
                 ++index
@@ -893,16 +895,25 @@ class Grid extends SpritesGroup {
 
         const rasterWidth = Math.max(1, Math.ceil(geometry.cacheWidth * geometry.scale))
         const rasterHeight = Math.max(1, Math.ceil(geometry.cacheHeight * geometry.scale))
+        let fresh = false
         if (!canvas || canvas.width != rasterWidth || canvas.height != rasterHeight) {
             canvas = document.createElement('canvas')
             canvas.width = rasterWidth
             canvas.height = rasterHeight
+            fresh = true
         }
         const ctx = canvas.getContext('2d')
         if (!ctx)
             return null
-        return {canvas, ctx, geometry, left: mapDepth.bounds.left, top: mapDepth.bounds.top, stage: 0, lit: false,
+        const build = {canvas, ctx, geometry, left: mapDepth.bounds.left, top: mapDepth.bounds.top, stage: 0, lit: false,
             atmospheric: otherSettings.atmosphericVisuals, state: [], overlayCells: []}
+        // A cache canvas's first build draws the slab's edge (MapDepth.renderUnderlay's shadow) a little unlike every
+        // later build on it, which starts from the context state the first stage leaves (TASK-1280 tools/idem.js):
+        // with atmospheric visuals a new canvas runs the first stage once ahead (the build's first stage clears it),
+        // so its first build draws what every later build on it draws.
+        if (fresh && otherSettings.atmosphericVisuals)
+            SURFACE_CACHE_STAGES[0](this, build)
+        return build
     }
     finishSurfaceCacheBuild(build) {
         this.surfaceCacheLit = build.lit
@@ -965,8 +976,12 @@ class Grid extends SpritesGroup {
         ++this.surfaceCacheStages
         SURFACE_CACHE_STAGES[build.stage++](this, build)
         // Drawing the canvas has its recorded drawing rasterized now, in this task.
-        const flush = this.surfaceCacheFlush ||= document.createElement('canvas')
-        flush.width = flush.height = 1
+        // A 1x1 canvas made once (assigning its size again would reallocate and clear it every stage).
+        let flush = this.surfaceCacheFlush
+        if (!flush) {
+            flush = this.surfaceCacheFlush = document.createElement('canvas')
+            flush.width = flush.height = 1
+        }
         flush.getContext('2d').drawImage(build.canvas, 0, 0, 1, 1, 0, 0, 1, 1)
         if (build.stage < SURFACE_CACHE_STAGES.length)
             return
@@ -1179,11 +1194,11 @@ class Grid extends SpritesGroup {
     // bars, production previews) and everything drawn after them (moving units, texts, borders) instead of
     // drawing them (CanvasCallRecorder), and drawOverlayComposite then draws them. When the calls and what
     // lies under the overlays (overlayCompositeKey: transform, canvas, sky, slab shadow, surface cache) are
-    // those of an earlier frame whose pixels it copied (its snapshot), the frame makes the later calls and
-    // copies the snapshot's rectangles over the overlays' pixels: the very pixels the calls drew there,
-    // with one drawImage a rectangle in place of every unit's bars and bodies. Otherwise it makes every
-    // call in order (the direct draw), and a frame whose calls and key repeat the previous frame's queues
-    // the snapshot: a task after the frame copies the rectangles from the main canvas (no frame drew since).
+    // those of an earlier frame with a snapshot, the frame draws the snapshot's rectangles over the overlays'
+    // pixels (the very pixels the calls drew there, with one drawImage a rectangle in place of every unit's
+    // bars and bodies), then the calls after the overlays. Otherwise it makes every call in order (the direct
+    // draw), and a frame whose calls and key repeat the previous frame's queues the snapshot
+    // (queueOverlaySnapshot, drawn in a task after the frame).
     // Returns the recorder, or null when the frame draws its overlays directly.
     beginOverlayComposite(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
@@ -1206,8 +1221,10 @@ class Grid extends SpritesGroup {
         const last = this.overlayComposite
         if (last && recorder.repeats(last)) {
             if (last.snapshot) {
-                recorder.replay(ctx, false)
+                // The overlays' state and path calls, their snapshot, then everything drawn after them.
+                recorder.replay(ctx, false, 0, recorder.overlayEnd)
                 this.drawOverlaySnapshot(ctx, last)
+                recorder.replay(ctx, true, recorder.overlayEnd)
                 return
             }
             recorder.replay(ctx, true)
@@ -1216,54 +1233,72 @@ class Grid extends SpritesGroup {
         }
         recorder.replay(ctx, true)
         const rects = recorder.overlayRects(ctx.canvas.width, ctx.canvas.height)
-        this.overlayComposite = rects && {key: recorder.key, calls: recorder.calls, rects, snapshot: null, queued: false}
+        this.overlayComposite = rects && {key: recorder.key, calls: recorder.calls, rects, snapshot: null, queued: false,
+            overlayEnd: recorder.overlayEnd, state: recorder.state}
     }
-    // The snapshot is packed into a small canvas (rows of rectangles, tallest first), not one the size of the main canvas.
+    // The snapshot is drawn in a task after the frame, not copied from the main canvas (a readback of the frame):
+    // into a canvas of the main canvas's size, at the same pixels, what the frame drew in the rectangles before the
+    // overlays' end: the sky (drawMain), the slab shadow and the surface cache (draw, drawMapSurface) under the key's
+    // transform, clipped to the rectangles (images, drawn alike clipped), then the overlays' recorded calls in the
+    // state they began with, not clipped (a clip changes how Chromium antialiases a path's edges; every pixel they
+    // draw is in the rectangles). The same calls on the same pixel grid draw the same pixels (an opaque sky first, so
+    // nothing under it shows). Frames draw it before the calls that follow the overlays (drawOverlayComposite). It is
+    // not drawn if another frame's calls replaced the composite, or what lies under the overlays changed (the key).
     queueOverlaySnapshot(source, composite) {
         if (composite.queued)
             return
         composite.queued = true
-        const serial = this.drawSerial
         setTimeout(() => {
             composite.queued = false
-            // No frame drew since, and the canvas still has the frame's transform (a reset canvas would not).
-            const t = source.getContext('2d').getTransform(), key = composite.key
-            if (this.overlayComposite !== composite || this.drawSerial !== serial ||
-                    t.a !== key[0] || t.d !== key[1] || t.e !== key[2] || t.f !== key[3])
+            const t = source.getContext('2d').getTransform(), key = composite.key, b = this.surfaceCacheBounds
+            const now = [t.a, t.d, t.e, t.f, source.width, source.height, atmosphericBackground.raster, mapDepth.atmosphericShadow,
+                this.surfaceCache, this.surfaceCacheRevision, b?.left, b?.top, b?.width, b?.height]
+            if (this.overlayComposite !== composite || now.some((v, k) => v !== key[k]) || !atmosphericBackground.opaqueOver(source.getContext('2d')))
                 return
-            const rects = composite.rects.slice().sort((p, q) => q.h - p.h || q.w - p.w)
-            const rowWidth = Math.max(OVERLAY_SNAPSHOT_ROW, ...rects.map(r => r.w))
-            let x = 0, y = 0, row = 0, width = 0
-            for (const r of rects) {
-                if (x + r.w > rowWidth) {
-                    y += row
-                    x = row = 0
-                }
-                r.ax = x
-                r.ay = y
-                x += r.w
-                row = Math.max(row, r.h)
-                width = Math.max(width, x)
-            }
-            const height = y + row
-            if (!width || !height)
-                return
-            let canvas = this.overlaySnapshotCanvas
-            if (!canvas) {
-                canvas = this.overlaySnapshotCanvas = document.createElement('canvas')
-                // A lost backing store loses the snapshot.
-                if (typeof canvas.addEventListener === 'function')
-                    canvas.addEventListener('contextlost', () => { this.overlayComposite = undefined })
-            }
-            if (canvas.width !== width || canvas.height !== height) {
-                canvas.width = width
-                canvas.height = height
-            }
-            const g = canvas.getContext('2d')
-            for (const r of rects)
-                g.drawImage(source, r.x, r.y, r.w, r.h, r.ax, r.ay, r.w, r.h)
-            composite.snapshot = canvas
+            this.renderOverlaySnapshot(source, composite)
         })
+    }
+    renderOverlaySnapshot(source, composite) {
+        let canvas = this.overlaySnapshotCanvas
+        if (!canvas) {
+            canvas = this.overlaySnapshotCanvas = document.createElement('canvas')
+            // A lost backing store loses the snapshot.
+            if (typeof canvas.addEventListener === 'function')
+                canvas.addEventListener('contextlost', () => { this.overlayComposite = undefined })
+        }
+        if (canvas.width !== source.width || canvas.height !== source.height) {
+            canvas.width = source.width
+            canvas.height = source.height
+        }
+        const g = canvas.getContext('2d'), key = composite.key
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.beginPath()
+        for (const r of composite.rects)
+            g.rect(r.x, r.y, r.w, r.h)
+        g.clip()
+        // The clip's rectangles leave the current path; the drawing that follows starts without one.
+        g.beginPath()
+        applyCanvasState(g, composite.state)
+        // As atmosphericBackground.draw and MapDepth.drawAtmosphericShadow draw them (the key holds their rasters).
+        const sky = atmosphericBackground.raster, shadow = mapDepth.atmosphericShadow
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        if (sky.width === source.width) g.drawImage(sky, 0, 0)
+        else g.drawImage(sky, 0, 0, source.width, source.height)
+        g.setTransform(key[0], 0, 0, key[1], key[2], key[3])
+        if (shadow) g.drawImage(shadow.canvas, shadow.left, shadow.top, shadow.width, shadow.height)
+        // A board changed since the frame (its cache no longer matching) draws no snapshot.
+        const drawn = this.drawSurfaceCache(g)
+        g.restore()
+        if (!drawn)
+            return
+        g.save()
+        g.beginPath()
+        applyCanvasState(g, composite.state)
+        replayCanvasCalls(g, composite.calls, null, composite.overlayEnd, true, 0, composite.overlayEnd)
+        g.restore()
+        composite.snapshot = canvas
+        ++this.overlaySnapshots
     }
     // The snapshot's rectangles over the main canvas, pixel for pixel (opaque, so source-over copies them).
     drawOverlaySnapshot(ctx, composite) {
@@ -1274,7 +1309,7 @@ class Grid extends SpritesGroup {
         ctx.filter = 'none'
         ctx.shadowColor = 'rgba(0,0,0,0)'
         for (const r of composite.rects)
-            ctx.drawImage(composite.snapshot, r.ax, r.ay, r.w, r.h, r.x, r.y, r.w, r.h)
+            ctx.drawImage(composite.snapshot, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h)
         ctx.restore()
     }
     // Above the surface cache's scale, pan frames and frames with the camera at rest draw the
@@ -1879,6 +1914,10 @@ function clipToDeviceRects(ctx, rects) {
     ctx.clip()
 }
 
+// The state properties of a 2D context a recording takes from the real one (CanvasCallRecorder.begin).
+const CANVAS_STATE = ['globalAlpha', 'globalCompositeOperation', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineJoin',
+    'lineCap', 'miterLimit', 'lineDashOffset', 'font', 'textAlign', 'textBaseline', 'direction', 'filter',
+    'imageSmoothingEnabled', 'imageSmoothingQuality', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY']
 // Drawing calls of a 2D context; the others change its state or path, or only read it.
 const CANVAS_DRAW_CALLS = new Set(['fill', 'stroke', 'drawImage', 'fillRect', 'strokeRect', 'clearRect', 'fillText',
     'strokeText', 'putImageData', 'drawFocusIfNeeded'])
@@ -1933,16 +1972,16 @@ class CanvasCallRecorder {
         // Bounds of a drawing are unknown (a Path2D, text, a shadow or filter), or a call cannot be cached.
         this.unbounded = false
         this.uncacheable = false
-        // A width assignment resets the scratch context's state and path; then it takes ctx's.
+        // reset() (else a width assignment, which reallocates the canvas every frame) clears the scratch
+        // context's state and path; then it takes ctx's, also kept (state, applyCanvasState).
         const g = this.scratch
-        this.scratchCanvas.width = 1
-        const t = ctx.getTransform()
+        if (typeof g.reset === 'function') g.reset()
+        else this.scratchCanvas.width = 1
+        const t = ctx.getTransform(), state = this.state = {transform: t}
         g.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
-        for (const name of ['globalAlpha', 'globalCompositeOperation', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineJoin',
-            'lineCap', 'miterLimit', 'lineDashOffset', 'font', 'textAlign', 'textBaseline', 'direction', 'filter',
-            'imageSmoothingEnabled', 'imageSmoothingQuality', 'shadowBlur', 'shadowColor', 'shadowOffsetX', 'shadowOffsetY'])
-            if (name in ctx) g[name] = ctx[name]
-        if (typeof ctx.getLineDash === 'function') g.setLineDash(ctx.getLineDash())
+        for (const name of CANVAS_STATE)
+            if (name in ctx) g[name] = state[name] = ctx[name]
+        if (typeof ctx.getLineDash === 'function') g.setLineDash(state.lineDash = ctx.getLineDash())
         this.matrix = t
         this.matrixStale = false
         this.path = null
@@ -2109,26 +2148,39 @@ class CanvasCallRecorder {
         }
         return rects.map(r => ({x: r.x0, y: r.y0, w: r.x1 - r.x0, h: r.y1 - r.y0}))
     }
-    // Makes the recorded calls on ctx in order; overlays false leaves out the overlays' drawing calls.
-    replay(ctx, overlays) {
-        const calls = this.calls, n = calls.length, labels = this.labels
-        const run = (from, to) => {
-            for (let k = from; k < to; ++k) {
-                const c = calls[k]
-                if (c.set !== undefined) ctx[c.set] = c.value
-                else if (overlays || !c.draw || k >= this.overlayEnd) ctx[c.name](...c.args)
-            }
+    // Makes the recorded calls on ctx in order: those from the index from to the index to (all by default);
+    // overlays false leaves out the overlays' drawing calls.
+    replay(ctx, overlays, from = 0, to = this.calls.length) {
+        replayCanvasCalls(ctx, this.calls, this.labels, this.overlayEnd, overlays, from, to)
+    }
+}
+// Sets ctx's transform and the state properties of state (CanvasCallRecorder.begin's copy of a context's).
+function applyCanvasState(ctx, state) {
+    const t = state.transform
+    ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+    for (const name of CANVAS_STATE)
+        if (name in state) ctx[name] = state[name]
+    if (state.lineDash) ctx.setLineDash(state.lineDash)
+}
+// Makes the recorded calls (CanvasCallRecorder) on ctx in order, from the index from to the index to, each in the
+// visualsPerf layer it was recorded in (labels); overlays false leaves out the drawing calls before overlayEnd.
+function replayCanvasCalls(ctx, calls, labels, overlayEnd, overlays, from, to) {
+    const run = (from, to) => {
+        for (let k = from; k < to; ++k) {
+            const c = calls[k]
+            if (c.set !== undefined) ctx[c.set] = c.value
+            else if (overlays || !c.draw || k >= overlayEnd) ctx[c.name](...c.args)
         }
-        if (!labels) {
-            run(0, n)
-            return
-        }
-        for (let k = 0; k < n;) {
-            let e = k + 1
-            while (e < n && calls[e].label === calls[k].label) ++e
-            labels.within(calls[k].label, () => run(k, e))
-            k = e
-        }
+    }
+    if (!labels) {
+        run(from, to)
+        return
+    }
+    for (let k = from; k < to;) {
+        let e = k + 1
+        while (e < to && calls[e].label === calls[k].label) ++e
+        labels.within(calls[k].label, () => run(k, e))
+        k = e
     }
 }
 // Set by render/visualsPerf.js (diagnostics only): {current(), within(label, fn)} for its drawing layers.
@@ -2179,8 +2231,6 @@ const LIT_REST_BANDS = 12
 const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024
 // Fewest overlay cells in a frame for which a pan draws its overlays from the layer (Grid.drawOverlayLayer).
 const OVERLAY_LAYER_MIN_CELLS = 64
-// Width (device pixels) of the rows the overlay snapshot's rectangles are packed in (Grid.queueOverlaySnapshot).
-const OVERLAY_SNAPSHOT_ROW = 1024
 
 function isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray) {
     return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray

@@ -287,10 +287,17 @@ class MapDepth {
 
         for (let i = 0; i < this.faces.length; ++i) {
             const face = this.faces[i]
-            const colors = this.getFaceColors(face.side)
-            const gradient = ctx.createLinearGradient(0, face.begin.y, 0, face.sortY)
-            gradient.addColorStop(0, colors[0])
-            gradient.addColorStop(1, colors[1])
+            // One gradient a face and context, as renderAtmosphericSides: a rebuild of the surface cache or
+            // its patch (Grid.patchSurfaceCache) draws with the gradients the first build made.
+            face.underlayGradients ||= new WeakMap()
+            let gradient = face.underlayGradients.get(ctx)
+            if (!gradient) {
+                const colors = this.getFaceColors(face.side)
+                gradient = ctx.createLinearGradient(0, face.begin.y, 0, face.sortY)
+                gradient.addColorStop(0, colors[0])
+                gradient.addColorStop(1, colors[1])
+                face.underlayGradients.set(ctx, gradient)
+            }
 
             ctx.beginPath()
             ctx.moveTo(face.begin.x, face.begin.y)
