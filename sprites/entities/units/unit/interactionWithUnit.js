@@ -514,6 +514,9 @@ class BestEnemyTargetForAI extends Way {
         this.blockedStamp = new Uint32Array(size)
         this.blocked = new Uint8Array(size)
         this.searchStamp = 0
+        // wantedStamp[k] == wantedSearch: cell k is one whose distance search() waits for
+        this.wantedStamp = new Uint32Array(size)
+        this.wantedSearch = 0
         this.distance = new Array(n)
         for (let x = 0; x < n; ++x) {
             this.distance[x] = this.flatDistance.subarray(x * m, (x + 1) * m)
@@ -561,31 +564,97 @@ class BestEnemyTargetForAI extends Way {
         }
     }
     static unreachableDistance = 999999
-    calculateBestEnemyTarget(v0, grid_arr, myPlayerColor) {
-        this.create(v0, this.constructor.unreachableDistance, grid_arr, myPlayerColor, border)
-        let resultCoord = { x: -1, y: -1 }
-        let minDistance = this.constructor.unreachableDistance
-        for (let i = 0; i < grid_arr.length; ++i) {
-            for (let j = 0; j < grid_arr[i].length; ++j) {
-                // the cheap distance test first: only nearer cells can change the result
-                if (this.distance[i][j] >= minDistance) {
+    // create(v0, unreachableDistance, arr, player) stopped as soon as the distances a caller reads are final: those of
+    // every cell of `wanted` (coords), or with `target` (cell -> bool) those up to the distance L of the nearest target
+    // cell and at least up to distance 1 (GetCommandNearestToBestTarget reads it). A breadth-first search gives a cell
+    // its final distance when it first reaches it and reaches the cells in distance order; a cell it did not reach keeps
+    // the unreachable distance + 1, as a cell create() cannot reach. Returns that nearest target cell's coord, ties by
+    // lowest x then y (the whole-map scan's order: the strict '<' keeps the first), or null (then every reachable cell
+    // was searched).
+    search(v0, arr, player, {wanted = null, target = null} = {}) {
+        const moves = this.constructor.unreachableDistance
+        this.prepareSearch(arr)
+        const m = this.searchM
+        const distance = this.flatDistance
+        const neighbourTable = this.neighbourTable
+        const queue = this.queue
+        const blocked = this.blocked
+        const usedStamp = this.usedStamp
+        const blockedStamp = this.blockedStamp
+        const stamp = ++this.searchStamp
+        distance.fill(moves + 1)
+        const start = v0.x * m + v0.y
+        distance[start] = 0
+        usedStamp[start] = stamp
+        let remaining = 0
+        const wantedStamp = this.wantedStamp
+        const wantedSearch = wanted ? ++this.wantedSearch : 0
+        if (wanted) {
+            for (const coord of wanted) {
+                const k = coord.x * m + coord.y
+                if (wantedStamp[k] !== wantedSearch) {
+                    wantedStamp[k] = wantedSearch
+                    ++remaining
+                }
+            }
+            if (wantedStamp[start] === wantedSearch) --remaining
+            if (!remaining) return null
+        }
+        let found = -1
+        let foundDistance = moves + 1
+        const consider = k => {
+            if (distance[k] > foundDistance || (distance[k] === foundDistance && k > found)) return
+            if (target(arr[(k / m) | 0][k % m])) {
+                foundDistance = distance[k]
+                found = k
+            }
+        }
+        if (target) consider(start)
+        let head = 0
+        let tail = 0
+        queue[tail++] = start
+        while (head < tail) {
+            const v = queue[head++]
+            if (found >= 0 && distance[v] >= Math.max(foundDistance, 1)) {
+                break
+            }
+            const next = distance[v] + 1
+            for (let side = 0; side < 6; ++side) {
+                const k = neighbourTable[v * 6 + side]
+                if (k < 0 || usedStamp[k] === stamp) {
                     continue
                 }
-                let cell = grid_arr[i][j]
-                let is_building_target = !players[myPlayerColor].ignoresObjective(cell) && cell.building.notEmpty() &&
-                    !players[myPlayerColor].isAlliedWith(cell.building.player) &&
-                    (!cell.building.isExternal || cell.building.isDemonPortal ||
-                        grid_arr[v0.x][v0.y].unit instanceof Bombard) && !cell.building.isNature
-                if (is_building_target &&
-                    this.distance[i][j] < minDistance) {
-                    minDistance = this.distance[i][j]
-                    resultCoord = { x: i, y: j }
+                if (blockedStamp[k] !== stamp) {
+                    blockedStamp[k] = stamp
+                    blocked[k] = this.isCellBlocked(arr[(k / m) | 0][k % m], player) ? 1 : 0
+                }
+                if (blocked[k]) {
+                    continue
+                }
+                usedStamp[k] = stamp
+                distance[k] = next
+                queue[tail++] = k
+                if (target) consider(k)
+                if (wanted && wantedStamp[k] === wantedSearch && --remaining === 0) {
+                    return null
                 }
             }
         }
-        if (minDistance != this.constructor.unreachableDistance) {
-            return resultCoord
+        return found >= 0 ? {x: (found / m) | 0, y: found % m} : null
+    }
+    calculateBestEnemyTarget(v0, grid_arr, myPlayerColor) {
+        // The nearest building target (search stops at its distance), as the scan over the whole search found it.
+        const buildingTarget = this.search(v0, grid_arr, myPlayerColor, {target: cell =>
+            !players[myPlayerColor].ignoresObjective(cell) && cell.building.notEmpty() &&
+            !players[myPlayerColor].isAlliedWith(cell.building.player) &&
+            (!cell.building.isExternal || cell.building.isDemonPortal ||
+                grid_arr[v0.x][v0.y].unit instanceof Bombard) && !cell.building.isNature})
+        if (buildingTarget) {
+            return buildingTarget
         }
+        // No building target: the search reached every reachable cell.
+        let resultCoord = { x: -1, y: -1 }
+        let minDistance = this.constructor.unreachableDistance
         // Building-only siege must not pursue an enemy it can never damage.
         if (grid_arr[v0.x][v0.y].unit instanceof Bombard) return null
         for (let i = 0; i < grid_arr.length; ++i) {
@@ -623,7 +692,8 @@ class BestEnemyTargetForAI extends Way {
         }
 
 
-        this.create(target_coord, this.constructor.unreachableDistance, grid_arr, myPlayerColor, border)
+        // only the distances of those commands' destinations are read
+        this.search(target_coord, grid_arr, myPlayerColor, {wanted: commandsOnDistanceOne.map(command => command.destinationCoord)})
         // now distance means distance to building
         let bestCommand = null
         let minDistance = this.constructor.unreachableDistance

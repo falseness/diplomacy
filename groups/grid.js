@@ -8,17 +8,36 @@ function isFogLandmark(building) {
     return building.name === 'town' && building.player?.isNeutral === true
 }
 class Cell {
+    // The texts are made when first read: loading a board builds every cell, and the server's rules
+    // contexts and replays load many boards they never draw.
     constructor(hexagon, unit, building, coordText, logicText) {
         this.hexagon = hexagon
         this.unit = unit
         this.building = building
-        // for escape menu. it writes coords of cells
-        this.coordText = coordText
-        // for suburbs 
-        this.logicText = logicText
-        
-        // for now for texts of production 
-        this.infoText = new CoordText(hexagon.coord.x, hexagon.coord.y, '')
+        this._coordText = coordText
+        this._logicText = logicText
+        this._infoText = undefined
+    }
+    // for escape menu. it writes coords of cells
+    get coordText() {
+        return this._coordText ??= new CoordText(this.coord.x, this.coord.y, this.coord.x + ' ' + this.coord.y)
+    }
+    set coordText(text) {
+        this._coordText = text
+    }
+    // for suburbs
+    get logicText() {
+        return this._logicText ??= new CoordText(this.coord.x, this.coord.y, '')
+    }
+    set logicText(text) {
+        this._logicText = text
+    }
+    // for now for texts of production
+    get infoText() {
+        return this._infoText ??= new CoordText(this.coord.x, this.coord.y, '')
+    }
+    set infoText(text) {
+        this._infoText = text
     }
     get coord() {
         return this.hexagon.coord
@@ -132,7 +151,10 @@ class Grid extends SpritesGroup {
     cleanLogicText() {
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
-                this.arr[i][j].logicText.text = ''
+                // A text not made yet is empty.
+                const text = this.arr[i][j]._logicText
+                if (text)
+                    text.text = ''
             }
         }
     }
@@ -151,18 +173,13 @@ class Grid extends SpritesGroup {
         this.infoTextCells.clear()
         for (let i = 0; i < n; ++i) {
             for (let j = 0; j < m; ++j) {
-                this.arr[i][j] = new Cell(new Hexagon(i, j, 0), new Empty(), new Empty(),
-                    new CoordText(i, j, i + ' ' + j), new CoordText(i, j, ''))
+                this.arr[i][j] = new Cell(new Hexagon(i, j, 0), new Empty(), new Empty())
             }
         }
         this.showChanceOfWinning = false
+        // Per cell, its text once fillChancesOfWinning set one (a missing text is empty).
         this.chanceOfWinning = []
         this.createArr(n, this.chanceOfWinning)
-        for (let i = 0; i < n; ++i) {
-            for (let j = 0; j < m; ++j) {
-                this.chanceOfWinning[i][j] = new CoordText(i, j, '')
-            }
-        }
         if (isFogOfWar) {
             this.fogOfWar = [] 
             this.visionUsed = []
@@ -187,7 +204,8 @@ class Grid extends SpritesGroup {
     clearChanceOfWinningText() {
         for (let i = 0; i < this.chanceOfWinning.length; ++i) {
             for (let j = 0; j < this.chanceOfWinning[i].length; ++j) {
-                this.chanceOfWinning[i][j].text = ''
+                if (this.chanceOfWinning[i][j])
+                    this.chanceOfWinning[i][j].text = ''
             }
         }
     }
@@ -204,6 +222,7 @@ class Grid extends SpritesGroup {
         console.log(commands)
         for (let i = 0; i < commands.length; ++i) {
             let coord = commands[i].destinationCoord
+            this.chanceOfWinning[coord.x][coord.y] ??= new CoordText(coord.x, coord.y, '')
             this.chanceOfWinning[coord.x][coord.y].text = '1'
         }
     }
@@ -293,7 +312,7 @@ class Grid extends SpritesGroup {
     drawChanceOfWinningText(ctx) {
         for (let i = 0; i < this.chanceOfWinning.length; ++i) {
             for (let j = 0; j < this.chanceOfWinning[i].length; ++j) {
-                if (isFogOfWar && !this.fogOfWar[i][j])
+                if (isFogOfWar && !this.fogOfWar[i][j] || !this.chanceOfWinning[i][j])
                     continue
                 this.chanceOfWinning[i][j].draw(ctx)
             }
