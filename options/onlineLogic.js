@@ -797,7 +797,10 @@ function SetupServerCommunicationLogic(gameID) {
             undoButton.disableClick()
             nextTurnPauseInterface.visible = false
         }
-        if (row.status === 'running' && row.pendingTurns?.some(key => Number(key.split(':')[3]) === clockBoard?.playerIndex)) unfreezeGame()
+        // Only over an accepted board: after a reconnect (or a reopened turn) the clock row arrives before game:open's
+        // board, and the board on screen is the one from before the outage, whose moves the new board discards.
+        if (row.status === 'running' && acceptedBoard &&
+                row.pendingTurns?.some(key => Number(key.split(':')[3]) === clockBoard?.playerIndex)) unfreezeGame()
         renderPause()
     }
     let playerClock = null
