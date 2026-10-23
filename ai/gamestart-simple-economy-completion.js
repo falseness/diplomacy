@@ -137,6 +137,13 @@ function createCanvasContext(canvas = { width: 800, height: 600 }) {
     },
     createImageData(width, height) {
       return { width, height, data: new Uint8ClampedArray(Math.max(0, width * height * 4) || 0) };
+    },
+    // Atmospheric tiles are painted with gradients (render/atmosphericLighting.js tileVariant).
+    createLinearGradient() {
+      return { addColorStop() {} };
+    },
+    createRadialGradient() {
+      return { addColorStop() {} };
     }
   }, {
     get(target, property) {
