@@ -1,5 +1,7 @@
 // Diagnostic-only instrumentation. No sampler, wrappers or listeners in ordinary play.
 (() => {
+    // Headless runtimes (vm contexts of the tests and tools) have no page address: nothing to instrument.
+    if (typeof location === 'undefined' || typeof URLSearchParams === 'undefined') return
     if (new URLSearchParams(location.search).get('visualsPerf') !== '1') return
     const query = new URLSearchParams(location.search)
     const sourceIdentity = Promise.all([{src:location.href},...document.scripts].filter(s=>s.src).map(async script=>{
