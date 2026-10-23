@@ -91,6 +91,7 @@ class Grid extends SpritesGroup {
         // the last frame's calls and key, the canvas of its snapshot and the frames drawn.
         this.overlayComposite = undefined
         this.overlaySnapshotCanvas = undefined
+        this.overlaySnapshotPacked = undefined
         this.overlaySnapshots = 0
         this.drawSerial = 0
         // Lit tiles and the rest snapshot above the surface cache's scale (drawLitView): the view,
@@ -1297,7 +1298,42 @@ class Grid extends SpritesGroup {
         applyCanvasState(g, composite.state)
         replayCanvasCalls(g, composite.calls, null, composite.overlayEnd, true, 0, composite.overlayEnd)
         g.restore()
-        composite.snapshot = canvas
+        // Frames draw the rectangles from a small canvas they are packed in (rows, tallest first), copied pixel for
+        // pixel: Chromium rasterizes a frame that draws from a canvas the size of the main canvas in the frame itself
+        // (about 40 ms a rest frame of the escort recording on this host) and one drawing from a small canvas not.
+        const rects = composite.rects.slice().sort((p, q) => q.h - p.h || q.w - p.w)
+        const rowWidth = Math.max(OVERLAY_SNAPSHOT_ROW, ...rects.map(r => r.w))
+        let x = 0, y = 0, row = 0, width = 0
+        for (const r of rects) {
+            if (x + r.w > rowWidth) {
+                y += row
+                x = row = 0
+            }
+            r.ax = x
+            r.ay = y
+            x += r.w
+            row = Math.max(row, r.h)
+            width = Math.max(width, x)
+        }
+        const height = y + row
+        if (!width || !height)
+            return
+        let packed = this.overlaySnapshotPacked
+        if (!packed) {
+            packed = this.overlaySnapshotPacked = document.createElement('canvas')
+            if (typeof packed.addEventListener === 'function')
+                packed.addEventListener('contextlost', () => { this.overlayComposite = undefined })
+        }
+        if (packed.width < width || packed.height < height) {
+            packed.width = Math.max(width, packed.width)
+            packed.height = Math.max(height, packed.height)
+        }
+        const k = packed.getContext('2d')
+        k.setTransform(1, 0, 0, 1, 0, 0)
+        k.clearRect(0, 0, width, height)
+        for (const r of rects)
+            k.drawImage(canvas, r.x, r.y, r.w, r.h, r.ax, r.ay, r.w, r.h)
+        composite.snapshot = packed
         ++this.overlaySnapshots
     }
     // The snapshot's rectangles over the main canvas, pixel for pixel (opaque, so source-over copies them).
@@ -1309,7 +1345,7 @@ class Grid extends SpritesGroup {
         ctx.filter = 'none'
         ctx.shadowColor = 'rgba(0,0,0,0)'
         for (const r of composite.rects)
-            ctx.drawImage(composite.snapshot, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h)
+            ctx.drawImage(composite.snapshot, r.ax, r.ay, r.w, r.h, r.x, r.y, r.w, r.h)
         ctx.restore()
     }
     // Above the surface cache's scale, pan frames and frames with the camera at rest draw the
@@ -2231,6 +2267,8 @@ const LIT_REST_BANDS = 12
 const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024
 // Fewest overlay cells in a frame for which a pan draws its overlays from the layer (Grid.drawOverlayLayer).
 const OVERLAY_LAYER_MIN_CELLS = 64
+// Width (device pixels) of the rows the overlay snapshot's rectangles are packed in (Grid.renderOverlaySnapshot).
+const OVERLAY_SNAPSHOT_ROW = 1024
 
 function isCoordNotOnMap(coord, xLengthOfMapArray, yLengthOfMapArray) {
     return coord.x < 0 || coord.y < 0 || coord.x >= xLengthOfMapArray || coord.y >= yLengthOfMapArray
