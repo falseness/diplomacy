@@ -140,7 +140,9 @@ class Unit extends Entity {
     }
     cellHasTeammate(cell) {
         // Passable nature only reports the hex colour; it is not a teammate building.
-        return [cell.unit, cell.building].some(entity => entity.notEmpty() &&
+        // An unknown cell (hidden-information board) has no owner, so its entities (public terrain) are
+        // nobody's teammates: their player is players[null].
+        return !cell.hexagon.unknown && [cell.unit, cell.building].some(entity => entity.notEmpty() &&
             !(entity.isNature && entity.isPassable) &&
             entity.playerColor !== this.playerColor && this.player.isAlliedWith(entity.player))
     }
