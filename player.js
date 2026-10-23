@@ -41,8 +41,10 @@ class Player {
             return gameSettings.coop.humanTeam
         return this.role === 'DEMONS' ? 'DEMONS' : players.indexOf(this)
     }
+    // An entity on an unknown cell (hidden-information board: public terrain such as a fogged mountain) has
+    // player players[null], undefined: nobody's ally.
     isAlliedWith(other) {
-        return this === other || Boolean(gameSettings.coop && this.role === 'HUMAN' &&
+        return this === other || Boolean(other && gameSettings.coop && this.role === 'HUMAN' &&
             other.role === 'HUMAN' && this.team === other.team)
     }
     // Nothing is ignored for pathing: demons path next to, hit and capture neutral towns too.
