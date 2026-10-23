@@ -48,7 +48,9 @@ test('twelve humans Big: authoritative peer and persisted reconnect convergence'
  // Hex circle big H12: R=max(16,ceil(14*sqrt(12)))=49, side 2R+1=99; 14 portals per human (TASK-575: two elite cavalry) + 2 heavy = 170.
  compare('Big-dimensions-roster-portals',f.evaluate('[grid.arr.length,grid.arr[0].length,gameSettings.coop.initialHumanCount,external.filter(p=>p.isDemonPortal).length]'),[99,99,12,170]);
  let h=await launch(board);
- const snapshots=()=>Promise.all(h.clients.map(c=>new Promise((resolve,reject)=>c.timeout(5000).emit('authoritySnapshot',(e,s)=>e?reject(e):resolve(s)))));
+ // The server shares this process: its restart recovery and seat contexts can hold the event loop for seconds, so the
+ // snapshot bound is a hang guard (the CPU_LIMIT_S check bounds the work).
+ const snapshots=()=>Promise.all(h.clients.map(c=>new Promise((resolve,reject)=>c.timeout(60000).emit('authoritySnapshot',(e,s)=>e?reject(e):resolve(s)))));
  try {
   let peers=await snapshots();compare('initial-peer-convergence',hash(peers[0]),hash(peers[1]));
   const pending=h.api.getCurrentParalleTurnInfo(h.game).whoNewToPlay;
