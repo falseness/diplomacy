@@ -1265,6 +1265,8 @@ const HUB_CARD = {
     // The opacity of a finished card's texts and marks (its result tag stays bright).
     finishedAlpha: 0.6,
     dim: '#a9a3b8',
+    // The mode beside the title on a your-turn card: its warm fill lowers dim's contrast below 4.5 at 844x390.
+    warmDim: '#bab4c8',
     round: '#f6e2b8',
     chip: 'rgba(255, 255, 255, 0.08)',
     chipText: '#e4dccb',
@@ -1488,7 +1490,7 @@ function hubDrawGoldButton(ctx, box, label) {
 }
 
 // The title in the display font, then the mode in small caps when the title keeps 6 units; returns their width.
-function hubDrawTitle(ctx, row, x, y, maxWidth, color, weight = 700, size = 2.05) {
+function hubDrawTitle(ctx, row, x, y, maxWidth, color, weight = 700, size = 2.05, modeColor = HUB_CARD.dim) {
     const u = hubUnit(), titleFont = hubFont(size * hubUnit(), weight), modeFont = hubFont(1.5 * u, 800, true)
     const mode = hubTitle(row.mode ?? '')
     ctx.font = modeFont
@@ -1497,7 +1499,7 @@ function hubDrawTitle(ctx, row, x, y, maxWidth, color, weight = 700, size = 2.05
     ctx.font = titleFont
     const title = hubEllipsis(ctx, hubTitle(row.title), withMode ? maxWidth - modeWidth - 0.8 * u : maxWidth)
     const width = hubText(ctx, title, x, y, titleFont, color)
-    if (withMode) return width + 0.8 * u + hubText(ctx, mode, x + width + 0.8 * u, y, modeFont, HUB_CARD.dim)
+    if (withMode) return width + 0.8 * u + hubText(ctx, mode, x + width + 0.8 * u, y, modeFont, modeColor)
     return width
 }
 
@@ -1852,7 +1854,7 @@ class HubPanel {
             bottomWidth = hubDrawPlayers(ctx, row.players, right, lines[line], maxWidth, HUB_CARD.dim)
         }
         const textTop = tall ? r.y + 0.33 * r.height : lines[0], textBottom = tall ? r.y + 0.7 * r.height : lines[1]
-        hubDrawTitle(ctx, row, left, textTop, inner - topWidth - pad, theme.text)
+        hubDrawTitle(ctx, row, left, textTop, inner - topWidth - pad, theme.text, 700, 2.05, row.yourTurn ? HUB_CARD.warmDim : HUB_CARD.dim)
         hubDrawChips(ctx, row.tags, left, textBottom, inner - bottomWidth - pad)
         ctx.restore()
     }
