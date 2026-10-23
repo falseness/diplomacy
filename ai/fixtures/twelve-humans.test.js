@@ -6,7 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const runtime = require('../../server/loadGameCode');
-const {launchMemoryServer} = require('./helpers/memory-server');
+const {launchMemoryServer, turnActionLog} = require('./helpers/memory-server');
 const {createEntityLedger} = require('../client/test-coop-entity-ledger');
 const {createEconomyLedger} = require('../client/test-coop-economy-ledger');
 const {createTurnLedger, compareCommitted} = require('../client/test-coop-turn-ledger');
@@ -56,8 +56,11 @@ test('twelve humans Big: authoritative peer and persisted reconnect convergence'
   const player=pending[0],component=h.game.rounds.at(-1).slice(1).find(c=>c.turns[c.nextTurnIndex]?.playerIndex===player);
   const issued=await h.api.getTurnGameObjectForEmit(h.game.gameID,player,component.componentResult);
   global.scheduleBoard=issued||component.componentResult;global.schedulePlayer=player;
-  evaluate('loadFromJson(JSON.stringify(scheduleBoard));whooseTurn=schedulePlayer;players[whooseTurn].nextTurn()');
-  const result=await h.api.applyNextTurn(h.game.gameID,player,evaluate('getGameObject()'),null);
+  evaluate('loadFromJson(JSON.stringify(scheduleBoard));whooseTurn=schedulePlayer;players[whooseTurn].nextTurn();actionLog.reset()');
+  // Since ordered replay (TASK-694) a committed human turn carries its action log (here only the turn's end); the restarted
+  // server replays the round's committed turns from them (no-action-log otherwise).
+  const log=turnActionLog(evaluate);
+  const result=await h.api.applyNextTurn(h.game.gameID,player,evaluate('getGameObject()'),null,log);
   compare('human-completion-accepted',!!result.ignored,false);
   peers=await snapshots();compare('committed-peer-convergence',hash(peers[0]),hash(peers[1]));
   const saved=copy(h.game),before=hash(saved.rounds);await h.close();h=await launch(board,saved,h);
