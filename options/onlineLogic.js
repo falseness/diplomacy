@@ -257,7 +257,8 @@ const onlineObservation = {
     draw(ctx) {
         if (this.board !== grid) return
         for (const {sprite} of this.buildings.values()) if (sprite) {
-            drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
+            // As the grid's passes: a demon portal's art is its category's image (imageName), not 'demonPortal'.
+            drawCachedImage(ctx, cachedImages[grid.getEntityBodyImageName(sprite)], sprite.pos)
             const cell = grid.getCell(sprite.coord)
             if (cell.unit.notEmpty() && !this.hidesUnit(cell) && !moveTween.isActive(cell.unit)) cell.unit.draw(ctx)
         }
