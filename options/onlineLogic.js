@@ -616,6 +616,10 @@ let onlinePauseStatus = 'running'
 // The open online game's forfeit (the (i) panel's 'forfeit', interface/statisticsinterface.js; set by
 // SetupServerCommunicationLogic): available() while this seat still plays, send() resolves the game:forfeit ack.
 let onlineForfeit = null
+// The open online game's pause controls (the (i) panel's pause section, interface/statisticsinterface.js; set by
+// SetupServerCommunicationLogic): state() is what the section shows, vote() sends game:pauseVote, kick(seat) removes a
+// seat (the host while paused); onchange, set by the panel, is called whenever state() changes.
+let onlinePause = null
 const FORFEIT_MESSAGE = 'You forfeited. The AI plays your side. You can watch the replay when the game ends.'
 // The open online game is over on the last board the server sent (set by SetupServerCommunicationLogic): the game-over
 // screen (interface/statisticsinterface.js OnlineResultInterface) waits for it, not for a local end not yet committed.
@@ -670,10 +674,10 @@ function closeOnlineGameSocket() {
     onlineSocket = null
     onlineGameFreeze = null
     onlineForfeit = null
+    onlinePause = null
     onlineGameOver = null
     onlineActionStream()?.stop()
     onlinePauseStatus = 'running'
-    document.getElementById('online-pause')?.remove()
     delete window.kick
     for (const [target, event, handler] of onlineListeners) target.off(event, handler)
     onlineListeners = []
@@ -726,61 +730,54 @@ function SetupServerCommunicationLogic(gameID) {
         cameraFocusPending = false
         focusCameraOnPlayerStart(players[whooseTurn])
     }
-    const pausePanel = document.createElement('section')
-    pausePanel.id = 'online-pause'
-    // DOM controls must not also trigger the canvas game/menu shortcuts.
-    for (const event of ['click', 'mousemove', 'wheel', 'keydown', 'keyup', 'touchstart', 'touchmove', 'touchend', 'touchcancel'])
-        pausePanel['on' + event] = e => e.stopPropagation()
-    pausePanel.setAttribute('aria-label', 'Online pause controls')
-    pausePanel.style.cssText = 'position:fixed;top:8px;left:8px;z-index:9999;background:#182332;color:white;padding:10px;font:14px sans-serif;max-width:380px'
-    const pauseText = document.createElement('div')
-    pauseText.setAttribute('role', 'status')
-    pauseText.setAttribute('aria-live', 'polite')
-    const voteButton = document.createElement('button')
-    const voteError = document.createElement('div')
-    voteError.setAttribute('role', 'alert')
-    const clockText = document.createElement('div')
-    clockText.setAttribute('aria-label', 'Server turn clock')
-    const kicks = document.createElement('div')
-    pausePanel.append(pauseText, voteButton, voteError, clockText, kicks)
-    document.body.append(pausePanel)
-    const renderPause = () => {
-        if (!pauseState) { pauseText.textContent = 'Loading server pause status…'; voteButton.disabled = true; return }
-        const remaining = pauseState.required.filter(p => !pauseState.consent.includes(p))
-        pauseText.textContent = (pauseState.status === 'paused' ? 'Fully paused' : pauseState.status === 'pausePending'
-            ? 'Pause pending — finishing active turns' : 'Running') +
-            ` · ${pauseState.consent.length}/${pauseState.required.length} ${pauseState.phase} votes · Remaining voters: ${remaining.join(', ') || 'none'}`
-        voteButton.textContent = pauseState.phase === 'resume' ? 'Vote to resume' : 'Vote to pause'
-        voteButton.setAttribute('aria-label', voteButton.textContent)
-        voteButton.disabled = !pauseState.required.includes(clockBoard?.playerIndex) ||
-            pauseState.consent.includes(clockBoard?.playerIndex) || pauseState.status === 'pausePending'
-        kicks.textContent = ''
-        if (clockBoard?.playerIndex === 1 && pauseState.status === 'paused') {
-            for (const seat of pauseState.required.filter(p => p !== 1)) {
-                const button = document.createElement('button')
-                button.textContent = `Kick player ${seat}`
-                button.setAttribute('aria-label', button.textContent)
-                button.onclick = async () => {
-                    const ack = await onlineSession.kickPlayer(gameID, seat)
-                    if (socket !== onlineSocket) return
-                    voteError.textContent = ack.ok ? `Player ${seat} removed` : `Kick rejected: ${ack.error}`
-                }
-                kicks.append(button)
+    // The pause section's texts: the vote error (or a kick's ack) and the server clock line.
+    let voteError = ''
+    let clockText = ''
+    let voting = false
+    const renderPause = () => onlinePause?.onchange?.()
+    const voteEnabled = () => !!pauseState && !voting && pauseState.required.includes(clockBoard?.playerIndex) &&
+        !pauseState.consent.includes(clockBoard?.playerIndex) && pauseState.status !== 'pausePending'
+    onlinePause = {
+        onchange: null,
+        state() {
+            if (!pauseState) return {row: null, status: 'Loading server pause status…', voteLabel: '', voteEnabled: false,
+                error: voteError, clock: clockText, kickSeats: []}
+            const remaining = pauseState.required.filter(p => !pauseState.consent.includes(p))
+            return {
+                row: pauseState,
+                status: (pauseState.status === 'paused' ? 'Fully paused' : pauseState.status === 'pausePending'
+                    ? 'Pause pending — finishing active turns' : 'Running') +
+                    ` · ${pauseState.consent.length}/${pauseState.required.length} ${pauseState.phase} votes · Remaining voters: ${remaining.join(', ') || 'none'}`,
+                voteLabel: pauseState.phase === 'resume' ? 'Vote to resume' : 'Vote to pause',
+                voteEnabled: voteEnabled(),
+                error: voteError,
+                clock: clockText,
+                kickSeats: clockBoard?.playerIndex === 1 && pauseState.status === 'paused'
+                    ? pauseState.required.filter(p => p !== 1) : [],
             }
-        }
-    }
-    voteButton.onclick = async () => {
-        if (!pauseState || voteButton.disabled) return
-        voteButton.disabled = true
-        const ack = await onlineSession.request('game:pauseVote', {gameID, phase: pauseState.phase,
-            cycle: pauseState.cycle, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
-        if (socket !== onlineSocket) return
-        if (ack.ok) { voteError.textContent = ''; acceptPause(ack.state) }
-        else {
-            voteError.textContent = `Vote rejected: ${ack.error}. Refreshing server state…`
-            await onlineSession.openGame(gameID)
-        }
-        renderPause()
+        },
+        async vote() {
+            if (socket !== onlineSocket || !voteEnabled()) return
+            voting = true
+            renderPause()
+            const ack = await onlineSession.request('game:pauseVote', {gameID, phase: pauseState.phase,
+                cycle: pauseState.cycle, recoveryEpoch: socket.recoveryEpochs?.[gameID]})
+            if (socket !== onlineSocket) return
+            if (ack.ok) { voting = false; voteError = ''; acceptPause(ack.state) }
+            else {
+                voteError = `Vote rejected: ${ack.error}. Refreshing server state…`
+                renderPause()
+                await onlineSession.openGame(gameID)
+                voting = false
+            }
+            renderPause()
+        },
+        async kick(seat) {
+            const ack = await onlineSession.kickPlayer(gameID, seat)
+            if (socket !== onlineSocket) return
+            voteError = ack.ok ? `Player ${seat} removed` : `Kick rejected: ${ack.error}`
+            renderPause()
+        },
     }
     const acceptPause = row => {
         if (socket !== onlineSocket || row?.gameID !== gameID || !Number.isSafeInteger(row.revision) ||
@@ -790,7 +787,7 @@ function SetupServerCommunicationLogic(gameID) {
         onlinePauseStatus = row.status
         if (row.status === 'paused') {
             playerClock = null
-            clockText.textContent = 'Server clock: 0.0 s · frozen (no active turns)'
+            clockText = 'Server clock: 0.0 s · frozen (no active turns)'
             applyPlayerClock()
             gameEvent.waitingMode = true
             nextTurnButton.disableClick()
@@ -871,7 +868,8 @@ function SetupServerCommunicationLogic(gameID) {
         playerClock = {...row, round, component, turn,
             serverOffset: row.serverTimestamp - performance.now()}
         applyPlayerClock()
-        clockText.textContent = `Server clock: ${(row.remainingMs / 1000).toFixed(1)} s · ${row.running ? 'running' : 'frozen'}`
+        clockText = `Server clock: ${(row.remainingMs / 1000).toFixed(1)} s · ${row.running ? 'running' : 'frozen'}`
+        renderPause()
     })
     document.getElementById('online-recovery')?.remove()
     // The host kicks a seat from the DevTools console: kick(playerIndex).

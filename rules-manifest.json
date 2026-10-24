@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "4bbf7ef288b071abe2919d271243a62344e7bf922cb981a5db6e75f4449e0ed5",
+  "rulesVersion": "8d5f9407d0f17637d800471adcee18c9f101e5217b139f8c2b83972a627f9ee5",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -165,8 +165,8 @@
     },
     {
       "path": "interface/statisticsinterface.js",
-      "sha256": "889c601b08589aea2fa2cb451f1af9daafbb36b18742802d8f5c7257f1bf3c4a",
-      "bytes": 15883
+      "sha256": "e74b0b20ef419e9e94449e232c7aacc0a8e7fab12811dbad9b111dd5aaf0912f",
+      "bytes": 21006
     },
     {
       "path": "interface/nextTurnPause.js",

@@ -45,6 +45,91 @@ class StatisticsInterface {
         this.forfeitButton = forfeitButton('forfeit', this.askForfeit)
         this.yesButton = forfeitButton('yes', this.confirmForfeit)
         this.noButton = forfeitButton('no', this.cancelForfeit)
+
+        // An online game's pause section above the forfeit row (onlinePause, options/onlineLogic.js): the pause status,
+        // the vote button, the vote error, the server clock and, for the host while paused, a 'Kick player N' per seat.
+        this.pauseShown = false
+        this.pauseState = null
+        this.pauseStatusText = new Text(NaN, NaN, 16, '', 'black')
+        this.pauseErrorText = new Text(NaN, NaN, 16, '', '#b00020')
+        this.pauseClockText = new Text(NaN, NaN, 16, '', 'black')
+        this.voteButton = forfeitButton('', this.votePause)
+        this.kickButtons = []
+        this.makeButton = forfeitButton
+    }
+    get pauseLineHeight() {
+        return Math.max(22, HEIGHT * 0.04)
+    }
+    get pauseButtonHeight() {
+        return Math.max(28, HEIGHT * 0.06)
+    }
+    get pauseRowHeight() {
+        const state = this.pauseShown && this.pauseState
+        if (!state)
+            return 0
+        const line = this.pauseLineHeight
+        const button = this.pauseButtonHeight + line * 0.4
+        return line * 0.5 + line + (state.voteLabel ? button : 0) + (state.error ? line : 0) + (state.clock ? line : 0) +
+            (state.kickSeats.length ? button : 0) + line * 0.3
+    }
+    // Lays out the pause section above the forfeit row (updateSizes made room for it).
+    updatePauseSection() {
+        const state = this.pauseState
+        if (!this.pauseShown || !state)
+            return
+        const line = this.pauseLineHeight
+        const buttonHeight = this.pauseButtonHeight
+        const fontSize = Math.max(14, buttonHeight * 0.55)
+        const maxWidth = this.width * 0.92
+        let y = this.pos.y + this.height - this.forfeitRowHeight - this.pauseRowHeight + line * 0.5
+        const placeText = (text, string) => {
+            text.text = string
+            text.fontSize = fontSize
+            if (text.width > maxWidth) text.fontSize *= maxWidth / text.width
+            text.pos = {x: this.centerX, y: y + line / 2}
+            y += line
+        }
+        const placeButton = (button, label, x) => {
+            button.text.text = label
+            button.text.fontSize = fontSize
+            button.rect.width = Math.max(70, WIDTH * 0.08, button.text.width + buttonHeight)
+            button.rect.height = buttonHeight
+            button.rect.cornerRadius = Array(4).fill(buttonHeight * 0.25)
+            button.pos = {x: x ?? this.centerX - button.rect.width / 2, y: y + line * 0.2}
+        }
+        placeText(this.pauseStatusText, state.status)
+        if (state.voteLabel) {
+            placeButton(this.voteButton, state.voteLabel)
+            y += buttonHeight + line * 0.4
+        }
+        this.voteButton.canClick = state.voteEnabled
+        this.voteButton.text.color = state.voteEnabled ? 'black' : 'grey'
+        if (state.error) placeText(this.pauseErrorText, state.error)
+        if (state.clock) placeText(this.pauseClockText, state.clock)
+        this.kickButtons = state.kickSeats.map(seat =>
+            this.makeButton(`Kick player ${seat}`, () => onlinePause?.kick(seat)))
+        if (this.kickButtons.length) {
+            for (const button of this.kickButtons) placeButton(button, button.text.text, 0)
+            const gap = buttonHeight * 0.3
+            let x = this.centerX - (this.kickButtons.reduce((sum, button) => sum + button.width, 0) +
+                gap * (this.kickButtons.length - 1)) / 2
+            for (const button of this.kickButtons) {
+                button.pos = {x, y: button.y}
+                x += button.width + gap
+            }
+        }
+    }
+    votePause() {
+        onlinePause?.vote()
+    }
+    // onlinePause's change notification: the section's texts and buttons change, and with them the panel's height.
+    pauseChanged() {
+        if (!this.visible || !this.pauseShown || typeof onlinePause === 'undefined' || !onlinePause)
+            return
+        this.pauseState = onlinePause.state()
+        this.updateSizes()
+        this.updatePauseSection()
+        if (this.forfeitShown) this.updateForfeitRow()
     }
     get forfeitRowHeight() {
         return this.forfeitShown ? Math.max(70, HEIGHT * 0.18) : 0
@@ -135,7 +220,7 @@ class StatisticsInterface {
         this.background.width = this.width
         this.background.x = this.pos.x
 
-        this.height = this.maxHeight + this.forfeitRowHeight
+        this.height = this.maxHeight + this.pauseRowHeight + this.forfeitRowHeight
         this.background.height = this.height
     }
     updatePlayersInfo() {
@@ -214,7 +299,12 @@ class StatisticsInterface {
         this.forfeitShown = typeof onlineForfeit !== 'undefined' && !!onlineForfeit && gameSettings.isOnline &&
             onlineForfeit.available()
         this.forfeitState = 'idle'
+        this.pauseShown = typeof onlinePause !== 'undefined' && !!onlinePause && gameSettings.isOnline &&
+            !gameSettings.tutorial
+        this.pauseState = this.pauseShown ? onlinePause.state() : null
+        if (this.pauseShown) onlinePause.onchange = () => this.pauseChanged()
         this.updateSizes()
+        this.updatePauseSection()
         if (this.forfeitShown) this.setForfeitState('idle')
         this.updatePlayersInfo()
     }
@@ -232,9 +322,25 @@ class StatisticsInterface {
             this.hide()
             return false
         }
+        if (this.pauseShown && this.pauseState)
+            this.voteButton.click(pos) || this.kickButtons.some(button => button.click(pos))
         if (this.forfeitShown && this.forfeitState !== 'sending')
             this.forfeitButton.click(pos) || this.yesButton.click(pos) || this.noButton.click(pos)
         return true
+    }
+    drawPauseSection(ctx) {
+        const state = this.pauseShown && this.pauseState
+        if (!state)
+            return
+        this.pauseStatusText.draw(ctx)
+        // A disabled vote button stays on screen, greyed out (Button.draw draws only clickable buttons).
+        if (state.voteLabel) {
+            this.voteButton.rect.draw(ctx)
+            this.voteButton.text.draw(ctx)
+        }
+        if (state.error) this.pauseErrorText.draw(ctx)
+        if (state.clock) this.pauseClockText.draw(ctx)
+        for (const button of this.kickButtons) button.draw(ctx)
     }
     draw(ctx) {
         if (!this.visible)
@@ -244,6 +350,7 @@ class StatisticsInterface {
         this.roundtext.draw(ctx)
         this.suddenDeathText.draw(ctx)
         this.drawPlayersInfo(ctx)
+        this.drawPauseSection(ctx)
         if (!this.forfeitShown)
             return
         if (this.forfeitState !== 'idle')
