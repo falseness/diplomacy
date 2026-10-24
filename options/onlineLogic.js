@@ -730,11 +730,8 @@ function SetupServerCommunicationLogic(gameID) {
         cameraFocusPending = false
         focusCameraOnPlayerStart(players[whooseTurn])
     }
-    // The pause section's texts: the vote error (or a kick's ack) and the server clock line.
+    // The pause section's vote error (or a kick's ack).
     let voteError = ''
-    let clockText = ''
-    // The same clock as numbers for the panel's m:ss: {ms, running}, null before the first clock row.
-    let clockValue = null
     let voting = false
     const renderPause = () => onlinePause?.onchange?.()
     const voteEnabled = () => !!pauseState && !voting && pauseState.required.includes(clockBoard?.playerIndex) &&
@@ -748,14 +745,14 @@ function SetupServerCommunicationLogic(gameID) {
             return pauseState.status === 'pausePending' ? 'You voted · waiting for turns to finish' : 'You voted'
         return 'Waiting for turns to finish'
     }
-    // state(): the section's texts (status, voteLabel, error, clock: the old box's strings) and, for the (i) panel's
-    // drawing, the same facts as data: seat, remaining voters, the disabled vote's reason and clockValue.
+    // state(): the section's texts (status, voteLabel, error: the old box's strings) and, for the (i) panel's
+    // drawing, the same facts as data: seat, remaining voters and the disabled vote's reason. The server clock is the
+    // HUD timer's (applyPlayerClock).
     onlinePause = {
         onchange: null,
         state() {
             if (!pauseState) return {row: null, status: 'Loading server pause status…', voteLabel: '', voteEnabled: false,
-                error: voteError, clock: clockText, kickSeats: [], seat: clockBoard?.playerIndex ?? null, remaining: [],
-                voteReason: '', clockValue}
+                error: voteError, kickSeats: [], seat: clockBoard?.playerIndex ?? null, remaining: [], voteReason: ''}
             const remaining = pauseState.required.filter(p => !pauseState.consent.includes(p))
             return {
                 row: pauseState,
@@ -765,13 +762,11 @@ function SetupServerCommunicationLogic(gameID) {
                 voteLabel: pauseState.phase === 'resume' ? 'Vote to resume' : 'Vote to pause',
                 voteEnabled: voteEnabled(),
                 error: voteError,
-                clock: clockText,
                 kickSeats: clockBoard?.playerIndex === 1 && pauseState.status === 'paused'
                     ? pauseState.required.filter(p => p !== 1) : [],
                 seat: clockBoard?.playerIndex ?? null,
                 remaining,
                 voteReason: voteReason(),
-                clockValue,
             }
         },
         async vote() {
@@ -805,8 +800,6 @@ function SetupServerCommunicationLogic(gameID) {
         onlinePauseStatus = row.status
         if (row.status === 'paused') {
             playerClock = null
-            clockText = 'Server clock: 0.0 s · frozen (no active turns)'
-            clockValue = {ms: 0, running: false}
             applyPlayerClock()
             gameEvent.waitingMode = true
             nextTurnButton.disableClick()
@@ -887,8 +880,6 @@ function SetupServerCommunicationLogic(gameID) {
         playerClock = {...row, round, component, turn,
             serverOffset: row.serverTimestamp - performance.now()}
         applyPlayerClock()
-        clockText = `Server clock: ${(row.remainingMs / 1000).toFixed(1)} s · ${row.running ? 'running' : 'frozen'}`
-        clockValue = {ms: row.remainingMs, running: row.running}
         renderPause()
     })
     document.getElementById('online-recovery')?.remove()

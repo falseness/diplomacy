@@ -1,5 +1,5 @@
 // The (i) panel's pause section and pill (TASK-1283): dark text on the white panel, muted secondary text, red vote
-// errors, a greyed disabled vote button, the clock's 'running'/'frozen' tag; every text >= 4.5:1 against its background.
+// errors, a greyed disabled vote button; every text >= 4.5:1 against its background.
 const PAUSE_LOOK = {
     text: '#1f1f1f',
     muted: '#555555',
@@ -7,8 +7,6 @@ const PAUSE_LOOK = {
     separator: '#d4d4d4',
     darkChip: '#000000',
     disabled: {fill: '#ececec', stroke: '#9a9a9a', text: '#5c5c5c'},
-    running: {fill: '#e3f4e8', text: '#1e6b35'},
-    frozen: {fill: '#e3edf8', text: '#1d4f86'},
     pill: {
         pausePending: {fill: '#8a4b00', stroke: '#5c3200', text: '#ffffff', label: 'Pause pending'},
         paused: {fill: '#1f2a44', stroke: '#0d1220', text: '#ffffff', label: 'Paused'},
@@ -208,7 +206,7 @@ class StatisticsInterface {
         return y
     }
     // Lays out the pause section under the players (updateSizes calls it once the panel's width is known, and takes
-    // its height): status, error, buttons, reason and clock.
+    // its height): status, error, buttons and reason.
     updatePauseSection() {
         const state = this.pauseState
         this.pauseItems = []
@@ -217,7 +215,7 @@ class StatisticsInterface {
             return
         }
         // The buttons' font is the forfeit button's; the lines' at most 4.5% of a narrow (portrait) screen's width.
-        const size = Math.min(this.pauseFontSize, Math.max(14, WIDTH * 0.045)), small = Math.max(13, size * 0.8)
+        const size = Math.min(this.pauseFontSize, Math.max(14, WIDTH * 0.045))
         const font = (px, weight = '') => (weight ? weight + ' ' : '') + px + 'px ' + Text.defaultFamily
         const plain = (text, color = PAUSE_LOOK.text, weight = '') => ({text, color, font: font(size, weight), size})
         const sep = {...plain('·', PAUSE_LOOK.muted), sep: true}
@@ -234,17 +232,7 @@ class StatisticsInterface {
             sep, ...(state.remaining.length ? [plain('Waiting for'), ...state.remaining.map(index =>
                 ({...this.playerChip(index, font(size, 'bold'), size), join: true}))] : [plain('All players voted')])]
         const errorColor = /rejected/i.test(state.error) ? PAUSE_LOOK.error : PAUSE_LOOK.text
-        const clock = state.clockValue
-        const seconds = clock ? Math.ceil(clock.ms / 1000) : 0
-        const meta = [
-            ...(state.voteLabel && !state.voteEnabled && state.voteReason ? [plain(state.voteReason, PAUSE_LOOK.muted)] : []),
-            ...(state.voteReason && clock && state.voteLabel && !state.voteEnabled ? [sep] : []),
-            ...(clock ? [plain('Server clock', PAUSE_LOOK.muted),
-                {...plain(`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`, PAUSE_LOOK.text, 'bold'),
-                    join: true},
-                {join: true, text: clock.running ? 'running' : 'frozen', color: PAUSE_LOOK[clock.running ? 'running' : 'frozen'].text,
-                    font: font(small), size: small, chip: {fill: PAUSE_LOOK[clock.running ? 'running' : 'frozen'].fill}}] : []),
-        ]
+        const meta = state.voteLabel && !state.voteEnabled && state.voteReason ? [plain(state.voteReason, PAUSE_LOOK.muted)] : []
         const lineText = tokens => tokens.map(token => token.text).join(' ')
         this.pauseTexts = {status: lineText(status), error: state.error, meta: lineText(meta)}
 
