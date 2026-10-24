@@ -888,13 +888,21 @@ class Grid extends SpritesGroup {
         const cacheWidth = mapDepth.bounds.right - mapDepth.bounds.left
         const cacheHeight = mapDepth.bounds.bottom - mapDepth.bounds.top
         const maxCacheDimension = 4096
-        const maxCachePixels = 12 * 1024 * 1024
-        const scale = Math.min(
+        // With atmospheric visuals the raster is at most the screen's device-pixel area (WIDTH x HEIGHT): every
+        // rebuild, patch and upload of it scales with its area, and frames magnifying it draw the board directly
+        // (canUseSurfaceCache).
+        const maxCachePixels = otherSettings.atmosphericVisuals ?
+            Math.min(12 * 1024 * 1024, WIDTH * HEIGHT) : 12 * 1024 * 1024
+        let scale = Math.min(
             1,
             maxCacheDimension / cacheWidth,
             maxCacheDimension / cacheHeight,
             Math.sqrt(maxCachePixels / (cacheWidth * cacheHeight))
         )
+        // The raster's whole pixels (startSurfaceCacheBuild rounds its size up) within the screen's area too.
+        if (otherSettings.atmosphericVisuals)
+            while (scale > 0 && Math.ceil(cacheWidth * scale) * Math.ceil(cacheHeight * scale) > maxCachePixels)
+                scale *= 0.999
         return {cacheWidth, cacheHeight, scale}
     }
     // The surface cache's raster, drawn by SURFACE_CACHE_STAGES in order: every stage at once in a
@@ -1038,7 +1046,7 @@ class Grid extends SpritesGroup {
     // (frames meanwhile drawing the whole board directly). The region: one rectangle of whole cache pixels holding every
     // world rectangle the changed cells draw on (surfaceCacheChangeRects), the light's grown by a light map pixel; the
     // light map is redrawn there first (atmosphericLighting.updateMapRegion). Every stage is then drawn as a build draws
-    // it, on the cache's canvas and transform, clipped to the region grown by SURFACE_PATCH_MARGIN pixels, its clip paths
+    // it, on the cache's canvas and transform, clipped to the region grown by SURFACE_PATCH_MARGIN pixels (at scale 1), its clip paths
     // made of the hexagons reaching that (atmosphericLighting.clipWindow); then the margin's pixels are put back from a
     // copy taken first, so the clip's edge, where Chromium draws clip paths, strokes and blurs a little unlike a whole
     // build (TASK-1280 tools/cliptest.js), stays off the region. The result is not pixel-identical to a whole build but
@@ -1090,7 +1098,7 @@ class Grid extends SpritesGroup {
         if (found.light.length && !atmosphericLighting.updateMapRegion(this, scale, found.light, this.surfaceCacheLighting) &&
                 !atmosphericLighting.sameLightState(this, atmosphericLighting.mapState))
             return refuse('light map')
-        const m = SURFACE_PATCH_MARGIN
+        const m = Math.max(SURFACE_PATCH_MARGIN_MIN, Math.ceil(SURFACE_PATCH_MARGIN * scale))
         const outer = pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, W, H)
         const kept = copyCanvasRing(canvas, outer, inner, this.surfacePatchCopies, 'cache')
         const ctx = canvas.getContext('2d')
@@ -2421,8 +2429,10 @@ const SURFACE_CACHE_STAGES = [
 // The largest part of the surface cache's pixels a patch redraws (Grid.patchSurfaceCache); more is rebuilt.
 const SURFACE_PATCH_MAX_AREA = 0.25
 // Cache pixels round a patch's region redrawn with it and then put back as they were (Grid.patchSurfaceCache): the clip
-// rectangle's edge, where Chromium draws clip paths, strokes and blurs unlike a whole build, kept that far off the region.
+// rectangle's edge, where Chromium draws clip paths, strokes and blurs unlike a whole build, kept that far off the region;
+// at a cache scale below 1 (a raster capped at the screen's area) the same world distance, at least the minimum.
 const SURFACE_PATCH_MARGIN = 128
+const SURFACE_PATCH_MARGIN_MIN = 32
 // false: every change rebuilds the whole cache, as before patches (tests compare a patched cache with a whole build).
 Grid.surfacePatching = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
