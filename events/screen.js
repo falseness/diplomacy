@@ -134,22 +134,27 @@ class Screen {
         }
         return out
     }
-    // On an axis where the whole slab (mapBorder.slab, TASK-1219) is smaller than the screen the board stays
-    // centred; otherwise the camera may go mapBorderMargin past the board's edges.
+    // Pan limits on each axis (TASK-1292). Where the whole slab (mapBorder.slab, TASK-1219) is smaller than the
+    // screen the offset keeps its value, clamped only so the whole slab stays on screen: [slab.right - w, slab.left].
+    // Where it is larger the camera may go mapBorderMargin past the board's edges, but the sky beside the slab may
+    // not exceed how far the slab overflows the screen (d = slab size - w): [max(margin low, slab.left - d),
+    // min(margin high, slab.right - w + d)]. At d = 0 both rules give the single point slab.left = slab.right - w,
+    // so the interval changes continuously with the scale and zooming across the threshold never jumps the camera
+    // (it used to centre the slab there). Far from the threshold d exceeds the margin and only the margin limits hold.
+    static panRange(slabLow, slabHigh, size, marginLow, marginHigh) {
+        const overflow = slabHigh - slabLow - size
+        if (overflow <= 0)
+            return {low: slabHigh - size, high: slabLow}
+        return {low: Math.max(marginLow, slabLow - overflow), high: Math.min(marginHigh, slabHigh - size + overflow)}
+    }
     correctCanvas() {
         const slab = mapBorder.slab
-        if (slab && slab.right - slab.left <= width)
-            canvas.offset.x = (slab.left + slab.right - width) / 2
-        else {
-            canvas.offset.x = Math.min(canvas.offset.x, this.getScreenRight())
-            canvas.offset.x = Math.max(canvas.offset.x, this.getScreenLeft())
-        }
-        if (slab && slab.bottom - slab.top <= height)
-            canvas.offset.y = (slab.top + slab.bottom - height) / 2
-        else {
-            canvas.offset.y = Math.min(canvas.offset.y, this.getScreenBottom())
-            canvas.offset.y = Math.max(canvas.offset.y, this.getScreenTop())
-        }
+        const x = slab ? Screen.panRange(slab.left, slab.right, width, this.getScreenLeft(), this.getScreenRight()) :
+            {low: this.getScreenLeft(), high: this.getScreenRight()}
+        const y = slab ? Screen.panRange(slab.top, slab.bottom, height, this.getScreenTop(), this.getScreenBottom()) :
+            {low: this.getScreenTop(), high: this.getScreenBottom()}
+        canvas.offset.x = Math.max(Math.min(canvas.offset.x, x.high), x.low)
+        canvas.offset.y = Math.max(Math.min(canvas.offset.y, y.high), y.low)
     }
     move(frameDuration = 1000 / 60, frameTime = undefined) {
         let old_value_x = canvas.offset.x

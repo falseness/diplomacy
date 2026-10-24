@@ -1358,7 +1358,7 @@ class GameManager {
     // Zoom limits from the screen and the whole board (TASK-1219, TASK-1281): zooming out stops where the slab (top
     // face and sides, the geometry fitCamera fits) fills CAMERA_LIMITS.fill = 1/1.3 of the screen on its tighter side
     // (about 30% sky), so the whole board can always be seen, however small its hexes get; zooming in stops at 1.
-    // mapBorder.slab is the slab's box, which the pan limits keep centred on an axis where it is smaller than the screen.
+    // mapBorder.slab is the slab's box, which the pan limits keep whole on screen on an axis where it is smaller than the screen.
     static CAMERA_LIMITS = {fill: 1 / 1.3, max: 1}
     static updateScaleLimits() {
         const b = mapDepth.surfaceBounds, max = this.CAMERA_LIMITS.max
