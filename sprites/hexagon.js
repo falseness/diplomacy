@@ -28,11 +28,6 @@ class Hexagon extends Sprite {
             Math.imul(grid.arr.length, 83492791) ^
             Math.imul(grid.arr[0].length, 2654435761)) >>> 0
     }
-    get grassHex() {
-        if (!this.grassHexImage)
-            this.grassHexImage = cachedImages[grassHexImages[this.tileHash % grassHexImages.length]]
-        return this.grassHexImage
-    }
     firstpaint(_player) {
         this.playerColor = _player
     }
@@ -115,7 +110,6 @@ class Hexagon extends Sprite {
         else {
             drawCachedImage(ctx, this.player.hexagon, pos)
         }
-        drawCachedImage(ctx, this.grassHex, pos)
     }
 
 }

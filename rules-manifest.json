@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "f812ae90f72f59f3e0629cc16794a82443a29b196e797d21d1500db7e9b47d3b",
+  "rulesVersion": "3ea1d7a2612e3e54e54cfbe0adaa149bf2f98bfe40233a57fa4cd472ab9c4386",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "88546aba440bb68869c0ecd6c7c446e710efcbac32e77db9835c470da607f731",
-      "bytes": 11355
+      "sha256": "d92812a29f2fbe04552e93e17cd6adda0e8e4950c4aa366830c2e47867cebf09",
+      "bytes": 10835
     },
     {
       "path": "render/image.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "sprites/hexagon.js",
-      "sha256": "c50d40d927d2ccd5a54d7695a338d6a33b52df2b816fd6c7af5f218c3a04365c",
-      "bytes": 5411
+      "sha256": "6cda065cd18c2d221b54a76e33139ae914160f7af9887b0b7d9c370f500b2f70",
+      "bytes": 5167
     },
     {
       "path": "groups/grid.js",

@@ -42,9 +42,6 @@ for (const name of undeadSpriteImages) assets[name] = new Image()
 // Main menu emblem pictures (town cells cut from in-game screenshots). The menu does not wait for them.
 const menuImages = ['menu/towncell-red', 'menu/towncell-green']
 for (const name of menuImages) assets[name] = new Image()
-let grassHexImages = Array.from({length: 6}, (_, i) => 'grass-hex/grass-hex-' + (i + 1))
-for (let i = 0; i < grassHexImages.length; ++i)
-    assets[grassHexImages[i]] = new Image()
 const atmosphericNatureImages = ['bush', 'hill', 'mountain', 'lake', 'sea']
 // Semantic keys shared by board drawing and production previews. No draw-time filename inference.
 const atmosphericBuildingImages = Object.freeze({
@@ -68,7 +65,7 @@ let spriteImages = ['town', 'farm', 'noob', 'archer',
         'KOHb', 'KOHbLeft', 'normchel', 
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
         'mountain', 'lake', 'sea', 'goldmine', 'bush', 'hill'].concat(demonSpriteImages, undeadSpriteImages)
-let images = spriteImages.concat(grassHexImages)
+let images = spriteImages.slice()
 // Images whose last request failed: they still count as loaded (so the menu starts) and are cached as a blank placeholder.
 let failedImages = new Set()
 for (let i = 0; i < images.length; ++i) {
@@ -105,8 +102,8 @@ function cacheImage(image) {
     return tmpCanvas
 }
 function paintCachedImage(tmpCanvas, image) {
-    let width = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.width * 2 : assets.size
-    let height = grassHexImages.includes(image) ? basis.hexHalfRectWithStrokeOffset.height * 2 : assets.size
+    let width = assets.size
+    let height = assets.size
 
     tmpCanvas.width = width
     tmpCanvas.height = height
@@ -120,8 +117,8 @@ function paintCachedImage(tmpCanvas, image) {
     if (!failedImages.has(image))
         drawImage(tmpCtx, image, pos, width, height)
 }
-// Repaints the existing cached canvases in place, so hexagon.grassHexImage and the grid
-// surface cache image refs stay valid, then makes the next frame rebuild the surface cache.
+// Repaints the existing cached canvases in place, so the grid surface cache image refs
+// stay valid, then makes the next frame rebuild the surface cache.
 function restoreImageCaches() {
     atmosphericBackground.invalidate()
     for (const name in cachedImages) {
@@ -201,9 +198,6 @@ function loadAssets() {
     for (const name of menuImages) assets[name].src = "assets/" + name + ".png"
 
     loadSprites()
-    for (let i = 0; i < grassHexImages.length; ++i) {
-        assets[grassHexImages[i]].src = "assets/" + grassHexImages[i] + ".svg"
-    }
 }
 function loadSprites() {
     let spritesFolder = otherSettings.usePolishedSprites ? "sprites" : "spritesOld"
