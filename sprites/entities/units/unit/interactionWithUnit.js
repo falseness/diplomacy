@@ -278,8 +278,13 @@ class Way {
     }
     // Every search reuses the arrays of the previous one on the same map size:
     // units search the whole map several times per move.
+    // A finished search changed only the cells it reached (create dequeues every
+    // cell it marks): only those are reset, and the distances of the others
+    // already hold moves + 1 when the previous search had the same moves.
     initialization(v0, moves, arr, bord, newBorder) {
         grid.newLogicText()
+        let reached = this.reached
+        this.reached = null
         if (!this.used || this.used.length != arr.length ||
                 this.used[0].length != arr[0].length) {
             this.used = new Array(arr.length)
@@ -290,13 +295,28 @@ class Way {
                 this.distance[i] = new Array(arr[i].length)
                 this.parent[i] = new Array(arr[i].length)
             }
+            reached = null
         }
         let used = this.used
-        for (let i = 0; i < arr.length; ++i) {
-            used[i].fill(false)
-            this.distance[i].fill(moves + 1)
-            this.parent[i].fill(null)
+        if (reached) {
+            const sameMoves = this.filledMoves === moves
+            for (const coord of reached) {
+                used[coord.x][coord.y] = false
+                this.parent[coord.x][coord.y] = null
+                if (sameMoves)
+                    this.distance[coord.x][coord.y] = moves + 1
+            }
+            if (!sameMoves)
+                for (let i = 0; i < arr.length; ++i)
+                    this.distance[i].fill(moves + 1)
+        } else {
+            for (let i = 0; i < arr.length; ++i) {
+                used[i].fill(false)
+                this.distance[i].fill(moves + 1)
+                this.parent[i].fill(null)
+            }
         }
+        this.filledMoves = moves
         used[v0.x][v0.y] = true
         this.distance[v0.x][v0.y] = 0
         this.parent[v0.x][v0.y] = v0
@@ -366,6 +386,8 @@ class Way {
         let Q = []
         Q.push(v0)
         let enemyEntityQ = [] //for pass mode only
+        // every cell the search marks, for the next initialization
+        let reached = []
             // BFS
         while (Q.length > 0 || enemyEntityQ.length > 0) {
             let v
@@ -373,6 +395,7 @@ class Way {
                 v = Q.shift()
             else
                 v = enemyEntityQ.shift()
+            reached.push(v)
             if (changeLogicText && this.distance[v.x][v.y])
                 arr[v.x][v.y].logicText.text = this.distance[v.x][v.y]
             if (this.distance[v.x][v.y] > moves)
@@ -390,6 +413,7 @@ class Way {
                 }
             }
         }
+        this.reached = reached
         return visitedCoords
     }
 }

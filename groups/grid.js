@@ -27,10 +27,15 @@ class Cell {
     }
     // for suburbs
     get logicText() {
-        return this._logicText ??= new CoordText(this.coord.x, this.coord.y, '')
+        if (this._logicText == null) {
+            this._logicText = new CoordText(this.coord.x, this.coord.y, '')
+            this.logicTextCells?.push(this)
+        }
+        return this._logicText
     }
     set logicText(text) {
         this._logicText = text
+        if (text) this.logicTextCells?.push(this)
     }
     // for now for texts of production
     get infoText() {
@@ -149,6 +154,15 @@ class Grid extends SpritesGroup {
         this.arr[coord.x][coord.y].unit = unit
     }
     cleanLogicText() {
+        // The cells of fill() list themselves once they have a logic text (each unit search cleans it).
+        if (this.logicTextCells) {
+            for (const cell of this.logicTextCells) {
+                const text = cell._logicText
+                if (text)
+                    text.text = ''
+            }
+            return
+        }
         for (let i = 0; i < this.arr.length; ++i) {
             for (let j = 0; j < this.arr[i].length; ++j) {
                 // A text not made yet is empty.
@@ -171,9 +185,11 @@ class Grid extends SpritesGroup {
     fill(n, m) {
         this.createArr(n, this.arr)
         this.infoTextCells.clear()
+        this.logicTextCells = []
         for (let i = 0; i < n; ++i) {
             for (let j = 0; j < m; ++j) {
                 this.arr[i][j] = new Cell(new Hexagon(i, j, 0), new Empty(), new Empty())
+                this.arr[i][j].logicTextCells = this.logicTextCells
             }
         }
         this.showChanceOfWinning = false

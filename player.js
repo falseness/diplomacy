@@ -330,8 +330,16 @@ class Player {
     get RGB() {
         return this.color
     }
+    // The string of the colour's current r, g, b, made again only when they change (income and
+    // ownership checks compare it for every town and goldmine).
     get hexColor() {
-        return rgbToHex(this.color.r, this.color.g, this.color.b)
+        const color = this.color
+        const cached = this._hexColor
+        if (cached && cached.r === color.r && cached.g === color.g && cached.b === color.b)
+            return cached.hex
+        const hex = rgbToHex(color.r, color.g, color.b)
+        this._hexColor = {r: color.r, g: color.g, b: color.b, hex}
+        return hex
     }
     get fullColor() {
         let color = {
