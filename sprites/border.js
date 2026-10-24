@@ -287,16 +287,18 @@ class MapDepth {
 
         for (let i = 0; i < this.faces.length; ++i) {
             const face = this.faces[i]
+            if (this.outsideClipWindow(face.begin, face.end, face.bottomEnd, face.bottomBegin))
+                continue
             // One gradient a face and context, as renderAtmosphericSides: a rebuild of the surface cache or
             // its patch (Grid.patchSurfaceCache) draws with the gradients the first build made.
             face.underlayGradients ||= new WeakMap()
-            let gradient = face.underlayGradients.get(ctx)
+            let gradient = face.underlayGradients.get(gradientContext(ctx))
             if (!gradient) {
                 const colors = this.getFaceColors(face.side)
                 gradient = ctx.createLinearGradient(0, face.begin.y, 0, face.sortY)
                 gradient.addColorStop(0, colors[0])
                 gradient.addColorStop(1, colors[1])
-                face.underlayGradients.set(ctx, gradient)
+                face.underlayGradients.set(gradientContext(ctx), gradient)
             }
 
             ctx.beginPath()
@@ -425,6 +427,15 @@ class MapDepth {
         for (let region of this.cacheRegions)
             this.drawCacheRegion(ctx, region, view)
     }
+    // Whether the box of points (world) misses the clip window of a patch's clipped redraw (atmosphericLighting.clipWindow,
+    // Grid.patchSurfaceCache), so a face there draws nothing into the clip and is skipped.
+    outsideClipWindow(...points) {
+        const w = atmosphericLighting.clipWindow
+        if (!w)
+            return false
+        const xs = points.map(p => p.x), ys = points.map(p => p.y)
+        return Math.max(...xs) < w.x0 || Math.min(...xs) > w.x1 || Math.max(...ys) < w.y0 || Math.min(...ys) > w.y1
+    }
     renderAtmosphericSides(ctx) {
         if (!otherSettings.atmosphericVisuals) return
         // Only exposed edges have faces. Paint before terrain/fog so no face can
@@ -439,19 +450,20 @@ class MapDepth {
                     Math.max(face.begin.x, face.end.x) * t.a + t.e < -1 ||
                     Math.min(face.begin.x, face.end.x) * t.a + t.e > ctx.canvas.width + 1 ||
                     (Math.max(face.begin.y, face.end.y) + depth) * t.d + t.f < -1 ||
-                    Math.min(face.begin.y, face.end.y) * t.d + t.f > ctx.canvas.height + 1))
+                    Math.min(face.begin.y, face.end.y) * t.d + t.f > ctx.canvas.height + 1) ||
+                    this.outsideClipWindow(face.begin, face.end, {x: face.end.x, y: face.end.y + depth}, {x: face.begin.x, y: face.begin.y + depth}))
                 continue
             // Face geometry is replaced on rebuild; context keys do not retain
             // discarded canvases. Camera transforms need no new gradient.
             face.atmosphericGradients ||= new WeakMap()
-            let shade = face.atmosphericGradients.get(ctx)
+            let shade = face.atmosphericGradients.get(gradientContext(ctx))
             if (!shade) {
                 const colors = MapDepth.ATMOSPHERIC_FACES[face.notch ? 'notch' : face.side]
                 shade = ctx.createLinearGradient(0, Math.min(face.begin.y, face.end.y), 0, Math.max(face.begin.y, face.end.y) + depth)
                 shade.addColorStop(0, colors[0])
                 shade.addColorStop(MapDepth.ATMOSPHERIC_FACE_EDGE, colors[1])
                 shade.addColorStop(1, colors[2])
-                face.atmosphericGradients.set(ctx, shade)
+                face.atmosphericGradients.set(gradientContext(ctx), shade)
             }
             ctx.fillStyle = shade
             ctx.beginPath()

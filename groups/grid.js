@@ -101,6 +101,11 @@ class Grid extends SpritesGroup {
         this.litTilePool = []
         this.litTilesQueued = false
         this.litFrame = undefined
+        // Patches of the rest snapshot (patchLitView): its buffer, patches made, the last one's region, refusals by reason.
+        this.litPatchBuffer = undefined
+        this.litPatches = 0
+        this.lastLitPatch = undefined
+        this.litPatchRefusals = {}
         // The surface cache built between frames (prepareSurfaceCache): the build in progress,
         // whether a stage is queued, when the cache was last compared with the whole board,
         // whether a frame found it not matching, stages run (a count) and a 1x1 canvas the
@@ -111,13 +116,15 @@ class Grid extends SpritesGroup {
         this.surfaceCacheDirty = false
         this.surfaceCacheStages = 0
         this.surfaceCacheFlush = undefined
-        // Patches of the cache in place (patchSurfaceCache), the cache pixels they redrew, the last one's region, and the
-        // changes rebuilt whole instead, by reason.
+        // Patches of the cache (patchSurfaceCache), the cache pixels they redrew, the last one's region, and the changes
+        // rebuilt whole instead, by reason.
         this.surfaceCachePatches = 0
         this.surfaceCachePatchPixels = 0
         this.lastSurfacePatch = undefined
-        this.surfacePatchCopies = {}
         this.surfacePatchRefusals = {}
+        // The patch under way (patchSurfaceCache, one step a frame) and its buffer.
+        this.surfacePatchJob = undefined
+        this.surfacePatchBuffer = undefined
 
         if (size) 
             this.fill(size.x, size.y)
@@ -258,6 +265,8 @@ class Grid extends SpritesGroup {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
         const hexagons = [], tiles = []
         const range = this.drawRange(ctx, true), drawn = this.drawRange(ctx)
+        // A patch's clipped redraw draws the tiles of the cells reaching its clip (atmosphericLighting.clipWindow).
+        const clip = atmosphericLighting.clipWindow
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
                 if (this.arr[i][j].building.isMapEdge)
@@ -267,7 +276,7 @@ class Grid extends SpritesGroup {
                     continue
                 const hexagon = observed || this.arr[i][j].hexagon
                 hexagons.push(hexagon)
-                if (i >= drawn.i0 && i < drawn.i1)
+                if (i >= drawn.i0 && i < drawn.i1 && (!clip || atmosphericLighting.inClipWindow([{pos: hexagon.calcPos()}]).length))
                     tiles.push(hexagon)
             }
         }
@@ -535,6 +544,7 @@ class Grid extends SpritesGroup {
     // A lit tile's canvas (buildLitTile) has a window, its part of the camera's canvas: whole rows
     // (fullWidth) and the cells of windowed ranges are those of the window, so the board's union
     // paths (grout, fog, the shadows' clip) hold the cells they hold on the camera's canvas.
+    // During a patch's clipped redraw only the cells that can draw into its clip window.
     drawRange(ctx, fullWidth = false, windowed = false) {
         const all = {i0: 0, i1: this.arr.length, j0: 0, j1: this.arr.length ? this.arr[0].length : 0}
         if (!otherSettings.atmosphericVisuals)
@@ -544,8 +554,16 @@ class Grid extends SpritesGroup {
             return all
         const margin = 4 * basis.r + assets.size
         const w = (fullWidth || windowed) && ctx.canvas.litWindow
-        const left = ((w ? w.left : 0) - t.e) / t.a - margin, right = ((w ? w.right : ctx.canvas.width) - t.e) / t.a + margin
-        const top = ((w ? w.top : 0) - t.f) / t.d - margin, bottom = ((w ? w.bottom : ctx.canvas.height) - t.f) / t.d + margin
+        let left = ((w ? w.left : 0) - t.e) / t.a - margin, right = ((w ? w.right : ctx.canvas.width) - t.e) / t.a + margin
+        let top = ((w ? w.top : 0) - t.f) / t.d - margin, bottom = ((w ? w.bottom : ctx.canvas.height) - t.f) / t.d + margin
+        // A patch's clipped redraw (atmosphericLighting.clipWindow): the cells that can draw into its clip.
+        const clip = atmosphericLighting.clipWindow
+        if (clip) {
+            left = Math.max(left, clip.x0 - margin)
+            right = Math.min(right, clip.x1 + margin)
+            top = Math.max(top, clip.y0 - margin)
+            bottom = Math.min(bottom, clip.y1 + margin)
+        }
         // Cell centres: x = i * offset.x, y = (2 * j + (i & 1)) * offset.y.
         return {
             i0: fullWidth ? 0 : Math.max(0, Math.floor(left / basis.offset.x)),
@@ -948,6 +966,8 @@ class Grid extends SpritesGroup {
         return build
     }
     finishSurfaceCacheBuild(build) {
+        this.surfacePatchJob = undefined
+        this.prepareSurfacePatchBuffer(build)
         this.surfaceCacheLit = build.lit
         this.surfaceCache = build.canvas
         this.surfaceCacheScale = build.geometry.scale
@@ -972,6 +992,11 @@ class Grid extends SpritesGroup {
     // starts it over), which becomes the cache's at its end.
     prepareSurfaceCache() {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        // A patch under way: its next step (patchSurfaceCache), and nothing queued.
+        if (this.surfacePatchJob) {
+            this.surfacePatchStep()
+            return
+        }
         if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceMoving || this.surfaceCacheQueued)
             return
         if (!this.surfaceCacheBuild && this.surfaceCache && !this.surfaceCacheDirty &&
@@ -1041,25 +1066,37 @@ class Grid extends SpritesGroup {
         }
     }
     // With atmospheric visuals a cache that differs from the board in some cells (the fog a move uncovers or hides, a
-    // capture, a suburb bought, a building or unit gone) is redrawn in place where those cells change its pixels, in the
-    // frame (camera at rest) or task that finds them, instead of being dropped and rebuilt in SURFACE_CACHE_STAGES tasks
-    // (frames meanwhile drawing the whole board directly). The region: one rectangle of whole cache pixels holding every
-    // world rectangle the changed cells draw on (surfaceCacheChangeRects), the light's grown by a light map pixel; the
-    // light map is redrawn there first (atmosphericLighting.updateMapRegion). Every stage is then drawn as a build draws
-    // it, on the cache's canvas and transform, clipped to the region grown by SURFACE_PATCH_MARGIN pixels (at scale 1), its clip paths
-    // made of the hexagons reaching that (atmosphericLighting.clipWindow); then the margin's pixels are put back from a
-    // copy taken first, so the clip's edge, where Chromium draws clip paths, strokes and blurs a little unlike a whole
-    // build (TASK-1280 tools/cliptest.js), stays off the region. The result is not pixel-identical to a whole build but
-    // shows no difference (TASK-1288 tests/client/test-move-work.js --tolerance: at most 0.05% of a frame's pixels, a few
-    // levels, after every change and cumulatively). The whole cache is rebuilt instead (refusals counted by reason) for:
-    // no cache or one being built, an observed board, another cache size or scale, a whole-board difference (visuals, hex
-    // radius, size), a lamp or demon portal shown, hidden or replaced (its light and shadows reach far off; a captured lamp
-    // keeps them), a region over SURFACE_PATCH_MAX_AREA of the cache, or a light map no longer that of the cache's state.
-    // Grid.surfacePatching false turns patches off. Returns whether the cache now matches the board.
+    // capture, a suburb bought, a building or unit gone) is redrawn where those cells change its pixels instead of being
+    // dropped and rebuilt in SURFACE_CACHE_STAGES tasks (frames meanwhile drawing the whole board directly). The region:
+    // one rectangle of whole cache pixels holding every world rectangle the changed cells draw on
+    // (surfaceCacheChangeRects), the light's grown by a light map pixel. The patch runs as SURFACE_PATCH_STEPS, one step
+    // a frame (surfacePatchStep, from prepareSurfaceCache; none while the lit view is patched, startLitPatch, and none in
+    // the frame that found the change), so no frame does the patch's work at once: the light map's region first
+    // (atmosphericLighting.updateMapRegion), then each stage as a build draws it, on the patch buffer (a canvas of the
+    // cache's size kept for patches, made with the cache: its contexts' gradients are the cache's, gradientContext) at the
+    // cache's transform, clipped to the region grown by SURFACE_PATCH_MARGIN pixels (at scale 1), its clip paths and drawn
+    // cells those reaching that (atmosphericLighting.clipWindow, drawRange); then the region is copied into the cache, so
+    // the clip's edge, where Chromium draws clip paths, strokes and blurs a little unlike a whole build (TASK-1280
+    // tools/cliptest.js), stays in the buffer's margin. Until then frames draw the cache as it was (the board as before the
+    // change, with this frame's units). The result is not pixel-identical to a whole build but shows no difference
+    // (TASK-1288 tests/client/test-move-work.js --tolerance: at most 0.05% of a frame's pixels, a few levels, after every
+    // change and cumulatively). The whole cache is rebuilt instead (refusals counted by reason) for: no cache or one being
+    // built, an observed board, another cache size or scale, a whole-board difference (visuals, hex radius, size), a lamp
+    // or demon portal shown, hidden or replaced (its light and shadows reach far off; a captured lamp keeps them), a region
+    // over SURFACE_PATCH_MAX_AREA of the cache, or a light map no longer that of the cache's state; a board change during a
+    // patch starts it over. Grid.surfacePatching false turns patches off. Returns whether the cache is patched to the
+    // board (a patch under way, surfacePatchJob, or nothing to patch).
     patchSurfaceCache() {
         if (!Grid.surfacePatching || !otherSettings.atmosphericVisuals || !this.surfaceCache || this.surfaceCacheBuild || !this.surfaceCacheLit ||
                 this.isObserving())
             return false
+        const job = this.surfacePatchJob
+        if (job) {
+            if (job.canvas === this.surfaceCache && this.withLitState(job, () => this.wholeSurfaceMatches()))
+                return true
+            // The board changed again: started over from the cache's own state.
+            this.surfacePatchJob = undefined
+        }
         // Why a cache is rebuilt whole instead (counted by reason).
         const refuse = reason => {
             this.surfacePatchRefusals[reason] = (this.surfacePatchRefusals[reason] || 0) + 1
@@ -1087,47 +1124,121 @@ class Grid extends SpritesGroup {
         const found = this.surfaceCacheChangeRects(changes)
         if (!found)
             return refuse('lamp or portal')
-        const texel = atmosphericLighting.mapPixel(scale)
-        const boxes = [...found.cells, ...found.light.map(r => ({x0: r.x0 - texel, y0: r.y0 - texel, x1: r.x1 + texel, y1: r.y1 + texel}))]
-        const wx0 = Math.min(...boxes.map(r => r.x0)), wy0 = Math.min(...boxes.map(r => r.y0))
-        const wx1 = Math.max(...boxes.map(r => r.x1)), wy1 = Math.max(...boxes.map(r => r.y1))
-        const inner = pixelRect(Math.floor((wx0 - b.left) * scale) - 2, Math.floor((wy0 - b.top) * scale) - 2,
-            Math.ceil((wx1 - b.left) * scale) + 2, Math.ceil((wy1 - b.top) * scale) + 2, W, H)
+        const inner = this.patchRegion(found, atmosphericLighting.mapPixel(scale), (x, y) => ({x: (x - b.left) * scale, y: (y - b.top) * scale}), W, H)
         if (!inner || inner.w * inner.h > SURFACE_PATCH_MAX_AREA * W * H)
             return refuse('area')
-        if (found.light.length && !atmosphericLighting.updateMapRegion(this, scale, found.light, this.surfaceCacheLighting) &&
-                !atmosphericLighting.sameLightState(this, atmosphericLighting.mapState))
+        if (found.light.length && !atmosphericLighting.canUpdateMapRegion(this, scale, this.surfaceCacheLighting))
             return refuse('light map')
         const m = Math.max(SURFACE_PATCH_MARGIN_MIN, Math.ceil(SURFACE_PATCH_MARGIN * scale))
         const outer = pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, W, H)
-        const kept = copyCanvasRing(canvas, outer, inner, this.surfacePatchCopies, 'cache')
-        const ctx = canvas.getContext('2d')
-        const build = {canvas, ctx, geometry, left: b.left, top: b.top, stage: 0, lit: false, atmospheric: true, state: [], overlayCells: []}
+        const buffer = this.surfacePatchBuffer
+        if (!buffer || buffer.width !== W || buffer.height !== H || buffer.gradientSource !== canvas.getContext('2d'))
+            return refuse('buffer')
+        const next = this.surfacePatchJob = {canvas, buffer, geometry, left: b.left, top: b.top, scale, inner, outer,
+            window: clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r), light: found.light,
+            lighting: this.surfaceCacheLighting, cells: changes.length, step: 0, ran: null, state: [], overlayCells: [],
+            build: {canvas: buffer, ctx: buffer.getContext('2d'), geometry, left: b.left, top: b.top, stage: 0, lit: false,
+                atmospheric: true, state: [], overlayCells: []}}
+        // The board state the patch draws (each step checks the board still has it).
+        this.withLitState(next, () => this.captureSurfaceState())
+        return true
+    }
+    // The pixel rectangle (of a W x H canvas) holding the world rectangles found (surfaceCacheChangeRects: the cells', and
+    // the light's grown by texel, a light map pixel), at = world point -> canvas pixels, grown by 2 pixels; null when off it
+    // (W Infinity: not cut to a canvas).
+    patchRegion(found, texel, at, W, H) {
+        const boxes = [...found.cells, ...found.light.map(r => ({x0: r.x0 - texel, y0: r.y0 - texel, x1: r.x1 + texel, y1: r.y1 + texel}))]
+        const p0 = at(Math.min(...boxes.map(r => r.x0)), Math.min(...boxes.map(r => r.y0)))
+        const p1 = at(Math.max(...boxes.map(r => r.x1)), Math.max(...boxes.map(r => r.y1)))
+        const x0 = Math.floor(p0.x) - 2, y0 = Math.floor(p0.y) - 2, x1 = Math.ceil(p1.x) + 2, y1 = Math.ceil(p1.y) + 2
+        return W === Infinity ? {x: x0, y: y0, w: x1 - x0, h: y1 - y0} : pixelRect(x0, y0, x1, y1, W, H)
+    }
+    // The patch buffer of the surface cache (patchSurfaceCache): a canvas of the cache's size drawing with its gradients,
+    // made (or resized) with the cache between frames, with the first stage run once ahead as on a new cache canvas
+    // (startSurfaceCacheBuild), so no patch makes a canvas or gradients.
+    prepareSurfacePatchBuffer(build) {
+        if (!otherSettings.atmosphericVisuals || !Grid.surfacePatching)
+            return
+        let buffer = this.surfacePatchBuffer
+        const fresh = !buffer || buffer.width !== build.canvas.width || buffer.height !== build.canvas.height
+        if (!buffer)
+            buffer = this.surfacePatchBuffer = document.createElement('canvas')
+        if (fresh) {
+            buffer.width = build.canvas.width
+            buffer.height = build.canvas.height
+        }
+        buffer.gradientSource = build.ctx
+        if (fresh)
+            SURFACE_CACHE_STAGES[0](this, {...build, canvas: buffer, ctx: buffer.getContext('2d')})
+    }
+    // One step of the surface cache patch under way (patchSurfaceCache), at most one a frame, not in the frame it was
+    // found in, none while the lit view is patched. A board changed since (another state than the patch's), another cache
+    // or a build drops the patch, and the next check patches again or rebuilds.
+    surfacePatchStep() {
+        const job = this.surfacePatchJob
+        if (!job || this.litView?.patch)
+            return
+        if (job.ran === null) {
+            job.ran = this.drawSerial
+            return
+        }
+        if (job.ran === this.drawSerial)
+            return
+        job.ran = this.drawSerial
+        if (job.canvas !== this.surfaceCache || this.surfaceCacheBuild || !this.withLitState(job, () => this.wholeSurfaceMatches())) {
+            this.surfacePatchJob = undefined
+            this.surfaceCacheDirty = true
+            return
+        }
+        SURFACE_PATCH_STEPS[job.step++](this, job)
+        if (job.failed) {
+            this.surfacePatchJob = undefined
+            this.surfaceCacheDirty = true
+        }
+    }
+    // A stage of the patch on its buffer, clipped to the region with its margin, at the cache's transform (the first stage
+    // sets it as a build's does; the others get the same calls).
+    drawSurfacePatchStage(job, stage) {
+        const ctx = job.build.ctx, {outer, scale} = job
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.beginPath()
         ctx.rect(outer.x, outer.y, outer.w, outer.h)
         ctx.clip()
         ctx.beginPath()
-        atmosphericLighting.clipWindow = clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r)
+        if (stage !== SURFACE_CACHE_STAGES[0]) {
+            ctx.scale(scale, scale)
+            ctx.translate(-job.left, -job.top)
+        }
+        atmosphericLighting.clipWindow = job.window
         try {
-            for (const stage of SURFACE_CACHE_STAGES)
-                stage(this, build)
+            stage(this, job.build)
         } finally {
             atmosphericLighting.clipWindow = null
             ctx.restore()
         }
-        restoreCanvasRing(canvas, kept)
-        this.surfaceCacheLit = build.lit
-        this.captureSurfaceState()
-        this.surfaceOverlayCells = overlayCells
+    }
+    // The patch's last step: its region copied from the buffer into the cache, which now holds the patch's board state.
+    finishSurfacePatch(job) {
+        copyCanvasRect(job.buffer, job.canvas, job.inner)
+        this.surfaceCacheLit = job.build.lit
+        SURFACE_STATE_FIELDS.forEach((name, k) => { this[name] = job.state[k] })
+        this.surfacePatchJob = undefined
         ++this.surfaceCacheRevision
         ++this.surfaceCachePatches
-        this.surfaceCachePatchPixels += inner.w * inner.h
-        this.lastSurfacePatch = {inner, outer, cells: changes.length, light: found.light.length}
+        this.surfaceCachePatchPixels += job.inner.w * job.inner.h
+        this.lastSurfacePatch = {inner: job.inner, outer: job.outer, cells: job.cells, light: job.light.length}
         this.surfaceCacheChecked = performance.now()
         this.surfaceCacheDirty = false
-        return true
+    }
+    // The light map brought up to the board's light state for a patch whose changed cells' light rectangles are rects,
+    // found against the light state stored (atmosphericLighting.updateMapRegion at cap's resolution), unless it has it
+    // already (another patch brought it). Returns whether the map now has the board's light state.
+    patchLightMap(rects, stored, cap) {
+        const L = atmosphericLighting
+        if (L.map && L.sameLightState(this, L.mapState))
+            return true
+        return L.updateMapRegion(this, cap, rects, stored)
     }
     // The world rectangles {x0, y0, x1, y1} the cells changes (board indices) draw on in the surface cache, as captured
     // and as now: cells (each its hexagon, with its tile, grout and fog variant, and the sprites of its building then and
@@ -1194,10 +1305,11 @@ class Grid extends SpritesGroup {
     drawSurfaceCache(ctx) {
         if (!this.surfaceCache || !this.surfaceStateMatches(ctx)) {
             // With atmospheric visuals no frame builds it (prepareSurfaceCache); a frame with the camera at
-            // rest patches a cache that differs in a few cells (patchSurfaceCache).
+            // rest starts the patch of a cache that differs in a few cells (patchSurfaceCache), and the frames
+            // until it is done draw the cache as it was (surfacePatchShows).
             if (otherSettings.atmosphericVisuals) {
-                if (!this.surfaceCache || typeof gameEvent === 'undefined' || gameEvent.screen?.surfaceMoving ||
-                        !this.patchSurfaceCache() || !this.surfaceStateMatches(ctx)) {
+                if (!this.surfaceCache || typeof gameEvent === 'undefined' || gameEvent.screen?.surfaceMoving && !this.surfacePatchJob ||
+                        !this.patchSurfaceCache() || !this.surfacePatchShows(ctx)) {
                     this.surfaceCacheDirty = true
                     return false
                 }
@@ -1232,6 +1344,18 @@ class Grid extends SpritesGroup {
             visibleRight - visibleLeft,
             visibleBottom - visibleTop
         )
+        return true
+    }
+    // Whether the cache, patched or being patched to the board (patchSurfaceCache), is drawn on ctx: during a patch the
+    // board matches the patch's state, and this frame's overlay cells are listed from it (surfaceOverlayCells).
+    surfacePatchShows(ctx) {
+        const job = this.surfacePatchJob
+        if (!job)
+            return this.surfaceStateMatches(ctx)
+        if (!this.withLitState(job, () => this.surfaceStateMatches(ctx)))
+            return false
+        this.surfaceOverlayCells.length = 0
+        this.surfaceOverlayCells.push(...job.overlayCells)
         return true
     }
     // During a zoom gesture or a camera pan on the surface-cache path (Screen.surfaceMoving), the
@@ -1379,11 +1503,13 @@ class Grid extends SpritesGroup {
     // bars and bodies), then the calls after the overlays. Otherwise it makes every call in order (the direct
     // draw), and a frame whose calls and key repeat the previous frame's queues the snapshot
     // (queueOverlaySnapshot, drawn in a task after the frame).
+    // Frames drawing a cache whose patch is under way (patchSurfaceCache) draw their overlays directly: the
+    // patch's last step changes what lies under them, so a snapshot of them would be made for a few frames only.
     // Returns the recorder, or null when the frame draws its overlays directly.
     beginOverlayComposite(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
-        if (typeof Proxy !== 'function' || debug || !screen || screen.surfaceMoving || !this.surfaceCacheLit ||
+        if (typeof Proxy !== 'function' || debug || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !atmosphericBackground.opaqueOver(ctx))
             return null
         const recorder = this.overlayRecorder ||= new CanvasCallRecorder()
@@ -1566,7 +1692,10 @@ class Grid extends SpritesGroup {
             ctx.drawImage(rest.canvas, 0, 0)
             ctx.restore()
             this.litFrame = {view, rest: true}
-            this.queueLitTiles(view, t, cw, ch)
+            if (view.patch)
+                this.litPatchStep(view)
+            else
+                this.queueLitTiles(view, t, cw, ch)
             return true
         }
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
@@ -1608,12 +1737,170 @@ class Grid extends SpritesGroup {
         }
         const cw = ctx.canvas.width, ch = ctx.canvas.height
         let view = this.litView
-        if (!view || !this.litViewHolds(ctx, view, t)) {
+        // A view being patched holds while its patch does (patchLitView).
+        if (!view || !(view.patch ? this.patchLitView(ctx, view, t) : this.litViewHolds(ctx, view, t) || this.patchLitView(ctx, view, t))) {
             this.dropLitView()
             view = this.litView = this.newLitView(t, ctx.canvas)
         }
         const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
         return {t, view, rest: rest && rest.done === LIT_REST_BANDS ? rest : null}
+    }
+    // A board change while the camera rests on the lit view's finished rest snapshot (drawLitView): instead of the view
+    // being dropped (a new light map, every visible tile built in the frame, then the snapshot's bands), the snapshot is
+    // patched where the changed cells draw, as the surface cache is (patchSurfaceCache). The region: the world rectangles
+    // the changed cells draw on (surfaceCacheChangeRects, against the view's own state) at the camera's transform. The
+    // patch runs as LIT_PATCH_STEPS, one step a frame (litPatchStep, not in the frame that found the change): the light
+    // map's region (atmosphericLighting.updateMapRegion), then the snapshot's drawing (the sky and the slab shadow, each
+    // part of drawLitScene, the light map's multiply, its color-dodge with the bloom) on the lit patch buffer (a canvas of
+    // the snapshot's size made when a snapshot is finished, drawing with the lit canvases' gradients, litGradientSource) at the
+    // camera's transform, clipped to the region grown by LIT_PATCH_MARGIN device pixels (the clip's bounds kept the
+    // canvas's, as the snapshot's bands keep them, so scaled images are sampled as unclipped) with the cells reaching it
+    // (atmosphericLighting.clipWindow, drawRange); then the region is copied into the snapshot and the view takes the
+    // board's state (finishLitPatch). Until then frames draw the snapshot as it was: the board as before the change, the
+    // units live over it (a move's tween runs meanwhile). The view is dropped as before for a lamp or portal change, an
+    // observed board, a region over LIT_PATCH_MAX_AREA of the canvas, a light map that cannot be brought up, or a camera
+    // moving; a board change during the patch starts it over. Grid.surfacePatching false turns it off.
+    // Returns whether view holds: patched now, or a patch under way (view.patch).
+    patchLitView(ctx, view, t) {
+        const screen = gameEvent.screen, rest = view.rest, cw = ctx.canvas.width, ch = ctx.canvas.height
+        const buffer = this.litPatchBuffer
+        if (!Grid.surfacePatching || screen.surfaceMoving || this.isObserving() || view.a !== t.a || view.d !== t.d ||
+                !rest || rest.done !== LIT_REST_BANDS || rest.e !== t.e || rest.f !== t.f || rest.canvas.width !== cw ||
+                rest.canvas.height !== ch || rest.sky !== atmosphericBackground.raster ||
+                view.mapScale !== atmosphericLighting.mapScale || !buffer || buffer.width !== cw || buffer.height !== ch ||
+                buffer.gradientSource !== litGradientSource()) {
+            view.patch = undefined
+            return false
+        }
+        const job = view.patch
+        if (job && this.withLitState(job, () => this.surfaceStateMatches(ctx)))
+            return true
+        view.patch = undefined
+        return this.startLitPatch(view, rest)
+    }
+    // The patch of view's snapshot rest to the board now (patchLitView): view.patch, or the view brought up at once when no
+    // pixel of the canvas changes. Returns false when the view is to be dropped instead.
+    startLitPatch(view, rest) {
+        const L = atmosphericLighting, changes = []
+        const matches = this.withLitState(view, () => {
+            const overlayCells = this.surfaceOverlayCells
+            this.surfaceOverlayCells = []
+            try {
+                return this.surfaceStateMatches(undefined, changes)
+            } finally {
+                this.surfaceOverlayCells = overlayCells
+            }
+        })
+        const refuse = reason => {
+            this.litPatchRefusals[reason] = (this.litPatchRefusals[reason] || 0) + 1
+            return false
+        }
+        if (!matches)
+            return refuse('board')
+        const found = changes.length ? this.withLitState(view, () => this.surfaceCacheChangeRects(changes)) : {cells: [], light: []}
+        if (!found)
+            return refuse('lamp or portal')
+        const cw = rest.canvas.width, ch = rest.canvas.height, lighting = view.state[0]
+        const at = (x, y) => ({x: x * view.a + rest.e, y: y * view.d + rest.f})
+        const region = changes.length ? this.patchRegion(found, L.mapPixel(), at, Infinity, Infinity) : null
+        const inner = region && pixelRect(region.x, region.y, region.x + region.w, region.y + region.h, cw, ch)
+        if (inner && inner.w * inner.h > LIT_PATCH_MAX_AREA * cw * ch)
+            return refuse('area')
+        if (found.light.length && !L.canUpdateMapRegion(this, undefined, lighting))
+            return refuse('light map')
+        const m = LIT_PATCH_MARGIN
+        const outer = inner && pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, cw, ch)
+        const job = {rest, region, inner, outer, light: found.light, lighting, cells: changes.length, step: 0, ran: null,
+            state: [], overlayCells: [], window: outer && clipWindowOf(outer, cw, ch, -rest.e / view.a, -rest.f / view.d, view.a, 1.05 * basis.r)}
+        this.withLitState(job, () => this.captureSurfaceState())
+        if (inner) {
+            view.patch = job
+            return true
+        }
+        // Nothing on the canvas changes: the light map brought up now (its region off the canvas), the view's state taken.
+        if (found.light.length && !this.patchLightMap(found.light, lighting))
+            return refuse('light map')
+        this.finishLitPatch(view, job)
+        return true
+    }
+    // One step of view's snapshot patch (patchLitView) in the frame drawing the snapshot: at most one a frame, none in the
+    // frame that found the change. A light map that cannot be brought up drops the view (the next frame makes a new one).
+    litPatchStep(view) {
+        const job = view.patch
+        if (job.ran === null || job.ran === this.drawSerial) {
+            job.ran ??= this.drawSerial
+            return
+        }
+        job.ran = this.drawSerial
+        LIT_PATCH_STEPS[job.step++](this, job, view)
+        if (job.failed) {
+            this.litPatchRefusals['light map'] = (this.litPatchRefusals['light map'] || 0) + 1
+            this.dropLitView()
+        }
+    }
+    // A part of the snapshot's drawing on the lit patch buffer: clipped to the patch's region with its margin (and two
+    // pixels off the canvas, so the clip's bounds are the canvas's: buildLitRestBand), at the camera's transform as the
+    // snapshot's, its clip paths and drawn cells those reaching the region.
+    drawLitPatch(job, view, part) {
+        const g = this.litPatchBuffer.getContext('2d'), cw = g.canvas.width, ch = g.canvas.height, {outer} = job
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.beginPath()
+        g.rect(outer.x, outer.y, outer.w, outer.h)
+        g.rect(-2, -2, 1, 1)
+        g.rect(cw + 1, ch + 1, 1, 1)
+        g.clip()
+        g.beginPath()
+        g.lineJoin = 'round'
+        g.lineCap = 'round'
+        this.setLitRestTransform(g, view, job.rest)
+        atmosphericLighting.clipWindow = job.window
+        try {
+            part(g)
+        } finally {
+            atmosphericLighting.clipWindow = null
+            g.restore()
+        }
+    }
+    // The patch's last step: its region copied into the snapshot (none when off the canvas); the view takes the board's
+    // state (the patch's), the light map's, the edge of the lit cells; the tiles the change reaches are dropped (built
+    // again one a task, LIT_TILE_PATCHED_BUDGET); the surface cache is checked next (its own patch).
+    finishLitPatch(view, job) {
+        if (job.inner)
+            copyCanvasRect(this.litPatchBuffer, job.rest.canvas, job.inner)
+        SURFACE_STATE_FIELDS.forEach((name, k) => { view.state[k] = job.state[k] })
+        view.rebuilds = atmosphericLighting.rebuilds
+        view.mapScale = atmosphericLighting.mapScale
+        Object.assign(view, this.litEdges(view))
+        const r = job.region
+        if (r) {
+            // The tiles whose squares meet the region grown by the edge runs' reach (a run joins blocks up to 3 apart).
+            const grow = 4 * LIT_EDGE_BLOCK, ox = Math.round(job.rest.e - view.e), oy = Math.round(job.rest.f - view.f)
+            for (const [key, tile] of view.tiles) {
+                const [u, v] = key.split(',').map(Number), x = u * LIT_TILE + ox, y = v * LIT_TILE + oy
+                if (x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
+                    view.tiles.delete(key)
+                    this.releaseLitTile(tile)
+                    view.patchedTiles = true
+                }
+            }
+        }
+        view.patch = undefined
+        ++this.litPatches
+        this.lastLitPatch = {inner: job.inner, outer: job.outer, cells: job.cells, light: job.light.length}
+        this.surfaceCacheDirty = true
+    }
+    // The lit patch buffer for the finished snapshot rest (patchLitView): a canvas of its size drawing with the lit canvases'
+    // gradients (litGradientSource), made or resized between frames with the snapshot's last band, so no patch makes one.
+    prepareLitPatchBuffer(rest) {
+        if (!Grid.surfacePatching)
+            return
+        const buffer = this.litPatchBuffer ||= document.createElement('canvas')
+        if (buffer.width !== rest.canvas.width || buffer.height !== rest.canvas.height) {
+            buffer.width = rest.canvas.width
+            buffer.height = rest.canvas.height
+        }
+        buffer.gradientSource = litGradientSource()
     }
     // The part of ctx's canvas (the main canvas, at the camera's transform, before drawMain draws
     // anything) that this frame's board images leave uncovered, so the sky is drawn only there and
@@ -1834,6 +2121,7 @@ class Grid extends SpritesGroup {
                 rest.sky === atmosphericBackground.raster)
             return rest
         const canvas = this.litRestCanvas ||= document.createElement('canvas')
+        canvas.gradientSource = litGradientSource()
         if (canvas.width !== cw || canvas.height !== ch) {
             canvas.width = cw
             canvas.height = ch
@@ -1874,7 +2162,8 @@ class Grid extends SpritesGroup {
         this.setLitRestTransform(g, view, rest)
         atmosphericLighting.drawRows(g, this, y0, y1)
         g.restore()
-        ++rest.done
+        if (++rest.done === LIT_REST_BANDS)
+            this.prepareLitPatchBuffer(rest)
     }
     // The camera's transform on the rest snapshot's canvas g, made as the main canvas's was
     // (cameraTransform), so its pixels round as the direct draw's.
@@ -1887,14 +2176,8 @@ class Grid extends SpritesGroup {
     // The direct draw's surface and buildings on g (before the light). underlay: the world
     // rectangle of the underlay cache drawn (the camera's view by default).
     drawLitScene(g, underlay) {
-        mapDepth.drawUnderlay(g, this, underlay)
-        mapDepth.renderAtmosphericSides(g)
-        this.drawHexagons(g)
-        atmosphericLighting.drawShadows(g, this)
-        if (isFogOfWar)
-            this.drawFogOfWar(g)
-        mapDepth.drawRim(g, this)
-        this.drawOther(g, 'buildings')
+        for (const part of LIT_SCENE_PARTS)
+            part(this, g, underlay)
     }
     // The tile index range covering a cw x ch canvas drawn with tiles moved by (ox, oy), grown
     // by ring tiles each way.
@@ -1922,8 +2205,10 @@ class Grid extends SpritesGroup {
                 if (!view.tiles.has(u + ',' + v)) missing.push({u, v, far: Math.hypot(u - cu, v - cv)})
         const rest = view.rest
         const banding = rest && rest.done < LIT_REST_BANDS && rest.e === t.e && rest.f === t.f
-        if (!banding && !missing.length)
+        if (!banding && !missing.length) {
+            view.patchedTiles = false
             return
+        }
         missing.sort((a, b) => a.far - b.far)
         this.litTilesQueued = true
         setTimeout(() => {
@@ -1936,7 +2221,9 @@ class Grid extends SpritesGroup {
                     this.buildLitRestBand(view, rest, rest.done)
                 return
             }
-            for (const {u, v} of missing.slice(0, LIT_TILE_BUDGET))
+            // After a patch dropped some, one a task while the camera rests.
+            const budget = view.patchedTiles && !gameEvent.screen.surfaceMoving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
+            for (const {u, v} of missing.slice(0, budget))
                 this.litTile(view, u, v)
         })
     }
@@ -1952,6 +2239,7 @@ class Grid extends SpritesGroup {
         if (right < b.left || left > b.right || bottom < b.top || top > b.bottom)
             return null
         const canvas = this.litTilePool.pop() || document.createElement('canvas')
+        canvas.gradientSource = litGradientSource()
         if (canvas.width !== S || canvas.height !== S) {
             canvas.width = S
             canvas.height = S
@@ -2018,14 +2306,18 @@ class Grid extends SpritesGroup {
         if (this.litRestCanvas)
             this.litRestCanvas.width = this.litRestCanvas.height = 0
         this.litRestCanvas = undefined
+        if (this.litPatchBuffer)
+            this.litPatchBuffer.width = this.litPatchBuffer.height = 0
+        this.litPatchBuffer = undefined
     }
-    // Bytes of the lit canvases: the view's tiles, the pool and the rest snapshot.
+    // Bytes of the lit canvases: the view's tiles, the pool, the rest snapshot and the lit patch buffer.
     litTileBytes() {
         let tiles = this.litTilePool.length
         if (this.litView)
             for (const tile of this.litView.tiles.values()) if (tile) ++tiles
         const rest = this.litRestCanvas ? this.litRestCanvas.width * this.litRestCanvas.height * 4 : 0
-        return tiles * (LIT_TILE + 2 * LIT_TILE_PAD) ** 2 * 4 + rest
+        const buffer = this.litPatchBuffer ? this.litPatchBuffer.width * this.litPatchBuffer.height * 4 : 0
+        return tiles * (LIT_TILE + 2 * LIT_TILE_PAD) ** 2 * 4 + rest + buffer
     }
     drawMapSurface(ctx) {
         // At or below the cache's scale a frame without the cache draws directly.
@@ -2426,6 +2718,21 @@ const SURFACE_CACHE_STAGES = [
     (grid, build) => grid.drawEntityBodies(build.ctx),
     (grid, build) => { build.lit = atmosphericLighting.bake(build.ctx, grid, build.geometry.scale) }
 ]
+// The context whose gradients the lit canvases draw with (gradientContext): the camera canvas's, so a lit tile, the rest
+// snapshot or the lit patch buffer makes none the frames or another lit canvas made (a new tile made one for each).
+function litGradientSource() {
+    return typeof mainCtx !== 'undefined' ? mainCtx : null
+}
+// The surface cache patch's steps (Grid.patchSurfaceCache), one a frame: the light map's region, each stage on the patch
+// buffer, the region copied into the cache.
+const SURFACE_PATCH_STEPS = [
+    (grid, job) => {
+        if (job.light.length && !grid.patchLightMap(job.light, job.lighting, job.scale))
+            job.failed = 'light map'
+    },
+    ...SURFACE_CACHE_STAGES.map(stage => (grid, job) => grid.drawSurfacePatchStage(job, stage)),
+    (grid, job) => grid.finishSurfacePatch(job)
+]
 // The largest part of the surface cache's pixels a patch redraws (Grid.patchSurfaceCache); more is rebuilt.
 const SURFACE_PATCH_MAX_AREA = 0.25
 // Cache pixels round a patch's region redrawn with it and then put back as they were (Grid.patchSurfaceCache): the clip
@@ -2450,6 +2757,48 @@ const LIT_TILE_BUDGET = 5
 const LIT_TILE_POOL = 16
 const LIT_EDGE_BLOCK = 16
 const LIT_REST_BANDS = 12
+// Tiles built a task while the camera rests after a patch of the view dropped some (Grid.finishLitPatch).
+const LIT_TILE_PATCHED_BUDGET = 1
+// The direct draw's surface and buildings in parts (Grid.drawLitScene), a part a step of a lit view patch.
+const LIT_SCENE_PARTS = [
+    (grid, g, underlay) => {
+        mapDepth.drawUnderlay(g, grid, underlay)
+        mapDepth.renderAtmosphericSides(g)
+    },
+    (grid, g) => grid.drawHexagons(g),
+    (grid, g) => {
+        atmosphericLighting.drawShadows(g, grid)
+        if (isFogOfWar)
+            grid.drawFogOfWar(g)
+        mapDepth.drawRim(g, grid)
+    },
+    (grid, g) => grid.drawOther(g, 'buildings')
+]
+// A lit view patch's steps (Grid.patchLitView), one a frame: the light map's region; on the lit patch buffer the sky and
+// the slab shadow (as the rest snapshot's first band), each part of the scene, the light map's multiply, its color-dodge
+// and the bloom (drawRows of the region's rows); the region copied into the snapshot.
+const LIT_PATCH_STEPS = [
+    (grid, job) => {
+        if (job.light.length && !grid.patchLightMap(job.light, job.lighting))
+            job.failed = true
+    },
+    (grid, job, view) => grid.drawLitPatch(job, view, g => {
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(0, 0, g.canvas.width, g.canvas.height)
+        atmosphericBackground.draw(g)
+        grid.setLitRestTransform(g, view, job.rest)
+        mapDepth.drawAtmosphericShadow(g, grid)
+    }),
+    ...LIT_SCENE_PARTS.map(part => (grid, job, view) => grid.drawLitPatch(job, view, g => part(grid, g))),
+    ...['map', 'gain'].map(light => (grid, job, view) => grid.drawLitPatch(job, view, g =>
+        atmosphericLighting.drawRows(g, grid, job.outer.y, job.outer.y + job.outer.h, light))),
+    (grid, job, view) => grid.finishLitPatch(view, job)
+]
+// The largest part of the canvas a lit view patch redraws (Grid.patchLitView); more drops the view.
+const LIT_PATCH_MAX_AREA = 0.25
+// Device pixels round a lit view patch's region drawn on its buffer and not copied (Grid.patchLitView): the clip's edge,
+// where paths, strokes and images are drawn a little unlike unclipped, kept that far off the region.
+const LIT_PATCH_MARGIN = 32
 
 // Largest overlay layer (device pixels) a zoom gesture draws its overlays from (Grid.drawOverlayLayer).
 const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024

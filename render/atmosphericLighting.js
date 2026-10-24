@@ -320,8 +320,9 @@ const atmosphericLighting = {
     GRADIENT_CACHE: 4096,
     gradients: new WeakMap(),
     gradient(ctx, key, make) {
-        let made = this.gradients.get(ctx)
-        if (!made) this.gradients.set(ctx, made = new Map())
+        const owner = gradientContext(ctx)
+        let made = this.gradients.get(owner)
+        if (!made) this.gradients.set(owner, made = new Map())
         let gradient = made.get(key)
         if (!gradient) {
             if (made.size >= this.GRADIENT_CACHE) made.delete(made.keys().next().value)
@@ -413,6 +414,19 @@ const atmosphericLighting = {
         for (const ring of kept[1]) restoreCanvasRing(this.gain, ring)
         ++this.rebuilds
         this.mapState = this.lightState(board).slice()
+        return true
+    },
+    // Whether updateMapRegion(board, cap, rects, stored) can bring the light map to the board's light state, or the map
+    // has it already (a patch's check before its steps, Grid.patchSurfaceCache).
+    canUpdateMapRegion(board, cap, stored) {
+        if (this.map && this.gain && this.sameLightState(board, this.mapState))
+            return true
+        mapDepth.ensureGeometry(board)
+        const bounds = mapDepth.surfaceBounds
+        if (!bounds || !this.map || !this.gain || this.mapKey !== JSON.stringify(bounds) ||
+                this.mapScale !== this.resolution(bounds, cap) || !this.mapState || !stored || this.mapState.length !== stored.length)
+            return false
+        for (let k = 0; k < stored.length; ++k) if (this.mapState[k] !== stored[k]) return false
         return true
     },
     // The world size of one light map pixel at cap's resolution.
@@ -614,34 +628,36 @@ const atmosphericLighting = {
         const strength = part ? alpha * Math.max(0, owner.b - owner.r) / 255 : alpha
         if (!strength) return
         const mix = c => Math.round(c + (255 - c) * amount), reach = radii * basis.r
+        // A clipped redraw (updateMapRegion) skips the glows that do not reach its clip window.
+        const w = fill && this.clipWindow
+        if (w && (pos.x + reach < w.x0 || pos.x - reach > w.x1 || pos.y + reach < w.y0 || pos.y - reach > w.y1)) return
         const color = part ? spill[part].join(',') : `${mix(owner.r)},${mix(owner.g)},${mix(owner.b)}`
         const colors = stops.map(([t, a]) => t + ':' + `rgba(${color},${+(a * strength).toFixed(4)})`)
-        g.fillStyle = this.gradient(g, 'glow,' + pos.x + ',' + pos.y + ',' + reach + ',' + colors.join(';'), () => {
-            const glow = g.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, reach)
+        // Centred on the origin and drawn moved to the cell: one gradient a colour and reach, not one a cell, so a patch
+        // of the light map uncovering or capturing a cell makes none (Grid.patchSurfaceCache, Grid.patchLitView).
+        g.fillStyle = this.gradient(g, 'glow,' + reach + ',' + colors.join(';'), () => {
+            const glow = g.createRadialGradient(0, 0, 0, 0, 0, reach)
             for (const [t, a] of stops) glow.addColorStop(t, `rgba(${color},${+(a * strength).toFixed(4)})`)
             return glow
         })
-        if (fill) g.fillRect(pos.x - reach, pos.y - reach, 2 * reach, 2 * reach)
+        if (!fill) return
+        g.save()
+        g.translate(pos.x, pos.y)
+        g.fillRect(-reach, -reach, 2 * reach, 2 * reach)
+        g.restore()
     },
-    // The territory glow gradients of every cell of the board in every player's colour, made with the light
-    // map's first whole build (its canvases' contexts), so a capture later reuses its cell's gradient instead
-    // of making one; not for a board whose glows would pass half of GRADIENT_CACHE (they are made as drawn).
+    // The territory glow gradients in every player's colour (one a colour, part and reach: territoryGlow), made with the
+    // light map's whole build (its canvases' contexts), so a capture later reuses them instead of making one.
     prewarmGlows(board) {
         const owners = (typeof players !== 'undefined' ? players : []).slice(1).map(p => p?.color).filter(Boolean)
         if (!this.map || !this.gain || !owners.length || !board.arr.length) return
         const cool = this.TERRITORY.cool, key = basis.r + '|' + owners.map(o => o.r + ',' + o.g + ',' + o.b).join(';')
         if (this.prewarmed && this.prewarmed.map === this.map && this.prewarmed.key === key) return
-        const parts = 1 + (cool?.map ? 1 : 0) + (cool?.gain ? 1 : 0)
-        if (board.arr.length * board.arr[0].length * owners.length * parts > this.GRADIENT_CACHE / 2) return
-        const g = this.map.getContext('2d'), k = this.gain.getContext('2d')
-        for (const row of board.arr) for (const cell of row) {
-            if (cell.building?.isMapEdge) continue
-            const pos = cell.hexagon.calcPos()
-            for (const owner of owners) {
-                this.territoryGlow(g, pos, this.TERRITORY, owner, undefined, false)
-                if (cool?.map) this.territoryGlow(g, pos, cool, owner, 'map', false)
-                if (cool?.gain) this.territoryGlow(k, pos, cool, owner, 'gain', false)
-            }
+        const g = this.map.getContext('2d'), k = this.gain.getContext('2d'), pos = {x: 0, y: 0}
+        for (const owner of owners) {
+            this.territoryGlow(g, pos, this.TERRITORY, owner, undefined, false)
+            if (cool?.map) this.territoryGlow(g, pos, cool, owner, 'map', false)
+            if (cool?.gain) this.territoryGlow(k, pos, cool, owner, 'gain', false)
         }
         this.prewarmed = {map: this.map, key}
     },
@@ -1320,8 +1336,9 @@ const atmosphericLighting = {
     },
     // The multiply and color-dodge of the light map over the world rectangle left..right x
     // top..bottom (cut to the map's bounds), each sampled through the same world-to-map mapping
-    // whatever the rectangle.
-    drawMapPart(ctx, map, left, top, right, bottom) {
+    // whatever the rectangle; only: 'map' or 'gain' draws that one alone (a lit view patch draws
+    // them in two steps, Grid.startLitPatch).
+    drawMapPart(ctx, map, left, top, right, bottom, only) {
         const bounds = mapDepth.surfaceBounds
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
         left = Math.max(left, bounds.left)
@@ -1331,12 +1348,16 @@ const atmosphericLighting = {
         if (left >= right || top >= bottom) return
         const sx = map.width / w, sy = map.height / h
         ctx.save()
-        ctx.globalCompositeOperation = 'multiply'
-        ctx.drawImage(map, (left - bounds.left) * sx, (top - bounds.top) * sy,
-            (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
-        ctx.globalCompositeOperation = 'color-dodge'
-        ctx.drawImage(this.gain, (left - bounds.left) * sx, (top - bounds.top) * sy,
-            (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
+        if (only !== 'gain') {
+            ctx.globalCompositeOperation = 'multiply'
+            ctx.drawImage(map, (left - bounds.left) * sx, (top - bounds.top) * sy,
+                (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
+        }
+        if (only !== 'map') {
+            ctx.globalCompositeOperation = 'color-dodge'
+            ctx.drawImage(this.gain, (left - bounds.left) * sx, (top - bounds.top) * sy,
+                (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
+        }
         ctx.restore()
     },
     // Lights a lit tile (Grid.buildLitTile, the camera's transform moved to the tile): draw()'s
@@ -1370,7 +1391,8 @@ const atmosphericLighting = {
     // draw() for a band of the rest snapshot (Grid.buildLitRestBand; its clip keeps the band's
     // rows y0..y1): the same on-screen part of the map as draw(), so its pixels are draw()'s,
     // then the bloom of the lamps reaching the band.
-    drawRows(ctx, board, y0, y1) {
+    // part: 'map' draws only the multiply, 'gain' the color-dodge and the bloom (a lit view patch's two steps).
+    drawRows(ctx, board, y0, y1, part) {
         if (!otherSettings.atmosphericVisuals) return
         const map = this.lightMap(board)
         if (!map) return
@@ -1378,8 +1400,9 @@ const atmosphericLighting = {
         const left = Math.max(bounds.left, -t.e / t.a), right = Math.min(bounds.right, (ctx.canvas.width - t.e) / t.a)
         const top = Math.max(bounds.top, -t.f / t.d), bottom = Math.min(bounds.bottom, (ctx.canvas.height - t.f) / t.d)
         if (left >= right || top >= bottom) return
-        this.drawMapPart(ctx, map, left, top, right, bottom)
-        this.bloom(ctx, board, {runs: [{x: 0, y: y0, w: ctx.canvas.width, h: y1 - y0}]})
+        this.drawMapPart(ctx, map, left, top, right, bottom, part)
+        if (part !== 'map')
+            this.bloom(ctx, board, {runs: [{x: 0, y: y0, w: ctx.canvas.width, h: y1 - y0}]})
     },
     // The light of the lit tiles' edge blocks (Grid.drawLitEdges): runs, whole device-pixel
     // rectangles of ctx's canvas, get draw()'s multiply and color-dodge, each clipped to its run
@@ -1945,6 +1968,12 @@ const atmosphericLighting = {
     }
 }
 
+// The context whose gradients ctx draws with (the gradient caches are kept per context): a patch's buffer canvas
+// (Grid.patchSurfaceCache, Grid.startLitPatch) draws with those of the canvas it patches (its gradientSource), so a patch
+// makes none. A gradient is defined in user space and draws the same on any context.
+function gradientContext(ctx) {
+    return ctx.canvas && ctx.canvas.gradientSource || ctx
+}
 // The world rectangle of atmosphericLighting.clipWindow for a redraw clipped to the pixel rectangle rect of a W x H
 // canvas (origin left, top at scale): rect grown by r (a hexagon's reach) on each side, so every hexagon drawing into rect
 // is in the clip paths; unbounded on a side rect shares with the canvas.
@@ -2010,6 +2039,21 @@ function copyCanvasRing(canvas, outer, inner, holder, name) {
         g.drawImage(canvas, x, y, w, h, cx, cy, w, h)
     }
     return {copy, tiles}
+}
+// Copies the pixel rectangle r of canvas source into the same place of canvas target, cleared first (its pixels become
+// source's, transparency included): a patch's region from its buffer (Grid.finishSurfacePatch, Grid.finishLitPatch).
+function copyCanvasRect(source, target, r) {
+    const g = target.getContext('2d')
+    g.save()
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.globalAlpha = 1
+    g.globalCompositeOperation = 'source-over'
+    g.filter = 'none'
+    g.shadowBlur = g.shadowOffsetX = g.shadowOffsetY = 0
+    g.shadowColor = 'rgba(0,0,0,0)'
+    g.clearRect(r.x, r.y, r.w, r.h)
+    g.drawImage(source, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h)
+    g.restore()
 }
 // Puts back canvas's ring pixels from kept (copyCanvasRing): each tile cleared, then drawn from the copy pixel for pixel.
 function restoreCanvasRing(canvas, kept) {
