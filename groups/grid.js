@@ -111,6 +111,13 @@ class Grid extends SpritesGroup {
         this.surfaceCacheDirty = false
         this.surfaceCacheStages = 0
         this.surfaceCacheFlush = undefined
+        // Patches of the cache in place (patchSurfaceCache), the cache pixels they redrew, the last one's region, and the
+        // changes rebuilt whole instead, by reason.
+        this.surfaceCachePatches = 0
+        this.surfaceCachePatchPixels = 0
+        this.lastSurfacePatch = undefined
+        this.surfacePatchCopies = {}
+        this.surfacePatchRefusals = {}
 
         if (size) 
             this.fill(size.x, size.y)
@@ -671,7 +678,10 @@ class Grid extends SpritesGroup {
     // (checkRange), and the others' visibility; otherwise every cell. With atmospheric visuals the
     // units are not compared: they are drawn after the light map (drawStillUnits), never into the
     // cache (drawEntityBodies), so a unit moving or selected leaves its pixels as they are.
-    surfaceStateMatches(ctx) {
+    // changes (an array, ctx undefined): every cell is compared and the index of each cell that
+    // differs is pushed on it instead of returning false at the first (patchSurfaceCache); false
+    // then only for a difference of the whole board (size, visuals, hex radius).
+    surfaceStateMatches(ctx, changes) {
         // The light state (atmosphericLighting.lightState) is compared cell by cell in the same pass.
         const lighting = this.surfaceCacheLighting
         if (!lighting || lighting.length != this.arr.length * this.arr[0].length + 1 ||
@@ -702,7 +712,7 @@ class Grid extends SpritesGroup {
         const buildingImages = this.surfaceCacheBuildingImages, unitImages = this.surfaceCacheUnitImages
         const inert = this.surfaceCacheInert, inertUnits = this.surfaceCacheInertUnits, inertBuildings = this.surfaceCacheInertBuildings
         const natureNames = this.surfaceCacheNatureNames
-        const range = observing ? this.checkRange() : this.checkRange(ctx), h = this.arr[0].length
+        const range = observing || changes ? this.checkRange() : this.checkRange(ctx), h = this.arr[0].length
         // Visibility is compared on the whole board all the same (each cell's fog bit, a typed
         // array read): a cell hidden or uncovered anywhere rebuilds the cache, as it always has.
         if (isFogOfWar && (range.i0 > 0 || range.i1 < this.arr.length || range.j0 > 0 || range.j1 < h)) {
@@ -715,6 +725,13 @@ class Grid extends SpritesGroup {
                         return false
                 }
             }
+        }
+        // A differing cell: listed (changes), else the cache does not match.
+        const differs = index => {
+            if (!changes)
+                return true
+            changes.push(index)
+            return false
         }
         for (let i = range.i0; i < range.i1; ++i) {
             const row = this.arr[i], fogRow = isFogOfWar ? this.fogOfWar[i] : undefined
@@ -737,8 +754,10 @@ class Grid extends SpritesGroup {
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
                         lighting[index + 1] !== (!atmospheric || !shown || kind === 2 || hexagon.unknown ? 0 :
                             1 + atmosphericLighting.ownerLight(hexagon)) ||
-                        kind >= 3 && buildingImages[index] != cachedImages[natureNames[index]])
-                        return false
+                        kind >= 3 && buildingImages[index] != cachedImages[natureNames[index]]) {
+                        if (differs(index))
+                            return false
+                    }
                     if (sameUnit ? kind === 4 : this.isOverlayCell(cell))
                         overlayCells.push(index)
                     ++index
@@ -749,8 +768,10 @@ class Grid extends SpritesGroup {
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
                         lighting[index + 1] !== (!atmospheric || !shown || hexagon.unknown ? 0 :
                             atmosphericLighting.shownLightValue(hexagon, cell.building)) ||
-                        buildings[index] !== undefined || !atmospheric && units[index] !== undefined)
-                        return false
+                        buildings[index] !== undefined || !atmospheric && units[index] !== undefined) {
+                        if (differs(index))
+                            return false
+                    }
                     ++index
                     continue
                 }
@@ -765,8 +786,10 @@ class Grid extends SpritesGroup {
                     buildingImages[index] != (building ?
                         cachedImages[this.getEntityBodyImageName(building)] : undefined) ||
                     !atmospheric && unitImages[index] != (unit ?
-                        cachedImages[this.getEntityBodyImageName(unit)] : undefined))
-                    return false
+                        cachedImages[this.getEntityBodyImageName(unit)] : undefined)) {
+                    if (differs(index))
+                        return false
+                }
                 ++index
             }
         }
@@ -959,7 +982,7 @@ class Grid extends SpritesGroup {
         if (!build) {
             this.surfaceCacheChecked = performance.now()
             this.surfaceCacheDirty = false
-            if (this.surfaceCache && this.wholeSurfaceMatches())
+            if (this.surfaceCache && (this.wholeSurfaceMatches() || this.patchSurfaceCache()))
                 return
             build = this.startSurfaceCacheBuild(this.surfaceCache)
             if (!build)
@@ -1009,6 +1032,150 @@ class Grid extends SpritesGroup {
             this.surfaceOverlayCells = overlayCells
         }
     }
+    // With atmospheric visuals a cache that differs from the board in some cells (the fog a move uncovers or hides, a
+    // capture, a suburb bought, a building or unit gone) is redrawn in place where those cells change its pixels, in the
+    // frame (camera at rest) or task that finds them, instead of being dropped and rebuilt in SURFACE_CACHE_STAGES tasks
+    // (frames meanwhile drawing the whole board directly). The region: one rectangle of whole cache pixels holding every
+    // world rectangle the changed cells draw on (surfaceCacheChangeRects), the light's grown by a light map pixel; the
+    // light map is redrawn there first (atmosphericLighting.updateMapRegion). Every stage is then drawn as a build draws
+    // it, on the cache's canvas and transform, clipped to the region grown by SURFACE_PATCH_MARGIN pixels, its clip paths
+    // made of the hexagons reaching that (atmosphericLighting.clipWindow); then the margin's pixels are put back from a
+    // copy taken first, so the clip's edge, where Chromium draws clip paths, strokes and blurs a little unlike a whole
+    // build (TASK-1280 tools/cliptest.js), stays off the region. The result is not pixel-identical to a whole build but
+    // shows no difference (TASK-1288 tests/client/test-move-work.js --tolerance: at most 0.05% of a frame's pixels, a few
+    // levels, after every change and cumulatively). The whole cache is rebuilt instead (refusals counted by reason) for:
+    // no cache or one being built, an observed board, another cache size or scale, a whole-board difference (visuals, hex
+    // radius, size), a lamp or demon portal shown, hidden or replaced (its light and shadows reach far off; a captured lamp
+    // keeps them), a region over SURFACE_PATCH_MAX_AREA of the cache, or a light map no longer that of the cache's state.
+    // Grid.surfacePatching false turns patches off. Returns whether the cache now matches the board.
+    patchSurfaceCache() {
+        if (!Grid.surfacePatching || !otherSettings.atmosphericVisuals || !this.surfaceCache || this.surfaceCacheBuild || !this.surfaceCacheLit ||
+                this.isObserving())
+            return false
+        // Why a cache is rebuilt whole instead (counted by reason).
+        const refuse = reason => {
+            this.surfacePatchRefusals[reason] = (this.surfacePatchRefusals[reason] || 0) + 1
+            return false
+        }
+        mapDepth.ensureGeometry(this)
+        const geometry = this.getSurfaceCacheGeometry(), b = this.surfaceCacheBounds, canvas = this.surfaceCache
+        const scale = geometry.scale, W = canvas.width, H = canvas.height
+        if (scale !== this.surfaceCacheScale || mapDepth.bounds.left !== b.left || mapDepth.bounds.top !== b.top ||
+                geometry.cacheWidth !== b.width || geometry.cacheHeight !== b.height ||
+                W !== Math.max(1, Math.ceil(b.width * scale)) || H !== Math.max(1, Math.ceil(b.height * scale)) || !mapDepth.outline)
+            return refuse('geometry')
+        const changes = [], overlayCells = this.surfaceOverlayCells
+        this.surfaceOverlayCells = []
+        let matches
+        try {
+            matches = this.surfaceStateMatches(undefined, changes)
+        } finally {
+            this.surfaceOverlayCells = overlayCells
+        }
+        if (!matches)
+            return refuse('board')
+        if (!changes.length)
+            return true
+        const found = this.surfaceCacheChangeRects(changes)
+        if (!found)
+            return refuse('lamp or portal')
+        const texel = atmosphericLighting.mapPixel(scale)
+        const boxes = [...found.cells, ...found.light.map(r => ({x0: r.x0 - texel, y0: r.y0 - texel, x1: r.x1 + texel, y1: r.y1 + texel}))]
+        const wx0 = Math.min(...boxes.map(r => r.x0)), wy0 = Math.min(...boxes.map(r => r.y0))
+        const wx1 = Math.max(...boxes.map(r => r.x1)), wy1 = Math.max(...boxes.map(r => r.y1))
+        const inner = pixelRect(Math.floor((wx0 - b.left) * scale) - 2, Math.floor((wy0 - b.top) * scale) - 2,
+            Math.ceil((wx1 - b.left) * scale) + 2, Math.ceil((wy1 - b.top) * scale) + 2, W, H)
+        if (!inner || inner.w * inner.h > SURFACE_PATCH_MAX_AREA * W * H)
+            return refuse('area')
+        if (found.light.length && !atmosphericLighting.updateMapRegion(this, scale, found.light, this.surfaceCacheLighting) &&
+                !atmosphericLighting.sameLightState(this, atmosphericLighting.mapState))
+            return refuse('light map')
+        const m = SURFACE_PATCH_MARGIN
+        const outer = pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, W, H)
+        const kept = copyCanvasRing(canvas, outer, inner, this.surfacePatchCopies, 'cache')
+        const ctx = canvas.getContext('2d')
+        const build = {canvas, ctx, geometry, left: b.left, top: b.top, stage: 0, lit: false, atmospheric: true, state: [], overlayCells: []}
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.beginPath()
+        ctx.rect(outer.x, outer.y, outer.w, outer.h)
+        ctx.clip()
+        ctx.beginPath()
+        atmosphericLighting.clipWindow = clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r)
+        try {
+            for (const stage of SURFACE_CACHE_STAGES)
+                stage(this, build)
+        } finally {
+            atmosphericLighting.clipWindow = null
+            ctx.restore()
+        }
+        restoreCanvasRing(canvas, kept)
+        this.surfaceCacheLit = build.lit
+        this.captureSurfaceState()
+        this.surfaceOverlayCells = overlayCells
+        ++this.surfaceCacheRevision
+        ++this.surfaceCachePatches
+        this.surfaceCachePatchPixels += inner.w * inner.h
+        this.lastSurfacePatch = {inner, outer, cells: changes.length, light: found.light.length}
+        this.surfaceCacheChecked = performance.now()
+        this.surfaceCacheDirty = false
+        return true
+    }
+    // The world rectangles {x0, y0, x1, y1} the cells changes (board indices) draw on in the surface cache, as captured
+    // and as now: cells (each its hexagon, with its tile, grout and fog variant, and the sprites of its building then and
+    // now with their shadows) and light (the cells whose light value changed: the hexagon, or the territory glow of an
+    // owned one). null when a lamp or a portal is among them.
+    surfaceCacheChangeRects(changes) {
+        const h = this.arr[0].length, r = basis.r, hex = 1.1 * r
+        const {sources} = atmosphericLighting.collect(this, false, false)
+        const lighting = this.surfaceCacheLighting, buildings = this.surfaceCacheBuildings, images = this.surfaceCacheBuildingImages
+        const inertBuildings = this.surfaceCacheInertBuildings, natureNames = this.surfaceCacheNatureNames
+        // A light value's lamp kind (shownLightValue: 1 + 2 x lamp kind + 8 x (owner colour + 1)); the reach of an owned
+        // value's territory glow (territoryGlow: the cool spill only for an owner bluer than red).
+        const lampKind = v => v > 0 ? ((v - 1) % 8) >> 1 : 0
+        const {reach: warm, cool} = atmosphericLighting.TERRITORY
+        const glow = v => {
+            if (v < 8)
+                return 0
+            const owner = typeof players !== 'undefined' ? players[(v >> 3) - 1]?.color : null
+            return Math.max(warm, !owner || cool && (cool.map || cool.gain) && owner.b > owner.r ? cool.reach : 0) * r
+        }
+        const cells = [], light = []
+        for (const index of changes) {
+            const i = Math.floor(index / h), j = index - i * h, cell = this.arr[i][j], c = cell.hexagon.calcPos()
+            const box = {x0: c.x - hex, y0: c.y - hex, x1: c.x + hex, y1: c.y + hex}
+            const add = q => {
+                box.x0 = Math.min(box.x0, q.x0); box.y0 = Math.min(box.y0, q.y0); box.x1 = Math.max(box.x1, q.x1); box.y1 = Math.max(box.y1, q.y1)
+            }
+            // A lamp in view before and after with only its owner changed (a capture) keeps every source (collect's sources
+            // have no owner: spills, shadows and blooms stay); a lamp shown, hidden or replaced does not.
+            const was = lighting[index + 1], now = atmosphericLighting.lightValue(this, cell), keptLamp = lampKind(was)
+            if (keptLamp !== lampKind(now))
+                return null
+            const before = buildings[index] || inertBuildings[index]
+            for (const [building, shown] of [[before, [images[index], natureNames[index] && cachedImages[natureNames[index]]]],
+                    [cell.building, []]]) {
+                if (!building || !building.notEmpty())
+                    continue
+                if (building.isDemonPortal || atmosphericLighting.emitsLight(building) && !keptLamp)
+                    return null
+                // Its sprite as cached, as a fog landmark and as drawn now, with its shadow.
+                for (const image of new Set([...shown, cachedImages[this.getEntityBodyImageName(building)], cachedImages[building.bodyImageName]])) {
+                    if (!image || !image.width)
+                        continue
+                    add({x0: building.pos.x, y0: building.pos.y, x1: building.pos.x + image.width, y1: building.pos.y + image.height})
+                    if (atmosphericLighting.castsShadow(this, i, j, building))
+                        add(atmosphericLighting.shadowBounds(building, image, c, sources))
+                }
+            }
+            cells.push(box)
+            if (was === now)
+                continue
+            const reach = Math.max(hex, glow(was), glow(now))
+            light.push({x0: c.x - reach, y0: c.y - reach, x1: c.x + reach, y1: c.y + reach})
+        }
+        return {cells, light}
+    }
     canUseSurfaceCache() {
         mapDepth.ensureGeometry(this)
         const cacheScale = this.surfaceCache ? this.surfaceCacheScale :
@@ -1018,12 +1185,16 @@ class Grid extends SpritesGroup {
     }
     drawSurfaceCache(ctx) {
         if (!this.surfaceCache || !this.surfaceStateMatches(ctx)) {
-            // With atmospheric visuals no frame builds it (prepareSurfaceCache).
+            // With atmospheric visuals no frame builds it (prepareSurfaceCache); a frame with the camera at
+            // rest patches a cache that differs in a few cells (patchSurfaceCache).
             if (otherSettings.atmosphericVisuals) {
-                this.surfaceCacheDirty = true
-                return false
+                if (!this.surfaceCache || typeof gameEvent === 'undefined' || gameEvent.screen?.surfaceMoving ||
+                        !this.patchSurfaceCache() || !this.surfaceStateMatches(ctx)) {
+                    this.surfaceCacheDirty = true
+                    return false
+                }
             }
-            if (!this.createSurfaceCache())
+            else if (!this.createSurfaceCache())
                 return false
         }
 
@@ -2247,6 +2418,13 @@ const SURFACE_CACHE_STAGES = [
     (grid, build) => grid.drawEntityBodies(build.ctx),
     (grid, build) => { build.lit = atmosphericLighting.bake(build.ctx, grid, build.geometry.scale) }
 ]
+// The largest part of the surface cache's pixels a patch redraws (Grid.patchSurfaceCache); more is rebuilt.
+const SURFACE_PATCH_MAX_AREA = 0.25
+// Cache pixels round a patch's region redrawn with it and then put back as they were (Grid.patchSurfaceCache): the clip
+// rectangle's edge, where Chromium draws clip paths, strokes and blurs unlike a whole build, kept that far off the region.
+const SURFACE_PATCH_MARGIN = 128
+// false: every change rebuilds the whole cache, as before patches (tests compare a patched cache with a whole build).
+Grid.surfacePatching = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).

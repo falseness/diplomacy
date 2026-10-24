@@ -288,6 +288,15 @@ const atmosphericLighting = {
             return y + ry >= top && y - ry <= h
         })
     },
+    // While a region is redrawn clipped (Grid.patchSurfaceCache, updateMapRegion), the world rectangle {x0, y0, x1, y1}
+    // (clipWindowOf) the centres of the hexagons of its clip paths (the cells drawShadows and bake clip to, the stone the
+    // light map clips to) lie in: those reaching the clip rectangle, so a path of the whole board's hexagons is not traced
+    // for a small region. null: all.
+    clipWindow: null,
+    inClipWindow(cells) {
+        const w = this.clipWindow
+        return w ? cells.filter(({pos}) => pos.x >= w.x0 && pos.x <= w.x1 && pos.y >= w.y0 && pos.y <= w.y1) : cells
+    },
     hexPath(ctx, cells) {
         ctx.beginPath()
         for (const cell of cells) {
@@ -339,6 +348,62 @@ const atmosphericLighting = {
         ++this.rebuilds
         return this.map
     },
+    // The light map at cap's resolution (as lightMap(board, cap)) brought up to the board's light state by redrawing
+    // only the map pixels the world rectangles rects ({x0, y0, x1, y1}, where the cells whose light changed draw)
+    // cover, grown by MAP_REGION_GROW pixels (Grid.patchSurfaceCache): build's own drawing on the map's canvases, at
+    // their transform, clipped to that region grown by MAP_REGION_MARGIN pixels, its clip paths the hexagons reaching
+    // that (clipWindow); then the margin's pixels are put back from a copy taken first, so the clip's edge stays off the
+    // region. Pixels outside the rectangles were drawn for the old state as for the new one. False (nothing drawn)
+    // unless the map is that of stored, the state the rectangles were found against, at this resolution.
+    MAP_REGION_GROW: 2,
+    MAP_REGION_MARGIN: 64,
+    // Reused canvases holding a region's ring while it is redrawn (updateMapRegion), by canvas name.
+    regionScratch: {},
+    updateMapRegion(board, cap, rects, stored) {
+        mapDepth.ensureGeometry(board)
+        const bounds = mapDepth.surfaceBounds
+        if (!bounds || !this.map || !this.gain || this.mapKey !== JSON.stringify(bounds) ||
+                this.mapScale !== this.resolution(bounds, cap) || !this.mapState || !stored || this.mapState.length !== stored.length)
+            return false
+        for (let k = 0; k < stored.length; ++k) if (this.mapState[k] !== stored[k]) return false
+        const scale = this.mapScale, W = this.map.width, H = this.map.height, grow = this.MAP_REGION_GROW
+        const x0 = Math.min(...rects.map(r => r.x0)), y0 = Math.min(...rects.map(r => r.y0))
+        const x1 = Math.max(...rects.map(r => r.x1)), y1 = Math.max(...rects.map(r => r.y1))
+        const inner = pixelRect(Math.floor((x0 - bounds.left) * scale) - grow, Math.floor((y0 - bounds.top) * scale) - grow,
+            Math.ceil((x1 - bounds.left) * scale) + grow, Math.ceil((y1 - bounds.top) * scale) + grow, W, H)
+        if (!inner) return true
+        const m = this.MAP_REGION_MARGIN
+        const outer = pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, W, H)
+        this.lastMapRegion = {inner, outer}
+        const kept = ['map', 'gain'].map(name => copyCanvasRing(this[name], outer, inner, this.regionScratch, name))
+        const g = this.map.getContext('2d'), k = this.gain.getContext('2d')
+        for (const c of [g, k]) {
+            c.save()
+            c.setTransform(1, 0, 0, 1, 0, 0)
+            c.beginPath()
+            c.rect(outer.x, outer.y, outer.w, outer.h)
+            c.clip()
+            c.beginPath()
+        }
+        this.clipWindow = clipWindowOf(outer, W, H, bounds.left, bounds.top, scale, 1.05 * basis.r)
+        try {
+            this.build(this.collect(board), bounds, scale, true)
+        } finally {
+            this.clipWindow = null
+            g.restore()
+            k.restore()
+        }
+        restoreCanvasRing(this.map, kept[0])
+        restoreCanvasRing(this.gain, kept[1])
+        ++this.rebuilds
+        this.mapState = this.lightState(board).slice()
+        return true
+    },
+    // The world size of one light map pixel at cap's resolution.
+    mapPixel(cap) {
+        const bounds = mapDepth.surfaceBounds
+        return bounds ? 1 / this.resolution(bounds, cap) : 0
+    },
     canvasFor(name, bounds, scale) {
         const surface = this[name] || document.createElement('canvas')
         atmosphericBackground.watch(surface)
@@ -347,6 +412,22 @@ const atmosphericLighting = {
         const g = surface.getContext('2d')
         g.setTransform(scale, 0, 0, scale, -bounds.left * scale, -bounds.top * scale)
         this[name] = surface
+        return g
+    },
+    // canvasFor's context without resizing its canvas (its clip kept): the state a resized canvas starts with, the
+    // transform canvasFor sets.
+    redrawContext(name, bounds, scale) {
+        const g = this[name].getContext('2d')
+        g.globalAlpha = 1
+        g.globalCompositeOperation = 'source-over'
+        g.filter = 'none'
+        g.shadowBlur = g.shadowOffsetX = g.shadowOffsetY = 0
+        g.shadowColor = 'rgba(0,0,0,0)'
+        g.imageSmoothingEnabled = true
+        g.imageSmoothingQuality = 'low'
+        g.fillStyle = g.strokeStyle = '#000'
+        g.lineWidth = 1
+        g.setTransform(scale, 0, 0, scale, -bounds.left * scale, -bounds.top * scale)
         return g
     },
     // One spill layer of a lamp: an elliptical radial gradient of colour, alpha by SPILL_STOPS.
@@ -459,14 +540,16 @@ const atmosphericLighting = {
         return this.spillLayers(lamp.like).map(l => ({...l, dx: (l.dx || 0) * reach, dy: foot + (l.dy - foot) * reach,
             rx: l.rx * reach, ry: l.ry * reach}))
     },
-    build({cells, sources}, bounds, scale) {
+    // inPlace: redraw the canvases as they are (their size and the caller's clip; updateMapRegion), in the state a
+    // resized canvas starts with.
+    build({cells, sources}, bounds, scale, inPlace = false) {
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
         // the authorized visible cells, which get the cool ambient plus warm lamps.
-        const g = this.canvasFor('map', bounds, scale)
+        const g = inPlace ? this.redrawContext('map', bounds, scale) : this.canvasFor('map', bounds, scale)
         g.fillStyle = '#fff'
         g.fillRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         const stone = cells.filter(cell => !cell.owner)
-        this.hexPath(g, stone)
+        this.hexPath(g, this.inClipWindow(stone))
         g.save()
         g.clip()
         g.fillStyle = this.keyGradient(g, bounds, 'ambient')
@@ -496,9 +579,9 @@ const atmosphericLighting = {
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
         // a low, near-neutral cream-gold so no channel saturates into flat paint.
-        const k = this.canvasFor('gain', bounds, scale)
+        const k = inPlace ? this.redrawContext('gain', bounds, scale) : this.canvasFor('gain', bounds, scale)
         k.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        this.hexPath(k, stone)
+        this.hexPath(k, this.inClipWindow(stone))
         k.save()
         k.clip()
         // The key light's lift, then each lamp's spill: the lighter of the two per channel.
@@ -1037,6 +1120,36 @@ const atmosphericLighting = {
         ++this.shadowSilhouetteBuilds
         return silhouette
     },
+    // Whether drawShadows lets building on the cell (x, y) cast a shadow (casters on screen aside).
+    castsShadow(board, x, y, building) {
+        return building.notEmpty() && !building.killed && !building.isInvisible && !building.isMapEdge &&
+            !building.isBuildingProduction() && !board.observedBuilding(board.arr[x][y]) &&
+            !this.flatObjects.includes(building.name) && !this.emitsLight(building)
+    },
+    // The world rectangle {x0, y0, x1, y1} drawShadows can draw on for a caster with sprite image at building.pos on
+    // the cell centred at pos: its contact shade and its cast silhouette turned away from the strongest of the lamps
+    // sources (collect's). A silhouette not built yet is bounded by the whole sprite (its base at the image's foot).
+    shadowBounds(building, image, pos, sources) {
+        const silhouette = this.shadowSilhouettes.get(image)
+        const pad = silhouette ? silhouette.pad : Math.ceil(this.SHADOW.blur * basis.r * 2) + 2
+        const bases = silhouette ? [silhouette.base] : [0, image.height]
+        const {best} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
+        const angle = best ? Math.atan2(pos.y - best.y, pos.x - best.x) : (this.KEY_ANGLE + 180) * Math.PI / 180
+        const dx = Math.cos(angle), dy = Math.sin(angle), L = this.SHADOW.length, W = this.SHADOW.width
+        const rx = this.SHADOW.contact.radius * basis.r, flat = this.SHADOW.contact.flat
+        const ox = building.pos.x + image.width / 2
+        const box = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity}
+        const grow = (x, y) => {
+            box.x0 = Math.min(box.x0, x); box.y0 = Math.min(box.y0, y); box.x1 = Math.max(box.x1, x); box.y1 = Math.max(box.y1, y)
+        }
+        for (const base of bases) {
+            const oy = building.pos.y + base
+            grow(ox - rx, oy - rx * flat); grow(ox + rx, oy + rx * flat)
+            const u0 = -image.width / 2 - pad, u1 = u0 + image.width + 2 * pad, v0 = -base - pad, v1 = v0 + image.height + 2 * pad
+            for (const u of [u0, u1]) for (const v of [v0, v1]) grow(ox - W * dy * u - L * dx * v, oy + W * dx * u - L * dy * v)
+        }
+        return box
+    },
     // Board objects (not units or lamps) on authorized visible cells cast their shadows, clipped to
     // the visible cells, under the fog and before any sprite is drawn.
     drawShadows(ctx, board) {
@@ -1065,7 +1178,7 @@ const atmosphericLighting = {
         }
         if (!casters.length) return
         ctx.save()
-        this.hexPath(ctx, this.onCanvas(ctx, cells))
+        this.hexPath(ctx, this.inClipWindow(this.onCanvas(ctx, cells)))
         ctx.clip()
         const log = this.shadowLog = []
         // Contact shade first, under the cast shadows.
@@ -1131,7 +1244,7 @@ const atmosphericLighting = {
         const bounds = mapDepth.surfaceBounds
         const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
         ctx.save()
-        this.hexPath(ctx, this.collect(board, false).cells)
+        this.hexPath(ctx, this.inClipWindow(this.collect(board, false).cells))
         ctx.clip()
         ctx.globalCompositeOperation = 'multiply'
         ctx.drawImage(map, bounds.left, bounds.top, w, h)
@@ -1786,4 +1899,64 @@ const atmosphericLighting = {
         }
         ctx.restore()
     }
+}
+
+// The world rectangle of atmosphericLighting.clipWindow for a redraw clipped to the pixel rectangle rect of a W x H
+// canvas (origin left, top at scale): rect grown by r (a hexagon's reach) on each side, so every hexagon drawing into rect
+// is in the clip paths; unbounded on a side rect shares with the canvas.
+function clipWindowOf(rect, W, H, left, top, scale, r) {
+    return {x0: rect.x > 0 ? left + rect.x / scale - r : -Infinity, y0: rect.y > 0 ? top + rect.y / scale - r : -Infinity,
+        x1: rect.x + rect.w < W ? left + (rect.x + rect.w) / scale + r : Infinity,
+        y1: rect.y + rect.h < H ? top + (rect.y + rect.h) / scale + r : Infinity}
+}
+// The whole pixel rectangle {x, y, w, h} spanning x0..x1 x y0..y1 (whole pixels) cut to a W x H canvas; null when empty.
+function pixelRect(x0, y0, x1, y1, W, H) {
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W, x1); y1 = Math.min(H, y1)
+    return x0 < x1 && y0 < y1 ? {x: x0, y: y0, w: x1 - x0, h: y1 - y0} : null
+}
+// The pixels of canvas's rectangle outer outside the rectangle inner (its ring: the strips above, below, left and right
+// of inner) copied into the reused canvas holder[name] (made, or grown to fit) in tiles of at most RING_TILE pixels a
+// side packed in a near-square grid, so the copy is about the ring's own size. Returns {copy, tiles}, each tile
+// [x, y, w, h, copy x, copy y].
+const RING_TILE = 128
+function copyCanvasRing(canvas, outer, inner, holder, name) {
+    const ix1 = inner.x + inner.w, iy1 = inner.y + inner.h, ox1 = outer.x + outer.w, oy1 = outer.y + outer.h
+    const strips = [[outer.x, outer.y, outer.w, inner.y - outer.y], [outer.x, iy1, outer.w, oy1 - iy1],
+        [outer.x, inner.y, inner.x - outer.x, inner.h], [ix1, inner.y, ox1 - ix1, inner.h]]
+    const pieces = []
+    for (const [x, y, w, h] of strips)
+        for (let v = 0; v < h; v += RING_TILE)
+            for (let u = 0; u < w; u += RING_TILE)
+                pieces.push([x + u, y + v, Math.min(RING_TILE, w - u), Math.min(RING_TILE, h - v)])
+    const cols = Math.max(1, Math.ceil(Math.sqrt(pieces.length))), rows = Math.max(1, Math.ceil(pieces.length / cols))
+    let copy = holder[name]
+    if (!copy || copy.width < cols * RING_TILE || copy.height < rows * RING_TILE) {
+        copy = holder[name] = document.createElement('canvas')
+        copy.width = Math.max(cols * RING_TILE, copy.width || 0)
+        copy.height = Math.max(rows * RING_TILE, copy.height || 0)
+    }
+    const g = copy.getContext('2d')
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    const tiles = pieces.map(([x, y, w, h], k) => [x, y, w, h, (k % cols) * RING_TILE, Math.floor(k / cols) * RING_TILE])
+    for (const [x, y, w, h, cx, cy] of tiles) {
+        g.clearRect(cx, cy, w, h)
+        g.drawImage(canvas, x, y, w, h, cx, cy, w, h)
+    }
+    return {copy, tiles}
+}
+// Puts back canvas's ring pixels from kept (copyCanvasRing): each tile cleared, then drawn from the copy pixel for pixel.
+function restoreCanvasRing(canvas, kept) {
+    const g = canvas.getContext('2d')
+    g.save()
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.globalAlpha = 1
+    g.globalCompositeOperation = 'source-over'
+    g.filter = 'none'
+    g.shadowBlur = g.shadowOffsetX = g.shadowOffsetY = 0
+    g.shadowColor = 'rgba(0,0,0,0)'
+    for (const [x, y, w, h, cx, cy] of kept.tiles) {
+        g.clearRect(x, y, w, h)
+        g.drawImage(kept.copy, cx, cy, w, h, x, y, w, h)
+    }
+    g.restore()
 }
