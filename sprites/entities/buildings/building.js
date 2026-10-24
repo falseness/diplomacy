@@ -59,7 +59,7 @@ class Building extends Entity {
         }
     }
     select(isNeedToChangeBorder = true) {
-        entityInterface.change(this.info, this.player.fullColor)
+        entityInterface.change(this.info, this.panelColor)
         if (isNeedToChangeBorder)
             this.changeBorder()
     }

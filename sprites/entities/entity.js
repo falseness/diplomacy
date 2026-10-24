@@ -90,6 +90,12 @@ class Entity extends Sprite {
     get player() {
         return players[this.playerColor]
     }
+    // The colour of the entity's info panel. An entity on an unknown cell (hidden-information board: public terrain
+    // such as a lake on a cell the server has not sent) has player players[null], undefined (nobody's ally, see
+    // Unit.cellHasTeammate and Player.isAlliedWith); its panel shows the neutral colour, players[0]'s.
+    get panelColor() {
+        return (this.player ?? players[0]).fullColor
+    }
     get isPassable() {
         return false
     }

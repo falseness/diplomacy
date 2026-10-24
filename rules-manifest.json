@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "0c79024eb0bdd7f7bed808be206a2c038d1ef77d340640c7ad15eb7e985435aa",
+  "rulesVersion": "8a965c5af81398dd68ccdfa193682a4737830215d9f6c690e8e8945c37deacbb",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "c0c7a6d87ab98eda0987910b1973af9eb80f8376ed4ddbb8eb51588472919e64",
-      "bytes": 12549
+      "sha256": "e32e70e4b3ac69aa600abc09499501a32fc94b100669d1a1ac8c18629a291922",
+      "bytes": 12543
     },
     {
       "path": "interface/barrackinterface.js",
@@ -315,8 +315,8 @@
     },
     {
       "path": "sprites/entities/entity.js",
-      "sha256": "9d0bd337ad30ca1944e0d3dec9f01a9e974c1a1cc5b3d26ae1b725df06ad52d1",
-      "bytes": 4685
+      "sha256": "e8cfae34ad794e010d0ac859b28d83392432161ddd993b6a6ac49cd64f4d7573",
+      "bytes": 5101
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
@@ -400,8 +400,8 @@
     },
     {
       "path": "sprites/entities/buildings/building.js",
-      "sha256": "ed6076f7ba8514268c38709f1e10384970e9a4051d5fbd379452c4e8581fc33c",
-      "bytes": 2738
+      "sha256": "9c19193d8bef084ed3870f9d0c550289a1540eef203df5899ac52d630b3f596c",
+      "bytes": 2732
     },
     {
       "path": "sprites/entities/buildings/nature/goldmine.js",
@@ -450,8 +450,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/production.js",
-      "sha256": "01861f31c71969440fbc9667943ec27b961662a16fa1a912b093df4ef70fb361",
-      "bytes": 17060
+      "sha256": "e4d35b17bfdf09aa027c596a87a1c36821173f6d04f4968fc15efffab4fe3bc9",
+      "bytes": 17054
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",

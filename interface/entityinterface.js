@@ -141,7 +141,7 @@ class EntityInterface {
         this.change(info, portal.player.fullColor, portal, description)
     }
     showFogTown(town) {
-        this.change(town.fogInfo, town.player.fullColor)
+        this.change(town.fogInfo, town.panelColor)
         this.fogTown = {...town.coord}
     }
     change(entity, color, portal = null, description = false) {
