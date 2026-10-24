@@ -3339,7 +3339,9 @@ class Menu {
         this.load.buttons[0].update()
         this.startGame.buttons[0].update()
     }
-    back() {
+    // Ends the running game without showing the menu: back() and TutorialManager.switchTo.
+    // Returns whether it was a lobby game. The game loop stops on its next frame (gameExit).
+    stopGame() {
         gameExit = true
         const lobbyGame = onlineSession.openGameID !== null
         if (onlineSocket) {
@@ -3358,6 +3360,10 @@ class Menu {
         timer.pauseAndSaveTime()
 
         removeEvents()
+        return lobbyGame
+    }
+    back() {
+        const lobbyGame = this.stopGame()
         menu.visible = true
         menu.start()
         // A lobby game returns to the hub, whose enter re-fetches lobby:list;
