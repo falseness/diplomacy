@@ -134,25 +134,25 @@ class Screen {
         }
         return out
     }
-    // Pan limits on each axis (TASK-1292). Where the whole slab (mapBorder.slab, TASK-1219) is smaller than the
-    // screen the offset keeps its value, clamped only so the whole slab stays on screen: [slab.right - w, slab.left].
-    // Where it is larger the camera may go mapBorderMargin past the board's edges, but the sky beside the slab may
-    // not exceed how far the slab overflows the screen (d = slab size - w): [max(margin low, slab.left - d),
-    // min(margin high, slab.right - w + d)]. At d = 0 both rules give the single point slab.left = slab.right - w,
-    // so the interval changes continuously with the scale and zooming across the threshold never jumps the camera
-    // (it used to centre the slab there). Far from the threshold d exceeds the margin and only the margin limits hold.
-    static panRange(slabLow, slabHigh, size, marginLow, marginHigh) {
-        const overflow = slabHigh - slabLow - size
-        if (overflow <= 0)
-            return {low: slabHigh - size, high: slabLow}
-        return {low: Math.max(marginLow, slabLow - overflow), high: Math.min(marginHigh, slabHigh - size + overflow)}
+    // Pan limits on each axis (TASK-1298): the camera may go mapBorderMargin (m = mapBorderMargin / canvas.scale) past
+    // the slab (mapBorder.slab: the board's top face and sides) again, so the cells under a right-side panel (the town
+    // panel covers the screen's right 26%) can always be brought out (user report 2026-10-24: zoomed out, the town panel
+    // hid cells the camera could not move right to; TASK-1219 centred a slab smaller than the screen, TASK-1292 kept it
+    // whole on screen and gave a slightly larger one only its overflow, so at the slab-width scale the camera could not
+    // move right at all). The offset may be anywhere the sky beside the slab is at most the margin on either side,
+    // [slab.left - m, slab.right - w + m] (the pre-TASK-1219 limits), or the whole slab is on screen,
+    // [slab.right - w, slab.left]: the union of both. Panned fully right, the slab's right edge is at w - m on screen,
+    // or, for a slab narrower than w - m, the whole slab is on screen from the left edge: either way left of the panel,
+    // and the board is never pushed off the screen. The ends are continuous in the scale (at slab size w the interval is
+    // [slab.left - m, slab.left + m], at w - m both parts meet), so zooming never jumps the camera (TASK-1292).
+    // Without a slab, mapBorder's margin limits (getScreenLeft/Right/Top/Bottom).
+    static panRange(low, high, size, margin) {
+        return {low: Math.min(low - margin, high - size), high: Math.max(high - size + margin, low)}
     }
     correctCanvas() {
-        const slab = mapBorder.slab
-        const x = slab ? Screen.panRange(slab.left, slab.right, width, this.getScreenLeft(), this.getScreenRight()) :
-            {low: this.getScreenLeft(), high: this.getScreenRight()}
-        const y = slab ? Screen.panRange(slab.top, slab.bottom, height, this.getScreenTop(), this.getScreenBottom()) :
-            {low: this.getScreenTop(), high: this.getScreenBottom()}
+        const slab = mapBorder.slab, m = mapBorderMargin / canvas.scale
+        const x = slab ? Screen.panRange(slab.left, slab.right, width, m) : {low: this.getScreenLeft(), high: this.getScreenRight()}
+        const y = slab ? Screen.panRange(slab.top, slab.bottom, height, m) : {low: this.getScreenTop(), high: this.getScreenBottom()}
         canvas.offset.x = Math.max(Math.min(canvas.offset.x, x.high), x.low)
         canvas.offset.y = Math.max(Math.min(canvas.offset.y, y.high), y.low)
     }

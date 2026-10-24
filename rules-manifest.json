@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "900b4d58aa788d39fb248f93eb76ea677d88906de980cc6f4552d6331f66932d",
+  "rulesVersion": "e1202c080beb0cb0449db1641f8f804038026f0ee2d093ee785688901d111776",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -270,8 +270,8 @@
     },
     {
       "path": "events/screen.js",
-      "sha256": "0b029e9fc1f64ace20575c488c3eb88d39d9a5e2c9ba25d001ec8fab4c40d457",
-      "bytes": 14005
+      "sha256": "afb8ba37b445d2acab1fae391135c72bbd21e155b4aedd37ed91f4f3031c9863",
+      "bytes": 14331
     },
     {
       "path": "events/events.js",
