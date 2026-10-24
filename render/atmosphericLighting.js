@@ -108,6 +108,10 @@ const atmosphericLighting = {
         map: [180, 205, 250], gain: [0, 30, 80], raster: 256},
     rimRaster: null,
     rimGain: null,
+    // boardLayers' rasters (undefined: not built).
+    layerShade: undefined,
+    layerLift: undefined,
+    layerKey: '',
     rimBuilds: 0,
     // Upper-left key light direction (degrees, screen space, y down) for shadows.
     KEY_ANGLE: -120,
@@ -188,7 +192,11 @@ const atmosphericLighting = {
         if (this.beamShade) this.beamShade.width = this.beamShade.height = 0
         if (this.rimRaster) this.rimRaster.width = this.rimRaster.height = 0
         if (this.rimGain) this.rimGain.width = this.rimGain.height = 0
+        if (this.layerShade) this.layerShade.width = this.layerShade.height = 0
+        if (this.layerLift) this.layerLift.width = this.layerLift.height = 0
         this.map = this.gain = this.beamRaster = this.beamShade = this.rimRaster = this.rimGain = null
+        this.layerShade = this.layerLift = undefined
+        this.layerKey = ''
         this.mapKey = ''
         this.mapState = null
     },
@@ -350,13 +358,19 @@ const atmosphericLighting = {
     },
     // The light map at cap's resolution (as lightMap(board, cap)) brought up to the board's light state by redrawing
     // only the map pixels the world rectangles rects ({x0, y0, x1, y1}, where the cells whose light changed draw)
-    // cover, grown by MAP_REGION_GROW pixels (Grid.patchSurfaceCache): build's own drawing on the map's canvases, at
-    // their transform, clipped to that region grown by MAP_REGION_MARGIN pixels, its clip paths the hexagons reaching
-    // that (clipWindow); then the margin's pixels are put back from a copy taken first, so the clip's edge stays off the
-    // region. Pixels outside the rectangles were drawn for the old state as for the new one. False (nothing drawn)
-    // unless the map is that of stored, the state the rectangles were found against, at this resolution.
-    MAP_REGION_GROW: 2,
-    MAP_REGION_MARGIN: 64,
+    // cover, grown by MAP_REGION_GROW pixels (Grid.patchSurfaceCache): the rectangles' pixel boxes merged into
+    // clusters (mapRegionClusters: those whose boxes grown by MAP_REGION_MARGIN overlap made one box), so a move's
+    // cells far apart redraw their own boxes, not one box holding them all; then build's own drawing on the map's
+    // canvases, at their transform, clipped to the clusters' boxes grown by MAP_REGION_MARGIN pixels, its clip paths the
+    // hexagons reaching them (clipWindow); then each margin's pixels are put back from a copy taken first, so the clip's
+    // edge stays off the region. Pixels outside the rectangles were drawn for the old state as for the new one. False
+    // (nothing drawn) unless the map is that of stored, the state the rectangles were found against, at this resolution.
+    // A clip rectangle crossing a hexagon side redraws the side's antialiasing a little unlike a whole build some pixels
+    // into the box (Chromium software raster), which the grow keeps within tolerance: with 2 or 8 pixels the patched
+    // frames differ from a whole build in more than 0.05% of their pixels (server tests/client/test-move-work.js
+    // --tolerance, TASK-1289), with 24 in at most 0.04%.
+    MAP_REGION_GROW: 24,
+    MAP_REGION_MARGIN: 8,
     // Reused canvases holding a region's ring while it is redrawn (updateMapRegion), by canvas name.
     regionScratch: {},
     updateMapRegion(board, cap, rects, stored) {
@@ -367,25 +381,27 @@ const atmosphericLighting = {
             return false
         for (let k = 0; k < stored.length; ++k) if (this.mapState[k] !== stored[k]) return false
         const scale = this.mapScale, W = this.map.width, H = this.map.height, grow = this.MAP_REGION_GROW
-        const x0 = Math.min(...rects.map(r => r.x0)), y0 = Math.min(...rects.map(r => r.y0))
-        const x1 = Math.max(...rects.map(r => r.x1)), y1 = Math.max(...rects.map(r => r.y1))
-        const inner = pixelRect(Math.floor((x0 - bounds.left) * scale) - grow, Math.floor((y0 - bounds.top) * scale) - grow,
-            Math.ceil((x1 - bounds.left) * scale) + grow, Math.ceil((y1 - bounds.top) * scale) + grow, W, H)
-        if (!inner) return true
         const m = this.MAP_REGION_MARGIN
-        const outer = pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, W, H)
-        this.lastMapRegion = {inner, outer}
-        const kept = ['map', 'gain'].map(name => copyCanvasRing(this[name], outer, inner, this.regionScratch, name))
+        const inners = rects.map(r => pixelRect(Math.floor((r.x0 - bounds.left) * scale) - grow,
+            Math.floor((r.y0 - bounds.top) * scale) - grow, Math.ceil((r.x1 - bounds.left) * scale) + grow,
+            Math.ceil((r.y1 - bounds.top) * scale) + grow, W, H)).filter(Boolean)
+        if (!inners.length) return true
+        const regions = mapRegionClusters(inners, m, W, H)
+        this.lastMapRegion = {regions}
+        const kept = ['map', 'gain'].map(name =>
+            regions.map(({inner, outer}, k) => copyCanvasRing(this[name], outer, inner, this.regionScratch, name + k)))
         const g = this.map.getContext('2d'), k = this.gain.getContext('2d')
         for (const c of [g, k]) {
             c.save()
             c.setTransform(1, 0, 0, 1, 0, 0)
             c.beginPath()
-            c.rect(outer.x, outer.y, outer.w, outer.h)
+            for (const {outer} of regions) c.rect(outer.x, outer.y, outer.w, outer.h)
             c.clip()
             c.beginPath()
         }
-        this.clipWindow = clipWindowOf(outer, W, H, bounds.left, bounds.top, scale, 1.05 * basis.r)
+        const span = pixelRect(Math.min(...regions.map(r => r.outer.x)), Math.min(...regions.map(r => r.outer.y)),
+            Math.max(...regions.map(r => r.outer.x + r.outer.w)), Math.max(...regions.map(r => r.outer.y + r.outer.h)), W, H)
+        this.clipWindow = clipWindowOf(span, W, H, bounds.left, bounds.top, scale, 1.05 * basis.r)
         try {
             this.build(this.collect(board), bounds, scale, true)
         } finally {
@@ -393,8 +409,8 @@ const atmosphericLighting = {
             g.restore()
             k.restore()
         }
-        restoreCanvasRing(this.map, kept[0])
-        restoreCanvasRing(this.gain, kept[1])
+        for (const ring of kept[0]) restoreCanvasRing(this.map, ring)
+        for (const ring of kept[1]) restoreCanvasRing(this.gain, ring)
         ++this.rebuilds
         this.mapState = this.lightState(board).slice()
         return true
@@ -562,16 +578,10 @@ const atmosphericLighting = {
             // A cool colour shows far over the warm stone, so it also spills wide (TERRITORY.cool).
             if (this.TERRITORY.cool?.map) this.territoryGlow(g, pos, this.TERRITORY.cool, owner, 'map')
         }
-        // The cool sky fill along the far edges.
-        if (this.RIM.alpha > 0) {
-            this.rim(bounds)
-            g.drawImage(this.rimRaster, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        }
-        // Shade between the key light's shafts.
-        if (this.BEAMS.shades.length) {
-            this.beams(bounds)
-            g.drawImage(this.beamShade, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        }
+        // The cool sky fill along the far edges and the shade between the key light's shafts, in one raster (boardLayers).
+        const layers = this.boardLayers(bounds)
+        if (layers.shade)
+            g.drawImage(layers.shade, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         // Lamp spill (multiply part): the blue is held back towards amber.
         g.globalCompositeOperation = 'source-over'
         this.drawSpill(g, sources, 'map')
@@ -587,12 +597,11 @@ const atmosphericLighting = {
         // The key light's lift, then each lamp's spill: the lighter of the two per channel.
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
+        // The key light's shafts and the rim's lift, in one raster (boardLayers), and the cool territories' lift: added.
         k.globalCompositeOperation = 'lighter'
-        k.drawImage(this.beams(bounds), bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
+        k.drawImage(layers.lift, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         if (this.TERRITORY.cool?.gain)
             for (const {pos, owner} of cells) if (owner) this.territoryGlow(k, pos, this.TERRITORY.cool, owner, 'gain')
-        if (this.RIM.gainAlpha > 0)
-            k.drawImage(this.rim(bounds, 'rimGain'), bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         k.globalCompositeOperation = 'lighten'
         this.drawSpill(k, sources, 'gain')
         k.restore()
@@ -677,6 +686,41 @@ const atmosphericLighting = {
         g.fillRect(0, 0, W, H)
         atmosphericBackground.watch(surface)
         return surface
+    },
+    // The light map's layers that follow from the board bounds alone, each one raster (RIM.raster pixels on the long
+    // side, as the rim and the beams): shade, the rim's multiply colour times the shade between the shafts (each
+    // 'multiply' over an opaque map multiplies it by 1 - alpha + colour, so one opaque raster of their product, drawn
+    // 'multiply', is both; null when neither draws) and lift, the shafts' gain plus the rim's lift (both 'lighter',
+    // added); so a light map region redraw (updateMapRegion) draws two layers fewer. Built once per bounds size and hex
+    // radius.
+    boardLayers(bounds) {
+        const beams = this.beams(bounds)
+        this.rim(bounds)
+        const key = this.beamKey + '|' + this.rimKey
+        if (this.layerShade !== undefined && this.layerKey === key) return {shade: this.layerShade, lift: this.layerLift}
+        const W = this.rimRaster.width, H = this.rimRaster.height
+        const layer = (surface, draw) => {
+            surface = surface || document.createElement('canvas')
+            surface.width = W
+            surface.height = H
+            draw(surface.getContext('2d'))
+            atmosphericBackground.watch(surface)
+            return surface
+        }
+        const shades = [this.RIM.alpha > 0 && this.rimRaster, this.BEAMS.shades.length && this.beamShade].filter(Boolean)
+        this.layerShade = shades.length ? layer(this.layerShade, g => {
+            g.fillStyle = '#fff'
+            g.fillRect(0, 0, W, H)
+            g.globalCompositeOperation = 'multiply'
+            for (const shade of shades) g.drawImage(shade, 0, 0, W, H)
+        }) : null
+        this.layerLift = layer(this.layerLift, g => {
+            g.drawImage(beams, 0, 0, W, H)
+            g.globalCompositeOperation = 'lighter'
+            if (this.RIM.gainAlpha > 0) g.drawImage(this.rimGain, 0, 0, W, H)
+        })
+        this.layerKey = key
+        return {shade: this.layerShade, lift: this.layerLift}
     },
     // The RIM fill over the board bounds: its multiply colour (rimRaster, the default) or its lift
     // (rimGain), both built once per bounds size and hex radius.
@@ -1908,6 +1952,29 @@ function clipWindowOf(rect, W, H, left, top, scale, r) {
     return {x0: rect.x > 0 ? left + rect.x / scale - r : -Infinity, y0: rect.y > 0 ? top + rect.y / scale - r : -Infinity,
         x1: rect.x + rect.w < W ? left + (rect.x + rect.w) / scale + r : Infinity,
         y1: rect.y + rect.h < H ? top + (rect.y + rect.h) / scale + r : Infinity}
+}
+// The pixel boxes inners (of a W x H canvas) merged into regions {inner, outer}: inner the box spanning a cluster's boxes,
+// outer it grown by margin pixels (cut to the canvas); boxes are merged until no two regions' outer boxes overlap, so
+// every region's ring (outer outside inner) lies outside every other region's outer box.
+function mapRegionClusters(inners, margin, W, H) {
+    const region = inner => ({inner, outer: pixelRect(inner.x - margin, inner.y - margin, inner.x + inner.w + margin,
+        inner.y + inner.h + margin, W, H)})
+    const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+    const regions = inners.map(region)
+    for (let merged = true; merged;) {
+        merged = false
+        for (let i = 0; i < regions.length && !merged; ++i)
+            for (let j = i + 1; j < regions.length; ++j) {
+                if (!overlap(regions[i].outer, regions[j].outer)) continue
+                const a = regions[i].inner, b = regions[j].inner
+                regions[i] = region(pixelRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x + a.w, b.x + b.w),
+                    Math.max(a.y + a.h, b.y + b.h), W, H))
+                regions.splice(j, 1)
+                merged = true
+                break
+            }
+    }
+    return regions
 }
 // The whole pixel rectangle {x, y, w, h} spanning x0..x1 x y0..y1 (whole pixels) cut to a W x H canvas; null when empty.
 function pixelRect(x0, y0, x1, y1, W, H) {
