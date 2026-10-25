@@ -1241,9 +1241,10 @@ const atmosphericLighting = {
         ++this.shadowSilhouetteBuilds
         return silhouette
     },
-    // Whether drawShadows lets building on the cell (x, y) cast a shadow (casters on screen aside).
-    castsShadow(board, x, y, building) {
-        return building.notEmpty() && !building.killed && !building.isInvisible && !building.isMapEdge &&
+    // Whether drawShadows lets building on the cell (x, y) cast a shadow (casters on screen aside). cached: building as a
+    // surface cache drew it, so one killed since (a tower a catapult destroyed) still cast its shadow there.
+    castsShadow(board, x, y, building, cached = false) {
+        return building.notEmpty() && (cached || !building.killed) && !building.isInvisible && !building.isMapEdge &&
             !building.isBuildingProduction() && !board.observedBuilding(board.arr[x][y]) &&
             !this.flatObjects.includes(building.name) && !this.emitsLight(building)
     },

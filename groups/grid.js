@@ -1293,7 +1293,7 @@ class Grid extends SpritesGroup {
                     if (!image || !image.width)
                         continue
                     add({x0: building.pos.x, y0: building.pos.y, x1: building.pos.x + image.width, y1: building.pos.y + image.height})
-                    if (atmosphericLighting.castsShadow(this, i, j, building))
+                    if (atmosphericLighting.castsShadow(this, i, j, building, building === before))
                         add(atmosphericLighting.shadowBounds(building, image, c, sources))
                 }
             }
