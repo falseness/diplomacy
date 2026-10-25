@@ -337,9 +337,10 @@ function createTutorial5Map() {
 }
 
 function createTutorial6Map() {
-    // Twelve typed portals share the open eastern battlefield (five of them mage). Starting defenders occupy
-    // their own portals; chaos starts empty and follows the game's chaos schedule (a demon lord every 4
-    // rounds from round 28). Red's archers start further west at (8,7), (8,4) and (10,4), so they can
+    // Fourteen typed portals share the open eastern battlefield (five of them mage, three siege: (10,6) and the
+    // northern (11,1) and southern (12,7), each with a starting Bombard). Starting defenders occupy their own
+    // portals; chaos starts empty and follows the game's chaos schedule (a demon lord every 4 rounds from
+    // round 28). Red's archers start further west at (8,7), (8,4) and (10,4), so they can
     // retreat to the towns in time.
     let size = {x: 16, y: 9}
     let towns = [{x: 1, y: 4}, {x: 6, y: 4}]
@@ -406,7 +407,9 @@ function createTutorial6Map() {
                 {x: 10, y: 6, type: Bombard},
                 {x: 9, y: 2, type: Brute},
                 {x: 13, y: 2, type: Hexcaster},
-                {x: 13, y: 6, type: Hexcaster}
+                {x: 13, y: 6, type: Hexcaster},
+                {x: 11, y: 1, type: Bombard},
+                {x: 12, y: 7, type: Bombard}
             ]
         }
     )
@@ -422,7 +425,9 @@ function createTutorial6Map() {
         {x: 9, y: 2, category: 'melee'},
         {x: 7, y: 7, category: 'chaos'},
         {x: 13, y: 2, category: 'mage'},
-        {x: 13, y: 6, category: 'mage'}
+        {x: 13, y: 6, category: 'mage'},
+        {x: 11, y: 1, category: 'siege'},
+        {x: 12, y: 7, category: 'siege'}
     ]
     map.testName = 'tutorial 6'
     return map
