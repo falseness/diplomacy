@@ -14,6 +14,10 @@ function createEvents() {
         document.addEventListener('touchmove', touchmove)
         document.addEventListener('touchend', touchend)
         document.addEventListener('touchcancel', touchend)
+        // touches that ended while the listeners were removed must not leave a pinch behind
+        buttonTouchIds.clear()
+        if (typeof gameEvent != 'undefined')
+            gameEvent.resetPinch()
     }
 }
 // The menu has its own listeners (menu.setEvents); the game's must not act on
@@ -42,26 +46,49 @@ event.preventDefault();
 event.stopPropagation();
     
 }, false);*/
+// identifiers of the touches that began on a game button (next turn, undo, menu, i): a finger resting on a button
+// while another drags the board is not a pinch
+let buttonTouchIds = new Set()
+function isOnGameButton(pos) {
+    const buttons = [typeof nextTurnButton != 'undefined' && nextTurnButton, typeof undoButton != 'undefined' && undoButton,
+        typeof backToMenuButton != 'undefined' && backToMenuButton, typeof iButton != 'undefined' && iButton]
+    // the button's place counts even while it is hidden (next turn during the AI turn)
+    return buttons.some(button => button && button.rect.isInside(pos))
+}
+// the touches the camera follows: those that did not begin on a button; a lone finger pans wherever it began
+function getGameTouches(event) {
+    const touches = Array.from(event.touches)
+    const game = touches.filter(touch => !buttonTouchIds.has(touch.identifier))
+    return game.length || touches.length != 1 ? game : touches
+}
 function touchstart(event) {
     event.stopPropagation()
-    
-    let pos = getTouchesPos(event)
-    gameEvent.touchstart(pos, event.touches.length)
+
+    // a touch that ended unseen (listeners removed) is forgotten
+    const down = new Set(Array.from(event.touches, touch => touch.identifier))
+    for (const id of buttonTouchIds)
+        if (!down.has(id))
+            buttonTouchIds.delete(id)
+    for (const touch of Array.from(event.changedTouches))
+        if (isOnGameButton(clientToCanvas(touch.clientX, touch.clientY)))
+            buttonTouchIds.add(touch.identifier)
+    const touches = getGameTouches(event)
+    gameEvent.touchstart(getTouchesPos(touches), touches.length)
 }
 function touchmove(event) {
     event.stopPropagation()
     
-    let pos = getTouchesPos(event)
-    gameEvent.touchmove(pos, event.touches.length)
+    const touches = getGameTouches(event)
+    gameEvent.touchmove(getTouchesPos(touches), touches.length)
 }
 function touchend(event) {
     event.stopPropagation()
     
-    let pos = getTouchesPos(event)
-    // the one finger still down (event.touches: targetTouches may not hold it) re-anchors the pan
-    if (event.touches.length == 1)
-        pos = clientToCanvas(event.touches[0].clientX, event.touches[0].clientY)
-    gameEvent.touchend(pos, event.touches.length)
+    // the fingers still down (event.touches: targetTouches may not hold them); one left re-anchors the pan
+    const touches = getGameTouches(event)
+    for (const touch of Array.from(event.changedTouches))
+        buttonTouchIds.delete(touch.identifier)
+    gameEvent.touchend(getTouchesPos(touches), touches.length)
 }
 function keydown(event) {
     if (gameEvent.keyboardZoom(event))
@@ -148,8 +175,14 @@ class Events {
             this.scalingStopped = true
         }
     }
-    touchend(pos, touchesCount) {
+    // forgets the pinch in progress: only a new two-finger touchstart starts one
+    resetPinch() {
         this.scaling = false
+        this.pitchStartDist = 0
+        this.pitchStartPos = {}
+    }
+    touchend(pos, touchesCount) {
+        this.resetPinch()
         // one finger left down after a pinch pans again from where it is now, with no jump
         this.scalingStopped = touchesCount <= 1
         if (touchesCount == 1) {
@@ -158,7 +191,7 @@ class Events {
         }
     }
     touchmove(pos, touchesCount) {
-        if (touchesCount > 2) {
+        if (touchesCount > 2 || touchesCount == 0) {
             this.scaling = false
             return
         }
@@ -189,8 +222,8 @@ class Events {
         }
     }
     touchstart(pos, touchesCount) {
-        this.scaling = false
-        if (touchesCount > 2)
+        this.resetPinch()
+        if (touchesCount > 2 || touchesCount == 0)
             return
         if (touchesCount == 2) {
             this.pitchStartPos = getAveragePoint(pos)

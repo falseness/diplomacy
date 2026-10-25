@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "53acaf31a42da5d444474c5584d1e4eebfb449c3ba3632be10ce6aec91a0a7eb",
+  "rulesVersion": "afa19706979405721930b4124557a8b3354fbc8b7175cf1d44342bd2417fd694",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "events/geteventpos.js",
-      "sha256": "66193f5f70c87dc46d6bd8d2015c6080dc1105041e04a76b1a4523d97abe6720",
-      "bytes": 1523
+      "sha256": "ea8d214bb3ce2d2bc15a34512878ab617428a4abd77305d719db00a6aed6e097",
+      "bytes": 1510
     },
     {
       "path": "events/screen.js",
@@ -275,8 +275,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "5ac9be231fe1f9687c16252c7c081678231bb9edd5fd01739d26343ab56bf0c1",
-      "bytes": 24731
+      "sha256": "8c8d4b012cd2e50db9394a9d4b65ab6e4ca822a02f924bb628d2fe0fe13e493c",
+      "bytes": 26609
     },
     {
       "path": "options/onlineHubRows.js",

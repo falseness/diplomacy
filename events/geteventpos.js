@@ -19,11 +19,11 @@ function getEventPos(event) {
         return clientToCanvas(event.changedTouches[0].clientX, event.changedTouches[0].clientY)
     return clientToCanvas(event.clientX, event.clientY)
 }
-function getTouchesPos(event) {
+// canvas positions of a list of touches (the handlers pass its length as the count)
+function getTouchesPos(touches) {
     let pos = []
-    // the handlers pass event.touches.length as the count, so read the same list
-    for (let i = 0; i < event.touches.length; ++i)
-        pos.push(clientToCanvas(event.touches[i].clientX, event.touches[i].clientY))
+    for (let i = 0; i < touches.length; ++i)
+        pos.push(clientToCanvas(touches[i].clientX, touches[i].clientY))
     if (pos.length == 1)
         return pos[0]
     return pos
