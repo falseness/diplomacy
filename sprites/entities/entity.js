@@ -52,6 +52,8 @@ class Entity extends Sprite {
             }
         }
         res.info['heal speed'] = this.healSpeed
+        // The panel shows displayName; name stays the image key.
+        if (this.displayName) res.displayName = this.displayName
         return res
     }
     calcPos() {
@@ -114,6 +116,7 @@ class Entity extends Sprite {
         hp += ' / ' + this.maxHP
         return {
             name: this.name,
+            ...(this.constructor.displayName ? {displayName: this.constructor.displayName} : {}),
             bodyImageName: this.bodyImageName,
             info: {
                 hp: hp

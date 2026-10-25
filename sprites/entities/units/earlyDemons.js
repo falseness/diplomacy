@@ -11,6 +11,8 @@ function registerDemonVariant(UnitClass, type, asset) {
         return value === undefined ? Object.getPrototypeOf(UnitClass).buildingDMG : value
     }})
     Object.assign(UnitClass, {healSpeed: 0, salary: 0})
+    // Not the base unit's display name (e.g. an imp is not a 'peasant').
+    Object.defineProperty(UnitClass, 'displayName', {get() { return DEMON_TYPES[type].name }})
 }
 class Imp extends Noob {}
 registerDemonVariant(Imp, 'imp', 'noob')

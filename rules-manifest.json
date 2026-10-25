@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "bc083cfce90c9cdf23541a9d594c4c9dc3eb709775ca6a7c84b6ddbe21b46b6f",
+  "rulesVersion": "bbb71868ed4050f4bdeea278205a0f5a6d5f59fedcd2e9111919b964dad54b3a",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,13 +150,13 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "e32e70e4b3ac69aa600abc09499501a32fc94b100669d1a1ac8c18629a291922",
-      "bytes": 12543
+      "sha256": "2ddbd381bcb9a5b11aaccbdf67ddff06917c850e1468633fb0bd94ad25218775",
+      "bytes": 14597
     },
     {
       "path": "interface/barrackinterface.js",
-      "sha256": "4155b7a5b6cf2afc7f47eadb54049d726e21226a7e8da9f8c070a79975ea5576",
-      "bytes": 11484
+      "sha256": "1bc4a1dd1d82b61bea0b025c021c05568c39b6a1a9d2fb48acce1cb00746749e",
+      "bytes": 11613
     },
     {
       "path": "interface/towninterface.js",
@@ -315,8 +315,8 @@
     },
     {
       "path": "sprites/entities/entity.js",
-      "sha256": "e8cfae34ad794e010d0ac859b28d83392432161ddd993b6a6ac49cd64f4d7573",
-      "bytes": 5101
+      "sha256": "654e525e036bf0ebb43bdf156215cbf82fc6b77820b8310841aadbdc00f6cbb9",
+      "bytes": 5330
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
@@ -330,13 +330,13 @@
     },
     {
       "path": "sprites/entities/units/noob.js",
-      "sha256": "6c029f69d34de6e84c1493f33f90ff3f4ff1b3ff09e4ed97eab410f4ddeb076d",
-      "bytes": 193
+      "sha256": "93e82b564dc4f8ebc7ef0732977fb4726b2f16a3f699188ed2f1137146ca97de",
+      "bytes": 228
     },
     {
       "path": "sprites/entities/units/normchel.js",
-      "sha256": "b9d1720d7a2a167678f22228d9d9b9a9dd1d079d173eb3831429f3f1161ef071",
-      "bytes": 201
+      "sha256": "ee6c2e496b266b5fd81f03bf36c2adb8fc911ca23ef5b4451317be527411d8e9",
+      "bytes": 237
     },
     {
       "path": "sprites/entities/units/KOHb/mirroringInteraction.js",
@@ -345,13 +345,13 @@
     },
     {
       "path": "sprites/entities/units/KOHb/KOHb.js",
-      "sha256": "39685783e8ec40a9e79ff444d77e54a682b591c8868e65fa59cf6ee14584001b",
-      "bytes": 584
+      "sha256": "65cbf2e6c6da92021a7b98071b5df9ccafafac1edfbe820c9ca6e24769c7ce20",
+      "bytes": 620
     },
     {
       "path": "sprites/entities/units/earlyDemons.js",
-      "sha256": "aacccc31c8b1ab6154bb9140dfbff20525a6cebbd5cc062ea53925ec208c9f24",
-      "bytes": 1077
+      "sha256": "bde31d842997b6275cb13c2b7d1a2af65e5848f0ed973796e9927011137ef5be",
+      "bytes": 1246
     },
     {
       "path": "sprites/entities/units/heavyDemons.js",
@@ -455,8 +455,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",
-      "sha256": "e7ec6877b596e77ca74edee85e1fc9e1e019d5934a6520061d0953d2f0247196",
-      "bytes": 2594
+      "sha256": "cce61ece577c52c3abd6b2534de5147d033c11d73fb8d394827fd349ea312f30",
+      "bytes": 2833
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/barrack.js",

@@ -1,4 +1,5 @@
 class KOHb extends Unit {
+    static displayName = 'horseman'
     static maxHP = 3
     static healSpeed = 2
     static dmg = 1

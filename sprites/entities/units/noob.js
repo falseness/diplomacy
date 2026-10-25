@@ -1,4 +1,5 @@
 class Noob extends Unit {
+    static displayName = 'peasant'
     static maxHP = 2
     static healSpeed = 1
     static dmg = 1

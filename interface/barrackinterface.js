@@ -161,19 +161,21 @@ class BarrackInterface {
         this.trainInterfacesCreationLoop(trainInterfaces, index)
     }
     changeTrainingUnitButton(barrack) {
-        if (!barrack.info.train)
+        // The production id: info.train is the shown (display) name.
+        const train = barrack.trainId
+        if (!train)
             return 
         
         let type = 'unit'
 
-        this.trainInterfaces[type][barrack.info.train].setButtonText(
-            barrack.info.turns + ' / ' + production[barrack.info.train].turns)
-        this.trainInterfaces[type][barrack.info.train].setCanTrain(true)    
+        this.trainInterfaces[type][train].setButtonText(
+            barrack.info.turns + ' / ' + production[train].turns)
+        this.trainInterfaces[type][train].setCanTrain(true)    
     }
     changeUnitTab(barrack) {
         const type = 'unit'
         
-        let canTrainNew = !barrack.info.train
+        let canTrainNew = !barrack.trainId
         for (let i in this.trainInterfaces[type]) {
             this.trainInterfaces[type][i].setCanTrain(canTrainNew)
             this.trainInterfaces[type][i].setButtonText('train (' + production[i].turns + ')')
@@ -194,6 +196,7 @@ class BarrackInterface {
         if (boolean && !this.#visible)
             this.invalidateRenderCache()
         this.#visible = boolean
+        if (typeof entityInterface !== 'undefined') entityInterface.refit()
         /*if (mobilePhone)
             nextTurnButton.canClick = !boolean*/
     }

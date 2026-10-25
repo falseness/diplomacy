@@ -107,7 +107,45 @@ class EntityInterface {
     get top() {
         return this.pos.y
     }
+    // A narrow (portrait) screen: the picture and the text column shrink together so the name and lines end before
+    // the screen's right edge, or before an open town/barrack panel reaching down beside this one. Returns whether
+    // the scale changed. Every panel that fits keeps scale 1, the constructor's layout.
+    fitColumn() {
+        const scale = this.columnScale ?? 1
+        this.layoutColumn(1)
+        let room = WIDTH
+        for (const panel of [typeof townInterface !== 'undefined' && townInterface,
+                typeof barrackInterface !== 'undefined' && barrackInterface])
+            if (panel && panel.visible && panel.pos && panel.pos.y + panel.height > this.pos.y)
+                room = Math.min(room, panel.pos.x)
+        const margin = 0.04 * this.height
+        const right = Math.max(this.entity.info.right, this.entity.name.right)
+        if (right + margin > room)
+            this.layoutColumn(Math.max(0.25, (room - margin - this.pos.x) / (right - this.pos.x)))
+        return this.columnScale !== scale
+    }
+    layoutColumn(scale) {
+        const h = this.height
+        this.columnScale = scale
+        this.img.x = this.suburbImage.pos.x = this.pos.x + h * 0.38 * scale
+        this.img.width = this.img.height = h * 0.775 * scale
+        this.suburbImage.r = h * 0.275 * scale
+        this.entity.name.pos.x = this.entity.info.pos.x = this.img.x + this.img.width / 2
+        this.entity.name.fontSize = h * 0.2 * scale
+        this.entity.info.fontSize = h * 0.1 * scale
+        this.entity.info.pos.y = this.entity.name.y + this.entity.name.height
+        for (const button of [this.destroyButton, this.skipMovesButton, this.portalStatsButton, this.portalBackButton])
+            button.x = this.entity.name.x
+    }
+    // The town/barrack panel opened or closed beside this one.
+    refit() {
+        if (!this.visible || !this.fitColumn()) return
+        this.updateSizes(this.sizedForUnit)
+        this.renderCacheDirty = true
+    }
     updateSizes(isCurrentEnityUnit) {
+        this.sizedForUnit = isCurrentEnityUnit
+        this.fitColumn()
         let currentButton = isCurrentEnityUnit ? this.destroyButton : this.skipMovesButton
         this.width = Math.max(
             this.entity.info.x + this.entity.info.width,

@@ -1,4 +1,5 @@
 class Normchel extends Unit {
+    static displayName = 'vanguard'
     static maxHP = 5
     static healSpeed = 3
     static dmg = 1

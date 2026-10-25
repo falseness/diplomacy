@@ -58,8 +58,13 @@ class PreparingManufacture extends Manufacture {
     }
 	get info() {
         let building = super.info
-        if (this.isPreparingUnit)
-            addProductionPreviewInfo(building.info, this.unitProduction.name, this.unitProduction.turns)
+        if (this.isPreparingUnit) {
+            // Shown as the unit's display name; trainId is the production id.
+            building.trainId = this.unitProduction.name
+            addProductionPreviewInfo(building.info,
+                production[this.unitProduction.name]?.class?.displayName || this.unitProduction.name,
+                this.unitProduction.turns)
+        }
         let income = this.player.income
         building.info.gold = this.player.gold + ' (' + ((income > 0) ? '+' : '') + income + ')'
         return building
