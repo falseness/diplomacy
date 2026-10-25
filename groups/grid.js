@@ -269,7 +269,9 @@ class Grid extends SpritesGroup {
     //todo: refactor
     // The grout path holds whole rows of cells across the canvas (atmosphericLighting.onCanvas);
     // the tiles drawn are those of the drawn range (each also culls itself).
-    drawHexagons(ctx) {
+    // part {k, n}: only the grout (k 0) and the k-th of n equal runs of the tiles, the calls the whole draw makes there in
+    // its order (the rest snapshot draws them a task each, LIT_REST_BASE).
+    drawHexagons(ctx, part) {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
         const hexagons = [], tiles = []
         const range = this.drawRange(ctx, true), drawn = this.drawRange(ctx)
@@ -289,10 +291,12 @@ class Grid extends SpritesGroup {
             }
         }
         // Grout under the drawn cells only: hidden cells keep their fog tile.
-        if (otherSettings.atmosphericVisuals)
+        if (otherSettings.atmosphericVisuals && (!part || part.k === 0))
             atmosphericLighting.drawGrout(ctx, hexagons)
-        for (const hexagon of tiles)
-            hexagon.draw(ctx, atmosphericTransform)
+        const from = part ? Math.floor(part.k * tiles.length / part.n) : 0
+        const to = part ? Math.floor((part.k + 1) * tiles.length / part.n) : tiles.length
+        for (let k = from; k < to; ++k)
+            tiles[k].draw(ctx, atmosphericTransform)
     }
     // Cell texts are set while their cells are drawn (production previews), within the same
     // drawn range, so the range also holds every text to draw and clear.
@@ -1816,6 +1820,8 @@ class Grid extends SpritesGroup {
             plan = this.planLitView(ctx)
         if (!plan)
             return false
+        if (plan.cache)
+            return this.drawSurfaceCache(ctx) ? 'cache' : false
         const cw = ctx.canvas.width, ch = ctx.canvas.height
         const {view, rest} = plan
         if (rest) {
@@ -1834,10 +1840,16 @@ class Grid extends SpritesGroup {
         }
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         const range = this.litTileRange(cw, ch, ox, oy, 0)
+        // A tile not built yet is drawn from the stand-in (the tasks build it, queueLitTiles); without one it is built now.
+        let standIn, missing = null
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (let v = range.v0; v <= range.v1; ++v) {
             for (let u = range.u0; u <= range.u1; ++u) {
+                if (!view.tiles.has(u + ',' + v) && (standIn ??= this.litStandIn(ctx))) {
+                    (missing ||= new Set()).add(u + ',' + v)
+                    continue
+                }
                 const tile = this.litTile(view, u, v)
                 if (tile)
                     ctx.drawImage(tile, LIT_TILE_PAD, LIT_TILE_PAD, LIT_TILE, LIT_TILE,
@@ -1845,6 +1857,17 @@ class Grid extends SpritesGroup {
             }
         }
         ctx.restore()
+        if (missing) {
+            ctx.save()
+            clipToDeviceRects(ctx, [...missing].map(key => {
+                const [u, v] = key.split(',').map(Number)
+                const x0 = Math.max(0, u * LIT_TILE + ox), y0 = Math.max(0, v * LIT_TILE + oy)
+                return {x: x0, y: y0, w: Math.min(cw, (u + 1) * LIT_TILE + ox) - x0, h: Math.min(ch, (v + 1) * LIT_TILE + oy) - y0}
+            }))
+            ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+            this.drawSurfaceCache(ctx)
+            ctx.restore()
+        }
         // Tiles more than a tile off the canvas go back to the pool.
         for (const [key, tile] of view.tiles) {
             const [u, v] = key.split(',').map(Number)
@@ -1853,9 +1876,15 @@ class Grid extends SpritesGroup {
                 this.releaseLitTile(tile)
             }
         }
-        this.litFrame = {view, ox, oy, rest: false}
+        this.litFrame = {view, ox, oy, rest: false, missing}
         this.queueLitTiles(view, t, cw, ch)
         return true
+    }
+    // Whether the surface cache can stand in for the lit view on ctx's canvas (drawn magnified: lit, its state the board's,
+    // no build or patch under way), so no frame builds the lit view's light map or tiles (Grid.litStandIns).
+    litStandIn(ctx) {
+        return Grid.litStandIns && !!this.surfaceCache && !!this.surfaceCacheLit && !this.surfaceCacheBuild && !this.surfacePatchJob &&
+            this.surfaceStateMatches(ctx)
     }
     // Whether ctx's frame draws lit images, and which: false (the live light), else {t, view, rest}
     // with view the lit view at ctx's transform t (made now if it does not hold) and rest its
@@ -1863,17 +1892,24 @@ class Grid extends SpritesGroup {
     planLitView(ctx) {
         const t = ctx.getTransform()
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceZooming ||
+        const zooming = screen && screen.surfaceZooming
+        if (!otherSettings.atmosphericVisuals || !screen || zooming ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(ctx)) {
             if (this.litView && (this.litView.a !== t.a || this.litView.d !== t.d))
                 this.dropLitView()
-            return false
+            // On a phone a zoom gesture draws the surface cache magnified where it can (Grid.litStandIns), not the direct draw.
+            return zooming && typeof mobilePhone !== 'undefined' && mobilePhone && this.litStandIn(ctx) ? {t, cache: true} : false
         }
         const cw = ctx.canvas.width, ch = ctx.canvas.height
         let view = this.litView
         // A view being patched holds while its patch does (patchLitView).
         if (!view || !(view.patch ? this.patchLitView(ctx, view, t) : this.litViewHolds(ctx, view, t) || this.patchLitView(ctx, view, t))) {
             this.dropLitView()
+            // The light map at the camera's scale is built a step a task (queueLitTiles) while the surface cache stands in.
+            if (!atmosphericLighting.lightMapReady(this) && this.litStandIn(ctx)) {
+                this.queueLitTiles(null, t, cw, ch)
+                return {t, cache: true}
+            }
             view = this.litView = this.newLitView(t, ctx.canvas)
         }
         const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
@@ -2053,7 +2089,7 @@ class Grid extends SpritesGroup {
         if (!otherSettings.atmosphericVisuals || !atmosphericBackground.opaqueOver(ctx) || this.canUseSurfaceCache())
             return null
         const plan = this.litPlan = this.planLitView(ctx)
-        if (!plan)
+        if (!plan || plan.cache)
             return null
         if (plan.rest)
             return {open: this.coverOpen = []}
@@ -2263,26 +2299,29 @@ class Grid extends SpritesGroup {
             canvas.height = ch
         }
         const camera = typeof cameraTransform !== 'undefined' && typeof mainCtx !== 'undefined' && ctx === mainCtx ? cameraTransform.capture(t) : null
-        return view.rest = {e: t.e, f: t.f, canvas, sky: atmosphericBackground.raster, done: 0, camera}
+        return view.rest = {e: t.e, f: t.f, canvas, sky: atmosphericBackground.raster, done: 0, base: 0, camera}
     }
     // Step k of view's rest snapshot: first the canvas as drawMain and draw() leave it before the
     // light (sky, slab shadow, surface and buildings; drawn whole, as a clip changes how paths
     // are rasterized), then band k of rows lit: draw()'s multiply, color-dodge and bloom
-    // (drawRows).
+    // (drawRows). The first is LIT_REST_BASE's steps, one a call (rest.base of them done), the
+    // calls a single draw would make in its order, its save left open from one to the next.
     buildLitRestBand(view, rest, k) {
         const canvas = rest.canvas, g = canvas.getContext('2d'), cw = canvas.width, ch = canvas.height
-        g.save()
-        if (k === 0) {
-            g.setTransform(1, 0, 0, 1, 0, 0)
-            g.clearRect(0, 0, cw, ch)
-            atmosphericBackground.draw(g)
-            g.lineJoin = 'round'
-            g.lineCap = 'round'
-            this.setLitRestTransform(g, view, rest)
-            drawBackgroundHints(g)
-            mapDepth.drawAtmosphericShadow(g, this)
-            this.drawLitScene(g)
+        if (k === 0 && rest.base < LIT_REST_BASE.length) {
+            if (rest.base === 0) {
+                // A snapshot dropped part way (the canvas is shared) leaves its save open.
+                if (canvas.restOpen)
+                    g.restore()
+                g.save()
+                canvas.restOpen = true
+            }
+            LIT_REST_BASE[rest.base++](this, g, view, rest)
+            if (rest.base < LIT_REST_BASE.length)
+                return
         }
+        else
+            g.save()
         // The band's rows, and two pixels off the canvas: the clip's bounds stay the canvas's, so
         // the light map's quad is not cut to the band (a cut quad samples the map a hair apart
         // from the direct draw's whole quad, which color-dodge shows as steps of a few levels).
@@ -2299,6 +2338,8 @@ class Grid extends SpritesGroup {
         this.setLitRestTransform(g, view, rest)
         atmosphericLighting.drawRows(g, this, y0, y1)
         g.restore()
+        if (k === 0)
+            canvas.restOpen = false
         if (++rest.done === LIT_REST_BANDS)
             this.prepareLitPatchBuffer(rest)
     }
@@ -2334,12 +2375,25 @@ class Grid extends SpritesGroup {
     queueLitTiles(view, t, cw, ch) {
         if (this.litTilesQueued)
             return
+        const snapshots = this.overlaySnapshots
+        // No view yet: a step of the light map at the camera's scale (atmosphericLighting.stepLightMap).
+        if (!view) {
+            this.litTilesQueued = true
+            setTimeout(() => {
+                this.litTilesQueued = false
+                if (this === grid && otherSettings.atmosphericVisuals && !this.litView && !gameEvent.screen.surfaceZooming &&
+                        !this.litTaskDefers(snapshots))
+                    atmosphericLighting.stepLightMap(this)
+            })
+            return
+        }
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         const range = this.litTileRange(cw, ch, ox, oy, 1), missing = []
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
         for (let v = range.v0; v <= range.v1; ++v)
             for (let u = range.u0; u <= range.u1; ++u)
-                if (!view.tiles.has(u + ',' + v)) missing.push({u, v, far: Math.hypot(u - cu, v - cv)})
+                if (!view.tiles.has(u + ',' + v)) missing.push({u, v, far: Math.hypot(u - cu, v - cv),
+                    shown: u > range.u0 && u < range.u1 && v > range.v0 && v < range.v1})
         const rest = view.rest
         const banding = rest && rest.done < LIT_REST_BANDS && rest.e === t.e && rest.f === t.f
         if (!banding && !missing.length) {
@@ -2351,10 +2405,16 @@ class Grid extends SpritesGroup {
         setTimeout(() => {
             this.litTilesQueued = false
             // Nothing is built inside a zoom gesture (its frames keep their live light).
-            if (view !== this.litView || gameEvent.screen.surfaceZooming)
+            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots))
                 return
             if (banding && !gameEvent.screen.surfaceMoving) {
-                if (view.rest === rest && rest.done < LIT_REST_BANDS)
+                // The tiles on the canvas the frames draw from the stand-in first (at most LIT_TILE_BUDGET a task), then the bands.
+                const shown = missing.filter(m => m.shown && !view.tiles.has(m.u + ',' + m.v))
+                if (shown.length) {
+                    for (const {u, v} of shown.slice(0, LIT_TILE_BUDGET))
+                        this.litTile(view, u, v)
+                }
+                else if (view.rest === rest && rest.done < LIT_REST_BANDS)
                     this.buildLitRestBand(view, rest, rest.done)
                 return
             }
@@ -2363,6 +2423,12 @@ class Grid extends SpritesGroup {
             for (const {u, v} of missing.slice(0, budget))
                 this.litTile(view, u, v)
         })
+    }
+    // Whether a lit task leaves its turn to another task of the same pause between frames (the next frame queues it again),
+    // so their drawing does not add up: a surface cache stage or check queued, or an overlay snapshot queued or made since
+    // the frame that queued the lit task (snapshots: overlaySnapshots then).
+    litTaskDefers(snapshots) {
+        return Grid.litStandIns && (this.surfaceCacheQueued || !!this.overlayComposite?.queued || this.overlaySnapshots !== snapshots)
     }
     // Draws tile (u, v) of view as the direct draw draws the canvas there, without the sky: the
     // surface, the buildings and the light but in view's edge runs (drawLitEdges lights them in
@@ -2415,14 +2481,32 @@ class Grid extends SpritesGroup {
     // The frame's light where the lit tiles left the board's edge unlit (litEdges), after the
     // tiles and before the units; none over the rest snapshot.
     drawLitEdges(ctx) {
-        const {view, ox, oy, rest} = this.litFrame
+        const {view, ox, oy, rest, missing} = this.litFrame
         if (rest)
             return
         const cw = ctx.canvas.width, ch = ctx.canvas.height, runs = []
-        for (const run of view.edges) {
-            const x0 = Math.max(run.x + ox, 0), y0 = Math.max(run.y + oy, 0)
-            const x1 = Math.min(run.x + run.w + ox, cw), y1 = Math.min(run.y + run.h + oy, ch)
+        const add = (x0, y0, x1, y1) => {
+            x0 = Math.max(x0 + ox, 0); y0 = Math.max(y0 + oy, 0)
+            x1 = Math.min(x1 + ox, cw); y1 = Math.min(y1 + oy, ch)
             if (x0 < x1 && y0 < y1) runs.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+        }
+        for (const run of view.edges) {
+            const u0 = Math.floor(run.x / LIT_TILE), u1 = Math.floor((run.x + run.w - 1) / LIT_TILE)
+            const v0 = Math.floor(run.y / LIT_TILE), v1 = Math.floor((run.y + run.h - 1) / LIT_TILE)
+            let crossed = false
+            if (missing)
+                for (let v = v0; v <= v1 && !crossed; ++v)
+                    for (let u = u0; u <= u1 && !crossed; ++u) crossed = missing.has(u + ',' + v)
+            // A run reaching a square the stand-in drew (already lit) is lit only over the tiles.
+            if (!crossed) {
+                add(run.x, run.y, run.x + run.w, run.y + run.h)
+                continue
+            }
+            for (let v = v0; v <= v1; ++v)
+                for (let u = u0; u <= u1; ++u)
+                    if (!missing.has(u + ',' + v))
+                        add(Math.max(run.x, u * LIT_TILE), Math.max(run.y, v * LIT_TILE),
+                            Math.min(run.x + run.w, (u + 1) * LIT_TILE), Math.min(run.y + run.h, (v + 1) * LIT_TILE))
         }
         atmosphericLighting.drawEdges(ctx, this, runs)
     }
@@ -2464,7 +2548,10 @@ class Grid extends SpritesGroup {
                 this.releaseLitCanvases()
             return true
         }
-        if (!cached && this.drawLitView(ctx))
+        const lit = !cached && this.drawLitView(ctx)
+        if (lit === 'cache')
+            return true
+        if (lit)
             return 'lit'
 
         mapDepth.drawUnderlay(ctx, this)
@@ -2887,6 +2974,11 @@ const SURFACE_PATCH_MARGIN = 128
 const SURFACE_PATCH_MARGIN_MIN = 32
 // false: every change rebuilds the whole cache, as before patches (tests compare a patched cache with a whole build).
 Grid.surfacePatching = true
+// Whether the surface cache stands in for the lit view's light map and tiles while they are built over frames
+// (Grid.litStandIn): drawn magnified until the light map is built (and on a phone in a zoom gesture, where the direct draw
+// costs about three times a cached frame), and over a tile not built yet. False: a frame builds what it draws (the light
+// map and the visible tiles), as a whole rebuild does.
+Grid.litStandIns = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).
@@ -2918,6 +3010,28 @@ const LIT_SCENE_PARTS = [
         mapDepth.drawRim(g, grid)
     },
     (grid, g) => grid.drawOther(g, 'buildings')
+]
+// The rest snapshot's steps before its first band of light (Grid.buildLitRestBand), one a task between frames: the sky,
+// the slab shadow, then the scene's parts, its cells' tiles in LIT_REST_HEX_STEPS runs. Each draws at most about two of the
+// camera canvas's area (drawn megapixels by visualsPerf's count), so no task with its frame draws much more than a frame.
+const LIT_REST_HEX_STEPS = 3
+const LIT_REST_BASE = [
+    (grid, g) => {
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(0, 0, g.canvas.width, g.canvas.height)
+        atmosphericBackground.draw(g)
+    },
+    (grid, g, view, rest) => {
+        g.lineJoin = 'round'
+        g.lineCap = 'round'
+        grid.setLitRestTransform(g, view, rest)
+        drawBackgroundHints(g)
+        mapDepth.drawAtmosphericShadow(g, grid)
+    },
+    // The parts as drawLitScene(g) draws them (no underlay rectangle: the camera's view).
+    (grid, g) => LIT_SCENE_PARTS[0](grid, g),
+    ...Array.from({length: LIT_REST_HEX_STEPS}, (_, k) => (grid, g) => grid.drawHexagons(g, {k, n: LIT_REST_HEX_STEPS})),
+    ...LIT_SCENE_PARTS.slice(2).map(part => (grid, g) => part(grid, g))
 ]
 // A lit view patch's steps (Grid.patchLitView), one a frame: the light map's region; on the lit patch buffer the sky and
 // the slab shadow (as the rest snapshot's first band), each part of the scene, the light map's multiply, its color-dodge

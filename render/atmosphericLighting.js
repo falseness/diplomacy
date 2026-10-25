@@ -199,6 +199,7 @@ const atmosphericLighting = {
         this.layerKey = ''
         this.mapKey = ''
         this.mapState = null
+        this.staged = null
     },
     // range (board.drawRange) limits the walk to those cells.
     collect(board, includeKey = true, includeCells = true, range = null) {
@@ -349,13 +350,59 @@ const atmosphericLighting = {
         if (this.map && this.mapKey === key && this.sameLightState(board, this.mapState) &&
                 (this.mapScale === scale || zooming))
             return this.map
-        this.build(this.collect(board), bounds, scale)
+        // A staged build of this very map is finished at once, another is dropped (canvasFor resets its canvases).
+        const staged = this.staged && this.stagedFor(board, key, scale) ? this.staged : null
+        this.staged = null
+        if (staged)
+            while (!staged.steps.next().done);
+        else
+            this.build(this.collect(board), bounds, scale)
+        this.finishLightMap(board, key, scale)
+        return this.map
+    },
+    finishLightMap(board, key, scale) {
         this.prewarmGlows(board)
         this.mapState = this.lightState(board).slice()
         this.mapKey = key
         this.mapScale = scale
         ++this.rebuilds
-        return this.map
+    },
+    // Whether lightMap(board, cap) returns the map it has (no rebuild), outside a zoom gesture.
+    lightMapReady(board, cap) {
+        mapDepth.ensureGeometry(board)
+        const bounds = mapDepth.surfaceBounds
+        if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return false
+        return !!this.map && this.mapKey === JSON.stringify(bounds) && this.mapScale === this.resolution(bounds, cap) &&
+            this.sameLightState(board, this.mapState)
+    },
+    // A staged build (stepLightMap): {key, scale, state, steps}.
+    staged: null,
+    stagedFor(board, key, scale) {
+        const job = this.staged
+        if (!job || job.key !== key || job.scale !== scale || job.state.length !== this.lightState(board).length) return false
+        const state = this.lightState(board)
+        for (let k = 0; k < state.length; ++k) if (state[k] !== job.state[k]) return false
+        return true
+    },
+    // One step of lightMap(board, cap)'s rebuild (Grid.queueLitTiles, a task between frames: the camera's light map after a
+    // zoom is built over frames, buildSteps): the first starts it, dropping the map (nothing draws from it meanwhile; a
+    // lightMap call finishes it at once); the last makes it the map as lightMap would. Returns whether the map is ready.
+    stepLightMap(board, cap) {
+        if (this.lightMapReady(board, cap)) return true
+        mapDepth.ensureGeometry(board)
+        const bounds = mapDepth.surfaceBounds
+        if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return false
+        const key = JSON.stringify(bounds), scale = this.resolution(bounds, cap)
+        if (!this.stagedFor(board, key, scale)) {
+            this.mapKey = ''
+            this.mapState = null
+            this.staged = {key, scale, state: this.lightState(board).slice(),
+                steps: this.buildSteps(this.collect(board), bounds, scale)}
+        }
+        if (!this.staged.steps.next().done) return false
+        this.staged = null
+        this.finishLightMap(board, key, scale)
+        return true
     },
     // The light map at cap's resolution (as lightMap(board, cap)) brought up to the board's light state by redrawing
     // only the map pixels the world rectangles rects ({x0, y0, x1, y1}, where the cells whose light changed draw)
@@ -632,7 +679,14 @@ const atmosphericLighting = {
     },
     // inPlace: redraw the canvases as they are (their size and the caller's clip; updateMapRegion), in the state a
     // resized canvas starts with; an object {map, gain, left, top}: regionLight's canvases instead.
-    build({cells, sources}, bounds, scale, inPlace = false) {
+    build(collected, bounds, scale, inPlace = false) {
+        for (const _ of this.buildSteps(collected, bounds, scale, inPlace));
+    },
+    // build's drawing in steps (a generator; each yield ends one): the same calls in the same order on the same canvases, so
+    // a light map built a step a task between frames (stepLightMap) has a whole build's pixels. A step draws at most about
+    // two of the map's (at most maxPixels) rasters over it, one of them blended.
+    MAP_STEP_PIXELS: 1.25e6,
+    *buildSteps({cells, sources}, bounds, scale, inPlace = false) {
         const target = inPlace && inPlace !== true ? inPlace : null
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
         // the authorized visible cells, which get the cool ambient plus warm lamps.
@@ -645,22 +699,34 @@ const atmosphericLighting = {
         g.clip()
         g.fillStyle = this.keyGradient(g, bounds, 'ambient')
         g.fill()
+        yield
         // Territory glow: each owned tile tints the stone around it with its colour.
         g.globalCompositeOperation = 'multiply'
+        // A step ends after MAP_STEP_PIXELS of glow squares.
+        const glowPixels = spill => (2 * spill.reach * basis.r * scale) ** 2
+        let pixels = 0
         for (const {pos, owner} of cells) {
             if (!owner) continue
-            this.territoryGlow(g, pos, this.TERRITORY, owner)
+            if (this.territoryGlow(g, pos, this.TERRITORY, owner)) pixels += glowPixels(this.TERRITORY)
             // A cool colour shows far over the warm stone, so it also spills wide (TERRITORY.cool).
-            if (this.TERRITORY.cool?.map) this.territoryGlow(g, pos, this.TERRITORY.cool, owner, 'map')
+            if (this.TERRITORY.cool?.map && this.territoryGlow(g, pos, this.TERRITORY.cool, owner, 'map'))
+                pixels += glowPixels(this.TERRITORY.cool)
+            if (pixels >= this.MAP_STEP_PIXELS) {
+                yield
+                pixels = 0
+            }
         }
+        yield
         // The cool sky fill along the far edges and the shade between the key light's shafts, in one raster (boardLayers).
         const layers = this.boardLayers(bounds)
         if (layers.shade)
             g.drawImage(layers.shade, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
+        yield
         // Lamp spill (multiply part): the blue is held back towards amber.
         g.globalCompositeOperation = 'source-over'
         this.drawSpill(g, sources, 'map')
         g.restore()
+        yield
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
         // a low, near-neutral cream-gold so no channel saturates into flat paint.
@@ -672,11 +738,23 @@ const atmosphericLighting = {
         // The key light's lift, then each lamp's spill: the lighter of the two per channel.
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
+        yield
         // The key light's shafts and the rim's lift, in one raster (boardLayers), and the cool territories' lift: added.
         k.globalCompositeOperation = 'lighter'
         k.drawImage(layers.lift, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        if (this.TERRITORY.cool?.gain)
-            for (const {pos, owner} of cells) if (owner) this.territoryGlow(k, pos, this.TERRITORY.cool, owner, 'gain')
+        yield
+        if (this.TERRITORY.cool?.gain) {
+            pixels = 0
+            for (const {pos, owner} of cells) {
+                if (!owner) continue
+                if (this.territoryGlow(k, pos, this.TERRITORY.cool, owner, 'gain') &&
+                        (pixels += glowPixels(this.TERRITORY.cool)) >= this.MAP_STEP_PIXELS) {
+                    yield
+                    pixels = 0
+                }
+            }
+        }
+        yield
         k.globalCompositeOperation = 'lighten'
         this.drawSpill(k, sources, 'gain')
         k.restore()
@@ -684,14 +762,14 @@ const atmosphericLighting = {
     // An owned tile's glow on the stone round it, a radial gradient over reach (hex radii) with stops
     // [t, alpha]: its colour mixed towards white (mix), or for a cool spill part (map: multiply colour,
     // gain: lift colour) that colour at alpha times how much bluer than red the owner is.
-    // fill false only makes its gradient (prewarmGlows).
+    // fill false only makes its gradient (prewarmGlows). Returns whether it filled.
     territoryGlow(g, pos, {reach: radii, mix: amount, alpha = 1, stops = [[0, 1], [0.45, 0.55], [1, 0]], ...spill}, owner, part, fill = true) {
         const strength = part ? alpha * Math.max(0, owner.b - owner.r) / 255 : alpha
-        if (!strength) return
+        if (!strength) return false
         const mix = c => Math.round(c + (255 - c) * amount), reach = radii * basis.r
         // A clipped redraw (updateMapRegion) skips the glows that do not reach its clip window.
         const w = fill && this.clipWindow
-        if (w && (pos.x + reach < w.x0 || pos.x - reach > w.x1 || pos.y + reach < w.y0 || pos.y - reach > w.y1)) return
+        if (w && (pos.x + reach < w.x0 || pos.x - reach > w.x1 || pos.y + reach < w.y0 || pos.y - reach > w.y1)) return false
         const color = part ? spill[part].join(',') : `${mix(owner.r)},${mix(owner.g)},${mix(owner.b)}`
         const colors = stops.map(([t, a]) => t + ':' + `rgba(${color},${+(a * strength).toFixed(4)})`)
         // Centred on the origin and drawn moved to the cell: one gradient a colour and reach, not one a cell, so a patch
@@ -701,11 +779,12 @@ const atmosphericLighting = {
             for (const [t, a] of stops) glow.addColorStop(t, `rgba(${color},${+(a * strength).toFixed(4)})`)
             return glow
         })
-        if (!fill) return
+        if (!fill) return false
         g.save()
         g.translate(pos.x, pos.y)
         g.fillRect(-reach, -reach, 2 * reach, 2 * reach)
         g.restore()
+        return true
     },
     // The territory glow gradients in every player's colour (one a colour, part and reach: territoryGlow), made with the
     // light map's whole build (its canvases' contexts), so a capture later reuses them instead of making one.
