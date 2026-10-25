@@ -1908,20 +1908,27 @@ class HubLists {
 // The load game screen's save slots (TASK-1205) as hub cards in one panel that scrolls like the hub's: a saved game's
 // card (loadSlotRow) is a tall one with the slot number, the mode badge, the title and the mode, the tag chips, and at
 // its right the player to move, the round and the players' colour dots; an empty slot is a dimmed card that does
-// nothing. A click on a saved game's card calls clickFunc(slot index).
+// nothing. A click on a saved game's card calls clickFunc(slot index). The new game's slot screen (TASK-1332) is the
+// same panel with emptyClickable: there a click on any card, empty or saved, calls clickFunc (start overwrites it).
 class LoadSlotsPanel extends HubPanel {
-    constructor(slotsCount, clickFunc) {
+    constructor(slotsCount, clickFunc, emptyClickable = false) {
         super({selectedId: null, lastPanel: null, choose: row => clickFunc(row.slot)}, 'Saved games',
             n => n === 1 ? '1 saved game' : `${n} saved games`, 'save')
         this.slotsCount = slotsCount
+        this.emptyClickable = emptyClickable
         // Empty until update() reads the saves.
-        this.setRows([...Array(slotsCount).keys()].map(i => loadSlotRow(i, {whooseTurn: -1})))
+        this.setRows([...Array(slotsCount).keys()].map(i => this.slotRow(i, {whooseTurn: -1})))
     }
     static cardHeight(row) {
         return row.kind === 'save' ? HubPanel.TALL_CARD : HubPanel.CARD
     }
+    // An empty slot's row takes clicks (has an id) only with emptyClickable.
+    slotRow(index, info) {
+        const row = loadSlotRow(index, info)
+        return this.emptyClickable ? {...row, id: index} : row
+    }
     update() {
-        this.setRows([...Array(this.slotsCount).keys()].map(i => loadSlotRow(i, loadSlotInfo(i))))
+        this.setRows([...Array(this.slotsCount).keys()].map(i => this.slotRow(i, loadSlotInfo(i))))
     }
     // Slot index's card on screen, the panel scrolled to show it whole (tests aim at it).
     slotRect(index) {
@@ -1996,11 +2003,12 @@ function hubDrawTurnDots(ctx, players, right, y) {
     return players.length ? players.length * step - (step - dot) + 2 * ring : 0
 }
 
-// 'load game': the save slots panel under the logo, 'Back' under it (hub layout units).
+// 'load game': the save slots panel under the logo, 'Back' under it (hub layout units). The hot-seat settings' 'Start'
+// opens the same screen with clickFunc start and empty slots clickable (TASK-1332).
 class LoadTree {
-    constructor(_menu, slotsCount) {
+    constructor(_menu, slotsCount, clickFunc = load, emptyClickable = false) {
         this.menu = _menu
-        this.panel = new LoadSlotsPanel(slotsCount, load)
+        this.panel = new LoadSlotsPanel(slotsCount, clickFunc, emptyClickable)
         this.backButton = new Empty()
         this.buttons = [this.panel]
         this.unit = null
@@ -3233,9 +3241,8 @@ class Menu {
 
         let startPos = {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: HEIGHT * 0.3}
 
-        this.startGame = new Tree([
-            new SlotManager(slotsCount, startPos.y, start)
-        ], this)
+        // The new game's slot screen is the load screen whose every slot card starts the game in (overwrites) it.
+        this.startGame = new LoadTree(this, slotsCount, start, true)
 
         this.play = new HotseatSettingsTree(this)
 
@@ -3335,9 +3342,9 @@ class Menu {
         return this.#visible
     }
     updateSlotManagers() {
-        // slot manager:
-        this.load.buttons[0].update()
-        this.startGame.buttons[0].update()
+        // The load and start screens' slot panels:
+        this.load.panel.update()
+        this.startGame.panel.update()
     }
     // Ends the running game without showing the menu: back() and TutorialManager.switchTo.
     // Returns whether it was a lobby game. The game loop stops on its next frame (gameExit).
