@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "8097d18d2c53713e10983562493ca38159f6b3a4506b50047c63c89b15bea95c",
+  "rulesVersion": "1fb5238803245f68a9aa68a57b4d6e6c9a0d43343144f90fb9976eb1188e2791",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -35,8 +35,8 @@
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "3abc605501b24c073d3042ae4909117c7d71b76481287c90cce31f778aee6960",
-      "bytes": 44890
+      "sha256": "13bfc9cc09cf76f4003c656ffd8365d190bebf81622ddfb5ce789cdaddbece85",
+      "bytes": 44938
     },
     {
       "path": "options/tutorialProgress.js",
@@ -100,8 +100,8 @@
     },
     {
       "path": "ai/coop-map-scaling.js",
-      "sha256": "306660199776da7733868880a88437a747fcbb88b9f881ed025af1c7fa2353f4",
-      "bytes": 6202
+      "sha256": "593bb555a1ad2e3ad05660e32b2b580ab0db449abdde18953ac82d6dbe54cd65",
+      "bytes": 6426
     },
     {
       "path": "ai/coop-hex-geometry.js",
@@ -480,8 +480,8 @@
     },
     {
       "path": "ai/wave-composition.js",
-      "sha256": "839277a102bd3067f91f847fef4f4df4b231950af073a300076daea9ddf275cc",
-      "bytes": 3145
+      "sha256": "145a3e0e7843b5f324d2c0b2400ce475ee2412bc3dce42eeea8cc5a39cff896a",
+      "bytes": 3186
     },
     {
       "path": "sprites/entities/buildings/demonPortal.js",

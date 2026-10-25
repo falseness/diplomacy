@@ -16,8 +16,8 @@ function generateCoopWave(round) {
     return wave
 }
 
-// Hand-made tutorial maps: fixed per-category types (getCoopTutorialDemonType),
-// once per round like the generated schedule.
+// Hand-made tutorial maps: fixed per-category types (getCoopTutorialDemonType; chaos follows
+// the game's chaos schedule), once per round like the generated schedule.
 function generateTutorialCoopWave(round) {
     const coop = gameSettings.coop
     const last = coop.typedWaves ? coop.typedWaves.lastRound : 0

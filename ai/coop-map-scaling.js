@@ -19,26 +19,31 @@ const COOP_PORTAL_CATEGORY_ORDER = Object.freeze(['melee', 'ranged', 'siege', 'h
 const COOP_EXTRA_HEAVY_PORTALS = 2
 // Hand-made tutorial co-op maps (GameMap coop {tutorial:true}) list their own portals and use a
 // fixed spawn table instead of the generated schedule: from round 4, every 4 rounds, each free
-// portal spawns its type; a chaos portal spawns one demonLord at COOP_TUTORIAL_CHAOS_ROUND only.
+// portal spawns its type; a chaos portal follows the game's chaos schedule (getCoopScheduledDemonType,
+// ai/wave-config.js: a demonLord every 4 rounds from round 28).
 const COOP_TUTORIAL_PORTAL_TYPES = Object.freeze({melee: 'brute', mage: 'hexcaster', siege: 'bombard',
     ranged: 'emberArcher', heavy: 'bulwark', chaos: 'demonLord'})
 const COOP_TUTORIAL_WAVE_INTERVAL = 4
-const COOP_TUTORIAL_CHAOS_ROUND = 8
+
+function coopWaveRules() {
+    return typeof module !== 'undefined' && module.exports ? require('./wave-config') :
+        {getCoopScheduledDemonType, getCoopNextScheduledProduction}
+}
 
 function getCoopTutorialDemonType(category, round) {
     if (typeof category !== 'string' || !Object.prototype.hasOwnProperty.call(COOP_TUTORIAL_PORTAL_TYPES, category))
         throw new RangeError('Invalid tutorial portal category')
     if (!Number.isSafeInteger(round) || round < 0) throw new RangeError('Invalid wave round')
-    if (category === 'chaos') return round === COOP_TUTORIAL_CHAOS_ROUND ? COOP_TUTORIAL_PORTAL_TYPES.chaos : null
+    if (category === 'chaos') return coopWaveRules().getCoopScheduledDemonType('chaos', round)
     return round > 0 && round % COOP_TUTORIAL_WAVE_INTERVAL === 0 ? COOP_TUTORIAL_PORTAL_TYPES[category] : null
 }
 
 // Tutorial counterpart of getCoopNextScheduledProduction (ai/wave-config.js) for portal previews: the first
 // round strictly after the completed round at which getCoopTutorialDemonType (the lookup spawning uses)
-// gives a type. Null once a chaos portal's single production is past.
+// gives a type. Chaos portals take it from the game's schedule directly.
 function getCoopTutorialNextProduction(category, completedRound) {
     if (!Number.isSafeInteger(completedRound) || completedRound < 0) throw new RangeError('Invalid wave round')
-    if (category === 'chaos' && completedRound >= COOP_TUTORIAL_CHAOS_ROUND) return null
+    if (category === 'chaos') return coopWaveRules().getCoopNextScheduledProduction('chaos', completedRound)
     for (let round = completedRound + 1; ; round++) {
         const type = getCoopTutorialDemonType(category, round)
         if (type) return {round, type, roundsRemaining: round - completedRound}

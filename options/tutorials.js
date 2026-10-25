@@ -338,8 +338,9 @@ function createTutorial5Map() {
 
 function createTutorial6Map() {
     // Twelve typed portals share the open eastern battlefield (five of them mage). Starting defenders occupy
-    // their own portals; chaos retains its existing empty startup and spawn behavior. Red's archers start
-    // further west at (8,7), (8,4) and (10,4), so they can retreat to the towns in time.
+    // their own portals; chaos starts empty and follows the game's chaos schedule (a demon lord every 4
+    // rounds from round 28). Red's archers start further west at (8,7), (8,4) and (10,4), so they can
+    // retreat to the towns in time.
     let size = {x: 16, y: 9}
     let towns = [{x: 1, y: 4}, {x: 6, y: 4}]
     // Hex distance in the x-parity offset layout of sprites/sprite.js.
