@@ -74,7 +74,7 @@ class TutorialCardsTree {
         'tutorial-6': {src: 'assets/atmosphere/buildings/town.svg'},
     }
     // The picture's box as a share of the medallion's diameter and its shift down as a share of that box.
-    // 'moves': a unit sprite with a unit's move bar (an entry's moves: {count, left}) on it as in the game.
+    // 'moves': a unit sprite drawn over a unit's move bar (an entry's moves: {count, left}) as in the game.
     static IMAGE_FIT = {plain: {size: 0.86, shift: 0}, unit: {size: 0.92, shift: 0.06}, low: {size: 0.86, shift: -0.14},
         moves: {size: 0.86, shift: 0.03}}
     static images = {}
@@ -376,7 +376,8 @@ class TutorialCardsTree {
         ctx.lineWidth = 0.45 * u
         ctx.stroke()
     }
-    // The tutorial's picture contained in its fit box, clipped to the disc; returns what was drawn (or null).
+    // The tutorial's picture contained in its fit box, clipped to the disc, with its moves bar (if any) drawn first
+    // and the picture over it, as Unit.draw draws a unit's bars and then its body; returns what was drawn (or null).
     drawMedallionImage(ctx, id, x, y, radius) {
         const image = TutorialCardsTree.image(id)
         if (!image) return null
@@ -388,12 +389,12 @@ class TutorialCardsTree {
         ctx.beginPath()
         ctx.arc(x, y, radius, 0, Math.PI * 2)
         ctx.clip()
-        ctx.drawImage(image, box.x, box.y, box.width, box.height)
         const moves = TutorialCardsTree.IMAGES[id].moves
         // Placed on the sprite as sprites/entities/units/unit/unit.js trimBars places a unit's: at the sprite's centre
-        // plus movesBarMarginY (0.1 r), r = box.height / 1.6.
+        // plus movesBarMarginY (0.1 r), r = box.height / 1.6. Drawn under the sprite, as in the game.
         const r = box.height / 1.6
         const bar = moves ? this.drawMovesBar(ctx, moves, x, box.y + box.height / 2 + 0.1 * r, r) : undefined
+        ctx.drawImage(image, box.x, box.y, box.width, box.height)
         ctx.restore()
         return {src: TutorialCardsTree.IMAGES[id].src, box, disc: {x, y, radius}, ...(bar && {bar})}
     }
