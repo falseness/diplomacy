@@ -13,7 +13,7 @@ function createTutorial0Map() {
         {rgb: {r: 255, g: 0, b: 0}, economyEnabled: false, towns: [],
             units: [{x: 2, y: 3, type: Noob}, {x: 2, y: 4, type: Noob}]},
         {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayer',
-            economyEnabled: false, towns: [], units: [{x: 7, y: 3, type: KOHb}]}
+            economyEnabled: false, towns: [], units: [{x: 5, y: 3, type: KOHb}]}
     ], [], coordDictionary([[0, 0], [1, 0]]), coordDictionary([[7, 6], [8, 6]]), [])
     map.testName = 'tutorial 0'
     return map
