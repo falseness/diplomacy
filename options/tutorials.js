@@ -251,14 +251,16 @@ function createTutorial5Map() {
     // Town defense against demons (co-op tutorial map). Red's town (1,4) owns the whole strip x <= 4 as
     // suburbs (a rich town: it pays for the army it builds after the first turns). Walls face the demons only
     // on the column x = 4, with two gates (4,3) and (4,5) the KOHb sortie through. Red starts with 2 KOHb, the
-    // town's noob, a barrack and 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. 8 ember
-    // archers, a bulwark and two Bombards stand 3-6 hexes from the walls; two ranged portals, a heavy one and a
-    // siege one keep sending more.
+    // town's noob, a barrack and 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. The map
+    // is 9 wide: 8 ember archers, a bulwark and two Bombards crowd the field x 5..7 right in front of the walls,
+    // and two ranged portals, a heavy one and a siege one on the last column x = 8 send more every 4 rounds.
     // The Bombards (building damage only) breach the walls within a few rounds, so merely waiting behind them
-    // loses, and so does attacking at once. Training KOHb every round while holding until round 4, striking the
-    // Bombards first in the sortie and then killing every demon unit wins (pass 'demonUnitsDead': the portals
-    // may still stand). Mountains on the flanks of
-    // the field and the walls' open ends are left free: the sortie needs them.
+    // loses, and so does attacking at once. Training KOHb every round while holding until round 4 (the KOHb
+    // only pick off the ember archers they reach; the walls take the first volleys and wounded units heal on
+    // the town's suburbs), then striking out of the gates, ember archers first, finishing wounded demons, and
+    // killing every wave as it steps off its portal wins (pass 'demonUnitsDead': the portals may still stand; a
+    // demon on its portal cannot be hit, the portal takes the blow). The gates and the walls' open ends stay
+    // passable: the sortie needs them.
     let redSide = []
     for (let x = 0; x <= 4; ++x) {
         for (let y = 0; y < 9; ++y) {
@@ -277,7 +279,7 @@ function createTutorial5Map() {
         }
     }
     let map = new GameMap(
-        {x: 13, y: 9},
+        {x: 9, y: 9},
         [
             {
                 rgb: {r: 208, g: 208, b: 208},
@@ -299,35 +301,36 @@ function createTutorial5Map() {
             }
         ],
         [],
-        // Lakes guard the town's back corners and split the demons' field into a north and a south lane.
-        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [10, 4], [11, 4], [11, 3]]),
-        coordDictionary([[5, 6], [6, 0], [12, 0], [12, 8], [10, 0]]),
+        // Lakes guard the town's back corners; two more lie in the demons' field.
+        coordDictionary([[0, 0], [0, 1], [0, 7], [0, 8], [6, 5], [8, 3]]),
+        // Mountains on the field's flanks and in front of the south wall stop arrows and block the way.
+        coordDictionary([[5, 6], [6, 0], [5, 8], [5, 5]]),
         // Bushes inside the walls stop the ember archers' arrows; the others grow in the field.
-        coordDictionary([[2, 1], [3, 6], [1, 7], [7, 1], [6, 8], [11, 5], [12, 6], [10, 3], [9, 0]]),
+        coordDictionary([[2, 1], [3, 6], [1, 7], [7, 1], [6, 8], [5, 0]]),
         [],
         {type: 'rectangular'},
         {
             tutorial: true,
             units: [
-                {x: 9, y: 3, type: EmberArcher},
-                {x: 7, y: 7, type: EmberArcher},
-                {x: 7, y: 4, type: EmberArcher},
-                {x: 10, y: 8, type: EmberArcher},
-                {x: 10, y: 6, type: EmberArcher},
-                {x: 8, y: 5, type: EmberArcher},
-                {x: 9, y: 1, type: EmberArcher},
-                {x: 8, y: 7, type: EmberArcher},
-                {x: 8, y: 2, type: Bulwark},
-                {x: 8, y: 3, type: Bombard},
-                {x: 9, y: 6, type: Bombard}
+                {x: 5, y: 1, type: Bombard},
+                {x: 7, y: 6, type: Bombard},
+                {x: 6, y: 7, type: Bulwark},
+                {x: 7, y: 3, type: EmberArcher},
+                {x: 7, y: 8, type: EmberArcher},
+                {x: 5, y: 3, type: EmberArcher},
+                {x: 5, y: 7, type: EmberArcher},
+                {x: 7, y: 5, type: EmberArcher},
+                {x: 6, y: 6, type: EmberArcher},
+                {x: 6, y: 2, type: EmberArcher},
+                {x: 6, y: 4, type: EmberArcher}
             ]
         }
     )
     map.portals = [
-        {x: 12, y: 2, category: 'ranged'},
-        {x: 12, y: 4, category: 'ranged'},
-        {x: 12, y: 7, category: 'heavy'},
-        {x: 12, y: 5, category: 'siege'}
+        {x: 8, y: 2, category: 'ranged'},
+        {x: 8, y: 4, category: 'ranged'},
+        {x: 8, y: 7, category: 'heavy'},
+        {x: 8, y: 5, category: 'siege'}
     ]
     map.testName = 'tutorial 5'
     return map
