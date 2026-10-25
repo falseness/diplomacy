@@ -1,7 +1,7 @@
 class Settings {
     constructor() {
-        this.alwaysDisplayHPBar = false
-        this.alwaysDisplayMovesBar = false
+        this.alwaysDisplayHPBar = true
+        this.alwaysDisplayMovesBar = true
         this.moveCameraToUndoTarget = true
         this.usePolishedSprites = true
         this.atmosphericVisuals = true
@@ -13,20 +13,24 @@ class Settings {
         // with game:open (OnlineSession.openGame).
         this.autoscout = true
     }
+    // Returns true when the stored dict was migrated (and should be saved once).
     fromJSON(dict) {
         if (!dict) // no settings in local storage
-            return
-        this.alwaysDisplayHPBar = dict.alwaysDisplayHPBar
-        this.alwaysDisplayMovesBar = dict.alwaysDisplayMovesBar
+            return false
+        // Version 1 turned both bars on for everyone once; a later uncheck is kept.
+        const migrate = !(dict.settingsVersion >= Settings.VERSION)
+        this.alwaysDisplayHPBar = migrate || dict.alwaysDisplayHPBar !== false
+        this.alwaysDisplayMovesBar = migrate || dict.alwaysDisplayMovesBar !== false
         this.moveCameraToUndoTarget = dict.moveCameraToUndoTarget
         this.usePolishedSprites = dict.usePolishedSprites !== false
         this.atmosphericVisuals = dict.atmosphericVisuals !== false
         this.animateMoves = dict.animateMoves !== false
         this.showReplays = dict.showReplays === true
         this.autoscout = dict.autoscout !== false
+        return migrate
     }
     toJSON() {
-        let res =  {
+        return {
             alwaysDisplayHPBar: this.alwaysDisplayHPBar,
             alwaysDisplayMovesBar: this.alwaysDisplayMovesBar,
             moveCameraToUndoTarget: this.moveCameraToUndoTarget,
@@ -34,19 +38,10 @@ class Settings {
             atmosphericVisuals: this.atmosphericVisuals,
             animateMoves: this.animateMoves,
             showReplays: this.showReplays,
-            autoscout: this.autoscout
+            autoscout: this.autoscout,
+            settingsVersion: Settings.VERSION
         }
-        res = {
-            alwaysDisplayHPBar: this.alwaysDisplayHPBar,
-            alwaysDisplayMovesBar: this.alwaysDisplayMovesBar,
-            moveCameraToUndoTarget: this.moveCameraToUndoTarget,
-            usePolishedSprites: this.usePolishedSprites,
-            atmosphericVisuals: this.atmosphericVisuals,
-            animateMoves: this.animateMoves,
-            showReplays: this.showReplays,
-            autoscout: this.autoscout
-        }
-        return res
     }
 }
+Settings.VERSION = 1
 let otherSettings = new Settings()

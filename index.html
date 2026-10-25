@@ -411,7 +411,8 @@
         }
         function loadOtherSettings() {
             try {
-                otherSettings.fromJSON(JSON.parse(localStorage.getItem('otherSettings')))
+                if (otherSettings.fromJSON(JSON.parse(localStorage.getItem('otherSettings'))))
+                    saveOtherSettings()
             }
             catch {
                 errorWindow.textString = "can't save game\ntry toggle internet connection"
