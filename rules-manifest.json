@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "c25fc0c5e2648e69fa19304cc05f5891b8b97c1b8da0ab43482e0d6c8a34c7e2",
+  "rulesVersion": "dda54676a68415135a4c4a2ec648b603e9446bf27cdec53c5cfd32a488295cfd",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -450,8 +450,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/production.js",
-      "sha256": "e4d35b17bfdf09aa027c596a87a1c36821173f6d04f4968fc15efffab4fe3bc9",
-      "bytes": 17054
+      "sha256": "d5012bc9780cefc2672f0812a0deb002fd3a176b45d8afb6f5a39da8f9f3440f",
+      "bytes": 17282
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",

@@ -158,6 +158,11 @@ class BuildingProduction extends Production {
     get player() {
         return players[this.playerColor]
     }
+    // The info panel's colour, as Entity.panelColor (a production is not an Entity): the neutral colour when the
+    // cell's owner is unknown.
+    get panelColor() {
+        return (this.player ?? players[0]).fullColor
+    }
     toJSON() {
         let res = {
             name: this.name,
