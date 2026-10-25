@@ -416,6 +416,64 @@ const atmosphericLighting = {
         this.mapState = this.lightState(board).slice()
         return true
     },
+    // The light map's pixels over the world rectangles rects ({x0, y0, x1, y1}, each grown by MAP_GROW pixels) for the
+    // board's light state now, without touching the map: build's drawing clipped to them (its hexagons and glows those
+    // reaching their span, clipWindow) on two small canvases (the span) kept per slot, on the map's pixel grid at its
+    // resolution, with its canvases' gradients (gradientSource). The frames drawing a patch's changed cells
+    // (Grid.drawPatchCells) light them with these from the first, while the patch brings the map up in a later frame
+    // (updateMapRegion) and only its own steps draw from it, so no frame draws from a light map canvas changed in it.
+    // Returns {map, gain, left, top, w, h, scale} (w, h: the part used, in pixels), or null without a light map or for a
+    // part over REGION_LIGHT_MAX pixels a side.
+    REGION_LIGHT_MAX: 1024,
+    regionCanvases: {},
+    regionLight(board, rects, slot) {
+        mapDepth.ensureGeometry(board)
+        const bounds = mapDepth.surfaceBounds, scale = this.mapScale, grow = this.MAP_GROW
+        if (!bounds || !this.map || !this.gain || !scale || !rects.length) return null
+        const rect = {x0: Math.min(...rects.map(r => r.x0)), y0: Math.min(...rects.map(r => r.y0)),
+            x1: Math.max(...rects.map(r => r.x1)), y1: Math.max(...rects.map(r => r.y1))}
+        const px0 = Math.max(0, Math.floor((rect.x0 - bounds.left) * scale) - grow)
+        const py0 = Math.max(0, Math.floor((rect.y0 - bounds.top) * scale) - grow)
+        const px1 = Math.min(this.map.width, Math.ceil((rect.x1 - bounds.left) * scale) + grow)
+        const py1 = Math.min(this.map.height, Math.ceil((rect.y1 - bounds.top) * scale) + grow)
+        const w = px1 - px0, h = py1 - py0
+        if (w <= 0 || h <= 0 || w > this.REGION_LIGHT_MAX || h > this.REGION_LIGHT_MAX) return null
+        const target = {left: bounds.left + px0 / scale, top: bounds.top + py0 / scale}
+        const kept = this.regionCanvases[slot] ||= {}
+        for (const name of ['map', 'gain']) {
+            const c = kept[name] ||= document.createElement('canvas')
+            if (c.width < w || c.height < h) {
+                c.width = Math.max(c.width, w)
+                c.height = Math.max(c.height, h)
+            }
+            c.gradientSource = this[name].getContext('2d')
+            target[name] = c
+        }
+        for (const name of ['map', 'gain']) {
+            const g = target[name].getContext('2d')
+            g.save()
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.beginPath()
+            for (const r of rects) {
+                const x0 = Math.floor((r.x0 - target.left) * scale) - grow, y0 = Math.floor((r.y0 - target.top) * scale) - grow
+                g.rect(x0, y0, Math.ceil((r.x1 - target.left) * scale) + grow - x0,
+                    Math.ceil((r.y1 - target.top) * scale) + grow - y0)
+            }
+            g.clip()
+            g.beginPath()
+        }
+        const clip = this.clipWindow
+        this.clipWindow = {x0: target.left - 1.05 * basis.r, y0: target.top - 1.05 * basis.r,
+            x1: target.left + w / scale + 1.05 * basis.r, y1: target.top + h / scale + 1.05 * basis.r}
+        try {
+            this.build(this.collect(board), bounds, scale, target)
+        } finally {
+            this.clipWindow = clip
+            target.map.getContext('2d').restore()
+            target.gain.getContext('2d').restore()
+        }
+        return {map: target.map, gain: target.gain, left: target.left, top: target.top, w, h, scale}
+    },
     // Whether updateMapRegion(board, cap, rects, stored) can bring the light map to the board's light state, or the map
     // has it already (a patch's check before its steps, Grid.patchSurfaceCache).
     canUpdateMapRegion(board, cap, stored) {
@@ -446,8 +504,9 @@ const atmosphericLighting = {
     },
     // canvasFor's context without resizing its canvas (its clip kept): the state a resized canvas starts with, the
     // transform canvasFor sets.
-    redrawContext(name, bounds, scale) {
-        const g = this[name].getContext('2d')
+    // target (regionLight): its canvases, their origin {left, top} the world point of their first pixel.
+    redrawContext(name, bounds, scale, target = null) {
+        const g = (target ? target[name] : this[name]).getContext('2d')
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
         g.filter = 'none'
@@ -457,7 +516,8 @@ const atmosphericLighting = {
         g.imageSmoothingQuality = 'low'
         g.fillStyle = g.strokeStyle = '#000'
         g.lineWidth = 1
-        g.setTransform(scale, 0, 0, scale, -bounds.left * scale, -bounds.top * scale)
+        const left = target ? target.left : bounds.left, top = target ? target.top : bounds.top
+        g.setTransform(scale, 0, 0, scale, -left * scale, -top * scale)
         return g
     },
     // One spill layer of a lamp: an elliptical radial gradient of colour, alpha by SPILL_STOPS.
@@ -571,11 +631,12 @@ const atmosphericLighting = {
             rx: l.rx * reach, ry: l.ry * reach}))
     },
     // inPlace: redraw the canvases as they are (their size and the caller's clip; updateMapRegion), in the state a
-    // resized canvas starts with.
+    // resized canvas starts with; an object {map, gain, left, top}: regionLight's canvases instead.
     build({cells, sources}, bounds, scale, inPlace = false) {
+        const target = inPlace && inPlace !== true ? inPlace : null
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
         // the authorized visible cells, which get the cool ambient plus warm lamps.
-        const g = inPlace ? this.redrawContext('map', bounds, scale) : this.canvasFor('map', bounds, scale)
+        const g = inPlace ? this.redrawContext('map', bounds, scale, target) : this.canvasFor('map', bounds, scale)
         g.fillStyle = '#fff'
         g.fillRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         const stone = cells.filter(cell => !cell.owner)
@@ -603,7 +664,7 @@ const atmosphericLighting = {
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
         // a low, near-neutral cream-gold so no channel saturates into flat paint.
-        const k = inPlace ? this.redrawContext('gain', bounds, scale) : this.canvasFor('gain', bounds, scale)
+        const k = inPlace ? this.redrawContext('gain', bounds, scale, target) : this.canvasFor('gain', bounds, scale)
         k.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         this.hexPath(k, this.inClipWindow(stone))
         k.save()
@@ -1234,7 +1295,14 @@ const atmosphericLighting = {
                 if (sx + rx < 0 || sy + ry < 0 || sx - rx > ctx.canvas.width || sy - ry > ctx.canvas.height) continue
             }
             const image = cachedImages[board.getEntityBodyImageName(building)]
-            if (image && image.width) casters.push({x, y, building, image, pos})
+            if (!image || !image.width) continue
+            // While Grid.drawPatchCells draws, only the shadows reaching its window.
+            const w = board.patchCellsWindow
+            if (w) {
+                const b = this.shadowBounds(building, image, pos, sources)
+                if (b.x1 < w.x0 || b.x0 > w.x1 || b.y1 < w.y0 || b.y0 > w.y1) continue
+            }
+            casters.push({x, y, building, image, pos})
         }
         if (!casters.length) return
         ctx.save()

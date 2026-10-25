@@ -125,6 +125,9 @@ class Grid extends SpritesGroup {
         // The patch under way (patchSurfaceCache, one step a frame) and its buffer.
         this.surfacePatchJob = undefined
         this.surfacePatchBuffer = undefined
+        // Frames that drew a patch's changed cells over its old picture (drawPatchCells), and its window while it draws.
+        this.patchCellFrames = 0
+        this.patchCellsWindow = null
 
         if (size) 
             this.fill(size.x, size.y)
@@ -401,13 +404,14 @@ class Grid extends SpritesGroup {
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
-                    if (buildings) this.drawFogLandmark(ctx, this.arr[i][j].building)
+                    if (buildings && this.spriteInPatchCells(this.arr[i][j].building))
+                        this.drawFogLandmark(ctx, this.arr[i][j].building)
                     continue
                 }
                 let cell = this.arr[i][j]
 
                 if (!this.observedBuilding(cell)) {
-                    if (buildings) cell.building.draw(ctx)
+                    if (buildings && this.spriteInPatchCells(cell.building)) cell.building.draw(ctx)
                     if (units && cell.building.hasBar) tmpBuildings.push(cell.building)
                     if (units) this.drawProductionSilhouette(ctx, cell.building)
                 }
@@ -456,11 +460,12 @@ class Grid extends SpritesGroup {
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
-                    this.drawFogLandmark(ctx, this.arr[i][j].building)
+                    if (this.spriteInPatchCells(this.arr[i][j].building))
+                        this.drawFogLandmark(ctx, this.arr[i][j].building)
                     continue
                 }
                 const cell = this.arr[i][j]
-                if (this.isCacheableBuilding(cell.building))
+                if (this.isCacheableBuilding(cell.building) && this.spriteInPatchCells(cell.building))
                     this.drawEntityBody(ctx, cell.building)
                 // Atmospheric units are drawn after the light map (drawStillUnits).
                 if (this.getStillUnit(cell) && !otherSettings.atmosphericVisuals)
@@ -1077,8 +1082,9 @@ class Grid extends SpritesGroup {
     // cache's transform, clipped to the region grown by SURFACE_PATCH_MARGIN pixels (at scale 1), its clip paths and drawn
     // cells those reaching that (atmosphericLighting.clipWindow, drawRange); then the region is copied into the cache, so
     // the clip's edge, where Chromium draws clip paths, strokes and blurs a little unlike a whole build (TASK-1280
-    // tools/cliptest.js), stays in the buffer's margin. Until then frames draw the cache as it was (the board as before the
-    // change, with this frame's units). The result is not pixel-identical to a whole build but shows no difference
+    // tools/cliptest.js), stays in the buffer's margin. Until then frames draw the cache as it was with the changed cells
+    // drawn over it in their new state (drawPatchCells), from the frame that found the change. The result is not
+    // pixel-identical to a whole build but shows no difference
     // (TASK-1288 tests/client/test-move-work.js --tolerance: at most 0.05% of a frame's pixels, a few levels, after every
     // change and cumulatively). The whole cache is rebuilt instead (refusals counted by reason) for: no cache or one being
     // built, an observed board, another cache size or scale, a whole-board difference (visuals, hex radius, size), a lamp
@@ -1135,8 +1141,9 @@ class Grid extends SpritesGroup {
         if (!buffer || buffer.width !== W || buffer.height !== H || buffer.gradientSource !== canvas.getContext('2d'))
             return refuse('buffer')
         const next = this.surfacePatchJob = {canvas, buffer, geometry, left: b.left, top: b.top, scale, inner, outer,
-            window: clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r), light: found.light,
-            lighting: this.surfaceCacheLighting, cells: changes.length, step: 0, ran: null, state: [], overlayCells: [],
+            window: clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r), light: found.light, boxes: found.cells,
+            changed: changes.slice(), sprites: found.sprites, lighting: this.surfaceCacheLighting, cells: changes.length,
+            step: 0, ran: null, state: [], overlayCells: [],
             build: {canvas: buffer, ctx: buffer.getContext('2d'), geometry, left: b.left, top: b.top, stage: 0, lit: false,
                 atmospheric: true, state: [], overlayCells: []}}
         // The board state the patch draws (each step checks the board still has it).
@@ -1243,7 +1250,8 @@ class Grid extends SpritesGroup {
     // The world rectangles {x0, y0, x1, y1} the cells changes (board indices) draw on in the surface cache, as captured
     // and as now: cells (each its hexagon, with its tile, grout and fog variant, and the sprites of its building then and
     // now with their shadows) and light (the cells whose light value changed: the hexagon, or the territory glow of an
-    // owned one). null when a lamp or a portal is among them.
+    // owned one); sprites: the rectangles of those sprites and shadows alone for the cells whose sprite changed (another
+    // image or none; Grid.drawPatchCells). null when a lamp or a portal is among them.
     surfaceCacheChangeRects(changes) {
         const h = this.arr[0].length, r = basis.r, hex = 1.1 * r
         const {sources} = atmosphericLighting.collect(this, false, false)
@@ -1259,11 +1267,13 @@ class Grid extends SpritesGroup {
             const owner = typeof players !== 'undefined' ? players[(v >> 3) - 1]?.color : null
             return Math.max(warm, !owner || cool && (cool.map || cool.gain) && owner.b > owner.r ? cool.reach : 0) * r
         }
-        const cells = [], light = []
+        const cells = [], light = [], sprites = []
         for (const index of changes) {
             const i = Math.floor(index / h), j = index - i * h, cell = this.arr[i][j], c = cell.hexagon.calcPos()
             const box = {x0: c.x - hex, y0: c.y - hex, x1: c.x + hex, y1: c.y + hex}
+            const mine = []
             const add = q => {
+                mine.push(q)
                 box.x0 = Math.min(box.x0, q.x0); box.y0 = Math.min(box.y0, q.y0); box.x1 = Math.max(box.x1, q.x1); box.y1 = Math.max(box.y1, q.y1)
             }
             // A lamp in view before and after with only its owner changed (a capture) keeps every source (collect's sources
@@ -1288,12 +1298,18 @@ class Grid extends SpritesGroup {
                 }
             }
             cells.push(box)
+            // The sprites' rectangles for drawPatchCells only when the cell's sprite changed (another image or none).
+            const image = b => b && b.notEmpty() ? cachedImages[this.getEntityBodyImageName(b)] || null : null
+            const shownBefore = before && before.notEmpty() ?
+                images[index] || natureNames[index] && cachedImages[natureNames[index]] || image(before) : null
+            if (shownBefore !== image(cell.building))
+                sprites.push(...mine)
             if (was === now)
                 continue
             const reach = Math.max(hex, glow(was), glow(now))
             light.push({x0: c.x - reach, y0: c.y - reach, x1: c.x + reach, y1: c.y + reach})
         }
-        return {cells, light}
+        return {cells, light, sprites}
     }
     canUseSurfaceCache() {
         mapDepth.ensureGeometry(this)
@@ -1344,6 +1360,8 @@ class Grid extends SpritesGroup {
             visibleRight - visibleLeft,
             visibleBottom - visibleTop
         )
+        if (this.surfacePatchJob)
+            this.drawPatchCells(ctx, this.surfacePatchJob, 'cache')
         return true
     }
     // Whether the cache, patched or being patched to the board (patchSurfaceCache), is drawn on ctx: during a patch the
@@ -1357,6 +1375,99 @@ class Grid extends SpritesGroup {
         this.surfaceOverlayCells.length = 0
         this.surfaceOverlayCells.push(...job.overlayCells)
         return true
+    }
+    // The world rectangles drawPatchCells draws on (each changed hexagon's box and the sprites' rectangles), whose light
+    // atmosphericLighting.regionLight draws.
+    patchCellsAreas(job) {
+        const h = this.arr[0].length, r = 1.05 * basis.r
+        return [...job.changed.map(index => {
+            const c = this.arr[Math.floor(index / h)][index % h].hexagon.calcPos()
+            return {x0: c.x - r, y0: c.y - r, x1: c.x + r, y1: c.y + r}
+        }), ...job.sprites]
+    }
+    // While drawPatchCells draws: whether entity's sprite reaches its window (one that does not draws nothing in its clip).
+    spriteInPatchCells(entity) {
+        const w = this.patchCellsWindow
+        if (!w)
+            return true
+        const image = cachedImages[this.getEntityBodyImageName(entity)]
+        return !image || !entity.pos || entity.pos.x <= w.x1 && entity.pos.x + image.width >= w.x0 &&
+            entity.pos.y <= w.y1 && entity.pos.y + image.height >= w.y0
+    }
+    // While a patch of the surface cache or of the lit view's rest snapshot is under way (its old picture drawn), the
+    // frame draws the changed cells over it in the board's state, as the direct draw does, clipped to their hexagons and,
+    // where a building's sprite changed, its sprites and shadows then and now (job.sprites, surfaceCacheChangeRects): the
+    // tiles and grout of the cells reaching them, the shadows, the fog, the buildings (path: 'cache' its bodies, as the
+    // cache holds them; 'lit' drawOther's, as the snapshot does; only the sprites and shadows reaching them), then the
+    // light's multiply and color-dodge clipped to those hexagons (as bake): the light state's part the first frame drawing
+    // them drew (job.regionLight: atmosphericLighting.regionLight, small canvases, the light map itself brought up by the
+    // patch a frame later), else (no light changed) the light map; then the lamps' bloom there. So the new owner colour,
+    // fog variant, building and light show from the frame that found the change, no frame shows the old state again, and
+    // the finished patch draws the same cells. Only those cells: no gradient made (the frame's own cached ones), no canvas
+    // of 1 MP or more, no light map canvas drawn from in the frame that changed it.
+    drawPatchCells(ctx, job, path) {
+        const boxes = job.boxes, L = atmosphericLighting
+        if (!boxes || !boxes.length || !otherSettings.atmosphericVisuals)
+            return
+        const areas = this.patchCellsAreas(job), window = patchCellsWindow(areas), h = this.arr[0].length
+        // Their rectangles (patchCellsAreas), then the changed hexagons (with the fog's grout reach) and the changed sprites
+        // and shadows within them.
+        ctx.save()
+        ctx.beginPath()
+        for (const b of areas)
+            ctx.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0)
+        ctx.clip()
+        ctx.beginPath()
+        for (const index of job.changed) {
+            const c = this.arr[Math.floor(index / h)][index % h].hexagon.calcPos()
+            L.hexagonPath(ctx, c.x, c.y, 1.02 * basis.r)
+        }
+        for (const b of job.sprites)
+            ctx.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0)
+        ctx.clip()
+        ctx.beginPath()
+        const clip = L.clipWindow
+        L.clipWindow = window
+        // Only the sprites and shadows reaching the window are drawn (spriteInPatchCells, drawShadows).
+        this.patchCellsWindow = window
+        try {
+            this.drawHexagons(ctx)
+            L.drawShadows(ctx, this)
+            if (isFogOfWar)
+                this.drawFogOfWar(ctx)
+            if (path === 'lit')
+                this.drawOther(ctx, 'buildings')
+            else
+                this.drawEntityBodies(ctx)
+            // The light: the changed light state's part, drawn for the patch by the first frame drawing it (a patch found
+            // between frames draws nothing there), else the light map (unchanged).
+            if (job.light.length && job.regionLight === undefined)
+                job.regionLight = L.regionLight(this, areas, path)
+            const map = L.map, bounds = mapDepth.surfaceBounds, light = job.regionLight
+            if (map && L.gain && bounds && (light || !job.light.length)) {
+                ctx.save()
+                L.hexPath(ctx, L.inClipWindow(L.collect(this, false).cells))
+                ctx.clip()
+                if (light) {
+                    for (const [name, op] of [['map', 'multiply'], ['gain', 'color-dodge']]) {
+                        ctx.globalCompositeOperation = op
+                        ctx.drawImage(light[name], 0, 0, light.w, light.h, light.left, light.top,
+                            light.w / light.scale, light.h / light.scale)
+                    }
+                }
+                else
+                    L.drawMapPart(ctx, map, window.x0, window.y0, window.x1, window.y1)
+                ctx.restore()
+                const t = ctx.getTransform()
+                L.bloom(ctx, this, {runs: areas.map(b => ({x: b.x0 * t.a + t.e, y: b.y0 * t.d + t.f,
+                    w: (b.x1 - b.x0) * t.a, h: (b.y1 - b.y0) * t.d}))})
+            }
+        } finally {
+            L.clipWindow = clip
+            this.patchCellsWindow = null
+            ctx.restore()
+        }
+        ++this.patchCellFrames
     }
     // During a zoom gesture or a camera pan on the surface-cache path (Screen.surfaceMoving), the
     // overlays drawn after the light map (still units, bars, production previews and production
@@ -1559,7 +1670,9 @@ class Grid extends SpritesGroup {
             const t = source.getContext('2d').getTransform(), key = composite.key, b = this.surfaceCacheBounds
             const now = [t.a, t.d, t.e, t.f, source.width, source.height, atmosphericBackground.raster, mapDepth.atmosphericShadow,
                 this.surfaceCache, this.surfaceCacheRevision, b?.left, b?.top, b?.width, b?.height]
-            if (this.overlayComposite !== composite || now.some((v, k) => v !== key[k]) || !atmosphericBackground.opaqueOver(source.getContext('2d')))
+            // Nor while a patch is under way: frames then draw their overlays directly (beginOverlayComposite).
+            if (this.overlayComposite !== composite || now.some((v, k) => v !== key[k]) || this.surfacePatchJob ||
+                    !atmosphericBackground.opaqueOver(source.getContext('2d')))
                 return
             this.renderOverlaySnapshot(source, composite)
         })
@@ -1693,8 +1806,10 @@ class Grid extends SpritesGroup {
             ctx.drawImage(rest.canvas, 0, 0)
             ctx.restore()
             this.litFrame = {view, rest: true}
-            if (view.patch)
+            if (view.patch) {
+                this.drawPatchCells(ctx, view.patch, 'lit')
                 this.litPatchStep(view)
+            }
             else
                 this.queueLitTiles(view, t, cw, ch)
             return true
@@ -1757,10 +1872,11 @@ class Grid extends SpritesGroup {
     // camera's transform, clipped to the region grown by LIT_PATCH_MARGIN device pixels (the clip's bounds kept the
     // canvas's, as the snapshot's bands keep them, so scaled images are sampled as unclipped) with the cells reaching it
     // (atmosphericLighting.clipWindow, drawRange); then the region is copied into the snapshot and the view takes the
-    // board's state (finishLitPatch). Until then frames draw the snapshot as it was: the board as before the change, the
-    // units live over it (a move's tween runs meanwhile). The view is dropped as before for a lamp or portal change, an
-    // observed board, a region over LIT_PATCH_MAX_AREA of the canvas, a light map that cannot be brought up, or a camera
-    // moving; a board change during the patch starts it over. Grid.surfacePatching false turns it off.
+    // board's state (finishLitPatch). Until then frames draw the snapshot as it was with the changed cells drawn over it in
+    // their new state (drawPatchCells), the units live over it (a move's tween runs meanwhile). The view is dropped as
+    // before for a lamp or portal change, an observed board, a region over LIT_PATCH_MAX_AREA of the canvas, a light map
+    // that cannot be brought up, or a camera moving; a board change during the patch starts it over. Grid.surfacePatching
+    // false turns it off.
     // Returns whether view holds: patched now, or a patch under way (view.patch).
     patchLitView(ctx, view, t) {
         const screen = gameEvent.screen, rest = view.rest, cw = ctx.canvas.width, ch = ctx.canvas.height
@@ -1811,7 +1927,8 @@ class Grid extends SpritesGroup {
             return refuse('light map')
         const m = LIT_PATCH_MARGIN
         const outer = inner && pixelRect(inner.x - m, inner.y - m, inner.x + inner.w + m, inner.y + inner.h + m, cw, ch)
-        const job = {rest, region, inner, outer, light: found.light, lighting, cells: changes.length, step: 0, ran: null,
+        const job = {rest, region, inner, outer, light: found.light, boxes: found.cells, changed: changes.slice(),
+            sprites: found.sprites, lighting, cells: changes.length, step: 0, ran: null,
             state: [], overlayCells: [], window: outer && clipWindowOf(outer, cw, ch, -rest.e / view.a, -rest.f / view.d, view.a, 1.05 * basis.r)}
         this.withLitState(job, () => this.captureSurfaceState())
         if (inner) {
@@ -2413,6 +2530,14 @@ class Grid extends SpritesGroup {
 // Hook for a cell-contents request (PRD 7.4): the cells the local fog just uncovered on a
 // hidden-information board without contents. No network yet; markCellsKnown answers it.
 function onLoadingCellsNeeded(cells) {}
+
+// The world rectangle a patch's changed cells' boxes (surfaceCacheChangeRects' cells) reach, grown by a hexagon's reach: the
+// cells drawn over its old picture (Grid.drawPatchCells) and their light (atmosphericLighting.regionLight).
+function patchCellsWindow(boxes) {
+    const r = 1.05 * basis.r
+    return {x0: Math.min(...boxes.map(b => b.x0)) - r, y0: Math.min(...boxes.map(b => b.y0)) - r,
+        x1: Math.max(...boxes.map(b => b.x1)) + r, y1: Math.max(...boxes.map(b => b.y1)) + r}
+}
 
 // Clips ctx to rects (whole device pixel rectangles {x, y, w, h}); leaves the identity transform.
 function clipToDeviceRects(ctx, rects) {
