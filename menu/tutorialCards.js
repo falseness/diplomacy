@@ -6,7 +6,7 @@
 // the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed, re-read on every enter) carry a
 // gold check badge; the first lesson in menu order that is not passed is Next: a thick gold rim, a gold glow and a
 // "Next" tag. More rows than the grid shows scroll by whole rows (wheel, touch drag, arrow keys) with a gold track at
-// the right. Sizes are in hub units (hubUnit). The medallion shows the lesson's
+// the right; while rows follow the shown ones, the next row peeks in, fading, under a "▼ N more" pill. Sizes are in hub units (hubUnit). The medallion shows the lesson's
 // picture (TutorialCardsTree.IMAGES, by tutorial id) from the game's own assets.
 
 // A lesson card: its whole rect starts the lesson. Menu.touchStart/Move/End hand every touch to every button of the
@@ -53,6 +53,8 @@ class TutorialCardsTree {
         disc: ['#f6ecdc', '#cbb79a'], discRing: '#d4a85a', discShade: 'rgba(0, 0, 0, 0.25)',
         badge: ['#ffe3a3', '#d9962f'], tag: ['#ffe3a3', '#e9a948'], dark: '#2a1a06',
     }
+    // The share of a card's height the next row shows below the shown ones (TutorialCardsTree.layout).
+    static PEEK = 0.45
     // Medallion pictures by tutorial id (not the display number): the file and its fit, as in the concept: 'unit'
     // sprites a little larger and lowered, 'low' buildings raised so their art is centred. The menu loads them as its
     // own images from these paths, so the sprite and visuals settings (which switch the shared assets' folders, see
@@ -100,6 +102,8 @@ class TutorialCardsTree {
         this.track = null
         this.columns = 3
         this.shownRows = 3
+        this.peek = null
+        this.peekCanvas = null
         this.buttons = [this.backButton]
     }
     get rows() {
@@ -135,7 +139,11 @@ class TutorialCardsTree {
         this.layout()
     }
     // The heading under the logo, Back at the bottom, the grid of equal cards between them (chooseGrid); rows above or
-    // below the shown ones are moved off the grid and ignore clicks.
+    // below the shown ones are moved off the grid and ignore clicks. While rows follow the shown ones, the cards are
+    // shorter so the shown rows and PEEK of a card fit the grid, and the next row is placed under them as the peek
+    // (clipped to the grid when drawn, ignoring clicks); this.peek keeps its band, its entries and the pill. Peek cards
+    // whose medallion and name would sit in the hidden part (tall cards: portrait phones) draw them centred in the
+    // band instead (entry.contentY).
     layout() {
         const u = hubUnit(), logo = this.menu.logo.bounds
         const headingTop = logo.y + logo.height + 0.2 * u
@@ -149,23 +157,57 @@ class TutorialCardsTree {
         this.columns = chosen.columns
         this.shownRows = chosen.rows
         this.firstRow = Math.min(this.firstRow, this.maxFirstRow)
-        const {width, height} = chosen.card
+        const peeking = this.firstRow < this.maxFirstRow, width = chosen.card.width
+        const height = peeking ? (this.grid.height - gap * this.shownRows) / (this.shownRows + TutorialCardsTree.PEEK) :
+            chosen.card.height
         this.cardStep = height + gap
+        this.peek = null
+        if (peeking) {
+            const top = this.grid.y + this.shownRows * this.cardStep, bottom = this.grid.y + this.grid.height
+            const lessons = this.entries.length - (this.firstRow + this.shownRows) * this.columns
+            this.peek = {top, bottom, entries: [], lessons, text: `▼  ${lessons} more`}
+        }
         this.entries.forEach((entry, index) => {
             const row = Math.floor(index / this.columns) - this.firstRow, column = index % this.columns
-            const shown = row >= 0 && row < this.shownRows
+            const shown = row >= 0 && row < this.shownRows, peek = this.peek && row === this.shownRows
             const rect = entry.button.rect
-            Object.assign(rect, {x: this.grid.x + column * (width + gap), y: shown ? this.grid.y + row * this.cardStep : -HEIGHT,
-                width, height, cornerRadius: Array(4).fill(u)})
+            Object.assign(rect, {x: this.grid.x + column * (width + gap),
+                y: shown || peek ? this.grid.y + row * this.cardStep : -HEIGHT, width, height, cornerRadius: Array(4).fill(u)})
             entry.button.canClick = shown
+            entry.peek = peek
+            entry.contentY = null
+            if (peek) {
+                this.peek.entries.push(entry)
+                const band = this.peek.bottom - this.peek.top, disc = TutorialCardsTree.discSize(rect, u)
+                if (rect.y + rect.height / 2 + disc / 2 + 0.9 * u > this.peek.bottom && disc + 2.4 * u <= band)
+                    entry.contentY = this.peek.top + band / 2
+            }
             entry.button.text.fontSize = 2 * u
             entry.button.trimText()
             const badge = 2.6 * u
             if (entry.checkMark) Object.assign(entry.checkMark, {width: badge, height: badge,
                 pos: {x: rect.x + rect.width - 0.9 * u - badge / 2, y: rect.y + 0.9 * u + badge / 2}})
         })
+        if (this.peek) {
+            const f = u * hubFontScale(), font = `700 ${1.5 * f}px ${Text.defaultFamily}`
+            const pill = {height: 2.6 * f}
+            pill.width = Math.max(11 * u, TutorialCardsTree.measure(this.peek.text, font) + 3 * f)
+            Object.assign(pill, {x: this.grid.x + this.grid.width / 2 - pill.width / 2,
+                y: this.peek.bottom - 0.2 * u - pill.height})
+            this.peek.pill = {...pill, font}
+        }
         this.track = this.rows > this.shownRows ?
             {x: this.grid.x + this.grid.width + 1.1 * u, y: this.grid.y, width: 0.45 * u, height: this.grid.height} : null
+    }
+    // The medallion's diameter on a card rect: at most 82% of its height and 30% of its width, and small enough that
+    // its ring and shade (0.7 u past the disc) stay 0.2 u inside the card on short cards (wide or low screens).
+    static discSize(r, u) {
+        return Math.min(0.82 * r.height, r.height - 1.8 * u, 0.3 * r.width)
+    }
+    static measure(text, font) {
+        const ctx = TutorialCardsTree.measureCtx ??= document.createElement('canvas').getContext('2d')
+        ctx.font = font
+        return ctx.measureText(text).width
     }
     // The gold thumb on the track: the shown rows' share of every row.
     get thumbRect() {
@@ -212,12 +254,50 @@ class TutorialCardsTree {
         const u = hubUnit()
         this.drawHeading(ctx, u)
         for (const entry of this.entries) if (entry.button.canClick) this.drawCard(ctx, entry, u)
+        if (this.peek) this.drawPeek(ctx, u)
         if (this.track) {
             hubFillRounded(ctx, this.track, this.track.width / 2, 'rgba(255, 255, 255, 0.08)')
             const thumb = this.thumbRect
             hubFillRounded(ctx, thumb, thumb.width / 2, MENU_THEME.plain.rim)
         }
         this.backButton.draw(ctx)
+    }
+    // The peek row drawn on its own canvas (the screen's size, kept), faded from 0.9 at its top to nothing at the
+    // grid's bottom and cut there, then the navy pill with a gold rim and "▼  N more" centred just above that bottom.
+    drawPeek(ctx, u) {
+        const peek = this.peek, canvas = this.peekCanvas ??= document.createElement('canvas')
+        if (canvas.width !== ctx.canvas.width || canvas.height !== ctx.canvas.height) {
+            canvas.width = ctx.canvas.width
+            canvas.height = ctx.canvas.height
+        }
+        const layer = canvas.getContext('2d')
+        layer.setTransform(1, 0, 0, 1, 0, 0)
+        layer.globalCompositeOperation = 'source-over'
+        layer.clearRect(0, 0, canvas.width, canvas.height)
+        layer.setTransform(...['a', 'b', 'c', 'd', 'e', 'f'].map(key => ctx.getTransform()[key]))
+        for (const entry of peek.entries) this.drawCard(layer, entry, u)
+        layer.globalCompositeOperation = 'destination-in'
+        const fade = layer.createLinearGradient(0, peek.top, 0, peek.bottom)
+        fade.addColorStop(0, 'rgba(0, 0, 0, 0.9)')
+        fade.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        layer.fillStyle = fade
+        layer.fillRect(0, peek.top, WIDTH, peek.bottom - peek.top)
+        layer.globalCompositeOperation = 'source-over'
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(0, peek.top, WIDTH, peek.bottom - peek.top)
+        ctx.clip()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.drawImage(canvas, 0, 0)
+        ctx.restore()
+        const pill = peek.pill
+        hubFillRounded(ctx, pill, pill.height / 2, 'rgba(14, 20, 48, 0.88)')
+        ctx.beginPath()
+        roundedRectPath(ctx, pill.x, pill.y, pill.width, pill.height, pill.height / 2)
+        ctx.strokeStyle = MENU_THEME.plain.rim
+        ctx.lineWidth = 0.12 * u
+        ctx.stroke()
+        hubText(ctx, peek.text, pill.x + pill.width / 2, pill.y + pill.height / 2, pill.font, MENU_THEME.heading, 'center')
     }
     // "Tutorial" between two gold lines fading outwards.
     drawHeading(ctx, u) {
@@ -260,10 +340,9 @@ class TutorialCardsTree {
         ctx.strokeStyle = entry.next ? colours.gold : colours.rim
         ctx.lineWidth = rim
         ctx.stroke()
-        // The medallion: at most 82% of the card's height and 30% of its width, and small enough that its ring and
-        // shade (0.7 u past the disc) stay 0.2 u inside the card on short cards (wide or low screens).
-        const pad = 1.6 * u, disc = Math.min(0.82 * r.height, r.height - 1.8 * u, 0.3 * r.width)
-        const cx = r.x + pad + disc / 2, cy = r.y + r.height / 2
+        // The medallion (discSize), centred on the card's height (or on entry.contentY in the peek).
+        const pad = 1.6 * u, disc = TutorialCardsTree.discSize(r, u)
+        const cx = r.x + pad + disc / 2, cy = entry.contentY ?? r.y + r.height / 2
         this.drawMedallion(ctx, cx, cy, disc / 2, u)
         button.medallion = this.drawMedallionImage(ctx, entry.id, cx, cy, disc / 2)
         // The corner mark: Next's tag or the check badge.
