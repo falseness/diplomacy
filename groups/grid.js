@@ -1592,6 +1592,7 @@ class Grid extends SpritesGroup {
         if (sky.width === source.width) g.drawImage(sky, 0, 0)
         else g.drawImage(sky, 0, 0, source.width, source.height)
         g.setTransform(key[0], 0, 0, key[1], key[2], key[3])
+        drawBackgroundHints(g)
         if (shadow) g.drawImage(shadow.canvas, shadow.left, shadow.top, shadow.width, shadow.height)
         // A board changed since the frame (its cache no longer matching) draws no snapshot.
         const drawn = this.drawSurfaceCache(g)
@@ -2143,6 +2144,7 @@ class Grid extends SpritesGroup {
             g.lineJoin = 'round'
             g.lineCap = 'round'
             this.setLitRestTransform(g, view, rest)
+            drawBackgroundHints(g)
             mapDepth.drawAtmosphericShadow(g, this)
             this.drawLitScene(g)
         }
@@ -2787,6 +2789,7 @@ const LIT_PATCH_STEPS = [
         g.clearRect(0, 0, g.canvas.width, g.canvas.height)
         atmosphericBackground.draw(g)
         grid.setLitRestTransform(g, view, job.rest)
+        drawBackgroundHints(g)
         mapDepth.drawAtmosphericShadow(g, grid)
     }),
     ...LIT_SCENE_PARTS.map(part => (grid, job, view) => grid.drawLitPatch(job, view, g => part(grid, g))),

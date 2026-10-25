@@ -8,11 +8,13 @@ function drawMain() {
             mainCtx.clearRect(canvas.offset.x, canvas.offset.y,
                 width, height)
         atmosphericBackground.draw(mainCtx)
+        drawBackgroundHints(mainCtx)
     }
     else if (cover.open.length) {
         mainCtx.save()
         clipToDeviceRects(mainCtx, cover.open)
         atmosphericBackground.draw(mainCtx)
+        drawBackgroundHints(mainCtx)
         mainCtx.restore()
     }
 
@@ -21,6 +23,156 @@ function drawMain() {
     mainCtx.lineJoin = 'round'
     mainCtx.lineCap = 'round'
     grid.draw(mainCtx)
+}
+
+// Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:
+// a 'Camera' panel left of the board and a 'Turn' panel right of it, in world space (they pan and zoom
+// with the board). They are part of the background: drawn right after the sky (drawMain and the lit
+// rest snapshot, lit patch and overlay snapshot, which hold the sky), so the board, its shadow and the
+// units draw over them. Each panel is rendered once per scale step into an offscreen canvas
+// (backgroundHintCanvas) and drawn with one drawImage a frame. In r (basis.r) units: panel rects from
+// the board's top face, the keys and texts from the panel's top left.
+const BACKGROUND_HINT_PANELS = [
+    {name: 'camera', heading: 'Camera', side: -1, width: 4.55, height: 6.1, keys: [
+        {text: '+', x: 0.47, y: 0.88, width: 0.98},
+        {text: '−', x: 1.6, y: 0.88, width: 0.98},
+        {text: '↑', x: 1.6, y: 3.15, width: 0.98},
+        {text: '←', x: 0.47, y: 4.3, width: 0.98},
+        {text: '↓', x: 1.6, y: 4.3, width: 0.98},
+        {text: '→', x: 2.73, y: 4.3, width: 0.98},
+    ], captions: [{text: 'scale camera', y: 2.3}, {text: 'move camera', y: 5.74}]},
+    {name: 'turn', heading: 'Turn', side: 1, width: 4.6, height: 5.35, keys: [
+        {text: 'Backspace', x: 0.41, y: 0.88, width: 3.06},
+        {text: 'Enter', x: 0.41, y: 3.15, width: 2.24},
+    ], captions: [{text: 'undo move', y: 2.3}, {text: 'go to next unit /', y: 4.55}, {text: 'confirm next turn', y: 5.02}]},
+]
+// The gap between a panel and the board's top face, the keys' height, the canvas margin (r units).
+const BACKGROUND_HINT_GAP = 0.8
+const BACKGROUND_HINT_KEY = 0.98
+const BACKGROUND_HINT_PAD = 0.1
+
+// Whether the page is used with a mouse: a hovering fine pointer, and no touch seen in this page
+// (false from the first touchstart on). No matchMedia (an old browser) counts as no.
+let pageTouched = false
+let desktopPointerQuery
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function')
+    window.addEventListener('touchstart', () => {
+        if (pageTouched)
+            return
+        pageTouched = true
+        // The lit snapshots and the overlay snapshot hold the hints drawn with the sky.
+        if (typeof grid !== 'undefined' && grid) {
+            grid.releaseLitCanvases()
+            grid.overlayComposite = undefined
+        }
+    }, {capture: true, passive: true})
+function isDesktopPointer() {
+    if (pageTouched || typeof window === 'undefined' || typeof window.matchMedia !== 'function')
+        return false
+    desktopPointerQuery ||= window.matchMedia('(hover: hover) and (pointer: fine)')
+    return !!desktopPointerQuery.matches
+}
+
+function backgroundHintsShown() {
+    return !!gameSettings.tutorial && gameSettings.tutorial.id === 'tutorial-16' && isDesktopPointer()
+}
+
+// The panels' world rects: beside the board's top face, centred on it vertically.
+function backgroundHintRects() {
+    mapDepth.ensureGeometry(grid)
+    const b = mapDepth.surfaceBounds, r = basis.r, middle = (b.top + b.bottom) / 2
+    const top = middle - BACKGROUND_HINT_PANELS[0].height * r / 2
+    return BACKGROUND_HINT_PANELS.map(panel => ({name: panel.name, panel,
+        x: panel.side < 0 ? b.left - (BACKGROUND_HINT_GAP + panel.width) * r : b.right + BACKGROUND_HINT_GAP * r,
+        y: top, width: panel.width * r, height: panel.height * r}))
+}
+
+function drawBackgroundHints(ctx) {
+    backgroundHintState.rects = null
+    if (!backgroundHintsShown())
+        return
+    const t = ctx.getTransform()
+    // The scale step at or above the transform's scale (quarter octaves): zooming re-renders at most
+    // once a step, panning never.
+    const scale = Math.pow(2, Math.ceil(Math.log2(Math.max(t.a, 1e-3)) * 4) / 4)
+    const rects = backgroundHintState.rects = backgroundHintRects()
+    const pad = BACKGROUND_HINT_PAD * basis.r
+    for (const rect of rects) {
+        const image = backgroundHintCanvas(rect.panel, scale)
+        ctx.drawImage(image, rect.x - pad, rect.y - pad, image.width / image.hintScale, image.height / image.hintScale)
+    }
+}
+// The rects drawn last (null when none), the panel renders so far and the rendered panels by panel and scale.
+const backgroundHintState = {rects: null, renders: 0, canvases: new Map()}
+
+// The panel rendered at scale (device pixels a world unit), kept for the last two scale steps.
+function backgroundHintCanvas(panel, scale) {
+    const cache = backgroundHintState.canvases
+    const key = panel.name + ':' + scale
+    let image = cache.get(key)
+    if (image)
+        return image
+    for (const old of [...cache.keys()].filter(k => k.startsWith(panel.name + ':')).slice(0, -1)) {
+        cache.get(old).width = 0
+        cache.delete(old)
+    }
+    // A world unit at most 4096 device pixels a panel side.
+    const k0 = scale * basis.r, side = (Math.max(panel.width, panel.height) + 2 * BACKGROUND_HINT_PAD) * k0
+    const k = side > 4096 ? k0 * 4096 / side : k0
+    image = document.createElement('canvas')
+    image.width = Math.ceil((panel.width + 2 * BACKGROUND_HINT_PAD) * k)
+    image.height = Math.ceil((panel.height + 2 * BACKGROUND_HINT_PAD) * k)
+    image.hintScale = k / basis.r
+    const g = image.getContext('2d')
+    g.translate(BACKGROUND_HINT_PAD * k, BACKGROUND_HINT_PAD * k)
+    renderBackgroundHintPanel(g, panel, k)
+    cache.set(key, image)
+    ++backgroundHintState.renders
+    return image
+}
+
+// Style of the menu's cards: the panel and keys as MENU_THEME's panel and plain controls (gold rim),
+// the heading in the heading gold between gold lines fading outwards, cream serif texts. k: pixels an r.
+function renderBackgroundHintPanel(g, panel, k) {
+    const rim = Math.max(1, 0.035 * k), family = Text.defaultFamily
+    const plate = (x, y, width, height, radius, style) => {
+        roundedRectPath(g, x + rim / 2, y + rim / 2, width - rim, height - rim, radius)
+        g.globalAlpha = style.alpha
+        g.fillStyle = style.fill
+        g.fill()
+        g.globalAlpha = 1
+        g.strokeStyle = style.rim
+        g.lineWidth = rim
+        g.stroke()
+    }
+    plate(0, 0, panel.width * k, panel.height * k, 0.2 * k, MENU_THEME.panel)
+    g.textBaseline = 'middle'
+    g.textAlign = 'center'
+    // The heading between two gold lines that fade towards the panel's sides.
+    const middle = panel.width * k / 2, headingY = 0.43 * k
+    g.font = `800 ${0.4 * k}px ${family}`
+    g.fillStyle = MENU_THEME.heading
+    g.fillText(panel.heading, middle, headingY)
+    const half = g.measureText(panel.heading).width / 2
+    for (const side of [-1, 1]) {
+        const inner = middle + side * (half + 0.2 * k), outer = middle + side * (panel.width / 2 - 0.2) * k
+        const line = g.createLinearGradient(outer, 0, inner, 0)
+        line.addColorStop(0, MENU_THEME.plain.rim + '00')
+        line.addColorStop(1, MENU_THEME.plain.rim)
+        g.fillStyle = line
+        g.fillRect(Math.min(inner, outer), Math.round(headingY), Math.abs(outer - inner), Math.max(1, 0.025 * k))
+    }
+    for (const key of panel.keys) {
+        plate(key.x * k, key.y * k, key.width * k, BACKGROUND_HINT_KEY * k, 0.18 * k, MENU_THEME.plain)
+        g.font = `700 ${(key.text.length > 1 ? 0.4 : 0.48) * k}px ${family}`
+        g.fillStyle = MENU_THEME.plain.text
+        g.fillText(key.text, (key.x + key.width / 2) * k, (key.y + BACKGROUND_HINT_KEY / 2) * k)
+    }
+    g.textAlign = 'left'
+    g.font = `${MENU_THEME.fontWeight} ${0.35 * k}px ${family}`
+    g.fillStyle = MENU_THEME.text
+    for (const caption of panel.captions)
+        g.fillText(caption.text, panel.keys[0].x * k, caption.y * k)
 }
 
 function drawDebugFps(ctx) {
