@@ -7,6 +7,11 @@ function isFogLandmark(building) {
         return true
     return building.name === 'town' && building.player?.isNeutral === true
 }
+// A live demon portal drawn above the fog (drawFogLandmark) also shows its next demon and the
+// rounds left (drawNextProduction) there, as on a visible cell. Nothing else of a fogged cell is.
+function fogShowsPortalPreview(building) {
+    return !!building?.isDemonPortal && isFogLandmark(building) && gameSettings.drawFogLandmarks === true
+}
 class Cell {
     // The texts are made when first read: loading a board builds every cell, and the server's rules
     // contexts and replays load many boards they never draw.
@@ -307,6 +312,10 @@ class Grid extends SpritesGroup {
                     if (debug) {
                         cell.coordText.draw(ctx)
                     }
+                    else if (fogShowsPortalPreview(cell.building) && cell.infoText.text != '') {
+                        cell.infoText.draw(ctx)
+                        cell.infoText.text = ''
+                    }
                     continue;
                 }
 
@@ -334,7 +343,7 @@ class Grid extends SpritesGroup {
             if (i < range.i0 || i >= range.i1 || j < range.j0 || j >= range.j1)
                 continue
             const cell = this.arr[i][j]
-            if (cell.building.isMapEdge || (isFogOfWar && !this.fogOfWar[i][j]))
+            if (cell.building.isMapEdge || (isFogOfWar && !this.fogOfWar[i][j] && !fogShowsPortalPreview(cell.building)))
                 continue
             if (cell.infoText.text != '')
                 cell.infoText.draw(ctx)
@@ -406,6 +415,8 @@ class Grid extends SpritesGroup {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
                     if (buildings && this.spriteInPatchCells(this.arr[i][j].building))
                         this.drawFogLandmark(ctx, this.arr[i][j].building)
+                    if (units && this.fogPortalPreview(this.arr[i][j]))
+                        this.arr[i][j].building.drawNextProduction(ctx)
                     continue
                 }
                 let cell = this.arr[i][j]
@@ -434,6 +445,10 @@ class Grid extends SpritesGroup {
     isCacheableBuilding(building) {
         return building.notEmpty() && !building.isInvisible && !building.isBuildingProduction() &&
             !this.observedBuilding(this.getCell(building.coord))
+    }
+    // A fogged cell's live, not observed demon portal whose next demon and rounds left draw (fogShowsPortalPreview).
+    fogPortalPreview(cell) {
+        return fogShowsPortalPreview(cell.building) && !this.observedBuilding(cell)
     }
     observedBuilding(cell) {
         return typeof onlineObservation !== 'undefined' && onlineObservation.hidesBuilding(cell)
@@ -486,8 +501,11 @@ class Grid extends SpritesGroup {
     drawEntityOverlays(ctx, cells) {
         const buildingBars = []
         const range = this.forEachDrawnCell(ctx, cells, (cell, i, j) => {
-            if (isFogOfWar && !this.fogOfWar[i][j])
+            if (isFogOfWar && !this.fogOfWar[i][j]) {
+                if (this.fogPortalPreview(cell))
+                    cell.building.drawNextProduction(ctx)
                 return
+            }
             const building = cell.building
             const observed = this.observedBuilding(cell)
             let silhouette = false
@@ -587,7 +605,7 @@ class Grid extends SpritesGroup {
         if (x >= range.i0 && x < range.i1 && y >= range.j0 && y < range.j1)
             return
         if (!this.arr[x] || this.arr[x][y]?.building !== portal ||
-                (isFogOfWar && !this.fogOfWar[x][y]) || this.observedBuilding(this.arr[x][y]))
+                (isFogOfWar && !this.fogOfWar[x][y] && !fogShowsPortalPreview(portal)) || this.observedBuilding(this.arr[x][y]))
             return
         entityInterface.refreshPortal(portal)
     }
