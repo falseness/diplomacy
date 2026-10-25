@@ -52,6 +52,11 @@ class TutorialManager {
                 return enemy.units.length === 0
             case 'enemyLost':
                 return enemy.isLost
+            case 'demonUnitsDead':
+                // Every demon unit dead (as coopResult counts them); portals and demon buildings do not matter.
+                human.updateTowns()
+                return human.towns.length > 0 && players.every(player => player.role !== 'DEMONS' ||
+                    !player.units.some(unit => !unit.killed && unit.hp > 0))
             case 'coopVictory':
                 human.updateTowns()
                 return players[0].coopResult === 'victory' && human.towns.length > 0

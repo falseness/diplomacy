@@ -209,7 +209,8 @@ function createTutorial5Map() {
     // siege one keep sending more.
     // The Bombards (building damage only) breach the walls within a few rounds, so merely waiting behind them
     // loses, and so does attacking at once. Training KOHb every round while holding until round 4, striking the
-    // Bombards first in the sortie and bringing catapults against the portals wins. Mountains on the flanks of
+    // Bombards first in the sortie and then killing every demon unit wins (pass 'demonUnitsDead': the portals
+    // may still stand). Mountains on the flanks of
     // the field and the walls' open ends are left free: the sortie needs them.
     let redSide = []
     for (let x = 0; x <= 4; ++x) {
@@ -886,7 +887,7 @@ const tutorials = [
     {id: 'tutorial-7', title: 'Tutorial 2: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
     {id: 'tutorial-3', title: 'Tutorial 3: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-2', title: 'Tutorial 4: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 5: Hold the Walls', pass: 'coopVictory', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 5: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
     {id: 'tutorial-15', title: 'Tutorial 6: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
     {id: 'tutorial-13', title: 'Tutorial 7: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
