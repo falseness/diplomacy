@@ -62,6 +62,7 @@ class TutorialCardsTree {
     static IMAGES = {
         'tutorial-0': {src: 'assets/sprites/noob.svg', fit: 'unit'},
         'tutorial-16': {src: 'assets/sprites/noob.svg', fit: 'moves', moves: {count: 2, left: 1}},
+        'tutorial-17': {src: 'assets/sprites/normchel.svg', fit: 'unit'},
         'tutorial-1': {src: 'assets/sprites/archer.svg', fit: 'unit'},
         'tutorial-7': {src: 'assets/atmosphere/buildings/tower.svg'},
         'tutorial-3': {src: 'assets/atmosphere/buildings/wall.svg', fit: 'low'},
