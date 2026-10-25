@@ -1,7 +1,7 @@
 // Browser-only (not in the server's rules script list, server/gameScriptList.js, so the rules version stays as it is):
 // the 'tutorial' screen as lesson cards, in place of menu/menu.js TutorialTree (installed at the end of this file).
 // A "Tutorial" heading under the logo, every entry of options/tutorials.js as a card in 3 equal columns between the
-// heading and Back (3 x 3 for up to 9 lessons, 3 x 4 or 4 x 3 for up to 12, see TutorialCardsTree.grids): a round cream
+// heading and Back (always 3 x 3 shown, see TutorialCardsTree.grids): a round cream
 // medallion at the left, the lesson number in gold and its name (at most 2 lines, never shrunk, ellipsis past them) at
 // the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed, re-read on every enter) carry a
 // gold check badge; the first lesson in menu order that is not passed is Next: a thick gold rim, a gold glow and a
@@ -30,12 +30,10 @@ class TutorialCard extends MenuButton {
 }
 
 class TutorialCardsTree {
-    // The grids the cards are laid out in: 3 x 3 up to 9 lessons (as before); above that, 3 columns x 4 rows or 4
-    // columns x 3 rows, whichever gives the screen's grid the roomier card (see chooseGrid): tall and squarish screens
-    // (1440x900, 1024x768, portrait phones) get 3 x 4, low wide ones (phones in landscape, 844x390) 4 x 3, where a
-    // 4th row would leave no height for a 2-line name. More than 12 lessons scroll in that grid.
+    // The grids the cards are laid out in: 3 columns x 3 rows shown for any number of lessons, so a card keeps the
+    // 9-lesson size at every screen; rows past the 3rd scroll in (wheel, arrow keys, touch drag, the gold track).
     static grids(count) {
-        return count <= 9 ? [{columns: 3, rows: 3}] : [{columns: 3, rows: 4}, {columns: 4, rows: 3}]
+        return [{columns: 3, rows: 3}]
     }
     // A card's size in a grid of width x height with gap between cards, in hub units u, rated against the card a
     // medallion and a 2-line name at the card font need (24 x 7 units): the grid whose card is the least short of that
@@ -375,7 +373,7 @@ class TutorialCardsTree {
         const numberWidth = button.number ? ctx.measureText(button.number).width + u : 0
         const nameLeft = left + numberWidth, top = y - lineHeight
         // Each line's right end: 0.6 u short of right, and clear of the corner mark when the line's band reaches it
-        // (the narrow 4-column cards need the room, see TutorialCardsTree.grids).
+        // (narrow cards, as on a portrait phone, need the room).
         const ends = [0, 1].map(i => corner && top + i * lineHeight < corner.y + corner.height + 0.3 * u ?
             Math.min(right - 0.6 * u, corner.x - 0.6 * u) : right - 0.6 * u)
         ctx.font = nameFont
