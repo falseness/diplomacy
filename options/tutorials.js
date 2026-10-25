@@ -951,7 +951,7 @@ const tutorials = [
         get map() { return createTutorial15Map() }},
     {id: 'tutorial-13', title: 'Tutorial 10: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 11: Lose a Town, Win the War', pass: 'coopVictory', startRound: 20,
+    {id: 'tutorial-6', title: 'Tutorial 11: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
         get map() { return createTutorial6Map() }},
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
