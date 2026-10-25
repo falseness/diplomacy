@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "9b0302faa2a85207cdad6a08d6a6c9d6a09cecf56c158e577c95cb6438c3a395",
+  "rulesVersion": "c88c944dc0982e12188ecb48a05b53ed5458a02517e1d545f7ae12bfa9f647b1",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,13 +30,13 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "88235667b8b2b48248782615673a9f489e2a2f4d5cc3f812475698222f817595",
-      "bytes": 74277
+      "sha256": "0a19c6b81a0c35661f61ab310bbb728326dc6c81bd7bce59a758eddc06ad5e07",
+      "bytes": 74547
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "2ef50457bb0d4a8754c5633392813761dbf1760ceceaf7d5a0b96ec7ea23932e",
-      "bytes": 43350
+      "sha256": "d37a9b0343b90b422b7e92c344e05443e00fb0f46b75cb8a9d3d41f7c836b134",
+      "bytes": 44552
     },
     {
       "path": "options/tutorialProgress.js",
@@ -320,8 +320,8 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "bebc01212d79d2987f1269e00804d37d1887e38914572d26c6da480bfde5798d",
-      "bytes": 29813
+      "sha256": "96a7ac1db31f59525c88637cf84787a82cb384c345076451855d24b44e88a2cc",
+      "bytes": 29874
     },
     {
       "path": "sprites/entities/units/unit/unit.js",

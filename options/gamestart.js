@@ -131,6 +131,9 @@ class GameMap {
                 new playerType(this.players[i].rgb) :
                 new playerType(this.players[i].rgb, configuredGold)
             players[i].economyEnabled = economyEnabled
+            // A lesson-only setting: the player's units path through hexes red cannot see (tutorial
+            // AIs otherwise move only into hexes red sees, see Way.isCellImpassable).
+            if (this.players[i].ignoresFog === true) players[i].ignoresFog = true
 
             if (!('units' in this.players[i])) {
                 continue;

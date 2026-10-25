@@ -334,8 +334,8 @@ class Way {
         let teammateUnit = cell.unit.notEmpty() && cell.unit.playerColor != player &&
             players[player].isAlliedWith(cell.unit.player)
         let buildingObstacle = cell.building.isObstacle(player) || teammateBuilding || teammateUnit
-        // Co-op fog contains human sight only; automatic demons do not use it.
-        let fogged = isFogOfWar && players[player].role !== 'DEMONS' &&
+        // Co-op fog contains human sight only; automatic demons and a map's ignoresFog player do not use it.
+        let fogged = isFogOfWar && players[player].role !== 'DEMONS' && !players[player].ignoresFog &&
             !grid.fogOfWar[neighbour.x][neighbour.y]
         return (players[player].ignoresCell(cell) || ourUnit || buildingObstacle || fogged)
     }

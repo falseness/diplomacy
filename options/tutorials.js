@@ -49,6 +49,23 @@ function createTutorial17Map() {
     return map
 }
 
+// Expand: a lone red noob next to a neutral town with 1 hp left; red's economy is on, so the
+// captured town pays for an army against blue's three noobs and archer, which march from the
+// far side from blue's first turn (ignoresFog: blue paths through hexes red cannot see). Scenery lies along the top and bottom borders, away from the units, the town and
+// the rows between the two sides.
+function createTutorial18Map() {
+    const map = new GameMap({x: 16, y: 9}, [
+        {rgb: {r: 208, g: 208, b: 208}, towns: [{x: 2, y: 4, hp: 1}]},
+        {rgb: {r: 255, g: 0, b: 0}, towns: [], units: [{x: 1, y: 4, type: Noob}]},
+        {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayer', economyEnabled: false, ignoresFog: true, towns: [],
+            units: [{x: 14, y: 3, type: Noob}, {x: 14, y: 4, type: Noob}, {x: 14, y: 5, type: Noob},
+                {x: 15, y: 4, type: Archer}]}
+    ], [], coordDictionary([[5, 0], [6, 0]]), coordDictionary([[9, 8], [10, 8]]),
+    coordDictionary([[0, 0], [0, 8], [15, 0], [15, 8]]))
+    map.testName = 'tutorial 18'
+    return map
+}
+
 function createTutorial1Map() {
     // Red stands on the left, blue on the right, along a hedge of bushes (column 5) with a
     // single gap at (5,3). Blue's two normchels stand in the hedge, its noob blocks the gap
@@ -918,13 +935,14 @@ const tutorials = [
     {id: 'tutorial-1', title: 'Tutorial 3: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-7', title: 'Tutorial 4: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
     {id: 'tutorial-3', title: 'Tutorial 5: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
-    {id: 'tutorial-2', title: 'Tutorial 6: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 7: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-15', title: 'Tutorial 8: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+    {id: 'tutorial-18', title: 'Tutorial 6: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
+    {id: 'tutorial-2', title: 'Tutorial 7: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 8: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-15', title: 'Tutorial 9: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-13', title: 'Tutorial 9: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
+    {id: 'tutorial-13', title: 'Tutorial 10: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 10: Lose a Town, Win the War', pass: 'coopVictory', startRound: 20,
+    {id: 'tutorial-6', title: 'Tutorial 11: Lose a Town, Win the War', pass: 'coopVictory', startRound: 20,
         get map() { return createTutorial6Map() }},
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
