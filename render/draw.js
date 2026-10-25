@@ -11,9 +11,12 @@ function drawMain() {
         drawBackgroundHints(mainCtx)
     }
     else if (cover.open.length) {
+        // clipToDeviceRects leaves the identity transform; the hints are in world space (the camera's).
+        const camera = mainCtx.getTransform()
         mainCtx.save()
         clipToDeviceRects(mainCtx, cover.open)
         atmosphericBackground.draw(mainCtx)
+        mainCtx.setTransform(camera.a, camera.b, camera.c, camera.d, camera.e, camera.f)
         drawBackgroundHints(mainCtx)
         mainCtx.restore()
     }
