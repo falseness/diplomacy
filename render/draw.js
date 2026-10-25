@@ -203,11 +203,12 @@ function drawDebugFps(ctx) {
 // the top centre between the menu and i buttons, and a label just above the undo and next-turn
 // buttons. When red has no moves left on its own turn, a big red arrow points at the next-turn
 // button (drawTutorialArrow). The boxes drawn last are kept in drawTutorialHints.boxes, the arrow
-// in drawTutorialHints.arrow (null when none is drawn).
+// in drawTutorialHints.arrow (null when none is drawn). Nothing is drawn while Retry or Next tutorial
+// switches tutorials (TutorialManager.switching).
 function drawTutorialHints(ctx) {
     drawTutorialHints.boxes = []
     drawTutorialHints.arrow = null
-    if (!gameSettings.tutorial || gameSettings.tutorial.id !== 'tutorial-0')
+    if (!gameSettings.tutorial || gameSettings.tutorial.id !== 'tutorial-0' || TutorialManager.switching)
         return
     const unit = Math.min(WIDTH, HEIGHT)
     const gap = unit * 0.012

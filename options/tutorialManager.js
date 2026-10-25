@@ -7,11 +7,14 @@ const TUTORIAL_AI_SLOT = 2
 const TUTORIAL_SUDDEN_DEATH_ROUND = 40
 
 class TutorialManager {
+    // True from Retry/Next tutorial (switchTo) until the new tutorial starts.
+    static switching = false
     static start(id) {
         const tutorial = tutorials.find(tutorial => tutorial.id === id)
         if (!tutorial)
             throw new Error('Unknown tutorial ' + id)
         tutorialResultInterface.hide()
+        TutorialManager.switching = false
         const map = tutorial.map
         map.tutorial = {id: id}
         // 'surviveRounds' counts red's units only when the map gives red no town.
@@ -88,8 +91,10 @@ class TutorialManager {
     // (the menu loop), setTree and updateSlotManagers, which would draw the menu until the new board.
     // The old game loop draws its last frame and stops on the next frame, before the callback below
     // (requested later); the 'Loading…' frame is shown, and the new game starts one frame after it, so
-    // only one game loop runs.
+    // only one game loop runs. switching is set until start, so the old loop's last frame draws no
+    // tutorial 0 hints (drawTutorialHints), whose arrow would otherwise flash once the result screen hides.
     static switchTo(id) {
+        TutorialManager.switching = true
         tutorialResultInterface.hide()
         menu.stopGame()
         requestAnimationFrame(() => {
