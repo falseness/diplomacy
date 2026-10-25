@@ -61,6 +61,7 @@ class TutorialCardsTree {
     // render/loadassets.js loadSprites) never change them. An id without an entry keeps the empty medallion.
     static IMAGES = {
         'tutorial-0': {src: 'assets/sprites/noob.svg', fit: 'unit'},
+        'tutorial-16': {src: 'assets/sprites/noob.svg', fit: 'moves', moves: {count: 2, left: 1}},
         'tutorial-1': {src: 'assets/sprites/archer.svg', fit: 'unit'},
         'tutorial-7': {src: 'assets/atmosphere/buildings/tower.svg'},
         'tutorial-3': {src: 'assets/atmosphere/buildings/wall.svg', fit: 'low'},
@@ -71,7 +72,9 @@ class TutorialCardsTree {
         'tutorial-6': {src: 'assets/atmosphere/buildings/town.svg'},
     }
     // The picture's box as a share of the medallion's diameter and its shift down as a share of that box.
-    static IMAGE_FIT = {plain: {size: 0.86, shift: 0}, unit: {size: 0.92, shift: 0.06}, low: {size: 0.86, shift: -0.14}}
+    // 'moves': a smaller, raised unit sprite with a unit's move bar (an entry's moves: {count, left}) under it.
+    static IMAGE_FIT = {plain: {size: 0.86, shift: 0}, unit: {size: 0.92, shift: 0.06}, low: {size: 0.86, shift: -0.14},
+        moves: {size: 0.7, shift: -0.1}}
     static images = {}
     // The loaded picture of a tutorial id (created on first use), or null while it loads or without an entry.
     static image(id) {
@@ -307,8 +310,24 @@ class TutorialCardsTree {
         ctx.arc(x, y, radius, 0, Math.PI * 2)
         ctx.clip()
         ctx.drawImage(image, box.x, box.y, box.width, box.height)
+        const moves = TutorialCardsTree.IMAGES[id].moves
+        const bar = moves ? this.drawMovesBar(ctx, moves, x, box.y + box.height + 0.05 * radius, box.height / 1.6) : undefined
         ctx.restore()
-        return {src: TutorialCardsTree.IMAGES[id].src, box, disc: {x, y, radius}}
+        return {src: TutorialCardsTree.IMAGES[id].src, box, disc: {x, y, radius}, ...(bar && {bar})}
+    }
+    // A unit's move bar as the game draws it (sprites/entities/units/unit/unit.js, sprites/entities/hpBar.js Bar):
+    // count boxes of 0.4 x 0.225 hex radii r, 0.05 r apart, black 0.03 r outline, the first left boxes in the move
+    // colour, the rest grey; r is the sprite's (assets.size is 1.6 r), the bar centred under x from top.
+    drawMovesBar(ctx, moves, x, top, r) {
+        const width = 0.4 * r, gap = 0.05 * r, left = x - (moves.count * width + (moves.count - 1) * gap) / 2
+        const boxes = []
+        for (let i = 0; i < moves.count; ++i) {
+            const rect = new Rect(left + i * (width + gap), top, width, 0.225 * r, undefined, 0.03 * r,
+                i < moves.left ? '#ffa500' : '#b3b3b3', 'black')
+            rect.draw(ctx)
+            boxes.push({x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: rect.color})
+        }
+        return boxes
     }
     drawCheckBadge(ctx, x, y, radius) {
         const colours = TutorialCardsTree.CARD
