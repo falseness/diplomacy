@@ -72,9 +72,9 @@ class TutorialCardsTree {
         'tutorial-6': {src: 'assets/atmosphere/buildings/town.svg'},
     }
     // The picture's box as a share of the medallion's diameter and its shift down as a share of that box.
-    // 'moves': a smaller, raised unit sprite with a unit's move bar (an entry's moves: {count, left}) under it.
+    // 'moves': a unit sprite with a unit's move bar (an entry's moves: {count, left}) on it as in the game.
     static IMAGE_FIT = {plain: {size: 0.86, shift: 0}, unit: {size: 0.92, shift: 0.06}, low: {size: 0.86, shift: -0.14},
-        moves: {size: 0.7, shift: -0.1}}
+        moves: {size: 0.86, shift: 0.03}}
     static images = {}
     // The loaded picture of a tutorial id (created on first use), or null while it loads or without an entry.
     static image(id) {
@@ -311,15 +311,20 @@ class TutorialCardsTree {
         ctx.clip()
         ctx.drawImage(image, box.x, box.y, box.width, box.height)
         const moves = TutorialCardsTree.IMAGES[id].moves
-        const bar = moves ? this.drawMovesBar(ctx, moves, x, box.y + box.height + 0.05 * radius, box.height / 1.6) : undefined
+        // Placed on the sprite as sprites/entities/units/unit/unit.js trimBars places a unit's: at the sprite's centre
+        // plus movesBarMarginY (0.1 r), r = box.height / 1.6.
+        const r = box.height / 1.6
+        const bar = moves ? this.drawMovesBar(ctx, moves, x, box.y + box.height / 2 + 0.1 * r, r) : undefined
         ctx.restore()
         return {src: TutorialCardsTree.IMAGES[id].src, box, disc: {x, y, radius}, ...(bar && {bar})}
     }
     // A unit's move bar as the game draws it (sprites/entities/units/unit/unit.js, sprites/entities/hpBar.js Bar):
     // count boxes of 0.4 x 0.225 hex radii r, 0.05 r apart, black 0.03 r outline, the first left boxes in the move
-    // colour, the rest grey; r is the sprite's (assets.size is 1.6 r), the bar centred under x from top.
-    drawMovesBar(ctx, moves, x, top, r) {
+    // colour, the rest grey; r is the sprite's (assets.size is 1.6 r). (x, y) is Bar's pos: the bar centred on x, its
+    // top 0.9 r above y (Bar's marginY).
+    drawMovesBar(ctx, moves, x, y, r) {
         const width = 0.4 * r, gap = 0.05 * r, left = x - (moves.count * width + (moves.count - 1) * gap) / 2
+        const top = y - 0.9 * r
         const boxes = []
         for (let i = 0; i < moves.count; ++i) {
             const rect = new Rect(left + i * (width + gap), top, width, 0.225 * r, undefined, 0.03 * r,
