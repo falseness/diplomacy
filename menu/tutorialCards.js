@@ -1,11 +1,12 @@
 // Browser-only (not in the server's rules script list, server/gameScriptList.js, so the rules version stays as it is):
 // the 'tutorial' screen as lesson cards, in place of menu/menu.js TutorialTree (installed at the end of this file).
 // A "Tutorial" heading under the logo, every entry of options/tutorials.js as a card in 3 equal columns between the
-// heading and Back: a round cream medallion at the left, the lesson number in gold and its name (at most 2 lines, never
-// shrunk, ellipsis past them) at the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed,
-// re-read on every enter) carry a gold check badge; the first lesson in menu order that is not passed is Next: a thick
-// gold rim, a gold glow and a "Next" tag. The cards are sized for 3 rows; more rows scroll by whole rows (wheel, touch
-// drag, arrow keys) with a gold track at the right. Sizes are in hub units (hubUnit). The medallion shows the lesson's
+// heading and Back (3 x 3 for up to 9 lessons, 3 x 4 or 4 x 3 for up to 12, see TutorialCardsTree.grids): a round cream
+// medallion at the left, the lesson number in gold and its name (at most 2 lines, never shrunk, ellipsis past them) at
+// the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed, re-read on every enter) carry a
+// gold check badge; the first lesson in menu order that is not passed is Next: a thick gold rim, a gold glow and a
+// "Next" tag. More rows than the grid shows scroll by whole rows (wheel, touch drag, arrow keys) with a gold track at
+// the right. Sizes are in hub units (hubUnit). The medallion shows the lesson's
 // picture (TutorialCardsTree.IMAGES, by tutorial id) from the game's own assets.
 
 // A lesson card: its whole rect starts the lesson. Menu.touchStart/Move/End hand every touch to every button of the
@@ -29,8 +30,25 @@ class TutorialCard extends MenuButton {
 }
 
 class TutorialCardsTree {
-    static COLUMNS = 3
-    static ROWS = 3
+    // The grids the cards are laid out in: 3 x 3 up to 9 lessons (as before); above that, 3 columns x 4 rows or 4
+    // columns x 3 rows, whichever gives the screen's grid the roomier card (see chooseGrid): tall and squarish screens
+    // (1440x900, 1024x768, portrait phones) get 3 x 4, low wide ones (phones in landscape, 844x390) 4 x 3, where a
+    // 4th row would leave no height for a 2-line name. More than 12 lessons scroll in that grid.
+    static grids(count) {
+        return count <= 9 ? [{columns: 3, rows: 3}] : [{columns: 3, rows: 4}, {columns: 4, rows: 3}]
+    }
+    // A card's size in a grid of width x height with gap between cards, in hub units u, rated against the card a
+    // medallion and a 2-line name at the card font need (24 x 7 units): the grid whose card is the least short of that
+    // in either direction wins; ties keep the first (3 columns).
+    static chooseGrid(count, width, height, gap, u) {
+        let best = null
+        for (const grid of TutorialCardsTree.grids(count)) {
+            const card = {width: (width - gap * (grid.columns - 1)) / grid.columns, height: (height - gap * (grid.rows - 1)) / grid.rows}
+            const score = Math.min(card.width / (24 * u), card.height / (7 * u))
+            if (!best || score > best.score + 1e-9) best = {...grid, card, score}
+        }
+        return best
+    }
     static CARD = {
         glass: 'rgba(20, 28, 56, 0.82)', rim: 'rgba(201, 154, 78, 0.75)', gold: '#f2b45a', text: '#f3ead8',
         heading: '#f6e2b8', glow: 'rgba(242, 180, 90, 0.45)', warm: ['rgba(242, 180, 90, 0.18)', 'rgba(242, 180, 90, 0.04)'],
@@ -77,16 +95,15 @@ class TutorialCardsTree {
         this.grid = {x: 0, y: 0, width: 0, height: 0}
         this.heading = {x: 0, y: 0, width: 0, height: 0}
         this.track = null
+        this.columns = 3
+        this.shownRows = 3
         this.buttons = [this.backButton]
     }
-    get columns() {
-        return TutorialCardsTree.COLUMNS
-    }
     get rows() {
-        return Math.ceil(this.entries.length / TutorialCardsTree.COLUMNS)
+        return Math.ceil(this.entries.length / this.columns)
     }
     get maxFirstRow() {
-        return Math.max(0, this.rows - TutorialCardsTree.ROWS)
+        return Math.max(0, this.rows - this.shownRows)
     }
     // "Tutorial N: Name" -> {number: 'N', name: 'Name'}; any other title is the whole name.
     static parseTitle(title) {
@@ -111,12 +128,11 @@ class TutorialCardsTree {
                 get x() { return this.pos.x }, get y() { return this.pos.y }} : null
             return {id: tutorial.id, button, checkMark, next: tutorial.id === this.nextId}
         })
-        this.firstRow = Math.min(this.firstRow, this.maxFirstRow)
         this.buttons = [...this.entries.map(entry => entry.button), this.backButton]
         this.layout()
     }
-    // The heading under the logo, Back at the bottom, the grid of 3 x 3 equal cards between them; rows above or below
-    // the shown ones are moved off the grid and ignore clicks.
+    // The heading under the logo, Back at the bottom, the grid of equal cards between them (chooseGrid); rows above or
+    // below the shown ones are moved off the grid and ignore clicks.
     layout() {
         const u = hubUnit(), logo = this.menu.logo.bounds
         const headingTop = logo.y + logo.height + 0.2 * u
@@ -126,12 +142,15 @@ class TutorialCardsTree {
         if (this.backButton.rect) this.backButton.rect.cornerRadius = Array(4).fill(backHeight / 2)
         const gap = 1.3 * u, top = headingTop + this.heading.height + 1.1 * u, bottom = backTop - 1.1 * u
         Object.assign(this.grid, {x: 3 * u, y: top, width: WIDTH - 6 * u, height: bottom - top})
-        const width = (this.grid.width - gap * (TutorialCardsTree.COLUMNS - 1)) / TutorialCardsTree.COLUMNS
-        const height = (this.grid.height - gap * (TutorialCardsTree.ROWS - 1)) / TutorialCardsTree.ROWS
+        const chosen = TutorialCardsTree.chooseGrid(this.entries.length, this.grid.width, this.grid.height, gap, u)
+        this.columns = chosen.columns
+        this.shownRows = chosen.rows
+        this.firstRow = Math.min(this.firstRow, this.maxFirstRow)
+        const {width, height} = chosen.card
         this.cardStep = height + gap
         this.entries.forEach((entry, index) => {
-            const row = Math.floor(index / TutorialCardsTree.COLUMNS) - this.firstRow, column = index % TutorialCardsTree.COLUMNS
-            const shown = row >= 0 && row < TutorialCardsTree.ROWS
+            const row = Math.floor(index / this.columns) - this.firstRow, column = index % this.columns
+            const shown = row >= 0 && row < this.shownRows
             const rect = entry.button.rect
             Object.assign(rect, {x: this.grid.x + column * (width + gap), y: shown ? this.grid.y + row * this.cardStep : -HEIGHT,
                 width, height, cornerRadius: Array(4).fill(u)})
@@ -142,13 +161,13 @@ class TutorialCardsTree {
             if (entry.checkMark) Object.assign(entry.checkMark, {width: badge, height: badge,
                 pos: {x: rect.x + rect.width - 0.9 * u - badge / 2, y: rect.y + 0.9 * u + badge / 2}})
         })
-        this.track = this.rows > TutorialCardsTree.ROWS ?
+        this.track = this.rows > this.shownRows ?
             {x: this.grid.x + this.grid.width + 1.1 * u, y: this.grid.y, width: 0.45 * u, height: this.grid.height} : null
     }
     // The gold thumb on the track: the shown rows' share of every row.
     get thumbRect() {
         if (!this.track) return null
-        const t = this.track, height = t.height * TutorialCardsTree.ROWS / this.rows
+        const t = this.track, height = t.height * this.shownRows / this.rows
         return {x: t.x, y: t.y + (t.height - height) * this.firstRow / this.maxFirstRow, width: t.width, height}
     }
     scrollRows(rows) {
@@ -165,7 +184,7 @@ class TutorialCardsTree {
         if (deltaY) this.scrollRows(Math.sign(deltaY))
     }
     scrollKey(key) {
-        const rows = {ArrowDown: 1, ArrowUp: -1, PageDown: TutorialCardsTree.ROWS, PageUp: -TutorialCardsTree.ROWS,
+        const rows = {ArrowDown: 1, ArrowUp: -1, PageDown: this.shownRows, PageUp: -this.shownRows,
             Home: -this.rows, End: this.rows}[key]
         if (rows) this.scrollRows(rows)
     }
@@ -334,9 +353,10 @@ class TutorialCardsTree {
         ctx.font = numberFont
         const numberWidth = button.number ? ctx.measureText(button.number).width + u : 0
         const nameLeft = left + numberWidth, top = y - lineHeight
-        // Each line's right end: clear of the corner mark when the line's band reaches it.
+        // Each line's right end: 0.6 u short of right, and clear of the corner mark when the line's band reaches it
+        // (the narrow 4-column cards need the room, see TutorialCardsTree.grids).
         const ends = [0, 1].map(i => corner && top + i * lineHeight < corner.y + corner.height + 0.3 * u ?
-            Math.min(right - 2.4 * u, corner.x - 0.6 * u) : right - 2.4 * u)
+            Math.min(right - 0.6 * u, corner.x - 0.6 * u) : right - 0.6 * u)
         ctx.font = nameFont
         const lines = TutorialCardsTree.wrap(ctx, button.name, ends.map(end => end - nameLeft))
         const blockTop = y - lines.length * lineHeight / 2
