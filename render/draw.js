@@ -34,25 +34,27 @@ function drawMain() {
 // rest snapshot, lit patch and overlay snapshot, which hold the sky), so the board, its shadow and the
 // units draw over them. Each panel is rendered once per scale step into an offscreen canvas
 // (backgroundHintCanvas) and drawn with one drawImage a frame. In r (basis.r) units: panel rects from
-// the board's top face, the keys and texts from the panel's top left.
+// the board's top face, the keys, the mouse icon (as high as a key) and texts from the panel's top left; captions
+// start at textX, words ('or') are left-aligned and vertically centred at y.
+// The gap between a panel and the board's top face, the keys' height, the canvas margin (r units).
+const BACKGROUND_HINT_GAP = 0.8
+const BACKGROUND_HINT_KEY = 0.98
+const BACKGROUND_HINT_PAD = 0.1
 const BACKGROUND_HINT_PANELS = [
-    {name: 'camera', heading: 'Camera', side: -1, width: 4.55, height: 6.1, keys: [
-        {text: '+', x: 0.47, y: 0.88, width: 0.98},
-        {text: '−', x: 1.6, y: 0.88, width: 0.98},
+    {name: 'camera', heading: 'Camera', side: -1, width: 4.55, height: 6.1, textX: 0.47,
+        mouse: {x: 0.47, y: 0.88, width: 0.62}, words: [{text: 'or', x: 1.2, y: 0.88 + BACKGROUND_HINT_KEY / 2}], keys: [
+        {text: '+', x: 1.75, y: 0.88, width: 0.98},
+        {text: '−', x: 2.88, y: 0.88, width: 0.98},
         {text: '↑', x: 1.6, y: 3.15, width: 0.98},
         {text: '←', x: 0.47, y: 4.3, width: 0.98},
         {text: '↓', x: 1.6, y: 4.3, width: 0.98},
         {text: '→', x: 2.73, y: 4.3, width: 0.98},
     ], captions: [{text: 'scale camera', y: 2.3}, {text: 'move camera', y: 5.74}]},
-    {name: 'turn', heading: 'Turn', side: 1, width: 4.6, height: 5.35, keys: [
+    {name: 'turn', heading: 'Turn', side: 1, width: 4.6, height: 5.35, textX: 0.41, keys: [
         {text: 'Backspace', x: 0.41, y: 0.88, width: 3.06},
         {text: 'Enter', x: 0.41, y: 3.15, width: 2.24},
     ], captions: [{text: 'undo move', y: 2.3}, {text: 'go to next unit /', y: 4.55}, {text: 'confirm next turn', y: 5.02}]},
 ]
-// The gap between a panel and the board's top face, the keys' height, the canvas margin (r units).
-const BACKGROUND_HINT_GAP = 0.8
-const BACKGROUND_HINT_KEY = 0.98
-const BACKGROUND_HINT_PAD = 0.1
 
 // Whether the page is used with a mouse: a hovering fine pointer, and no touch seen in this page
 // (false from the first touchstart on). No matchMedia (an old browser) counts as no.
@@ -171,11 +173,62 @@ function renderBackgroundHintPanel(g, panel, k) {
         g.fillStyle = MENU_THEME.plain.text
         g.fillText(key.text, (key.x + key.width / 2) * k, (key.y + BACKGROUND_HINT_KEY / 2) * k)
     }
+    if (panel.mouse)
+        renderBackgroundHintMouse(g, panel.mouse.x * k, panel.mouse.y * k, panel.mouse.width * k, BACKGROUND_HINT_KEY * k, rim, k)
     g.textAlign = 'left'
     g.font = `${MENU_THEME.fontWeight} ${0.35 * k}px ${family}`
     g.fillStyle = MENU_THEME.text
+    for (const word of panel.words || [])
+        g.fillText(word.text, word.x * k, word.y * k)
     for (const caption of panel.captions)
-        g.fillText(caption.text, panel.keys[0].x * k, caption.y * k)
+        g.fillText(caption.text, panel.textX * k, caption.y * k)
+}
+
+// The mouse in the box x, y, width, height (pixels): an egg-shaped navy body (narrower at the top) with a gold rim,
+// a gold seam across it at 0.4 of its height, a gold split from the top to the seam and a plain glowing gold wheel
+// on the split. k: pixels an r.
+function renderBackgroundHintMouse(g, x, y, width, height, rim, k) {
+    const cx = x + width / 2, w = width / 2 - rim, top = y + rim, bottom = y + height - rim, h = bottom - top
+    const body = () => {
+        g.beginPath()
+        g.moveTo(cx, top)
+        g.bezierCurveTo(cx + 0.8 * w, top, cx + w, top + 0.28 * h, cx + w, top + 0.55 * h)
+        g.bezierCurveTo(cx + w, top + 0.88 * h, cx + 0.6 * w, bottom, cx, bottom)
+        g.bezierCurveTo(cx - 0.6 * w, bottom, cx - w, top + 0.88 * h, cx - w, top + 0.55 * h)
+        g.bezierCurveTo(cx - w, top + 0.28 * h, cx - 0.8 * w, top, cx, top)
+        g.closePath()
+    }
+    g.save()
+    body()
+    const fill = g.createLinearGradient(0, top, 0, bottom)
+    fill.addColorStop(0, '#2b3766')
+    fill.addColorStop(1, MENU_THEME.plain.fill)
+    g.fillStyle = fill
+    g.fill()
+    g.clip()
+    const seam = top + 0.4 * h, line = Math.max(1, 0.6 * rim)
+    g.strokeStyle = MENU_THEME.plain.rim
+    g.lineWidth = line
+    g.beginPath()
+    g.moveTo(cx - w - rim, seam - 0.04 * h)
+    g.quadraticCurveTo(cx, seam + 0.08 * h, cx + w + rim, seam - 0.04 * h)
+    g.moveTo(cx, top)
+    g.lineTo(cx, seam + 0.02 * h)
+    g.stroke()
+    g.restore()
+    body()
+    g.strokeStyle = MENU_THEME.plain.rim
+    g.lineWidth = 1.2 * rim
+    g.stroke()
+    // The wheel: a plain gold pill with a gold glow.
+    const ww = 0.14 * k, wh = 0.26 * k
+    g.save()
+    g.shadowColor = MENU_THEME.plain.rim
+    g.shadowBlur = 0.15 * k
+    roundedRectPath(g, cx - ww / 2, top + 0.1 * h, ww, wh, ww / 2)
+    g.fillStyle = MENU_THEME.heading
+    g.fill()
+    g.restore()
 }
 
 function drawDebugFps(ctx) {
