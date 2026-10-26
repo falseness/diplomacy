@@ -943,7 +943,7 @@ const tutorials = [
     {id: 'tutorial-17', title: 'Tutorial 2: Shield and Bow', pass: 'enemyLost', get map() { return createTutorial17Map() }},
     {id: 'tutorial-1', title: 'Tutorial 3: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-7', title: 'Tutorial 4: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
-    {id: 'tutorial-3', title: 'Tutorial 5: Break the Walls', pass: 'enemyLost', get map() { return createTutorial3Map() }},
+    {id: 'tutorial-3', title: 'Tutorial 5: "No Assault Duty"', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-18', title: 'Tutorial 6: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
     {id: 'tutorial-2', title: 'Tutorial 7: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
     {id: 'tutorial-5', title: 'Tutorial 8: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
