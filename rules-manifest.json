@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "dd3e36e31d5e6869bd389fd8e878e81aee658ecc03a476a67128296b1a1b4f86",
+  "rulesVersion": "57cf31cdb77b413d8e50b02d7af731104c554c21406e77627584f6547b421153",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -220,8 +220,8 @@
     },
     {
       "path": "sprites/elements/image.js",
-      "sha256": "6c1adbc24e3df858b3f36a8c91a5c8266fc12eed97ad80dfee031f6116cf978c",
-      "bytes": 4873
+      "sha256": "a77572f672b5b5ae4ef252d15e4a220013563c5dcfa0b0e0bb34212227b421c2",
+      "bytes": 10570
     },
     {
       "path": "sprites/elements/imageButton.js",
