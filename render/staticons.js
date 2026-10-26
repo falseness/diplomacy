@@ -1,0 +1,28 @@
+// The stat icon of each entity panel row: row key (or the text of a keyless row) -> assets entry
+// (statIconImages, render/loadassets.js). Rows not listed here stay plain.
+const STAT_ICONS = Object.freeze({
+    'hp': 'statHp',
+    'heal speed': 'statHealSpeed',
+    'dmg': 'statDmg',
+    'building dmg': 'statBuildingDmg',
+    'speed': 'statMoves',
+    'moves': 'statMoves',
+    'range': 'statRange',
+    'range increase': 'statRangeIncrease',
+    'archer range increase': 'statRangeIncrease',
+    'target': 'statTarget',
+    'unit on it is priority target': 'statTarget',
+    'salary': 'statSalary',
+    'cost': 'statCost',
+    'cost formula': 'statCost',
+    'income': 'statIncome',
+    'gold': 'statGold',
+    'turns': 'statTurns',
+    'rounds to open': 'statTurns',
+    'train': 'statTrain',
+    'category': 'statCategory',
+    'highground': 'statHighground',
+    'higround': 'statHighground',
+    "archers can't shoot through it": 'statNoShoot',
+    "units can't stand on it": 'statNoStand',
+})

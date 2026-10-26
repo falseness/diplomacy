@@ -42,6 +42,28 @@ for (const name of undeadSpriteImages) assets[name] = new Image()
 // Main menu emblem pictures (town cells cut from in-game screenshots). The menu does not wait for them.
 const menuImages = ['menu/towncell-red', 'menu/towncell-green']
 for (const name of menuImages) assets[name] = new Image()
+// Panel stat icons (row key -> entry: STAT_ICONS, render/staticons.js). The menu does not wait for them.
+const statIconImages = Object.freeze({
+    statHp: 'assets/icons/stat-hp.svg',
+    statHealSpeed: 'assets/icons/stat-heal-speed.svg',
+    statDmg: 'assets/icons/stat-dmg.svg',
+    statBuildingDmg: 'assets/icons/stat-building-dmg.svg',
+    statMoves: 'assets/icons/stat-moves.svg',
+    statRange: 'assets/icons/stat-range.svg',
+    statRangeIncrease: 'assets/icons/stat-range-increase.svg',
+    statTarget: 'assets/icons/stat-target.svg',
+    statSalary: 'assets/icons/stat-salary.svg',
+    statCost: 'assets/icons/stat-cost.svg',
+    statIncome: 'assets/icons/stat-income.svg',
+    statGold: 'assets/icons/stat-gold.svg',
+    statTurns: 'assets/icons/stat-turns.svg',
+    statTrain: 'assets/icons/stat-train.svg',
+    statCategory: 'assets/icons/stat-category.svg',
+    statHighground: 'assets/icons/stat-highground.svg',
+    statNoShoot: 'assets/icons/stat-no-shoot.svg',
+    statNoStand: 'assets/icons/stat-no-stand.svg',
+})
+for (const name in statIconImages) assets[name] = new Image()
 const atmosphericNatureImages = ['bush', 'hill', 'mountain', 'lake', 'sea']
 // Semantic keys shared by board drawing and production previews. No draw-time filename inference.
 const atmosphericBuildingImages = Object.freeze({
@@ -196,6 +218,7 @@ function loadAssets() {
     
     assets.gold.src = "assets/gold.svg"
     for (const name of menuImages) assets[name].src = "assets/" + name + ".png"
+    for (const name in statIconImages) assets[name].src = statIconImages[name]
 
     loadSprites()
 }
