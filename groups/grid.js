@@ -955,6 +955,23 @@ class Grid extends SpritesGroup {
                 states[index] = this.getSurfaceStateValue(i, j, false)
         return states
     }
+    // TASK-1316: whether states (cellLayerStates' array) are the board's cell states now, read in place (no array made, no
+    // call a cell: followCellLayer and litLayerBehind ask it every frame).
+    cellLayerStatesAre(states) {
+        const arr = this.arr, h = arr[0].length, fog = isFogOfWar ? this.fogOfWar : null
+        if (!states || states.length !== arr.length * h)
+            return false
+        for (let i = 0, index = 0; i < arr.length; ++i) {
+            const row = arr[i], fogRow = fog && fog[i]
+            for (let j = 0; j < h; ++j, ++index) {
+                const hexagon = row[j].hexagon
+                if (states[index] !== (((hexagon.unknown ? 0 : hexagon.playerColor + 1) << 2) | (hexagon.isSuburb ? 2 : 0) |
+                        (!fogRow || fogRow[j] ? 1 : 0)))
+                    return false
+            }
+        }
+        return true
+    }
     // TASK-1315 (Grid.liveCellLayer): a frame drawing the surface cache (which 'surface') or the lit view's rest snapshot
     // ('lit') with its cell layer (each matching the board but in its cells' owner colour, suburb and fog,
     // surfaceStateMatches) first brings the layer up to the board when a cell's surface state is not the one the layer was
@@ -974,14 +991,14 @@ class Grid extends SpritesGroup {
         if (which === 'surface' ? !layer?.cells || layer.raster !== this.surfaceCache || !this.surfaceCache?.cellLayered :
                 !layer?.cells || !view?.rest || view.rest.cellLayer !== layer || layer.raster !== view.rest.canvas)
             return true
-        const states = this.cellLayerStates(), old = layer.states
-        const same = (a, b) => a && a.length === b.length && a.every((v, k) => v === b[k])
         const pending = which === 'lit' ? view.layerJob : undefined
-        if (same(old, states)) {
+        if (this.cellLayerStatesAre(layer.states)) {
             if (pending)
                 view.layerJob = undefined
             return true
         }
+        const states = this.cellLayerStates()
+        const same = (a, b) => a && a.length === b.length && a.every((v, k) => v === b[k])
         const job = which === 'surface' ? this.surfacePatchJob || this.surfaceCacheBuild : view.patch
         if (job)
             return true
@@ -1124,6 +1141,19 @@ class Grid extends SpritesGroup {
         }).filter(r => r.h > 0)
         // Each new variant's sprite, made from its cell's sprite before and the bands' renders.
         const made = new Map(missing.map(c => [c, layer.sprites.get(c.index + '|' + c.key)]))
+        // The view's lit edges found a step of their own (litEdges keeps them; the last step's followedCellLayer finds them
+        // again unless the lit cells changed meanwhile).
+        job.steps.push(() => this.litEdges(view))
+        // The light map's canvases, changed by the owner sync, each read once in a step of its own (one pixel drawn on a
+        // kept 1 x 1 canvas): a canvas drawn from after a change is copied whole at its next draw, so the light's steps,
+        // which draw them over the band, do not also pay for that copy.
+        for (const name of ['map', 'gain'])
+            job.steps.push(() => {
+                const source = atmosphericLighting[name]
+                if (source?.width && source.height)
+                    (this.litLightTouch ||= Object.assign(document.createElement('canvas'), {width: 1, height: 1}))
+                        .getContext('2d').drawImage(source, 0, 0, 1, 1, 0, 0, 1, 1)
+            })
 
         // Each step draws about its band's area once (LIT_LAYER_PARTS; the sprites made about their boxes' four times, in
         // groups of a sixth of the budget).
@@ -3225,9 +3255,18 @@ class Grid extends SpritesGroup {
     // the light map's reach (MAP_GROW plus one of its pixels, plus 2 device pixels of
     // antialiasing) of those sides; blocks of a row less than three blocks apart joined, and
     // equal runs of consecutive rows merged (the runs do not overlap).
+    // TASK-1316: the last result kept for its lit cells, hex radius, transform and margin (litEdgesKept): a lit layer
+    // job takes it in a step before its last (planLitLayerJob), whose followedCellLayer then only finds it again.
     litEdges(view) {
+        const cells = atmosphericLighting.collect(this, false).cells
+        const margin = (atmosphericLighting.MAP_GROW + 1) * view.a / atmosphericLighting.mapScale + 2
+        let key = basis.r + ',' + view.a + ',' + view.d + ',' + view.e + ',' + view.f + ',' + margin + '|'
+        for (const {x, y} of cells)
+            key += x + ',' + y + ';'
+        if (this.litEdgesKept?.key === key)
+            return this.litEdgesKept.edges
         const sides = new Map()
-        for (const {pos} of atmosphericLighting.collect(this, false).cells) {
+        for (const {pos} of cells) {
             const points = mapDepth.getVertices(pos)
             for (let k = 0; k < 6; ++k) {
                 const p = points[k], q = points[(k + 1) % 6]
@@ -3260,7 +3299,6 @@ class Grid extends SpritesGroup {
             outline.push(loop)
         }
         const B = LIT_EDGE_BLOCK
-        const margin = (atmosphericLighting.MAP_GROW + 1) * view.a / atmosphericLighting.mapScale + 2
         const rows = new Map()
         for (const {p, q, n} of sides.values()) {
             if (n !== 1) continue
@@ -3297,6 +3335,7 @@ class Grid extends SpritesGroup {
             open.clear()
             for (const [key, run] of still) open.set(key, run)
         }
+        this.litEdgesKept = {key, edges: {edges, outline}}
         return {edges, outline}
     }
     // view's rest snapshot at transform t of ctx (a cw x ch canvas): kept while the camera stays at t
@@ -3449,8 +3488,7 @@ class Grid extends SpritesGroup {
         const states = this.cellLayerOn() && view.rest?.cellLayer?.states
         if (!states)
             return false
-        const now = this.cellLayerStates()
-        return states.length !== now.length || states.some((v, k) => v !== now[k])
+        return !this.cellLayerStatesAre(states)
     }
     // Whether a lit task leaves its turn to another task of the same pause between frames (the next frame queues it again),
     // so their drawing does not add up: a surface cache stage or check queued, or an overlay snapshot queued or made since
@@ -4105,17 +4143,18 @@ const LIT_PATCH_STEPS = [
 // TASK-1316: the largest part of the canvas a band of a lit layer job's region spans (Grid.planLitLayerJob); each of its
 // steps draws about that area once (LIT_LAYER_PARTS), so no frame of the job draws much more than one with a lit view
 // patch's step; the sprites made and composed are in groups and chunks of a sixth and a third of it. The light in
-// LIT_LAYER_LIGHT_BANDS bands of rows of a band (one: the lit patch's two steps).
+// LIT_LAYER_LIGHT_BANDS bands of rows of a band (each light's step about half the lit patch's).
 const LIT_LAYER_STEP = 0.2
-const LIT_LAYER_LIGHT_BANDS = 1
+const LIT_LAYER_LIGHT_BANDS = 2
 // TASK-1316: a lit layer job's drawing of a band on the lit patch buffer (Grid.planLitLayerJob: each list a step, each
 // part in Grid.drawLitPatch): LIT_PATCH_STEPS' drawing up to the light with its first step's clear, sky and slab shadow
 // apart and the grout and the tiles in LIT_REST_HEX_STEPS runs apart (the calls drawHexagons makes), each step about the
 // band's area once; the light follows in LIT_LAYER_LIGHT_BANDS bands (planLitLayerJob).
 const LIT_LAYER_PARTS = [
-    [(grid, g) => {
+    // The clear of the band's outer rectangle only (the clip's; the canvas whole cost a frame its size).
+    [(grid, g, part) => {
         g.setTransform(1, 0, 0, 1, 0, 0)
-        g.clearRect(0, 0, g.canvas.width, g.canvas.height)
+        g.clearRect(part.outer.x, part.outer.y, part.outer.w, part.outer.h)
     }],
     [(grid, g) => {
         g.setTransform(1, 0, 0, 1, 0, 0)
