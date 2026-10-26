@@ -119,6 +119,8 @@ class Grid extends SpritesGroup {
         this.litCellLayer = undefined
         this.cellMaskCanvas = undefined
         this.surfaceCacheShown = undefined
+        // TASK-1316: the lit view's rest snapshot with its cell layer composed (prepareLitCellLayer), drawn in one drawImage.
+        this.litCellShown = undefined
         this.cellLayerSplits = 0
         this.cellLayerComposites = 0
         this.cellSpriteRenders = 0
@@ -129,6 +131,9 @@ class Grid extends SpritesGroup {
         this.cellLayerRevision = 0
         // Caches or lit views dropped as their cell layer could not be brought up to the board (followCellLayer).
         this.cellLayerFollowDrops = 0
+        // TASK-1316: lit layer jobs started and finished (startLitLayerJob: new variants rendered a step a frame).
+        this.cellLayerJobs = 0
+        this.cellLayerJobsDone = 0
         // The surface cache built between frames (prepareSurfaceCache): the build in progress,
         // whether a stage is queued, when the cache was last compared with the whole board,
         // whether a frame found it not matching, stages run (a count) and a 1x1 canvas the
@@ -288,7 +293,8 @@ class Grid extends SpritesGroup {
     // The grout path holds whole rows of cells across the canvas (atmosphericLighting.onCanvas);
     // the tiles drawn are those of the drawn range (each also culls itself).
     // part {k, n}: only the grout (k 0) and the k-th of n equal runs of the tiles, the calls the whole draw makes there in
-    // its order (the rest snapshot draws them a task each, LIT_REST_BASE).
+    // its order (the rest snapshot draws them a task each, LIT_REST_BASE); part.grout: the grout or not whatever k, n 0: no
+    // tiles (TASK-1316, LIT_LAYER_PARTS).
     drawHexagons(ctx, part) {
         const atmosphericTransform = otherSettings.atmosphericVisuals ? ctx.getTransform() : undefined
         const hexagons = [], tiles = []
@@ -309,8 +315,10 @@ class Grid extends SpritesGroup {
             }
         }
         // Grout under the drawn cells only: hidden cells keep their fog tile.
-        if (otherSettings.atmosphericVisuals && (!part || part.k === 0))
+        if (otherSettings.atmosphericVisuals && (!part || (part.grout ?? part.k === 0)))
             atmosphericLighting.drawGrout(ctx, hexagons)
+        if (part && !part.n)
+            return
         const from = part ? Math.floor(part.k * tiles.length / part.n) : 0
         const to = part ? Math.floor((part.k + 1) * tiles.length / part.n) : tiles.length
         for (let k = from; k < to; ++k)
@@ -680,8 +688,8 @@ class Grid extends SpritesGroup {
         mask.height = H
         const {cells, box, image} = this.cellLayerCells(W, H, place)
         mask.getContext('2d').putImageData(image, 0, 0)
-        Object.assign(layer, {cells, cellBox: box, sprites: new Map(), byIndex: new Map(cells.map(c => [c.index, c])), place,
-            states: this.cellLayerStates()})
+        Object.assign(layer, {cells, cellBox: box, sprites: new Map(), stale: null, byIndex: new Map(cells.map(c => [c.index, c])),
+            place, states: this.cellLayerStates()})
         for (const cell of cells)
             this.cellSprite(layer, cell, canvas)
         const whole = {x: 0, y: 0, w: W, h: H}
@@ -956,7 +964,10 @@ class Grid extends SpritesGroup {
     // again), so the exact comparisons of a build, patch or rest snapshot under way hold. During a patch the layer waits
     // (the patch draws every changed cell, patchSurfaceCache); a layer that cannot be brought up otherwise (a light map at
     // another scale) has its cache dropped (rebuilt between frames) or its view dropped. Returns whether the frame can draw it.
-    followCellLayer(which) {
+    // TASK-1316: on the lit view (ctx and t, the frame's canvas and transform) with the camera resting on its finished rest
+    // snapshot, new variants are rendered a step a frame (startLitLayerJob) while the frames draw the changed cells over
+    // the snapshot (drawPatchCells), instead of all in the frame that found the change.
+    followCellLayer(which, ctx, t) {
         if (!this.cellLayerOn())
             return true
         const view = this.litView, layer = which === 'surface' ? this.surfaceCellLayer : this.litCellLayer
@@ -964,11 +975,24 @@ class Grid extends SpritesGroup {
                 !layer?.cells || !view?.rest || view.rest.cellLayer !== layer || layer.raster !== view.rest.canvas)
             return true
         const states = this.cellLayerStates(), old = layer.states
-        if (old && old.length === states.length && old.every((v, k) => v === states[k]))
+        const same = (a, b) => a && a.length === b.length && a.every((v, k) => v === b[k])
+        const pending = which === 'lit' ? view.layerJob : undefined
+        if (same(old, states)) {
+            if (pending)
+                view.layerJob = undefined
             return true
+        }
         const job = which === 'surface' ? this.surfacePatchJob || this.surfaceCacheBuild : view.patch
         if (job)
             return true
+        if (which === 'lit' && ctx) {
+            const patchable = this.litPatchable(ctx, view, t)
+            if (pending && patchable && same(pending.states, states))
+                return true
+            view.layerJob = undefined
+            if (patchable && !view.layerJobFailed && this.startLitLayerJob(view, states))
+                return true
+        }
         const {failed} = this.refreshCellLayer(which)
         if (failed.length) {
             if (which === 'surface') {
@@ -980,6 +1004,14 @@ class Grid extends SpritesGroup {
             ++this.cellLayerFollowDrops
             return false
         }
+        this.followedCellLayer(which, layer, states)
+        return true
+    }
+    // A layer brought up to the board's states (followCellLayer, a lit layer job's last step): it takes them, and so does its
+    // raster's captured state (the cache's, or the lit view's, whose lit edges are found again and whose tiles, drawn for its old
+    // state, are released: those meeting region, the layer's pixel rectangle the change was drawn in, else all).
+    followedCellLayer(which, layer, states, region) {
+        const view = this.litView
         layer.states = states
         const overlayCells = this.surfaceOverlayCells
         if (which === 'surface') {
@@ -989,20 +1021,279 @@ class Grid extends SpritesGroup {
             } finally {
                 this.surfaceOverlayCells = overlayCells
             }
+            return
         }
-        else {
-            this.withLitState(view, () => this.captureSurfaceState())
-            Object.assign(view, this.litEdges(view))
+        this.withLitState(view, () => this.captureSurfaceState())
+        Object.assign(view, this.litEdges(view))
+        if (!region) {
             for (const tile of view.tiles.values())
                 this.releaseLitTile(tile)
             view.tiles.clear()
+            return
         }
+        this.releaseLitTilesIn(view, view.rest, region)
+    }
+    // The tiles of view whose squares meet the rest snapshot's pixel rectangle r grown by the edge runs' reach (a run joins
+    // blocks up to 3 apart), released (built again one a task, LIT_TILE_PATCHED_BUDGET).
+    releaseLitTilesIn(view, rest, r) {
+        const grow = 4 * LIT_EDGE_BLOCK, ox = Math.round(rest.e - view.e), oy = Math.round(rest.f - view.f)
+        for (const [key, tile] of view.tiles) {
+            const [u, v] = key.split(',').map(Number), x = u * LIT_TILE + ox, y = v * LIT_TILE + oy
+            if (x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
+                view.tiles.delete(key)
+                this.releaseLitTile(tile)
+                view.patchedTiles = true
+            }
+        }
+    }
+    // TASK-1316: the lit view's cell layer brought up to the board's states (followCellLayer) when variants of changed
+    // cells have no sprite yet, a step a frame (litLayerStep, none in the frame that found the change), the snapshot and its
+    // state left as they are (planLitLayerJob): the light map's owners synced quietly (as a variant render's,
+    // withHeldLightMap); the change's region (a lit view patch's, patchRegion) drawn on the lit patch buffer in
+    // LIT_LAYER_PARTS and the light, a band of at most LIT_LAYER_STEP of the canvas at a time, with the light map as it is,
+    // and the new variants' sprites made from it there and from their cells' sprites before elsewhere (cellSpriteIn, in
+    // groups); then the changed cells' sprites composed on a canvas of the region (composeCellSprites, in chunks) and the
+    // region copied into the shown snapshot, the layer taking the board's states (followedCellLayer). Until then the
+    // frames draw the changed cells over the shown snapshot in the board's state (drawPatchCells), so the change shows from
+    // the frame that found it; each step draws about its part of the region once, and only the last changes a canvas of
+    // 1 MP or more a frame draws. Returns false when the change is drawn at once
+    // instead (refreshCellLayer): no cell state changed, a lamp or portal among the cells; a job whose cells span too much
+    // fails in its first step, and the view's changes are then drawn at once (layerJobFailed).
+    // The frame that finds the change only finds what drawPatchCells draws (as a lit view patch does, startLitPatch); the
+    // job's second step plans the rest (planLitLayerJob).
+    startLitLayerJob(view, states) {
+        const changes = []
+        const found = this.withLitState(view, () => {
+            const overlayCells = this.surfaceOverlayCells
+            this.surfaceOverlayCells = []
+            try {
+                return this.surfaceStateMatches(undefined, changes, true) && changes.length && this.surfaceCacheChangeRects(changes)
+            } finally {
+                this.surfaceOverlayCells = overlayCells
+            }
+        })
+        if (!found)
+            return false
+        const job = view.layerJob = {rest: view.rest, light: found.light, boxes: found.cells, changed: changes.slice(),
+            sprites: found.sprites, states, steps: [], step: 0, ran: null}
+        // First the light map's owners synced (none to sync: nothing drawn), as a lit view patch's first step brings its light
+        // map region up; then the plan (planLitLayerJob).
+        job.steps.push(() => {
+            if (!this.withHeldLightMap(undefined, () => atmosphericLighting.lightMap(this)))
+                job.failed = true
+        }, () => this.withCellReach(() => this.planLitLayerJob(view, job)))
+        ++this.cellLayerJobs
         return true
+    }
+    // A lit layer job's second step: the changed cells' variants now (cellLayerKey, found once: the board's states are the
+    // job's while it runs) and the job's other steps.
+    planLitLayerJob(view, job) {
+        const layer = this.litCellLayer, rest = view.rest, states = job.states
+        const keys = new Map()
+        for (const c of layer.cells) {
+            const key = this.cellLayerKey(c.i, c.j)
+            if (key !== c.key)
+                keys.set(c, key)
+        }
+        const cells = job.cells = [...keys.keys()], missing = cells.filter(c => !layer.sprites.has(c.index + '|' + keys.get(c)))
+        if (!cells.length) {
+            view.layerJob = undefined
+            this.followedCellLayer('lit', layer, states)
+            return
+        }
+        const cw = rest.canvas.width, ch = rest.canvas.height, m = LIT_PATCH_MARGIN, budget = LIT_LAYER_STEP * cw * ch
+        const span = list => list.reduce((r, {box}) => pixelRect(Math.min(r.x, box.x), Math.min(r.y, box.y),
+            Math.max(r.x + r.w, box.x + box.w), Math.max(r.y + r.h, box.y + box.h), cw, ch), list[0].box)
+        const inner = span(cells)
+        const fail = () => { job.failed = true }
+        if (!inner || inner.w * inner.h > LIT_PATCH_MAX_AREA * cw * ch)
+            return fail()
+        // The new variants are drawn only within the change's region, the pixel rectangle the changed cells draw on (as a
+        // lit view patch's, patchRegion: their hexagons and sprites, the light rectangles, the territory glow's reach of an
+        // owner changed): elsewhere a new variant's sprite keeps its cell's sprite before (cellSpriteIn), as a patch copies
+        // only its region. The region in bands of at most LIT_LAYER_STEP of the canvas, each drawn on the lit patch buffer
+        // (with the lit patch margin) and taken into the sprites before the next band is drawn.
+        const at = (x, y) => ({x: x * view.a + rest.e, y: y * view.d + rest.f})
+        const region = this.patchRegion({cells: job.boxes, light: job.light}, atmosphericLighting.mapPixel(), at, cw, ch)
+        if (region && region.w * region.h > LIT_PATCH_MAX_AREA * cw * ch)
+            return fail()
+        const n = !region || !missing.length ? 0 : Math.ceil(region.w * region.h / budget)
+        const bands = Array.from({length: n}, (_, k) => {
+            const y0 = region.y + Math.floor(k * region.h / n), y1 = region.y + Math.floor((k + 1) * region.h / n)
+            return {x: region.x, y: y0, w: region.w, h: y1 - y0}
+        }).filter(r => r.h > 0)
+        // Each new variant's sprite, made from its cell's sprite before and the bands' renders.
+        const made = new Map(missing.map(c => [c, layer.sprites.get(c.index + '|' + c.key)]))
+
+        // Each step draws about its band's area once (LIT_LAYER_PARTS; the sprites made about their boxes' four times, in
+        // groups of a sixth of the budget).
+        for (const band of bands) {
+            const outer = pixelRect(band.x - m, band.y - m, band.x + band.w + m, band.y + band.h + m, cw, ch)
+            const part = {rest, outer, light: job.light, window: clipWindowOf(outer, cw, ch, -rest.e / view.a, -rest.f / view.d, view.a, 1.05 * basis.r)}
+            for (const draws of LIT_LAYER_PARTS)
+                job.steps.push(() => this.withHeldLightMap(undefined, () => {
+                    for (const draw of draws)
+                        this.drawLitPatch(part, view, g => draw(this, g, part))
+                    return true
+                }) || fail())
+            // The light map's multiply, then its color-dodge and the bloom, in LIT_LAYER_LIGHT_BANDS bands of rows each
+            // (as the rest snapshot's bands: each clipped to its rows, the clip's bounds the canvas's, drawLitPatch).
+            for (const light of ['map', 'gain'])
+                for (let k = 0; k < LIT_LAYER_LIGHT_BANDS; ++k) {
+                    const y0 = outer.y + Math.floor(k * outer.h / LIT_LAYER_LIGHT_BANDS)
+                    const y1 = outer.y + Math.floor((k + 1) * outer.h / LIT_LAYER_LIGHT_BANDS)
+                    const rows = {...part, outer: {x: outer.x, y: y0, w: outer.w, h: y1 - y0}}
+                    job.steps.push(() => this.withHeldLightMap(undefined, () => {
+                        this.drawLitPatch(rows, view, g => atmosphericLighting.drawRows(g, this, y0, y1, light))
+                        return true
+                    }) || fail())
+                }
+            const meets = missing.filter(({box}) => box.x < band.x + band.w && band.x < box.x + box.w && box.y < band.y + band.h && band.y < box.y + box.h)
+            for (const group of this.layerGroups(meets, budget / 6))
+                job.steps.push(() => {
+                    for (const cell of group)
+                        made.set(cell, this.cellSpriteIn(cell, this.litPatchBuffer, band, made.get(cell)))
+                })
+        }
+        job.steps.push(() => {
+            for (const cell of missing) {
+                const sprite = made.get(cell)
+                if (!sprite)
+                    return fail()
+                layer.sprites.set(cell.index + '|' + keys.get(cell), sprite)
+            }
+            this.cellSpriteRenders += missing.length
+            this.cellLayerVariantRenders += missing.length
+        })
+        // The changed cells' sprites composed on a canvas of the change's region (the shown snapshot's pixels there first; a
+        // sprite differs from its cell's before only there), in chunks, then the region copied into the shown snapshot in one
+        // step: a canvas the size of the camera's changed in several frames running and drawn in each was rasterized whole
+        // in one of them (about 400 ms a frame on this host). The layer canvas itself is drawn when next read
+        // (staleCellLayer).
+        const area = region && pixelRect(Math.max(region.x, inner.x), Math.max(region.y, inner.y),
+            Math.min(region.x + region.w, inner.x + inner.w), Math.min(region.y + region.h, inner.y + inner.h), cw, ch)
+        const stage = this.litLayerStage ||= document.createElement('canvas')
+        const finish = () => {
+            for (const cell of cells)
+                cell.key = keys.get(cell)
+            if (area)
+                this.staleCellLayer(layer, area)
+            ++this.cellLayerRefreshes
+            ++this.cellLayerRevision
+            ++this.cellLayerJobsDone
+            view.layerJob = undefined
+            this.followedCellLayer('lit', layer, states, area || inner)
+        }
+        if (!area) {
+            job.steps.push(finish)
+            this.lastLitLayerJob = {cells: cells.length, missing: missing.length, changes: job.changed.length, inner, region, bands: 0,
+                steps: job.steps.length}
+            return
+        }
+        job.steps.push(() => {
+            if (stage.width < area.w || stage.height < area.h) {
+                stage.width = Math.max(stage.width, area.w)
+                stage.height = Math.max(stage.height, area.h)
+            }
+            const g = stage.getContext('2d')
+            g.save()
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalCompositeOperation = 'copy'
+            g.drawImage(rest.shown, area.x, area.y, area.w, area.h, 0, 0, area.w, area.h)
+            g.restore()
+        })
+        const meetsArea = ({box}) => box.x < area.x + area.w && area.x < box.x + box.w && box.y < area.y + area.h && area.y < box.y + box.h
+        for (const chunk of this.layerChunks(cells.filter(meetsArea), budget / 3, cw, ch)) {
+            const rect = pixelRect(Math.max(area.x, chunk.rect.x), Math.max(area.y, chunk.rect.y), Math.min(area.x + area.w,
+                chunk.rect.x + chunk.rect.w), Math.min(area.y + area.h, chunk.rect.y + chunk.rect.h), cw, ch)
+            job.steps.push(() => {
+                if (chunk.cells.some(c => !layer.sprites.has(c.index + '|' + keys.get(c))))
+                    return fail()
+                for (const cell of chunk.cells)
+                    cell.key = keys.get(cell)
+                this.composeCellSprites(stage, layer, rect, area.x, area.y)
+            })
+        }
+        job.steps.push(() => {
+            const g = rest.shown.getContext('2d')
+            g.save()
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalCompositeOperation = 'copy'
+            g.beginPath()
+            g.rect(area.x, area.y, area.w, area.h)
+            g.clip()
+            g.drawImage(stage, 0, 0, area.w, area.h, area.x, area.y, area.w, area.h)
+            g.restore()
+            finish()
+        })
+        this.lastLitLayerJob = {cells: cells.length, missing: missing.length, changes: job.changed.length, inner, region, bands: bands.length,
+            steps: job.steps.length, boxArea: missing.reduce((a, {box}) => a + box.w * box.h, 0)}
+    }
+    // cells in chunks of neighbours, each {cells, rect: their boxes' span}, the span at most budget pixels unless one cell's
+    // box is larger: the cells halved along their span's longer side (by their boxes' centres) until each half fits.
+    layerChunks(cells, budget, W, H) {
+        const span = list => list.reduce((r, {box}) => pixelRect(Math.min(r.x, box.x), Math.min(r.y, box.y),
+            Math.max(r.x + r.w, box.x + box.w), Math.max(r.y + r.h, box.y + box.h), W, H), list[0].box)
+        const rect = span(cells)
+        if (cells.length === 1 || rect.w * rect.h <= budget)
+            return [{cells, rect}]
+        const along = rect.w >= rect.h ? c => c.box.x + c.box.w / 2 : c => c.box.y + c.box.h / 2
+        const sorted = [...cells].sort((p, q) => along(p) - along(q)), half = sorted.length >> 1
+        return [...this.layerChunks(sorted.slice(0, half), budget, W, H), ...this.layerChunks(sorted.slice(half), budget, W, H)]
+    }
+    // TASK-1316: the layer's pixel rectangle rect left to be drawn from its cells' sprites when the layer is next read
+    // (flushCellLayer: composeCellLayer, refreshCellLayer); its shown canvas already has them (composeCellSprites).
+    staleCellLayer(layer, rect) {
+        const r = layer.stale
+        layer.stale = !r ? rect : pixelRect(Math.min(r.x, rect.x), Math.min(r.y, rect.y), Math.max(r.x + r.w, rect.x + rect.w),
+            Math.max(r.y + r.h, rect.y + rect.h), layer.width, layer.height)
+    }
+    flushCellLayer(layer) {
+        const r = layer?.stale
+        if (!r)
+            return
+        layer.stale = null
+        if (layer.cells)
+            this.drawCellSprites(layer, r)
+    }
+    // cells in groups in their order, each group's boxes at most budget pixels together (at least one cell a group).
+    layerGroups(cells, budget) {
+        const groups = []
+        let area = Infinity
+        for (const cell of cells) {
+            const a = cell.box.w * cell.box.h
+            if (area + a > budget) {
+                groups.push([])
+                area = 0
+            }
+            groups.at(-1).push(cell)
+            area += a
+        }
+        return groups
+    }
+    // One step of view's lit layer job (startLitLayerJob) in a frame drawing the shown snapshot: at most one a frame, none in
+    // the frame that started it. A step that fails ends it; the layer is then brought up at once (refreshCellLayer).
+    litLayerStep(view) {
+        const job = view.layerJob
+        if (job.ran === null || job.ran === this.drawSerial) {
+            job.ran ??= this.drawSerial
+            return
+        }
+        job.ran = this.drawSerial
+        if (view.rest !== job.rest || job.rest.cellLayer !== this.litCellLayer)
+            job.failed = true
+        else
+            job.steps[job.step++]()
+        if (job.failed) {
+            view.layerJob = undefined
+            view.layerJobFailed = true
+        }
     }
     // The sprite of cell for its variant now (cellLayerKey), its mask pixels taken from source (the split canvas, drawn
     // whole there, or a render of the variant, renderCellSprites), kept in layer.sprites; the cell takes the variant.
-    cellSprite(layer, cell, source) {
-        const key = this.cellLayerKey(cell.i, cell.j), {box} = cell
+    // key: the cell's variant now when known (a lit layer job's).
+    cellSprite(layer, cell, source, key = this.cellLayerKey(cell.i, cell.j)) {
+        const {box} = cell
         const sprite = document.createElement('canvas')
         sprite.width = box.w
         sprite.height = box.h
@@ -1015,6 +1306,38 @@ class Grid extends SpritesGroup {
         layer.sprites.set(cell.index + '|' + key, sprite)
         cell.key = key
         ++this.cellSpriteRenders
+        return sprite
+    }
+    // TASK-1316: a sprite of cell whose mask pixels within the pixel rectangle rect are source's (a render of the board now
+    // there, as cellSprite takes them) and elsewhere base's (the cell's sprite before: a change draws nothing outside its
+    // region, as a patch copies only its region; none: transparent there).
+    cellSpriteIn(cell, source, rect, base) {
+        const {box} = cell, sprite = document.createElement('canvas')
+        sprite.width = box.w
+        sprite.height = box.h
+        const g = sprite.getContext('2d')
+        if (base)
+            g.drawImage(base, 0, 0)
+        const x0 = Math.max(rect.x, box.x) - box.x, y0 = Math.max(rect.y, box.y) - box.y
+        const x1 = Math.min(rect.x + rect.w, box.x + box.w) - box.x, y1 = Math.min(rect.y + rect.h, box.y + box.h) - box.y
+        if (x0 >= x1 || y0 >= y1)
+            return sprite
+        const alpha = document.createElement('canvas')
+        alpha.width = box.w
+        alpha.height = box.h
+        const a = alpha.getContext('2d'), image = a.createImageData(box.w, box.h), data = image.data
+        for (let k = 0; k < cell.alpha.length; ++k)
+            data[4 * k + 3] = cell.alpha[k]
+        a.putImageData(image, 0, 0)
+        g.save()
+        g.beginPath()
+        g.rect(x0, y0, x1 - x0, y1 - y0)
+        g.clip()
+        g.clearRect(x0, y0, x1 - x0, y1 - y0)
+        g.drawImage(alpha, 0, 0)
+        g.globalCompositeOperation = 'source-in'
+        g.drawImage(source, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
+        g.restore()
         return sprite
     }
     // The layer's pixel rectangle rect drawn from its cells' sprites (each cell's for its variant, cell.key): cleared, then
@@ -1050,6 +1373,7 @@ class Grid extends SpritesGroup {
     // would add to the layer's) and the layer added, so each pixel is the canvas as drawn whole (target the canvas itself:
     // put back before a patch, resplitCellLayer; the shown canvas, prepareSurfaceCellLayer).
     composeCellLayer(target, canvas, layer, rect) {
+        this.flushCellLayer(layer)
         const g = target.getContext('2d'), {x, y, w, h} = rect
         g.save()
         g.setTransform(1, 0, 0, 1, 0, 0)
@@ -1065,6 +1389,29 @@ class Grid extends SpritesGroup {
         g.globalCompositeOperation = 'lighter'
         g.drawImage(layer, x, y, w, h, x, y, w, h)
         g.restore()
+    }
+    // TASK-1316: target (a composed canvas: the shown cache or snapshot, composeCellLayer) brought up within the pixel
+    // rectangle rect to its layer's cells' sprites (each cell's for its variant, cell.key): the mask's pixels taken out and
+    // the sprites added there, as composeCellLayer adds the layer (its pixels there are the sums of those sprites,
+    // drawCellSprites), but drawn from the sprites, not from the layer canvas changed in the frame.
+    // ox, oy: target's pixel (0, 0) at the layer's (ox, oy) (a canvas of a region of it).
+    composeCellSprites(target, layer, rect, ox = 0, oy = 0) {
+        const g = target.getContext('2d'), {x, y, w, h} = rect
+        g.save()
+        g.setTransform(1, 0, 0, 1, -ox, -oy)
+        g.beginPath()
+        g.rect(x, y, w, h)
+        g.clip()
+        g.globalCompositeOperation = 'destination-out'
+        g.drawImage(layer.mask, x, y, w, h, x, y, w, h)
+        g.globalCompositeOperation = 'lighter'
+        for (const {index, box, key} of layer.cells) {
+            if (box.x >= x + w || x >= box.x + box.w || box.y >= y + h || y >= box.y + box.h)
+                continue
+            g.drawImage(layer.sprites.get(index + '|' + key), box.x, box.y)
+        }
+        g.restore()
+        ++this.cellLayerComposites
     }
     // The surface cache's cell layer (splitCellLayer) after a build, or after a patch of rect (copy: the patch's region
     // copied into the cache, resplitCellLayer), or none (no cell layer). The frames draw the cache scaled: its layer is added
@@ -1107,13 +1454,24 @@ class Grid extends SpritesGroup {
             return
         }
         const layer = this.litCellLayer ||= document.createElement('canvas')
-        if (rect && rest.cellLayer === layer && layer.raster === rest.canvas && layer.cells)
-            this.resplitCellLayer(rest.canvas, layer, rect, copy)
+        if (rect && rest.cellLayer === layer && layer.raster === rest.canvas && layer.cells && rest.shown)
+            rect = this.resplitCellLayer(rest.canvas, layer, rect, copy)
         else {
             copy?.()
             rest.cellLayer = this.splitCellLayer(rest.canvas, layer, g => this.setLitRestTransform(g, view, rest))
             layer.raster = rest.canvas
+            rect = {x: 0, y: 0, w: rest.canvas.width, h: rest.canvas.height}
         }
+        // TASK-1316: the snapshot with its layer composed (composeCellLayer, as the cache's shown canvas), which the frames
+        // draw in one drawImage instead of the snapshot and its layer added over it.
+        const shown = this.litCellShown ||= document.createElement('canvas')
+        if (shown.width !== rest.canvas.width || shown.height !== rest.canvas.height) {
+            shown.width = rest.canvas.width
+            shown.height = rest.canvas.height
+        }
+        this.composeCellLayer(shown, rest.canvas, layer, rect)
+        rest.shown = shown
+        ++this.cellLayerComposites
     }
     // A board change seen by the cell layers (Grid.liveCellLayer): each split cell whose variant (cellLayerKey) is no longer
     // its sprite's gets the sprite of its variant now drawn into the layer (drawCellSprites, the region its box and its
@@ -1139,6 +1497,7 @@ class Grid extends SpritesGroup {
         if (which !== 'surface' && lit?.cells && view?.rest && view.rest.cellLayer === lit && lit.raster === view.rest.canvas)
             layers.push(['lit', lit, region => this.renderLitCellSprites(view, region)])
         for (const [name, layer, render] of layers) {
+            this.flushCellLayer(layer)
             const changed = layer.cells.filter(c => c.key !== this.cellLayerKey(c.i, c.j))
             if (!changed.length)
                 continue
@@ -1160,8 +1519,8 @@ class Grid extends SpritesGroup {
             for (const cell of changed)
                 cell.key = this.cellLayerKey(cell.i, cell.j)
             this.drawCellSprites(layer, region)
-            if (name === 'surface')
-                this.composeCellLayer(this.surfaceCacheShown, this.surfaceCache, layer, region)
+            // TASK-1316: the shown canvas from the sprites (composeCellSprites: no draw from the layer just changed).
+            this.composeCellSprites(name === 'surface' ? this.surfaceCacheShown : view.rest.shown, layer, region)
             result.cells += changed.length
             ++this.cellLayerRefreshes
             // What the frames draw under the overlays changed (overlayCompositeKey).
@@ -2274,7 +2633,7 @@ class Grid extends SpritesGroup {
     beginOverlayComposite(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
-        if (typeof Proxy !== 'function' || debug || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob ||
+        if (typeof Proxy !== 'function' || debug || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob || this.litView?.layerJob ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !atmosphericBackground.opaqueOver(ctx))
             return null
         const recorder = this.overlayRecorder ||= new CanvasCallRecorder()
@@ -2325,7 +2684,7 @@ class Grid extends SpritesGroup {
             const now = [t.a, t.d, t.e, t.f, source.width, source.height, atmosphericBackground.raster, mapDepth.atmosphericShadow,
                 this.surfaceCache, this.surfaceCacheRevision, b?.left, b?.top, b?.width, b?.height]
             // Nor while a patch is under way: frames then draw their overlays directly (beginOverlayComposite).
-            if (this.overlayComposite !== composite || now.some((v, k) => v !== key[k]) || this.surfacePatchJob ||
+            if (this.overlayComposite !== composite || now.some((v, k) => v !== key[k]) || this.surfacePatchJob || this.litView?.layerJob ||
                     !atmosphericBackground.opaqueOver(source.getContext('2d')))
                 return
             this.renderOverlaySnapshot(source, composite)
@@ -2459,18 +2818,17 @@ class Grid extends SpritesGroup {
         if (rest) {
             ctx.save()
             ctx.setTransform(1, 0, 0, 1, 0, 0)
-            ctx.drawImage(rest.canvas, 0, 0)
-            // Its cell layer added over it (splitCellLayer), where it has pixels.
-            const box = rest.canvas.cellLayered && rest.cellLayer && rest.cellLayer.cellBox
-            if (box) {
-                ctx.globalCompositeOperation = 'lighter'
-                ctx.drawImage(rest.cellLayer, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h)
-            }
+            // With its cell layer (splitCellLayer) the snapshot with the layer composed (TASK-1316, prepareLitCellLayer).
+            ctx.drawImage(rest.canvas.cellLayered && rest.cellLayer && rest.shown || rest.canvas, 0, 0)
             ctx.restore()
             this.litFrame = {view, rest: true}
             if (view.patch) {
                 this.drawPatchCells(ctx, view.patch, 'lit')
                 this.litPatchStep(view)
+            }
+            else if (view.layerJob) {
+                this.drawPatchCells(ctx, view.layerJob, 'lit')
+                this.litLayerStep(view)
             }
             else
                 this.queueLitTiles(view, t, cw, ch)
@@ -2520,9 +2878,11 @@ class Grid extends SpritesGroup {
     }
     // Whether the surface cache can stand in for the lit view on ctx's canvas (drawn magnified: lit, its state the board's,
     // no build or patch under way), so no frame builds the lit view's light map or tiles (Grid.litStandIns).
+    // TASK-1316: exactly (surfaceStateMatches exact): with the cell layer a stand-in cache not drawn since a cell's owner, suburb
+    // or fog changed (its layer not brought up, followCellLayer) stands in no more, as without the layer.
     litStandIn(ctx) {
         return Grid.litStandIns && !!this.surfaceCache && !!this.surfaceCacheLit && !this.surfaceCacheBuild && !this.surfacePatchJob &&
-            this.surfaceStateMatches(ctx)
+            this.surfaceStateMatches(ctx, undefined, true)
     }
     // Whether ctx's frame draws lit images, and which: false (the live light), else {t, view, rest}
     // with view the lit view at ctx's transform t (made now if it does not hold) and rest its
@@ -2551,7 +2911,7 @@ class Grid extends SpritesGroup {
             view = this.litView = this.newLitView(t, ctx.canvas)
         }
         // The rest snapshot's cell layer brought up to the board (TASK-1315); a view dropped for it is made again.
-        if (!this.followCellLayer('lit'))
+        if (!this.followCellLayer('lit', ctx, t))
             view = this.litView = this.newLitView(t, ctx.canvas)
         const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
         return {t, view, rest: rest && rest.done === LIT_REST_BANDS ? rest : null}
@@ -2574,13 +2934,7 @@ class Grid extends SpritesGroup {
     // false turns it off.
     // Returns whether view holds: patched now, or a patch under way (view.patch).
     patchLitView(ctx, view, t) {
-        const screen = gameEvent.screen, rest = view.rest, cw = ctx.canvas.width, ch = ctx.canvas.height
-        const buffer = this.litPatchBuffer
-        if (!Grid.surfacePatching || screen.surfaceMoving || this.isObserving() || view.a !== t.a || view.d !== t.d ||
-                !rest || rest.done !== LIT_REST_BANDS || rest.e !== t.e || rest.f !== t.f || rest.canvas.width !== cw ||
-                rest.canvas.height !== ch || rest.sky !== atmosphericBackground.raster ||
-                view.mapScale !== atmosphericLighting.mapScale || !buffer || buffer.width !== cw || buffer.height !== ch ||
-                buffer.gradientSource !== litGradientSource()) {
+        if (!this.litPatchable(ctx, view, t)) {
             view.patch = undefined
             return false
         }
@@ -2588,7 +2942,19 @@ class Grid extends SpritesGroup {
         if (job && this.withLitState(job, () => this.surfaceStateMatches(ctx, undefined, true)))
             return true
         view.patch = undefined
-        return this.startLitPatch(view, rest)
+        return this.startLitPatch(view, view.rest)
+    }
+    // Whether view's finished rest snapshot can be patched at transform t of ctx's canvas (patchLitView; TASK-1316: its cell
+    // layer's variants rendered a step a frame, startLitLayerJob): the camera resting on it at its transform, its sky and
+    // light map the current ones, the lit patch buffer its size, drawing with the lit canvases' gradients.
+    litPatchable(ctx, view, t) {
+        const screen = gameEvent.screen, rest = view.rest, cw = ctx.canvas.width, ch = ctx.canvas.height
+        const buffer = this.litPatchBuffer
+        return !(!Grid.surfacePatching || screen.surfaceMoving || this.isObserving() || view.a !== t.a || view.d !== t.d ||
+                !rest || rest.done !== LIT_REST_BANDS || rest.e !== t.e || rest.f !== t.f || rest.canvas.width !== cw ||
+                rest.canvas.height !== ch || rest.sky !== atmosphericBackground.raster ||
+                view.mapScale !== atmosphericLighting.mapScale || !buffer || buffer.width !== cw || buffer.height !== ch ||
+                buffer.gradientSource !== litGradientSource())
     }
     // The patch of view's snapshot rest to the board now (patchLitView): view.patch, or the view brought up at once when no
     // pixel of the canvas changes. Returns false when the view is to be dropped instead.
@@ -2631,6 +2997,8 @@ class Grid extends SpritesGroup {
             sprites: found.sprites, lighting, cells: changes.length, step: 0, ran: null,
             state: [], overlayCells: [], window: outer && clipWindowOf(outer, cw, ch, -rest.e / view.a, -rest.f / view.d, view.a, 1.05 * basis.r)}
         this.withLitState(job, () => this.captureSurfaceState())
+        // A patch draws every changed cell (a lit layer job under way ends: the layer follows after it, followCellLayer).
+        view.layerJob = undefined
         if (inner) {
             view.patch = job
             return true
@@ -3054,8 +3422,10 @@ class Grid extends SpritesGroup {
         this.litTilesQueued = true
         setTimeout(() => {
             this.litTilesQueued = false
-            // Nothing is built inside a zoom gesture (its frames keep their live light).
-            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots))
+            // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
+            // view's cell layer is behind (the next frame brings it up, followCellLayer; a tile built now would also bring
+            // the light map's owners up in the task drawing from it).
+            if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) || this.litLayerBehind(view))
                 return
             if (banding && !gameEvent.screen.surfaceMoving) {
                 // The tiles on the canvas the frames draw from the stand-in first (at most LIT_TILE_BUDGET a task), then the bands.
@@ -3073,6 +3443,14 @@ class Grid extends SpritesGroup {
             for (const {u, v} of missing.slice(0, budget))
                 this.litTile(view, u, v)
         })
+    }
+    // TASK-1316: whether view's rest snapshot has a cell layer drawn for other cell states than the board's now.
+    litLayerBehind(view) {
+        const states = this.cellLayerOn() && view.rest?.cellLayer?.states
+        if (!states)
+            return false
+        const now = this.cellLayerStates()
+        return states.length !== now.length || states.some((v, k) => v !== now[k])
     }
     // Whether a lit task leaves its turn to another task of the same pause between frames (the next frame queues it again),
     // so their drawing does not add up: a surface cache stage or check queued, or an overlay snapshot queued or made since
@@ -3183,6 +3561,9 @@ class Grid extends SpritesGroup {
         if (this.litCellLayer)
             this.litCellLayer.width = this.litCellLayer.height = 0
         this.litCellLayer = undefined
+        if (this.litCellShown)
+            this.litCellShown.width = this.litCellShown.height = 0
+        this.litCellShown = undefined
     }
     // Bytes of the lit canvases: the view's tiles, the pool, the rest snapshot and the lit patch buffer.
     litTileBytes() {
@@ -3627,10 +4008,11 @@ const SURFACE_PATCH_MARGIN = 128
 const SURFACE_PATCH_MARGIN_MIN = 32
 // false: every change rebuilds the whole cache, as before patches (tests compare a patched cache with a whole build).
 Grid.surfacePatching = true
-// TASK-1313 (off until TASK-1316): true keeps the cells' tiles, owner colours and fog out of the surface cache and the lit
-// view's rest snapshot, in a cell layer of per-cell variant sprites added over them (Grid.splitCellLayer, refreshCellLayer).
-// With it the light state holds no owner (TASK-1314, atmosphericLighting.ownerFree): the sprites hold the territory glow.
-Grid.liveCellLayer = false
+// TASK-1313 (on since TASK-1316, with atmospheric visuals): true keeps the cells' tiles, owner colours and fog out of the
+// surface cache and the lit view's rest snapshot, in a cell layer of per-cell variant sprites added over them
+// (Grid.splitCellLayer, refreshCellLayer). With it the light state holds no owner (TASK-1314,
+// atmosphericLighting.ownerFree): the sprites hold the territory glow.
+Grid.liveCellLayer = true
 // TASK-1315: how far off the board (hex radii, plus the slab's depth and shadow) the cells at its side hold the pixels
 // nearest them in the cell layer (Grid.cellLayerCells).
 const CELL_LAYER_EDGE_REACH = 0.5
@@ -3719,6 +4101,37 @@ const LIT_PATCH_STEPS = [
     ...['map', 'gain'].map(light => (grid, job, view) => grid.drawLitPatch(job, view, g =>
         atmosphericLighting.drawRows(g, grid, job.outer.y, job.outer.y + job.outer.h, light))),
     (grid, job, view) => grid.finishLitPatch(view, job)
+]
+// TASK-1316: the largest part of the canvas a band of a lit layer job's region spans (Grid.planLitLayerJob); each of its
+// steps draws about that area once (LIT_LAYER_PARTS), so no frame of the job draws much more than one with a lit view
+// patch's step; the sprites made and composed are in groups and chunks of a sixth and a third of it. The light in
+// LIT_LAYER_LIGHT_BANDS bands of rows of a band (one: the lit patch's two steps).
+const LIT_LAYER_STEP = 0.2
+const LIT_LAYER_LIGHT_BANDS = 1
+// TASK-1316: a lit layer job's drawing of a band on the lit patch buffer (Grid.planLitLayerJob: each list a step, each
+// part in Grid.drawLitPatch): LIT_PATCH_STEPS' drawing up to the light with its first step's clear, sky and slab shadow
+// apart and the grout and the tiles in LIT_REST_HEX_STEPS runs apart (the calls drawHexagons makes), each step about the
+// band's area once; the light follows in LIT_LAYER_LIGHT_BANDS bands (planLitLayerJob).
+const LIT_LAYER_PARTS = [
+    [(grid, g) => {
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(0, 0, g.canvas.width, g.canvas.height)
+    }],
+    [(grid, g) => {
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        atmosphericBackground.draw(g)
+    }],
+    [(grid, g) => {
+        drawBackgroundHints(g)
+        mapDepth.drawAtmosphericShadow(g, grid)
+    }],
+    [(grid, g) => LIT_SCENE_PARTS[0](grid, g)],
+    [(grid, g) => grid.drawHexagons(g, {grout: true, n: 0})],
+    // A run of the tiles draws about a third of the area: two runs a step; the last with the shadows, fog and rim, which
+    // draw little there.
+    [0, 1].map(k => (grid, g) => grid.drawHexagons(g, {k, n: LIT_REST_HEX_STEPS, grout: false})),
+    [(grid, g) => grid.drawHexagons(g, {k: 2, n: LIT_REST_HEX_STEPS, grout: false}), LIT_SCENE_PARTS[2]],
+    [LIT_SCENE_PARTS[3]],
 ]
 // The largest part of the canvas a lit view patch redraws (Grid.patchLitView); more drops the view.
 const LIT_PATCH_MAX_AREA = 0.25
