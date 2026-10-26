@@ -1,6 +1,38 @@
 function displayDescription(_class) {
     entityInterface.change(_class.description, gameEvent.selected.player.fullColor)
 }
+// The gold edge of the panels' washed buttons and the Switch's active half.
+const TRAIN_PANEL_GOLD = '#e0b55e'
+// A stat icon (assets entry, TASK-1342) centred at (x, y); one still loading goes to pending.
+function drawTrainPanelIcon(ctx, name, x, y, size, pending) {
+    const icon = assets[name]
+    if (icon && icon.complete && icon.naturalWidth > 0)
+        ctx.drawImage(icon, x - size / 2, y - size / 2, size, size)
+    else if (icon && !icon.complete)
+        pending.push(icon)
+}
+// A washed button with a gold edge and its text in ink (italic bold, shrunk to fit the rect).
+function drawTrainPanelButton(ctx, rect, text, wash) {
+    roundedRectPath(ctx, rect.x, rect.y, rect.width, rect.height, Math.min(rect.height / 2, rect.cornerRadius[0]))
+    ctx.fillStyle = wash
+    ctx.fill()
+    ctx.strokeStyle = TRAIN_PANEL_GOLD
+    ctx.lineWidth = Math.max(1, 0.0025 * HEIGHT)
+    ctx.stroke()
+    drawTrainPanelText(ctx, text.text, rect.x + rect.width / 2, rect.y + rect.height / 2, text.fontSize * 0.8,
+        rect.width * 0.88, ENTITY_PANEL_INK, 'center')
+}
+function drawTrainPanelText(ctx, string, x, y, fontSize, maxWidth, color, align) {
+    const font = size => `italic 700 ${size}px ${Text.defaultFamily}`
+    ctx.font = font(fontSize)
+    const width = ctx.measureText(string).width
+    if (width > maxWidth)
+        ctx.font = font(fontSize * maxWidth / width)
+    ctx.fillStyle = color
+    ctx.textAlign = align
+    ctx.textBaseline = 'middle'
+    ctx.fillText(string, x, y)
+}
 class BarrackInterface {
     #visible = false
     constructor() {
@@ -186,6 +218,7 @@ class BarrackInterface {
     }
     change(barrack, color) {
         this.background.color = color.hex
+        this.setPanelColors(color.hex)
 
         this.changeUnitTab(barrack)
         this.goldText.text = barrack.info.gold
@@ -226,12 +259,99 @@ class BarrackInterface {
     invalidateRenderCache() {
         this.renderCacheDirty = true
     }
+    // The owner's colour under the next-turn button's 40% white wash (nextTurn.js highlightButton colorAlpha 0.4 over
+    // TriangleImage's fill: each channel c * 0.6 + 255 * 0.4) and a dark shade of it for the roller. Made in change().
+    setPanelColors(hex) {
+        const n = parseInt(String(hex).slice(1), 16)
+        const channels = [n >> 16 & 255, n >> 8 & 255, n & 255]
+        const toHex = f => '#' + channels.map(c => Math.round(f(c)).toString(16).padStart(2, '0')).join('')
+        this.panelColors = {source: hex, wash: toHex(c => c * 0.6 + 255 * 0.4), dark: toHex(c => c * 0.6)}
+    }
+    // Concept F2 inside the background rect: cloth on the inner (left) side and a bottom roller in the washed colour,
+    // parchment with straight top, right and bottom (screen edges / roller) and a torn left side.
+    drawPanelBody(ctx) {
+        const {wash, dark} = this.panelColors
+        const bg = this.background
+        const r = 0.016 * HEIGHT, m = 0.02 * HEIGHT
+        const right = bg.x + bg.width, bottom = bg.y + bg.height - r, x0 = bg.x + m, w = right - x0, h = bottom - bg.y
+        ctx.save()
+        // Cloth
+        ctx.fillStyle = wash
+        ctx.fillRect(bg.x, bg.y, bg.width, h)
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(bg.x, bg.y, bg.width, h)
+        ctx.clip()
+        ctx.globalAlpha = 0.1
+        ctx.strokeStyle = '#000'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        for (let i = -h; i < bg.width; i += 6) {
+            ctx.moveTo(bg.x + i, bg.y)
+            ctx.lineTo(bg.x + i + h, bg.y + h)
+        }
+        ctx.stroke()
+        ctx.restore()
+        // Parchment: the left side torn.
+        const tear = () => {
+            let k = 65
+            const rnd = () => (k = (k * 9301 + 49297) % 233280) / 233280
+            const j = 0.018 * Math.min(w, h), rows = Math.max(6, Math.round(h / (0.035 * HEIGHT)))
+            ctx.beginPath()
+            ctx.moveTo(x0, bg.y)
+            ctx.lineTo(right, bg.y)
+            ctx.lineTo(right, bottom)
+            ctx.lineTo(x0, bottom)
+            for (let i = rows - 1; i > 0; i--) ctx.lineTo(x0 + (rnd() - 0.5) * 2 * j, bg.y + h * i / rows)
+            ctx.closePath()
+        }
+        ctx.save()
+        ctx.shadowColor = 'rgba(0,0,0,0.55)'
+        ctx.shadowBlur = 0.02 * HEIGHT
+        tear()
+        const paper = ctx.createRadialGradient(x0 + w * 0.45, bg.y + h * 0.4, Math.min(w, h) * 0.1, x0 + w / 2,
+            bg.y + h / 2, Math.max(w, h) * 0.75)
+        paper.addColorStop(0, '#f6e9c9')
+        paper.addColorStop(1, '#cfae78')
+        ctx.fillStyle = paper
+        ctx.fill()
+        ctx.restore()
+        tear()
+        ctx.strokeStyle = 'rgba(110,70,30,0.6)'
+        ctx.lineWidth = Math.max(1, Math.min(w, h) * 0.008)
+        ctx.stroke()
+        // Roller: the washed colour shaded round, gold caps (the left one inside the background, the right one at the
+        // screen edge).
+        const roll = ctx.createLinearGradient(0, bottom - r, 0, bottom + r)
+        roll.addColorStop(0, dark)
+        roll.addColorStop(0.45, wash)
+        roll.addColorStop(1, dark)
+        ctx.fillStyle = roll
+        roundedRectPath(ctx, bg.x, bottom - r, bg.width, 2 * r, r)
+        ctx.fill()
+        for (const ex of [bg.x + r, right]) {
+            ctx.beginPath()
+            ctx.arc(ex, bottom, r, 0, 2 * Math.PI)
+            const cap = ctx.createRadialGradient(ex - r * 0.3, bottom - r * 0.3, 0, ex, bottom, r)
+            cap.addColorStop(0, '#f6dc9a')
+            cap.addColorStop(1, '#8a6a2a')
+            ctx.fillStyle = cap
+            ctx.fill()
+        }
+        ctx.restore()
+    }
     drawContents(ctx) {
-        this.background.draw(ctx)
-        this.gold.draw(ctx)
-        this.goldText.draw(ctx)
+        if (this.panelColors?.source !== this.background.color) this.setPanelColors(this.background.color)
+        this.iconsPending = []
+        this.drawPanelBody(ctx)
+        // Gold: TASK-1342's gold icon and the goldText string after it.
+        const goldSize = this.gold.width * 0.7
+        drawTrainPanelIcon(ctx, 'statGold', this.gold.x, this.gold.y, goldSize, this.iconsPending)
+        const goldX = this.gold.x + goldSize * 0.75
+        drawTrainPanelText(ctx, String(this.goldText.text), goldX, this.gold.y, this.goldText.fontSize * 0.8,
+            this.background.right - 0.03 * HEIGHT - goldX, ENTITY_PANEL_INK, 'left')
         for (let i in this.trainInterfaces[this.trainInterfacesTab]) {
-            this.trainInterfaces[this.trainInterfacesTab][i].draw(ctx)
+            this.trainInterfaces[this.trainInterfacesTab][i].draw(ctx, this.panelColors.wash, this.iconsPending)
         }
     }
     getRenderCacheBounds() {
@@ -270,6 +390,8 @@ class BarrackInterface {
     draw(ctx) {
         if (!this.visible)
             return
+        // Stat icons still loading when the cache was drawn (the menu does not wait for them): draw it again once.
+        if (this.iconsPending?.length && this.iconsPending.every(icon => icon.complete)) this.renderCacheDirty = true
         if ((this.renderCacheDirty || !this.renderCache) && !this.createRenderCache()) {
             this.drawContents(ctx)
             return
@@ -330,10 +452,39 @@ class TrainInterface {
         this.canTrain = boolean
         this.button.canClick = boolean
     }
-    draw(ctx) {
+    // The turns of the row: n of the button's 'train (n)' (the total of 'k / n'), else the production's.
+    get turnsString() {
+        const text = String(this.button.textString)
+        const match = /\((\d+)\)/.exec(text) || /\/\s*(\d+)/.exec(text)
+        return match ? match[1] : String(production[this.name]?.turns ?? '')
+    }
+    // Picture; cost coin + number (the 'cost: ' prefix replaced by the icon) and hourglass + turns between it and the
+    // button, shrunk to fit; the button washed with a gold edge, its original text in ink.
+    draw(ctx, wash, pending) {
         this.image.draw(ctx)
-        this.costText.draw(ctx)
+        const cost = String(this.costText.text).replace(/^cost: /, '')
+        const turns = this.turnsString
+        const left = this.image.rect.right + 0.01 * HEIGHT, right = this.button.x - 0.01 * HEIGHT, y = this.y
+        let size = this.costText.fontSize * 0.75
+        ctx.font = `700 ${size}px ${Text.defaultFamily}`
+        const widths = [ctx.measureText(cost).width, ctx.measureText(turns).width]
+        const total = s => s * (1.1 + 0.15 + 0.5 + 1 + 0.15) + (widths[0] + widths[1]) * s / size
+        if (total(size) > right - left)
+            size *= (right - left) / total(size)
+        let x = left
+        drawTrainPanelIcon(ctx, 'statCost', x + size * 0.55, y, size * 1.1, pending)
+        x += size * 1.25
+        ctx.font = `700 ${size}px ${Text.defaultFamily}`
+        ctx.fillStyle = ENTITY_PANEL_INK
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(cost, x, y)
+        x += widths[0] * size / (this.costText.fontSize * 0.75) + size * 0.5
+        drawTrainPanelIcon(ctx, 'statTurns', x + size * 0.5, y, size, pending)
+        x += size * 1.15
+        ctx.fillStyle = 'rgba(74,46,20,0.8)'
+        ctx.fillText(turns, x, y)
         if (this.canTrain)
-            this.button.draw(ctx)
+            drawTrainPanelButton(ctx, this.button.rect, this.button.text, wash)
     }
 }

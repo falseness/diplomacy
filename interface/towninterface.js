@@ -83,6 +83,7 @@ class TownInterface extends BarrackInterface {
     }
     change(town, color) {
         this.background.color = color.hex
+        this.setPanelColors(color.hex)
         
         if (this.trainInterfacesTab == 'unit') {
             if (town.isBadlyDamaged) {
@@ -107,8 +108,22 @@ class TownInterface extends BarrackInterface {
         this.invalidateRenderCache()
         this.visible = true
     }
+    // The Switch: the active half washed with a gold edge, both original texts in ink (the other one faded).
     drawContents(ctx) {
         super.drawContents(ctx)
-        this.switch.draw(ctx)
+        const halves = [[this.switch.buttonOne, this.switch.selected == 1], [this.switch.buttonTwo, this.switch.selected == 2]]
+        for (const [half, active] of halves) {
+            const rect = half.rect
+            if (active) {
+                roundedRectPath(ctx, rect.x, rect.y, rect.width, rect.height, rect.height * 0.2)
+                ctx.fillStyle = this.panelColors.wash
+                ctx.fill()
+                ctx.strokeStyle = TRAIN_PANEL_GOLD
+                ctx.lineWidth = Math.max(1, 0.0025 * HEIGHT)
+                ctx.stroke()
+            }
+            drawTrainPanelText(ctx, half.textString, rect.x + rect.width / 2, rect.y + rect.height / 2,
+                half.text.fontSize * 0.85, rect.width * 0.88, active ? ENTITY_PANEL_INK : 'rgba(74,46,20,0.55)', 'center')
+        }
     }
 }

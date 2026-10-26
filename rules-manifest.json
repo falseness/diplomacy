@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "1f5ee2bf0dca19eac14eeae9efb2f9f4c4eb0b337a6572c72e06b2780a5081b4",
+  "rulesVersion": "0470c37edafb2973965d34272ecf07fe79b798efdc4e70cd21fc4f8e1082eff8",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -160,13 +160,13 @@
     },
     {
       "path": "interface/barrackinterface.js",
-      "sha256": "1bc4a1dd1d82b61bea0b025c021c05568c39b6a1a9d2fb48acce1cb00746749e",
-      "bytes": 11613
+      "sha256": "d3241861bb8f00f349539310c463bc55d0a0d829d93ff3ebb897d211599e8edc",
+      "bytes": 19343
     },
     {
       "path": "interface/towninterface.js",
-      "sha256": "0d19140df9bf6f320b6b16ceda6bb59fe2fb604365e660d7a6affc30b87d3cfd",
-      "bytes": 3369
+      "sha256": "c90d17098dca748259e54cd95815c2720a647145c74e1ce87aed19eb44eb7b19",
+      "bytes": 4294
     },
     {
       "path": "interface/statisticsinterface.js",
