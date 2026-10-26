@@ -127,6 +127,8 @@ class Grid extends SpritesGroup {
         this.cellLayerVariantRenders = 0
         // Refreshes that changed a layer (overlayCompositeKey).
         this.cellLayerRevision = 0
+        // Caches or lit views dropped as their cell layer could not be brought up to the board (followCellLayer).
+        this.cellLayerFollowDrops = 0
         // The surface cache built between frames (prepareSurfaceCache): the build in progress,
         // whether a stage is queued, when the cache was last compared with the whole board,
         // whether a frame found it not matching, stages run (a count) and a 1x1 canvas the
@@ -656,8 +658,8 @@ class Grid extends SpritesGroup {
     }
     // TASK-1313 (Grid.liveCellLayer): the surface cache or the lit view's rest snapshot (canvas, drawn whole as without the
     // layer) split by its cells' mask (cellLayerCells: every pixel nearer one cell's centre than any other's, that is the
-    // cell's hexagon, map edges left out; geometric, the same whatever a cell's owner or fog) into the canvas, black at the
-    // mask's pixels (their alpha kept), so it holds no tile, owner colour or fog, and the cell layer (layer, a canvas of its
+    // cell's hexagon, map edge cells too, and off the board the side cells' nearest pixels; geometric, the same whatever a
+    // cell's owner or fog) into the canvas, black at the mask's pixels (their alpha kept), so it holds no tile, owner colour or fog, and the cell layer (layer, a canvas of its
     // size): per cell a sprite of that cell's mask pixels (cellSprite), kept by the cell's variant (cellLayerKey: its owner
     // colour, suburb and fog state, its building's image, and its neighbours' states, whose tiles' edges and fog reach it),
     // drawn into the layer by drawImage (drawCellSprites). The two added ('lighter', each pixel in one of them) are the
@@ -665,6 +667,9 @@ class Grid extends SpritesGroup {
     // the sprite kept or rendered once for the variant), never the cache built or patched. place sets the canvas's
     // transform on a context. layer.cellBox: the pixel rectangle the cells' boxes span, all a frame need draw of it.
     splitCellLayer(canvas, layer, place) {
+        return this.withCellReach(() => this.splitCellLayerNow(canvas, layer, place))
+    }
+    splitCellLayerNow(canvas, layer, place) {
         const W = canvas.width, H = canvas.height
         if (layer.width !== W || layer.height !== H) {
             layer.width = W
@@ -675,7 +680,8 @@ class Grid extends SpritesGroup {
         mask.height = H
         const {cells, box, image} = this.cellLayerCells(W, H, place)
         mask.getContext('2d').putImageData(image, 0, 0)
-        Object.assign(layer, {cells, cellBox: box, sprites: new Map(), byIndex: new Map(cells.map(c => [c.index, c])), place})
+        Object.assign(layer, {cells, cellBox: box, sprites: new Map(), byIndex: new Map(cells.map(c => [c.index, c])), place,
+            states: this.cellLayerStates()})
         for (const cell of cells)
             this.cellSprite(layer, cell, canvas)
         const whole = {x: 0, y: 0, w: W, h: H}
@@ -689,6 +695,9 @@ class Grid extends SpritesGroup {
     // copy run, those cells' sprites taken again from the canvas (their variants now), the layer drawn there from the
     // sprites and the canvas cut there again. Returns the region.
     resplitCellLayer(canvas, layer, rect, copy) {
+        return this.withCellReach(() => this.resplitCellLayerNow(canvas, layer, rect, copy))
+    }
+    resplitCellLayerNow(canvas, layer, rect, copy) {
         const meets = (b, r) => b.x < r.x + r.w && r.x < b.x + b.w && b.y < r.y + r.h && r.y < b.y + b.h
         const touched = layer.cells.filter(c => meets(c.box, rect))
         let x0 = rect.x, y0 = rect.y, x1 = rect.x + rect.w, y1 = rect.y + rect.h
@@ -707,10 +716,12 @@ class Grid extends SpritesGroup {
         return region
     }
     // The mask of a W x H canvas at the transform place sets (splitCellLayer): each cell's pixels (centre nearer its centre
-    // than any other cell's, the one of lower index on a tie: cells' hexagons, disjoint, map edges left out). {cells: per
-    // cell {index, i, j, box (its hexagon's pixel rectangle grown by a pixel, cut to the canvas), alpha (per box pixel 255
-    // when the cell's, else 0), key}, box: the rectangle the boxes span or null, image: the mask (black, opaque at the cells'
-    // pixels, transparent elsewhere)}.
+    // than any other cell's, the one of lower index on a tie: cells' hexagons, disjoint, map edge cells included), and
+    // (TASK-1315) for a cell at the board's side, the pixels off the board nearer its centre than any other side cell's
+    // within CELL_LAYER_EDGE_REACH of it (the slab's side and shadow, the outline's antialiasing: they follow its fog and
+    // tile). {cells: per cell {index, i, j, box (its pixels' rectangle grown by a pixel, cut to the canvas), alpha (per box
+    // pixel 255 when the cell's, else 0), key}, box: the rectangle the boxes span or null, image: the mask (black, opaque
+    // at the cells' pixels, transparent elsewhere)}.
     cellLayerCells(W, H, place) {
         const g = (this.cellMaskCanvas ||= document.createElement('canvas')).getContext('2d')
         g.save()
@@ -718,52 +729,92 @@ class Grid extends SpritesGroup {
         place(g)
         const t = g.getTransform()
         g.restore()
-        const {a, d, e, f} = t, ox = basis.offset.x, oy = basis.offset.y, rx = basis.r, h = this.arr[0].length
-        const image = new ImageData(W, H), out = image.data, cells = []
-        let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity
-        for (let i = 0; i < this.arr.length; ++i) {
+        const {a, d, e, f} = t, ox = basis.offset.x, oy = basis.offset.y, rx = basis.r, w = this.arr.length, h = this.arr[0].length
+        // Per pixel its cell (board index + 1, 0: none) and, off the board, its squared distance to that cell's centre.
+        const owner = new Int32Array(W * H), far = new Float32Array(W * H)
+        const centre = (i, j) => [i * ox, (2 * j + (i & 1)) * oy]
+        const boxOf = (cx, cy, rx0, ry0) => pixelRect(Math.floor((cx - rx0) * a + e) - 1, Math.floor((cy - ry0) * d + f) - 1,
+            Math.ceil((cx + rx0) * a + e) + 1, Math.ceil((cy + ry0) * d + f) + 1, W, H)
+        const reach = CELL_LAYER_EDGE_REACH * rx + (mapDepth.depth || 0) + (mapDepth.shadowOffset || 0) + 2 * (mapDepth.shadowBlur || 0)
+        for (let i = 0; i < w; ++i) {
             for (let j = 0; j < h; ++j) {
-                if (this.arr[i][j].building.isMapEdge)
-                    continue
                 // Centres as calcPos (biasToTransition), the candidates' those of the cells round it (on the board or not).
-                const cx = i * ox, cy = (2 * j + (i & 1)) * oy, index = i * h + j, near = []
+                const [cx, cy] = centre(i, j), near = [], own = i * 100000 + j
+                let side = false
                 for (let di = -1; di <= 1; ++di)
                     for (let dj = -1; dj <= 1; ++dj)
-                        if (di || dj)
-                            near.push([(i + di) * ox, (2 * (j + dj) + ((i + di) & 1)) * oy, (i + di) * 100000 + j + dj])
-                const own = i * 100000 + j
-                const box = pixelRect(Math.floor((cx - rx) * a + e) - 1, Math.floor((cy - oy) * d + f) - 1,
-                    Math.ceil((cx + rx) * a + e) + 1, Math.ceil((cy + oy) * d + f) + 1, W, H)
+                        if (di || dj) {
+                            const [nx, ny] = centre(i + di, j + dj)
+                            near.push([nx, ny, (i + di) * 100000 + j + dj])
+                            if (i + di < 0 || i + di >= w || j + dj < 0 || j + dj >= h)
+                                side = true
+                        }
+                const box = side ? boxOf(cx, cy, rx + reach, oy + reach) : boxOf(cx, cy, rx, oy)
                 if (!box)
                     continue
-                const alpha = new Uint8Array(box.w * box.h)
-                let any = false
                 for (let y = 0; y < box.h; ++y) {
                     const wy = (box.y + y + 0.5 - f) / d
                     for (let x = 0; x < box.w; ++x) {
-                        const wx = (box.x + x + 0.5 - e) / a
+                        const wx = (box.x + x + 0.5 - e) / a, p = (box.y + y) * W + box.x + x
                         const d0 = (wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)
-                        let mine = true
+                        let mine = true, offBoard = false
                         for (const [nx, ny, n] of near) {
                             const dn = (wx - nx) * (wx - nx) + (wy - ny) * (wy - ny)
                             if (dn < d0 || dn === d0 && n < own) {
-                                mine = false
-                                break
+                                const ni = Math.floor(n / 100000 + 0.5), nj = n - ni * 100000
+                                if (ni >= 0 && ni < w && nj >= 0 && nj < h) {
+                                    mine = false
+                                    break
+                                }
+                                offBoard = true
                             }
                         }
-                        if (mine) {
-                            alpha[y * box.w + x] = 255
-                            out[((box.y + y) * W + box.x + x) * 4 + 3] = 255
-                            any = true
+                        if (!mine)
+                            continue
+                        if (!offBoard) {
+                            owner[p] = i * h + j + 1
+                            far[p] = 0
+                        }
+                        // Off the board: the nearest side cell's within the reach (a pixel of a cell's own stays its).
+                        else if (side && d0 <= (rx + reach) * (rx + reach) && (!owner[p] || far[p] > d0 || far[p] === d0 && owner[p] > i * h + j + 1)) {
+                            if (owner[p] && !far[p])
+                                continue
+                            owner[p] = i * h + j + 1
+                            far[p] = d0
                         }
                     }
                 }
-                if (!any)
-                    continue
-                cells.push({index, i, j, box, alpha, key: undefined})
-                bx0 = Math.min(bx0, box.x); by0 = Math.min(by0, box.y)
-                bx1 = Math.max(bx1, box.x + box.w); by1 = Math.max(by1, box.y + box.h)
             }
+        }
+        // The cells' boxes and alpha from the owners.
+        const x0 = new Int32Array(w * h).fill(W), y0 = new Int32Array(w * h).fill(H), x1 = new Int32Array(w * h).fill(-1), y1 = new Int32Array(w * h).fill(-1)
+        const image = new ImageData(W, H), out = image.data
+        for (let y = 0, p = 0; y < H; ++y)
+            for (let x = 0; x < W; ++x, ++p) {
+                const o = owner[p] - 1
+                if (o < 0)
+                    continue
+                out[p * 4 + 3] = 255
+                if (x < x0[o]) x0[o] = x
+                if (x > x1[o]) x1[o] = x
+                if (y < y0[o]) y0[o] = y
+                if (y > y1[o]) y1[o] = y
+            }
+        const cells = []
+        let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity
+        for (let index = 0; index < w * h; ++index) {
+            if (x1[index] < 0)
+                continue
+            const box = pixelRect(x0[index] - 1, y0[index] - 1, x1[index] + 2, y1[index] + 2, W, H)
+            const alpha = new Uint8Array(box.w * box.h)
+            for (let y = 0; y < box.h; ++y)
+                for (let x = 0; x < box.w; ++x)
+                    if (owner[(box.y + y) * W + box.x + x] === index + 1)
+                        alpha[y * box.w + x] = 255
+            const i = Math.floor(index / h)
+            cells.push({index, i, j: index - i * h, box, alpha, key: undefined})
+            bx0 = Math.min(bx0, box.x); by0 = Math.min(by0, box.y)
+            bx1 = Math.max(bx1, box.x + box.w); by1 = Math.max(by1, box.y + box.h)
         }
         return {cells, image, box: cells.length ? pixelRect(bx0, by0, bx1, by1, W, H) : null}
     }
@@ -779,6 +830,12 @@ class Grid extends SpritesGroup {
             key += ',' + (other ? this.getSurfaceStateValue(i + di, j + dj, false) : '-')
         }
         const L = atmosphericLighting, near = this.cellGlowCells(), h = this.arr[0].length, index = i * h + j
+        // TASK-1315: whether each building whose sprite or shadow reaches the cell is in view (cellBuildingReach).
+        key += '|'
+        for (const k of (this.cellReachPass || this.cellBuildingReach())[index]) {
+            const q = Math.floor(k / h)
+            key += isFogOfWar && !this.fogOfWar[q][k - q * h] ? 0 : 1
+        }
         key += '|'
         for (const [list, cool] of [[near.warm[index], false], [near.cool[index], true]]) {
             for (const k of list) {
@@ -820,6 +877,127 @@ class Grid extends SpritesGroup {
             }
         }
         return this.cellGlowNear = {id, warm, cool: coolCells, warmReach}
+    }
+    // TASK-1315: per cell (board index) the other cells whose building's sprite (as drawn in view and as a fog landmark) or
+    // shadow (atmosphericLighting.shadowBounds, its lamps the board's now) reaches the cell's hexagon: fog a move uncovers
+    // or hides there draws or hides them (drawEntityBodies, drawShadows), so the cell's sprite variant holds it. Kept for
+    // the board's size, hex radius, buildings and lamps.
+    cellBuildingReach() {
+        const w = this.arr.length, h = this.arr[0].length, L = atmosphericLighting, {sources} = L.collect(this, false, false)
+        let id = w + 'x' + h + ',' + basis.r + ',' + basis.offset.x + ',' + basis.offset.y + '|' +
+            sources.map(s => s.x + ',' + s.y + s.name).join(';') + '|'
+        const casters = []
+        for (let i = 0; i < w; ++i) {
+            for (let j = 0; j < h; ++j) {
+                const building = this.arr[i][j].building
+                if (!building.notEmpty() || building.isMapEdge || !building.pos)
+                    continue
+                const images = [...new Set([cachedImages[this.getEntityBodyImageName(building)], cachedImages[building.bodyImageName]])]
+                    .filter(image => image && image.width)
+                if (!images.length)
+                    continue
+                id += i * h + j + ':' + this.getEntityBodyImageName(building) + ':' + building.pos.x + ',' + building.pos.y + ';'
+                casters.push({i, j, building, images})
+            }
+        }
+        if (this.cellReach?.id === id)
+            return this.cellReach.cells
+        const cells = Array.from({length: w * h}, () => [])
+        const ox = basis.offset.x, oy = basis.offset.y, hex = 1.1 * basis.r
+        for (const {i, j, building, images} of casters) {
+            const pos = this.arr[i][j].hexagon.calcPos(), box = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity}
+            const add = q => {
+                box.x0 = Math.min(box.x0, q.x0); box.y0 = Math.min(box.y0, q.y0); box.x1 = Math.max(box.x1, q.x1); box.y1 = Math.max(box.y1, q.y1)
+            }
+            for (const image of images) {
+                add({x0: building.pos.x, y0: building.pos.y, x1: building.pos.x + image.width, y1: building.pos.y + image.height})
+                if (L.castsShadow(this, i, j, building, true))
+                    add(L.shadowBounds(building, image, pos, sources))
+            }
+            const a0 = Math.max(0, Math.floor((box.x0 - hex) / ox)), a1 = Math.min(w - 1, Math.ceil((box.x1 + hex) / ox))
+            for (let a = a0; a <= a1; ++a) {
+                const b0 = Math.max(0, Math.floor(((box.y0 - hex) / oy - (a & 1)) / 2)), b1 = Math.min(h - 1, Math.ceil(((box.y1 + hex) / oy - (a & 1)) / 2))
+                for (let b = b0; b <= b1; ++b) {
+                    const cx = a * ox, cy = (2 * b + (a & 1)) * oy
+                    if ((a !== i || b !== j) && cx + hex > box.x0 && cx - hex < box.x1 && cy + hex > box.y0 && cy - hex < box.y1)
+                        cells[a * h + b].push(i * h + j)
+                }
+            }
+        }
+        this.cellReach = {id, cells}
+        return cells
+    }
+    // The surface states (getSurfaceStateValue, not observed) of the board's cells now, in board order: a cell layer's
+    // sprites are those of its states (layer.states), followCellLayer compares them.
+    // fn run with the cells' building reach found once (cellBuildingReach), for its many cellLayerKey calls.
+    withCellReach(fn) {
+        if (this.cellReachPass)
+            return fn()
+        this.cellReachPass = this.cellBuildingReach()
+        try {
+            return fn()
+        } finally {
+            this.cellReachPass = undefined
+        }
+    }
+    cellLayerStates() {
+        const h = this.arr[0].length, states = new Uint16Array(this.arr.length * h)
+        for (let i = 0, index = 0; i < this.arr.length; ++i)
+            for (let j = 0; j < h; ++j, ++index)
+                states[index] = this.getSurfaceStateValue(i, j, false)
+        return states
+    }
+    // TASK-1315 (Grid.liveCellLayer): a frame drawing the surface cache (which 'surface') or the lit view's rest snapshot
+    // ('lit') with its cell layer (each matching the board but in its cells' owner colour, suburb and fog,
+    // surfaceStateMatches) first brings the layer up to the board when a cell's surface state is not the one the layer was
+    // drawn for (layer.states): refreshCellLayer draws the changed variants' sprites (kept, or rendered once), never a
+    // cache or snapshot build or patch. A layer brought up takes the board's states; so does its raster's captured state
+    // (the cache's, or the lit view's, whose tiles, drawn for its old state, are released and whose lit edges are found
+    // again), so the exact comparisons of a build, patch or rest snapshot under way hold. During a patch the layer waits
+    // (the patch draws every changed cell, patchSurfaceCache); a layer that cannot be brought up otherwise (a light map at
+    // another scale) has its cache dropped (rebuilt between frames) or its view dropped. Returns whether the frame can draw it.
+    followCellLayer(which) {
+        if (!this.cellLayerOn())
+            return true
+        const view = this.litView, layer = which === 'surface' ? this.surfaceCellLayer : this.litCellLayer
+        if (which === 'surface' ? !layer?.cells || layer.raster !== this.surfaceCache || !this.surfaceCache?.cellLayered :
+                !layer?.cells || !view?.rest || view.rest.cellLayer !== layer || layer.raster !== view.rest.canvas)
+            return true
+        const states = this.cellLayerStates(), old = layer.states
+        if (old && old.length === states.length && old.every((v, k) => v === states[k]))
+            return true
+        const job = which === 'surface' ? this.surfacePatchJob || this.surfaceCacheBuild : view.patch
+        if (job)
+            return true
+        const {failed} = this.refreshCellLayer(which)
+        if (failed.length) {
+            if (which === 'surface') {
+                this.surfaceCache = undefined
+                this.surfaceCacheDirty = true
+            }
+            else
+                this.dropLitView()
+            ++this.cellLayerFollowDrops
+            return false
+        }
+        layer.states = states
+        const overlayCells = this.surfaceOverlayCells
+        if (which === 'surface') {
+            this.surfaceOverlayCells = []
+            try {
+                this.captureSurfaceState()
+            } finally {
+                this.surfaceOverlayCells = overlayCells
+            }
+        }
+        else {
+            this.withLitState(view, () => this.captureSurfaceState())
+            Object.assign(view, this.litEdges(view))
+            for (const tile of view.tiles.values())
+                this.releaseLitTile(tile)
+            view.tiles.clear()
+        }
+        return true
     }
     // The sprite of cell for its variant now (cellLayerKey), its mask pixels taken from source (the split canvas, drawn
     // whole there, or a render of the variant, renderCellSprites), kept in layer.sprites; the cell takes the variant.
@@ -944,15 +1122,21 @@ class Grid extends SpritesGroup {
     // The cache and the snapshot themselves and their state are left as they are; a variant rendered draws with the light
     // map brought up to the owners now where they differ (atmosphericLighting.syncOwners, in its lightMap: the territory
     // glow, TASK-1314), which no frame draws from. Returns {cells: the cells redrawn, rendered: sprites rendered, failed:
-    // layers whose variants could not be rendered (a patch under way, a light map not the raster's)}.
-    refreshCellLayer() {
+    // layers whose variants could not be rendered (a patch under way, a light map not the raster's)}. TASK-1315: each frame
+    // drawing a layer calls it for a board change (followCellLayer); its key also holds the fog of the buildings reaching the
+    // cell (cellBuildingReach).
+    // which: only that layer ('surface' or 'lit'), else both.
+    refreshCellLayer(which) {
+        return this.withCellReach(() => this.refreshCellLayerNow(which))
+    }
+    refreshCellLayerNow(which) {
         const result = {cells: 0, rendered: 0, failed: []}
         const layers = []
         const surface = this.surfaceCellLayer
-        if (surface?.cells && this.surfaceCache === surface.raster && this.surfaceCache.cellLayered)
+        if (which !== 'lit' && surface?.cells && this.surfaceCache === surface.raster && this.surfaceCache.cellLayered)
             layers.push(['surface', surface, region => this.renderSurfaceCellSprites(region)])
         const view = this.litView, lit = this.litCellLayer
-        if (lit?.cells && view?.rest && view.rest.cellLayer === lit && lit.raster === view.rest.canvas)
+        if (which !== 'surface' && lit?.cells && view?.rest && view.rest.cellLayer === lit && lit.raster === view.rest.canvas)
             layers.push(['lit', lit, region => this.renderLitCellSprites(view, region)])
         for (const [name, layer, render] of layers) {
             const changed = layer.cells.filter(c => c.key !== this.cellLayerKey(c.i, c.j))
@@ -1132,7 +1316,11 @@ class Grid extends SpritesGroup {
     // changes (an array, ctx undefined): every cell is compared and the index of each cell that
     // differs is pushed on it instead of returning false at the first (patchSurfaceCache); false
     // then only for a difference of the whole board (size, visuals, hex radius).
-    surfaceStateMatches(ctx, changes) {
+    // TASK-1315: a cache drawn with the cell layer (surfaceCacheLayered, Grid.liveCellLayer) holds no owner colour, suburb or
+    // fog of a known cell (its sprites do, followCellLayer): only whether each cell is known is compared of its surface
+    // state (a hidden-information reveal), so a move, undo, capture or suburb purchase matches. exact: the whole state
+    // compared all the same (a build or patch under way, or a lit view still drawing, reads the board as it draws).
+    surfaceStateMatches(ctx, changes, exact = false) {
         // The light state (atmosphericLighting.lightState) is compared cell by cell in the same pass.
         const lighting = this.surfaceCacheLighting
         if (!lighting || lighting.length != this.arr.length * this.arr[0].length + 1 ||
@@ -1167,9 +1355,13 @@ class Grid extends SpritesGroup {
         const inert = this.surfaceCacheInert, inertUnits = this.surfaceCacheInertUnits, inertBuildings = this.surfaceCacheInertBuildings
         const natureNames = this.surfaceCacheNatureNames
         const range = observing || changes ? this.checkRange() : this.checkRange(ctx), h = this.arr[0].length
+        // With the cell layer only a cell's being known (its state's colour part not 0) is compared (sameState).
+        const masked = !exact && !!this.surfaceCacheLayered
+        const sameState = masked ? (a, b) => !(a >> 2) === !(b >> 2) : (a, b) => a == b
         // Visibility is compared on the whole board all the same (each cell's fog bit, a typed
-        // array read): a cell hidden or uncovered anywhere rebuilds the cache, as it always has.
-        if (isFogOfWar && (range.i0 > 0 || range.i1 < this.arr.length || range.j0 > 0 || range.j1 < h)) {
+        // array read): a cell hidden or uncovered anywhere rebuilds the cache, as it always has
+        // (with the cell layer fog is its sprites').
+        if (isFogOfWar && !masked && (range.i0 > 0 || range.i1 < this.arr.length || range.j0 > 0 || range.j1 < h)) {
             for (let i = 0; i < this.arr.length; ++i) {
                 const fogRow = this.fogOfWar[i], inside = i >= range.i0 && i < range.i1
                 for (let j = 0, index = i * h; j < h; ++j, ++index) {
@@ -1205,8 +1397,8 @@ class Grid extends SpritesGroup {
                 if (kind !== 0 && !observing && (sameUnit || atmospheric) && cell.building === inertBuildings[index] &&
                         (kind < 3 || cell.building.name === natureNames[index])) {
                     const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
-                    if (states[index] != this.surfaceStateOf(hexagon, shown) ||
-                        lighting[index + 1] !== (!atmospheric || !shown || kind === 2 || hexagon.unknown ? 0 :
+                    if (!sameState(states[index], this.surfaceStateOf(hexagon, shown)) ||
+                        lighting[index + 1] !== (!atmospheric || !shown && !ownerFree || kind === 2 || hexagon.unknown ? 0 :
                             1 + atmosphericLighting.ownerLight(hexagon, ownerFree)) ||
                         kind >= 3 && buildingImages[index] != cachedImages[natureNames[index]]) {
                         if (differs(index))
@@ -1219,8 +1411,8 @@ class Grid extends SpritesGroup {
                 }
                 if (!observing && cell.unit.constructor === Empty && this.isInertBuilding(cell.building)) {
                     const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
-                    if (states[index] != this.surfaceStateOf(hexagon, shown) ||
-                        lighting[index + 1] !== (!atmospheric || !shown || hexagon.unknown ? 0 :
+                    if (!sameState(states[index], this.surfaceStateOf(hexagon, shown)) ||
+                        lighting[index + 1] !== (!atmospheric || !shown && !ownerFree || hexagon.unknown ? 0 :
                             atmosphericLighting.shownLightValue(hexagon, cell.building, ownerFree)) ||
                         buildings[index] !== undefined || !atmospheric && units[index] !== undefined) {
                         if (differs(index))
@@ -1235,7 +1427,7 @@ class Grid extends SpritesGroup {
                     cell.building : undefined
                 const unit = atmospheric ? undefined : this.getStillUnit(cell)
                 if (buildings[index] != building || !atmospheric && units[index] != unit ||
-                    states[index] != this.getSurfaceStateValue(i, j, observing) ||
+                    !sameState(states[index], this.getSurfaceStateValue(i, j, observing)) ||
                     lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, observing, ownerFree) ||
                     buildingImages[index] != (building ?
                         cachedImages[this.getEntityBodyImageName(building)] : undefined) ||
@@ -1493,14 +1685,15 @@ class Grid extends SpritesGroup {
         return build.atmospheric === otherSettings.atmosphericVisuals && build.left === mapDepth.bounds.left &&
             build.top === mapDepth.bounds.top && geometry.scale === build.geometry.scale &&
             geometry.cacheWidth === build.geometry.cacheWidth && geometry.cacheHeight === build.geometry.cacheHeight &&
-            this.withLitState(build, () => this.surfaceStateMatches())
+            this.withLitState(build, () => this.surfaceStateMatches(undefined, undefined, true))
     }
     // Whether the surface cache matches the whole board (not only a view's cells).
-    wholeSurfaceMatches() {
+    // exact: as surfaceStateMatches'.
+    wholeSurfaceMatches(exact = false) {
         const overlayCells = this.surfaceOverlayCells
         this.surfaceOverlayCells = []
         try {
-            return this.surfaceStateMatches()
+            return this.surfaceStateMatches(undefined, undefined, exact)
         } finally {
             this.surfaceOverlayCells = overlayCells
         }
@@ -1533,7 +1726,7 @@ class Grid extends SpritesGroup {
             return false
         const job = this.surfacePatchJob
         if (job) {
-            if (job.canvas === this.surfaceCache && this.withLitState(job, () => this.wholeSurfaceMatches()))
+            if (job.canvas === this.surfaceCache && this.withLitState(job, () => this.wholeSurfaceMatches(true)))
                 return true
             // The board changed again: started over from the cache's own state.
             this.surfacePatchJob = undefined
@@ -1555,6 +1748,12 @@ class Grid extends SpritesGroup {
         let matches
         try {
             matches = this.surfaceStateMatches(undefined, changes)
+            // With the cell layer a patch (a hidden-information reveal, a lamp, a building) also redraws the cells only its
+            // layer would (owner colour, suburb, fog: the whole state compared), so its frames draw them all new.
+            if (matches && changes.length && this.surfaceCacheLayered) {
+                changes.length = 0
+                matches = this.surfaceStateMatches(undefined, changes, true)
+            }
         } finally {
             this.surfaceOverlayCells = overlayCells
         }
@@ -1627,7 +1826,7 @@ class Grid extends SpritesGroup {
         if (job.ran === this.drawSerial)
             return
         job.ran = this.drawSerial
-        if (job.canvas !== this.surfaceCache || this.surfaceCacheBuild || !this.withLitState(job, () => this.wholeSurfaceMatches())) {
+        if (job.canvas !== this.surfaceCache || this.surfaceCacheBuild || !this.withLitState(job, () => this.wholeSurfaceMatches(true))) {
             this.surfacePatchJob = undefined
             this.surfaceCacheDirty = true
             return
@@ -1783,6 +1982,9 @@ class Grid extends SpritesGroup {
             else if (!this.createSurfaceCache())
                 return false
         }
+        // Its cell layer brought up to the board's owner colours, suburbs and fog (TASK-1315).
+        if (!this.followCellLayer('surface'))
+            return false
 
         const visibleLeft = Math.max(this.surfaceCacheBounds.left, canvas.offset.x)
         const visibleTop = Math.max(this.surfaceCacheBounds.top, canvas.offset.y)
@@ -1822,7 +2024,7 @@ class Grid extends SpritesGroup {
         const job = this.surfacePatchJob
         if (!job)
             return this.surfaceStateMatches(ctx)
-        if (!this.withLitState(job, () => this.surfaceStateMatches(ctx)))
+        if (!this.withLitState(job, () => this.surfaceStateMatches(ctx, undefined, true)))
             return false
         this.surfaceOverlayCells.length = 0
         this.surfaceOverlayCells.push(...job.overlayCells)
@@ -2348,6 +2550,9 @@ class Grid extends SpritesGroup {
             }
             view = this.litView = this.newLitView(t, ctx.canvas)
         }
+        // The rest snapshot's cell layer brought up to the board (TASK-1315); a view dropped for it is made again.
+        if (!this.followCellLayer('lit'))
+            view = this.litView = this.newLitView(t, ctx.canvas)
         const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
         return {t, view, rest: rest && rest.done === LIT_REST_BANDS ? rest : null}
     }
@@ -2380,7 +2585,7 @@ class Grid extends SpritesGroup {
             return false
         }
         const job = view.patch
-        if (job && this.withLitState(job, () => this.surfaceStateMatches(ctx)))
+        if (job && this.withLitState(job, () => this.surfaceStateMatches(ctx, undefined, true)))
             return true
         view.patch = undefined
         return this.startLitPatch(view, rest)
@@ -2393,7 +2598,12 @@ class Grid extends SpritesGroup {
             const overlayCells = this.surfaceOverlayCells
             this.surfaceOverlayCells = []
             try {
-                return this.surfaceStateMatches(undefined, changes)
+                // With the cell layer, as patchSurfaceCache: a patch redraws every changed cell.
+                const matches = this.surfaceStateMatches(undefined, changes)
+                if (!matches || !changes.length || !this.surfaceCacheLayered)
+                    return matches
+                changes.length = 0
+                return this.surfaceStateMatches(undefined, changes, true)
             } finally {
                 this.surfaceOverlayCells = overlayCells
             }
@@ -2599,7 +2809,7 @@ class Grid extends SpritesGroup {
     litViewHolds(ctx, view, t) {
         return view.a === t.a && view.d === t.d && view.rebuilds === atmosphericLighting.rebuilds &&
             view.mapScale === atmosphericLighting.mapScale &&
-            this.withLitState(view, () => this.surfaceStateMatches(ctx))
+            this.withLitState(view, () => this.surfaceStateMatches(ctx, undefined, !view.rest || view.rest.done !== LIT_REST_BANDS))
     }
     // A building under construction drawn on ctx's canvas (not fogged, not observed).
     constructionInView(ctx) {
@@ -3421,6 +3631,9 @@ Grid.surfacePatching = true
 // view's rest snapshot, in a cell layer of per-cell variant sprites added over them (Grid.splitCellLayer, refreshCellLayer).
 // With it the light state holds no owner (TASK-1314, atmosphericLighting.ownerFree): the sprites hold the territory glow.
 Grid.liveCellLayer = false
+// TASK-1315: how far off the board (hex radii, plus the slab's depth and shadow) the cells at its side hold the pixels
+// nearest them in the cell layer (Grid.cellLayerCells).
+const CELL_LAYER_EDGE_REACH = 0.5
 // Hex radii beyond a hexagon and the glow's reach within which an owner's glow counts in a cell's variant (Grid.cellGlowCells).
 const CELL_GLOW_MARGIN = 0.5
 // Patch margins round a surface cache variant render (Grid.renderSurfaceCellSprites): with one, the fog's edge where it meets

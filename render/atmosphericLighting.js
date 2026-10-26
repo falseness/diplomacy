@@ -253,8 +253,10 @@ const atmosphericLighting = {
     lightValue(board, cell, observing = true, free = this.ownerFree(board)) {
         if (!otherSettings.atmosphericVisuals) return 0
         const {x, y} = cell.coord
-        // As collect: never inspect a hidden building, including public fog landmarks.
-        if (isFogOfWar && !board.fogOfWar[x][y]) return 0
+        // As collect: never inspect a hidden building, including public fog landmarks. With the cell layer (free) a known
+        // fogged cell has a lit cell's value without a lamp (the same as in view): its sprites hold the fog and the light
+        // map's stone under it (ownerState), so fog a move uncovers or hides changes no light state; a lamp still does.
+        if (isFogOfWar && !board.fogOfWar[x][y]) return free && !cell.hexagon.unknown && !cell.building?.isMapEdge ? 1 : 0
         const hex = (observing && board.observedHexagon(cell)) || cell.hexagon
         if (hex.unknown) return 0
         const observation = observing && board.observedBuilding(cell)
@@ -281,14 +283,21 @@ const atmosphericLighting = {
         return typeof Grid !== 'undefined' && Grid.liveCellLayer === true && !!board?.cellLayerOn?.()
     },
     // The owners the light map draws (collect's cells' owner: the territory glow and the stone clip): per cell (lightState's
-    // order, after basis.r) 0, or the owner colour of an owned cell collect lists, in a reused array.
+    // order, after basis.r) 0, or the owner colour of an owned cell collect lists, or with the cell layer -1 for a known
+    // fogged cell (collect leaves it out), in a reused array.
     ownerState(board) {
         const w = board.arr.length, h = w ? board.arr[0].length : 0
         let state = this.ownerStateScratch
         if (!state || state.length !== w * h + 1) state = this.ownerStateScratch = new Float64Array(w * h + 1)
         state[0] = otherSettings.atmosphericVisuals ? basis.r : 0
         let k = 0
-        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) state[++k] = this.ownerValue(board, board.arr[i][j])
+        const free = this.ownerFree(board)
+        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) {
+            const cell = board.arr[i][j]
+            // With the cell layer a known fogged cell is -1: not collected (no stone light there), redrawn when it changes.
+            state[++k] = free && isFogOfWar && !board.fogOfWar[i][j] && !cell.hexagon.unknown && !cell.building?.isMapEdge ? -1 :
+                this.ownerValue(board, cell)
+        }
         return state
     },
     // A cell's ownerState entry (as collect: in view, known, no map edge; the board's own hexagon, the cell layer being off
@@ -302,7 +311,7 @@ const atmosphericLighting = {
     // The reach (world units) of the territory glow of an owner colour (0: none): TERRITORY's, the cool spill's for an owner
     // bluer than red (territoryGlow).
     glowReach(colour) {
-        if (!colour) return 0
+        if (!(colour > 0)) return 0
         const owner = typeof players !== 'undefined' ? players[colour]?.color : null, {reach, cool} = this.TERRITORY
         return Math.max(reach, !owner || cool && (cool.map || cool.gain) && owner.b > owner.r ? cool.reach : 0) * basis.r
     },
