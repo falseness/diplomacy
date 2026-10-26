@@ -119,9 +119,13 @@ class EntityInterface {
             if (panel && panel.visible && panel.pos && panel.pos.y + panel.height > this.pos.y)
                 room = Math.min(room, panel.pos.x)
         const margin = 0.04 * this.height
-        const right = Math.max(this.entity.info.right, this.entity.name.right)
+        let right = Math.max(this.entity.info.right, this.entity.name.right)
         if (right + margin > room)
             this.layoutColumn(Math.max(0.25, (room - margin - this.pos.x) / (right - this.pos.x)))
+        // Rows made smaller for the skip moves button at scale 1 (layoutColumn) are not at this scale: fit once more.
+        right = Math.max(this.entity.info.right, this.entity.name.right)
+        if (right + margin > room && this.columnScale > 0.25)
+            this.layoutColumn(Math.max(0.25, this.columnScale * (room - margin - this.pos.x) / (right - this.pos.x)))
         return this.columnScale !== scale
     }
     layoutColumn(scale) {
@@ -134,6 +138,11 @@ class EntityInterface {
         this.entity.name.fontSize = h * 0.2 * scale
         this.entity.info.fontSize = h * 0.1 * scale
         this.entity.info.pos.y = this.entity.name.y + this.entity.name.height
+        // A unit panel whose rows would reach its skip moves button (a siege demon's seven) gets a smaller row font.
+        const rows = this.entity.info.text.split('\n').length
+        const room = this.skipMovesButton.y - this.entity.info.pos.y
+        if (this.skipMovesButton.canClick && rows * this.entity.info.fontSize > room)
+            this.entity.info.fontSize = room / rows
         for (const button of [this.destroyButton, this.skipMovesButton, this.portalStatsButton, this.portalBackButton])
             button.x = this.entity.name.x
     }

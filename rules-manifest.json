@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "1430433e6b132e955aab62b8fc39dadf4773bc1993cb9976971c27765272f12e",
+  "rulesVersion": "68b40047f2d1b532aa02ddef8c9bc1a7a6d4711903d2be0c103f054faabc616a",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "2ddbd381bcb9a5b11aaccbdf67ddff06917c850e1468633fb0bd94ad25218775",
-      "bytes": 14597
+      "sha256": "ee5fe0ee06de081d3f5537c43b9f7230732d4b602c57bd248ba77a7281333faa",
+      "bytes": 15354
     },
     {
       "path": "interface/barrackinterface.js",
@@ -365,8 +365,8 @@
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/rangeUnit.js",
-      "sha256": "4d62a2a03253a9a92052c609c81b7173509e1dfef773c9dac6de62542b48663a",
-      "bytes": 517
+      "sha256": "288877fcb800a77c506e9a4e06001b74b59056aea31fea21520f7efdf08f4d3c",
+      "bytes": 555
     },
     {
       "path": "sprites/entities/units/range/archer/interactionWithArcher.js",
@@ -375,8 +375,8 @@
     },
     {
       "path": "sprites/entities/units/range/archer/archer.js",
-      "sha256": "b502b97e190993b61577fdead9d22bdfedfa101002abd094f044ac46f7e9c623",
-      "bytes": 564
+      "sha256": "3e40aa9fd481ec3c46817a335091d50467d2d8f3f1bd9159590af302bd2bcf68",
+      "bytes": 965
     },
     {
       "path": "sprites/entities/units/range/earlyRangedDemons.js",
@@ -395,8 +395,8 @@
     },
     {
       "path": "sprites/entities/units/range/catapult/catapult.js",
-      "sha256": "b5c7d80b2c48a5edbbdc473538ad1d11699965db741bcddfb429b5b5669c7623",
-      "bytes": 1988
+      "sha256": "473a5c422f9cbb600d1634ba29b77ed10f3e63b3b701d73263c4ad89f2cf27b6",
+      "bytes": 1956
     },
     {
       "path": "sprites/entities/buildings/building.js",

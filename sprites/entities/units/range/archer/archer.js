@@ -13,6 +13,14 @@ class Archer extends RangeUnit {
         super.nextTurn()
         this.interaction.updateRange(this)
     }
+    // The attack range on this cell: base, or 'base + increase' on a hill, tower or town (InteractionWithArcher.updateRange).
+    get info() {
+        const unit = super.info
+        const increase = grid.getBuilding(this.coord)?.rangeIncrease || 0
+        if (increase > 0)
+            unit.info.range = (this.range + increase) + ' (' + this.range + ' + ' + increase + ')'
+        return unit
+    }
     get onHill() {
         return grid.getBuilding(this.coord).rangeIncrease
     }

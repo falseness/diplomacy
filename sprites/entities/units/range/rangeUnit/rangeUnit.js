@@ -12,9 +12,9 @@ class RangeUnit extends Unit {
         return res
     }
     get info() {
+        // Every ranged unit's panel shows its range, own or foreign.
         let unit = super.info
-        if (!this.isMyTurn)
-            unit.info.range = this.range
+        unit.info.range = this.range
         return unit
     }
     get range() {
