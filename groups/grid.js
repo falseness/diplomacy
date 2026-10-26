@@ -125,6 +125,8 @@ class Grid extends SpritesGroup {
         this.cellSpriteDraws = 0
         this.cellLayerRefreshes = 0
         this.cellLayerVariantRenders = 0
+        // Refreshes that changed a layer (overlayCompositeKey).
+        this.cellLayerRevision = 0
         // The surface cache built between frames (prepareSurfaceCache): the build in progress,
         // whether a stage is queued, when the cache was last compared with the whole board,
         // whether a frame found it not matching, stages run (a count) and a 1x1 canvas the
@@ -765,8 +767,10 @@ class Grid extends SpritesGroup {
         }
         return {cells, image, box: cells.length ? pixelRect(bx0, by0, bx1, by1, W, H) : null}
     }
-    // A cell's variant in the cell layer: its surface state (owner colour, suburb, fog), its building's cached image, and the
-    // surface states of the cells round it (their tiles' antialiased edges and their fog reach its pixels).
+    // A cell's variant in the cell layer: its surface state (owner colour, suburb, fog), its building's cached image, the
+    // surface states of the cells round it (their tiles' antialiased edges and their fog reach its pixels), and (TASK-1314)
+    // the owners whose territory glow reaches it (cellGlowCells: the light map's owners there, atmosphericLighting.ownerValue,
+    // the cool spill's only for an owner bluer than red), so a capture gives every cell its glow reaches a new variant.
     cellLayerKey(i, j) {
         const cell = this.arr[i][j], building = this.isCacheableBuilding(cell.building) ? cell.building : undefined
         let key = this.getSurfaceStateValue(i, j, false) + ':' + (building ? this.getEntityBodyImageName(building) : '')
@@ -774,7 +778,48 @@ class Grid extends SpritesGroup {
             const row = this.arr[i + di], other = row && row[j + dj]
             key += ',' + (other ? this.getSurfaceStateValue(i + di, j + dj, false) : '-')
         }
+        const L = atmosphericLighting, near = this.cellGlowCells(), h = this.arr[0].length, index = i * h + j
+        key += '|'
+        for (const [list, cool] of [[near.warm[index], false], [near.cool[index], true]]) {
+            for (const k of list) {
+                const q = Math.floor(k / h), owner = L.ownerValue(this, this.arr[q][k - q * h])
+                if (owner && (!cool || L.glowReach(owner) > near.warmReach))
+                    key += k + ':' + owner + ';'
+            }
+        }
         return key
+    }
+    // Per cell (board index) the cells whose territory glow can reach its hexagon (centres within the glow's reach plus a
+    // hexagon and CELL_GLOW_MARGIN radii, for the light map's sampling): warm, within TERRITORY's reach; cool, beyond it within
+    // the cool spill's. Kept for the board's size and hex radius.
+    cellGlowCells() {
+        const w = this.arr.length, h = this.arr[0].length, r = basis.r, {reach, cool} = atmosphericLighting.TERRITORY
+        const id = w + 'x' + h + ',' + r + ',' + basis.offset.x + ',' + basis.offset.y
+        if (this.cellGlowNear?.id === id)
+            return this.cellGlowNear
+        const warmReach = reach * r, coolReach = Math.max(reach, cool && (cool.map || cool.gain) ? cool.reach : 0) * r
+        const warmR = warmReach + (1 + CELL_GLOW_MARGIN) * r, coolR = coolReach + (1 + CELL_GLOW_MARGIN) * r
+        const ox = basis.offset.x, oy = basis.offset.y, di = Math.ceil(coolR / ox), dj = Math.ceil(coolR / (2 * oy)) + 1
+        const warm = [], coolCells = []
+        for (let i = 0; i < w; ++i) {
+            for (let j = 0; j < h; ++j) {
+                const cx = i * ox, cy = (2 * j + (i & 1)) * oy, near = [], far = []
+                for (let a = Math.max(0, i - di); a < Math.min(w, i + di + 1); ++a) {
+                    for (let b = Math.max(0, j - dj); b < Math.min(h, j + dj + 1); ++b) {
+                        if (a === i && b === j)
+                            continue
+                        const d = Math.hypot(a * ox - cx, (2 * b + (a & 1)) * oy - cy)
+                        if (d <= warmR)
+                            near.push(a * h + b)
+                        else if (d <= coolR)
+                            far.push(a * h + b)
+                    }
+                }
+                warm.push(near)
+                coolCells.push(far)
+            }
+        }
+        return this.cellGlowNear = {id, warm, cool: coolCells, warmReach}
     }
     // The sprite of cell for its variant now (cellLayerKey), its mask pixels taken from source (the split canvas, drawn
     // whole there, or a render of the variant, renderCellSprites), kept in layer.sprites; the cell takes the variant.
@@ -896,9 +941,10 @@ class Grid extends SpritesGroup {
     // its sprite's gets the sprite of its variant now drawn into the layer (drawCellSprites, the region its box and its
     // neighbours'), the one kept from before (an undo, a capture taken back) or rendered once (renderCellSprites, on a patch
     // buffer: never the cache or the snapshot built or patched); the surface cache's shown canvas is composed there again.
-    // The cache and the snapshot themselves, their light map (the territory glow, TASK-1314) and their state are left as
-    // they are. Returns {cells: the cells redrawn, rendered: sprites rendered, failed: layers whose variants could not be
-    // rendered (a patch under way, a light map not the raster's)}.
+    // The cache and the snapshot themselves and their state are left as they are; a variant rendered draws with the light
+    // map brought up to the owners now where they differ (atmosphericLighting.syncOwners, in its lightMap: the territory
+    // glow, TASK-1314), which no frame draws from. Returns {cells: the cells redrawn, rendered: sprites rendered, failed:
+    // layers whose variants could not be rendered (a patch under way, a light map not the raster's)}.
     refreshCellLayer() {
         const result = {cells: 0, rendered: 0, failed: []}
         const layers = []
@@ -934,11 +980,14 @@ class Grid extends SpritesGroup {
                 this.composeCellLayer(this.surfaceCacheShown, this.surfaceCache, layer, region)
             result.cells += changed.length
             ++this.cellLayerRefreshes
+            // What the frames draw under the overlays changed (overlayCompositeKey).
+            ++this.cellLayerRevision
         }
         return result
     }
-    // The light map as it is (the raster's: a cell's owner colour then lights nothing new, its territory glow TASK-1314's)
-    // for fn's drawing of the board now, when it is the map lightMap(board, cap) gives at this resolution; else null.
+    // The light map as it is (the raster's; with the cell layer its light state holds no owner, and lightMap brings its
+    // territory glow up to the owners now, syncOwners) for fn's drawing of the board now, when it is the map
+    // lightMap(board, cap) gives at this resolution; else null.
     withHeldLightMap(cap, fn) {
         const L = atmosphericLighting, bounds = mapDepth.surfaceBounds
         if (!L.map || !bounds || L.mapKey !== JSON.stringify(bounds) || L.mapScale !== L.resolution(bounds, cap))
@@ -951,16 +1000,16 @@ class Grid extends SpritesGroup {
             L.mapState = kept
         }
     }
-    // The board now drawn on the surface cache's patch buffer within the pixel rectangle rect (grown by the patch margin), as
-    // a patch draws it (drawSurfacePatchStage: SURFACE_CACHE_STAGES clipped, at the cache's transform) with the light map as
-    // it is (withHeldLightMap): the buffer, or null when no patch buffer is free.
+    // The board now drawn on the surface cache's patch buffer within the pixel rectangle rect (grown by CELL_RENDER_MARGIN
+    // patch margins), as a patch draws it (drawSurfacePatchStage: SURFACE_CACHE_STAGES clipped, at the cache's transform)
+    // with the light map as it is (withHeldLightMap): the buffer, or null when no patch buffer is free.
     renderSurfaceCellSprites(rect) {
         const canvas = this.surfaceCache, buffer = this.surfacePatchBuffer, b = this.surfaceCacheBounds
         if (this.surfacePatchJob || this.surfaceCacheBuild || !buffer || buffer.width !== canvas.width ||
                 buffer.height !== canvas.height || buffer.gradientSource !== canvas.getContext('2d'))
             return null
         const scale = this.surfaceCacheScale, W = canvas.width, H = canvas.height
-        const m = Math.max(SURFACE_PATCH_MARGIN_MIN, Math.ceil(SURFACE_PATCH_MARGIN * scale))
+        const m = CELL_RENDER_MARGIN * Math.max(SURFACE_PATCH_MARGIN_MIN, Math.ceil(SURFACE_PATCH_MARGIN * scale))
         const outer = pixelRect(rect.x - m, rect.y - m, rect.x + rect.w + m, rect.y + rect.h + m, W, H)
         const geometry = {scale, cacheWidth: b.width, cacheHeight: b.height}
         const job = {outer, scale, left: b.left, top: b.top, window: clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r),
@@ -1111,6 +1160,8 @@ class Grid extends SpritesGroup {
         const overlayCells = this.surfaceOverlayCells
         overlayCells.length = 0
         const observing = this.isObserving(), atmospheric = otherSettings.atmosphericVisuals
+        // With the cell layer the light values hold no owner (atmosphericLighting.ownerFree).
+        const ownerFree = atmosphericLighting.ownerFree(this)
         const states = this.surfaceCacheState, buildings = this.surfaceCacheBuildings, units = this.surfaceCacheUnits
         const buildingImages = this.surfaceCacheBuildingImages, unitImages = this.surfaceCacheUnitImages
         const inert = this.surfaceCacheInert, inertUnits = this.surfaceCacheInertUnits, inertBuildings = this.surfaceCacheInertBuildings
@@ -1156,7 +1207,7 @@ class Grid extends SpritesGroup {
                     const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
                         lighting[index + 1] !== (!atmospheric || !shown || kind === 2 || hexagon.unknown ? 0 :
-                            1 + atmosphericLighting.ownerLight(hexagon)) ||
+                            1 + atmosphericLighting.ownerLight(hexagon, ownerFree)) ||
                         kind >= 3 && buildingImages[index] != cachedImages[natureNames[index]]) {
                         if (differs(index))
                             return false
@@ -1170,7 +1221,7 @@ class Grid extends SpritesGroup {
                     const hexagon = cell.hexagon, shown = !fogRow || fogRow[j] ? 1 : 0
                     if (states[index] != this.surfaceStateOf(hexagon, shown) ||
                         lighting[index + 1] !== (!atmospheric || !shown || hexagon.unknown ? 0 :
-                            atmosphericLighting.shownLightValue(hexagon, cell.building)) ||
+                            atmosphericLighting.shownLightValue(hexagon, cell.building, ownerFree)) ||
                         buildings[index] !== undefined || !atmospheric && units[index] !== undefined) {
                         if (differs(index))
                             return false
@@ -1185,7 +1236,7 @@ class Grid extends SpritesGroup {
                 const unit = atmospheric ? undefined : this.getStillUnit(cell)
                 if (buildings[index] != building || !atmospheric && units[index] != unit ||
                     states[index] != this.getSurfaceStateValue(i, j, observing) ||
-                    lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, observing) ||
+                    lighting[index + 1] !== atmosphericLighting.lightValue(this, cell, observing, ownerFree) ||
                     buildingImages[index] != (building ?
                         cachedImages[this.getEntityBodyImageName(building)] : undefined) ||
                     !atmospheric && unitImages[index] != (unit ?
@@ -1627,10 +1678,11 @@ class Grid extends SpritesGroup {
     // The light map brought up to the board's light state for a patch whose changed cells' light rectangles are rects,
     // found against the light state stored (atmosphericLighting.updateMapRegion at cap's resolution), unless it has it
     // already (another patch brought it). Returns whether the map now has the board's light state.
+    // With the cell layer (light states without owners) a capture's glow is brought up as its owners (syncOwners).
     patchLightMap(rects, stored, cap) {
         const L = atmosphericLighting
         if (L.map && L.sameLightState(this, L.mapState))
-            return true
+            return L.syncOwners(this, cap)
         return L.updateMapRegion(this, cap, rects, stored)
     }
     // The world rectangles {x0, y0, x1, y1} the cells changes (board indices) draw on in the surface cache, as captured
@@ -1653,6 +1705,10 @@ class Grid extends SpritesGroup {
             const owner = typeof players !== 'undefined' ? players[(v >> 3) - 1]?.color : null
             return Math.max(warm, !owner || cool && (cool.map || cool.gain) && owner.b > owner.r ? cool.reach : 0) * r
         }
+        // With the cell layer the light values hold no owner (atmosphericLighting.ownerFree): a cell's owner then and now
+        // (its surface state's colour, as collect lists it: in view and known; ownerValue) gives its glow's reach.
+        const ownerFree = atmosphericLighting.ownerFree(this), states = this.surfaceCacheState
+        const ownerOf = v => (v & 1) && (v >> 2) > 1 ? (v >> 2) - 1 : 0
         const cells = [], light = [], sprites = []
         for (const index of changes) {
             const i = Math.floor(index / h), j = index - i * h, cell = this.arr[i][j], c = cell.hexagon.calcPos()
@@ -1690,6 +1746,14 @@ class Grid extends SpritesGroup {
                 images[index] || natureNames[index] && cachedImages[natureNames[index]] || image(before) : null
             if (shownBefore !== image(cell.building))
                 sprites.push(...mine)
+            if (ownerFree) {
+                const before = ownerOf(states[index]), after = atmosphericLighting.ownerValue(this, cell)
+                if (was === now && before === after)
+                    continue
+                const reach = Math.max(hex, atmosphericLighting.glowReach(before), atmosphericLighting.glowReach(after))
+                light.push({x0: c.x - reach, y0: c.y - reach, x1: c.x + reach, y1: c.y + reach})
+                continue
+            }
             if (was === now)
                 continue
             const reach = Math.max(hex, glow(was), glow(now))
@@ -1996,9 +2060,9 @@ class Grid extends SpritesGroup {
     // opaque sky) draw the same pixels frame after frame. Such a frame records its overlays (still units,
     // bars, production previews) and everything drawn after them (moving units, texts, borders) instead of
     // drawing them (CanvasCallRecorder), and drawOverlayComposite then draws them. When the calls and what
-    // lies under the overlays (overlayCompositeKey: transform, canvas, sky, slab shadow, surface cache) are
-    // those of an earlier frame with a snapshot, the frame draws the snapshot's rectangles over the overlays'
-    // pixels (the very pixels the calls drew there, with one drawImage a rectangle in place of every unit's
+    // lies under the overlays (overlayCompositeKey: transform, canvas, sky, slab shadow, surface cache and its cell layer,
+    // refreshCellLayer) are those of an earlier frame with a snapshot, the frame draws the snapshot's rectangles over the
+    // overlays' pixels (the very pixels the calls drew there, with one drawImage a rectangle in place of every unit's
     // bars and bodies), then the calls after the overlays. Otherwise it makes every call in order (the direct
     // draw), and a frame whose calls and key repeat the previous frame's queues the snapshot
     // (queueOverlaySnapshot, drawn in a task after the frame).
@@ -2020,7 +2084,7 @@ class Grid extends SpritesGroup {
     overlayCompositeKey(ctx, t) {
         const b = this.surfaceCacheBounds
         return [t.a, t.d, t.e, t.f, ctx.canvas.width, ctx.canvas.height, atmosphericBackground.raster, mapDepth.atmosphericShadow,
-            this.surfaceCache, this.surfaceCacheRevision, b.left, b.top, b.width, b.height]
+            this.surfaceCache, this.surfaceCacheRevision, b.left, b.top, b.width, b.height, this.cellLayerRevision]
     }
     drawOverlayComposite(ctx, recorder) {
         const last = this.overlayComposite
@@ -3355,7 +3419,14 @@ const SURFACE_PATCH_MARGIN_MIN = 32
 Grid.surfacePatching = true
 // TASK-1313 (off until TASK-1316): true keeps the cells' tiles, owner colours and fog out of the surface cache and the lit
 // view's rest snapshot, in a cell layer of per-cell variant sprites added over them (Grid.splitCellLayer, refreshCellLayer).
+// With it the light state holds no owner (TASK-1314, atmosphericLighting.ownerFree): the sprites hold the territory glow.
 Grid.liveCellLayer = false
+// Hex radii beyond a hexagon and the glow's reach within which an owner's glow counts in a cell's variant (Grid.cellGlowCells).
+const CELL_GLOW_MARGIN = 0.5
+// Patch margins round a surface cache variant render (Grid.renderSurfaceCellSprites): with one, the fog's edge where it meets
+// a rendered cell's corner came out up to 26 levels off the whole build at the fogged hot-seat board's opening fit (scale
+// 0.24, test-cell-layer glow: 2 pixels at 12 and 15 levels in the frame); with four, at most 3 (TASK-1314).
+const CELL_RENDER_MARGIN = 4
 // Whether the surface cache stands in for the lit view's light map and tiles while they are built over frames
 // (Grid.litStandIn): drawn magnified until the light map is built (and on a phone in a zoom gesture, where the direct draw
 // costs about three times a cached frame), and over a tile not built yet. False: a frame builds what it draws (the light

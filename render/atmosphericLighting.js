@@ -199,6 +199,7 @@ const atmosphericLighting = {
         this.layerKey = ''
         this.mapKey = ''
         this.mapState = null
+        this.mapOwners = null
         this.staged = null
     },
     // range (board.drawRange) limits the walk to those cells.
@@ -242,13 +243,14 @@ const atmosphericLighting = {
         let state = this.lightStateScratch
         if (!state || state.length !== w * h + 1) state = this.lightStateScratch = new Float64Array(w * h + 1)
         state[0] = otherSettings.atmosphericVisuals ? basis.r : 0
+        const free = this.ownerFree(board)
         let k = 0
-        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) state[++k] = this.lightValue(board, board.arr[i][j])
+        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) state[++k] = this.lightValue(board, board.arr[i][j], true, free)
         return state
     },
     // One cell's lightState entry (grid.surfaceStateMatches compares them in its own cell pass).
-    // observing: false when board.isObserving() is (nothing observed then).
-    lightValue(board, cell, observing = true) {
+    // observing: false when board.isObserving() is (nothing observed then). free: ownerFree(board).
+    lightValue(board, cell, observing = true, free = this.ownerFree(board)) {
         if (!otherSettings.atmosphericVisuals) return 0
         const {x, y} = cell.coord
         // As collect: never inspect a hidden building, including public fog landmarks.
@@ -257,18 +259,82 @@ const atmosphericLighting = {
         if (hex.unknown) return 0
         const observation = observing && board.observedBuilding(cell)
         const building = observation ? onlineObservation.buildings.get(x + ',' + y)?.sprite : cell.building
-        return this.shownLightValue(hex, building)
+        return this.shownLightValue(hex, building, free)
     },
     // lightValue of a cell in view (not fogged) whose shown hexagon hex is known, with building.
-    shownLightValue(hex, building) {
+    shownLightValue(hex, building, free = this.ownerFree()) {
         if (building?.isMapEdge) return 0
         const emitsLight = building && !building.killed && this.emitsLight(building)
         const kind = emitsLight ? this.LAMP_KINDS.indexOf(building.isDemonPortal ? 'demonPortal' : building.name) : 0
-        return 1 + 2 * kind + this.ownerLight(hex)
+        return 1 + 2 * kind + this.ownerLight(hex, free)
     },
-    // The owner's part of shownLightValue (hex known).
-    ownerLight(hex) {
-        return hex.playerColor && hex.player?.color ? 8 * (hex.playerColor + 1) : 0
+    // The owner's part of shownLightValue (hex known): none with the cell layer (free, ownerFree), whose sprites hold the
+    // owner colour and the territory glow (Grid.cellLayerKey), so a capture leaves the light state as it is.
+    ownerLight(hex, free = this.ownerFree()) {
+        return !free && hex.playerColor && hex.player?.color ? 8 * (hex.playerColor + 1) : 0
+    },
+    // TASK-1314: whether board (the game's) is drawn with the cell layer (Grid.liveCellLayer, Grid.cellLayerOn). Then the
+    // light state holds no owner: the light map is not rebuilt or patched for a capture; the per-cell sprites of the cell
+    // layer hold each cell's owner colour and the territory glow on it (their key: the owners whose glow reaches the cell,
+    // Grid.cellLayerKey), rendered with a light map brought up to the owners now (syncOwners) when a variant is new.
+    ownerFree(board = typeof grid !== 'undefined' ? grid : null) {
+        return typeof Grid !== 'undefined' && Grid.liveCellLayer === true && !!board?.cellLayerOn?.()
+    },
+    // The owners the light map draws (collect's cells' owner: the territory glow and the stone clip): per cell (lightState's
+    // order, after basis.r) 0, or the owner colour of an owned cell collect lists, in a reused array.
+    ownerState(board) {
+        const w = board.arr.length, h = w ? board.arr[0].length : 0
+        let state = this.ownerStateScratch
+        if (!state || state.length !== w * h + 1) state = this.ownerStateScratch = new Float64Array(w * h + 1)
+        state[0] = otherSettings.atmosphericVisuals ? basis.r : 0
+        let k = 0
+        for (let i = 0; i < w; ++i) for (let j = 0; j < h; ++j) state[++k] = this.ownerValue(board, board.arr[i][j])
+        return state
+    },
+    // A cell's ownerState entry (as collect: in view, known, no map edge; the board's own hexagon, the cell layer being off
+    // for an observed board).
+    ownerValue(board, cell) {
+        if (!otherSettings.atmosphericVisuals) return 0
+        const {x, y} = cell.coord, hex = cell.hexagon
+        if (isFogOfWar && !board.fogOfWar[x][y] || hex.unknown || cell.building?.isMapEdge) return 0
+        return hex.playerColor && hex.player?.color ? hex.playerColor : 0
+    },
+    // The reach (world units) of the territory glow of an owner colour (0: none): TERRITORY's, the cool spill's for an owner
+    // bluer than red (territoryGlow).
+    glowReach(colour) {
+        if (!colour) return 0
+        const owner = typeof players !== 'undefined' ? players[colour]?.color : null, {reach, cool} = this.TERRITORY
+        return Math.max(reach, !owner || cool && (cool.map || cool.gain) && owner.b > owner.r ? cool.reach : 0) * basis.r
+    },
+    // With the cell layer (ownerFree): the world rectangles where the light map's owners (mapOwners) differ from the
+    // board's, each cell's hexagon or its glow's reach then and now (as Grid.surfaceCacheChangeRects finds a light change).
+    ownerRects(board) {
+        const now = this.ownerState(board), was = this.mapOwners, rects = [], h = board.arr.length ? board.arr[0].length : 0
+        if (!was || was.length !== now.length) return null
+        for (let k = 1; k < now.length; ++k) {
+            if (was[k] === now[k]) continue
+            const i = Math.floor((k - 1) / h), c = board.arr[i][k - 1 - i * h].hexagon.calcPos()
+            const reach = Math.max(1.1 * basis.r, this.glowReach(was[k]), this.glowReach(now[k]))
+            rects.push({x0: c.x - reach, y0: c.y - reach, x1: c.x + reach, y1: c.y + reach})
+        }
+        return rects
+    },
+    // With the cell layer: the light map brought up to the board's owners by redrawing their rectangles (updateMapRegion,
+    // ownerRects) when they differ; its light state already the board's. Returns whether it has the board's owners.
+    // quiet (lightMap's, as a cell layer variant is rendered): not counted as a rebuild (rebuilds), so a lit view whose
+    // rest snapshot's cells come from its cell layer holds (Grid.litViewHolds); a patch's (Grid.patchLightMap) counts as
+    // updateMapRegion's own. ownerSyncs counts them.
+    ownerSyncs: 0,
+    syncOwners(board, cap, quiet = false) {
+        if (!this.ownerFree(board) || !this.map) return true
+        const rects = this.ownerRects(board)
+        if (rects && !rects.length) return true
+        const rebuilds = this.rebuilds, synced = !!rects && this.updateMapRegion(board, cap, [], this.mapState)
+        if (synced) {
+            ++this.ownerSyncs
+            if (quiet) this.rebuilds = rebuilds
+        }
+        return synced
     },
     // Whether the board's light state equals stored (a lightState copy).
     sameLightState(board, stored) {
@@ -347,22 +413,27 @@ const atmosphericLighting = {
         const key = JSON.stringify(bounds)
         const scale = this.resolution(bounds, cap)
         const zooming = gameEvent.screen.surfaceZooming
+        // With the cell layer (ownerFree) the map is brought up to the owners now where they differ (syncOwners) before it is
+        // drawn from, the light state holding none.
         if (this.map && this.mapKey === key && this.sameLightState(board, this.mapState) &&
-                (this.mapScale === scale || zooming))
+                (this.mapScale === scale || zooming) && (this.mapScale !== scale || this.syncOwners(board, cap, true)))
             return this.map
         // A staged build of this very map is finished at once, another is dropped (canvasFor resets its canvases).
         const staged = this.staged && this.stagedFor(board, key, scale) ? this.staged : null
         this.staged = null
+        const owners = staged ? staged.owners : this.ownerState(board).slice()
         if (staged)
             while (!staged.steps.next().done);
         else
             this.build(this.collect(board), bounds, scale)
-        this.finishLightMap(board, key, scale)
+        this.finishLightMap(board, key, scale, owners)
         return this.map
     },
-    finishLightMap(board, key, scale) {
+    // owners: the ownerState the map was drawn with (mapOwners).
+    finishLightMap(board, key, scale, owners) {
         this.prewarmGlows(board)
         this.mapState = this.lightState(board).slice()
+        this.mapOwners = owners
         this.mapKey = key
         this.mapScale = scale
         ++this.rebuilds
@@ -396,12 +467,13 @@ const atmosphericLighting = {
         if (!this.stagedFor(board, key, scale)) {
             this.mapKey = ''
             this.mapState = null
-            this.staged = {key, scale, state: this.lightState(board).slice(),
+            this.staged = {key, scale, state: this.lightState(board).slice(), owners: this.ownerState(board).slice(),
                 steps: this.buildSteps(this.collect(board), bounds, scale)}
         }
         if (!this.staged.steps.next().done) return false
+        const owners = this.staged.owners
         this.staged = null
-        this.finishLightMap(board, key, scale)
+        this.finishLightMap(board, key, scale, owners)
         return true
     },
     // The light map at cap's resolution (as lightMap(board, cap)) brought up to the board's light state by redrawing
@@ -428,12 +500,22 @@ const atmosphericLighting = {
                 this.mapScale !== this.resolution(bounds, cap) || !this.mapState || !stored || this.mapState.length !== stored.length)
             return false
         for (let k = 0; k < stored.length; ++k) if (this.mapState[k] !== stored[k]) return false
+        // With the cell layer also where the map's owners differ from the board's (ownerRects), so it then has them all.
+        const free = this.ownerFree(board), owners = free && this.ownerRects(board)
+        if (free && !owners) return false
+        if (owners) rects = rects.concat(owners)
         const scale = this.mapScale, W = this.map.width, H = this.map.height, grow = this.MAP_REGION_GROW
         const m = this.MAP_REGION_MARGIN
         const inners = rects.map(r => pixelRect(Math.floor((r.x0 - bounds.left) * scale) - grow,
             Math.floor((r.y0 - bounds.top) * scale) - grow, Math.ceil((r.x1 - bounds.left) * scale) + grow,
             Math.ceil((r.y1 - bounds.top) * scale) + grow, W, H)).filter(Boolean)
-        if (!inners.length) return true
+        if (!inners.length) {
+            if (free) {
+                this.mapState = this.lightState(board).slice()
+                this.mapOwners = this.ownerState(board).slice()
+            }
+            return true
+        }
         const regions = mapRegionClusters(inners, m, W, H)
         this.lastMapRegion = {regions}
         const kept = ['map', 'gain'].map(name =>
@@ -449,11 +531,13 @@ const atmosphericLighting = {
         }
         const span = pixelRect(Math.min(...regions.map(r => r.outer.x)), Math.min(...regions.map(r => r.outer.y)),
             Math.max(...regions.map(r => r.outer.x + r.outer.w)), Math.max(...regions.map(r => r.outer.y + r.outer.h)), W, H)
+        // The caller's clip window kept (a cell layer variant's render brings the map up within a patch stage, syncOwners).
+        const clip = this.clipWindow
         this.clipWindow = clipWindowOf(span, W, H, bounds.left, bounds.top, scale, 1.05 * basis.r)
         try {
             this.build(this.collect(board), bounds, scale, true)
         } finally {
-            this.clipWindow = null
+            this.clipWindow = clip
             g.restore()
             k.restore()
         }
@@ -461,6 +545,7 @@ const atmosphericLighting = {
         for (const ring of kept[1]) restoreCanvasRing(this.gain, ring)
         ++this.rebuilds
         this.mapState = this.lightState(board).slice()
+        this.mapOwners = this.ownerState(board).slice()
         return true
     },
     // The light map's pixels over the world rectangles rects ({x0, y0, x1, y1}, each grown by MAP_GROW pixels) for the
