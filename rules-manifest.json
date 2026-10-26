@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "68b40047f2d1b532aa02ddef8c9bc1a7a6d4711903d2be0c103f054faabc616a",
+  "rulesVersion": "45c47afb77027bf5896311822ba234f2787429276e8a973bd1738deb9021a932",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -430,13 +430,13 @@
     },
     {
       "path": "sprites/entities/buildings/tower.js",
-      "sha256": "2f717ee4fb9a475ed84119fd05a57c0e634ec930bd5d986e6ce29085c46fcc65",
-      "bytes": 1289
+      "sha256": "2f56e3783cfdff7c4325b5f5f5b847e3aff9f3fd3fc8d32d56a99bb663fde55f",
+      "bytes": 1350
     },
     {
       "path": "sprites/entities/buildings/wall.js",
-      "sha256": "a02b185d02eaa923c7a0685b7edf3e17bef2bdff619ed1b48bc3625f39335ded",
-      "bytes": 989
+      "sha256": "0f3208a8fdfeb3ac1ed698f41582c2cb1d82bab052ebbb5e129401dfc4f5f99a",
+      "bytes": 1121
     },
     {
       "path": "sprites/entities/buildings/manufactures/manufacture.js",

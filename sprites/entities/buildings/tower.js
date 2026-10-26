@@ -20,7 +20,8 @@ class Tower extends Building {
     }
     get info() {
         let tower = super.info
-        tower.info['range increase'] = this.rangeIncrease
+        tower.info['range increase'] = this.rangeIncrease +
+            "\nhighground\narchers can't shoot through it"
         return tower
     }
     isBarrier() {

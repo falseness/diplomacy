@@ -13,6 +13,11 @@ class Wall extends Building {
             "\nunits can't stand on it"
         return res
     }
+    get info() {
+        let wall = super.info
+        wall.info.hp += "\narchers can't shoot through it"
+        return wall
+    }
     // obstacle -> cant stand
     // barrier -> cant shoot
     isObstacle(playerColor) {
