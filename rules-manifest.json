@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "dc1ca4c877f10c280bf66a14139653063b27a183318cfaae0022904dd6f3c4c8",
+  "rulesVersion": "dd3e36e31d5e6869bd389fd8e878e81aee658ecc03a476a67128296b1a1b4f86",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -65,8 +65,8 @@
     },
     {
       "path": "options/timer.js",
-      "sha256": "8aa1bacc0df32cabcfd51917ab5793bc1e39583d99a19617ca128bcb0c8568e2",
-      "bytes": 3838
+      "sha256": "8b17c454ed274246c5bc6a12a370605d721a387ddcf0398c5284ef2f9201bc29",
+      "bytes": 4076
     },
     {
       "path": "options/otherSettings.js",
@@ -190,8 +190,8 @@
     },
     {
       "path": "sprites/elements/text.js",
-      "sha256": "8e2783344924c74cc0ddd8de8b0c44f85285d4791f2c43e38f35eef16fc5d5e1",
-      "bytes": 6026
+      "sha256": "b2d9e89248aab3e4dcc122f362ef6297a22e83b07482ff4fb844e097bacf41d6",
+      "bytes": 6657
     },
     {
       "path": "sprites/elements/rect.js",

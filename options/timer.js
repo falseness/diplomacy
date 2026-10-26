@@ -1,10 +1,13 @@
+const TIMER_TEXT_INK = '#4a2e14'
 class Timer {
     constructor() {
         // this.time is turn time
         // initialization in nextTurn or in loader:
 
         this.text = new Text(WIDTH - WIDTH * 0.06, HEIGHT - nextTurnButtonSize * 1.1 / 2, WIDTH * 0.03,
-            'timer text', 'white')
+            'timer text', TIMER_TEXT_INK)
+        // Dark ink on a parchment rim: readable on the next-turn triangle in any player's colour.
+        this.text.outline = {color: 'rgba(244,230,196,0.95)', widthRatio: 0.28, lineJoin: 'round'}
         this.isTick = false
     }
     calcTime() {

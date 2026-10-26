@@ -45,6 +45,8 @@ class Text {
         this.ratio = ratio
         this.fontFamily = fontFamily
         this.fontWeight = fontWeight
+        // An outline stroked behind the fill: {color, widthRatio (of the font size), lineJoin}; null draws none.
+        this.outline = null
     }
     font(fontSize = this.fontSize) {
         return (this.fontWeight ? this.fontWeight + ' ' : '') + fontSize + 'px ' + (this.fontFamily ?? Text.defaultFamily)
@@ -120,6 +122,16 @@ class Text {
         ctx.textBaseline = this.textBaseline
 
         let lines = this.text.split('\n')
+        const outline = this.outline
+        if (outline) {
+            const {strokeStyle, lineWidth, lineJoin} = ctx
+            ctx.strokeStyle = outline.color
+            ctx.lineWidth = fontSize * outline.widthRatio
+            ctx.lineJoin = outline.lineJoin ?? 'round'
+            for (let i = 0; i < lines.length; ++i)
+                ctx.strokeText(lines[i], this.pos.x, this.pos.y + (i * this.height))
+            Object.assign(ctx, {strokeStyle, lineWidth, lineJoin})
+        }
         for (let i = 0; i < lines.length; ++i)
             ctx.fillText(lines[i], this.pos.x, this.pos.y + (i * this.height))
     }
