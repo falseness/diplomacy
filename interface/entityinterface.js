@@ -98,6 +98,12 @@ class EntityInterface {
         this.portalStatsButton = this.createButtonInTheBottom('stats', () => this.refreshPortal(this.portal, true))
         this.portalBackButton = this.createButtonInTheBottom('back', () => this.refreshPortal(this.portal, false))
         this.portalStatsButton.canClick = this.portalBackButton.canClick = false
+        // A town's tower rows (Town.info's 'range increase' and what a tower adds) shown only on its button.
+        this.townTowerButton = this.createButtonInTheBottom('& tower properties', () => this.showTownTower(true))
+        this.townBackButton = this.createButtonInTheBottom('back', () => this.showTownTower(false))
+        this.townTowerButton.canClick = this.townBackButton.canClick = false
+        this.townTowerText = null
+        this.townTowerShown = false
         this.updateSizes(false)
 
         this.renderCache = undefined
@@ -113,11 +119,7 @@ class EntityInterface {
     fitColumn() {
         const scale = this.columnScale ?? 1
         this.layoutColumn(1)
-        let room = WIDTH
-        for (const panel of [typeof townInterface !== 'undefined' && townInterface,
-                typeof barrackInterface !== 'undefined' && barrackInterface])
-            if (panel && panel.visible && panel.pos && panel.pos.y + panel.height > this.pos.y)
-                room = Math.min(room, panel.pos.x)
+        const room = this.columnRoom()
         const margin = 0.04 * this.height
         let right = Math.max(this.entity.info.right, this.entity.name.right)
         if (right + margin > room)
@@ -127,6 +129,15 @@ class EntityInterface {
         if (right + margin > room && this.columnScale > 0.25)
             this.layoutColumn(Math.max(0.25, this.columnScale * (room - margin - this.pos.x) / (right - this.pos.x)))
         return this.columnScale !== scale
+    }
+    // Where the column has to end: the screen's right edge or an open town/barrack panel reaching down beside it.
+    columnRoom() {
+        let room = WIDTH
+        for (const panel of [typeof townInterface !== 'undefined' && townInterface,
+                typeof barrackInterface !== 'undefined' && barrackInterface])
+            if (panel && panel.visible && panel.pos && panel.pos.y + panel.height > this.pos.y)
+                room = Math.min(room, panel.pos.x)
+        return room
     }
     layoutColumn(scale) {
         const h = this.height
@@ -138,13 +149,29 @@ class EntityInterface {
         this.entity.name.fontSize = h * 0.2 * scale
         this.entity.info.fontSize = h * 0.1 * scale
         this.entity.info.pos.y = this.entity.name.y + this.entity.name.height
-        // A unit panel whose rows would reach its skip moves button (a siege demon's seven) gets a smaller row font.
+        // A unit panel whose rows would reach its skip moves button (a siege demon's seven), or a town's with its tower
+        // rows, gets a smaller row font.
         const rows = this.entity.info.text.split('\n').length
-        const room = this.skipMovesButton.y - this.entity.info.pos.y
-        if (this.skipMovesButton.canClick && rows * this.entity.info.fontSize > room)
+        const button = [this.skipMovesButton, this.townTowerButton, this.townBackButton].find(button => button.canClick)
+        const room = button && button.y - this.entity.info.pos.y
+        if (button && rows * this.entity.info.fontSize > room)
             this.entity.info.fontSize = room / rows
-        for (const button of [this.destroyButton, this.skipMovesButton, this.portalStatsButton, this.portalBackButton])
+        for (const button of [this.destroyButton, this.skipMovesButton, this.portalStatsButton, this.portalBackButton,
+                this.townTowerButton, this.townBackButton])
             button.x = this.entity.name.x
+        // Beside the destroy button of an own town, not under it.
+        if (this.destroyButton.canClick)
+            this.townTowerButton.x = this.townBackButton.x = this.destroyButton.rect.right + 0.04 * h
+        // The town buttons hold their whole text, a smaller font where it would pass the column's room.
+        const end = this.columnRoom() - 0.04 * h
+        for (const button of [this.townTowerButton, this.townBackButton]) {
+            button.text.fontSize = Math.min(h * 0.1, button.rect.height * 0.7)
+            const width = () => Math.max(0.11 * WIDTH, button.text.width + button.text.fontSize)
+            if (button.x + width() > end)
+                button.text.fontSize *= Math.max(0.25, (end - button.x) / width())
+            button.rect.width = width()
+            button.trimText()
+        }
     }
     // The town/barrack panel opened or closed beside this one.
     refit() {
@@ -159,7 +186,8 @@ class EntityInterface {
         this.width = Math.max(
             this.entity.info.x + this.entity.info.width,
             this.entity.name.x + this.entity.name.width,
-            currentButton.rect.right) + 0.04 * this.height
+            currentButton.rect.right,
+            this.townTowerText ? this.townTowerButton.rect.right : 0) + 0.04 * this.height
 
         this.background.width = this.width
         
@@ -187,6 +215,18 @@ class EntityInterface {
                 this.entity.info.text === text) return
         this.change(info, portal.player.fullColor, portal, description)
     }
+    // The town panel's '& tower properties' / 'back': the tower rows after the town's own, the gold row kept as shown.
+    showTownTower(shown) {
+        if (!this.visible || !this.townTowerText) return
+        const rows = this.entity.info.text
+        const base = this.townTowerShown ? rows.slice(0, rows.length - this.townTowerText.length - 1) : rows
+        this.townTowerShown = shown
+        this.entity.info.text = shown ? base + '\n' + this.townTowerText : base
+        this.townTowerButton.canClick = !shown
+        this.townBackButton.canClick = shown
+        this.updateSizes(this.sizedForUnit)
+        this.renderCacheDirty = true
+    }
     showFogTown(town) {
         this.change(town.fogInfo, town.panelColor)
         this.fogTown = {...town.coord}
@@ -201,10 +241,19 @@ class EntityInterface {
         this.background.color = color.hex
         this.img.image = entity.image || entity.bodyImageName || entity.name
         this.entity.name.text = entity.displayName || entity.name
+        this.townTowerText = null
+        this.townTowerShown = false
         if (entity.isDescriptionInfo) 
             this.entity.info.text = entity.info
+        else if (entity.name === 'town' && entity.info && 'range increase' in entity.info) {
+            const {'range increase': rangeIncrease, ...rows} = entity.info
+            this.entity.info.text = join(rows, ': ', '\n')
+            this.townTowerText = `range increase: ${rangeIncrease}\nhighground\narchers can't shoot through it`
+        }
         else
             this.entity.info.text = join(entity.info, ': ', '\n')
+        this.townTowerButton.canClick = Boolean(this.townTowerText)
+        this.townBackButton.canClick = false
         
         this.destroyButton.canClick = entity.isDestroyable && !gameEvent.waitingMode
         this.skipMovesButton.canClick = entity.canSkipMoves && !gameEvent.waitingMode
@@ -265,7 +314,11 @@ class EntityInterface {
     set visible(boolean) {
         if (boolean && !this.#visible)
             this.renderCacheDirty = true
-        if (!boolean) { this.townInspection = null; this.fogTown = null; this.portal = null; this.portalDescription = false }
+        if (!boolean) {
+            this.townInspection = null; this.fogTown = null; this.portal = null; this.portalDescription = false
+            this.townTowerText = null; this.townTowerShown = false
+            this.townTowerButton.canClick = this.townBackButton.canClick = false
+        }
         this.#visible = boolean
         undoButton.selected = boolean
     }
@@ -283,6 +336,8 @@ class EntityInterface {
         this.destroyButton.click(pos)
         if (this.portalStatsButton.click(pos)) return true
         if (this.portalBackButton.click(pos)) return true
+        if (this.townTowerButton.click(pos)) return true
+        if (this.townBackButton.click(pos)) return true
         this.skipMovesButton.click(pos)
         return this.isInside(pos)
     }
@@ -301,6 +356,8 @@ class EntityInterface {
         this.skipMovesButton.draw(ctx)
         this.portalStatsButton.draw(ctx)
         this.portalBackButton.draw(ctx)
+        this.townTowerButton.draw(ctx)
+        this.townBackButton.draw(ctx)
     }
     getRenderCacheBounds() {
         const padding = this.background.strokeWidth
