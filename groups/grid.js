@@ -112,14 +112,19 @@ class Grid extends SpritesGroup {
         this.lastLitPatch = undefined
         this.litPatchRefusals = {}
         // The cell layers of the surface cache and the lit view's rest snapshot with Grid.liveCellLayer (splitCellLayer),
-        // their mask's canvas, the canvas the frames draw for a cache with its layer, and how many splits and composites
-        // were made.
+        // a canvas whose context places their masks, the canvas the frames draw for a cache with its layer, and how many
+        // splits, composites, sprites taken (from a split raster or a render), sprites drawn into a layer, refreshes of a
+        // layer for a board change (refreshCellLayer) and variants rendered for them were made.
         this.surfaceCellLayer = undefined
         this.litCellLayer = undefined
         this.cellMaskCanvas = undefined
         this.surfaceCacheShown = undefined
         this.cellLayerSplits = 0
         this.cellLayerComposites = 0
+        this.cellSpriteRenders = 0
+        this.cellSpriteDraws = 0
+        this.cellLayerRefreshes = 0
+        this.cellLayerVariantRenders = 0
         // The surface cache built between frames (prepareSurfaceCache): the build in progress,
         // whether a stage is queued, when the cache was last compared with the whole board,
         // whether a frame found it not matching, stages run (a count) and a 1x1 canvas the
@@ -647,140 +652,343 @@ class Grid extends SpritesGroup {
     cellLayerOn() {
         return Grid.liveCellLayer === true && otherSettings.atmosphericVisuals && !this.isObserving()
     }
-    // TASK-1313 (Grid.liveCellLayer): the surface cache and the lit view's rest snapshot (canvas, drawn whole as without the
-    // layer) split in two by the cells' mask (cellLayerMask): the canvas keeps every pixel no owned tile or fogged cell
-    // reaches and is black at the others (their alpha kept), the cell layer (layer, a canvas of its size) takes those whole
-    // and is transparent elsewhere, so the canvas holds no cell's owner colour or fog state and the two added ('lighter',
-    // each pixel in one of them) are the canvas as drawn, to the bit. Only the pixel rectangle rect {x, y, w, h} (a patch's
-    // region; all by default). place sets the canvas's transform on a context. layer.cellBox: the pixel rectangle holding
-    // its pixels (after a region's split, holding the old one's too), all a frame need draw of it.
-    splitCellLayer(canvas, layer, place, rect = {x: 0, y: 0, w: canvas.width, h: canvas.height}) {
-        const whole = rect.x === 0 && rect.y === 0 && rect.w === canvas.width && rect.h === canvas.height
-        if (layer.width !== canvas.width || layer.height !== canvas.height) {
-            layer.width = canvas.width
-            layer.height = canvas.height
-            layer.cellBox = null
+    // TASK-1313 (Grid.liveCellLayer): the surface cache or the lit view's rest snapshot (canvas, drawn whole as without the
+    // layer) split by its cells' mask (cellLayerCells: every pixel nearer one cell's centre than any other's, that is the
+    // cell's hexagon, map edges left out; geometric, the same whatever a cell's owner or fog) into the canvas, black at the
+    // mask's pixels (their alpha kept), so it holds no tile, owner colour or fog, and the cell layer (layer, a canvas of its
+    // size): per cell a sprite of that cell's mask pixels (cellSprite), kept by the cell's variant (cellLayerKey: its owner
+    // colour, suburb and fog state, its building's image, and its neighbours' states, whose tiles' edges and fog reach it),
+    // drawn into the layer by drawImage (drawCellSprites). The two added ('lighter', each pixel in one of them) are the
+    // canvas as drawn, to the bit. A cell whose variant changes then needs only its sprite drawn again (refreshCellLayer,
+    // the sprite kept or rendered once for the variant), never the cache built or patched. place sets the canvas's
+    // transform on a context. layer.cellBox: the pixel rectangle the cells' boxes span, all a frame need draw of it.
+    splitCellLayer(canvas, layer, place) {
+        const W = canvas.width, H = canvas.height
+        if (layer.width !== W || layer.height !== H) {
+            layer.width = W
+            layer.height = H
         }
-        const {mask, box} = this.cellLayerMask(canvas.width, canvas.height, place, rect)
-        const old = whole ? null : layer.cellBox
-        layer.cellBox = !old ? box : !box ? old : pixelRect(Math.min(old.x, box.x), Math.min(old.y, box.y),
-            Math.max(old.x + old.w, box.x + box.w), Math.max(old.y + old.h, box.y + box.h), canvas.width, canvas.height)
-        const g = layer.getContext('2d'), c = canvas.getContext('2d'), {x, y, w, h} = rect
-        g.save()
-        g.setTransform(1, 0, 0, 1, 0, 0)
-        g.clearRect(x, y, w, h)
-        g.drawImage(canvas, x, y, w, h, x, y, w, h)
-        g.globalCompositeOperation = 'destination-in'
-        g.drawImage(mask, x, y, w, h, x, y, w, h)
-        g.restore()
-        // The mask is black where opaque: the canvas black there, its alpha kept (under the layer, it covers what the
-        // canvas covered and adds nothing).
-        c.save()
-        c.setTransform(1, 0, 0, 1, 0, 0)
-        c.globalCompositeOperation = 'source-atop'
-        c.drawImage(mask, x, y, w, h, x, y, w, h)
-        c.restore()
+        const mask = layer.mask ||= document.createElement('canvas')
+        mask.width = W
+        mask.height = H
+        const {cells, box, image} = this.cellLayerCells(W, H, place)
+        mask.getContext('2d').putImageData(image, 0, 0)
+        Object.assign(layer, {cells, cellBox: box, sprites: new Map(), byIndex: new Map(cells.map(c => [c.index, c])), place})
+        for (const cell of cells)
+            this.cellSprite(layer, cell, canvas)
+        const whole = {x: 0, y: 0, w: W, h: H}
+        this.drawCellSprites(layer, whole)
+        this.cutCellLayer(canvas, layer, whole)
         ++this.cellLayerSplits
         return layer
     }
-    // The cells' mask for splitCellLayer: within rect of a W x H canvas at the transform place sets, black and opaque at every
-    // pixel an owned cell's tile (atmosphericLighting.drawTile) or the fog (its grout and variants, drawFogOfWar) covers at
-    // all as the canvas drew them, transparent elsewhere: the tiles and the fog drawn, then read back and every pixel made
-    // opaque black or transparent (its own canvas, kept in memory for the readback: willReadFrequently). {mask, box: a pixel
-    // rectangle holding its opaque pixels (the cells' hexagons grown by a pixel), or null}.
-    cellLayerMask(W, H, place, rect) {
-        const mask = this.cellMaskCanvas ||= document.createElement('canvas')
-        if (mask.width !== W || mask.height !== H) {
-            mask.width = W
-            mask.height = H
+    // A patch of canvas's pixel rectangle rect (copy draws it, from the patch buffer) with the canvas split (splitCellLayer):
+    // the rectangle grown to the boxes of the cells meeting it (region) put back whole (the cut canvas with its layer added),
+    // copy run, those cells' sprites taken again from the canvas (their variants now), the layer drawn there from the
+    // sprites and the canvas cut there again. Returns the region.
+    resplitCellLayer(canvas, layer, rect, copy) {
+        const meets = (b, r) => b.x < r.x + r.w && r.x < b.x + b.w && b.y < r.y + r.h && r.y < b.y + b.h
+        const touched = layer.cells.filter(c => meets(c.box, rect))
+        let x0 = rect.x, y0 = rect.y, x1 = rect.x + rect.w, y1 = rect.y + rect.h
+        for (const {box} of touched) {
+            x0 = Math.min(x0, box.x); y0 = Math.min(y0, box.y)
+            x1 = Math.max(x1, box.x + box.w); y1 = Math.max(y1, box.y + box.h)
         }
-        const g = mask.getContext('2d', {willReadFrequently: true}), {x, y, w, h} = rect
+        const region = pixelRect(x0, y0, x1, y1, canvas.width, canvas.height)
+        this.composeCellLayer(canvas, canvas, layer, region)
+        copy()
+        for (const cell of touched)
+            this.cellSprite(layer, cell, canvas)
+        this.drawCellSprites(layer, region)
+        this.cutCellLayer(canvas, layer, region)
+        ++this.cellLayerSplits
+        return region
+    }
+    // The mask of a W x H canvas at the transform place sets (splitCellLayer): each cell's pixels (centre nearer its centre
+    // than any other cell's, the one of lower index on a tie: cells' hexagons, disjoint, map edges left out). {cells: per
+    // cell {index, i, j, box (its hexagon's pixel rectangle grown by a pixel, cut to the canvas), alpha (per box pixel 255
+    // when the cell's, else 0), key}, box: the rectangle the boxes span or null, image: the mask (black, opaque at the cells'
+    // pixels, transparent elsewhere)}.
+    cellLayerCells(W, H, place) {
+        const g = (this.cellMaskCanvas ||= document.createElement('canvas')).getContext('2d')
         g.save()
         g.setTransform(1, 0, 0, 1, 0, 0)
-        g.clearRect(x, y, w, h)
+        place(g)
+        const t = g.getTransform()
+        g.restore()
+        const {a, d, e, f} = t, ox = basis.offset.x, oy = basis.offset.y, rx = basis.r, h = this.arr[0].length
+        const image = new ImageData(W, H), out = image.data, cells = []
+        let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0; j < h; ++j) {
+                if (this.arr[i][j].building.isMapEdge)
+                    continue
+                // Centres as calcPos (biasToTransition), the candidates' those of the cells round it (on the board or not).
+                const cx = i * ox, cy = (2 * j + (i & 1)) * oy, index = i * h + j, near = []
+                for (let di = -1; di <= 1; ++di)
+                    for (let dj = -1; dj <= 1; ++dj)
+                        if (di || dj)
+                            near.push([(i + di) * ox, (2 * (j + dj) + ((i + di) & 1)) * oy, (i + di) * 100000 + j + dj])
+                const own = i * 100000 + j
+                const box = pixelRect(Math.floor((cx - rx) * a + e) - 1, Math.floor((cy - oy) * d + f) - 1,
+                    Math.ceil((cx + rx) * a + e) + 1, Math.ceil((cy + oy) * d + f) + 1, W, H)
+                if (!box)
+                    continue
+                const alpha = new Uint8Array(box.w * box.h)
+                let any = false
+                for (let y = 0; y < box.h; ++y) {
+                    const wy = (box.y + y + 0.5 - f) / d
+                    for (let x = 0; x < box.w; ++x) {
+                        const wx = (box.x + x + 0.5 - e) / a
+                        const d0 = (wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)
+                        let mine = true
+                        for (const [nx, ny, n] of near) {
+                            const dn = (wx - nx) * (wx - nx) + (wy - ny) * (wy - ny)
+                            if (dn < d0 || dn === d0 && n < own) {
+                                mine = false
+                                break
+                            }
+                        }
+                        if (mine) {
+                            alpha[y * box.w + x] = 255
+                            out[((box.y + y) * W + box.x + x) * 4 + 3] = 255
+                            any = true
+                        }
+                    }
+                }
+                if (!any)
+                    continue
+                cells.push({index, i, j, box, alpha, key: undefined})
+                bx0 = Math.min(bx0, box.x); by0 = Math.min(by0, box.y)
+                bx1 = Math.max(bx1, box.x + box.w); by1 = Math.max(by1, box.y + box.h)
+            }
+        }
+        return {cells, image, box: cells.length ? pixelRect(bx0, by0, bx1, by1, W, H) : null}
+    }
+    // A cell's variant in the cell layer: its surface state (owner colour, suburb, fog), its building's cached image, and the
+    // surface states of the cells round it (their tiles' antialiased edges and their fog reach its pixels).
+    cellLayerKey(i, j) {
+        const cell = this.arr[i][j], building = this.isCacheableBuilding(cell.building) ? cell.building : undefined
+        let key = this.getSurfaceStateValue(i, j, false) + ':' + (building ? this.getEntityBodyImageName(building) : '')
+        for (const [di, dj] of neighborhood[i & 1]) {
+            const row = this.arr[i + di], other = row && row[j + dj]
+            key += ',' + (other ? this.getSurfaceStateValue(i + di, j + dj, false) : '-')
+        }
+        return key
+    }
+    // The sprite of cell for its variant now (cellLayerKey), its mask pixels taken from source (the split canvas, drawn
+    // whole there, or a render of the variant, renderCellSprites), kept in layer.sprites; the cell takes the variant.
+    cellSprite(layer, cell, source) {
+        const key = this.cellLayerKey(cell.i, cell.j), {box} = cell
+        const sprite = document.createElement('canvas')
+        sprite.width = box.w
+        sprite.height = box.h
+        const g = sprite.getContext('2d'), image = g.createImageData(box.w, box.h), data = image.data
+        for (let k = 0; k < cell.alpha.length; ++k)
+            data[4 * k + 3] = cell.alpha[k]
+        g.putImageData(image, 0, 0)
+        g.globalCompositeOperation = 'source-in'
+        g.drawImage(source, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
+        layer.sprites.set(cell.index + '|' + key, sprite)
+        cell.key = key
+        ++this.cellSpriteRenders
+        return sprite
+    }
+    // The layer's pixel rectangle rect drawn from its cells' sprites (each cell's for its variant, cell.key): cleared, then
+    // every cell meeting it drawn (drawImage, clipped to rect; the cells' pixels are disjoint, so each is its sprite's).
+    drawCellSprites(layer, rect) {
+        const g = layer.getContext('2d')
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(rect.x, rect.y, rect.w, rect.h)
+        g.beginPath()
+        g.rect(rect.x, rect.y, rect.w, rect.h)
+        g.clip()
+        g.globalCompositeOperation = 'lighter'
+        for (const {index, box, key} of layer.cells) {
+            if (box.x >= rect.x + rect.w || rect.x >= box.x + box.w || box.y >= rect.y + rect.h || rect.y >= box.y + box.h)
+                continue
+            g.drawImage(layer.sprites.get(index + '|' + key), box.x, box.y)
+            ++this.cellSpriteDraws
+        }
+        g.restore()
+    }
+    // canvas black at the layer's mask pixels within rect, their alpha kept (under the layer, it covers what the canvas
+    // covered and adds nothing).
+    cutCellLayer(canvas, layer, rect) {
+        const c = canvas.getContext('2d'), {x, y, w, h} = rect
+        c.save()
+        c.setTransform(1, 0, 0, 1, 0, 0)
+        c.globalCompositeOperation = 'source-atop'
+        c.drawImage(layer.mask, x, y, w, h, x, y, w, h)
+        c.restore()
+    }
+    // target's pixel rectangle rect: the cut canvas there without the mask's pixels (its black taken out: added, its alpha
+    // would add to the layer's) and the layer added, so each pixel is the canvas as drawn whole (target the canvas itself:
+    // put back before a patch, resplitCellLayer; the shown canvas, prepareSurfaceCellLayer).
+    composeCellLayer(target, canvas, layer, rect) {
+        const g = target.getContext('2d'), {x, y, w, h} = rect
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
         g.beginPath()
         g.rect(x, y, w, h)
         g.clip()
-        place(g)
-        const t = g.getTransform(), range = this.drawRange(g), reach = 1.05 * basis.r
-        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
-        const cover = hexagon => {
-            const c = hexagon.calcPos()
-            x0 = Math.min(x0, (c.x - reach) * t.a + t.e)
-            x1 = Math.max(x1, (c.x + reach) * t.a + t.e)
-            y0 = Math.min(y0, (c.y - reach) * t.d + t.f)
-            y1 = Math.max(y1, (c.y + reach) * t.d + t.f)
+        if (target !== canvas) {
+            g.clearRect(x, y, w, h)
+            g.drawImage(canvas, x, y, w, h, x, y, w, h)
         }
-        for (let i = range.i0; i < range.i1; ++i) {
-            for (let j = range.j0; j < range.j1; ++j) {
-                const cell = this.arr[i][j], hexagon = cell.hexagon
-                if (cell.building.isMapEdge)
-                    continue
-                if (isFogOfWar && !this.fogOfWar[i][j]) {
-                    if (!this.observedHexagon(cell))
-                        cover(hexagon)
-                }
-                else if (!hexagon.unknown && hexagon.playerColor !== 0) {
-                    hexagon.draw(g, t)
-                    cover(hexagon)
-                }
-            }
-        }
-        if (isFogOfWar)
-            this.drawFogOfWar(g)
+        g.globalCompositeOperation = 'destination-out'
+        g.drawImage(layer.mask, x, y, w, h, x, y, w, h)
+        g.globalCompositeOperation = 'lighter'
+        g.drawImage(layer, x, y, w, h, x, y, w, h)
         g.restore()
-        if (w > 0 && h > 0) {
-            const image = g.getImageData(x, y, w, h), data = image.data
-            for (let k = 0; k < data.length; k += 4) {
-                data[k] = data[k + 1] = data[k + 2] = 0
-                data[k + 3] = data[k + 3] ? 255 : 0
-            }
-            g.putImageData(image, x, y)
-        }
-        const box = x1 < x0 ? null : pixelRect(Math.max(x, Math.floor(x0) - 1), Math.max(y, Math.floor(y0) - 1),
-            Math.min(x + w, Math.ceil(x1) + 1), Math.min(y + h, Math.ceil(y1) + 1), W, H)
-        return {mask, box}
     }
-    // The surface cache's cell layer (splitCellLayer) after a build or a patch of rect, or none (no cell layer). The frames
-    // draw the cache scaled: its layer is added to it at the cache's own resolution, on the canvas they draw
-    // (surfaceCacheShown), where each pixel is the sum of the two, to the bit (adding the layer after the scaled cache, each
-    // scaled on its own, rounds a level or so apart at a fifth of a frame's pixels: TASK-1313).
-    prepareSurfaceCellLayer(canvas, geometry, left, top, rect = {x: 0, y: 0, w: canvas.width, h: canvas.height}) {
+    // The surface cache's cell layer (splitCellLayer) after a build, or after a patch of rect (copy: the patch's region
+    // copied into the cache, resplitCellLayer), or none (no cell layer). The frames draw the cache scaled: its layer is added
+    // to it at the cache's own resolution, on the canvas they draw (surfaceCacheShown), where each pixel is the sum of the
+    // two, to the bit (adding the layer after the scaled cache, each scaled on its own, rounds a level or so apart at a
+    // fifth of a frame's pixels: TASK-1313 design.md, test-cell-layer's scaledAddAlternative).
+    prepareSurfaceCellLayer(canvas, geometry, left, top, rect, copy) {
         if (!canvas.cellLayered) {
+            copy?.()
             this.surfaceCellLayer = this.surfaceCacheShown = undefined
             return
         }
-        const layer = this.surfaceCellLayer = this.splitCellLayer(canvas, this.surfaceCellLayer || document.createElement('canvas'), g => {
+        const place = g => {
             g.scale(geometry.scale, geometry.scale)
             g.translate(-left, -top)
-        }, rect)
+        }
+        let layer = this.surfaceCellLayer
+        if (rect && layer?.cells && layer.width === canvas.width && layer.height === canvas.height && layer.raster === canvas)
+            rect = this.resplitCellLayer(canvas, layer, rect, copy)
+        else {
+            copy?.()
+            layer = this.surfaceCellLayer = this.splitCellLayer(canvas, layer || document.createElement('canvas'), place)
+            layer.raster = canvas
+            rect = {x: 0, y: 0, w: canvas.width, h: canvas.height}
+        }
         const shown = this.surfaceCacheShown ||= document.createElement('canvas')
         if (shown.width !== canvas.width || shown.height !== canvas.height) {
             shown.width = canvas.width
             shown.height = canvas.height
         }
-        // The cache without the layer's pixels (its black there taken out: added, its alpha would add to the layer's), then
-        // the layer added.
-        const g = shown.getContext('2d'), {x, y, w, h} = rect
-        g.save()
-        g.clearRect(x, y, w, h)
-        g.drawImage(canvas, x, y, w, h, x, y, w, h)
-        g.globalCompositeOperation = 'destination-out'
-        g.drawImage(this.cellMaskCanvas, x, y, w, h, x, y, w, h)
-        // (layer.cellBox: the layer is transparent elsewhere.)
-        g.globalCompositeOperation = 'lighter'
-        g.drawImage(layer, x, y, w, h, x, y, w, h)
-        g.restore()
+        this.composeCellLayer(shown, canvas, layer, rect)
         ++this.cellLayerComposites
     }
-    // The lit view's rest snapshot's cell layer (splitCellLayer) when finished or patched in rect, or none.
-    prepareLitCellLayer(view, rest, rect) {
+    // The lit view's rest snapshot's cell layer (splitCellLayer) when finished, or after a patch of rect (copy, as
+    // prepareSurfaceCellLayer's), or none.
+    prepareLitCellLayer(view, rest, rect, copy) {
         if (!rest.canvas.cellLayered) {
+            copy?.()
             rest.cellLayer = undefined
             return
         }
-        rest.cellLayer = this.splitCellLayer(rest.canvas, this.litCellLayer ||= document.createElement('canvas'),
-            g => this.setLitRestTransform(g, view, rest), rect)
+        const layer = this.litCellLayer ||= document.createElement('canvas')
+        if (rect && rest.cellLayer === layer && layer.raster === rest.canvas && layer.cells)
+            this.resplitCellLayer(rest.canvas, layer, rect, copy)
+        else {
+            copy?.()
+            rest.cellLayer = this.splitCellLayer(rest.canvas, layer, g => this.setLitRestTransform(g, view, rest))
+            layer.raster = rest.canvas
+        }
+    }
+    // A board change seen by the cell layers (Grid.liveCellLayer): each split cell whose variant (cellLayerKey) is no longer
+    // its sprite's gets the sprite of its variant now drawn into the layer (drawCellSprites, the region its box and its
+    // neighbours'), the one kept from before (an undo, a capture taken back) or rendered once (renderCellSprites, on a patch
+    // buffer: never the cache or the snapshot built or patched); the surface cache's shown canvas is composed there again.
+    // The cache and the snapshot themselves, their light map (the territory glow, TASK-1314) and their state are left as
+    // they are. Returns {cells: the cells redrawn, rendered: sprites rendered, failed: layers whose variants could not be
+    // rendered (a patch under way, a light map not the raster's)}.
+    refreshCellLayer() {
+        const result = {cells: 0, rendered: 0, failed: []}
+        const layers = []
+        const surface = this.surfaceCellLayer
+        if (surface?.cells && this.surfaceCache === surface.raster && this.surfaceCache.cellLayered)
+            layers.push(['surface', surface, region => this.renderSurfaceCellSprites(region)])
+        const view = this.litView, lit = this.litCellLayer
+        if (lit?.cells && view?.rest && view.rest.cellLayer === lit && lit.raster === view.rest.canvas)
+            layers.push(['lit', lit, region => this.renderLitCellSprites(view, region)])
+        for (const [name, layer, render] of layers) {
+            const changed = layer.cells.filter(c => c.key !== this.cellLayerKey(c.i, c.j))
+            if (!changed.length)
+                continue
+            const region = changed.reduce((r, {box}) => !r ? box : pixelRect(Math.min(r.x, box.x), Math.min(r.y, box.y),
+                Math.max(r.x + r.w, box.x + box.w), Math.max(r.y + r.h, box.y + box.h), layer.width, layer.height), null)
+            const missing = changed.filter(c => !layer.sprites.has(c.index + '|' + this.cellLayerKey(c.i, c.j)))
+            if (missing.length) {
+                const buffer = render(missing.reduce((r, {box}) => pixelRect(Math.min(r.x, box.x), Math.min(r.y, box.y),
+                    Math.max(r.x + r.w, box.x + box.w), Math.max(r.y + r.h, box.y + box.h), layer.width, layer.height), missing[0].box))
+                if (!buffer) {
+                    result.failed.push(name)
+                    continue
+                }
+                for (const cell of missing)
+                    this.cellSprite(layer, cell, buffer)
+                result.rendered += missing.length
+                this.cellLayerVariantRenders += missing.length
+            }
+            for (const cell of changed)
+                cell.key = this.cellLayerKey(cell.i, cell.j)
+            this.drawCellSprites(layer, region)
+            if (name === 'surface')
+                this.composeCellLayer(this.surfaceCacheShown, this.surfaceCache, layer, region)
+            result.cells += changed.length
+            ++this.cellLayerRefreshes
+        }
+        return result
+    }
+    // The light map as it is (the raster's: a cell's owner colour then lights nothing new, its territory glow TASK-1314's)
+    // for fn's drawing of the board now, when it is the map lightMap(board, cap) gives at this resolution; else null.
+    withHeldLightMap(cap, fn) {
+        const L = atmosphericLighting, bounds = mapDepth.surfaceBounds
+        if (!L.map || !bounds || L.mapKey !== JSON.stringify(bounds) || L.mapScale !== L.resolution(bounds, cap))
+            return null
+        const kept = L.mapState
+        L.mapState = L.lightState(this).slice()
+        try {
+            return fn()
+        } finally {
+            L.mapState = kept
+        }
+    }
+    // The board now drawn on the surface cache's patch buffer within the pixel rectangle rect (grown by the patch margin), as
+    // a patch draws it (drawSurfacePatchStage: SURFACE_CACHE_STAGES clipped, at the cache's transform) with the light map as
+    // it is (withHeldLightMap): the buffer, or null when no patch buffer is free.
+    renderSurfaceCellSprites(rect) {
+        const canvas = this.surfaceCache, buffer = this.surfacePatchBuffer, b = this.surfaceCacheBounds
+        if (this.surfacePatchJob || this.surfaceCacheBuild || !buffer || buffer.width !== canvas.width ||
+                buffer.height !== canvas.height || buffer.gradientSource !== canvas.getContext('2d'))
+            return null
+        const scale = this.surfaceCacheScale, W = canvas.width, H = canvas.height
+        const m = Math.max(SURFACE_PATCH_MARGIN_MIN, Math.ceil(SURFACE_PATCH_MARGIN * scale))
+        const outer = pixelRect(rect.x - m, rect.y - m, rect.x + rect.w + m, rect.y + rect.h + m, W, H)
+        const geometry = {scale, cacheWidth: b.width, cacheHeight: b.height}
+        const job = {outer, scale, left: b.left, top: b.top, window: clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r),
+            build: {canvas: buffer, ctx: buffer.getContext('2d'), geometry, left: b.left, top: b.top, stage: 0, lit: false,
+                atmospheric: true, state: [], overlayCells: []}}
+        const lit = this.withHeldLightMap(scale, () => {
+            for (const stage of SURFACE_CACHE_STAGES)
+                this.drawSurfacePatchStage(job, stage)
+            return job.build.lit
+        })
+        return lit ? buffer : null
+    }
+    // The board now drawn on the lit patch buffer within rect (grown by the lit patch margin), as a lit view patch draws it
+    // (LIT_PATCH_STEPS' drawing, drawLitPatch) with the light map as it is: the buffer, or null.
+    renderLitCellSprites(view, rect) {
+        const rest = view.rest, buffer = this.litPatchBuffer
+        if (view.patch || !buffer || buffer.width !== rest.canvas.width || buffer.height !== rest.canvas.height ||
+                buffer.gradientSource !== litGradientSource() || view.mapScale !== atmosphericLighting.mapScale)
+            return null
+        const cw = buffer.width, ch = buffer.height, m = LIT_PATCH_MARGIN
+        const outer = pixelRect(rect.x - m, rect.y - m, rect.x + rect.w + m, rect.y + rect.h + m, cw, ch)
+        const job = {rest, outer, window: clipWindowOf(outer, cw, ch, -rest.e / view.a, -rest.f / view.d, view.a, 1.05 * basis.r)}
+        const drawn = this.withHeldLightMap(undefined, () => {
+            for (const step of LIT_PATCH_STEPS.slice(1, -1))
+                step(this, job, view)
+            return true
+        })
+        return drawn ? buffer : null
     }
     // Two layers on a hidden-information board (PRD 7.3-7.4): the fog (visible now) and the
     // known contents (cells whose colour is known). A loading cell is uncovered by the local
@@ -1403,11 +1611,11 @@ class Grid extends SpritesGroup {
     }
     // The patch's last step: its region copied from the buffer into the cache, which now holds the patch's board state.
     finishSurfacePatch(job) {
-        copyCanvasRect(job.buffer, job.canvas, job.inner)
+        // The region copied (with the cell layer, as its cells' variants are taken again: prepareSurfaceCellLayer).
+        this.prepareSurfaceCellLayer(job.canvas, job.geometry, job.left, job.top, job.inner,
+            () => copyCanvasRect(job.buffer, job.canvas, job.inner))
         this.surfaceCacheLit = job.build.lit
         SURFACE_STATE_FIELDS.forEach((name, k) => { this[name] = job.state[k] })
-        // The region, drawn whole, split again (the cell layer's pixels there taken from it).
-        this.prepareSurfaceCellLayer(job.canvas, job.geometry, job.left, job.top, job.inner)
         this.surfacePatchJob = undefined
         ++this.surfaceCacheRevision
         ++this.surfaceCachePatches
@@ -2202,10 +2410,8 @@ class Grid extends SpritesGroup {
     // state (the patch's), the light map's, the edge of the lit cells; the tiles the change reaches are dropped (built
     // again one a task, LIT_TILE_PATCHED_BUDGET); the surface cache is checked next (its own patch).
     finishLitPatch(view, job) {
-        if (job.inner) {
-            copyCanvasRect(this.litPatchBuffer, job.rest.canvas, job.inner)
-            this.prepareLitCellLayer(view, job.rest, job.inner)
-        }
+        if (job.inner)
+            this.prepareLitCellLayer(view, job.rest, job.inner, () => copyCanvasRect(this.litPatchBuffer, job.rest.canvas, job.inner))
         SURFACE_STATE_FIELDS.forEach((name, k) => { view.state[k] = job.state[k] })
         view.rebuilds = atmosphericLighting.rebuilds
         view.mapScale = atmosphericLighting.mapScale
@@ -3147,8 +3353,8 @@ const SURFACE_PATCH_MARGIN = 128
 const SURFACE_PATCH_MARGIN_MIN = 32
 // false: every change rebuilds the whole cache, as before patches (tests compare a patched cache with a whole build).
 Grid.surfacePatching = true
-// TASK-1313 (off until TASK-1316): true keeps the owned cells' tiles and the fog out of the surface cache and the lit view's
-// rest snapshot, in a cell layer added over them every frame (Grid.splitCellLayer).
+// TASK-1313 (off until TASK-1316): true keeps the cells' tiles, owner colours and fog out of the surface cache and the lit
+// view's rest snapshot, in a cell layer of per-cell variant sprites added over them (Grid.splitCellLayer, refreshCellLayer).
 Grid.liveCellLayer = false
 // Whether the surface cache stands in for the lit view's light map and tiles while they are built over frames
 // (Grid.litStandIn): drawn magnified until the light map is built (and on a phone in a zoom gesture, where the direct draw
