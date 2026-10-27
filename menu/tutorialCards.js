@@ -6,7 +6,8 @@
 // the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed, re-read on every enter) carry a
 // gold check badge; the first lesson in menu order that is not passed is Next: a thick gold rim, a gold glow and a
 // "Next" tag. More rows than the grid shows scroll by whole rows (wheel, touch drag, arrow keys) with a gold track at
-// the right; while rows follow the shown ones, the next row peeks in, fading, under a "▼ N more" pill. Sizes are in hub units (hubUnit). The medallion shows the lesson's
+// the right; while rows follow the shown ones, the next row peeks in, fading, under a "▼ N more" pill (no pill while a
+// dotted "Advanced tutorial" divider, above ADVANCED_FROM's row, is shown). Sizes are in hub units (hubUnit). The medallion shows the lesson's
 // picture (TutorialCardsTree.IMAGES, by tutorial id) from the game's own assets.
 
 // A lesson card: its whole rect starts the lesson. Menu.touchStart/Move/End hand every touch to every button of the
@@ -55,6 +56,8 @@ class TutorialCardsTree {
     }
     // The share of a card's height the next row shows below the shown ones (TutorialCardsTree.layout).
     static PEEK = 0.45
+    // The first advanced lesson: the "Advanced tutorial" divider sits above its row (TutorialCardsTree.layout).
+    static ADVANCED_FROM = 'tutorial-15'
     // Medallion pictures by tutorial id (not the display number): the file and its fit, as in the concept: 'unit'
     // sprites a little larger and lowered, 'low' buildings raised so their art is centred. The menu loads them as its
     // own images from these paths, so the sprite and visuals settings (which switch the shared assets' folders, see
@@ -103,6 +106,7 @@ class TutorialCardsTree {
         this.columns = 3
         this.shownRows = 3
         this.peek = null
+        this.divider = null
         this.peekCanvas = null
         this.buttons = [this.backButton]
     }
@@ -111,6 +115,11 @@ class TutorialCardsTree {
     }
     get maxFirstRow() {
         return Math.max(0, this.rows - this.shownRows)
+    }
+    // The row the advanced lessons start at (ADVANCED_FROM), or null without it or in the first row.
+    get dividerRow() {
+        const index = this.entries.findIndex(entry => entry.id === TutorialCardsTree.ADVANCED_FROM)
+        return index > 0 && index >= this.columns ? Math.floor(index / this.columns) : null
     }
     // "Tutorial N: Name" -> {number: 'N', name: 'Name'}; any other title is the whole name.
     static parseTitle(title) {
@@ -143,7 +152,9 @@ class TutorialCardsTree {
     // shorter so the shown rows and PEEK of a card fit the grid, and the next row is placed under them as the peek
     // (clipped to the grid when drawn, ignoring clicks); this.peek keeps its band, its entries and the pill. Peek cards
     // whose medallion and name would sit in the hidden part (tall cards: portrait phones) draw them centred in the
-    // band instead (entry.contentY).
+    // band instead (entry.contentY). While the divider row (dividerRow) is shown or peeks, the divider's band takes the
+    // gap above it (this.divider): the cards are shorter by the band's extra height and the rows from it on move down
+    // by it; cardStep stays a card and a gap, so scrolling keeps whole rows. No pill is shown with the divider.
     layout() {
         const u = hubUnit(), logo = this.menu.logo.bounds
         const headingTop = logo.y + logo.height + 0.2 * u
@@ -158,12 +169,19 @@ class TutorialCardsTree {
         this.shownRows = chosen.rows
         this.firstRow = Math.min(this.firstRow, this.maxFirstRow)
         const peeking = this.firstRow < this.maxFirstRow, width = chosen.card.width
-        const height = peeking ? (this.grid.height - gap * this.shownRows) / (this.shownRows + TutorialCardsTree.PEEK) :
-            chosen.card.height
+        const f = u * hubFontScale(), band = Math.max(2.6 * u, 2.4 * f), dividerRow = this.dividerRow
+        const dividerAt = dividerRow !== null && dividerRow > this.firstRow &&
+            dividerRow < this.firstRow + this.shownRows + (peeking ? 1 : 0) ? dividerRow - this.firstRow : null
+        const extra = dividerAt === null ? 0 : band - gap
+        const height = peeking ? (this.grid.height - gap * this.shownRows - extra) / (this.shownRows + TutorialCardsTree.PEEK) :
+            (this.grid.height - gap * (this.shownRows - 1) - extra) / this.shownRows
         this.cardStep = height + gap
+        const rowY = row => this.grid.y + row * this.cardStep + (dividerAt !== null && row >= dividerAt ? extra : 0)
+        this.divider = dividerAt === null ? null : {x: this.grid.x, y: rowY(dividerAt) - band, width: this.grid.width,
+            height: band, text: 'Advanced tutorial', font: `700 ${1.5 * f}px ${Text.titleFamily}`}
         this.peek = null
         if (peeking) {
-            const top = this.grid.y + this.shownRows * this.cardStep, bottom = this.grid.y + this.grid.height
+            const top = rowY(this.shownRows), bottom = this.grid.y + this.grid.height
             const lessons = this.entries.length - (this.firstRow + this.shownRows) * this.columns
             this.peek = {top, bottom, entries: [], lessons, text: `▼  ${lessons} more`}
         }
@@ -172,7 +190,7 @@ class TutorialCardsTree {
             const shown = row >= 0 && row < this.shownRows, peek = this.peek && row === this.shownRows
             const rect = entry.button.rect
             Object.assign(rect, {x: this.grid.x + column * (width + gap),
-                y: shown || peek ? this.grid.y + row * this.cardStep : -HEIGHT, width, height, cornerRadius: Array(4).fill(u)})
+                y: shown || peek ? rowY(row) : -HEIGHT, width, height, cornerRadius: Array(4).fill(u)})
             entry.button.canClick = shown
             entry.peek = peek
             entry.contentY = null
@@ -188,14 +206,14 @@ class TutorialCardsTree {
             if (entry.checkMark) Object.assign(entry.checkMark, {width: badge, height: badge,
                 pos: {x: rect.x + rect.width - 0.9 * u - badge / 2, y: rect.y + 0.9 * u + badge / 2}})
         })
-        if (this.peek) {
-            const f = u * hubFontScale(), font = `700 ${1.5 * f}px ${Text.defaultFamily}`
+        if (this.peek && !this.divider) {
+            const font = `700 ${1.5 * f}px ${Text.defaultFamily}`
             const pill = {height: 2.6 * f}
             pill.width = Math.max(11 * u, TutorialCardsTree.measure(this.peek.text, font) + 3 * f)
             Object.assign(pill, {x: this.grid.x + this.grid.width / 2 - pill.width / 2,
                 y: this.peek.bottom - 0.2 * u - pill.height})
             this.peek.pill = {...pill, font}
-        }
+        } else if (this.peek) this.peek.pill = null
         this.track = this.rows > this.shownRows ?
             {x: this.grid.x + this.grid.width + 1.1 * u, y: this.grid.y, width: 0.45 * u, height: this.grid.height} : null
     }
@@ -255,6 +273,7 @@ class TutorialCardsTree {
         this.drawHeading(ctx, u)
         for (const entry of this.entries) if (entry.button.canClick) this.drawCard(ctx, entry, u)
         if (this.peek) this.drawPeek(ctx, u)
+        if (this.divider) this.drawDivider(ctx, u)
         if (this.track) {
             hubFillRounded(ctx, this.track, this.track.width / 2, 'rgba(255, 255, 255, 0.08)')
             const thumb = this.thumbRect
@@ -291,6 +310,7 @@ class TutorialCardsTree {
         ctx.drawImage(canvas, 0, 0)
         ctx.restore()
         const pill = peek.pill
+        if (!pill) return
         hubFillRounded(ctx, pill, pill.height / 2, 'rgba(14, 20, 48, 0.88)')
         ctx.beginPath()
         roundedRectPath(ctx, pill.x, pill.y, pill.width, pill.height, pill.height / 2)
@@ -298,6 +318,23 @@ class TutorialCardsTree {
         ctx.lineWidth = 0.12 * u
         ctx.stroke()
         hubText(ctx, peek.text, pill.x + pill.width / 2, pill.y + pill.height / 2, pill.font, MENU_THEME.heading, 'center')
+    }
+    // "Advanced tutorial" centred in the divider's band, a dotted gold line from each grid edge to 1.2 u from it.
+    drawDivider(ctx, u) {
+        const d = this.divider, y = d.y + d.height / 2, centre = d.x + d.width / 2
+        const inner = hubText(ctx, d.text, centre, y, d.font, MENU_THEME.heading, 'center') / 2 + 1.2 * u
+        ctx.save()
+        ctx.setLineDash([0.35 * u, 0.45 * u])
+        ctx.lineCap = 'round'
+        ctx.strokeStyle = MENU_THEME.plain.rim
+        ctx.lineWidth = Math.max(1, 0.18 * u)
+        ctx.beginPath()
+        ctx.moveTo(d.x, y)
+        ctx.lineTo(centre - inner, y)
+        ctx.moveTo(d.x + d.width, y)
+        ctx.lineTo(centre + inner, y)
+        ctx.stroke()
+        ctx.restore()
     }
     // "Tutorial" between two gold lines fading outwards.
     drawHeading(ctx, u) {
@@ -463,11 +500,13 @@ class TutorialCardsTree {
             Math.min(right - 0.6 * u, corner.x - 0.6 * u) : right - 0.6 * u)
         ctx.font = nameFont
         const lines = TutorialCardsTree.wrap(ctx, button.name, ends.map(end => end - nameLeft))
-        const blockTop = y - lines.length * lineHeight / 2
+        const width = Math.max(0, ...lines.map(line => ctx.measureText(line).width))
+        // On short cards (the divider's) a centred block can reach the mark's bottom: a block as wide as under the mark
+        // then starts at that bottom.
+        let blockTop = y - lines.length * lineHeight / 2
+        if (corner && nameLeft + width > corner.x) blockTop = Math.max(blockTop, corner.y + corner.height)
         lines.forEach((line, i) => hubText(ctx, line, nameLeft, blockTop + (i + 0.5) * lineHeight, nameFont, colours.text))
         if (button.number) hubText(ctx, button.number, left, blockTop + 0.5 * lineHeight, numberFont, colours.gold)
-        ctx.font = nameFont
-        const width = Math.max(0, ...lines.map(line => ctx.measureText(line).width))
         button.label = {numberFontSize: 3 * u, nameFontSize: nameSize, lines,
             nameBox: {x: nameLeft, y: blockTop, width, height: lines.length * lineHeight},
             numberBox: {x: left, y: blockTop, width: numberWidth, height: 3 * u}}
