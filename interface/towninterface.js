@@ -109,10 +109,11 @@ class TownInterface extends BarrackInterface {
         this.invalidateRenderCache()
         this.visible = true
     }
-    // The Switch: the active half washed with a gold edge, both original texts in ink (the other one faded).
+    // The Switch: the active half washed with a gold edge, the other one with a dashed gold outline; both texts in ink.
     drawContents(ctx) {
         super.drawContents(ctx)
         const halves = [[this.switch.buttonOne, this.switch.selected == 1], [this.switch.buttonTwo, this.switch.selected == 2]]
+        const lw = Math.max(1, 0.0025 * HEIGHT)
         for (const [half, active] of halves) {
             const rect = half.rect
             if (active) {
@@ -120,11 +121,21 @@ class TownInterface extends BarrackInterface {
                 ctx.fillStyle = this.panelColors.wash
                 ctx.fill()
                 ctx.strokeStyle = TRAIN_PANEL_GOLD
-                ctx.lineWidth = Math.max(1, 0.0025 * HEIGHT)
+                ctx.lineWidth = lw
                 ctx.stroke()
             }
+            else {
+                ctx.save()
+                roundedRectPath(ctx, rect.x + lw, rect.y + lw, rect.width - 2 * lw, rect.height - 2 * lw, rect.height * 0.2)
+                ctx.setLineDash([2.4 * lw, 2 * lw])
+                ctx.lineCap = 'round'
+                ctx.strokeStyle = TRAIN_PANEL_GOLD
+                ctx.lineWidth = 1.3 * lw
+                ctx.stroke()
+                ctx.restore()
+            }
             drawTrainPanelText(ctx, half.textString, rect.x + rect.width / 2, rect.y + rect.height / 2,
-                half.text.fontSize * 0.85, rect.width * 0.88, active ? ENTITY_PANEL_INK : 'rgba(74,46,20,0.55)', 'center')
+                half.text.fontSize * 0.85, rect.width * 0.88, ENTITY_PANEL_INK, 'center')
         }
         if (this.badlyDamaged)
             this.drawBadlyDamagedNotice(ctx)
