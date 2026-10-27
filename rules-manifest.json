@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "72d906493bf8e21e0dbfd4b200676c713246d06fa0934ac2fe65c14ed3d9c759",
+  "rulesVersion": "6f2f5d449d8bc23d9b27530734fc6834bcde137eef89d95d8f59593a6426d181",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -165,8 +165,8 @@
     },
     {
       "path": "interface/towninterface.js",
-      "sha256": "c9701af617bd7f57b480641bf9e91081f565a3b92fc76df33ec6a357c5e3844a",
-      "bytes": 4264
+      "sha256": "6327cadb17c3d58b8aa019e58dea02384517c140b18fccf983adfafb85ae5c58",
+      "bytes": 7379
     },
     {
       "path": "interface/statisticsinterface.js",

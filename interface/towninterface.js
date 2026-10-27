@@ -105,6 +105,7 @@ class TownInterface extends BarrackInterface {
         this.switch.setSelectedColor(color.hex)
         
         this.goldText.text = town.info.gold
+        this.badlyDamaged = !!town.isBadlyDamaged
         this.invalidateRenderCache()
         this.visible = true
     }
@@ -125,5 +126,81 @@ class TownInterface extends BarrackInterface {
             drawTrainPanelText(ctx, half.textString, rect.x + rect.width / 2, rect.y + rect.height / 2,
                 half.text.fontSize * 0.85, rect.width * 0.88, active ? ENTITY_PANEL_INK : 'rgba(74,46,20,0.55)', 'center')
         }
+        if (this.badlyDamaged)
+            this.drawBadlyDamagedNotice(ctx)
     }
+    // A 0-hp town cannot build: the rows faded under a parchment wash, a broken heart, why, and how it heals.
+    drawBadlyDamagedNotice(ctx) {
+        const rows = Object.values(this.trainInterfaces[this.trainInterfacesTab])
+        if (!rows.length)
+            return
+        const bg = this.background
+        const pad = 0.03 * 0.35 * HEIGHT
+        const top = Math.min(...rows.map(row => row.y - row.image.height / 2)) - pad
+        const bottom = Math.max(...rows.map(row => row.y + row.image.height / 2)) + pad
+        const x0 = bg.x + bg.width * 0.12, x1 = bg.x + bg.width * 0.94, cx = (x0 + x1) / 2
+        const fontSize = 0.35 * HEIGHT * 0.085
+        ctx.save()
+        ctx.fillStyle = 'rgba(236,220,186,0.78)'
+        ctx.fillRect(bg.x + bg.width * 0.06, top, bg.width * 0.92, bottom - top)
+        drawBrokenHeart(ctx, cx, top + (bottom - top) * 0.22 + fontSize * 0.75, fontSize * 1.5)
+        ctx.font = `italic 600 ${fontSize}px ${Text.defaultFamily}`
+        ctx.fillStyle = ENTITY_PANEL_INK
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        const lines = wrapCanvasText(ctx, "can't build when at 0 hp", x1 - x0)
+        const textY = top + (bottom - top) * 0.52
+        lines.forEach((line, i) => ctx.fillText(line, cx, textY + i * fontSize * 1.2))
+        ctx.globalAlpha = 0.6
+        ctx.font = `italic ${fontSize * 0.7}px ${Text.defaultFamily}`
+        ctx.fillText(`heals +${Town.healSpeed} hp a turn when not hit`, cx, textY + lines.length * fontSize * 1.2 + fontSize * 0.2,
+            x1 - x0)
+        ctx.restore()
+    }
+}
+// A red heart with an ink outline and a cream crack, size wide, centred at (x, y).
+function drawBrokenHeart(ctx, x, y, size) {
+    ctx.save()
+    ctx.translate(x - size / 2, y - size / 2)
+    ctx.scale(size / 24, size / 24)
+    ctx.beginPath()
+    ctx.moveTo(12, 21)
+    ctx.bezierCurveTo(4, 15, 1, 11, 1, 7)
+    ctx.bezierCurveTo(1, 3.5, 4, 1.5, 6.8, 1.5)
+    ctx.bezierCurveTo(9, 1.5, 11, 3, 12, 5)
+    ctx.bezierCurveTo(13, 3, 15, 1.5, 17.2, 1.5)
+    ctx.bezierCurveTo(20, 1.5, 23, 3.5, 23, 7)
+    ctx.bezierCurveTo(23, 11, 20, 15, 12, 21)
+    ctx.closePath()
+    ctx.fillStyle = '#c0392b'
+    ctx.fill()
+    ctx.lineWidth = 1.4
+    ctx.strokeStyle = ENTITY_PANEL_INK
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(12, 5)
+    ctx.lineTo(10, 9)
+    ctx.lineTo(14, 12)
+    ctx.lineTo(11, 16)
+    ctx.lineTo(12, 21)
+    ctx.strokeStyle = '#f3e3c0'
+    ctx.lineWidth = 2.2
+    ctx.stroke()
+    ctx.restore()
+}
+// The text split into lines no wider than maxWidth in ctx's font (a single long word stays on its line).
+function wrapCanvasText(ctx, text, maxWidth) {
+    const lines = []
+    let line = ''
+    for (const word of text.split(' ')) {
+        const next = line ? line + ' ' + word : word
+        if (line && ctx.measureText(next).width > maxWidth) {
+            lines.push(line)
+            line = word
+        }
+        else
+            line = next
+    }
+    lines.push(line)
+    return lines
 }
