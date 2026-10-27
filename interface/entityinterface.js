@@ -141,6 +141,10 @@ class EntityInterface {
                 room = Math.min(room, panel.pos.x)
         return room
     }
+    // The x of the rows' stat icons (drawContents); the bottom buttons start there too, under the stats.
+    get statIconX() {
+        return this.entity.info.x - 0.14 * this.height * (this.columnScale ?? 1)
+    }
     layoutColumn(scale) {
         const h = this.height
         this.columnScale = scale
@@ -160,7 +164,7 @@ class EntityInterface {
             this.entity.info.fontSize = room / rows
         for (const button of [this.destroyButton, this.skipMovesButton, this.portalStatsButton, this.portalBackButton,
                 this.townTowerButton, this.townBackButton])
-            button.x = this.entity.name.x
+            button.x = this.statIconX
         // Beside the destroy button of an own town, not under it.
         if (this.destroyButton.canClick)
             this.townTowerButton.x = this.townBackButton.x = this.destroyButton.rect.right + 0.04 * h
@@ -185,11 +189,15 @@ class EntityInterface {
         this.sizedForUnit = isCurrentEnityUnit
         this.fitColumn()
         let currentButton = isCurrentEnityUnit ? this.destroyButton : this.skipMovesButton
+        // The buttons' ends as if they started at the text column, not under the icons: the drawn rows (wider than
+        // info.width) keep the room they are laid out in.
+        const start = this.entity.name.x
+        const towerStart = this.destroyButton.canClick ? start + this.destroyButton.rect.width + 0.04 * this.height : start
         this.width = Math.max(
             this.entity.info.x + this.entity.info.width,
             this.entity.name.x + this.entity.name.width,
-            currentButton.rect.right,
-            this.townTowerText ? this.townTowerButton.rect.right : 0) + 0.04 * this.height
+            start + currentButton.rect.width,
+            this.townTowerText ? towerStart + this.townTowerButton.rect.width : 0) + 0.04 * this.height
 
         this.background.width = this.width
         
@@ -473,7 +481,7 @@ class EntityInterface {
         ctx.fill()
         // Rows: icon, key, value (the value column after the widest key); keyless rows as text.
         const rows = this.panelRows()
-        const iconX = this.entity.info.x - 0.14 * h * s
+        const iconX = this.statIconX
         const button = [this.destroyButton, this.skipMovesButton, this.portalStatsButton, this.portalBackButton,
             this.townTowerButton, this.townBackButton].filter(b => b.canClick)
         const rowsTop = ruleY + 0.05 * h * s
