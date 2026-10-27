@@ -345,6 +345,33 @@ const atmosphericLighting = {
         }
         return synced
     },
+    // TASK-1360: syncOwners(board, cap, true) in steps (a generator; each yield ends one: updateMapRegionSteps'), the same
+    // calls in the same order, for a surface cell layer job (Grid.startSurfaceLayerJob), kept in regionStaged while under
+    // way. Its clip stays on the map's canvases between steps, so a call drawing on the map (lightMap, updateMapRegion,
+    // stepLightMap) first drops it (endRegionSteps: the clip taken off); the owners it had not brought up are left to the
+    // next sync (mapOwners unchanged until its last step). Returns (the generator's value) whether the map has the owners.
+    regionStaged: null,
+    startOwnerSync(board, cap) {
+        this.endRegionSteps()
+        const steps = this.regionStaged = (function* (L) {
+            if (!L.ownerFree(board) || !L.map) return true
+            const rects = L.ownerRects(board)
+            if (rects && !rects.length) return true
+            if (!rects) return false
+            const rebuilds = L.rebuilds, synced = yield* L.updateMapRegionSteps(board, cap, [], L.mapState)
+            if (synced) {
+                ++L.ownerSyncs
+                L.rebuilds = rebuilds
+            }
+            return synced
+        })(this)
+        return steps
+    },
+    endRegionSteps() {
+        const steps = this.regionStaged
+        this.regionStaged = null
+        steps?.return()
+    },
     // Whether the board's light state equals stored (a lightState copy).
     sameLightState(board, stored) {
         const state = this.lightState(board)
@@ -416,6 +443,7 @@ const atmosphericLighting = {
     // settled zoom change. Panning draws the same map through the camera transform,
     // and a zoom gesture reuses it scaled until the gesture settles.
     lightMap(board, cap) {
+        this.endRegionSteps()
         mapDepth.ensureGeometry(board)
         const bounds = mapDepth.surfaceBounds
         if (!bounds || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return null
@@ -468,6 +496,7 @@ const atmosphericLighting = {
     // zoom is built over frames, buildSteps): the first starts it, dropping the map (nothing draws from it meanwhile; a
     // lightMap call finishes it at once); the last makes it the map as lightMap would. Returns whether the map is ready.
     stepLightMap(board, cap) {
+        this.endRegionSteps()
         if (this.lightMapReady(board, cap)) return true
         mapDepth.ensureGeometry(board)
         const bounds = mapDepth.surfaceBounds
@@ -503,6 +532,16 @@ const atmosphericLighting = {
     // Reused canvases holding a region's ring while it is redrawn (updateMapRegion), by canvas name.
     regionScratch: {},
     updateMapRegion(board, cap, rects, stored) {
+        this.endRegionSteps()
+        const steps = this.updateMapRegionSteps(board, cap, rects, stored)
+        let step
+        while (!(step = steps.next()).done);
+        return step.value
+    },
+    // updateMapRegion's drawing in steps (a generator; each yield ends one: the rings kept, each of build's steps, the rings
+    // put back), its value updateMapRegion's (TASK-1360, startOwnerSync). The clip window is set only within a step; the
+    // canvases' clip stays on between steps until the last (or the generator's return).
+    *updateMapRegionSteps(board, cap, rects, stored) {
         mapDepth.ensureGeometry(board)
         const bounds = mapDepth.surfaceBounds
         if (!bounds || !this.map || !this.gain || this.mapKey !== JSON.stringify(bounds) ||
@@ -529,6 +568,7 @@ const atmosphericLighting = {
         this.lastMapRegion = {regions}
         const kept = ['map', 'gain'].map(name =>
             regions.map(({inner, outer}, k) => copyCanvasRing(this[name], outer, inner, this.regionScratch, name + k)))
+        yield
         const g = this.map.getContext('2d'), k = this.gain.getContext('2d')
         for (const c of [g, k]) {
             c.save()
@@ -541,15 +581,27 @@ const atmosphericLighting = {
         const span = pixelRect(Math.min(...regions.map(r => r.outer.x)), Math.min(...regions.map(r => r.outer.y)),
             Math.max(...regions.map(r => r.outer.x + r.outer.w)), Math.max(...regions.map(r => r.outer.y + r.outer.h)), W, H)
         // The caller's clip window kept (a cell layer variant's render brings the map up within a patch stage, syncOwners).
-        const clip = this.clipWindow
-        this.clipWindow = clipWindowOf(span, W, H, bounds.left, bounds.top, scale, 1.05 * basis.r)
+        const clip = this.clipWindow, window = clipWindowOf(span, W, H, bounds.left, bounds.top, scale, 1.05 * basis.r)
         try {
-            this.build(this.collect(board), bounds, scale, true)
+            const steps = this.buildSteps(this.collect(board), bounds, scale, true)
+            for (;;) {
+                this.clipWindow = window
+                let done
+                try {
+                    done = steps.next().done
+                } finally {
+                    this.clipWindow = clip
+                }
+                if (done)
+                    break
+                yield
+            }
         } finally {
             this.clipWindow = clip
             g.restore()
             k.restore()
         }
+        yield
         for (const ring of kept[0]) restoreCanvasRing(this.map, ring)
         for (const ring of kept[1]) restoreCanvasRing(this.gain, ring)
         ++this.rebuilds

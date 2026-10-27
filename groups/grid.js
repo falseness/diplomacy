@@ -134,6 +134,15 @@ class Grid extends SpritesGroup {
         // TASK-1316: lit layer jobs started and finished (startLitLayerJob: new variants rendered a step a frame).
         this.cellLayerJobs = 0
         this.cellLayerJobsDone = 0
+        // TASK-1360: the surface cell layer's job under way (startSurfaceLayerJob), whether one failed for the board's states
+        // now (they are then drawn at once), its steps run, jobs started and finished, the last one's plan and its stage canvas.
+        this.surfaceLayerJob = undefined
+        this.surfaceLayerJobFailed = false
+        this.surfaceLayerSteps = 0
+        this.surfaceLayerJobs = 0
+        this.surfaceLayerJobsDone = 0
+        this.lastSurfaceLayerJob = undefined
+        this.surfaceLayerStage = undefined
         // The surface cache built between frames (prepareSurfaceCache): the build in progress,
         // whether a stage is queued, when the cache was last compared with the whole board,
         // whether a frame found it not matching, stages run (a count) and a 1x1 canvas the
@@ -984,24 +993,39 @@ class Grid extends SpritesGroup {
     // TASK-1316: on the lit view (ctx and t, the frame's canvas and transform) with the camera resting on its finished rest
     // snapshot, new variants are rendered a step a frame (startLitLayerJob) while the frames draw the changed cells over
     // the snapshot (drawPatchCells), instead of all in the frame that found the change.
-    followCellLayer(which, ctx, t) {
+    // TASK-1360: so are the surface cache's (startSurfaceLayerJob) when the frame drawing it is the frame's surface (main:
+    // drawMapSurface's, not a stand-in's or the overlay snapshot's, which draw the change as the job's frames do).
+    followCellLayer(which, ctx, t, main = false) {
         if (!this.cellLayerOn())
             return true
         const view = this.litView, layer = which === 'surface' ? this.surfaceCellLayer : this.litCellLayer
         if (which === 'surface' ? !layer?.cells || layer.raster !== this.surfaceCache || !this.surfaceCache?.cellLayered :
                 !layer?.cells || !view?.rest || view.rest.cellLayer !== layer || layer.raster !== view.rest.canvas)
             return true
-        const pending = which === 'lit' ? view.layerJob : undefined
+        const pending = which === 'lit' ? view.layerJob : this.surfaceLayerJob
         if (this.cellLayerStatesAre(layer.states)) {
             if (pending)
-                view.layerJob = undefined
+                which === 'lit' ? view.layerJob = undefined : this.dropSurfaceLayerJob()
+            this.surfaceLayerJobFailed = false
             return true
         }
         const states = this.cellLayerStates()
         const same = (a, b) => a && a.length === b.length && a.every((v, k) => v === b[k])
         const job = which === 'surface' ? this.surfacePatchJob || this.surfaceCacheBuild : view.patch
-        if (job)
+        if (job) {
+            // The patch draws every changed cell (the layer follows after it).
+            if (which === 'surface' && pending)
+                this.dropSurfaceLayerJob()
             return true
+        }
+        if (which === 'surface' && Grid.surfaceLayerJobs) {
+            if (pending && same(pending.states, states))
+                return true
+            if (pending)
+                this.dropSurfaceLayerJob()
+            if (main && !this.surfaceLayerJobFailed && this.startSurfaceLayerJob(states))
+                return true
+        }
         if (which === 'lit' && ctx) {
             const patchable = this.litPatchable(ctx, view, t)
             if (pending && patchable && same(pending.states, states))
@@ -1022,6 +1046,7 @@ class Grid extends SpritesGroup {
             return false
         }
         this.followedCellLayer(which, layer, states)
+        this.surfaceLayerJobFailed = false
         return true
     }
     // A layer brought up to the board's states (followCellLayer, a lit layer job's last step): it takes them, and so does its
@@ -1318,6 +1343,188 @@ class Grid extends SpritesGroup {
             view.layerJob = undefined
             view.layerJobFailed = true
         }
+    }
+    // TASK-1360: the surface cache's cell layer brought up to the board's states (followCellLayer, a frame drawing the cache
+    // as its surface) when variants of changed cells have no sprite yet, a step a frame (surfaceLayerStep, none in the frame
+    // that found the change), as the lit view's layer job does (startLitLayerJob), instead of all in that frame
+    // (refreshCellLayer): each of SURFACE_CACHE_STAGES drawn on the patch buffer over the missing cells' region, as
+    // renderSurfaceCellSprites draws them all at once (with the light map as it is, withHeldLightMap; its owners synced a step
+    // before the bake's); the new variants'
+    // sprites made from it, SURFACE_LAYER_SPRITES a step (cellSprite); the changed cells' sprites drawn into the layer
+    // (drawCellSprites) and composed on a canvas of their region (the shown canvas's pixels there first, composeCellSprites,
+    // in bands of rows: disjoint, so each pixel is composed once, as in one call); then the region copied into the shown
+    // canvas and the layer taking the board's states (followedCellLayer). So the shown canvas ends as refreshCellLayer draws
+    // it, to the bit. Until then the frames draw the changed cells over it in the board's state (drawPatchCells), and the
+    // cells keep their variants (cell.key) until the last step, so a job dropped (another board change, a patch or build,
+    // another cache) leaves the layer as it was (the layer canvas drawn again from them when next read, staleCellLayer).
+    // Returns false when the change is drawn at once instead: every changed variant has its sprite (an undo, a capture taken
+    // back), no cell state changed for the cache, a lamp or portal among the cells (surfaceCacheChangeRects), no patch buffer.
+    startSurfaceLayerJob(states) {
+        const layer = this.surfaceCellLayer, canvas = this.surfaceCache, shown = this.surfaceCacheShown, buffer = this.surfacePatchBuffer
+        if (!shown || !buffer || buffer.width !== canvas.width || buffer.height !== canvas.height ||
+                buffer.gradientSource !== canvas.getContext('2d'))
+            return false
+        return this.withCellReach(() => {
+            const keys = new Map()
+            for (const c of layer.cells) {
+                const key = this.cellLayerKey(c.i, c.j)
+                if (key !== c.key)
+                    keys.set(c, key)
+            }
+            const cells = [...keys.keys()], missing = cells.filter(c => !layer.sprites.has(c.index + '|' + keys.get(c)))
+            if (!missing.length)
+                return false
+            const changes = [], overlayCells = this.surfaceOverlayCells
+            this.surfaceOverlayCells = []
+            let found
+            try {
+                found = this.surfaceStateMatches(undefined, changes, true) && changes.length && this.surfaceCacheChangeRects(changes)
+            } finally {
+                this.surfaceOverlayCells = overlayCells
+            }
+            if (!found)
+                return false
+            const W = layer.width, H = layer.height
+            const span = list => list.reduce((r, {box}) => pixelRect(Math.min(r.x, box.x), Math.min(r.y, box.y),
+                Math.max(r.x + r.w, box.x + box.w), Math.max(r.y + r.h, box.y + box.h), W, H), list[0].box)
+            const region = span(cells), rendered = span(missing)
+            const job = this.surfaceLayerJob = {cache: canvas, layer, states, boxes: found.cells, light: found.light, sprites: found.sprites,
+                changed: changes.slice(), cells, region, steps: [], step: 0, ran: null, drawn: false}
+            const fail = () => { job.failed = true }
+            // The stages over the missing cells' region on the patch buffer (renderSurfaceCellSprites' drawing, a stage a step).
+            const scale = this.surfaceCacheScale, b = this.surfaceCacheBounds
+            const m = CELL_RENDER_MARGIN * Math.max(SURFACE_PATCH_MARGIN_MIN, Math.ceil(SURFACE_PATCH_MARGIN * scale))
+            const outer = pixelRect(rendered.x - m, rendered.y - m, rendered.x + rendered.w + m, rendered.y + rendered.h + m, W, H)
+            const render = {outer, scale, left: b.left, top: b.top, window: clipWindowOf(outer, W, H, b.left, b.top, scale, 1.05 * basis.r),
+                build: {canvas: buffer, ctx: buffer.getContext('2d'), geometry: {scale, cacheWidth: b.width, cacheHeight: b.height},
+                    left: b.left, top: b.top, stage: 0, lit: false, atmospheric: true, state: [], overlayCells: []}}
+            // First the light map's owners synced in steps of their own (atmosphericLighting.startOwnerSync, up to
+            // SURFACE_LAYER_SYNC_STEPS of updateMapRegion's a step, the step run again until the sync ends; only the bake of
+            // the stages draws from the map, and its lightMap then finds them synced), so frames lighting the changed cells
+            // from the map (drawSurfaceCache) soon have the new owners' glow.
+            job.steps.push(() => {
+                const L = atmosphericLighting
+                if (job.sync && L.regionStaged !== job.sync)
+                    return fail()
+                const step = this.withHeldLightMap(scale, () => {
+                    job.sync ||= L.startOwnerSync(this, scale)
+                    let step
+                    for (let k = 0; k < SURFACE_LAYER_SYNC_STEPS && !(step = job.sync.next()).done; ++k);
+                    return step
+                })
+                if (!step || step.done && !step.value)
+                    return fail()
+                if (!step.done)
+                    --job.step
+                else if (L.regionStaged === job.sync)
+                    L.regionStaged = null
+            })
+            for (const stage of SURFACE_CACHE_STAGES)
+                job.steps.push(() => this.withHeldLightMap(scale, () => {
+                    this.drawSurfacePatchStage(render, stage)
+                    return true
+                }) || fail())
+            for (let k = 0; k < missing.length; k += SURFACE_LAYER_SPRITES)
+                job.steps.push(() => {
+                    if (!render.build.lit)
+                        return fail()
+                    for (const cell of missing.slice(k, k + SURFACE_LAYER_SPRITES)) {
+                        const key = cell.key
+                        this.cellSprite(layer, cell, buffer, keys.get(cell))
+                        cell.key = key
+                    }
+                    this.cellLayerVariantRenders += Math.min(SURFACE_LAYER_SPRITES, missing.length - k)
+                })
+            // fn with the changed cells at their variants now (taken for good by the last step).
+            const atKeys = fn => {
+                const kept = cells.map(c => c.key)
+                cells.forEach(c => { c.key = keys.get(c) })
+                try {
+                    fn()
+                } finally {
+                    cells.forEach((c, k) => { c.key = kept[k] })
+                }
+            }
+            job.steps.push(() => {
+                if (cells.some(c => !layer.sprites.has(c.index + '|' + keys.get(c))))
+                    return fail()
+                this.flushCellLayer(layer)
+                job.drawn = true
+                atKeys(() => this.drawCellSprites(layer, region))
+            })
+            const stage = this.surfaceLayerStage ||= document.createElement('canvas')
+            job.steps.push(() => {
+                if (stage.width < region.w || stage.height < region.h) {
+                    stage.width = Math.max(stage.width, region.w)
+                    stage.height = Math.max(stage.height, region.h)
+                }
+                const g = stage.getContext('2d')
+                g.save()
+                g.setTransform(1, 0, 0, 1, 0, 0)
+                g.globalCompositeOperation = 'copy'
+                g.drawImage(shown, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h)
+                g.restore()
+            })
+            const n = Math.ceil(region.w * region.h / (SURFACE_LAYER_COMPOSE * W * H))
+            for (let k = 0; k < n; ++k) {
+                const y0 = region.y + Math.floor(k * region.h / n), y1 = region.y + Math.floor((k + 1) * region.h / n)
+                if (y1 > y0)
+                    job.steps.push(() => atKeys(() => this.composeCellSprites(stage, layer, {x: region.x, y: y0, w: region.w, h: y1 - y0},
+                        region.x, region.y)))
+            }
+            job.steps.push(() => {
+                const g = shown.getContext('2d')
+                g.save()
+                g.setTransform(1, 0, 0, 1, 0, 0)
+                g.globalCompositeOperation = 'copy'
+                g.beginPath()
+                g.rect(region.x, region.y, region.w, region.h)
+                g.clip()
+                g.drawImage(stage, 0, 0, region.w, region.h, region.x, region.y, region.w, region.h)
+                g.restore()
+                for (const cell of cells)
+                    cell.key = keys.get(cell)
+                this.surfaceLayerJob = undefined
+                ++this.cellLayerRefreshes
+                ++this.cellLayerRevision
+                ++this.surfaceLayerJobsDone
+                this.followedCellLayer('surface', layer, states)
+            })
+            ++this.surfaceLayerJobs
+            this.lastSurfaceLayerJob = {cells: cells.length, missing: missing.length, changes: changes.length, region, rendered: outer,
+                bands: n, steps: job.steps.length}
+            return true
+        })
+    }
+    // One step of the surface layer job (startSurfaceLayerJob) in a frame drawing the cache as its surface: at most one a
+    // frame, none in the frame that started it. A job whose cache, layer or board state is no longer its own, or a patch or
+    // build under way, is dropped; a step that fails drops it too, and the change is then drawn at once (refreshCellLayer).
+    surfaceLayerStep() {
+        const job = this.surfaceLayerJob
+        if (job.ran === null || job.ran === this.drawSerial) {
+            job.ran ??= this.drawSerial
+            return
+        }
+        job.ran = this.drawSerial
+        if (job.cache !== this.surfaceCache || job.layer !== this.surfaceCellLayer || this.surfacePatchJob || this.surfaceCacheBuild ||
+                !this.cellLayerStatesAre(job.states))
+            return this.dropSurfaceLayerJob()
+        ++this.surfaceLayerSteps
+        job.steps[job.step++]()
+        if (job.failed) {
+            this.dropSurfaceLayerJob()
+            this.surfaceLayerJobFailed = true
+        }
+    }
+    // The surface layer job ended before its last step: the layer canvas, if its step drew the new sprites, drawn again from
+    // the cells' variants when next read.
+    dropSurfaceLayerJob() {
+        const job = this.surfaceLayerJob
+        this.surfaceLayerJob = undefined
+        if (job?.sync && atmosphericLighting.regionStaged === job.sync)
+            atmosphericLighting.endRegionSteps()
+        if (job?.drawn && job.layer === this.surfaceCellLayer)
+            this.staleCellLayer(job.layer, job.region)
     }
     // The sprite of cell for its variant now (cellLayerKey), its mask pixels taken from source (the split canvas, drawn
     // whole there, or a render of the variant, renderCellSprites), kept in layer.sprites; the cell takes the variant.
@@ -2356,7 +2563,8 @@ class Grid extends SpritesGroup {
         // Never above the raster's own scale (it would be drawn magnified, below full resolution).
         return canvas.scale <= cacheScale
     }
-    drawSurfaceCache(ctx) {
+    // main: the frame's surface (drawMapSurface), which runs the surface layer job's steps (TASK-1360).
+    drawSurfaceCache(ctx, main = false) {
         if (!this.surfaceCache || !this.surfaceStateMatches(ctx)) {
             // With atmospheric visuals no frame builds it (prepareSurfaceCache); a frame with the camera at
             // rest starts the patch of a cache that differs in a few cells (patchSurfaceCache), and the frames
@@ -2371,8 +2579,8 @@ class Grid extends SpritesGroup {
             else if (!this.createSurfaceCache())
                 return false
         }
-        // Its cell layer brought up to the board's owner colours, suburbs and fog (TASK-1315).
-        if (!this.followCellLayer('surface'))
+        // Its cell layer brought up to the board's owner colours, suburbs and fog (TASK-1315), in a job's steps (TASK-1360).
+        if (!this.followCellLayer('surface', undefined, undefined, main))
             return false
 
         const visibleLeft = Math.max(this.surfaceCacheBounds.left, canvas.offset.x)
@@ -2405,7 +2613,54 @@ class Grid extends SpritesGroup {
         draw(this.surfaceCache.cellLayered && this.surfaceCacheShown || this.surfaceCache)
         if (this.surfacePatchJob)
             this.drawPatchCells(ctx, this.surfacePatchJob, 'cache')
+        else if (this.surfaceLayerJob) {
+            const job = this.surfaceLayerJob
+            for (const part of job.parts ||= this.surfaceLayerParts(job))
+                this.drawPatchCells(ctx, part, 'cache')
+            if (main)
+                this.surfaceLayerStep()
+        }
         return true
+    }
+    // TASK-1360: the surface layer job's changed cells as drawPatchCells draws them, with their light (the changed light's
+    // part, atmosphericLighting.regionLight, found by the job's first frame): the job itself, or, for cells spanning more than
+    // one such part draws (REGION_LIGHT_MAX map pixels a side), clusters of them each with its own part (on canvases of its
+    // own slot), the sprites' rectangles with the cluster nearest them; a cluster whose part cannot be drawn is lit by the
+    // light map as it is (its owners brought up by the job's first steps).
+    surfaceLayerParts(job) {
+        const L = atmosphericLighting
+        if (!job.light.length || (job.regionLight = L.regionLight(this, this.patchCellsAreas(job), 'cache')))
+            return [job]
+        const h = this.arr[0].length, r = 1.05 * basis.r, limit = (L.REGION_LIGHT_MAX - 2 * L.MAP_GROW - 2) / (L.mapScale || 1)
+        const clusters = []
+        for (const index of job.changed) {
+            const c = this.arr[Math.floor(index / h)][index % h].hexagon.calcPos()
+            const box = {x0: c.x - r, y0: c.y - r, x1: c.x + r, y1: c.y + r}
+            const join = (q, b) => ({x0: Math.min(q.x0, b.x0), y0: Math.min(q.y0, b.y0), x1: Math.max(q.x1, b.x1), y1: Math.max(q.y1, b.y1)})
+            const fits = q => q.x1 - q.x0 <= limit && q.y1 - q.y0 <= limit
+            const cluster = clusters.find(k => fits(join(k.span, box)))
+            if (cluster) {
+                cluster.span = join(cluster.span, box)
+                cluster.changed.push(index)
+            }
+            else
+                clusters.push({span: box, changed: [index], sprites: []})
+        }
+        const centre = q => ({x: (q.x0 + q.x1) / 2, y: (q.y0 + q.y1) / 2})
+        for (const q of job.sprites) {
+            const p = centre(q), d = k => {
+                const c = centre(k.span)
+                return Math.hypot(c.x - p.x, c.y - p.y)
+            }
+            clusters.reduce((a, k) => d(k) < d(a) ? k : a).sprites.push(q)
+        }
+        return clusters.map((k, n) => {
+            const part = {boxes: job.boxes, changed: k.changed, sprites: k.sprites, light: job.light}
+            part.regionLight = L.regionLight(this, this.patchCellsAreas(part), 'surface-layer-' + n)
+            if (!part.regionLight)
+                part.light = []
+            return part
+        })
     }
     // Whether the cache, patched or being patched to the board (patchSurfaceCache), is drawn on ctx: during a patch the
     // board matches the patch's state, and this frame's overlay cells are listed from it (surfaceOverlayCells).
@@ -2664,6 +2919,7 @@ class Grid extends SpritesGroup {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
         if (typeof Proxy !== 'function' || debug || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob || this.litView?.layerJob ||
+                this.surfaceLayerJob ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !atmosphericBackground.opaqueOver(ctx))
             return null
         const recorder = this.overlayRecorder ||= new CanvasCallRecorder()
@@ -2714,7 +2970,7 @@ class Grid extends SpritesGroup {
             const now = [t.a, t.d, t.e, t.f, source.width, source.height, atmosphericBackground.raster, mapDepth.atmosphericShadow,
                 this.surfaceCache, this.surfaceCacheRevision, b?.left, b?.top, b?.width, b?.height]
             // Nor while a patch is under way: frames then draw their overlays directly (beginOverlayComposite).
-            if (this.overlayComposite !== composite || now.some((v, k) => v !== key[k]) || this.surfacePatchJob || this.litView?.layerJob ||
+            if (this.overlayComposite !== composite || now.some((v, k) => v !== key[k]) || this.surfacePatchJob || this.litView?.layerJob || this.surfaceLayerJob ||
                     !atmosphericBackground.opaqueOver(source.getContext('2d')))
                 return
             this.renderOverlaySnapshot(source, composite)
@@ -2842,7 +3098,7 @@ class Grid extends SpritesGroup {
         if (!plan)
             return false
         if (plan.cache)
-            return this.drawSurfaceCache(ctx) ? 'cache' : false
+            return this.drawSurfaceCache(ctx, true) ? 'cache' : false
         const cw = ctx.canvas.width, ch = ctx.canvas.height
         const {view, rest} = plan
         if (rest) {
@@ -3615,7 +3871,7 @@ class Grid extends SpritesGroup {
     drawMapSurface(ctx) {
         // At or below the cache's scale a frame without the cache draws directly.
         const cached = this.canUseSurfaceCache()
-        if (cached && this.drawSurfaceCache(ctx)) {
+        if (cached && this.drawSurfaceCache(ctx, true)) {
             if (this.litView || this.litRestCanvas)
                 this.releaseLitCanvases()
             return true
@@ -4051,6 +4307,16 @@ Grid.surfacePatching = true
 // (Grid.splitCellLayer, refreshCellLayer). With it the light state holds no owner (TASK-1314,
 // atmosphericLighting.ownerFree): the sprites hold the territory glow.
 Grid.liveCellLayer = true
+// TASK-1360: true brings the surface cache's cell layer up to a board change needing new variants in a job, a step a frame
+// (Grid.startSurfaceLayerJob); false draws them all in the frame that found the change (refreshCellLayer).
+Grid.surfaceLayerJobs = true
+// Variant sprites a surface layer job makes a step (Grid.startSurfaceLayerJob).
+const SURFACE_LAYER_SPRITES = 8
+// Light map owner sync steps (atmosphericLighting.startOwnerSync: the rings kept or put back, a build step) a surface layer
+// job's step runs (Grid.startSurfaceLayerJob).
+const SURFACE_LAYER_SYNC_STEPS = 4
+// The largest part of the cache's pixels a surface layer job's step composes (Grid.startSurfaceLayerJob: bands of rows).
+const SURFACE_LAYER_COMPOSE = 0.15
 // TASK-1315: how far off the board (hex radii, plus the slab's depth and shadow) the cells at its side hold the pixels
 // nearest them in the cell layer (Grid.cellLayerCells).
 const CELL_LAYER_EDGE_REACH = 0.5
