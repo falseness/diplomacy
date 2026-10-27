@@ -245,9 +245,11 @@
                 {x: 0, y: entityInterface.top - nextTurnButtonSize},
             AiRuntime.undoHumanCommand, undefined, undefined, undefined, AiRuntime
         )
+        let backToMenuButtonSize = nextTurnButtonSize * 2 / 3
+
         let backToMenuButton = new ImageButton(
-            new ParchmentIconImage('menu', {x: NaN, y: NaN}, nextTurnButtonSize, -1, -1),
-            new Rect(0, 0, nextTurnButtonSize, nextTurnButtonSize),
+            new ParchmentIconImage('menu', {x: NaN, y: NaN}, backToMenuButtonSize, -1, -1),
+            new Rect(0, 0, backToMenuButtonSize, backToMenuButtonSize),
             menuBack
         )
         let iButton = new ImageButton(
