@@ -1354,7 +1354,8 @@ class Grid extends SpritesGroup {
     // (drawCellSprites) and composed on a canvas of their region (the shown canvas's pixels there first, composeCellSprites,
     // in bands of rows: disjoint, so each pixel is composed once, as in one call); then the region copied into the shown
     // canvas and the layer taking the board's states (followedCellLayer). So the shown canvas ends as refreshCellLayer draws
-    // it, to the bit. Until then the frames draw the changed cells over it in the board's state (drawPatchCells), and the
+    // it, to the bit. Until then the frames draw the cells whose variants change (the changed cells and the neighbours their
+    // glow reaches) over it in the board's state (drawPatchCells), and the
     // cells keep their variants (cell.key) until the last step, so a job dropped (another board change, a patch or build,
     // another cache) leaves the layer as it was (the layer canvas drawn again from them when next read, staleCellLayer).
     // Returns false when the change is drawn at once instead: every changed variant has its sprite (an undo, a capture taken
@@ -1388,8 +1389,11 @@ class Grid extends SpritesGroup {
             const span = list => list.reduce((r, {box}) => pixelRect(Math.min(r.x, box.x), Math.min(r.y, box.y),
                 Math.max(r.x + r.w, box.x + box.w), Math.max(r.y + r.h, box.y + box.h), W, H), list[0].box)
             const region = span(cells), rendered = span(missing)
+            // The frames draw every cell whose variant changes (a changed cell's neighbours too: their glow and edges), not
+            // only the cells whose state changed, so none shows its old variant until the last step.
+            const drawn = [...new Set([...changes, ...cells.map(c => c.index)])]
             const job = this.surfaceLayerJob = {cache: canvas, layer, states, boxes: found.cells, light: found.light, sprites: found.sprites,
-                changed: changes.slice(), cells, region, steps: [], step: 0, ran: null, drawn: false}
+                changed: drawn, cells, region, steps: [], step: 0, ran: null, drawn: false}
             const fail = () => { job.failed = true }
             // The stages over the missing cells' region on the patch buffer (renderSurfaceCellSprites' drawing, a stage a step).
             const scale = this.surfaceCacheScale, b = this.surfaceCacheBounds
