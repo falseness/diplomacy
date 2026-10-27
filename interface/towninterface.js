@@ -72,7 +72,7 @@ class TownInterface extends BarrackInterface {
     
         for (let i in this.trainInterfaces[type]) {
             this.trainInterfaces[type][i].setCanTrain(canTrainNew)
-            this.trainInterfaces[type][i].setButtonText('train (' + production[i].turns + ')')
+            this.trainInterfaces[type][i].setButtonText('train')
         }
         if (!canTrainNew) {
             this.trainInterfaces[type][town.activeProduction].setCanTrain(true)

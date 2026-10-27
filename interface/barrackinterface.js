@@ -210,7 +210,7 @@ class BarrackInterface {
         let canTrainNew = !barrack.trainId
         for (let i in this.trainInterfaces[type]) {
             this.trainInterfaces[type][i].setCanTrain(canTrainNew)
-            this.trainInterfaces[type][i].setButtonText('train (' + production[i].turns + ')')
+            this.trainInterfaces[type][i].setButtonText('train')
         }
         if (!canTrainNew) {
             this.changeTrainingUnitButton(barrack)
@@ -452,11 +452,9 @@ class TrainInterface {
         this.canTrain = boolean
         this.button.canClick = boolean
     }
-    // The turns of the row: n of the button's 'train (n)' (the total of 'k / n'), else the production's.
+    // The turns of the row: the production's total (the n of 'k / n' while it trains).
     get turnsString() {
-        const text = String(this.button.textString)
-        const match = /\((\d+)\)/.exec(text) || /\/\s*(\d+)/.exec(text)
-        return match ? match[1] : String(production[this.name]?.turns ?? '')
+        return String(production[this.name]?.turns ?? '')
     }
     // Picture; cost coin + number (the 'cost: ' prefix replaced by the icon) and hourglass + turns between it and the
     // button, shrunk to fit; the button washed with a gold edge, its original text in ink.
