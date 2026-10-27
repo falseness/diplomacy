@@ -3038,28 +3038,29 @@ class Grid extends SpritesGroup {
             canvas.height = source.height
         }
         const g = canvas.getContext('2d'), key = composite.key
-        g.save()
-        g.setTransform(1, 0, 0, 1, 0, 0)
-        g.beginPath()
-        for (const r of composite.rects)
-            g.rect(r.x, r.y, r.w, r.h)
-        g.clip()
-        // The clip's rectangles leave the current path; the drawing that follows starts without one.
-        g.beginPath()
-        applyCanvasState(g, composite.state)
         // As atmosphericBackground.draw and MapDepth.drawAtmosphericShadow draw them (the key holds their rasters).
         const sky = atmosphericBackground.raster, shadow = mapDepth.atmosphericShadow
-        g.setTransform(1, 0, 0, 1, 0, 0)
-        if (sky.width === source.width) g.drawImage(sky, 0, 0)
-        else g.drawImage(sky, 0, 0, source.width, source.height)
-        g.setTransform(key[0], 0, 0, key[1], key[2], key[3])
-        drawBackgroundHints(g)
-        if (shadow) g.drawImage(shadow.canvas, shadow.left, shadow.top, shadow.width, shadow.height)
-        // A board changed since the frame (its cache no longer matching) draws no snapshot.
-        const drawn = this.drawSurfaceCache(g)
-        g.restore()
-        if (!drawn)
-            return
+        // TASK-1361: clipped to one rectangle at a time (disjoint, so each pixel is drawn once, in the same order), not
+        // to one path of all of them: a whole-pixel rectangle clip is a scissor on the GPU, a path of many a clip mask
+        // rasterized over the canvas before the draws (the stall after the frames that queue the snapshot).
+        for (const r of disjointDeviceRects(composite.rects)) {
+            g.save()
+            clipToDeviceRects(g, [r])
+            // The clip's rectangle leaves the current path; the drawing that follows starts without one.
+            g.beginPath()
+            applyCanvasState(g, composite.state)
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            if (sky.width === source.width) g.drawImage(sky, 0, 0)
+            else g.drawImage(sky, 0, 0, source.width, source.height)
+            g.setTransform(key[0], 0, 0, key[1], key[2], key[3])
+            drawBackgroundHints(g)
+            if (shadow) g.drawImage(shadow.canvas, shadow.left, shadow.top, shadow.width, shadow.height)
+            // A board changed since the frame (its cache no longer matching) draws no snapshot.
+            const drawn = this.drawSurfaceCache(g)
+            g.restore()
+            if (!drawn)
+                return
+        }
         g.save()
         g.beginPath()
         applyCanvasState(g, composite.state)
@@ -4028,6 +4029,38 @@ function clipToDeviceRects(ctx, rects) {
     for (const r of rects)
         ctx.rect(r.x, r.y, r.w, r.h)
     ctx.clip()
+}
+
+// The same pixels as rects (whole device pixel rectangles {x, y, w, h}, which may overlap) in disjoint rectangles: rows
+// of the rectangles' edges, each the spans covering it, and a row the same spans as the row above joined to it.
+function disjointDeviceRects(rects) {
+    const ys = [...new Set(rects.flatMap(r => [r.y, r.y + r.h]))].sort((a, b) => a - b)
+    const out = []
+    let open = []
+    for (let k = 0; k + 1 < ys.length; ++k) {
+        const y0 = ys[k], y1 = ys[k + 1]
+        const spans = []
+        for (const r of rects.filter(r => r.y <= y0 && r.y + r.h >= y1).sort((p, q) => p.x - q.x)) {
+            const last = spans[spans.length - 1]
+            if (last && r.x <= last.x1) last.x1 = Math.max(last.x1, r.x + r.w)
+            else spans.push({x0: r.x, x1: r.x + r.w})
+        }
+        const next = []
+        for (const s of spans) {
+            const above = open.find(o => o.x === s.x0 && o.x + o.w === s.x1 && o.y + o.h === y0)
+            if (above) {
+                above.h = y1 - above.y
+                next.push(above)
+            }
+            else {
+                const r = {x: s.x0, y: y0, w: s.x1 - s.x0, h: y1 - y0}
+                out.push(r)
+                next.push(r)
+            }
+        }
+        open = next
+    }
+    return out
 }
 
 // The state properties of a 2D context a recording takes from the real one (CanvasCallRecorder.begin).
