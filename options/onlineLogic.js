@@ -217,7 +217,8 @@ const onlineObservation = {
                 const info = sprite.info
                 info.canSkipMoves = false
                 info.isDestroyable = false
-                if (sprite.moves === null) info.info.moves = 'Hidden / ' + sprite.speed
+                // Only a shown moves row (own seat or co-op ally, Unit.showsMovesRow) reads 'Hidden'.
+                if (sprite.moves === null && 'moves' in info.info) info.info.moves = 'Hidden / ' + sprite.speed
                 entityInterface.change(info, sprite.player.fullColor)
                 border.clean()
                 grid.drawLogicText = false

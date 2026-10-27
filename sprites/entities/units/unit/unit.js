@@ -121,10 +121,20 @@ class Unit extends Entity {
 
         unit.canSkipMoves = this.isMyTurn && this.moves != 0
 
-        unit.info.moves = this.moves + ' / ' + this.speed
+        if (this.showsMovesRow)
+            unit.info.moves = this.moves + ' / ' + this.speed
         if (this.player.showsUnitSalary)
             unit.info.salary = this.salary
         return unit
+    }
+    // The panel's moves row: the viewer's own units (offline the current turn's
+    // player, online the local seat) and, in co-op, a human ally's. Enemies,
+    // demons, AI and neutral units show none.
+    get showsMovesRow() {
+        if (this.isMyTurn) return true
+        const owner = this.player
+        return Boolean(gameSettings.coop && owner && owner.constructor === Player &&
+            owner.isAlliedWith(players[whooseTurn]))
     }
     select() {
         this.interaction.select(this)
