@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "6f2f5d449d8bc23d9b27530734fc6834bcde137eef89d95d8f59593a6426d181",
+  "rulesVersion": "76c0e334813db1356457cf0c65644c35904a2a937ac478cf2c543d329ffe4a20",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -155,13 +155,13 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "524cb5f6b37cbbf8af1a963dbea658a6793b19d6945c00810f6fb00d1f69b375",
-      "bytes": 28798
+      "sha256": "5045ec9610e48ea4f1e920922014e559ff3edf0b4902d193bdc51d9b3e2846d5",
+      "bytes": 32772
     },
     {
       "path": "interface/barrackinterface.js",
-      "sha256": "658155c7aa32eb5e2320ff6bd512533d6316b55342c313023e735461c4bc856d",
-      "bytes": 19152
+      "sha256": "81b3d3b27bd28ecfa6d0c8013ddea65cb67a34fa81e752e5a854c108941b275d",
+      "bytes": 19460
     },
     {
       "path": "interface/towninterface.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "c007ffed024da9b13eeb217c579c9ab49467be0ac8da25482226349c2bca8d92",
-      "bytes": 233223
+      "sha256": "3f73e7ca19165089c322b669204439516310f81fc08094dd5fed22aef5e3b1e2",
+      "bytes": 254016
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -460,8 +460,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",
-      "sha256": "cce61ece577c52c3abd6b2534de5147d033c11d73fb8d394827fd349ea312f30",
-      "bytes": 2833
+      "sha256": "5d95ac8a7a567eb7f7c28dbec615432444d7d5a36d92ee90e5b4282138c93701",
+      "bytes": 2893
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/barrack.js",

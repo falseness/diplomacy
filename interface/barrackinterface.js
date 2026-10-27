@@ -344,12 +344,17 @@ class BarrackInterface {
         if (this.panelColors?.source !== this.background.color) this.setPanelColors(this.background.color)
         this.iconsPending = []
         this.drawPanelBody(ctx)
-        // Gold: TASK-1342's gold icon and the goldText string after it.
+        // Gold: TASK-1342's gold icon and the goldText string after it, drawn as the gold formula (TASK-1354).
         const goldSize = this.gold.width * 0.7
         drawTrainPanelIcon(ctx, 'statGold', this.gold.x, this.gold.y, goldSize, this.iconsPending)
         const goldX = this.gold.x + goldSize * 0.75
-        drawTrainPanelText(ctx, String(this.goldText.text), goldX, this.gold.y, this.goldText.fontSize * 0.8,
-            this.background.right - 0.03 * HEIGHT - goldX, ENTITY_PANEL_INK, 'left')
+        const goldWidth = this.background.right - 0.03 * HEIGHT - goldX
+        const formula = parseGoldFormula(this.goldText.text)
+        if (formula)
+            this.iconsPending.push(...drawGoldFormula(ctx, formula, goldX, this.gold.y, this.goldText.fontSize * 0.8, goldWidth))
+        else
+            drawTrainPanelText(ctx, String(this.goldText.text), goldX, this.gold.y, this.goldText.fontSize * 0.8,
+                goldWidth, ENTITY_PANEL_INK, 'left')
         for (let i in this.trainInterfaces[this.trainInterfacesTab]) {
             this.trainInterfaces[this.trainInterfacesTab][i].draw(ctx, this.panelColors.wash, this.iconsPending)
         }

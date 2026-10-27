@@ -35,6 +35,61 @@ function panelGradient(ctx, kind, args, stops) {
     }
     return gradient
 }
+// TASK-1354: the gold row as a formula 'G + I = T' (I the net income, T the gold next turn). The text keeps an em space
+// where the income icon (the salary icon when I < 0) is drawn, so its readers and the width maths see the icon's room.
+const GOLD_FORMULA_TOTAL = '#8a6a12'
+function goldFormulaText(gold, income) {
+    return gold + (income < 0 ? ' \u2212 ' : ' + ') + '\u2003' + Math.abs(income) + ' = ' + (gold + income)
+}
+// The formula's parts as text (gold and total 'Hidden' / '?' when hidden), or null for any other text.
+function parseGoldFormula(text) {
+    const m = /^(\S+) ([+\u2212]) \u2003(\d+) = (\S+)$/.exec(String(text))
+    return m && {gold: m[1], negative: m[2] === '\u2212', income: m[3], total: m[4]}
+}
+// G and the sign in ink, the icon, |I| green (+) or red (-), then ' = T' in dark gold, italic bold (concept A).
+function goldFormulaItems(formula, f) {
+    const family = Text.defaultFamily
+    return [
+        {text: formula.gold, font: `700 ${f}px ${family}`, color: ENTITY_PANEL_INK},
+        {text: formula.negative ? ' \u2212 ' : ' + ', font: `600 ${f}px ${family}`, color: ENTITY_PANEL_INK},
+        {icon: formula.negative ? 'statSalary' : 'statIncome'},
+        {text: formula.income, font: `700 ${f}px ${family}`, color: formula.negative ? '#9b2d20' : '#2f6b2a'},
+        {text: '  = ' + formula.total, font: `italic 700 ${f * 0.9}px ${family}`, color: GOLD_FORMULA_TOTAL}]
+}
+function goldFormulaWidth(ctx, formula, f) {
+    let width = 0
+    for (const item of goldFormulaItems(formula, f)) {
+        if (item.icon) { width += f * 1.17; continue }
+        ctx.font = item.font
+        width += ctx.measureText(item.text).width
+    }
+    return width
+}
+// Draws the formula left-aligned at (x, y) (middle baseline), its icon at the font size, shrunk to maxWidth.
+// Returns the icons still loading.
+function drawGoldFormula(ctx, formula, x, y, f, maxWidth) {
+    const width = goldFormulaWidth(ctx, formula, f)
+    if (width > maxWidth) f *= maxWidth / width
+    const pending = []
+    ctx.save()
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    for (const item of goldFormulaItems(formula, f)) {
+        if (item.icon) {
+            const icon = assets[item.icon], size = f * 1.05
+            if (icon && icon.complete && icon.naturalWidth > 0) ctx.drawImage(icon, x, y - size / 2, size, size)
+            else if (icon && !icon.complete) pending.push(icon)
+            x += f * 1.17
+            continue
+        }
+        ctx.font = item.font
+        ctx.fillStyle = item.color
+        ctx.fillText(item.text, x, y)
+        x += ctx.measureText(item.text).width
+    }
+    ctx.restore()
+    return pending
+}
 class EntityInterface {
     #visible = false
     
@@ -289,7 +344,7 @@ class EntityInterface {
         this.visible = true
     }
     // Resolve by coordinate on every frame: captures and snapshots can replace the
-    // building object. Only the gold token is projected; income stays untouched.
+    // building object. Only the gold token (and the total after it) is projected; income stays untouched.
     refreshTown(coord = this.townInspection || gameEvent.selected?.coord) {
         if (!coord || !grid) return
         if (isFogOfWar && !grid.fogOfWar[coord.x]?.[coord.y]) {
@@ -314,9 +369,11 @@ class EntityInterface {
         const gold = !gameSettings.isOnline || owner === whooseTurn ? ownerPlayer.gold :
             players[whooseTurn]?.isAlliedWith(ownerPlayer) ? onlineAlliedGold.get(owner) : null
         const token = typeof gold === 'number' && Number.isFinite(gold) ? String(gold) : 'Hidden'
-        // Preserve the existing income row and suffix, including on reconnect.
+        // Preserve the existing income row and the formula's income, including on reconnect.
         this.visible = true
-        const text = this.entity.info.text.replace(/(gold: )\S+(?= \()/, (_, label) => label + token)
+        const text = this.entity.info.text.replace(/(gold: )\S+( ([+\u2212]) \u2003(\d+) = )\S+/,
+            (_, label, middle, sign, income) => label + token + middle +
+                (token === 'Hidden' ? '?' : gold + (sign === '+' ? +income : -income)))
         if (this.entity.info.text !== text || this.background.color !== ownerPlayer.fullColor.hex) {
             this.entity.info.text = text
             this.background.color = ownerPlayer.fullColor.hex
@@ -390,6 +447,7 @@ class EntityInterface {
             const row = i < 0 ? {key: null, value: line} : {key: line.slice(0, i), value: line.slice(i + 2)}
             const icon = typeof STAT_ICONS !== 'undefined' && STAT_ICONS[row.key ?? line]
             row.icon = icon ? assets[icon] : null
+            row.goldFormula = row.key === 'gold' ? parseGoldFormula(row.value) : null
             return row
         })
     }
@@ -500,7 +558,8 @@ class EntityInterface {
             const keyless = Math.max(0, ...rows.map(row => row.key === null ? ctx.measureText(row.value).width : 0))
             ctx.font = valueFont(f)
             const valueX = keyX + keyWidth + f * 0.6
-            const values = Math.max(0, ...rows.map(row => row.key === null ? 0 : ctx.measureText(row.value).width))
+            const values = Math.max(0, ...rows.map(row => row.key === null ? 0 : row.goldFormula ?
+                goldFormulaWidth(ctx, row.goldFormula, f) : (ctx.font = valueFont(f), ctx.measureText(row.value).width)))
             return {keyX, valueX, end: Math.max(keyX + keyless, valueX + values)}
         }
         let layout = measure(size)
@@ -540,9 +599,15 @@ class EntityInterface {
                 ctx.font = keyFont(size)
                 ctx.fillStyle = 'rgba(74,46,20,0.8)'
                 ctx.fillText(row.key, layout.keyX, y)
-                ctx.font = valueFont(size)
-                ctx.fillStyle = ENTITY_PANEL_INK
-                ctx.fillText(row.value, layout.valueX, y)
+                if (row.goldFormula) {
+                    const pending = drawGoldFormula(ctx, row.goldFormula, layout.valueX, y, size, x1 - 0.02 * h - layout.valueX)
+                    if (pending.length) (this.iconsPending ??= []).push(...pending)
+                }
+                else {
+                    ctx.font = valueFont(size)
+                    ctx.fillStyle = ENTITY_PANEL_INK
+                    ctx.fillText(row.value, layout.valueX, y)
+                }
             }
             y += size * 1.15
         }

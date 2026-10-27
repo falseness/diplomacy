@@ -65,8 +65,8 @@ class PreparingManufacture extends Manufacture {
                 production[this.unitProduction.name]?.class?.displayName || this.unitProduction.name,
                 this.unitProduction.turns)
         }
-        let income = this.player.income
-        building.info.gold = this.player.gold + ' (' + ((income > 0) ? '+' : '') + income + ')'
+        // 'G + I = T': the gold, the net income and the gold next turn (drawn with the income icon, TASK-1354).
+        building.info.gold = goldFormulaText(this.player.gold, this.player.income)
         return building
     }
 	unitPreparingLogic() {
