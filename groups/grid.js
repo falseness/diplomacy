@@ -127,6 +127,9 @@ class Grid extends SpritesGroup {
         this.cellSpriteDraws = 0
         this.cellLayerRefreshes = 0
         this.cellLayerVariantRenders = 0
+        // TASK-1361: sprite canvases the layers let go of, for the next variants (cellSpriteCanvas), and sprites let go of.
+        this.cellSpritePool = []
+        this.cellSpritesPruned = 0
         // Refreshes that changed a layer (overlayCompositeKey).
         this.cellLayerRevision = 0
         // Caches or lit views dropped as their cell layer could not be brought up to the board (followCellLayer).
@@ -1055,6 +1058,7 @@ class Grid extends SpritesGroup {
     followedCellLayer(which, layer, states, region) {
         const view = this.litView
         layer.states = states
+        this.pruneCellSprites(layer)
         const overlayCells = this.surfaceOverlayCells
         if (which === 'surface') {
             this.surfaceOverlayCells = []
@@ -1535,13 +1539,9 @@ class Grid extends SpritesGroup {
     // key: the cell's variant now when known (a lit layer job's).
     cellSprite(layer, cell, source, key = this.cellLayerKey(cell.i, cell.j)) {
         const {box} = cell
-        const sprite = document.createElement('canvas')
-        sprite.width = box.w
-        sprite.height = box.h
-        const g = sprite.getContext('2d'), image = g.createImageData(box.w, box.h), data = image.data
-        for (let k = 0; k < cell.alpha.length; ++k)
-            data[4 * k + 3] = cell.alpha[k]
-        g.putImageData(image, 0, 0)
+        const sprite = this.cellSpriteCanvas(box)
+        const g = sprite.getContext('2d')
+        g.putImageData(this.cellAlphaImage(g, cell), 0, 0)
         g.globalCompositeOperation = 'source-in'
         g.drawImage(source, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
         layer.sprites.set(cell.index + '|' + key, sprite)
@@ -1553,9 +1553,7 @@ class Grid extends SpritesGroup {
     // there, as cellSprite takes them) and elsewhere base's (the cell's sprite before: a change draws nothing outside its
     // region, as a patch copies only its region; none: transparent there).
     cellSpriteIn(cell, source, rect, base) {
-        const {box} = cell, sprite = document.createElement('canvas')
-        sprite.width = box.w
-        sprite.height = box.h
+        const {box} = cell, sprite = this.cellSpriteCanvas(box)
         const g = sprite.getContext('2d')
         if (base)
             g.drawImage(base, 0, 0)
@@ -1563,13 +1561,11 @@ class Grid extends SpritesGroup {
         const x1 = Math.min(rect.x + rect.w, box.x + box.w) - box.x, y1 = Math.min(rect.y + rect.h, box.y + box.h) - box.y
         if (x0 >= x1 || y0 >= y1)
             return sprite
-        const alpha = document.createElement('canvas')
+        const alpha = this.cellAlphaCanvas ||= document.createElement('canvas')
         alpha.width = box.w
         alpha.height = box.h
-        const a = alpha.getContext('2d'), image = a.createImageData(box.w, box.h), data = image.data
-        for (let k = 0; k < cell.alpha.length; ++k)
-            data[4 * k + 3] = cell.alpha[k]
-        a.putImageData(image, 0, 0)
+        const a = alpha.getContext('2d')
+        a.putImageData(this.cellAlphaImage(a, cell), 0, 0)
         g.save()
         g.beginPath()
         g.rect(x0, y0, x1 - x0, y1 - y0)
@@ -1580,6 +1576,55 @@ class Grid extends SpritesGroup {
         g.drawImage(source, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
         g.restore()
         return sprite
+    }
+    // TASK-1361: a cleared box.w x box.h canvas for a sprite, one a layer let go of (pruneCellSprites) when there is one, so the
+    // variants rendered move after move make no new canvas once the layers hold their cap.
+    cellSpriteCanvas(box) {
+        const sprite = this.cellSpritePool.pop() || document.createElement('canvas')
+        // Set even when equal: that clears the canvas and resets its context's state.
+        sprite.width = box.w
+        sprite.height = box.h
+        return sprite
+    }
+    // TASK-1361: an ImageData of cell's mask (cell.alpha; black), one kept a box size and filled again, not one made a sprite.
+    cellAlphaImage(g, cell) {
+        const {box} = cell, size = box.w + 'x' + box.h
+        const images = this.cellAlphaImages ||= new Map()
+        let image = images.get(size)
+        if (!image)
+            images.set(size, image = g.createImageData(box.w, box.h))
+        const data = image.data, alpha = cell.alpha
+        for (let k = 0; k < alpha.length; ++k)
+            data[4 * k + 3] = alpha[k]
+        return image
+    }
+    // TASK-1361: the layer's sprites cut to CELL_LAYER_VARIANTS a cell, those its cells took last kept (each cell's variant
+    // now first, then the one before it, so an undo still draws a kept sprite); the others' canvases go to the pool
+    // (cellSpriteCanvas, at most CELL_SPRITE_POOL). Not while a layer job is under way on the layer (its sprites made
+    // before its last step are not yet any cell's variant).
+    pruneCellSprites(layer) {
+        const sprites = layer.sprites
+        if (!sprites || this.surfaceLayerJob?.layer === layer || this.litView?.layerJob && layer === this.litCellLayer)
+            return
+        // The variants the cells hold now are the latest taken (a Map keeps its keys in the order set).
+        for (const {index, key} of layer.cells) {
+            const k = index + '|' + key, sprite = sprites.get(k)
+            if (sprite) {
+                sprites.delete(k)
+                sprites.set(k, sprite)
+            }
+        }
+        const kept = new Map(), pool = this.cellSpritePool
+        for (const k of [...sprites.keys()].reverse()) {
+            const index = k.slice(0, k.indexOf('|')), n = (kept.get(index) || 0) + 1
+            kept.set(index, n)
+            if (n > CELL_LAYER_VARIANTS) {
+                if (pool.length < CELL_SPRITE_POOL)
+                    pool.push(sprites.get(k))
+                sprites.delete(k)
+                ++this.cellSpritesPruned
+            }
+        }
     }
     // The layer's pixel rectangle rect drawn from its cells' sprites (each cell's for its variant, cell.key): cleared, then
     // every cell meeting it drawn (drawImage, clipped to rect; the cells' pixels are disjoint, so each is its sprite's).
@@ -4314,6 +4359,10 @@ Grid.liveCellLayer = true
 // TASK-1360: true brings the surface cache's cell layer up to a board change needing new variants in a job, a step a frame
 // (Grid.startSurfaceLayerJob); false draws them all in the frame that found the change (refreshCellLayer).
 Grid.surfaceLayerJobs = true
+// TASK-1361: variants a cell layer keeps a cell (the cell's now and the one before, for an undo; Grid.pruneCellSprites) and
+// sprite canvases kept for reuse (Grid.cellSpriteCanvas).
+const CELL_LAYER_VARIANTS = 2
+const CELL_SPRITE_POOL = 128
 // Variant sprites a surface layer job makes a step (Grid.startSurfaceLayerJob).
 const SURFACE_LAYER_SPRITES = 8
 // Light map owner sync steps (atmosphericLighting.startOwnerSync: the rings kept or put back, a build step) a surface layer

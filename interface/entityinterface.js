@@ -20,6 +20,21 @@ function skipMovesOfSelected() {
 }
 // The dark-brown ink of the panel's rows and button texts (the timer's, TASK-1340).
 const ENTITY_PANEL_INK = '#4a2e14'
+// TASK-1361: the panel's gradients made once per geometry and stops (the same ones draw the same pixels), so a panel drawn
+// again (each selection) makes none; at most PANEL_GRADIENT_CACHE kept (the oldest dropped first).
+const PANEL_GRADIENT_CACHE = 64
+const panelGradients = new Map()
+function panelGradient(ctx, kind, args, stops) {
+    const key = kind + ',' + args.join(',') + '|' + stops.join(';')
+    let gradient = panelGradients.get(key)
+    if (!gradient) {
+        if (panelGradients.size >= PANEL_GRADIENT_CACHE) panelGradients.delete(panelGradients.keys().next().value)
+        gradient = kind === 'radial' ? ctx.createRadialGradient(...args) : ctx.createLinearGradient(...args)
+        for (const [t, color] of stops) gradient.addColorStop(t, color)
+        panelGradients.set(key, gradient)
+    }
+    return gradient
+}
 class EntityInterface {
     #visible = false
     
@@ -425,11 +440,8 @@ class EntityInterface {
         ctx.shadowColor = 'rgba(0,0,0,0.55)'
         ctx.shadowBlur = 0.02 * h
         tear()
-        const paper = ctx.createRadialGradient(x0 + w * 0.45, top + h * 0.4, Math.min(w, h) * 0.1, x0 + w / 2, top + h / 2,
-            Math.max(w, h) * 0.75)
-        paper.addColorStop(0, '#f6e9c9')
-        paper.addColorStop(1, '#cfae78')
-        ctx.fillStyle = paper
+        ctx.fillStyle = panelGradient(ctx, 'radial', [x0 + w * 0.45, top + h * 0.4, Math.min(w, h) * 0.1, x0 + w / 2, top + h / 2,
+            Math.max(w, h) * 0.75], [[0, '#f6e9c9'], [1, '#cfae78']])
         ctx.fill()
         ctx.restore()
         tear()
@@ -437,20 +449,13 @@ class EntityInterface {
         ctx.lineWidth = Math.max(1, Math.min(w, h) * 0.008)
         ctx.stroke()
         // Roller: the washed colour shaded round, gold caps (the right one ends at the background's right edge).
-        const roll = ctx.createLinearGradient(0, bg.y + 0.2 * r, 0, bg.y + 1.8 * r)
-        roll.addColorStop(0, dark)
-        roll.addColorStop(0.45, wash)
-        roll.addColorStop(1, dark)
-        ctx.fillStyle = roll
+        ctx.fillStyle = panelGradient(ctx, 'linear', [0, bg.y + 0.2 * r, 0, bg.y + 1.8 * r], [[0, dark], [0.45, wash], [1, dark]])
         roundedRectPath(ctx, bg.x, bg.y + 0.2 * r, right - bg.x, 1.6 * r, 0.8 * r)
         ctx.fill()
         for (const ex of [bg.x, right]) {
             ctx.beginPath()
             ctx.arc(ex, bg.y + r, r, 0, 2 * Math.PI)
-            const cap = ctx.createRadialGradient(ex - r * 0.3, bg.y + r * 0.7, 0, ex, bg.y + r, r)
-            cap.addColorStop(0, '#f6dc9a')
-            cap.addColorStop(1, '#8a6a2a')
-            ctx.fillStyle = cap
+            ctx.fillStyle = panelGradient(ctx, 'radial', [ex - r * 0.3, bg.y + r * 0.7, 0, ex, bg.y + r, r], [[0, '#f6dc9a'], [1, '#8a6a2a']])
             ctx.fill()
         }
         // Name between two rules.
