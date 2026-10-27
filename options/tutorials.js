@@ -210,7 +210,7 @@ function createTutorial3Map() {
                 units: [
                     {x: 9, y: 0, type: Archer},
                     {x: 9, y: 1, type: Normchel},
-                    {x: 9, y: 2, type: KOHb},
+                    {x: 9, y: 2, type: Normchel},
                     {x: 9, y: 3, type: Catapult},
                     {x: 9, y: 4, type: Catapult},
                     {x: 9, y: 5, type: KOHb},
