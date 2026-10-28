@@ -95,9 +95,17 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
 
         return super.sendInstructions(cell, catapult)
     }
+    // A 0-hp enemy town takes no damage, but a shot marks it hit, so it does not heal at its
+    // owner's turn start. Once marked this round it is no target: another shot would be wasted.
+    cellHasUnmarkedZeroHpTown(cell, unit) {
+        const building = cell.building
+        return this.cellHasEnemyBuilding(cell, unit) && building.isTown() && !building.killed &&
+            !building.hp && !building.wasHitted
+    }
     canHitSomethingOnCell(cell, catapult) {
         return !this.cantRangeInteract(cell.coord, catapult) &&
-             this.cellHasAttackableBuilding(cell, catapult)
+            (this.cellHasAttackableBuilding(cell, catapult) ||
+                this.cellHasUnmarkedZeroHpTown(cell, catapult))
     }
     sendInstructions(cell, catapult) {
         let coord = cell.coord
@@ -165,14 +173,20 @@ class InteractionWithBombard extends InteractionWithCatapult {
         return this.moves > 0 && !unit.player.ignoresCell(cell) &&
             !this.cantRangeInteract(cell.coord, unit) &&
             (this.cellHasAttackableBuilding(cell, unit) ||
-                this.cellHasEnemyBuildingProduction(cell, unit))
+                this.cellHasEnemyBuildingProduction(cell, unit) ||
+                this.cellHasUnmarkedZeroHpTown(cell, unit))
     }
     sendInstructions(cell, unit) {
         if (!this.moves || unit.player.ignoresCell(cell)) return true
-        if (this.canHitSomethingOnCell(cell, unit))
-            return this.buildingAttack(cell, unit)
+        if (this.canHitSomethingOnCell(cell, unit)) {
+            // a 0-hp enemy town is only marked hit (no damage, no capture)
+            if (!this.buildingAttack(cell, unit))
+                this.removeSelect()
+            return true
+        }
         // Reject occupied and enemy-building destinations before movement can
-        // invoke the inherited melee/capture path, including zero-HP towns.
+        // invoke the inherited melee/capture path: a 0-hp enemy town is shot,
+        // never entered, and a town already marked this round is no target.
         if (cell.unit.notEmpty() || this.cellHasEnemyBuilding(cell, unit) ||
                 this.cellHasEnemyBuildingProduction(cell, unit)) {
             this.removeSelect()

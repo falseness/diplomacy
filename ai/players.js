@@ -251,6 +251,24 @@ function getAiCommandCell(coord) {
     return grid.getCell(coord) || null
 }
 
+// A siege unit shoots an enemy 0-hp town not yet marked this round before any other target:
+// the shot keeps the town from healing.
+function findZeroHpTownShotCommand(unit, commands) {
+    let interaction = unit.interaction
+    if (typeof InteractionWithCatapult == 'undefined' ||
+            !(interaction instanceof InteractionWithCatapult)) {
+        return null
+    }
+    for (let i = 0; i < commands.length; ++i) {
+        let cell = getAiCommandCell(commands[i].destinationCoord)
+        if (cell && interaction.cellHasUnmarkedZeroHpTown(cell, unit) &&
+                unit.canHitSomethingOnCell(cell)) {
+            return commands[i]
+        }
+    }
+    return null
+}
+
 function resolveLiveAiCommandUnit(player, command) {
     if (!command || !command.whoDoCommandCoord || !command.destinationCoord ||
             typeof grid == 'undefined' || !grid.getCell) {
@@ -309,6 +327,10 @@ class SimpleAiPlayer extends Player {
     }
     findUnitAttackCommand(unit) {
         let commands = unit.getAvailableCommands()
+        let zeroHpTownShot = findZeroHpTownShotCommand(unit, commands)
+        if (zeroHpTownShot) {
+            return zeroHpTownShot
+        }
         for (let i = 0; i < commands.length; ++i) {
             let command = commands[i]
             let cell = grid.arr[command.destinationCoord.x] &&
@@ -1037,6 +1059,10 @@ class SimpleAiPlayerWithEconomy extends SimpleAiPlayer {
     }
     findUnitAttackCommand(unit) {
         let commands = unit.getAvailableCommands()
+        let zeroHpTownShot = findZeroHpTownShotCommand(unit, commands)
+        if (zeroHpTownShot) {
+            return zeroHpTownShot
+        }
         let playerIndex = this.getPlayerIndex()
         let bestCommand = null
         let bestScore = -Infinity

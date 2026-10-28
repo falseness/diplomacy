@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "ab348721b1f9de613326c7d886cfd577fdac4d2e6e4f4a6fa2339e7db32ed5c8",
+  "rulesVersion": "7c07af935dea69b5de94ec02727d4909286c560a9e9cd825ff317fedfa092fe5",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -395,8 +395,8 @@
     },
     {
       "path": "sprites/entities/units/range/catapult/interactionWithCatapult.js",
-      "sha256": "a38f33b18e00c5f8e8d8a48c82d7e28993f63d9b35f930fc548f5bd611cfc1c7",
-      "bytes": 7135
+      "sha256": "5aa92a5d57ddd61b15966c1c6d49b0737f7054c21aaab4886edfdde980ec3eac",
+      "bytes": 7915
     },
     {
       "path": "sprites/entities/units/range/catapult/catapult.js",
@@ -505,8 +505,8 @@
     },
     {
       "path": "ai/players.js",
-      "sha256": "93b29aa55c45cee58b31561c07cb199fe03d807f807cfbc79a881eade764fe1b",
-      "bytes": 103918
+      "sha256": "0fefd3f430797f63240af0e9ce7e02a11d58103f0d4b910b9954b45b3bd734a9",
+      "bytes": 104887
     },
     {
       "path": "nextTurn.js",
