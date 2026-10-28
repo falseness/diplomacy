@@ -4376,6 +4376,9 @@ class Grid extends SpritesGroup {
 
         attackBorder.draw(ctx)
         border.draw(ctx)
+        // TASK-1412: drawMain and the zoom raster draw the marks after the selection overlay (SelectionOverlay.drawSelection).
+        if (typeof gameEvent !== 'undefined' && !SelectionOverlay.deferred && !this.zoomBoardPass)
+            gameEvent.selected?.drawSelectionMarks?.(ctx)
         if (composite)
             this.drawOverlayComposite(main, composite)
         this.lod = false

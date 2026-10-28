@@ -33,6 +33,10 @@ class Catapult extends RangeUnit {
     get hasMirroredImage() {
         return true
     }
+    // Selection overlay extras: the '?' on this turn's still-fogged blind-shot cell.
+    drawSelectionMarks(ctx) {
+        this.interaction.drawBlindShotMark(ctx, this)
+    }
     draw(ctx) {
         this.drawBars(ctx)
         drawCachedImage(ctx, cachedImages[this.bodyImageName], this.pos)

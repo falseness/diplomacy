@@ -754,7 +754,14 @@ class SelectionOverlay {
     static rasterBuilds = 0
     static RASTER_MAX_CANVASES = 2
     // Blits the selected unit's overlay on ctx (the main canvas, the camera's transform); releases it with no selection.
+    // TASK-1412: the selected unit's marks (a catapult's blind-shot '?') are drawn after it, never into the board.
     static drawSelection(ctx) {
+        const drawn = SelectionOverlay.blitSelection(ctx)
+        if (typeof gameEvent !== 'undefined')
+            gameEvent.selected?.drawSelectionMarks?.(ctx)
+        return drawn
+    }
+    static blitSelection(ctx) {
         const overlay = Border.selection, state = Border.selectionState()
         if (!state) {
             overlay.releaseRaster()

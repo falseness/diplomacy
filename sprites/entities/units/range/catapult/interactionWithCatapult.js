@@ -5,6 +5,52 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
         this.way = this.mirrorInteraction.way
 
         this.rangeWay = new RangeWay()
+        // UI only (TASK-1412): the fogged cell of this turn's blind shot, drawn as '?' while the
+        // catapult is selected. Never saved or sent; an undo rebuilds the catapult without it.
+        this.blindShotMark = undefined
+    }
+    nextTurn() {
+        super.nextTurn()
+        this.blindShotMark = undefined
+    }
+    // The blind-shot cell while it is still fogged for the owner; a revealed cell forgets the mark.
+    visibleBlindShotMark(catapult) {
+        const mark = this.blindShotMark
+        if (!mark)
+            return undefined
+        if (!isFogOfWar || !grid.fogOfWar || grid.fogOfWar[mark.x]?.[mark.y]) {
+            this.blindShotMark = undefined
+            return undefined
+        }
+        return catapult.isMyTurn ? mark : undefined
+    }
+    // S6 neutral style: a dashed white ring with a white '?' over a dark halo.
+    drawBlindShotMark(ctx, catapult) {
+        const mark = this.visibleBlindShotMark(catapult)
+        if (!mark)
+            return
+        const p = grid.arr[mark.x][mark.y].hexagon.calcPos(), r = basis.r * 0.33
+        ctx.save()
+        ctx.setLineDash([r * 0.32, r * 0.24])
+        ctx.lineCap = 'round'
+        for (const [color, width] of [['rgba(0,0,0,0.6)', 0.3], ['#ffffff', 0.13]]) {
+            ctx.beginPath()
+            ctx.arc(p.x, p.y - basis.r * 0.04, r * 1.05, 0, 2 * Math.PI)
+            ctx.strokeStyle = color
+            ctx.lineWidth = r * width
+            ctx.stroke()
+        }
+        ctx.setLineDash([])
+        ctx.font = `700 ${r * 1.5}px ${Text.defaultFamily}`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.lineJoin = 'round'
+        ctx.lineWidth = r * 0.3
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)'
+        ctx.strokeText('?', p.x, p.y - basis.r * 0.02)
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText('?', p.x, p.y - basis.r * 0.02)
+        ctx.restore()
     }
 	get isMoveOver() {
     	return this.mirrorInteraction.isMoveOver
@@ -70,6 +116,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
                 this.addThisUndo(catapult)
                 this.moves = 0
                 this.addKillUnitUndo(catapult)
+                this.blindShotMark = {x: coord.x, y: coord.y}
                 this.removeSelect()
                 return true
             }
@@ -79,6 +126,8 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
                 this.moves = 0
                 this.addKillUnitUndo(catapult)
             }
+            if (!this.moves)
+                this.blindShotMark = {x: coord.x, y: coord.y}
             return result
         }
         

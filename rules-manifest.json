@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "df09628f31529dc03a4dc6b8cc08b855510dac6dd37c525478a9b0b3d0b8e4bd",
+  "rulesVersion": "6855de78060c2405f9ce52427ebb47e561f961721ff21ded89cf1a45ae2e7f0b",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "sprites/border.js",
-      "sha256": "84088f669a1394a6396d9c71e099b6ab0f3583900d2cf0b9b7013c30988bcd32",
-      "bytes": 50804
+      "sha256": "109bebf02a9b5ea7a8b7037a57bce4c0d7071693564893a2b526b30262d58e50",
+      "bytes": 51141
     },
     {
       "path": "events/geteventpos.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "41f347574118208708209f7d3097cc3add8135444c91e9dc3c3dc47323d782d1",
-      "bytes": 308164
+      "sha256": "fa312ac7e9b9ed59a0f441532b9f37253b08801ec3f82d4e1013885e182ce736",
+      "bytes": 308449
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -395,13 +395,13 @@
     },
     {
       "path": "sprites/entities/units/range/catapult/interactionWithCatapult.js",
-      "sha256": "6100e8785de348978e0295641852a6aa050c993a84c53b4f99dbe041a336ecd9",
-      "bytes": 5096
+      "sha256": "a38f33b18e00c5f8e8d8a48c82d7e28993f63d9b35f930fc548f5bd611cfc1c7",
+      "bytes": 7135
     },
     {
       "path": "sprites/entities/units/range/catapult/catapult.js",
-      "sha256": "44df2e9fa3a88b4caef21830900d808b7170f43072aae3177dce74c651c0ca9c",
-      "bytes": 1856
+      "sha256": "94e610aaca85055266f9e70e8d68667ad49a5848f28e607acecbf1ef1cd1cbbd",
+      "bytes": 2032
     },
     {
       "path": "sprites/entities/buildings/building.js",
