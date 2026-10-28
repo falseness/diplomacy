@@ -99,6 +99,12 @@ class Grid extends SpritesGroup {
         this.overlaySnapshotPacked = undefined
         this.overlaySnapshots = 0
         this.drawSerial = 0
+        // TASK-1375: whether the frame being drawn is a level-of-detail frame (Grid.lodTransform), its recording
+        // (beginLodFrame), the last such frame on the main canvas (key, calls, drawSerial) and the frames it held.
+        this.lod = false
+        this.lodRecorder = undefined
+        this.lodFrame = undefined
+        this.lodHolds = 0
         // Lit tiles and the rest snapshot above the surface cache's scale (drawLitView): the view,
         // the snapshot's canvas, spare tile canvases and what the frame drew.
         this.litView = undefined
@@ -391,7 +397,8 @@ class Grid extends SpritesGroup {
             const cell = this.arr[i][j]
             if (cell.building.isMapEdge || (isFogOfWar && !this.fogOfWar[i][j] && !fogShowsPortalPreview(cell.building)))
                 continue
-            if (cell.infoText.text != '')
+            // A level-of-detail frame draws no cell text (TASK-1375); it is cleared as a drawn one is.
+            if (cell.infoText.text != '' && !this.lod)
                 cell.infoText.draw(ctx)
             cell.infoText.text = ''
             this.infoTextCells.delete(index)
@@ -469,11 +476,13 @@ class Grid extends SpritesGroup {
 
                 if (!this.observedBuilding(cell)) {
                     if (buildings && this.spriteInPatchCells(cell.building)) cell.building.draw(ctx)
-                    if (units && cell.building.hasBar) tmpBuildings.push(cell.building)
-                    if (units) this.drawProductionSilhouette(ctx, cell.building)
+                    if (units && cell.building.hasBar && !this.lod) tmpBuildings.push(cell.building)
+                    if (units && !this.lod) this.drawProductionSilhouette(ctx, cell.building)
                 }
                 const unit = units && this.getStillUnit(cell)
-                if (unit) unit.draw(ctx)
+                // A level-of-detail frame (TASK-1375): the unit's cached body, no bars.
+                if (unit && this.lod) this.drawEntityBody(ctx, unit)
+                else if (unit) unit.draw(ctx)
             }
         }
         for (let i = 0; i < tmpBuildings.length; ++i) {
@@ -546,9 +555,12 @@ class Grid extends SpritesGroup {
     }
     drawEntityOverlays(ctx, cells) {
         const buildingBars = []
+        // A level-of-detail frame (TASK-1375) draws the buildings under construction only: no production silhouettes or
+        // bars, so no unit body repainted over them.
+        const lod = this.lod
         const range = this.forEachDrawnCell(ctx, cells, (cell, i, j) => {
             if (isFogOfWar && !this.fogOfWar[i][j]) {
-                if (this.fogPortalPreview(cell))
+                if (this.fogPortalPreview(cell) && !lod)
                     cell.building.drawNextProduction(ctx)
                 return
             }
@@ -557,6 +569,7 @@ class Grid extends SpritesGroup {
             let silhouette = false
             if (!observed) {
                 if (building.isBuildingProduction()) building.draw(ctx)
+                else if (lod) {}
                 else if (building.isPreparingManufacture) {
                     silhouette = building.unitProduction.notEmpty()
                     building.unitProduction.draw(ctx)
@@ -567,12 +580,12 @@ class Grid extends SpritesGroup {
             }
             // Same order as Unit.draw: the unit's bars, then its body. The cached body sits
             // under the silhouette and under its own moves bar; repaint it on top of both.
-            const unit = this.getStillUnit(cell)
+            const unit = !lod && this.getStillUnit(cell)
             if (unit)
                 unit.drawBars(ctx)
             if (unit && (silhouette || shouldShowMovesBar(unit)))
                 this.drawEntityBody(ctx, unit)
-            if (!observed && building.hasBar)
+            if (!observed && building.hasBar && !lod)
                 buildingBars.push(building)
         })
         for (let i = 0; i < buildingBars.length; ++i)
@@ -3080,7 +3093,7 @@ class Grid extends SpritesGroup {
     drawOverlayLayer(ctx) {
         const layer = this.overlayLayer
         const t = ctx.getTransform()
-        if (!gameEvent.screen.surfaceMoving || debug || this.drawLogicText || typeof createImageBitmap !== 'function' ||
+        if (!gameEvent.screen.surfaceMoving || debug || this.drawLogicText || this.lod || typeof createImageBitmap !== 'function' ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) {
             this.dropOverlayLayer()
             return false
@@ -3209,7 +3222,7 @@ class Grid extends SpritesGroup {
     beginOverlayComposite(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
-        if (typeof Proxy !== 'function' || debug || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob || this.litView?.layerJob ||
+        if (typeof Proxy !== 'function' || debug || this.lod || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob || this.litView?.layerJob ||
                 this.surfaceLayerJob ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !atmosphericBackground.opaqueOver(ctx))
             return null
@@ -4240,9 +4253,11 @@ class Grid extends SpritesGroup {
     }
     draw(ctx) {
         ++this.drawSerial
+        this.lod = this.lodTransform(ctx)
         // The slab's soft drop shadow on the sky, under the board.
         this.drawSlabShadow(ctx)
         const surface = this.drawMapSurface(ctx)
+        this.frameSurface = surface
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
         const lit = surface === 'lit', cachedScene = surface === true
         // The overlay layer holds the production texts too (drawInfoTexts).
@@ -4298,7 +4313,8 @@ class Grid extends SpritesGroup {
         if (composite)
             this.drawOverlayComposite(main, composite)
         this.prepareSurfaceCache()
-        if (typeof mainCtx !== 'undefined' && main === mainCtx) {
+        this.lod = false
+        if (typeof mainCtx !== 'undefined' && (main === mainCtx || main === this.lodRecorder?.context)) {
             const t = main.getTransform()
             this.zoomRasterSource = {a: t.a, b: t.b, c: t.c, d: t.d, e: t.e, f: t.f, width: main.canvas.width, height: main.canvas.height}
         }
@@ -4369,6 +4385,7 @@ class Grid extends SpritesGroup {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.drawImage(raster.canvas, x, y, w, h)
         ctx.restore()
+        this.lodFrame = undefined
         this.prepareSurfaceCache()
         this.countGestureFrame()
         return true
@@ -4385,6 +4402,70 @@ class Grid extends SpritesGroup {
         const sx = cache.width / b.width, sy = cache.height / b.height
         ctx.drawImage(cache.cellLayered && this.surfaceCacheShown || cache, (left - b.left) * sx, (top - b.top) * sy,
             (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
+    }
+    // TASK-1375: level of detail when cells are tiny. Below Grid.LOD_RADIUS (a hexagon's on-screen radius, CSS pixels) a
+    // frame of the main canvas is a level-of-detail frame: no cell texts (drawInfoTexts), hp and moves bars, production
+    // silhouettes (a training unit, a portal's next demon and its rounds) or overlay composite and layer; the board's
+    // surface, buildings, nature and towns come from the surface cache (one image) and the units from their cached body
+    // images, as at any scale on that path. At or above it every frame draws as before. Not with debug or logic texts.
+    lodTransform(ctx) {
+        if (!Grid.lodFrames || this !== grid || debug || this.drawLogicText || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas)
+            return false
+        const t = ctx.getTransform()
+        return t.b === 0 && t.c === 0 && t.a > 0 && t.a === t.d &&
+            t.a * basis.r < Grid.LOD_RADIUS * (typeof window !== 'undefined' && window.devicePixelRatio || 1)
+    }
+    // A level-of-detail frame is recorded (CanvasCallRecorder: drawMain's calls on ctx, the main canvas, without drawing) and
+    // made on ctx at its end (endLodFrame), unless it is steady (lodFrameSteady) and its calls and key (lodFrameKey: the
+    // rasters it draws from) repeat those of the frame before it, which was such a frame made on ctx: the canvas already
+    // holds its pixels and the frame draws nothing (a still board seen whole). Returns the recorder, or null when the frame
+    // draws directly (not a level-of-detail frame).
+    beginLodFrame(ctx) {
+        if (typeof Proxy !== 'function' || !this.lodTransform(ctx)) {
+            this.lodFrame = undefined
+            return null
+        }
+        const recorder = this.lodRecorder ||= new CanvasCallRecorder()
+        recorder.begin(ctx, null)
+        // Bounds are kept for an overlay snapshot only; none is made from this recording.
+        recorder.endOverlays()
+        return recorder
+    }
+    // The rasters a level-of-detail frame's calls draw from that change in place, by identity and revision.
+    lodFrameKey(ctx) {
+        const t = ctx.getTransform(), b = this.surfaceCacheBounds
+        return [t.a, t.d, t.e, t.f, ctx.canvas.width, ctx.canvas.height, otherSettings.atmosphericVisuals, atmosphericBackground.raster,
+            mapDepth.atmosphericShadow, this.surfaceCache, this.surfaceCacheShown, this.surfaceCacheRevision, this.cellLayerRevision,
+            b?.left, b?.top, b?.width, b?.height]
+    }
+    // Whether a frame's calls can stand for the next frame's: drawn from the surface cache (not lit tiles or directly), no
+    // camera move or zoom gesture, move tween, surface cache job
+    // or lit layer job (they draw from buffers changed in place), and the light baked into the cache (else the light map,
+    // patched in place, is drawn over it).
+    lodFrameSteady(recorder) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (this.frameSurface !== true || !screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens() || this.surfaceCacheBuild || this.surfacePatchJob ||
+                this.surfaceLayerJob || this.surfaceSplitJob || this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit)
+            return false
+        // A path object can change after it is drawn.
+        for (const c of recorder.calls)
+            if (c.args && c.args.some(a => typeof Path2D !== 'undefined' && a instanceof Path2D))
+                return false
+        return true
+    }
+    // Ends a level-of-detail frame (beginLodFrame): its calls made on ctx, or none when they repeat the frame before.
+    // Returns whether the frame was held.
+    endLodFrame(ctx, recorder) {
+        recorder.key = this.lodFrameKey(ctx)
+        const last = this.lodFrame, steady = this.lodFrameSteady(recorder)
+        if (steady && last && last.serial === this.drawSerial - 1 && recorder.repeats(last)) {
+            last.serial = this.drawSerial
+            ++this.lodHolds
+            return true
+        }
+        recorder.replay(ctx, true)
+        this.lodFrame = steady ? {key: recorder.key, calls: recorder.calls, serial: this.drawSerial} : undefined
+        return false
     }
 }
 
@@ -4849,6 +4930,11 @@ Grid.litStandIns = true
 // TASK-1374: true draws a zoom gesture's frames from the zoom raster, the board rebuilt once when it ends (Grid.drawZoomRaster);
 // false draws them as any frame (the board directly above the surface cache's scale on a desktop).
 Grid.zoomRasters = true
+// TASK-1375: level-of-detail frames (Grid.lodTransform) below this hexagon radius on screen, in CSS pixels (12 device pixels at
+// the user's DPR 1.5): the hp and moves bars are then about a pixel high and the cell texts 3-4 pixels, unreadable. False:
+// every frame draws as above it.
+Grid.LOD_RADIUS = 8
+Grid.lodFrames = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).

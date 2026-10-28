@@ -2,33 +2,39 @@ function drawMain() {
     // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374).
     if (grid.drawZoomRaster(mainCtx))
         return
+    // Cells too small for their details: a level-of-detail frame, recorded and made at the end unless it repeats the
+    // frame already on the canvas (TASK-1375, Grid.beginLodFrame).
+    const lod = grid.beginLodFrame(mainCtx)
+    const ctx = lod ? lod.context : mainCtx
     // An opaque sky raster covers the whole canvas, so it needs no clear under it; the board's lit
     // images may hide most of the canvas (Grid.frameCover): then the sky is drawn only where they
     // leave it open.
-    const cover = grid.frameCover(mainCtx)
+    const cover = grid.frameCover(ctx)
     if (!cover) {
-        if (!atmosphericBackground.opaqueOver(mainCtx))
-            mainCtx.clearRect(canvas.offset.x, canvas.offset.y,
+        if (!atmosphericBackground.opaqueOver(ctx))
+            ctx.clearRect(canvas.offset.x, canvas.offset.y,
                 width, height)
-        atmosphericBackground.draw(mainCtx)
-        drawBackgroundHints(mainCtx)
+        atmosphericBackground.draw(ctx)
+        drawBackgroundHints(ctx)
     }
     else if (cover.open.length) {
         // clipToDeviceRects leaves the identity transform; the hints are in world space (the camera's).
-        const camera = mainCtx.getTransform()
-        mainCtx.save()
-        clipToDeviceRects(mainCtx, cover.open)
-        atmosphericBackground.draw(mainCtx)
-        mainCtx.setTransform(camera.a, camera.b, camera.c, camera.d, camera.e, camera.f)
-        drawBackgroundHints(mainCtx)
-        mainCtx.restore()
+        const camera = ctx.getTransform()
+        ctx.save()
+        clipToDeviceRects(ctx, cover.open)
+        atmosphericBackground.draw(ctx)
+        ctx.setTransform(camera.a, camera.b, camera.c, camera.d, camera.e, camera.f)
+        drawBackgroundHints(ctx)
+        ctx.restore()
     }
 
     // Border.draw sets round joins/caps and never restores them, so every frame after the first strokes
     // text and bars with them. Start each frame in that state, so the first frame draws the same.
-    mainCtx.lineJoin = 'round'
-    mainCtx.lineCap = 'round'
-    grid.draw(mainCtx)
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+    grid.draw(ctx)
+    if (lod)
+        grid.endLodFrame(mainCtx, lod)
 }
 
 // Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:

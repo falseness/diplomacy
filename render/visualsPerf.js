@@ -364,6 +364,15 @@
                 return drawn
             }, 'surface')
         }
+        // TASK-1375: a level-of-detail frame that repeats the one on the canvas draws nothing.
+        if (proto.endLodFrame) {
+            const endLod = proto.endLodFrame
+            proto.endLodFrame = function(...args) {
+                const held = endLod.apply(this, args)
+                if (active && held) work.renderPath = 'lod-held'
+                return held
+            }
+        }
         proto.drawOverlayLayer = function(...args) {
             const layered = layer.apply(this, args)
             if (active && layered) work.overlayLayer = true
