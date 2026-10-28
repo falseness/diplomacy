@@ -1,7 +1,13 @@
 function drawMain() {
+    // Attack animations (render/attackFx.js): waiting effects start and finished ones end before the board is drawn, so
+    // the units an effect draws are left out of this frame's unit passes (Grid.getStillUnit).
+    if (typeof attackFx !== 'undefined')
+        attackFx.prune()
     // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374).
-    if (grid.drawZoomRaster(mainCtx))
+    if (grid.drawZoomRaster(mainCtx)) {
+        drawAttackFx()
         return
+    }
     // Cells too small for their details: a level-of-detail frame, recorded and made at the end unless it repeats the
     // frame before, whose board is then drawn back (TASK-1375, Grid.beginLodFrame); so is a still frame at any scale
     // (TASK-1376, Grid.stillFrameCandidate).
@@ -44,6 +50,14 @@ function drawMain() {
     if (lod)
         grid.endLodFrame(mainCtx, lod)
     SelectionOverlay.drawSelection(mainCtx)
+    drawAttackFx()
+}
+
+// Attack animations over the board's frame on the main canvas, whether drawn, held (its snapshot is taken before them:
+// Grid.endLodFrame) or a zoom gesture's raster: an effect never makes the board draw live (TASK-1425, render/attackFx.js).
+function drawAttackFx() {
+    if (typeof attackFx !== 'undefined')
+        attackFx.draw(mainCtx)
 }
 
 // Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:

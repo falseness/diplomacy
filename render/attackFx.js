@@ -4,8 +4,12 @@
 // Melee: the attacker hops toward the target in an arc and back, a white slash with gold sparks crosses the target,
 // a red flash, '-N' floats up. Last hit: after the slash the target (a snapshot of its sprite: it is already gone
 // in the rules) greys, falls back in a dust puff and fades; an attacker that moved into the hex slides in after it.
-// While an effect plays its attacker is left out of the grid's unit passes (Grid.getStillUnit) and drawn here, and
-// frames are drawn live (zoomRasterTweens: no held, still or zoom raster frame), the board cache is not rebuilt.
+// While an effect plays its attacker is left out of the grid's unit passes (Grid.getStillUnit) and drawn here. Effects
+// draw over the board's frame (drawMain, TASK-1425): a held still or level-of-detail frame stays held (one drawImage of
+// its snapshot, taken before the effects), a zoom gesture keeps its raster; no frame is drawn live for an effect and the
+// board cache is not rebuilt for one: a finished effect keeps its units (drawn in place, as the board draws them) until
+// the board changes anyway (the next attack, the unit moving or dying, the turn's end), so they leave and rejoin the
+// board's frame only in frames an attack redraws already.
 // Ranged (TASK-1422): an archer draws back and an arrow arcs with a short trail, sparks and a knock-back on the hit
 // (B2-archer); an ember archer's bow glows and a burning arrow trails embers, small flames on the hit (B3-ember-archer);
 // a hexcaster gathers violet sparks, a wobbling orb flies, a hex sigil spins on the target's ground (B3-hexcaster). A
@@ -67,6 +71,13 @@ class AttackFx {
         return debris
     })()
     effects = []
+    // The units effects draw, bars and sprite as one image each (drawUnitImage): unit -> {image, bars state, scale, canvas}; the
+    // canvases' pool.
+    barImages = new WeakMap()
+    barPool = new Array(32)
+    barNext = 0
+    // The units the effects draw (hideUnits).
+    hidden = new Set()
     // Clock in ms; tests may replace it.
     now() {
         return typeof performance != 'undefined' ? performance.now() : Date.now()
@@ -440,19 +451,22 @@ class AttackFx {
         effect.span = span
         effect.startTime = event.own ? this.now() : null
         effect.duration = duration
-        // One effect per attacker: a new attack of the same unit replaces its effect.
-        if (event.attacker)
-            this.effects = this.effects.filter(e => e.attacker !== event.attacker)
+        // One effect per attacker: a new attack of the same unit replaces its effect. The finished effects (held at their
+        // end, prune) let their units go: the attack changes the board in this frame anyway (TASK-1425).
+        const now = this.now()
+        this.effects = this.effects.filter(e => e.attacker !== event.attacker && !this.finished(e, now))
         this.effects.push(effect)
         ++this.stats.queued
         while (this.effects.length > this.maxEffects) {
             this.effects.shift()
             ++this.stats.dropped
         }
+        this.hideUnits()
         return effect
     }
     clear() {
         this.effects.length = 0
+        this.hidden.clear()
         this.later.length = 0
         this.view = null
     }
@@ -460,6 +474,7 @@ class AttackFx {
     // human's ending turn leaves its fog as the view others' attacks are judged by.
     endTurn() {
         this.effects = this.effects.filter(e => !e.own)
+        this.hideUnits()
         const ending = typeof players !== 'undefined' && typeof whooseTurn !== 'undefined' ? players[whooseTurn] : null
         if (ending && ending.constructor === Player && !(typeof gameSettings !== 'undefined' && gameSettings.isOnline))
             this.view = typeof isFogOfWar !== 'undefined' && isFogOfWar && grid.fogOfWar ? grid.fogOfWar.map(column => Array.from(column)) : null
@@ -490,25 +505,48 @@ class AttackFx {
         for (const e of this.effects)
             if (e.startTime === null && !held)
                 e.startTime = now
-        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration) &&
+        // TASK-1425: a finished effect stays (drawn at its end: its units in place, bars on, as the board draws them)
+        // while it draws a unit, until the board changes anyway: the next attack (play), the unit moving or dying, the
+        // turn's end or a new view. A unit leaving or rejoining the board's frame makes it draw live (and, without the
+        // atmospheric visuals, patches the surface cache, which holds the unit bodies); an attack does so already, so
+        // its units leave in that frame and come back in another such frame, never in one of their own.
+        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || this.drawsUnit(e)) &&
             (e.edge === 'in' || !e.attacker || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
                 e.attacker.coord.y === e.to.y && grid.getUnit(e.to) === e.attacker))
+        this.hideUnits()
     }
-    // An effect plays (a waiting one does not keep frames live).
+    // Whether e draws a unit (its attacker, but for a shot entering from the fog edge, or a ranged hit's living target).
+    drawsUnit(e) {
+        return !!e.attacker && e.edge !== 'in' || this.drawsTarget(e)
+    }
+    // Whether e has played to its end (finished effects stay while they draw a unit: prune).
+    finished(e, now = this.now()) {
+        return e.startTime !== null && now - e.startTime >= e.duration
+    }
+    // The units the effects draw, left out of the grid's unit passes until the next prune (hidesUnit, called for every
+    // unit of every pass, looks them up): attackers (but a shot entering from the fog edge) and a ranged hit's living
+    // target while it stays on its cell. An effect waiting behind the pass-device screen hides its units already (drawn
+    // at its first pose), so the board's frame drops them with the turn's own change, not in the next view's first frame.
+    hideUnits() {
+        const hidden = this.hidden
+        hidden.clear()
+        for (const e of this.effects) {
+            if (e.attacker && e.edge !== 'in')
+                hidden.add(e.attacker)
+            if (this.drawsTarget(e))
+                hidden.add(e.targetUnit)
+        }
+    }
+    // An effect plays (a waiting one or one held at its end does not).
     isActive() {
         this.prune()
-        return this.effects.some(e => e.startTime !== null)
+        const now = this.now()
+        return this.effects.some(e => e.startTime !== null && now - e.startTime < e.duration)
     }
     // Whether unit is drawn by an effect (left out of the grid's unit passes): its attacker, or a ranged hit's living
     // unit target while it stays on the target cell.
     hidesUnit(unit) {
-        if (!this.effects.length)
-            return false
-        for (const e of this.effects)
-            if (e.startTime !== null && (e.attacker === unit && e.edge !== 'in' || this.drawsTarget(e) && e.targetUnit === unit) &&
-                    this.now() - e.startTime < e.duration)
-                return true
-        return false
+        return this.hidden.size > 0 && this.hidden.has(unit)
     }
     drawsTarget(e) {
         return !!e.targetUnit && !e.targetUnit.killed && grid.getUnit(e.target) === e.targetUnit
@@ -518,10 +556,9 @@ class AttackFx {
         if (!this.effects.length)
             return
         const t = ctx.getTransform(), margin = 3 * basis.r
-        const lod = typeof grid !== 'undefined' && grid.lod
+        // (drawn after Grid.draw: its level of detail from the camera, as the board's)
+        const lod = typeof grid !== 'undefined' && (grid.lod || !!grid.lodTransform?.(ctx))
         for (const e of this.effects) {
-            if (e.startTime === null)
-                continue
             // Off-screen effects are skipped (the target's centre and reach against the canvas).
             const cx = e.targetPos.x + assets.size / 2, cy = e.targetPos.y + assets.size / 2
             const x = t.a * cx + t.c * cy + t.e, y = t.b * cx + t.d * cy + t.f
@@ -529,7 +566,13 @@ class AttackFx {
             if (x < -reach || y < -reach || x > ctx.canvas.width + reach || y > ctx.canvas.height + reach)
                 continue
             ctx.save()
-            const time = Math.min(1, (now - e.startTime) / e.duration) * e.span
+            if (this.finished(e, now)) {
+                this.drawEnd(ctx, e, lod)
+                ctx.restore()
+                continue
+            }
+            // (an effect waiting behind the pass-device screen: its first pose)
+            const time = e.startTime === null ? 0 : Math.min(1, (now - e.startTime) / e.duration) * e.span
             if (this.siege[e.kind])
                 this.drawSiege(ctx, e, time, lod)
             else if (this.ranged[e.kind])
@@ -538,6 +581,13 @@ class AttackFx {
                 this.drawMelee(ctx, e, time, lod)
             ctx.restore()
         }
+    }
+    // A finished effect (held until the board changes, prune): only the units it keeps from the board, where they are.
+    drawEnd(ctx, e, lod) {
+        if (e.attacker && e.edge !== 'in')
+            this.drawUnitAt(ctx, e.attacker, this.imageOf(e.attacker) || e.image, e.attacker.pos.x, e.attacker.pos.y, lod)
+        if (this.drawsTarget(e))
+            this.drawUnitAt(ctx, e.targetUnit, this.imageOf(e.targetUnit) || e.targetImage, e.targetUnit.pos.x, e.targetUnit.pos.y, lod)
     }
     ease(t) {
         return 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, t)))
@@ -706,13 +756,82 @@ class AttackFx {
     drawUnitAt(ctx, unit, image, x, y, lod) {
         if (!image)
             return
-        if (!lod && unit.drawBars) {
-            ctx.save()
-            ctx.translate(x - unit.pos.x, y - unit.pos.y)
-            unit.drawBars(ctx)
-            ctx.restore()
+        if (lod || !unit.drawBars || !this.drawUnitImage(ctx, unit, image, x - unit.pos.x, y - unit.pos.y)) {
+            if (!lod && unit.drawBars) {
+                ctx.save()
+                ctx.translate(x - unit.pos.x, y - unit.pos.y)
+                unit.drawBars(ctx)
+                ctx.restore()
+            }
+            ctx.drawImage(image, x, y)
         }
-        ctx.drawImage(image, x, y)
+    }
+    // TASK-1425: a unit's bars (unit.drawBars, 8-14 fills and strokes) and its sprite over them, moved by dx, dy, as one
+    // image: drawn once into a small canvas at the camera's scale and the device-pixel phase of the unit's place (there
+    // the image is pixel for pixel what drawing them does), then one drawImage a frame at whole device pixels of that
+    // phase (a moving unit within half a device pixel). Remade when the bars or the sprite change, or the scale or that
+    // phase with the camera at rest (while it zooms or pans the image is scaled and moved along).
+    // Canvases come from a pool of barPool.length, reused in turn (12 effects draw at most 24 units). False (nothing
+    // drawn) when the transform is not a plain scale and translation.
+    drawUnitImage(ctx, unit, image, dx, dy) {
+        const t = ctx.getTransform()
+        const rects = unit.hpBar?.rects, moves = unit.movesBar?.rects
+        if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !rects || typeof document === 'undefined')
+            return false
+        let x0 = unit.pos.x, y0 = unit.pos.y, x1 = x0 + image.width, y1 = y0 + image.height
+        for (const list of [rects, moves || []])
+            for (const r of list) {
+                const w = r.strokeWidth || 0
+                x0 = Math.min(x0, r.x - w); y0 = Math.min(y0, r.y - w)
+                x1 = Math.max(x1, r.x + r.width + w); y1 = Math.max(y1, r.y + r.height + w)
+            }
+        // device position of the box at rest, its phase (fraction of a device pixel)
+        const X = t.a * x0 + t.e, Y = t.d * y0 + t.f, fx = X - Math.floor(X), fy = Y - Math.floor(Y)
+        const showMoves = typeof shouldShowMovesBar === 'function' && shouldShowMovesBar(unit)
+        const alwaysHP = !!otherSettings?.alwaysDisplayHPBar, w0 = x1 - x0, h0 = y1 - y0
+        let entry = this.barImages.get(unit)
+        const same = entry && entry.canvas.owner === entry && entry.image === image && entry.hp === unit.hp && entry.maxHP === unit.maxHP &&
+            entry.moves === unit.moves && entry.showMoves === showMoves && entry.alwaysHP === alwaysHP && entry.r === basis.r &&
+            entry.w0 === w0 && entry.h0 === h0
+        const exact = same && entry.a === t.a && entry.d === t.d && Math.abs(entry.fx - fx) < 1e-3 && Math.abs(entry.fy - fy) < 1e-3
+        // While the camera zooms or pans the image is drawn scaled and moved with it, remade once the camera rests.
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        const moving = !!screen && (screen.zoomGesture || screen.surfaceMoving)
+        if (!exact && !(same && moving)) {
+            const canvas = this.barPool[this.barNext] ||= document.createElement('canvas')
+            this.barNext = (this.barNext + 1) % this.barPool.length
+            entry = {image, hp: unit.hp, maxHP: unit.maxHP, moves: unit.moves, showMoves, alwaysHP, r: basis.r, w0, h0, a: t.a, d: t.d, fx, fy, canvas}
+            canvas.owner = entry
+            const w = Math.ceil(t.a * w0 + fx) + 2, h = Math.ceil(t.d * h0 + fy) + 2
+            if (canvas.width < w || canvas.height < h) {
+                canvas.width = Math.max(canvas.width, w)
+                canvas.height = Math.max(canvas.height, h)
+            }
+            entry.w = w
+            entry.h = h
+            const g = canvas.getContext('2d')
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.clearRect(0, 0, w, h)
+            g.lineJoin = ctx.lineJoin
+            g.lineCap = ctx.lineCap
+            // the box's corner at device (1 + fx, 1 + fy) of the canvas
+            g.setTransform(t.a, 0, 0, t.d, 1 + fx - t.a * x0, 1 + fy - t.d * y0)
+            unit.drawBars(g)
+            g.drawImage(image, unit.pos.x, unit.pos.y)
+            this.barImages.set(unit, entry)
+        }
+        // the box's corner now (moved by dx, dy)
+        const X1 = t.a * (x0 + dx) + t.e, Y1 = t.d * (y0 + dy) + t.f
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        if (entry.a === t.a && entry.d === t.d)
+            ctx.drawImage(entry.canvas, 0, 0, entry.w, entry.h, Math.round(X1 - entry.fx) - 1, Math.round(Y1 - entry.fy) - 1, entry.w, entry.h)
+        else {
+            const kx = t.a / entry.a, ky = t.d / entry.d
+            ctx.drawImage(entry.canvas, 0, 0, entry.w, entry.h, X1 - (1 + entry.fx) * kx, Y1 - (1 + entry.fy) * ky, entry.w * kx, entry.h * ky)
+        }
+        ctx.restore()
+        return true
     }
     // The point q of the shot's arc from S to T, height h at its middle (into this.point).
     arc(S, T, h, q) {
@@ -868,15 +987,23 @@ class AttackFx {
         }
         if (t >= 0.22 && t < 0.56) {
             const q = (t - 0.22) / 0.34, trail = this.embers.trail
-            for (let i = 0; i < trail.length; i += 3) {
-                const qq = q + trail[i] * 1.5
-                if (qq < 0)
-                    continue
-                const age = -trail[i] / 0.06, c = this.arc(S, T, h, qq)
-                ctx.fillStyle = `rgba(255, ${Math.round(200 - 150 * age)}, 40, ${(0.9 * (1 - age)).toFixed(3)})`
+            // TASK-1425: the embers in 4 age bands, one fill a band (the band's middle age gives colour and alpha).
+            for (let band = 0; band < 4; ++band) {
+                const mid = (band + 0.5) / 4
+                ctx.fillStyle = `rgba(255, ${Math.round(200 - 150 * mid)}, 40, ${(0.9 * (1 - mid)).toFixed(3)})`
                 ctx.beginPath()
-                ctx.arc(c.x, c.y + trail[i + 1] * age * r, trail[i + 2] * r, 0, 2 * Math.PI)
-                ctx.fill()
+                let any = false
+                for (let i = 0; i < trail.length; i += 3) {
+                    const qq = q + trail[i] * 1.5, age = -trail[i] / 0.06
+                    if (qq < 0 || Math.min(3, Math.floor(age * 4)) !== band)
+                        continue
+                    const c = this.arc(S, T, h, qq), x = c.x, y = c.y + trail[i + 1] * age * r
+                    ctx.moveTo(x + trail[i + 2] * r, y)
+                    ctx.arc(x, y, trail[i + 2] * r, 0, 2 * Math.PI)
+                    any = true
+                }
+                if (any)
+                    ctx.fill()
             }
             this.drawShaft(ctx, S, T, h, q, r, 'rgb(60, 30, 15)', true)
         }

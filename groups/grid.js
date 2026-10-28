@@ -4362,8 +4362,6 @@ class Grid extends SpritesGroup {
             ctx = composite.context
         }
         moveTween.draw(ctx)
-        if (typeof attackFx !== 'undefined')
-            attackFx.draw(ctx)
         if (typeof onlineObservation !== 'undefined')
             onlineObservation.draw(ctx)
         if (typeof remoteEffects !== 'undefined')
@@ -4840,10 +4838,10 @@ function patchCellsWindow(boxes) {
         x1: Math.max(...boxes.map(b => b.x1)) + r, y1: Math.max(...boxes.map(b => b.y1)) + r}
 }
 
-// Whether a move tween or an attack animation (attackFx) runs: the zoom raster (Grid.drawZoomRaster) and a held frame
-// would hold the unit and the effect still.
+// Whether a move tween runs: the zoom raster (Grid.drawZoomRaster) and a held frame would hold the unit still. Attack
+// animations (attackFx) draw over the frame, held or not (drawMain), and keep no frame live.
 function zoomRasterTweens() {
-    return typeof moveTween !== 'undefined' && moveTween.tweens.size > 0 || typeof attackFx !== 'undefined' && attackFx.isActive()
+    return typeof moveTween !== 'undefined' && moveTween.tweens.size > 0
 }
 
 // Clips ctx to rects (whole device pixel rectangles {x, y, w, h}); leaves the identity transform.
