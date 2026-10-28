@@ -1336,8 +1336,8 @@ const atmosphericLighting = {
             ++this.tileDetailBuilds
         }
         if (this.tileDetails[index]) return this.tileDetails[index]
-        const tile = this.tileVariant(index)
-        const {data} = tile.getContext('2d').getImageData(0, 0, tile.width, tile.height)
+        const tile = this.tileVariant(index), box = this.tileBox(tile.width)
+        const {data} = tile.getContext('2d').getImageData(box.x, box.y, box.w, box.h)
         const offset = new Float32Array(data.length / 4)
         let sum = 0, weight = 0
         for (let i = 0; i < offset.length; i++) {
@@ -1356,7 +1356,15 @@ const atmosphericLighting = {
             const bin = Math.round(offset[i] * 2) / 2
             histogram.set(bin, (histogram.get(bin) || 0) + a / weight)
         }
-        return this.tileDetails[index] = {size: tile.width, offset, alpha: data, histogram: [...histogram]}
+        return this.tileDetails[index] = {size: tile.width, box, offset, alpha: data, histogram: [...histogram]}
+    },
+    // TASK-1373: the pixel rectangle of a size x size variant raster holding its inset tile (the variant is drawn clipped to the
+    // tileRadius hexagon at its centre, so every pixel outside is transparent), 2 pixels of margin: what tileDetail reads and
+    // the owned tiles' detail and colour cover (their pixels outside it are transparent too).
+    tileBox(size) {
+        const s = this.TILE.rasterScale, rx = this.tileRadius() * s, ry = rx * Math.sqrt(3) / 2
+        const x = Math.max(0, Math.floor(size / 2 - rx) - 2), y = Math.max(0, Math.floor(size / 2 - ry) - 2)
+        return {x, y, w: Math.min(size, Math.ceil(size / 2 + rx) + 2) - x, h: Math.min(size, Math.ceil(size / 2 + ry) + 2) - y}
     },
     // Owned marble, built once per hex radius and tile colour, all variants at once: the colour plus the
     // variant's detail, with the variant's alpha (the inset tile), under the sheen; an owned cell is one
@@ -1418,8 +1426,31 @@ const atmosphericLighting = {
         }
         return fills
     },
+    // TASK-1373: the variant's detail at gain TILE.owned over its tile's box (tileDetail): an opaque grey canvas of the levels
+    // |TILE.owned x offset| (rounded as the owned tile's colour + gain x offset is), and its pixels where that is above 0
+    // (raised) and below 0 (lowered) as paths of whole pixels (maskPath). Built once per hex radius, one ImageData put a variant,
+    // so the owned tiles of every colour are drawn from it (buildOwnedTile) with none.
+    ownedDetail(index) {
+        const detail = this.tileDetail(index)
+        if (detail.parts) return detail.parts
+        const {box: {w, h}, offset} = detail, owned = this.TILE.owned
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const g = canvas.getContext('2d'), image = g.createImageData(w, h), data = image.data
+        const raised = new Uint8Array(offset.length), lowered = new Uint8Array(offset.length)
+        for (let i = 0; i < offset.length; i++) {
+            const v = owned * offset[i]
+            data[4 * i] = data[4 * i + 1] = data[4 * i + 2] = Math.abs(v)
+            data[4 * i + 3] = 255
+            if (v > 0) raised[i] = 1
+            else if (v < 0) lowered[i] = 1
+        }
+        g.putImageData(image, 0, 0)
+        return detail.parts = {canvas, raised: maskPath(raised, w, h), lowered: maskPath(lowered, w, h)}
+    },
     buildOwnedTile(index, fill) {
-        const {size, offset, alpha, histogram} = this.tileDetail(index)
+        const {size, box, offset, alpha, histogram} = this.tileDetail(index)
         const color = fill.match(/\d+/g).map(Number)
         // A channel near 0 or 255 would clip and shift the colour's mean: each channel takes the largest gain up to
         // its target that keeps its mean within half a level, and the channels with room make up the luminance.
@@ -1444,14 +1475,47 @@ const atmosphericLighting = {
         if (boost > 1) gains = gains.map((gain, i) => gain < owned ? gain : fit(color[i], owned * boost))
         const surface = document.createElement('canvas')
         surface.width = surface.height = size
-        const g = surface.getContext('2d'), image = g.createImageData(size, size), data = image.data
-        for (let i = 0; i < offset.length; i++) {
-            data[4 * i] = color[0] + gains[0] * offset[i]
-            data[4 * i + 1] = color[1] + gains[1] * offset[i]
-            data[4 * i + 2] = color[2] + gains[2] * offset[i]
-            data[4 * i + 3] = alpha[4 * i + 3]
+        const g = surface.getContext('2d')
+        // TASK-1373: within the tile's box (outside it the tile is transparent). A colour whose gains are all TILE.owned (the
+        // boost of an unclipped colour leaves them within a rounding of it) is drawn from the variant's detail (ownedDetail),
+        // no ImageData put: the colour, the detail added at its raised pixels, taken off at its lowered ones (added to the
+        // inverse, 255 - (255 - c + d): the canvas's clamping is the clamp to 0..255), then the variant's alpha
+        // (destination-in, as the put's colour is premultiplied). A clipped colour's channels have their own gains: put.
+        if (gains.every(gain => Math.abs(gain - owned) < 1e-9)) {
+            const {canvas, raised, lowered} = this.ownedDetail(index)
+            g.setTransform(1, 0, 0, 1, box.x, box.y)
+            g.fillStyle = `rgb(${color.join(',')})`
+            g.fillRect(0, 0, box.w, box.h)
+            const add = path => {
+                g.save()
+                g.clip(path)
+                g.globalCompositeOperation = 'lighter'
+                g.drawImage(canvas, 0, 0)
+                g.restore()
+            }
+            const invert = () => {
+                g.globalCompositeOperation = 'difference'
+                g.fillStyle = '#fff'
+                g.fillRect(0, 0, box.w, box.h)
+            }
+            add(raised)
+            invert()
+            add(lowered)
+            invert()
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalCompositeOperation = 'destination-in'
+            g.drawImage(this.tileVariant(index), 0, 0)
+            g.globalCompositeOperation = 'source-over'
+        } else {
+            const image = g.createImageData(box.w, box.h), data = image.data
+            for (let i = 0; i < offset.length; i++) {
+                data[4 * i] = color[0] + gains[0] * offset[i]
+                data[4 * i + 1] = color[1] + gains[1] * offset[i]
+                data[4 * i + 2] = color[2] + gains[2] * offset[i]
+                data[4 * i + 3] = alpha[4 * i + 3]
+            }
+            g.putImageData(image, box.x, box.y)
         }
-        g.putImageData(image, 0, 0)
         g.setTransform(this.TILE.rasterScale, 0, 0, this.TILE.rasterScale, size / 2, size / 2)
         g.globalCompositeOperation = 'source-atop'
         this.drawSheen(g, 0, 0, this.TILE.sheen)

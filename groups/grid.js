@@ -702,8 +702,8 @@ class Grid extends SpritesGroup {
         const mask = layer.mask ||= document.createElement('canvas')
         mask.width = W
         mask.height = H
-        const {cells, box, image} = this.cellLayerCells(W, H, place)
-        mask.getContext('2d').putImageData(image, 0, 0)
+        const {cells, box, path} = this.cellLayerCells(W, H, place)
+        fillCellMask(mask.getContext('2d'), path)
         Object.assign(layer, {cells, cellBox: box, sprites: new Map(), stale: null, byIndex: new Map(cells.map(c => [c.index, c])),
             place, states: this.cellLayerStates()})
         for (const cell of cells)
@@ -737,8 +737,8 @@ class Grid extends SpritesGroup {
             const mask = layer.mask ||= document.createElement('canvas')
             mask.width = W
             mask.height = H
-            const {cells, box, image} = this.cellLayerCells(W, H, place)
-            mask.getContext('2d').putImageData(image, 0, 0)
+            const {cells, box, path} = this.cellLayerCells(W, H, place)
+            fillCellMask(mask.getContext('2d'), path)
             for (const cell of cells)
                 cell.key = this.cellLayerKey(cell.i, cell.j)
             const far = ({box}) => Math.hypot(box.x + box.w / 2 - centre.x, box.y + box.h / 2 - centre.y)
@@ -826,9 +826,10 @@ class Grid extends SpritesGroup {
     // (TASK-1315) for a cell at the board's side, the pixels off the board nearer its centre than any other side cell's
     // within CELL_LAYER_EDGE_REACH of it (the slab's side and shadow, the outline's antialiasing: they follow its fog and
     // tile). {cells: per cell {index, i, j, box (its pixels' rectangle grown by a pixel, cut to the canvas), alpha (per box
-    // pixel 255 when the cell's, else 0), key}, box: the rectangle the boxes span or null, image: the mask (black, opaque
-    // at the cells' pixels, transparent elsewhere)}. TASK-1371: it depends on the geometry and scale only (not on the
-    // board's state), so it is kept by them (cellMaskCache; a cell's alpha and the image are shared, read only).
+    // pixel 255 when the cell's, else 0; path: those pixels as rectangles in the box, maskPath), key}, box: the rectangle the
+    // boxes span or null, path: the mask's pixels as rectangles (maskPath; filled black, fillCellMask, the mask: opaque at the
+    // cells' pixels, transparent elsewhere)}. TASK-1371: it depends on the geometry and scale only (not on the board's state),
+    // so it is kept by them (cellMaskCache; the cells' alpha and paths and the whole path are shared, read only).
     cellLayerCells(W, H, place) {
         const g = (this.cellMaskCanvas ||= document.createElement('canvas')).getContext('2d')
         g.save()
@@ -848,7 +849,7 @@ class Grid extends SpritesGroup {
         cellMaskCache.set(key, mask)
         if (cellMaskCache.size > CELL_MASK_CACHE)
             cellMaskCache.delete(cellMaskCache.keys().next().value)
-        return {cells: mask.cells.map(c => ({...c})), box: mask.box, image: mask.image}
+        return {cells: mask.cells.map(c => ({...c})), box: mask.box, path: mask.path}
     }
     // cellLayerCells's mask built (x' = a x + e, y' = d y + f). Each row of a cell's box splits by the bisectors with the
     // cells round it: the run surely the cell's (every bisector at least CELL_MASK_MARGIN pixels away on the cell's side),
@@ -1016,8 +1017,8 @@ class Grid extends SpritesGroup {
                     }
             x0[index] = sx0; y0[index] = sy0; x1[index] = sx1; y1[index] = sy1
         }
-        // The cells' boxes and alpha, and the image, from the owners.
-        const image = new ImageData(W, H), out = image.data
+        // The cells' boxes, alpha and paths, and the whole mask (out: 255 at a cell's pixel), from the owners.
+        const out = new Uint8Array(W * H)
         const cells = []
         let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity
         for (let index = 0; index < w * h; ++index) {
@@ -1029,10 +1030,10 @@ class Grid extends SpritesGroup {
                 for (let x = 0, p = (box.y + y) * W + box.x; x < box.w; ++x, ++p)
                     if (owner[p] === index + 1) {
                         alpha[y * box.w + x] = 255
-                        out[p * 4 + 3] = 255
+                        out[p] = 255
                     }
             const i = Math.floor(index / h)
-            cells.push({index, i, j: index - i * h, box, alpha, key: undefined})
+            cells.push({index, i, j: index - i * h, box, alpha, path: maskPath(alpha, box.w, box.h), key: undefined})
             bx0 = Math.min(bx0, box.x); by0 = Math.min(by0, box.y)
             bx1 = Math.max(bx1, box.x + box.w); by1 = Math.max(by1, box.y + box.h)
         }
@@ -1040,7 +1041,7 @@ class Grid extends SpritesGroup {
         ++work.builds
         work.tests += tests
         work.distances += distances
-        return {cells, image, box: cells.length ? pixelRect(bx0, by0, bx1, by1, W, H) : null}
+        return {cells, path: maskPath(out, W, H), box: cells.length ? pixelRect(bx0, by0, bx1, by1, W, H) : null}
     }
     // A cell's variant in the cell layer: its surface state (owner colour, suburb, fog), its building's cached image, the
     // surface states of the cells round it (their tiles' antialiased edges and their fog reach its pixels), and (TASK-1314)
@@ -1745,7 +1746,7 @@ class Grid extends SpritesGroup {
         const {box} = cell
         const sprite = this.cellSpriteCanvas(box)
         const g = sprite.getContext('2d')
-        g.putImageData(this.cellAlphaImage(g, cell), 0, 0)
+        fillCellMask(g, cell.path)
         g.globalCompositeOperation = 'source-in'
         g.drawImage(source, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
         layer.sprites.set(cell.index + '|' + key, sprite)
@@ -1769,7 +1770,7 @@ class Grid extends SpritesGroup {
         alpha.width = box.w
         alpha.height = box.h
         const a = alpha.getContext('2d')
-        a.putImageData(this.cellAlphaImage(a, cell), 0, 0)
+        fillCellMask(a, cell.path)
         g.save()
         g.beginPath()
         g.rect(x0, y0, x1 - x0, y1 - y0)
@@ -1789,18 +1790,6 @@ class Grid extends SpritesGroup {
         sprite.width = box.w
         sprite.height = box.h
         return sprite
-    }
-    // TASK-1361: an ImageData of cell's mask (cell.alpha; black), one kept a box size and filled again, not one made a sprite.
-    cellAlphaImage(g, cell) {
-        const {box} = cell, size = box.w + 'x' + box.h
-        const images = this.cellAlphaImages ||= new Map()
-        let image = images.get(size)
-        if (!image)
-            images.set(size, image = g.createImageData(box.w, box.h))
-        const data = image.data, alpha = cell.alpha
-        for (let k = 0; k < alpha.length; ++k)
-            data[4 * k + 3] = alpha[k]
-        return image
     }
     // TASK-1361: the layer's sprites cut to CELL_LAYER_VARIANTS a cell, those its cells took last kept (each cell's variant
     // now first, then the one before it, so an undo still draws a kept sprite); the others' canvases go to the pool
@@ -4726,6 +4715,39 @@ const CELL_LAYER_EDGE_REACH = 0.5
 const CELL_MASK_MARGIN = 0.25
 const CELL_MASK_CACHE = 2
 const cellMaskCache = new Map()
+// TASK-1373: a mask's pixels (alpha: w x h, non-zero at them) as a path of whole-pixel rectangles (each row's runs, rows
+// with the same runs as one rectangle). Filled black (fillCellMask) on a cleared canvas with the identity
+// transform, it is the mask to the bit (opaque there, transparent elsewhere: whole pixels, no partial coverage), with no
+// ImageData put.
+function maskPath(alpha, w, h) {
+    const path = new Path2D()
+    let open = [], top = 0
+    for (let y = 0; y <= h; ++y) {
+        const runs = []
+        for (let x = 0, p = y * w; y < h && x < w; ++x)
+            if (alpha[p + x]) {
+                const x0 = x
+                while (x < w && alpha[p + x]) ++x
+                runs.push(x0, x)
+            }
+        if (runs.length === open.length && runs.every((v, k) => v === open[k]))
+            continue
+        for (let k = 0; k < open.length; k += 2)
+            path.rect(open[k], top, open[k + 1] - open[k], y - top)
+        open = runs
+        top = y
+    }
+    return path
+}
+function fillCellMask(g, path) {
+    g.save()
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.globalCompositeOperation = 'source-over'
+    g.globalAlpha = 1
+    g.fillStyle = '#000'
+    g.fill(path)
+    g.restore()
+}
 Grid.cellMaskWork = {builds: 0, hits: 0, tests: 0, distances: 0}
 // Hex radii beyond a hexagon and the glow's reach within which an owner's glow counts in a cell's variant (Grid.cellGlowCells).
 const CELL_GLOW_MARGIN = 0.5
