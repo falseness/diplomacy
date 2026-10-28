@@ -320,6 +320,7 @@ class EntityInterface {
         this.portalBackButton.canClick = Boolean(portal && description)
         this.background.color = color.hex
         this.setPanelColors(color.hex)
+        this.suburbImage.color = color.hex
         this.img.image = entity.image || entity.bodyImageName || entity.name
         this.entity.name.text = entity.displayName || entity.name
         this.townTowerText = null

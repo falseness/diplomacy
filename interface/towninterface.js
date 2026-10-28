@@ -84,6 +84,9 @@ class TownInterface extends BarrackInterface {
     change(town, color) {
         this.background.color = color.hex
         this.setPanelColors(color.hex)
+        // The suburb row's hexagon is filled with the owner's colour (it sits on parchment).
+        const suburb = this.trainInterfaces.building.suburb
+        if (suburb) suburb.image.img.color = color.hex
         
         if (this.trainInterfacesTab == 'unit') {
             if (town.isBadlyDamaged) {
