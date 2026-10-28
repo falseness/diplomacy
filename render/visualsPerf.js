@@ -10,6 +10,8 @@
         return [new URL(script.src).pathname,[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,'0')).join('')]
     })).then(Object.fromEntries).catch(error=>({error:String(error)}))
     const boardIdentity = () => { const state=getGameObject(); delete state.timers; return JSON.stringify(state) }
+    // A capture started in the menu has no game yet (no grid, no players): its board is the game's, from its first frame.
+    const liveBoard = () => typeof grid !== 'undefined' && grid && players.length ? boardIdentity() : null
     const camera = () => ({scale: canvas.scale, offset: {...canvas.offset}})
     const counters = {canvasAllocations: 0, gradients: 0, spriteLoads: 0}
     let report, active = false, segment = 'idle-before', frame, saved, cancelled = false, lastInput = null, lastInputType = null
@@ -28,6 +30,7 @@
             surfaceCacheRevision:grid.surfaceCacheRevision, surfaceCacheStages:grid.surfaceCacheStages, surfaceCacheThreshold:grid.getSurfaceCacheGeometry().scale, rasterizations: atmosphericBackground.rasterizations, cacheBytes: atmosphericBackground.bytes()}
         try { return originalLoop(timestamp) }
         finally {
+            if (report.board === null && (report.board = liveBoard()) !== null) Object.assign(report, {flag: otherSettings.atmosphericVisuals, initialCamera: frame.camera})
             Object.assign(frame,counters,{surfaceCacheRevision:grid.surfaceCacheRevision,surfaceCacheStages:grid.surfaceCacheStages,rasterizations:atmosphericBackground.rasterizations,cacheBytes:atmosphericBackground.bytes()})
             frame.end = performance.now()
             frame.updateMs = Math.max(0, frame.end - start - frame.renderMs)
@@ -422,7 +425,7 @@
         report = {schemaVersion:2, environment:'user-browser', performanceStatus:'user-device-performance-unverified',
             sourceCommits:{client:query.get('clientCommit'),server:query.get('serverCommit'),provenance:'user-supplied URL; verify against source hashes'}, ...metadata, userAgent:navigator.userAgent, viewport:[innerWidth,innerHeight], dpr:devicePixelRatio,
             renderer:'Canvas2D', refreshInterval:{method:'median of consecutive visible RAF timestamps; not hardware refresh rate'},
-            board:boardIdentity(), flag:otherSettings.atmosphericVisuals, initialCamera:camera(),
+            board:liveBoard(), flag:otherSettings.atmosphericVisuals, initialCamera:camera(),
             samples:[], inputs:[], visibility:[], longGaps:[], invalidReasons:[]}
         if (document.hidden || !document.hasFocus()) report.invalidReasons.push('initial visibility/focus')
         lastInput=null;lastInputType=null;pointerState=null
