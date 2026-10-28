@@ -64,7 +64,9 @@ class TutorialCardsTree {
     // Medallion pictures by tutorial id (not the display number): the file and its fit, as in the concept: 'unit'
     // sprites a little larger and lowered, 'low' buildings raised so their art is centred. The menu loads them as its
     // own images from these paths, so the sprite and visuals settings (which switch the shared assets' folders, see
-    // render/loadassets.js loadSprites) never change them. An id without an entry keeps the empty medallion.
+    // render/loadassets.js loadSprites) never change them. A {shape: 'suburb'} entry has no file: the game's suburb
+    // hexagon (sprites/elements/image.js SuburbImage, as the town interface's suburb portrait) is drawn in the disc.
+    // An id without an entry keeps the empty medallion.
     static IMAGES = {
         'tutorial-0': {src: 'assets/sprites/noob.svg', fit: 'unit'},
         'tutorial-16': {src: 'assets/sprites/noob.svg', fit: 'moves', moves: {count: 2, left: 1}},
@@ -73,6 +75,7 @@ class TutorialCardsTree {
         'tutorial-7': {src: 'assets/atmosphere/buildings/tower.svg'},
         'tutorial-3': {src: 'assets/atmosphere/buildings/wall.svg', fit: 'low'},
         'tutorial-18': {src: 'assets/atmosphere/buildings/farm.svg'},
+        'tutorial-20': {shape: 'suburb'},
         'tutorial-19': {src: 'assets/sprites/KOHb.svg', fit: 'unit'},
         'tutorial-2': {src: 'assets/atmosphere/buildings/barrack.svg'},
         'tutorial-5': {src: 'assets/sprites/emberArcher.svg', fit: 'unit'},
@@ -84,11 +87,17 @@ class TutorialCardsTree {
     // 'moves': a unit sprite drawn over a unit's move bar (an entry's moves: {count, left}) as in the game.
     static IMAGE_FIT = {plain: {size: 0.86, shift: 0}, unit: {size: 0.92, shift: 0.06}, low: {size: 0.86, shift: -0.14},
         moves: {size: 0.86, shift: 0.03}}
+    // The suburb shape's hexagon radius as a share of the disc's radius, its stroke as a share of the hexagon's radius
+    // and its fill, as the town interface's suburb portrait (interface/entityinterface.js: r 0.275 and stroke 0.02 of
+    // its panel height, filled with the panel's player colour, here the red player's of the tutorials).
+    static SUBURB = {size: 0.6, stroke: 0.02 / 0.275, color: '#ff0000'}
     static images = {}
-    // The loaded picture of a tutorial id (created on first use), or null while it loads or without an entry.
+    // The loaded picture of a tutorial id (created on first use), or null while it loads or without an entry; a shape
+    // entry is ready at once (the entry itself).
     static image(id) {
         const entry = TutorialCardsTree.IMAGES[id]
         if (!entry) return null
+        if (entry.shape) return entry
         let image = TutorialCardsTree.images[entry.src]
         if (!image) {
             image = TutorialCardsTree.images[entry.src] = new Image()
@@ -428,6 +437,7 @@ class TutorialCardsTree {
     drawMedallionImage(ctx, id, x, y, radius) {
         const image = TutorialCardsTree.image(id)
         if (!image) return null
+        if (image.shape === 'suburb') return this.drawMedallionSuburb(ctx, x, y, radius)
         const fit = TutorialCardsTree.IMAGE_FIT[TutorialCardsTree.IMAGES[id].fit ?? 'plain']
         const size = fit.size * 2 * radius, scale = Math.min(size / image.naturalWidth, size / image.naturalHeight)
         const width = image.naturalWidth * scale, height = image.naturalHeight * scale
@@ -444,6 +454,19 @@ class TutorialCardsTree {
         ctx.drawImage(image, box.x, box.y, box.width, box.height)
         ctx.restore()
         return {src: TutorialCardsTree.IMAGES[id].src, box, disc: {x, y, radius}, ...(bar && {bar})}
+    }
+    // The suburb hexagon (SuburbImage: the red player's fill, black stroke) centred in the disc and clipped to it.
+    drawMedallionSuburb(ctx, x, y, radius) {
+        const r = TutorialCardsTree.SUBURB.size * radius, strokeWidth = TutorialCardsTree.SUBURB.stroke * r
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.clip()
+        const suburb = new SuburbImage({x, y}, r, strokeWidth)
+        suburb.color = TutorialCardsTree.SUBURB.color
+        suburb.draw(ctx)
+        ctx.restore()
+        return {shape: 'suburb', r, strokeWidth, color: suburb.color, disc: {x, y, radius}}
     }
     // A unit's move bar as the game draws it (sprites/entities/units/unit/unit.js, sprites/entities/hpBar.js Bar):
     // count boxes of 0.4 x 0.225 hex radii r, 0.05 r apart, black 0.03 r outline, the first left boxes in the move
