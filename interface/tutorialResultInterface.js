@@ -1,9 +1,12 @@
 // The end screen of a tutorial: 'Victory' or 'Defeat' on a ribbon over the dimmed board, the lesson's medallion above
 // it, 'Tutorial N: Name · passed / not passed' below it and one row of buttons: Retry (the same tutorial again) and
 // Back to tutorials, and on a victory with a later tutorial in the list Next tutorial first. Everything is laid out in
-// hub units from the current WIDTH/HEIGHT on show() and on every draw and click, so a resize keeps it right. While it
-// is shown it takes every game click.
+// hub units from the current WIDTH/HEIGHT on show() and on every draw and click, so a resize keeps it right. On a
+// victory in the last lesson of the list the ribbon sits higher and three lines under the subtitle say how to play the
+// real game. While it is shown it takes every game click.
 class TutorialResultInterface {
+    static READY_LINES = ['You are ready for the real game!', 'Solo: Hot seat \u2192 Co-op \u2192 1 player',
+        'With other people: Hot seat or Play online']
     static RIBBON = {
         victory: {face: ['#ffe3a3', '#d9962f'], rim: '#fff1c8', tail: '#9a6420', title: '#2a1a06'},
         defeat: {face: ['#8a3a32', '#4e1616'], rim: '#b5524a', tail: '#2e0c0c', title: '#f6e2b8'},
@@ -15,6 +18,8 @@ class TutorialResultInterface {
         this.nextButton = null
         this.retryButton = null
         this.backButton = null
+        this.ready = false
+        this.lines = []
         this.layOut(false)
     }
     // The buttons in their row order: Next tutorial (primary) when shown, else Retry is the primary one.
@@ -32,15 +37,19 @@ class TutorialResultInterface {
         const tutorial = id && tutorials.find(tutorial => tutorial.id === id)
         return tutorial ? {id, ...TutorialCardsTree.parseTitle(tutorial.title)} : null
     }
-    layOut(hasNext) {
+    // ready: the victory of the last lesson, which shows the 'ready for the real game' lines.
+    layOut(hasNext, ready = false) {
+        this.ready = ready
         this.makeButtons(hasNext)
         this.place()
     }
-    // Every box from the current screen size: ribbon, medallion, stars, subtitle, the button row and the panel (the
-    // drawn composition's bounding box).
+    // Every box from the current screen size: ribbon, medallion, stars, subtitle, the ready lines, the button row and
+    // the panel (the drawn composition's bounding box).
     place() {
         const u = hubUnit(), f = u * hubFontScale()
-        const cy = HEIGHT * 0.44, height = 7.5 * u, width = Math.min(56 * u, WIDTH - 14 * u)
+        // With the ready lines the ribbon sits higher, but low enough on wide short screens that the medallion's top
+        // (14.85 u above the ribbon's centre) stays on screen.
+        const cy = this.ready ? Math.max(HEIGHT * 0.32, 15.6 * u) : HEIGHT * 0.44, height = 7.5 * u, width = Math.min(56 * u, WIDTH - 14 * u)
         this.ribbon = {x: WIDTH / 2 - width / 2, y: cy - height / 2, width, height, cy, bow: 1.6 * u}
         this.tails = [-1, 1].map(side => {
             const inner = side < 0 ? this.ribbon.x + 2 * u : this.ribbon.x + width - 2 * u
@@ -57,26 +66,53 @@ class TutorialResultInterface {
         this.titleFont = 4.6 * f
         this.subtitle = {x: WIDTH / 2, y: this.ribbon.y + height + 2.6 * u, fontSize: 1.9 * f}
         const buttons = this.buttons, bw = 17 * u, bh = 4.6 * u, gap = 1.4 * u
-        const total = buttons.length * bw + (buttons.length - 1) * gap, by = this.ribbon.y + height + 5.6 * u
+        // The ready lines: the gold heading 1.8 u below the subtitle block (which ends 4.4 u below the ribbon), then
+        // the solo and the with-people lines; each shrunk only if wider than the screen less 4 u.
+        this.lines = []
+        let by = this.ribbon.y + height + 5.6 * u
+        if (this.ready) {
+            const [heading, solo, people] = TutorialResultInterface.READY_LINES
+            let y = this.ribbon.y + height + 4.4 * u + 1.8 * u
+            for (const [text, size, weight, colour, step] of [[heading, 2.4, 800, TutorialCardsTree.CARD.gold, 0],
+                [solo, 1.7, 700, MENU_THEME.text, 3.2], [people, 1.7, 700, MENU_THEME.text, 2.8]]) {
+                y += step * u
+                const fontSize = size * f * this.labelFit(text, WIDTH - 4 * u, size * f, weight)
+                this.lines.push({text, x: WIDTH / 2, y, fontSize, weight, colour})
+            }
+            by = y + 3.4 * u
+        }
+        const total = buttons.length * bw + (buttons.length - 1) * gap
         buttons.forEach((button, i) => button.place(WIDTH / 2 - total / 2 + i * (bw + gap), by, bw, bh,
             2.1 * u * this.labelFit(button.text.text, bw - 2.4 * u, 2.1 * f)))
         // The medallion's shade ring is 0.7 u outside its disc; the tails' outer ends are the left and right.
-        const left = this.tails[0].outer, top = this.medallion.y - r - 0.7 * u
-        this.panel = new Rect(left, top, this.tails[1].outer - left, by + bh - top)
+        let left = this.tails[0].outer, right = this.tails[1].outer
+        for (const line of this.lines) {
+            const width = this.textWidth(line.text, line.fontSize, line.weight)
+            left = Math.min(left, line.x - width / 2)
+            right = Math.max(right, line.x + width / 2)
+        }
+        const top = this.medallion.y - r - 0.7 * u
+        this.panel = new Rect(left, top, right - left, by + bh - top)
     }
     // The share of a label's font (px) that fits it in width (at most 1).
-    labelFit(label, width, px) {
+    labelFit(label, width, px, weight = 800) {
+        const measured = this.textWidth(label, px, weight)
+        return measured > 0 ? Math.min(1, width / measured) : 1
+    }
+    // A text's width (px) in the title font.
+    textWidth(text, px, weight = 800) {
         const ctx = interfaceCtx
         ctx.save()
-        ctx.font = `800 ${px}px ${MENU_TITLE_FONT_FAMILY}`
-        const measured = ctx.measureText(label).width
+        ctx.font = `${weight} ${px}px ${MENU_TITLE_FONT_FAMILY}`
+        const measured = ctx.measureText(text).width
         ctx.restore()
-        return measured > 0 ? Math.min(1, width / measured) : 1
+        return measured
     }
     show(outcome) {
         tutorialPauseInterface.hide()
         this.outcome = outcome
-        this.layOut(outcome == 'victory' && TutorialManager.nextId() !== null)
+        const last = TutorialManager.nextId() === null
+        this.layOut(outcome == 'victory' && !last, outcome == 'victory' && last)
         this.visible = true
     }
     // Retry, Next tutorial, Back to tutorials and a tutorial's start hide the pause menu too.
@@ -119,6 +155,11 @@ class TutorialResultInterface {
             ctx.font = `700 ${this.subtitle.fontSize}px ${MENU_TITLE_FONT_FAMILY}`
             ctx.fillStyle = MENU_THEME.text
             ctx.fillText(`${name}  ·  ${victory ? 'passed' : 'not passed'}`, this.subtitle.x, this.subtitle.y)
+        }
+        for (const line of this.lines) {
+            ctx.font = `${line.weight} ${line.fontSize}px ${MENU_TITLE_FONT_FAMILY}`
+            ctx.fillStyle = line.colour
+            ctx.fillText(line.text, line.x, line.y)
         }
         ctx.restore()
         const family = Text.titleFamily
