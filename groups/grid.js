@@ -741,7 +741,8 @@ class Grid extends SpritesGroup {
     // within CELL_LAYER_EDGE_REACH of it (the slab's side and shadow, the outline's antialiasing: they follow its fog and
     // tile). {cells: per cell {index, i, j, box (its pixels' rectangle grown by a pixel, cut to the canvas), alpha (per box
     // pixel 255 when the cell's, else 0), key}, box: the rectangle the boxes span or null, image: the mask (black, opaque
-    // at the cells' pixels, transparent elsewhere)}.
+    // at the cells' pixels, transparent elsewhere)}. TASK-1371: it depends on the geometry and scale only (not on the
+    // board's state), so it is kept by them (cellMaskCache; a cell's alpha and the image are shared, read only).
     cellLayerCells(W, H, place) {
         const g = (this.cellMaskCanvas ||= document.createElement('canvas')).getContext('2d')
         g.save()
@@ -749,36 +750,147 @@ class Grid extends SpritesGroup {
         place(g)
         const t = g.getTransform()
         g.restore()
-        const {a, d, e, f} = t, ox = basis.offset.x, oy = basis.offset.y, rx = basis.r, w = this.arr.length, h = this.arr[0].length
+        const {a, d, e, f} = t, w = this.arr.length, h = this.arr[0].length
+        const reach = CELL_LAYER_EDGE_REACH * basis.r + (mapDepth.depth || 0) + (mapDepth.shadowOffset || 0) + 2 * (mapDepth.shadowBlur || 0)
+        const key = [W, H, a, d, e, f, basis.offset.x, basis.offset.y, basis.r, w, h, reach].join()
+        let mask = cellMaskCache.get(key)
+        cellMaskCache.delete(key)
+        if (mask)
+            ++Grid.cellMaskWork.hits
+        else
+            mask = this.buildCellMask(W, H, a, d, e, f, reach)
+        cellMaskCache.set(key, mask)
+        if (cellMaskCache.size > CELL_MASK_CACHE)
+            cellMaskCache.delete(cellMaskCache.keys().next().value)
+        return {cells: mask.cells.map(c => ({...c})), box: mask.box, image: mask.image}
+    }
+    // cellLayerCells's mask built (x' = a x + e, y' = d y + f). Each row of a cell's box splits by the bisectors with the
+    // cells round it: the run surely the cell's (every bisector at least CELL_MASK_MARGIN pixels away on the cell's side),
+    // filled; the pixels surely another board cell's (or, for a side cell, surely beyond its reach), skipped; and the rest
+    // (near a bisector, and a side cell's pixels off the board) tested against the neighbours' centres as before, so the
+    // bits are the same as testing every pixel of the box. Grid.cellMaskWork counts the builds, tested pixels and distances.
+    buildCellMask(W, H, a, d, e, f, reach) {
+        const ox = basis.offset.x, oy = basis.offset.y, rx = basis.r, w = this.arr.length, h = this.arr[0].length
         // Per pixel its cell (board index + 1, 0: none) and, off the board, its squared distance to that cell's centre.
         const owner = new Int32Array(W * H), far = new Float32Array(W * H)
         const centre = (i, j) => [i * ox, (2 * j + (i & 1)) * oy]
         const boxOf = (cx, cy, rx0, ry0) => pixelRect(Math.floor((cx - rx0) * a + e) - 1, Math.floor((cy - ry0) * d + f) - 1,
             Math.ceil((cx + rx0) * a + e) + 1, Math.ceil((cy + ry0) * d + f) + 1, W, H)
-        const reach = CELL_LAYER_EDGE_REACH * rx + (mapDepth.depth || 0) + (mapDepth.shadowOffset || 0) + 2 * (mapDepth.shadowBlur || 0)
+        // Per cell the rectangle its pixels were given in (x1 < 0: none).
+        const x0 = new Int32Array(w * h).fill(W), y0 = new Int32Array(w * h).fill(H), x1 = new Int32Array(w * h).fill(-1), y1 = new Int32Array(w * h).fill(-1)
+        // A pixel's side of a bisector is sure margin (world units) off it (rounding is far smaller); with no positive scale
+        // every pixel of a box is tested.
+        const sure = a > 0 && d > 0 && Number.isFinite(a + d + e + f), margin = CELL_MASK_MARGIN / Math.min(a, d)
+        // The world x range of the row at wy surely nearer (cx, cy) than every site [x, y, t] (sign 1), or not surely nearer
+        // one of them (sign -1). Along the row a site's squared distance minus the centre's is k - 2 dx wx, and it is t (twice
+        // the sites' distance times the margin) where the pixel is the margin off their bisector.
+        const range = (cx, cy, sites, wy, sign) => {
+            let lo = -Infinity, hi = Infinity
+            for (const [nx, ny, t] of sites) {
+                const dx = nx - cx, k = nx * nx - cx * cx + (wy - ny) * (wy - ny) - (wy - cy) * (wy - cy), c = sign * t
+                if (dx > 0)
+                    hi = Math.min(hi, (k - c) / (2 * dx))
+                else if (dx < 0)
+                    lo = Math.max(lo, (k - c) / (2 * dx))
+                else if (k <= c)
+                    lo = Infinity
+            }
+            return [lo, hi]
+        }
+        const site = (cx, cy, nx, ny) => [nx, ny, 2 * Math.hypot(nx - cx, ny - cy) * margin]
+        const R = rx + reach, far2 = 2 * (R + margin) + oy, ki = Math.ceil(far2 / ox), kj = Math.ceil(far2 / (2 * oy)) + 1
+        const sides = []
+        let tests = 0, distances = 0
         for (let i = 0; i < w; ++i) {
             for (let j = 0; j < h; ++j) {
                 // Centres as calcPos (biasToTransition), the candidates' those of the cells round it (on the board or not).
-                const [cx, cy] = centre(i, j), near = [], own = i * 100000 + j
+                const [cx, cy] = centre(i, j), near = [], sites = [], blockers = [], own = i * 100000 + j, id = i * h + j + 1
                 let side = false
                 for (let di = -1; di <= 1; ++di)
                     for (let dj = -1; dj <= 1; ++dj)
                         if (di || dj) {
                             const [nx, ny] = centre(i + di, j + dj)
                             near.push([nx, ny, (i + di) * 100000 + j + dj])
+                            sites.push(site(cx, cy, nx, ny))
                             if (i + di < 0 || i + di >= w || j + dj < 0 || j + dj >= h)
                                 side = true
+                            else
+                                blockers.push(site(cx, cy, nx, ny))
                         }
-                const box = side ? boxOf(cx, cy, rx + reach, oy + reach) : boxOf(cx, cy, rx, oy)
+                const box = side ? boxOf(cx, cy, R, oy + reach) : boxOf(cx, cy, rx, oy)
                 if (!box)
                     continue
-                for (let y = 0; y < box.h; ++y) {
-                    const wy = (box.y + y + 0.5 - f) / d
-                    for (let x = 0; x < box.w; ++x) {
-                        const wx = (box.x + x + 0.5 - e) / a, p = (box.y + y) * W + box.x + x
+                // A side cell's rivals off the board: every board cell whose centre is near enough to be nearer a pixel within
+                // the reach (whichever of them takes it, the nearest does).
+                const rivals = []
+                if (side) {
+                    sides.push(id - 1)
+                    for (let di = -ki; di <= ki; ++di)
+                        for (let dj = -kj; dj <= kj; ++dj) {
+                            const [nx, ny] = centre(i + di, j + dj)
+                            if ((di || dj) && i + di >= 0 && i + di < w && j + dj >= 0 && j + dj < h && Math.hypot(nx - cx, ny - cy) <= far2)
+                                rivals.push(site(cx, cy, nx, ny))
+                        }
+                }
+                const give = (x, y, p, d0) => {
+                    owner[p] = id
+                    far[p] = d0
+                    if (x < x0[id - 1]) x0[id - 1] = x
+                    if (x > x1[id - 1]) x1[id - 1] = x
+                    if (y < y0[id - 1]) y0[id - 1] = y
+                    if (y > y1[id - 1]) y1[id - 1] = y
+                }
+                for (let y = box.y; y < box.y + box.h; ++y) {
+                    const wy = (y + 0.5 - f) / d, dy2 = (wy - cy) * (wy - cy)
+                    // As pixel columns of the row: the run surely in the cell's hexagon (inner), a side cell's run surely its
+                    // off the board (off) and the pixels not surely another board cell's or (a side cell) beyond the reach (out).
+                    let in0 = Infinity, in1 = -Infinity, of0 = Infinity, of1 = -Infinity, out0 = box.x, out1 = box.x + box.w
+                    if (sure) {
+                        const cols = ([lo, hi]) => [Math.max(box.x, Math.ceil(lo * a + e - 0.5)), Math.min(box.x + box.w, Math.floor(hi * a + e - 0.5) + 1)]
+                        ;[in0, in1] = cols(range(cx, cy, sites, wy, 1))
+                        let [olo, ohi] = range(cx, cy, blockers, wy, -1)
+                        // A side cell's pixels off the board within its reach (its own hexagon lies within rx of the centre).
+                        if (side) {
+                            const q = (R + margin) * (R + margin) - dy2, q1 = (R - margin) * (R - margin) - dy2
+                            olo = q < 0 ? Infinity : Math.max(olo, cx - Math.sqrt(q))
+                            ohi = Math.min(ohi, cx + Math.sqrt(Math.max(q, 0)))
+                            if (q1 > 0) {
+                                const [lo, hi] = range(cx, cy, rivals, wy, 1)
+                                ;[of0, of1] = cols([Math.max(lo, cx - Math.sqrt(q1)), Math.min(hi, cx + Math.sqrt(q1))])
+                            }
+                        }
+                        ;[out0, out1] = cols([olo, ohi])
+                    }
+                    const inner = in0 < in1, off = of0 < of1
+                    if (inner) {
+                        owner.fill(id, y * W + in0, y * W + in1)
+                        far.fill(0, y * W + in0, y * W + in1)
+                        give(in0, y, y * W + in0, 0)
+                        give(in1 - 1, y, y * W + in1 - 1, 0)
+                    }
+                    // Nearer the cell than any board cell that could take it: the cell's, whatever the order (its distance kept).
+                    for (let x = of0; off && x < of1; ++x) {
+                        if (inner && x >= in0 && x < in1) {
+                            x = in1 - 1
+                            continue
+                        }
+                        const wx = (x + 0.5 - e) / a
+                        ++distances
+                        give(x, y, y * W + x, (wx - cx) * (wx - cx) + dy2)
+                    }
+                    for (let x = out0; x < out1; ++x) {
+                        const done = inner && x >= in0 && x < in1 ? in1 : off && x >= of0 && x < of1 ? of1 : 0
+                        if (done) {
+                            x = done - 1
+                            continue
+                        }
+                        ++tests
+                        const wx = (x + 0.5 - e) / a, p = y * W + x
                         const d0 = (wx - cx) * (wx - cx) + (wy - cy) * (wy - cy)
                         let mine = true, offBoard = false
+                        ++distances
                         for (const [nx, ny, n] of near) {
+                            ++distances
                             const dn = (wx - nx) * (wx - nx) + (wy - ny) * (wy - ny)
                             if (dn < d0 || dn === d0 && n < own) {
                                 const ni = Math.floor(n / 100000 + 0.5), nj = n - ni * 100000
@@ -791,35 +903,35 @@ class Grid extends SpritesGroup {
                         }
                         if (!mine)
                             continue
-                        if (!offBoard) {
-                            owner[p] = i * h + j + 1
-                            far[p] = 0
-                        }
+                        if (!offBoard)
+                            give(x, y, p, 0)
                         // Off the board: the nearest side cell's within the reach (a pixel of a cell's own stays its).
-                        else if (side && d0 <= (rx + reach) * (rx + reach) && (!owner[p] || far[p] > d0 || far[p] === d0 && owner[p] > i * h + j + 1)) {
+                        else if (side && d0 <= (rx + reach) * (rx + reach) && (!owner[p] || far[p] > d0 || far[p] === d0 && owner[p] > id)) {
                             if (owner[p] && !far[p])
                                 continue
-                            owner[p] = i * h + j + 1
-                            far[p] = d0
+                            give(x, y, p, d0)
                         }
                     }
                 }
             }
         }
-        // The cells' boxes and alpha from the owners.
-        const x0 = new Int32Array(w * h).fill(W), y0 = new Int32Array(w * h).fill(H), x1 = new Int32Array(w * h).fill(-1), y1 = new Int32Array(w * h).fill(-1)
+        // A side cell's pixels off the board may have gone to another side cell since: its rectangle shrunk to those left.
+        for (const index of sides) {
+            if (x1[index] < 0)
+                continue
+            let sx0 = W, sy0 = H, sx1 = -1, sy1 = -1
+            for (let y = y0[index]; y <= y1[index]; ++y)
+                for (let x = x0[index], p = y * W + x; x <= x1[index]; ++x, ++p)
+                    if (owner[p] === index + 1) {
+                        if (x < sx0) sx0 = x
+                        if (x > sx1) sx1 = x
+                        if (y < sy0) sy0 = y
+                        if (y > sy1) sy1 = y
+                    }
+            x0[index] = sx0; y0[index] = sy0; x1[index] = sx1; y1[index] = sy1
+        }
+        // The cells' boxes and alpha, and the image, from the owners.
         const image = new ImageData(W, H), out = image.data
-        for (let y = 0, p = 0; y < H; ++y)
-            for (let x = 0; x < W; ++x, ++p) {
-                const o = owner[p] - 1
-                if (o < 0)
-                    continue
-                out[p * 4 + 3] = 255
-                if (x < x0[o]) x0[o] = x
-                if (x > x1[o]) x1[o] = x
-                if (y < y0[o]) y0[o] = y
-                if (y > y1[o]) y1[o] = y
-            }
         const cells = []
         let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity
         for (let index = 0; index < w * h; ++index) {
@@ -828,14 +940,20 @@ class Grid extends SpritesGroup {
             const box = pixelRect(x0[index] - 1, y0[index] - 1, x1[index] + 2, y1[index] + 2, W, H)
             const alpha = new Uint8Array(box.w * box.h)
             for (let y = 0; y < box.h; ++y)
-                for (let x = 0; x < box.w; ++x)
-                    if (owner[(box.y + y) * W + box.x + x] === index + 1)
+                for (let x = 0, p = (box.y + y) * W + box.x; x < box.w; ++x, ++p)
+                    if (owner[p] === index + 1) {
                         alpha[y * box.w + x] = 255
+                        out[p * 4 + 3] = 255
+                    }
             const i = Math.floor(index / h)
             cells.push({index, i, j: index - i * h, box, alpha, key: undefined})
             bx0 = Math.min(bx0, box.x); by0 = Math.min(by0, box.y)
             bx1 = Math.max(bx1, box.x + box.w); by1 = Math.max(by1, box.y + box.h)
         }
+        const work = Grid.cellMaskWork
+        ++work.builds
+        work.tests += tests
+        work.distances += distances
         return {cells, image, box: cells.length ? pixelRect(bx0, by0, bx1, by1, W, H) : null}
     }
     // A cell's variant in the cell layer: its surface state (owner colour, suburb, fog), its building's cached image, the
@@ -4406,6 +4524,13 @@ const SURFACE_LAYER_COMPOSE = 0.15
 // TASK-1315: how far off the board (hex radii, plus the slab's depth and shadow) the cells at its side hold the pixels
 // nearest them in the cell layer (Grid.cellLayerCells).
 const CELL_LAYER_EDGE_REACH = 0.5
+// TASK-1371: pixels a pixel's centre keeps off a bisector of two cells' centres for the cell mask to take its side without
+// testing it (Grid.buildCellMask), masks kept by geometry and scale (cellMaskCache, the least recently used dropped) and the
+// work of building them (builds, pixels tested, centre distances; hits: masks served from the cache).
+const CELL_MASK_MARGIN = 0.25
+const CELL_MASK_CACHE = 2
+const cellMaskCache = new Map()
+Grid.cellMaskWork = {builds: 0, hits: 0, tests: 0, distances: 0}
 // Hex radii beyond a hexagon and the glow's reach within which an owner's glow counts in a cell's variant (Grid.cellGlowCells).
 const CELL_GLOW_MARGIN = 0.5
 // Patch margins round a surface cache variant render (Grid.renderSurfaceCellSprites): with one, the fog's edge where it meets
