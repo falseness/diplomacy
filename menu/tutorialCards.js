@@ -57,7 +57,8 @@ class TutorialCardsTree {
     // The share of a card's height the next row shows below the shown ones (TutorialCardsTree.layout).
     static PEEK = 0.45
     // The first advanced lesson: the "Advanced tutorial" divider sits above its row (TutorialCardsTree.layout).
-    static ADVANCED_FROM = 'tutorial-15'
+    // Hold the Walls opens the fourth row since Puzzle Rush came in, so the first three rows stay the basic lessons.
+    static ADVANCED_FROM = 'tutorial-5'
     // Medallion pictures by tutorial id (not the display number): the file and its fit, as in the concept: 'unit'
     // sprites a little larger and lowered, 'low' buildings raised so their art is centred. The menu loads them as its
     // own images from these paths, so the sprite and visuals settings (which switch the shared assets' folders, see
@@ -70,6 +71,7 @@ class TutorialCardsTree {
         'tutorial-7': {src: 'assets/atmosphere/buildings/tower.svg'},
         'tutorial-3': {src: 'assets/atmosphere/buildings/wall.svg', fit: 'low'},
         'tutorial-18': {src: 'assets/atmosphere/buildings/farm.svg'},
+        'tutorial-19': {src: 'assets/sprites/KOHb.svg', fit: 'unit'},
         'tutorial-2': {src: 'assets/atmosphere/buildings/barrack.svg'},
         'tutorial-5': {src: 'assets/sprites/emberArcher.svg', fit: 'unit'},
         'tutorial-15': {src: 'assets/atmosphere/buildings/bastion.svg', fit: 'low'},

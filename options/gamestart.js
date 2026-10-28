@@ -167,7 +167,8 @@ class GameMap {
                 let town_coord = this.getMapCoord(towns[j])
 
                 grid.arr[town_coord.x][town_coord.y].hexagon.firstpaint(i)
-                let town = new Town(town_coord.x, town_coord.y, false, true)
+                // A town may start without its own noob (noob: false): a configured unit stands on it instead.
+                let town = new Town(town_coord.x, town_coord.y, false, town_coord.noob !== false)
                 if ('hp' in town_coord) {
                     // A town may start at 0 hp: an enemy unit can step in and capture it.
                     assert(0 <= town_coord.hp && town_coord.hp <= town.hp)

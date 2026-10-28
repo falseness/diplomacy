@@ -120,6 +120,82 @@ function createTutorial1Map() {
     return map
 }
 
+function createTutorial19Map() {
+    // Puzzle rush: the demons have broken into red's town. The town (2,4) is at 0 hp with a wounded red normchel
+    // (1 hp) standing on it, the vanguard, instead of the town's own noob (town noob: false). A Bulwark, a Brute,
+    // two Hexcasters and two Bombards stand right at the town, one Bombard (4,4) inside its suburbs. Red has a
+    // KOHb, an archer and a normchel, four empty barracks, walls and bastions south of the town and 250 gold
+    // (234 here plus the first turn's income of 16). The lesson starts at round 23 (entry
+    // startRound), so the six portals in the north-east send the next wave after a single turn. Killing every
+    // demon unit wins (pass 'demonUnitsDead').
+    const town = {x: 2, y: 4}
+    const isLake = cell => cell.x == 5 && cell.y == 4
+    const isDemon = cell => cell.x == 4 && cell.y == 4
+    // Suburbs: every cell with x <= 5 and y >= 4 but the lake and the Bombard's cell, nearest to the town first.
+    const suburbs = [town]
+    for (let i = 0; i < suburbs.length; ++i) {
+        for (const offset of neighborhood[suburbs[i].x & 1]) {
+            const cell = {x: suburbs[i].x + offset[0], y: suburbs[i].y + offset[1]}
+            if (cell.x >= 0 && cell.x <= 5 && cell.y >= 4 && cell.y < 9 && !isLake(cell) && !isDemon(cell) &&
+                    !suburbs.some(suburb => suburb.x == cell.x && suburb.y == cell.y)) {
+                suburbs.push(cell)
+            }
+        }
+    }
+    const map = new GameMap(
+        {x: 9, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 234,
+                towns: [{x: 2, y: 4, hp: 0, noob: false}],
+                suburbs: [{town: town, cells: suburbs, expansionCells: suburbs}],
+                barracks: [{x: 0, y: 7, town: town}, {x: 1, y: 7, town: town}, {x: 2, y: 8, town: town},
+                    {x: 3, y: 7, town: town}],
+                walls: [{x: 0, y: 6}, {x: 3, y: 6}, {x: 4, y: 7}, {x: 4, y: 8}],
+                bastions: [{x: 2, y: 7}, {x: 4, y: 6}],
+                units: [
+                    {x: 2, y: 4, type: Normchel, hp: 1},
+                    {x: 3, y: 4, type: KOHb},
+                    {x: 2, y: 5, type: Archer},
+                    {x: 2, y: 6, type: Normchel}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([[5, 4], [0, 0], [1, 0], [7, 7], [8, 6]]),
+        coordDictionary([[4, 0], [0, 2], [8, 4], [6, 8], [8, 8]]),
+        coordDictionary([[0, 1], [5, 0], [6, 6], [6, 7], [7, 5], [8, 7]]),
+        [],
+        {type: 'rectangular'},
+        {
+            tutorial: true,
+            units: [
+                {x: 1, y: 3, type: Bombard},
+                {x: 4, y: 4, type: Bombard},
+                {x: 2, y: 3, type: Bulwark},
+                {x: 2, y: 2, type: Hexcaster},
+                {x: 3, y: 2, type: Hexcaster},
+                {x: 3, y: 3, type: Brute}
+            ]
+        }
+    )
+    map.portals = [
+        {x: 7, y: 1, category: 'melee'},
+        {x: 7, y: 2, category: 'heavy'},
+        {x: 8, y: 0, category: 'mage'},
+        {x: 8, y: 1, category: 'mage'},
+        {x: 8, y: 2, category: 'mage'},
+        {x: 7, y: 0, category: 'siege'}
+    ]
+    map.testName = 'tutorial 19'
+    return map
+}
+
 function createTutorial2Map() {
     // Blue's 4 normchels and 8 archers face red's 2 normchels and 2 archers.
     // Red can retreat along the clear road to its town and barrack, through the
@@ -948,13 +1024,15 @@ const tutorials = [
     {id: 'tutorial-7', title: 'Tutorial 4: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
     {id: 'tutorial-3', title: 'Tutorial 5: "No Assault Duty"', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-18', title: 'Tutorial 6: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
-    {id: 'tutorial-2', title: 'Tutorial 7: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 8: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-15', title: 'Tutorial 9: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+    {id: 'tutorial-19', title: 'Tutorial 7: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
+        get map() { return createTutorial19Map() }},
+    {id: 'tutorial-2', title: 'Tutorial 8: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 9: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-15', title: 'Tutorial 10: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-13', title: 'Tutorial 10: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
+    {id: 'tutorial-13', title: 'Tutorial 11: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 11: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
+    {id: 'tutorial-6', title: 'Tutorial 12: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
         get map() { return createTutorial6Map() }},
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
