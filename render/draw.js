@@ -33,9 +33,17 @@ function drawMain() {
     // text and bars with them. Start each frame in that state, so the first frame draws the same.
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
-    grid.draw(ctx)
+    // TASK-1411: the selected unit's overlay is blitted from its raster after the board (made, held or recorded), so it
+    // is never part of a held frame's snapshot (SelectionOverlay.drawSelection).
+    SelectionOverlay.deferred = true
+    try {
+        grid.draw(ctx)
+    } finally {
+        SelectionOverlay.deferred = false
+    }
     if (lod)
         grid.endLodFrame(mainCtx, lod)
+    SelectionOverlay.drawSelection(mainCtx)
 }
 
 // Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:

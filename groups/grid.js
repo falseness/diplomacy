@@ -367,7 +367,8 @@ class Grid extends SpritesGroup {
     // drawn range, so the range also holds every text to draw and clear.
     drawCellText(ctx) {
         const range = this.drawRange(ctx)
-        if (!debug && !this.drawLogicText) {
+        // A level-of-detail frame has no logic text to draw (lodTransform).
+        if (!debug && (!this.drawLogicText || this.lod)) {
             this.drawInfoTexts(ctx, range)
             return
         }
@@ -4610,6 +4611,8 @@ class Grid extends SpritesGroup {
         if (box.w && box.h)
             ctx.drawImage(raster.canvas, box.x, box.y, box.w, box.h, x + kx * box.x, y + ky * box.y, kx * box.w, ky * box.h)
         ctx.restore()
+        // TASK-1411: the selection overlay's raster scaled to the camera (the zoom raster's board has none).
+        SelectionOverlay.drawSelection(ctx)
         this.dropHeldFrame()
         this.prepareSurfaceCache()
         this.countGestureFrame()
@@ -4628,13 +4631,25 @@ class Grid extends SpritesGroup {
         ctx.drawImage(cache.cellLayered && this.surfaceCacheShown || cache, (left - b.left) * sx, (top - b.top) * sy,
             (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
     }
+    // Whether a logic text has something to draw (a production's costs; a unit's search turns them on, all empty).
+    logicTextShown() {
+        if (!this.logicTextCells)
+            return true
+        for (const cell of this.logicTextCells)
+            if (cell._logicText && cell._logicText.text != '')
+                return true
+        return false
+    }
     // TASK-1375: level of detail when cells are tiny. Below Grid.LOD_RADIUS (a hexagon's on-screen radius, CSS pixels) a
     // frame of the main canvas is a level-of-detail frame: no cell texts (drawInfoTexts), hp and moves bars, production
     // silhouettes (a training unit, a portal's next demon and its rounds) or overlay composite and layer; the board's
     // surface, buildings, nature and towns come from the surface cache (one image) and the units from their cached body
     // images, as at any scale on that path. At or above it every frame draws as before. Not with debug or logic texts.
     lodTransform(ctx) {
-        if (!Grid.lodFrames || this !== grid || debug || this.drawLogicText || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas)
+        // TASK-1411: a selected unit's search turns the logic texts on with none set (Way.initialization): a level-of-detail
+        // frame still, as without the selection (its overlay is blitted after the frame).
+        if (!Grid.lodFrames || this !== grid || debug || this.drawLogicText && this.logicTextShown() || typeof mainCanvas === 'undefined' ||
+                ctx.canvas !== mainCanvas)
             return false
         const t = ctx.getTransform()
         return t.b === 0 && t.c === 0 && t.a > 0 && t.a === t.d &&

@@ -5,7 +5,11 @@ class Border {
     }
     clean() {
         this.lines = []
+        ++Border.serial
     }
+    // TASK-1411: bumped by every clean and new broken line (select, a reselect after a move or attack, undo, hideAll), so
+    // the selection overlay's data and raster are made again for each selection state.
+    static serial = 0
     isCleaned() {
         return !this.lines.length
     }
@@ -77,13 +81,28 @@ class Border {
     isAttackBorder() {
         return typeof attackBorder != 'undefined' && this === attackBorder
     }
+    // The selected unit's overlay state: its data (SelectionOverlay.compute) and which of the two borders show (range:
+    // attackBorder, move: border; a cleaned border, as after hideAll or an inspected fogged unit, shows nothing, as its
+    // lines did), or undefined.
+    static selectionState() {
+        const unit = typeof border != 'undefined' && Border.selectedUnit()
+        if (!unit)
+            return undefined
+        const move = border.visible && !border.isCleaned()
+        const range = typeof attackBorder != 'undefined' && attackBorder.visible && !attackBorder.isCleaned()
+        const data = (move || range) && Border.selection.compute(unit)
+        return data ? {data, move, range} : undefined
+    }
     draw(ctx) {
         if (!this.visible)
             return
-        // A cleaned border (hideAll, an inspected fogged unit) shows nothing, as its lines did.
         const unit = !this.isCleaned() && this.isSelectionBorder() && Border.selectedUnit()
         const data = unit && Border.selection.compute(unit)
         if (data) {
+            // TASK-1411: drawMain and the zoom gesture's frames blit the overlay's raster after the board
+            // (SelectionOverlay.drawSelection), so no recorded, held or zoom raster board holds it.
+            if (SelectionOverlay.deferred || typeof grid != 'undefined' && grid.zoomBoardPass)
+                return
             // attackBorder's slot comes first: the range ridge lies under the move plate and the targets.
             if (this.isAttackBorder())
                 Border.selection.drawRange(ctx, data)
@@ -651,7 +670,7 @@ class SelectionOverlay {
         if (!interaction || !unit.coord || grid.getUnit(unit.coord) !== unit || !interaction.way)
             return undefined
         const radius = SelectionOverlay.moveRadius(unit), ranged = SelectionOverlay.isRanged(interaction)
-        const id = [SelectionOverlay.key(unit.coord), interaction.moves, radius, interaction.range, whooseTurn,
+        const id = [Border.serial, SelectionOverlay.key(unit.coord), interaction.moves, radius, interaction.range, whooseTurn,
             SelectionOverlay.fogKey(unit, radius + (ranged ? interaction.range + 2 : 1))].join('|')
         if (this.cache && this.cache.unit === unit && this.cache.id === id)
             return this.cache
@@ -722,6 +741,134 @@ class SelectionOverlay {
     }
     clean() {
         this.cache = undefined
+        this.releaseRaster()
+    }
+    // TASK-1411: the overlay is rendered once per selection state (its data, which borders show, the hexagon radius) and
+    // camera scale into a canvas of its bounds plus the shadows' margin (renderRaster), and blitted in one drawImage a
+    // frame after the board (drawMain: after a recorded, held or level-of-detail frame is made; drawZoomRaster: over the
+    // zoom raster), never drawn into a recorded frame, a held frame's snapshot or the zoom raster. During a zoom gesture or
+    // a camera move the raster is scaled and moved to the camera; once the camera rests it is rendered again when its scale
+    // or pixel phase differs (a zoom settled). A raster bigger than RASTER_MAX_CANVASES canvases holds the view grown
+    // by a quarter each side only, rendered again when the resting view leaves it.
+    static deferred = false
+    static rasterBuilds = 0
+    static RASTER_MAX_CANVASES = 2
+    // Blits the selected unit's overlay on ctx (the main canvas, the camera's transform); releases it with no selection.
+    static drawSelection(ctx) {
+        const overlay = Border.selection, state = Border.selectionState()
+        if (!state) {
+            overlay.releaseRaster()
+            return false
+        }
+        const raster = overlay.rasterFor(ctx, state)
+        if (!raster)
+            return false
+        const t = ctx.getTransform()
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.globalAlpha = 1
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.shadowColor = 'rgba(0,0,0,0)'
+        ctx.imageSmoothingEnabled = true
+        if ('filter' in ctx)
+            ctx.filter = 'none'
+        const canvas = raster.canvas
+        ctx.drawImage(canvas, t.a * raster.wx + t.e, t.d * raster.wy + t.f, canvas.width * t.a / raster.sx, canvas.height * t.d / raster.sy)
+        ctx.restore()
+        return true
+    }
+    // The raster for state on ctx's camera: the one made before while it stands for the frame, else a new one.
+    rasterFor(ctx, state) {
+        const t = ctx.getTransform(), raster = this.raster
+        if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0)
+            return undefined
+        if (raster && raster.data === state.data && raster.move === state.move && raster.range === state.range &&
+                raster.r === basis.r && !(raster.missingIcon && SelectionOverlay.whiteIcon(raster.missingIcon))) {
+            const screen = typeof gameEvent != 'undefined' && gameEvent ? gameEvent.screen : undefined
+            if (screen && SelectionOverlay.cameraMoving(screen))
+                return raster
+            const x = t.a * raster.wx + t.e, y = t.d * raster.wy + t.f
+            if (raster.sx === t.a && raster.sy === t.d && Math.abs(x - Math.round(x)) < 1e-6 && Math.abs(y - Math.round(y)) < 1e-6 &&
+                    (!raster.view || SelectionOverlay.contains(raster.view, SelectionOverlay.viewOf(ctx, t, 0))))
+                return raster
+        }
+        return this.renderRaster(ctx, t, state)
+    }
+    // A zoom gesture or a camera pan under way (not Screen.surfaceMoving's layer hold after them: settled is settled).
+    static cameraMoving(screen) {
+        return !!(screen.zoomGesture || screen.surfaceZooming || performance.now() < screen.surfacePanUntil || screen.surfacePanFrames > 0)
+    }
+    // The world rectangle ctx's canvas shows at camera t, grown by grow of its size each side.
+    static viewOf(ctx, t, grow) {
+        const w = ctx.canvas.width / t.a, h = ctx.canvas.height / t.d, x0 = -t.e / t.a, y0 = -t.f / t.d
+        return {x0: x0 - grow * w, y0: y0 - grow * h, x1: x0 + w + grow * w, y1: y0 + h + grow * h}
+    }
+    static contains(a, b) {
+        return a.x0 <= b.x0 && a.y0 <= b.y0 && a.x1 >= b.x1 && a.y1 >= b.y1
+    }
+    // The world bounds of what state draws: its contours and target emblems, plus the shadows' and offsets' reach.
+    static boundsOf(state) {
+        const data = state.data, r = basis.r, b = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity}
+        const add = (x, y, m) => {
+            b.x0 = Math.min(b.x0, x - m); b.y0 = Math.min(b.y0, y - m)
+            b.x1 = Math.max(b.x1, x + m); b.y1 = Math.max(b.y1, y + m)
+        }
+        const loops = [...state.move ? data.moveLoops : [], ...state.range && data.ranged ? data.rangeLoops : []]
+        for (const loop of loops)
+            for (const p of loop.P)
+                add(p[0], p[1], 0.8 * r)
+        if (state.move)
+            for (const k of [...data.targetsNow, ...data.targetsAfterStep.keys()]) {
+                const q = SelectionOverlay.targetPos(k)
+                add(q.x, q.y, 0.9 * r)
+            }
+        return b.x0 < b.x1 ? b : undefined
+    }
+    // Renders state at camera t into the raster's canvas: the bounds (or their part near the view) at t's scale, with
+    // the pixel phase of t, so a resting camera blits it at whole device pixels as the direct draws would land.
+    renderRaster(ctx, t, state) {
+        let b = SelectionOverlay.boundsOf(state), view
+        if (!b) {
+            this.releaseRaster()
+            return undefined
+        }
+        const sx = t.a, sy = t.d, limit = SelectionOverlay.RASTER_MAX_CANVASES * ctx.canvas.width * ctx.canvas.height
+        if ((b.x1 - b.x0) * sx * (b.y1 - b.y0) * sy > limit) {
+            view = SelectionOverlay.viewOf(ctx, t, 0.25)
+            b = {x0: Math.max(b.x0, view.x0), y0: Math.max(b.y0, view.y0), x1: Math.min(b.x1, view.x1), y1: Math.min(b.y1, view.y1)}
+            if (b.x0 >= b.x1 || b.y0 >= b.y1)
+                b = {x0: view.x0, y0: view.y0, x1: view.x0 + 1 / sx, y1: view.y0 + 1 / sy}
+        }
+        const ix = Math.floor(sx * b.x0 + t.e), iy = Math.floor(sy * b.y0 + t.f)
+        const w = Math.max(1, Math.ceil(sx * b.x1 + t.e) - ix), h = Math.max(1, Math.ceil(sy * b.y1 + t.f) - iy)
+        const canvas = this.raster?.canvas || document.createElement('canvas')
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w
+            canvas.height = h
+        }
+        const g = canvas.getContext('2d')
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(0, 0, w, h)
+        g.save()
+        // World x lands at sx x + t.e - ix: device x minus the raster's left pixel.
+        g.setTransform(sx, 0, 0, sy, t.e - ix, t.f - iy)
+        g.lineJoin = 'round'
+        g.lineCap = 'round'
+        this.missingIcon = undefined
+        if (state.range)
+            this.drawRange(g, state.data)
+        if (state.move)
+            this.drawMove(g, state.data)
+        g.restore()
+        ++SelectionOverlay.rasterBuilds
+        return this.raster = {canvas, data: state.data, move: state.move, range: state.range, r: basis.r, sx, sy,
+            wx: (ix - t.e) / sx, wy: (iy - t.f) / sy, view, missingIcon: this.missingIcon}
+    }
+    releaseRaster() {
+        if (!this.raster)
+            return
+        this.raster.canvas.width = this.raster.canvas.height = 0
+        this.raster = undefined
     }
     // S6 look (concept drawS6): the range as a thin raised ridge pushed out 0.1 r; the move area as a soft
     // raised plate inset 0.1 r with no face fill, so the cells keep their own colour; neutral target emblems.
@@ -892,6 +1039,8 @@ class SelectionOverlay {
         const image = SelectionOverlay.whiteIcon(icon)
         if (image)
             ctx.drawImage(image, q.x - r * 0.62, q.y - r * 0.62, r * 1.24, r * 1.24)
+        else
+            this.missingIcon = icon
         ctx.restore()
     }
     // The stat icon recoloured white (cached per icon).
