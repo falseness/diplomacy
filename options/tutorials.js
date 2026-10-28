@@ -77,8 +77,8 @@ function createTutorial1Map() {
     // and with the noob dead the red noob in front of the gap runs through it and kills the
     // blue archer (hp 1); the other two noobs both hit one normchel. Then red's 4 units
     // out-damage the two normchels. Hitting the nearest normchels instead (what SimpleAiPlayer
-    // does for red) leaves the archer shooting through the gap and loses. The red noob in
-    // front of the gap (4,3) starts wounded, with 1 hp out of 2.
+    // does for red) leaves the archer shooting through the gap and loses. The red noobs at
+    // (4,3), in front of the gap, and (4,4) start wounded, with 1 hp out of 2.
     let map = new GameMap(
         {x: 9, y: 7},
         [
@@ -92,7 +92,7 @@ function createTutorial1Map() {
                 units: [
                     {x: 4, y: 2, type: Noob},
                     {x: 4, y: 3, type: Noob, hp: 1},
-                    {x: 4, y: 4, type: Noob},
+                    {x: 4, y: 4, type: Noob, hp: 1},
                     {x: 3, y: 3, type: Archer}
                 ]
             },
