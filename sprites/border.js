@@ -59,9 +59,38 @@ class Border {
         this.extraStrokeWidth = extraStrokeWidth
         this.extraColor = extraColor
     }
+    // The selection overlay (S6) every Border shares; its draws replace the lines of a selected unit.
+    static get selection() {
+        return Border.overlay || (Border.overlay = new SelectionOverlay())
+    }
+    // The selected unit whose interaction filled border/attackBorder, or undefined (a building's
+    // border, the headless stubs, nothing selected).
+    static selectedUnit() {
+        if (typeof gameEvent == 'undefined' || !gameEvent || !gameEvent.selected)
+            return undefined
+        const unit = gameEvent.selected
+        return unit.isUnit && unit.interaction && unit.coord ? unit : undefined
+    }
+    isSelectionBorder() {
+        return typeof border != 'undefined' && this === border || this.isAttackBorder()
+    }
+    isAttackBorder() {
+        return typeof attackBorder != 'undefined' && this === attackBorder
+    }
     draw(ctx) {
         if (!this.visible)
             return
+        // A cleaned border (hideAll, an inspected fogged unit) shows nothing, as its lines did.
+        const unit = !this.isCleaned() && this.isSelectionBorder() && Border.selectedUnit()
+        const data = unit && Border.selection.compute(unit)
+        if (data) {
+            // attackBorder's slot comes first: the range ridge lies under the move plate and the targets.
+            if (this.isAttackBorder())
+                Border.selection.drawRange(ctx, data)
+            else
+                Border.selection.drawMove(ctx, data)
+            return
+        }
         ctx.beginPath()
         ctx.lineJoin = 'round'
         ctx.lineCap = 'round'
@@ -693,6 +722,194 @@ class SelectionOverlay {
     }
     clean() {
         this.cache = undefined
+    }
+    // S6 look (concept drawS6): the range as a thin raised ridge pushed out 0.1 r; the move area as a soft
+    // raised plate inset 0.1 r with no face fill, so the cells keep their own colour; neutral target emblems.
+    // Light comes from the upper left; no hue carries meaning. Shadows scale with the context's transform.
+    static scaleOf(ctx) {
+        return ctx.getTransform ? Math.abs(ctx.getTransform().a) || 1 : 1
+    }
+    drawRange(ctx, data) {
+        if (!data.ranged || !data.rangeLoops.length)
+            return
+        const r = basis.r, sc = SelectionOverlay.scaleOf(ctx)
+        const path = () => SelectionOverlay.roundedOffset(ctx, data.rangeLoops, 0.1, 0.32)
+        ctx.save()
+        ctx.lineJoin = 'round'
+        ctx.shadowColor = 'rgba(0,0,0,0.6)'
+        ctx.shadowBlur = 0.08 * r * sc
+        ctx.shadowOffsetX = 0.03 * r * sc
+        ctx.shadowOffsetY = 0.045 * r * sc
+        ctx.beginPath()
+        path()
+        ctx.strokeStyle = 'rgba(225,225,230,0.95)'
+        ctx.lineWidth = 0.085 * r
+        ctx.stroke()
+        ctx.restore()
+        ctx.save()
+        ctx.lineJoin = 'round'
+        ctx.translate(-0.012 * r, -0.016 * r)
+        ctx.beginPath()
+        path()
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 0.035 * r
+        ctx.stroke()
+        ctx.restore()
+    }
+    drawMove(ctx, data) {
+        if (data.moveLoops.length) {
+            const frame = SelectionOverlay.frameOf(data.moveLoops)
+            this.softPlate(ctx, () => SelectionOverlay.roundedOffset(ctx, data.moveLoops, -0.1, 0.32), frame)
+        }
+        this.drawTargets(ctx, data)
+    }
+    // The loops' bounds plus a margin, as a rectangle wound counter-clockwise: with the area's clockwise
+    // loops the nonzero rule leaves the area a hole (cairo's shadows ignore evenodd), and a shadowed shape
+    // bounded to the area keeps cairo drawing (a huge one silently stops later draws).
+    static frameOf(loops) {
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+        for (const loop of loops)
+            for (const p of loop.P) {
+                x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1])
+                x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1])
+            }
+        const m = 1.5 * basis.r
+        return {x0: x0 - m, y0: y0 - m, x1: x1 + m, y1: y1 + m}
+    }
+    static frameRect(ctx, b) {
+        ctx.moveTo(b.x0, b.y0)
+        ctx.lineTo(b.x0, b.y1)
+        ctx.lineTo(b.x1, b.y1)
+        ctx.lineTo(b.x1, b.y0)
+        ctx.closePath()
+    }
+    // A blurred light or shade inside the path, cast by the frame around it.
+    innerShadow(ctx, path, frame, color, blur, dx, dy) {
+        const r = basis.r, sc = SelectionOverlay.scaleOf(ctx)
+        ctx.save()
+        ctx.beginPath()
+        path()
+        ctx.clip()
+        ctx.shadowColor = color
+        ctx.shadowBlur = blur * r * sc
+        ctx.shadowOffsetX = dx * r * sc
+        ctx.shadowOffsetY = dy * r * sc
+        ctx.beginPath()
+        SelectionOverlay.frameRect(ctx, frame)
+        path()
+        ctx.fillStyle = '#000'
+        ctx.fill()
+        ctx.restore()
+    }
+    // The concept's softPlate with face 0 and sheen 0: drop shadow outside only, white inner light on the
+    // upper-left edges, dark inner shade on the lower-right ones, a hairline rim.
+    softPlate(ctx, path, frame) {
+        const r = basis.r, sc = SelectionOverlay.scaleOf(ctx)
+        ctx.save()
+        ctx.beginPath()
+        SelectionOverlay.frameRect(ctx, frame)
+        path()
+        ctx.clip()
+        ctx.shadowColor = 'rgba(0,0,0,0.7)'
+        ctx.shadowBlur = 0.3 * r * sc
+        ctx.shadowOffsetX = 0.07 * r * sc
+        ctx.shadowOffsetY = 0.1 * r * sc
+        ctx.beginPath()
+        path()
+        ctx.fillStyle = '#000'
+        ctx.fill()
+        ctx.restore()
+        for (let i = 0; i < 2; ++i)
+            this.innerShadow(ctx, path, frame, 'rgba(255,255,255,0.95)', 0.06, 0.08, 0.11)
+        for (let i = 0; i < 2; ++i)
+            this.innerShadow(ctx, path, frame, 'rgba(0,0,0,0.6)', 0.07, -0.08, -0.11)
+        ctx.save()
+        ctx.beginPath()
+        path()
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'
+        ctx.lineWidth = 0.012 * r
+        ctx.stroke()
+        ctx.restore()
+    }
+    drawTargets(ctx, data) {
+        const icon = data.siege ? 'statBuildingDmg' : SelectionOverlay.isRanged(data.unit.interaction) ? 'statRange' : 'statDmg'
+        for (const k of data.targetsAfterStep.keys())
+            if (!data.targetsNow.has(k))
+                this.stepRing(ctx, SelectionOverlay.targetPos(k))
+        for (const k of data.targetsNow)
+            this.emblem(ctx, SelectionOverlay.targetPos(k), icon)
+    }
+    static targetPos(key) {
+        const coord = SelectionOverlay.coordOf(key), p = grid.arr[coord.x][coord.y].hexagon.calcPos()
+        return {x: p.x, y: p.y - basis.r * 0.04}
+    }
+    // Hit after a step: a dashed white ring with a dark halo.
+    stepRing(ctx, q) {
+        const r = basis.r * 0.33
+        ctx.save()
+        ctx.setLineDash([r * 0.32, r * 0.24])
+        ctx.lineCap = 'round'
+        for (const [color, width] of [['rgba(0,0,0,0.6)', 0.3], ['#ffffff', 0.13]]) {
+            ctx.beginPath()
+            ctx.arc(q.x, q.y, r * 1.05, 0, 2 * Math.PI)
+            ctx.strokeStyle = color
+            ctx.lineWidth = r * width
+            ctx.stroke()
+        }
+        ctx.restore()
+    }
+    // Hit now: a dark disc with a white rim and ticks and the white weapon icon.
+    emblem(ctx, q, icon) {
+        const r = basis.r * 0.33, sc = SelectionOverlay.scaleOf(ctx)
+        ctx.save()
+        ctx.shadowColor = 'rgba(0,0,0,0.6)'
+        ctx.shadowBlur = r * 0.7 * sc
+        ctx.shadowOffsetY = r * 0.18 * sc
+        const g = ctx.createRadialGradient(q.x - r * 0.3, q.y - r * 0.4, r * 0.1, q.x, q.y, r)
+        g.addColorStop(0, '#3a3f4a')
+        g.addColorStop(1, '#0c0e13')
+        ctx.beginPath()
+        ctx.arc(q.x, q.y, r, 0, 2 * Math.PI)
+        ctx.fillStyle = g
+        ctx.fill()
+        ctx.shadowColor = 'transparent'
+        ctx.lineWidth = r * 0.14
+        ctx.strokeStyle = '#ffffff'
+        ctx.stroke()
+        ctx.lineCap = 'round'
+        ctx.beginPath()
+        for (let a = 0; a < 4; ++a) {
+            const dx = Math.cos(a * Math.PI / 2), dy = Math.sin(a * Math.PI / 2)
+            ctx.moveTo(q.x + dx * r * 1.12, q.y + dy * r * 1.12)
+            ctx.lineTo(q.x + dx * r * 1.5, q.y + dy * r * 1.5)
+        }
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+        ctx.lineWidth = r * 0.26
+        ctx.stroke()
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = r * 0.12
+        ctx.stroke()
+        const image = SelectionOverlay.whiteIcon(icon)
+        if (image)
+            ctx.drawImage(image, q.x - r * 0.62, q.y - r * 0.62, r * 1.24, r * 1.24)
+        ctx.restore()
+    }
+    // The stat icon recoloured white (cached per icon).
+    static whiteIcon(name) {
+        const cache = SelectionOverlay.icons || (SelectionOverlay.icons = {})
+        if (cache[name])
+            return cache[name]
+        const image = typeof assets != 'undefined' && assets[name]
+        if (!image || !image.width || typeof document == 'undefined')
+            return undefined
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 96
+        const g = canvas.getContext('2d')
+        g.drawImage(image, 0, 0, 96, 96)
+        g.globalCompositeOperation = 'source-in'
+        g.fillStyle = '#ffffff'
+        g.fillRect(0, 0, 96, 96)
+        return cache[name] = canvas
     }
     // The boundary edges of a set of cells (side i: vertex i to i + 1, as Border.createLine), chained into
     // closed loops (outer loops clockwise on screen, holes counter-clockwise). Each loop: its points P, edge
