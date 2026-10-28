@@ -19,17 +19,18 @@ function createTutorial0Map() {
     return map
 }
 
-// Moving around: two red noobs (one hurt) face two blue noobs straight up column 4.
-// Scenery hugs the side borders, away from the units and the column between them.
+// Moving around: two red noobs (one hurt) face two blue noobs straight up column 4, on a 9x6 board.
+// Scenery hugs the side borders, away from the units and the column between them, plus lakes at
+// (2, 5) (3, 5) and mountains at (6, 5) (7, 5) along the bottom row.
 function createTutorial16Map() {
-    const map = new GameMap({x: 9, y: 7}, [
+    const map = new GameMap({x: 9, y: 6}, [
         {rgb: {r: 208, g: 208, b: 208}, towns: []},
         {rgb: {r: 255, g: 0, b: 0}, economyEnabled: false, towns: [],
             units: [{x: 4, y: 4, type: Noob, hp: 1}, {x: 4, y: 5, type: Noob, hp: 2}]},
         {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayer', economyEnabled: false, towns: [],
             units: [{x: 4, y: 3, type: Noob, hp: 2}, {x: 4, y: 2, type: Noob, hp: 2}]}
-    ], [], coordDictionary([[0, 0], [1, 0], [0, 1]]), coordDictionary([[8, 5], [8, 6], [7, 6]]),
-    coordDictionary([[0, 5], [0, 6], [8, 0], [8, 1]]))
+    ], [], coordDictionary([[0, 0], [1, 0], [0, 1], [2, 5], [3, 5]]), coordDictionary([[8, 5], [6, 5], [7, 5]]),
+    coordDictionary([[0, 5], [8, 0], [8, 1]]))
     map.testName = 'tutorial 16'
     return map
 }

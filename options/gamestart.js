@@ -1789,13 +1789,21 @@ class GameManager {
     // the zoom-out limit of the standard 21-cell board in landscape (5/21 of basis.r = the longer screen
     // side / 18), in either orientation. Otherwise, and with atmospheric visuals off, the camera stays as
     // it is (the map's top-left corner at full zoom). Zoom limits: updateScaleLimits.
+    // With the keyboard hint panels beside the board (Tutorial 1 on a desktop, render/draw.js), the fitted width
+    // spans them too, symmetrically about the board's centre, so they stay whole on screen.
     static CAMERA_FIT = {margin: 0.04, readableRadius: 5 / 21 / 18}
     static fitCamera() {
         const b = mapDepth.surfaceBounds
         if (!otherSettings.atmosphericVisuals || !b || !(b.right > b.left))
             return this.cameraFit = {fitted: false, reason: 'off'}
         const margin = this.CAMERA_FIT.margin * Math.min(WIDTH, HEIGHT)
-        const boardWidth = b.right - b.left, boardHeight = b.bottom - b.top + mapDepth.depth
+        let boardWidth = b.right - b.left
+        const boardHeight = b.bottom - b.top + mapDepth.depth
+        if (typeof backgroundHintsShown === 'function' && backgroundHintsShown()) {
+            const centre = (b.left + b.right) / 2, pad = BACKGROUND_HINT_PAD * basis.r
+            for (const rect of backgroundHintRects())
+                boardWidth = Math.max(boardWidth, 2 * Math.max(centre - rect.x + pad, rect.x + rect.width + pad - centre))
+        }
         const fit = Math.min((WIDTH - 2 * margin) / boardWidth, (HEIGHT - 2 * margin) / boardHeight)
         const readable = Math.max(mapBorder.scale.min,
             this.CAMERA_FIT.readableRadius * Math.max(WIDTH, HEIGHT) / basis.r)
