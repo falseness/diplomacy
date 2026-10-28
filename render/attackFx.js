@@ -11,6 +11,12 @@
 // a hexcaster gathers violet sparks, a wobbling orb flies, a hex sigil spins on the target's ground (B3-hexcaster). A
 // ranged last hit falls and fades like the melee one; a shot building flashes in place. A unit target that lives is
 // left out of the grid's unit passes too while the effect plays (drawn here, knocked back).
+// Siege (TASK-1423): a catapult recoils and lobs a boulder high with its shadow along the ground, the impact flashes,
+// raises dust and debris (B2-catapult); a bombard fires a flat cannonball with a muzzle flash and smoke, a fireball and
+// smoke on the impact (B3-bombard); a mortar shoots up a red-hot shell lobbed high, a large explosion with a shockwave
+// ring (B3-mortar). '-N' rises from the building (none for a 0-hp town only marked hit); a destroyed building collapses
+// from its snapshot in the dust. Only the impact (and a collapsing snapshot) shakes, never the view. A shot into a cell
+// fogged for the screen's player lands with a muffled grey puff and nothing else: the effect keeps no target data.
 // Plain canvas code: paths, arcs, ellipses, the cached unit sprites (and one tinted copy per sprite, made once);
 // no shadowBlur, filters or new assets. Off when otherSettings.animateAttacks is false (no effect is queued).
 // API: play(event), draw(ctx, now), isActive(), clear(); the hooks call before(unit, cell) / after(snapshot).
@@ -19,9 +25,9 @@ class AttackFx {
     // Most effects playing at once: a new one drops the oldest.
     maxEffects = 12
     // ms per kind.
-    durations = {melee: 650, lasthit: 700, archer: 650, ember: 650, hexcaster: 650}
+    durations = {melee: 650, lasthit: 700, archer: 650, ember: 650, hexcaster: 650, catapult: 700, bombard: 650, mortar: 700}
     // Concept time units an effect's duration covers (the last hit runs on to the captured hex's pulse).
-    spans = {melee: 1, lasthit: 1.3, archer: 1, ember: 1, hexcaster: 1}
+    spans = {melee: 1, lasthit: 1.3, archer: 1, ember: 1, hexcaster: 1, catapult: 1, bombard: 1, mortar: 1}
     // Ranged kinds (concept time units): the shot lands at hit; the shooter draws back pull r; a unit target is knocked
     // back kb r and tinted (tint, alpha, fade span); '-N' rises from text over textSpan; a last hit falls from hit + 0.15
     // for 0.35 (the ember archer's runs on to 1.05: its duration grows with it). An arrow leaves muzzle r (ahead toward
@@ -31,6 +37,26 @@ class AttackFx {
         ember: {hit: 0.55, pull: 0.06, kb: 0.1, tint: 'orange', tintAlpha: 0.55, tintSpan: 0.3, text: 0.57, textSpan: 0.42, muzzle: [0.45, 0.1]},
         hexcaster: {hit: 0.5, pull: 0, kb: 0, tint: 'violet', tintAlpha: 0.6, tintSpan: 0.3, text: 0.52, textSpan: 0.46}
     }
+    // Siege kinds (concept time units): the shot leaves at fly0 and lands at fly1, its arc's height is height of the
+    // distance; it leaves muzzle r (ahead toward the target, down) from the shooter's centre; the shooter recoils recoil
+    // r away (mortar: partly down) on [fly0, fly0 + 0.15); the impact shakes shake r (concept frames: frames).
+    siege = {
+        catapult: {fly0: 0.18, fly1: 0.6, height: 0.43, muzzle: [-0.2, -0.55], recoil: 0.1, shake: 0.09, shakeSpan: 0.3, frames: 46},
+        bombard: {fly0: 0.2, fly1: 0.45, height: 0.23, muzzle: [0.5, -0.45], recoil: 0.14, shake: 0.08, shakeSpan: 0.35, frames: 40},
+        mortar: {fly0: 0.2, fly1: 0.6, height: 0.52, muzzle: [0, -0.58], recoil: 0.14, shake: 0.14, shakeSpan: 0.35, frames: 50}
+    }
+    // Siege debris, made once: direction, reach (in r), half size (in r).
+    debris = (() => {
+        let seed = 7
+        const random = (a, b) => a + (b - a) * (seed = (seed * 16807) % 2147483647) / 2147483647
+        const debris = new Float32Array(54)
+        for (let i = 0; i < 54; i += 3) {
+            debris[i] = random(-Math.PI, 0)
+            debris[i + 1] = random(0.8, 2.2)
+            debris[i + 2] = random(0.03, 0.07)
+        }
+        return debris
+    })()
     effects = []
     // Clock in ms; tests may replace it.
     now() {
@@ -78,6 +104,8 @@ class AttackFx {
     before(unit, cell) {
         if (!this.enabled() || !cell || !unit || unit.isEmpty() || !this.kindOf(unit))
             return null
+        if (this.siege[this.kindOf(unit)])
+            return this.beforeSiege(unit, cell)
         const enemy = entity => entity && entity.notEmpty() && entity.hp !== undefined &&
             entity.playerColor !== unit.playerColor && !entity.isNature ? entity : null
         const target = {unit: enemy(cell.unit), building: enemy(cell.building)}
@@ -91,10 +119,39 @@ class AttackFx {
             buildingPos: target.building && {x: target.building.pos.x, y: target.building.pos.y},
             buildingImage: target.building && this.imageOf(target.building)}
     }
+    // A siege shot's snapshot: the shooter's moves and the target building; a cell fogged for the screen's player (the
+    // shot takes the fog branch) keeps nothing of what is there.
+    beforeSiege(unit, cell) {
+        const coord = {x: cell.hexagon.coord.x, y: cell.hexagon.coord.y}
+        const fog = typeof isFogOfWar !== 'undefined' && isFogOfWar && !!grid.fogOfWar && !grid.fogOfWar[coord.x]?.[coord.y]
+        const building = !fog && cell.building && cell.building.notEmpty() && cell.building.hp !== undefined &&
+            cell.building.playerColor !== unit.playerColor && !cell.building.isNature ? cell.building : null
+        const p = cell.hexagon.calcPos()
+        return {siege: true, fog, attacker: unit, moves: unit.moves, from: {x: unit.coord.x, y: unit.coord.y},
+            fromPos: {x: unit.pos.x, y: unit.pos.y}, image: this.imageOf(unit), coord,
+            targetPos: {x: p.x - assets.size / 2, y: p.y - assets.size / 2},
+            building, buildingHp: building?.hp, buildingImage: building && this.imageOf(building)}
+    }
+    // After a siege shot (the shooter stayed and spent moves): the effect, with the building's hp lost, destroyed or (a
+    // 0-hp town only marked hit) no number; a fog shot's effect has no target fields at all.
+    afterSiege(s) {
+        const a = s.attacker
+        if (a.killed || a.coord.x !== s.from.x || a.coord.y !== s.from.y || !(a.moves < s.moves))
+            return false
+        const event = {kind: this.kindOf(a), attacker: a, image: s.image, from: s.from, fromPos: s.fromPos, to: s.from,
+            target: s.coord, targetPos: s.targetPos}
+        if (s.fog)
+            return this.play({...event, fog: true})
+        const b = s.building, killed = !!b && grid.getBuilding(s.coord) !== b
+        return this.play({...event, targetImage: s.buildingImage, targetIsUnit: false,
+            damage: b ? Math.max(0, s.buildingHp - (killed ? 0 : b.hp)) : 0, killed})
+    }
     // After the action: plays the effect of a hit on the snapshot's unit or building (hp lost or killed).
     after(snapshot) {
         if (!snapshot)
             return false
+        if (snapshot.siege)
+            return this.afterSiege(snapshot)
         const s = snapshot, coord = s.coord
         let target = null
         if (s.unit && (s.unit.killed || grid.getUnit(coord) !== s.unit || s.unit.hp < s.unitHp)) {
@@ -114,9 +171,15 @@ class AttackFx {
             to: {x: attacker.coord.x, y: attacker.coord.y}, target: coord, targetPos: target.pos, targetImage: target.image,
             targetIsUnit: target.unit, targetUnit, damage: target.damage, killed: target.killed})
     }
-    // The effect kind of an attacker's hits; null: none (siege kinds come with TASK-1423). The demon variants extend
-    // Archer: they are picked first.
+    // The effect kind of an attacker's hits; null: none. The demon variants extend Archer, Mortar extends Bombard extends
+    // Catapult: they are picked first.
     kindOf(unit) {
+        if (typeof Mortar !== 'undefined' && unit instanceof Mortar)
+            return 'mortar'
+        if (typeof Bombard !== 'undefined' && unit instanceof Bombard)
+            return 'bombard'
+        if (typeof Catapult !== 'undefined' && unit instanceof Catapult)
+            return 'catapult'
         if (typeof EmberArcher !== 'undefined' && unit instanceof EmberArcher)
             return 'ember'
         if (typeof Hexcaster !== 'undefined' && unit instanceof Hexcaster)
@@ -130,15 +193,17 @@ class AttackFx {
     imageOf(entity) {
         return typeof cachedImages !== 'undefined' && typeof grid !== 'undefined' ? cachedImages[grid.getEntityBodyImageName(entity)] : undefined
     }
-    // Visible to the screen's player: no fog, or both cells in vision (TASK-1424 refines this for others' attacks).
+    // Visible to the screen's player: no fog, or both cells in vision (a fog shot: the shooter's) (TASK-1424 refines
+    // this for others' attacks).
     visible(event) {
         if (typeof isFogOfWar === 'undefined' || !isFogOfWar)
             return true
         const seen = c => Boolean(grid.fogOfWar?.[c.x]?.[c.y])
-        return seen(event.from) && seen(event.target)
+        return seen(event.from) && (event.fog || seen(event.target))
     }
     // event: {kind, attacker, image, from, fromPos, to, target, targetPos, targetImage, targetIsUnit, targetUnit, damage,
-    // killed}; targetUnit: a living unit target the effect draws (ranged kinds).
+    // killed, fog}; targetUnit: a living unit target the effect draws (ranged kinds); fog: a siege shot into fog (no
+    // target fields).
     // Returns the queued effect, or null.
     play(event) {
         if (!this.enabled() || !event || !event.kind || !this.visible(event))
@@ -201,7 +266,9 @@ class AttackFx {
                 continue
             ctx.save()
             const time = Math.min(1, (now - e.startTime) / e.duration) * e.span
-            if (this.ranged[e.kind])
+            if (this.siege[e.kind])
+                this.drawSiege(ctx, e, time, lod)
+            else if (this.ranged[e.kind])
                 this.drawRanged(ctx, e, time, lod)
             else
                 this.drawMelee(ctx, e, time, lod)
@@ -647,6 +714,215 @@ class AttackFx {
                 ctx.stroke()
             }
         }
+    }
+    // Siege shots (B2-catapult, B3-bombard, B3-mortar), t in concept time units [0, 1]; sizes in r as drawMelee.
+    drawSiege(ctx, e, t, lod) {
+        const r = basis.r, half = assets.size / 2, st = this.siege[e.kind], {fly0, fly1} = st
+        const A = {x: e.fromPos.x + half, y: e.fromPos.y + half}
+        const E = {x: e.targetPos.x + half, y: e.targetPos.y + half + 0.1 * r}
+        const vx = E.x - A.x, vy = E.y - A.y, dist = Math.hypot(vx, vy) || 1
+        const ux = vx / dist, uy = vy / dist
+        const M = {x: A.x + ux * st.muzzle[0] * r, y: A.y + uy * st.muzzle[0] * r + st.muzzle[1] * r}
+        const s = t >= fly1 ? (t - fly1) / (1 - fly1) : -1
+        // The impact shakes (the target hex's effect and collapsing snapshot only).
+        const frame = t * (st.frames - 1)
+        const amp = !e.fog && s >= 0 && s < st.shakeSpan ? st.shake * r * (1 - s / st.shakeSpan) : 0
+        const sx = amp * Math.sin(frame * 2.1), sy = amp * Math.cos(frame * 1.7)
+        // A destroyed building: its snapshot until the impact, then it sinks greying and fades.
+        if (e.killed && e.targetImage)
+            this.drawCollapse(ctx, e, s, sx, sy)
+        // The shooter recoils (a catapult also tips back).
+        const k = t >= fly0 && t < fly0 + 0.15 ? Math.sin(Math.PI * (t - fly0) / 0.15) : 0
+        const rec = st.recoil * r * k
+        let dx = -ux * rec, dy = -uy * rec
+        if (e.kind === 'mortar') {
+            dx *= 0.4
+            dy = 0.6 * rec
+        }
+        if (e.kind === 'catapult' && k) {
+            ctx.save()
+            const bx = A.x + dx, by = A.y + 0.5 * r + dy
+            ctx.translate(bx, by)
+            ctx.rotate(-Math.sign(ux || 1) * 3 * Math.PI / 180 * k)
+            ctx.translate(-bx, -by)
+            this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + dx, e.fromPos.y + dy, lod)
+            ctx.restore()
+        }
+        else
+            this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + dx, e.fromPos.y + dy, lod)
+        // Muzzle flash and smoke (bombard: toward the target, mortar: up).
+        if (e.kind !== 'catapult' && t >= fly0 && t < fly0 + 0.4) {
+            const q = (t - fly0) / 0.4
+            const up = e.kind === 'mortar'
+            if (t < fly0 + 0.12) {
+                const f = (t - fly0) / 0.12, fr = (0.18 + 0.28 * f) * r
+                ctx.fillStyle = `rgba(255, 220, 120, ${(1 - f).toFixed(3)})`
+                ctx.beginPath()
+                ctx.arc(M.x + (up ? 0 : ux) * fr * 0.6, M.y + (up ? -1 : uy) * fr * 0.6, fr, 0, 2 * Math.PI)
+                ctx.fill()
+            }
+            ctx.fillStyle = `rgba(170, 165, 160, ${(150 / 255 * (1 - q)).toFixed(3)})`
+            ctx.beginPath()
+            for (let j = 0; j < 4; ++j) {
+                const x = M.x + (up ? 0 : ux * (0.2 + 0.3 * q) * r) + 0.12 * r * Math.sin(j * 2)
+                const y = M.y - (up ? (0.4 * q + 0.12 * j) * r : 0.1 * q * r)
+                const pr = (0.1 + 0.18 * q) * r
+                ctx.moveTo(x + pr, y)
+                ctx.arc(x, y, pr, 0, 2 * Math.PI)
+            }
+            ctx.fill()
+        }
+        // The shot in flight with its shadow along the ground.
+        if (t >= fly0 && t < fly1) {
+            const q = (t - fly0) / (fly1 - fly0), h = st.height * dist, lift = Math.sin(Math.PI * q)
+            const gx = A.x + (E.x - A.x) * q, gy = A.y + 0.5 * r + (E.y + 0.4 * r - A.y - 0.5 * r) * q
+            const sr = (0.08 + 0.06 * (1 - lift)) * r
+            ctx.fillStyle = `rgba(0, 0, 0, ${(e.kind === 'catapult' ? (60 + 60 * (1 - lift)) / 255 : 90 / 255).toFixed(3)})`
+            ctx.beginPath()
+            ctx.ellipse(gx, gy, 1.6 * sr, 0.6 * sr, 0, 0, 2 * Math.PI)
+            ctx.fill()
+            if (e.kind === 'mortar')
+                for (let j = 4; j >= 0; --j) {
+                    const c = this.arc(M, E, h, Math.max(0, q - 0.03 * j))
+                    ctx.fillStyle = `rgba(255, 140, 40, ${((160 - 30 * j) / 255).toFixed(3)})`
+                    ctx.beginPath()
+                    ctx.arc(c.x, c.y, (0.06 - 0.01 * j) * r, 0, 2 * Math.PI)
+                    ctx.fill()
+                }
+            const c = this.arc(M, E, h, q), x = c.x, y = c.y
+            const [br, fill, edge, shine] = {catapult: [0.13, 'rgb(95, 88, 80)', 'rgb(40, 35, 30)', 'rgb(160, 150, 140)'],
+                bombard: [0.11, 'rgb(60, 50, 50)', 'rgb(25, 20, 20)', 'rgb(150, 140, 130)'],
+                mortar: [0.14, 'rgb(120, 40, 30)', 'rgb(25, 20, 20)', 'rgb(255, 160, 60)']}[e.kind]
+            ctx.fillStyle = fill
+            ctx.strokeStyle = edge
+            ctx.lineWidth = 0.02 * r
+            ctx.beginPath()
+            ctx.arc(x, y, br * r, 0, 2 * Math.PI)
+            ctx.fill()
+            ctx.stroke()
+            ctx.fillStyle = shine
+            ctx.beginPath()
+            ctx.arc(x - 0.25 * br * r, y - 0.35 * br * r, 0.25 * br * r, 0, 2 * Math.PI)
+            ctx.fill()
+        }
+        if (s < 0)
+            return
+        if (e.fog) {
+            this.drawFogPuff(ctx, E, s, r)
+            return
+        }
+        ctx.save()
+        ctx.translate(sx, sy)
+        if (e.kind === 'catapult')
+            this.drawBoulderImpact(ctx, E, s, r)
+        else
+            this.drawExplosion(ctx, E, s, r, e.kind === 'mortar')
+        if (e.damage > 0)
+            this.drawDamage(ctx, {x: E.x, y: E.y - 0.4 * r}, s * 1.1, e.damage, r)
+        ctx.restore()
+    }
+    // A destroyed building's snapshot: whole until the impact (s < 0), then it sinks below its base greying and fades
+    // over s in [0, 0.7], shaken by sx, sy.
+    drawCollapse(ctx, e, s, sx, sy) {
+        const image = e.targetImage, x = e.targetPos.x, y = e.targetPos.y
+        if (s < 0) {
+            ctx.drawImage(image, x, y)
+            return
+        }
+        if (s >= 0.7)
+            return
+        const k = this.ease(s / 0.7), grey = this.tinted(image).grey
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(x - image.width, y - image.height, 3 * image.width, 2 * image.height)
+        ctx.clip()
+        ctx.globalAlpha = 1 - k
+        ctx.drawImage(k < 0.15 ? image : grey, x + sx, y + sy + 0.6 * image.height * k)
+        ctx.restore()
+    }
+    // The boulder's impact: a flash, a ring of dust and debris falling (B2-catapult), s in [0, 1].
+    drawBoulderImpact(ctx, E, s, r) {
+        if (s < 0.25) {
+            const f = (0.6 + 1.4 * s / 0.25) * r
+            ctx.fillStyle = `rgba(255, 220, 150, ${(200 / 255 * (1 - s / 0.25)).toFixed(3)})`
+            ctx.beginPath()
+            ctx.ellipse(E.x, E.y, f, 0.7 * f, 0, 0, 2 * Math.PI)
+            ctx.fill()
+        }
+        ctx.fillStyle = `rgba(200, 180, 150, ${(190 / 255 * (1 - s)).toFixed(3)})`
+        ctx.beginPath()
+        const rr = (0.3 + 1.1 * this.ease(Math.min(1, s * 1.5))) * r, pr = (0.22 + 0.18 * s) * r
+        for (let j = 0; j < 10; ++j) {
+            const angle = j / 10 * 2 * Math.PI
+            const x = E.x + Math.cos(angle) * rr, y = E.y + 0.3 * r + Math.sin(angle) * rr * 0.4
+            ctx.moveTo(x + pr, y)
+            ctx.ellipse(x, y, pr, 0.8 * pr, 0, 0, 2 * Math.PI)
+        }
+        ctx.fill()
+        this.drawDebris(ctx, E, s, r, 1, 16, 'rgb(110, 80, 50)')
+    }
+    // A shell's explosion (B3-bombard, B3-mortar: big, 1.6 times as large with a shockwave ring), s in [0, 1].
+    drawExplosion(ctx, E, s, r, big) {
+        const sc = big ? 1.6 : 1
+        if (s < 0.3) {
+            const f = (0.4 + 0.9 * s / 0.3) * sc * r, a = 1 - s / 0.3
+            ctx.fillStyle = `rgba(255, 200, 90, ${(230 / 255 * a).toFixed(3)})`
+            ctx.beginPath()
+            ctx.ellipse(E.x, E.y, f, 0.75 * f, 0, 0, 2 * Math.PI)
+            ctx.fill()
+            ctx.fillStyle = `rgba(255, 250, 210, ${a.toFixed(3)})`
+            ctx.beginPath()
+            ctx.ellipse(E.x, E.y, 0.55 * f, 0.41 * f, 0, 0, 2 * Math.PI)
+            ctx.fill()
+        }
+        if (big && s < 0.5) {
+            const f = (0.6 + 3 * s) * r
+            ctx.strokeStyle = `rgba(255, 235, 200, ${(200 / 255 * (1 - s / 0.5)).toFixed(3)})`
+            ctx.lineWidth = 0.06 * r
+            ctx.beginPath()
+            ctx.ellipse(E.x, E.y + 0.3 * r, f, 0.4 * f, 0, 0, 2 * Math.PI)
+            ctx.stroke()
+        }
+        const g = Math.round(150 - 60 * s)
+        ctx.fillStyle = `rgba(${g}, ${g - 10}, ${g - 20}, ${(200 / 255 * (1 - s)).toFixed(3)})`
+        ctx.beginPath()
+        const rr = (0.3 + 1.1 * this.ease(Math.min(1, s * 1.4))) * sc * r, pr = (0.22 + 0.22 * s) * sc * r
+        for (let j = 0; j < 12; ++j) {
+            const angle = j / 12 * 2 * Math.PI
+            const x = E.x + Math.cos(angle) * rr, y = E.y + 0.25 * r + Math.sin(angle) * rr * 0.4 - 0.4 * r * s
+            ctx.moveTo(x + pr, y)
+            ctx.ellipse(x, y, pr, 0.8 * pr, 0, 0, 2 * Math.PI)
+        }
+        ctx.fill()
+        this.drawDebris(ctx, E, s, r, sc, 18, 'rgb(90, 60, 40)')
+    }
+    // n debris squares thrown up from E and falling, s in [0, 1].
+    drawDebris(ctx, E, s, r, sc, n, colour) {
+        const debris = this.debris
+        ctx.globalAlpha = 1 - s
+        ctx.fillStyle = colour
+        ctx.beginPath()
+        for (let i = 0; i < 3 * n; i += 3) {
+            const d = debris[i + 1] * s * sc * r, size = debris[i + 2] * r
+            ctx.rect(E.x + Math.cos(debris[i]) * d - size, E.y + Math.sin(debris[i]) * d + 3.8 * r * s * s - size, 2 * size, 2 * size)
+        }
+        ctx.fill()
+        ctx.globalAlpha = 1
+    }
+    // A shot into fog lands with a muffled grey puff: no flash, debris, number or shake, s in [0, 1].
+    drawFogPuff(ctx, E, s, r) {
+        if (s >= 0.8)
+            return
+        const q = s / 0.8, rr = (0.15 + 0.4 * this.ease(Math.min(1, q * 1.5))) * r, pr = (0.12 + 0.12 * q) * r
+        ctx.fillStyle = `rgba(150, 150, 150, ${(0.5 * (1 - q)).toFixed(3)})`
+        ctx.beginPath()
+        for (let j = 0; j < 6; ++j) {
+            const angle = j / 6 * 2 * Math.PI
+            const x = E.x + Math.cos(angle) * rr, y = E.y + 0.25 * r + Math.sin(angle) * rr * 0.4 - 0.2 * r * q
+            ctx.moveTo(x + pr, y)
+            ctx.ellipse(x, y, pr, 0.8 * pr, 0, 0, 2 * Math.PI)
+        }
+        ctx.fill()
     }
     drawSlash(ctx, E, s, r) {
         const end = (-150 + 140 * Math.min(1, s * 1.6)) * Math.PI / 180, start = -160 * Math.PI / 180
