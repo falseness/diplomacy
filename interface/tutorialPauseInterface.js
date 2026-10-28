@@ -1,6 +1,6 @@
 // The pause menu of a tutorial, opened by the top-left menu button: 'Paused' on a navy ribbon over the dimmed board,
 // the lesson's medallion above it, 'Tutorial N: Name' below it and three stacked buttons: Resume, Retry (the same
-// tutorial again) and Back to menu (the main menu, as the menu button outside a tutorial). The turn timer is frozen
+// tutorial again) and Back to tutorials (the tutorial menu, as the result screen's button). The turn timer is frozen
 // while it is shown (its text stays drawn); it closes only by Resume or by the menu button again, and takes every
 // other game click. Laid out in hub units from the current WIDTH/HEIGHT on every draw and click.
 class TutorialPauseInterface {
@@ -12,7 +12,7 @@ class TutorialPauseInterface {
         this.panel = new Rect(0, 0, 0, 0)
         this.resumeButton = new HubButton('Resume', this.resume, undefined, this, true)
         this.retryButton = new HubButton('Retry', this.retry, undefined, this)
-        this.backButton = new HubButton('Back to menu', this.back, undefined, this)
+        this.backButton = new HubButton('Back to tutorials', this.back, undefined, this)
         this.place()
     }
     get buttons() {
@@ -33,8 +33,10 @@ class TutorialPauseInterface {
         this.titleFont = 4 * f
         this.subtitle = {x: WIDTH / 2, y: this.ribbon.y + height + 2.4 * u, fontSize: 1.9 * f}
         const bw = 24 * u, bh = 4.6 * u, gap = 1.2 * u, by = this.ribbon.y + height + 5 * u
+        // The centred label keeps clear of the glyph (its right edge 0.85 bh in) by 0.5 u on both sides.
+        const room = bw - 2 * (0.85 * bh + 0.5 * u)
         this.buttons.forEach((button, i) => button.place(WIDTH / 2 - bw / 2, by + i * (bh + gap), bw, bh,
-            2.1 * u * this.labelFit(button.text.text, bw - 2.4 * u, 2.1 * f)))
+            2.1 * u * this.labelFit(button.text.text, room, 2.1 * f)))
         // The medallion's shade ring is 0.7 u outside its disc; the tails' outer ends are the left and right.
         const left = this.tails[0].outer, top = this.medallion.y - r - 0.7 * u
         this.panel = new Rect(left, top, this.tails[1].outer - left, by + 3 * bh + 2 * gap - top)
@@ -82,7 +84,7 @@ class TutorialPauseInterface {
     }
     back() {
         this.hide()
-        menuBack()
+        TutorialManager.backToTutorials()
     }
     // True while shown: the menu button still toggles, the three buttons act, every other click is swallowed.
     click(pos) {
