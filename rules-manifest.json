@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "00221def3b6adc85a58c8c0d864672345ef8ef335818a4a12c454ee2906608b7",
+  "rulesVersion": "4cd440269d907604e59aabfb6169cde2a06941c854aada0f2ebb49e335299749",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -90,8 +90,8 @@
     },
     {
       "path": "options/reveal.js",
-      "sha256": "607ad73caeb9b37e27438700199be7a5ffcb0e39a458b91161bbbb37bcd4f487",
-      "bytes": 28811
+      "sha256": "a18002ff615ba777db734eb52e212e14203930ada8bf0f21a3f9e2320b3bff0c",
+      "bytes": 28720
     },
     {
       "path": "options/filteredView.js",
@@ -395,13 +395,13 @@
     },
     {
       "path": "sprites/entities/units/range/catapult/interactionWithCatapult.js",
-      "sha256": "c95ac49d19b6194221e2722df88d1f8cb88d8405a57f59ca17a827c2228ed1fe",
-      "bytes": 5043
+      "sha256": "6100e8785de348978e0295641852a6aa050c993a84c53b4f99dbe041a336ecd9",
+      "bytes": 5096
     },
     {
       "path": "sprites/entities/units/range/catapult/catapult.js",
-      "sha256": "473a5c422f9cbb600d1634ba29b77ed10f3e63b3b701d73263c4ad89f2cf27b6",
-      "bytes": 1956
+      "sha256": "44df2e9fa3a88b4caef21830900d808b7170f43072aae3177dce74c651c0ca9c",
+      "bytes": 1856
     },
     {
       "path": "sprites/entities/buildings/building.js",

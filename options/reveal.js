@@ -490,8 +490,6 @@ const RevealScout = {
                 return false
             if (building.isBuildingProduction())
                 return false
-            if (siege && interaction.isBlindArea(cell.coord))
-                return false
             let probe = RevealScout.probeHit(building, siege ? unit.buildingDMG : unit.dmg)
             if (probe.killed)
                 scout.events.push({kind: 'wallKill', removed: [index], newSources: [], mover: null})

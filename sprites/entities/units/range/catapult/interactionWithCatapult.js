@@ -19,7 +19,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
     	return this.cellHasEnemyBuilding(cell, catapult) ||
     		this.cellHasEnemyUnit(cell, catapult)
     }
-    isBlindArea(coord) {
+    isMoveArea(coord) {
     	return this.way.getDistance(coord) <= this.moves
     }
     // Siege never damages units: an open-ground unit is not a target, a hidden
@@ -50,7 +50,7 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
         return super.sendInstructions(cell, catapult)
     }
     canHitSomethingOnCell(cell, catapult) {
-        return !this.cantRangeInteract(cell.coord, catapult) && !this.isBlindArea(cell.coord) &&
+        return !this.cantRangeInteract(cell.coord, catapult) &&
              this.cellHasAttackableBuilding(cell, catapult)
     }
     sendInstructions(cell, catapult) {
@@ -82,16 +82,19 @@ class InteractionWithCatapult extends InteractionWithRangeUnit {
             return result
         }
         
-        let isCellInBlindArea = this.isBlindArea(coord)
-        let isEnemyInBlindArea = (isCellInBlindArea &&
-                this.cellHasEnemy(cell, catapult))
-        let noObjectsToAttack = !isCellInBlindArea &&
-            !(this.cellHasEnemyBuilding(cell, catapult) ||
-            this.cellHasEnemyBuildingProduction(cell, catapult))
+        // No blind area: an enemy building anywhere in range is shot, even one
+        // the catapult could also walk to.
+        let hasEnemyBuilding = this.cellHasEnemyBuilding(cell, catapult) ||
+            this.cellHasEnemyBuildingProduction(cell, catapult)
+        if (cell.building.isStaticNature) {
+            this.removeSelect()
+            return true
+        }
+        if (hasEnemyBuilding && !this.cantRangeInteract(coord, catapult))
+            return this.sendAttackInstructions(cell, catapult)
 
-        if (cell.building.isStaticNature || 
-            isEnemyInBlindArea ||
-            noObjectsToAttack) {
+        // Siege never targets units; any other cell outside the move area is a no-op.
+        if (this.cellHasEnemy(cell, catapult) || !this.isMoveArea(coord)) {
             this.removeSelect()
             return true
         }
@@ -109,12 +112,9 @@ class InteractionWithBombard extends InteractionWithCatapult {
         // Empty-cell movement must never path through a defender or building.
         this.way = this.mirrorInteraction.way = new RangeUnitMoveWay()
     }
-    isBlindArea(coord) {
-        return this.rangeWay.getDistance(coord) < Bombard.minimumRange
-    }
     canHitSomethingOnCell(cell, unit) {
         return this.moves > 0 && !unit.player.ignoresCell(cell) &&
-            !this.cantRangeInteract(cell.coord, unit) && !this.isBlindArea(cell.coord) &&
+            !this.cantRangeInteract(cell.coord, unit) &&
             (this.cellHasAttackableBuilding(cell, unit) ||
                 this.cellHasEnemyBuildingProduction(cell, unit))
     }

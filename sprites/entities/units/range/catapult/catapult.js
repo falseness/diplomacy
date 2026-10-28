@@ -17,7 +17,7 @@ class Catapult extends RangeUnit {
 
         res.info.dmg += '\nbuilding dmg: ' + this.buildingDMG
 
-        res.info.range = '2 - ' + this.range
+        res.info.range = '' + this.range
         
         return res
     }
@@ -27,7 +27,7 @@ class Catapult extends RangeUnit {
     get info() {
         let unit = super.info
         unit.info.dmg += '\nbuilding dmg: ' + this.buildingDMG
-        unit.info.range = '2 - ' + this.range
+        unit.info.range = '' + this.range
         return unit
     }
     get hasMirroredImage() {
@@ -41,7 +41,6 @@ class Catapult extends RangeUnit {
 // Siege demons inherit building damage/undo mechanics and use their own artwork.
 class Bombard extends Catapult {
     static range = 2
-    static minimumRange = 2
     constructor(x, y) {
         super(x, y)
         this.interaction = new InteractionWithBombard(this.speed, this.range)
@@ -53,7 +52,7 @@ class Bombard extends Catapult {
     }
     get info() {
         const res = super.info
-        res.info.range = this.constructor.minimumRange + ' - ' + this.range
+        res.info.range = '' + this.range
         res.info.target = 'enemy buildings only'
         return res
     }
@@ -63,7 +62,5 @@ class Bombard extends Catapult {
     }
 }
 registerDemonVariant(Bombard, 'bombard', 'catapult')
-class Mortar extends Bombard {
-    static minimumRange = 2
-}
+class Mortar extends Bombard {}
 registerDemonVariant(Mortar, 'mortar', 'catapult')
