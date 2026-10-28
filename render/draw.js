@@ -1,4 +1,7 @@
 function drawMain() {
+    // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374).
+    if (grid.drawZoomRaster(mainCtx))
+        return
     // An opaque sky raster covers the whole canvas, so it needs no clear under it; the board's lit
     // images may hide most of the canvas (Grid.frameCover): then the sky is drawn only where they
     // leave it open.

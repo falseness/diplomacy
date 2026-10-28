@@ -4298,12 +4298,93 @@ class Grid extends SpritesGroup {
         if (composite)
             this.drawOverlayComposite(main, composite)
         this.prepareSurfaceCache()
-        // One of the frames that follow a zoom input as part of its gesture (Screen.surfaceZooming),
-        // or a camera move (Screen.surfaceMoving).
-        if (typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceZoomFrames > 0)
-            --gameEvent.screen.surfaceZoomFrames
-        if (typeof gameEvent !== 'undefined' && gameEvent.screen?.surfacePanFrames > 0)
-            --gameEvent.screen.surfacePanFrames
+        if (typeof mainCtx !== 'undefined' && main === mainCtx) {
+            const t = main.getTransform()
+            this.zoomRasterSource = {a: t.a, b: t.b, c: t.c, d: t.d, e: t.e, f: t.f, width: main.canvas.width, height: main.canvas.height}
+        }
+        this.countGestureFrame()
+    }
+    // One of the frames that follow a zoom input as part of its gesture (Screen.surfaceZooming, Screen.zoomGesture),
+    // or a camera move (Screen.surfaceMoving).
+    countGestureFrame() {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (screen?.surfaceZoomFrames > 0)
+            --screen.surfaceZoomFrames
+        if (screen?.surfacePanFrames > 0)
+            --screen.surfacePanFrames
+        if (screen?.zoomGestureFrames > 0)
+            --screen.zoomGestureFrames
+    }
+    // TASK-1374: a zoom gesture's frames (wheel, pinch, the +/- keys: Screen.zoomBy) draw the board of the frame before the
+    // gesture, the main canvas as Grid.draw left it (zoomRasterSource: its transform and size), copied at the gesture's first
+    // input (captureZoomRaster), scaled to the camera; where zooming out opens the canvas past it, the sky, the slab shadow and
+    // the surface cache as they are, without the overlays. Nothing of the board is built or drawn at the gesture's scales
+    // (no lit view, tile, light map, cache build or overlay layer: a zoom frame used to draw the whole view directly). When
+    // the gesture ends (Screen.zoomGesture: 160 ms and four frames after its last input) the raster is dropped and the next
+    // frame draws the board as any frame does: the lit view or surface cache rebuilt once at the new scale, in its steps
+    // (TASK-1372). A move tween keeps the frames live. Grid.zoomRasters false: zoom frames as before.
+    captureZoomRaster() {
+        const source = this.zoomRasterSource
+        if (!Grid.zoomRasters || this !== grid || this.zoomRaster || typeof mainCanvas === 'undefined' || !source ||
+                source.width !== mainCanvas.width || source.height !== mainCanvas.height ||
+                source.b !== 0 || source.c !== 0 || source.a <= 0 || source.d <= 0 || zoomRasterTweens())
+            return
+        let canvas = this.zoomRasterCanvas
+        if (!canvas || canvas.width !== source.width || canvas.height !== source.height) {
+            canvas = this.zoomRasterCanvas = document.createElement('canvas')
+            canvas.width = source.width
+            canvas.height = source.height
+        }
+        const g = canvas.getContext('2d')
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalCompositeOperation = 'copy'
+        g.drawImage(mainCanvas, 0, 0)
+        g.globalCompositeOperation = 'source-over'
+        this.zoomRaster = {canvas, a: source.a, d: source.d, e: source.e, f: source.f}
+    }
+    // Draws a zoom gesture's frame from the zoom raster (captureZoomRaster) on ctx (the main canvas, drawMain); false (the
+    // raster dropped) when the gesture is over or the raster cannot stand for the frame.
+    drawZoomRaster(ctx) {
+        const raster = this.zoomRaster
+        if (!raster)
+            return false
+        const t = ctx.getTransform(), cw = ctx.canvas.width, ch = ctx.canvas.height
+        if (!Grid.zoomRasters || this !== grid || !gameEvent.screen.zoomGesture || zoomRasterTweens() ||
+                raster.canvas.width !== cw || raster.canvas.height !== ch || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) {
+            this.zoomRaster = undefined
+            return false
+        }
+        // A world point at device x in the raster is at device t.e + kx (x - raster.e) now.
+        const kx = t.a / raster.a, ky = t.d / raster.d
+        const x = t.e - kx * raster.e, y = t.f - ky * raster.f, w = kx * cw, h = ky * ch
+        if (!atmosphericBackground.opaqueOver(ctx))
+            ctx.clearRect(canvas.offset.x, canvas.offset.y, width, height)
+        if (x > 0 || y > 0 || x + w < cw || y + h < ch) {
+            atmosphericBackground.draw(ctx)
+            drawBackgroundHints(ctx)
+            this.drawSlabShadow(ctx)
+            this.drawZoomUnderlay(ctx)
+        }
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.drawImage(raster.canvas, x, y, w, h)
+        ctx.restore()
+        this.prepareSurfaceCache()
+        this.countGestureFrame()
+        return true
+    }
+    // The surface cache's raster (with its cell layer as drawSurfaceCache shows it) where it meets the view, as it is.
+    drawZoomUnderlay(ctx) {
+        const cache = this.surfaceCache, b = this.surfaceCacheBounds
+        if (!cache || !b || this.surfaceSplitJob)
+            return
+        const left = Math.max(b.left, canvas.offset.x), top = Math.max(b.top, canvas.offset.y)
+        const right = Math.min(b.left + b.width, canvas.offset.x + width), bottom = Math.min(b.top + b.height, canvas.offset.y + height)
+        if (left >= right || top >= bottom)
+            return
+        const sx = cache.width / b.width, sy = cache.height / b.height
+        ctx.drawImage(cache.cellLayered && this.surfaceCacheShown || cache, (left - b.left) * sx, (top - b.top) * sy,
+            (right - left) * sx, (bottom - top) * sy, left, top, right - left, bottom - top)
     }
 }
 
@@ -4317,6 +4398,11 @@ function patchCellsWindow(boxes) {
     const r = 1.05 * basis.r
     return {x0: Math.min(...boxes.map(b => b.x0)) - r, y0: Math.min(...boxes.map(b => b.y0)) - r,
         x1: Math.max(...boxes.map(b => b.x1)) + r, y1: Math.max(...boxes.map(b => b.y1)) + r}
+}
+
+// Whether a move tween runs: the zoom raster (Grid.drawZoomRaster) would hold the unit still.
+function zoomRasterTweens() {
+    return typeof moveTween !== 'undefined' && moveTween.tweens.size > 0
 }
 
 // Clips ctx to rects (whole device pixel rectangles {x, y, w, h}); leaves the identity transform.
@@ -4760,6 +4846,9 @@ const CELL_RENDER_MARGIN = 4
 // costs about three times a cached frame), and over a tile not built yet. False: a frame builds what it draws (the light
 // map and the visible tiles), as a whole rebuild does.
 Grid.litStandIns = true
+// TASK-1374: true draws a zoom gesture's frames from the zoom raster, the board rebuilt once when it ends (Grid.drawZoomRaster);
+// false draws them as any frame (the board directly above the surface cache's scale on a desktop).
+Grid.zoomRasters = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).

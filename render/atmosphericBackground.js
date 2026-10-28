@@ -26,8 +26,10 @@ const atmosphericBackground = {
         return bytes(this.raster) + bytes(atmosphericLighting.map) + bytes(atmosphericLighting.gain)
     },
     watched: new WeakSet(),
+    // A surface without events (a test canvas's native backing, which jsdom's main context reports once the main canvas has
+    // been drawn into another canvas: Grid.captureZoomRaster) is not watched.
     watch(surface) {
-        if (this.watched.has(surface)) return
+        if (this.watched.has(surface) || typeof surface?.addEventListener !== 'function') return
         this.watched.add(surface)
         surface.addEventListener('contextlost', event => {
             event.preventDefault()

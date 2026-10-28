@@ -59,6 +59,13 @@ class Screen {
     get surfaceZooming() {
         return performance.now() < this.surfaceZoomUntil || this.surfaceZoomFrames > 0
     }
+    // TASK-1374: a zoom gesture with either visuals, for the zoom raster (Grid.drawZoomRaster): 160 ms after a zoom input and
+    // in any case the ZOOM_GESTURE_FRAMES frames drawn after it, so that on a device drawing a frame in 100-200 ms a gesture's
+    // inputs a few frames apart do not each end it (each ending rebuilds the board at its scale).
+    static ZOOM_GESTURE_FRAMES = 4
+    get zoomGesture() {
+        return performance.now() < this.zoomGestureUntil || this.zoomGestureFrames > 0
+    }
     // A zoom gesture, or a camera pan in the same window (160 ms after a move of the view, and the
     // first two board frames drawn after it), and the SURFACE_LAYER_HOLD ms after either, when a
     // gesture often goes on: the overlays may come from their layer (Grid.drawOverlayLayer).
@@ -205,6 +212,13 @@ class Screen {
             this.surfaceZoomUntil = performance.now() + 160
             this.surfaceZoomFrames = 2
             this.surfaceLayerUntil = performance.now() + Screen.SURFACE_LAYER_HOLD
+        }
+        // TASK-1374: with either visuals, the gesture's frames draw the board's last frame scaled (Grid.drawZoomRaster),
+        // taken now, before the camera changes.
+        if (requested !== 1 && typeof grid !== 'undefined' && grid) {
+            this.zoomGestureUntil = performance.now() + 160
+            this.zoomGestureFrames = Screen.ZOOM_GESTURE_FRAMES
+            grid.captureZoomRaster()
         }
 
         cameraTransform.translate(canvas.offset.x, canvas.offset.y)

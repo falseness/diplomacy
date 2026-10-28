@@ -355,6 +355,15 @@
             return cached
         }
         proto.drawMapSurface.visualsPerf = true
+        // TASK-1374: a zoom gesture's frame drawn from the zoom raster.
+        if (proto.drawZoomRaster) {
+            const zoomRaster = proto.drawZoomRaster
+            proto.drawZoomRaster = labelled(function(...args) {
+                const drawn = zoomRaster.apply(this, args)
+                if (active && drawn) work.renderPath = 'zoom-raster'
+                return drawn
+            }, 'surface')
+        }
         proto.drawOverlayLayer = function(...args) {
             const layered = layer.apply(this, args)
             if (active && layered) work.overlayLayer = true
