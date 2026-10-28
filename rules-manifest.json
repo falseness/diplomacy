@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "72be3ec0c3745631588d15896c61b3927ea974e8b7acffea6a8825b20ca87c10",
+  "rulesVersion": "450df33573d007bfc228477e410061f2efe38f3b71b89b24a14d0a00ca80b6e7",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -175,8 +175,8 @@
     },
     {
       "path": "interface/nextTurnPause.js",
-      "sha256": "06999622068979318e4b159fa7f8ff89133634e96dbec440012740dd0f3ef386",
-      "bytes": 2149
+      "sha256": "bce4a2063dc65a93feebbf00221afa00c67a92bcc2bbe77552622aa029c98b73",
+      "bytes": 3355
     },
     {
       "path": "sprites/sprite.js",
