@@ -260,67 +260,79 @@ class InterationWithUnit {
     }
 }
 
+// Way keys a cell by x * WAY_KEY_STRIDE + y (maps are far narrower than the stride).
+const WAY_KEY_STRIDE = 1 << 16
 class Way {
+    // Only the cells the last search reached are stored (a few dozen per search on a map of
+    // thousands of cells, searched several times per unit move): distanceOf and parentOf map
+    // their keys to the distance and the parent coord. Every other cell of the map has the
+    // distance filledMoves + 1 and is its own parent, as the full arrays of the old search had.
     constructor() {
-        this.distance = []
-        this.parent = []
+        this.distanceOf = new Map()
+        this.parentOf = new Map()
+        this.searchArr = null
+        this.filledMoves = 0
+        this.distanceRows = null
+    }
+    // The whole distance array (x, y), built on demand for readers outside the search.
+    get distance() {
+        if (!this.distanceRows) {
+            let arr = this.searchArr
+            let rows = []
+            for (let x = 0; arr && x < arr.length; ++x) {
+                rows.push(new Array(arr[x].length).fill(this.filledMoves + 1))
+            }
+            for (let [key, distance] of this.distanceOf) {
+                rows[Math.floor(key / WAY_KEY_STRIDE)][key % WAY_KEY_STRIDE] = distance
+            }
+            this.distanceRows = rows
+        }
+        return this.distanceRows
+    }
+    set distance(rows) {
+        this.distanceRows = rows
+    }
+    isOnSearchedMap(coord) {
+        let arr = this.searchArr
+        return !!(arr && arr[coord.x] && coord.y >= 0 && coord.y < arr[coord.x].length)
+    }
+    distanceAt(coord) {
+        let distance = this.distanceOf.get(coord.x * WAY_KEY_STRIDE + coord.y)
+        return distance === undefined ? this.filledMoves + 1 : distance
+    }
+    setDistance(coord, distance) {
+        this.distanceOf.set(coord.x * WAY_KEY_STRIDE + coord.y, distance)
+    }
+    // a cell is used (marked by the search) once it has a parent
+    isUsed(coord) {
+        return this.parentOf.has(coord.x * WAY_KEY_STRIDE + coord.y)
+    }
+    setParent(coord, parent) {
+        this.parentOf.set(coord.x * WAY_KEY_STRIDE + coord.y, parent)
     }
     needToCreateLine(parent, child, moves) {
-        return this.distance[parent.x][parent.y] == moves && this.distance[child.x][child.y] > moves
+        return this.distanceAt(parent) == moves && this.distanceAt(child) > moves
     }
     getDistance(coord) {
-        return this.distance[coord.x][coord.y]
+        return this.isOnSearchedMap(coord) ? this.distanceAt(coord) : undefined
     }
     getParent(coord) {
-        // an unreached cell (parent null) is its own parent
-        let parent = this.parent[coord.x][coord.y]
+        // an unreached cell (no parent) is its own parent
+        let parent = this.isOnSearchedMap(coord) && this.parentOf.get(coord.x * WAY_KEY_STRIDE + coord.y)
         return parent ? Object.assign({}, parent) : { x: coord.x, y: coord.y }
     }
-    // Every search reuses the arrays of the previous one on the same map size:
-    // units search the whole map several times per move.
-    // A finished search changed only the cells it reached (create dequeues every
-    // cell it marks): only those are reset, and the distances of the others
-    // already hold moves + 1 when the previous search had the same moves.
+    // Resets only the cells the previous search reached (create dequeues every cell it marks).
+    // Returns no used array: isUsed() answers for a cell.
     initialization(v0, moves, arr, bord, newBorder) {
         grid.newLogicText()
-        let reached = this.reached
-        this.reached = null
-        if (!this.used || this.used.length != arr.length ||
-                this.used[0].length != arr[0].length) {
-            this.used = new Array(arr.length)
-            this.distance = new Array(arr.length)
-            this.parent = new Array(arr.length)
-            for (let i = 0; i < arr.length; ++i) {
-                this.used[i] = new Array(arr[i].length)
-                this.distance[i] = new Array(arr[i].length)
-                this.parent[i] = new Array(arr[i].length)
-            }
-            reached = null
-        }
-        let used = this.used
-        if (reached) {
-            const sameMoves = this.filledMoves === moves
-            for (const coord of reached) {
-                used[coord.x][coord.y] = false
-                this.parent[coord.x][coord.y] = null
-                if (sameMoves)
-                    this.distance[coord.x][coord.y] = moves + 1
-            }
-            if (!sameMoves)
-                for (let i = 0; i < arr.length; ++i)
-                    this.distance[i].fill(moves + 1)
-        } else {
-            for (let i = 0; i < arr.length; ++i) {
-                used[i].fill(false)
-                this.distance[i].fill(moves + 1)
-                this.parent[i].fill(null)
-            }
-        }
+        this.distanceOf.clear()
+        this.parentOf.clear()
+        this.distanceRows = null
+        this.searchArr = arr
         this.filledMoves = moves
-        used[v0.x][v0.y] = true
-        this.distance[v0.x][v0.y] = 0
-        this.parent[v0.x][v0.y] = v0
-        return used
+        this.setDistance(v0, 0)
+        this.setParent(v0, v0)
+        return null
     }
     isCellImpassable(neighbour, v0, arr, player) {
         let cell = arr[neighbour.x][neighbour.y]
@@ -369,13 +381,12 @@ class Way {
         let cell = grid.arr[coord.x][coord.y]
         if (this.cellHasEnemyEntity(cell, player)) {
             enemyEntityQ.push(coord)
-            this.distance[coord.x][coord.y] = Math.max(moves, this.distance[v.x][v.y] + 1)
+            this.setDistance(coord, Math.max(moves, this.distanceAt(v) + 1))
         } else {
             Q.push(coord)
-            this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
+            this.setDistance(coord, this.distanceAt(v) + 1)
         }
-        this.parent[coord.x][coord.y] = v
-        used[coord.x][coord.y] = true
+        this.setParent(coord, v)
     }
     // return arr of visitedCoords except v0
     create(v0, moves, arr, player, bord, changeLogicText = false, newBorder = true) {
@@ -386,8 +397,6 @@ class Way {
         let Q = []
         Q.push(v0)
         let enemyEntityQ = [] //for pass mode only
-        // every cell the search marks, for the next initialization
-        let reached = []
             // BFS
         while (Q.length > 0 || enemyEntityQ.length > 0) {
             let v
@@ -395,10 +404,10 @@ class Way {
                 v = Q.shift()
             else
                 v = enemyEntityQ.shift()
-            reached.push(v)
-            if (changeLogicText && this.distance[v.x][v.y])
-                arr[v.x][v.y].logicText.text = this.distance[v.x][v.y]
-            if (this.distance[v.x][v.y] > moves)
+            let distance = this.distanceAt(v)
+            if (changeLogicText && distance)
+                arr[v.x][v.y].logicText.text = distance
+            if (distance > moves)
                 continue
             visitedCoords.push(v)
             let neighbours = arr[v.x][v.y].hexagon.neighbours
@@ -408,12 +417,11 @@ class Way {
                 if (this.needToCreateLine(v, coord, moves)) {
                     bord.createLine(arr[v.x][v.y].hexagon.calcPos(), sortedHexagonNeighbours[i].side)
                 }
-                if (!used[coord.x][coord.y]) {
+                if (!this.isUsed(coord)) {
                     this.notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ)
                 }
             }
         }
-        this.reached = reached
         return visitedCoords
     }
 }
@@ -498,7 +506,27 @@ class InfluenceFieldWay {
 // Runs two whole-map searches per AI step, so it keeps flat typed arrays and a cached
 // neighbour table and draws no border lines or logic text. Plain BFS: the distances,
 // and hence every target and command choice, equal those of Way.create.
+// distance (rows over flatDistance) always holds the whole result of the last search.
 class BestEnemyTargetForAI extends Way {
+    getDistance(coord) {
+        return this.distance[coord.x][coord.y]
+    }
+    // Before a search with `moves`: every cell to moves + 1. A search writes the distance of
+    // exactly the cells it queues (queue[0..writtenCells)), so after one with the same moves
+    // only those are reset, not the whole map.
+    resetDistances(moves) {
+        const distance = this.flatDistance
+        if (this.writtenMoves === moves) {
+            const queue = this.queue
+            for (let i = 0; i < this.writtenCells; ++i) {
+                distance[queue[i]] = moves + 1
+            }
+        } else {
+            distance.fill(moves + 1)
+        }
+        this.writtenMoves = moves
+        this.writtenCells = 0
+    }
     isCellBlocked(cell, player) {
         return players[player].ignoresCell(cell) ||
             (cell.building.isStaticNature && cell.building.isObstacle(player))
@@ -541,6 +569,8 @@ class BestEnemyTargetForAI extends Way {
         // wantedStamp[k] == wantedSearch: cell k is one whose distance search() waits for
         this.wantedStamp = new Uint32Array(size)
         this.wantedSearch = 0
+        this.writtenMoves = null
+        this.writtenCells = 0
         this.distance = new Array(n)
         for (let x = 0; x < n; ++x) {
             this.distance[x] = this.flatDistance.subarray(x * m, (x + 1) * m)
@@ -556,7 +586,7 @@ class BestEnemyTargetForAI extends Way {
         const usedStamp = this.usedStamp
         const blockedStamp = this.blockedStamp
         const stamp = ++this.searchStamp
-        distance.fill(moves + 1)
+        this.resetDistances(moves)
         const start = v0.x * m + v0.y
         distance[start] = 0
         usedStamp[start] = stamp
@@ -586,6 +616,7 @@ class BestEnemyTargetForAI extends Way {
                 queue[tail++] = k
             }
         }
+        this.writtenCells = tail
     }
     static unreachableDistance = 999999
     // create(v0, unreachableDistance, arr, player) stopped as soon as the distances a caller reads are final: those of
@@ -606,10 +637,14 @@ class BestEnemyTargetForAI extends Way {
         const usedStamp = this.usedStamp
         const blockedStamp = this.blockedStamp
         const stamp = ++this.searchStamp
-        distance.fill(moves + 1)
+        this.resetDistances(moves)
         const start = v0.x * m + v0.y
         distance[start] = 0
         usedStamp[start] = stamp
+        let head = 0
+        let tail = 0
+        queue[tail++] = start
+        this.writtenCells = tail
         let remaining = 0
         const wantedStamp = this.wantedStamp
         const wantedSearch = wanted ? ++this.wantedSearch : 0
@@ -634,9 +669,6 @@ class BestEnemyTargetForAI extends Way {
             }
         }
         if (target) consider(start)
-        let head = 0
-        let tail = 0
-        queue[tail++] = start
         while (head < tail) {
             const v = queue[head++]
             if (found >= 0 && distance[v] >= Math.max(foundDistance, 1)) {
@@ -658,6 +690,7 @@ class BestEnemyTargetForAI extends Way {
                 usedStamp[k] = stamp
                 distance[k] = next
                 queue[tail++] = k
+                this.writtenCells = tail
                 if (target) consider(k)
                 if (wanted && wantedStamp[k] === wantedSearch && --remaining === 0) {
                     return null

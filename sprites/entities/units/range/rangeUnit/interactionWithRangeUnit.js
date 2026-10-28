@@ -161,10 +161,8 @@ class RangeWay extends Way {
         return false
     }
     markCoord(v, coord, used) {
-        this.distance[coord.x][coord.y] = this.distance[v.x][v.y] + 1
-
-        this.parent[coord.x][coord.y] = v
-        used[coord.x][coord.y] = true
+        this.setDistance(coord, this.distanceAt(v) + 1)
+        this.setParent(coord, v)
     }
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         Q.push(coord)

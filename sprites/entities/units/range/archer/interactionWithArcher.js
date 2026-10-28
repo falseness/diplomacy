@@ -38,7 +38,7 @@ class ArcherRangeWay extends RangeWay {
     notUsedHandler(v, coord, moves, player, used, Q, enemyEntityQ = []) {
         this.markCoord(v, coord, used)
         if (grid.getBuilding(coord).isBarrier()) {
-            this.distance[coord.x][coord.y] = Math.max(moves, this.distance[v.x][v.y] + 1)
+            this.setDistance(coord, Math.max(moves, this.distanceAt(v) + 1))
             // now it might not be an enemy but it doesn't matter
             enemyEntityQ.push(coord)
             return

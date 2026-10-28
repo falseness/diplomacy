@@ -23,6 +23,7 @@ function createEvents() {
 // The menu has its own listeners (menu.setEvents); the game's must not act on
 // the game left behind or on its hidden buttons while the menu is shown.
 function removeEvents() {
+    saveManager.flush?.()
     document.removeEventListener('click', click)
     document.removeEventListener('mousemove', mousemove)
     document.removeEventListener('wheel', mousewheel)
@@ -67,6 +68,7 @@ function isGamePaused() {
 }
 function touchstart(event) {
     event.stopPropagation()
+    saveManager.flush?.()
 
     // a touch that ended unseen (listeners removed) is forgotten
     const down = new Set(Array.from(event.touches, touch => touch.identifier))
@@ -91,6 +93,7 @@ function touchmove(event) {
 }
 function touchend(event) {
     event.stopPropagation()
+    saveManager.flush?.()
     
     // the fingers still down (event.touches: targetTouches may not hold them); one left re-anchors the pan
     const touches = getGameTouches(event)
@@ -99,6 +102,7 @@ function touchend(event) {
     gameEvent.touchend(getTouchesPos(touches), touches.length)
 }
 function keydown(event) {
+    saveManager.flush?.()
     // Escape still toggles debug; every other key waits for Resume.
     if (isGamePaused() && event.keyCode != Events.kEscapeKeycode)
         return
@@ -111,6 +115,7 @@ function keyup(event) {
     gameEvent.keyup(event.keyCode, event.timeStamp)
 }
 function click(event) {
+    saveManager.flush?.()
     let pos = getEventPos(event)
     let realPos = getRealEventPos(event)
     gameEvent.click(pos, realPos)

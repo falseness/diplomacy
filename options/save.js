@@ -10,8 +10,15 @@ function gameStorageSlot() {
 }
 
 class SaveManager {
-    constructor() {}
+    constructor() {
+        this.pendingSave = false
+        this.flushScheduled = false
+        // a save still waiting when the page goes away is written then
+        if (typeof window != 'undefined' && window.addEventListener)
+            window.addEventListener('pagehide', () => this.flush())
+    }
     save() {
+        this.pendingSave = false
         // A tutorial is never saved.
         if (gameSettings.tutorial)
             return
@@ -20,7 +27,34 @@ class SaveManager {
         saveGame()
         //console.log("saved")
     }
+    // The turn-end save: the same save, run after the next frame is shown (a task queued from that
+    // frame's requestAnimationFrame callback runs after its paint). Whatever could change the saved
+    // state first (an input, the next turn end, leaving the game, a load) calls flush(), so the save
+    // is never skipped and saves the state of the turn end.
+    saveAfterNextFrame() {
+        if (typeof requestAnimationFrame != 'function') {
+            this.save()
+            return
+        }
+        // a save still waiting is of an earlier turn end (its player's timer and history keys): written first
+        this.flush()
+        this.pendingSave = true
+        if (this.flushScheduled)
+            return
+        this.flushScheduled = true
+        requestAnimationFrame(() => setTimeout(() => {
+            this.flushScheduled = false
+            this.flush()
+        }, 0))
+    }
+    flush() {
+        if (!this.pendingSave)
+            return
+        this.pendingSave = false
+        this.save()
+    }
     load() {
+        this.flush()
         return loadGame()
     }
 }

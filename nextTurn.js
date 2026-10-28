@@ -154,13 +154,16 @@ function advanceOfflineTurn() {
     actionLog.clear()
 
     timer.setNextTurnTime()
-    saveManager.save()
+    // after the next frame (the pass-device screen) is shown; a stand-in manager saves at once
+    if (saveManager.saveAfterNextFrame) saveManager.saveAfterNextFrame()
+    else saveManager.save()
 
     // A tutorial has one human: the turn starts at once.
     nextTurnPauseInterface.visible = !gameSettings.tutorial
 }
 
 function nextTurn() {
+    saveManager.flush?.()
     ActionRecorder.recordEnd()
     if (gameSettings.isOnline) {
         onlineNextTurn();
