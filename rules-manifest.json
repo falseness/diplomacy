@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "bc3a8e67e6f29bf7f81281c1d469d4194821cece3ab70932ccf17b650a5f8a1b",
+  "rulesVersion": "d4446d48cf966e75b8ede1535711e59ec6df281c1dcd623c1991d1d1136c12d5",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,8 +30,8 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "f2f96afce2ce1e44855c53298fef65025c8ece3eff384cce6017ec505dd4591b",
-      "bytes": 99121
+      "sha256": "cddb5fcc36f2d3cd2a64a4093a2e16adf3584b4b2f8edbe74d9e2e3e15cf76d9",
+      "bytes": 99195
     },
     {
       "path": "options/tutorials.js",
@@ -55,8 +55,8 @@
     },
     {
       "path": "options/actionManager.js",
-      "sha256": "fbedf93fe6ce5c748901dc27e54dae161a297699638b022eab083851ec2a3297",
-      "bytes": 20224
+      "sha256": "94c6740681d7541bdd34be2c827ad3bdb2328891740f2925f51f36d18bd95367",
+      "bytes": 20364
     },
     {
       "path": "options/classManager.js",
@@ -70,8 +70,8 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "f86c3e29558bc9129200d807c8c495927ab2671ebc934b4358e22f6486ac167e",
-      "bytes": 2172
+      "sha256": "236001e721012a3b788b354b865ff1bf8479c778b2b2937a245bdcf3aac708ba",
+      "bytes": 2367
     },
     {
       "path": "options/actionApi.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "fa312ac7e9b9ed59a0f441532b9f37253b08801ec3f82d4e1013885e182ce736",
-      "bytes": 308449
+      "sha256": "bdf9ec33cb9c24ab9c6a633bba33c469b80bfdcb0c4589c5f2121ddb0e08f391",
+      "bytes": 308768
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -330,8 +330,8 @@
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
-      "sha256": "ac2fbd470c3986846e87f2718da37aeca83195be1729126a949bc684c14586ec",
-      "bytes": 8745
+      "sha256": "667923e28ee8bd7385d4b500374ca0ba476b535b4655412f3a67f10da1debf96",
+      "bytes": 9007
     },
     {
       "path": "sprites/entities/units/noob.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "ef3fe028371837222846739a6a3a9ad63d6dfbdf13be09650cc0eedf6413e2e4",
-      "bytes": 8026
+      "sha256": "35e888bdb44698437ca4751ac409be154b4eba2437593112e9547fc8fa108233",
+      "bytes": 8296
     },
     {
       "path": "managers.js",

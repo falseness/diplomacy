@@ -538,10 +538,11 @@ class Grid extends SpritesGroup {
         }
         drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(entity)], entity.pos)
     }
-    // The cell's unit as drawn in place: none while it is tweening (moveTween draws it).
+    // The cell's unit as drawn in place: none while it is tweening (moveTween draws it) or attacking (attackFx draws it).
     getStillUnit(cell) {
         if (typeof onlineObservation !== 'undefined' && onlineObservation.hidesUnit(cell)) return undefined
-        return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) ? cell.unit : undefined
+        return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) &&
+            !(typeof attackFx !== 'undefined' && attackFx.hidesUnit(cell.unit)) ? cell.unit : undefined
     }
     drawEntityBodies(ctx) {
         const range = this.drawRange(ctx)
@@ -4361,6 +4362,8 @@ class Grid extends SpritesGroup {
             ctx = composite.context
         }
         moveTween.draw(ctx)
+        if (typeof attackFx !== 'undefined')
+            attackFx.draw(ctx)
         if (typeof onlineObservation !== 'undefined')
             onlineObservation.draw(ctx)
         if (typeof remoteEffects !== 'undefined')
@@ -4837,9 +4840,10 @@ function patchCellsWindow(boxes) {
         x1: Math.max(...boxes.map(b => b.x1)) + r, y1: Math.max(...boxes.map(b => b.y1)) + r}
 }
 
-// Whether a move tween runs: the zoom raster (Grid.drawZoomRaster) would hold the unit still.
+// Whether a move tween or an attack animation (attackFx) runs: the zoom raster (Grid.drawZoomRaster) and a held frame
+// would hold the unit and the effect still.
 function zoomRasterTweens() {
-    return typeof moveTween !== 'undefined' && moveTween.tweens.size > 0
+    return typeof moveTween !== 'undefined' && moveTween.tweens.size > 0 || typeof attackFx !== 'undefined' && attackFx.isActive()
 }
 
 // Clips ctx to rects (whole device pixel rectangles {x, y, w, h}); leaves the identity transform.

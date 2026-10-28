@@ -101,6 +101,9 @@ function advanceOfflineTurn() {
     }
 
     gameEvent.nextTurn()
+    // The ended turn's attack animations stop (render/attackFx.js).
+    if (typeof attackFx !== 'undefined')
+        attackFx.clear()
 
     timer.pauseAndSaveTime()
 
@@ -182,6 +185,9 @@ function onlineNextTurn() {
     }
 
     gameEvent.nextTurn()
+    // The ended turn's attack animations stop (render/attackFx.js).
+    if (typeof attackFx !== 'undefined')
+        attackFx.clear()
 
     timer.pauseAndSaveTime()
     actionManager.clear()

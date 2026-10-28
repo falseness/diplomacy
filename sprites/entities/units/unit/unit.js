@@ -168,8 +168,12 @@ class Unit extends Entity {
             return true
         }
         
+        // An attack's animation (UI only, render/attackFx.js): the target before the action, the effect after it.
+        const attack = typeof attackFx !== 'undefined' ? attackFx.before(this, cell) : null
         let noNeedInstructionsEnough = this.interaction.sendInstructions(cell, this)
         this.updateMovesBar()
+        if (attack)
+            attackFx.after(attack)
         return noNeedInstructionsEnough
     }
     kill() {

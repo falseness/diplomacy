@@ -498,6 +498,9 @@ class ActionManager {
             return false
 
         let wasSelection = gameEvent.selected.notEmpty()
+        // The undone action's attack animation is not played on.
+        if (typeof attackFx !== 'undefined')
+            attackFx.clear()
         gameEvent.hideAll()
         gameEvent.removeSelection()
 

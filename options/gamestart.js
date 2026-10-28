@@ -1751,6 +1751,8 @@ class GameManager {
         hiddenInfo = false
         hiddenStatus = null
         moveTween.clear()
+        if (typeof attackFx !== 'undefined')
+            attackFx.clear()
 
         this.clearBasisValues()
     }

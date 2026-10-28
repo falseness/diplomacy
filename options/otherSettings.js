@@ -6,6 +6,8 @@ class Settings {
         this.usePolishedSprites = true
         this.atmosphericVisuals = true
         this.animateMoves = true
+        // Attack animations (render/attackFx.js).
+        this.animateAttacks = true
         // The 'replays' menu entry, hidden until the server serves game:replay.
         this.showReplays = false
         // Autoscouting prefetch (artifacts/actions_feature_prd.txt sec. 7.2): online hidden-information games get the
@@ -25,6 +27,7 @@ class Settings {
         this.usePolishedSprites = dict.usePolishedSprites !== false
         this.atmosphericVisuals = dict.atmosphericVisuals !== false
         this.animateMoves = dict.animateMoves !== false
+        this.animateAttacks = dict.animateAttacks !== false
         this.showReplays = dict.showReplays === true
         this.autoscout = dict.autoscout !== false
         return migrate
@@ -37,6 +40,7 @@ class Settings {
             usePolishedSprites: this.usePolishedSprites,
             atmosphericVisuals: this.atmosphericVisuals,
             animateMoves: this.animateMoves,
+            animateAttacks: this.animateAttacks,
             showReplays: this.showReplays,
             autoscout: this.autoscout,
             settingsVersion: Settings.VERSION
