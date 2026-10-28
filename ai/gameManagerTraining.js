@@ -9,6 +9,7 @@ GameManager.pushReplay = function(x, y) {
 }
 
 GameManager.trainFromBuffer = async function(sampleSize, epochs) {
+    await ensureTensorFlow()
     let buffer = GameManager.replayBuffer
     if (buffer.length == 0) {
         return
@@ -40,6 +41,7 @@ GameManager.startTrain = function() {
 }
 
 GameManager.startAI = async function() {
+    await ensureTensorFlow()
     ai_model = await loadModel()
     isFogOfWar = false
     let map = generateBrowserPlayAiCombatMap()
@@ -52,7 +54,8 @@ GameManager.startAI = async function() {
 }
 
 GameManager.startPredict = function() {
-    tf.loadLayersModel('localstorage://diplomacy_weights')
+    ensureTensorFlow()
+    .then(() => tf.loadLayersModel('localstorage://diplomacy_weights'))
     .then(async model => {
         ai_model = model
         let map = generateTinyOnlyBlue()
@@ -101,6 +104,7 @@ GameManager.generateAndPlay = async function() {
 }
 
 GameManager.playAndTrain = async function() {
+    await ensureTensorFlow()
     ai_model = await loadModel()
     isFogOfWar = false
     const learningRate = 0.001
@@ -138,6 +142,7 @@ GameManager.playAndTrain = async function() {
 }
 
 GameManager.startTrain0 = async function() {
+    await ensureTensorFlow()
     isFogOfWar = false
     gameSettings.withAI = true
     let xTrain = []

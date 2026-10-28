@@ -336,7 +336,44 @@ function assertBrowserSafeModelSource(source) {
   }
 }
 
+// TensorFlow.js (1.47 MB to parse) is not in index.html: only the learned AI
+// needs it, so the page loads it on first use. Node runs and test pages that
+// provide tf themselves resolve at once; repeated calls share one request.
+const TENSORFLOW_URL = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0'
+let tensorFlowPromise = undefined
+
+function ensureTensorFlow() {
+  if (typeof tf != 'undefined') {
+    return Promise.resolve(tf)
+  }
+  if (tensorFlowPromise) {
+    return tensorFlowPromise
+  }
+  if (typeof document == 'undefined') {
+    return Promise.reject(new Error('TensorFlow.js is not available: no global tf and no document to load ' + TENSORFLOW_URL))
+  }
+  tensorFlowPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = TENSORFLOW_URL
+    script.onload = () => {
+      if (typeof tf == 'undefined') {
+        reject(new Error('TensorFlow.js loaded from ' + TENSORFLOW_URL + ' but defined no global tf'))
+        return
+      }
+      resolve(tf)
+    }
+    script.onerror = () => {
+      tensorFlowPromise = undefined
+      script.remove()
+      reject(new Error('Failed to load TensorFlow.js from ' + TENSORFLOW_URL))
+    }
+    document.head.appendChild(script)
+  })
+  return tensorFlowPromise
+}
+
 async function loadModel(modelSource) {
+  await ensureTensorFlow()
   const source = getAiModelSource(modelSource)
   assertBrowserSafeModelSource(source)
   const model = await tf.loadLayersModel(source)
@@ -439,14 +476,15 @@ function trainModelByHumanData() {
   
 
   const learningRate = 0.00001
-  ai_model.compile({
-      optimizer: tf.train.adam(learningRate),
-      loss: 'meanSquaredError',
-      metrics: ['accuracy'],
-  });
-
-  
-  trainModel(ai_model, xTrain, yTrain, 300)
+  return ensureTensorFlow()
+  .then(() => {
+    ai_model.compile({
+        optimizer: tf.train.adam(learningRate),
+        loss: 'meanSquaredError',
+        metrics: ['accuracy'],
+    });
+    return trainModel(ai_model, xTrain, yTrain, 300)
+  })
   .then(async trainResult => { 
     console.log("trainedModel", trainResult)
     let save_result = await saveModel()
