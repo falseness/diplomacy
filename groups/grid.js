@@ -106,6 +106,10 @@ class Grid extends SpritesGroup {
         // and the renders made.
         this.zoomBoardPass = undefined
         this.zoomBoardRenders = 0
+        // TASK-1396: the zoom rasters copied from the held frame (copyZoomBoard) and the slab's footprint they are cut to
+        // (zoomSlabPath: per board outline).
+        this.zoomBoardCopies = 0
+        this.zoomSlab = undefined
         this.lodRecorder = undefined
         this.lodFrame = undefined
         this.lodHolds = 0
@@ -4407,6 +4411,10 @@ class Grid extends SpritesGroup {
     // The board's own canvas is drawn from, so no snapshot is closed under it (the held frame's bitmap holds the sky). No
     // raster when a move tween runs (it would hold the unit still) or the canvas, camera or board cannot be drawn so: that
     // gesture's frames are normal frames, as before TASK-1374.
+    // TASK-1396: rendering the board at the gesture's first input took a frame of 100-1066 ms (189-8593 calls). With the
+    // camera at rest the last frame is a held frame (TASK-1375/1376), whose bitmap is the main canvas as drawMain left it:
+    // the sky and the board, no interface. The raster is that bitmap cut to the slab's footprint (copyZoomBoard: one
+    // drawImage), the board rendered (renderZoomBoard, zoomBoardRenders) only when there is no such bitmap.
     captureZoomRaster() {
         if (!Grid.zoomRasters || this !== grid || this.zoomRaster || typeof mainCanvas === 'undefined' || typeof mainCtx === 'undefined' ||
                 !this.zoomRasterSource || zoomRasterTweens())
@@ -4420,10 +4428,117 @@ class Grid extends SpritesGroup {
             canvas.width = cw
             canvas.height = ch
         }
-        if (!this.renderZoomBoard(canvas, t))
+        // The raster's part a frame draws (box, device pixels): a copy holds nothing past the slab's band (copyZoomBoard).
+        let box = this.copyZoomBoard(canvas, t)
+        if (box)
+            ++this.zoomBoardCopies
+        else if (this.renderZoomBoard(canvas, t)) {
+            box = {x: 0, y: 0, w: cw, h: ch}
+            ++this.zoomBoardRenders
+        }
+        else
             return
-        this.zoomRaster = {canvas, a: t.a, d: t.d, e: t.e, f: t.f}
-        ++this.zoomBoardRenders
+        this.zoomRaster = {canvas, box, a: t.a, d: t.d, e: t.e, f: t.f}
+    }
+    // Draws the held frame's bitmap (captureHeldFrame: the last frame's sky and board, no interface) on canvas, cleared, but
+    // where the slab is (zoomSlabPath): the board as the main canvas's frame at camera t drew it, without the sky, the
+    // background hints or the slab shadow (but a band around it: copyZoomBoard's margin). False (nothing drawn)
+    // when the last frame is not a held frame with its bitmap ready at camera t, else the device rectangle ({x, y, w, h})
+    // past which the canvas holds nothing.
+    copyZoomBoard(canvas, t) {
+        const frame = this.lodFrame, bitmap = frame?.bitmap, key = frame?.key
+        if (!bitmap || frame.serial !== this.drawSerial || bitmap.width !== canvas.width || bitmap.height !== canvas.height ||
+                !key || key[0] !== t.a || key[1] !== t.d || key[2] !== t.e || key[3] !== t.f)
+            return false
+        // The slab, grown by Grid.ZOOM_SLAB_MARGIN (the rim and the edge cells' strokes reach past the outline), clips the
+        // bitmap. With simple visuals the board's underlay casts its own soft shadow past the slab (MapDepth.renderUnderlay)
+        // on a sky that is the cleared canvas: the clip holds it too; without the background hints that sky is all the
+        // bitmap holds off the board, so it is copied whole. (A clip: a mask composited over the whole canvas, source-in or
+        // destination-in, took 20 ms more at 1920x1080 in software.)
+        const atmo = otherSettings.atmosphericVisuals, b = mapDepth.surfaceBounds
+        const hints = typeof backgroundHintsShown === 'function' && backgroundHintsShown()
+        let margin = Grid.ZOOM_SLAB_MARGIN * basis.r
+        if (!atmo)
+            margin += 2 * mapDepth.shadowBlur + mapDepth.shadowOffset
+        let slab
+        if (!b || (atmo || hints) && !(slab = this.zoomSlabPath(margin)))
+            return false
+        const x0 = Math.max(0, Math.floor(t.a * (b.left - margin) + t.e)), y0 = Math.max(0, Math.floor(t.d * (b.top - margin) + t.f))
+        const x1 = Math.min(canvas.width, Math.ceil(t.a * (b.right + margin) + t.e))
+        const y1 = Math.min(canvas.height, Math.ceil(t.d * (b.bottom + mapDepth.depth + margin) + t.f))
+        const g = canvas.getContext('2d')
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalAlpha = 1
+        if (slab) {
+            g.globalCompositeOperation = 'source-over'
+            g.clearRect(0, 0, canvas.width, canvas.height)
+            g.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+            g.clip(slab)
+            g.setTransform(1, 0, 0, 1, 0, 0)
+        }
+        else
+            g.globalCompositeOperation = 'copy'
+        g.drawImage(bitmap, 0, 0)
+        g.restore()
+        return {x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0)}
+    }
+    // The slab's footprint in world space grown by margin: its top face (mapDepth's outline), that face moved down by the
+    // side depth, the side faces between them and, around the top and bottom outlines and the slab's vertical edges at the
+    // outline's points, bands margin wide with round ends; each wound as the outline is, so that the path clipped (nonzero)
+    // is their union. Kept per outline and margin. Undefined without an outline.
+    zoomSlabPath(margin) {
+        const loop = mapDepth.outlineLoop
+        if (!mapDepth.outline || !loop || loop.length < 3)
+            return undefined
+        if (this.zoomSlab?.outline === mapDepth.outline && this.zoomSlab.margin === margin)
+            return this.zoomSlab.path
+        const area = points => {
+            let a = 0
+            for (let i = 0; i < points.length; ++i) {
+                const p = points[i], q = points[(i + 1) % points.length]
+                a += p.x * q.y - q.x * p.y
+            }
+            return a
+        }
+        const path = new Path2D(), depth = mapDepth.depth, wound = area(loop) > 0
+        const add = points => {
+            const a = area(points)
+            if (!a)
+                return
+            if (a > 0 !== wound)
+                points = points.slice().reverse()
+            path.moveTo(points[0].x, points[0].y)
+            for (let i = 1; i < points.length; ++i)
+                path.lineTo(points[i].x, points[i].y)
+            path.closePath()
+        }
+        const bottom = loop.map(p => ({x: p.x, y: p.y + depth}))
+        add(loop)
+        add(bottom)
+        for (const face of mapDepth.faces)
+            add([face.begin, face.end, face.bottomEnd, face.bottomBegin])
+        if (margin > 0) {
+            const band = (a, b) => {
+                const dx = b.x - a.x, dy = b.y - a.y, k = margin / Math.hypot(dx, dy)
+                if (!Number.isFinite(k))
+                    return
+                const nx = -dy * k, ny = dx * k
+                add([{x: a.x + nx, y: a.y + ny}, {x: b.x + nx, y: b.y + ny}, {x: b.x - nx, y: b.y - ny}, {x: a.x - nx, y: a.y - ny}])
+            }
+            for (let i = 0; i + 1 < loop.length; ++i) {
+                band(loop[i], loop[i + 1])
+                band(bottom[i], bottom[i + 1])
+                band(loop[i], bottom[i])
+            }
+            for (const p of [...loop, ...bottom]) {
+                path.moveTo(p.x + margin, p.y)
+                path.arc(p.x, p.y, margin, 0, 2 * Math.PI, !wound)
+                path.closePath()
+            }
+        }
+        this.zoomSlab = {outline: mapDepth.outline, margin, path}
+        return path
     }
     // Draws the board as the main canvas's frame at camera t draws it (its level of detail; directly: drawMapSurface) on
     // canvas, cleared, without the sky, the background hints, the slab shadow or the interface; the light clipped to the lit
@@ -4490,7 +4605,10 @@ class Grid extends SpritesGroup {
             this.drawZoomUnderlay(ctx)
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.drawImage(raster.canvas, x, y, w, h)
+        // Only the raster's box: the rest of it is transparent (a copy's sky is cut out), drawn for nothing.
+        const box = raster.box
+        if (box.w && box.h)
+            ctx.drawImage(raster.canvas, box.x, box.y, box.w, box.h, x + kx * box.x, y + ky * box.y, kx * box.w, ky * box.h)
         ctx.restore()
         this.dropHeldFrame()
         this.prepareSurfaceCache()
@@ -5179,6 +5297,9 @@ Grid.litStandIns = true
 // TASK-1374: true draws a zoom gesture's frames from the zoom raster, the board rebuilt once when it ends (Grid.drawZoomRaster);
 // false draws them as any frame (the board directly above the surface cache's scale on a desktop).
 Grid.zoomRasters = true
+// TASK-1396: the band around the slab (in basis.r) a zoom raster copied from the held frame keeps (Grid.copyZoomBoard): the rim and
+// the edge cells' strokes, half outside the outline.
+Grid.ZOOM_SLAB_MARGIN = 0.12
 // TASK-1375: level-of-detail frames (Grid.lodTransform) below this hexagon radius on screen, in CSS pixels (12 device pixels at
 // the user's DPR 1.5): the hp and moves bars are then about a pixel high and the cell texts 3-4 pixels, unreadable. False:
 // every frame draws as above it.
