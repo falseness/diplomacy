@@ -185,6 +185,44 @@ const atmosphericLighting = {
     mapKey: '',
     mapScale: 0,
     rebuilds: 0,
+    // TASK-1377: work counters: lightState builds, sameLightState full comparisons and lightMap calls answered by the trust
+    // below without either.
+    work: {lightStates: 0, stateCompares: 0, trusted: 0},
+    // TASK-1377: the lit view (Grid.planLitView) whose hold this frame (litViewHolds: the board state it was made for, its
+    // light values compared within reach of the canvas, the light map not rebuilt since) vouches for the light map: {board,
+    // view, rebuilds, exact}. While it is board's lit view and the map is the same raster at the camera's scale,
+    // lightMap(board) returns the map without building and comparing the whole board's light state (none of what the frame
+    // draws can differ from it); not exact (the rest snapshot's cell layer compare, owners left out) still brings the map's
+    // owners up (syncOwners).
+    trust: null,
+    trusts(board, key, scale) {
+        const t = this.trust, s = this.scoped
+        if (!this.map || this.mapKey !== key || this.mapScale !== scale || gameEvent.screen.surfaceZooming)
+            return false
+        // 1: the map is the board's; 2: but for its owners (a hold not exact). A check made in this run (scoped) first.
+        if (s && s.board === board && s.rebuilds === this.rebuilds && s.key === key && s.scale === scale)
+            return 1
+        return !!t && t.board === board && t.view === board.litView && t.rebuilds === this.rebuilds && (t.exact ? 1 : 2)
+    },
+    // TASK-1377: fn's lightMap(board) calls (Grid.queueLitTiles' task building tiles: one synchronous run, nothing changes the
+    // board between them) compare the light state once: after the first found the map the board's (or made it so, vouch),
+    // the others take it as the trust above (scoped: {board, rebuilds, key, scale}).
+    scoped: null,
+    checkedOnce(board, fn) {
+        const outer = this.scoped
+        this.scoped = {board, rebuilds: -1}
+        try {
+            return fn()
+        } finally {
+            this.scoped = outer
+        }
+    },
+    vouch(board, cap, key, scale) {
+        const s = this.scoped
+        if (s && s.board === board && cap === undefined && this.mapScale === scale)
+            Object.assign(s, {rebuilds: this.rebuilds, key, scale})
+        return this.map
+    },
     release() {
         if (this.map) this.map.width = this.map.height = 0
         if (this.gain) this.gain.width = this.gain.height = 0
@@ -239,6 +277,7 @@ const atmosphericLighting = {
     // building and comparing a string of every cell, which loaded every frame with garbage.
     LAMP_KINDS: ['', 'town', 'goldmine', 'demonPortal'],
     lightState(board) {
+        ++this.work.lightStates
         const w = board.arr.length, h = w ? board.arr[0].length : 0
         let state = this.lightStateScratch
         if (!state || state.length !== w * h + 1) state = this.lightStateScratch = new Float64Array(w * h + 1)
@@ -374,6 +413,7 @@ const atmosphericLighting = {
     },
     // Whether the board's light state equals stored (a lightState copy).
     sameLightState(board, stored) {
+        ++this.work.stateCompares
         const state = this.lightState(board)
         if (!stored || stored.length !== state.length) return false
         for (let k = 0; k < state.length; ++k) if (stored[k] !== state[k]) return false
@@ -450,11 +490,17 @@ const atmosphericLighting = {
         const key = JSON.stringify(bounds)
         const scale = this.resolution(bounds, cap)
         const zooming = gameEvent.screen.surfaceZooming
+        // Only the camera's map (no cap: what the frame and its lit view draw), never a cache's bake of the whole board.
+        const trusted = cap === undefined && this.trusts(board, key, scale)
+        if (trusted && (trusted !== 2 || this.syncOwners(board, cap, true))) {
+            ++this.work.trusted
+            return this.vouch(board, cap, key, scale)
+        }
         // With the cell layer (ownerFree) the map is brought up to the owners now where they differ (syncOwners) before it is
         // drawn from, the light state holding none.
         if (this.map && this.mapKey === key && this.sameLightState(board, this.mapState) &&
                 (this.mapScale === scale || zooming) && (this.mapScale !== scale || this.syncOwners(board, cap, true)))
-            return this.map
+            return this.vouch(board, cap, key, scale)
         // A staged build of this very map is finished at once, another is dropped (canvasFor resets its canvases).
         const staged = this.staged && this.stagedFor(board, key, scale) ? this.staged : null
         this.staged = null
@@ -464,7 +510,7 @@ const atmosphericLighting = {
         else
             this.build(this.collect(board), bounds, scale)
         this.finishLightMap(board, key, scale, owners)
-        return this.map
+        return this.vouch(board, cap, key, scale)
     },
     // owners: the ownerState the map was drawn with (mapOwners).
     finishLightMap(board, key, scale, owners) {

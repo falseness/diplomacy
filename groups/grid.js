@@ -116,6 +116,9 @@ class Grid extends SpritesGroup {
         this.litView = undefined
         this.litRestCanvas = undefined
         this.litTilePool = []
+        // TASK-1377: drawLitEdges' last runs and how often they were found.
+        this.litEdgeRuns = undefined
+        this.litWork = {edgeRuns: 0}
         this.litTilesQueued = false
         this.litFrame = undefined
         // Patches of the rest snapshot (patchLitView): its buffer, patches made, the last one's region, refusals by reason.
@@ -3488,6 +3491,8 @@ class Grid extends SpritesGroup {
     // finished rest snapshot (null: the frame draws the tiles).
     planLitView(ctx) {
         const t = ctx.getTransform()
+        // TASK-1377: the light map is vouched for by a view that holds exactly in this frame only (below).
+        atmosphericLighting.trust = null
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const zooming = screen && screen.surfaceZooming
         if (!otherSettings.atmosphericVisuals || !screen || zooming ||
@@ -3500,7 +3505,8 @@ class Grid extends SpritesGroup {
         const cw = ctx.canvas.width, ch = ctx.canvas.height
         let view = this.litView
         // A view being patched holds while its patch does (patchLitView).
-        if (!view || !(view.patch ? this.patchLitView(ctx, view, t) : this.litViewHolds(ctx, view, t) || this.patchLitView(ctx, view, t))) {
+        const holds = !!view && !view.patch && this.litViewHolds(ctx, view, t) ? view : null
+        if (!view || !(holds || this.patchLitView(ctx, view, t))) {
             this.dropLitView()
             // The light map at the camera's scale is built a step a task (queueLitTiles) while the surface cache stands in.
             if (!atmosphericLighting.lightMapReady(this) && this.litStandIn(ctx)) {
@@ -3513,6 +3519,11 @@ class Grid extends SpritesGroup {
         // TASK-1372: so is one whose snapshot's split is behind the board.
         if (!this.followCellLayer('lit', ctx, t) || !this.litSplitHolds(view))
             view = this.litView = this.newLitView(t, ctx.canvas)
+        // TASK-1377: a view that held and is still the one drawn vouches for the light map (atmosphericLighting.trust): the
+        // frame's lightMap calls (the tiles, the lit edges) and the tasks building its tiles skip the whole board's light
+        // state. exact: its whole state compared (litViewHolds' exact, not the rest snapshot's cell layer compare).
+        if (Grid.litTrust && holds && view === holds)
+            atmosphericLighting.trust = {board: this, view, rebuilds: view.rebuilds, exact: !view.rest || view.rest.done !== LIT_REST_BANDS}
         const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
         // TASK-1372 (Grid.litFirstViewSteps): a view with more than LIT_FRAME_TILES of the tiles on the canvas not built and
         // no stand-in for them (no surface cache yet: a new game's first frames) is not drawn: the frame draws the board
@@ -4078,8 +4089,11 @@ class Grid extends SpritesGroup {
                 // the frames draw live LIT_FIRST_TILE_BUDGET), then the bands.
                 const shown = missing.filter(m => m.shown && !view.tiles.has(m.u + ',' + m.v))
                 if (shown.length) {
-                    for (const {u, v} of shown.slice(0, view.unbuilt ? LIT_FIRST_TILE_BUDGET : LIT_TILE_BUDGET))
-                        this.litTile(view, u, v)
+                    // TASK-1377: the task's tiles compare the board's light state once (atmosphericLighting.checkedOnce).
+                    atmosphericLighting.checkedOnce(this, () => {
+                        for (const {u, v} of shown.slice(0, view.unbuilt ? LIT_FIRST_TILE_BUDGET : LIT_TILE_BUDGET))
+                            this.litTile(view, u, v)
+                    })
                 }
                 else if (view.rest === rest && rest.done < LIT_REST_BANDS)
                     this.buildLitRestBand(view, rest, rest.done)
@@ -4088,8 +4102,10 @@ class Grid extends SpritesGroup {
             // After a patch dropped some, one a task while the camera rests.
             const budget = view.unbuilt ? LIT_FIRST_TILE_BUDGET :
                 view.patchedTiles && !gameEvent.screen.surfaceMoving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
-            for (const {u, v} of missing.slice(0, budget))
-                this.litTile(view, u, v)
+            atmosphericLighting.checkedOnce(this, () => {
+                for (const {u, v} of missing.slice(0, budget))
+                    this.litTile(view, u, v)
+            })
         })
     }
     // TASK-1372: whether view's split job (prepareLitCellLayer) still splits its rest snapshot: else it is dropped, and so is
@@ -4171,11 +4187,21 @@ class Grid extends SpritesGroup {
     }
     // The frame's light where the lit tiles left the board's edge unlit (litEdges), after the
     // tiles and before the units; none over the rest snapshot.
+    // TASK-1377: the runs kept (litEdgeRuns) for the view's edges, its offset on the canvas, the canvas size and the squares
+    // the stand-in drew; found again (litWork.edgeRuns) only when one of them changed.
     drawLitEdges(ctx) {
         const {view, ox, oy, rest, missing} = this.litFrame
         if (rest)
             return
-        const cw = ctx.canvas.width, ch = ctx.canvas.height, runs = []
+        const cw = ctx.canvas.width, ch = ctx.canvas.height, squares = missing ? [...missing].join(';') : ''
+        const kept = this.litEdgeRuns
+        if (Grid.litTrust && kept && kept.view === view && kept.edges === view.edges && kept.ox === ox && kept.oy === oy && kept.cw === cw &&
+                kept.ch === ch && kept.squares === squares) {
+            atmosphericLighting.drawEdges(ctx, this, kept.runs)
+            return
+        }
+        ++this.litWork.edgeRuns
+        const runs = []
         const add = (x0, y0, x1, y1) => {
             x0 = Math.max(x0 + ox, 0); y0 = Math.max(y0 + oy, 0)
             x1 = Math.min(x1 + ox, cw); y1 = Math.min(y1 + oy, ch)
@@ -4199,6 +4225,7 @@ class Grid extends SpritesGroup {
                         add(Math.max(run.x, u * LIT_TILE), Math.max(run.y, v * LIT_TILE),
                             Math.min(run.x + run.w, (u + 1) * LIT_TILE), Math.min(run.y + run.h, (v + 1) * LIT_TILE))
         }
+        this.litEdgeRuns = {view, edges: view.edges, ox, oy, cw, ch, squares, runs}
         atmosphericLighting.drawEdges(ctx, this, runs)
     }
     releaseLitTile(tile) {
@@ -4210,6 +4237,7 @@ class Grid extends SpritesGroup {
             for (const tile of this.litView.tiles.values())
                 this.releaseLitTile(tile)
         this.litView = undefined
+        this.litEdgeRuns = undefined
     }
     // Releases every lit canvas (the surface cache draws the board).
     releaseLitCanvases() {
@@ -5090,6 +5118,9 @@ Grid.lodFrames = true
 // level-of-detail threshold are held (Grid.stillFrameCandidate).
 Grid.simpleCulling = true
 Grid.stillFrames = true
+// TASK-1377: a lit view holding exactly vouches for the light map (atmosphericLighting.trust) and drawLitEdges keeps its runs
+// (litEdgeRuns). False: every frame compares the whole board's light state and finds the runs again.
+Grid.litTrust = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).
