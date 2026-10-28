@@ -88,13 +88,14 @@ let spriteImages = ['town', 'farm', 'noob', 'archer',
         'catapult', 'catapultLeft', 'barrack', 'wall', 'bastion', 'tower',
         'mountain', 'lake', 'sea', 'goldmine', 'bush', 'hill'].concat(demonSpriteImages, undeadSpriteImages)
 let images = spriteImages.slice()
-// Images whose last request failed: they still count as loaded (so the menu starts) and are cached as a blank placeholder.
+// Images whose last request failed: they still count as loaded (so games can start) and are cached as a blank placeholder.
 let failedImages = new Set()
 for (let i = 0; i < images.length; ++i) {
     assets[images[i]].onload = function() {
         failedImages.delete(images[i])
         ++imagesCountLoaded
         cachedImages[images[i]] = cacheImage(images[i])
+        settleGameSprites()
         if ((atmosphericNatureImages.includes(images[i]) || atmosphericBuildingImages[images[i]]) && typeof grid != 'undefined' && grid)
             grid.surfaceCacheState = undefined
     }
@@ -109,6 +110,7 @@ for (let i = 0; i < images.length; ++i) {
         failedImages.add(images[i])
         ++imagesCountLoaded
         cachedImages[images[i]] = cacheImage(images[i])
+        settleGameSprites()
     }
 }
 
@@ -220,11 +222,14 @@ function loadAssets() {
     for (const name of menuImages) assets[name].src = "assets/" + name + ".png"
     for (const name in statIconImages) assets[name].src = statIconImages[name]
 
-    loadSprites()
+    // The game sprites the menu draws now, the others once the menu has started (waitForImagesLoad).
+    loadSprites(spriteImages.filter(name => MENU_CRITICAL_IMAGES.includes(name)))
 }
-function loadSprites() {
+function loadSprites(names = spriteImages) {
     let spritesFolder = otherSettings.usePolishedSprites ? "sprites" : "spritesOld"
     for (let i = 0; i < spriteImages.length; ++i) {
+        if (!names.includes(spriteImages[i]))
+            continue
         if (undeadSpriteImages.includes(spriteImages[i])) {
             assets[spriteImages[i]].src = "assets/" + spriteImages[i] + ".svg"
             continue
@@ -243,18 +248,57 @@ function loadSprites() {
         assets[spriteImages[i]].src = "assets/" + folder + "/" + spriteImages[i] + ".svg"
     }
 }
+// What the menu itself draws (menu/, the menu interfaces): the logo, check marks, slider arrows and the
+// hot seat / tutorial banner emblems (MENU_EMBLEMS: 'normchel', 'noob'). The menu starts once these and the fonts are
+// ready; the other game sprites load behind it, and every entry into a game waits for them (whenGameSpritesReady).
+const MENU_CRITICAL_IMAGES = ['logo', 'checkMark', 'leftButton', 'rightButton', 'normchel', 'noob']
+function menuImagesSettled() {
+    return MENU_CRITICAL_IMAGES.every(name => assets[name].complete || failedImages.has(name))
+}
+// True once every game sprite has loaded or failed and cacheAllImages ran; gameSpritesReady resolves then.
+let gameSpritesLoaded = false
+let resolveGameSprites
+const gameSpritesReady = new Promise(resolve => resolveGameSprites = resolve)
+// The game entry waiting for the sprites ({control}: the pressed menu control the menu marks 'Loading…'), or null.
+let gameSpritesWaiting = null
+// Runs run() once the game sprites are loaded and cached: at once when they already are, else when gameSpritesReady
+// resolves, with the pressed control (Button.pressed) shown as loading meanwhile. A later entry replaces a waiting one.
+function whenGameSpritesReady(run, control = Button.pressed) {
+    if (gameSpritesLoaded)
+        return run()
+    const waiting = gameSpritesWaiting = {control, since: performance.now()}
+    return gameSpritesReady.then(() => {
+        if (gameSpritesWaiting !== waiting)
+            return
+        gameSpritesWaiting = null
+        return run()
+    })
+}
 function waitForImagesLoad() {
-    if (imagesCountLoaded == images.length) {
-        cacheAllImages()
-        if (typeof mainCanvas.addEventListener == 'function') {
-            mainCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
-            mainCanvas.addEventListener('contextrestored', restoreImageCaches)
-        }
-        // The first menu frame waits for the menu fonts (they load in parallel with the images).
-        if (menuFontsReady) menuFontsReady.then(() => menu.start())
-        else menu.start()
-        return 
+    if (!menuImagesSettled()) {
+        requestAnimationFrame(waitForImagesLoad)
+        return
     }
-    //console.log(imagesCountLoaded)
-    requestAnimationFrame(waitForImagesLoad)
+    if (typeof mainCanvas.addEventListener == 'function') {
+        mainCanvas.addEventListener('contextlost', () => requestAnimationFrame(restoreImageCaches))
+        mainCanvas.addEventListener('contextrestored', restoreImageCaches)
+    }
+    // The first menu frame waits for the menu fonts (they load in parallel with the images). The other game sprites
+    // are requested then, so they do not hold up the menu's own downloads.
+    const startMenu = () => {
+        menu.start()
+        loadSprites(spriteImages.filter(name => !MENU_CRITICAL_IMAGES.includes(name)))
+    }
+    if (menuFontsReady) menuFontsReady.then(startMenu)
+    else startMenu()
+}
+// Called by every sprite load or failure: once every sprite has loaded or failed (a reloaded one counts again, so the
+// count alone is not enough) it caches them all (once) and resolves gameSpritesReady.
+function settleGameSprites() {
+    if (gameSpritesLoaded || imagesCountLoaded < images.length ||
+            !images.every(name => failedImages.has(name) || (assets[name].complete && assets[name].naturalWidth > 0)))
+        return
+    cacheAllImages()
+    gameSpritesLoaded = true
+    resolveGameSprites()
 }

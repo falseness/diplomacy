@@ -1,4 +1,5 @@
 class Button {
+    static pressed = null
     constructor(rect, text, clickFunc, parameters, canClick = true, callThis) {
         this.rect = rect
         this.text = text
@@ -90,11 +91,17 @@ class Button {
     }
     click(pos) {
         if (this.canClick && this.isInside(pos)) {
-            if (this.callThis) {
-                this.clickFunc.call(this.callThis, this.parameters)
-            }
-            else {
-                this.clickFunc(this.parameters)
+            // The button whose click is running (whenGameSpritesReady marks it while a game waits for its sprites).
+            Button.pressed = this
+            try {
+                if (this.callThis) {
+                    this.clickFunc.call(this.callThis, this.parameters)
+                }
+                else {
+                    this.clickFunc(this.parameters)
+                }
+            } finally {
+                Button.pressed = null
             }
             return true
         }

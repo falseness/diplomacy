@@ -31,21 +31,28 @@ function menuTouchEnd(event) {
     let pos = getEventPos(event)
     menu.touchEnd(pos)
 }
+// Every entry into a game waits for the game sprites (render/loadassets.js whenGameSpritesReady).
 function start(_slot) {
-    gameSlot = _slot
     let game_mode = menu.previousTree
-    GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer)
+    return whenGameSpritesReady(() => {
+        gameSlot = _slot
+        GameManager.start(game_mode.selectedMap, game_mode.isFogOfWar, game_mode.isDynamicTimer)
+    })
 }
 function startAI(_slot) {
-    gameSlot = _slot
-
-    return GameManager.startAI()
+    return whenGameSpritesReady(() => {
+        gameSlot = _slot
+        return GameManager.startAI()
+    })
 }
 function load(_slot) {
-    gameSlot = _slot
-    if (!saveManager.load())
-        return
-    GameManager.load()
+    // The save is unpacked into the game's entities, so it waits too.
+    return whenGameSpritesReady(() => {
+        gameSlot = _slot
+        if (!saveManager.load())
+            return
+        GameManager.load()
+    })
 }
 
 class Tree {
@@ -1912,7 +1919,15 @@ class HubLists {
 // same panel with emptyClickable: there a click on any card, empty or saved, calls clickFunc (start overwrites it).
 class LoadSlotsPanel extends HubPanel {
     constructor(slotsCount, clickFunc, emptyClickable = false) {
-        super({selectedId: null, lastPanel: null, choose: row => clickFunc(row.slot)}, 'Saved games',
+        // The chosen card is the pressed control a game start marks while it waits for the sprites.
+        super({selectedId: null, lastPanel: null, choose: row => {
+            Button.pressed = {rect: this.rowRect(row.slot)}
+            try {
+                clickFunc(row.slot)
+            } finally {
+                Button.pressed = null
+            }
+        }}, 'Saved games',
             n => n === 1 ? '1 saved game' : `${n} saved games`, 'save')
         this.slotsCount = slotsCount
         this.emptyClickable = emptyClickable
@@ -2164,7 +2179,9 @@ class OnlineHubTree {
     // game:open; the first board enters the game (options/onlineLogic.js).
     openGame(gameID) {
         if (this.menu.selectedTree !== this || onlineSession.openGameID !== null) return
-        openLobbyGame(gameID)
+        whenGameSpritesReady(() => {
+            if (this.menu.selectedTree === this && onlineSession.openGameID === null) openLobbyGame(gameID)
+        })
     }
     // game:replay of a finished game, then the replay viewer; exit comes back to the hub. Errors show on the notice line.
     async openReplay(gameID) {
@@ -2178,12 +2195,14 @@ class OnlineHubTree {
     }
     // A game:replay recording in the replay viewer, exit back to the hub (also the game-over screen's 'Watch replay').
     showReplay(recording) {
-        try {
-            new ReplayViewer(recording, this).open()
-            this.feed?.stop()
-        } catch (e) {
-            this.showReplayError(e.message)
-        }
+        whenGameSpritesReady(() => {
+            try {
+                new ReplayViewer(recording, this).open()
+                this.feed?.stop()
+            } catch (e) {
+                this.showReplayError(e.message)
+            }
+        })
     }
     showReplayError(error) {
         this.notice = 'could not open the replay: ' + error
@@ -3425,6 +3444,7 @@ class Menu {
             if (this.selectedTree.logo || !this.selectedTree.isCoop) logo.draw(ctx)
             betaTag.draw(ctx)
             this.selectedTree.draw(ctx)
+            this.drawGameSpritesWaiting(ctx)
             errorWindow.draw(ctx)
         } finally {
             Text.defaultFamily = gameFamily
@@ -3433,6 +3453,25 @@ class Menu {
             ctx.restore()
         }
     }
+}
+
+// While a game entry waits for the game sprites: 'Loading…' over the pressed control (a centred pill without one).
+Menu.prototype.drawGameSpritesWaiting = function(ctx) {
+    if (!gameSpritesWaiting)
+        return
+    const rect = gameSpritesWaiting.control?.rect
+    const box = rect && rect.width > 0 ? rect : {x: WIDTH * 0.35, y: HEIGHT * 0.86, width: WIDTH * 0.3, height: HEIGHT * 0.07}
+    ctx.save()
+    ctx.fillStyle = 'rgba(20, 16, 10, 0.72)'
+    roundedRectPath(ctx, box.x, box.y, box.width, box.height, Math.min(box.width, box.height) * 0.12)
+    ctx.fill()
+    const dots = '.'.repeat(1 + Math.floor((performance.now() - gameSpritesWaiting.since) / 400) % 3)
+    ctx.fillStyle = '#fbe7b0'
+    ctx.font = `${Math.round(Math.min(box.height * 0.32, box.width * 0.12))}px ${MENU_FONT_FAMILY}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('Loading' + dots, box.x + box.width / 2, box.y + box.height / 2)
+    ctx.restore()
 }
 
 let menu = new Menu()

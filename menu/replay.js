@@ -774,6 +774,9 @@ class ReplayTree {
         }
     }
     open(source) {
+        // A replay builds a board, so it waits for the game sprites like every game entry.
+        if (!gameSpritesLoaded)
+            return whenGameSpritesReady(() => this.open(source))
         let viewer
         try {
             viewer = new ReplayViewer(source)
