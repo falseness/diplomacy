@@ -1,7 +1,7 @@
 // Hand-made tutorial maps. The human always plays red (slot 1, fog of war) against
 // blue (slot 2, an AI player). `pass` picks the win rule (TutorialManager.isPassed):
 // 'enemyUnitsDead' every blue unit is dead, 'enemyLost' blue has no towns and no units,
-// 'coopVictory' the co-op result is victory while red still owns a town,
+// 'coopVictory' the co-op result is victory while red still owns a town (none needed if the map gives red none),
 // 'captureTowns' red owns every town of `targets` [{x, y}], 'surviveRounds' gameRound
 // reaches `rounds` while red still owns a town (a unit if the map gives red no town),
 // 'enemyTypesDead' no blue unit of a class named in `types` is alive (other classes ignored).
@@ -254,6 +254,53 @@ function createTutorial19Map() {
         {x: 7, y: 0, category: 'siege'}
     ]
     map.testName = 'tutorial 19'
+    return map
+}
+
+function createTutorial21Map() {
+    // All as one: red has no town (so no economy, see options/gamestart.js createPlayers) and two groups, a KOHb with
+    // three noobs in the north-east (9,1), (8,1), (9,2), (9,3) and four noobs in the south (1,7), (2,8), (3,8),
+    // (5,8). A ranged demon portal (4,4) in the middle is ringed by six ember archers on its six neighbour cells
+    // (hp 1, dmg 1, movement 2, range 3). Every red unit stands exactly 4 hexes from the nearest archer, so a group
+    // that walks in alone is shot down by the whole ring: both groups must close in and strike in the same turn.
+    // The lesson starts at round 16 (entry startRound), the portal sends another ember archer every 4 rounds.
+    // Destroying the portal and every demon unit wins (pass 'coopVictory').
+    const map = new GameMap(
+        {x: 10, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 0,
+                towns: [],
+                units: [
+                    {x: 9, y: 1, type: KOHb},
+                    {x: 8, y: 1, type: Noob},
+                    {x: 9, y: 2, type: Noob},
+                    {x: 9, y: 3, type: Noob},
+                    {x: 1, y: 7, type: Noob},
+                    {x: 2, y: 8, type: Noob},
+                    {x: 3, y: 8, type: Noob},
+                    {x: 5, y: 8, type: Noob}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([[6, 0], [7, 0], [6, 1], [0, 4], [0, 5], [1, 5], [8, 7], [9, 7], [9, 8]]),
+        coordDictionary([[0, 1], [1, 1], [9, 5], [7, 6]]),
+        coordDictionary([[2, 0], [3, 0], [0, 7], [7, 4], [8, 4], [6, 7], [4, 7]]),
+        [],
+        {type: 'rectangular'},
+        {
+            tutorial: true,
+            units: [[3, 3], [3, 4], [4, 3], [4, 5], [5, 3], [5, 4]].map(([x, y]) => ({x, y, type: EmberArcher}))
+        }
+    )
+    map.portals = [{x: 4, y: 4, category: 'ranged'}]
+    map.testName = 'tutorial 21'
     return map
 }
 
@@ -1087,15 +1134,17 @@ const tutorials = [
     {id: 'tutorial-18', title: 'Tutorial 6: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
     {id: 'tutorial-20', title: 'Tutorial 7: Rotate and Heal', pass: 'enemyTypesDead', types: ['Noob'],
         get map() { return createTutorial20Map() }},
-    {id: 'tutorial-19', title: 'Tutorial 8: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
+    {id: 'tutorial-21', title: 'Tutorial 8: All as One', pass: 'coopVictory', startRound: 16,
+        get map() { return createTutorial21Map() }},
+    {id: 'tutorial-19', title: 'Tutorial 9: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
         get map() { return createTutorial19Map() }},
-    {id: 'tutorial-2', title: 'Tutorial 9: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 10: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-15', title: 'Tutorial 11: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+    {id: 'tutorial-2', title: 'Tutorial 10: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 11: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-15', title: 'Tutorial 12: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-13', title: 'Tutorial 12: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
+    {id: 'tutorial-13', title: 'Tutorial 13: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 13: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
+    {id: 'tutorial-6', title: 'Tutorial 14: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
         get map() { return createTutorial6Map() }},
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
