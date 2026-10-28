@@ -1,7 +1,8 @@
 // Browser-only (not in the server's rules script list, server/gameScriptList.js, so the rules version stays as it is):
 // the 'tutorial' screen as lesson cards, in place of menu/menu.js TutorialTree (installed at the end of this file).
 // A "Tutorial" heading under the logo, every entry of options/tutorials.js as a card in 3 equal columns between the
-// heading and Back (always 3 x 3 shown, see TutorialCardsTree.grids): a round cream
+// heading and Back (always 3 x 3 shown, see TutorialCardsTree.grids; the cards keep the size the menu opens with
+// while scrolling, see TutorialCardsTree.layout): a round cream
 // medallion at the left, the lesson number in gold and its name (at most 2 lines, never shrunk, ellipsis past them) at
 // the right, both from the title "Tutorial N: Name". Passed lessons (readTutorialPassed, re-read on every enter) carry a
 // gold check badge; the first lesson in menu order that is not passed is Next: a thick gold rim, a gold glow and a
@@ -150,13 +151,15 @@ class TutorialCardsTree {
         this.layout()
     }
     // The heading under the logo, Back at the bottom, the grid of equal cards between them (chooseGrid); rows above or
-    // below the shown ones are moved off the grid and ignore clicks. While rows follow the shown ones, the cards are
-    // shorter so the shown rows and PEEK of a card fit the grid, and the next row is placed under them as the peek
-    // (clipped to the grid when drawn, ignoring clicks); this.peek keeps its band, its entries and the pill. Peek cards
+    // below the shown ones are moved off the grid and ignore clicks. The cards keep the size the menu opens with
+    // (firstRow 0) at every firstRow: with rows to scroll, short enough that the shown rows and PEEK of a card fit the
+    // grid (less the divider band's extra height when firstRow 0 shows it). While rows follow the shown ones, the next
+    // row is placed under them as the peek (clipped to the grid when drawn, ignoring clicks); this.peek keeps its band,
+    // its entries and the pill. At the last row nothing peeks and the strip under the last row stays empty. Peek cards
     // whose medallion and name would sit in the hidden part (tall cards: portrait phones) draw them centred in the
     // band instead (entry.contentY). While the divider row (dividerRow) is shown or peeks, the divider's band takes the
-    // gap above it (this.divider): the cards are shorter by the band's extra height and the rows from it on move down
-    // by it; cardStep stays a card and a gap, so scrolling keeps whole rows. No pill is shown with the divider.
+    // gap above it (this.divider) and the rows from it on move down by its extra height; cardStep stays a card and a
+    // gap, so scrolling keeps whole rows. No pill is shown with the divider.
     layout() {
         const u = hubUnit(), logo = this.menu.logo.bounds
         const headingTop = logo.y + logo.height + 0.2 * u
@@ -172,11 +175,15 @@ class TutorialCardsTree {
         this.firstRow = Math.min(this.firstRow, this.maxFirstRow)
         const peeking = this.firstRow < this.maxFirstRow, width = chosen.card.width
         const f = u * hubFontScale(), band = Math.max(2.6 * u, 2.4 * f), dividerRow = this.dividerRow
-        const dividerAt = dividerRow !== null && dividerRow > this.firstRow &&
-            dividerRow < this.firstRow + this.shownRows + (peeking ? 1 : 0) ? dividerRow - this.firstRow : null
+        // The divider's shown row at firstRow, or null while it is neither shown nor peeking.
+        const dividerAtRow = firstRow => dividerRow !== null && dividerRow > firstRow &&
+            dividerRow < firstRow + this.shownRows + (firstRow < this.maxFirstRow ? 1 : 0) ? dividerRow - firstRow : null
+        const dividerAt = dividerAtRow(this.firstRow)
         const extra = dividerAt === null ? 0 : band - gap
-        const height = peeking ? (this.grid.height - gap * this.shownRows - extra) / (this.shownRows + TutorialCardsTree.PEEK) :
-            (this.grid.height - gap * (this.shownRows - 1) - extra) / this.shownRows
+        // The card size the menu opens with (firstRow 0) at every firstRow: no growing at the last row.
+        const openPeeking = this.maxFirstRow > 0, openExtra = dividerAtRow(0) === null ? 0 : band - gap
+        const height = openPeeking ? (this.grid.height - gap * this.shownRows - openExtra) / (this.shownRows + TutorialCardsTree.PEEK) :
+            (this.grid.height - gap * (this.shownRows - 1) - openExtra) / this.shownRows
         this.cardStep = height + gap
         const rowY = row => this.grid.y + row * this.cardStep + (dividerAt !== null && row >= dividerAt ? extra : 0)
         this.divider = dividerAt === null ? null : {x: this.grid.x, y: rowY(dividerAt) - band, width: this.grid.width,
