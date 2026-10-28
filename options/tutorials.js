@@ -259,12 +259,14 @@ function createTutorial19Map() {
 
 function createTutorial21Map() {
     // All as one: red has no town (so no economy, see options/gamestart.js createPlayers) and two groups, a KOHb with
-    // three noobs in the north-east (9,1), (8,1), (9,2), (9,3) and four noobs in the south (1,7), (2,8), (3,8),
-    // (5,8). A ranged demon portal (4,4) in the middle is ringed by six ember archers on its six neighbour cells
-    // (hp 1, dmg 1, movement 2, range 3). Every red unit stands exactly 4 hexes from the nearest archer, so a group
-    // that walks in alone is shot down by the whole ring: both groups must close in and strike in the same turn.
-    // The lesson starts at round 16 (entry startRound), the portal sends another ember archer every 4 rounds.
-    // Destroying the portal and every demon unit wins (pass 'coopVictory').
+    // three noobs in the north-east (9,2), (8,1), (9,1), (9,3) and four wounded noobs (hp 1) in the south (1,7),
+    // (2,8), (3,8), (5,8). A ranged demon portal (4,4) in the middle is ringed by six ember archers on its six
+    // neighbour cells (hp 1, dmg 1, movement 2, range 3). Every red unit stands exactly 4 hexes from the nearest
+    // archer, so a group that walks in alone is shot down by the whole ring: both groups must close in in the same
+    // turn and then hit every archer they can reach together, the south noobs taking the west of the ring.
+    // The lesson starts at round 17 (entry startRound), the portal sends another ember archer at round 20 and then
+    // every 4 rounds. Destroying the portal and every demon unit wins (pass 'coopVictory').
+    // TASK-1417 balance: SimpleAi as red loses, the coordinated strike wins (KOHb/noob swap, south hp 1, round 17).
     const map = new GameMap(
         {x: 10, y: 9},
         [
@@ -277,14 +279,14 @@ function createTutorial21Map() {
                 gold: 0,
                 towns: [],
                 units: [
-                    {x: 9, y: 1, type: KOHb},
+                    {x: 9, y: 2, type: KOHb},
                     {x: 8, y: 1, type: Noob},
-                    {x: 9, y: 2, type: Noob},
+                    {x: 9, y: 1, type: Noob},
                     {x: 9, y: 3, type: Noob},
-                    {x: 1, y: 7, type: Noob},
-                    {x: 2, y: 8, type: Noob},
-                    {x: 3, y: 8, type: Noob},
-                    {x: 5, y: 8, type: Noob}
+                    {x: 1, y: 7, type: Noob, hp: 1},
+                    {x: 2, y: 8, type: Noob, hp: 1},
+                    {x: 3, y: 8, type: Noob, hp: 1},
+                    {x: 5, y: 8, type: Noob, hp: 1}
                 ]
             }
         ],
@@ -1134,7 +1136,7 @@ const tutorials = [
     {id: 'tutorial-18', title: 'Tutorial 6: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
     {id: 'tutorial-20', title: 'Tutorial 7: Rotate and Heal', pass: 'enemyTypesDead', types: ['Noob'],
         get map() { return createTutorial20Map() }},
-    {id: 'tutorial-21', title: 'Tutorial 8: All as One', pass: 'coopVictory', startRound: 16,
+    {id: 'tutorial-21', title: 'Tutorial 8: All as One', pass: 'coopVictory', startRound: 17,
         get map() { return createTutorial21Map() }},
     {id: 'tutorial-19', title: 'Tutorial 9: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
         get map() { return createTutorial19Map() }},
