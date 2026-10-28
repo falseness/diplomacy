@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "5967cbc401880a31f6e8d22b250e94e8cdb2001583ea23a6cf988bb29f8ed706",
+  "rulesVersion": "c55c8e75cfa82c8c2727f233e3aa46977da312c48ab75ed2646cdb6197dd1235",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "6ffb2cb0391528f4510622183ead02b44e439efb467d1b3dd43a7fa1021309b8",
-      "bytes": 12009
+      "sha256": "2e613ecd23120033762d64e6daccc76e40165a75afddd25bcc2224663664557f",
+      "bytes": 14513
     },
     {
       "path": "render/staticons.js",
@@ -205,8 +205,8 @@
     },
     {
       "path": "sprites/elements/button.js",
-      "sha256": "ac80258ad53025806592bf12a673a1bf77317252c9e39c895ec3c4b52fe20439",
-      "bytes": 2244
+      "sha256": "27fe2e678bcbcb2492edb36d2678d6e62ffad4bfed4ee34a9fd27a72eaa16ff3",
+      "bytes": 2539
     },
     {
       "path": "sprites/elements/menuButton.js",
@@ -295,13 +295,13 @@
     },
     {
       "path": "menu/replay.js",
-      "sha256": "2fb8236a793480260db2e4e5329749eb91d2a1eb6d916fd85363d623e8c6b54e",
-      "bytes": 35756
+      "sha256": "d6bc3a2e6a6355761cdd5601a1dde5efe65fbd7ee20e73b2ab916365c3d3d3f9",
+      "bytes": 35945
     },
     {
       "path": "menu/menu.js",
-      "sha256": "0e706e09c4c9f9fb1168a50b931fd7ed84e8a4b99a224636c0ccc6cb9f3c96eb",
-      "bytes": 156416
+      "sha256": "312c7d0e62f381f933b968dd9ae75e725256c6a2078320e9687f711fea630a58",
+      "bytes": 158252
     },
     {
       "path": "sprites/hexagon.js",
@@ -310,13 +310,13 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "db769eb743a34fac1ed62d034f06be96f9ede5a1b223b2e809fae76d8de8fd5e",
-      "bytes": 296453
+      "sha256": "fdff5e9a9108bd36b8ee3441a35c3adc793d2bfc0e9f35f5f000480b2aaa3d8d",
+      "bytes": 307298
     },
     {
       "path": "sprites/entities/hpBar.js",
-      "sha256": "0b5653d348527a42ed3fa8306454081320c9d0855ba9e05583d2796090b67ab6",
-      "bytes": 4371
+      "sha256": "cd60a974c14c3a5ab39e4352cfbd19598ce7810c202ea848132b5de1d5a13cdf",
+      "bytes": 4536
     },
     {
       "path": "sprites/entities/entity.js",
