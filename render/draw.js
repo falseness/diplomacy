@@ -3,7 +3,8 @@ function drawMain() {
     if (grid.drawZoomRaster(mainCtx))
         return
     // Cells too small for their details: a level-of-detail frame, recorded and made at the end unless it repeats the
-    // frame already on the canvas (TASK-1375, Grid.beginLodFrame).
+    // frame before, whose board is then drawn back (TASK-1375, Grid.beginLodFrame); so is a still frame at any scale
+    // (TASK-1376, Grid.stillFrameCandidate).
     const lod = grid.beginLodFrame(mainCtx)
     const ctx = lod ? lod.context : mainCtx
     // An opaque sky raster covers the whole canvas, so it needs no clear under it; the board's lit

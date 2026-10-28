@@ -368,11 +368,15 @@
         if (proto.endLodFrame) {
             const endLod = proto.endLodFrame
             proto.endLodFrame = function(...args) {
+                // TASK-1376: a still frame above the threshold held the same way.
+                const still = this.stillHolds
                 const held = endLod.apply(this, args)
-                if (active && held) work.renderPath = 'lod-held'
+                if (active && held) work.renderPath = this.stillHolds !== still ? 'still-held' : 'lod-held'
                 return held
             }
         }
+        // TASK-1376: a held frame draws the board's snapshot (surface, buildings, units, texts) in one drawImage.
+        if (proto.drawHeldFrame) proto.drawHeldFrame = labelled(proto.drawHeldFrame, 'surface')
         proto.drawOverlayLayer = function(...args) {
             const layered = layer.apply(this, args)
             if (active && layered) work.overlayLayer = true

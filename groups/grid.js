@@ -105,6 +105,12 @@ class Grid extends SpritesGroup {
         this.lodRecorder = undefined
         this.lodFrame = undefined
         this.lodHolds = 0
+        // TASK-1376: the same recording and hold for still frames at any scale (stillFrameCandidate): whether the frame
+        // being drawn is recorded as one, the frames held, and the held frame's refreshes (a steady frame made on the
+        // canvas, whose calls the next frames repeat).
+        this.stillRecording = false
+        this.stillHolds = 0
+        this.stillRefreshes = 0
         // Lit tiles and the rest snapshot above the surface cache's scale (drawLitView): the view,
         // the snapshot's canvas, spare tile canvases and what the frame drew.
         this.litView = undefined
@@ -617,11 +623,11 @@ class Grid extends SpritesGroup {
         return cell.unit.notEmpty() || !!building.hasBar || !!building.isPreparingManufacture ||
             !!building.isDemonPortal || building.isBuildingProduction()
     }
-    // The cell index range whose drawing can reach ctx's canvas: with atmospheric visuals and an
-    // axis-aligned transform, the cells centred within a margin of the canvas that holds any
-    // hexagon, sprite, shadow, silhouette or bar drawn for a cell; the whole board otherwise
-    // (and for the surface cache, whose raster holds the whole board). Per-frame loops skip the
-    // other cells, so a zoomed-in large board does not walk every cell every frame.
+    // The cell index range whose drawing can reach ctx's canvas: with an axis-aligned transform, the
+    // cells centred within a margin of the canvas that holds any hexagon, sprite, shadow, silhouette or
+    // bar drawn for a cell; the whole board otherwise (and for the surface cache, whose raster holds the
+    // whole board). Per-frame loops skip the other cells, so a zoomed-in large board does not walk every
+    // cell every frame. TASK-1376: simple visuals too (they drew the whole board at any zoom).
     // fullWidth keeps every column (whole rows).
     // A lit tile's canvas (buildLitTile) has a window, its part of the camera's canvas: whole rows
     // (fullWidth) and the cells of windowed ranges are those of the window, so the board's union
@@ -629,7 +635,7 @@ class Grid extends SpritesGroup {
     // During a patch's clipped redraw only the cells that can draw into its clip window.
     drawRange(ctx, fullWidth = false, windowed = false) {
         const all = {i0: 0, i1: this.arr.length, j0: 0, j1: this.arr.length ? this.arr[0].length : 0}
-        if (!otherSettings.atmosphericVisuals)
+        if (!otherSettings.atmosphericVisuals && !Grid.simpleCulling)
             return all
         const t = ctx.getTransform()
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0)
@@ -3222,7 +3228,8 @@ class Grid extends SpritesGroup {
     beginOverlayComposite(ctx) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
-        if (typeof Proxy !== 'function' || debug || this.lod || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob || this.litView?.layerJob ||
+        // Not inside a recorded still frame (stillFrameCandidate): that recording stands for the frame's calls.
+        if (typeof Proxy !== 'function' || debug || this.lod || this.stillRecording || !screen || screen.surfaceMoving || !this.surfaceCacheLit || this.surfacePatchJob || this.litView?.layerJob ||
                 this.surfaceLayerJob ||
                 t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !atmosphericBackground.opaqueOver(ctx))
             return null
@@ -3412,7 +3419,8 @@ class Grid extends SpritesGroup {
             // With its cell layer (splitCellLayer) the snapshot with the layer composed (TASK-1316, prepareLitCellLayer).
             ctx.drawImage(rest.canvas.cellLayered && rest.cellLayer && rest.shown || rest.canvas, 0, 0)
             ctx.restore()
-            this.litFrame = {view, rest: true}
+            // job: the frame drew a patch's or layer job's cells over the snapshot (not a still frame, stillFrameSteady).
+            this.litFrame = {view, rest: true, job: !!(view.patch || view.layerJob)}
             if (view.patch) {
                 this.drawPatchCells(ctx, view.patch, 'lit')
                 this.litPatchStep(view)
@@ -3936,7 +3944,8 @@ class Grid extends SpritesGroup {
             canvas.width = cw
             canvas.height = ch
         }
-        const camera = typeof cameraTransform !== 'undefined' && typeof mainCtx !== 'undefined' && ctx === mainCtx ? cameraTransform.capture(t) : null
+        const camera = typeof cameraTransform !== 'undefined' && typeof mainCtx !== 'undefined' &&
+            (ctx === mainCtx || ctx === this.lodRecorder?.context) ? cameraTransform.capture(t) : null
         // With the cell layer (Grid.liveCellLayer, the view's state) the finished snapshot is split (prepareLitCellLayer).
         canvas.cellLayered = this.withLitState(view, () => !!this.surfaceCacheLayered)
         return view.rest = {e: t.e, f: t.f, canvas, sky: atmosphericBackground.raster, done: 0, base: 0, camera}
@@ -4385,7 +4394,7 @@ class Grid extends SpritesGroup {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.drawImage(raster.canvas, x, y, w, h)
         ctx.restore()
-        this.lodFrame = undefined
+        this.dropHeldFrame()
         this.prepareSurfaceCache()
         this.countGestureFrame()
         return true
@@ -4417,12 +4426,14 @@ class Grid extends SpritesGroup {
     }
     // A level-of-detail frame is recorded (CanvasCallRecorder: drawMain's calls on ctx, the main canvas, without drawing) and
     // made on ctx at its end (endLodFrame), unless it is steady (lodFrameSteady) and its calls and key (lodFrameKey: the
-    // rasters it draws from) repeat those of the frame before it, which was such a frame made on ctx: the canvas already
-    // holds its pixels and the frame draws nothing (a still board seen whole). Returns the recorder, or null when the frame
-    // draws directly (not a level-of-detail frame).
+    // rasters it draws from) repeat those of the frame before it, which was such a frame made on ctx: the frame draws that
+    // frame's board back in one drawImage (drawHeldFrame; a still board seen whole). Returns the recorder, or null when the
+    // frame draws directly (not a level-of-detail frame).
+    // TASK-1376: so is a still frame candidate above the threshold (stillFrameCandidate), held by stillFrameSteady's rules.
     beginLodFrame(ctx) {
-        if (typeof Proxy !== 'function' || !this.lodTransform(ctx)) {
-            this.lodFrame = undefined
+        this.stillRecording = false
+        if (typeof Proxy !== 'function' || !this.lodTransform(ctx) && !(this.stillRecording = this.stillFrameCandidate(ctx))) {
+            this.dropHeldFrame()
             return null
         }
         const recorder = this.lodRecorder ||= new CanvasCallRecorder()
@@ -4436,7 +4447,10 @@ class Grid extends SpritesGroup {
         const t = ctx.getTransform(), b = this.surfaceCacheBounds
         return [t.a, t.d, t.e, t.f, ctx.canvas.width, ctx.canvas.height, otherSettings.atmosphericVisuals, atmosphericBackground.raster,
             mapDepth.atmosphericShadow, this.surfaceCache, this.surfaceCacheShown, this.surfaceCacheRevision, this.cellLayerRevision,
-            b?.left, b?.top, b?.width, b?.height]
+            b?.left, b?.top, b?.width, b?.height,
+            // TASK-1376: a still frame on the lit view's rest snapshot (changed in place by patches, layer jobs and splits).
+            this.litView, this.litView?.rest, this.litView?.rest?.canvas, this.litView?.rest?.shown, this.litView?.rest?.cellLayer,
+            this.cellLayerComposites, this.cellLayerRefreshes, this.litPatches, mapDepth.outline, mapDepth.rim]
     }
     // Whether a frame's calls can stand for the next frame's: drawn from the surface cache (not lit tiles or directly), no
     // camera move or zoom gesture, move tween, surface cache job
@@ -4447,25 +4461,133 @@ class Grid extends SpritesGroup {
         if (this.frameSurface !== true || !screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens() || this.surfaceCacheBuild || this.surfacePatchJob ||
                 this.surfaceLayerJob || this.surfaceSplitJob || this.litView?.layerJob || otherSettings.atmosphericVisuals && !this.surfaceCacheLit)
             return false
-        // A path object can change after it is drawn.
-        for (const c of recorder.calls)
-            if (c.args && c.args.some(a => typeof Path2D !== 'undefined' && a instanceof Path2D))
-                return false
+        return this.recordingSteady(recorder)
+    }
+    // Whether a recording's calls draw from nothing that can change unseen: a path object can change after it is
+    // drawn (but the board's outline and rim, made once per geometry: the key holds them), an image still loading
+    // draws nothing now and its pixels later.
+    recordingSteady(recorder) {
+        for (const c of recorder.calls) {
+            if (!c.args)
+                continue
+            for (const a of c.args) {
+                if (!a || typeof a !== 'object')
+                    continue
+                if (typeof Path2D !== 'undefined' && a instanceof Path2D && a !== mapDepth.outline && a !== mapDepth.rim)
+                    return false
+                if (typeof HTMLImageElement !== 'undefined' && a instanceof HTMLImageElement && !(a.complete && a.naturalWidth > 0))
+                    return false
+            }
+        }
         return true
     }
-    // Ends a level-of-detail frame (beginLodFrame): its calls made on ctx, or none when they repeat the frame before.
-    // Returns whether the frame was held.
+    // TASK-1376: still frames above the level-of-detail threshold. A frame of the main canvas with the camera at rest (no
+    // pan, zoom gesture or move tween) is recorded as a level-of-detail frame is (beginLodFrame) and made on the canvas
+    // only when it is not steady (stillFrameSteady) or its calls or rasters (the key) differ from the frame before: a still
+    // board is one drawImage of the held frame's board (drawHeldFrame), where it drew every sprite, bar, production
+    // preview and cell text again each frame (and on the surface-cache path the overlay composite's snapshot, which a
+    // recorded frame does not make: beginOverlayComposite). Its side effects (texts set and cleared, panels refreshed)
+    // are those of the drawing code, which runs as before.
+    stillFrameCandidate(ctx) {
+        // Logic texts (a selected unit's) are recorded calls as any other; debug draws are not held.
+        if (!Grid.stillFrames || this !== grid || debug || typeof mainCanvas === 'undefined' || ctx.canvas !== mainCanvas)
+            return false
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        const t = ctx.getTransform()
+        return !!screen && !screen.surfaceMoving && !screen.zoomGesture && !zoomRasterTweens() &&
+            t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
+    }
+    // Whether a recorded still frame (stillFrameCandidate) can stand for the next: the camera still at rest, and drawn from
+    // the surface cache as a steady level-of-detail frame is (lodFrameSteady), or from the lit view's finished rest snapshot
+    // drawn whole (no patch's or layer job's cells over it, no split or patch under way: they change it in place), or with
+    // simple visuals the board drawn directly (its sprites and hexagon images do not change).
+    stillFrameSteady(recorder) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (!screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens())
+            return false
+        if (this.frameSurface === true)
+            return this.lodFrameSteady(recorder)
+        if (otherSettings.atmosphericVisuals) {
+            const frame = this.litFrame, view = this.litView
+            if (this.frameSurface !== 'lit' || !frame || !frame.rest || frame.job || frame.view !== view || !view ||
+                    view.patch || view.layerJob || view.splitJob)
+                return false
+        }
+        else if (this.frameSurface !== false)
+            return false
+        return this.recordingSteady(recorder)
+    }
+    // Ends a level-of-detail frame (beginLodFrame): its calls made on ctx, or, when they repeat the frame before, the board
+    // as that frame left it (its snapshot, captureHeldFrame) drawn back in one drawImage. Returns whether the frame was held.
+    // TASK-1376: the interface is drawn on the same canvas after drawMain (interfaceCtx is mainCtx), so the canvas does not
+    // keep the board's pixels from one frame to the next: a steady frame made on the canvas is snapshot (the board without
+    // the interface) and a held frame draws that snapshot, then leaves ctx's state as the frame's calls left it, so the
+    // interface draws over the same pixels in the same state. Until the snapshot is ready (createImageBitmap resolves after
+    // the frame) the frames repeating it are made again; they are not new held frames (stillRefreshes).
     endLodFrame(ctx, recorder) {
+        const still = this.stillRecording
+        this.stillRecording = false
         recorder.key = this.lodFrameKey(ctx)
-        const last = this.lodFrame, steady = this.lodFrameSteady(recorder)
+        const last = this.lodFrame, steady = still ? this.stillFrameSteady(recorder) : this.lodFrameSteady(recorder)
         if (steady && last && last.serial === this.drawSerial - 1 && recorder.repeats(last)) {
             last.serial = this.drawSerial
-            ++this.lodHolds
-            return true
+            if (this.drawHeldFrame(ctx, last)) {
+                if (still) ++this.stillHolds
+                else ++this.lodHolds
+                return true
+            }
+            recorder.replay(ctx, true)
+            return false
         }
         recorder.replay(ctx, true)
-        this.lodFrame = steady ? {key: recorder.key, calls: recorder.calls, serial: this.drawSerial} : undefined
+        this.dropHeldFrame()
+        this.lodFrame = steady ? {key: recorder.key, calls: recorder.calls, serial: this.drawSerial, state: canvasStateOf(ctx), bitmap: null} : undefined
+        if (this.lodFrame) {
+            this.captureHeldFrame(ctx, this.lodFrame)
+            if (still)
+                ++this.stillRefreshes
+        }
         return false
+    }
+    // No held frame (its snapshot let go of).
+    dropHeldFrame() {
+        this.lodFrame?.bitmap?.close?.()
+        this.lodFrame = undefined
+    }
+    // Snapshots ctx's canvas (the board as drawMain left it, before the interface) for frame: an image bitmap of its
+    // pixels now, no drawing (none without createImageBitmap: the frames are then made, never held).
+    captureHeldFrame(ctx, frame) {
+        if (typeof createImageBitmap !== 'function')
+            return
+        let snapshot
+        try {
+            snapshot = createImageBitmap(ctx.canvas)
+        } catch (e) {
+            return
+        }
+        snapshot.then(bitmap => {
+            if (this.lodFrame === frame)
+                frame.bitmap = bitmap
+            else
+                bitmap.close?.()
+        }, () => {})
+    }
+    // Draws the held frame's snapshot (captureHeldFrame) over ctx's canvas, its pixels replaced, and gives ctx the state the
+    // frame's calls left it in. False when the snapshot is not ready.
+    drawHeldFrame(ctx, frame) {
+        const bitmap = frame.bitmap
+        if (!bitmap || bitmap.width !== ctx.canvas.width || bitmap.height !== ctx.canvas.height)
+            return false
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.globalCompositeOperation = 'copy'
+        ctx.drawImage(bitmap, 0, 0)
+        ctx.restore()
+        const state = frame.state
+        for (const name of CANVAS_STATE)
+            if (name in state && ctx[name] !== state[name]) ctx[name] = state[name]
+        if (state.lineDash) ctx.setLineDash(state.lineDash)
+        return true
     }
 }
 
@@ -4597,6 +4719,12 @@ class CanvasCallRecorder {
         if (typeof ctx.getLineDash === 'function') g.setLineDash(state.lineDash = ctx.getLineDash())
         this.matrix = t
         this.matrixStale = false
+        // TASK-1376: whether a recorded call changed the transform (with the saves made since, as save and restore keep
+        // it): until one does, getTransform answers the real context's. The scratch context keeps it in single precision
+        // (0.13729862868785858 for the camera's 0.13729863013467103), which code reading it then draws with (a lit rest
+        // snapshot made in a recorded frame was set up a hair off the camera, a level or two of its light off).
+        this.ownTransform = false
+        this.ownTransforms = []
         this.path = null
         const labels = typeof canvasCallLabels !== 'undefined' ? canvasCallLabels : null
         this.labels = labels
@@ -4613,6 +4741,8 @@ class CanvasCallRecorder {
     }
     call(name, args) {
         const g = this.scratch
+        if (name === 'getTransform' && !this.ownTransform)
+            return this.target.getTransform()
         if (CANVAS_QUERY_CALLS.has(name))
             return g[name](...args)
         if (CANVAS_READ_CALLS.has(name)) {
@@ -4633,6 +4763,19 @@ class CanvasCallRecorder {
         if (name === 'save' || name === 'restore' || name === 'translate' || name === 'scale' || name === 'rotate' ||
                 name === 'transform' || name === 'setTransform' || name === 'resetTransform' || name === 'reset')
             this.matrixStale = true
+        if (name === 'save')
+            this.ownTransforms.push(this.ownTransform)
+        else if (name === 'restore') {
+            if (this.ownTransforms.length)
+                this.ownTransform = this.ownTransforms.pop()
+        }
+        else if (name === 'reset') {
+            this.ownTransforms.length = 0
+            this.ownTransform = true
+        }
+        else if (name === 'translate' || name === 'scale' || name === 'rotate' || name === 'transform' || name === 'setTransform' ||
+                name === 'resetTransform')
+            this.ownTransform = true
         return result
     }
     transform() {
@@ -4766,6 +4909,14 @@ class CanvasCallRecorder {
     replay(ctx, overlays, from = 0, to = this.calls.length) {
         replayCanvasCalls(ctx, this.calls, this.labels, this.overlayEnd, overlays, from, to)
     }
+}
+// ctx's state properties and line dash (not its transform), as applyCanvasState and Grid.drawHeldFrame set them.
+function canvasStateOf(ctx) {
+    const state = {}
+    for (const name of CANVAS_STATE)
+        if (name in ctx) state[name] = ctx[name]
+    if (typeof ctx.getLineDash === 'function') state.lineDash = ctx.getLineDash()
+    return state
 }
 // Sets ctx's transform and the state properties of state (CanvasCallRecorder.begin's copy of a context's).
 function applyCanvasState(ctx, state) {
@@ -4935,6 +5086,10 @@ Grid.zoomRasters = true
 // every frame draws as above it.
 Grid.LOD_RADIUS = 8
 Grid.lodFrames = true
+// TASK-1376: simple visuals' frames walk the cells reaching the canvas only (drawRange); still frames above the
+// level-of-detail threshold are held (Grid.stillFrameCandidate).
+Grid.simpleCulling = true
+Grid.stillFrames = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).
