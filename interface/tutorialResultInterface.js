@@ -74,11 +74,14 @@ class TutorialResultInterface {
         return measured > 0 ? Math.min(1, width / measured) : 1
     }
     show(outcome) {
+        tutorialPauseInterface.hide()
         this.outcome = outcome
         this.layOut(outcome == 'victory' && TutorialManager.nextId() !== null)
         this.visible = true
     }
+    // Retry, Next tutorial, Back to tutorials and a tutorial's start hide the pause menu too.
     hide() {
+        tutorialPauseInterface.hide()
         this.visible = false
         this.outcome = null
     }

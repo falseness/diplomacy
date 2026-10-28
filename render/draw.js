@@ -464,8 +464,10 @@ function drawInterface() {
     timer.draw(interfaceCtx)
 
     nextTurnPauseInterface.draw(interfaceCtx)
-    if (gameSettings.tutorial)
+    if (gameSettings.tutorial) {
         tutorialResultInterface.draw(interfaceCtx)
+        tutorialPauseInterface.draw(interfaceCtx)
+    }
     const onlineResult = typeof onlineResultInterface !== 'undefined' ? onlineResultInterface : null
     onlineResult?.update()
     const outcome = gameSettings.coop && gameSettings.coop.result || hiddenGameEndText()

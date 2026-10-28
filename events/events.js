@@ -61,6 +61,10 @@ function getGameTouches(event) {
     const game = touches.filter(touch => !buttonTouchIds.has(touch.identifier))
     return game.length || touches.length != 1 ? game : touches
 }
+// The tutorial pause menu is shown: the board, the camera and the game keys wait (only clicks reach the menu).
+function isGamePaused() {
+    return typeof tutorialPauseInterface != 'undefined' && tutorialPauseInterface.visible
+}
 function touchstart(event) {
     event.stopPropagation()
 
@@ -72,11 +76,15 @@ function touchstart(event) {
     for (const touch of Array.from(event.changedTouches))
         if (isOnGameButton(clientToCanvas(touch.clientX, touch.clientY)))
             buttonTouchIds.add(touch.identifier)
+    if (isGamePaused())
+        return
     const touches = getGameTouches(event)
     gameEvent.touchstart(getTouchesPos(touches), touches.length)
 }
 function touchmove(event) {
     event.stopPropagation()
+    if (isGamePaused())
+        return
     
     const touches = getGameTouches(event)
     gameEvent.touchmove(getTouchesPos(touches), touches.length)
@@ -91,6 +99,9 @@ function touchend(event) {
     gameEvent.touchend(getTouchesPos(touches), touches.length)
 }
 function keydown(event) {
+    // Escape still toggles debug; every other key waits for Resume.
+    if (isGamePaused() && event.keyCode != Events.kEscapeKeycode)
+        return
     if (gameEvent.keyboardZoom(event))
         return
     gameEvent.keyboard(event.keyCode, event.shiftKey, event.repeat, event.timeStamp)
@@ -110,6 +121,8 @@ function mousemove(event) {
     let realPos = getRealEventPos(event)
     if (event.target?.tagName == 'CANVAS')
         gameEvent.setPointerPosition(pos)
+    if (isGamePaused())
+        return
     gameEvent.mousemove(pos, realPos, event.timeStamp)
 }
 // a key released while the window is unfocused never sends keyup
@@ -125,7 +138,7 @@ function isEditableTarget(target) {
 
 // ctrl+wheel is the browser's page zoom; the map must not zoom along with it
 function mousewheel(event) {
-    if (event.ctrlKey)
+    if (event.ctrlKey || isGamePaused())
         return
     let pos = getEventPos(event)
     gameEvent.mousewheel(pos, event.wheelDelta ?? -event.deltaY)
@@ -505,6 +518,7 @@ class Events {
     }
     click(pos, realPos) {
         let clickToButton = (gameSettings.tutorial && tutorialResultInterface.click(pos)) ||
+            (gameSettings.tutorial && tutorialPauseInterface.click(pos)) ||
             (typeof onlineResultInterface !== 'undefined' && onlineResultInterface.click(pos)) ||
             this.interface.nextTurnPause.click(pos) ||
             undoButton.click(pos) || backToMenuButton.click(pos) || 

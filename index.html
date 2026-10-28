@@ -104,6 +104,7 @@
     <script src='interface/statisticsinterface.js'></script>
     <script src='interface/nextTurnPause.js'></script>
     <script src='interface/tutorialResultInterface.js'></script>
+    <script src='interface/tutorialPauseInterface.js'></script>
 
     <script src='sprites/sprite.js'></script>
     <script src='groups/spritesGroup.js'></script>
@@ -228,6 +229,7 @@
         let statisticsInterface = new StatisticsInterface()
         let nextTurnPauseInterface = new NextTurnPauseInterface()
         let tutorialResultInterface = new TutorialResultInterface()
+        let tutorialPauseInterface = new TutorialPauseInterface()
         let onlineResultInterface = new OnlineResultInterface()
 
         let entityInterface = new EntityInterface()
@@ -250,7 +252,7 @@
         let backToMenuButton = new ImageButton(
             new ParchmentIconImage('menu', {x: NaN, y: NaN}, backToMenuButtonSize, -1, -1),
             new Rect(0, 0, backToMenuButtonSize, backToMenuButtonSize),
-            menuBack
+            backToMenuPress
         )
         let iButton = new ImageButton(
             new ParchmentIconImage('statistics', {x: NaN, y: NaN}, nextTurnButtonSize, 1, -1),
