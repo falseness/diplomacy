@@ -125,10 +125,10 @@ function createTutorial19Map() {
     // Puzzle rush: the demons have broken into red's town. The town (2,4) is at 0 hp with a wounded red normchel
     // (1 hp) standing on it, the vanguard, instead of the town's own noob (town noob: false). A Bulwark, a Brute,
     // two Hexcasters and two Bombards stand right at the town, one Bombard (4,4) inside its suburbs. Red has a
-    // KOHb, an archer and a normchel, four empty barracks, walls and bastions south of the town and 250 gold
-    // (234 here plus the first turn's income of 16). The lesson starts at round 23 (entry
-    // startRound), so the six portals in the north-east send the next wave after a single turn. Killing every
-    // demon unit wins (pass 'demonUnitsDead').
+    // KOHb, an archer and a normchel, four empty barracks, walls (0,6), (4,7), (4,8) and bastions (1,6), (2,7),
+    // (3,6) south of the town and 500 gold (484 here plus the first turn's income of 16). The lesson starts at
+    // round 23 (entry startRound), so the six portals in the north-east send the next wave after a single turn.
+    // Killing every demon unit wins (pass 'demonUnitsDead').
     const town = {x: 2, y: 4}
     const isLake = cell => cell.x == 5 && cell.y == 4
     const isDemon = cell => cell.x == 4 && cell.y == 4
@@ -152,13 +152,13 @@ function createTutorial19Map() {
             },
             {
                 rgb: {r: 255, g: 0, b: 0},
-                gold: 234,
+                gold: 484,
                 towns: [{x: 2, y: 4, hp: 0, noob: false}],
                 suburbs: [{town: town, cells: suburbs, expansionCells: suburbs}],
                 barracks: [{x: 0, y: 7, town: town}, {x: 1, y: 7, town: town}, {x: 2, y: 8, town: town},
                     {x: 3, y: 7, town: town}],
-                walls: [{x: 0, y: 6}, {x: 3, y: 6}, {x: 4, y: 7}, {x: 4, y: 8}],
-                bastions: [{x: 2, y: 7}, {x: 4, y: 6}],
+                walls: [{x: 0, y: 6}, {x: 4, y: 7}, {x: 4, y: 8}],
+                bastions: [{x: 2, y: 7}, {x: 1, y: 6}, {x: 3, y: 6}],
                 units: [
                     {x: 2, y: 4, type: Normchel, hp: 1},
                     {x: 3, y: 4, type: KOHb},
