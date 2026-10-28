@@ -1369,13 +1369,38 @@ const atmosphericLighting = {
         }
         let tiles = this.ownedTiles.get(fill)
         if (!tiles) {
-            for (const f of [fill, ...this.ownedFills()]) {
-                if (!this.ownedTiles.has(f))
-                    this.ownedTiles.set(f, Array.from({length: this.TILE.variants}, (_, i) => this.buildOwnedTile(i, f)))
-            }
-            tiles = this.ownedTiles.get(fill)
+            // TASK-1372: the other owners' fills are built a fill a task (prewarmOwnedTiles), not in this frame.
+            if (!this.stagedOwnedTiles)
+                for (const f of this.ownedFills())
+                    this.buildOwnedFill(f)
+            tiles = this.buildOwnedFill(fill)
+            if (this.stagedOwnedTiles)
+                this.prewarmOwnedTiles()
         }
         return tiles[index]
+    },
+    buildOwnedFill(fill) {
+        let tiles = this.ownedTiles.get(fill)
+        if (!tiles)
+            this.ownedTiles.set(fill, tiles = Array.from({length: this.TILE.variants}, (_, i) => this.buildOwnedTile(i, fill)))
+        return tiles
+    },
+    // TASK-1372: true builds the owned tiles of a fill a frame first draws (ownedTile) and those of every other owner on the
+    // board (ownedFills, which can own a cell later) one fill a task after it; false builds them all at the first.
+    stagedOwnedTiles: true,
+    ownedTilesQueued: false,
+    prewarmOwnedTiles() {
+        if (this.ownedTilesQueued) return
+        this.ownedTilesQueued = true
+        setTimeout(() => {
+            this.ownedTilesQueued = false
+            const tiles = this.ownedTiles
+            if (!tiles || tiles.radius !== basis.r) return
+            const fill = this.ownedFills().find(f => !tiles.has(f))
+            if (!fill) return
+            this.buildOwnedFill(fill)
+            this.prewarmOwnedTiles()
+        })
     },
     // The owned tile colours of every player holding a cell on the board, suburb and not: only a
     // player on the board can own a cell later (captures and suburbs come from its own units and towns).

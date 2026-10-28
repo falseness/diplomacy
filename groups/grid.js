@@ -119,6 +119,10 @@ class Grid extends SpritesGroup {
         this.litCellLayer = undefined
         this.cellMaskCanvas = undefined
         this.surfaceCacheShown = undefined
+        // TASK-1372: the split under way of the surface cache into its cell layer (startCellSplit; the lit view's is
+        // view.splitJob) and splits finished in steps.
+        this.surfaceSplitJob = undefined
+        this.cellSplitSteps = 0
         // TASK-1316: the lit view's rest snapshot with its cell layer composed (prepareLitCellLayer), drawn in one drawImage.
         this.litCellShown = undefined
         this.cellLayerSplits = 0
@@ -709,6 +713,88 @@ class Grid extends SpritesGroup {
         this.cutCellLayer(canvas, layer, whole)
         ++this.cellLayerSplits
         return layer
+    }
+    // TASK-1372 (Grid.cellLayerSplitJobs): splitCellLayer's work in steps (cellSplitStep, CELL_SPLIT_CELLS cells' sprites a
+    // step, those nearest centre, canvas's pixel the camera's view is centred on, first), so no frame makes every cell's
+    // sprite. Until the last step canvas is left whole and the layer holds no cells (nothing draws it or brings it up,
+    // followCellLayer): the frames draw canvas uncut, which is the canvas and the layer added. Each cell's variant and the
+    // cell states are taken now, the states of canvas's board (a step finding the board's states changed ends the job,
+    // its owner drops it, holds). The last step cuts canvas and makes the layer the split one, as splitCellLayer leaves it
+    // (each sprite drawn into the cleared layer as made: their pixels are disjoint, so the layer is the one drawCellSprites
+    // draws), then runs finish(layer).
+    startCellSplit(canvas, layer, place, centre, finish) {
+        return this.withCellReach(() => {
+            const W = canvas.width, H = canvas.height
+            if (layer.width !== W || layer.height !== H) {
+                layer.width = W
+                layer.height = H
+            }
+            const g = layer.getContext('2d')
+            g.save()
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.clearRect(0, 0, W, H)
+            g.restore()
+            const mask = layer.mask ||= document.createElement('canvas')
+            mask.width = W
+            mask.height = H
+            const {cells, box, image} = this.cellLayerCells(W, H, place)
+            mask.getContext('2d').putImageData(image, 0, 0)
+            for (const cell of cells)
+                cell.key = this.cellLayerKey(cell.i, cell.j)
+            const far = ({box}) => Math.hypot(box.x + box.w / 2 - centre.x, box.y + box.h / 2 - centre.y)
+            Object.assign(layer, {cells: undefined, cellBox: undefined, sprites: new Map(), stale: null, byIndex: undefined, place,
+                states: undefined})
+            return {canvas, layer, place, cells, box, states: this.cellLayerStates(), next: 0, finish,
+                order: cells.map(cell => [far(cell), cell]).sort((a, b) => a[0] - b[0]).map(([, cell]) => cell)}
+        })
+    }
+    // One step of a split job (startCellSplit). Returns whether the split is finished.
+    cellSplitStep(job) {
+        const {layer, canvas, order} = job
+        ++this.cellSplitSteps
+        const g = layer.getContext('2d')
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalCompositeOperation = 'lighter'
+        for (const end = Math.min(job.next + CELL_SPLIT_CELLS, order.length); job.next < end; ++job.next) {
+            const cell = order[job.next]
+            g.drawImage(this.cellSprite(layer, cell, canvas, cell.key), cell.box.x, cell.box.y)
+            ++this.cellSpriteDraws
+        }
+        g.restore()
+        if (job.next < order.length)
+            return false
+        Object.assign(layer, {cells: job.cells, cellBox: job.box, byIndex: new Map(job.cells.map(c => [c.index, c])),
+            states: job.states})
+        this.cutCellLayer(canvas, layer, {x: 0, y: 0, w: canvas.width, h: canvas.height})
+        ++this.cellLayerSplits
+        job.finish(layer)
+        return true
+    }
+    // The surface cache's split job (prepareSurfaceCellLayer): one step a task between frames (prepareSurfaceCache), none
+    // while a patch of the cache is under way (its end splits the cache again). A job whose cache or layer is no longer the
+    // drawn one is dropped; one whose board states changed drops the cache too (rebuilt between frames), as its uncut
+    // canvas shows the cells as they were.
+    surfaceSplitStep() {
+        const job = this.surfaceSplitJob
+        if (!job || this.surfacePatchJob)
+            return
+        if (!this.surfaceSplitHolds(job))
+            return
+        if (this.cellSplitStep(job))
+            this.surfaceSplitJob = undefined
+    }
+    surfaceSplitHolds(job) {
+        if (job.canvas !== this.surfaceCache || job.layer !== this.surfaceCellLayer || this.surfaceCacheBuild) {
+            this.surfaceSplitJob = undefined
+            return false
+        }
+        if (this.cellLayerStatesAre(job.states))
+            return true
+        this.surfaceSplitJob = undefined
+        this.surfaceCache = undefined
+        this.surfaceCacheDirty = true
+        return false
     }
     // A patch of canvas's pixel rectangle rect (copy draws it, from the patch buffer) with the canvas split (splitCellLayer):
     // the rectangle grown to the boxes of the cells meeting it (region) put back whole (the cut canvas with its layer added),
@@ -1825,7 +1911,7 @@ class Grid extends SpritesGroup {
     prepareSurfaceCellLayer(canvas, geometry, left, top, rect, copy) {
         if (!canvas.cellLayered) {
             copy?.()
-            this.surfaceCellLayer = this.surfaceCacheShown = undefined
+            this.surfaceCellLayer = this.surfaceCacheShown = this.surfaceSplitJob = undefined
             return
         }
         const place = g => {
@@ -1837,10 +1923,28 @@ class Grid extends SpritesGroup {
             rect = this.resplitCellLayer(canvas, layer, rect, copy)
         else {
             copy?.()
+            this.surfaceSplitJob = undefined
+            if (Grid.cellLayerSplitJobs) {
+                // TASK-1372: split in steps (startCellSplit); the frames draw the cache uncut meanwhile.
+                layer = this.surfaceCellLayer = layer || document.createElement('canvas')
+                layer.raster = canvas
+                const centre = this.cameraCentreAt(geometry.scale, left, top)
+                this.surfaceSplitJob = this.startCellSplit(canvas, layer, place, centre,
+                    layer => this.composeSurfaceCellLayer(canvas, layer, {x: 0, y: 0, w: canvas.width, h: canvas.height}))
+                return
+            }
             layer = this.surfaceCellLayer = this.splitCellLayer(canvas, layer || document.createElement('canvas'), place)
             layer.raster = canvas
             rect = {x: 0, y: 0, w: canvas.width, h: canvas.height}
         }
+        this.composeSurfaceCellLayer(canvas, layer, rect)
+    }
+    // The camera view's centre in the pixels of a raster of the world at scale whose pixel (0, 0) is world (left, top).
+    cameraCentreAt(scale, left, top) {
+        return {x: (canvas.offset.x + width / 2 - left) * scale, y: (canvas.offset.y + height / 2 - top) * scale}
+    }
+    // The surface cache's shown canvas composed within rect (prepareSurfaceCellLayer).
+    composeSurfaceCellLayer(canvas, layer, rect) {
         const shown = this.surfaceCacheShown ||= document.createElement('canvas')
         if (shown.width !== canvas.width || shown.height !== canvas.height) {
             shown.width = canvas.width
@@ -1862,10 +1966,28 @@ class Grid extends SpritesGroup {
             rect = this.resplitCellLayer(rest.canvas, layer, rect, copy)
         else {
             copy?.()
+            view.splitJob = undefined
+            if (Grid.cellLayerSplitJobs) {
+                // TASK-1372: split in steps (startCellSplit, a step a task, queueLitTiles); the frames draw the snapshot
+                // uncut meanwhile (rest.cellLayer none).
+                rest.cellLayer = undefined
+                layer.raster = rest.canvas
+                const whole = {x: 0, y: 0, w: rest.canvas.width, h: rest.canvas.height}
+                view.splitJob = this.startCellSplit(rest.canvas, layer, g => this.setLitRestTransform(g, view, rest),
+                    {x: whole.w / 2, y: whole.h / 2}, layer => {
+                        rest.cellLayer = layer
+                        this.composeLitCellLayer(rest, layer, whole)
+                    })
+                view.splitJob.rest = rest
+                return
+            }
             rest.cellLayer = this.splitCellLayer(rest.canvas, layer, g => this.setLitRestTransform(g, view, rest))
             layer.raster = rest.canvas
             rect = {x: 0, y: 0, w: rest.canvas.width, h: rest.canvas.height}
         }
+        this.composeLitCellLayer(rest, layer, rect)
+    }
+    composeLitCellLayer(rest, layer, rect) {
         // TASK-1316: the snapshot with its layer composed (composeCellLayer, as the cache's shown canvas), which the frames
         // draw in one drawImage instead of the snapshot and its layer added over it.
         const shown = this.litCellShown ||= document.createElement('canvas')
@@ -2392,8 +2514,18 @@ class Grid extends SpritesGroup {
             this.surfacePatchStep()
             return
         }
-        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceMoving || this.surfaceCacheQueued)
+        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceMoving || this.surfaceCacheQueued || this.litView?.unbuilt)
             return
+        // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
+        if (this.surfaceSplitJob) {
+            this.surfaceCacheQueued = true
+            setTimeout(() => {
+                this.surfaceCacheQueued = false
+                if (this === grid && otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
+                    this.surfaceSplitStep()
+            })
+            return
+        }
         if (!this.surfaceCacheBuild && this.surfaceCache && !this.surfaceCacheDirty &&
                 performance.now() - this.surfaceCacheChecked < SURFACE_CACHE_CHECK_MS)
             return
@@ -2749,6 +2881,9 @@ class Grid extends SpritesGroup {
         // Its cell layer brought up to the board's owner colours, suburbs and fog (TASK-1315), in a job's steps (TASK-1360).
         if (!this.followCellLayer('surface', undefined, undefined, main))
             return false
+        // TASK-1372: uncut while split, the cache shows the cells as the split found them.
+        if (this.surfaceSplitJob && !this.surfaceSplitHolds(this.surfaceSplitJob))
+            return false
 
         const visibleLeft = Math.max(this.surfaceCacheBounds.left, canvas.offset.x)
         const visibleTop = Math.max(this.surfaceCacheBounds.top, canvas.offset.y)
@@ -2777,7 +2912,7 @@ class Grid extends SpritesGroup {
             visibleBottom - visibleTop
         )
         // With its cell layer, the two added (prepareSurfaceCellLayer).
-        draw(this.surfaceCache.cellLayered && this.surfaceCacheShown || this.surfaceCache)
+        draw(this.surfaceCache.cellLayered && !this.surfaceSplitJob && this.surfaceCacheShown || this.surfaceCache)
         if (this.surfacePatchJob)
             this.drawPatchCells(ctx, this.surfacePatchJob, 'cache')
         else if (this.surfaceLayerJob) {
@@ -3365,10 +3500,34 @@ class Grid extends SpritesGroup {
             view = this.litView = this.newLitView(t, ctx.canvas)
         }
         // The rest snapshot's cell layer brought up to the board (TASK-1315); a view dropped for it is made again.
-        if (!this.followCellLayer('lit', ctx, t))
+        // TASK-1372: so is one whose snapshot's split is behind the board.
+        if (!this.followCellLayer('lit', ctx, t) || !this.litSplitHolds(view))
             view = this.litView = this.newLitView(t, ctx.canvas)
         const rest = screen.surfaceMoving ? null : this.litRest(ctx, view, t, cw, ch)
+        // TASK-1372 (Grid.litFirstViewSteps): a view with more than LIT_FRAME_TILES of the tiles on the canvas not built and
+        // no stand-in for them (no surface cache yet: a new game's first frames) is not drawn: the frame draws the board
+        // live, as a zoom gesture's frames do, while the tasks build those tiles, LIT_FIRST_TILE_BUDGET a task, nearest the
+        // canvas's centre first (queueLitTiles), and no surface cache build starts (prepareSurfaceCache) until they are.
+        if (!(rest && rest.done === LIT_REST_BANDS) && this.litTilesUnbuilt(ctx, view, t)) {
+            this.queueLitTiles(view, t, cw, ch)
+            return false
+        }
         return {t, view, rest: rest && rest.done === LIT_REST_BANDS ? rest : null}
+    }
+    // Whether view at transform t of ctx's canvas has more than LIT_FRAME_TILES tiles on the canvas not built and no stand-in
+    // (planLitView); view.unbuilt keeps the answer for queueLitTiles and prepareSurfaceCache.
+    litTilesUnbuilt(ctx, view, t) {
+        view.unbuilt = false
+        if (!Grid.litFirstViewSteps)
+            return false
+        const cw = ctx.canvas.width, ch = ctx.canvas.height
+        const range = this.litTileRange(cw, ch, Math.round(t.e - view.e), Math.round(t.f - view.f), 0)
+        let missing = 0
+        for (let v = range.v0; v <= range.v1; ++v)
+            for (let u = range.u0; u <= range.u1; ++u)
+                if (!view.tiles.has(u + ',' + v))
+                    ++missing
+        return view.unbuilt = missing > LIT_FRAME_TILES && !this.litStandIn(ctx)
     }
     // A board change while the camera rests on the lit view's finished rest snapshot (drawLitView): instead of the view
     // being dropped (a new light map, every visible tile built in the frame, then the snapshot's bands), the snapshot is
@@ -3877,6 +4036,19 @@ class Grid extends SpritesGroup {
                     shown: u > range.u0 && u < range.u1 && v > range.v0 && v < range.v1})
         const rest = view.rest
         const banding = rest && rest.done < LIT_REST_BANDS && rest.e === t.e && rest.f === t.f
+        // TASK-1372: the snapshot's split, a step a task (cellSplitStep), not during its patch.
+        if (view.splitJob && !banding && !view.patch) {
+            this.litTilesQueued = true
+            setTimeout(() => {
+                this.litTilesQueued = false
+                if (view !== this.litView || !view.splitJob || view.patch || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) ||
+                        !this.litSplitHolds(view))
+                    return
+                if (this.cellSplitStep(view.splitJob))
+                    view.splitJob = undefined
+            })
+            return
+        }
         if (!banding && !missing.length) {
             view.patchedTiles = false
             return
@@ -3891,10 +4063,11 @@ class Grid extends SpritesGroup {
             if (view !== this.litView || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) || this.litLayerBehind(view))
                 return
             if (banding && !gameEvent.screen.surfaceMoving) {
-                // The tiles on the canvas the frames draw from the stand-in first (at most LIT_TILE_BUDGET a task), then the bands.
+                // The tiles on the canvas the frames draw from the stand-in first (at most LIT_TILE_BUDGET a task, a view
+                // the frames draw live LIT_FIRST_TILE_BUDGET), then the bands.
                 const shown = missing.filter(m => m.shown && !view.tiles.has(m.u + ',' + m.v))
                 if (shown.length) {
-                    for (const {u, v} of shown.slice(0, LIT_TILE_BUDGET))
+                    for (const {u, v} of shown.slice(0, view.unbuilt ? LIT_FIRST_TILE_BUDGET : LIT_TILE_BUDGET))
                         this.litTile(view, u, v)
                 }
                 else if (view.rest === rest && rest.done < LIT_REST_BANDS)
@@ -3902,10 +4075,27 @@ class Grid extends SpritesGroup {
                 return
             }
             // After a patch dropped some, one a task while the camera rests.
-            const budget = view.patchedTiles && !gameEvent.screen.surfaceMoving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
+            const budget = view.unbuilt ? LIT_FIRST_TILE_BUDGET :
+                view.patchedTiles && !gameEvent.screen.surfaceMoving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
             for (const {u, v} of missing.slice(0, budget))
                 this.litTile(view, u, v)
         })
+    }
+    // TASK-1372: whether view's split job (prepareLitCellLayer) still splits its rest snapshot: else it is dropped, and so is
+    // the view when the board's cell states changed (the uncut snapshot shows the cells as the split found them).
+    litSplitHolds(view) {
+        const job = view.splitJob
+        if (!job)
+            return true
+        if (job.rest !== view.rest || job.layer !== this.litCellLayer || job.canvas !== view.rest.canvas) {
+            view.splitJob = undefined
+            return true
+        }
+        if (this.cellLayerStatesAre(job.states))
+            return true
+        view.splitJob = undefined
+        this.dropLitView()
+        return false
     }
     // TASK-1316: whether view's rest snapshot has a cell layer drawn for other cell states than the board's now.
     litLayerBehind(view) {
@@ -4510,6 +4700,12 @@ Grid.liveCellLayer = true
 // TASK-1360: true brings the surface cache's cell layer up to a board change needing new variants in a job, a step a frame
 // (Grid.startSurfaceLayerJob); false draws them all in the frame that found the change (refreshCellLayer).
 Grid.surfaceLayerJobs = true
+// TASK-1372: true splits a raster into its cell layer in steps, CELL_SPLIT_CELLS cells a task (Grid.startCellSplit), and a
+// lit view without a stand-in has its tiles built in tasks while the frames draw the board live (Grid.litTilesUnbuilt); false
+// does each in the frame or task that needs it, as before.
+Grid.cellLayerSplitJobs = true
+Grid.litFirstViewSteps = true
+const CELL_SPLIT_CELLS = 400
 // TASK-1361: variants a cell layer keeps a cell (the cell's now and the one before, for an undo; Grid.pruneCellSprites) and
 // sprite canvases kept for reuse (Grid.cellSpriteCanvas).
 const CELL_LAYER_VARIANTS = 2
@@ -4554,6 +4750,10 @@ const SURFACE_STATE_FIELDS = ['surfaceCacheLighting', 'surfaceCacheAtmospheric',
 const LIT_TILE = 256
 const LIT_TILE_PAD = 8
 const LIT_TILE_BUDGET = 5
+// TASK-1372: tiles a frame without a stand-in builds itself (drawLitView; more and it draws the board live, planLitView), and
+// tiles a task builds meanwhile (queueLitTiles).
+const LIT_FRAME_TILES = 8
+const LIT_FIRST_TILE_BUDGET = 16
 const LIT_TILE_POOL = 16
 const LIT_EDGE_BLOCK = 16
 const LIT_REST_BANDS = 12

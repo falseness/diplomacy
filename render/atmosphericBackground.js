@@ -7,6 +7,15 @@ const atmosphericBackground = {
     releaseRaster() {
         if (this.raster) this.raster.width = this.raster.height = 0
         this.raster = this.rasterView = null
+        this.dropRasterJob()
+    },
+    // TASK-1372 (stagedRaster): the raster built a step a frame (rasterSteps), the frames drawing the image or navy directly
+    // until it is done: {raster, view, w, h, steps}.
+    stagedRaster: true,
+    rasterJob: null,
+    dropRasterJob() {
+        if (this.rasterJob) this.rasterJob.raster.width = this.rasterJob.raster.height = 0
+        this.rasterJob = null
     },
     invalidate() {
         this.releaseRaster()
@@ -101,6 +110,12 @@ const atmosphericBackground = {
         return gradient
     },
     decorate(g, w, h) {
+        for (const _ of this.decorateSteps(g, w, h));
+    },
+    // decorate's drawing in steps (a generator; each yield ends one): the same calls in the same order, SKY_STEP_BEAMS beams
+    // a step, so a raster built over frames (rasterSteps) has a whole build's pixels.
+    SKY_STEP_BEAMS: 4,
+    *decorateSteps(g, w, h) {
         const sky = this.SKY, px = window.devicePixelRatio || 1
         const random = this.random(sky.seed)
         const ox = sky.origin[0] * w, oy = sky.origin[1] * h, reach = 1.25 * Math.hypot(w, h)
@@ -117,7 +132,10 @@ const atmosphericBackground = {
             ray.width = w
             ray.height = h
         }
+        let beamsDrawn = 0
         for (const [angle, half, alpha, at = sky.origin, length] of sky.beams) {
+            if (beamsDrawn++ && beamsDrawn % this.SKY_STEP_BEAMS === 1)
+                yield
             const target = length ? ray.getContext('2d') : b
             if (length) target.clearRect(0, 0, w, h)
             target.save()
@@ -139,6 +157,7 @@ const atmosphericBackground = {
             if (length) b.drawImage(ray, 0, 0)
         }
         if (ray) ray.width = ray.height = 0
+        yield
         b.globalCompositeOperation = 'destination-in'
         const fade = b.createRadialGradient(ox, oy, 0, ox, oy, reach)
         fade.addColorStop(0, 'rgba(0,0,0,1)')
@@ -150,6 +169,7 @@ const atmosphericBackground = {
         g.globalCompositeOperation = 'screen'
         g.drawImage(beams, 0, 0)
         beams.width = beams.height = 0
+        yield
         // Stars: tiny cool points, about half of them bright.
         g.globalCompositeOperation = 'source-over'
         for (let i = 0; i < sky.stars; i++) {
@@ -256,6 +276,46 @@ const atmosphericBackground = {
             target.fillRect(0, 0, w, h)
         }
     },
+    // TASK-1372: one step of the raster for a w x h canvas (draw, at most one a frame): the first paints it, the others
+    // decorate it (decorateSteps), the last backs it as draw's whole build does and makes it the raster.
+    *rasterSteps(raster, rw, rh) {
+        const g = raster.getContext('2d')
+        this.paint(g, rw, rh)
+        yield
+        yield* this.decorateSteps(g, rw, rh)
+        g.save()
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalAlpha = 1
+        g.globalCompositeOperation = 'destination-over'
+        g.fillStyle = this.PAGE_BACKGROUND
+        g.fillRect(0, 0, rw, rh)
+        g.restore()
+    },
+    rasterStep(w, h, fit) {
+        let job = this.rasterJob
+        if (job && !(job.w === w && job.h === h && this.viewMatches(job.view, w, h)))
+            this.dropRasterJob(), job = null
+        if (!job) {
+            const raster = document.createElement('canvas')
+            const rw = raster.width = fit < 1 ? Math.floor(w * fit) : w
+            const rh = raster.height = fit < 1 ? Math.floor(h * fit) : h
+            job = this.rasterJob = {raster, view: this.viewFor(w, h), w, h, steps: this.rasterSteps(raster, rw, rh)}
+        }
+        let done
+        try {
+            done = job.steps.next().done
+        } catch (_) {
+            this.dropRasterJob()
+            return
+        }
+        if (!done) return
+        this.rasterJob = null
+        this.watch(job.raster)
+        this.raster = job.raster
+        this.rasterView = job.view
+        if (this.state === 'ready') ++this.rasterizations
+        else ++this.fallbackRasterizations
+    },
     draw(ctx) {
         // Bind independently of the optional sprite startup counter.
         this.watch(ctx.canvas)
@@ -284,7 +344,9 @@ const atmosphericBackground = {
         // A canvas over the budget gets a raster of up to minRasterScale less resolution, drawn scaled up
         // (the soft sky does not show it); beyond that, the image or navy is drawn directly.
         const fit = Math.min(1, Math.sqrt((this.maxBytes - this.lightBytes) / (w * h * 4)))
-        if (!this.raster && fit >= this.minRasterScale) {
+        if (!this.raster && fit >= this.minRasterScale && this.stagedRaster)
+            this.rasterStep(w, h, fit)
+        else if (!this.raster && fit >= this.minRasterScale) {
             const raster = document.createElement('canvas')
             try {
                 const rw = raster.width = fit < 1 ? Math.floor(w * fit) : w
