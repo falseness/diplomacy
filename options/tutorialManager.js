@@ -53,6 +53,12 @@ class TutorialManager {
             case 'enemyUnitsDead':
                 enemy.updateUnits()
                 return enemy.units.length === 0
+            case 'enemyTypesDead':
+                // Every blue unit whose class is in tutorial.types dead; blue units of other classes do not matter.
+                if (!tutorial.types || !tutorial.types.length)
+                    throw new Error('Unknown tutorial pass rule ' + tutorial.pass + ' without types')
+                enemy.updateUnits()
+                return !enemy.units.some(unit => tutorial.types.includes(unit.constructor.name) && !unit.killed && unit.hp > 0)
             case 'enemyLost':
                 return enemy.isLost
             case 'demonUnitsDead':
