@@ -379,6 +379,8 @@ const gameDiffHandler = {
         if (hints.length || Array.isArray(diff.paths))
             diff.paths = (Array.isArray(diff.paths) ? diff.paths : []).concat(hints)
         const before = remoteEffects.snapshot(diff.cells)
+        // An opponent's attack in the change is animated (UI only, render/attackFx.js).
+        const attacks = typeof attackFx !== 'undefined' ? attackFx.remoteBefore(diff.cells) : null
         const inspectedTown = entityInterface.townInspectionCoord?.()
         const result = applyCellDiff(diff)
         // Wire metadata uses boardDiff's fields envelope. The local viewer/turn
@@ -412,6 +414,8 @@ const gameDiffHandler = {
             if (unit.notEmpty() && !moveTween.isActive(unit))
                 moveTween.start(unit, hint.path)
         }
+        if (attacks)
+            attackFx.remoteAfter(attacks)
         // Waiting views also need pictures of uncommitted co-op actions: a
         // different peer's commit can replace their rule board before this actor ends.
         if (observing || (gameSettings.coop && onlineCommit?.pendingSeats?.includes(message.actorSeat)))

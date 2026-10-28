@@ -19,7 +19,16 @@
 // fogged for the screen's player lands with a muffled grey puff and nothing else: the effect keeps no target data.
 // Plain canvas code: paths, arcs, ellipses, the cached unit sprites (and one tinted copy per sprite, made once);
 // no shadowBlur, filters or new assets. Off when otherSettings.animateAttacks is false (no effect is queued).
-// API: play(event), draw(ctx, now), isActive(), clear(); the hooks call before(unit, cell) / after(snapshot).
+// Others' attacks (TASK-1424): AI players and the demon turn act through the same unit code (the same hooks); an online
+// opponent's attack is read from the server's change (remoteBefore / remoteAfter around applyCellDiff). The rules never
+// wait for an effect. Such an effect plays only for what the screen's player sees (grid.fogOfWar): both cells -> the
+// whole effect; only the target -> the shot enters from the fog edge on the line from the attacker (melee: only the hit
+// on the target); only the attacker -> the shot leaves toward the target and ends at the fog edge with no result (the
+// effect keeps no target data); neither -> nothing. It starts once the pass-device screen is gone, and a new viewer (hot
+// seat with fog: the next human's view) drops the effects queued for the last one. The AI turn itself only stores
+// the hooks' events (queue); they become effects on the first frame drawn (flush).
+// API: play(event), draw(ctx, now), isActive(), clear(); the hooks call before(unit, cell) / after(snapshot),
+// remoteBefore(cells) / remoteAfter(snapshot), endTurn(), setViewer(slot) and flush().
 // Removing this file and its guarded calls leaves the game as it was.
 class AttackFx {
     // Most effects playing at once: a new one drops the oldest.
@@ -94,41 +103,53 @@ class AttackFx {
     point = {x: 0, y: 0}
     // image -> {red, grey} tinted copies (canvases of the sprite's size), made on first use.
     tints = new Map()
-    // Counters for tests and evidence.
-    stats = {queued: 0, dropped: 0}
+    // Counters for tests and evidence: queued, dropped by the cap, others' attacks cut to a fog edge or not seen at all.
+    stats = {queued: 0, dropped: 0, edge: 0, unseen: 0}
+    // The slot whose view (fog) the queued effects were made for.
+    viewer = null
+    // The fog of the local human whose turn ended (offline), kept until the next view is set: an AI or demon unit's move
+    // adds its own vision to grid.fogOfWar during its turn, so others' attacks are judged by this copy.
+    view = null
     enabled() {
         return typeof otherSettings === 'undefined' || otherSettings.animateAttacks !== false
     }
     // The target cell's enemy unit and building with their hp, before unit acts on cell; null when no effect can
     // come of it (off, no enemy there, a kind of attacker with no effect).
     before(unit, cell) {
-        if (!this.enabled() || !cell || !unit || unit.isEmpty() || !this.kindOf(unit))
+        if (!this.enabled() || !cell || !unit || unit.isEmpty())
             return null
-        if (this.siege[this.kindOf(unit)])
+        const kind = this.kindOf(unit)
+        if (!kind)
+            return null
+        if (this.siege[kind])
             return this.beforeSiege(unit, cell)
-        const enemy = entity => entity && entity.notEmpty() && entity.hp !== undefined &&
-            entity.playerColor !== unit.playerColor && !entity.isNature ? entity : null
-        const target = {unit: enemy(cell.unit), building: enemy(cell.building)}
-        if (!target.unit && !target.building)
+        const colour = unit.playerColor
+        const targetUnit = this.enemyOf(cell.unit, colour), building = this.enemyOf(cell.building, colour)
+        if (!targetUnit && !building)
             return null
+        // (the attacker's sprite: read when the effect is made, it stays alive; the target's now, it may die)
         return {attacker: unit, from: {x: unit.coord.x, y: unit.coord.y}, fromPos: {x: unit.pos.x, y: unit.pos.y},
-            image: this.imageOf(unit), coord: {x: cell.hexagon.coord.x, y: cell.hexagon.coord.y},
-            ranged: !!this.ranged[this.kindOf(unit)], unit: target.unit, unitHp: target.unit?.hp, unitPos: target.unit && {x: target.unit.pos.x, y: target.unit.pos.y},
-            unitImage: target.unit && this.imageOf(target.unit),
-            building: target.building, buildingHp: target.building?.hp,
-            buildingPos: target.building && {x: target.building.pos.x, y: target.building.pos.y},
-            buildingImage: target.building && this.imageOf(target.building)}
+            image: undefined, coord: {x: cell.hexagon.coord.x, y: cell.hexagon.coord.y},
+            ranged: !!this.ranged[kind], unit: targetUnit, unitHp: targetUnit?.hp, unitPos: targetUnit && {x: targetUnit.pos.x, y: targetUnit.pos.y},
+            unitImage: targetUnit && this.imageOf(targetUnit),
+            building, buildingHp: building?.hp,
+            buildingPos: building && {x: building.pos.x, y: building.pos.y},
+            buildingImage: building && this.imageOf(building)}
+    }
+    // entity when it is an enemy of colour with hp (not nature), else null.
+    enemyOf(entity, colour) {
+        return entity && entity.notEmpty() && entity.hp !== undefined && entity.playerColor !== colour && !entity.isNature ? entity : null
     }
     // A siege shot's snapshot: the shooter's moves and the target building; a cell fogged for the screen's player (the
     // shot takes the fog branch) keeps nothing of what is there.
     beforeSiege(unit, cell) {
         const coord = {x: cell.hexagon.coord.x, y: cell.hexagon.coord.y}
-        const fog = typeof isFogOfWar !== 'undefined' && isFogOfWar && !!grid.fogOfWar && !grid.fogOfWar[coord.x]?.[coord.y]
+        const fog = typeof isFogOfWar !== 'undefined' && isFogOfWar && !!grid.fogOfWar && !this.seen(coord)
         const building = !fog && cell.building && cell.building.notEmpty() && cell.building.hp !== undefined &&
             cell.building.playerColor !== unit.playerColor && !cell.building.isNature ? cell.building : null
         const p = cell.hexagon.calcPos()
         return {siege: true, fog, attacker: unit, moves: unit.moves, from: {x: unit.coord.x, y: unit.coord.y},
-            fromPos: {x: unit.pos.x, y: unit.pos.y}, image: this.imageOf(unit), coord,
+            fromPos: {x: unit.pos.x, y: unit.pos.y}, image: undefined, coord,
             targetPos: {x: p.x - assets.size / 2, y: p.y - assets.size / 2},
             building, buildingHp: building?.hp, buildingImage: building && this.imageOf(building)}
     }
@@ -138,13 +159,18 @@ class AttackFx {
         const a = s.attacker
         if (a.killed || a.coord.x !== s.from.x || a.coord.y !== s.from.y || !(a.moves < s.moves))
             return false
-        const event = {kind: this.kindOf(a), attacker: a, image: s.image, from: s.from, fromPos: s.fromPos, to: s.from,
-            target: s.coord, targetPos: s.targetPos}
-        if (s.fog)
-            return this.play({...event, fog: true})
+        const event = {kind: this.kindOf(a), attacker: a, own: this.isOwn(a), image: s.image, from: s.from, fromPos: s.fromPos,
+            to: s.from, target: s.coord, targetPos: s.targetPos}
+        if (s.fog) {
+            event.fog = true
+            return this.queue(event)
+        }
         const b = s.building, killed = !!b && grid.getBuilding(s.coord) !== b
-        return this.play({...event, targetImage: s.buildingImage, targetIsUnit: false,
-            damage: b ? Math.max(0, s.buildingHp - (killed ? 0 : b.hp)) : 0, killed})
+        event.targetImage = s.buildingImage
+        event.targetIsUnit = false
+        event.damage = b ? Math.max(0, s.buildingHp - (killed ? 0 : b.hp)) : 0
+        event.killed = killed
+        return this.queue(event)
     }
     // After the action: plays the effect of a hit on the snapshot's unit or building (hp lost or killed).
     after(snapshot) {
@@ -167,13 +193,109 @@ class AttackFx {
         const attacker = s.attacker
         // A ranged hit's living unit target is drawn by the effect (knocked back).
         const targetUnit = s.ranged && target.unit && !target.killed ? s.unit : null
-        return this.play({kind: this.kindOf(attacker), attacker, image: s.image, from: s.from, fromPos: s.fromPos,
+        return this.queue({kind: this.kindOf(attacker), attacker, own: this.isOwn(attacker), image: s.image, from: s.from, fromPos: s.fromPos,
             to: {x: attacker.coord.x, y: attacker.coord.y}, target: coord, targetPos: target.pos, targetImage: target.image,
             targetIsUnit: target.unit, targetUnit, damage: target.damage, killed: target.killed})
     }
-    // The effect kind of an attacker's hits; null: none. The demon variants extend Archer, Mortar extends Bombard extends
-    // Catapult: they are picked first.
+    // Whether unit belongs to a local human (its own attack: shown whole, from the turn's start; online, only the local
+    // player's units act here). AI players, demons and neutrals are other classes than Player.
+    isOwn(unit) {
+        return typeof players === 'undefined' || players[unit.playerColor]?.constructor === Player
+    }
+    // An online change's cells before applyCellDiff (records: the diff's cells): their units with hp and moves, buildings
+    // with hp, and whether the screen's player saw each cell.
+    remoteBefore(records) {
+        if (!this.enabled() || !Array.isArray(records))
+            return null
+        const cells = []
+        for (const record of records) {
+            const cell = grid.arr[record.x]?.[record.y]
+            if (!cell)
+                continue
+            const coord = {x: record.x, y: record.y}
+            const unit = cell.unit.notEmpty() ? cell.unit : null, building = cell.building.notEmpty() && cell.building.hp !== undefined &&
+                !cell.building.isNature ? cell.building : null
+            // (owners before: a unit's colour is its hexagon's, which a capture repaints)
+            cells.push({coord, seen: this.seen(coord), unit, owner: unit?.playerColor, buildingOwner: building?.playerColor, hp: unit?.hp, moves: unit?.moves, pos: unit && {x: unit.pos.x, y: unit.pos.y},
+                image: unit && this.imageOf(unit), building, buildingHp: building?.hp,
+                buildingPos: building && {x: building.pos.x, y: building.pos.y}, buildingImage: building && this.imageOf(building)})
+        }
+        return cells
+    }
+    // After applyCellDiff: an attack in the change (a unit or building that lost hp or was killed) plays its effect. Its
+    // attacker is the enemy unit of the change that spent moves nearest the target (unknown: its cell is not in the change,
+    // then only the hit plays). A cell counts as seen when it was seen before or after the change.
+    remoteAfter(before) {
+        if (!before)
+            return []
+        const played = []
+        for (const cell of before) {
+            const coord = cell.coord
+            let target = null
+            // (a unit gone from its cell but not killed moved: no target)
+            if (cell.unit && (cell.unit.killed || grid.getUnit(coord) === cell.unit && cell.unit.hp < cell.hp)) {
+                const killed = !!cell.unit.killed
+                target = {owner: cell.owner, killed, damage: cell.hp - (killed ? 0 : cell.unit.hp), pos: cell.pos,
+                    image: cell.image, isUnit: true, unit: cell.unit}
+            }
+            else if (cell.building && (grid.getBuilding(coord) !== cell.building || cell.building.hp < cell.buildingHp)) {
+                const killed = grid.getBuilding(coord) !== cell.building
+                target = {owner: cell.buildingOwner, killed, damage: cell.buildingHp - (killed ? 0 : cell.building.hp),
+                    pos: cell.buildingPos, image: cell.buildingImage, isUnit: false}
+            }
+            if (!target || !(target.damage > 0))
+                continue
+            let source = null, best = Infinity
+            for (const other of before) {
+                const u = other.unit
+                if (!u || other === cell || u.killed || other.owner === target.owner || !(u.moves < other.moves))
+                    continue
+                const d = Math.hypot(other.coord.x - coord.x, other.coord.y - coord.y)
+                if (d < best) {
+                    best = d
+                    source = other
+                }
+            }
+            const seenTo = cell.seen || this.seen(coord)
+            let event
+            if (source) {
+                const a = source.unit, kind = this.kindOf(a)
+                if (!kind)
+                    continue
+                const to = {x: a.coord.x, y: a.coord.y}
+                event = {kind, attacker: a, image: source.image, from: source.coord, fromPos: source.pos, to, target: coord,
+                    targetPos: target.pos, targetImage: target.image, targetIsUnit: target.isUnit,
+                    targetUnit: this.ranged[kind] && target.isUnit && !target.killed ? target.unit : null,
+                    damage: target.damage, killed: target.killed,
+                    seen: {from: source.seen || this.seen(source.coord), to: seenTo}}
+            }
+            else
+                // An unseen attacker: only the hit on the target.
+                event = {kind: 'melee', attacker: null, image: null, from: null, fromPos: target.pos, to: null, target: coord,
+                    targetPos: target.pos, targetImage: target.image, targetIsUnit: target.isUnit, targetUnit: null,
+                    damage: target.damage, killed: target.killed, seen: {from: false, to: seenTo}}
+            const effect = this.play(event)
+            if (!effect)
+                continue
+            played.push(effect)
+            // A drawn attacker's move into the hex is the effect's (the hint's tween would draw it twice).
+            if (effect.image && effect.attacker && (effect.to.x !== effect.from.x || effect.to.y !== effect.from.y) &&
+                    typeof moveTween !== 'undefined')
+                moveTween.cancel(effect.attacker)
+        }
+        return played
+    }
+    // The effect kind of an attacker's hits; null: none (cached per class: AI turns call it for every action).
     kindOf(unit) {
+        const type = unit.constructor
+        let kind = this.kinds.get(type)
+        if (kind === undefined)
+            this.kinds.set(type, kind = this.kindOfClass(unit))
+        return kind
+    }
+    kinds = new Map()
+    // The demon variants extend Archer, Mortar extends Bombard extends Catapult: they are picked first.
+    kindOfClass(unit) {
         if (typeof Mortar !== 'undefined' && unit instanceof Mortar)
             return 'mortar'
         if (typeof Bombard !== 'undefined' && unit instanceof Bombard)
@@ -193,29 +315,134 @@ class AttackFx {
     imageOf(entity) {
         return typeof cachedImages !== 'undefined' && typeof grid !== 'undefined' ? cachedImages[grid.getEntityBodyImageName(entity)] : undefined
     }
-    // Visible to the screen's player: no fog, or both cells in vision (a fog shot: the shooter's) (TASK-1424 refines
-    // this for others' attacks).
-    visible(event) {
-        if (typeof isFogOfWar === 'undefined' || !isFogOfWar)
-            return true
-        const seen = c => Boolean(grid.fogOfWar?.[c.x]?.[c.y])
-        return seen(event.from) && (event.fog || seen(event.target))
+    // Whether the screen's player sees coord: no fog, or in vision (and not an unknown cell).
+    seen(coord) {
+        if (!coord || typeof grid === 'undefined')
+            return false
+        if (grid.arr?.[coord.x]?.[coord.y]?.hexagon?.unknown)
+            return false
+        return typeof isFogOfWar === 'undefined' || !isFogOfWar || Boolean((this.view || grid.fogOfWar)?.[coord.x]?.[coord.y])
+    }
+    // What of an attack the screen's player sees: 'both', 'target', 'attacker' or null (nothing). Own attacks are seen
+    // whole (a fog shot is the player's own aim); others' by the cells in vision (event.seen: given by remoteAfter).
+    visibility(event) {
+        if (event.own)
+            return 'both'
+        const from = event.seen ? event.seen.from : this.seen(event.from)
+        const to = event.seen ? event.seen.to : !event.fog && this.seen(event.target)
+        return from && to ? 'both' : to ? 'target' : from ? 'attacker' : null
+    }
+    // The point (top-left pos, as unit.pos) where the line between the cells' centres from seen to hidden crosses into
+    // the fog: halfway between the last sample in a seen cell and the first in a hidden one (the nearest cell centre).
+    fogEdge(seenCoord, hiddenCoord) {
+        const half = assets.size / 2
+        const centre = c => {
+            const p = grid.arr[c.x][c.y].hexagon.calcPos()
+            return {x: p.x, y: p.y}
+        }
+        const S = centre(seenCoord), H = centre(hiddenCoord)
+        const cells = []
+        for (let x = Math.min(seenCoord.x, hiddenCoord.x) - 1; x <= Math.max(seenCoord.x, hiddenCoord.x) + 1; ++x)
+            for (let y = Math.min(seenCoord.y, hiddenCoord.y) - 1; y <= Math.max(seenCoord.y, hiddenCoord.y) + 1; ++y)
+                if (grid.arr[x]?.[y])
+                    cells.push({coord: {x, y}, p: centre({x, y})})
+        let last = S
+        for (let i = 1; i <= 32; ++i) {
+            const q = i / 32, x = S.x + (H.x - S.x) * q, y = S.y + (H.y - S.y) * q
+            let nearest = null, best = Infinity
+            for (const c of cells) {
+                const d = (c.p.x - x) ** 2 + (c.p.y - y) ** 2
+                if (d < best) {
+                    best = d
+                    nearest = c.coord
+                }
+            }
+            if (!this.seen(nearest))
+                return {x: (last.x + x) / 2 - half, y: (last.y + y) / 2 - half}
+            last = {x, y}
+        }
+        return {x: H.x - half, y: H.y - half}
+    }
+    // An effect of what the screen's player sees (mode from visibility): 'target' -> the attacker is not drawn and the
+    // shot enters from the fog edge (melee or an unknown attacker: only the hit); 'attacker' -> no target data, the shot
+    // ends at the fog edge (a melee attacker that moved into the fog: nothing).
+    cut(event, mode) {
+        if (mode === 'both')
+            return event
+        if (mode === 'target') {
+            const fromPos = event.from && !this.siege[event.kind] && !this.ranged[event.kind] ? event.targetPos :
+                event.from ? this.fogEdge(event.target, event.from) : event.targetPos
+            event.edge = 'in'
+            event.image = null
+            event.from = null
+            event.fromPos = fromPos
+            return event
+        }
+        const moved = event.to && (event.to.x !== event.from.x || event.to.y !== event.from.y)
+        if (moved || !event.target)
+            return null
+        return {kind: event.kind, attacker: event.attacker, image: event.image, from: event.from, fromPos: event.fromPos,
+            to: event.to, edge: 'out', targetPos: this.fogEdge(event.from, event.target)}
     }
     // event: {kind, attacker, image, from, fromPos, to, target, targetPos, targetImage, targetIsUnit, targetUnit, damage,
     // killed, fog}; targetUnit: a living unit target the effect draws (ranged kinds); fog: a siege shot into fog (no
     // target fields).
-    // Returns the queued effect, or null.
+    // An attack's event from the hooks: an own attack plays at once; others' (an AI or demon turn) wait in later and are
+    // played (visibility, fog-edge cut, cap) on the first frame drawn or when the next view is set (flush): the turn
+    // spends nothing on them. Returns the event (or the own effect), or null.
+    queue(event) {
+        if (event.own)
+            return this.play(event)
+        this.later.push(event)
+        if (this.later.length > 4 * this.maxEffects) {
+            this.later.shift()
+            ++this.stats.dropped
+        }
+        return event
+    }
+    later = []
+    flush() {
+        if (!this.later.length)
+            return
+        const later = this.later
+        this.later = []
+        for (const event of later)
+            this.play(event)
+    }
+    // Returns the queued effect (event itself, or its fog-edge cut, with the effect's fields set: no copy, AI turns call
+    // this for every hit), or null.
     play(event) {
-        if (!this.enabled() || !event || !event.kind || !this.visible(event))
+        if (!this.enabled() || !event || !event.kind)
             return null
+        if (event.image === undefined)
+            event.image = event.attacker ? this.imageOf(event.attacker) : null
+        const mode = this.visibility(event)
+        if (!mode) {
+            ++this.stats.unseen
+            return null
+        }
+        event = this.cut(event, mode)
+        if (!event) {
+            ++this.stats.unseen
+            return null
+        }
+        if (event.edge)
+            ++this.stats.edge
         const kind = event.kind === 'melee' && event.killed ? 'lasthit' : event.kind
         const style = this.ranged[kind]
         const span = style && event.killed && event.targetIsUnit ? Math.max(this.spans[kind], style.hit + 0.5) : this.spans[kind]
-        const effect = {...event, kind, span, startTime: this.now(), duration: Math.round(this.durations[kind] * span / this.spans[kind])}
-        if (!effect.duration)
+        // Others' effects start on the first frame drawn without the pass-device screen (prune).
+        const duration = Math.round(this.durations[kind] * span / this.spans[kind])
+        if (!duration)
             return null
+        const effect = event
+        effect.kind = kind
+        effect.span = span
+        effect.startTime = event.own ? this.now() : null
+        effect.duration = duration
         // One effect per attacker: a new attack of the same unit replaces its effect.
-        this.effects = this.effects.filter(e => e.attacker !== event.attacker)
+        if (event.attacker)
+            this.effects = this.effects.filter(e => e.attacker !== event.attacker)
         this.effects.push(effect)
         ++this.stats.queued
         while (this.effects.length > this.maxEffects) {
@@ -226,17 +453,51 @@ class AttackFx {
     }
     clear() {
         this.effects.length = 0
+        this.later.length = 0
+        this.view = null
     }
-    // Drops finished effects and those of an attacker no longer where the rules left it (killed, moved, undone).
+    // A turn ends: its own effects stop; others' (an AI or demon turn just played) stay for the next view. A local
+    // human's ending turn leaves its fog as the view others' attacks are judged by.
+    endTurn() {
+        this.effects = this.effects.filter(e => !e.own)
+        const ending = typeof players !== 'undefined' && typeof whooseTurn !== 'undefined' ? players[whooseTurn] : null
+        if (ending && ending.constructor === Player && !(typeof gameSettings !== 'undefined' && gameSettings.isOnline))
+            this.view = typeof isFogOfWar !== 'undefined' && isFogOfWar && grid.fogOfWar ? grid.fogOfWar.map(column => Array.from(column)) : null
+    }
+    // The screen shows slot's view (fog, rebuilt from its vision): the effects queued for another human's view are
+    // dropped (no leak to the next human). An AI slot's turn (hot seat with an AI) keeps the last human's view.
+    setViewer(slot) {
+        if (typeof players !== 'undefined' && players[slot]?.constructor !== Player)
+            return
+        if (this.viewer !== null && this.viewer !== slot)
+            this.clear()
+        else
+            this.flush()
+        this.viewer = slot
+        this.view = null
+    }
+    // The pass-device screen covers the board: others' effects wait.
+    held() {
+        return typeof nextTurnPauseInterface !== 'undefined' && !!nextTurnPauseInterface?.visible
+    }
+    // Starts waiting effects (no pass-device screen), drops finished ones and those of a drawn attacker no longer where
+    // the rules left it (killed, moved, undone).
     prune(now = this.now()) {
+        this.flush()
         if (!this.effects.length)
             return
-        this.effects = this.effects.filter(e => now - e.startTime < e.duration && !e.attacker.killed &&
-            e.attacker.coord.x === e.to.x && e.attacker.coord.y === e.to.y && grid.getUnit(e.to) === e.attacker)
+        const held = this.held()
+        for (const e of this.effects)
+            if (e.startTime === null && !held)
+                e.startTime = now
+        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration) &&
+            (e.edge === 'in' || !e.attacker || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
+                e.attacker.coord.y === e.to.y && grid.getUnit(e.to) === e.attacker))
     }
+    // An effect plays (a waiting one does not keep frames live).
     isActive() {
         this.prune()
-        return this.effects.length > 0
+        return this.effects.some(e => e.startTime !== null)
     }
     // Whether unit is drawn by an effect (left out of the grid's unit passes): its attacker, or a ranged hit's living
     // unit target while it stays on the target cell.
@@ -244,7 +505,8 @@ class AttackFx {
         if (!this.effects.length)
             return false
         for (const e of this.effects)
-            if ((e.attacker === unit || this.drawsTarget(e) && e.targetUnit === unit) && this.now() - e.startTime < e.duration)
+            if (e.startTime !== null && (e.attacker === unit && e.edge !== 'in' || this.drawsTarget(e) && e.targetUnit === unit) &&
+                    this.now() - e.startTime < e.duration)
                 return true
         return false
     }
@@ -258,6 +520,8 @@ class AttackFx {
         const t = ctx.getTransform(), margin = 3 * basis.r
         const lod = typeof grid !== 'undefined' && grid.lod
         for (const e of this.effects) {
+            if (e.startTime === null)
+                continue
             // Off-screen effects are skipped (the target's centre and reach against the canvas).
             const cx = e.targetPos.x + assets.size / 2, cy = e.targetPos.y + assets.size / 2
             const x = t.a * cx + t.c * cy + t.e, y = t.b * cx + t.d * cy + t.f
@@ -339,7 +603,7 @@ class AttackFx {
         const E = {x: e.targetPos.x + half, y: e.targetPos.y + half}
         const vx = E.x - A.x, vy = E.y - A.y
         const time = t
-        const moved = e.to.x !== e.from.x || e.to.y !== e.from.y
+        const moved = !!e.from && (e.to.x !== e.from.x || e.to.y !== e.from.y)
         // The attacker: hop toward the target (k of the way, hop up), back, or (last hit, moved in) into the hex.
         let k = 0, hop = 0
         if (time < 0.3) {
@@ -380,7 +644,8 @@ class AttackFx {
             this.drawDying(ctx, e, time, 0.3, 0.45, E, vx * 0.12, vy * 0.12, tint)
         // The attacker over the target, its bars with it (but in a level-of-detail frame).
         this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + vx * k, e.fromPos.y + vy * k + hop, lod)
-        if (time >= 0.28 && time < 0.48)
+        // (a shot toward the fog edge: no slash, flash or number)
+        if (time >= 0.28 && time < 0.48 && e.edge !== 'out')
             this.drawSlash(ctx, E, (time - 0.28) / 0.2, r)
         // The captured hex's outline pulses once the attacker is in.
         if (last && moved && time >= 1) {
@@ -503,20 +768,21 @@ class AttackFx {
         }
         this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + dx, e.fromPos.y + dy, lod)
         if (e.kind === 'hexcaster')
-            this.drawHexcaster(ctx, t, A, E, ux, uy, dy, r)
+            this.drawHexcaster(ctx, t, A, E, ux, uy, dy, r, e.edge)
         else {
-            const [ahead, down] = style.muzzle
+            const [ahead, down] = e.edge === 'in' ? [0, 0] : style.muzzle
             const S = {x: A.x + ux * ahead * r, y: A.y + uy * ahead * r + down * r}
-            const T = {x: E.x - ux * 0.1 * r, y: E.y - uy * 0.1 * r + 0.05 * r}
+            const T = e.edge === 'out' ? E : {x: E.x - ux * 0.1 * r, y: E.y - uy * 0.1 * r + 0.05 * r}
             if (e.kind === 'ember')
-                this.drawEmber(ctx, t, S, T, 0.26 * dist, r)
+                this.drawEmber(ctx, t, S, T, 0.26 * dist, r, e.edge)
             else
-                this.drawArrow(ctx, t, S, T, 0.26 * dist, E, r)
+                this.drawArrow(ctx, t, S, T, 0.26 * dist, E, r, e.edge)
         }
         this.drawDamage(ctx, E, (t - style.text) / style.textSpan, e.damage, r)
     }
     // The arrow: flies S -> T on [0.22, 0.5) with a short white trail; sparks burst from the target on [0.48, 0.66).
-    drawArrow(ctx, t, S, T, h, E, r) {
+    // edge: 'in' (from the fog edge), 'out' (to the fog edge: no sparks).
+    drawArrow(ctx, t, S, T, h, E, r, edge) {
         if (t >= 0.22 && t < 0.5) {
             const p = (t - 0.22) / 0.28, q = this.ease(p) * 0.5 + p * 0.5
             for (let j = 1; j < 5; ++j) {
@@ -528,7 +794,7 @@ class AttackFx {
             }
             this.drawShaft(ctx, S, T, h, q, r, 'rgb(70, 45, 20)', false)
         }
-        if (t >= 0.48 && t < 0.66) {
+        if (t >= 0.48 && t < 0.66 && edge !== 'out') {
             const s = (t - 0.48) / 0.18, sparks = this.sparks
             ctx.globalAlpha = 1 - s
             ctx.strokeStyle = 'rgb(255, 220, 120)'
@@ -593,8 +859,8 @@ class AttackFx {
     }
     // The ember archer: the bow glows on [0, 0.24), a burning arrow flies on [0.22, 0.56) trailing embers; on the hit
     // (0.55) sparks burst and three small flames lick the target until 0.95.
-    drawEmber(ctx, t, S, T, h, r) {
-        if (t < 0.24) {
+    drawEmber(ctx, t, S, T, h, r, edge) {
+        if (t < 0.24 && edge !== 'in') {
             ctx.fillStyle = 'rgba(255, 140, 30, 0.55)'
             ctx.beginPath()
             ctx.arc(S.x, S.y, (0.08 + 0.1 * t / 0.24) * r, 0, 2 * Math.PI)
@@ -614,7 +880,7 @@ class AttackFx {
             }
             this.drawShaft(ctx, S, T, h, q, r, 'rgb(60, 30, 15)', true)
         }
-        if (t >= 0.55 && t < 0.95) {
+        if (t >= 0.55 && t < 0.95 && edge !== 'out') {
             const s = (t - 0.55) / 0.4, burst = this.embers.burst
             ctx.globalAlpha = 1 - s
             ctx.fillStyle = 'rgb(255, 200, 60)'
@@ -643,9 +909,9 @@ class AttackFx {
     }
     // The hexcaster: violet sparks gather on the staff on [0, 0.32), a wobbling orb flies on [0.3, 0.52), a spinning hex
     // sigil brands the target's ground on [0.5, 0.95) with a flash ring on its first 0.3.
-    drawHexcaster(ctx, t, A, E, ux, uy, lift, r) {
-        const O = {x: A.x + ux * 0.6 * r, y: A.y + uy * 0.6 * r - 0.5 * r + lift}
-        if (t < 0.32) {
+    drawHexcaster(ctx, t, A, E, ux, uy, lift, r, edge) {
+        const O = edge === 'in' ? A : {x: A.x + ux * 0.6 * r, y: A.y + uy * 0.6 * r - 0.5 * r + lift}
+        if (t < 0.32 && edge !== 'in') {
             const k = t / 0.32
             ctx.fillStyle = 'rgba(190, 90, 255, 0.25)'
             ctx.beginPath()
@@ -681,7 +947,7 @@ class AttackFx {
             ctx.arc(x, y, 0.07 * r, 0, 2 * Math.PI)
             ctx.fill()
         }
-        if (t >= 0.5 && t < 0.95) {
+        if (t >= 0.5 && t < 0.95 && edge !== 'out') {
             const s = (t - 0.5) / 0.45, alpha = s < 0.6 ? 1 : (1 - s) / 0.4
             const R = (0.55 + 0.15 * Math.min(1, s * 3)) * r, rot = s * 2, cy = E.y + 0.55 * r
             const hex = j => [E.x + R * Math.cos(rot + Math.PI / 3 * j), cy + R * 0.45 * Math.sin(rot + Math.PI / 3 * j)]
@@ -722,7 +988,7 @@ class AttackFx {
         const E = {x: e.targetPos.x + half, y: e.targetPos.y + half + 0.1 * r}
         const vx = E.x - A.x, vy = E.y - A.y, dist = Math.hypot(vx, vy) || 1
         const ux = vx / dist, uy = vy / dist
-        const M = {x: A.x + ux * st.muzzle[0] * r, y: A.y + uy * st.muzzle[0] * r + st.muzzle[1] * r}
+        const M = e.edge === 'in' ? A : {x: A.x + ux * st.muzzle[0] * r, y: A.y + uy * st.muzzle[0] * r + st.muzzle[1] * r}
         const s = t >= fly1 ? (t - fly1) / (1 - fly1) : -1
         // The impact shakes (the target hex's effect and collapsing snapshot only).
         const frame = t * (st.frames - 1)
@@ -751,7 +1017,7 @@ class AttackFx {
         else
             this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x + dx, e.fromPos.y + dy, lod)
         // Muzzle flash and smoke (bombard: toward the target, mortar: up).
-        if (e.kind !== 'catapult' && t >= fly0 && t < fly0 + 0.4) {
+        if (e.kind !== 'catapult' && e.edge !== 'in' && t >= fly0 && t < fly0 + 0.4) {
             const q = (t - fly0) / 0.4
             const up = e.kind === 'mortar'
             if (t < fly0 + 0.12) {
@@ -805,7 +1071,7 @@ class AttackFx {
             ctx.arc(x - 0.25 * br * r, y - 0.35 * br * r, 0.25 * br * r, 0, 2 * Math.PI)
             ctx.fill()
         }
-        if (s < 0)
+        if (s < 0 || e.edge === 'out')
             return
         if (e.fog) {
             this.drawFogPuff(ctx, E, s, r)
@@ -955,7 +1221,7 @@ class AttackFx {
     }
     // '-N' rising from the target, u in (0, 1].
     drawDamage(ctx, E, u, damage, r) {
-        if (!(u > 0 && u <= 1))
+        if (!(u > 0 && u <= 1) || !(damage > 0))
             return
         ctx.globalAlpha = u < 0.6 ? 1 : (1 - u) / 0.4
         ctx.font = `bold ${Math.round(0.4 * r)}px serif`

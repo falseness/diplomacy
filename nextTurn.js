@@ -101,9 +101,9 @@ function advanceOfflineTurn() {
     }
 
     gameEvent.nextTurn()
-    // The ended turn's attack animations stop (render/attackFx.js).
+    // The ended turn's own attack animations stop; an AI or demon turn's stay for the next view (render/attackFx.js).
     if (typeof attackFx !== 'undefined')
-        attackFx.clear()
+        attackFx.endTurn()
 
     timer.pauseAndSaveTime()
 
@@ -139,12 +139,17 @@ function advanceOfflineTurn() {
     if (gameSettings.tutorial && whooseTurn !== TUTORIAL_HUMAN_SLOT) {
         if (isFogOfWar) {
             players[TUTORIAL_HUMAN_SLOT].changeFogOfWarByVision()
+            if (typeof attackFx !== 'undefined')
+                attackFx.setViewer(TUTORIAL_HUMAN_SLOT)
         }
         advanceOfflineTurn()
         return
     }
     if (isFogOfWar) {
         players[whooseTurn].changeFogOfWarByVision()
+        // Another human's view: the effects queued for the last one are dropped (render/attackFx.js).
+        if (typeof attackFx !== 'undefined')
+            attackFx.setViewer(whooseTurn)
     }
     // Only a tutorial moves the camera on each turn; other games centre it once at start (focusCameraOnPlayerStart).
     if (gameSettings.tutorial)
@@ -185,9 +190,9 @@ function onlineNextTurn() {
     }
 
     gameEvent.nextTurn()
-    // The ended turn's attack animations stop (render/attackFx.js).
+    // The ended turn's own attack animations stop; an AI or demon turn's stay for the next view (render/attackFx.js).
     if (typeof attackFx !== 'undefined')
-        attackFx.clear()
+        attackFx.endTurn()
 
     timer.pauseAndSaveTime()
     actionManager.clear()

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "d4446d48cf966e75b8ede1535711e59ec6df281c1dcd623c1991d1d1136c12d5",
+  "rulesVersion": "c4fd08c46066363f5bf66efac86e8b5d671f5ac127d70edd54325f6ef05b2ea8",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "35e888bdb44698437ca4751ac409be154b4eba2437593112e9547fc8fa108233",
-      "bytes": 8296
+      "sha256": "5e803333a5d803a58d7ca15bb6857c551f3e6a90e3e51ef6c09290aaea95b522",
+      "bytes": 8696
     },
     {
       "path": "managers.js",
