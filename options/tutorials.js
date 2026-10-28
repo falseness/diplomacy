@@ -3,7 +3,8 @@
 // 'enemyUnitsDead' every blue unit is dead, 'enemyLost' blue has no towns and no units,
 // 'coopVictory' the co-op result is victory while red still owns a town,
 // 'captureTowns' red owns every town of `targets` [{x, y}], 'surviveRounds' gameRound
-// reaches `rounds` while red still owns a town (a unit if the map gives red no town).
+// reaches `rounds` while red still owns a town (a unit if the map gives red no town),
+// 'enemyTypesDead' no blue unit of a class named in `types` is alive (other classes ignored).
 // Unit classes load after this file, so each map is built on access.
 // First contact teaches moving through fog and concentrating two attacks.
 // Border scenery leaves the entire interior approach and combat area open.
@@ -70,6 +71,61 @@ function createTutorial18Map() {
     coordDictionary([[9, 8], [8, 8], [9, 7], [2, 0], [3, 0], [3, 1]]),
     coordDictionary([[0, 0], [1, 0], [0, 1], [0, 8], [0, 7], [1, 8], [8, 0], [9, 0], [9, 1], [7, 8]]))
     map.testName = 'tutorial 18'
+    return map
+}
+
+// Rotate and heal: a mountain ridge (columns 4 and 5) splits the 11x9 board, open only at a
+// 2-cell pass on rows 4 and 5. Red holds the pass with 5 normchels, two of them in the pass
+// wounded; normchels heal +3 a turn on their own suburb hexes when not hit that turn, and every
+// passable cell west of the ridge, the pass included, is red's suburb. So red rotates: a wounded
+// front normchel steps back to heal and a healthy one takes its cell. Red's town (2,4) is at 0 hp
+// with no noob of its own and red has no gold and no economy, so it cannot rebuild; blue's three
+// catapults (6,1), (6,7) and (7,4) fire over the ridge at the town whenever it has hp (a 0-hp town
+// is no target), so it is back at 0 after every blue turn (catapults never hurt units). Blue (an
+// AI that paths through fog, ignoresFog) has no town, so its economy is off too, else salaries
+// would bankrupt it and disband its army; it throws 14 noobs at the pass; red wins when every blue
+// noob is dead (pass 'enemyTypesDead', types ['Noob']), the catapults do not count. Lakes and
+// bushes sit in the corners and on the flanks, away from the pass.
+function createTutorial20Map() {
+    const town = {x: 2, y: 4}
+    const ridge = []
+    for (const x of [4, 5]) {
+        for (let y = 0; y < 9; ++y) {
+            if (y != 4 && y != 5) ridge.push([x, y])
+        }
+    }
+    const lakes = [[0, 0], [1, 0], [0, 8]]
+    const isBlocked = cell => ridge.concat(lakes).some(c => c[0] == cell.x && c[1] == cell.y)
+    // Suburbs: every passable cell with x <= 5 (the pass included), nearest to the town first.
+    const suburbs = [town]
+    for (let i = 0; i < suburbs.length; ++i) {
+        for (const offset of neighborhood[suburbs[i].x & 1]) {
+            const cell = {x: suburbs[i].x + offset[0], y: suburbs[i].y + offset[1]}
+            if (cell.x >= 0 && cell.x <= 5 && cell.y >= 0 && cell.y < 9 && !isBlocked(cell) &&
+                    !suburbs.some(suburb => suburb.x == cell.x && suburb.y == cell.y)) {
+                suburbs.push(cell)
+            }
+        }
+    }
+    const noobs = [[6, 3], [6, 4], [6, 5], [7, 3], [7, 5], [7, 6], [8, 2], [8, 3], [8, 4], [8, 5], [8, 6],
+        [9, 3], [9, 4], [9, 5]]
+    const map = new GameMap({x: 11, y: 9}, [
+        {rgb: {r: 208, g: 208, b: 208}, towns: []},
+        {rgb: {r: 255, g: 0, b: 0}, gold: 0, economyEnabled: false, towns: [{x: 2, y: 4, hp: 0, noob: false}],
+            suburbs: [{town: town, cells: suburbs, expansionCells: suburbs}],
+            units: [
+                {x: 5, y: 4, type: Normchel, hp: 2},
+                {x: 5, y: 5, type: Normchel, hp: 4},
+                {x: 4, y: 4, type: Normchel},
+                {x: 4, y: 5, type: Normchel, hp: 3},
+                {x: 3, y: 4, type: Normchel}
+            ]},
+        {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayer', ignoresFog: true, economyEnabled: false,
+            towns: [], units: noobs.map(cell => ({x: cell[0], y: cell[1], type: Noob})).concat([
+                {x: 6, y: 1, type: Catapult}, {x: 6, y: 7, type: Catapult}, {x: 7, y: 4, type: Catapult}])}
+    ], [], coordDictionary(lakes), coordDictionary(ridge),
+    coordDictionary([[0, 2], [1, 7], [2, 8], [8, 0], [9, 0], [9, 8], [10, 7]]))
+    map.testName = 'tutorial 20'
     return map
 }
 
@@ -1029,15 +1085,17 @@ const tutorials = [
     {id: 'tutorial-7', title: 'Tutorial 4: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
     {id: 'tutorial-3', title: 'Tutorial 5: "No Assault Duty"', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-18', title: 'Tutorial 6: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
-    {id: 'tutorial-19', title: 'Tutorial 7: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
+    {id: 'tutorial-20', title: 'Tutorial 7: Rotate and Heal', pass: 'enemyTypesDead', types: ['Noob'],
+        get map() { return createTutorial20Map() }},
+    {id: 'tutorial-19', title: 'Tutorial 8: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
         get map() { return createTutorial19Map() }},
-    {id: 'tutorial-2', title: 'Tutorial 8: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 9: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-15', title: 'Tutorial 10: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+    {id: 'tutorial-2', title: 'Tutorial 9: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 10: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-15', title: 'Tutorial 11: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-13', title: 'Tutorial 11: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
+    {id: 'tutorial-13', title: 'Tutorial 12: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 12: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
+    {id: 'tutorial-6', title: 'Tutorial 13: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
         get map() { return createTutorial6Map() }},
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
