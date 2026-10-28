@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "450df33573d007bfc228477e410061f2efe38f3b71b89b24a14d0a00ca80b6e7",
+  "rulesVersion": "4139ccd10e2c26acd50cb44bf920dfe56e1b620d48e42ce0999892a8476d57cc",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,13 +30,13 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "0a19c6b81a0c35661f61ab310bbb728326dc6c81bd7bce59a758eddc06ad5e07",
-      "bytes": 74547
+      "sha256": "5bf26a3751a4ea06319213add28da0a97ec30ffee3aeb30865c692f46cd34821",
+      "bytes": 98717
     },
     {
       "path": "options/tutorials.js",
-      "sha256": "1d5199f28e66c6bc4d04ace3dd87e71fea826879a08d8806ef4532d3e97b052a",
-      "bytes": 45202
+      "sha256": "3c3af9026e47d09ed100ea0ab984b15e247ea3e7120aae71b5902cbdc0c60441",
+      "bytes": 48999
     },
     {
       "path": "options/tutorialProgress.js",
@@ -50,8 +50,8 @@
     },
     {
       "path": "options/save.js",
-      "sha256": "17053e735d8abe8d7a161fad83f515df714f821ebe0df0485543cffbeb7d8924",
-      "bytes": 14889
+      "sha256": "df5db13c9140df7e4210bce9020e6daa0f6bd06326eba3de74aad6541a15bf75",
+      "bytes": 16243
     },
     {
       "path": "options/actionManager.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "9f0510d1a7de2f875e4128e3be50a945af500c720fccc9a862746b91e0d238cf",
-      "bytes": 23688
+      "sha256": "57d8c0bbde25b7c7a841a8a294156b77df12f06ae9713fdac56892d9e3a09723",
+      "bytes": 24188
     },
     {
       "path": "interface/entityinterface.js",
@@ -275,13 +275,13 @@
     },
     {
       "path": "events/screen.js",
-      "sha256": "afb8ba37b445d2acab1fae391135c72bbd21e155b4aedd37ed91f4f3031c9863",
-      "bytes": 14331
+      "sha256": "f64f95e1471f0fe6d241d6f3e74019d679308d15a17f75870bf1280a9db73d5c",
+      "bytes": 15249
     },
     {
       "path": "events/events.js",
-      "sha256": "24d014a01ae1f6a6aad896c5ef008849d0bd1a9bf14d500e74b24a1b86395b01",
-      "bytes": 27200
+      "sha256": "84d515c1ea401095e6e416ee6497b8c8b8ce0d96648c004a0af2d8b21ec48b20",
+      "bytes": 27330
     },
     {
       "path": "options/onlineHubRows.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "3f73e7ca19165089c322b669204439516310f81fc08094dd5fed22aef5e3b1e2",
-      "bytes": 254016
+      "sha256": "db769eb743a34fac1ed62d034f06be96f9ede5a1b223b2e809fae76d8de8fd5e",
+      "bytes": 296453
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -325,8 +325,8 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "96a7ac1db31f59525c88637cf84787a82cb384c345076451855d24b44e88a2cc",
-      "bytes": 29874
+      "sha256": "84cfb75c9d9ec5a1d4477f7deb71cebbe49cb72248ec8cd014d32d4cbb6e2119",
+      "bytes": 31231
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
@@ -365,8 +365,8 @@
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/interactionWithRangeUnit.js",
-      "sha256": "adfb5fc7d13dce7386c544bb65cb6ec79efee7223ce46250c438567904b8a677",
-      "bytes": 6134
+      "sha256": "ebdbc298a542a9653ff7d6c6ed52ee4f486f385ffa066f4bc33a573862685158",
+      "bytes": 6072
     },
     {
       "path": "sprites/entities/units/range/rangeUnit/rangeUnit.js",
@@ -375,8 +375,8 @@
     },
     {
       "path": "sprites/entities/units/range/archer/interactionWithArcher.js",
-      "sha256": "9db3e3c51aaa9ba9a444218f039be8e80789c380e336001bf712abf4f0e498ec",
-      "bytes": 1781
+      "sha256": "411a87d4e59a15f504765507f51539b2c876c0d323af82d3e3f7233a77966ca3",
+      "bytes": 1767
     },
     {
       "path": "sprites/entities/units/range/archer/archer.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "9c2e2539c6c551c0f1a3777e5b1341e4d40d368b4c34e01c8fd3328c1c03be4c",
-      "bytes": 7826
+      "sha256": "ef3fe028371837222846739a6a3a9ad63d6dfbdf13be09650cc0eedf6413e2e4",
+      "bytes": 8026
     },
     {
       "path": "managers.js",
