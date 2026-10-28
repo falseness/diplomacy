@@ -534,3 +534,237 @@ class MapDepth {
         this.renderRim(ctx)
     }
 }
+
+// The data of the selection overlay (S6 borders): what a selected unit can reach and hit, read from the
+// interaction's own searches after unit.select() (its way and range way). Movement is never changed here:
+// only the step searches of targetsAfterStep are new searches, made with the classes the game itself uses.
+// Cells are keyed 'x,y'. Targets are listed only on cells the viewer sees (grid.fogOfWar), so fog never
+// reveals anything. An enemy unit selected gives the danger preview (its targets are the viewer's units).
+class SelectionOverlay {
+    constructor() {
+        this.cache = undefined
+    }
+    static key(coord) {
+        return coord.x + ',' + coord.y
+    }
+    static coordOf(key) {
+        const [x, y] = key.split(',')
+        return {x: +x, y: +y}
+    }
+    // The radius select() searches the moves with (the full speed for a unit that is not on its turn).
+    static moveRadius(unit) {
+        return unit.isMyTurn ? unit.interaction.moves : unit.interaction.speed
+    }
+    static isRanged(interaction) {
+        return !!interaction.rangeWay
+    }
+    static isSiege(interaction) {
+        return typeof InteractionWithCatapult != 'undefined' && interaction instanceof InteractionWithCatapult
+    }
+    static seen(coord) {
+        return !isFogOfWar || !grid.fogOfWar || !!grid.fogOfWar[coord.x][coord.y]
+    }
+    // The fog bits of the cells the overlay can reach (offset coords: no hex distance exceeds |dx| or |dy|).
+    static fogKey(unit, reach) {
+        if (!isFogOfWar || !grid.fogOfWar)
+            return ''
+        let key = ''
+        const x0 = Math.max(0, unit.coord.x - reach), x1 = Math.min(grid.arr.length - 1, unit.coord.x + reach)
+        const y0 = Math.max(0, unit.coord.y - reach), y1 = Math.min(grid.arr[0].length - 1, unit.coord.y + reach)
+        for (let x = x0; x <= x1; ++x)
+            for (let y = y0; y <= y1; ++y)
+                key += grid.fogOfWar[x][y] ? 1 : 0
+        return key
+    }
+    // The cells a finished search reached with a distance up to radius (the start cell left out).
+    static reached(way, from, radius) {
+        const cells = []
+        for (const key of way.distanceOf.keys()) {
+            const coord = {x: Math.floor(key / WAY_KEY_STRIDE), y: key % WAY_KEY_STRIDE}
+            if (!coordsEqually(coord, from) && way.isUsed(coord) && way.distanceAt(coord) <= radius)
+                cells.push(coord)
+        }
+        return cells
+    }
+    // A search made only for the overlay: it must not reset or show the logic texts of the selection.
+    static quietSearch(fn) {
+        const drawLogicText = grid.drawLogicText, own = Object.prototype.hasOwnProperty.call(grid, 'newLogicText')
+        const newLogicText = grid.newLogicText
+        grid.newLogicText = () => {}
+        try {
+            return fn()
+        } finally {
+            if (own)
+                grid.newLogicText = newLogicText
+            else
+                delete grid.newLogicText
+            grid.drawLogicText = drawLogicText
+        }
+    }
+    // The range search a ranged unit would make standing on coord: the archer's range and way depend on the
+    // cell (InteractionWithArcher.updateRange); other ranged units keep theirs.
+    static rangeSearchFrom(interaction, unit, coord) {
+        let way, range = interaction.range
+        if (interaction.standartRangeWay) {
+            const increase = grid.getBuilding(coord).rangeIncrease
+            range = interaction.standartRange + (increase || 0)
+            way = increase ? new RangeWay() : new ArcherRangeWay()
+        } else
+            way = new (interaction.rangeWay.constructor)()
+        way.create(coord, range, grid.arr, unit.playerColor, SelectionOverlay.noBorder)
+        return SelectionOverlay.reached(way, coord, range)
+    }
+    static noBorder = {createLine() {}}
+    // The overlay data of the selected unit, or undefined when it is not on the board. Cached per
+    // (unit, coord, moves, fog state); any change recomputes.
+    compute(unit) {
+        const interaction = unit && unit.interaction
+        if (!interaction || !unit.coord || grid.getUnit(unit.coord) !== unit || !interaction.way)
+            return undefined
+        const radius = SelectionOverlay.moveRadius(unit), ranged = SelectionOverlay.isRanged(interaction)
+        const id = [SelectionOverlay.key(unit.coord), interaction.moves, radius, interaction.range, whooseTurn,
+            SelectionOverlay.fogKey(unit, radius + (ranged ? interaction.range + 2 : 1))].join('|')
+        if (this.cache && this.cache.unit === unit && this.cache.id === id)
+            return this.cache
+        const data = this.build(unit, interaction, radius, ranged)
+        data.unit = unit
+        data.id = id
+        ++SelectionOverlay.builds
+        return this.cache = data
+    }
+    static builds = 0
+    build(unit, interaction, radius, ranged) {
+        const key = SelectionOverlay.key, player = unit.playerColor
+        const siege = SelectionOverlay.isSiege(interaction)
+        // Ranged select() makes no range search once the unit's own turn is done.
+        const rangeShown = ranged && !(interaction.isTurnFinished && interaction.isTurnFinished(unit))
+        const moveCells = new Map()
+        for (const coord of SelectionOverlay.reached(interaction.way, unit.coord, radius)) {
+            const cell = grid.arr[coord.x][coord.y]
+            if (!interaction.way.cellHasEnemyEntity(cell, player))
+                moveCells.set(key(coord), interaction.way.distanceAt(coord))
+        }
+        const rangeCells = new Set(), rangeExcluded = new Set()
+        const candidates = new Map(SelectionOverlay.reached(interaction.way, unit.coord, radius).map(c => [key(c), c]))
+        if (rangeShown) {
+            for (const coord of SelectionOverlay.reached(interaction.rangeWay, unit.coord, interaction.range)) {
+                candidates.set(key(coord), coord)
+                if (grid.getBuilding(coord).isStaticNature)
+                    rangeExcluded.add(key(coord))
+                else
+                    rangeCells.add(key(coord))
+            }
+        }
+        // Hit now: the game's own answer on every cell its searches reached.
+        const targetsNow = new Set()
+        if (!ranged || rangeShown) {
+            for (const [k, coord] of candidates) {
+                if (SelectionOverlay.seen(coord) &&
+                        interaction.canHitSomethingOnCell(grid.arr[coord.x][coord.y], unit))
+                    targetsNow.add(k)
+            }
+        }
+        // Hit after a step (ranged, not siege): enemy units in range of a move cell reached with a move left.
+        const targetsAfterStep = new Map()
+        if (rangeShown && !siege) {
+            SelectionOverlay.quietSearch(() => {
+                for (const [k, distance] of moveCells) {
+                    if (distance >= radius)
+                        continue
+                    const from = SelectionOverlay.coordOf(k)
+                    for (const coord of SelectionOverlay.rangeSearchFrom(interaction, unit, from)) {
+                        const target = key(coord), cell = grid.arr[coord.x][coord.y]
+                        if (targetsAfterStep.has(target) || !SelectionOverlay.seen(coord) ||
+                                !interaction.cellHasEnemyUnit(cell, unit))
+                            continue
+                        targetsAfterStep.set(target, from)
+                    }
+                }
+            })
+        }
+        const moveSet = new Set([...moveCells.keys(), key(unit.coord)])
+        const rangeSet = new Set([...rangeCells, key(unit.coord)])
+        return {
+            coord: {x: unit.coord.x, y: unit.coord.y}, moves: interaction.moves, radius, ranged: rangeShown, siege,
+            range: interaction.range, moveCells, rangeCells, rangeExcluded, targetsNow, targetsAfterStep,
+            moveLoops: SelectionOverlay.edgeLoops(moveSet),
+            rangeLoops: rangeShown ? SelectionOverlay.edgeLoops(rangeSet) : []
+        }
+    }
+    clean() {
+        this.cache = undefined
+    }
+    // The boundary edges of a set of cells (side i: vertex i to i + 1, as Border.createLine), chained into
+    // closed loops (outer loops clockwise on screen, holes counter-clockwise). Each loop: its points P, edge
+    // normals N (outward), corner normals M (k: the stretch keeping an offset edge parallel) and convexity.
+    static edgeLoops(set) {
+        const round = p => Math.round(p[0] * 10) + ':' + Math.round(p[1] * 10)
+        const edges = new Map()
+        for (const k of set) {
+            const coord = SelectionOverlay.coordOf(k), cell = grid.arr[coord.x][coord.y]
+            const vertices = SelectionOverlay.vertices(cell.hexagon.calcPos())
+            cell.hexagon.neighbours.forEach((n, i) => {
+                const inside = !isCoordNotOnMap(n, grid.arr.length, grid.arr[0].length) &&
+                    set.has(SelectionOverlay.key(n))
+                if (!inside)
+                    edges.set(round(vertices[i]), [vertices[i], vertices[(i + 1) % 6]])
+            })
+        }
+        const loops = [], seen = new Set()
+        for (const [start] of edges) {
+            if (seen.has(start))
+                continue
+            const P = []
+            for (let k = start; edges.has(k) && !seen.has(k);) {
+                seen.add(k)
+                const [a, b] = edges.get(k)
+                P.push(a)
+                k = round(b)
+            }
+            if (P.length > 2)
+                loops.push(SelectionOverlay.loopNormals(P))
+        }
+        return loops
+    }
+    static vertices(p) {
+        const r = basis.r, h = r * Math.sqrt(3) / 2
+        return [[p.x - r / 2, p.y - h], [p.x + r / 2, p.y - h], [p.x + r, p.y],
+            [p.x + r / 2, p.y + h], [p.x - r / 2, p.y + h], [p.x - r, p.y]]
+    }
+    static loopNormals(P) {
+        const n = P.length, N = []
+        for (let i = 0; i < n; ++i) {
+            const a = P[i], b = P[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy)
+            N.push({x: dy / l, y: -dx / l})
+        }
+        const M = P.map((_, i) => {
+            const a = N[(i - 1 + n) % n], b = N[i], x = a.x + b.x, y = a.y + b.y, l = Math.hypot(x, y) || 1
+            const m = {x: x / l, y: y / l}
+            m.k = 1 / Math.max(0.35, m.x * b.x + m.y * b.y)
+            return m
+        })
+        const convex = P.map((_, i) => {
+            const a = N[(i - 1 + n) % n], b = N[i]
+            return a.x * b.y - a.y * b.x > 0
+        })
+        return {P, N, M, convex}
+    }
+    // The loop's points moved along the corner normals by offset hex radii (negative: inward).
+    static offsetPoints(loop, offset) {
+        return loop.P.map((p, i) => [p[0] + loop.M[i].x * offset * basis.r * loop.M[i].k,
+            p[1] + loop.M[i].y * offset * basis.r * loop.M[i].k])
+    }
+    // Adds the loops, offset and with corners rounded by rad hex radii, to the context's current path.
+    static roundedOffset(ctx, loops, offset = 0, rad = 0.3) {
+        const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+        for (const loop of loops) {
+            const Q = SelectionOverlay.offsetPoints(loop, offset), n = Q.length, m0 = mid(Q[n - 1], Q[0])
+            ctx.moveTo(m0[0], m0[1])
+            for (let i = 0; i < n; ++i) {
+                const m = mid(Q[i], Q[(i + 1) % n])
+                ctx.arcTo(Q[i][0], Q[i][1], m[0], m[1], basis.r * rad)
+            }
+            ctx.closePath()
+        }
+    }
+}
