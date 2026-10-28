@@ -55,16 +55,20 @@ function createTutorial17Map() {
 // full-hp noob standing on it (a player's starting town spawns that noob and its first suburbs
 // itself, so blue lists no units); blue's economy is on too and, as a SimpleAiPlayerWithEconomy,
 // blue spends its town's gold on units (ignoresFog: blue paths through hexes red cannot see).
-// Two lakes in column 5 split the middle row; the other scenery lies along the top and bottom
-// borders.
+// Two lakes in column 5 split the middle row, so the way east goes round them to the north or the
+// south. The rest of the landscape sits on the flanks and borders: a pond (5,0),(6,0) on the top
+// border and another (5,7),(5,8),(6,8) on the bottom one, a mountain ridge (2,0),(3,0),(3,1) at the
+// top left and another (9,7),(9,8),(8,8) in the bottom right corner, and walkable thickets of
+// bushes in the corners. Both towns, their neighbours and red's noob stay clear of it.
 function createTutorial18Map() {
     const map = new GameMap({x: 10, y: 9}, [
         {rgb: {r: 208, g: 208, b: 208}, towns: [{x: 2, y: 4, hp: 1}]},
         {rgb: {r: 255, g: 0, b: 0}, towns: [], units: [{x: 1, y: 4, type: Noob}]},
         {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayerWithEconomy', ignoresFog: true,
             towns: [{x: 8, y: 4, hp: 0}], units: []}
-    ], [], coordDictionary([[5, 0], [6, 0], [5, 3], [5, 4]]), coordDictionary([[9, 8]]),
-    coordDictionary([[0, 0], [0, 8]]))
+    ], [], coordDictionary([[5, 0], [6, 0], [5, 3], [5, 4], [5, 7], [5, 8], [6, 8]]),
+    coordDictionary([[9, 8], [8, 8], [9, 7], [2, 0], [3, 0], [3, 1]]),
+    coordDictionary([[0, 0], [1, 0], [0, 1], [0, 8], [0, 7], [1, 8], [8, 0], [9, 0], [9, 1], [7, 8]]))
     map.testName = 'tutorial 18'
     return map
 }
