@@ -17,7 +17,8 @@ class TutorialManager {
         TutorialManager.switching = false
         const map = tutorial.map
         map.tutorial = {id: id}
-        // 'surviveRounds' counts red's units only when the map gives red no town.
+        // 'surviveRounds' counts red's units only when the map gives red no town; 'coopVictory' and
+        // 'demonUnitsDead' need a red town only when the map gives red one.
         const human = map.players[TUTORIAL_HUMAN_SLOT]
         TutorialManager.humanStartsWithTown = !!(human && human.towns && human.towns.length)
         suddenDeathRound = tutorial.suddenDeathRound || TUTORIAL_SUDDEN_DEATH_ROUND
@@ -64,11 +65,11 @@ class TutorialManager {
             case 'demonUnitsDead':
                 // Every demon unit dead (as coopResult counts them); portals and demon buildings do not matter.
                 human.updateTowns()
-                return human.towns.length > 0 && players.every(player => player.role !== 'DEMONS' ||
+                return (human.towns.length > 0 || !TutorialManager.humanStartsWithTown) && players.every(player => player.role !== 'DEMONS' ||
                     !player.units.some(unit => !unit.killed && unit.hp > 0))
             case 'coopVictory':
                 human.updateTowns()
-                return players[0].coopResult === 'victory' && human.towns.length > 0
+                return players[0].coopResult === 'victory' && (human.towns.length > 0 || !TutorialManager.humanStartsWithTown)
             case 'captureTowns':
                 return tutorial.targets.every(target => {
                     const building = grid.getCell(target).building

@@ -121,7 +121,11 @@ class GameMap {
         for (let i = 1; i < this.players.length; ++i) {
             let playerType = this.coop && i === this.coop.demonSlot ?
                 DemonPlayer : this.getPlayerType(this.players[i])
-            let economyEnabled = this.players[i].economyEnabled !== false
+            // A co-op tutorial human without a town has no economy: it cannot earn or spend, and the army
+            // salary would drive its gold below 0 on the first turn, where crisisPenalty disbands every unit.
+            const townlessTutorialHuman = this.coop && this.coop.tutorial && i !== this.coop.demonSlot &&
+                !(this.players[i].towns || []).length
+            let economyEnabled = this.players[i].economyEnabled !== false && !townlessTutorialHuman
             let configuredGold = economyEnabled ? this.players[i].gold : 0
             if (competitiveHotseat && playerType === Player) {
                 if (configuredGold === undefined) configuredGold = 100
