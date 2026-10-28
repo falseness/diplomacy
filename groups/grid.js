@@ -102,6 +102,10 @@ class Grid extends SpritesGroup {
         // TASK-1375: whether the frame being drawn is a level-of-detail frame (Grid.lodTransform), its recording
         // (beginLodFrame), the last such frame on the main canvas (key, calls, drawSerial) and the frames it held.
         this.lod = false
+        // TASK-1395: the zoom raster's board render under way (renderZoomBoard: its level of detail and lit cells' outline)
+        // and the renders made.
+        this.zoomBoardPass = undefined
+        this.zoomBoardRenders = 0
         this.lodRecorder = undefined
         this.lodFrame = undefined
         this.lodHolds = 0
@@ -4266,6 +4270,18 @@ class Grid extends SpritesGroup {
         return tiles * (LIT_TILE + 2 * LIT_TILE_PAD) ** 2 * 4 + rest + buffer
     }
     drawMapSurface(ctx) {
+        // TASK-1395: the zoom raster's board (renderZoomBoard) is drawn directly: the surface cache and the lit view's
+        // snapshots are not touched (the lit rest snapshot holds the sky).
+        if (this.zoomBoardPass) {
+            mapDepth.drawUnderlay(ctx, this)
+            mapDepth.renderAtmosphericSides(ctx)
+            this.drawHexagons(ctx)
+            atmosphericLighting.drawShadows(ctx, this)
+            if (isFogOfWar)
+                this.drawFogOfWar(ctx)
+            mapDepth.drawRim(ctx, this)
+            return false
+        }
         // At or below the cache's scale a frame without the cache draws directly.
         const cached = this.canUseSurfaceCache()
         if (cached && this.drawSurfaceCache(ctx, true)) {
@@ -4289,10 +4305,13 @@ class Grid extends SpritesGroup {
         return false
     }
     draw(ctx) {
+        const pass = this.zoomBoardPass
         ++this.drawSerial
-        this.lod = this.lodTransform(ctx)
-        // The slab's soft drop shadow on the sky, under the board.
-        this.drawSlabShadow(ctx)
+        this.lod = pass ? pass.lod : this.lodTransform(ctx)
+        // The slab's soft drop shadow on the sky, under the board (not in the zoom raster's board: the gesture's frames
+        // draw it with the sky, drawZoomRaster).
+        if (!pass)
+            this.drawSlabShadow(ctx)
         const surface = this.drawMapSurface(ctx)
         this.frameSurface = surface
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
@@ -4308,11 +4327,16 @@ class Grid extends SpritesGroup {
                 this.drawOther(ctx, 'buildings')
             if (lit)
                 this.drawLitEdges(ctx)
+            // The light map's multiply would paint the transparent canvas off the board (as on a lit tile): clipped to
+            // the lit cells as a lit tile's light is.
+            else if (pass)
+                atmosphericLighting.lightTile(ctx, this, pass.outline)
             else
                 atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
             layered = cachedScene && this.drawOverlayLayer(ctx)
             if (!cachedScene) {
-                this.dropOverlayLayer()
+                if (!pass)
+                    this.dropOverlayLayer()
                 this.drawOther(ctx, 'units')
             }
             else if (!layered) {
@@ -4349,8 +4373,10 @@ class Grid extends SpritesGroup {
         border.draw(ctx)
         if (composite)
             this.drawOverlayComposite(main, composite)
-        this.prepareSurfaceCache()
         this.lod = false
+        if (pass)
+            return
+        this.prepareSurfaceCache()
         if (typeof mainCtx !== 'undefined' && (main === mainCtx || main === this.lodRecorder?.context)) {
             const t = main.getTransform()
             this.zoomRasterSource = {a: t.a, b: t.b, c: t.c, d: t.d, e: t.e, f: t.f, width: main.canvas.width, height: main.canvas.height}
@@ -4369,34 +4395,78 @@ class Grid extends SpritesGroup {
             --screen.zoomGestureFrames
     }
     // TASK-1374: a zoom gesture's frames (wheel, pinch, the +/- keys: Screen.zoomBy) draw the board of the frame before the
-    // gesture, the main canvas as Grid.draw left it (zoomRasterSource: its transform and size), copied at the gesture's first
-    // input (captureZoomRaster), scaled to the camera; where zooming out opens the canvas past it, the sky, the slab shadow and
-    // the surface cache as they are, without the overlays. Nothing of the board is built or drawn at the gesture's scales
-    // (no lit view, tile, light map, cache build or overlay layer: a zoom frame used to draw the whole view directly). When
-    // the gesture ends (Screen.zoomGesture: 160 ms and four frames after its last input) the raster is dropped and the next
-    // frame draws the board as any frame does: the lit view or surface cache rebuilt once at the new scale, in its steps
-    // (TASK-1372). A move tween keeps the frames live. Grid.zoomRasters false: zoom frames as before.
+    // gesture scaled to the camera (the zoom raster, captureZoomRaster). Nothing of the board is built or drawn at the
+    // gesture's scales (no lit view, tile, light map, cache build or overlay layer: a zoom frame used to draw the whole view
+    // directly). When the gesture ends (Screen.zoomGesture: 160 ms and four frames after its last input) the raster is
+    // dropped and the next frame draws the board as any frame does: the lit view or surface cache rebuilt once at the new
+    // scale, in its steps (TASK-1372). Grid.zoomRasters false: zoom frames as before.
+    // TASK-1395: the raster is the board only, rendered once at the gesture's first input (renderZoomBoard: Grid.draw's board
+    // at the camera of the last frame into a transparent canvas of the main canvas's size, no sky, slab shadow or interface).
+    // It used to be a copy of the main canvas, which holds the last frame's interface (drawInterface draws on it after
+    // drawMain: the HUD showed twice) and its sky (stretched with the board, while the sky does not scale with the camera).
+    // The board's own canvas is drawn from, so no snapshot is closed under it (the held frame's bitmap holds the sky). No
+    // raster when a move tween runs (it would hold the unit still) or the canvas, camera or board cannot be drawn so: that
+    // gesture's frames are normal frames, as before TASK-1374.
     captureZoomRaster() {
-        const source = this.zoomRasterSource
-        if (!Grid.zoomRasters || this !== grid || this.zoomRaster || typeof mainCanvas === 'undefined' || !source ||
-                source.width !== mainCanvas.width || source.height !== mainCanvas.height ||
-                source.b !== 0 || source.c !== 0 || source.a <= 0 || source.d <= 0 || zoomRasterTweens())
+        if (!Grid.zoomRasters || this !== grid || this.zoomRaster || typeof mainCanvas === 'undefined' || typeof mainCtx === 'undefined' ||
+                !this.zoomRasterSource || zoomRasterTweens())
+            return
+        const t = mainCtx.getTransform(), cw = mainCanvas.width, ch = mainCanvas.height
+        if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !cw || !ch)
             return
         let canvas = this.zoomRasterCanvas
-        if (!canvas || canvas.width !== source.width || canvas.height !== source.height) {
+        if (!canvas || canvas.width !== cw || canvas.height !== ch) {
             canvas = this.zoomRasterCanvas = document.createElement('canvas')
-            canvas.width = source.width
-            canvas.height = source.height
+            canvas.width = cw
+            canvas.height = ch
         }
-        const g = canvas.getContext('2d')
-        g.setTransform(1, 0, 0, 1, 0, 0)
-        g.globalCompositeOperation = 'copy'
-        g.drawImage(mainCanvas, 0, 0)
-        g.globalCompositeOperation = 'source-over'
-        this.zoomRaster = {canvas, a: source.a, d: source.d, e: source.e, f: source.f}
+        if (!this.renderZoomBoard(canvas, t))
+            return
+        this.zoomRaster = {canvas, a: t.a, d: t.d, e: t.e, f: t.f}
+        ++this.zoomBoardRenders
     }
-    // Draws a zoom gesture's frame from the zoom raster (captureZoomRaster) on ctx (the main canvas, drawMain); false (the
-    // raster dropped) when the gesture is over or the raster cannot stand for the frame.
+    // Draws the board as the main canvas's frame at camera t draws it (its level of detail; directly: drawMapSurface) on
+    // canvas, cleared, without the sky, the background hints, the slab shadow or the interface; the light clipped to the lit
+    // cells (lightTile). Grid.draw's state of the frame (its serial, surface, lit frame and plan, overlay layer and the jobs
+    // it steps) is left as it was. False when it could not be drawn.
+    renderZoomBoard(canvas, t) {
+        const g = canvas.getContext('2d')
+        canvas.gradientSource = litGradientSource()
+        const lod = this.lodTransform(mainCtx)
+        const kept = {drawSerial: this.drawSerial, frameSurface: this.frameSurface, litFrame: this.litFrame, litPlan: this.litPlan,
+            coverOpen: this.coverOpen, litEdgesKept: this.litEdgesKept, litEdgeRuns: this.litEdgeRuns}
+        let drawn = false
+        g.save()
+        try {
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalCompositeOperation = 'source-over'
+            g.globalAlpha = 1
+            g.clearRect(0, 0, canvas.width, canvas.height)
+            // As drawMain gives the main canvas its transform and line state before the board.
+            if (typeof cameraTransform !== 'undefined')
+                cameraTransform.apply(g, cameraTransform.capture(t))
+            else
+                g.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+            g.lineJoin = 'round'
+            g.lineCap = 'round'
+            const outline = otherSettings.atmosphericVisuals ? this.litEdges({a: t.a, d: t.d, e: t.e, f: t.f}).outline : []
+            this.zoomBoardPass = {lod, outline}
+            this.draw(g)
+            drawn = true
+        } catch (e) {
+            console.error('zoom raster', e)
+        } finally {
+            this.zoomBoardPass = undefined
+            g.restore()
+            Object.assign(this, kept)
+        }
+        return drawn
+    }
+    // Draws a zoom gesture's frame on ctx (the main canvas, drawMain): the sky and the background hints as drawMain draws
+    // them now (the sky does not scale with the camera; the hints are in world space), the slab shadow, where the gesture
+    // opened the canvas past the raster the surface cache as it is (drawZoomUnderlay), then the zoom raster's board
+    // (captureZoomRaster) scaled to the camera, nothing else of the old frame. False (the raster dropped) when the gesture
+    // is over or the raster cannot stand for the frame.
     drawZoomRaster(ctx) {
         const raster = this.zoomRaster
         if (!raster)
@@ -4412,12 +4482,12 @@ class Grid extends SpritesGroup {
         const x = t.e - kx * raster.e, y = t.f - ky * raster.f, w = kx * cw, h = ky * ch
         if (!atmosphericBackground.opaqueOver(ctx))
             ctx.clearRect(canvas.offset.x, canvas.offset.y, width, height)
-        if (x > 0 || y > 0 || x + w < cw || y + h < ch) {
-            atmosphericBackground.draw(ctx)
-            drawBackgroundHints(ctx)
-            this.drawSlabShadow(ctx)
+        atmosphericBackground.draw(ctx)
+        drawBackgroundHints(ctx)
+        this.coverOpen = undefined
+        this.drawSlabShadow(ctx)
+        if (x > 0 || y > 0 || x + w < cw || y + h < ch)
             this.drawZoomUnderlay(ctx)
-        }
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.drawImage(raster.canvas, x, y, w, h)
