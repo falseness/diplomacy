@@ -89,6 +89,19 @@ class AttackFx {
     // Canvases made ready in idle time (fillPools) for tinted copies.
     spares = []
     batchFrame = false
+    // TASK-1425: a canvas just drawn into costs its first drawImage about 0.6 ms (the browser rasterizes it there), on
+    // top of the 0.3 ms that drawing it takes. In a browser (requestIdleCallback) unit images and tinted copies are
+    // therefore made in idle time, never in a frame: a frame that finds a unit's image missing or stale draws the unit
+    // directly (drawUnitAt: the same pixels) and queues the image (idleImages: unit -> how to make it); an effect's
+    // tinted copies are queued on its first frame (idleTints), the ones still missing at its hit made there. runIdle
+    // makes them and draws each once into a 1x1 canvas, so the next frame's drawImage finds it rasterized. (Elsewhere,
+    // e.g. jsdom tests and the warm-up's scratch instance: made in the frame, at most imageBudget / tintBudget.)
+    idleWork = typeof requestIdleCallback === 'function' && typeof document !== 'undefined'
+    idleImages = new Map()
+    idleTints = []
+    idleScheduled = false
+    // A prune ran since the last draw (draw).
+    pruned = false
     // The units the effects draw (hideUnits).
     hidden = new Set()
     // The camera at the last prune (offset and scale), to tell a pan.
@@ -480,6 +493,9 @@ class AttackFx {
         this.effects = this.effects.filter(e => e.attacker !== event.attacker && !this.finished(e, now))
         this.effects.push(effect)
         ++this.stats.queued
+        // (its tinted copies are made in the idle time after this task: before its hit, usually not in a frame)
+        if (this.idleWork && effect.targetImage)
+            this.queueTints(effect)
         while (this.effects.length > this.maxEffects) {
             this.effects.shift()
             ++this.stats.dropped
@@ -524,11 +540,12 @@ class AttackFx {
     // Starts waiting effects (no pass-device screen), drops finished ones and those of a drawn attacker no longer where
     // the rules left it (killed, moved, undone).
     prune(now = this.now()) {
+        this.pruned = true
         if (!AttackFx.warm)
             this.scheduleWarmUp()
         this.flush()
         // (the camera is followed in every prune, so the first frame of new effects does not see a pan)
-        const keep = !this.panning()
+        const moved = this.cameraMoved()
         if (!this.effects.length)
             return
         const held = this.held()
@@ -543,15 +560,15 @@ class AttackFx {
         // (out of a zoom gesture: the camera moved at the same scale, or Screen.surfaceMoving, set with the atmospheric
         // visuals only) draws its frames live (never held, no zoom raster), so there a finished effect gives its units back
         // to the board's unit passes rather than drawing them itself each frame.
-        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || keep && this.drawsUnit(e)) &&
+        // (the screen's gesture getters read the clock: asked only when a finished effect draws a unit)
+        let keep
+        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || this.drawsUnit(e) && (keep ??= !this.panning(moved))) &&
             (e.edge === 'in' || !e.attacker || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
                 e.attacker.coord.y === e.to.y && grid.getUnit(e.to) === e.attacker))
         this.hideUnits()
     }
-    // Whether the camera pans (prune): moved since the last prune at the same scale, or Screen.surfaceMoving, out of a
-    // zoom gesture.
-    panning() {
-        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+    // Whether the camera moved since the last prune at the same scale (and follows it).
+    cameraMoved() {
         if (typeof canvas === 'undefined' || !canvas?.offset)
             return false
         const c = this.camera, o = canvas.offset
@@ -559,6 +576,13 @@ class AttackFx {
         c.x = o.x
         c.y = o.y
         c.scale = canvas.scale
+        return moved
+    }
+    // Whether the camera pans (prune): moved (cameraMoved) or Screen.surfaceMoving, out of a zoom gesture.
+    panning(moved) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (typeof canvas === 'undefined' || !canvas?.offset)
+            return false
         return (moved || !!screen?.surfaceMoving) && !screen?.zoomGesture
     }
     // TASK-1425: an effect's code costs several ms on its first runs (first calls, inline caches, a new canvas's first
@@ -575,6 +599,8 @@ class AttackFx {
             try {
                 this.fillPools()
                 const fx = new AttackFx()
+                // (its frames make the images and tinted copies themselves: that code runs once too)
+                fx.idleWork = false
                 fx.barPool = this.barPool
                 fx.tints = this.tints
                 fx.warmUp()
@@ -688,8 +714,12 @@ class AttackFx {
     drawsTarget(e) {
         return !!e.targetUnit && !e.targetUnit.killed && grid.getUnit(e.target) === e.targetUnit
     }
+    // TASK-1425: drawMain prunes before the board is drawn (its units left out by that prune's hidden set); the draw after
+    // it in the same frame does not prune again (only a draw with no prune since the last draw does).
     draw(ctx, now = this.now()) {
-        this.prune(now)
+        if (!this.pruned)
+            this.prune(now)
+        this.pruned = false
         this.imagesMade = this.batchFrame ? this.imageBudget : 0
         this.tintsMade = this.batchFrame ? this.tintBudget : 0
         this.batchFrame = false
@@ -705,8 +735,12 @@ class AttackFx {
             const reach = Math.abs(t.a) * margin
             if (x < -reach || y < -reach || x > ctx.canvas.width + reach || y > ctx.canvas.height + reach)
                 continue
-            if (this.tintsMade < this.tintBudget && e.targetImage && !this.finished(e, now))
-                this.prepareTint(e)
+            if (e.targetImage && !this.finished(e, now)) {
+                if (this.idleWork)
+                    this.queueTints(e)
+                else if (this.tintsMade < this.tintBudget)
+                    this.prepareTint(e)
+            }
             ctx.save()
             if (this.finished(e, now)) {
                 this.drawEnd(ctx, e, lod)
@@ -791,6 +825,46 @@ class AttackFx {
                 this.tinted(e.targetImage, name)
                 return
             }
+    }
+    // e's missing tinted copies, made in idle time (idleWork); once per effect.
+    queueTints(e) {
+        if (e.tintsQueued)
+            return
+        e.tintsQueued = true
+        const tint = this.tints.get(e.targetImage)
+        for (const name of this.tintNames(e))
+            if (!tint?.[name])
+                this.idleTints.push(e.targetImage, name)
+        if (this.idleTints.length)
+            this.scheduleIdle()
+    }
+    scheduleIdle() {
+        if (this.idleScheduled)
+            return
+        this.idleScheduled = true
+        requestIdleCallback(deadline => this.runIdle(deadline), {timeout: 20})
+    }
+    // Makes the queued unit images (of units an effect still draws) and tinted copies, while the idle period lasts (all
+    // of them once the timeout passed), each rasterized by one draw into a 1x1 canvas.
+    runIdle(deadline) {
+        this.idleScheduled = false
+        const g = (this.rasterCtx ||= Object.assign(document.createElement('canvas'), {width: 1, height: 1}).getContext('2d'))
+        const more = () => deadline.didTimeout || deadline.timeRemaining() > 1
+        for (const [unit, job] of this.idleImages) {
+            if (!more())
+                break
+            this.idleImages.delete(unit)
+            if (this.hidden.has(unit) && !unit.killed)
+                g.drawImage(this.makeUnitImage(unit, job).canvas, 0, 0, 1, 1, 0, 0, 1, 1)
+        }
+        while (this.idleTints.length && more()) {
+            const image = this.idleTints.shift(), name = this.idleTints.shift()
+            const tint = this.tints.get(image)
+            if (!tint?.[name])
+                g.drawImage(this.tinted(image, name)[name], 0, 0, 1, 1, 0, 0, 1, 1)
+        }
+        if (this.idleImages.size || this.idleTints.length)
+            this.scheduleIdle()
     }
     // Melee hit and last hit (B2-melee, B2-lasthit), t in concept time units ([0, 1], the last hit [0, 1.3]). Sizes in r
     // (basis.r): the concepts' scene had r = 100 px.
@@ -945,32 +1019,17 @@ class AttackFx {
         const exact = same && entry.a === t.a && entry.d === t.d && Math.abs(entry.fx - fx) < 1e-3 && Math.abs(entry.fy - fy) < 1e-3
         // While the camera zooms or pans the image is drawn scaled and moved with it, remade once the camera rests.
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
-        const moving = !!screen && (screen.zoomGesture || screen.surfaceMoving)
-        if (!exact && !(same && moving)) {
+        if (!exact && !(same && !!screen && (screen.zoomGesture || screen.surfaceMoving))) {
+            const job = {image, showMoves, alwaysHP, x0, y0, w0, h0, a: t.a, d: t.d, fx, fy, lineJoin: ctx.lineJoin, lineCap: ctx.lineCap}
+            if (this.idleWork) {
+                this.idleImages.set(unit, job)
+                this.scheduleIdle()
+                return false
+            }
             if (this.imagesMade >= this.imageBudget)
                 return false
             ++this.imagesMade
-            const canvas = this.barPool[this.barNext] ||= document.createElement('canvas')
-            this.barNext = (this.barNext + 1) % this.barPool.length
-            entry = {image, hp: unit.hp, maxHP: unit.maxHP, moves: unit.moves, showMoves, alwaysHP, r: basis.r, w0, h0, a: t.a, d: t.d, fx, fy, canvas}
-            canvas.owner = entry
-            const w = Math.ceil(t.a * w0 + fx) + 2, h = Math.ceil(t.d * h0 + fy) + 2
-            if (canvas.width < w || canvas.height < h) {
-                canvas.width = Math.max(canvas.width, w)
-                canvas.height = Math.max(canvas.height, h)
-            }
-            entry.w = w
-            entry.h = h
-            const g = canvas.getContext('2d')
-            g.setTransform(1, 0, 0, 1, 0, 0)
-            g.clearRect(0, 0, w, h)
-            g.lineJoin = ctx.lineJoin
-            g.lineCap = ctx.lineCap
-            // the box's corner at device (1 + fx, 1 + fy) of the canvas
-            g.setTransform(t.a, 0, 0, t.d, 1 + fx - t.a * x0, 1 + fy - t.d * y0)
-            unit.drawBars(g)
-            g.drawImage(image, unit.pos.x, unit.pos.y)
-            this.barImages.set(unit, entry)
+            entry = this.makeUnitImage(unit, job)
         }
         // the box's corner now (moved by dx, dy)
         const X1 = t.a * (x0 + dx) + t.e, Y1 = t.d * (y0 + dy) + t.f
@@ -984,6 +1043,32 @@ class AttackFx {
         }
         ctx.restore()
         return true
+    }
+    // Draws unit's bars and image (job: drawUnitImage's box, scale and phase) into the next pool canvas: its entry.
+    makeUnitImage(unit, job) {
+        const {image, x0, y0, w0, h0, a, d, fx, fy} = job
+        const canvas = this.barPool[this.barNext] ||= document.createElement('canvas')
+        this.barNext = (this.barNext + 1) % this.barPool.length
+        const entry = {image, hp: unit.hp, maxHP: unit.maxHP, moves: unit.moves, showMoves: job.showMoves, alwaysHP: job.alwaysHP, r: basis.r, w0, h0, a, d, fx, fy, canvas}
+        canvas.owner = entry
+        const w = Math.ceil(a * w0 + fx) + 2, h = Math.ceil(d * h0 + fy) + 2
+        if (canvas.width < w || canvas.height < h) {
+            canvas.width = Math.max(canvas.width, w)
+            canvas.height = Math.max(canvas.height, h)
+        }
+        entry.w = w
+        entry.h = h
+        const g = canvas.getContext('2d')
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(0, 0, w, h)
+        g.lineJoin = job.lineJoin
+        g.lineCap = job.lineCap
+        // the box's corner at device (1 + fx, 1 + fy) of the canvas
+        g.setTransform(a, 0, 0, d, 1 + fx - a * x0, 1 + fy - d * y0)
+        unit.drawBars(g)
+        g.drawImage(image, unit.pos.x, unit.pos.y)
+        this.barImages.set(unit, entry)
+        return entry
     }
     // The point q of the shot's arc from S to T, height h at its middle (into this.point).
     arc(S, T, h, q) {
