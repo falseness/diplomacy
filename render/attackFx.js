@@ -37,6 +37,8 @@
 class AttackFx {
     // Most effects playing at once: a new one drops the oldest.
     maxEffects = 12
+    // Whether the effect code's warm-up was scheduled (scheduleWarmUp: once a page).
+    static warm = false
     // ms per kind.
     durations = {melee: 650, lasthit: 700, archer: 650, ember: 650, hexcaster: 650, catapult: 700, bombard: 650, mortar: 700}
     // Concept time units an effect's duration covers (the last hit runs on to the captured hex's pulse).
@@ -81,6 +83,11 @@ class AttackFx {
     // the turn and draws live in that frame), so a turn's batch never makes its images in its own first frame (TASK-1425).
     imagesMade = 0
     imageBudget = 2
+    // Tinted copies made in this frame ahead of the effects' hits (prepareTint), as imagesMade.
+    tintsMade = 0
+    tintBudget = 1
+    // Canvases made ready in idle time (fillPools) for tinted copies.
+    spares = []
     batchFrame = false
     // The units the effects draw (hideUnits).
     hidden = new Set()
@@ -515,6 +522,8 @@ class AttackFx {
     // Starts waiting effects (no pass-device screen), drops finished ones and those of a drawn attacker no longer where
     // the rules left it (killed, moved, undone).
     prune(now = this.now()) {
+        if (!AttackFx.warm)
+            this.scheduleWarmUp()
         this.flush()
         if (!this.effects.length)
             return
@@ -531,6 +540,97 @@ class AttackFx {
             (e.edge === 'in' || !e.attacker || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
                 e.attacker.coord.y === e.to.y && grid.getUnit(e.to) === e.attacker))
         this.hideUnits()
+    }
+    // TASK-1425: an effect's code costs several ms on its first runs (first calls, inline caches, a new canvas's first
+    // context and draws), and a page's first effects often come as a demon or AI turn's batch, in the frame drawn with
+    // the turn's change. Once a board with units is drawn, an idle task (browsers only) makes the canvases for unit images
+    // and tinted copies ready (fillPools) and runs every kind once on a scratch instance: through the hooks, the flush
+    // and the drawing into a small canvas of its own (through those pool canvases). This instance's effects, the board
+    // and its units are not changed.
+    scheduleWarmUp() {
+        if (typeof requestIdleCallback !== 'function' || typeof document === 'undefined' || typeof grid === 'undefined' || !grid?.arr)
+            return
+        AttackFx.warm = true
+        requestIdleCallback(() => {
+            try {
+                this.fillPools()
+                const fx = new AttackFx()
+                fx.barPool = this.barPool
+                fx.tints = this.tints
+                fx.warmUp()
+            } catch (error) {
+                // (a warm-up only: the effects work without it)
+            }
+        }, {timeout: 2000})
+    }
+    // The unit images' canvases (barPool) at the size of a unit with its bars at the main canvas's scale, and 16 spare
+    // canvases of a sprite's size for tinted copies, each with its context made and drawn on once.
+    fillPools() {
+        const t = typeof mainCtx !== 'undefined' ? mainCtx.getTransform() : null
+        const size = assets.size, box = Math.ceil(Math.max(1, t ? Math.abs(t.a) : 1) * 1.5 * size) + 4
+        const make = (w, h) => {
+            const canvas = document.createElement('canvas')
+            canvas.width = w
+            canvas.height = h
+            canvas.getContext('2d').clearRect(0, 0, 1, 1)
+            return canvas
+        }
+        for (let i = 0; i < this.barPool.length; ++i)
+            this.barPool[i] ||= make(box, box)
+        while (this.spares.length < 16)
+            this.spares.push(make(size, size))
+    }
+    warmUp() {
+        const cells = grid.arr.flat().filter(c => c?.unit?.notEmpty?.() && c.unit.pos && c.unit.coord)
+        if (!cells.length)
+            return
+        const a = cells[0].unit, colour = a.playerColor
+        const enemyCell = cells.find(c => c.unit.playerColor !== colour) || cells[cells.length - 1]
+        const b = enemyCell.unit, from = {x: a.coord.x, y: a.coord.y}, target = {x: b.coord.x, y: b.coord.y}
+        // The hooks, an attacker of each class on the board: its snapshot (a copy) is told the target lost 1 hp (a siege
+        // shooter: spent moves), so after() makes the event (on this instance) without any unit changing.
+        const classes = new Set()
+        for (const c of cells) {
+            const unit = c.unit
+            if (classes.has(unit.constructor))
+                continue
+            classes.add(unit.constructor)
+            const s = this.before(unit, cells.find(o => o.unit.playerColor !== unit.playerColor) || enemyCell)
+            if (s?.siege)
+                s.moves = unit.moves + 1
+            else if (s?.unit)
+                s.unitHp = s.unit.hp + 1
+            else if (s?.building)
+                s.buildingHp = s.building.hp + 1
+            this.after(s)
+        }
+        this.after(this.beforeSiege(a, enemyCell))
+        this.flush()
+        const image = this.imageOf(a) || null, targetImage = this.imageOf(b) || image
+        const event = (kind, more) => ({kind, attacker: a, own: false, image, from, fromPos: {x: a.pos.x, y: a.pos.y}, to: from,
+            target, targetPos: {x: b.pos.x, y: b.pos.y}, targetImage, targetIsUnit: true, targetUnit: null, damage: 2,
+            killed: false, seen: {from: true, to: true}, ...more})
+        const effects = [event('melee'), event('melee', {killed: true}), event('archer', {targetUnit: b}), event('ember', {killed: true}),
+            event('hexcaster'), event('catapult', {targetIsUnit: false}), event('bombard', {targetIsUnit: false, killed: true}),
+            event('mortar', {targetIsUnit: false}), event('catapult', {fog: true, seen: {from: true, to: false}}),
+            event('archer', {seen: {from: true, to: false}}), event('archer', {seen: {from: false, to: true}})]
+        for (const e of effects) {
+            // (one effect per attacker: each kind's own run)
+            this.effects.length = 0
+            this.queue(e)
+            this.flush()
+            const canvas = document.createElement('canvas')
+            canvas.width = canvas.height = 64
+            const ctx = canvas.getContext('2d')
+            for (const effect of this.effects) {
+                effect.startTime = 0
+                for (let time = 0; time <= effect.duration + 50; time += 50) {
+                    ctx.setTransform(0.25, 0, 0, 0.25, 32 - 0.25 * (effect.targetPos.x + assets.size / 2), 32 - 0.25 * (effect.targetPos.y + assets.size / 2))
+                    this.draw(ctx, time)
+                }
+            }
+        }
+        this.clear()
     }
     // Whether e draws a unit (its attacker, but for a shot entering from the fog edge, or a ranged hit's living target).
     drawsUnit(e) {
@@ -571,6 +671,7 @@ class AttackFx {
     draw(ctx, now = this.now()) {
         this.prune(now)
         this.imagesMade = this.batchFrame ? this.imageBudget : 0
+        this.tintsMade = this.batchFrame ? this.tintBudget : 0
         this.batchFrame = false
         if (!this.effects.length)
             return
@@ -584,6 +685,8 @@ class AttackFx {
             const reach = Math.abs(t.a) * margin
             if (x < -reach || y < -reach || x > ctx.canvas.width + reach || y > ctx.canvas.height + reach)
                 continue
+            if (this.tintsMade < this.tintBudget && e.targetImage && !this.finished(e, now))
+                this.prepareTint(e)
             ctx.save()
             if (this.finished(e, now)) {
                 this.drawEnd(ctx, e, lod)
@@ -611,57 +714,63 @@ class AttackFx {
     ease(t) {
         return 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, t)))
     }
-    // Tinted copies of a sprite: red (flash) and grey with a dark red cast (a dying unit); orange and violet (ranged
-    // demon hits) made on first use.
-    tinted(image, name) {
+    // Tinted copies of a sprite, each made on first use: red (flash), grey with a dark red cast (a dying unit), orange and
+    // violet (ranged demon hits). names: the copies wanted (none: red and grey). TASK-1425: an effect makes its copies in
+    // the frames before its hit, one a frame (prepareTint), so a turn's batch does not make them all in its hit frame.
+    tinted(image, ...names) {
         let tint = this.tints.get(image)
-        if (tint) {
-            if (name && !tint[name])
-                tint[name] = this.tintCopy(image, this.tintColors[name])
-            return tint
+        if (!tint) {
+            if (this.tints.size > 64)
+                this.tints.clear()
+            this.tints.set(image, tint = {})
         }
-        const make = paint => {
-            const c = document.createElement('canvas')
-            c.width = image.width
-            c.height = image.height
-            const g = c.getContext('2d')
-            g.drawImage(image, 0, 0)
-            paint(g, c)
-            return c
-        }
-        tint = {
-            red: make((g, c) => {
-                g.globalCompositeOperation = 'source-atop'
-                g.fillStyle = 'rgb(255, 40, 30)'
-                g.fillRect(0, 0, c.width, c.height)
-            }),
-            grey: make((g, c) => {
-                g.globalCompositeOperation = 'saturation'
-                g.fillStyle = 'rgb(128, 128, 128)'
-                g.fillRect(0, 0, c.width, c.height)
-                g.globalCompositeOperation = 'destination-in'
-                g.drawImage(image, 0, 0)
-                g.globalCompositeOperation = 'source-atop'
-                g.fillStyle = 'rgba(120, 20, 20, 0.4)'
-                g.fillRect(0, 0, c.width, c.height)
-            })
-        }
-        if (this.tints.size > 64)
-            this.tints.clear()
-        this.tints.set(image, tint)
-        return name ? this.tinted(image, name) : tint
+        for (const name of names.length ? names : ['red', 'grey'])
+            if (!tint[name])
+                tint[name] = this.tintCopy(image, name)
+        return tint
     }
     tintColors = {red: 'rgb(255, 40, 30)', orange: 'rgb(255, 110, 20)', violet: 'rgb(150, 40, 220)'}
-    tintCopy(image, color) {
-        const c = document.createElement('canvas')
+    tintCopy(image, name) {
+        const c = this.spares.pop() || document.createElement('canvas')
         c.width = image.width
         c.height = image.height
         const g = c.getContext('2d')
         g.drawImage(image, 0, 0)
-        g.globalCompositeOperation = 'source-atop'
-        g.fillStyle = color
+        if (name === 'grey') {
+            g.globalCompositeOperation = 'saturation'
+            g.fillStyle = 'rgb(128, 128, 128)'
+            g.fillRect(0, 0, c.width, c.height)
+            g.globalCompositeOperation = 'destination-in'
+            g.drawImage(image, 0, 0)
+            g.globalCompositeOperation = 'source-atop'
+            g.fillStyle = 'rgba(120, 20, 20, 0.4)'
+        }
+        else {
+            g.globalCompositeOperation = 'source-atop'
+            g.fillStyle = this.tintColors[name]
+        }
         g.fillRect(0, 0, c.width, c.height)
         return c
+    }
+    // The tinted copies e draws (drawMelee; drawRanged and its drawDying; drawCollapse), kept on e.
+    tintNames(e) {
+        if (!e.tints) {
+            const style = this.ranged[e.kind]
+            e.tints = !e.targetImage ? [] : this.siege[e.kind] ? (e.killed ? ['grey'] : []) :
+                style ? (e.killed && e.targetIsUnit ? [style.tint, 'red', 'grey'] : [style.tint]) : e.kind === 'lasthit' ? ['red', 'grey'] : ['red']
+        }
+        return e.tints
+    }
+    // Makes one of e's missing tinted copies (draw: an effect still playing, at most tintBudget a frame, none in a batch's
+    // first frame; its hit makes those still missing).
+    prepareTint(e) {
+        const tint = this.tints.get(e.targetImage)
+        for (const name of this.tintNames(e))
+            if (!tint?.[name]) {
+                ++this.tintsMade
+                this.tinted(e.targetImage, name)
+                return
+            }
     }
     // Melee hit and last hit (B2-melee, B2-lasthit), t in concept time units ([0, 1], the last hit [0, 1.3]). Sizes in r
     // (basis.r): the concepts' scene had r = 100 px.
@@ -701,7 +810,7 @@ class AttackFx {
         }
         const hit = time >= 0.3
         // (tinted copies from the hit on: an effect's first frames, e.g. a turn's batch behind the pass-device screen, make none)
-        const tint = hit && e.targetImage && this.tinted(e.targetImage)
+        const tint = hit && e.targetImage && this.tinted(e.targetImage, ...this.tintNames(e))
         // The target: a red flash over it (a hit) or its snapshot dying (last hit).
         if (!last) {
             if (hit && time < 0.55 && tint) {
@@ -870,7 +979,7 @@ class AttackFx {
         const E = {x: e.targetPos.x + half, y: e.targetPos.y + half}
         const vx = E.x - A.x, vy = E.y - A.y, dist = Math.hypot(vx, vy) || 1
         const ux = vx / dist, uy = vy / dist
-        const tint = t >= hit && e.targetImage && this.tinted(e.targetImage, style.tint)
+        const tint = t >= hit && e.targetImage && this.tinted(e.targetImage, ...this.tintNames(e))
         // The target: a living unit (drawn here) knocked back and flashing, a dying one falling, a building flashing.
         const flash = t >= hit && t < hit + style.tintSpan ? style.tintAlpha * (1 - (t - hit) / style.tintSpan) : 0
         if (e.killed && e.targetIsUnit)
@@ -1247,7 +1356,7 @@ class AttackFx {
         }
         if (s >= 0.7)
             return
-        const k = this.ease(s / 0.7), grey = this.tinted(image).grey
+        const k = this.ease(s / 0.7), grey = this.tinted(image, 'grey').grey
         ctx.save()
         ctx.beginPath()
         ctx.rect(x - image.width, y - image.height, 3 * image.width, 2 * image.height)
