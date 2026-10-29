@@ -712,6 +712,15 @@ class SelectionOverlay {
                     targetsNow.add(k)
             }
         }
+        // TASK-1437: a melee unit stands on the cell it hits when the hit leaves it standable (a last hit): that cell is
+        // part of the move plate and keeps its hit-now emblem. Ranged and siege units never move onto their target.
+        if (!ranged) {
+            for (const k of targetsNow) {
+                const coord = SelectionOverlay.coordOf(k), cell = grid.arr[coord.x][coord.y]
+                if (interaction.way.cellHasEnemyEntity(cell, player) && SelectionOverlay.standsAfterHit(interaction, cell, unit))
+                    moveCells.set(k, interaction.way.distanceAt(coord))
+            }
+        }
         // Hit after a step (ranged, not siege): enemy units in range of a move cell reached with a move left.
         const targetsAfterStep = new Map()
         if (rangeShown && !siege) {
@@ -738,6 +747,23 @@ class SelectionOverlay {
             moveLoops: SelectionOverlay.edgeLoops(moveSet),
             rangeLoops: rangeShown ? SelectionOverlay.edgeLoops(rangeSet) : []
         }
+    }
+    // TASK-1437: whether move() would leave the melee unit on cell after its hit, predicted without side effects: the
+    // target hitIfCellHasEnemy picks (an enemy building first, except a demon on its live portal), whether unit.dmg
+    // kills it (a town only drops to 0 hp and stays), then cantStandOnCell on the cell as the hit would leave it.
+    static standsAfterHit(interaction, cell, unit) {
+        let building = cell.building, cellUnit = cell.unit
+        if (interaction.cellHasEnemyBuilding(cell, unit) && !interaction.demonShieldsPortal(cell, unit) &&
+                building.isHitable) {
+            const hp = building.hp - unit.dmg
+            if (building.isTown())
+                building = Object.create(building, {hp: {value: Math.max(hp, 0)}})
+            else if (hp <= 0)
+                building = new Empty()
+        } else if (interaction.cellHasEnemyUnit(cell, unit) && cellUnit.hp - unit.dmg <= 0)
+            cellUnit = new Empty()
+        const after = Object.create(cell, {building: {value: building}, unit: {value: cellUnit}})
+        return !interaction.cantStandOnCell(after, unit)
     }
     clean() {
         this.cache = undefined
