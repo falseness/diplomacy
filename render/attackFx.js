@@ -39,6 +39,8 @@
 // replay goes on at once. When the queue is empty the camera glides back to the view the replay started from. Input is
 // never blocked and the rules never wait: the player selects, moves, attacks (own effects at once), zooms, pans and ends
 // the turn while it goes on; a new viewer clears it (clear), as does animateAttacks off (no camera movement at all).
+// No unit enters or leaves the board's cache in a glide frame (TASK-1429): a step's effect starts in the frame after its
+// glide's last step, and with the classic visuals finished effects keep their units through the replay's glides.
 // Peers' attacks in a parallel turn (TASK-1427): while the screen's player is active a peer's action comes as an
 // observation (onlineObservation: pictures only); its attack is read from the update (observedBefore / observedAfter) and
 // played once: the committed diff of the same action does not play it again (played), a peer's undo plays nothing.
@@ -656,10 +658,18 @@ class AttackFx {
         for (;;) {
             if (r.phase === 'home' && r.index < r.steps.length)
                 r.phase = null
+            // A glide's phase ends in the frame after its last step (TASK-1429): the units the next effect takes (or the
+            // finished ones give back) change the board's cache in a frame of their own, never in a glide frame.
+            if ((r.phase === 'glide' || r.phase === 'home') && (screen.glide || r.gliding)) {
+                if (!screen.glide)
+                    r.glideEnded = now
+                r.gliding = !!screen.glide
+                return
+            }
             if (r.phase && now < r.until)
                 return
             if (r.phase === 'home') {
-                r.log.push({home: true, glideStart: r.homeStart, glideEnd: now, offset: {x: canvas.offset.x, y: canvas.offset.y},
+                r.log.push({home: true, glideStart: r.homeStart, glideEnd: r.glideEnded ?? now, offset: {x: canvas.offset.x, y: canvas.offset.y},
                     startOffset: r.homeOffset})
                 this.endReplay(null)
                 return
@@ -667,7 +677,7 @@ class AttackFx {
             if (r.phase === 'glide') {
                 const step = r.steps[r.index], entry = step.entry
                 const effect = this.play(step.event, 'both')
-                entry.glideEnd = now
+                entry.glideEnd = r.glideEnded ?? now
                 entry.offsetAtEffect = {x: canvas.offset.x, y: canvas.offset.y}
                 if (effect) {
                     effect.startTime = now
@@ -694,6 +704,7 @@ class AttackFx {
                 r.homeStart = now
                 r.until = now + Screen.GLIDE_DURATION
                 screen.glideTo(r.home, Screen.GLIDE_DURATION, () => this.now())
+                r.gliding = true
                 return
             }
             const step = r.steps[r.index]
@@ -714,6 +725,7 @@ class AttackFx {
                 entry.glideStart = now
                 r.moved = true
                 screen.glideTo(target, Screen.GLIDE_DURATION, () => this.now())
+                r.gliding = true
                 r.phase = 'glide'
                 r.until = now + Screen.GLIDE_DURATION
                 return
@@ -876,11 +888,19 @@ class AttackFx {
         // to the board's unit passes rather than drawing them itself each frame.
         // (the screen's gesture getters read the clock: asked only when a finished effect draws a unit)
         // An observed effect (TASK-1427) plays to its end: a peer's next update remakes its pictures (an undo too).
+        // TASK-1429: the replay's own glide keeps them with the classic visuals (the surface cache holds the unit bodies:
+        // giving them back would rebuild it in a glide frame); the next step's effect gives them back as it starts.
         let keep
-        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || this.drawsUnit(e) && (keep ??= !this.panning(moved))) &&
+        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || this.drawsUnit(e) && (keep ??= !this.panning(moved) ||
+            this.replayGlide())) &&
             (e.edge === 'in' || !e.attacker || e.observed && !this.finished(e, now) || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
                 e.attacker.coord.y === e.to.y && this.unitAt(e, e.to) === e.attacker))
         this.hideUnits()
+    }
+    // Whether the camera moves by the replay's glide (its glide phases) with the classic visuals (TASK-1429).
+    replayGlide() {
+        const phase = this.replay?.phase
+        return (phase === 'glide' || phase === 'home') && typeof otherSettings !== 'undefined' && !otherSettings.atmosphericVisuals
     }
     // Whether the camera moved since the last prune at the same scale (and follows it).
     cameraMoved() {
