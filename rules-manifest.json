@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "43c4ef48a33d76657c735cf579d934f348ba8a7ba059456833fb73e9dcb5c0c9",
+  "rulesVersion": "f6861a1d403e15132aec522c2f0d6483bae5a8f9b4560160f3804cffe6782609",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -70,8 +70,8 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "236001e721012a3b788b354b865ff1bf8479c778b2b2937a245bdcf3aac708ba",
-      "bytes": 2367
+      "sha256": "8f88ab7478d7a9c13003832d5ec50faa54a59b18f20a06aaa16907e3fb7f15b5",
+      "bytes": 2676
     },
     {
       "path": "options/actionApi.js",
@@ -145,8 +145,8 @@
     },
     {
       "path": "render/moveTween.js",
-      "sha256": "7d7e5508e20ec2fb9603051a93bc242708450b6d8e23a34e4a7f728931ca5c7f",
-      "bytes": 3560
+      "sha256": "ae9a9dc3e58deb7ba7fde597abaec01d3a28079427ae76ee803015359841937e",
+      "bytes": 3745
     },
     {
       "path": "render/draw.js",
@@ -250,8 +250,8 @@
     },
     {
       "path": "sprites/elements/checkBox.js",
-      "sha256": "2ae19216639d6a29844dd71f033b9926ecedc9b1f9206f56234cefc6473cf30f",
-      "bytes": 2944
+      "sha256": "798febc7fcc483e68c8fa7b03ecd994c37a3056830831eeb25a5f3ca27a95f36",
+      "bytes": 3409
     },
     {
       "path": "sprites/elements/slider.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "312c7d0e62f381f933b968dd9ae75e725256c6a2078320e9687f711fea630a58",
-      "bytes": 158252
+      "sha256": "a6be420625d30059b16375a27e6351cc1f50691fc2850723d65a866e86e10d18",
+      "bytes": 159249
     },
     {
       "path": "sprites/hexagon.js",

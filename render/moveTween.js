@@ -37,6 +37,11 @@ const moveTween = {
         const tween = this.tweens.get(unit)
         if (!tween)
             return null
+        // (animations turned off: every unit is drawn at its cell at once)
+        if (!otherSettings.animateMoves) {
+            this.tweens.clear()
+            return null
+        }
         const path = tween.path
         const target = path[path.length - 1]
         const elapsed = Math.max(0, now - tween.startTime)

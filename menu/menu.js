@@ -105,7 +105,7 @@ class OtherSettingsTree {
     // Rows form a two-column grid: labels left-aligned at one x, boxes in one column to their right.
     // The rows and the back button below them are scaled to fit between the logo and the screen bottom.
     LABELS = ['always display hp bar', 'always display moves bar', 'move camera to undo target',
-        'use polished sprites', 'autoscout (online fog)', 'Atmospheric visuals']
+        'use polished sprites', 'autoscout (online fog)', 'Atmospheric visuals', 'Animations', "Replay others' moves"]
     BACK_HEIGHT = HEIGHT * 0.1
     FIRST_Y = Math.max(HEIGHT * 0.27, HEIGHT * 0.17 + WIDTH * 0.055)
     INTERVAL_Y = Math.min(HEIGHT * 0.08,
@@ -146,11 +146,10 @@ class OtherSettingsTree {
         })
         this.rowsBottom = this.FIRST_Y + count * intervalY
         ;[this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox, this.polishedSpritesCheckBox,
-            this.autoscoutCheckBox, this.atmosphericVisualsCheckBox] = boxes
+            this.autoscoutCheckBox, this.atmosphericVisualsCheckBox, this.animationsCheckBox, this.replayCheckBox] = boxes
 
         this.buttons = []
-        this.buttons.push(this.hpBarCheckBox, this.movesBarCheckBox, this.undoCheckBox, this.polishedSpritesCheckBox,
-            this.autoscoutCheckBox, this.atmosphericVisualsCheckBox)
+        this.buttons.push(...boxes)
     }
     setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
         let y = this.rowsBottom + this.INTERVAL_Y * 0.25
@@ -177,6 +176,19 @@ class OtherSettingsTree {
         otherSettings.usePolishedSprites = this.polishedSpritesCheckBox.mark
         otherSettings.autoscout = this.autoscoutCheckBox.mark
         otherSettings.atmosphericVisuals = this.atmosphericVisualsCheckBox.mark
+        // 'Animations' is both the move slide and the attack effects (an old save with one of them off shows unchecked);
+        // off ends running ones at once. 'Replay others' moves' is ignored (greyed, not clickable) while it is off.
+        if (this.animationsCheckBox.mark !== (otherSettings.animateMoves && otherSettings.animateAttacks)) {
+            otherSettings.animateMoves = otherSettings.animateAttacks = this.animationsCheckBox.mark
+            if (!this.animationsCheckBox.mark) {
+                if (typeof moveTween !== 'undefined')
+                    moveTween.clear()
+                if (typeof attackFx !== 'undefined')
+                    attackFx.clear()
+            }
+        }
+        otherSettings.replayOthers = this.replayCheckBox.mark
+        this.replayCheckBox.disabled = !this.animationsCheckBox.mark
         if (atmosphericVisuals !== otherSettings.atmosphericVisuals && grid) {
             // Rebuild the board display on the next frame, without changing game state.
             grid.surfaceCacheState = undefined
@@ -195,6 +207,9 @@ class OtherSettingsTree {
         this.polishedSpritesCheckBox.mark = otherSettings.usePolishedSprites
         this.autoscoutCheckBox.mark = otherSettings.autoscout
         this.atmosphericVisualsCheckBox.mark = otherSettings.atmosphericVisuals
+        this.animationsCheckBox.mark = otherSettings.animateMoves && otherSettings.animateAttacks
+        this.replayCheckBox.mark = otherSettings.replayOthers
+        this.replayCheckBox.disabled = !this.animationsCheckBox.mark
     }
     draw(ctx) {
         this.__updateButtonsByOtherSettings()

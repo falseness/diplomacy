@@ -8,6 +8,9 @@ class Settings {
         this.animateMoves = true
         // Attack animations (render/attackFx.js).
         this.animateAttacks = true
+        // The camera replay of others' attacks (render/attackFx.js, TASK-1428); off -> they play in place, the camera
+        // stays. Ignored while the animations are off.
+        this.replayOthers = true
         // The 'replays' menu entry, hidden until the server serves game:replay.
         this.showReplays = false
         // Autoscouting prefetch (artifacts/actions_feature_prd.txt sec. 7.2): online hidden-information games get the
@@ -28,6 +31,7 @@ class Settings {
         this.atmosphericVisuals = dict.atmosphericVisuals !== false
         this.animateMoves = dict.animateMoves !== false
         this.animateAttacks = dict.animateAttacks !== false
+        this.replayOthers = dict.replayOthers !== false
         this.showReplays = dict.showReplays === true
         this.autoscout = dict.autoscout !== false
         return migrate
@@ -41,6 +45,7 @@ class Settings {
             atmosphericVisuals: this.atmosphericVisuals,
             animateMoves: this.animateMoves,
             animateAttacks: this.animateAttacks,
+            replayOthers: this.replayOthers,
             showReplays: this.showReplays,
             autoscout: this.autoscout,
             settingsVersion: Settings.VERSION

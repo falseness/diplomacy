@@ -177,6 +177,10 @@ class AttackFx {
     enabled() {
         return typeof otherSettings === 'undefined' || otherSettings.animateAttacks !== false
     }
+    // TASK-1430: the camera replay of others' attacks (the 'Replay others' moves' setting); off -> in place, at once.
+    replays() {
+        return typeof otherSettings === 'undefined' || otherSettings.replayOthers !== false
+    }
     // The target cell's enemy unit and building with their hp, before unit acts on cell; null when no effect can
     // come of it (off, no enemy there, a kind of attacker with no effect).
     before(unit, cell) {
@@ -619,7 +623,7 @@ class AttackFx {
     replayLog = []
     replayScreen() {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent?.screen : undefined
-        return this.sequential && screen && typeof screen.glideTo === 'function' && typeof canvas !== 'undefined' && canvas?.offset ? screen : null
+        return this.sequential && this.replays() && screen && typeof screen.glideTo === 'function' && typeof canvas !== 'undefined' && canvas?.offset ? screen : null
     }
     // Queues others' events in the replay, judged by the viewer's fog now (an AI turn's own vision is in grid.fogOfWar,
     // the ended human's in view); returns the event, or null for one the viewer sees nothing of.
@@ -647,7 +651,23 @@ class AttackFx {
             return
         const screen = this.replayScreen()
         if (!screen || !this.enabled()) {
-            this.endReplay(screen)
+            // TASK-1430: the replay turned off while it runs: its glide stops (the camera stays where it is now) and the
+            // steps not played yet play in place, as a batch.
+            const own = typeof gameEvent !== 'undefined' ? gameEvent?.screen : null
+            const rest = this.enabled() ? r.steps.slice(r.phase === 'effect' ? r.index + 1 : r.index) : []
+            this.endReplay(screen || (r.gliding || r.phase === 'glide' || r.phase === 'home' ? own : null))
+            if (rest.some(step => step.event)) {
+                this.flushing = true
+                try {
+                    for (const step of rest)
+                        if (step.event)
+                            this.play(step.event, 'both')
+                } finally {
+                    this.flushing = false
+                }
+                this.hideUnits()
+                this.batchFrame = true
+            }
             return
         }
         if (!r.home) {
@@ -866,6 +886,9 @@ class AttackFx {
     // the rules left it (killed, moved, undone).
     prune(now = this.now()) {
         this.pruned = true
+        // TASK-1430: the animations turned off: running and waiting effects and the replay end at once.
+        if (!this.enabled() && (this.effects.length || this.later.length || this.replay))
+            this.clear()
         if (!AttackFx.warm)
             this.scheduleWarmUp()
         this.flush()

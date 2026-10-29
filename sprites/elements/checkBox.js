@@ -5,6 +5,8 @@ class CheckBox extends Rect {
             color, strokeColor, light)
         
         this.mark = false
+        // A disabled box is drawn greyed and ignores clicks.
+        this.disabled = false
         this.marginLeft = marginLeft
         this.text = text
         this.trimText()
@@ -34,7 +36,7 @@ class CheckBox extends Rect {
 
     }
     click(pos) {
-        if (this.isInside(pos)) {
+        if (!this.disabled && this.isInside(pos)) {
             this.mark = !this.mark
             return true
         }
@@ -58,11 +60,17 @@ class CheckBox extends Rect {
         return this.selected ? this.selectedRect : this
     }
     draw(ctx) {
+        if (this.disabled) {
+            ctx.save()
+            ctx.globalAlpha *= 0.4
+        }
         if (Text.menuTheme)
             this.box.drawPlaque(ctx, Text.menuTheme.plain)
         else
             Rect.prototype.draw.call(this.box, ctx)
         this.text.draw(ctx)
+        if (this.disabled)
+            ctx.restore()
     }
 }
 class ImageCheckBox extends CheckBox {
@@ -74,6 +82,15 @@ class ImageCheckBox extends CheckBox {
     }
     draw(ctx) {
         super.draw(ctx)
+        if (this.disabled) {
+            ctx.save()
+            ctx.globalAlpha *= 0.4
+        }
+        this.drawCheck(ctx)
+        if (this.disabled)
+            ctx.restore()
+    }
+    drawCheck(ctx) {
         if (this.mark && Text.menuTheme) {
             const box = this.box
             CheckBox.drawMark(ctx, box.center, box.width * 0.72, Text.menuTheme.text)
