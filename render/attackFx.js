@@ -102,6 +102,13 @@ class AttackFx {
     // Frames drawn (draw), and how many of them a queued unit image may wait for idle time (drawUnitImage).
     drawFrames = 0
     idleWait = 1
+    // This frame is a zoom gesture's raster (drawMain sets it; draw resets it): no idle time comes between such frames, so
+    // a missing unit image is made at once, within imageBudget. ownEffect: the effect being drawn is the local player's
+    // own; others' effects (a flushed AI / demon batch) make their images in idle time only outside raster frames, so a
+    // turn's batch does not make them in the frames right after the turn (TASK-1425).
+    rasterFrame = false
+    inRaster = false
+    ownEffect = true
     idleTints = []
     idleScheduled = false
     // A prune ran since the last draw (draw).
@@ -725,6 +732,8 @@ class AttackFx {
             this.prune(now)
         this.pruned = false
         ++this.drawFrames
+        this.inRaster = this.rasterFrame
+        this.rasterFrame = false
         this.imagesMade = this.batchFrame ? this.imageBudget : 0
         this.tintsMade = this.batchFrame ? this.tintBudget : 0
         this.batchFrame = false
@@ -746,6 +755,7 @@ class AttackFx {
                 else if (this.tintsMade < this.tintBudget)
                     this.prepareTint(e)
             }
+            this.ownEffect = e.own
             ctx.save()
             if (this.finished(e, now)) {
                 this.drawEnd(ctx, e, lod)
@@ -1027,11 +1037,13 @@ class AttackFx {
         if (!exact && !(same && !!screen && (screen.zoomGesture || screen.surfaceMoving))) {
             const job = {image, showMoves, alwaysHP, x0, y0, w0, h0, a: t.a, d: t.d, fx, fy, lineJoin: ctx.lineJoin, lineCap: ctx.lineCap}
             if (this.idleWork) {
-                // queued since a frame number: still missing idleWait frames later (back-to-back frames, e.g. a zoom
-                // gesture, leave no idle period) it is made in the frame as below, within imageBudget
+                // queued since a frame number: an own effect's image still missing idleWait frames later (back-to-back
+                // frames leave no idle period) is made in the frame as below, within imageBudget; in a zoom raster frame
+                // any effect's at once; outside those, others' effects wait for idle time only
                 const queued = this.idleImages.get(unit)
                 job.since = queued ? queued.since : this.drawFrames
-                if (this.drawFrames - job.since < this.idleWait || this.imagesMade >= this.imageBudget) {
+                const wait = this.inRaster ? 0 : this.ownEffect ? this.idleWait : Infinity
+                if (this.drawFrames - job.since < wait || this.imagesMade >= this.imageBudget) {
                     this.idleImages.set(unit, job)
                     this.scheduleIdle()
                     return false

@@ -5,6 +5,8 @@ function drawMain() {
         attackFx.prune()
     // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374).
     if (grid.drawZoomRaster(mainCtx)) {
+        if (typeof attackFx !== 'undefined')
+            attackFx.rasterFrame = true
         drawAttackFx()
         return
     }
