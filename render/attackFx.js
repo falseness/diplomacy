@@ -523,8 +523,8 @@ class AttackFx {
     finished(e, now = this.now()) {
         return e.startTime !== null && now - e.startTime >= e.duration
     }
-    // The units the effects draw, left out of the grid's unit passes until the next prune (hidesUnit, called for every
-    // unit of every pass, looks them up): attackers (but a shot entering from the fog edge) and a ranged hit's living
+    // The units the effects draw, left out of the grid's unit passes until the next prune (Grid.getStillUnit, run for every
+    // unit of every pass, looks them up in this set directly): attackers (but a shot entering from the fog edge) and a ranged hit's living
     // target while it stays on its cell. An effect waiting behind the pass-device screen hides its units already (drawn
     // at its first pose), so the board's frame drops them with the turn's own change, not in the next view's first frame.
     hideUnits() {

@@ -539,10 +539,11 @@ class Grid extends SpritesGroup {
         drawCachedImage(ctx, cachedImages[this.getEntityBodyImageName(entity)], entity.pos)
     }
     // The cell's unit as drawn in place: none while it is tweening (moveTween draws it) or attacking (attackFx draws it).
+    // (attackFx.hidden is read here, not through a method call: this runs for every unit of every pass, TASK-1425)
     getStillUnit(cell) {
         if (typeof onlineObservation !== 'undefined' && onlineObservation.hidesUnit(cell)) return undefined
         return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) &&
-            !(typeof attackFx !== 'undefined' && attackFx.hidesUnit(cell.unit)) ? cell.unit : undefined
+            !(typeof attackFx !== 'undefined' && attackFx.hidden.size > 0 && attackFx.hidden.has(cell.unit)) ? cell.unit : undefined
     }
     drawEntityBodies(ctx) {
         const range = this.drawRange(ctx)
