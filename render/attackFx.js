@@ -91,13 +91,17 @@ class AttackFx {
     batchFrame = false
     // TASK-1425: a canvas just drawn into costs its first drawImage about 0.6 ms (the browser rasterizes it there), on
     // top of the 0.3 ms that drawing it takes. In a browser (requestIdleCallback) unit images and tinted copies are
-    // therefore made in idle time, never in a frame: a frame that finds a unit's image missing or stale draws the unit
-    // directly (drawUnitAt: the same pixels) and queues the image (idleImages: unit -> how to make it); an effect's
+    // therefore made in idle time: a frame that finds a unit's image missing or stale draws the unit directly
+    // (drawUnitAt: the same pixels) and queues the image (idleImages: unit -> how to make it; made in a frame only when
+    // no idle period came for idleWait frames, as during a zoom gesture's back-to-back frames); an effect's
     // tinted copies are queued on its first frame (idleTints), the ones still missing at its hit made there. runIdle
     // makes them and draws each once into a 1x1 canvas, so the next frame's drawImage finds it rasterized. (Elsewhere,
     // e.g. jsdom tests and the warm-up's scratch instance: made in the frame, at most imageBudget / tintBudget.)
     idleWork = typeof requestIdleCallback === 'function' && typeof document !== 'undefined'
     idleImages = new Map()
+    // Frames drawn (draw), and how many of them a queued unit image may wait for idle time (drawUnitImage).
+    drawFrames = 0
+    idleWait = 1
     idleTints = []
     idleScheduled = false
     // A prune ran since the last draw (draw).
@@ -720,6 +724,7 @@ class AttackFx {
         if (!this.pruned)
             this.prune(now)
         this.pruned = false
+        ++this.drawFrames
         this.imagesMade = this.batchFrame ? this.imageBudget : 0
         this.tintsMade = this.batchFrame ? this.tintBudget : 0
         this.batchFrame = false
@@ -1022,11 +1027,17 @@ class AttackFx {
         if (!exact && !(same && !!screen && (screen.zoomGesture || screen.surfaceMoving))) {
             const job = {image, showMoves, alwaysHP, x0, y0, w0, h0, a: t.a, d: t.d, fx, fy, lineJoin: ctx.lineJoin, lineCap: ctx.lineCap}
             if (this.idleWork) {
-                this.idleImages.set(unit, job)
-                this.scheduleIdle()
-                return false
-            }
-            if (this.imagesMade >= this.imageBudget)
+                // queued since a frame number: still missing idleWait frames later (back-to-back frames, e.g. a zoom
+                // gesture, leave no idle period) it is made in the frame as below, within imageBudget
+                const queued = this.idleImages.get(unit)
+                job.since = queued ? queued.since : this.drawFrames
+                if (this.drawFrames - job.since < this.idleWait || this.imagesMade >= this.imageBudget) {
+                    this.idleImages.set(unit, job)
+                    this.scheduleIdle()
+                    return false
+                }
+                this.idleImages.delete(unit)
+            } else if (this.imagesMade >= this.imageBudget)
                 return false
             ++this.imagesMade
             entry = this.makeUnitImage(unit, job)
