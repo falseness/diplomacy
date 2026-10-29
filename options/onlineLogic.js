@@ -79,7 +79,8 @@ const onlineObservation = {
         this.buildings.clear()
         this.hexagons.clear()
     },
-    receive(message) {
+    // animate: false when gameDiffHandler.apply played the change's attacks already (render/attackFx.js).
+    receive(message, animate = true) {
         // Consume stale sequence slots in gameDiffHandler, but never let their
         // pictures return after authority has advanced or committed this peer.
         if (Number.isInteger(message.gameRound) && message.gameRound !== gameRound) return null
@@ -90,6 +91,8 @@ const onlineObservation = {
             this.board = grid
             this.round = gameRound
         }
+        // A peer's attack in the update is animated from the pictures (UI only, render/attackFx.js).
+        const attacks = animate && typeof attackFx !== 'undefined' ? attackFx.observedBefore(message.diff.cells, this) : null
         if (Array.isArray(message.visibility)) {
             // Retire cells no longer in the server's shared vision without
             // mutating this active seat's canonical rule board or fog mask.
@@ -154,6 +157,8 @@ const onlineObservation = {
             this.units.set(key, sprite)
             this.unitActors.set(key, message.actorSeat)
         }
+        if (attacks)
+            attackFx.observedAfter(attacks, message, this)
         this.refreshInspection()
         return {observation: true}
     },
@@ -177,6 +182,13 @@ const onlineObservation = {
                     sprite.speed, '#ffa500', undefined, basis.r * 0.4, basis.r * 0.225)
                 sprite.movesBar.repaintRects(moves)
             }
+            // Unit.drawBars without a moves bar of hidden moves (attack effects draw the sprite with it too).
+            // Same owner rule as Unit.drawBars: a peer's bar goes once it leaves pendingSeats.
+            Object.defineProperty(sprite, 'drawBars', {configurable: true, value(ctx) {
+                Entity.prototype.drawBars.call(this, ctx)
+                if (this.movesBar && shouldShowMovesBar(this))
+                    this.movesBar.draw(ctx)
+            }})
         }
         sprite.updateHPBar()
         return sprite
@@ -267,13 +279,12 @@ const onlineObservation = {
             if (!sprite) continue
             const local = grid.getUnit(sprite.coord)
             if (local.notEmpty() && local.playerColor === whooseTurn) continue
+            // An attack effect draws its attacker (and a ranged hit's target) itself while it plays.
+            if (typeof attackFx !== 'undefined' && attackFx.hidesUnit(sprite)) continue
             // Only server-filtered unit records enter this layer. Its shared
             // vision may reveal a peer beyond our turn-opening fog.
             // Bars first, as in Unit.draw: the moves bar stays under the unit's own body.
-            Entity.prototype.drawBars.call(sprite, ctx)
-            // Same owner rule as Unit.drawBars: a peer's bar goes once it leaves pendingSeats.
-            if (sprite.movesBar && shouldShowMovesBar(sprite))
-                sprite.movesBar.draw(ctx)
+            sprite.drawBars(ctx)
             drawCachedImage(ctx, cachedImages[sprite.bodyImageName], sprite.pos)
         }
         // Match grid overlays: occupied building bars stay above every unit body.
@@ -415,11 +426,11 @@ const gameDiffHandler = {
                 moveTween.start(unit, hint.path)
         }
         if (attacks)
-            attackFx.remoteAfter(attacks)
+            attackFx.remoteAfter(attacks, message)
         // Waiting views also need pictures of uncommitted co-op actions: a
         // different peer's commit can replace their rule board before this actor ends.
         if (observing || (gameSettings.coop && onlineCommit?.pendingSeats?.includes(message.actorSeat)))
-            onlineObservation.receive({...message, changedCells: message.changedCells || message.diff.cells})
+            onlineObservation.receive({...message, changedCells: message.changedCells || message.diff.cells}, false)
         return result
     },
     // {from, to, path} for applyCellDiff from {segments} (a hint already in that shape is kept):

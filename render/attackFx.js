@@ -31,8 +31,12 @@
 // effect keeps no target data); neither -> nothing. It starts once the pass-device screen is gone, and a new viewer (hot
 // seat with fog: the next human's view) drops the effects queued for the last one. The AI turn itself only stores
 // the hooks' events (queue); they become effects on the first frame drawn (flush).
+// Peers' attacks in a parallel turn (TASK-1427): while the screen's player is active a peer's action comes as an
+// observation (onlineObservation: pictures only); its attack is read from the update (observedBefore / observedAfter) and
+// played once: the committed diff of the same action does not play it again (played), a peer's undo plays nothing.
 // API: play(event), draw(ctx, now), isActive(), clear(); the hooks call before(unit, cell) / after(snapshot),
-// remoteBefore(cells) / remoteAfter(snapshot), endTurn(), setViewer(slot) and flush().
+// remoteBefore(cells) / remoteAfter(snapshot, message), observedBefore(cells, observation) / observedAfter(snapshot, message,
+// observation), endTurn(), setViewer(slot) and flush().
 // Removing this file and its guarded calls leaves the game as it was.
 class AttackFx {
     // Most effects playing at once: a new one drops the oldest.
@@ -274,8 +278,9 @@ class AttackFx {
     }
     // After applyCellDiff: an attack in the change (a unit or building that lost hp or was killed) plays its effect. Its
     // attacker is the enemy unit of the change that spent moves nearest the target (unknown: its cell is not in the change,
-    // then only the hit plays). A cell counts as seen when it was seen before or after the change.
-    remoteAfter(before) {
+    // then only the hit plays). A cell counts as seen when it was seen before or after the change. message: the change's
+    // game:diff (its actor: an attack an observation played already is not played again, TASK-1427).
+    remoteAfter(before, message = null) {
         if (!before)
             return []
         const played = []
@@ -285,12 +290,12 @@ class AttackFx {
             // (a unit gone from its cell but not killed moved: no target)
             if (cell.unit && (cell.unit.killed || grid.getUnit(coord) === cell.unit && cell.unit.hp < cell.hp)) {
                 const killed = !!cell.unit.killed
-                target = {owner: cell.owner, killed, damage: cell.hp - (killed ? 0 : cell.unit.hp), pos: cell.pos,
+                target = {owner: cell.owner, killed, hp: killed ? 0 : cell.unit.hp, damage: cell.hp - (killed ? 0 : cell.unit.hp), pos: cell.pos,
                     image: cell.image, isUnit: true, unit: cell.unit}
             }
             else if (cell.building && (grid.getBuilding(coord) !== cell.building || cell.building.hp < cell.buildingHp)) {
                 const killed = grid.getBuilding(coord) !== cell.building
-                target = {owner: cell.buildingOwner, killed, damage: cell.buildingHp - (killed ? 0 : cell.building.hp),
+                target = {owner: cell.buildingOwner, killed, hp: killed ? 0 : cell.building.hp, damage: cell.buildingHp - (killed ? 0 : cell.building.hp),
                     pos: cell.buildingPos, image: cell.buildingImage, isUnit: false}
             }
             if (!target || !(target.damage > 0))
@@ -324,9 +329,15 @@ class AttackFx {
                 event = {kind: 'melee', attacker: null, image: null, from: null, fromPos: target.pos, to: null, target: coord,
                     targetPos: target.pos, targetImage: target.image, targetIsUnit: target.isUnit, targetUnit: null,
                     damage: target.damage, killed: target.killed, seen: {from: false, to: seenTo}}
+            // (an attack an observation played already: TASK-1427)
+            const key = message && this.playedKey(message, coord, target.hp)
+            if (key && this.wasPlayed(key, event.from))
+                continue
             const effect = this.play(event)
             if (!effect)
                 continue
+            if (key)
+                this.markPlayed(key, event.from)
             played.push(effect)
             // A drawn attacker's move into the hex is the effect's (the hint's tween would draw it twice).
             if (effect.image && effect.attacker && (effect.to.x !== effect.from.x || effect.to.y !== effect.from.y) &&
@@ -334,6 +345,144 @@ class AttackFx {
                 moveTween.cancel(effect.attacker)
         }
         return played
+    }
+    // TASK-1427: a peer's action reaches a seat active in a parallel turn as an observation (onlineObservation: pictures
+    // of the peer's units and buildings, no rule entities). observedBefore(records, observation) reads the message's cells
+    // as drawn before it (the observed picture, else the board's); observedAfter(before, message, observation), once the
+    // pictures are updated, plays an attack of the actor read from the message's records: a unit or building of another
+    // seat on a changed cell losing hp or gone (a tombstone, colour null, is a cell leaving vision: no target); the attacker
+    // the actor's unit nearest it, within its range, whose moves dropped (unknown moves: its cell changed) or that moved into
+    // the target's hex. The effect draws the pictures (observed: drawsTarget and prune look them up), its cells count as seen
+    // in the message's shared vision too; the rest is remoteAfter's (visibility, fog-edge cut). An attack plays once:
+    // played keeps its key, so the committed diff of the same action (remoteAfter) does not replay it; a peer's undo
+    // raises hp or restores units, which plays nothing.
+    observedBefore(records, observation) {
+        if (!this.enabled() || !Array.isArray(records))
+            return null
+        const cells = []
+        for (const record of records) {
+            const cell = grid.arr[record.x]?.[record.y]
+            if (!cell)
+                continue
+            const key = record.x + ',' + record.y
+            const unit = observation.hidesUnit(cell) ? observation.units.get(key) : cell.unit.notEmpty() ? cell.unit : null
+            const shown = observation.hidesBuilding(cell) ? observation.buildings.get(key).sprite : cell.building
+            const building = shown && shown.notEmpty() && shown.hp !== undefined && !shown.isNature ? shown : null
+            cells.push({coord: {x: record.x, y: record.y}, record, unit, owner: unit?.playerColor, hp: unit?.hp, moves: unit?.moves,
+                pos: unit && {x: unit.pos.x, y: unit.pos.y}, image: unit && this.imageOf(unit), building,
+                buildingOwner: building?.playerColor, buildingHp: building?.hp,
+                buildingPos: building && {x: building.pos.x, y: building.pos.y}, buildingImage: building && this.imageOf(building)})
+        }
+        return cells
+    }
+    observedAfter(before, message, observation) {
+        if (!before)
+            return []
+        const actor = message.actorSeat, played = []
+        const changed = Array.isArray(message.changedCells) ? new Set(message.changedCells.map(c => c.x + ',' + c.y)) : null
+        const isChanged = c => !changed || changed.has(c.x + ',' + c.y)
+        const seen = c => this.seen(c) || !!message.visibility?.[c.x]?.[c.y]
+        const drawn = c => {
+            const cell = grid.arr[c.x][c.y]
+            return observation.hidesUnit(cell) ? observation.units.get(c.x + ',' + c.y) : cell.unit.notEmpty() ? cell.unit : null
+        }
+        const step = Math.sqrt(3) * basis.r
+        for (const cell of before) {
+            const coord = cell.coord, r = cell.record
+            if (r.colour === null || !isChanged(coord))
+                continue
+            let target = null
+            if (cell.unit && cell.owner !== actor && Object.hasOwn(r, 'unit')) {
+                const killed = !r.unit || r.unit.owner !== cell.owner
+                const hp = killed ? 0 : r.unit.hp
+                if (killed || hp < cell.hp)
+                    target = {owner: cell.owner, killed, hp, damage: cell.hp - hp, pos: cell.pos, image: cell.image, isUnit: true}
+            }
+            else if (cell.building && cell.buildingOwner !== actor && Object.hasOwn(r, 'building')) {
+                const killed = !r.building
+                const hp = killed ? 0 : r.building.hp
+                if (killed || hp < cell.buildingHp)
+                    target = {owner: cell.buildingOwner, killed, hp, damage: cell.buildingHp - hp, pos: cell.buildingPos,
+                        image: cell.buildingImage, isUnit: false}
+            }
+            if (!target || !(target.damage > 0))
+                continue
+            let source = null, to = null, best = Infinity
+            for (const other of before) {
+                const u = other.unit
+                if (!u || other === cell || other.owner !== actor || other.record.colour === null)
+                    continue
+                const now = other.record.unit
+                let at
+                if (now && now.owner === actor && getClass(now.name) === u.constructor && (Number.isFinite(now.moves) &&
+                        Number.isFinite(other.moves) ? now.moves < other.moves : isChanged(other.coord)))
+                    at = other.coord
+                else if (target.killed && target.isUnit && (!now || now.owner !== actor) && r.unit?.owner === actor &&
+                        getClass(r.unit.name) === u.constructor)
+                    at = coord
+                else
+                    continue
+                const d = Math.hypot(other.pos.x - target.pos.x, other.pos.y - target.pos.y) / step
+                if (d > (u.constructor.range ?? 1) + 1.1 || d >= best)
+                    continue
+                best = d
+                source = other
+                to = at
+            }
+            const attacker = source && drawn(to)
+            if (source && !attacker || !source && target.killed && !changed)
+                continue
+            const seenTo = seen(coord)
+            let event
+            if (source) {
+                const kind = this.kindOf(attacker)
+                if (!kind)
+                    continue
+                event = {kind, attacker, image: source.image, from: source.coord, fromPos: source.pos, to: {...to}, target: coord,
+                    targetPos: target.pos, targetImage: target.image, targetIsUnit: target.isUnit,
+                    targetUnit: this.ranged[kind] && target.isUnit && !target.killed ? drawn(coord) : null,
+                    damage: target.damage, killed: target.killed, seen: {from: seen(source.coord), to: seenTo}}
+            }
+            else
+                event = {kind: 'melee', attacker: null, image: null, from: null, fromPos: target.pos, to: null, target: coord,
+                    targetPos: target.pos, targetImage: target.image, targetIsUnit: target.isUnit, targetUnit: null,
+                    damage: target.damage, killed: target.killed, seen: {from: false, to: seenTo}}
+            event.observed = true
+            const key = this.playedKey(message, coord, target.hp)
+            if (this.wasPlayed(key, event.from))
+                continue
+            const effect = this.play(event)
+            if (!effect)
+                continue
+            this.markPlayed(key, event.from)
+            played.push(effect)
+        }
+        return played
+    }
+    // An attack's key (TASK-1427): the game, the actor, the round, the target and its hp after; the attacker's coord is
+    // matched apart (wasPlayed): an attack whose attacker one of the two messages did not see is the same attack.
+    playedKey(message, target, hp) {
+        const gameID = typeof gameDiffHandler !== 'undefined' ? gameDiffHandler.gameID : null
+        return [gameID, message.actorSeat, typeof gameRound !== 'undefined' ? gameRound : null, target.x, target.y, hp].join('|')
+    }
+    wasPlayed(key, from) {
+        const sources = this.played.get(key)
+        return !!sources && (!from || sources.has(null) || sources.has(from.x + ',' + from.y))
+    }
+    markPlayed(key, from) {
+        if (!this.played.has(key))
+            this.played.set(key, new Set())
+        this.played.get(key).add(from ? from.x + ',' + from.y : null)
+        // (bounded: the oldest keys go)
+        while (this.played.size > 64)
+            this.played.delete(this.played.keys().next().value)
+    }
+    played = new Map()
+    // The unit e's effect expects on coord: an observed effect's picture (TASK-1427), else the board's.
+    unitAt(e, coord) {
+        const cell = grid.arr[coord.x]?.[coord.y]
+        return e.observed && cell && typeof onlineObservation !== 'undefined' && onlineObservation.hidesUnit(cell) ?
+            onlineObservation.units.get(coord.x + ',' + coord.y) : grid.getUnit(coord)
     }
     // The effect kind of an attacker's hits; null: none (cached per class: AI turns call it for every action).
     kindOf(unit) {
@@ -432,7 +581,7 @@ class AttackFx {
         if (moved || !event.target)
             return null
         return {kind: event.kind, attacker: event.attacker, image: event.image, from: event.from, fromPos: event.fromPos,
-            to: event.to, edge: 'out', targetPos: this.fogEdge(event.from, event.target)}
+            to: event.to, edge: 'out', targetPos: this.fogEdge(event.from, event.target), observed: event.observed}
     }
     // event: {kind, attacker, image, from, fromPos, to, target, targetPos, targetImage, targetIsUnit, targetUnit, damage,
     // killed, fog}; targetUnit: a living unit target the effect draws (ranged kinds); fog: a siege shot into fog (no
@@ -572,10 +721,11 @@ class AttackFx {
         // visuals only) draws its frames live (never held, no zoom raster), so there a finished effect gives its units back
         // to the board's unit passes rather than drawing them itself each frame.
         // (the screen's gesture getters read the clock: asked only when a finished effect draws a unit)
+        // An observed effect (TASK-1427) plays to its end: a peer's next update remakes its pictures (an undo too).
         let keep
         this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || this.drawsUnit(e) && (keep ??= !this.panning(moved))) &&
-            (e.edge === 'in' || !e.attacker || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
-                e.attacker.coord.y === e.to.y && grid.getUnit(e.to) === e.attacker))
+            (e.edge === 'in' || !e.attacker || e.observed && !this.finished(e, now) || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
+                e.attacker.coord.y === e.to.y && this.unitAt(e, e.to) === e.attacker))
         this.hideUnits()
     }
     // Whether the camera moved since the last prune at the same scale (and follows it).
@@ -723,7 +873,7 @@ class AttackFx {
         return this.hidden.size > 0 && this.hidden.has(unit)
     }
     drawsTarget(e) {
-        return !!e.targetUnit && !e.targetUnit.killed && grid.getUnit(e.target) === e.targetUnit
+        return !!e.targetUnit && !e.targetUnit.killed && this.unitAt(e, e.target) === e.targetUnit
     }
     // TASK-1425: drawMain prunes before the board is drawn (its units left out by that prune's hidden set); the draw after
     // it in the same frame does not prune again (only a draw with no prune since the last draw does).
