@@ -76,6 +76,12 @@ class AttackFx {
     barImages = new WeakMap()
     barPool = new Array(32)
     barNext = 0
+    // Unit images made in this frame (draw resets it): at most imageBudget a frame, the others drawn directly until a later
+    // frame makes theirs; none in the frame drawn after a batch of others' attacks started (flush: the board changed with
+    // the turn and draws live in that frame), so a turn's batch never makes its images in its own first frame (TASK-1425).
+    imagesMade = 0
+    imageBudget = 2
+    batchFrame = false
     // The units the effects draw (hideUnits).
     hidden = new Set()
     // Clock in ms; tests may replace it.
@@ -417,9 +423,17 @@ class AttackFx {
             return
         const later = this.later
         this.later = []
-        for (const event of later)
-            this.play(event)
+        this.flushing = true
+        try {
+            for (const event of later)
+                this.play(event)
+        } finally {
+            this.flushing = false
+        }
+        this.hideUnits()
+        this.batchFrame = true
     }
+    flushing = false
     // Returns the queued effect (event itself, or its fog-edge cut, with the effect's fields set: no copy, AI turns call
     // this for every hit), or null.
     play(event) {
@@ -461,10 +475,13 @@ class AttackFx {
             this.effects.shift()
             ++this.stats.dropped
         }
-        this.hideUnits()
+        // (a batch hides its units once: flush)
+        if (!this.flushing)
+            this.hideUnits()
         return effect
     }
     clear() {
+        this.batchFrame = false
         this.effects.length = 0
         this.hidden.clear()
         this.later.length = 0
@@ -553,6 +570,8 @@ class AttackFx {
     }
     draw(ctx, now = this.now()) {
         this.prune(now)
+        this.imagesMade = this.batchFrame ? this.imageBudget : 0
+        this.batchFrame = false
         if (!this.effects.length)
             return
         const t = ctx.getTransform(), margin = 3 * basis.r
@@ -681,7 +700,8 @@ class AttackFx {
             }
         }
         const hit = time >= 0.3
-        const tint = e.targetImage && this.tinted(e.targetImage)
+        // (tinted copies from the hit on: an effect's first frames, e.g. a turn's batch behind the pass-device screen, make none)
+        const tint = hit && e.targetImage && this.tinted(e.targetImage)
         // The target: a red flash over it (a hit) or its snapshot dying (last hit).
         if (!last) {
             if (hit && time < 0.55 && tint) {
@@ -772,7 +792,7 @@ class AttackFx {
     // phase (a moving unit within half a device pixel). Remade when the bars or the sprite change, or the scale or that
     // phase with the camera at rest (while it zooms or pans the image is scaled and moved along).
     // Canvases come from a pool of barPool.length, reused in turn (12 effects draw at most 24 units). False (nothing
-    // drawn) when the transform is not a plain scale and translation.
+    // drawn) when the transform is not a plain scale and translation, or this frame made imageBudget images already.
     drawUnitImage(ctx, unit, image, dx, dy) {
         const t = ctx.getTransform()
         const rects = unit.hpBar?.rects, moves = unit.movesBar?.rects
@@ -798,6 +818,9 @@ class AttackFx {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const moving = !!screen && (screen.zoomGesture || screen.surfaceMoving)
         if (!exact && !(same && moving)) {
+            if (this.imagesMade >= this.imageBudget)
+                return false
+            ++this.imagesMade
             const canvas = this.barPool[this.barNext] ||= document.createElement('canvas')
             this.barNext = (this.barNext + 1) % this.barPool.length
             entry = {image, hp: unit.hp, maxHP: unit.maxHP, moves: unit.moves, showMoves, alwaysHP, r: basis.r, w0, h0, a: t.a, d: t.d, fx, fy, canvas}
@@ -847,7 +870,7 @@ class AttackFx {
         const E = {x: e.targetPos.x + half, y: e.targetPos.y + half}
         const vx = E.x - A.x, vy = E.y - A.y, dist = Math.hypot(vx, vy) || 1
         const ux = vx / dist, uy = vy / dist
-        const tint = e.targetImage && this.tinted(e.targetImage, style.tint)
+        const tint = t >= hit && e.targetImage && this.tinted(e.targetImage, style.tint)
         // The target: a living unit (drawn here) knocked back and flashing, a dying one falling, a building flashing.
         const flash = t >= hit && t < hit + style.tintSpan ? style.tintAlpha * (1 - (t - hit) / style.tintSpan) : 0
         if (e.killed && e.targetIsUnit)
