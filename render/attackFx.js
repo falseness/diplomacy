@@ -31,10 +31,18 @@
 // effect keeps no target data); neither -> nothing. It starts once the pass-device screen is gone, and a new viewer (hot
 // seat with fog: the next human's view) drops the effects queued for the last one. The AI turn itself only stores
 // the hooks' events (queue); they become effects on the first frame drawn (flush).
+// Replay (TASK-1428): others' attacks (AI, demons, online opponents) play one by one in the order the hooks recorded
+// them (the order the turn played), not all at once: flush judges each by the viewer's fog then (visibility, cut) and
+// queues it in replay; once the pass-device screen is gone, an attack whose attacker is seen is a camera step: the
+// camera glides (Screen.glideTo, about 0.3 s) to centre the attacker and target, then its effect plays to its end, then
+// the next step. An attack with a fogged attacker plays in place at its turn (the fog-edge hit, or nothing) and the
+// replay goes on at once. When the queue is empty the camera glides back to the view the replay started from. Input is
+// never blocked and the rules never wait: the player selects, moves, attacks (own effects at once), zooms, pans and ends
+// the turn while it goes on; a new viewer clears it (clear), as does animateAttacks off (no camera movement at all).
 // Peers' attacks in a parallel turn (TASK-1427): while the screen's player is active a peer's action comes as an
 // observation (onlineObservation: pictures only); its attack is read from the update (observedBefore / observedAfter) and
 // played once: the committed diff of the same action does not play it again (played), a peer's undo plays nothing.
-// API: play(event), draw(ctx, now), isActive(), clear(); the hooks call before(unit, cell) / after(snapshot),
+// API: play(event), draw(ctx, now), isActive(), clear(), undo(); the hooks call before(unit, cell) / after(snapshot),
 // remoteBefore(cells) / remoteAfter(snapshot, message), observedBefore(cells, observation) / observedAfter(snapshot, message,
 // observation), endTurn(), setViewer(slot) and flush().
 // Removing this file and its guarded calls leaves the game as it was.
@@ -333,7 +341,7 @@ class AttackFx {
             const key = message && this.playedKey(message, coord, target.hp)
             if (key && this.wasPlayed(key, event.from))
                 continue
-            const effect = this.play(event)
+            const effect = this.replayScreen() ? this.enqueue(event) : this.play(event)
             if (!effect)
                 continue
             if (key)
@@ -451,7 +459,7 @@ class AttackFx {
             const key = this.playedKey(message, coord, target.hp)
             if (this.wasPlayed(key, event.from))
                 continue
-            const effect = this.play(event)
+            const effect = this.replayScreen() ? this.enqueue(event) : this.play(event)
             if (!effect)
                 continue
             this.markPlayed(key, event.from)
@@ -600,11 +608,148 @@ class AttackFx {
         return event
     }
     later = []
+    // TASK-1428: the replay of others' attacks, null when none: {steps: [{event, mode}], index, phase (null: the next step,
+    // 'glide', 'effect', 'home'), until (ms), home (the screen's centre at its start), moved, log}; sequential false: all
+    // at once as before (a screen without glides, the warm-up's scratch instance).
+    replay = null
+    sequential = true
+    // The step log of the last replays (evidence and tests; bounded).
+    replayLog = []
+    replayScreen() {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent?.screen : undefined
+        return this.sequential && screen && typeof screen.glideTo === 'function' && typeof canvas !== 'undefined' && canvas?.offset ? screen : null
+    }
+    // Queues others' events in the replay, judged by the viewer's fog now (an AI turn's own vision is in grid.fogOfWar,
+    // the ended human's in view); returns the event, or null for one the viewer sees nothing of.
+    enqueue(event) {
+        if (!this.enabled() || !event || !event.kind)
+            return null
+        if (event.image === undefined)
+            event.image = event.attacker ? this.imageOf(event.attacker) : null
+        const mode = this.visibility(event), from = event.from && {x: event.from.x, y: event.from.y}
+        const cut = mode && this.cut(event, mode)
+        const r = this.replay ??= {steps: [], index: 0, phase: null, until: 0, home: null, moved: false, log: []}
+        if (!cut) {
+            ++this.stats.unseen
+            r.log.push({order: r.steps.length, kind: event.kind, from, target: event.target, mode: null, camera: null})
+            r.steps.push({event: null, mode: null})
+            return null
+        }
+        r.steps.push({event: cut, mode, from})
+        return cut
+    }
+    // Drives the replay (prune, every frame): starts the next step's glide or effect when the last one is over.
+    advance(now) {
+        const r = this.replay
+        if (!r || this.held())
+            return
+        const screen = this.replayScreen()
+        if (!screen || !this.enabled()) {
+            this.endReplay(screen)
+            return
+        }
+        if (!r.home) {
+            r.home = screen.centre()
+            r.startedAt = now
+            r.homeOffset = {x: canvas.offset.x, y: canvas.offset.y}
+        }
+        for (;;) {
+            if (r.phase === 'home' && r.index < r.steps.length)
+                r.phase = null
+            if (r.phase && now < r.until)
+                return
+            if (r.phase === 'home') {
+                r.log.push({home: true, glideStart: r.homeStart, glideEnd: now, offset: {x: canvas.offset.x, y: canvas.offset.y},
+                    startOffset: r.homeOffset})
+                this.endReplay(null)
+                return
+            }
+            if (r.phase === 'glide') {
+                const step = r.steps[r.index], entry = step.entry
+                const effect = this.play(step.event, 'both')
+                entry.glideEnd = now
+                entry.offsetAtEffect = {x: canvas.offset.x, y: canvas.offset.y}
+                if (effect) {
+                    effect.startTime = now
+                    entry.effectStart = now
+                    entry.effectEnd = now + effect.duration
+                    r.phase = 'effect'
+                    r.until = now + effect.duration
+                    return
+                }
+                r.phase = null
+                ++r.index
+                continue
+            }
+            if (r.phase === 'effect') {
+                r.phase = null
+                ++r.index
+            }
+            if (r.index >= r.steps.length) {
+                if (!r.moved) {
+                    this.endReplay(null)
+                    return
+                }
+                r.phase = 'home'
+                r.homeStart = now
+                r.until = now + Screen.GLIDE_DURATION
+                screen.glideTo(r.home, Screen.GLIDE_DURATION, () => this.now())
+                return
+            }
+            const step = r.steps[r.index]
+            if (!step.event) {
+                ++r.index
+                continue
+            }
+            const e = step.event
+            const entry = {order: r.index, kind: e.kind, from: step.from, target: e.target, mode: step.mode, camera: null}
+            r.log.push(entry)
+            step.entry = entry
+            if (step.mode === 'both' || step.mode === 'attacker') {
+                // A camera step: the attacker and the target (the attacker alone when the target is fogged) centred.
+                const half = assets.size / 2, a = e.fromPos
+                const b = step.mode === 'both' ? e.targetPos : a
+                const target = {x: (a.x + b.x) / 2 + half, y: (a.y + b.y) / 2 + half}
+                entry.camera = target
+                entry.glideStart = now
+                r.moved = true
+                screen.glideTo(target, Screen.GLIDE_DURATION, () => this.now())
+                r.phase = 'glide'
+                r.until = now + Screen.GLIDE_DURATION
+                return
+            }
+            // A fogged attacker: in place, at its turn, without the camera (and without waiting).
+            const effect = this.play(e, 'both')
+            if (effect) {
+                effect.startTime = now
+                entry.effectStart = now
+                entry.effectEnd = now + effect.duration
+            }
+            ++r.index
+        }
+    }
+    // Ends the replay (its glide too when screen is given: cleared, the camera stays where it is).
+    endReplay(screen) {
+        const r = this.replay
+        if (!r)
+            return
+        this.replay = null
+        if (screen?.glide)
+            screen.stopGlide()
+        this.replayLog.push(r.log)
+        if (this.replayLog.length > 8)
+            this.replayLog.shift()
+    }
     flush() {
         if (!this.later.length)
             return
         const later = this.later
         this.later = []
+        if (this.replayScreen()) {
+            for (const event of later)
+                this.enqueue(event)
+            return
+        }
         this.flushing = true
         try {
             for (const event of later)
@@ -618,12 +763,13 @@ class AttackFx {
     flushing = false
     // Returns the queued effect (event itself, or its fog-edge cut, with the effect's fields set: no copy, AI turns call
     // this for every hit), or null.
-    play(event) {
+    play(event, mode = undefined) {
         if (!this.enabled() || !event || !event.kind)
             return null
         if (event.image === undefined)
             event.image = event.attacker ? this.imageOf(event.attacker) : null
-        const mode = this.visibility(event)
+        // (mode given: the replay judged and cut the event already, TASK-1428)
+        mode ??= this.visibility(event)
         if (!mode) {
             ++this.stats.unseen
             return null
@@ -671,6 +817,13 @@ class AttackFx {
         this.hidden.clear()
         this.later.length = 0
         this.view = null
+        this.endReplay(this.replayScreen() || (typeof gameEvent !== 'undefined' ? gameEvent?.screen : null))
+    }
+    // An undo (actionManager): no effect plays on; others' replay goes on with its next step (TASK-1428).
+    undo() {
+        this.batchFrame = false
+        this.effects.length = 0
+        this.hidden.clear()
     }
     // A turn ends: its own effects stop; others' (an AI or demon turn just played) stay for the next view. A local
     // human's ending turn leaves its fog as the view others' attacks are judged by.
@@ -704,6 +857,7 @@ class AttackFx {
         if (!AttackFx.warm)
             this.scheduleWarmUp()
         this.flush()
+        this.advance(now)
         // (the camera is followed in every prune, so the first frame of new effects does not see a pan)
         const moved = this.cameraMoved()
         if (!this.effects.length)
@@ -762,6 +916,7 @@ class AttackFx {
                 const fx = new AttackFx()
                 // (its frames make the images and tinted copies themselves: that code runs once too)
                 fx.idleWork = false
+                fx.sequential = false
                 fx.barPool = this.barPool
                 fx.tints = this.tints
                 fx.warmUp()

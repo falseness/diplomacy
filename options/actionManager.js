@@ -498,9 +498,9 @@ class ActionManager {
             return false
 
         let wasSelection = gameEvent.selected.notEmpty()
-        // The undone action's attack animation is not played on.
+        // The undone action's attack animation is not played on (others' replay goes on, TASK-1428).
         if (typeof attackFx !== 'undefined')
-            attackFx.clear()
+            attackFx.undo()
         gameEvent.hideAll()
         gameEvent.removeSelection()
 

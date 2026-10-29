@@ -52,6 +52,7 @@ class Screen {
         // movement accumulated at the current speed up to integratedUntil (event/frame clock, ms)
         this.pendingOffset = { x: 0, y: 0 }
         this.integratedUntil = undefined
+        this.glide = null
     }
     // A zoom gesture, for the surface cache and the light map: 160 ms after a zoom input, and in
     // any case the first two board frames drawn after it (Grid.draw counts them), so frames slower
@@ -179,6 +180,7 @@ class Screen {
             this.pendingOffset = { x: 0, y: 0 }
         }
         
+        this.stepGlide()
         this.correctCanvas()
 
         if ((canvas.offset.x !== old_value_x || canvas.offset.y !== old_value_y) && otherSettings.atmosphericVisuals) {
@@ -260,6 +262,32 @@ class Screen {
         }
 
         this.moveTo(pos)
+    }
+    // TASK-1428: a camera glide (the attack replay, render/attackFx.js): the screen's centre goes to posOnGrid in duration ms,
+    // eased, the scale unchanged, a frame's share in each move() (the pan path: no board rebuild). It adds to the player's
+    // own panning, which it never blocks (each frame moves the camera by the glide's progress since the last frame); a zoom
+    // keeps it going, by the world point at the centre. clock: the glide's ms clock (the replay's).
+    static GLIDE_DURATION = 300
+    centre() {
+        return {x: canvas.offset.x + width / 2, y: canvas.offset.y + height / 2}
+    }
+    glideTo(posOnGrid, duration = Screen.GLIDE_DURATION, clock = () => performance.now()) {
+        this.glide = {from: this.centre(), to: {x: posOnGrid.x, y: posOnGrid.y}, start: clock(), duration, clock, done: 0}
+    }
+    stopGlide() {
+        this.glide = null
+    }
+    stepGlide() {
+        const g = this.glide
+        if (!g)
+            return
+        const t = Math.max(0, Math.min(1, (g.clock() - g.start) / g.duration))
+        const q = 0.5 - 0.5 * Math.cos(Math.PI * t), d = q - g.done
+        g.done = q
+        if (t >= 1)
+            this.glide = null
+        canvas.offset.x += (g.to.x - g.from.x) * d
+        canvas.offset.y += (g.to.y - g.from.y) * d
     }
     moveTo(posOnGrid) {
         let result = {
