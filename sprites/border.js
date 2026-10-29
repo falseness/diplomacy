@@ -609,6 +609,19 @@ class SelectionOverlay {
     static isSiege(interaction) {
         return typeof InteractionWithCatapult != 'undefined' && interaction instanceof InteractionWithCatapult
     }
+    // TASK-1438: the static nature the range contour leaves out: an archer's range covers lakes, the catapult family's
+    // (bombard, mortar) lakes and mountains; map-edge cells and other nature stay out.
+    static rangeExcludes(interaction, building) {
+        if (!building.isStaticNature)
+            return false
+        if (building.isMapEdge)
+            return true
+        if (typeof Lake != 'undefined' && building instanceof Lake)
+            return !(interaction instanceof InteractionWithArcher || SelectionOverlay.isSiege(interaction))
+        if (typeof Mountain != 'undefined' && building instanceof Mountain)
+            return !SelectionOverlay.isSiege(interaction)
+        return true
+    }
     static seen(coord) {
         return !isFogOfWar || !grid.fogOfWar || !!grid.fogOfWar[coord.x][coord.y]
     }
@@ -697,7 +710,7 @@ class SelectionOverlay {
         if (rangeShown) {
             for (const coord of SelectionOverlay.reached(interaction.rangeWay, unit.coord, interaction.range)) {
                 candidates.set(key(coord), coord)
-                if (grid.getBuilding(coord).isStaticNature)
+                if (SelectionOverlay.rangeExcludes(interaction, grid.getBuilding(coord)))
                     rangeExcluded.add(key(coord))
                 else
                     rangeCells.add(key(coord))
