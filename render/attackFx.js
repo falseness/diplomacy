@@ -91,6 +91,8 @@ class AttackFx {
     batchFrame = false
     // The units the effects draw (hideUnits).
     hidden = new Set()
+    // The camera at the last prune (offset and scale), to tell a pan.
+    camera = {x: NaN, y: NaN, scale: NaN}
     // Clock in ms; tests may replace it.
     now() {
         return typeof performance != 'undefined' ? performance.now() : Date.now()
@@ -525,6 +527,8 @@ class AttackFx {
         if (!AttackFx.warm)
             this.scheduleWarmUp()
         this.flush()
+        // (the camera is followed in every prune, so the first frame of new effects does not see a pan)
+        const keep = !this.panning()
         if (!this.effects.length)
             return
         const held = this.held()
@@ -535,11 +539,27 @@ class AttackFx {
         // while it draws a unit, until the board changes anyway: the next attack (play), the unit moving or dying, the
         // turn's end or a new view. A unit leaving or rejoining the board's frame makes it draw live (and, without the
         // atmospheric visuals, patches the surface cache, which holds the unit bodies); an attack does so already, so
-        // its units leave in that frame and come back in another such frame, never in one of their own.
-        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || this.drawsUnit(e)) &&
+        // its units leave in that frame and come back in another such frame, never in one of their own. A camera pan
+        // (out of a zoom gesture: the camera moved at the same scale, or Screen.surfaceMoving, set with the atmospheric
+        // visuals only) draws its frames live (never held, no zoom raster), so there a finished effect gives its units back
+        // to the board's unit passes rather than drawing them itself each frame.
+        this.effects = this.effects.filter(e => (e.startTime === null || now - e.startTime < e.duration || keep && this.drawsUnit(e)) &&
             (e.edge === 'in' || !e.attacker || !e.attacker.killed && e.attacker.coord.x === e.to.x &&
                 e.attacker.coord.y === e.to.y && grid.getUnit(e.to) === e.attacker))
         this.hideUnits()
+    }
+    // Whether the camera pans (prune): moved since the last prune at the same scale, or Screen.surfaceMoving, out of a
+    // zoom gesture.
+    panning() {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (typeof canvas === 'undefined' || !canvas?.offset)
+            return false
+        const c = this.camera, o = canvas.offset
+        const moved = (c.x !== o.x || c.y !== o.y) && c.scale === canvas.scale
+        c.x = o.x
+        c.y = o.y
+        c.scale = canvas.scale
+        return (moved || !!screen?.surfaceMoving) && !screen?.zoomGesture
     }
     // TASK-1425: an effect's code costs several ms on its first runs (first calls, inline caches, a new canvas's first
     // context and draws), and a page's first effects often come as a demon or AI turn's batch, in the frame drawn with
