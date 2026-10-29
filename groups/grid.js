@@ -4037,11 +4037,31 @@ class Grid extends SpritesGroup {
             v0: Math.floor(-oy / LIT_TILE) - ring, v1: Math.floor((ch - 1 - oy) / LIT_TILE) + ring}
     }
     // Tile (u, v) of view, built now if missing; null when the board does not reach it.
+    // TASK-1439: each build timed (litTileCost, a tile the board reaches).
     litTile(view, u, v) {
         const key = u + ',' + v
-        if (!view.tiles.has(key))
-            view.tiles.set(key, this.buildLitTile(view, u, v))
+        if (!view.tiles.has(key)) {
+            const start = performance.now(), tile = this.buildLitTile(view, u, v)
+            if (tile)
+                litTileCost.add(performance.now() - start)
+            view.tiles.set(key, tile)
+        }
         return view.tiles.get(key)
+    }
+    // TASK-1439: builds tiles of view from list ({u, v}, the first cap of them as before, those built already skipped) while
+    // the time the task has taken and one tile's estimate fit LIT_TASK_MS; atLeastOne: the first even when it does not
+    // (the camera at rest or a view the frames draw live, so the lighting completes).
+    buildLitTiles(view, list, cap, atLeastOne) {
+        const start = performance.now()
+        let built = 0
+        for (const {u, v} of list.slice(0, cap)) {
+            if (view.tiles.has(u + ',' + v))
+                continue
+            if (performance.now() - start + litTileCost.ms > LIT_TASK_MS && !(atLeastOne && !built))
+                return
+            this.litTile(view, u, v)
+            ++built
+        }
     }
     // One task between frames: a band of the rest snapshot while the camera is at rest, else up
     // to LIT_TILE_BUDGET of the tiles within a tile of the canvas, nearest its centre first.
@@ -4088,7 +4108,9 @@ class Grid extends SpritesGroup {
         }
         missing.sort((a, b) => a.far - b.far)
         this.litTilesQueued = true
-        setTimeout(() => {
+        // TASK-1439: a task of tiles with the camera at rest when the browser is idle (LIT_IDLE_TIMEOUT at most).
+        const idle = !banding && !gameEvent.screen.surfaceMoving && typeof requestIdleCallback === 'function'
+        ;(idle ? fn => requestIdleCallback(fn, {timeout: LIT_IDLE_TIMEOUT}) : setTimeout)(() => {
             this.litTilesQueued = false
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
             // view's cell layer is behind (the next frame brings it up, followCellLayer; a tile built now would also bring
@@ -4101,22 +4123,22 @@ class Grid extends SpritesGroup {
                 const shown = missing.filter(m => m.shown && !view.tiles.has(m.u + ',' + m.v))
                 if (shown.length) {
                     // TASK-1377: the task's tiles compare the board's light state once (atmosphericLighting.checkedOnce).
-                    atmosphericLighting.checkedOnce(this, () => {
-                        for (const {u, v} of shown.slice(0, view.unbuilt ? LIT_FIRST_TILE_BUDGET : LIT_TILE_BUDGET))
-                            this.litTile(view, u, v)
-                    })
+                    atmosphericLighting.checkedOnce(this, () =>
+                        this.buildLitTiles(view, shown, view.unbuilt ? LIT_FIRST_TILE_BUDGET : LIT_TILE_BUDGET, true))
                 }
                 else if (view.rest === rest && rest.done < LIT_REST_BANDS)
                     this.buildLitRestBand(view, rest, rest.done)
                 return
             }
             // After a patch dropped some, one a task while the camera rests.
+            const moving = gameEvent.screen.surfaceMoving
             const budget = view.unbuilt ? LIT_FIRST_TILE_BUDGET :
-                view.patchedTiles && !gameEvent.screen.surfaceMoving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
-            atmosphericLighting.checkedOnce(this, () => {
-                for (const {u, v} of missing.slice(0, budget))
-                    this.litTile(view, u, v)
-            })
+                view.patchedTiles && !moving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
+            // TASK-1439: tiles that fit LIT_TASK_MS; while the camera moves none when one tile does not fit (the frames draw
+            // the stand-in), at rest and for a view the frames draw live at least one.
+            if (moving && !view.unbuilt && litTileCost.ms > LIT_TASK_MS)
+                return
+            atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, budget, !moving || view.unbuilt))
         })
     }
     // TASK-1372: whether view's split job (prepareLitCellLayer) still splits its rest snapshot: else it is dropped, and so is
@@ -5354,6 +5376,23 @@ const LIT_EDGE_BLOCK = 16
 const LIT_REST_BANDS = 12
 // Tiles built a task while the camera rests after a patch of the view dropped some (Grid.finishLitPatch).
 const LIT_TILE_PATCHED_BUDGET = 1
+// TASK-1439: the time (ms) a task between frames spends on lit tiles (Grid.buildLitTiles: tiles while the task's time and one
+// tile's estimate fit, LIT_TILE_BUDGET 1 ms tiles), and the most a rest task waits for the browser to be idle.
+const LIT_TASK_MS = 5
+const LIT_IDLE_TIMEOUT = 100
+// TASK-1439: one lit tile's build time on this device (Grid.litTile): the mean of the last LIT_COST_SAMPLES builds,
+// LIT_TASK_MS before the first.
+const LIT_COST_SAMPLES = 8
+const litTileCost = {
+    samples: [],
+    ms: LIT_TASK_MS,
+    add(ms) {
+        this.samples.push(ms)
+        if (this.samples.length > LIT_COST_SAMPLES)
+            this.samples.shift()
+        this.ms = this.samples.reduce((a, b) => a + b, 0) / this.samples.length
+    }
+}
 // The direct draw's surface and buildings in parts (Grid.drawLitScene), a part a step of a lit view patch.
 const LIT_SCENE_PARTS = [
     (grid, g, underlay) => {
