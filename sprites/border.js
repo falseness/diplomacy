@@ -610,8 +610,9 @@ class SelectionOverlay {
         return typeof InteractionWithCatapult != 'undefined' && interaction instanceof InteractionWithCatapult
     }
     // TASK-1438: the static nature the range contour leaves out: an archer's range covers lakes, the catapult family's
-    // (bombard, mortar) lakes and mountains; map-edge cells and other nature stay out.
-    static rangeExcludes(interaction, building) {
+    // (bombard, mortar) lakes and mountains; map-edge cells and other nature stay out. TASK-1451: an archer on raised
+    // ground (its cell's rangeIncrease: hill, tower, town) shoots with the plain RangeWay, so its range covers mountains.
+    static rangeExcludes(interaction, building, raised) {
         if (!building.isStaticNature)
             return false
         if (building.isMapEdge)
@@ -619,7 +620,7 @@ class SelectionOverlay {
         if (typeof Lake != 'undefined' && building instanceof Lake)
             return !(interaction instanceof InteractionWithArcher || SelectionOverlay.isSiege(interaction))
         if (typeof Mountain != 'undefined' && building instanceof Mountain)
-            return !SelectionOverlay.isSiege(interaction)
+            return !(SelectionOverlay.isSiege(interaction) || raised && interaction instanceof InteractionWithArcher)
         return true
     }
     static seen(coord) {
@@ -708,9 +709,10 @@ class SelectionOverlay {
         const rangeCells = new Set(), rangeExcluded = new Set()
         const candidates = new Map(SelectionOverlay.reached(interaction.way, unit.coord, radius).map(c => [key(c), c]))
         if (rangeShown) {
+            const raised = !!grid.getBuilding(unit.coord).rangeIncrease
             for (const coord of SelectionOverlay.reached(interaction.rangeWay, unit.coord, interaction.range)) {
                 candidates.set(key(coord), coord)
-                if (SelectionOverlay.rangeExcludes(interaction, grid.getBuilding(coord)))
+                if (SelectionOverlay.rangeExcludes(interaction, grid.getBuilding(coord), raised))
                     rangeExcluded.add(key(coord))
                 else
                     rangeCells.add(key(coord))
