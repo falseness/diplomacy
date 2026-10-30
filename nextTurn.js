@@ -104,9 +104,9 @@ function advanceOfflineTurn() {
     // The ended turn's own attack animations stop; an AI or demon turn's stay for the next view (render/attackFx.js).
     if (typeof attackFx !== 'undefined')
         attackFx.endTurn()
-    // The ended turn's heal animations stop (render/healFx.js).
+    // The ended turn's heal animations stop; an AI turn's waiting ones stay for the next view (render/healFx.js).
     if (typeof healFx !== 'undefined')
-        healFx.clear()
+        healFx.endTurn()
 
     timer.pauseAndSaveTime()
 
@@ -115,7 +115,8 @@ function advanceOfflineTurn() {
     actionLog.clear()
 
     // The turn player's heals are animated once its view opens (render/healFx.js: after the pass-device screen); taken
-    // before externalNextTurn, which heals its walls and towers (TASK-1446).
+    // before externalNextTurn, which heals its walls and towers (TASK-1446). An AI's are read before it plays
+    // (Player.nextTurn: healFx.healed) and shown where the viewer sees them (TASK-1447).
     const heals = typeof healFx !== 'undefined' ? healFx.before(whooseTurn) : null
     externalNextTurn() 
     natureNextTurn()
@@ -149,6 +150,8 @@ function advanceOfflineTurn() {
             players[TUTORIAL_HUMAN_SLOT].changeFogOfWarByVision()
             if (typeof attackFx !== 'undefined')
                 attackFx.setViewer(TUTORIAL_HUMAN_SLOT)
+            if (typeof healFx !== 'undefined')
+                healFx.setViewer(TUTORIAL_HUMAN_SLOT)
         }
         advanceOfflineTurn()
         return
@@ -158,6 +161,8 @@ function advanceOfflineTurn() {
         // Another human's view: the effects queued for the last one are dropped (render/attackFx.js).
         if (typeof attackFx !== 'undefined')
             attackFx.setViewer(whooseTurn)
+        if (typeof healFx !== 'undefined')
+            healFx.setViewer(whooseTurn)
     }
     // Only a tutorial moves the camera on each turn; other games centre it once at start (focusCameraOnPlayerStart).
     if (gameSettings.tutorial)

@@ -18,7 +18,17 @@
 // changes anyway (the unit moves, dies or its bars change, a camera pan, an undo, the turn's end), as attackFx does.
 // Plain canvas code: rects, arcs, ellipses, one gradient made once; no shadowBlur, filters or new assets. Off when
 // otherSettings.animateHeals is false (no effect is queued; running ones end at once).
-// API: play(event), draw(ctx, now), isActive(), clear(), now(); the hooks call before(slot) / after(snapshot) and prune().
+// TASK-1447: others' heals the screen's player sees play too, in place (no camera move), in the next wave of its view.
+// Offline an AI's turn start heals its units and buildings and then plays (Player.nextTurn calls healed before the AI's
+// moves); each heal on a cell the viewer sees (the last local human's fog: endTurn keeps a copy, as attackFx; all cells
+// without fog) is queued, fogged ones get nothing. endTurn drops the ended turn's own effects and keeps others' waiting
+// ones; a new local human viewer drops those (setViewer, no leak to the next human). Online and co-op the heals arrive
+// in the server's cell diffs (remoteBefore / remoteAfter around applyCellDiff in gameDiffHandler.apply, as attackFx):
+// the same entity on the same cell with more hp, not hit before the diff (a heal needs wasHitted false; an undo of a hit
+// restores hp of a hit entity), on a cell seen before and after it (a cell revealed from fog is not a heal); the player's
+// own heals online too. A peer's observed mid-turn action (onlineObservation) never heals (heals happen at turn starts).
+// API: play(event), draw(ctx, now), isActive(), clear(), now(); the hooks call before(slot) / after(snapshot), healed(player),
+// endTurn(), setViewer(slot), remoteBefore(records) / remoteAfter(snapshot) and prune().
 // Removing this file and its guarded calls leaves the game as it was.
 class HealFx {
     // Most effects queued (a bound on memory): a new one drops the oldest.
@@ -53,6 +63,11 @@ class HealFx {
     pruned = false
     // The camera at the last prune (offset and scale), to tell a pan.
     camera = {x: NaN, y: NaN, scale: NaN}
+    // The local human whose view the effects are for (offline), and the ended human's fog others' heals are judged by.
+    viewer = null
+    view = null
+    // The turn start snapshot waiting for its heals (before -> healed / after).
+    pending = null
     // Clock in ms; tests may replace it.
     now() {
         return typeof performance != 'undefined' ? performance.now() : Date.now()
@@ -60,10 +75,18 @@ class HealFx {
     enabled() {
         return typeof otherSettings === 'undefined' || otherSettings.animateHeals !== false
     }
-    // The hp of slot's units and buildings before its turn start heals them (offlineNextTurn); null when off or slot is
-    // not a local human (others' heals are not shown yet).
+    // Whether the screen's player sees coord: no fog, else the ended human's fog copy (an AI turn's vision is in
+    // grid.fogOfWar then) or the board's fog.
+    seen(coord) {
+        if (typeof isFogOfWar === 'undefined' || !isFogOfWar || typeof grid === 'undefined' || !grid.fogOfWar)
+            return true
+        return Boolean((this.view || grid.fogOfWar)[coord.x]?.[coord.y])
+    }
+    // The hp of slot's units and buildings before its turn start heals them (offlineNextTurn); null when off. A slot that is
+    // not a local human (an AI) is others': its heals are queued for the cells the viewer sees.
     before(slot) {
-        if (!this.enabled() || typeof players === 'undefined' || players[slot]?.constructor !== Player || typeof grid === 'undefined')
+        this.pending = null
+        if (!this.enabled() || typeof players === 'undefined' || !players[slot] || players[slot].isNeutral || typeof grid === 'undefined')
             return null
         const entities = [], hp = []
         for (const unit of players[slot].units)
@@ -79,12 +102,21 @@ class HealFx {
                     hp.push(b.hp)
                 }
             }
-        return {entities, hp}
+        return this.pending = {slot, player: players[slot], other: players[slot].constructor !== Player, entities, hp, done: false}
     }
-    // After the turn start: a heal event for each entity whose hp rose.
+    // Player.nextTurn has applied player's heals (an AI plays after it): the pending snapshot's heals are read now.
+    healed(player) {
+        if (this.pending && this.pending.player === player)
+            this.after(this.pending)
+    }
+    // After the turn start: a heal event for each entity whose hp rose (others': on a cell the viewer sees). Once per
+    // snapshot.
     after(snapshot) {
-        if (!snapshot)
+        if (!snapshot || snapshot.done)
             return 0
+        snapshot.done = true
+        if (this.pending === snapshot)
+            this.pending = null
         let n = 0
         for (let i = 0; i < snapshot.entities.length; ++i) {
             const entity = snapshot.entities[i], amount = entity.hp - snapshot.hp[i]
@@ -92,9 +124,81 @@ class HealFx {
                 continue
             const unit = entity.isUnit
             const coord = unit ? entity.coord : entity.hexagon?.coord ?? entity.coord
-            if (this.play({entity, coord: {x: coord.x, y: coord.y}, kind: unit ? 'unit' : 'building', amount, from: snapshot.hp[i],
-                    sprite: this.imageOf(entity)}))
+            if (snapshot.other && !this.seen(coord))
+                continue
+            const effect = this.play({entity, coord: {x: coord.x, y: coord.y}, kind: unit ? 'unit' : 'building', amount, from: snapshot.hp[i],
+                sprite: this.imageOf(entity)})
+            if (effect) {
+                effect.other = snapshot.other
                 ++n
+            }
+        }
+        return n
+    }
+    // A turn ends: its own effects stop; others' waiting ones (an AI turn just played) stay for the next view. A local
+    // human's ending turn leaves its fog as the view others' heals are judged by (offline).
+    endTurn() {
+        this.pending = null
+        this.effects = this.effects.filter(e => e.other && !e.begun)
+        this.hideUnits()
+        const ending = typeof players !== 'undefined' && typeof whooseTurn !== 'undefined' ? players[whooseTurn] : null
+        if (ending && ending.constructor === Player && !(typeof gameSettings !== 'undefined' && gameSettings.isOnline))
+            this.view = typeof isFogOfWar !== 'undefined' && isFogOfWar && grid.fogOfWar ? grid.fogOfWar.map(column => Array.from(column)) : null
+    }
+    // The screen shows slot's view (its fog rebuilt): others' effects queued for another human's view are dropped (slot's
+    // own heals stay). An AI slot keeps the last human's view.
+    setViewer(slot) {
+        if (typeof players !== 'undefined' && players[slot]?.constructor !== Player)
+            return
+        if (this.viewer !== null && this.viewer !== slot) {
+            this.effects = this.effects.filter(e => !e.other)
+            this.hideUnits()
+        }
+        this.viewer = slot
+        this.view = null
+    }
+    // An online change's cells before applyCellDiff (records: the diff's cells): their unit and building with hp, whether
+    // each was hit, and whether the screen's player saw the cell.
+    remoteBefore(records) {
+        if (!this.enabled() || !Array.isArray(records) || typeof grid === 'undefined')
+            return null
+        const cells = []
+        for (const record of records) {
+            const cell = grid.arr[record.x]?.[record.y]
+            if (!cell || cell.hexagon.unknown)
+                continue
+            const coord = {x: record.x, y: record.y}
+            if (!this.seen(coord))
+                continue
+            const unit = cell.unit.notEmpty() && cell.unit.hp < cell.unit.maxHP && !cell.unit.wasHitted ? cell.unit : null
+            const b = cell.building
+            const building = b.notEmpty() && !b.isNature && b.hp !== undefined && b.hp < b.maxHP && !b.wasHitted ? b : null
+            if (unit || building)
+                cells.push({coord, unit, hp: unit?.hp, building, buildingHp: building?.hp, moves: unit?.moves})
+        }
+        return cells
+    }
+    // After applyCellDiff: the same unit or building on its cell with more hp, the cell still seen, is a heal event.
+    remoteAfter(before) {
+        if (!before)
+            return 0
+        let n = 0
+        for (const cell of before) {
+            const coord = cell.coord
+            if (!this.seen(coord) || grid.arr[coord.x][coord.y].hexagon.unknown)
+                continue
+            for (const [entity, from, kind] of [[cell.unit, cell.hp, 'unit'], [cell.building, cell.buildingHp, 'building']]) {
+                if (!entity || entity.killed || !(entity.hp > from))
+                    continue
+                if ((kind === 'unit' ? grid.getUnit(coord) : grid.getBuilding(coord)) !== entity)
+                    continue
+                const effect = this.play({entity, coord: {x: coord.x, y: coord.y}, kind, amount: entity.hp - from, from,
+                    sprite: this.imageOf(entity)})
+                if (effect) {
+                    effect.other = true
+                    ++n
+                }
+            }
         }
         return n
     }
@@ -163,6 +267,9 @@ class HealFx {
             const u = e.entity
             if (u.killed || u.hp !== e.hp || panning && this.finished(e, now))
                 return false
+            // (others' waiting heals: the AI played on after its heals; a unit still on its cell keeps its effect)
+            if (e.other && !e.begun)
+                e.moves = u.moves
             if (e.kind === 'building')
                 return grid.arr[e.coord.x]?.[e.coord.y]?.building === u
             return u.coord.x === e.coord.x && u.coord.y === e.coord.y && grid.getUnit(e.coord) === u && u.moves === e.moves

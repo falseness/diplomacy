@@ -392,6 +392,8 @@ const gameDiffHandler = {
         const before = remoteEffects.snapshot(diff.cells)
         // An opponent's attack in the change is animated (UI only, render/attackFx.js).
         const attacks = typeof attackFx !== 'undefined' ? attackFx.remoteBefore(diff.cells) : null
+        // Heals in the change (turn starts) the player sees are animated too (UI only, render/healFx.js).
+        const heals = typeof healFx !== 'undefined' ? healFx.remoteBefore(diff.cells) : null
         const inspectedTown = entityInterface.townInspectionCoord?.()
         const result = applyCellDiff(diff)
         // Wire metadata uses boardDiff's fields envelope. The local viewer/turn
@@ -427,6 +429,8 @@ const gameDiffHandler = {
         }
         if (attacks)
             attackFx.remoteAfter(attacks, message)
+        if (heals)
+            healFx.remoteAfter(heals)
         // Waiting views also need pictures of uncommitted co-op actions: a
         // different peer's commit can replace their rule board before this actor ends.
         if (observing || (gameSettings.coop && onlineCommit?.pendingSeats?.includes(message.actorSeat)))

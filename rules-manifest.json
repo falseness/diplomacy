@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "4f78e8775b640d1fb154521e4b50f38a76f8b5d7c99c1ab9dde6d13337156768",
+  "rulesVersion": "3942d41b6c0a342d96f333addbf3c1809d1d462fd120f3db27870f6cdb802491",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -500,8 +500,8 @@
     },
     {
       "path": "player.js",
-      "sha256": "53d5d14271612993450657ebf6f85a205f61cb2bcf032783bb16cd191560552d",
-      "bytes": 24011
+      "sha256": "254a9470754bdf8e9c36d46648cf0d63828399ca0af8306cfa732711a446f5a9",
+      "bytes": 24183
     },
     {
       "path": "ai/players.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "9101fbcbec7cd2ff5525ce316a34817fed05656e1c685907fd03a422648e3705",
-      "bytes": 9147
+      "sha256": "9faf8dd70dc9e70230ec290eee3e07fbe7be7ff5d251c99b9c217486fd784add",
+      "bytes": 9507
     },
     {
       "path": "managers.js",

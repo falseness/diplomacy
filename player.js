@@ -251,6 +251,9 @@ class Player {
         for (let i = 0; i < this.towns.length; ++i) {
             this.towns[i].nextTurn()
         }
+        // The turn start's heals are read here, before an AI plays (render/healFx.js, UI only).
+        if (typeof healFx !== 'undefined')
+            healFx.healed(this)
     }
     calcSuburbHexagon() {
         let tmpCanvas = document.createElement('canvas')
