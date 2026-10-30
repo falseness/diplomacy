@@ -73,6 +73,7 @@ class TutorialCardsTree {
         'tutorial-17': {src: 'assets/sprites/normchel.svg', fit: 'unit'},
         'tutorial-1': {src: 'assets/sprites/archer.svg', fit: 'unit'},
         'tutorial-7': {src: 'assets/atmosphere/buildings/tower.svg'},
+        'tutorial-22': {src: 'assets/atmosphere/buildings/town.svg'},
         'tutorial-3': {src: 'assets/atmosphere/buildings/wall.svg', fit: 'low'},
         'tutorial-18': {src: 'assets/atmosphere/buildings/farm.svg'},
         'tutorial-20': {shape: 'suburb'},
