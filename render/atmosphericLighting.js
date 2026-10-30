@@ -387,8 +387,8 @@ const atmosphericLighting = {
     // TASK-1360: syncOwners(board, cap, true) in steps (a generator; each yield ends one: updateMapRegionSteps'), the same
     // calls in the same order, for a surface cell layer job (Grid.startSurfaceLayerJob), kept in regionStaged while under
     // way. Its clip stays on the map's canvases between steps, so a call drawing on the map (lightMap, updateMapRegion,
-    // stepLightMap) first drops it (endRegionSteps: the clip taken off); the owners it had not brought up are left to the
-    // next sync (mapOwners unchanged until its last step). Returns (the generator's value) whether the map has the owners.
+    // stepLightMap) first ends it (endRegionSteps: its remaining steps run at once, so the map is never left with a region
+    // half drawn, TASK-1442). Returns (the generator's value) whether the map has the owners.
     regionStaged: null,
     startOwnerSync(board, cap) {
         this.endRegionSteps()
@@ -406,10 +406,15 @@ const atmosphericLighting = {
         })(this)
         return steps
     },
+    // A staged update ended before its last step would leave its region filled with the ambient light only (buildSteps'
+    // first) and its rings unrestored, which the next update keeps as they are (TASK-1442): its steps are run to the end.
     endRegionSteps() {
         const steps = this.regionStaged
         this.regionStaged = null
-        steps?.return()
+        if (!steps) return
+        const t0 = performance.now()
+        while (!steps.next().done);
+        this.work.regionFinishMs = performance.now() - t0
     },
     // Whether the board's light state equals stored (a lightState copy).
     sameLightState(board, stored) {
@@ -628,6 +633,9 @@ const atmosphericLighting = {
             Math.max(...regions.map(r => r.outer.x + r.outer.w)), Math.max(...regions.map(r => r.outer.y + r.outer.h)), W, H)
         // The caller's clip window kept (a cell layer variant's render brings the map up within a patch stage, syncOwners).
         const clip = this.clipWindow, window = clipWindowOf(span, W, H, bounds.left, bounds.top, scale, 1.05 * basis.r)
+        // The state drawn (that collected now), kept as the map's at the end: a board changed between steps leaves the map
+        // stale for its new state, not vouched for it.
+        const drawnState = this.lightState(board).slice(), drawnOwners = this.ownerState(board).slice()
         try {
             const steps = this.buildSteps(this.collect(board), bounds, scale, true)
             for (;;) {
@@ -651,8 +659,8 @@ const atmosphericLighting = {
         for (const ring of kept[0]) restoreCanvasRing(this.map, ring)
         for (const ring of kept[1]) restoreCanvasRing(this.gain, ring)
         ++this.rebuilds
-        this.mapState = this.lightState(board).slice()
-        this.mapOwners = this.ownerState(board).slice()
+        this.mapState = drawnState
+        this.mapOwners = drawnOwners
         return true
     },
     // The light map's pixels over the world rectangles rects ({x0, y0, x1, y1}, each grown by MAP_GROW pixels) for the
