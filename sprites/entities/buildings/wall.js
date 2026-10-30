@@ -16,6 +16,7 @@ class Wall extends Building {
     get info() {
         let wall = super.info
         wall.info.hp += "\narchers can't shoot through it"
+        wall.info.hp += "\nunits can't stand on it"
         return wall
     }
     // obstacle -> cant stand
