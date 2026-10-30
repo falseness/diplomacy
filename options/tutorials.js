@@ -1147,6 +1147,54 @@ function createTutorial22Map() {
     return map
 }
 
+// Through the lines: the demons hold a line in the middle, two vanguard normchels (3,2) at 3 hp and (3,3) at 5 hp
+// with a hexcaster (4,2) behind them, and three noobs (4,4), (3,6), (4,7) to the south-east. Red has an archer
+// (1,2), a normchel (2,3) and a KOHb (2,4) facing the line and no town (so no economy). The demon-slot normchels
+// and noobs draw with the undead art. Lakes (7,1) (8,1) (8,2), (0,7) (0,8), (5,5) (6,5), (1,6), (8,4), mountains
+// (3,0) (3,1), (5,0) (6,0), (0,4), (7,6) (8,6) (8,7), (7,8) and bushes scattered around the edges. No portals.
+// Killing every demon unit wins (pass 'demonUnitsDead').
+function createTutorial23Map() {
+    const map = new GameMap(
+        {x: 9, y: 9},
+        [
+            {
+                rgb: {r: 208, g: 208, b: 208},
+                towns: []
+            },
+            {
+                rgb: {r: 255, g: 0, b: 0},
+                gold: 0,
+                towns: [],
+                units: [
+                    {x: 1, y: 2, type: Archer},
+                    {x: 2, y: 3, type: Normchel},
+                    {x: 2, y: 4, type: KOHb}
+                ]
+            }
+        ],
+        [],
+        coordDictionary([[7, 1], [8, 1], [8, 2], [0, 7], [0, 8], [5, 5], [6, 5], [1, 6], [8, 4]]),
+        coordDictionary([[3, 1], [3, 0], [7, 6], [8, 6], [8, 7], [5, 0], [6, 0], [0, 4], [7, 8]]),
+        coordDictionary([[0, 0], [1, 0], [6, 3], [6, 8], [2, 8], [5, 2], [6, 6], [1, 8], [5, 8], [0, 3], [7, 3]]),
+        [],
+        {type: 'rectangular'},
+        {
+            tutorial: true,
+            units: [
+                {x: 3, y: 2, type: Normchel, hp: 3},
+                {x: 3, y: 3, type: Normchel, hp: 5},
+                {x: 4, y: 2, type: Hexcaster},
+                {x: 4, y: 4, type: Noob},
+                {x: 3, y: 6, type: Noob},
+                {x: 4, y: 7, type: Noob}
+            ]
+        }
+    )
+    map.portals = []
+    map.testName = 'tutorial 23'
+    return map
+}
+
 const tutorials = [
     {id: 'tutorial-0', title: 'Tutorial 0: First Contact', pass: 'enemyUnitsDead', get map() { return createTutorial0Map() }},
     {id: 'tutorial-16', title: 'Tutorial 1: Moving Around', pass: 'enemyLost', get map() { return createTutorial16Map() }},
@@ -1160,15 +1208,16 @@ const tutorials = [
         get map() { return createTutorial20Map() }},
     {id: 'tutorial-21', title: 'Tutorial 9: All as One', pass: 'coopVictory', startRound: 17,
         get map() { return createTutorial21Map() }},
-    {id: 'tutorial-19', title: 'Tutorial 10: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
+    {id: 'tutorial-23', title: 'Tutorial 10: Through the Lines', pass: 'demonUnitsDead', get map() { return createTutorial23Map() }},
+    {id: 'tutorial-19', title: 'Tutorial 11: Puzzle Rush', pass: 'demonUnitsDead', startRound: 23,
         get map() { return createTutorial19Map() }},
-    {id: 'tutorial-2', title: 'Tutorial 11: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
-    {id: 'tutorial-5', title: 'Tutorial 12: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
-    {id: 'tutorial-15', title: 'Tutorial 13: Fortify in Time', pass: 'surviveRounds', rounds: 16,
+    {id: 'tutorial-2', title: 'Tutorial 12: Retreat and Rebuild', pass: 'enemyUnitsDead', get map() { return createTutorial2Map() }},
+    {id: 'tutorial-5', title: 'Tutorial 13: Hold the Walls', pass: 'demonUnitsDead', get map() { return createTutorial5Map() }},
+    {id: 'tutorial-15', title: 'Tutorial 14: Fortify in Time', pass: 'surviveRounds', rounds: 16,
         get map() { return createTutorial15Map() }},
-    {id: 'tutorial-13', title: 'Tutorial 14: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
+    {id: 'tutorial-13', title: 'Tutorial 15: Escort the Catapults', pass: 'captureTowns', targets: [{x: 14, y: 4}],
         get map() { return createTutorial13Map() }},
-    {id: 'tutorial-6', title: 'Tutorial 15: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
+    {id: 'tutorial-6', title: 'Tutorial 16: Lose a Town, Win the War', pass: 'demonUnitsDead', startRound: 20,
         get map() { return createTutorial6Map() }},
 ]
 // An entry may set startRound: N (the game starts at gameRound N, so round counters and the
