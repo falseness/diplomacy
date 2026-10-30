@@ -278,31 +278,34 @@ class HealFx {
         if (this.effects.length !== before)
             this.hideUnits()
     }
-    // The waiting effects' wave, from now: those whose entity's centre is off the main canvas are skipped (stats.offscreen),
-    // the rest start by their distance from the canvas centre, min(wave.step, wave.span / n) ms apart. The effects are kept
-    // in start order.
+    // The waiting effects' wave, from now: those whose entity's centre is off the main canvas are skipped (stats.offscreen,
+    // settled: finished at once), the rest start by their distance from the canvas centre, min(wave.step, wave.span / n) ms
+    // apart. The effects are kept in start order.
     startWave(now) {
         const ctx = typeof mainCtx !== 'undefined' ? mainCtx : null
         const t = ctx?.getTransform?.(), w = ctx?.canvas?.width, h = ctx?.canvas?.height
         const half = typeof assets !== 'undefined' ? assets.size / 2 : 0
         let offscreen = 0, n = 0
-        this.effects = this.effects.filter(e => {
+        const wave = []
+        for (const e of this.effects) {
             if (e.startTime !== null)
-                return true
+                continue
             e.distance = 0
             if (t && w > 0 && h > 0) {
                 const cx = e.entity.pos.x + half, cy = e.entity.pos.y + half
                 const x = t.a * cx + t.c * cy + t.e, y = t.b * cx + t.d * cy + t.f
                 if (!(x >= 0 && y >= 0 && x <= w && y <= h)) {
                     ++offscreen
-                    return false
+                    this.settle(e, now)
+                    e.offscreen = true
+                    continue
                 }
                 e.distance = Math.hypot(x - w / 2, y - h / 2)
             }
             ++n
-            return true
-        })
-        const wave = this.effects.filter(e => e.startTime === null).sort((a, b) => a.distance - b.distance)
+            wave.push(e)
+        }
+        wave.sort((a, b) => a.distance - b.distance)
         const step = n ? Math.min(this.wave.step, this.wave.span / n) : 0
         for (let i = 0; i < wave.length; ++i)
             wave[i].startTime = now + i * step
@@ -310,10 +313,10 @@ class HealFx {
         this.stats.offscreen += offscreen
         this.lastWave = {at: now, n, step, offscreen}
     }
-    // Starts the effects due by now in start order; one due while maxDrawn play is skipped (stats.capped; its hp and pips
-    // are final).
+    // Starts the effects due by now in start order; one due while maxDrawn play is skipped (stats.capped, settled: its hp
+    // and pips final).
     startDue(now) {
-        let playing = 0, capped = false
+        let playing = 0
         for (const e of this.effects)
             if (e.begun && now - e.startTime < e.duration)
                 ++playing
@@ -321,7 +324,8 @@ class HealFx {
             if (e.begun || e.startTime === null || e.startTime > now)
                 continue
             if (playing >= this.maxDrawn) {
-                e.capped = capped = true
+                this.settle(e, now)
+                e.capped = true
                 ++this.stats.capped
             }
             else {
@@ -330,8 +334,14 @@ class HealFx {
                     ++playing
             }
         }
-        if (capped)
-            this.effects = this.effects.filter(e => !e.capped)
+    }
+    // A skipped heal (off screen at its wave's start, or due while maxDrawn play): finished at once, its unit or building
+    // drawn here as the board draws it (hp and pips final) until the board changes anyway, as a finished effect. It stays
+    // in effects so the board's unit and bar passes (hidden) do not change during the wave: a change there makes the
+    // board's held still frame again (TASK-1448: one board redraw and snapshot per skipped heal).
+    settle(e, now) {
+        e.startTime = now - e.duration
+        e.begun = true
     }
     // Whether the camera moved since the last prune at the same scale (and follows it).
     cameraMoved() {
@@ -384,6 +394,8 @@ class HealFx {
             return
         const t = ctx.getTransform(), margin = 3 * basis.r, half = assets.size / 2
         const lod = typeof grid !== 'undefined' && (grid.lod || !!grid.lodTransform?.(ctx))
+        // (the board's transform: cached bars are made for it, blitBars)
+        this.restTransform = t
         for (const e of this.effects) {
             const u = e.entity
             const cx = u.pos.x + half, cy = u.pos.y + half
@@ -398,7 +410,7 @@ class HealFx {
             if (e.kind === 'building')
                 this.drawRepair(ctx, e, this.finished(e, now) && e.begun ? 1 : s, lod)
             else if (this.finished(e, now) && e.begun)
-                this.drawUnit(ctx, e, 0, 1, 0, lod)
+                this.drawUnit(ctx, e, 0, 1.4, 0, lod)
             else
                 this.drawUnitHeal(ctx, e, s, lod)
             ctx.restore()
@@ -542,6 +554,8 @@ class HealFx {
         const u = e.entity
         k = Math.max(0, Math.min(k, 1.4))
         const old = e.oldBar
+        if ((k <= 0 || k >= 1.4 || !old) && this.blitBars(ctx, e, k <= 0 && old ? 'before' : 'after'))
+            return
         if (!old || k >= 1.4)
             u.drawBars(ctx)
         else {
@@ -572,6 +586,72 @@ class HealFx {
             if (e.kind === 'unit' && typeof shouldShowMovesBar === 'function' && shouldShowMovesBar(u))
                 u.movesBar.draw(ctx)
         }
+    }
+    // TASK-1448: an effect's bars at rest ('before': the bar before the heal, k = 0; 'after': as the board draws them,
+    // k = 1.4) are drawn once into a small canvas at the board's device scale and pixel phase (barsImage) and blitted each
+    // frame, where every pip was a fill and a stroke every frame for every effect (most of a wave's draw time); the
+    // crossfade and flash between them are drawn live. A lifted unit's bars (drawUnit's dy) are blitted at the nearest
+    // device pixel. False (drawn live) for a rotated or rescaled context and entities with their own drawBars.
+    blitBars(ctx, e, pose) {
+        const t = ctx.getTransform(), rest = this.restTransform, u = e.entity
+        if (!rest || t.a !== rest.a || t.d !== rest.d || t.b || t.c || typeof document === 'undefined' ||
+                u.drawBars !== Entity.prototype.drawBars && !(typeof Unit !== 'undefined' && u.drawBars === Unit.prototype.drawBars))
+            return false
+        const image = this.barsImage(e, pose, rest)
+        if (!image)
+            return false
+        if (image.canvas) {
+            ctx.save()
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.drawImage(image.canvas, image.x + Math.round(t.e - rest.e), image.y + Math.round(t.f - rest.f))
+            ctx.restore()
+        }
+        return true
+    }
+    // The pose's bars in device pixels for transform t: {canvas, x, y} (canvas null: no bar shown), remade when what they
+    // show or the transform's scale or sub-pixel phase changed. One canvas per effect, reused.
+    barsImage(e, pose, t) {
+        const u = e.entity, moves = e.kind === 'unit' && typeof shouldShowMovesBar === 'function' && shouldShowMovesBar(u)
+        const hp = pose === 'before' ? (otherSettings.alwaysDisplayHPBar || e.from < u.maxHP ? e.oldBar : null) :
+            otherSettings.alwaysDisplayHPBar || !u.isFullHP ? u.hpBar : null
+        const bars = [hp, moves ? u.movesBar : null]
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+        for (const bar of bars) {
+            if (!bar)
+                continue
+            for (const r of bar.rects) {
+                const w = r.strokeWidth || 0
+                x0 = Math.min(x0, r.x - w)
+                y0 = Math.min(y0, r.y - w)
+                x1 = Math.max(x1, r.x + r.width + w)
+                y1 = Math.max(y1, r.y + r.height + w)
+            }
+        }
+        const key = [pose, t.a, t.d, t.e - Math.floor(t.e), t.f - Math.floor(t.f), u.hp, u.maxHP, u.moves, moves,
+            otherSettings.alwaysDisplayHPBar, x0, y0, x1, y1].join()
+        const cached = e.bars
+        if (cached && cached.key === key)
+            return cached.image
+        const image = {canvas: null, x: 0, y: 0}
+        if (x0 <= x1) {
+            const X0 = Math.floor(t.a * x0 + t.e) - 2, Y0 = Math.floor(t.d * y0 + t.f) - 2
+            const w = Math.ceil(t.a * x1 + t.e) + 2 - X0, h = Math.ceil(t.d * y1 + t.f) + 2 - Y0
+            if (!(w > 0 && h > 0 && w * h <= 1 << 20))
+                return null
+            const canvas = cached?.canvas || document.createElement('canvas')
+            canvas.width = w
+            canvas.height = h
+            const c = canvas.getContext('2d')
+            c.setTransform(t.a, 0, 0, t.d, t.e - X0, t.f - Y0)
+            if (pose === 'after')
+                u.drawBars(c)
+            else
+                for (const bar of bars)
+                    bar?.draw(c)
+            Object.assign(image, {canvas, x: X0, y: Y0})
+        }
+        e.bars = {key, image, canvas: image.canvas || cached?.canvas}
+        return image
     }
     // '+N' rising from y, q in (0, 1].
     drawGain(ctx, x, y, q, amount, r) {
