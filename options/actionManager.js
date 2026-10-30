@@ -501,6 +501,9 @@ class ActionManager {
         // The undone action's attack animation is not played on (others' replay goes on, TASK-1428).
         if (typeof attackFx !== 'undefined')
             attackFx.undo()
+        // (and the turn start's heal animations: render/healFx.js)
+        if (typeof healFx !== 'undefined')
+            healFx.clear()
         gameEvent.hideAll()
         gameEvent.removeSelection()
 

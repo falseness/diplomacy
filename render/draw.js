@@ -3,6 +3,9 @@ function drawMain() {
     // the units an effect draws are left out of this frame's unit passes (Grid.getStillUnit).
     if (typeof attackFx !== 'undefined')
         attackFx.prune()
+    // Heal animations (render/healFx.js), likewise: their units are left out of this frame's unit passes.
+    if (typeof healFx !== 'undefined')
+        healFx.prune()
     // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374).
     if (grid.drawZoomRaster(mainCtx)) {
         if (typeof attackFx !== 'undefined')
@@ -60,6 +63,9 @@ function drawMain() {
 function drawAttackFx() {
     if (typeof attackFx !== 'undefined')
         attackFx.draw(mainCtx)
+    // (heal animations over them the same way: render/healFx.js)
+    if (typeof healFx !== 'undefined')
+        healFx.draw(mainCtx)
 }
 
 // Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:

@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "8c24d326302e6fb748f34e0bbccbda777643c52d13b193c30a900f29ae5b345b",
+  "rulesVersion": "04ccdab7cdfbba47c4d59c854493bcd36813603754c9f6debc340b18bddd01cb",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,8 +30,8 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "cddb5fcc36f2d3cd2a64a4093a2e16adf3584b4b2f8edbe74d9e2e3e15cf76d9",
-      "bytes": 99195
+      "sha256": "0bc3e08046ad33eb3b914070f7461578e22a9a9c0fbb104560d548cff395e3f8",
+      "bytes": 99265
     },
     {
       "path": "options/tutorials.js",
@@ -55,8 +55,8 @@
     },
     {
       "path": "options/actionManager.js",
-      "sha256": "fa21e066751833458f532fe0f06bcedd93d455985b3b1c80231484239cce6908",
-      "bytes": 20399
+      "sha256": "d017917a98c4169b20fd71cba139499ca0f3db4703eb194d5d72d8bcbfafd668",
+      "bytes": 20537
     },
     {
       "path": "options/classManager.js",
@@ -70,8 +70,8 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "8f88ab7478d7a9c13003832d5ec50faa54a59b18f20a06aaa16907e3fb7f15b5",
-      "bytes": 2676
+      "sha256": "3006084b49b0f54f405cab07eba81cded7b75795ca44707efcf53bb9cb3c1210",
+      "bytes": 2857
     },
     {
       "path": "options/actionApi.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "e1ce745fc121b649f6a4316ab2d681186db409b386c9f97e3cebff3bc0a6979a",
-      "bytes": 25312
+      "sha256": "b3020267c0439a12f149ba966c85a76601ff7a94228ff16caf229994a708fb45",
+      "bytes": 25615
     },
     {
       "path": "interface/entityinterface.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "a6be420625d30059b16375a27e6351cc1f50691fc2850723d65a866e86e10d18",
-      "bytes": 159249
+      "sha256": "07dd86cba1d519082754c8e768b432f33612fbb7e359868ec976e446065508a3",
+      "bytes": 159437
     },
     {
       "path": "sprites/hexagon.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "20c94650c6b64d4dc9eedd61c31d3964fd5f49c7f63fedd0cc433c83728b16dc",
-      "bytes": 311067
+      "sha256": "cdc7c60c6469791dfac0386b98abe88bd112b1d6eb9af358caec250c317954e8",
+      "bytes": 311207
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "5e803333a5d803a58d7ca15bb6857c551f3e6a90e3e51ef6c09290aaea95b522",
-      "bytes": 8696
+      "sha256": "d7166357d077a704d3c9d908a5cebc68fd3226aec9dd4e08ef6797c283f07102",
+      "bytes": 9063
     },
     {
       "path": "managers.js",

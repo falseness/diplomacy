@@ -1753,6 +1753,8 @@ class GameManager {
         moveTween.clear()
         if (typeof attackFx !== 'undefined')
             attackFx.clear()
+        if (typeof healFx !== 'undefined')
+            healFx.clear()
 
         this.clearBasisValues()
     }

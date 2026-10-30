@@ -104,6 +104,9 @@ function advanceOfflineTurn() {
     // The ended turn's own attack animations stop; an AI or demon turn's stay for the next view (render/attackFx.js).
     if (typeof attackFx !== 'undefined')
         attackFx.endTurn()
+    // The ended turn's heal animations stop (render/healFx.js).
+    if (typeof healFx !== 'undefined')
+        healFx.clear()
 
     timer.pauseAndSaveTime()
 
@@ -122,7 +125,11 @@ function advanceOfflineTurn() {
         finishCoopLocalPhase()
         return
     }
+    // The turn player's heals are animated once its view opens (render/healFx.js: after the pass-device screen).
+    const heals = typeof healFx !== 'undefined' ? healFx.before(whooseTurn) : null
     players[whooseTurn].nextTurn()
+    if (heals)
+        healFx.after(heals)
     if (gameSettings.tutorial && TutorialManager.checkResult()) {
         return
     }

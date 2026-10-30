@@ -8,6 +8,8 @@ class Settings {
         this.animateMoves = true
         // Attack animations (render/attackFx.js).
         this.animateAttacks = true
+        // Heal animations (render/healFx.js).
+        this.animateHeals = true
         // The camera replay of others' attacks (render/attackFx.js, TASK-1428); off -> they play in place, the camera
         // stays. Ignored while the animations are off.
         this.replayOthers = true
@@ -31,6 +33,7 @@ class Settings {
         this.atmosphericVisuals = dict.atmosphericVisuals !== false
         this.animateMoves = dict.animateMoves !== false
         this.animateAttacks = dict.animateAttacks !== false
+        this.animateHeals = dict.animateHeals !== false
         this.replayOthers = dict.replayOthers !== false
         this.showReplays = dict.showReplays === true
         this.autoscout = dict.autoscout !== false
@@ -45,6 +48,7 @@ class Settings {
             atmosphericVisuals: this.atmosphericVisuals,
             animateMoves: this.animateMoves,
             animateAttacks: this.animateAttacks,
+            animateHeals: this.animateHeals,
             replayOthers: this.replayOthers,
             showReplays: this.showReplays,
             autoscout: this.autoscout,

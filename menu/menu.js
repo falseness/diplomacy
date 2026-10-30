@@ -176,15 +176,17 @@ class OtherSettingsTree {
         otherSettings.usePolishedSprites = this.polishedSpritesCheckBox.mark
         otherSettings.autoscout = this.autoscoutCheckBox.mark
         otherSettings.atmosphericVisuals = this.atmosphericVisualsCheckBox.mark
-        // 'Animations' is both the move slide and the attack effects (an old save with one of them off shows unchecked);
-        // off ends running ones at once. 'Replay others' moves' is ignored (greyed, not clickable) while it is off.
-        if (this.animationsCheckBox.mark !== (otherSettings.animateMoves && otherSettings.animateAttacks)) {
-            otherSettings.animateMoves = otherSettings.animateAttacks = this.animationsCheckBox.mark
+        // 'Animations' is the move slide, the attack effects and the heal effects (an old save with one of them off shows
+        // unchecked); off ends running ones at once. 'Replay others' moves' is ignored (greyed, not clickable) while it is off.
+        if (this.animationsCheckBox.mark !== (otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals)) {
+            otherSettings.animateMoves = otherSettings.animateAttacks = otherSettings.animateHeals = this.animationsCheckBox.mark
             if (!this.animationsCheckBox.mark) {
                 if (typeof moveTween !== 'undefined')
                     moveTween.clear()
                 if (typeof attackFx !== 'undefined')
                     attackFx.clear()
+                if (typeof healFx !== 'undefined')
+                    healFx.clear()
             }
         }
         otherSettings.replayOthers = this.replayCheckBox.mark
@@ -207,7 +209,7 @@ class OtherSettingsTree {
         this.polishedSpritesCheckBox.mark = otherSettings.usePolishedSprites
         this.autoscoutCheckBox.mark = otherSettings.autoscout
         this.atmosphericVisualsCheckBox.mark = otherSettings.atmosphericVisuals
-        this.animationsCheckBox.mark = otherSettings.animateMoves && otherSettings.animateAttacks
+        this.animationsCheckBox.mark = otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals
         this.replayCheckBox.mark = otherSettings.replayOthers
         this.replayCheckBox.disabled = !this.animationsCheckBox.mark
     }
