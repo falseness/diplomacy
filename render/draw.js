@@ -72,32 +72,45 @@ function drawAttackFx() {
 }
 
 // Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:
-// a 'Camera' panel left of the board and a 'Turn' panel right of it, in world space (they pan and zoom
+// a 'Camera' panel left of the board and a 'Turn' panel right of it; Tutorial 4 ('High Ground') shows a 'Display'
+// panel left of the board with the 'always display hp bar' and 'always display moves bar' settings as checkboxes
+// (white ticks), on a desktop and on a touch device. The panels are in world space (they pan and zoom
 // with the board). They are part of the background: drawn right after the sky (drawMain and the lit
 // rest snapshot, lit patch and overlay snapshot, which hold the sky), so the board, its shadow and the
-// units draw over them. Each panel is rendered once per scale step into an offscreen canvas
-// (backgroundHintCanvas) and drawn with one drawImage a frame. In r (basis.r) units: panel rects from
-// the board's top face, the keys, the mouse icon (as high as a key) and texts from the panel's top left; captions
-// start at textX, words ('or') are left-aligned and vertically centred at y.
-// The gap between a panel and the board's top face, the keys' height, the canvas margin (r units).
+// units draw over them. Each panel is rendered once per scale step (and per state of its settings) into an
+// offscreen canvas (backgroundHintCanvas) and drawn with one drawImage a frame. In r (basis.r) units: panel rects from
+// the board's top face, the keys, the mouse icon (as high as a key), the checkbox rows and texts from the panel's top
+// left; captions start at textX, words ('or') are left-aligned and vertically centred at y; a row's checkbox plate
+// is BACKGROUND_HINT_CHECK.size square at (BACKGROUND_HINT_CHECK.x, y), its label left-aligned at labelX and
+// vertically centred on the plate.
 const BACKGROUND_HINT_GAP = 0.8
 const BACKGROUND_HINT_KEY = 0.98
 const BACKGROUND_HINT_PAD = 0.1
-const BACKGROUND_HINT_PANELS = [
-    {name: 'camera', heading: 'Camera', side: -1, width: 4.55, height: 6.1, textX: 0.47,
-        mouse: {x: 0.47, y: 0.88, width: 0.62}, words: [{text: 'or', x: 1.2, y: 0.88 + BACKGROUND_HINT_KEY / 2}], keys: [
-        {text: '+', x: 1.75, y: 0.88, width: 0.98},
-        {text: '−', x: 2.88, y: 0.88, width: 0.98},
-        {text: '↑', x: 1.6, y: 3.15, width: 0.98},
-        {text: '←', x: 0.47, y: 4.3, width: 0.98},
-        {text: '↓', x: 1.6, y: 4.3, width: 0.98},
-        {text: '→', x: 2.73, y: 4.3, width: 0.98},
-    ], captions: [{text: 'scale camera', y: 2.3}, {text: 'move camera', y: 5.74}]},
-    {name: 'turn', heading: 'Turn', side: 1, width: 4.6, height: 5.35, textX: 0.41, keys: [
-        {text: 'Backspace', x: 0.41, y: 0.88, width: 3.06},
-        {text: 'Enter', x: 0.41, y: 3.15, width: 2.24},
-    ], captions: [{text: 'undo move', y: 2.3}, {text: 'go to next unit /', y: 4.55}, {text: 'confirm next turn', y: 5.02}]},
-]
+const BACKGROUND_HINT_CHECK = {x: 0.32, size: 0.62, labelX: 0.32 + 0.62 + 0.25, font: 0.31}
+// The panels by tutorial id; touch: shown on touch devices too (else on a desktop pointer only).
+const BACKGROUND_HINT_PANELS = {
+    'tutorial-16': {touch: false, panels: [
+        {name: 'camera', heading: 'Camera', side: -1, width: 4.55, height: 6.1, textX: 0.47,
+            mouse: {x: 0.47, y: 0.88, width: 0.62}, words: [{text: 'or', x: 1.2, y: 0.88 + BACKGROUND_HINT_KEY / 2}], keys: [
+            {text: '+', x: 1.75, y: 0.88, width: 0.98},
+            {text: '−', x: 2.88, y: 0.88, width: 0.98},
+            {text: '↑', x: 1.6, y: 3.15, width: 0.98},
+            {text: '←', x: 0.47, y: 4.3, width: 0.98},
+            {text: '↓', x: 1.6, y: 4.3, width: 0.98},
+            {text: '→', x: 2.73, y: 4.3, width: 0.98},
+        ], captions: [{text: 'scale camera', y: 2.3}, {text: 'move camera', y: 5.74}]},
+        {name: 'turn', heading: 'Turn', side: 1, width: 4.6, height: 5.35, textX: 0.41, keys: [
+            {text: 'Backspace', x: 0.41, y: 0.88, width: 3.06},
+            {text: 'Enter', x: 0.41, y: 3.15, width: 2.24},
+        ], captions: [{text: 'undo move', y: 2.3}, {text: 'go to next unit /', y: 4.55}, {text: 'confirm next turn', y: 5.02}]},
+    ]},
+    'tutorial-7': {touch: true, panels: [
+        {name: 'display', heading: 'Display', side: -1, width: 5.75, height: 3.15, keys: [], captions: [], checks: [
+            {text: 'always display hp bar', setting: 'alwaysDisplayHPBar', y: 0.9},
+            {text: 'always display moves bar', setting: 'alwaysDisplayMovesBar', y: 0.9 + 0.95},
+        ]},
+    ]},
+}
 
 // Whether the page is used with a mouse: a hovering fine pointer, and no touch seen in this page
 // (false from the first touchstart on). No matchMedia (an old browser) counts as no.
@@ -107,9 +120,10 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
     window.addEventListener('touchstart', () => {
         if (pageTouched)
             return
+        const shown = typeof gameSettings !== 'undefined' && backgroundHintsShown()
         pageTouched = true
         // The lit snapshots and the overlay snapshot hold the hints drawn with the sky.
-        if (typeof grid !== 'undefined' && grid) {
+        if (shown && !backgroundHintsShown() && typeof grid !== 'undefined' && grid) {
             grid.releaseLitCanvases()
             grid.overlayComposite = undefined
         }
@@ -121,16 +135,22 @@ function isDesktopPointer() {
     return !!desktopPointerQuery.matches
 }
 
+// The current tutorial's panel set, or undefined.
+function backgroundHintSet() {
+    return gameSettings.tutorial ? BACKGROUND_HINT_PANELS[gameSettings.tutorial.id] : undefined
+}
+
 function backgroundHintsShown() {
-    return !!gameSettings.tutorial && gameSettings.tutorial.id === 'tutorial-16' && isDesktopPointer()
+    const set = backgroundHintSet()
+    return !!set && (set.touch || isDesktopPointer())
 }
 
 // The panels' world rects: beside the board's top face, centred on it vertically.
 function backgroundHintRects() {
     mapDepth.ensureGeometry(grid)
     const b = mapDepth.surfaceBounds, r = basis.r, middle = (b.top + b.bottom) / 2
-    const top = middle - BACKGROUND_HINT_PANELS[0].height * r / 2
-    return BACKGROUND_HINT_PANELS.map(panel => ({name: panel.name, panel,
+    const panels = backgroundHintSet().panels, top = middle - panels[0].height * r / 2
+    return panels.map(panel => ({name: panel.name, panel,
         x: panel.side < 0 ? b.left - (BACKGROUND_HINT_GAP + panel.width) * r : b.right + BACKGROUND_HINT_GAP * r,
         y: top, width: panel.width * r, height: panel.height * r}))
 }
@@ -153,10 +173,10 @@ function drawBackgroundHints(ctx) {
 // The rects drawn last (null when none), the panel renders so far and the rendered panels by panel and scale.
 const backgroundHintState = {rects: null, renders: 0, canvases: new Map()}
 
-// The panel rendered at scale (device pixels a world unit), kept for the last two scale steps.
+// The panel rendered at scale (device pixels a world unit) and its settings' state, kept for the last two keys.
 function backgroundHintCanvas(panel, scale) {
     const cache = backgroundHintState.canvases
-    const key = panel.name + ':' + scale
+    const key = panel.name + ':' + (panel.checks || []).map(check => otherSettings[check.setting] ? 1 : 0).join('') + scale
     let image = cache.get(key)
     if (image)
         return image
@@ -225,6 +245,26 @@ function renderBackgroundHintPanel(g, panel, k) {
         g.fillText(word.text, word.x * k, word.y * k)
     for (const caption of panel.captions)
         g.fillText(caption.text, panel.textX * k, caption.y * k)
+    // The checkbox rows: a plain plate, a white tick in it when the setting is on, the label right of it.
+    const check = BACKGROUND_HINT_CHECK, size = check.size * k
+    g.font = `${MENU_THEME.fontWeight} ${check.font * k}px ${family}`
+    for (const row of panel.checks || []) {
+        const x = check.x * k, y = row.y * k
+        plate(x, y, size, size, 0.12 * k, MENU_THEME.plain)
+        if (otherSettings[row.setting]) {
+            g.beginPath()
+            g.moveTo(x + 0.22 * size, y + 0.52 * size)
+            g.lineTo(x + 0.42 * size, y + 0.72 * size)
+            g.lineTo(x + 0.78 * size, y + 0.3 * size)
+            g.strokeStyle = '#ffffff'
+            g.lineWidth = Math.max(2.5, 0.12 * size)
+            g.lineCap = 'round'
+            g.lineJoin = 'round'
+            g.stroke()
+        }
+        g.fillStyle = MENU_THEME.text
+        g.fillText(row.text, check.labelX * k, y + size / 2)
+    }
 }
 
 // The mouse in the box x, y, width, height (pixels): an egg-shaped navy body (narrower at the top) with a gold rim,
