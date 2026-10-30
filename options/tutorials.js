@@ -436,19 +436,19 @@ function createTutorial3Map() {
 }
 
 function createTutorial5Map() {
-    // Town defense against demons (co-op tutorial map). Red's town (1,4) owns the whole strip x <= 4 as
-    // suburbs (a rich town: it pays for the army it builds after the first turns). Walls face the demons only
-    // on the column x = 4, with two gates (4,3) and (4,5) the KOHb sortie through. Red starts with 2 KOHb, the
-    // town's noob, a barrack and 77 gold: with the first turn's income that is 119, exactly 2 more KOHb. The map
-    // is 9 wide: 8 ember archers, a bulwark and two Bombards crowd the field x 5..7 right in front of the walls,
-    // and two ranged portals, a heavy one and a siege one on the last column x = 8 send more every 4 rounds.
-    // The Bombards (building damage only) breach the walls within a few rounds, so merely waiting behind them
-    // loses, and so does attacking at once. Training KOHb every round while holding until round 4 (the KOHb
-    // only pick off the ember archers they reach; the walls take the first volleys and wounded units heal on
-    // the town's suburbs), then striking out of the gates, ember archers first, finishing wounded demons, and
-    // killing every wave as it steps off its portal wins (pass 'demonUnitsDead': the portals may still stand; a
-    // demon on its portal cannot be hit, the portal takes the blow). The gates and the walls' open ends stay
-    // passable: the sortie needs them.
+    // Town defense against demons (co-op tutorial map). Red's town (1,4) owns the whole strip x <= 4 as suburbs
+    // (a rich town: it pays for the army it builds after the first turns). Walls face the demons only on the
+    // column x = 4, with two gates (4,3) and (4,5) the KOHb sortie through. Red starts with 2 KOHb, the town's
+    // noob, a barrack (0,4) behind the town, bastions (1,3) and (1,5) beside it and 77 gold: with the first
+    // turn's income that is 119, exactly 2 more KOHb. The map is 9 wide: 8 ember archers, a bulwark and two
+    // Bombards crowd the field x 5..7 right in front of the walls, and two ranged portals, a heavy one and a
+    // siege one on the last column x = 8 send more every 4 rounds. The Bombards (building damage only) breach
+    // the walls within a few rounds, so merely waiting behind them loses, and so does attacking at once.
+    // Training KOHb every round while holding until round 4 (the KOHb only pick off the ember archers they
+    // reach; the walls take the first volleys and wounded units heal on the town's suburbs), then striking out
+    // of the gates, ember archers first, finishing wounded demons, and killing every wave as it steps off its
+    // portal wins (pass 'demonUnitsDead': the portals may still stand; a demon on its portal cannot be hit, the
+    // portal takes the blow). The gates and the walls' open ends stay passable: the sortie needs them.
     let redSide = []
     for (let x = 0; x <= 4; ++x) {
         for (let y = 0; y < 9; ++y) {
@@ -478,7 +478,8 @@ function createTutorial5Map() {
                 gold: 77,
                 towns: [{x: 1, y: 4}],
                 suburbs: [{town: {x: 1, y: 4}, cells: suburbs, expansionCells: redSide}],
-                barracks: [{x: 1, y: 3, town: {x: 1, y: 4}}],
+                barracks: [{x: 0, y: 4, town: {x: 1, y: 4}}],
+                bastions: [{x: 1, y: 3}, {x: 1, y: 5}],
                 walls: [
                     {x: 4, y: 1}, {x: 4, y: 2}, {x: 4, y: 4}, {x: 4, y: 6}, {x: 4, y: 7}
                 ],
