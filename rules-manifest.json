@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "2e65eb664bccdad02b9e444b261ca55cccdc356618f8e1c8cb8133a7ffed08a8",
+  "rulesVersion": "cd3e580da70a693f74c9ad2a5a6a2855d4b327625eecfc55c47c8f42b575af17",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -145,8 +145,8 @@
     },
     {
       "path": "render/moveTween.js",
-      "sha256": "ae9a9dc3e58deb7ba7fde597abaec01d3a28079427ae76ee803015359841937e",
-      "bytes": 3745
+      "sha256": "9a40d7fa04beda1c0f1c063e448e33bb47e2c6693d6920edf28d4e432b1abd7f",
+      "bytes": 4080
     },
     {
       "path": "render/draw.js",

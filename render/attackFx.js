@@ -901,8 +901,12 @@ class AttackFx {
         this.advance(now)
         // (the camera is followed in every prune, so the first frame of new effects does not see a pan)
         const moved = this.cameraMoved()
-        if (!this.effects.length)
+        if (!this.effects.length) {
+            // (a replay's steps not played yet hide their attackers: TASK-1467)
+            if (this.replay || this.hidden.size)
+                this.hideUnits()
             return
+        }
         const held = this.held()
         for (const e of this.effects)
             if (e.startTime === null && !held)
@@ -1118,6 +1122,53 @@ class AttackFx {
             if (this.drawsTarget(e))
                 hidden.add(e.targetUnit)
         }
+        // TASK-1467: and the attackers of the replay's steps not played yet (drawWaiting)
+        const r = this.replay
+        if (r)
+            for (let i = this.firstWaiting(r); i < r.steps.length; ++i)
+                if (this.waits(r.steps[i].event))
+                    hidden.add(r.steps[i].event.attacker)
+    }
+    // TASK-1467: the replay's first step not played yet (the step at its index plays once its glide is over).
+    firstWaiting(r) {
+        return r.phase === 'effect' ? r.index + 1 : r.index
+    }
+    // Whether a replay step not played yet draws its attacker (drawWaiting): one drawn, still where the attack left it.
+    // (the rules moved it into the hex already: the board would draw it there, and its effect then starts back on its
+    // old cell)
+    waits(e) {
+        return !!e && !!e.attacker && e.edge !== 'in' && !!e.image && !e.attacker.killed && e.attacker.coord.x === e.to.x &&
+            e.attacker.coord.y === e.to.y && this.unitAt(e, e.to) === e.attacker
+    }
+    // Whether an effect draws unit on its cell now (playing, held at its end, or a replay step not played yet): a move
+    // tween does not draw it too (render/moveTween.js).
+    drawsAt(unit) {
+        const at = e => e.attacker === unit && e.edge !== 'in' && e.to && e.to.x === unit.coord.x && e.to.y === unit.coord.y
+        if (this.effects.some(at))
+            return true
+        const r = this.replay
+        if (r)
+            for (let i = this.firstWaiting(r); i < r.steps.length; ++i)
+                if (r.steps[i].event && at(r.steps[i].event) && this.waits(r.steps[i].event))
+                    return true
+        return false
+    }
+    // TASK-1467: the replay's steps not played yet are drawn at their first pose: the attacker on the cell it attacks
+    // from (once, at its first step) and a killed target's picture.
+    drawWaiting(ctx, lod) {
+        const r = this.replay
+        if (!r)
+            return
+        let drawn = null
+        for (let i = this.firstWaiting(r); i < r.steps.length; ++i) {
+            const e = r.steps[i].event
+            if (!this.waits(e) || drawn?.has(e.attacker))
+                continue
+            (drawn ??= new Set()).add(e.attacker)
+            if (e.killed && !e.edge && e.targetImage)
+                ctx.drawImage(e.targetImage, e.targetPos.x, e.targetPos.y)
+            this.drawUnitAt(ctx, e.attacker, e.image, e.fromPos.x, e.fromPos.y, lod)
+        }
     }
     // An effect plays (a waiting one or one held at its end does not).
     isActive() {
@@ -1145,6 +1196,9 @@ class AttackFx {
         this.imagesMade = this.batchFrame ? this.imageBudget : 0
         this.tintsMade = this.batchFrame ? this.tintBudget : 0
         this.batchFrame = false
+        // (lod: as below)
+        if (this.replay)
+            this.drawWaiting(ctx, typeof grid !== 'undefined' && (grid.lod || !!grid.lodTransform?.(ctx)))
         if (!this.effects.length)
             return
         const t = ctx.getTransform(), margin = 3 * basis.r

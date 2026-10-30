@@ -17,13 +17,18 @@ const moveTween = {
                 !Array.isArray(path) || path.length < 2)
             return false
         const last = path[path.length - 1]
-        if (last.x !== unit.coord.x || last.y !== unit.coord.y)
+        if (last.x !== unit.coord.x || last.y !== unit.coord.y || this.attacking(unit))
             return false
         this.tweens.set(unit, {
             path: path.map(cell => ({x: cell.x, y: cell.y})),
             startTime: this.now()
         })
         return true
+    },
+    // TASK-1467: an attack effect draws the unit where it is (a melee kill's move into the hex is the effect's): no
+    // tween draws it a second time.
+    attacking(unit) {
+        return typeof attackFx !== 'undefined' && attackFx.drawsAt(unit)
     },
     cancel(unit) {
         return this.tweens.delete(unit)
@@ -32,7 +37,7 @@ const moveTween = {
         this.tweens.clear()
     },
     // {pos, from, to, progress} of a running tween, else null (a finished, moved or killed
-    // unit's tween is dropped).
+    // unit's tween is dropped, as one an attack effect draws).
     state(unit, now = this.now()) {
         const tween = this.tweens.get(unit)
         if (!tween)
@@ -47,7 +52,7 @@ const moveTween = {
         const elapsed = Math.max(0, now - tween.startTime)
         const total = (path.length - 1) * this.msPerCell
         if (elapsed >= total || unit.killed || grid.getUnit(unit.coord) !== unit ||
-                target.x !== unit.coord.x || target.y !== unit.coord.y) {
+                target.x !== unit.coord.x || target.y !== unit.coord.y || this.attacking(unit)) {
             this.tweens.delete(unit)
             return null
         }
