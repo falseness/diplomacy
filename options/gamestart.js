@@ -163,6 +163,8 @@ class GameMap {
             if ('hp' in town_coord) {
                 assert(0 <= town_coord.hp && town_coord.hp <= town.hp)
                 town.hit(town.hp - town_coord.hp)
+                // hit: false starts the town not hit, so it heals on its first turn.
+                if (town_coord.hit === false) town.wasHitted = false
             }
         }
         for (let i = 1; i < this.players.length; ++i) {
@@ -177,6 +179,8 @@ class GameMap {
                     // A town may start at 0 hp: an enemy unit can step in and capture it.
                     assert(0 <= town_coord.hp && town_coord.hp <= town.hp)
                     town.hit(town.hp - town_coord.hp)
+                    // hit: false starts the town not hit, so it heals on its first turn.
+                    if (town_coord.hit === false) town.wasHitted = false
                 }
             }
         }

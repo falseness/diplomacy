@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "38188b301626f617f05f2349f59f7c827d63c7765831599379a1d8e5618f112e",
+  "rulesVersion": "f50d6c77cb5a4afaea33111fb2bddc9439f53afe05ce72e0785687b3a4b0edb1",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,8 +30,8 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "0bc3e08046ad33eb3b914070f7461578e22a9a9c0fbb104560d548cff395e3f8",
-      "bytes": 99265
+      "sha256": "7544c8ea94be47227bb33e684c975336954215e4f9b9022699f1b50f9d0b8d3d",
+      "bytes": 99583
     },
     {
       "path": "options/tutorials.js",
