@@ -4057,13 +4057,15 @@ class Grid extends SpritesGroup {
     // TASK-1439: builds tiles of view from list ({u, v}, the first cap of them as before, those built already skipped) while
     // the time the task has taken and one tile's estimate fit LIT_TASK_MS; atLeastOne: the first even when it does not
     // (the camera at rest or a view the frames draw live, so the lighting completes).
+    // TASK-1453: a view the frames draw live (view.unbuilt, the first after a start or a new scale) builds all cap of them
+    // in the task, as before TASK-1439 (one tile a task made a game start's first view settle seconds later).
     buildLitTiles(view, list, cap, atLeastOne) {
-        const start = performance.now()
+        const start = performance.now(), batch = view.unbuilt
         let built = 0
         for (const {u, v} of list.slice(0, cap)) {
             if (view.tiles.has(u + ',' + v))
                 continue
-            if (performance.now() - start + litTileCost.ms > LIT_TASK_MS && !(atLeastOne && !built))
+            if (!batch && performance.now() - start + litTileCost.ms > LIT_TASK_MS && !(atLeastOne && !built))
                 return
             this.litTile(view, u, v)
             ++built
@@ -4114,8 +4116,9 @@ class Grid extends SpritesGroup {
         }
         missing.sort((a, b) => a.far - b.far)
         this.litTilesQueued = true
-        // TASK-1439: a task of tiles with the camera at rest when the browser is idle (LIT_IDLE_TIMEOUT at most).
-        const idle = !banding && !gameEvent.screen.surfaceMoving && typeof requestIdleCallback === 'function'
+        // TASK-1439: a task of tiles with the camera at rest when the browser is idle (LIT_IDLE_TIMEOUT at most); TASK-1453: a
+        // view the frames draw live at once (setTimeout).
+        const idle = !banding && !view.unbuilt && !gameEvent.screen.surfaceMoving && typeof requestIdleCallback === 'function'
         ;(idle ? fn => requestIdleCallback(fn, {timeout: LIT_IDLE_TIMEOUT}) : setTimeout)(() => {
             this.litTilesQueued = false
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
