@@ -533,7 +533,10 @@ class Events {
 
         if (clickToButton)
             return 
-            
+        // A checkbox row of a background panel (TASK-1470, render/draw.js).
+        if (typeof backgroundHintClick === 'function' && backgroundHintClick(realPos))
+            return
+
         let coord = getCoord(realPos.x, realPos.y)
         if (isCoordNotOnMap(coord, grid.arr.length, grid.arr[0].length) ||
             grid.arr[coord.x][coord.y].building.isMapEdge) {

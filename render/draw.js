@@ -86,7 +86,7 @@ function drawAttackFx() {
 const BACKGROUND_HINT_GAP = 0.8
 const BACKGROUND_HINT_KEY = 0.98
 const BACKGROUND_HINT_PAD = 0.1
-const BACKGROUND_HINT_CHECK = {x: 0.32, size: 0.62, labelX: 0.32 + 0.62 + 0.25, font: 0.31}
+const BACKGROUND_HINT_CHECK = {x: 0.32, size: 0.62, labelX: 0.32 + 0.62 + 0.25, font: 0.31, hitPad: 0.1}
 // The panels by tutorial id; touch: shown on touch devices too (else on a desktop pointer only).
 const BACKGROUND_HINT_PANELS = {
     'tutorial-16': {touch: false, panels: [
@@ -170,8 +170,39 @@ function drawBackgroundHints(ctx) {
         ctx.drawImage(image, rect.x - pad, rect.y - pad, image.width / image.hintScale, image.height / image.hintScale)
     }
 }
-// The rects drawn last (null when none), the panel renders so far and the rendered panels by panel and scale.
-const backgroundHintState = {rects: null, renders: 0, canvases: new Map()}
+// TASK-1470: a click or a touch tap at realPos (world coordinates: the event mapped through the camera transform,
+// getRealEventPos) on a checkbox row of a shown panel (its plate or its label, the panel's width less the plate's
+// inset at each side, the plate's height and BACKGROUND_HINT_CHECK.hitPad above and below) flips the row's setting and
+// saves it as the Settings menu does. The next frame shows it: the panel's canvas key holds the settings' state; the lit
+// snapshots and the overlay composite (they hold the panel drawn with the sky) and the held still frame are dropped
+// now, once. Returns whether a row was hit (the click is consumed).
+function backgroundHintClick(realPos) {
+    if (!backgroundHintsShown())
+        return false
+    const rects = backgroundHintRects(), check = BACKGROUND_HINT_CHECK, r = basis.r
+    for (const rect of rects) {
+        for (const row of rect.panel.checks || []) {
+            const x0 = rect.x + check.x * r, x1 = rect.x + (rect.panel.width - check.x) * r
+            const y0 = rect.y + (row.y - check.hitPad) * r, y1 = rect.y + (row.y + check.size + check.hitPad) * r
+            if (realPos.x < x0 || realPos.x > x1 || realPos.y < y0 || realPos.y > y1)
+                continue
+            otherSettings[row.setting] = !otherSettings[row.setting]
+            if (typeof saveOtherSettings === 'function')
+                saveOtherSettings()
+            ++backgroundHintState.toggles
+            if (typeof grid !== 'undefined' && grid) {
+                grid.releaseLitCanvases()
+                grid.overlayComposite = undefined
+                grid.dropHeldFrame()
+            }
+            return true
+        }
+    }
+    return false
+}
+// The rects drawn last (null when none), the panel renders and row toggles (backgroundHintClick) so far and the rendered
+// panels by panel and scale.
+const backgroundHintState = {rects: null, renders: 0, toggles: 0, canvases: new Map()}
 
 // The panel rendered at scale (device pixels a world unit) and its settings' state, kept for the last two keys.
 function backgroundHintCanvas(panel, scale) {
