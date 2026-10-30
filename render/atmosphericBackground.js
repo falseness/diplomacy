@@ -323,8 +323,11 @@ const atmosphericBackground = {
         this.watch(ctx.canvas)
         // The viewport sky and the fixed light kernel are camera-scale independent.
         // Reuse them through wheel/pinch gestures; world layers use the draw transform.
+        // TASK-1454: the sky raster (and a raster job under way) depends only on the key and the view (viewMatches), so a
+        // new board keeps it; the board's light map is released.
         if (!this.keyMatches() || this.board !== grid) {
-            this.invalidate()
+            if (this.keyMatches()) atmosphericLighting.release()
+            else this.invalidate()
             this.keyOn = otherSettings.atmosphericVisuals
             this.keyPolished = otherSettings.usePolishedSprites
             this.keyDpr = window.devicePixelRatio
