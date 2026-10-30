@@ -1385,32 +1385,51 @@ const atmosphericLighting = {
     // Marble detail, built once per hex radius from the variant of the same index: each pixel's luminance
     // minus the tile's mean (alpha weighted), so the pattern adds nothing on average.
     tileDetail(index) {
+        const details = this.tileDetailArray()
+        if (details[index]) return details[index]
+        const steps = this.tileDetailSteps(index)
+        for (;;) {
+            const {done, value} = steps.next()
+            if (done)
+                return details[index] = value
+        }
+    },
+    // The tile details by variant at the hex radius now (a new array at a new radius).
+    tileDetailArray() {
         if (!this.tileDetails || this.tileDetails.radius !== basis.r) {
             this.tileDetails = Object.assign(new Array(this.TILE.variants), {radius: basis.r})
             ++this.tileDetailBuilds
         }
-        if (this.tileDetails[index]) return this.tileDetails[index]
+        return this.tileDetails
+    },
+    // tileDetail's work as a generator returning the detail (TASK-1455: a yield after the pixels are read and after each
+    // DETAIL_STEP_PIXELS pixels of either pass, the menu's prebuild runs it in steps; tileDetail runs it through).
+    DETAIL_STEP_PIXELS: 32768,
+    *tileDetailSteps(index) {
         const tile = this.tileVariant(index), box = this.tileBox(tile.width)
         const {data} = tile.getContext('2d').getImageData(box.x, box.y, box.w, box.h)
-        const offset = new Float32Array(data.length / 4)
+        yield
+        const offset = new Float32Array(data.length / 4), step = this.DETAIL_STEP_PIXELS
         let sum = 0, weight = 0
         for (let i = 0; i < offset.length; i++) {
             const a = data[4 * i + 3]
             offset[i] = 0.299 * data[4 * i] + 0.587 * data[4 * i + 1] + 0.114 * data[4 * i + 2]
             sum += offset[i] * a
             weight += a
+            if ((i + 1) % step === 0) yield
         }
         const mean = sum / weight
         // Alpha-weighted histogram of the offsets (half-level bins), for the clipping check in buildOwnedTile.
         const histogram = new Map()
         for (let i = 0; i < offset.length; i++) {
+            if (i % step === step - 1) yield
             offset[i] -= mean
             const a = data[4 * i + 3]
             if (!a) continue
             const bin = Math.round(offset[i] * 2) / 2
             histogram.set(bin, (histogram.get(bin) || 0) + a / weight)
         }
-        return this.tileDetails[index] = {size: tile.width, box, offset, alpha: data, histogram: [...histogram]}
+        return {size: tile.width, box, offset, alpha: data, histogram: [...histogram]}
     },
     // TASK-1373: the pixel rectangle of a size x size variant raster holding its inset tile (the variant is drawn clipped to the
     // tileRadius hexagon at its centre, so every pixel outside is transparent), 2 pixels of margin: what tileDetail reads and
@@ -1425,11 +1444,7 @@ const atmosphericLighting = {
     // drawImage, as a neutral one. The first colour built for a radius builds every colour the board can
     // show (ownedFills), so a move (a capture, a new suburb) never builds one inside its frames.
     ownedTile(index, fill) {
-        if (!this.ownedTiles || this.ownedTiles.radius !== basis.r) {
-            this.ownedTiles = Object.assign(new Map(), {radius: basis.r})
-            ++this.ownedTileBuilds
-        }
-        let tiles = this.ownedTiles.get(fill)
+        let tiles = this.ownedTileMap().get(fill)
         if (!tiles) {
             // TASK-1372: the other owners' fills are built a fill a task (prewarmOwnedTiles), not in this frame.
             if (!this.stagedOwnedTiles)
@@ -1440,6 +1455,43 @@ const atmosphericLighting = {
                 this.prewarmOwnedTiles()
         }
         return tiles[index]
+    },
+    // The owned tiles by fill at the hex radius now (a new map at a new radius).
+    ownedTileMap() {
+        if (!this.ownedTiles || this.ownedTiles.radius !== basis.r) {
+            this.ownedTiles = Object.assign(new Map(), {radius: basis.r})
+            ++this.ownedTileBuilds
+        }
+        return this.ownedTiles
+    },
+    // TASK-1455: the owned tiles of each fill of colours (player colours: {r, g, b}), suburb and not, built as a game's first
+    // frame builds them (tileVariant, tileDetail in steps, buildOwnedTile; ownedDetail within it) while the menu is idle
+    // (menuPrebuild), so the game finds them built. A generator: each yield ends a piece (what it built); a fill is kept
+    // (ownedTiles) once all its variants are built, and skipped when kept already.
+    *prebuildOwnedSteps(colours) {
+        for (let i = 0; i < this.TILE.variants; i++) {
+            if (!this.tileVariants || this.tileVariants.radius !== basis.r || !this.tileVariants[i]) {
+                this.tileVariant(i)
+                yield 'tileVariant ' + i
+            }
+            if (!this.tileDetailArray()[i]) {
+                const steps = this.tileDetailSteps(i)
+                let step = steps.next()
+                for (; !step.done; step = steps.next())
+                    yield 'tileDetail ' + i
+                this.tileDetailArray()[i] ||= step.value
+            }
+        }
+        for (const colour of colours)
+            for (const suburb of [false, true]) {
+                const fill = this.colourFill(colour, suburb), tiles = []
+                for (let i = 0; i < this.TILE.variants && !this.ownedTileMap().has(fill); i++) {
+                    tiles.push(this.buildOwnedTile(i, fill))
+                    yield 'ownedTile ' + fill + ' ' + i
+                }
+                if (!this.ownedTileMap().has(fill))
+                    this.ownedTileMap().set(fill, tiles)
+            }
     },
     buildOwnedFill(fill) {
         let tiles = this.ownedTiles.get(fill)

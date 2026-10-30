@@ -3346,6 +3346,7 @@ class Menu {
         this.updateMainButtons()
         this.updateSlotManagers()
         requestAnimationFrame(menuLoop)
+        menuPrebuild.schedule()
     }
     setEvents(boolean) {
         if (boolean) {
@@ -3498,4 +3499,111 @@ function menuLoop() {
         return
     menu.draw(interfaceCtx)
     requestAnimationFrame(menuLoop)
+}
+
+// TASK-1455: while the menu is shown and idle, the caches a game's first frames build that do not depend on the board's
+// state are built ahead, a step at a time in idle callbacks (requestIdleCallback): the owned tiles of the colours of the
+// boards the menu can start next (atmosphericLighting.prebuildOwnedSteps) and their surface caches' cell masks
+// (Grid.prebuildCellMaskSteps). Those boards: tutorial 0 and the hot seat screen's selected map (not co-op, whose map
+// is generated). With the same builders and cache keys, the game takes them as cache hits; a game started before they are
+// built builds the rest itself. Steps run QUIET_MS after the last input: one an idle callback, for the idle time left
+// within MIN_STEP_MS..STEP_MS (STEP_MS when it timed out, TIMEOUT_MS: the animated menu may leave no idle period), and
+// more while STEP_MS of idle time is left; the work stops while a game runs (menu hidden) and goes on when the menu is
+// shown again (start). A new selection is planned again after the next input.
+const menuPrebuild = {
+    STEP_MS: 8,
+    MIN_STEP_MS: 4,
+    QUIET_MS: 300,
+    TIMEOUT_MS: 100,
+    LOG_SIZE: 1000,
+    job: null,
+    queued: false,
+    // The selection may have changed since the job was planned (input, the menu shown again).
+    stale: true,
+    lastInput: -Infinity,
+    // Per step {ms, what: the pieces it built, by kind}, the latest LOG_SIZE.
+    log: [],
+    listening: false,
+    enabled() {
+        return typeof requestIdleCallback === 'function' && typeof menu !== 'undefined' && menu.visible &&
+            otherSettings.atmosphericVisuals
+    },
+    // Plans the work again (start, input; stale) and asks for an idle callback.
+    schedule(stale = true) {
+        if (!this.listening && typeof document !== 'undefined') {
+            this.listening = true
+            const input = () => {
+                this.lastInput = performance.now()
+                this.schedule()
+            }
+            for (const type of ['pointerdown', 'keydown', 'wheel', 'touchstart'])
+                document.addEventListener(type, input, {capture: true, passive: true})
+        }
+        this.stale ||= stale
+        if (this.queued || !this.enabled() || !this.job && !this.stale)
+            return
+        this.queued = true
+        requestIdleCallback(deadline => this.run(deadline), {timeout: this.TIMEOUT_MS})
+    },
+    // The boards the menu can start next.
+    maps() {
+        const maps = [tutorials.find(t => t.id === 'tutorial-0')?.map]
+        const setup = menu.play
+        if (setup && !setup.isCoop)
+            maps.push(setup.selectedMap)
+        return maps.filter(Boolean)
+    },
+    // The work as pieces (a generator, each yield one piece: what it built).
+    *pieces() {
+        const maps = this.maps()
+        const colours = new Map()
+        for (const map of maps)
+            for (const {rgb} of map.players.slice(1))
+                colours.set(rgb.r + ',' + rgb.g + ',' + rgb.b, rgb)
+        yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()])
+        // The masks only serve the cell layer (Grid.cellLayerOn).
+        for (const map of Grid.liveCellLayer === true ? maps : [])
+            for (const _ of Grid.prebuildCellMaskSteps(map))
+                yield 'cellMask ' + (map.testName || map.mapSize.x + 'x' + map.mapSize.y)
+    },
+    // Steps of pieces, each while another piece as long as the last fits in its budget (the idle time left, within
+    // MIN_STEP_MS..STEP_MS; STEP_MS on a timeout): one, then more while the idle time left is STEP_MS or more.
+    run(deadline) {
+        this.queued = false
+        if (!this.enabled())
+            return
+        if (performance.now() - this.lastInput < this.QUIET_MS) {
+            setTimeout(() => this.schedule(false), this.QUIET_MS)
+            return
+        }
+        let first = true
+        while ((first || deadline.timeRemaining() >= this.STEP_MS) && this.enabled() &&
+                performance.now() - this.lastInput >= this.QUIET_MS) {
+            const budget = first && deadline.didTimeout ? this.STEP_MS :
+                Math.min(this.STEP_MS, Math.max(this.MIN_STEP_MS, deadline.timeRemaining()))
+            first = false
+            if (!this.job) {
+                if (!this.stale)
+                    break
+                this.job = this.pieces()
+                this.stale = false
+            }
+            const start = performance.now(), what = {}
+            let piece = 0
+            do {
+                const begin = performance.now(), {done, value} = this.job.next()
+                piece = performance.now() - begin
+                const kind = done ? 'finish' : value
+                what[kind] = (what[kind] || 0) + 1
+                if (done) {
+                    this.job = null
+                    break
+                }
+            } while (performance.now() - start + piece < budget)
+            this.log.push({ms: performance.now() - start, what})
+            if (this.log.length > this.LOG_SIZE)
+                this.log.shift()
+        }
+        this.schedule(false)
+    }
 }

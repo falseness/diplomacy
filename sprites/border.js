@@ -240,11 +240,6 @@ class MapDepth {
         this.gridWidth = _grid.arr.length
         this.gridHeight = _grid.arr[0].length
 
-        let minX = Infinity
-        let maxX = -Infinity
-        let minY = Infinity
-        let maxY = -Infinity
-
         for (let x = 0; x < this.gridWidth; ++x) {
             for (let y = 0; y < this.gridHeight; ++y) {
                 if (_grid.arr[x][y].building.isMapEdge)
@@ -255,11 +250,6 @@ class MapDepth {
                 const cellFaces = []
 
                 for (let i = 0; i < vertices.length; ++i) {
-                    minX = Math.min(minX, vertices[i].x)
-                    maxX = Math.max(maxX, vertices[i].x)
-                    minY = Math.min(minY, vertices[i].y)
-                    maxY = Math.max(maxY, vertices[i].y)
-
                     const neighbour = {
                         x: x + neighborhood[parity][i][0],
                         y: y + neighborhood[parity][i][1]
@@ -297,15 +287,38 @@ class MapDepth {
         this.createOutline()
         this.releaseAtmosphericShadow()
 
-        const shadowPadding = this.shadowBlur * 2
-        this.bounds = {
-            left: minX - shadowPadding,
-            right: maxX + shadowPadding,
-            top: minY - shadowPadding,
-            bottom: maxY + this.depth + this.shadowOffset + shadowPadding
-        }
-        this.surfaceBounds = {left: minX, right: maxX, top: minY, bottom: maxY}
+        Object.assign(this, this.boundsOf(_grid))
         this.createUnderlayCache()
+    }
+    // The slab's bounds (shadow included) and its top face's (surfaceBounds) on a board: the vertices of its cells but the
+    // map edge. _grid needs only arr[x][y].hexagon.calcPos() and .building.isMapEdge (TASK-1455: the menu's prebuild
+    // takes them for a board not yet made, Grid.prebuildCellMaskSteps).
+    boundsOf(_grid) {
+        let minX = Infinity
+        let maxX = -Infinity
+        let minY = Infinity
+        let maxY = -Infinity
+        for (let x = 0; x < _grid.arr.length; ++x)
+            for (let y = 0; y < _grid.arr[x].length; ++y) {
+                if (_grid.arr[x][y].building.isMapEdge)
+                    continue
+                for (const vertex of this.getVertices(_grid.arr[x][y].hexagon.calcPos())) {
+                    minX = Math.min(minX, vertex.x)
+                    maxX = Math.max(maxX, vertex.x)
+                    minY = Math.min(minY, vertex.y)
+                    maxY = Math.max(maxY, vertex.y)
+                }
+            }
+        const shadowPadding = this.shadowBlur * 2
+        return {
+            bounds: {
+                left: minX - shadowPadding,
+                right: maxX + shadowPadding,
+                top: minY - shadowPadding,
+                bottom: maxY + this.depth + this.shadowOffset + shadowPadding
+            },
+            surfaceBounds: {left: minX, right: maxX, top: minY, bottom: maxY}
+        }
     }
     ensureGeometry(_grid) {
         if (this.gridWidth != _grid.arr.length ||

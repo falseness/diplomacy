@@ -870,6 +870,17 @@ class Grid extends SpritesGroup {
     // cells' pixels, transparent elsewhere)}. TASK-1371: it depends on the geometry and scale only (not on the board's state),
     // so it is kept by them (cellMaskCache; the cells' alpha and paths and the whole path are shared, read only).
     cellLayerCells(W, H, place) {
+        const {key, a, d, e, f, reach} = this.cellMaskKey(W, H, place)
+        let mask = cellMaskCache.get(key)
+        if (mask)
+            ++Grid.cellMaskWork.hits
+        else
+            mask = this.buildCellMask(W, H, a, d, e, f, reach)
+        rememberCellMask(key, mask)
+        return {cells: mask.cells.map(c => ({...c})), box: mask.box, path: mask.path}
+    }
+    // cellLayerCells's cache key and the transform and reach its mask is built at, for a W x H canvas at place's transform.
+    cellMaskKey(W, H, place) {
         const g = (this.cellMaskCanvas ||= document.createElement('canvas')).getContext('2d')
         g.save()
         g.setTransform(1, 0, 0, 1, 0, 0)
@@ -878,17 +889,30 @@ class Grid extends SpritesGroup {
         g.restore()
         const {a, d, e, f} = t, w = this.arr.length, h = this.arr[0].length
         const reach = CELL_LAYER_EDGE_REACH * basis.r + (mapDepth.depth || 0) + (mapDepth.shadowOffset || 0) + 2 * (mapDepth.shadowBlur || 0)
-        const key = [W, H, a, d, e, f, basis.offset.x, basis.offset.y, basis.r, w, h, reach].join()
-        let mask = cellMaskCache.get(key)
-        cellMaskCache.delete(key)
-        if (mask)
-            ++Grid.cellMaskWork.hits
-        else
-            mask = this.buildCellMask(W, H, a, d, e, f, reach)
-        cellMaskCache.set(key, mask)
-        if (cellMaskCache.size > CELL_MASK_CACHE)
-            cellMaskCache.delete(cellMaskCache.keys().next().value)
-        return {cells: mask.cells.map(c => ({...c})), box: mask.box, path: mask.path}
+        return {key: [W, H, a, d, e, f, basis.offset.x, basis.offset.y, basis.r, w, h, reach].join(), a, d, e, f, reach}
+    }
+    // TASK-1455: the surface cache's cell mask of a board the menu can start (map: a GameMap; its size and shape, which
+    // cells are map edge, are all the mask and the cache's geometry take of it) built in steps while the menu is idle
+    // (menuPrebuild), as the game's first surface cache split would build it (cellMaskKey, cellMaskSteps), kept in
+    // cellMaskCache under its key, so that split finds it. A generator: each yield ends a step; nothing when kept already.
+    static *prebuildCellMaskSteps(map) {
+        const w = map.mapSize.x, h = map.mapSize.y, shape = map.mapShape
+        const board = Object.create(Grid.prototype)
+        board.arr = Array.from({length: w}, (_, x) => Array.from({length: h}, (_, y) => ({
+            hexagon: {calcPos: () => Hexagon.prototype.calcPos.call({coord: {x, y}})},
+            building: {isMapEdge: shape?.type == 'hexagonal' && getHexagonalLayer(x, y, shape.center) > shape.radius}})))
+        const {bounds} = mapDepth.boundsOf(board)
+        const geometry = board.getSurfaceCacheGeometry(bounds)
+        if (geometry.cacheWidth <= 0 || geometry.cacheHeight <= 0)
+            return
+        const {width: W, height: H} = Grid.surfaceRasterSize(geometry)
+        const {key, a, d, e, f, reach} = board.cellMaskKey(W, H, Grid.surfacePlace(geometry.scale, bounds.left, bounds.top))
+        if (cellMaskCache.has(key))
+            return
+        yield
+        const mask = yield* board.cellMaskSteps(W, H, a, d, e, f, reach)
+        if (!cellMaskCache.has(key))
+            rememberCellMask(key, mask)
     }
     // cellLayerCells's mask built (x' = a x + e, y' = d y + f). Each row of a cell's box splits by the bisectors with the
     // cells round it: the run surely the cell's (every bisector at least CELL_MASK_MARGIN pixels away on the cell's side),
@@ -896,6 +920,16 @@ class Grid extends SpritesGroup {
     // (near a bisector, and a side cell's pixels off the board) tested against the neighbours' centres as before, so the
     // bits are the same as testing every pixel of the box. Grid.cellMaskWork counts the builds, tested pixels and distances.
     buildCellMask(W, H, a, d, e, f, reach) {
+        const steps = this.cellMaskSteps(W, H, a, d, e, f, reach)
+        for (;;) {
+            const {done, value} = steps.next()
+            if (done)
+                return value
+        }
+    }
+    // buildCellMask's work as a generator returning the mask (TASK-1455: a yield after each row of a cell's box and each cell
+    // of the last passes, the menu's prebuild runs it a few rows an idle step; buildCellMask runs it through).
+    *cellMaskSteps(W, H, a, d, e, f, reach) {
         const ox = basis.offset.x, oy = basis.offset.y, rx = basis.r, w = this.arr.length, h = this.arr[0].length
         // Per pixel its cell (board index + 1, 0: none) and, off the board, its squared distance to that cell's centre.
         const owner = new Int32Array(W * H), far = new Float32Array(W * H)
@@ -1038,6 +1072,7 @@ class Grid extends SpritesGroup {
                             give(x, y, p, d0)
                         }
                     }
+                    yield
                 }
             }
         }
@@ -1055,6 +1090,7 @@ class Grid extends SpritesGroup {
                         if (y > sy1) sy1 = y
                     }
             x0[index] = sx0; y0[index] = sy0; x1[index] = sx1; y1[index] = sy1
+            yield
         }
         // The cells' boxes, alpha and paths, and the whole mask (out: 255 at a cell's pixel), from the owners.
         const out = new Uint8Array(W * H)
@@ -1075,6 +1111,7 @@ class Grid extends SpritesGroup {
             cells.push({index, i, j: index - i * h, box, alpha, path: maskPath(alpha, box.w, box.h), key: undefined})
             bx0 = Math.min(bx0, box.x); by0 = Math.min(by0, box.y)
             bx1 = Math.max(bx1, box.x + box.w); by1 = Math.max(by1, box.y + box.h)
+            yield
         }
         const work = Grid.cellMaskWork
         ++work.builds
@@ -1942,10 +1979,7 @@ class Grid extends SpritesGroup {
             this.surfaceCellLayer = this.surfaceCacheShown = this.surfaceSplitJob = undefined
             return
         }
-        const place = g => {
-            g.scale(geometry.scale, geometry.scale)
-            g.translate(-left, -top)
-        }
+        const place = Grid.surfacePlace(geometry.scale, left, top)
         let layer = this.surfaceCellLayer
         if (rect && layer?.cells && layer.width === canvas.width && layer.height === canvas.height && layer.raster === canvas)
             rect = this.resplitCellLayer(canvas, layer, rect, copy)
@@ -2444,9 +2478,9 @@ class Grid extends SpritesGroup {
         this.surfaceCacheInertBuildings = inertBuildings
         this.surfaceCacheNatureNames = natureNames
     }
-    getSurfaceCacheGeometry() {
-        const cacheWidth = mapDepth.bounds.right - mapDepth.bounds.left
-        const cacheHeight = mapDepth.bounds.bottom - mapDepth.bounds.top
+    getSurfaceCacheGeometry(bounds = mapDepth.bounds) {
+        const cacheWidth = bounds.right - bounds.left
+        const cacheHeight = bounds.bottom - bounds.top
         const maxCacheDimension = 4096
         // With atmospheric visuals the raster is at most the screen's device-pixel area (WIDTH x HEIGHT): every
         // rebuild, patch and upload of it scales with its area, and frames magnifying it draw the board directly
@@ -2478,6 +2512,18 @@ class Grid extends SpritesGroup {
         this.captureSurfaceState()
         return true
     }
+    // The surface cache raster's pixel size at geometry (getSurfaceCacheGeometry).
+    static surfaceRasterSize(geometry) {
+        return {width: Math.max(1, Math.ceil(geometry.cacheWidth * geometry.scale)),
+            height: Math.max(1, Math.ceil(geometry.cacheHeight * geometry.scale))}
+    }
+    // The surface cache raster's transform (world pixel (left, top) at its pixel (0, 0), at scale) set on a context.
+    static surfacePlace(scale, left, top) {
+        return g => {
+            g.scale(scale, scale)
+            g.translate(-left, -top)
+        }
+    }
     // A build of the cache raster into canvas (reused at the same size) at the board's geometry now.
     startSurfaceCacheBuild(canvas) {
         mapDepth.ensureGeometry(this)
@@ -2485,8 +2531,7 @@ class Grid extends SpritesGroup {
         if (geometry.cacheWidth <= 0 || geometry.cacheHeight <= 0)
             return null
 
-        const rasterWidth = Math.max(1, Math.ceil(geometry.cacheWidth * geometry.scale))
-        const rasterHeight = Math.max(1, Math.ceil(geometry.cacheHeight * geometry.scale))
+        const {width: rasterWidth, height: rasterHeight} = Grid.surfaceRasterSize(geometry)
         let fresh = false
         if (!canvas || canvas.width != rasterWidth || canvas.height != rasterHeight) {
             canvas = document.createElement('canvas')
@@ -5300,7 +5345,15 @@ const CELL_LAYER_EDGE_REACH = 0.5
 // testing it (Grid.buildCellMask), masks kept by geometry and scale (cellMaskCache, the least recently used dropped) and the
 // work of building them (builds, pixels tested, centre distances; hits: masks served from the cache).
 const CELL_MASK_MARGIN = 0.25
-const CELL_MASK_CACHE = 2
+// TASK-1455: 2 for a game's surface cache and lit view, 2 more for the menu's prebuilt boards (menuPrebuild).
+const CELL_MASK_CACHE = 4
+// A mask kept in cellMaskCache under key, the most recently used; the least recently used dropped beyond CELL_MASK_CACHE.
+function rememberCellMask(key, mask) {
+    cellMaskCache.delete(key)
+    cellMaskCache.set(key, mask)
+    if (cellMaskCache.size > CELL_MASK_CACHE)
+        cellMaskCache.delete(cellMaskCache.keys().next().value)
+}
 const cellMaskCache = new Map()
 // TASK-1373: a mask's pixels (alpha: w x h, non-zero at them) as a path of whole-pixel rectangles (each row's runs, rows
 // with the same runs as one rectangle). Filled black (fillCellMask) on a cleared canvas with the identity
