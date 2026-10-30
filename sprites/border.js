@@ -789,24 +789,32 @@ class SelectionOverlay {
     // a camera move the raster is scaled and moved to the camera; once the camera rests it is rendered again when its scale
     // or pixel phase differs (a zoom settled). A raster bigger than RASTER_MAX_CANVASES canvases holds the view grown
     // by a quarter each side only, rendered again when the resting view leaves it.
+    // TASK-1450: two such rasters, the plate and range ridge ('plate', drawSelection: under the attack and heal effects'
+    // units) and the target icons ('icons', drawSelectionIcons: after those effects, with the selected unit's marks).
     static deferred = false
     static rasterBuilds = 0
+    static iconBuilds = 0
     static RASTER_MAX_CANVASES = 2
-    // Blits the selected unit's overlay on ctx (the main canvas, the camera's transform); releases it with no selection.
-    // TASK-1412: the selected unit's marks (a catapult's blind-shot '?') are drawn after it, never into the board.
+    // Blits the selected unit's plate and range ridge on ctx (the main canvas, the camera's transform); releases the
+    // rasters with no selection.
     static drawSelection(ctx) {
-        const drawn = SelectionOverlay.blitSelection(ctx)
+        return SelectionOverlay.blitSelection(ctx, 'plate')
+    }
+    // Blits the selected unit's target icons on ctx after every effect that draws units (drawMain), then its marks (a
+    // catapult's blind-shot '?', TASK-1412), never into the board.
+    static drawSelectionIcons(ctx) {
+        const drawn = SelectionOverlay.blitSelection(ctx, 'icons')
         if (typeof gameEvent !== 'undefined')
             gameEvent.selected?.drawSelectionMarks?.(ctx)
         return drawn
     }
-    static blitSelection(ctx) {
+    static blitSelection(ctx, layer) {
         const overlay = Border.selection, state = Border.selectionState()
         if (!state) {
             overlay.releaseRaster()
             return false
         }
-        const raster = overlay.rasterFor(ctx, state)
+        const raster = overlay.rasterFor(ctx, state, layer)
         if (!raster)
             return false
         const t = ctx.getTransform()
@@ -824,8 +832,8 @@ class SelectionOverlay {
         return true
     }
     // The raster for state on ctx's camera: the one made before while it stands for the frame, else a new one.
-    rasterFor(ctx, state) {
-        const t = ctx.getTransform(), raster = this.raster
+    rasterFor(ctx, state, layer) {
+        const t = ctx.getTransform(), raster = this.rasters?.[layer]
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0)
             return undefined
         if (raster && raster.data === state.data && raster.move === state.move && raster.range === state.range &&
@@ -838,7 +846,7 @@ class SelectionOverlay {
                     (!raster.view || SelectionOverlay.contains(raster.view, SelectionOverlay.viewOf(ctx, t, 0))))
                 return raster
         }
-        return this.renderRaster(ctx, t, state)
+        return this.renderRaster(ctx, t, state, layer)
     }
     // A zoom gesture or a camera pan under way (not Screen.surfaceMoving's layer hold after them: settled is settled).
     static cameraMoving(screen) {
@@ -853,17 +861,17 @@ class SelectionOverlay {
         return a.x0 <= b.x0 && a.y0 <= b.y0 && a.x1 >= b.x1 && a.y1 >= b.y1
     }
     // The world bounds of what state draws: its contours and target emblems, plus the shadows' and offsets' reach.
-    static boundsOf(state) {
+    static boundsOf(state, layer) {
         const data = state.data, r = basis.r, b = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity}
         const add = (x, y, m) => {
             b.x0 = Math.min(b.x0, x - m); b.y0 = Math.min(b.y0, y - m)
             b.x1 = Math.max(b.x1, x + m); b.y1 = Math.max(b.y1, y + m)
         }
-        const loops = [...state.move ? data.moveLoops : [], ...state.range && data.ranged ? data.rangeLoops : []]
+        const loops = layer === 'icons' ? [] : [...state.move ? data.moveLoops : [], ...state.range && data.ranged ? data.rangeLoops : []]
         for (const loop of loops)
             for (const p of loop.P)
                 add(p[0], p[1], 0.8 * r)
-        if (state.move)
+        if (state.move && layer === 'icons')
             for (const k of [...data.targetsNow, ...data.targetsAfterStep.keys()]) {
                 const q = SelectionOverlay.targetPos(k)
                 add(q.x, q.y, 0.9 * r)
@@ -872,10 +880,10 @@ class SelectionOverlay {
     }
     // Renders state at camera t into the raster's canvas: the bounds (or their part near the view) at t's scale, with
     // the pixel phase of t, so a resting camera blits it at whole device pixels as the direct draws would land.
-    renderRaster(ctx, t, state) {
-        let b = SelectionOverlay.boundsOf(state), view
+    renderRaster(ctx, t, state, layer) {
+        let b = SelectionOverlay.boundsOf(state, layer), view
         if (!b) {
-            this.releaseRaster()
+            this.releaseRaster(layer)
             return undefined
         }
         const sx = t.a, sy = t.d, limit = SelectionOverlay.RASTER_MAX_CANVASES * ctx.canvas.width * ctx.canvas.height
@@ -887,7 +895,8 @@ class SelectionOverlay {
         }
         const ix = Math.floor(sx * b.x0 + t.e), iy = Math.floor(sy * b.y0 + t.f)
         const w = Math.max(1, Math.ceil(sx * b.x1 + t.e) - ix), h = Math.max(1, Math.ceil(sy * b.y1 + t.f) - iy)
-        const canvas = this.raster?.canvas || document.createElement('canvas')
+        const rasters = this.rasters || (this.rasters = {})
+        const canvas = rasters[layer]?.canvas || document.createElement('canvas')
         if (canvas.width !== w || canvas.height !== h) {
             canvas.width = w
             canvas.height = h
@@ -901,20 +910,33 @@ class SelectionOverlay {
         g.lineJoin = 'round'
         g.lineCap = 'round'
         this.missingIcon = undefined
-        if (state.range)
-            this.drawRange(g, state.data)
-        if (state.move)
-            this.drawMove(g, state.data)
+        if (layer === 'icons') {
+            this.drawTargets(g, state.data)
+            ++SelectionOverlay.iconBuilds
+        } else {
+            if (state.range)
+                this.drawRange(g, state.data)
+            if (state.move)
+                this.drawPlate(g, state.data)
+            ++SelectionOverlay.rasterBuilds
+        }
         g.restore()
-        ++SelectionOverlay.rasterBuilds
-        return this.raster = {canvas, data: state.data, move: state.move, range: state.range, r: basis.r, sx, sy,
+        return rasters[layer] = {canvas, data: state.data, move: state.move, range: state.range, r: basis.r, sx, sy,
             wx: (ix - t.e) / sx, wy: (iy - t.f) / sy, view, missingIcon: this.missingIcon}
     }
-    releaseRaster() {
-        if (!this.raster)
-            return
-        this.raster.canvas.width = this.raster.canvas.height = 0
-        this.raster = undefined
+    // The raster of layer, or both.
+    releaseRaster(layer) {
+        for (const name of layer ? [layer] : ['plate', 'icons']) {
+            const raster = this.rasters?.[name]
+            if (!raster)
+                continue
+            raster.canvas.width = raster.canvas.height = 0
+            this.rasters[name] = undefined
+        }
+    }
+    // The plate raster (the overlay's state before TASK-1450 split the icons out).
+    get raster() {
+        return this.rasters?.plate
     }
     // S6 look (concept drawS6): the range as a thin raised ridge pushed out 0.1 r; the move area as a soft
     // raised plate inset 0.1 r with no face fill, so the cells keep their own colour; neutral target emblems.
@@ -950,11 +972,14 @@ class SelectionOverlay {
         ctx.restore()
     }
     drawMove(ctx, data) {
+        this.drawPlate(ctx, data)
+        this.drawTargets(ctx, data)
+    }
+    drawPlate(ctx, data) {
         if (data.moveLoops.length) {
             const frame = SelectionOverlay.frameOf(data.moveLoops)
             this.softPlate(ctx, () => SelectionOverlay.roundedOffset(ctx, data.moveLoops, -0.1, 0.32), frame)
         }
-        this.drawTargets(ctx, data)
     }
     // The loops' bounds plus a margin, as a rectangle wound counter-clockwise: with the area's clockwise
     // loops the nonzero rule leaves the area a hole (cairo's shadows ignore evenodd), and a shadowed shape

@@ -11,6 +11,7 @@ function drawMain() {
         if (typeof attackFx !== 'undefined')
             attackFx.rasterFrame = true
         drawAttackFx()
+        SelectionOverlay.drawSelectionIcons(mainCtx)
         return
     }
     // Cells too small for their details: a level-of-detail frame, recorded and made at the end unless it repeats the
@@ -56,6 +57,8 @@ function drawMain() {
         grid.endLodFrame(mainCtx, lod)
     SelectionOverlay.drawSelection(mainCtx)
     drawAttackFx()
+    // TASK-1450: the target icons and marks over the effects' units.
+    SelectionOverlay.drawSelectionIcons(mainCtx)
 }
 
 // Attack animations over the board's frame on the main canvas, whether drawn, held (its snapshot is taken before them:

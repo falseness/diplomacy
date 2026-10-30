@@ -4406,7 +4406,7 @@ class Grid extends SpritesGroup {
 
         attackBorder.draw(ctx)
         border.draw(ctx)
-        // TASK-1412: drawMain and the zoom raster draw the marks after the selection overlay (SelectionOverlay.drawSelection).
+        // TASK-1412: drawMain draws the marks after the selection overlay and the effects (SelectionOverlay.drawSelectionIcons).
         if (typeof gameEvent !== 'undefined' && !SelectionOverlay.deferred && !this.zoomBoardPass)
             gameEvent.selected?.drawSelectionMarks?.(ctx)
         if (composite)
@@ -4644,7 +4644,8 @@ class Grid extends SpritesGroup {
         if (box.w && box.h)
             ctx.drawImage(raster.canvas, box.x, box.y, box.w, box.h, x + kx * box.x, y + ky * box.y, kx * box.w, ky * box.h)
         ctx.restore()
-        // TASK-1411: the selection overlay's raster scaled to the camera (the zoom raster's board has none).
+        // TASK-1411: the selection overlay's raster scaled to the camera (the zoom raster's board has none); its icons
+        // after the effects (drawMain, TASK-1450).
         SelectionOverlay.drawSelection(ctx)
         this.dropHeldFrame()
         this.prepareSurfaceCache()
