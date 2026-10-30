@@ -76,7 +76,7 @@ function createTutorial18Map() {
 }
 
 // Rotate and heal: a mountain ridge (columns 4 and 5) splits the 11x9 board, open only at a
-// 2-cell pass on rows 4 and 5. Red holds the pass with 5 normchels, two of them in the pass
+// 2-cell pass on rows 4 and 5. Red holds the pass with 4 normchels, two of them in the pass
 // wounded; normchels heal +3 a turn on their own suburb hexes when not hit that turn, and every
 // passable cell west of the ridge, the pass included, is red's suburb. So red rotates: a wounded
 // front normchel steps back to heal and a healthy one takes its cell. Red's town (2,4) is at 0 hp
@@ -84,7 +84,7 @@ function createTutorial18Map() {
 // catapults (6,1), (6,7) and (7,4) fire over the ridge at the town whenever it has hp (a 0-hp town
 // is no target), so it is back at 0 after every blue turn (catapults never hurt units). Blue (an
 // AI that paths through fog, ignoresFog) has no town, so its economy is off too, else salaries
-// would bankrupt it and disband its army; it throws 14 noobs at the pass; red wins when every blue
+// would bankrupt it and disband its army; it throws 9 noobs at the pass; red wins when every blue
 // noob is dead (pass 'enemyTypesDead', types ['Noob']), the catapults do not count. Lakes and
 // bushes sit in the corners and on the flanks, away from the pass.
 function createTutorial20Map() {
@@ -108,8 +108,7 @@ function createTutorial20Map() {
             }
         }
     }
-    const noobs = [[6, 3], [6, 4], [6, 5], [7, 3], [7, 5], [7, 6], [8, 2], [8, 3], [8, 4], [8, 5], [8, 6],
-        [9, 3], [9, 4], [9, 5]]
+    const noobs = [[6, 3], [6, 4], [6, 5], [7, 3], [7, 5], [7, 6], [8, 3], [8, 4], [8, 5]]
     const map = new GameMap({x: 11, y: 9}, [
         {rgb: {r: 208, g: 208, b: 208}, towns: []},
         {rgb: {r: 255, g: 0, b: 0}, gold: 0, economyEnabled: false, towns: [{x: 2, y: 4, hp: 0, noob: false}],
@@ -118,8 +117,7 @@ function createTutorial20Map() {
                 {x: 5, y: 4, type: Normchel, hp: 2},
                 {x: 5, y: 5, type: Normchel, hp: 4},
                 {x: 4, y: 4, type: Normchel},
-                {x: 4, y: 5, type: Normchel, hp: 3},
-                {x: 3, y: 4, type: Normchel}
+                {x: 4, y: 5, type: Normchel, hp: 3}
             ]},
         {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayer', ignoresFog: true, economyEnabled: false,
             towns: [], units: noobs.map(cell => ({x: cell[0], y: cell[1], type: Noob})).concat([
