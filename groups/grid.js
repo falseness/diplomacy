@@ -494,7 +494,7 @@ class Grid extends SpritesGroup {
 
                 if (!this.observedBuilding(cell)) {
                     if (buildings && this.spriteInPatchCells(cell.building)) cell.building.draw(ctx)
-                    if (units && cell.building.hasBar && !this.lod) tmpBuildings.push(cell.building)
+                    if (units && cell.building.hasBar && !this.lod && !this.healBarHidden(cell.building)) tmpBuildings.push(cell.building)
                     if (units && !this.lod) this.drawProductionSilhouette(ctx, cell.building)
                 }
                 const unit = units && this.getStillUnit(cell)
@@ -546,6 +546,10 @@ class Grid extends SpritesGroup {
         return cell.unit.notEmpty() && !moveTween.isActive(cell.unit) &&
             !(typeof attackFx !== 'undefined' && attackFx.hidden.size > 0 && attackFx.hidden.has(cell.unit)) &&
             !(typeof healFx !== 'undefined' && healFx.hidden.size > 0 && healFx.hidden.has(cell.unit)) ? cell.unit : undefined
+    }
+    // A building being repaired: healFx draws its bars (TASK-1446).
+    healBarHidden(building) {
+        return typeof healFx !== 'undefined' && healFx.hidden.size > 0 && healFx.hidden.has(building)
     }
     drawEntityBodies(ctx) {
         const range = this.drawRange(ctx)
@@ -607,7 +611,7 @@ class Grid extends SpritesGroup {
                 unit.drawBars(ctx)
             if (unit && (silhouette || shouldShowMovesBar(unit)))
                 this.drawEntityBody(ctx, unit)
-            if (!observed && building.hasBar && !lod)
+            if (!observed && building.hasBar && !lod && !this.healBarHidden(building))
                 buildingBars.push(building)
         })
         for (let i = 0; i < buildingBars.length; ++i)

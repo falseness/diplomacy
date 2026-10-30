@@ -114,6 +114,9 @@ function advanceOfflineTurn() {
     actionManager.clear()
     actionLog.clear()
 
+    // The turn player's heals are animated once its view opens (render/healFx.js: after the pass-device screen); taken
+    // before externalNextTurn, which heals its walls and towers (TASK-1446).
+    const heals = typeof healFx !== 'undefined' ? healFx.before(whooseTurn) : null
     externalNextTurn() 
     natureNextTurn()
     const localDemon = !gameSettings.isOnline && gameSettings.coop &&
@@ -125,8 +128,6 @@ function advanceOfflineTurn() {
         finishCoopLocalPhase()
         return
     }
-    // The turn player's heals are animated once its view opens (render/healFx.js: after the pass-device screen).
-    const heals = typeof healFx !== 'undefined' ? healFx.before(whooseTurn) : null
     players[whooseTurn].nextTurn()
     if (heals)
         healFx.after(heals)
