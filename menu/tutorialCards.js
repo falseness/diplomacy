@@ -82,7 +82,7 @@ class TutorialCardsTree {
         'tutorial-5': {src: 'assets/sprites/emberArcher.svg', fit: 'unit'},
         'tutorial-15': {src: 'assets/atmosphere/buildings/bastion.svg', fit: 'low'},
         'tutorial-13': {src: 'assets/sprites/catapult.svg'},
-        'tutorial-6': {src: 'assets/atmosphere/buildings/town.svg'},
+        'tutorial-6': {src: 'assets/sprites/demonLord.svg', fit: 'unit'},
     }
     // The picture's box as a share of the medallion's diameter and its shift down as a share of that box.
     // 'moves': a unit sprite drawn over a unit's move bar (an entry's moves: {count, left}) as in the game.
