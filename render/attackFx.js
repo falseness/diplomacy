@@ -53,6 +53,12 @@ class AttackFx {
     maxEffects = 12
     // Whether the effect code's warm-up was scheduled (scheduleWarmUp: once a page).
     static warm = false
+    // TASK-1456: the warm-up waits WARM_MIN_MS after it was scheduled at least and WARM_MAX_MS at most for the board to
+    // settle (polled every WARM_POLL_MS), then runs in idle tasks of about WARM_STEP_MS.
+    static WARM_MIN_MS = 1000
+    static WARM_MAX_MS = 4000
+    static WARM_POLL_MS = 250
+    static WARM_STEP_MS = 10
     // ms per kind.
     durations = {melee: 650, lasthit: 700, archer: 650, ember: 650, hexcaster: 650, catapult: 700, bombard: 650, mortar: 700}
     // Concept time units an effect's duration covers (the last hit runs on to the captured hex's pulse).
@@ -945,32 +951,73 @@ class AttackFx {
     }
     // TASK-1425: an effect's code costs several ms on its first runs (first calls, inline caches, a new canvas's first
     // context and draws), and a page's first effects often come as a demon or AI turn's batch, in the frame drawn with
-    // the turn's change. Once a board with units is drawn, an idle task (browsers only) makes the canvases for unit images
-    // and tinted copies ready (fillPools) and runs every kind once on a scratch instance: through the hooks, the flush
+    // the turn's change. Once a board with units is drawn, idle tasks (browsers only) make the canvases for unit images
+    // and tinted copies ready (fillPools) and run every kind once on a scratch instance: through the hooks, the flush
     // and the drawing into a small canvas of its own (through those pool canvases). This instance's effects, the board
     // and its units are not changed.
+    // TASK-1456: not in the first seconds of a game (about 110 ms in one task right after a start): it waits until the
+    // board has settled (boardBusy: its first pictures built, WARM_MIN_MS at least) or WARM_MAX_MS passed, and pauses
+    // while an effect of this instance plays; then it runs in idle tasks of about WARM_STEP_MS (warmUpSteps). A new board
+    // drops it (scheduled again by the next prune). An attack before it finished plays as without it.
     scheduleWarmUp() {
         if (typeof requestIdleCallback !== 'function' || typeof document === 'undefined' || typeof grid === 'undefined' || !grid?.arr)
             return
         AttackFx.warm = true
-        requestIdleCallback(() => {
+        const board = grid, since = performance.now()
+        let steps = null
+        const run = () => {
+            const now = performance.now()
+            if (typeof grid === 'undefined' || grid !== board) {
+                AttackFx.warm = false
+                return
+            }
+            if (!steps && (now - since < AttackFx.WARM_MIN_MS || now - since < AttackFx.WARM_MAX_MS && AttackFx.boardBusy()) ||
+                    this.effects.some(e => !this.finished(e, this.now())) || this.later.length || this.replay) {
+                setTimeout(() => requestIdleCallback(run, {timeout: 1000}), AttackFx.WARM_POLL_MS)
+                return
+            }
             try {
-                this.fillPools()
-                const fx = new AttackFx()
-                // (its frames make the images and tinted copies themselves: that code runs once too)
-                fx.idleWork = false
-                fx.sequential = false
-                fx.barPool = this.barPool
-                fx.tints = this.tints
-                fx.warmUp()
+                if (!steps) {
+                    const fx = new AttackFx()
+                    // (its frames make the images and tinted copies themselves: that code runs once too)
+                    fx.idleWork = false
+                    fx.sequential = false
+                    fx.barPool = this.barPool
+                    fx.tints = this.tints
+                    steps = (function* () {
+                        yield* this.fillPools()
+                        yield* fx.warmUpSteps()
+                    }).call(this)
+                }
+                // pieces while they fit the step (the next one is guessed to cost as much as the last)
+                const start = performance.now()
+                let last = 0
+                while (performance.now() - start + last <= AttackFx.WARM_STEP_MS) {
+                    const t = performance.now()
+                    if (steps.next().done)
+                        return
+                    last = performance.now() - t
+                }
             } catch (error) {
                 // (a warm-up only: the effects work without it)
+                return
             }
-        }, {timeout: 2000})
+            requestIdleCallback(run, {timeout: 1000})
+        }
+        requestIdleCallback(run, {timeout: AttackFx.WARM_MIN_MS})
+    }
+    // TASK-1456: whether the board still builds its first pictures: the sky raster, the surface cache, the lit view's
+    // first tiles or a queued task of them.
+    static boardBusy() {
+        if (typeof grid === 'undefined' || !grid)
+            return false
+        return !grid.surfaceCacheState || !!grid.surfaceCacheQueued || !!grid.litView?.unbuilt || !!grid.litTilesQueued ||
+            typeof atmosphericBackground !== 'undefined' && !!atmosphericBackground.rasterJob
     }
     // The unit images' canvases (barPool) at the size of a unit with its bars at the main canvas's scale, and 16 spare
     // canvases of a sprite's size for tinted copies, each with its context made and drawn on once.
-    fillPools() {
+    // (a generator: one canvas a piece)
+    * fillPools() {
         const t = typeof mainCtx !== 'undefined' ? mainCtx.getTransform() : null
         const size = assets.size, box = Math.ceil(Math.max(1, t ? Math.abs(t.a) : 1) * 1.5 * size) + 4
         const make = (w, h) => {
@@ -981,11 +1028,20 @@ class AttackFx {
             return canvas
         }
         for (let i = 0; i < this.barPool.length; ++i)
-            this.barPool[i] ||= make(box, box)
-        while (this.spares.length < 16)
+            if (!this.barPool[i]) {
+                this.barPool[i] = make(box, box)
+                yield
+            }
+        while (this.spares.length < 16) {
             this.spares.push(make(size, size))
+            yield
+        }
     }
     warmUp() {
+        for (const _ of this.warmUpSteps());
+    }
+    // TASK-1456: warmUp's pieces (a generator): each class's hooks, each kind's flush, each drawn frame.
+    * warmUpSteps() {
         const cells = grid.arr.flat().filter(c => c?.unit?.notEmpty?.() && c.unit.pos && c.unit.coord)
         if (!cells.length)
             return
@@ -1008,9 +1064,11 @@ class AttackFx {
             else if (s?.building)
                 s.buildingHp = s.building.hp + 1
             this.after(s)
+            yield
         }
         this.after(this.beforeSiege(a, enemyCell))
         this.flush()
+        yield
         const image = this.imageOf(a) || null, targetImage = this.imageOf(b) || image
         const event = (kind, more) => ({kind, attacker: a, own: false, image, from, fromPos: {x: a.pos.x, y: a.pos.y}, to: from,
             target, targetPos: {x: b.pos.x, y: b.pos.y}, targetImage, targetIsUnit: true, targetUnit: null, damage: 2,
@@ -1024,6 +1082,7 @@ class AttackFx {
             this.effects.length = 0
             this.queue(e)
             this.flush()
+            yield
             const canvas = document.createElement('canvas')
             canvas.width = canvas.height = 64
             const ctx = canvas.getContext('2d')
@@ -1032,6 +1091,7 @@ class AttackFx {
                 for (let time = 0; time <= effect.duration + 50; time += 50) {
                     ctx.setTransform(0.25, 0, 0, 0.25, 32 - 0.25 * (effect.targetPos.x + assets.size / 2), 32 - 0.25 * (effect.targetPos.y + assets.size / 2))
                     this.draw(ctx, time)
+                    yield
                 }
             }
         }
