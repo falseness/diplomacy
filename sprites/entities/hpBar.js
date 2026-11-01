@@ -54,12 +54,18 @@ class Bar {
 }
 // Health is decomposed independently into remaining and missing big (HealthBar.BIG HP, drawn at 2x size) and
 // one-HP boxes. Movement continues to use Bar above, with its original geometry and colors.
+// TASK-1491: the hp the entity heals at its owner's next turn start (Entity.hpIncrease, the 'pending' argument) is
+// drawn as pink one-HP boxes between the healthy and the missing ones; the missing hp left after it is decomposed
+// as before, so a big missing box the pending hp reaches is split into one-HP boxes.
 class HealthBar {
     static BIG = 5
+    // Count of repaintRects calls (TASK-1491 sync evidence: Entity.syncHPBar repaints only on a change).
+    static repaints = 0
     constructor(pos, maxHP) {
         this.maxHP = maxHP
         this.healthColor = '#2bb52b'
         this.dmgColor = '#b3b3b3'
+        this.pendingColor = '#ff6fb5'
         this._pos = pos
         this.repaintRects(maxHP)
     }
@@ -68,23 +74,35 @@ class HealthBar {
         this._pos = pos
         this.layout()
     }
-    repaintRects(hp) {
+    repaintRects(hp, pending = 0) {
+        ++HealthBar.repaints
         // Overkill affects gameplay HP, but cannot add missing-health boxes.
         const healthy = Math.max(0, Math.min(this.maxHP, Math.floor(hp)))
         const missing = this.maxHP - healthy
+        // The pending heal fills at most the missing hp (NaN, negative: none).
+        const heal = Math.max(0, Math.min(missing, Math.floor(pending) || 0))
+        const rest = missing - heal
+        this.paintedHP = hp
+        this.paintedPending = pending
         this.rects = []
-        for (const [count, value, filled] of [
-            [Math.floor(healthy / HealthBar.BIG), HealthBar.BIG, true], [healthy % HealthBar.BIG, 1, true],
-            [missing % HealthBar.BIG, 1, false], [Math.floor(missing / HealthBar.BIG), HealthBar.BIG, false]
+        for (const [count, value, filled, pink] of [
+            [Math.floor(healthy / HealthBar.BIG), HealthBar.BIG, true, false], [healthy % HealthBar.BIG, 1, true, false],
+            [heal, 1, false, true],
+            [rest % HealthBar.BIG, 1, false, false], [Math.floor(rest / HealthBar.BIG), HealthBar.BIG, false, false]
         ]) {
             for (let i = 0; i < count; i++) {
                 const rect = new Rect(0, 0, 0, 0)
                 rect.hpValue = value
                 rect.healthy = filled
+                rect.pending = pink
                 this.rects.push(rect)
             }
         }
         this.layout()
+    }
+    // The box colour of a rect of this bar.
+    colorOf(rect) {
+        return rect.healthy ? this.healthColor : rect.pending ? this.pendingColor : this.dmgColor
     }
     layout() {
         this.width = this.height = basis.r * 0.15
@@ -98,7 +116,7 @@ class HealthBar {
             rect.width = this.width * (rect.hpValue === HealthBar.BIG ? 2 : 1)
             rect.height = this.height * (rect.hpValue === HealthBar.BIG ? 2 : 1)
             rect.strokeWidth = basis.r * 0.03
-            rect.color = rect.healthy ? this.healthColor : this.dmgColor
+            rect.color = this.colorOf(rect)
             rect.pos = {x, y: centerY - rect.height / 2}
             x += rect.width + gap
         }
@@ -108,10 +126,11 @@ class HealthBar {
     draw(ctx) {
         const pos = this.pos, key = this.laidOut
         if (!key || key.rects !== this.rects || key.x !== pos.x || key.y !== pos.y || key.r !== basis.r ||
-                key.healthColor !== this.healthColor || key.dmgColor !== this.dmgColor) {
+                key.healthColor !== this.healthColor || key.dmgColor !== this.dmgColor ||
+                key.pendingColor !== this.pendingColor) {
             this.layout()
             this.laidOut = {rects: this.rects, x: pos.x, y: pos.y, r: basis.r,
-                healthColor: this.healthColor, dmgColor: this.dmgColor}
+                healthColor: this.healthColor, dmgColor: this.dmgColor, pendingColor: this.pendingColor}
         }
         for (const rect of this.rects) rect.draw(ctx)
     }

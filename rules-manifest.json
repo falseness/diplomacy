@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "0f7ac4c55bfe25288f84be598b5fa8f26a8f66dd10cff6db369997e84aa319d9",
+  "rulesVersion": "9c89f2e2d89cd37ee90a951d1a1a526f30fa17ce0f9771af599aa367818049b2",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -315,13 +315,13 @@
     },
     {
       "path": "sprites/entities/hpBar.js",
-      "sha256": "cd60a974c14c3a5ab39e4352cfbd19598ce7810c202ea848132b5de1d5a13cdf",
-      "bytes": 4536
+      "sha256": "09f1754e565221dc59f4b4aeefc1133462a86a4a104afe0715e25afa70723c50",
+      "bytes": 5654
     },
     {
       "path": "sprites/entities/entity.js",
-      "sha256": "654e525e036bf0ebb43bdf156215cbf82fc6b77820b8310841aadbdc00f6cbb9",
-      "bytes": 5330
+      "sha256": "837f7fc78d7819a626ac3ebf1007adb185fd2778359b6082156abbe9453fc121",
+      "bytes": 6075
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
@@ -490,8 +490,8 @@
     },
     {
       "path": "sprites/entities/buildings/demonPortal.js",
-      "sha256": "29a76f8571c89b1d6427f63441e619619d9e92e0da744fa67048db5beda76705",
-      "bytes": 6105
+      "sha256": "b6cd072cd866c0938ff514b9dc8de0be4f2200e7ff1d04ce248c8fd7ea45f893",
+      "bytes": 6144
     },
     {
       "path": "ai/wave-placement.js",

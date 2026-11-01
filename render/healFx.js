@@ -225,7 +225,8 @@ class HealFx {
         effect.oldBar = null
         if (unit.hpBar && typeof HealthBar !== 'undefined') {
             effect.oldBar = new HealthBar(unit.hpBar.pos, unit.maxHP)
-            effect.oldBar.repaintRects(effect.from)
+            // TASK-1491: the heal fills exactly the pink (pending) pips the bar showed before it.
+            effect.oldBar.repaintRects(effect.from, event.amount)
         }
         this.effects = this.effects.filter(e => e.entity !== unit)
         this.effects.push(effect)
@@ -564,6 +565,7 @@ class HealFx {
                     old.draw(ctx)
                 if (k > 0) {
                     ctx.globalAlpha = Math.min(1, k)
+                    u.syncHPBar?.()
                     u.hpBar.draw(ctx)
                     ctx.globalAlpha = 1
                 }
@@ -612,6 +614,8 @@ class HealFx {
     // show or the transform's scale or sub-pixel phase changed. One canvas per effect, reused.
     barsImage(e, pose, t) {
         const u = e.entity, moves = e.kind === 'unit' && typeof shouldShowMovesBar === 'function' && shouldShowMovesBar(u)
+        if (pose === 'after')
+            u.syncHPBar?.()
         const hp = pose === 'before' ? (otherSettings.alwaysDisplayHPBar || e.from < u.maxHP ? e.oldBar : null) :
             otherSettings.alwaysDisplayHPBar || !u.isFullHP ? u.hpBar : null
         const bars = [hp, moves ? u.movesBar : null]
@@ -627,7 +631,8 @@ class HealFx {
                 y1 = Math.max(y1, r.y + r.height + w)
             }
         }
-        const key = [pose, t.a, t.d, t.e - Math.floor(t.e), t.f - Math.floor(t.f), u.hp, u.maxHP, u.moves, moves,
+        const key = [pose, t.a, t.d, t.e - Math.floor(t.e), t.f - Math.floor(t.f), u.hp, u.maxHP,
+            pose === 'after' ? u.hpBar?.paintedPending : e.amount, u.moves, moves,
             otherSettings.alwaysDisplayHPBar, x0, y0, x1, y1].join()
         const cached = e.bars
         if (cached && cached.key === key)

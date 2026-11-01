@@ -1529,7 +1529,9 @@ class AttackFx {
     // drawn) when the transform is not a plain scale and translation, or this frame made imageBudget images already.
     drawUnitImage(ctx, unit, image, dx, dy) {
         const t = ctx.getTransform()
-        const rects = unit.hpBar?.rects, moves = unit.movesBar?.rects
+        // TASK-1491: the bar's pink pips follow hpIncrease; the image is remade when they change.
+        unit.syncHPBar?.()
+        const rects = unit.hpBar?.rects, moves = unit.movesBar?.rects, pending = unit.hpBar?.paintedPending
         if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !rects || typeof document === 'undefined')
             return false
         let x0 = unit.pos.x, y0 = unit.pos.y, x1 = x0 + image.width, y1 = y0 + image.height
@@ -1545,7 +1547,7 @@ class AttackFx {
         const alwaysHP = !!otherSettings?.alwaysDisplayHPBar, w0 = x1 - x0, h0 = y1 - y0
         let entry = this.barImages.get(unit)
         const same = entry && entry.canvas.owner === entry && entry.image === image && entry.hp === unit.hp && entry.maxHP === unit.maxHP &&
-            entry.moves === unit.moves && entry.showMoves === showMoves && entry.alwaysHP === alwaysHP && entry.r === basis.r &&
+            entry.pending === pending && entry.moves === unit.moves && entry.showMoves === showMoves && entry.alwaysHP === alwaysHP && entry.r === basis.r &&
             entry.w0 === w0 && entry.h0 === h0
         const exact = same && entry.a === t.a && entry.d === t.d && Math.abs(entry.fx - fx) < 1e-3 && Math.abs(entry.fy - fy) < 1e-3
         // While the camera zooms or pans the image is drawn scaled and moved with it, remade once the camera rests.
@@ -1588,7 +1590,7 @@ class AttackFx {
         const {image, x0, y0, w0, h0, a, d, fx, fy} = job
         const canvas = this.barPool[this.barNext] ||= document.createElement('canvas')
         this.barNext = (this.barNext + 1) % this.barPool.length
-        const entry = {image, hp: unit.hp, maxHP: unit.maxHP, moves: unit.moves, showMoves: job.showMoves, alwaysHP: job.alwaysHP, r: basis.r, w0, h0, a, d, fx, fy, canvas}
+        const entry = {image, hp: unit.hp, maxHP: unit.maxHP, pending: unit.hpBar?.paintedPending, moves: unit.moves, showMoves: job.showMoves, alwaysHP: job.alwaysHP, r: basis.r, w0, h0, a, d, fx, fy, canvas}
         canvas.owner = entry
         const w = Math.ceil(a * w0 + fx) + 2, h = Math.ceil(d * h0 + fy) + 2
         if (canvas.width < w || canvas.height < h) {

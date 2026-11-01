@@ -126,6 +126,8 @@ class DemonPortal extends Building {
         entityInterface.refreshPortal(this)
     }
     drawBars(ctx) {
-        if (!this.killed) this.hpBar.draw(ctx)
+        if (this.killed) return
+        this.syncHPBar()
+        this.hpBar.draw(ctx)
     }
 }

@@ -29,7 +29,18 @@ class Entity extends Sprite {
     }
     updateHPBar() {
         if (this.hasBar)
-            this.hpBar.repaintRects(this.hp)
+            this.hpBar.repaintRects(this.hp, this.hpIncrease)
+    }
+    // TASK-1491: the bar shows hpIncrease (pink), which changes without updateHPBar (a hit sets wasHitted, a unit
+    // moves on or off a suburb, a suburb changes owner, undo, load, online diffs). Repaints the bar only when
+    // (hp, hpIncrease) differs from what it last painted; called by every site that draws the hp bar.
+    syncHPBar() {
+        const bar = this.hpBar
+        if (!bar || !this.hasBar)
+            return
+        const pending = this.hpIncrease
+        if (bar.paintedHP !== this.hp || bar.paintedPending !== pending)
+            bar.repaintRects(this.hp, pending)
     }
     get maxHP() {
         return this.constructor.maxHP
@@ -128,10 +139,10 @@ class Entity extends Sprite {
     }
     hit(dmg) {
         this.hp -= dmg
+        // Hit before the repaint: the bar shows no pending heal (TASK-1491), one repaint.
+        this.wasHitted = true
 
         this.updateHPBar()
-
-        this.wasHitted = true
 
         if (this.hp <= 0)
             this.kill()
@@ -160,8 +171,10 @@ class Entity extends Sprite {
         return false
     }
     drawBars(ctx) {
-        if (otherSettings.alwaysDisplayHPBar || !this.isFullHP)
+        if (otherSettings.alwaysDisplayHPBar || !this.isFullHP) {
+            this.syncHPBar()
             this.hpBar.draw(ctx)
+        }
     }
     // Only classes with a mirrored ('Left') image (KOHb, Catapult and their
     // demon variants) turn mirrorX into a different image key.
