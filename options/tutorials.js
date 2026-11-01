@@ -1150,7 +1150,7 @@ function createTutorial22Map() {
 }
 
 // Through the lines: the demons hold a line in the middle, two vanguard normchels (3,2) at 3 hp and (3,3) at 5 hp
-// with a hexcaster (4,2) behind them, and three noobs (4,4), (3,6), (4,7) to the south-east. Red has an archer
+// with a hexcaster (4,2) behind them, and five noobs (4,4), (3,6), (4,7), (2,7), (3,7) to the south. Red has an archer
 // (1,2), a normchel (2,3) and a KOHb (2,4) facing the line and no town (so no economy). The demon-slot normchels
 // and noobs draw with the undead art. Lakes (7,1) (8,1) (8,2), (0,7) (0,8), (5,5) (6,5), (1,6), (8,4), mountains
 // (3,0) (3,1), (5,0) (6,0), (0,4), (7,6) (8,6) (8,7), (7,8) and bushes scattered around the edges. No portals.
@@ -1188,7 +1188,9 @@ function createTutorial23Map() {
                 {x: 4, y: 2, type: Hexcaster},
                 {x: 4, y: 4, type: Noob},
                 {x: 3, y: 6, type: Noob},
-                {x: 4, y: 7, type: Noob}
+                {x: 4, y: 7, type: Noob},
+                {x: 2, y: 7, type: Noob},
+                {x: 3, y: 7, type: Noob}
             ]
         }
     )
