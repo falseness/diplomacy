@@ -55,22 +55,35 @@ function load(_slot) {
     })
 }
 
+// A column of Menu.getButton buttons: the first at its own position, each next one an interval (8% of HEIGHT) below the
+// previous one at x pos0X (the centred button column).
 class Tree {
-    #interval = HEIGHT * 0.08
-    constructor(buttons, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+    get interval() {
+        return HEIGHT * 0.08
+    }
+    constructor(buttons, _menu, pos0X = Menu.columnX()) {
         this.buttons = new Array(buttons.length)
         this.buttons[0] = buttons[0]
         for (let i = 1; i < buttons.length; ++i) {
-            buttons[i].pos = {x: pos0X, y: buttons[i - 1].bottom + this.#interval}
+            buttons[i].pos = {x: pos0X, y: buttons[i - 1].bottom + this.interval}
             this.buttons[i] = buttons[i]
         }
     }
-    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+    setParent(parent, _menu, pos0X = Menu.columnX()) {
         let y = this.buttons[this.buttons.length - 1].bottom
         this.buttons.push(
-            Menu.getButton({x: pos0X, y: y + this.#interval},
+            Menu.getButton({x: pos0X, y: y + this.interval},
                 'back', _menu.setTree, parent, true, _menu)
         )
+    }
+    // TASK-1484: the column again at the current WIDTH x HEIGHT (a screen resize), the first button at first, as the
+    // constructor and setParent place it on a fresh boot; every button keeps its object and state.
+    layoutButtons(first, pos0X = Menu.columnX()) {
+        let pos = first
+        for (const button of this.buttons) {
+            menuRefitButton(button, pos)
+            pos = {x: pos0X, y: button.bottom + this.interval}
+        }
     }
     click(pos) {
         for (let i = 0; i < this.buttons.length; ++i) {
@@ -90,27 +103,51 @@ class Tree {
         }
     }
 }
+// Read at the current WIDTH (TASK-1484: the screen size changes with the window).
 menuOptions = {
-    fontSize: 0.04 * WIDTH,
-    rectSize: 0.05 * WIDTH,
+    get fontSize() { return 0.04 * WIDTH },
+    get rectSize() { return 0.05 * WIDTH },
     checkBox: {
-        strokeWidth: 0.003 * WIDTH,
+        get strokeWidth() { return 0.003 * WIDTH },
         color: 'white'
-    }
+    },
+    get marginLeft() { return 0.5 * this.rectSize },
+    get cornerR() { return 0.1 * this.rectSize },
 }
-menuOptions.marginLeft = 0.5 * menuOptions.rectSize
-menuOptions.cornerR = 0.1 * menuOptions.rectSize
+
+// TASK-1484: a Menu.getButton button moved to pos and sized for the current WIDTH x HEIGHT, as Menu.getButton builds it
+// there (rect, font size, the pressed look's rect and text); the button keeps its object, label, state and click.
+function menuRefitButton(button, pos) {
+    button.rect = Menu.getButtonRect(pos)
+    button.text.fontSize = Menu.getButtonText('').fontSize
+    const fresh = new MenuButton(button.rect, button.text, button.clickFunc, button.parameters, true, button.callThis)
+    button.selectedRect = fresh.selectedRect
+    button.selectedText = fresh.selectedText
+    button.trimText()
+}
 
 class OtherSettingsTree {
     // Rows form a two-column grid: labels left-aligned at one x, boxes in one column to their right.
     // The rows and the back button below them are scaled to fit between the logo and the screen bottom.
     LABELS = ['always display hp bar', 'always display moves bar', 'move camera to undo target',
         'use polished sprites', 'autoscout (online fog)', 'Atmospheric visuals', 'Animations', "Replay others' moves"]
-    BACK_HEIGHT = HEIGHT * 0.1
-    FIRST_Y = Math.max(HEIGHT * 0.27, HEIGHT * 0.17 + WIDTH * 0.055)
-    INTERVAL_Y = Math.min(HEIGHT * 0.08,
-        (HEIGHT * 0.97 - this.BACK_HEIGHT - this.FIRST_Y) / (this.LABELS.length + 0.25))
+    // At the current WIDTH x HEIGHT; layout() reads them (TASK-1484: again on a screen resize).
+    get BACK_HEIGHT() {
+        return HEIGHT * 0.1
+    }
+    get FIRST_Y() {
+        return Math.max(HEIGHT * 0.27, HEIGHT * 0.17 + WIDTH * 0.055)
+    }
+    get INTERVAL_Y() {
+        return Math.min(HEIGHT * 0.08,
+            (HEIGHT * 0.97 - this.BACK_HEIGHT - this.FIRST_Y) / (this.LABELS.length + 0.25))
+    }
     constructor() {
+        this.layout()
+    }
+    // The rows and (once setParent named the parent) the back button for the current WIDTH x HEIGHT: the check boxes
+    // are built again, their marks from otherSettings.
+    layout() {
         const count = this.LABELS.length
         const intervalY = this.INTERVAL_Y
         let rectSize = Math.min(menuOptions.rectSize, intervalY * 0.7)
@@ -150,12 +187,19 @@ class OtherSettingsTree {
 
         this.buttons = []
         this.buttons.push(...boxes)
+        if (this.parent) {
+            const y = this.rowsBottom + this.INTERVAL_Y * 0.25
+            if (this.backButton) menuRefitButton(this.backButton, {x: Menu.columnX(), y})
+            else this.backButton = Menu.getButton({x: Menu.columnX(), y},
+                'back', this.parentMenu.setTree, this.parent, true, this.parentMenu)
+            this.buttons.push(this.backButton)
+        }
+        if (typeof otherSettings !== 'undefined') this.__updateButtonsByOtherSettings()
     }
-    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
-        let y = this.rowsBottom + this.INTERVAL_Y * 0.25
-        this.backButton = Menu.getButton({x: pos0X, y: y},
-            'back', _menu.setTree, parent, true, _menu)
-        this.buttons.push(this.backButton)
+    setParent(parent, _menu) {
+        this.parent = parent
+        this.parentMenu = _menu
+        this.layout()
     }
     click(pos) {
         let ok = false
@@ -467,6 +511,8 @@ class SetupSwitch extends ImageCheckBox {
 function setupPlaceStepper(slider, row, layout, {sub = null, dots = null, label = null} = {}) {
     for (const [button, box] of [[slider.leftButton, row.leftArrow], [slider.rightButton, row.rightArrow]]) {
         Object.assign(button.rect, {x: box.x, y: box.y, width: box.width, height: box.height})
+        Object.assign(button.img, {width: box.width, height: box.height})
+        button.trimText()
         button.img.pos = button.rect.center
     }
     slider.text.pos = {x: row.value.x + row.value.width / 2, y: row.value.y + row.value.height / 2}
@@ -805,8 +851,13 @@ class SetupSettingsTree extends GameSettingsTree {
         this.playButton = new SetupButton(label, clickFunc, parameters, callThis, true)
         this.modeCards = new SetupModeCards(this.selectMode, this)
         this.dimensionsText = new Text(NaN, NaN, 1, '', HUB_CARD.dim)
+        this.logo = new HaloLogo('logo', {x: 0, y: 0}, 0, 0)
+        this.relayout()
+    }
+    // TASK-1484: the logo and every control at the current WIDTH x HEIGHT (a screen resize); mode, values kept.
+    relayout() {
         const logo = setupLayout(0).logo
-        this.logo = new HaloLogo('logo', {x: logo.x + logo.width / 2, y: logo.y + logo.height / 2}, logo.width, logo.height)
+        Object.assign(this.logo, {pos: {x: logo.x + logo.width / 2, y: logo.y + logo.height / 2}, w: logo.width, h: logo.height})
         this.layout()
     }
     // The setting rows of the current mode: icon, name, hint and control (a slider's stepper options too).
@@ -2340,13 +2391,14 @@ class NicknameTree {
 // passed ones (readTutorialPassed, re-read on every enter). The entries fill columns of
 // ROWS buttons below the logo (16 tutorials = 3 columns); all titles share the font size
 // that fits the longest one.
+// The list tutorial screen (menu/tutorialCards.js replaces it in the browser); sizes at the current WIDTH x HEIGHT.
 class TutorialTree {
-    FIRST_Y = 0.26 * HEIGHT
-    INTERVAL_Y = 0.1 * HEIGHT
+    get FIRST_Y() { return 0.26 * HEIGHT }
+    get INTERVAL_Y() { return 0.1 * HEIGHT }
     ROWS = 6
-    COLUMN_STEP = 0.325 * WIDTH
-    BUTTON_WIDTH = 0.22 * WIDTH
-    BUTTON_HEIGHT = 0.08 * HEIGHT
+    get COLUMN_STEP() { return 0.325 * WIDTH }
+    get BUTTON_WIDTH() { return 0.22 * WIDTH }
+    get BUTTON_HEIGHT() { return 0.08 * HEIGHT }
     constructor(_menu) {
         this.menu = _menu
         this.backButton = new Empty()
@@ -2425,6 +2477,10 @@ class HotseatChoiceTree extends Tree {
         super([newGame, loadGame], _menu)
         this.loadButton = loadGame
         this.slotsCount = slotsCount
+    }
+    // TASK-1484: the column at the current WIDTH x HEIGHT, from Menu.startPos as on a fresh boot.
+    layout() {
+        this.layoutButtons(Menu.startPos())
     }
     hasSave() {
         for (let i = 0; i < this.slotsCount; ++i)
@@ -2574,9 +2630,13 @@ class HaloLogo {
 // A small gold "beta" tag at the top right, clear of the logo.
 class BetaTag {
     constructor() {
-        this.text = new Text(WIDTH * 0.935, HEIGHT * 0.065, Math.min(WIDTH * 0.012, HEIGHT * 0.026), 'beta', '#3a2410',
-            'center', 'middle', 1, MENU_TITLE_FONT_FAMILY, 800)
+        this.text = new Text(0, 0, 1, 'beta', '#3a2410', 'center', 'middle', 1, MENU_TITLE_FONT_FAMILY, 800)
         this.angle = 0.05
+        this.layout()
+    }
+    // At the current WIDTH x HEIGHT (TASK-1484: again on a screen resize).
+    layout() {
+        Object.assign(this.text, {x: WIDTH * 0.935, y: HEIGHT * 0.065, fontSize: Math.min(WIDTH * 0.012, HEIGHT * 0.026)})
     }
     // The tag's size around its centre, before the rotation (measured in its font once the font has loaded).
     get size() {
@@ -3173,6 +3233,13 @@ class MainTree extends Tree {
 
 class Menu {
     #visible
+    // The x of the centred column of Menu.getButton buttons and the first button's position (hot seat choice).
+    static columnX() {
+        return WIDTH / 2 - WIDTH * 0.25 / 2
+    }
+    static startPos() {
+        return {x: Menu.columnX(), y: HEIGHT * 0.3}
+    }
     static getButtonRect(pos) {
         return new Rect(pos.x, pos.y, WIDTH * 0.25, HEIGHT * 0.1,
             [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH],
@@ -3269,13 +3336,11 @@ class Menu {
             back
         */
         this.sky = new MenuSky()
-        // Sized by the width, on screens wider than 16:9 (2560x1080, phones) as on a 16:9 one, so the halo stays on
-        // screen and the first row below it stays clear.
-        const logoScale = Math.min(WIDTH, HEIGHT * 16 / 9)
-        this.logo = new HaloLogo('logo', { x: WIDTH / 2, y: HEIGHT * 0.15 }, logoScale * 0.5, logoScale * 0.55 * 0.2)
+        this.logo = new HaloLogo('logo', {x: 0, y: 0}, 0, 0)
+        this.layoutLogo()
         this.betaTag = new BetaTag()
 
-        let startPos = {x: WIDTH / 2 - WIDTH * 0.25 / 2, y: HEIGHT * 0.3}
+        let startPos = Menu.startPos()
 
         // The new game's slot screen is the load screen whose every slot card starts the game in (overwrites) it.
         this.startGame = new LoadTree(this, slotsCount, start, true)
@@ -3329,9 +3394,28 @@ class Menu {
         this.tutorial.setParent(this.main, this)
         this.replays.setParent(this.main, this)
         this.selectedTree = this.main
-
-        let firstY = HEIGHT * 0.3
-        let interval = HEIGHT * 0.18
+    }
+    // Sized by the width, on screens wider than 16:9 (2560x1080, phones) as on a 16:9 one, so the halo stays on
+    // screen and the first row below it stays clear.
+    layoutLogo() {
+        const logoScale = Math.min(WIDTH, HEIGHT * 16 / 9)
+        Object.assign(this.logo, {pos: {x: WIDTH / 2, y: HEIGHT * 0.15}, w: logoScale * 0.5, h: logoScale * 0.55 * 0.2})
+    }
+    // TASK-1484: after a screen resize (onScreenResize), the offline screens laid out again for the new WIDTH x HEIGHT
+    // as a fresh boot at that size lays them out: logo and beta tag, the main banners, the hot seat choice, settings,
+    // the hot seat setup (both modes' current one; the other mode is placed when chosen), the tutorial cards (their
+    // scroll row clamped by their layout) and the save slot screens. The shown screen, selections, values and the
+    // scroll position are kept. The sky repaints itself at the new size.
+    relayout() {
+        this.layoutLogo()
+        this.betaTag.layout()
+        this.layoutMain()
+        this.hotseatChoice.layout()
+        this.settings.layout()
+        this.play.relayout()
+        if (this.tutorial.dragY !== undefined) this.tutorial.dragY = null
+        this.tutorial.layout?.()
+        for (const tree of [this.load, this.startGame]) tree.layout()
     }
     get selectedMap() {
         return this.play.selectedMap
@@ -3493,6 +3577,8 @@ Menu.prototype.drawGameSpritesWaiting = function(ctx) {
 }
 
 let menu = new Menu()
+// After menu/tutorialCards.js has replaced the tutorial screen too (callbacks run on a resize, after page load).
+if (typeof onScreenResize === 'function') onScreenResize(() => menu.relayout())
 
 function menuLoop() {
     if (!menu.visible)
