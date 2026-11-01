@@ -55,8 +55,10 @@ class Bar {
 // Health is decomposed independently into remaining and missing big (HealthBar.BIG HP, drawn at 2x size) and
 // one-HP boxes. Movement continues to use Bar above, with its original geometry and colors.
 // TASK-1491: the hp the entity heals at its owner's next turn start (Entity.hpIncrease, the 'pending' argument) is
-// drawn as pink one-HP boxes between the healthy and the missing ones; the missing hp left after it is decomposed
+// drawn as pending one-HP boxes between the healthy and the missing ones; the missing hp left after it is decomposed
 // as before, so a big missing box the pending hp reaches is split into one-HP boxes.
+// TASK-1509: a pending box is dark (pendingColor) with a white heart (pendingMarkColor) inside its rim (concept Y36);
+// the bar draws the heart itself, so every place that draws a HealthBar shows it.
 class HealthBar {
     static BIG = 5
     // Count of repaintRects calls (TASK-1491 sync evidence: Entity.syncHPBar repaints only on a change).
@@ -65,7 +67,8 @@ class HealthBar {
         this.maxHP = maxHP
         this.healthColor = '#2bb52b'
         this.dmgColor = '#b3b3b3'
-        this.pendingColor = '#ff6fb5'
+        this.pendingColor = '#1a1a1a'
+        this.pendingMarkColor = '#ffffff'
         this._pos = pos
         this.repaintRects(maxHP)
     }
@@ -132,6 +135,26 @@ class HealthBar {
             this.laidOut = {rects: this.rects, x: pos.x, y: pos.y, r: basis.r,
                 healthColor: this.healthColor, dmgColor: this.dmgColor, pendingColor: this.pendingColor}
         }
-        for (const rect of this.rects) rect.draw(ctx)
+        for (const rect of this.rects) {
+            rect.draw(ctx)
+            if (rect.pending) this.drawPendingMark(ctx, rect)
+        }
+    }
+    // The heart of a pending box (concept Y36: 0.86 of the inner width), clipped to the box inside its rim.
+    drawPendingMark(ctx, rect) {
+        const sw = rect.strokeWidth, x = rect.x + sw / 2, y = rect.y + sw / 2, w = rect.width - sw, h = rect.height - sw
+        if (!(w > 0 && h > 0)) return
+        const cx = x + w / 2, cy = y + h / 2, s = w * 0.86, top = cy - s * 0.3
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(x, y, w, h)
+        ctx.clip()
+        ctx.beginPath()
+        ctx.moveTo(cx, cy + s * 0.45)
+        ctx.bezierCurveTo(cx - s * 0.6, cy + s * 0.02, cx - s * 0.55, top - s * 0.32, cx, top + s * 0.02)
+        ctx.bezierCurveTo(cx + s * 0.55, top - s * 0.32, cx + s * 0.6, cy + s * 0.02, cx, cy + s * 0.45)
+        ctx.fillStyle = this.pendingMarkColor
+        ctx.fill()
+        ctx.restore()
     }
 }

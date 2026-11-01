@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "41b5a0ddc6ae6cba44c1e23f1d491c360dd51e35c6634c9c42078a55a8ada18a",
+  "rulesVersion": "b3b6ae92eb28a2b982b69a1e5056e1f160c1e1e3f83293a5fc562dc0f37aacd3",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -315,8 +315,8 @@
     },
     {
       "path": "sprites/entities/hpBar.js",
-      "sha256": "09f1754e565221dc59f4b4aeefc1133462a86a4a104afe0715e25afa70723c50",
-      "bytes": 5654
+      "sha256": "df524563fa25eadfc2dd457f3c31fe3a88a163716ce3e76c15c41eb5e80d29ed",
+      "bytes": 6824
     },
     {
       "path": "sprites/entities/entity.js",
