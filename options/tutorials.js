@@ -1125,22 +1125,25 @@ function createTutorial15Map() {
     return map
 }
 
-// High to capture: blue's town (2,4) starts at 0 hp but not hit (hit: false), so it heals on blue's first
-// turn. Blue walls (0,3) (1,3) (3,5) fence it in; a blue KOHb (2,3) and archer (3,3) guard it from the north.
-// Red's archer (1,4) stands next to the town with a normchel (0,5) behind it. Red wins once blue has lost
-// (no towns and no units). Lakes (6,1) (7,1) (7,2) and (1,8) (2,8), mountains (4,0) (5,0) and (8,6) (9,6) (9,7),
-// bushes in the corners (0,0) (1,0) (9,1) and the bottom (6,7) (5,8) keep away from the fight.
+// How to capture: blue's town (2,4) starts at 0 hp but not hit (hit: false), so it heals on blue's first
+// turn. Blue walls (0,4) (3,5) and mountains (1,3) (3,4) fence it in; two blue KOHbs (2,3) and (2,2) at 2 hp and an
+// archer (3,3) guard it from the north. (2,3) and (3,3) are blue-owned (captured) but not suburbs: the town's only
+// suburb is its own cell (2,4). Blue is a SimpleAiPlayerWithEconomy with its economy on (default gold). Red's
+// archer (1,4) stands next to the town with a normchel (0,5) behind it. Red wins once blue has lost (no towns and
+// no units). Lakes (6,1) (7,1) (7,2), (1,8) (2,8) and (1,5), mountains (4,0) (5,0) and (8,6) (9,6) (9,7), bushes
+// in the corners (0,0) (1,0) (9,1) and the bottom (6,7) (5,8).
 function createTutorial22Map() {
     const map = new GameMap({x: 10, y: 9}, [
         {rgb: {r: 208, g: 208, b: 208}, towns: []},
         {rgb: {r: 255, g: 0, b: 0}, economyEnabled: false, towns: [],
             units: [{x: 1, y: 4, type: Archer}, {x: 0, y: 5, type: Normchel}]},
-        {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayer', economyEnabled: false,
+        {rgb: {r: 98, g: 168, b: 222}, playerType: 'SimpleAiPlayerWithEconomy',
             towns: [{x: 2, y: 4, hp: 0, noob: false, hit: false}],
-            walls: [{x: 0, y: 3}, {x: 1, y: 3}, {x: 3, y: 5}],
-            units: [{x: 2, y: 3, type: KOHb}, {x: 3, y: 3, type: Archer}]}
-    ], [], coordDictionary([[6, 1], [7, 1], [7, 2], [1, 8], [2, 8]]),
-    coordDictionary([[4, 0], [5, 0], [8, 6], [9, 6], [9, 7]]),
+            suburbs: [{town: {x: 2, y: 4}, cells: [{x: 2, y: 4}]}],
+            walls: [{x: 0, y: 4}, {x: 3, y: 5}],
+            units: [{x: 2, y: 3, type: KOHb, hp: 2}, {x: 2, y: 2, type: KOHb, hp: 2}, {x: 3, y: 3, type: Archer}]}
+    ], [], coordDictionary([[6, 1], [7, 1], [7, 2], [1, 8], [2, 8], [1, 5]]),
+    coordDictionary([[4, 0], [5, 0], [8, 6], [9, 6], [9, 7], [1, 3], [3, 4]]),
     coordDictionary([[0, 0], [1, 0], [9, 1], [6, 7], [5, 8]]))
     map.testName = 'tutorial 22'
     return map
@@ -1200,7 +1203,7 @@ const tutorials = [
     {id: 'tutorial-17', title: 'Tutorial 2: Shield and Bow', pass: 'enemyLost', get map() { return createTutorial17Map() }},
     {id: 'tutorial-1', title: 'Tutorial 3: Pick Your Targets', pass: 'enemyUnitsDead', get map() { return createTutorial1Map() }},
     {id: 'tutorial-7', title: 'Tutorial 4: High Ground', pass: 'enemyUnitsDead', get map() { return createTutorial7Map() }},
-    {id: 'tutorial-22', title: 'Tutorial 5: High to Capture', pass: 'enemyLost', get map() { return createTutorial22Map() }},
+    {id: 'tutorial-22', title: 'Tutorial 5: How to Capture', pass: 'enemyLost', get map() { return createTutorial22Map() }},
     {id: 'tutorial-3', title: 'Tutorial 6: "No Assault Duty"', pass: 'enemyLost', get map() { return createTutorial3Map() }},
     {id: 'tutorial-18', title: 'Tutorial 7: Expand', pass: 'enemyLost', get map() { return createTutorial18Map() }},
     {id: 'tutorial-20', title: 'Tutorial 8: Rotate and Heal', pass: 'enemyTypesDead', types: ['Noob'],
