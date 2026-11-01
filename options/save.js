@@ -299,7 +299,11 @@ class JsonUnpackManager {
         let packedExternal = normalizeLegacyCoopPortalCategories(JSON.parse(jsonExternal))
         if (settings && settings.coop) {
             const coop = settings.coop
-            getCoopMapScalingFromMetadata(coop)
+            // TASK-1511: a hand-made co-op tutorial map has no coop.generation; the turn playback (turnPlaybackView.load)
+            // loads its own snapshot of such a board (one this client just serialized) with ownSnapshot set. Every other
+            // load (saves, online boards) keeps the check.
+            if (!(this.ownSnapshot && coop.tutorial === true))
+                getCoopMapScalingFromMetadata(coop)
             if (coop.balanceVersion !== 2 || coop.waveGeneration !== undefined)
                 throw new Error('Unsupported co-op wave metadata')
             const savedGrid = JSON.parse(jsonGrid)

@@ -656,7 +656,13 @@ const turnPlaybackView = {
     load(p) {
         const recording = p.recordings[p.recordingIndex]
         moveTween.clear()
-        loadFromJson(recording.snapshot)
+        // TASK-1511: the snapshot is this client's own board (a co-op tutorial's has no generation metadata).
+        unpacker.ownSnapshot = true
+        try {
+            loadFromJson(recording.snapshot)
+        } finally {
+            unpacker.ownSnapshot = false
+        }
         // The AI slots keep their classes (loadFromJson makes plain Players): others' effects, not own ones.
         for (let i = 0; i < players.length && i < p.liveClasses.length; ++i)
             if (Object.getPrototypeOf(players[i]) !== p.liveClasses[i] && players[i].constructor === Player)
