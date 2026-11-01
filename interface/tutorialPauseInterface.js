@@ -1,45 +1,67 @@
 // The pause menu of a tutorial, opened by the top-left menu button: 'Paused' on a navy ribbon over the dimmed board,
-// the lesson's medallion above it, 'Tutorial N: Name' below it and three stacked buttons: Resume, Retry (the same
-// tutorial again) and Back to tutorials (the tutorial menu, as the result screen's button). The turn timer is frozen
-// while it is shown (its text stays drawn); it closes only by Resume or by the menu button again, and takes every
-// other game click. Laid out in hub units from the current WIDTH/HEIGHT on every draw and click.
+// the lesson's medallion above it, 'Tutorial N: Name' below it and stacked buttons: Resume, Next tutorial (the next
+// lesson in the list, as the result screen's Next button; it does not mark this one passed and is not shown in the
+// last tutorial, where the menu keeps its three buttons), Retry (the same tutorial again) and Back to tutorials (the
+// tutorial menu, as the result screen's button). The turn timer is frozen while it is shown (its text stays drawn);
+// it closes only by Resume or by the menu button again, and takes every other game click. Laid out in hub units from
+// the current WIDTH/HEIGHT and the shown buttons on every draw and click.
 class TutorialPauseInterface {
-    static GLYPHS = ['resume', 'retry', 'menu']
+    // Each button's glyph by its property name.
+    static GLYPHS = {resumeButton: 'resume', nextButton: 'next', retryButton: 'retry', backButton: 'menu'}
     constructor() {
         this.visible = false
         // Whether the turn timer was ticking when the menu opened; Resume restarts it only then.
         this.timerWasTicking = false
         this.panel = new Rect(0, 0, 0, 0)
         this.resumeButton = new HubButton('Resume', this.resume, undefined, this, true)
+        this.nextButton = new HubButton('Next tutorial', this.next, undefined, this)
         this.retryButton = new HubButton('Retry', this.retry, undefined, this)
         this.backButton = new HubButton('Back to tutorials', this.back, undefined, this)
         this.place()
     }
+    // The property names of the shown buttons, top to bottom: Next tutorial only when a lesson follows this one.
+    get buttonNames() {
+        const hasNext = Boolean(gameSettings.tutorial && TutorialManager.nextId())
+        return ['resumeButton', ...(hasNext ? ['nextButton'] : []), 'retryButton', 'backButton']
+    }
     get buttons() {
-        return [this.resumeButton, this.retryButton, this.backButton]
+        return this.buttonNames.map(name => this[name])
     }
     // Every box from the current screen size: ribbon, tails, medallion, subtitle, the buttons and the panel (the
-    // drawn composition's bounding box).
+    // drawn composition's bounding box). A stack that would end below HEIGHT - 0.5 u (four buttons on a short
+    // screen; three always fit) first moves the composition up, keeping the medallion's ring 0.5 u below the top,
+    // then shrinks the button rows and gaps for the rest.
     place() {
-        const u = hubUnit(), f = u * hubFontScale()
-        const cy = HEIGHT * 0.36, height = 6.5 * u, width = Math.min(46 * u, WIDTH - 14 * u)
+        const u = hubUnit(), f = u * hubFontScale(), buttons = this.buttons
+        const height = 6.5 * u, width = Math.min(46 * u, WIDTH - 14 * u), r = 4 * u
+        let cy = HEIGHT * 0.36, bh = 4.6 * u, gap = 1.2 * u
+        const stack = buttons.length * bh + (buttons.length - 1) * gap
+        // The medallion ring's top and the stack's bottom as offsets from cy.
+        const above = height / 2 + 1.2 * u + 2 * r + 0.7 * u, below = height / 2 + 5 * u + stack
+        const overflow = cy + below - (HEIGHT - 0.5 * u)
+        if (overflow > 0) {
+            const shift = Math.min(overflow, Math.max(0, cy - above - 0.5 * u))
+            cy -= shift
+            const k = Math.max(0.5, (stack - (overflow - shift)) / stack)
+            bh *= k
+            gap *= k
+        }
         this.ribbon = {x: WIDTH / 2 - width / 2, y: cy - height / 2, width, height, cy, bow: 1.4 * u}
         this.tails = [-1, 1].map(side => {
             const inner = side < 0 ? this.ribbon.x + 2 * u : this.ribbon.x + width - 2 * u
             return {side, inner, outer: inner + side * 8 * u, y: this.ribbon.y + 1.4 * u, height, notch: 2.2 * u}
         })
-        const r = 4 * u
         this.medallion = {x: WIDTH / 2, y: this.ribbon.y - 1.2 * u - r, radius: r}
         this.titleFont = 4 * f
         this.subtitle = {x: WIDTH / 2, y: this.ribbon.y + height + 2.4 * u, fontSize: 1.9 * f}
-        const bw = 24 * u, bh = 4.6 * u, gap = 1.2 * u, by = this.ribbon.y + height + 5 * u
+        const bw = 24 * u, by = this.ribbon.y + height + 5 * u
         // The centred label keeps clear of the glyph (its right edge 0.85 bh in) by 0.5 u on both sides.
         const room = bw - 2 * (0.85 * bh + 0.5 * u)
-        this.buttons.forEach((button, i) => button.place(WIDTH / 2 - bw / 2, by + i * (bh + gap), bw, bh,
+        buttons.forEach((button, i) => button.place(WIDTH / 2 - bw / 2, by + i * (bh + gap), bw, bh,
             2.1 * u * this.labelFit(button.text.text, room, 2.1 * f)))
         // The medallion's shade ring is 0.7 u outside its disc; the tails' outer ends are the left and right.
         const left = this.tails[0].outer, top = this.medallion.y - r - 0.7 * u
-        this.panel = new Rect(left, top, this.tails[1].outer - left, by + 3 * bh + 2 * gap - top)
+        this.panel = new Rect(left, top, this.tails[1].outer - left, by + buttons.length * bh + (buttons.length - 1) * gap - top)
     }
     // The share of a label's font (px) that fits it in width (at most 1).
     labelFit(label, width, px) {
@@ -82,18 +104,22 @@ class TutorialPauseInterface {
         this.hide()
         TutorialManager.retry()
     }
+    next() {
+        this.hide()
+        TutorialManager.next()
+    }
     back() {
         this.hide()
         TutorialManager.backToTutorials()
     }
-    // True while shown: the menu button still toggles, the three buttons act, every other click is swallowed.
+    // True while shown: the menu button still toggles, the shown buttons act, every other click is swallowed.
     click(pos) {
         if (!this.visible)
             return false
         if (backToMenuButton.rect.isInside(pos))
             return backToMenuButton.click(pos)
         this.place()
-        this.resumeButton.click(pos) || this.retryButton.click(pos) || this.backButton.click(pos)
+        this.buttons.some(button => button.click(pos))
         return true
     }
     // The lesson's {id, number, name} (parseTitle of its title), or null outside a tutorial.
@@ -131,15 +157,16 @@ class TutorialPauseInterface {
                 this.subtitle.x, this.subtitle.y)
         }
         ctx.restore()
-        const family = Text.titleFamily
+        const names = this.buttonNames, family = Text.titleFamily
         Text.titleFamily = MENU_TITLE_FONT_FAMILY
         try {
-            for (const button of this.buttons)
-                button.draw(ctx)
+            for (const name of names)
+                this[name].draw(ctx)
         } finally {
             Text.titleFamily = family
         }
-        this.buttons.forEach((button, i) => this.drawGlyph(ctx, button, TutorialPauseInterface.GLYPHS[i]))
+        for (const name of names)
+            this.drawGlyph(ctx, this[name], TutorialPauseInterface.GLYPHS[name])
     }
     // The tails (V-notched, lower, behind), then the navy face with both edges bowed up at the centre, its shadow
     // and rim.
@@ -175,7 +202,8 @@ class TutorialPauseInterface {
         ctx.lineWidth = 0.18 * u
         ctx.stroke()
     }
-    // A glyph left of the label in the button's text colour: a play triangle, the undo arrow or the menu icon.
+    // A glyph left of the label in the button's text colour: a play triangle, a skip-forward triangle with its bar,
+    // the undo arrow or the menu icon.
     drawGlyph(ctx, button, kind) {
         const {x, y, height} = button.rect, s = 0.42 * height, cx = x + 0.55 * height, cy = y + height / 2
         const colour = button.primary ? MENU_THEME.primary.text : MENU_THEME.plain.text
@@ -190,6 +218,14 @@ class TutorialPauseInterface {
             ctx.lineTo(cx - 0.3 * s, cy + 0.4 * s)
             ctx.closePath()
             ctx.fill()
+        } else if (kind === 'next') {
+            ctx.beginPath()
+            ctx.moveTo(cx - 0.4 * s, cy - 0.4 * s)
+            ctx.lineTo(cx + 0.25 * s, cy)
+            ctx.lineTo(cx - 0.4 * s, cy + 0.4 * s)
+            ctx.closePath()
+            ctx.fill()
+            ctx.fillRect(cx + 0.25 * s, cy - 0.4 * s, 0.16 * s, 0.8 * s)
         } else if (kind === 'retry')
             ParchmentIconImage.undo(ctx, cx, cy, 1.6 * s, colour, 0.14 * s)
         else
