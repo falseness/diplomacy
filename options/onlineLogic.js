@@ -31,6 +31,8 @@ function onlineActionStream() {
 // checkpoints and continues independently of overlay/menu visibility.
 function unfreezeGame() {
     if (onlinePauseStatus === 'paused') return
+    // TASK-1498: the local player acts on the whole board: the queued diffs first.
+    gameDiffQueue.flush('acting')
     gameEvent.waitingMode = false
     nextTurnButton.highlightButton = false
     undoButton.enableClick()
@@ -325,6 +327,10 @@ const gameDiffHandler = {
     buffered: new Map(),
     // A new game or a new socket (the server counts seq per socket from 1).
     reset(gameID = null, lastSeq = 0) {
+        // TASK-1498: a reconnect / reopened turn of the same game applies the queued diffs first (at once, in seq order);
+        // another game (or none) drops them.
+        if (gameID !== null && gameID === this.gameID) gameDiffQueue.flush('reset')
+        else gameDiffQueue.discard()
         this.gameID = gameID
         this.lastSeq = lastSeq
         this.buffered.clear()
@@ -338,7 +344,7 @@ const gameDiffHandler = {
         if (!message || !message.diff || (this.gameID !== null && message.gameID !== this.gameID))
             return []
         if (!Number.isInteger(message.seq))
-            return [this.apply(message)]
+            return [this.deliver(message)]
         if (message.seq <= this.lastSeq)
             return []
         this.buffered.set(message.seq, message)
@@ -346,9 +352,19 @@ const gameDiffHandler = {
         while (this.buffered.has(this.lastSeq + 1)) {
             const next = this.buffered.get(++this.lastSeq)
             this.buffered.delete(this.lastSeq)
-            applied.push(this.apply(next))
+            applied.push(this.deliver(next))
         }
-        return applied
+        return applied.filter(result => result !== gameDiffQueue.QUEUED)
+    },
+    // TASK-1498: a message next in seq order: queued while the local player waits (gameDiffQueue, played one step at a
+    // time), else the queue is applied first and the message at once.
+    deliver(message) {
+        if (gameDiffQueue.accepts()) {
+            gameDiffQueue.push(message)
+            return gameDiffQueue.QUEUED
+        }
+        gameDiffQueue.flush('acting')
+        return this.apply(message)
     },
     apply(message) {
         if (typeof grid === 'undefined' || !grid)
@@ -449,6 +465,233 @@ const gameDiffHandler = {
             return null
         const last = segments[segments.length - 1]
         return {from: segments[0][0], to: last[last.length - 1], path: last}
+    }
+}
+
+// TASK-1498: online opponents and allies step by step. While the local player waits (gameEvent.waitingMode: not its
+// turn, or its parallel turn already committed), the game:diff messages next in seq order (gameDiffHandler.deliver) are
+// queued and applied one at a time from the frame loop (tick, drawMain): each applied diff waits for its own move slide
+// (moveTween), attack effects (attackFx: its sequential replay with the camera glide where attackFx uses it) and heal
+// effects (healFx), or a short dwell when nothing of it animates. Pacing: every message is applied within targetMs of
+// its arrival: the clocks of moveTween / attackFx / healFx run faster (wrapped, as turnPlaybackView does offline) when
+// the steps left (estimated per message) would not fit; a message older than capMs applies the whole queue at once.
+// Flush (no player time is spent and no one acts on a stale board): all queued diffs are applied at once, in seq
+// order, with their attacks in place (no glide), before anything else when a board arrives (receiveBoard / resyncBoard:
+// the local turn starts, turn change, game end), when the local player acts (unfreezeGame, waitingMode off: a parallel
+// turn), on a reconnect / reopened turn (gameDiffHandler.reset of the same game) and when playback is off. Off (today's
+// behaviour: every diff at once) when otherSettings.replayOthers is false, the 'Animations' row is off (animateMoves /
+// animateAttacks false), in headless runs (gameSettings.testAI, no screen glide) and while enabled is false. UI only:
+// the same diffs are applied by the same gameDiffHandler.apply in the same order, so the board (stateHash) after the
+// queue equals the one of immediate application.
+const gameDiffQueue = {
+    QUEUED: Symbol('queued'),
+    // null: on when the conditions above hold; false / true force it (tests).
+    enabled: null,
+    targetMs: 27000,
+    capMs: 29000,
+    // A step's wait never exceeds this (real ms).
+    stepTimeoutMs: 4000,
+    // Scaled ms a diff is estimated to take: with a move slide / attack, without; dwell of a diff with nothing animated.
+    estimateMs: {animated: 1250, still: 450},
+    dwellMs: 350,
+    // [{message, arrival}] waiting, in seq order.
+    pending: [],
+    // The applied step still playing: {seq, real, scaled, dwell, entry}, null when none.
+    step: null,
+    clock: {real0: 0, scaled0: 0, speed: 1},
+    wrapped: [],
+    // Evidence and tests: the last steps and flushes (bounded); called after each step / flush.
+    log: [],
+    onStep: null,
+    onFlush: null,
+    now() {
+        return typeof performance != 'undefined' ? performance.now() : Date.now()
+    },
+    settingsAllow() {
+        if (this.enabled === false)
+            return false
+        return !(typeof otherSettings !== 'undefined' && (otherSettings.replayOthers === false ||
+            otherSettings.animateMoves === false || otherSettings.animateAttacks === false))
+    },
+    // Whether a message next in seq order waits in the queue now.
+    accepts() {
+        if (!this.settingsAllow() || typeof gameEvent === 'undefined' || !gameEvent || !gameEvent.waitingMode)
+            return false
+        if (typeof grid === 'undefined' || !grid)
+            return false
+        if (this.enabled === true)
+            return true
+        if (typeof gameSettings !== 'undefined' && gameSettings && gameSettings.testAI)
+            return false
+        const screen = gameEvent.screen
+        return !!screen && typeof screen.glideTo === 'function' && typeof canvas !== 'undefined' && !!canvas && !!canvas.offset
+    },
+    isActive() {
+        return this.pending.length > 0 || this.step !== null
+    },
+    push(message) {
+        this.pending.push({message, arrival: this.now()})
+    },
+    record(entry) {
+        this.log.push(entry)
+        if (this.log.length > 256)
+            this.log.shift()
+    },
+    // (estimate only: a move hint slides; whether the applied diff plays anything is busy() after it)
+    animates(message) {
+        return Array.isArray(message.paths) && message.paths.length > 0
+    },
+    scaledNow() {
+        return this.clock.scaled0 + (this.now() - this.clock.real0) * this.clock.speed
+    },
+    // The effects' clocks run at speed (wrapped on the first speed-up, rebased at every change: no jump).
+    setSpeed(speed) {
+        if (speed === this.clock.speed)
+            return
+        const scaled = this.scaledNow()
+        if (speed !== 1 && !this.wrapped.length && typeof moveTween !== 'undefined')
+            for (const object of [moveTween, typeof attackFx !== 'undefined' ? attackFx : null, typeof healFx !== 'undefined' ? healFx : null])
+                if (object) {
+                    const hadOwn = Object.prototype.hasOwnProperty.call(object, 'now'), previous = object.now
+                    const entry = {object, hadOwn, previous, read: () => previous.call(object), speed: () => this.clock.speed}
+                    entry.real0 = entry.read()
+                    entry.scaled0 = entry.real0
+                    object.now = () => entry.scaled0 + (entry.read() - entry.real0) * this.clock.speed
+                    this.wrapped.push(entry)
+                }
+        for (const entry of this.wrapped) {
+            const now = entry.object.now()
+            entry.real0 = entry.read()
+            entry.scaled0 = now
+        }
+        this.clock = {real0: this.now(), scaled0: scaled, speed}
+    },
+    // The real clocks back; running slides and effects keep their progress (their start times moved onto the real clock).
+    unwrap() {
+        for (const entry of this.wrapped) {
+            const shift = entry.object.now() - entry.read()
+            if (entry.hadOwn)
+                entry.object.now = entry.previous
+            else
+                delete entry.object.now
+            if (!shift)
+                continue
+            if (entry.object === moveTween)
+                for (const tween of moveTween.tweens.values()) tween.startTime -= shift
+            else
+                for (const e of entry.object.effects || []) if (e.startTime !== null && e.startTime !== undefined) e.startTime -= shift
+        }
+        this.wrapped = []
+        this.clock = {real0: this.now(), scaled0: this.now(), speed: 1}
+    },
+    // The speed at which every queued message is applied within targetMs of its arrival (one frame each not scaled).
+    pace() {
+        const now = this.now()
+        let need = 1, sum = this.step ? Math.max(0, this.step.dwell - (this.scaledNow() - this.step.scaled)) : 0
+        for (let i = 0; i < this.pending.length; ++i) {
+            const {message, arrival} = this.pending[i]
+            sum += this.animates(message) ? this.estimateMs.animated : this.estimateMs.still
+            const available = arrival + this.targetMs - now - (i + 1) * 20
+            need = Math.max(need, sum / Math.max(available, 250))
+        }
+        const speed = Math.min(64, Math.max(1, need))
+        this.setSpeed(Math.round(speed * 100) / 100)
+        return this.clock.speed
+    },
+    // Whether the applied step's slide or effects still play (on the scaled clocks).
+    busy() {
+        if (typeof moveTween !== 'undefined')
+            for (const unit of [...moveTween.tweens.keys()])
+                if (moveTween.state(unit))
+                    return true
+        if (typeof attackFx !== 'undefined') {
+            if (attackFx.replay)
+                return true
+            const now = attackFx.now()
+            if (attackFx.effects.some(e => e.startTime === null || now - e.startTime < e.duration))
+                return true
+        }
+        if (typeof healFx !== 'undefined') {
+            const now = healFx.now()
+            if (healFx.effects.some(e => e.startTime === null || now - e.startTime < e.duration))
+                return true
+        }
+        return false
+    },
+    // Every frame (drawMain): the next queued diff once the last one has played.
+    tick() {
+        if (!this.isActive()) {
+            if (this.wrapped.length)
+                this.unwrap()
+            return
+        }
+        if (!this.accepts())
+            return this.flush('off')
+        const now = this.now()
+        if (this.pending.length && now - this.pending[0].arrival > this.capMs)
+            return this.flush('cap')
+        const step = this.step
+        if (step) {
+            const timeout = now - step.real > this.stepTimeoutMs
+            if (!timeout && (this.scaledNow() - step.scaled < step.dwell || this.busy()))
+                return
+            step.entry.ms = Math.round(now - step.real)
+            if (timeout)
+                step.entry.timeout = true
+            this.step = null
+        }
+        if (!this.pending.length) {
+            this.setSpeed(1)
+            this.unwrap()
+            return
+        }
+        const speed = this.pace()
+        const {message, arrival} = this.pending.shift()
+        const entry = {seq: message.seq ?? null, actor: message.actorSeat ?? null, waited: Math.round(now - arrival),
+            at: Math.round(now), speed, left: this.pending.length}
+        this.record(entry)
+        gameDiffHandler.apply(message)
+        // (an attack effect starts in the frame's prune: startTime null counts as playing)
+        this.step = {seq: entry.seq, real: now, scaled: this.scaledNow(), dwell: this.busy() ? 0 : this.dwellMs, entry}
+        if (this.onStep)
+            this.onStep(entry, message)
+    },
+    // Every queued diff at once, in seq order, its attacks in place (a running attack replay ends: no glide); the
+    // clocks back to real time. reason: 'board', 'acting', 'reset', 'off', 'cap', 'resync'.
+    flush(reason) {
+        if (!this.isActive() && !this.wrapped.length)
+            return 0
+        const items = this.pending
+        this.pending = []
+        this.step = null
+        const fx = typeof attackFx !== 'undefined' ? attackFx : null
+        const sequential = fx ? fx.sequential : null
+        if (fx)
+            fx.sequential = false
+        try {
+            if (fx && fx.replay)
+                fx.advance(fx.now())
+            if (typeof grid !== 'undefined' && grid)
+                for (const {message} of items)
+                    gameDiffHandler.apply(message)
+        } finally {
+            if (fx)
+                fx.sequential = sequential
+        }
+        this.setSpeed(1)
+        this.unwrap()
+        const entry = {flush: reason, count: items.length, seqs: items.map(item => item.message.seq ?? null), at: Math.round(this.now())}
+        this.record(entry)
+        if (this.onFlush)
+            this.onFlush(entry)
+        return items.length
+    },
+    // Another game (or none): the queued diffs are dropped.
+    discard() {
+        this.pending = []
+        this.step = null
+        this.setSpeed(1)
+        this.unwrap()
     }
 }
 
@@ -990,6 +1233,8 @@ function SetupServerCommunicationLogic(gameID) {
     let terrainRequested = false
     function receiveBoard(body, active) {
         if (socket !== onlineSocket || failed) return false
+        // TASK-1498: the queued diffs are applied before any board (turn start, turn change, game end).
+        gameDiffQueue.flush('board')
         const board = boardWithOnlineTerrain(gameID, typeof body === 'string' ? JSON.parse(body) : body)
         if (!board) {
             // game:open answers with game:terrain first; a second miss is a protocol error.
@@ -1108,6 +1353,7 @@ function SetupServerCommunicationLogic(gameID) {
     // recorded on the replaced board) start again. Returns true when the board was loaded.
     function resyncBoard(body, turnEnded) {
         if (socket !== onlineSocket || failed) return false
+        gameDiffQueue.flush('resync')
         const board = boardWithOnlineTerrain(gameID, typeof body === 'string' ? JSON.parse(body) : body)
         if (!board || board.whooseTurn !== whooseTurn || board.gameRound !== gameRound) {
             fail('The server corrected a move this page cannot show.')
