@@ -26,7 +26,7 @@
             z-index: 0;
         }
 
-        /* Mobile landscape: the game runs portrait only (TASK-1481). */
+        /* Mobile portrait: the game runs landscape only (TASK-1481, flipped by TASK-1506). */
         #rotateOverlay {
             display: none;
             position: fixed;
@@ -60,7 +60,7 @@
 
 <body id="container">
     <canvas id="canvas"></canvas>
-    <div id="rotateOverlay" aria-live="polite"><svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="#f2ede3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="20" y="8" width="24" height="42" rx="4"/><line x1="29" y1="44" x2="35" y2="44"/><path d="M50 30a20 20 0 0 1-6 22"/><polyline points="38,50 44,52 46,46"/></svg><div>rotate the phone, only portrait is allowed</div></div>
+    <div id="rotateOverlay" aria-live="polite"><svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="#f2ede3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="30" width="44" height="24" rx="4"/><line x1="48" y1="39" x2="48" y2="45"/><path d="M14 22a20 20 0 0 1 30-12"/><polyline points="38,6 44,10 40,16"/></svg><div>rotate the phone, only landscape is allowed</div></div>
 
     <!--<script src = "objectModels/setDefaultModel.js"></script>
         <script src = "objectModels/setObjectOffset.js"></script>
@@ -73,13 +73,14 @@
     <script src='options/assert.js'></script>
     <script src='options/gameCoords.js'></script>
     <script>
-        // TASK-1481: phones and tablets (mobilePhone) run portrait only. In landscape a full-window overlay covers the
-        // game and swallows input; the game itself keeps running underneath.
+        // TASK-1481 / TASK-1506: phones and tablets (mobilePhone) run landscape only. In portrait (strictly taller than
+        // wide; a square window shows nothing) a full-window overlay covers the game and swallows input; the game itself
+        // keeps running underneath.
         (function () {
             const overlay = document.getElementById('rotateOverlay')
             let shown = false
             const update = () => {
-                shown = mobilePhone && window.innerWidth > window.innerHeight
+                shown = mobilePhone && window.innerHeight > window.innerWidth
                 overlay.style.display = shown ? 'flex' : 'none'
             }
             const swallow = event => {
