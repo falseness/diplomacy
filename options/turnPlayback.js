@@ -76,6 +76,9 @@ const turnPlayback = {
     },
     // A new game: nothing of the previous one stays readable.
     reset() {
+        // (TASK-1496: a playback still running belongs to the last game: dropped, its board never put back)
+        if (typeof turnPlaybackView !== 'undefined')
+            turnPlaybackView.discard()
         this.recordings = {}
         this.fresh = []
         this.lastHuman = null
@@ -227,13 +230,19 @@ turnPlayback.install()
 // 'turn playback drift' with the step index (drifts). At the end the camera glides back to where it was.
 // Pacing: the time of the effects, slides and glides runs on a scaled clock (the moveTween / attackFx / healFx clocks
 // are wrapped while a playback runs): at every step the speed is set so that the steps left (estimated per kind) end
-// within targetMs of the start; past capMs whatever is left is applied at once. Never more than 30 s.
+// within targetMs of the AI turn's start; past capMs whatever is left of it is applied at once. Never more than 30 s per
+// AI turn: several AI turns in one playback play one after another in turn order, each with its own cap (TASK-1496).
 // Player time: the next human's turn (the pass-device screen, the timer's start, input) begins only when the playback
 // ends (begin's start callback); the timer is set before and not running during it. A click or a key during the playback
 // skips it (the computed board at once); the camera can still pan and zoom.
 // Off (today's behaviour: the computed board at once, others' attacks replayed after it) when otherSettings.replayOthers
 // is false, when the 'Animations' row is off (animateMoves / animateAttacks false), online, for partial boards, in
 // headless runs (gameSettings.testAI, no camera glide) and while turnPlayback.enabled is false.
+// Safety (TASK-1496): a save during a playback stores the computed board (withLiveBoard, options/save.js); leaving the
+// game (menu.stopGame) cancels it with nothing left running, and a new game drops it (discard); either settings row
+// turned off jumps to the computed board (settingsChanged, also checked every frame); a tutorial result or a co-op game
+// end found after recorded AI turns shows when the playback ends or is cut (finishAfter, nextTurn.js); a resize, pan or
+// zoom keeps it going. A loaded snapshot gets the computed players' map settings (playerSettings: economyEnabled).
 const turnPlaybackView = {
     // null: on when the conditions above hold; false / true force it (tests).
     enabled: null,
@@ -243,6 +252,8 @@ const turnPlaybackView = {
     stepTimeoutMs: 4000,
     // ms (speed 1) a step of each kind is estimated to take (glide, slide, effect or dwell).
     estimates: {start: 900, unit: 1250, skip: 60, train: 600, build: 600, destroy: 600},
+    // Player fields set from the map (GameMap.createPlayers) that a loaded snapshot lacks (load()).
+    playerSettings: ['economyEnabled', 'ignoresFog'],
     // Dwell (scaled ms) of a seen step with nothing animated (a train, a build, a destroy).
     dwellMs: 300,
     // The running playback, null when none.
@@ -284,7 +295,7 @@ const turnPlaybackView = {
         return {grid, players, external, externalProduction, nature, goldmines, timer, whooseTurn, gameRound, isFogOfWar,
             gameSettings, hiddenInfo, hiddenStatus, onlineGameStorage, timers}
     },
-    restoreGlobals(g) {
+    restoreGlobals(g, storedTimers = true) {
         grid = g.grid
         players = g.players
         external = g.external
@@ -299,12 +310,73 @@ const turnPlaybackView = {
         hiddenInfo = g.hiddenInfo
         hiddenStatus = g.hiddenStatus
         onlineGameStorage = g.onlineGameStorage
+        if (!storedTimers)
+            return
         for (let i = 0; i < g.timers.length; ++i) {
             if (g.timers[i] === null)
                 localStorage.removeItem(gameStorageSlot() + 'timer' + i)
             else
                 localStorage.setItem(gameStorageSlot() + 'timer' + i, g.timers[i])
         }
+    },
+    // TASK-1496: fn() runs on the computed board (the live globals) while a playback shows its own board: a save (manual,
+    // the turn-end save, a flush on input or pagehide) stores the computed final state, never an intermediate board.
+    // The stored timers keep the computed board's values afterwards (no step reads them).
+    withLiveBoard(fn) {
+        const p = this.active
+        if (!p)
+            return fn()
+        const shown = this.captureGlobals()
+        this.restoreGlobals(p.live)
+        try {
+            return fn()
+        } finally {
+            this.restoreGlobals(shown, false)
+        }
+    },
+    // The menu's 'Animations' and 'replay others' rows (and enabled) still allow a playback.
+    settingsAllow() {
+        if (this.enabled === false)
+            return false
+        return !(typeof otherSettings !== 'undefined' && (otherSettings.replayOthers === false ||
+            otherSettings.animateMoves === false || otherSettings.animateAttacks === false))
+    },
+    // A settings change (the menu, menu.js; also checked every frame): turned off, a running playback jumps to the
+    // computed board at once and the turn goes on.
+    settingsChanged() {
+        const p = this.active
+        if (p && !this.settingsAllow())
+            this.end(p, 'off')
+    },
+    // TASK-1496: a result found on the computed board right after recorded AI turns (a tutorial's result, a game end:
+    // advanceOfflineTurn): over() true -> the playback runs first and show() runs on the computed board when it ends
+    // (at once when it is cut: a click, a key, a settings change, a drift). False (nothing begun) when there is nothing
+    // to play or over() is false: the caller checks as before.
+    finishAfter(viewer, over, show) {
+        if (this.active || typeof turnPlayback === 'undefined' || !this.isOn())
+            return false
+        if (!turnPlayback.fresh.some(recording => recording.endHash !== null) || !over())
+            return false
+        return this.begin(viewer, show)
+    },
+    // TASK-1496: the game is left (menu.stopGame: back to the menu, a tutorial's Retry / Next, then maybe a load): the
+    // computed board is put back for the exit's own save and timer pause; no step, glide, slide, effect or turn start is
+    // left.
+    cancel() {
+        const p = this.active
+        if (!p)
+            return false
+        this.end(p, 'exit')
+        return true
+    },
+    // A new game's reset (turnPlayback.reset): a playback still running is dropped without putting its globals back (the
+    // new game's own are set); the effects and clocks are cleared.
+    discard() {
+        const p = this.active
+        if (!p)
+            return false
+        this.end(p, 'discarded')
+        return true
     },
     // Called by advanceOfflineTurn with the next human's view (viewer) and the rest of its turn start (start): true when a
     // playback began (start runs when it ends), false to go on at once.
@@ -326,13 +398,13 @@ const turnPlaybackView = {
             recordings, viewer, start, steps, live: this.captureGlobals(), finalHash: stateHash(),
             liveClasses: players.map(player => Object.getPrototypeOf(player)),
             recordingIndex: 0, stepIndex: -1, phase: 'load', rulesFog: null,
-            startReal: this.now(), stepReal: 0, stepScaled: 0, frames: 0, dwell: 0,
+            startReal: this.now(), recordingStart: this.now(), stepReal: 0, stepScaled: 0, frames: 0, dwell: 0,
             home: screen.centre(), moved: false, screen,
             clock: {real0: this.now(), scaled0: 0, speed: 1}, wrapped: [],
             stash: {later: attackFx.later, attackView: attackFx.view, sequential: attackFx.sequential,
                 heals: healFx.effects, healView: healFx.view},
             log: {player: recordings.map(recording => recording.player), round: recordings[0].round, viewer, steps,
-                timerBefore: timer.timeLeft, startReal: this.now(), entries: [], speeds: [], result: null}
+                timerBefore: timer.timeLeft, startReal: this.now(), entries: [], speeds: [], recordings: [], result: null}
         }
         // The AI turn's own effects (its attacks and heals, read while it played) are made again by the steps; the next
         // human's own heals (its turn start) wait for the end.
@@ -391,18 +463,17 @@ const turnPlaybackView = {
         }
         p.clock = {real0: this.now(), scaled0: scaled, speed}
     },
-    // The playback's speed for the steps left: they end within targetMs of the start (one frame each not scaled).
+    // The playback's speed for the steps left of the AI turn shown: they end within targetMs of that turn's start (one
+    // frame each not scaled). Several AI turns in a row play one after another, each paced on its own (TASK-1496).
     pace(p) {
         let estimate = 0, left = 0
-        for (let r = p.recordingIndex; r < p.recordings.length; ++r) {
-            const actions = p.recordings[r].actions
-            for (let i = r === p.recordingIndex ? Math.max(0, p.stepIndex) : 0; i < actions.length; ++i) {
-                estimate += this.estimates[actions[i].action.t] ?? 600
-                ++left
-            }
+        const actions = p.recordings[p.recordingIndex].actions
+        for (let i = Math.max(0, p.stepIndex); i < actions.length; ++i) {
+            estimate += this.estimates[actions[i].action.t] ?? 600
+            ++left
         }
         estimate += 300
-        const available = this.targetMs - (this.now() - p.startReal) - left * 20
+        const available = this.targetMs - (this.now() - p.recordingStart) - left * 20
         const speed = Math.min(64, Math.max(1, estimate / Math.max(available, 500)))
         this.setSpeed(p, speed)
         p.log.speeds.push(Math.round(speed * 100) / 100)
@@ -482,12 +553,22 @@ const turnPlaybackView = {
         for (let i = 0; i < players.length && i < p.liveClasses.length; ++i)
             if (Object.getPrototypeOf(players[i]) !== p.liveClasses[i] && players[i].constructor === Player)
                 Object.setPrototypeOf(players[i], p.liveClasses[i])
+        // TASK-1496: the map's player settings a board JSON does not carry (Player.toJSON: gold, towns, units, colour) come
+        // from the computed board's players: a tutorial's economyEnabled false (else the 'start' step's salary disbands the
+        // units: a drift) and ignoresFog.
+        for (let i = 0; i < players.length && i < p.live.players.length; ++i)
+            for (const key of this.playerSettings)
+                if (Object.prototype.hasOwnProperty.call(p.live.players[i], key))
+                    players[i][key] = p.live.players[i][key]
         actionManager.clear()
         if (isFogOfWar && recording.fog)
             grid.fogOfWar = recording.fog.map(column => Array.from(column))
         p.rulesFog = isFogOfWar ? grid.fogOfWar : null
         this.showViewerFog(p)
         p.stepIndex = -1
+        p.recordingStart = this.now()
+        p.log.recordings.push({player: recording.player, round: recording.round, start: Math.round(p.recordingStart - p.startReal),
+            steps: recording.actions.length})
     },
     // Applies the step at p.stepIndex; false on a drift (ended already).
     apply(p) {
@@ -551,8 +632,11 @@ const turnPlaybackView = {
     advance(p) {
         if (typeof gameExit !== 'undefined' && gameExit)
             return this.end(p, 'exit')
+        if (!this.settingsAllow())
+            return this.end(p, 'off')
         ++p.frames
-        if (this.now() - p.startReal > this.capMs && p.phase !== 'load')
+        // (each AI turn of the playback has its own cap, from its load)
+        if (p.phase !== 'load' && this.now() - p.recordingStart > this.capMs)
             return this.rush(p)
         for (let guard = 0; guard < 4; ++guard) {
             if (p.phase === 'load') {
@@ -566,6 +650,7 @@ const turnPlaybackView = {
                 if (p.stepIndex >= recording.actions.length) {
                     if (stateHash() !== recording.endHash)
                         return this.drift(p, `step ${p.stepIndex} end hash`)
+                    this.recordingDone(p)
                     if (++p.recordingIndex < p.recordings.length) {
                         p.phase = 'load'
                         continue
@@ -623,15 +708,23 @@ const turnPlaybackView = {
             return
         }
     },
-    goHome(p) {
+    // An AI turn's last step is shown: its time (from its load) in the log.
+    recordingDone(p) {
+        const entry = p.log.recordings[p.recordingIndex]
+        if (entry)
+            entry.ms = Math.round(this.now() - p.recordingStart)
+    },
+        goHome(p) {
         if (!p.moved)
             return this.end(p, 'ok')
         p.screen.glideTo(p.home, Screen.GLIDE_DURATION, () => this.scaledNow(p))
         p.phase = 'home'
     },
-    // Past capMs: the steps left at once (their hashes still checked), then the end.
+    // Past capMs of the AI turn shown: its steps left at once (their hashes still checked), then the next AI turn (its own
+    // cap) or the end.
     rush(p) {
         p.log.rushed = true
+        p.log.recordings[p.log.recordings.length - 1].rushed = true
         if (p.screen.glide)
             p.screen.stopGlide()
         if (p.phase === 'home')
@@ -650,10 +743,11 @@ const turnPlaybackView = {
             if (p.stepIndex >= recording.actions.length) {
                 if (stateHash() !== recording.endHash)
                     return this.drift(p, `step ${p.stepIndex} end hash`)
+                this.recordingDone(p)
                 if (++p.recordingIndex >= p.recordings.length)
                     return this.end(p, 'ok')
-                this.load(p)
-                continue
+                p.phase = 'load'
+                return
             }
             if (!this.apply(p))
                 return
@@ -706,13 +800,17 @@ const turnPlaybackView = {
         healFx.view = p.stash.healView
         healFx.effects.length = 0
         healFx.hidden.clear()
-        this.restoreGlobals(p.live)
-        // Shown: the AI turns' effects played; else (a drift, an exit) they play as without a playback. The next human's
-        // own heals (its turn start) always stay.
-        const shown = result === 'ok' || result === 'skipped' || result === 'superseded'
-        attackFx.later = shown ? [] : p.stash.later
-        healFx.effects = shown ? p.stash.heals.filter(e => !e.other) : p.stash.heals
-        healFx.hideUnits()
+        // (discarded: a new game's globals are set already; nothing of the old game stays)
+        const left = result === 'exit' || result === 'discarded'
+        if (result !== 'discarded')
+            this.restoreGlobals(p.live)
+        // Shown: the AI turns' effects played (or cut: a skip, the settings turned off); else (a drift) they play as without
+        // a playback. The next human's own heals (its turn start) always stay. A left game keeps none.
+        const shown = result === 'ok' || result === 'skipped' || result === 'superseded' || result === 'off'
+        attackFx.later = shown || left ? [] : p.stash.later
+        healFx.effects = left ? [] : shown ? p.stash.heals.filter(e => !e.other) : p.stash.heals
+        if (!left)
+            healFx.hideUnits()
         actionManager.clear()
         actionLog.clear()
         gameEvent.removeSelection()
@@ -720,14 +818,14 @@ const turnPlaybackView = {
         log.result = result
         log.ms = Math.round(this.now() - p.startReal)
         log.frames = p.frames
-        log.finalHash = stateHash() === p.finalHash
-        log.timerAfter = timer.timeLeft
+        log.finalHash = result === 'discarded' ? null : stateHash() === p.finalHash
+        log.timerAfter = result === 'discarded' ? null : timer.timeLeft
         this.logs.push(log)
         if (this.logs.length > 8)
             this.logs.shift()
         if (this.onEnd)
             this.onEnd(log)
-        if (result !== 'exit' && result !== 'superseded' && p.start)
+        if (!left && result !== 'superseded' && p.start)
             p.start()
     }
 }

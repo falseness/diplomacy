@@ -19,6 +19,13 @@ class SaveManager {
     }
     save() {
         this.pendingSave = false
+        // TASK-1496: during a step-by-step playback of AI turns (options/turnPlayback.js) the save stores the computed
+        // board, never the playback's intermediate one.
+        if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.isActive())
+            return turnPlaybackView.withLiveBoard(() => this.saveBoard())
+        this.saveBoard()
+    }
+    saveBoard() {
         // A tutorial is never saved.
         if (gameSettings.tutorial)
             return

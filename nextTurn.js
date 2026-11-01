@@ -80,6 +80,25 @@ function finishCoopLocalPhase() {
     advanceOfflineTurn()
 }
 
+// TASK-1496: a result found on the computed board right after recorded AI turns waits for their step-by-step playback
+// (options/turnPlayback.js turnPlaybackView.finishAfter): show() runs on the computed board when it ends, or at once
+// when it is cut. False: no playback (off, nothing recorded, over() false); the caller checks as before.
+function resultAfterPlayback(over, show) {
+    if (typeof turnPlaybackView === 'undefined')
+        return false
+    return turnPlaybackView.finishAfter(gameSettings.tutorial ? TUTORIAL_HUMAN_SLOT : whooseTurn, over, show)
+}
+function tutorialResultAfterPlayback() {
+    return resultAfterPlayback(() => !tutorialResultInterface.visible &&
+        (TutorialManager.isPassed() || TutorialManager.isFailed()), () => TutorialManager.checkResult())
+}
+function endCoopGame() {
+    // The ended turn cannot be undone after the game is over (as after any turn end).
+    actionManager.clear()
+    actionLog.clear()
+    menuBack()
+}
+
 function advanceOfflineTurn() {
     if (gameExit) {
         return
@@ -87,11 +106,14 @@ function advanceOfflineTurn() {
 
     // A finished tutorial stays on its result screen. Checked before the co-op end: a co-op
     // tutorial that ends during the demon phase must show its result, not return to the menu.
-    if (gameSettings.tutorial && TutorialManager.checkResult()) {
+    if (gameSettings.tutorial && (tutorialResultAfterPlayback() || TutorialManager.checkResult())) {
         return
     }
     // Resolve the whole committed action/phase before deciding a shared result;
     // individual deaths must not preempt simultaneous elimination (e.g. flood).
+    // TASK-1496: AI turns recorded just before are played back first; the game ends when the playback does.
+    if (gameSettings.coop && resultAfterPlayback(() => players[0].isGameEnded, endCoopGame))
+        return
     if (gameSettings.coop && players[0].isGameEnded) {
         // The ended turn cannot be undone after the game is over (as after any turn end).
         actionManager.clear()
@@ -132,7 +154,7 @@ function advanceOfflineTurn() {
     players[whooseTurn].nextTurn()
     if (heals)
         healFx.after(heals)
-    if (gameSettings.tutorial && TutorialManager.checkResult()) {
+    if (gameSettings.tutorial && (tutorialResultAfterPlayback() || TutorialManager.checkResult())) {
         return
     }
     if (players[whooseTurn].isLost) {

@@ -234,6 +234,9 @@ class OtherSettingsTree {
             }
         }
         otherSettings.replayOthers = this.replayCheckBox.mark
+        // TASK-1496: either row off ends a running playback of AI turns at once (the computed board).
+        if (typeof turnPlaybackView !== 'undefined')
+            turnPlaybackView.settingsChanged()
         this.replayCheckBox.disabled = !this.animationsCheckBox.mark
         if (atmosphericVisuals !== otherSettings.atmosphericVisuals && grid) {
             // Rebuild the board display on the next frame, without changing game state.
@@ -3533,6 +3536,10 @@ class Menu {
     // Ends the running game without showing the menu: back() and TutorialManager.switchTo.
     // Returns whether it was a lobby game. The game loop stops on its next frame (gameExit).
     stopGame() {
+        // TASK-1496: a step-by-step playback of AI turns ends first: the computed board is back for the save and the timer
+        // pause below, and nothing of it keeps running (options/turnPlayback.js).
+        if (typeof turnPlaybackView !== 'undefined')
+            turnPlaybackView.cancel()
         gameExit = true
         const lobbyGame = onlineSession.openGameID !== null
         if (onlineSocket) {

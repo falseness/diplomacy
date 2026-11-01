@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "51f289167ba074d33e51bd828677a5fdec413a3a27323fe68d83a04d180b7ae0",
+  "rulesVersion": "39b5166cf0a7bf22f5df6fa63bf737dcb348d2a2702a59a0810d8ca00c5ecdfe",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -50,8 +50,8 @@
     },
     {
       "path": "options/save.js",
-      "sha256": "df5db13c9140df7e4210bce9020e6daa0f6bd06326eba3de74aad6541a15bf75",
-      "bytes": 16243
+      "sha256": "e71f56309a4b3512e76c49f0d08472ffde989a9c4556fa78049269c6a9cab917",
+      "bytes": 16627
     },
     {
       "path": "options/actionManager.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "cf6845f20e0b4618e305a9543e40fb0ee2366f580a33a6550d41f7868f23a15c",
-      "bytes": 172608
+      "sha256": "85642363b1546cbd28fd58a8a3d55fc1d302f3f1f7864adcb3016de675c8dd54",
+      "bytes": 173109
     },
     {
       "path": "sprites/hexagon.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "08cad6ffbdc922958691f3492718ff805871402231ecf261a5b071ecec4e4d57",
-      "bytes": 10213
+      "sha256": "d9cff94ca95c0aa39f00e9831899b9db58474900bcfe49819eb8273b71206613",
+      "bytes": 11467
     },
     {
       "path": "managers.js",
