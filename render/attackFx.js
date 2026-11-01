@@ -202,7 +202,7 @@ class AttackFx {
         if (!targetUnit && !building)
             return null
         // (the attacker's sprite: read when the effect is made, it stays alive; the target's now, it may die)
-        return {attacker: unit, from: {x: unit.coord.x, y: unit.coord.y}, fromPos: {x: unit.pos.x, y: unit.pos.y},
+        return {attacker: unit, moves: unit.moves, from: {x: unit.coord.x, y: unit.coord.y}, fromPos: {x: unit.pos.x, y: unit.pos.y},
             image: undefined, coord: {x: cell.hexagon.coord.x, y: cell.hexagon.coord.y},
             ranged: !!this.ranged[kind], unit: targetUnit, unitHp: targetUnit?.hp, unitPos: targetUnit && {x: targetUnit.pos.x, y: targetUnit.pos.y},
             unitImage: targetUnit && this.imageOf(targetUnit),
@@ -263,13 +263,26 @@ class AttackFx {
             target = {killed, damage: s.buildingHp - (killed ? 0 : s.building.hp), pos: s.buildingPos, image: s.buildingImage, unit: false}
         }
         if (!target || !(target.damage > 0))
-            return false
+            return this.afterZeroTown(s)
         const attacker = s.attacker
         // A ranged hit's living unit target is drawn by the effect (knocked back).
         const targetUnit = s.ranged && target.unit && !target.killed ? s.unit : null
         return this.queue({kind: this.kindOf(attacker), attacker, own: this.isOwn(attacker), image: s.image, from: s.from, fromPos: s.fromPos,
             to: {x: attacker.coord.x, y: attacker.coord.y}, target: coord, targetPos: target.pos, targetImage: target.image,
             targetIsUnit: target.unit, targetUnit, damage: target.damage, killed: target.killed})
+    }
+    // TASK-1489: a ranged shot at an enemy town already at 0 hp (the rules only mark it hit: no hp lost) plays the normal
+    // ranged effect with damage 0 and zeroHit ('-0' rises): the town is the same object, still at 0 hp, the shooter
+    // alive, in place and its moves spent. Anything else plays nothing, as before.
+    afterZeroTown(s) {
+        const a = s.attacker, b = s.building
+        if (!s.ranged || !b || s.buildingHp !== 0 || b.hp !== 0 || typeof b.isTown !== 'function' || !b.isTown() ||
+                grid.getBuilding(s.coord) !== b || !a || a.killed || a.coord.x !== s.from.x || a.coord.y !== s.from.y ||
+                !(a.moves < s.moves))
+            return false
+        return this.queue({kind: this.kindOf(a), attacker: a, own: this.isOwn(a), image: s.image, from: s.from, fromPos: s.fromPos,
+            to: {x: a.coord.x, y: a.coord.y}, target: s.coord, targetPos: s.buildingPos, targetImage: s.buildingImage,
+            targetIsUnit: false, targetUnit: null, damage: 0, zeroHit: true, killed: false})
     }
     // Whether unit belongs to a local human (its own attack: shown whole, from the turn's start; online, only the local
     // player's units act here). AI players, demons and neutrals are other classes than Player.
@@ -1619,7 +1632,7 @@ class AttackFx {
             else
                 this.drawArrow(ctx, t, S, T, 0.26 * dist, E, r, e.edge)
         }
-        this.drawDamage(ctx, E, (t - style.text) / style.textSpan, e.damage, r)
+        this.drawDamage(ctx, E, (t - style.text) / style.textSpan, e.damage, r, e.zeroHit === true)
     }
     // The arrow: flies S -> T on [0.22, 0.5) with a short white trail; sparks burst from the target on [0.48, 0.66).
     // edge: 'in' (from the fog edge), 'out' (to the fog edge: no sparks).
@@ -2068,9 +2081,9 @@ class AttackFx {
         ctx.fill()
         ctx.globalAlpha = 1
     }
-    // '-N' rising from the target, u in (0, 1].
-    drawDamage(ctx, E, u, damage, r) {
-        if (!(u > 0 && u <= 1) || !(damage > 0))
+    // '-N' rising from the target, u in (0, 1]; zeroHit: '-0' (a ranged shot at a 0-hp town, TASK-1489).
+    drawDamage(ctx, E, u, damage, r, zeroHit = false) {
+        if (!(u > 0 && u <= 1) || !(damage > 0) && !(zeroHit && damage === 0))
             return
         ctx.globalAlpha = u < 0.6 ? 1 : (1 - u) / 0.4
         ctx.font = `bold ${Math.round(0.4 * r)}px serif`
