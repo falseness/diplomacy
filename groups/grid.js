@@ -787,20 +787,34 @@ class Grid extends SpritesGroup {
                 order: cells.map(cell => [far(cell), cell]).sort((a, b) => a[0] - b[0]).map(([, cell]) => cell)}
         })
     }
-    // One step of a split job (startCellSplit). Returns whether the split is finished.
-    cellSplitStep(job) {
+    // One step of a split job (startCellSplit). Returns whether the split is finished. TASK-1473: a step with a budget (ms,
+    // the between-frames tasks: SURFACE_STEP_MS) makes sprites while the time spent and the last sprite's time fit in it (at
+    // least one), and at most job.cap: the canvas draws are rasterized later in the step (its restore) or after it, so the
+    // cap follows the whole steps' time (shrunk to the share of the budget a step over it took, grown after one within it);
+    // without a budget, CELL_SPLIT_CELLS. The sprites' pixels are disjoint and added ('lighter'), so the layer is the same
+    // however the cells are split into steps.
+    cellSplitStep(job, budget = Infinity) {
         const {layer, canvas, order} = job
         ++this.cellSplitSteps
+        const start = performance.now(), first = job.next
         const g = layer.getContext('2d')
         g.save()
         g.setTransform(1, 0, 0, 1, 0, 0)
         g.globalCompositeOperation = 'lighter'
-        for (const end = Math.min(job.next + CELL_SPLIT_CELLS, order.length); job.next < end; ++job.next) {
-            const cell = order[job.next]
+        const cap = budget < Infinity ? job.cap ||= CELL_SPLIT_CELLS : CELL_SPLIT_CELLS
+        for (let end = Math.min(first + cap, order.length), piece = 0; job.next < end; ++job.next) {
+            if (job.next > first && performance.now() - start + piece >= budget)
+                break
+            const begin = performance.now(), cell = order[job.next]
             g.drawImage(this.cellSprite(layer, cell, canvas, cell.key), cell.box.x, cell.box.y)
             ++this.cellSpriteDraws
+            piece = performance.now() - begin
         }
         g.restore()
+        if (budget < Infinity) {
+            const spent = performance.now() - start, made = job.next - first
+            job.cap = spent > budget ? Math.max(1, Math.floor(made * budget / spent)) : Math.min(CELL_SPLIT_CELLS, 2 * made)
+        }
         if (job.next < order.length)
             return false
         Object.assign(layer, {cells: job.cells, cellBox: job.box, byIndex: new Map(job.cells.map(c => [c.index, c])),
@@ -820,7 +834,7 @@ class Grid extends SpritesGroup {
             return
         if (!this.surfaceSplitHolds(job))
             return
-        if (this.cellSplitStep(job))
+        if (this.cellSplitStep(job, SURFACE_STEP_MS))
             this.surfaceSplitJob = undefined
     }
     surfaceSplitHolds(job) {
@@ -2607,11 +2621,22 @@ class Grid extends SpritesGroup {
             this.surfaceCacheQueued = false
             // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
             if (this === grid && otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
-                this.surfaceCacheBuildStep()
+                this.surfaceCacheBuildStep(SURFACE_STEP_MS)
         })
     }
-    surfaceCacheBuildStep() {
+    // A step of the surface cache's build: a stage, or (TASK-1473, with a budget in ms: the between-frames tasks) a step
+    // of the work a stage or the finish would otherwise do at once, while the time spent and the last piece's fit in the
+    // budget: the lamps' overlays ahead of the bake (atmosphericLighting.lampOverlaySteps) and the cache's cell mask
+    // ahead of the finish (surfaceMaskSteps). They fill caches the stage and the finish then find (the same builders),
+    // so the cache is the same. Without a budget (a direct call) they run within the stage or the finish as before.
+    surfaceCacheBuildStep(budget = Infinity) {
         let build = this.surfaceCacheBuild
+        if (build?.steps) {
+            if (!runSteps(build.steps, budget))
+                return
+            build.steps = undefined
+            return
+        }
         if (!build) {
             this.surfaceCacheChecked = performance.now()
             this.surfaceCacheDirty = false
@@ -2627,7 +2652,18 @@ class Grid extends SpritesGroup {
         }
         else if (!this.surfaceCacheBuildHolds(build)) {
             this.surfaceCacheBuild = undefined
-            this.surfaceCacheBuildStep()
+            this.surfaceCacheBuildStep(budget)
+            return
+        }
+        if (budget < Infinity && build.stage === SURFACE_CACHE_STAGES.length - 1 && !build.lamps) {
+            build.lamps = true
+            if (build.atmospheric) {
+                build.steps = atmosphericLighting.lampOverlaySteps(this)
+                return
+            }
+        }
+        if (build.stage === SURFACE_CACHE_STAGES.length) {
+            this.finishSurfaceCacheStep(build)
             return
         }
         ++this.surfaceCacheStages
@@ -2642,9 +2678,31 @@ class Grid extends SpritesGroup {
         flush.getContext('2d').drawImage(build.canvas, 0, 0, 1, 1, 0, 0, 1, 1)
         if (build.stage < SURFACE_CACHE_STAGES.length)
             return
+        if (budget < Infinity && (build.steps = this.surfaceMaskSteps(build)))
+            return
+        this.finishSurfaceCacheStep(build)
+    }
+    finishSurfaceCacheStep(build) {
         this.surfaceCacheBuild = undefined
         this.finishSurfaceCacheBuild(build)
         SURFACE_STATE_FIELDS.forEach((name, k) => { this[name] = build.state[k] })
+    }
+    // TASK-1473: the steps (a generator) building the cell mask the finished build's split takes (prepareSurfaceCellLayer ->
+    // startCellSplit -> cellLayerCells: the same key, builder and cache), or none when it has no cell layer or the mask
+    // is kept already.
+    surfaceMaskSteps(build) {
+        if (!build.canvas.cellLayered)
+            return undefined
+        const W = build.canvas.width, H = build.canvas.height
+        const {key, a, d, e, f, reach} = this.cellMaskKey(W, H, Grid.surfacePlace(build.geometry.scale, build.left, build.top))
+        if (cellMaskCache.has(key))
+            return undefined
+        const board = this
+        return (function* () {
+            const mask = yield* board.cellMaskSteps(W, H, a, d, e, f, reach)
+            if (!cellMaskCache.has(key))
+                rememberCellMask(key, mask)
+        })()
     }
     // Whether build still draws this board: the same geometry, visuals and board state (its copy).
     surfaceCacheBuildHolds(build) {
@@ -4150,7 +4208,7 @@ class Grid extends SpritesGroup {
                 if (view !== this.litView || !view.splitJob || view.patch || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) ||
                         !this.litSplitHolds(view))
                     return
-                if (this.cellSplitStep(view.splitJob))
+                if (this.cellSplitStep(view.splitJob, SURFACE_STEP_MS))
                     view.splitJob = undefined
             })
             return
@@ -5327,6 +5385,22 @@ Grid.surfaceLayerJobs = true
 Grid.cellLayerSplitJobs = true
 Grid.litFirstViewSteps = true
 const CELL_SPLIT_CELLS = 400
+// TASK-1473: the time (ms) a between-frames step of the surface cache's build or a cell split takes at most, but for its
+// last piece (runSteps, Grid.cellSplitStep).
+const SURFACE_STEP_MS = 8
+// Runs steps (a generator) while the time spent and the last piece's fit in budget (ms; at least one piece). Returns whether
+// they are done.
+function runSteps(steps, budget = Infinity) {
+    const start = performance.now()
+    let piece = 0
+    do {
+        const begin = performance.now()
+        if (steps.next().done)
+            return true
+        piece = performance.now() - begin
+    } while (performance.now() - start + piece < budget)
+    return false
+}
 // TASK-1361: variants a cell layer keeps a cell (the cell's now and the one before, for an undo; Grid.pruneCellSprites) and
 // sprite canvases kept for reuse (Grid.cellSpriteCanvas).
 const CELL_LAYER_VARIANTS = 2

@@ -2041,6 +2041,8 @@ const atmosphericLighting = {
     bloomSprite: null,
     bloomSpriteBuilds: 0,
     lampOverlays: new WeakMap(),
+    // Rows of the cave grade's pixels a step (gradeSteps).
+    GRADE_STEP_ROWS: 8,
     gradedImages: new WeakMap(),
     lampOverlayBuilds: 0,
     bloomImage() {
@@ -2150,6 +2152,15 @@ const atmosphericLighting = {
     // The cave grade's shade (multiply factors) and lift ('screen') canvases, or null when
     // the raster's pixels can't be read.
     gradeCanvases(image, door) {
+        const steps = this.gradeSteps(image, door)
+        for (;;) {
+            const {done, value} = steps.next()
+            if (done) return value
+        }
+    },
+    // TASK-1473: gradeCanvases's work as a generator returning its result: a yield after the read, after the distances and
+    // every GRADE_STEP_ROWS rows (lampOverlaySteps runs it between frames).
+    *gradeSteps(image, door) {
         const W = image.width, H = image.height
         const {stone, form, warm, warmJoint, warmLift, warmReach, near, nearLift, nearReach, nearOut, ringTone, ringLift, share, joint, anchor, lip, lipColor, flame, feather, groove, crest, contour, frame, interior, flameGlow, toneBias, upperGlow, ringHue} = this.BLOOM.grade
         const ring = this.outline(door.ring, W, H), opening = this.outline(door.opening, W, H), arch = this.outline(door.arch, W, H)
@@ -2170,12 +2181,14 @@ const atmosphericLighting = {
         } catch (_) {
             return null
         }
+        yield
         // Distance inside the silhouette (the sprite's solid pixels) to its edge, on a grid padded
         // by a pixel so the raster's border counts as outside.
         const PW = W + 2, PH = H + 2, solid = new Uint8Array(PW * PH)
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
             solid[(y + 1) * PW + x + 1] = pixels.data[4 * (y * W + x) + 3] >= 128 ? 1 : 0
         const inner = this.chamfer(solid, PW, PH, 1)
+        yield
         const grooveWidth = Math.max(0.75, groove.width * W), crestWidth = Math.max(0.75, crest.width * W)
         const contourWidth = Math.max(0.75, contour.width * W)
         const l = lift.getContext('2d'), raised = l.createImageData(W, H)
@@ -2183,88 +2196,91 @@ const atmosphericLighting = {
         // A warm colour darkened by the luminance tone, towards orange-brown.
         const toned = (color, c, tone) => color[c] * tone ** toneBias[c]
         const target = [0, 0, 0], hole = [0, 0, 0]
-        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-            // Faint pixels (the contact shadow on the ground) keep their look, so the grade
-            // never reaches the stone beside the sprite; faint green moss is graded anyway, so no
-            // mossy fringe shows round the dome.
-            const i = 4 * (y * W + x), moss = src[i + 1] > src[i] && src[i + 1] > src[i + 2] + 25
-            const a = moss ? Math.min(255, Math.round(1.6 * src[i + 3])) : Math.round(src[i + 3] * Math.min(1, Math.max(0, (src[i + 3] / 255 - 0.6) / 0.3)))
-            src[i + 3] = a
-            if (!a) continue
-            const px = x + 0.5, py = y + 0.5
-            const lum = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]
-            // The doorway region: the opening plus the inner share of the ring, by a distance
-            // that is zero where the share of the way from the opening to the arch's outer edge is reached.
-            const dOpen = this.outlineDistance(opening, px, py, 6 * warmth), dArch = this.outlineDistance(arch, px, py, 6 * warmth)
-            const reach = dOpen >= 0 ? dArch + dOpen : share * dArch + (1 - share) * dOpen
-            const inDoor = Math.min(1, Math.max(0, 0.5 + reach / (2 * soft)))
-            const onLip = lip ? Math.max(0, 1 - Math.abs(reach) / lipWidth) : 0
-            const dRing = this.outlineDistance(ring, px, py, 4 * grooveWidth)
-            const inRing = Math.min(1, Math.max(0, 0.5 + dRing / (2 * soft))) * (dOpen < 0 ? 1 : 0)
-            // The doorway: the gold inner arch face (frame) by the distance inside the shaft, round
-            // a deep amber interior graded down from the anchor to the foot; the flame a small
-            // teardrop (narrowing upwards) at the anchor in a gold glow.
-            const q = this.outlineDistance(shaft, px, py, 6 * warmth) / halfOpen
-            const within = Math.min(1, Math.max(0, (q - frame.width + frame.soft) / (2 * frame.soft)))
-            const face = Math.min(1, Math.max(0, (q + frame.soft) / frame.width))
-            const t = Math.min(1, Math.max(0, (py - oy) / (bottom - oy)))
-            let k = 1
-            while (k < stops.length - 1 && stops[k][0] < t) k++
-            const [t0, c0] = stops[k - 1], [t1, c1] = stops[k], f = Math.min(1, Math.max(0, (t - t0) / (t1 - t0 || 1)))
-            const narrow = 1 + 0.6 * Math.max(0, oy - py) / (flame.ry * halfOpen)
-            const tear = Math.hypot(narrow * (px - ox) / (flame.rx * halfOpen), (py - oy) / ((py > oy ? flame.low : 1) * flame.ry * halfOpen))
-            const flare = Math.min(1, 1.6 * Math.max(0, 1 - tear)), light = 1 - joint * inRing * (1 - lum / 160)
-            const glowing = (py > oy ? flameGlow.below : 1) * Math.max(0, 1 - (tear - 1) / (flameGlow.reach - 1)) ** 2
-            const fill = to => {
-                const u = Math.min(1, Math.max(0, (to + upperGlow.soft - (py - opening.top) / (bottom - opening.top)) / upperGlow.soft))
-                return upperGlow.amount * u * u * (3 - 2 * u)
+        for (let y = 0; y < H; y++) {
+            if (y && y % this.GRADE_STEP_ROWS === 0) yield
+            for (let x = 0; x < W; x++) {
+                // Faint pixels (the contact shadow on the ground) keep their look, so the grade
+                // never reaches the stone beside the sprite; faint green moss is graded anyway, so no
+                // mossy fringe shows round the dome.
+                const i = 4 * (y * W + x), moss = src[i + 1] > src[i] && src[i + 1] > src[i + 2] + 25
+                const a = moss ? Math.min(255, Math.round(1.6 * src[i + 3])) : Math.round(src[i + 3] * Math.min(1, Math.max(0, (src[i + 3] / 255 - 0.6) / 0.3)))
+                src[i + 3] = a
+                if (!a) continue
+                const px = x + 0.5, py = y + 0.5
+                const lum = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]
+                // The doorway region: the opening plus the inner share of the ring, by a distance
+                // that is zero where the share of the way from the opening to the arch's outer edge is reached.
+                const dOpen = this.outlineDistance(opening, px, py, 6 * warmth), dArch = this.outlineDistance(arch, px, py, 6 * warmth)
+                const reach = dOpen >= 0 ? dArch + dOpen : share * dArch + (1 - share) * dOpen
+                const inDoor = Math.min(1, Math.max(0, 0.5 + reach / (2 * soft)))
+                const onLip = lip ? Math.max(0, 1 - Math.abs(reach) / lipWidth) : 0
+                const dRing = this.outlineDistance(ring, px, py, 4 * grooveWidth)
+                const inRing = Math.min(1, Math.max(0, 0.5 + dRing / (2 * soft))) * (dOpen < 0 ? 1 : 0)
+                // The doorway: the gold inner arch face (frame) by the distance inside the shaft, round
+                // a deep amber interior graded down from the anchor to the foot; the flame a small
+                // teardrop (narrowing upwards) at the anchor in a gold glow.
+                const q = this.outlineDistance(shaft, px, py, 6 * warmth) / halfOpen
+                const within = Math.min(1, Math.max(0, (q - frame.width + frame.soft) / (2 * frame.soft)))
+                const face = Math.min(1, Math.max(0, (q + frame.soft) / frame.width))
+                const t = Math.min(1, Math.max(0, (py - oy) / (bottom - oy)))
+                let k = 1
+                while (k < stops.length - 1 && stops[k][0] < t) k++
+                const [t0, c0] = stops[k - 1], [t1, c1] = stops[k], f = Math.min(1, Math.max(0, (t - t0) / (t1 - t0 || 1)))
+                const narrow = 1 + 0.6 * Math.max(0, oy - py) / (flame.ry * halfOpen)
+                const tear = Math.hypot(narrow * (px - ox) / (flame.rx * halfOpen), (py - oy) / ((py > oy ? flame.low : 1) * flame.ry * halfOpen))
+                const flare = Math.min(1, 1.6 * Math.max(0, 1 - tear)), light = 1 - joint * inRing * (1 - lum / 160)
+                const glowing = (py > oy ? flameGlow.below : 1) * Math.max(0, 1 - (tear - 1) / (flameGlow.reach - 1)) ** 2
+                const fill = to => {
+                    const u = Math.min(1, Math.max(0, (to + upperGlow.soft - (py - opening.top) / (bottom - opening.top)) / upperGlow.soft))
+                    return upperGlow.amount * u * u * (3 - 2 * u)
+                }
+                const filled = fill(upperGlow.frame) + (fill(upperGlow.to) - fill(upperGlow.frame)) * within
+                for (let c = 0; c < 3; c++) {
+                    const faceLit = (frame.outer[c] + (frame.inner[c] - frame.outer[c]) * face) * light
+                    const deep = c0[c] + (c1[c] - c0[c]) * f, room = deep + (flameGlow.color[c] - deep) * glowing
+                    const framed = faceLit + (room - faceLit) * within, base = framed + (upperGlow.color[c] - framed) * filled
+                    hole[c] = base + (flame.color[c] - base) * flare
+                }
+                // Form shading: the stone is lit on the upper-left side facing the key light and
+                // shaded across the dome to its lower right.
+                const side = Math.min(1, Math.max(0, 0.5 + form.slope[0] * (px - cx) / (0.45 * W) + form.slope[1] * (2 * py / bottom - 1)))
+                const lit = form.lit + (form.dark - form.lit) * side ** form.power
+                // The doorway's warm light on the stone round it, falling off with the distance
+                // from the doorway, so the top and the far side stay grey stone.
+                const glow = warmLift * (reach < 0 ? Math.exp(reach / warmth) : 1), tone = 1 - warmJoint + warmJoint * lum / 255
+                // Kept to the ring's inner shell: past the ring's outer edge (the groove) only nearOut of it.
+                const shell = nearOut + (1 - nearOut) * Math.min(1, Math.max(0, 0.5 + dRing / (2 * grooveWidth)))
+                const close = nearLift * (reach < 0 ? shell * Math.exp(reach / (nearReach * W)) : 1)
+                // The groove: a thin shadow on the dome just outside the ring's outer edge (away from
+                // the opening). The crest: the ring's upper inner face lit next to the opening, on the
+                // lit side. The contour: shadow just inside the silhouette, on its far side and foot.
+                const grooved = dOpen < -crestWidth ? groove.depth * Math.exp(-(((dRing + 0.6 * grooveWidth) / grooveWidth) ** 2)) : 0
+                const upper = py < bottom - 0.3 * (bottom - opening.top) ? 1 - side : 0
+                const crested = dOpen < 0 ? upper * Math.max(crest.lift * Math.exp(-(((dOpen + crestWidth) / crestWidth) ** 2)),
+                    crest.bevel * Math.exp(-(((dRing - crestWidth) / crestWidth) ** 2))) : 0
+                const contact = Math.min(1, contour.lit + Math.max(0, (side - 0.45) / 0.35) + Math.max(0, (py - bottom) / (0.04 * H)))
+                const contoured = contour.depth * contact * Math.exp(-inner[(y + 1) * PW + x + 1] / contourWidth)
+                const darken = 1 - contoured
+                for (let c = 0; c < 3; c++) {
+                    const rock = lum * stone[c] * lit, broad = rock + (toned(warm, c, tone) - rock) * glow
+                    const carved = broad + (toned(ringTone, c, tone) - broad) * ringLift * inRing
+                    const warmed = carved + (toned(near, c, tone) - carved) * close
+                    const outside = warmed + (lipColor[c] - warmed) * onLip
+                    const crestLit = outside + (toned(crest.color, c, tone) - outside) * crested
+                    const cut = crestLit + (groove.color[c] - crestLit) * grooved
+                    target[c] = hole[c] * inDoor + cut * darken * (1 - inDoor)
+                }
+                target[1] -= (1 - inDoor) * Math.max(0, target[1] - ringHue * target[0])
+                // The doorway gives its own light: there the shade goes to black and the lift is the
+                // colour itself, so neither the sprite's pixels nor the light on the board tint it.
+                for (let c = 0; c < 3; c++) {
+                    const o = src[i + c], t = Math.min(255, target[c])
+                    const shaded = t >= o ? 255 : 255 * t / o, raised = t > o ? 255 * (t - o) / (255 - o) : 0
+                    src[i + c] = Math.round(shaded * (1 - inDoor))
+                    up[i + c] = Math.round(raised + (t - raised) * inDoor)
+                }
+                up[i + 3] = a
             }
-            const filled = fill(upperGlow.frame) + (fill(upperGlow.to) - fill(upperGlow.frame)) * within
-            for (let c = 0; c < 3; c++) {
-                const faceLit = (frame.outer[c] + (frame.inner[c] - frame.outer[c]) * face) * light
-                const deep = c0[c] + (c1[c] - c0[c]) * f, room = deep + (flameGlow.color[c] - deep) * glowing
-                const framed = faceLit + (room - faceLit) * within, base = framed + (upperGlow.color[c] - framed) * filled
-                hole[c] = base + (flame.color[c] - base) * flare
-            }
-            // Form shading: the stone is lit on the upper-left side facing the key light and
-            // shaded across the dome to its lower right.
-            const side = Math.min(1, Math.max(0, 0.5 + form.slope[0] * (px - cx) / (0.45 * W) + form.slope[1] * (2 * py / bottom - 1)))
-            const lit = form.lit + (form.dark - form.lit) * side ** form.power
-            // The doorway's warm light on the stone round it, falling off with the distance
-            // from the doorway, so the top and the far side stay grey stone.
-            const glow = warmLift * (reach < 0 ? Math.exp(reach / warmth) : 1), tone = 1 - warmJoint + warmJoint * lum / 255
-            // Kept to the ring's inner shell: past the ring's outer edge (the groove) only nearOut of it.
-            const shell = nearOut + (1 - nearOut) * Math.min(1, Math.max(0, 0.5 + dRing / (2 * grooveWidth)))
-            const close = nearLift * (reach < 0 ? shell * Math.exp(reach / (nearReach * W)) : 1)
-            // The groove: a thin shadow on the dome just outside the ring's outer edge (away from
-            // the opening). The crest: the ring's upper inner face lit next to the opening, on the
-            // lit side. The contour: shadow just inside the silhouette, on its far side and foot.
-            const grooved = dOpen < -crestWidth ? groove.depth * Math.exp(-(((dRing + 0.6 * grooveWidth) / grooveWidth) ** 2)) : 0
-            const upper = py < bottom - 0.3 * (bottom - opening.top) ? 1 - side : 0
-            const crested = dOpen < 0 ? upper * Math.max(crest.lift * Math.exp(-(((dOpen + crestWidth) / crestWidth) ** 2)),
-                crest.bevel * Math.exp(-(((dRing - crestWidth) / crestWidth) ** 2))) : 0
-            const contact = Math.min(1, contour.lit + Math.max(0, (side - 0.45) / 0.35) + Math.max(0, (py - bottom) / (0.04 * H)))
-            const contoured = contour.depth * contact * Math.exp(-inner[(y + 1) * PW + x + 1] / contourWidth)
-            const darken = 1 - contoured
-            for (let c = 0; c < 3; c++) {
-                const rock = lum * stone[c] * lit, broad = rock + (toned(warm, c, tone) - rock) * glow
-                const carved = broad + (toned(ringTone, c, tone) - broad) * ringLift * inRing
-                const warmed = carved + (toned(near, c, tone) - carved) * close
-                const outside = warmed + (lipColor[c] - warmed) * onLip
-                const crestLit = outside + (toned(crest.color, c, tone) - outside) * crested
-                const cut = crestLit + (groove.color[c] - crestLit) * grooved
-                target[c] = hole[c] * inDoor + cut * darken * (1 - inDoor)
-            }
-            target[1] -= (1 - inDoor) * Math.max(0, target[1] - ringHue * target[0])
-            // The doorway gives its own light: there the shade goes to black and the lift is the
-            // colour itself, so neither the sprite's pixels nor the light on the board tint it.
-            for (let c = 0; c < 3; c++) {
-                const o = src[i + c], t = Math.min(255, target[c])
-                const shaded = t >= o ? 255 : 255 * t / o, raised = t > o ? 255 * (t - o) / (255 - o) : 0
-                src[i + c] = Math.round(shaded * (1 - inDoor))
-                up[i + c] = Math.round(raised + (t - raised) * inDoor)
-            }
-            up[i + 3] = a
         }
         g.putImageData(pixels, 0, 0)
         l.putImageData(raised, 0, 0)
@@ -2419,6 +2435,48 @@ const atmosphericLighting = {
         this.lampOverlays.set(image, overlay)
         ++this.lampOverlayBuilds
         return overlay
+    },
+    // TASK-1473: the board's lamps' overlays (lampOverlay, with the cave grade, gradeSteps) built in steps (a generator, each
+    // yield ending one), for the surface cache's build to run between frames ahead of its bake (Grid.surfaceCacheBuildStep),
+    // so the bake's bloom finds them built. Each sprite image once; the same builders and caches as bloom's.
+    *lampOverlaySteps(board) {
+        if (!otherSettings.atmosphericVisuals) return
+        const seen = new Set()
+        for (const source of this.collect(board, false, false).sources) {
+            const building = this.lampBuilding(board, source)
+            const image = building && cachedImages[board.getEntityBodyImageName(building)]
+            if (!image || !image.width || !building.pos || seen.has(image)) continue
+            seen.add(image)
+            const overlay = this.lampOverlays.get(image)
+            if (overlay && overlay.radius === basis.r && overlay.name === source.name) continue
+            const door = this.DOOR[source.name] || this.DOOR.goldmine
+            if (door.grade && this.gradedImages.get(image) === undefined) {
+                const graded = yield* this.gradeSteps(image, door)
+                if (this.gradedImages.get(image) === undefined) this.gradedImages.set(image, graded)
+                yield
+            }
+            this.lampOverlay(image, source.name)
+            yield
+        }
+    },
+    // TASK-1473: the lamps' overlays of the lamp sprites a board can show (the goldmine's with its cave grade, the town's)
+    // built while the menu is idle (menuPrebuild), before any board: they depend on the sprite image and the hex radius only,
+    // and the grade's read of the sprite's pixels (getImageData) waits for the GPU's queued work, little in the menu, the
+    // whole board's raster in a game. A generator (each yield ends a step); nothing for a sprite not cached yet.
+    *prebuildLampSteps() {
+        if (typeof cachedImages === 'undefined') return
+        for (const name of ['goldmine', 'town']) {
+            const image = cachedImages[name], door = this.DOOR[name]
+            if (!image || !image.width) continue
+            if (door.grade && this.gradedImages.get(image) === undefined) {
+                const graded = yield* this.gradeSteps(image, door)
+                if (this.gradedImages.get(image) === undefined) this.gradedImages.set(image, graded)
+                yield
+            }
+            const overlay = this.lampOverlays.get(image)
+            if (!overlay || overlay.radius !== basis.r || overlay.name !== name) this.lampOverlay(image, name)
+            yield
+        }
     },
     // The lamp building's sprite as drawn (an observed building's last seen sprite).
     lampBuilding(board, {x, y}) {

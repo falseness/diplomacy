@@ -3505,8 +3505,8 @@ function menuLoop() {
 // state are built ahead, a step at a time in idle callbacks (requestIdleCallback): the owned tiles of the colours of the
 // boards the menu can start next (atmosphericLighting.prebuildOwnedSteps) and their surface caches' cell masks
 // (Grid.prebuildCellMaskSteps). Those boards: tutorial 0 and the hot seat screen's selected map (not co-op, whose map
-// is generated). With the same builders and cache keys, the game takes them as cache hits; a game started before they are
-// built builds the rest itself. Steps run QUIET_MS after the last input: one an idle callback, for the idle time left
+// is generated); TASK-1473: and the lamps' overlays of any board (atmosphericLighting.prebuildLampSteps). With the same
+// builders and cache keys, the game takes them as cache hits; a game started before they are built builds the rest itself. Steps run QUIET_MS after the last input: one an idle callback, for the idle time left
 // within MIN_STEP_MS..STEP_MS (STEP_MS when it timed out, TIMEOUT_MS: the animated menu may leave no idle period), and
 // more while STEP_MS of idle time is left; the work stops while a game runs (menu hidden) and goes on when the menu is
 // shown again (start). A new selection is planned again after the next input.
@@ -3524,6 +3524,8 @@ const menuPrebuild = {
     // Per step {ms, what: the pieces it built, by kind}, the latest LOG_SIZE.
     log: [],
     listening: false,
+    // Whether the work is planned again once the game sprites are cached (the lamps' overlays need them).
+    lampWait: false,
     enabled() {
         return typeof requestIdleCallback === 'function' && typeof menu !== 'undefined' && menu.visible &&
             otherSettings.atmosphericVisuals
@@ -3561,6 +3563,16 @@ const menuPrebuild = {
             for (const {rgb} of map.players.slice(1))
                 colours.set(rgb.r + ',' + rgb.g + ',' + rgb.b, rgb)
         yield* atmosphericLighting.prebuildOwnedSteps([...colours.values()])
+        // TASK-1473: the lamps' overlays (any board, co-op too), once the game sprites are cached; planned again then.
+        const sprites = typeof gameSpritesLoaded !== 'undefined'
+        if (sprites && gameSpritesLoaded) {
+            for (const _ of atmosphericLighting.prebuildLampSteps())
+                yield 'lampOverlay'
+        }
+        else if (sprites && !this.lampWait) {
+            this.lampWait = true
+            gameSpritesReady.then(() => this.schedule())
+        }
         // The masks only serve the cell layer (Grid.cellLayerOn).
         for (const map of Grid.liveCellLayer === true ? maps : [])
             for (const _ of Grid.prebuildCellMaskSteps(map))
