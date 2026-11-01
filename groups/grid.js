@@ -92,6 +92,11 @@ class Grid extends SpritesGroup {
         this.overlayLayer = undefined
         this.overlayLayerCanvas = undefined
         this.overlayLayerQueued = false
+        // TASK-1474: raster of the slab shadow, surface cache and overlays while the camera moves far out (drawSceneLayer).
+        this.sceneLayer = undefined
+        this.sceneLayerQueued = false
+        this.sceneLayerBuilds = 0
+        this.sceneLayerFrames = 0
         // The overlays' composite on rest frames of the surface-cache path (drawOverlayComposite):
         // the last frame's calls and key, the canvas of its snapshot and the frames drawn.
         this.overlayComposite = undefined
@@ -3016,34 +3021,8 @@ class Grid extends SpritesGroup {
         if (this.surfaceSplitJob && !this.surfaceSplitHolds(this.surfaceSplitJob))
             return false
 
-        const visibleLeft = Math.max(this.surfaceCacheBounds.left, canvas.offset.x)
-        const visibleTop = Math.max(this.surfaceCacheBounds.top, canvas.offset.y)
-        const visibleRight = Math.min(
-            this.surfaceCacheBounds.left + this.surfaceCacheBounds.width,
-            canvas.offset.x + width
-        )
-        const visibleBottom = Math.min(
-            this.surfaceCacheBounds.top + this.surfaceCacheBounds.height,
-            canvas.offset.y + height
-        )
-        if (visibleLeft >= visibleRight || visibleTop >= visibleBottom)
+        if (!this.drawSurfaceCacheRect(ctx, canvas.offset.x, canvas.offset.y, canvas.offset.x + width, canvas.offset.y + height))
             return true
-
-        const sourceScaleX = this.surfaceCache.width / this.surfaceCacheBounds.width
-        const sourceScaleY = this.surfaceCache.height / this.surfaceCacheBounds.height
-        const draw = image => ctx.drawImage(
-            image,
-            (visibleLeft - this.surfaceCacheBounds.left) * sourceScaleX,
-            (visibleTop - this.surfaceCacheBounds.top) * sourceScaleY,
-            (visibleRight - visibleLeft) * sourceScaleX,
-            (visibleBottom - visibleTop) * sourceScaleY,
-            visibleLeft,
-            visibleTop,
-            visibleRight - visibleLeft,
-            visibleBottom - visibleTop
-        )
-        // With its cell layer, the two added (prepareSurfaceCellLayer).
-        draw(this.surfaceCache.cellLayered && !this.surfaceSplitJob && this.surfaceCacheShown || this.surfaceCache)
         if (this.surfacePatchJob)
             this.drawPatchCells(ctx, this.surfacePatchJob, 'cache')
         else if (this.surfaceLayerJob) {
@@ -3053,6 +3032,23 @@ class Grid extends SpritesGroup {
             if (main)
                 this.surfaceLayerStep()
         }
+        return true
+    }
+    // The surface cache's raster (with its cell layer, the two added: prepareSurfaceCellLayer) over the world rectangle
+    // left..right x top..bottom cut to the cache's bounds, each pixel sampled through the same world-to-cache mapping
+    // whatever the rectangle. Returns whether any of it was drawn.
+    drawSurfaceCacheRect(ctx, left, top, right, bottom) {
+        const b = this.surfaceCacheBounds
+        const visibleLeft = Math.max(b.left, left), visibleTop = Math.max(b.top, top)
+        const visibleRight = Math.min(b.left + b.width, right), visibleBottom = Math.min(b.top + b.height, bottom)
+        if (visibleLeft >= visibleRight || visibleTop >= visibleBottom)
+            return false
+        const sourceScaleX = this.surfaceCache.width / b.width
+        const sourceScaleY = this.surfaceCache.height / b.height
+        ctx.drawImage(this.surfaceCache.cellLayered && !this.surfaceSplitJob && this.surfaceCacheShown || this.surfaceCache,
+            (visibleLeft - b.left) * sourceScaleX, (visibleTop - b.top) * sourceScaleY,
+            (visibleRight - visibleLeft) * sourceScaleX, (visibleBottom - visibleTop) * sourceScaleY,
+            visibleLeft, visibleTop, visibleRight - visibleLeft, visibleBottom - visibleTop)
         return true
     }
     // TASK-1360: the surface layer job's changed cells as drawPatchCells draws them, with their light (the changed light's
@@ -3272,6 +3268,152 @@ class Grid extends SpritesGroup {
     }
     dropOverlayLayer() {
         this.overlayLayer = undefined
+    }
+    // TASK-1474: during a pan, or the hold after it or a zoom (Screen.surfaceMoving), on the surface-cache path with the
+    // light baked into the cache, a frame whose overlay layer would exceed OVERLAY_LAYER_MAX_PIXELS (a desktop canvas zoomed
+    // far out: the whole board's units, bars and texts, hundreds of overlay cells), with at least SCENE_LAYER_CELLS_PER_MP
+    // overlay cells a megapixel of it, draws the slab shadow, the surface cache and the overlays (still units, entity
+    // overlays, production texts) from one raster of them, the scene layer, at its own scale: its pixels copied whole at
+    // the camera's shift rounded to whole pixels (under half a pixel off while moving), over the sky. Drawn directly they
+    // are the shadow's and the cache's images and a call or more for each unit, bar and text, every frame (about 3000 calls
+    // on the user's 55x55 6-player co-op board: renderMs 18-19 ms, 30 fps). The overlay layer (drawOverlayLayer) is not
+    // used there: the sky (the canvas's size), the cache and a layer that large in one frame exceed the images a Chromium
+    // canvas records before it rasterizes (the whole frame rasterized inside its drawing). The layer is built by a task
+    // after a frame that could not use one (queueSceneLayer, as the overlay layer: the rectangle overlayLayerRect, its
+    // drawing rasterized there) and used while the surface cache, its cell layer, the board's surface state and the scale
+    // are unchanged, no cache job runs, the view is inside it and for at most a second; the next one is queued ahead once
+    // it is 750 ms old or the view is within a tenth of its size of its edge. Frames at rest (held or drawn directly), zoom
+    // gestures (the zoom raster), level-of-detail frames and frames with debug or logic texts never draw it. At the layer's
+    // own camera its pixels are the direct frame's but for rounding (and a text glyph whose position lies on a sub-pixel
+    // bin's edge, which the layer's own offset can put in the next bin).
+    // Returns whether it drew the frame's shadow, surface and overlays.
+    drawSceneLayer(ctx) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        const t = ctx.getTransform()
+        if (!otherSettings.atmosphericVisuals || !Grid.sceneLayers || !screen || !screen.surfaceMoving || screen.zoomGesture ||
+                debug || this.drawLogicText || this.lod || typeof createImageBitmap !== 'function' || typeof mainCanvas === 'undefined' ||
+                ctx.canvas !== mainCanvas || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !this.surfaceCacheSteady() ||
+                this.stillUnitsHidden() || !this.canUseSurfaceCache()) {
+            this.dropSceneLayer()
+            return false
+        }
+        const rect = this.overlayLayerRect(ctx.canvas.width, ctx.canvas.height, t), pixels = rect.width * rect.height
+        if (pixels <= OVERLAY_LAYER_MAX_PIXELS || pixels > SCENE_LAYER_MAX_PIXELS ||
+                this.surfaceOverlayCells.length < SCENE_LAYER_CELLS_PER_MP * pixels / 1e6) {
+            this.dropSceneLayer()
+            return false
+        }
+        const layer = this.sceneLayer
+        const margin = 4 * basis.r + assets.size, b = this.surfaceCacheBounds
+        const viewLeft = Math.max(-t.e / t.a, b.left - margin), viewTop = Math.max(-t.f / t.d, b.top - margin)
+        const viewRight = Math.min((ctx.canvas.width - t.e) / t.a, b.left + b.width + margin)
+        const viewBottom = Math.min((ctx.canvas.height - t.f) / t.d, b.top + b.height + margin)
+        // The board's surface state as the cache's (it also lists the frame's overlay cells, surfaceOverlayCells), and ctx's
+        // state as the layer's drawing began in (the interface, drawn on the same canvas, leaves its state to the next frame:
+        // a line dash strokes the cell texts' outlines).
+        const state = canvasStateOf(ctx)
+        if (!layer || t.a !== layer.a || t.d !== layer.d || !this.sceneLayerKeyHolds(layer) || performance.now() - layer.time > 1000 ||
+                !sameCanvasState(state, layer.state) ||
+                viewLeft < layer.left || viewTop < layer.top || viewRight > layer.right || viewBottom > layer.bottom ||
+                !this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds()) {
+            this.queueSceneLayer(ctx, t, state)
+            return false
+        }
+        const nearX = (viewRight - viewLeft) / 10, nearY = (viewBottom - viewTop) / 10
+        if (performance.now() - layer.time > 750 || Math.max(viewLeft - nearX, b.left - margin) < layer.left ||
+                Math.max(viewTop - nearY, b.top - margin) < layer.top ||
+                Math.min(viewRight + nearX, b.left + b.width + margin) > layer.right ||
+                Math.min(viewBottom + nearY, b.top + b.height + margin) > layer.bottom)
+            this.queueSceneLayer(ctx, t, state)
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.drawImage(layer.canvas, 0, 0, layer.width, layer.height,
+            layer.x0 + Math.round(t.e - layer.e), layer.y0 + Math.round(t.f - layer.f), layer.width, layer.height)
+        ctx.restore()
+        ++this.sceneLayerFrames
+        return true
+    }
+    // Whether a still unit is left out of the unit passes now (getStillUnit: a move tween, an attack or heal effect, another
+    // player's replay step not played yet): a layer drawn before or after would hold it, or not, while the frame draws it.
+    stillUnitsHidden() {
+        return zoomRasterTweens() || typeof attackFx !== 'undefined' && attackFx.hidden.size > 0 ||
+            typeof healFx !== 'undefined' && healFx.hidden.size > 0 ||
+            typeof onlineObservation !== 'undefined' && onlineObservation.board === grid && onlineObservation.units.size > 0
+    }
+    // The surface cache drawn whole as a frame draws it, the light baked in: no build, split, patch or cell layer job.
+    surfaceCacheSteady() {
+        return !!this.surfaceCache && !!this.surfaceCacheLit && !this.surfaceCacheBuild && !this.surfaceSplitJob &&
+            !this.surfacePatchJob && !this.surfaceLayerJob && !this.surfaceCacheDirty
+    }
+    // The cache's cell layer is up to the board's owner colours, suburbs and fog (followCellLayer has nothing to do).
+    surfaceCellLayerHolds() {
+        const layer = this.surfaceCellLayer
+        return !this.cellLayerOn() || !layer?.cells || layer.raster !== this.surfaceCache || !this.surfaceCache?.cellLayered ||
+            this.cellLayerStatesAre(layer.states)
+    }
+    // What the scene layer drew from: the cache, its shown raster and revision, the cell layer's, the shadow and bounds.
+    sceneLayerKey() {
+        const b = this.surfaceCacheBounds
+        return [this.surfaceCache, this.surfaceCacheShown, this.surfaceCacheRevision, this.cellLayerRevision, mapDepth.atmosphericShadow,
+            b.left, b.top, b.width, b.height]
+    }
+    sceneLayerKeyHolds(layer) {
+        const key = this.sceneLayerKey()
+        return key.every((v, k) => v === layer.key[k])
+    }
+    dropSceneLayer() {
+        if (this.sceneLayer) {
+            this.sceneLayer.canvas.width = this.sceneLayer.canvas.height = 0
+            this.sceneLayer = undefined
+        }
+    }
+    // Queues the scene layer for transform t of ctx, drawn from ctx's state (canvasStateOf) now (one at a time). It is not
+    // built if the camera came to rest, a zoom gesture began, or the cache is not steady or no longer matches the board
+    // when the task runs.
+    queueSceneLayer(ctx, t, state) {
+        if (this.sceneLayerQueued)
+            return
+        this.sceneLayerQueued = true
+        const cw = ctx.canvas.width, ch = ctx.canvas.height
+        setTimeout(() => {
+            this.sceneLayerQueued = false
+            const screen = gameEvent.screen
+            if (!screen.surfaceMoving || screen.zoomGesture || this !== grid || !this.surfaceCacheSteady() || this.stillUnitsHidden())
+                return
+            const layer = this.drawSceneLayerRaster(cw, ch, t, state)
+            if (!layer)
+                return
+            // A one-pixel read rasterizes the drawing now, in this task between frames (as queueOverlayLayer).
+            layer.canvas.getContext('2d').getImageData(0, 0, 1, 1)
+            this.dropSceneLayer()
+            this.sceneLayer = {...layer.bounds, canvas: layer.canvas, a: t.a, d: t.d, e: t.e, f: t.f, x0: layer.x0, y0: layer.y0,
+                width: layer.width, height: layer.height, key: this.sceneLayerKey(), state, time: performance.now()}
+            ++this.sceneLayerBuilds
+        })
+    }
+    // The slab shadow (drawSlabShadow's), the surface cache (drawSurfaceCacheRect, the light baked in) and the overlays
+    // (drawOverlayLayerRaster's) as a frame on a cw x ch canvas at transform t draws them, within overlayLayerRect and on
+    // the same pixel grid, on a canvas of the rectangle's size (no larger: with the sky, the images a frame draws stay
+    // within what a Chromium canvas records before it rasterizes). None when the board no longer matches the cache.
+    drawSceneLayerRaster(cw, ch, t, state) {
+        const {x0, y0, width, height} = this.overlayLayerRect(cw, ch, t)
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const lctx = canvas.getContext('2d')
+        applyCanvasState(lctx, {...state, transform: {a: t.a, b: 0, c: 0, d: t.d, e: t.e - x0, f: t.f - y0}})
+        // The cache's state compared on the layer's cells (surfaceStateMatches lists them as surfaceOverlayCells).
+        if (!this.surfaceStateMatches(lctx) || !this.surfaceCellLayerHolds()) {
+            canvas.width = canvas.height = 0
+            return null
+        }
+        const bounds = {left: (x0 - t.e) / t.a, top: (y0 - t.f) / t.d, right: (x0 + width - t.e) / t.a, bottom: (y0 + height - t.f) / t.d}
+        mapDepth.drawAtmosphericShadow(lctx, this)
+        this.drawSurfaceCacheRect(lctx, bounds.left, bounds.top, bounds.right, bounds.bottom)
+        this.drawStillUnits(lctx, this.surfaceOverlayCells)
+        this.drawEntityOverlays(lctx, this.surfaceOverlayCells)
+        this.drawInfoTexts(lctx, this.drawRange(lctx))
+        return {canvas, width, height, x0, y0, bounds}
     }
     // Queues the overlay layer for transform t of ctx (one at a time). It is not built if the
     // surface cache changed or the gesture ended before the task runs.
@@ -4449,19 +4591,24 @@ class Grid extends SpritesGroup {
         const pass = this.zoomBoardPass
         ++this.drawSerial
         this.lod = pass ? pass.lod : this.lodTransform(ctx)
+        // TASK-1474: a moving frame far out draws the slab shadow, surface and overlays from the scene layer.
+        const scene = !pass && this.drawSceneLayer(ctx)
         // The slab's soft drop shadow on the sky, under the board (not in the zoom raster's board: the gesture's frames
         // draw it with the sky, drawZoomRaster).
-        if (!pass)
+        if (!pass && !scene)
             this.drawSlabShadow(ctx)
-        const surface = this.drawMapSurface(ctx)
+        const surface = scene || this.drawMapSurface(ctx)
         this.frameSurface = surface
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
         const lit = surface === 'lit', cachedScene = surface === true
-        // The overlay layer holds the production texts too (drawInfoTexts).
-        let layered = false
+        // The overlay layer holds the production texts too (drawInfoTexts); so does the scene layer.
+        let layered = scene
         // A rest frame's overlays and everything after them, recorded (drawOverlayComposite).
         let composite = null
-        if (otherSettings.atmosphericVisuals) {
+        if (scene) {
+            // The light is baked into the cache (surfaceCacheSteady); the layer holds the overlays.
+        }
+        else if (otherSettings.atmosphericVisuals) {
             // The light map lights terrain and buildings; units, silhouettes and
             // bars come after it, so the multiply never darkens them.
             if (!cachedScene && !lit)
@@ -5290,6 +5437,16 @@ function canvasStateOf(ctx) {
     if (typeof ctx.getLineDash === 'function') state.lineDash = ctx.getLineDash()
     return state
 }
+// Whether two canvasStateOf states are the same.
+function sameCanvasState(a, b) {
+    if (!a || !b)
+        return false
+    for (const name of CANVAS_STATE)
+        if (a[name] !== b[name])
+            return false
+    const da = a.lineDash || [], db = b.lineDash || []
+    return da.length === db.length && da.every((v, k) => v === db[k])
+}
 // Sets ctx's transform and the state properties of state (CanvasCallRecorder.begin's copy of a context's).
 function applyCanvasState(ctx, state) {
     const t = state.transform
@@ -5489,6 +5646,8 @@ Grid.lodFrames = true
 // level-of-detail threshold are held (Grid.stillFrameCandidate).
 Grid.simpleCulling = true
 Grid.stillFrames = true
+// TASK-1474: moving frames far out draw from the scene layer (Grid.drawSceneLayer).
+Grid.sceneLayers = true
 // TASK-1377: a lit view holding exactly vouches for the light map (atmosphericLighting.trust) and drawLitEdges keeps its runs
 // (litEdgeRuns). False: every frame compares the whole board's light state and finds the runs again.
 Grid.litTrust = true
@@ -5630,6 +5789,11 @@ const LIT_PATCH_MARGIN = 32
 const OVERLAY_LAYER_MAX_PIXELS = 1024 * 1024
 // Fewest overlay cells in a frame for which a pan draws its overlays from the layer (Grid.drawOverlayLayer).
 const OVERLAY_LAYER_MIN_CELLS = 64
+// TASK-1474: the scene layer (Grid.drawSceneLayer) is used for a layer rectangle over OVERLAY_LAYER_MAX_PIXELS and at most
+// SCENE_LAYER_MAX_PIXELS (with the canvas-sized sky, within the images a Chromium canvas records before it rasterizes),
+// with at least SCENE_LAYER_CELLS_PER_MP overlay cells a megapixel of it (their calls then cost more than the layer).
+const SCENE_LAYER_MAX_PIXELS = 4.5 * 1024 * 1024
+const SCENE_LAYER_CELLS_PER_MP = 64
 // Width (device pixels) of the rows the overlay snapshot's rectangles are packed in (Grid.renderOverlaySnapshot).
 const OVERLAY_SNAPSHOT_ROW = 1024
 

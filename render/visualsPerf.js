@@ -18,7 +18,7 @@
     // Compositor-side work of a frame (and of the tasks since the previous one): blended destination
     // pixels, large canvas uploads and the board's render path. Reset after every sample.
     const freshWork = () => ({blendedMegapixels: 0, blendedDraws: 0, blendedMainMegapixels: 0, blendedByOp: {},
-        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false,
+        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false, sceneLayer: false,
         drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
@@ -361,6 +361,18 @@
             proto.drawZoomRaster = labelled(function(...args) {
                 const drawn = zoomRaster.apply(this, args)
                 if (active && drawn) work.renderPath = 'zoom-raster'
+                return drawn
+            }, 'surface')
+        }
+        // TASK-1474: a moving frame far out drawn from the scene layer (the surface cache, its shadow and overlays).
+        if (proto.drawSceneLayer) {
+            const sceneLayer = proto.drawSceneLayer
+            proto.drawSceneLayer = labelled(function(...args) {
+                const drawn = sceneLayer.apply(this, args)
+                if (active && drawn) {
+                    work.renderPath = 'surface-cache'
+                    work.sceneLayer = true
+                }
                 return drawn
             }, 'surface')
         }
