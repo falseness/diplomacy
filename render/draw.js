@@ -1,4 +1,7 @@
 function drawMain() {
+    // TASK-1495: a step-by-step playback of AI turns applies its next step before the frame (options/turnPlayback.js).
+    if (typeof turnPlaybackView !== 'undefined')
+        turnPlaybackView.tick()
     // Attack animations (render/attackFx.js): waiting effects start and finished ones end before the board is drawn, so
     // the units an effect draws are left out of this frame's unit passes (Grid.getStillUnit).
     if (typeof attackFx !== 'undefined')

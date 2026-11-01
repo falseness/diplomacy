@@ -348,6 +348,9 @@ class Events {
                 debug = !debug
                 return
             }
+            // TASK-1495: a key during a playback of AI turns skips it (the computed board at once).
+            if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.skip())
+                return
             if (keycode == Events.kILetterKeycode) {
                 grid.showChanceOfWinning = true
                 grid.fillChancesOfWinning(this.selected)
@@ -522,6 +525,9 @@ class Events {
             TutorialManager.checkResult()
     }
     click(pos, realPos) {
+        // TASK-1495: a click during a playback of AI turns skips it (the computed board at once).
+        if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.skip())
+            return
         let clickToButton = (gameSettings.tutorial && tutorialResultInterface.click(pos)) ||
             (gameSettings.tutorial && tutorialPauseInterface.click(pos)) ||
             (typeof onlineResultInterface !== 'undefined' && onlineResultInterface.click(pos)) ||

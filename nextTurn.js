@@ -175,17 +175,29 @@ function advanceOfflineTurn() {
     actionLog.clear()
 
     timer.setNextTurnTime()
+    // A tutorial has one human: the turn starts at once.
+    const tutorial = !!gameSettings.tutorial
+    const startHumanTurn = () => {
+        nextTurnPauseInterface.visible = !tutorial
+    }
+    // TASK-1495: the AI turns just played are shown step by step first (options/turnPlayback.js turnPlaybackView: it
+    // saves the computed board itself); the human's turn (pass-device screen, timer, input) starts when it ends.
+    if (typeof turnPlaybackView !== 'undefined' &&
+            turnPlaybackView.begin(tutorial ? TUTORIAL_HUMAN_SLOT : whooseTurn, startHumanTurn))
+        return
     // after the next frame (the pass-device screen) is shown; a stand-in manager saves at once
     if (saveManager.saveAfterNextFrame) saveManager.saveAfterNextFrame()
     else saveManager.save()
 
-    // A tutorial has one human: the turn starts at once.
-    nextTurnPauseInterface.visible = !gameSettings.tutorial
+    startHumanTurn()
 }
 
 function nextTurn() {
     saveManager.flush?.()
     ActionRecorder.recordEnd()
+    // TASK-1495: the AI turns played from here on are the next playback's.
+    if (typeof turnPlayback !== 'undefined')
+        turnPlayback.turnEnded()
     if (gameSettings.isOnline) {
         onlineNextTurn();
     }

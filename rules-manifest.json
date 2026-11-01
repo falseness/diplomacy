@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "9c89f2e2d89cd37ee90a951d1a1a526f30fa17ce0f9771af599aa367818049b2",
+  "rulesVersion": "51f289167ba074d33e51bd828677a5fdec413a3a27323fe68d83a04d180b7ae0",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "25cbce8c2a1e5cbd1aa877a71cc5ed3796a069c5ad7d14eee00a061adf08d9f9",
-      "bytes": 29862
+      "sha256": "c0834d49eef594cbeb0d7562994ca6f67d5f364bde7b7d845f8ddb8a10b0fde4",
+      "bytes": 30063
     },
     {
       "path": "interface/entityinterface.js",
@@ -280,8 +280,8 @@
     },
     {
       "path": "events/events.js",
-      "sha256": "79625f6e5b78c3ddf7eb1ca763a1bdcd4421e9c2d6bf96531a35c67c42204e60",
-      "bytes": 27501
+      "sha256": "b003fe1635a31e91a7498800d8241cd45cbf23dca133a3aac7a7b12b157ebd1d",
+      "bytes": 27907
     },
     {
       "path": "options/onlineHubRows.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "981d2d2521f0d027ff3e3c9987cc3ce2c2d7d8abaf63d0026133f47d15c1186a",
-      "bytes": 9566
+      "sha256": "08cad6ffbdc922958691f3492718ff805871402231ecf261a5b071ecec4e4d57",
+      "bytes": 10213
     },
     {
       "path": "managers.js",
