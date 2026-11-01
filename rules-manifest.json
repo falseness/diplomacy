@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "af7fbbebd38d1191da1a3f3fc9043a9a683c8f47abd792e11ab8d6330bfd19cb",
+  "rulesVersion": "e0b18d2e49862f1df07322314393165b0d7f191bd2f26b396de5ab8b6b659e50",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -15,8 +15,8 @@
     },
     {
       "path": "options/gameCoords.js",
-      "sha256": "703354e4906c424766f92d8d998ca021ce53e51add6a2b8d18abe37a97b8fccf",
-      "bytes": 3878
+      "sha256": "a52948f328c05b166f07f7566ee9e7e4b65622fcc6ef21c7416afdf516b281fc",
+      "bytes": 4632
     },
     {
       "path": "options/dictionaryEnumeration.js",
@@ -65,8 +65,8 @@
     },
     {
       "path": "options/timer.js",
-      "sha256": "8b17c454ed274246c5bc6a12a370605d721a387ddcf0398c5284ef2f9201bc29",
-      "bytes": 4076
+      "sha256": "09bcc83b86c0111eb7029517494185275bc94429b356d4bed0ea7f711b9375b9",
+      "bytes": 4274
     },
     {
       "path": "options/otherSettings.js",
@@ -275,8 +275,8 @@
     },
     {
       "path": "events/screen.js",
-      "sha256": "339fbad6017e58aec6dd3ae638787c57ebdf93aae0594cd3509c358988a65d86",
-      "bytes": 16589
+      "sha256": "5bdca51c46e2e40548debb9bd380e1a84f554d894d41802ace0b09cfee7fdffa",
+      "bytes": 17195
     },
     {
       "path": "events/events.js",
@@ -510,8 +510,8 @@
     },
     {
       "path": "nextTurn.js",
-      "sha256": "9faf8dd70dc9e70230ec290eee3e07fbe7be7ff5d251c99b9c217486fd784add",
-      "bytes": 9507
+      "sha256": "981d2d2521f0d027ff3e3c9987cc3ce2c2d7d8abaf63d0026133f47d15c1186a",
+      "bytes": 9566
     },
     {
       "path": "managers.js",

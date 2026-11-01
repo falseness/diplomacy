@@ -1,10 +1,23 @@
 const mobilePhone = (/Android|webOS|iPhone|iPad|iPod|BlackBerry|BB|PlayBook|IEMobile|Windows Phone|Kindle|Silk|Opera Mini/i).test(navigator.userAgent)
 
-const WIDTH = window.innerWidth * window.devicePixelRatio
-const HEIGHT = window.innerHeight * window.devicePixelRatio
+// The screen in device pixels. TASK-1483: they follow the window (index.html applyScreenSize sets them, the canvas
+// backing store and every onScreenResize callback); BOOT_WIDTH/BOOT_HEIGHT keep the load-time values, from which
+// the world basis (hex radius, map border margin, sprite size) derives, so the world stays the same and only the
+// camera sees more or less of it.
+let WIDTH = window.innerWidth * window.devicePixelRatio
+let HEIGHT = window.innerHeight * window.devicePixelRatio
+const BOOT_WIDTH = WIDTH
+const BOOT_HEIGHT = HEIGHT
+// Callbacks run in registration order after every screen size change (index.html applyScreenSize), with
+// {width, height, oldWidth, oldHeight} in device pixels; WIDTH/HEIGHT already hold the new size.
+const screenResizeCallbacks = []
+function onScreenResize(fn) {
+    screenResizeCallbacks.push(fn)
+    return fn
+}
 let width = WIDTH
 let height = HEIGHT
-const radius = 0.05555555555555555 * WIDTH// * window.devicePixelRatio
+const radius = 0.05555555555555555 * BOOT_WIDTH// * window.devicePixelRatio
 const strokeWidth = 0.02 * radius
 
 let basis = {
@@ -48,7 +61,7 @@ let canvas = {
     },
     scale: 1
 }
-const mapBorderMargin = 0.35 * WIDTH //0.5 * HEIGHT
+const mapBorderMargin = 0.35 * BOOT_WIDTH //0.5 * HEIGHT
     /*function toCube(x, by)
     {
         

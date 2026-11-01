@@ -307,6 +307,10 @@ class MobileScreen extends Screen {
         this.ACCELERATION = 0.001 * HEIGHT
         this.speedRatio = 1 / Screen.kCameraPanSlowdown
     }
+    // TASK-1483: after a screen size change (index.html applyScreenSize).
+    screenResized(oldWidth, oldHeight) {
+        this.ACCELERATION *= HEIGHT / oldHeight
+    }
     // touchmoves between two frames add up; move() applies the total once and clears it
     setSpeedX(speedX) {
         this.speedX += speedX * this.speedRatio / canvas.scale
@@ -340,6 +344,15 @@ class ComputerScreen extends Screen {
         this.rightBorder = width - margin
         this.bottomBorder = height - margin
         this.speed = speed / Screen.kCameraPanSlowdown
+    }
+    // TASK-1483: margin and speed scale with the screen height (as given at construction), the borders follow the
+    // new screen (index.html applyScreenSize).
+    screenResized(oldWidth, oldHeight) {
+        const k = HEIGHT / oldHeight, margin = this.topBorder * k
+        this.topBorder = this.leftBorder = margin
+        this.rightBorder = WIDTH - margin
+        this.bottomBorder = HEIGHT - margin
+        this.speed *= k
     }
     goLeft() {
         this.setSpeedX(this.speed)

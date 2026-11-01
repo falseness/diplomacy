@@ -468,21 +468,119 @@
                 errorWindow.enableTemporary()
             }
         }
-        // The game lays out in WIDTH x HEIGHT canvas pixels fixed at load; after a resize or browser zoom the
-        // canvas keeps that backing store and its CSS box is scaled to fit the window (aspect kept), and
-        // getEventPos maps clicks through that box.
-        function fitCanvasToWindow() {
-            const width = Math.min(window.innerWidth, window.innerHeight * WIDTH / HEIGHT)
-            mainCanvas.style.width = width + 'px'
-            mainCanvas.style.height = width * HEIGHT / WIDTH + 'px'
+        // TASK-1483: the canvas follows the window. applyScreenSize reads the window size in device pixels and, when it
+        // changed, sets WIDTH/HEIGHT, the canvas backing store and its box (the whole window, no letterbox), keeps the
+        // camera's transform and the world point at the screen centre, re-lays the core HUD, brings the camera back
+        // inside the new limits (GameManager.screenResized; an untouched fitted board is fitted again), then runs every
+        // onScreenResize callback in registration order. The world basis stays the load-time one.
+        function layoutCoreHud() {
+            nextTurnButtonSize = WIDTH * 0.1
+            const nextRect = nextTurnButton.rect
+            nextRect.x = WIDTH - nextTurnButtonSize * 1.05
+            nextRect.y = HEIGHT - nextTurnButtonSize * 1.05
+            nextRect.width = nextRect.height = nextTurnButtonSize
+            nextTurnButton.img.side = nextTurnButtonSize
+            nextTurnButton.img.strokeWidth = 0.005 * HEIGHT
+            nextTurnButton.img.pos = nextRect.center
+
+            const icon = (button, size) => {
+                button.rect.width = button.rect.height = size
+                button.img.size = button.img.w = button.img.h = size
+            }
+            icon(undoButton, nextTurnButtonSize)
+            undoButton.firstPos = {x: 0, y: HEIGHT - nextTurnButtonSize}
+            undoButton.secondPos = {x: 0, y: entityInterface.top - nextTurnButtonSize}
+            undoButton.pos = undoButton.selected == 2 ? undoButton.secondPos : undoButton.firstPos
+
+            backToMenuButtonSize = nextTurnButtonSize * 2 / 3
+            icon(backToMenuButton, backToMenuButtonSize)
+            backToMenuButton.pos = {x: 0, y: 0}
+            icon(iButton, nextTurnButtonSize)
+            iButton.pos = {x: WIDTH - nextTurnButtonSize, y: 0}
+
+            const errorRect = errorWindow.rect, corner = 0.03 * HEIGHT
+            errorRect.width = WIDTH * 0.4
+            errorRect.height = WIDTH * 0.55 * 0.1
+            errorRect.y = HEIGHT * 0.75
+            errorRect.cornerRadius = [corner, corner, corner, corner]
+            errorRect.strokeWidth = HEIGHT * 0.005
+            errorRect.centerX = WIDTH / 2
+            errorWindow.text.fontSize = WIDTH * 0.55 * 0.05
+            errorWindow.trimText()
+
+            if (typeof timer !== 'undefined' && timer && typeof timer.layout === 'function')
+                timer.layout()
+        }
+        function applyScreenSize() {
+            const dpr = window.devicePixelRatio || 1
+            const w = Math.round(window.innerWidth * dpr), h = Math.round(window.innerHeight * dpr)
+            mainCanvas.style.width = window.innerWidth + 'px'
+            mainCanvas.style.height = window.innerHeight + 'px'
+            if (w === Math.round(WIDTH) && h === Math.round(HEIGHT) && mainCanvas.width === w && mainCanvas.height === h)
+                return false
+            const oldWidth = WIDTH, oldHeight = HEIGHT
+            const inGame = !menu.visible && !!mapBorder
+            const fitted = inGame && gameEvent.screen.isFittedView()
+            const centre = {x: canvas.offset.x + width / 2, y: canvas.offset.y + height / 2}
+            const transform = mainCtx.getTransform()
+
+            WIDTH = w
+            HEIGHT = h
+            // A new backing store resets the context: the camera transform is put back.
+            mainCanvas.width = w
+            mainCanvas.height = h
+            mainCtx.setTransform(transform)
+            width = WIDTH / canvas.scale
+            height = HEIGHT / canvas.scale
+            if (inGame) {
+                const old = {x: canvas.offset.x, y: canvas.offset.y}
+                canvas.offset.x = centre.x - width / 2
+                canvas.offset.y = centre.y - height / 2
+                cameraTransform.translate(old.x - canvas.offset.x, old.y - canvas.offset.y)
+            }
+            if (typeof gameEvent.screen.screenResized === 'function')
+                gameEvent.screen.screenResized(oldWidth, oldHeight)
+            layoutCoreHud()
+            atmosphericBackground.viewport = [window.innerWidth, window.innerHeight]
+            GameManager.screenResized()
+            if (fitted)
+                GameManager.fitCamera()
+            const info = {width: WIDTH, height: HEIGHT, oldWidth, oldHeight}
+            for (const fn of screenResizeCallbacks.slice()) {
+                try {
+                    fn(info)
+                }
+                catch (e) {
+                    // One broken callback does not stop the others; the error still reaches the page.
+                    setTimeout(() => { throw e })
+                }
+            }
+            return true
+        }
+        // Size events come in bursts (address bar, rotation): one re-layout per animation frame, and a final one
+        // 250 ms after the last event (a size can settle without another event; rAF stops in a hidden page).
+        let screenSizeFrame = 0, screenSizeSettle = 0
+        function scheduleScreenSize() {
+            if (!screenSizeFrame)
+                screenSizeFrame = requestAnimationFrame(() => {
+                    screenSizeFrame = 0
+                    applyScreenSize()
+                })
+            clearTimeout(screenSizeSettle)
+            screenSizeSettle = setTimeout(applyScreenSize, 250)
         }
         function start() {
 
             mainCanvas.width = WIDTH
             mainCanvas.height = HEIGHT
-            fitCanvasToWindow()
-            window.addEventListener('resize', fitCanvasToWindow)
-            window.addEventListener('resize', () => GameManager.screenResized())
+            applyScreenSize()
+            for (const type of ['resize', 'orientationchange', 'pageshow'])
+                window.addEventListener(type, scheduleScreenSize)
+            if (window.visualViewport)
+                window.visualViewport.addEventListener('resize', scheduleScreenSize)
+            // A size that changed without a resize event (a late mobile layout) is caught after load too.
+            requestAnimationFrame(() => requestAnimationFrame(applyScreenSize))
+            setTimeout(applyScreenSize, 500)
 
             loadOtherSettings()
             loadAssets()

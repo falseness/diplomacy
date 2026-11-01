@@ -4,11 +4,16 @@ class Timer {
         // this.time is turn time
         // initialization in nextTurn or in loader:
 
-        this.text = new Text(WIDTH - WIDTH * 0.06, HEIGHT - nextTurnButtonSize * 1.1 / 2, WIDTH * 0.03,
-            'timer text', TIMER_TEXT_INK)
+        this.text = new Text(NaN, NaN, NaN, 'timer text', TIMER_TEXT_INK)
+        this.layout()
         // Dark ink on a parchment rim: readable on the next-turn triangle in any player's colour.
         this.text.outline = {color: 'rgba(244,230,196,0.95)', widthRatio: 0.28, lineJoin: 'round'}
         this.isTick = false
+    }
+    // On the next-turn button; again after a screen size change (index.html layoutCoreHud).
+    layout() {
+        this.text.pos = {x: WIDTH - WIDTH * 0.06, y: HEIGHT - nextTurnButtonSize * 1.1 / 2}
+        this.text.fontSize = WIDTH * 0.03
     }
     calcTime() {
         // units * 10  + gold (seconds) + 20

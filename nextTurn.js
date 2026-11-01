@@ -273,7 +273,8 @@ class gameLogicButtons extends ImageButton {
         this.img.color = oldColor
     }
 }
-const nextTurnButtonSize = WIDTH * 0.1
+// TASK-1483: follows the screen (index.html layoutCoreHud).
+let nextTurnButtonSize = WIDTH * 0.1
 let nextTurnButton = new gameLogicButtons(
     new TriangleImage({ x: NaN, y: NaN }, 'white', nextTurnButtonSize, 'black', 0.005 * HEIGHT, 1.0),
     new Rect(WIDTH - nextTurnButtonSize * 1.05, HEIGHT - nextTurnButtonSize * 1.05,
