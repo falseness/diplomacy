@@ -123,10 +123,27 @@ class EntityInterface {
     }
 
     constructor() {
+        this.entity = {}
+        this.entity.name = new Text(NaN, NaN, 1)
+        this.entity.name.textBaseline = 'top'
+        this.entity.name.textAlign = 'left'
+        this.entity.info = new Text(NaN, NaN, 1)
+        this.entity.info.textBaseline = 'top'
+        this.entity.info.textAlign = 'left'
+        this.townTowerText = null
+        this.townTowerShown = false
+        this.layout()
 
+        this.renderCache = undefined
+        this.renderCacheBounds = undefined
+        this.renderCacheDirty = true
+    }
+    // TASK-1486: every box from the current WIDTH/HEIGHT (the constructor, and again after a screen resize through
+    // index.html layoutGameInterfaces). The texts, picture, colours and which buttons are clickable are kept; an open
+    // panel fits its column again as change() fits it.
+    layout() {
         let stroke = 0.001 * WIDTH
         let cornerRadius = 0.03 * WIDTH
-        let indent = this.stroke + this.cornerRadius
 
         this.pos = {
             x: 0,
@@ -135,6 +152,8 @@ class EntityInterface {
         this.height = HEIGHT - this.pos.y
         this.width = this.height * 1.7
 
+        const old = this.background ? {color: this.background.color, image: this.img.image,
+            suburb: this.suburbImage.color} : null
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
             [0, cornerRadius, 0, 0], stroke)
 
@@ -143,28 +162,20 @@ class EntityInterface {
         this.suburbImage = new SuburbImage(
             { x: this.pos.x + this.height * 0.38, y: this.pos.y + this.height * 0.5 },
             this.height * 0.275, this.height * 0.02)
+        if (old) {
+            this.background.color = old.color
+            this.img.image = old.image
+            this.suburbImage.color = old.suburb
+        }
 
+        const name = this.entity.name, info = this.entity.info
+        name.pos = {x: this.img.x + this.img.width / 2, y: this.pos.y + this.height * 0.02}
+        name.fontSize = this.height * 0.2
+        info.pos = {x: name.x, y: name.y + name.height}
+        info.fontSize = this.height * 0.1
 
-        this.entity = {}
-
-        this.entity.name = new Text(
-            this.img.x + this.img.width / 2,
-            this.pos.y + this.height * 0.02,
-            this.height * 0.2
-        )
-
-        this.entity.name.textBaseline = 'top'
-        this.entity.name.textAlign = 'left'
-
-        this.entity.info = new Text(
-            this.entity.name.x,
-            this.entity.name.y + this.entity.name.height,
-            this.height * 0.1
-        )
-
-        this.entity.info.textBaseline = 'top'
-        this.entity.info.textAlign = 'left'
-        
+        const clickable = this.destroyButton ? ['destroyButton', 'skipMovesButton', 'portalStatsButton',
+            'portalBackButton', 'townTowerButton', 'townBackButton'].map(key => this[key].canClick) : null
         this.destroyButton = this.createButtonInTheBottom('destroy', destroySelected)
         this.skipMovesButton = this.createButtonInTheBottom('skip moves', skipMovesOfSelected)
         this.portalStatsButton = this.createButtonInTheBottom('stats', () => this.refreshPortal(this.portal, true))
@@ -174,12 +185,12 @@ class EntityInterface {
         this.townTowerButton = this.createButtonInTheBottom('& tower properties', () => this.showTownTower(true))
         this.townBackButton = this.createButtonInTheBottom('back', () => this.showTownTower(false))
         this.townTowerButton.canClick = this.townBackButton.canClick = false
-        this.townTowerText = null
-        this.townTowerShown = false
-        this.updateSizes(false)
-
-        this.renderCache = undefined
-        this.renderCacheBounds = undefined
+        if (clickable) {
+            ;['destroyButton', 'skipMovesButton', 'portalStatsButton', 'portalBackButton', 'townTowerButton',
+                'townBackButton'].forEach((key, i) => this[key].canClick = clickable[i])
+            if (this.panelColors) this.setPanelColors(this.panelColors.source)
+        }
+        this.updateSizes(clickable && this.visible ? this.sizedForUnit : false)
         this.renderCacheDirty = true
     }
     get top() {

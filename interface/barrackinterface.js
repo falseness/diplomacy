@@ -36,6 +36,17 @@ function drawTrainPanelText(ctx, string, x, y, fontSize, maxWidth, color, align)
 class BarrackInterface {
     #visible = false
     constructor() {
+        this.layout()
+
+        this.renderCache = undefined
+        this.renderCacheBounds = undefined
+        this.renderCacheDirty = true
+    }
+    // TASK-1486: every box from the current WIDTH/HEIGHT (the constructor, and again after a screen resize through
+    // index.html layoutGameInterfaces). The rows are made again; an open panel keeps its colour, gold text, tab and
+    // each row's state (trainState / restoreTrainState).
+    layout() {
+        const state = this.trainInterfaces ? this.trainState() : null
 
         this.pos = {
             x: WIDTH * 0.74,
@@ -44,11 +55,8 @@ class BarrackInterface {
         this.height = 0.35 * HEIGHT
         this.width = WIDTH - this.pos.x 
 
-        const bestThisWidthWIDTHRatio = 4
-
         let stroke = 0.001 * WIDTH * 1.15
         let cornerRadius = 0.03 * WIDTH * 1.15
-            //let indent = stroke + cornerRadius
         this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
             [cornerRadius, 0, 0, cornerRadius], stroke)
         let goldImageSize = this.height * 0.25
@@ -62,10 +70,33 @@ class BarrackInterface {
         
         this.makeTrainInterfaces()
         this.updateSizes()
-
-        this.renderCache = undefined
-        this.renderCacheBounds = undefined
+        if (state)
+            this.restoreTrainState(state)
         this.renderCacheDirty = true
+    }
+    // What change() set on the panel (restored on the rows made again by layout()).
+    trainState() {
+        const rows = {}
+        for (const type in this.trainInterfaces)
+            for (const name in this.trainInterfaces[type]) {
+                const row = this.trainInterfaces[type][name]
+                rows[type + '/' + name] = {canTrain: row.canTrain, text: row.button.textString}
+            }
+        return {rows, tab: this.trainInterfacesTab, color: this.background.color, panelColors: this.panelColors,
+            gold: this.goldText.text}
+    }
+    restoreTrainState(state) {
+        this.trainInterfacesTab = state.tab
+        this.background.color = state.color
+        if (state.panelColors) this.panelColors = state.panelColors
+        this.goldText.text = state.gold
+        for (const type in this.trainInterfaces)
+            for (const name in this.trainInterfaces[type]) {
+                const row = this.trainInterfaces[type][name], saved = state.rows[type + '/' + name]
+                if (!saved) continue
+                row.setButtonText(saved.text)
+                row.setCanTrain(saved.canTrain)
+            }
     }
     updateSizes() {
         let maximumTrainInterfacesCount = 0
@@ -76,7 +107,8 @@ class BarrackInterface {
         }
         let interfaceSize = this.getTrainInterfaceY(maximumTrainInterfacesCount - 1)
 
-        const requiredMargin = height * 0.1
+        // The screen's height (the world height at the constructor's camera scale 1; TASK-1486 relayout too).
+        const requiredMargin = HEIGHT * 0.1
         if (interfaceSize - this.pos.y > this.height - requiredMargin) {
             this.height = interfaceSize - this.pos.y + requiredMargin
             this.background.height = this.height

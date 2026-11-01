@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "a9e30a95e0c6232871cefaafd4b6293c808c7191b65bad0554ff309bce7b5624",
+  "rulesVersion": "0f7ac4c55bfe25288f84be598b5fa8f26a8f66dd10cff6db369997e84aa319d9",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -155,28 +155,28 @@
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "685e54f551a94fb01427107464f8f4a620fba0747972ca157280181df25897cd",
-      "bytes": 32815
+      "sha256": "23560eceb6be0e1156c0dd4ad2baa51a951f305e7f69a84bbc53c31fd8cba841",
+      "bytes": 34056
     },
     {
       "path": "interface/barrackinterface.js",
-      "sha256": "81b3d3b27bd28ecfa6d0c8013ddea65cb67a34fa81e752e5a854c108941b275d",
-      "bytes": 19460
+      "sha256": "a844a05e2e787ff3047ee7d6106d4d787d2fc8393bdd52e8e6b8b776ce2a3d3b",
+      "bytes": 21135
     },
     {
       "path": "interface/towninterface.js",
-      "sha256": "7f2dc78f3a0f8e03d292a4a71e6cea42cc18d4f2ab9a00e0ed64de5f68126fd8",
-      "bytes": 8014
+      "sha256": "0b74e6c50502307027d583177ec0e82a1bdab8471b1eceeb0d343af6f773e5b8",
+      "bytes": 8819
     },
     {
       "path": "interface/statisticsinterface.js",
-      "sha256": "475fca84a098b393dad6388d69a03f939965b8354125583b8ecbb637358a199b",
-      "bytes": 32748
+      "sha256": "3cff7149a937df934f088e72a5a96dde10173038fe957c8c0a46c391f6cc4e28",
+      "bytes": 34507
     },
     {
       "path": "interface/nextTurnPause.js",
-      "sha256": "bce4a2063dc65a93feebbf00221afa00c67a92bcc2bbe77552622aa029c98b73",
-      "bytes": 3355
+      "sha256": "fac8dc5323f1639c12ab43055ccb695e8e55370daae526416fbdcd4635861145",
+      "bytes": 3974
     },
     {
       "path": "sprites/sprite.js",

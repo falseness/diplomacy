@@ -16,38 +16,8 @@ class StatisticsInterface {
 
     constructor() {
         this.visible = false
-
-        this.centerX = WIDTH * 0.5
-
-        this.width = WIDTH * 0.76
-        this.height = 0.6 * HEIGHT
-
-        this.cornerRadius = 0.03 * WIDTH
-        let stroke = 0.001 * WIDTH
-
-        this.pos = {
-            x: this.centerX - this.width / 2,
-            y: -stroke / 2, // 0.12
-        } 
-
-        this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
-            [0, 0, this.cornerRadius, this.cornerRadius], stroke, 'white')
-        
         this.playersInfo = []
-        this.playersCountInRow = 4
-        this.playerInfoWidth = this.width  / this.playersCountInRow
-        this.playerInfoHeight = this.height * 0.4
-        this.playerInfoMarginY = this.height * 0.2
-
-        this.roundtextMarginX = this.playerInfoWidth * 0.15
-        this.roundtextMarginY = this.height * 0.1
-        const bigTextSize = this.width * 0.05
-        this.roundtext = new Text(this.pos.x + this.roundtextMarginX, this.pos.y + this.roundtextMarginY, 
-            bigTextSize, undefined, 'black', 'left')
-        this.suddenDeathText = new Text(this.pos.x + this.width - this.roundtextMarginX, 
-            this.pos.y + this.roundtextMarginY, bigTextSize, undefined, 'black', 'right')
-
-        this.roundTextSuddenDeathTextMinMargin = 0.075 * WIDTH
+        this.layout()
 
         // An online game's forfeit row under the players (onlineForfeit, options/onlineLogic.js): 'forfeit', then
         // 'Are you sure?' with 'yes' and 'no'. forfeitState: 'idle' | 'confirm' | 'sending' | 'error'.
@@ -55,7 +25,7 @@ class StatisticsInterface {
         this.forfeitState = 'idle'
         this.forfeitText = new Text(NaN, NaN, 16, 'Are you sure?', 'black')
         const forfeitButton = (text, clickFunc) => new Button(new Rect(NaN, NaN, 0, 0,
-            [0, 0, 0, 0], stroke * 2, 'white'), new Text(NaN, NaN, 16, text, 'black'), clickFunc, undefined, true, this)
+            [0, 0, 0, 0], 0.002 * WIDTH, 'white'), new Text(NaN, NaN, 16, text, 'black'), clickFunc, undefined, true, this)
         this.forfeitButton = forfeitButton('forfeit', this.askForfeit)
         this.yesButton = forfeitButton('yes', this.confirmForfeit)
         this.noButton = forfeitButton('no', this.cancelForfeit)
@@ -75,6 +45,55 @@ class StatisticsInterface {
         // The top-centre pill of a pending or full pause while the panel is closed; a click opens the panel.
         this.pillRect = null
         this.pillText = new Text(NaN, NaN, 16, '', 'white', 'left')
+    }
+    // TASK-1486: the panel's base boxes from the current WIDTH/HEIGHT (the constructor, and again after a screen resize
+    // through index.html layoutGameInterfaces); an open panel is laid out again as show() lays it out, its state kept.
+    layout() {
+        this.centerX = WIDTH * 0.5
+
+        this.width = WIDTH * 0.76
+        this.height = 0.6 * HEIGHT
+
+        this.cornerRadius = 0.03 * WIDTH
+        let stroke = 0.001 * WIDTH
+
+        this.pos = {
+            x: this.centerX - this.width / 2,
+            y: -stroke / 2, // 0.12
+        } 
+
+        const color = this.background ? this.background.color : 'white'
+        this.background = new Rect(this.pos.x, this.pos.y, this.width, this.height, 
+            [0, 0, this.cornerRadius, this.cornerRadius], stroke, color)
+        
+        this.playersCountInRow = 4
+        this.playerInfoWidth = this.width  / this.playersCountInRow
+        this.playerInfoHeight = this.height * 0.4
+        this.playerInfoMarginY = this.height * 0.2
+
+        this.roundtextMarginX = this.playerInfoWidth * 0.15
+        this.roundtextMarginY = this.height * 0.1
+        const bigTextSize = this.width * 0.05
+        const texts = this.roundtext && {round: [this.roundtext.text, this.roundtext.color],
+            suddenDeath: [this.suddenDeathText.text, this.suddenDeathText.color]}
+        this.roundtext = new Text(this.pos.x + this.roundtextMarginX, this.pos.y + this.roundtextMarginY, 
+            bigTextSize, undefined, 'black', 'left')
+        this.suddenDeathText = new Text(this.pos.x + this.width - this.roundtextMarginX, 
+            this.pos.y + this.roundtextMarginY, bigTextSize, undefined, 'black', 'right')
+        if (texts) {
+            [this.roundtext.text, this.roundtext.color] = texts.round;
+            [this.suddenDeathText.text, this.suddenDeathText.color] = texts.suddenDeath
+        }
+
+        this.roundTextSuddenDeathTextMinMargin = 0.075 * WIDTH
+
+        for (const button of [this.forfeitButton, this.yesButton, this.noButton, this.voteButton, ...(this.kickButtons || [])])
+            if (button) button.rect.strokeWidth = stroke * 2
+        if (this.visible) {
+            this.updateSizes()
+            if (this.forfeitShown) this.updateForfeitRow()
+            this.updatePlayersInfo()
+        }
     }
     // Relative luminance and WCAG contrast of {r, g, b} colours.
     static luminance({r, g, b}) {
@@ -584,6 +603,13 @@ class OnlineResultInterface {
         this.visible = false
         this.gameID = null
         this.loading = false
+        this.layout()
+    }
+    // TASK-1486: every box from the current WIDTH/HEIGHT (the constructor, and again after a screen resize through
+    // index.html layoutGameInterfaces); the shown texts, their colours and the replay button's state are kept.
+    layout() {
+        const old = this.title && {title: [this.title.text, this.title.color], subtitle: this.subtitle.text,
+            status: this.status.text, replay: this.replayButton.canClick}
         this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, 0, 'rgba(0, 0, 0, 0.4)')
         this.panel = new Rect(WIDTH * 0.25, HEIGHT * 0.2, WIDTH * 0.5, HEIGHT * 0.6,
             [0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH, 0.02 * WIDTH], 0.0035 * WIDTH, 'white')
@@ -592,6 +618,12 @@ class OnlineResultInterface {
         this.status = new Text(WIDTH / 2, HEIGHT * 0.755, Math.min(0.02 * WIDTH, 0.04 * HEIGHT), '', 'red')
         this.replayButton = OnlineResultInterface.getButton(HEIGHT * 0.43, 'Watch replay', this.watchReplay, this)
         this.backButton = OnlineResultInterface.getButton(HEIGHT * 0.58, 'Back to menu', menuBack, this)
+        if (old) {
+            [this.title.text, this.title.color] = old.title
+            this.subtitle.text = old.subtitle
+            this.status.text = old.status
+            this.replayButton.canClick = old.replay
+        }
     }
     static getButton(y, text, clickFunc, callThis) {
         const width = WIDTH * 0.36

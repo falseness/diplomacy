@@ -309,6 +309,25 @@
             statisticsInterface.show, undefined, undefined, undefined, statisticsInterface
         )
 
+        // TASK-1486: the in-game panels after a screen resize are laid out as a fresh boot at the new size would lay
+        // them out (an open panel stays open, laid out again with its state); the undo button's raised position follows
+        // the entity panel's new top (layoutCoreHud ran before it).
+        function layoutGameInterfaces() {
+            barrackInterface.layout()
+            townInterface.layout()
+            entityInterface.layout()
+            statisticsInterface.layout()
+            nextTurnPauseInterface.layout()
+            onlineResultInterface.layout()
+            if (tutorialPauseInterface.visible)
+                tutorialPauseInterface.place()
+            if (tutorialResultInterface.visible)
+                tutorialResultInterface.place()
+            undoButton.secondPos = {x: 0, y: entityInterface.top - nextTurnButtonSize}
+            undoButton.pos = undoButton.selected == 2 ? undoButton.secondPos : undoButton.firstPos
+        }
+        onScreenResize(layoutGameInterfaces)
+
         function saveGame() {
             // A tutorial is never saved.
             if (gameSettings.tutorial)

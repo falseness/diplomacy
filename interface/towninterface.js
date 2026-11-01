@@ -21,6 +21,21 @@ class TownInterface extends BarrackInterface {
     isTypeValid(type) {
         return true
     }
+    // TASK-1486: the switch's half and colours and the suburb row's fill kept over layout() too.
+    trainState() {
+        const state = super.trainState()
+        state.switch = {selected: this.switch.selected, colors: [this.switch.buttonOne.text.color, this.switch.buttonTwo.text.color]}
+        state.suburb = this.trainInterfaces.building.suburb?.image.img.color
+        return state
+    }
+    restoreTrainState(state) {
+        super.restoreTrainState(state)
+        this.switch.selected = state.switch.selected
+        this.switch.buttonOne.text.color = state.switch.colors[0]
+        this.switch.buttonTwo.text.color = state.switch.colors[1]
+        const suburb = this.trainInterfaces.building.suburb
+        if (suburb && state.suburb !== undefined) suburb.image.img.color = state.suburb
+    }
     wasClickOnButton(point) {
         if (this.switch.click(point)) {
             return true

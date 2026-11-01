@@ -1,6 +1,14 @@
 class NextTurnPauseInterface {
     #visible = false
     constructor() {
+        this.goldFormula = null
+        this.layout()
+    }
+    // TASK-1486: every box from the current WIDTH/HEIGHT (the constructor, and again after a screen resize through
+    // index.html layoutGameInterfaces); the shown colour and texts are kept.
+    layout() {
+        const old = this.playerText ? {color: this.background.color, player: this.playerText.text,
+            time: this.timeInfo.textString, round: this.roundText.text} : null
         this.background = new Rect(0, 0, WIDTH, HEIGHT, undefined, 0, undefined, 
             undefined, 0.4)
 
@@ -17,7 +25,6 @@ class NextTurnPauseInterface {
         this.goldY = firstY
         // The plaque stops short of the clock row (on wide short screens, e.g. 844x390, the rows are close).
         this.goldPlaqueHeight = Math.min(1.5 * this.goldSize, 2 * (intervalY - imgClockSize / 2) - 0.01 * HEIGHT)
-        this.goldFormula = null
 
         this.timeInfo = new ImageWithLabel(
             new JustImage('clock', {x: NaN, y: NaN}, imgClockSize, imgClockSize),
@@ -25,7 +32,12 @@ class NextTurnPauseInterface {
             {x: WIDTH / 2, y: firstY + intervalY})
         
         this.roundText = new Text(WIDTH / 2, firstY + 2 * intervalY, imgClockSize, 'error')
-        
+        if (old) {
+            this.background.color = old.color
+            this.playerText.text = old.player
+            this.timeInfo.textString = old.time
+            this.roundText.text = old.round
+        }
     }
     get visible() {
         return this.#visible
