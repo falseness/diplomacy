@@ -12,13 +12,22 @@ function drawMain() {
     // Heal animations (render/healFx.js), likewise: their units are left out of this frame's unit passes.
     if (typeof healFx !== 'undefined')
         healFx.prune()
+    // TASK-1499: the board is drawn with the cells of an own kill not landed yet in their state before it (attackFx.withHeldCells).
+    // A zoom gesture's frame (drawBoard true) has no selection overlay of its own.
+    if (!(typeof attackFx !== 'undefined' ? attackFx.withHeldCells(drawBoard) : drawBoard()))
+        SelectionOverlay.drawSelection(mainCtx)
+    drawAttackFx()
+    // TASK-1450: the target icons and marks over the effects' units.
+    SelectionOverlay.drawSelectionIcons(mainCtx)
+}
+
+// The board's frame (drawMain); true for a zoom gesture's frame (the board of the frame before it, scaled).
+function drawBoard() {
     // A zoom gesture's frame: the board of the frame before it, scaled (TASK-1374).
     if (grid.drawZoomRaster(mainCtx)) {
         if (typeof attackFx !== 'undefined')
             attackFx.rasterFrame = true
-        drawAttackFx()
-        SelectionOverlay.drawSelectionIcons(mainCtx)
-        return
+        return true
     }
     // Cells too small for their details: a level-of-detail frame, recorded and made at the end unless it repeats the
     // frame before, whose board is then drawn back (TASK-1375, Grid.beginLodFrame); so is a still frame at any scale
@@ -61,10 +70,7 @@ function drawMain() {
     }
     if (lod)
         grid.endLodFrame(mainCtx, lod)
-    SelectionOverlay.drawSelection(mainCtx)
-    drawAttackFx()
-    // TASK-1450: the target icons and marks over the effects' units.
-    SelectionOverlay.drawSelectionIcons(mainCtx)
+    return false
 }
 
 // Attack animations over the board's frame on the main canvas, whether drawn, held (its snapshot is taken before them:

@@ -12,6 +12,11 @@ function isFogLandmark(building) {
 function fogShowsPortalPreview(building) {
     return !!building?.isDemonPortal && isFogLandmark(building) && gameSettings.drawFogLandmarks === true
 }
+// TASK-1499: the grid's deferred cache, layer and light tasks draw the board as its frames do: with the cells of an own
+// kill not landed yet in their state before it (attackFx.withHeldCells).
+function gridTask(fn) {
+    return () => typeof attackFx !== 'undefined' ? attackFx.withHeldCells(fn) : fn()
+}
 class Cell {
     // The texts are made when first read: loading a board builds every cell, and the server's rules
     // contexts and replays load many boards they never draw.
@@ -2611,23 +2616,23 @@ class Grid extends SpritesGroup {
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
             this.surfaceCacheQueued = true
-            setTimeout(() => {
+            setTimeout(gridTask(() => {
                 this.surfaceCacheQueued = false
                 if (this === grid && otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
                     this.surfaceSplitStep()
-            })
+            }))
             return
         }
         if (!this.surfaceCacheBuild && this.surfaceCache && !this.surfaceCacheDirty &&
                 performance.now() - this.surfaceCacheChecked < SURFACE_CACHE_CHECK_MS)
             return
         this.surfaceCacheQueued = true
-        setTimeout(() => {
+        setTimeout(gridTask(() => {
             this.surfaceCacheQueued = false
             // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
             if (this === grid && otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
                 this.surfaceCacheBuildStep(SURFACE_STEP_MS)
-        })
+        }))
     }
     // A step of the surface cache's build: a stage, or (TASK-1473, with a budget in ms: the between-frames tasks) a step
     // of the work a stage or the finish would otherwise do at once, while the time spent and the last piece's fit in the
@@ -3375,7 +3380,7 @@ class Grid extends SpritesGroup {
             return
         this.sceneLayerQueued = true
         const cw = ctx.canvas.width, ch = ctx.canvas.height
-        setTimeout(() => {
+        setTimeout(gridTask(() => {
             this.sceneLayerQueued = false
             const screen = gameEvent.screen
             if (!screen.surfaceMoving || screen.zoomGesture || this !== grid || !this.surfaceCacheSteady() || this.stillUnitsHidden())
@@ -3389,7 +3394,7 @@ class Grid extends SpritesGroup {
             this.sceneLayer = {...layer.bounds, canvas: layer.canvas, a: t.a, d: t.d, e: t.e, f: t.f, x0: layer.x0, y0: layer.y0,
                 width: layer.width, height: layer.height, key: this.sceneLayerKey(), state, time: performance.now()}
             ++this.sceneLayerBuilds
-        })
+        }))
     }
     // The slab shadow (drawSlabShadow's), the surface cache (drawSurfaceCacheRect, the light baked in) and the overlays
     // (drawOverlayLayerRaster's) as a frame on a cw x ch canvas at transform t draws them, within overlayLayerRect and on
@@ -3422,7 +3427,7 @@ class Grid extends SpritesGroup {
             return
         this.overlayLayerQueued = true
         const cw = ctx.canvas.width, ch = ctx.canvas.height, revision = this.surfaceCacheRevision
-        setTimeout(() => {
+        setTimeout(gridTask(() => {
             this.overlayLayerQueued = false
             if (revision !== this.surfaceCacheRevision || !gameEvent.screen.surfaceMoving)
                 return
@@ -3433,7 +3438,7 @@ class Grid extends SpritesGroup {
             layer.canvas.getContext('2d').getImageData(0, 0, 1, 1)
             this.overlayLayer = {...layer.bounds, canvas: layer.canvas, a: t.a, d: t.d, e: t.e, f: t.f,
                 x0: layer.x0, y0: layer.y0, width: layer.width, height: layer.height, revision, time: performance.now()}
-        })
+        }))
     }
     // The device-pixel rectangle of the overlay layer for a cw x ch canvas at transform t: that
     // canvas and a quarter of it on each side, within the board and the overlays' margin around it.
@@ -3540,7 +3545,7 @@ class Grid extends SpritesGroup {
         if (composite.queued)
             return
         composite.queued = true
-        setTimeout(() => {
+        setTimeout(gridTask(() => {
             composite.queued = false
             const t = source.getContext('2d').getTransform(), key = composite.key, b = this.surfaceCacheBounds
             const now = [t.a, t.d, t.e, t.f, source.width, source.height, atmosphericBackground.raster, mapDepth.atmosphericShadow,
@@ -3550,7 +3555,7 @@ class Grid extends SpritesGroup {
                     !atmosphericBackground.opaqueOver(source.getContext('2d')))
                 return
             this.renderOverlaySnapshot(source, composite)
-        })
+        }))
     }
     renderOverlaySnapshot(source, composite) {
         let canvas = this.overlaySnapshotCanvas
@@ -4325,12 +4330,12 @@ class Grid extends SpritesGroup {
         // No view yet: a step of the light map at the camera's scale (atmosphericLighting.stepLightMap).
         if (!view) {
             this.litTilesQueued = true
-            setTimeout(() => {
+            setTimeout(gridTask(() => {
                 this.litTilesQueued = false
                 if (this === grid && otherSettings.atmosphericVisuals && !this.litView && !gameEvent.screen.surfaceZooming &&
                         !this.litTaskDefers(snapshots))
                     atmosphericLighting.stepLightMap(this)
-            })
+            }))
             return
         }
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
@@ -4345,14 +4350,14 @@ class Grid extends SpritesGroup {
         // TASK-1372: the snapshot's split, a step a task (cellSplitStep), not during its patch.
         if (view.splitJob && !banding && !view.patch) {
             this.litTilesQueued = true
-            setTimeout(() => {
+            setTimeout(gridTask(() => {
                 this.litTilesQueued = false
                 if (view !== this.litView || !view.splitJob || view.patch || gameEvent.screen.surfaceZooming || this.litTaskDefers(snapshots) ||
                         !this.litSplitHolds(view))
                     return
                 if (this.cellSplitStep(view.splitJob, SURFACE_STEP_MS))
                     view.splitJob = undefined
-            })
+            }))
             return
         }
         if (!banding && !missing.length) {
@@ -4364,7 +4369,7 @@ class Grid extends SpritesGroup {
         // TASK-1439: a task of tiles with the camera at rest when the browser is idle (LIT_IDLE_TIMEOUT at most); TASK-1453: a
         // view the frames draw live at once (setTimeout).
         const idle = !banding && !view.unbuilt && !gameEvent.screen.surfaceMoving && typeof requestIdleCallback === 'function'
-        ;(idle ? fn => requestIdleCallback(fn, {timeout: LIT_IDLE_TIMEOUT}) : setTimeout)(() => {
+        ;(idle ? fn => requestIdleCallback(fn, {timeout: LIT_IDLE_TIMEOUT}) : setTimeout)(gridTask(() => {
             this.litTilesQueued = false
             // Nothing is built inside a zoom gesture (its frames keep their live light), nor (TASK-1316) for a board the
             // view's cell layer is behind (the next frame brings it up, followCellLayer; a tile built now would also bring
@@ -4393,7 +4398,7 @@ class Grid extends SpritesGroup {
             if (moving && !view.unbuilt && litTileCost.ms > LIT_TASK_MS)
                 return
             atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, budget, !moving || view.unbuilt))
-        })
+        }))
     }
     // TASK-1372: whether view's split job (prepareLitCellLayer) still splits its rest snapshot: else it is dropped, and so is
     // the view when the board's cell states changed (the uncut snapshot shows the cells as the split found them).

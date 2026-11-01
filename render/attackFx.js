@@ -46,6 +46,13 @@
 // played once: the committed diff of the same action does not play it again (played), a peer's undo plays nothing.
 // A shot at a 0-hp town online (TASK-1490) changes no hp, only wasHitted (false -> true): remoteAfter / observedAfter
 // play it from that (zeroHitEvent: ranged '-0', siege no number); a second shot at an already marked town changes nothing.
+// Own kill (TASK-1499): the local player's melee last hit that moves the attacker into the hex repaints the path cells and
+// may capture a building at once in the rules (clicks and selection read them); the board draws those cells (owner,
+// suburb, building) in their state before the action until the attacker lands (the last hit's time 1 of its 1.3), then the
+// new state: before() snapshots every cell, after() keeps the cells the action changed on the effect (hold), and drawMain
+// draws the board (and the grid's deferred cache tasks run) with them put back for the frame (withHeldCells), so nothing
+// draws or caches the new state before the landing and the board changes once, at the landing, as for any action. A later
+// action (another before(), an undo, the turn's end, animations off) ends it; a cell changed again since is not held.
 // API: play(event), draw(ctx, now), isActive(), clear(), undo(); the hooks call before(unit, cell) / after(snapshot),
 // remoteBefore(cells) / remoteAfter(snapshot, message), observedBefore(cells, observation) / observedAfter(snapshot, message,
 // observation), endTurn(), setViewer(slot) and flush().
@@ -176,7 +183,9 @@ class AttackFx {
     // image -> {red, grey} tinted copies (canvases of the sprite's size), made on first use.
     tints = new Map()
     // Counters for tests and evidence: queued, dropped by the cap, others' attacks cut to a fog edge or not seen at all.
-    stats = {queued: 0, dropped: 0, edge: 0, unseen: 0}
+    stats = {queued: 0, dropped: 0, edge: 0, unseen: 0, holds: 0, holdsEnded: 0, landed: 0, heldFrames: 0}
+    // TASK-1499: the cells put back for the draw under way (withHeldCells), else null.
+    holding = null
     // The slot whose view (fog) the queued effects were made for.
     viewer = null
     // The fog of the local human whose turn ended (offline), kept until the next view is set: an AI or demon unit's move
@@ -192,6 +201,8 @@ class AttackFx {
     // The target cell's enemy unit and building with their hp, before unit acts on cell; null when no effect can
     // come of it (off, no enemy there, a kind of attacker with no effect).
     before(unit, cell) {
+        // TASK-1499: any action shows the board as it is (earlier kills' held cells end)
+        this.endHolds()
         if (!this.enabled() || !cell || !unit || unit.isEmpty())
             return null
         const kind = this.kindOf(unit)
@@ -204,7 +215,7 @@ class AttackFx {
         if (!targetUnit && !building)
             return null
         // (the attacker's sprite: read when the effect is made, it stays alive; the target's now, it may die)
-        return {attacker: unit, moves: unit.moves, from: {x: unit.coord.x, y: unit.coord.y}, fromPos: {x: unit.pos.x, y: unit.pos.y},
+        return {attacker: unit, cells: !this.ranged[kind] && this.isOwn(unit) ? this.cellStates() : null, moves: unit.moves, from: {x: unit.coord.x, y: unit.coord.y}, fromPos: {x: unit.pos.x, y: unit.pos.y},
             image: undefined, coord: {x: cell.hexagon.coord.x, y: cell.hexagon.coord.y},
             ranged: !!this.ranged[kind], unit: targetUnit, unitHp: targetUnit?.hp, unitPos: targetUnit && {x: targetUnit.pos.x, y: targetUnit.pos.y},
             unitImage: targetUnit && this.imageOf(targetUnit),
@@ -269,9 +280,101 @@ class AttackFx {
         const attacker = s.attacker
         // A ranged hit's living unit target is drawn by the effect (knocked back).
         const targetUnit = s.ranged && target.unit && !target.killed ? s.unit : null
-        return this.queue({kind: this.kindOf(attacker), attacker, own: this.isOwn(attacker), image: s.image, from: s.from, fromPos: s.fromPos,
-            to: {x: attacker.coord.x, y: attacker.coord.y}, target: coord, targetPos: target.pos, targetImage: target.image,
+        const to = {x: attacker.coord.x, y: attacker.coord.y}
+        // TASK-1499: an own last hit that moved the attacker into the hex holds the cells it changed until the landing.
+        const hold = s.cells && target.killed && !s.ranged && (to.x !== s.from.x || to.y !== s.from.y) ? this.changedCells(s.cells) : null
+        const effect = this.queue({kind: this.kindOf(attacker), attacker, own: this.isOwn(attacker), image: s.image, from: s.from, fromPos: s.fromPos,
+            to, target: coord, targetPos: target.pos, targetImage: target.image,
             targetIsUnit: target.unit, targetUnit, damage: target.damage, killed: target.killed})
+        if (effect && hold?.length && effect.kind === 'lasthit' && effect.startTime !== null) {
+            effect.hold = hold
+            ++this.stats.holds
+        }
+        return effect
+    }
+    // TASK-1499: every cell's owner, suburb and building (flat, column by column), before an own melee action.
+    cellStates() {
+        if (typeof grid === 'undefined' || !grid?.arr)
+            return null
+        const states = []
+        for (const column of grid.arr)
+            for (const cell of column)
+                states.push(cell.hexagon.playerColor, cell.hexagon.isSuburb, cell.building)
+        return {arr: grid.arr, states}
+    }
+    // The cells whose owner, suburb or building the action changed: each with its state before (shown until the landing)
+    // and after (held only while the cell still has it).
+    changedCells(before) {
+        if (!before || typeof grid === 'undefined' || grid.arr !== before.arr)
+            return null
+        const hold = [], states = before.states
+        let k = 0
+        for (const column of grid.arr)
+            for (const cell of column) {
+                const playerColor = states[k++], isSuburb = states[k++], building = states[k++], hexagon = cell.hexagon
+                if (hexagon.playerColor !== playerColor || hexagon.isSuburb !== isSuburb || cell.building !== building)
+                    hold.push({cell, playerColor, isSuburb, building, newColor: hexagon.playerColor, newSuburb: hexagon.isSuburb, newBuilding: cell.building})
+            }
+        return hold
+    }
+    // The landing: the time (ms since its start) from which a held effect's cells show their new state.
+    landing(e) {
+        return e.duration / e.span
+    }
+    // Ends every hold (the cells show the board's state from the next frame).
+    endHolds() {
+        for (const e of this.effects)
+            if (e.hold) {
+                e.hold = null
+                ++this.stats.holdsEnded
+            }
+    }
+    // Puts the held cells' state before their actions back (the cells held now: before their effect's landing and still in
+    // the state their action left), runs fn, and puts the board's state back (whatever fn throws). fn must only draw.
+    withHeldCells(fn) {
+        if (this.holding || !this.effects.length)
+            return fn()
+        let held = null
+        const now = this.now()
+        for (const e of this.effects) {
+            if (!e.hold)
+                continue
+            if (e.startTime === null || now - e.startTime >= this.landing(e)) {
+                if (e.startTime !== null) {
+                    e.hold = null
+                    ++this.stats.landed
+                }
+                continue
+            }
+            for (const h of e.hold) {
+                const cell = h.cell, hexagon = cell.hexagon
+                if (hexagon.playerColor !== h.newColor || hexagon.isSuburb !== h.newSuburb || cell.building !== h.newBuilding)
+                    continue
+                ;(held ??= []).push(h)
+                hexagon.playerColor = h.playerColor
+                hexagon.isSuburb = h.isSuburb
+                cell.building = h.building
+            }
+        }
+        if (!held)
+            return fn()
+        this.holding = held
+        ++this.stats.heldFrames
+        try {
+            return fn()
+        } finally {
+            for (let i = held.length - 1; i >= 0; --i) {
+                const h = held[i]
+                h.cell.hexagon.playerColor = h.newColor
+                h.cell.hexagon.isSuburb = h.newSuburb
+                h.cell.building = h.newBuilding
+            }
+            this.holding = null
+        }
+    }
+    // Whether cells are held now (drawn in their state before an own kill), for tests and evidence.
+    holdsCells(now = this.now()) {
+        return this.effects.some(e => e.hold && e.startTime !== null && now - e.startTime < this.landing(e))
     }
     // TASK-1489: a ranged shot at an enemy town already at 0 hp (the rules only mark it hit: no hp lost) plays the normal
     // ranged effect with damage 0 and zeroHit ('-0' rises): the town is the same object, still at 0 hp, the shooter
