@@ -44,6 +44,8 @@
 // Peers' attacks in a parallel turn (TASK-1427): while the screen's player is active a peer's action comes as an
 // observation (onlineObservation: pictures only); its attack is read from the update (observedBefore / observedAfter) and
 // played once: the committed diff of the same action does not play it again (played), a peer's undo plays nothing.
+// A shot at a 0-hp town online (TASK-1490) changes no hp, only wasHitted (false -> true): remoteAfter / observedAfter
+// play it from that (zeroHitEvent: ranged '-0', siege no number); a second shot at an already marked town changes nothing.
 // API: play(event), draw(ctx, now), isActive(), clear(), undo(); the hooks call before(unit, cell) / after(snapshot),
 // remoteBefore(cells) / remoteAfter(snapshot, message), observedBefore(cells, observation) / observedAfter(snapshot, message,
 // observation), endTurn(), setViewer(slot) and flush().
@@ -304,7 +306,7 @@ class AttackFx {
                 !cell.building.isNature ? cell.building : null
             // (owners before: a unit's colour is its hexagon's, which a capture repaints)
             cells.push({coord, seen: this.seen(coord), unit, owner: unit?.playerColor, buildingOwner: building?.playerColor, hp: unit?.hp, moves: unit?.moves, pos: unit && {x: unit.pos.x, y: unit.pos.y},
-                image: unit && this.imageOf(unit), building, buildingHp: building?.hp,
+                image: unit && this.imageOf(unit), building, buildingHp: building?.hp, buildingWasHitted: !!building?.wasHitted,
                 buildingPos: building && {x: building.pos.x, y: building.pos.y}, buildingImage: building && this.imageOf(building)})
         }
         return cells
@@ -331,14 +333,23 @@ class AttackFx {
                 target = {owner: cell.buildingOwner, killed, hp: killed ? 0 : cell.building.hp, damage: cell.buildingHp - (killed ? 0 : cell.building.hp),
                     pos: cell.buildingPos, image: cell.buildingImage, isUnit: false}
             }
-            if (!target || !(target.damage > 0))
+            else if (cell.building && grid.getBuilding(coord) === cell.building && cell.buildingHp === 0 && cell.building.hp === 0 &&
+                    cell.building.playerColor === cell.buildingOwner && !cell.buildingWasHitted && cell.building.wasHitted === true)
+                // TASK-1490: a shot at a 0-hp building only marks it hit (wasHitted false -> true, no hp lost)
+                target = {owner: cell.buildingOwner, killed: false, hp: 0, damage: 0, zero: true, pos: cell.buildingPos,
+                    image: cell.buildingImage, isUnit: false}
+            if (!target || !(target.damage > 0) && !target.zero)
                 continue
+            const step = Math.sqrt(3) * basis.r
             let source = null, best = Infinity
             for (const other of before) {
                 const u = other.unit
                 if (!u || other === cell || u.killed || other.owner === target.owner || !(u.moves < other.moves))
                     continue
                 const d = Math.hypot(other.coord.x - coord.x, other.coord.y - coord.y)
+                // (a 0-hp hit: only a shooter within its range, as observedAfter)
+                if (target.zero && Math.hypot(other.pos.x - target.pos.x, other.pos.y - target.pos.y) / step > (u.constructor.range ?? 1) + 1.1)
+                    continue
                 if (d < best) {
                     best = d
                     source = other
@@ -346,7 +357,13 @@ class AttackFx {
             }
             const seenTo = cell.seen || this.seen(coord)
             let event
-            if (source) {
+            if (target.zero) {
+                event = source && this.zeroHitEvent(source.unit, source.image, source.coord, source.pos, {x: source.unit.coord.x, y: source.unit.coord.y},
+                    coord, target, {from: source.seen || this.seen(source.coord), to: seenTo})
+                if (!event)
+                    continue
+            }
+            else if (source) {
                 const a = source.unit, kind = this.kindOf(a)
                 if (!kind)
                     continue
@@ -403,7 +420,7 @@ class AttackFx {
             const building = shown && shown.notEmpty() && shown.hp !== undefined && !shown.isNature ? shown : null
             cells.push({coord: {x: record.x, y: record.y}, record, unit, owner: unit?.playerColor, hp: unit?.hp, moves: unit?.moves,
                 pos: unit && {x: unit.pos.x, y: unit.pos.y}, image: unit && this.imageOf(unit), building,
-                buildingOwner: building?.playerColor, buildingHp: building?.hp,
+                buildingOwner: building?.playerColor, buildingHp: building?.hp, buildingWasHitted: !!building?.wasHitted,
                 buildingPos: building && {x: building.pos.x, y: building.pos.y}, buildingImage: building && this.imageOf(building)})
         }
         return cells
@@ -437,8 +454,13 @@ class AttackFx {
                 if (killed || hp < cell.buildingHp)
                     target = {owner: cell.buildingOwner, killed, hp, damage: cell.buildingHp - hp, pos: cell.buildingPos,
                         image: cell.buildingImage, isUnit: false}
+                // TASK-1490: a 0-hp building of the same owner only marked hit (wasHitted false -> true)
+                else if (cell.buildingHp === 0 && hp === 0 && r.building.owner === cell.buildingOwner && !cell.buildingWasHitted &&
+                        r.building.wasHitted === true)
+                    target = {owner: cell.buildingOwner, killed: false, hp: 0, damage: 0, zero: true, pos: cell.buildingPos,
+                        image: cell.buildingImage, isUnit: false}
             }
-            if (!target || !(target.damage > 0))
+            if (!target || !(target.damage > 0) && !target.zero)
                 continue
             let source = null, to = null, best = Infinity
             for (const other of before) {
@@ -463,11 +485,17 @@ class AttackFx {
                 to = at
             }
             const attacker = source && drawn(to)
-            if (source && !attacker || !source && target.killed && !changed)
+            if (source && !attacker || !source && (target.killed && !changed || target.zero))
                 continue
             const seenTo = seen(coord)
             let event
-            if (source) {
+            if (target.zero) {
+                event = this.zeroHitEvent(attacker, source.image, source.coord, source.pos, {...to}, coord, target,
+                    {from: seen(source.coord), to: seenTo})
+                if (!event)
+                    continue
+            }
+            else if (source) {
                 const kind = this.kindOf(attacker)
                 if (!kind)
                     continue
@@ -491,6 +519,19 @@ class AttackFx {
             played.push(effect)
         }
         return played
+    }
+    // TASK-1490: another player's shot at a 0-hp building (remoteAfter / observedAfter: hp 0 before and after, the same
+    // building and owner, wasHitted false -> true): a ranged attacker plays its effect with damage 0 and zeroHit ('-0',
+    // as afterZeroTown); a siege attacker its effect with damage 0 and no number (as afterSiege); a melee one nothing.
+    zeroHitEvent(attacker, image, from, fromPos, to, coord, target, seen) {
+        const kind = attacker && this.kindOf(attacker)
+        if (!kind || !this.ranged[kind] && !this.siege[kind])
+            return null
+        const event = {kind, attacker, image, from, fromPos, to, target: coord, targetPos: target.pos, targetImage: target.image,
+            targetIsUnit: false, targetUnit: null, damage: 0, killed: false, seen}
+        if (this.ranged[kind])
+            event.zeroHit = true
+        return event
     }
     // An attack's key (TASK-1427): the game, the actor, the round, the target and its hp after; the attacker's coord is
     // matched apart (wasPlayed): an attack whose attacker one of the two messages did not see is the same attack.
