@@ -1810,8 +1810,9 @@ class Grid extends SpritesGroup {
         })
     }
     // One step of the surface layer job (startSurfaceLayerJob) in a frame drawing the cache as its surface: at most one a
-    // frame, none in the frame that started it. A job whose cache, layer or board state is no longer its own, or a patch or
-    // build under way, is dropped; a step that fails drops it too, and the change is then drawn at once (refreshCellLayer).
+    // frame, none in the frame that started it. A job whose cache, layer or board state is no longer its own, a layer being
+    // split again (no cells: TASK-1504, prepareSurfaceCellLayer drops it there too), or a patch or build under way, is
+    // dropped; a step that fails drops it too, and the change is then drawn at once (refreshCellLayer).
     surfaceLayerStep() {
         const job = this.surfaceLayerJob
         if (job.ran === null || job.ran === this.drawSerial) {
@@ -1819,8 +1820,8 @@ class Grid extends SpritesGroup {
             return
         }
         job.ran = this.drawSerial
-        if (job.cache !== this.surfaceCache || job.layer !== this.surfaceCellLayer || this.surfacePatchJob || this.surfaceCacheBuild ||
-                !this.cellLayerStatesAre(job.states))
+        if (job.cache !== this.surfaceCache || job.layer !== this.surfaceCellLayer || !job.layer?.cells || this.surfacePatchJob ||
+                this.surfaceCacheBuild || !this.cellLayerStatesAre(job.states))
             return this.dropSurfaceLayerJob()
         ++this.surfaceLayerSteps
         job.steps[job.step++]()
@@ -1997,8 +1998,13 @@ class Grid extends SpritesGroup {
     // to it at the cache's own resolution, on the canvas they draw (surfaceCacheShown), where each pixel is the sum of the
     // two, to the bit (adding the layer after the scaled cache, each scaled on its own, rounds a level or so apart at a
     // fifth of a frame's pixels: TASK-1313 design.md, test-cell-layer's scaledAddAlternative).
+    // TASK-1504: a surface layer job (startSurfaceLayerJob) under way is dropped before the layer is reset or split again
+    // (a same-size rebuild keeps the cache canvas and the layer object, so the job's own checks in surfaceLayerStep pass and
+    // its next step would read the reset layer's cells); the split's reset (stale: null) leaves nothing of it behind.
     prepareSurfaceCellLayer(canvas, geometry, left, top, rect, copy) {
         if (!canvas.cellLayered) {
+            if (this.surfaceLayerJob)
+                this.dropSurfaceLayerJob()
             copy?.()
             this.surfaceCellLayer = this.surfaceCacheShown = this.surfaceSplitJob = undefined
             return
@@ -2008,6 +2014,8 @@ class Grid extends SpritesGroup {
         if (rect && layer?.cells && layer.width === canvas.width && layer.height === canvas.height && layer.raster === canvas)
             rect = this.resplitCellLayer(canvas, layer, rect, copy)
         else {
+            if (this.surfaceLayerJob)
+                this.dropSurfaceLayerJob()
             copy?.()
             this.surfaceSplitJob = undefined
             if (Grid.cellLayerSplitJobs) {
