@@ -37,6 +37,13 @@ class MenuTextInput {
         document.body.appendChild(input)
         return input
     }
+    // The field at rect with the font size (TASK-1485: re-placed after a screen resize); the open DOM input follows.
+    place(rect, fontSize) {
+        this.rect = rect
+        Object.assign(this.text, {x: rect.centerX, y: rect.centerY, fontSize})
+        if (this.dom) Object.assign(this.dom.style, {left: rect.x / devicePixelRatio + 'px', top: rect.y / devicePixelRatio + 'px',
+            width: rect.width / devicePixelRatio + 'px', height: rect.height / devicePixelRatio + 'px'})
+    }
     // Keeps only allowed characters, up to maxLength.
     setValue(value) {
         this.value = [...String(value)].filter(char => MENU_TEXT_INPUT_CHAR.test(char))

@@ -518,8 +518,8 @@ class ReplayControls {
         const bar = this.container = document.createElement('div')
         bar.id = 'replay-controls'
         bar.style.cssText = 'position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;flex-wrap:wrap;' +
-            `gap:${HEIGHT * 0.007 / devicePixelRatio}px;align-items:center;padding:${HEIGHT * 0.007 / devicePixelRatio}px;` +
-            `background:rgba(255,255,255,0.85);font:${menuDomFontSize() * 0.875}px Arial`
+            'align-items:center;background:rgba(255,255,255,0.85)'
+        this.layout()
         bar.addEventListener('click', event => event.stopPropagation())
         const button = (id, text, handler) => {
             const element = document.createElement('button')
@@ -560,6 +560,11 @@ class ReplayControls {
         this.status.id = 'replay-status'
         bar.append(this.status)
         document.body.append(bar)
+    }
+    // TASK-1485: gap, padding and font at the current WIDTH x HEIGHT (also after a screen resize).
+    layout() {
+        const gap = `${HEIGHT * 0.007 / devicePixelRatio}px`
+        Object.assign(this.container.style, {gap, padding: gap, font: `${menuDomFontSize() * 0.875}px Arial`})
     }
     update() {
         const session = this.session
@@ -656,20 +661,32 @@ class ReplayTree {
     constructor(_menu) {
         this.menu = _menu
         this.container = null
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, 0.04 * WIDTH, 'replays', MENU_THEME.text)
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.6, 0.025 * WIDTH, '', MENU_THEME.mutedText)
+        this.title = new Text(NaN, NaN, 1, 'replays', MENU_THEME.text)
+        this.status = new Text(NaN, NaN, 1, '', MENU_THEME.mutedText)
         this.buttons = []
+        this.layout()
     }
-    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
-        this.buttons = [Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', _menu.setTree, parent, true, _menu)]
+    setParent(parent, _menu) {
+        this.buttons = [Menu.getButton(undefined, 'back', _menu.setTree, parent, true, _menu)]
+        this.layout()
+    }
+    // TASK-1485: the title, status, back and (while shown) the DOM panel at the current WIDTH x HEIGHT (also after a
+    // screen resize).
+    layout() {
+        Object.assign(this.title, {x: WIDTH / 2, y: HEIGHT * 0.3, fontSize: 0.04 * WIDTH})
+        Object.assign(this.status, {x: WIDTH / 2, y: HEIGHT * 0.6, fontSize: 0.025 * WIDTH})
+        for (const button of this.buttons) menuRefitButton(button, {x: Menu.columnX(), y: HEIGHT * 0.7})
+        if (!this.container) return
+        Object.assign(this.container.style, {left: `${WIDTH / 2 / devicePixelRatio}px`, top: `${HEIGHT * 0.4 / devicePixelRatio}px`,
+            gap: `${HEIGHT * 0.009 / devicePixelRatio}px`, font: `${menuDomFontSize()}px Arial`})
+        const listGap = `${HEIGHT * 0.0045 / devicePixelRatio}px`
+        this.finishedPanel.style.gap = this.finishedList.style.gap = listGap
     }
     enter() {
         this.leave()
         const div = this.container = document.createElement('div')
         div.id = 'replay-open'
-        div.style.cssText = `position:absolute;left:${WIDTH / 2 / devicePixelRatio}px;` +
-            `top:${HEIGHT * 0.4 / devicePixelRatio}px;transform:translateX(-50%);z-index:1;` +
-            `display:flex;flex-direction:column;gap:${HEIGHT * 0.009 / devicePixelRatio}px;font:${menuDomFontSize()}px Arial`
+        div.style.cssText = 'position:absolute;transform:translateX(-50%);z-index:1;display:flex;flex-direction:column'
         div.addEventListener('click', event => event.stopPropagation())
         const file = document.createElement('input')
         file.type = 'file'
@@ -685,17 +702,18 @@ class ReplayTree {
         open.textContent = 'open'
         open.addEventListener('click', () => this.openUrl(url.value))
         row.append(url, open)
-        const finished = document.createElement('div')
+        const finished = this.finishedPanel = document.createElement('div')
         finished.id = 'replay-finished'
-        finished.style.cssText = `display:flex;flex-direction:column;gap:${HEIGHT * 0.0045 / devicePixelRatio}px;max-height:40vh;overflow-y:auto`
+        finished.style.cssText = 'display:flex;flex-direction:column;max-height:40vh;overflow-y:auto'
         const heading = document.createElement('b')
         heading.textContent = 'My finished games'
         this.finishedList = document.createElement('div')
         this.finishedList.id = 'replay-finished-list'
-        this.finishedList.style.cssText = `display:flex;flex-direction:column;gap:${HEIGHT * 0.0045 / devicePixelRatio}px`
+        this.finishedList.style.cssText = 'display:flex;flex-direction:column'
         finished.append(heading, this.finishedList)
         div.append(file, row, finished)
         document.body.append(div)
+        this.layout()
         this.loadFinished(div)
     }
     leave() {

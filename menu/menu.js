@@ -844,6 +844,9 @@ class SetupSettingsTree extends GameSettingsTree {
         this.coopSliders = {players: coop.playersSlider, map: coop.mapSlider, size: coop.sizeSlider}
         this.fogOfWarCheckBox = new SetupSwitch()
         this.fogOfWarCheckBox.text.text = 'fog of war'
+        // GameSettingsTree's boot-size 'dynamic timer' box is never shown here: the screen's own option row replaces
+        // it (TASK-1485: the online screen kept it unplaced at the boot size).
+        delete this.timerCheckBox
         const {key, text, name, hint} = setup.option, option = this[key] = new SetupSwitch()
         option.text.text = text
         this.optionRow = {icon: 'clock', name, hint, control: option}
@@ -1052,18 +1055,29 @@ class LobbyRoomTree {
         this.view = LobbyRoomTree.noView
         this.socket = null
         this.busy = false
-        this.rowTop = HEIGHT * 0.38
-        this.rowHeight = HEIGHT * 0.065
-        // Title and count between the logo and the rows; sizes capped by the height for wide screens.
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.295, Math.min(0.028 * WIDTH, 0.035 * HEIGHT), '', MENU_THEME.text)
-        this.count = new Text(WIDTH / 2, HEIGHT * 0.335, Math.min(0.028 * WIDTH, 0.035 * HEIGHT), '', MENU_THEME.mutedText)
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.8, 0.025 * WIDTH, '', MENU_THEME.text)
+        this.title = new Text(NaN, NaN, 1, '', MENU_THEME.text)
+        this.count = new Text(NaN, NaN, 1, '', MENU_THEME.mutedText)
+        this.status = new Text(NaN, NaN, 1, '', MENU_THEME.text)
         this.rowTexts = []
         this.kickButtons = []
-        this.leaveButton = Menu.getButton({x: WIDTH * 0.2, y: HEIGHT * 0.85}, 'leave', this.leaveLobby, undefined, true, this)
-        this.startButton = Menu.getButton({x: WIDTH * 0.55, y: HEIGHT * 0.85}, 'start', this.startLobby, undefined, true, this)
+        this.leaveButton = Menu.getButton(undefined, 'leave', this.leaveLobby, undefined, true, this)
+        this.startButton = Menu.getButton(undefined, 'start', this.startLobby, undefined, true, this)
         this.startButton.primary = true
         this.buttons = [this.leaveButton]
+        this.layout()
+    }
+    // TASK-1485: every size at the current WIDTH x HEIGHT (also after a screen resize): title and count between the
+    // logo and the rows (sizes capped by the height for wide screens), the member rows, status, leave and start.
+    layout() {
+        this.rowTop = HEIGHT * 0.38
+        this.rowHeight = HEIGHT * 0.065
+        const titleSize = Math.min(0.028 * WIDTH, 0.035 * HEIGHT)
+        Object.assign(this.title, {x: WIDTH / 2, y: HEIGHT * 0.295, fontSize: titleSize})
+        Object.assign(this.count, {x: WIDTH / 2, y: HEIGHT * 0.335, fontSize: titleSize})
+        Object.assign(this.status, {x: WIDTH / 2, y: HEIGHT * 0.8, fontSize: 0.025 * WIDTH})
+        menuRefitButton(this.leaveButton, {x: WIDTH * 0.2, y: HEIGHT * 0.85})
+        menuRefitButton(this.startButton, {x: WIDTH * 0.55, y: HEIGHT * 0.85})
+        if (this.lobby) this.layoutRows()
     }
     setParent() {}
     // Opens the room for a lobby I am a member of (lobby:create or lobby:join ack).
@@ -1110,6 +1124,13 @@ class LobbyRoomTree {
         const view = this.view = buildRoomView(lobby, this.myAccountId)
         this.title.text = view.settingsText
         this.count.text = view.countText
+        this.layoutRows()
+        // A disabled start is drawn greyed and ignores clicks.
+        this.startButton.canClick = view.start.enabled
+    }
+    // The member rows and kick buttons of the current view at the current size.
+    layoutRows() {
+        const view = this.view
         // A row's text fits its row height on wide screens.
         const fontSize = Math.min(0.03 * WIDTH, 0.7 * this.rowHeight)
         this.rowTexts = view.rows.map((row, i) => new Text(WIDTH * 0.3, this.rowTop + (i + 0.5) * this.rowHeight,
@@ -1127,8 +1148,6 @@ class LobbyRoomTree {
             button.accountId = row.accountId
             this.kickButtons.push(button)
         })
-        // A disabled start is drawn greyed and ignores clicks.
-        this.startButton.canClick = view.start.enabled
         this.buttons = [this.leaveButton, ...this.kickButtons]
         if (view.start.visible) this.buttons.push(this.startButton)
     }
@@ -1185,28 +1204,41 @@ class SignInTree {
     constructor(_menu) {
         this.menu = _menu
         this.container = null
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.33, 0.04 * WIDTH, 'sign in to play online', MENU_THEME.text)
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.58, 0.025 * WIDTH, '', MENU_THEME.mutedText)
+        this.title = new Text(NaN, NaN, 1, 'sign in to play online', MENU_THEME.text)
+        this.status = new Text(NaN, NaN, 1, '', MENU_THEME.mutedText)
         this.buttons = []
+        this.layout()
     }
-    setParent(parent, _menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
-        this.buttons = [Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', _menu.setTree, parent, true, _menu)]
+    setParent(parent, _menu) {
+        this.buttons = [Menu.getButton(undefined, 'back', _menu.setTree, parent, true, _menu)]
+        this.layout()
+    }
+    // TASK-1485: the title, status, back and (while shown) Google's button box and the status line at the current
+    // WIDTH x HEIGHT (also after a screen resize).
+    layout() {
+        Object.assign(this.title, {x: WIDTH / 2, y: HEIGHT * 0.33, fontSize: 0.04 * WIDTH})
+        Object.assign(this.status, {x: WIDTH / 2, y: HEIGHT * 0.58, fontSize: 0.025 * WIDTH})
+        for (const button of this.buttons) menuRefitButton(button, {x: Menu.columnX(), y: HEIGHT * 0.7})
+        if (this.container) Object.assign(this.container.style, {left: `${WIDTH / 2 / devicePixelRatio}px`,
+            top: `${HEIGHT * 0.43 / devicePixelRatio}px`})
+        if (this.statusElement) Object.assign(this.statusElement.style, {top: `${HEIGHT * 0.55 / devicePixelRatio}px`,
+            font: `${menuDomFontSize()}px/1.4 sans-serif`})
     }
     // Google's button and the wrapping status live only while this screen is shown.
     enter() {
         this.leave()
         const div = this.container = document.createElement('div')
         div.id = 'google-signin'
-        div.style.cssText = `position:absolute;left:${WIDTH / 2 / devicePixelRatio}px;` +
-            `top:${HEIGHT * 0.43 / devicePixelRatio}px;transform:translateX(-50%);z-index:1`
+        div.style.cssText = 'position:absolute;transform:translateX(-50%);z-index:1'
         // Clicks on Google's button must not reach the canvas menu below it.
         div.addEventListener('click', event => event.stopPropagation())
         document.body.append(div)
         const status = this.statusElement = document.createElement('div')
-        status.style.cssText = `position:absolute;left:5%;width:90%;top:${HEIGHT * 0.55 / devicePixelRatio}px;` +
-            `text-align:center;font:${menuDomFontSize()}px/1.4 sans-serif;color:${MENU_THEME.mutedText};overflow-wrap:anywhere;pointer-events:none`
+        status.style.cssText = 'position:absolute;left:5%;width:90%;' +
+            `text-align:center;color:${MENU_THEME.mutedText};overflow-wrap:anywhere;pointer-events:none`
         status.setAttribute('role', 'status')
         document.body.append(status)
+        this.layout()
         this.setStatus('loading Google sign-in…')
         loadGoogleIdentity().then(() => {
             if (this.container !== div) return
@@ -2145,7 +2177,7 @@ class OnlineHubTree {
         this.notice = ''
         // 'Signed in as <nickname>' and the notice, for tests; drawn only while signing in (the chip and the notice line
         // draw them once signed in).
-        this.status = new Text(WIDTH / 2, HEIGHT / 2, 2 * hubUnit() * hubFontScale(), '', MENU_THEME.text)
+        this.status = new Text(NaN, NaN, 1, '', MENU_THEME.text)
         this.list = new HubLists()
         this.list.onRow = row => {
             // lobby:join of my own lobby returns it, so both open the room.
@@ -2156,9 +2188,9 @@ class OnlineHubTree {
         this.list.onRowsChanged = () => this.layout()
         this.joining = false
         this.replaying = false
-        const u = hubUnit()
-        // The menu logo's shape, 6.5 units high.
-        this.logo = new HaloLogo('logo', {x: WIDTH / 2, y: 4.45 * u}, 6.5 * u * 0.5 / 0.11, 6.5 * u)
+        this.logo = new HaloLogo('logo', {x: 0, y: 0}, 0, 0)
+        // The hub unit the panels' row heights were set for.
+        this.unit = null
         this.betaTag = undefined
         this.nicknameButton = new HubPencilButton(_menu.setTree, _menu.nickname, _menu)
         this.createButton = new HubButton('Create game', _menu.setTree, _menu.createLobby, _menu, true)
@@ -2174,12 +2206,7 @@ class OnlineHubTree {
     setAccount(account) {
         this.account = account
         this.status.text = account ? 'Signed in as ' + account.nickname : 'signing in…'
-        this.status.fontSize = 2 * hubUnit() * hubFontScale()
-        if (account && this.notice) {
-            this.status.text += ' · ' + this.notice
-            // A long notice (the forfeit message, options/onlineLogic.js) shrinks the line to the screen width.
-            if (this.status.width > WIDTH * 0.96) this.status.fontSize *= WIDTH * 0.96 / this.status.width
-        }
+        if (account && this.notice) this.status.text += ' · ' + this.notice
         this.buttons = account ? [...this.list.panels, this.list.bar, this.nicknameButton, this.createButton,
             this.backButton] : [this.backButton]
         this.layout()
@@ -2187,9 +2214,17 @@ class OnlineHubTree {
     }
     // In hub units from the top: the logo row (the logo centred, the account chip and the beta tag at the right), the
     // return bar when I have a lobby, the notice line when there is one, the two panels of equal width filling the
-    // rest, the bottom row with create game and back.
+    // rest, the bottom row with create game and back. Everything from the current WIDTH x HEIGHT (TASK-1485: also after
+    // a screen resize), with the logo, the status line and the panels' row heights (re-set when the hub unit changed).
     layout() {
-        const u = hubUnit(), side = 2.4 * u, logoY = this.logo.pos.y
+        const u = hubUnit(), side = 2.4 * u, logoY = 4.45 * u
+        // The menu logo's shape, 6.5 units high.
+        Object.assign(this.logo, {pos: {x: WIDTH / 2, y: logoY}, w: 6.5 * u * 0.5 / 0.11, h: 6.5 * u})
+        this.layoutStatus()
+        if (this.unit !== u) {
+            this.unit = u
+            for (const panel of this.list.panels) panel.setRows(panel.rows)
+        }
         let right = WIDTH - side
         if (this.menu.betaTag) {
             this.betaTag ??= new BetaTag()
@@ -2217,6 +2252,15 @@ class OnlineHubTree {
         const createWidth = 18 * u, backWidth = 11 * u, left = WIDTH / 2 - (createWidth + 2 * u + backWidth) / 2
         this.createButton.place(left, bottom, createWidth, 4.6 * u, 2 * u)
         this.backButton.place?.(left + createWidth + 2 * u, bottom, backWidth, 4.6 * u, 2 * u)
+    }
+    // The status line in the middle; a long notice (the forfeit message, options/onlineLogic.js) shrinks it to the
+    // screen width.
+    layoutStatus() {
+        const status = this.status, key = `${WIDTH}x${HEIGHT}:${status.text}`
+        if (this.statusKey === key) return
+        this.statusKey = key
+        Object.assign(status, {x: WIDTH / 2, y: HEIGHT / 2, fontSize: 2 * hubUnit() * hubFontScale()})
+        if (this.account && this.notice && status.width > WIDTH * 0.96) status.fontSize *= WIDTH * 0.96 / status.width
     }
     startFeed() {
         this.feed ||= new HubListFeed(onlineSession, rows => this.list.setRows(rows))
@@ -2334,20 +2378,30 @@ class OnlineHubTree {
 
 // 'change nickname': a canvas text input prefilled with the current nickname.
 class NicknameTree {
-    constructor(_menu, pos0X = WIDTH / 2 - WIDTH * 0.25 / 2) {
+    constructor(_menu) {
         this.menu = _menu
         this.saving = false
-        this.title = new Text(WIDTH / 2, HEIGHT * 0.3, Math.min(0.04 * WIDTH, 0.07 * HEIGHT), 'change nickname', MENU_THEME.text)
+        this.title = new Text(NaN, NaN, 1, 'change nickname', MENU_THEME.text)
+        this.input = new MenuTextInput(Menu.getButtonRect({x: NaN, y: NaN}), 1,
+            {maxLength: 16, onSubmit: () => this.save(), onCancel: () => this.back()})
+        this.status = new Text(NaN, NaN, 1, '', MENU_THEME.mutedText)
+        this.buttons = [
+            Menu.getButton(undefined, 'save', this.save, undefined, true, this),
+            Menu.getButton(undefined, 'back', this.back, undefined, true, this),
+        ]
+        this.layout()
+    }
+    // TASK-1485: every size at the current WIDTH x HEIGHT (also after a screen resize); value and focus kept.
+    layout() {
+        Object.assign(this.title, {x: WIDTH / 2, y: HEIGHT * 0.3, fontSize: Math.min(0.04 * WIDTH, 0.07 * HEIGHT)})
         // Wider than a button so 16 characters fit.
         const inputRect = Menu.getButtonRect({x: WIDTH * 0.3, y: HEIGHT * 0.36})
         inputRect.width = WIDTH * 0.4
-        this.input = new MenuTextInput(inputRect, 0.04 * WIDTH,
-            {maxLength: 16, onSubmit: () => this.save(), onCancel: () => this.back()})
-        this.status = new Text(WIDTH / 2, HEIGHT * 0.51, 0.025 * WIDTH, '', MENU_THEME.mutedText)
-        this.buttons = [
-            Menu.getButton({x: pos0X, y: HEIGHT * 0.56}, 'save', this.save, undefined, true, this),
-            Menu.getButton({x: pos0X, y: HEIGHT * 0.7}, 'back', this.back, undefined, true, this),
-        ]
+        this.input.place(inputRect, 0.04 * WIDTH)
+        Object.assign(this.status, {x: WIDTH / 2, y: HEIGHT * 0.51, fontSize: 0.025 * WIDTH})
+        const x = Menu.columnX()
+        menuRefitButton(this.buttons[0], {x, y: HEIGHT * 0.56})
+        menuRefitButton(this.buttons[1], {x, y: HEIGHT * 0.7})
     }
     enter() {
         this.saving = false
@@ -3416,6 +3470,15 @@ class Menu {
         if (this.tutorial.dragY !== undefined) this.tutorial.dragY = null
         this.tutorial.layout?.()
         for (const tree of [this.load, this.startGame]) tree.layout()
+        // TASK-1485: the online screens (hub, lobby room, create game, sign-in, nickname, replays) and an open replay
+        // viewer's controls.
+        this.onlineHub.layout()
+        this.lobbyRoom.layout()
+        this.createLobby.relayout()
+        this.signIn.layout()
+        this.nickname.layout()
+        this.replays.layout()
+        if (typeof replayViewer !== 'undefined') replayViewer?.controls?.layout()
     }
     get selectedMap() {
         return this.play.selectedMap
