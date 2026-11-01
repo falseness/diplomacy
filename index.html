@@ -26,11 +26,41 @@
             z-index: 0;
         }
 
+        /* Mobile landscape: the game runs portrait only (TASK-1481). */
+        #rotateOverlay {
+            display: none;
+            position: fixed;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            background-color: #141a22;
+            color: #f2ede3;
+            font: 600 22px/1.4 sans-serif;
+            text-align: center;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #rotateOverlay svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 18px;
+        }
+
     </style>
 </head>
 
 <body id="container">
     <canvas id="canvas"></canvas>
+    <div id="rotateOverlay" aria-live="polite"><svg viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="#f2ede3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="20" y="8" width="24" height="42" rx="4"/><line x1="29" y1="44" x2="35" y2="44"/><path d="M50 30a20 20 0 0 1-6 22"/><polyline points="38,50 44,52 46,46"/></svg><div>rotate the phone, only portrait is allowed</div></div>
 
     <!--<script src = "objectModels/setDefaultModel.js"></script>
         <script src = "objectModels/setObjectOffset.js"></script>
@@ -42,6 +72,31 @@
 
     <script src='options/assert.js'></script>
     <script src='options/gameCoords.js'></script>
+    <script>
+        // TASK-1481: phones and tablets (mobilePhone) run portrait only. In landscape a full-window overlay covers the
+        // game and swallows input; the game itself keeps running underneath.
+        (function () {
+            const overlay = document.getElementById('rotateOverlay')
+            let shown = false
+            const update = () => {
+                shown = mobilePhone && window.innerWidth > window.innerHeight
+                overlay.style.display = shown ? 'flex' : 'none'
+            }
+            const swallow = event => {
+                if (!shown) return
+                event.stopImmediatePropagation()
+                if (event.cancelable) event.preventDefault()
+            }
+            for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'mousedown', 'mousemove', 'mouseup',
+                'click', 'dblclick', 'contextmenu', 'wheel', 'touchstart', 'touchmove', 'touchend', 'touchcancel'])
+                window.addEventListener(type, swallow, {capture: true, passive: false})
+            window.addEventListener('resize', update)
+            window.addEventListener('orientationchange', update)
+            window.addEventListener('load', update)
+            if (window.visualViewport) window.visualViewport.addEventListener('resize', update)
+            update()
+        })()
+    </script>
     <script src='options/dictionaryEnumeration.js'></script>
     <script src='options/dictionaryToList.js'></script>
     <script src='options/gameObjectVariables.js'></script>
