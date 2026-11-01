@@ -144,10 +144,85 @@ const turnPlayback = {
     // Re-applies one recorded step on a board loaded from the recording's snapshot ({ok, reason?}).
     applyStep(action) {
         if (action && action.t === 'start') {
-            Player.prototype.nextTurn.call(players[whooseTurn])
+            // (a demon's turn start refreshes its units first: DemonPlayer.nextTurn, not wrapped outside a recorded phase)
+            const player = players[whooseTurn]
+            if (typeof DemonPlayer !== 'undefined' && player instanceof DemonPlayer)
+                DemonPlayer.prototype.nextTurn.call(player)
+            else
+                Player.prototype.nextTurn.call(player)
+            return {ok: true}
+        }
+        // TASK-1497: the local co-op demon phase's wave spawn (advanceCoopLocalPhase stage 'wave')
+        if (action && action.t === 'wave') {
+            const phase = gameSettings.coop && gameSettings.coop.localPhase
+            if (!phase || phase.stage !== 'wave' || phase.round !== action.round || whooseTurn !== gameSettings.coop.demonSlot ||
+                    !this.coopPhase)
+                return {ok: false, reason: 'not a demon phase wave'}
+            // (the phase's own stage step: spawnCoopWave(round), then stage 'demon', as the recorded phase did)
+            this.coopPhase()
             return {ok: true}
         }
         return applyAction(action)
+    },
+    // TASK-1497: the local co-op demon phase being recorded (advanceCoopLocalPhase, wrapped below), or null.
+    demonPhase: null,
+    // advanceCoopLocalPhase as nextTurn.js defines it (not recording): a playback's wave step.
+    coopPhase: null,
+    // The local co-op demon phase (offline co-op: advanceCoopLocalPhase, nextTurn.js) is recorded like an AI turn: the
+    // snapshot before the wave spawn, a {t: 'wave', round} step (spawnCoopWave), the demons' turn start {t: 'start'}
+    // (DemonPlayer.nextTurn) and every command of their play() (spendGold's purchases, the combat AI's moves and
+    // attacks). A phase resumed from a save at stage 'demon' starts its recording there (no wave step). The phase
+    // itself runs unchanged (its saved localPhase semantics too).
+    installDemonPhase() {
+        if (typeof advanceCoopLocalPhase !== 'function' || typeof DemonPlayer !== 'function')
+            return
+        const self = this
+        const originalPhase = this.coopPhase = advanceCoopLocalPhase
+        advanceCoopLocalPhase = function() {
+            const phase = gameSettings.coop && gameSettings.coop.localPhase
+            const stage = phase && phase.stage
+            if (stage === 'wave') {
+                const recording = self.demonPhase = self.beginTurn(players[whooseTurn])
+                if (recording)
+                    recording.demon = true
+                const result = originalPhase.apply(this, arguments)
+                if (recording && self.demonPhase === recording)
+                    recording.actions.push({action: {t: 'wave', round: phase.round}, hash: stateHash()})
+                return result
+            }
+            if (stage === 'demon') {
+                let recording = self.demonPhase
+                if (!recording || recording.player !== whooseTurn || recording.endHash !== null) {
+                    recording = self.beginTurn(players[whooseTurn])
+                    if (recording)
+                        recording.demon = true
+                }
+                self.demonPhase = recording
+                try {
+                    return originalPhase.apply(this, arguments)
+                } finally {
+                    self.demonPhase = null
+                    if (recording && recording.endHash === null)
+                        recording.endHash = stateHash()
+                }
+            }
+            return originalPhase.apply(this, arguments)
+        }
+        const originalNextTurn = DemonPlayer.prototype.nextTurn
+        DemonPlayer.prototype.nextTurn = function() {
+            const result = originalNextTurn.apply(this, arguments)
+            const recording = self.demonPhase
+            if (recording && recording.player === players.indexOf(this) && !recording.actions.some(step => step.action.t === 'start'))
+                self.recordStart(recording)
+            return result
+        }
+        const originalPlay = DemonPlayer.prototype.play
+        DemonPlayer.prototype.play = function() {
+            const recording = self.demonPhase
+            if (!recording || recording.player !== players.indexOf(this) || self.active)
+                return originalPlay.apply(this, arguments)
+            return self.play(recording, () => originalPlay.apply(this, arguments))
+        }
     },
     // Wraps the AI turn and the executors (once; index.html loads this after the classes).
     install() {
@@ -208,6 +283,7 @@ const turnPlayback = {
             self.recordStart(recording)
             self.play(recording, () => this.play())
         }
+        this.installDemonPhase()
     }
 }
 turnPlayback.install()
@@ -251,11 +327,13 @@ const turnPlaybackView = {
     // A step's wait never exceeds this (real ms): an effect that does not end does not hold the playback.
     stepTimeoutMs: 4000,
     // ms (speed 1) a step of each kind is estimated to take (glide, slide, effect or dwell).
-    estimates: {start: 900, unit: 1250, skip: 60, train: 600, build: 600, destroy: 600},
+    estimates: {start: 900, wave: 1000, unit: 1250, skip: 60, train: 600, build: 600, destroy: 600},
     // Player fields set from the map (GameMap.createPlayers) that a loaded snapshot lacks (load()).
     playerSettings: ['economyEnabled', 'ignoresFog'],
     // Dwell (scaled ms) of a seen step with nothing animated (a train, a build, a destroy).
     dwellMs: 300,
+    // TASK-1497: dwell (scaled ms) of a seen wave spawn (the new demons on their portals).
+    waveDwellMs: 700,
     // The running playback, null when none.
     active: null,
     // Evidence and tests: the last playbacks' logs (bounded), drift records.
@@ -501,11 +579,41 @@ const turnPlaybackView = {
             coords = [action.producer]
         else if (action.t === 'build' || action.t === 'destroy')
             coords = [action.at]
+        else if (action.t === 'wave')
+            coords = this.waveCells(action)
         coords = coords.filter(coord => this.seen(coord))
         if (!coords.length)
             return null
+        // (a wave's portals can be far apart: the camera goes to the seen spawn nearest to where it is)
+        if (action.t === 'wave' && coords.length > 1) {
+            const here = gameEvent.screen.centre()
+            const distance = coord => { const q = this.centreOf(coord); return Math.hypot(q.x - here.x, q.y - here.y) }
+            coords = [coords.reduce((best, coord) => distance(coord) < distance(best) ? coord : best)]
+        }
         const points = coords.map(coord => this.centreOf(coord))
         return {x: points.reduce((s, q) => s + q.x, 0) / points.length, y: points.reduce((s, q) => s + q.y, 0) / points.length}
+    },
+    // TASK-1497: the cells a wave step spawns demons on (the wave generateCoopWave composes for the playback's board; its
+    // typedWaves bookkeeping is put back, so the step itself composes the same wave).
+    waveCells(action) {
+        const coop = gameSettings.coop
+        if (!coop || typeof generateCoopWave !== 'function')
+            return []
+        const had = Object.prototype.hasOwnProperty.call(coop, 'typedWaves'), typedWaves = coop.typedWaves
+        try {
+            const wave = generateCoopWave(action.round)
+            return (wave && wave.selections || []).filter(entry => {
+                const cell = this.cell(entry)
+                return cell && cell.unit.isEmpty() && cell.building.isDemonPortal
+            }).map(entry => ({x: entry.x, y: entry.y}))
+        } catch (error) {
+            return []
+        } finally {
+            if (had)
+                coop.typedWaves = typedWaves
+            else
+                delete coop.typedWaves
+        }
     },
     // The unit's cells from action.from to action.to along the way its selection computes (for its slide), or null.
     unitPath(action) {
@@ -680,7 +788,8 @@ const turnPlaybackView = {
                 if (!this.apply(p))
                     return
                 const action = p.recordings[p.recordingIndex].actions[p.stepIndex].action
-                p.dwell = p.seen && action.t !== 'unit' && action.t !== 'start' ? this.dwellMs : 0
+                p.dwell = !p.seen || action.t === 'unit' || action.t === 'start' ? 0 :
+                    action.t === 'wave' ? this.waveDwellMs : this.dwellMs
                 p.stepReal = this.now()
                 p.stepScaled = this.scaledNow(p)
                 p.stepFrames = 0
