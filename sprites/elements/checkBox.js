@@ -13,9 +13,17 @@ class CheckBox extends Rect {
         
         this.selected = false
         this.selectedRect = Rect.getSelectedRect(this)
+        // Optional {x, y, width, height}: the click/hover area instead of the box (TASK-1535: a settings row). Half-open
+        // in y, so rows that meet share no point.
+        this.hitRect = null
+    }
+    isHit(pos) {
+        const r = this.hitRect
+        if (!r) return this.isInside(pos)
+        return r.x <= pos.x && pos.x <= r.x + r.width && r.y <= pos.y && pos.y < r.y + r.height
     }
     select(pos) {
-        this.selected = this.isInside(pos)
+        this.selected = this.isHit(pos)
     }
     removeSelect() {
         this.selected = false
@@ -36,7 +44,7 @@ class CheckBox extends Rect {
 
     }
     click(pos) {
-        if (!this.disabled && this.isInside(pos)) {
+        if (!this.disabled && this.isHit(pos)) {
             this.mark = !this.mark
             return true
         }

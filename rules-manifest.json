@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "ab1b68b397f36c156fe059f07d51b59d7891f6ab04b0772709a6845599851105",
+  "rulesVersion": "4c7757424dc73542d4c4e84919e56435d5521f06c6ee8653d942fe608153f88e",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -250,8 +250,8 @@
     },
     {
       "path": "sprites/elements/checkBox.js",
-      "sha256": "798febc7fcc483e68c8fa7b03ecd994c37a3056830831eeb25a5f3ca27a95f36",
-      "bytes": 3409
+      "sha256": "561890599b031bb7038fba244785ad32e521c0faadf4ead060c35ea42ac2552d",
+      "bytes": 3796
     },
     {
       "path": "sprites/elements/slider.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "0a586798f00f1b1d6001785a7be3bfa9c1e305eacd2865e6a3ec1e1ed6a67387",
-      "bytes": 176736
+      "sha256": "e1dcda2929bc8b285885d72397d3a5a6ed06e4166ee9b91731484dfd76d3c089",
+      "bytes": 177272
     },
     {
       "path": "sprites/hexagon.js",

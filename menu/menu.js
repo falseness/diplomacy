@@ -179,6 +179,9 @@ class OtherSettingsTree {
                 [cornerR, cornerR, cornerR, cornerR], strokeWidth, menuOptions.checkBox.color)
             text.textAlign = 'left'
             text.x = labelX
+            // TASK-1535: the whole row toggles: from the label's left edge to the box's right edge, over the row's
+            // interval, so adjacent rows meet without a dead strip.
+            box.hitRect = {x: labelX, y: this.FIRST_Y + i * intervalY, width: boxX + rectSize - labelX, height: intervalY}
             return box
         })
         this.rowsBottom = this.FIRST_Y + count * intervalY
@@ -210,6 +213,10 @@ class OtherSettingsTree {
 
         ok |= this.buttons[this.buttons.length - 1].click(pos)
         return ok
+    }
+    // TASK-1535: a mouse pointer anywhere in a row highlights its box (CheckBox.select over its row hitRect).
+    hover(pos) {
+        for (const button of this.buttons) if (button instanceof CheckBox) button.select(pos)
     }
     __updateOtherSettings() {
         let usePolishedSprites = otherSettings.usePolishedSprites
