@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "1d0014603a52fd5dff37020c27c5e063da882b236b750101fdfe7f71747ee411",
+  "rulesVersion": "73246573e9bc9b01b3610c1757f986ad5db19fd627ad8fd8d452dc63d6ab0e8d",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -70,8 +70,8 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "3006084b49b0f54f405cab07eba81cded7b75795ca44707efcf53bb9cb3c1210",
-      "bytes": 2857
+      "sha256": "e79ba74da5110f0013217e2307126b1ad484a03ae9feb4dab82ea38ca3149b5e",
+      "bytes": 4695
     },
     {
       "path": "options/actionApi.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "e5301b943d65075cfdcc43fb70cf48c7339915dd7228f9b4338f0bebe3417043",
-      "bytes": 33438
+      "sha256": "3624f668e8b61fe0d3efd08771c8b9527e9454b033a4a09520dd7a94585a93cf",
+      "bytes": 33850
     },
     {
       "path": "interface/entityinterface.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "85642363b1546cbd28fd58a8a3d55fc1d302f3f1f7864adcb3016de675c8dd54",
-      "bytes": 173109
+      "sha256": "f5c0a448ce80df4469456bea36da0e41edc8a1eeaf566c956b56a596ae3187ad",
+      "bytes": 172188
     },
     {
       "path": "sprites/hexagon.js",

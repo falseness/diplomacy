@@ -220,23 +220,9 @@ class OtherSettingsTree {
         otherSettings.usePolishedSprites = this.polishedSpritesCheckBox.mark
         otherSettings.autoscout = this.autoscoutCheckBox.mark
         otherSettings.atmosphericVisuals = this.atmosphericVisualsCheckBox.mark
-        // 'Animations' is the move slide, the attack effects and the heal effects (an old save with one of them off shows
-        // unchecked); off ends running ones at once. 'Replay others' moves' is ignored (greyed, not clickable) while it is off.
-        if (this.animationsCheckBox.mark !== (otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals)) {
-            otherSettings.animateMoves = otherSettings.animateAttacks = otherSettings.animateHeals = this.animationsCheckBox.mark
-            if (!this.animationsCheckBox.mark) {
-                if (typeof moveTween !== 'undefined')
-                    moveTween.clear()
-                if (typeof attackFx !== 'undefined')
-                    attackFx.clear()
-                if (typeof healFx !== 'undefined')
-                    healFx.clear()
-            }
-        }
-        otherSettings.replayOthers = this.replayCheckBox.mark
-        // TASK-1496: either row off ends a running playback of AI turns at once (the computed board).
-        if (typeof turnPlaybackView !== 'undefined')
-            turnPlaybackView.settingsChanged()
+        // 'Animations' / 'Replay others' moves': the shared rule (options/otherSettings.js applyAnimationSettings, also
+        // the tutorial-20 panel's rows); it saves the settings.
+        applyAnimationSettings(this.animationsCheckBox.mark, this.replayCheckBox.mark)
         this.replayCheckBox.disabled = !this.animationsCheckBox.mark
         if (atmosphericVisuals !== otherSettings.atmosphericVisuals && grid) {
             // Rebuild the board display on the next frame, without changing game state.
@@ -256,7 +242,7 @@ class OtherSettingsTree {
         this.polishedSpritesCheckBox.mark = otherSettings.usePolishedSprites
         this.autoscoutCheckBox.mark = otherSettings.autoscout
         this.atmosphericVisualsCheckBox.mark = otherSettings.atmosphericVisuals
-        this.animationsCheckBox.mark = otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals
+        this.animationsCheckBox.mark = animationsSettingOn()
         this.replayCheckBox.mark = otherSettings.replayOthers
         this.replayCheckBox.disabled = !this.animationsCheckBox.mark
     }

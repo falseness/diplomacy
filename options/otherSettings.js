@@ -58,3 +58,41 @@ class Settings {
 }
 Settings.VERSION = 1
 let otherSettings = new Settings()
+
+// TASK-1523: the Settings menu's 'Animations' and "Replay others' moves" rows (menu.js OtherSettingsTree) and the
+// tutorial-20 background panel's rows (render/draw.js backgroundHintClick) share this rule.
+// 'Animations' is the move slide, the attack effects and the heal effects, all three on (an old save with one of them off
+// shows unchecked).
+function animationsSettingOn() {
+    return !!(otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals)
+}
+// Applies the two rows' marks: Animations sets all three flags (off ends running animations at once); Replay is ignored
+// (greyed, not clickable) while Animations is off. A running playback of AI turns that the rows no longer allow jumps to
+// the computed board; the settings are saved. Returns whether a setting changed.
+function applyAnimationSettings(animations, replay) {
+    animations = !!animations
+    replay = !!replay
+    let changed = false
+    if (animations !== animationsSettingOn()) {
+        otherSettings.animateMoves = otherSettings.animateAttacks = otherSettings.animateHeals = animations
+        changed = true
+        if (!animations) {
+            if (typeof moveTween !== 'undefined')
+                moveTween.clear()
+            if (typeof attackFx !== 'undefined')
+                attackFx.clear()
+            if (typeof healFx !== 'undefined')
+                healFx.clear()
+        }
+    }
+    if (animations && replay !== otherSettings.replayOthers) {
+        otherSettings.replayOthers = replay
+        changed = true
+    }
+    // TASK-1496: either row off ends a running playback of AI turns at once (the computed board).
+    if (typeof turnPlaybackView !== 'undefined')
+        turnPlaybackView.settingsChanged()
+    if (typeof saveOtherSettings === 'function')
+        saveOtherSettings()
+    return changed
+}

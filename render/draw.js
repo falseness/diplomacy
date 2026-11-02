@@ -128,17 +128,17 @@ const BACKGROUND_HINT_PANELS = {
     ]},
     // TASK-1522: Tutorial 8 ('Rotate and Heal'): the Settings menu's 'Animations' row (the move slide, the attack effects
     // and the heal effects, all three on: OtherSettingsTree.__updateButtonsByOtherSettings) and its "Replay others'
-    // moves" row, greyed (disabled) while Animations is off. Rows with a state getter (no setting) are not clickable here.
+    // moves" row, greyed (disabled) while Animations is off. Rows with a state getter (no setting) toggle by their
+    // toggle(): the Settings menu's rule (options/otherSettings.js applyAnimationSettings, TASK-1523).
     'tutorial-20': {touch: true, panels: [
         {name: 'animations', heading: 'Animations', side: -1, width: 5.75, height: 3.15, keys: [], captions: [], checks: [
-            {text: 'Animations', state: backgroundHintAnimationsOn, y: 0.9},
+            {text: 'Animations', state: () => animationsSettingOn(), y: 0.9,
+                toggle: () => applyAnimationSettings(!animationsSettingOn(), otherSettings.replayOthers)},
             {text: "Replay others' moves", state: () => !!otherSettings.replayOthers,
-                disabled: () => !backgroundHintAnimationsOn(), y: 0.9 + 0.95},
+                disabled: () => !animationsSettingOn(), y: 0.9 + 0.95,
+                toggle: () => applyAnimationSettings(animationsSettingOn(), !otherSettings.replayOthers)},
         ]},
     ]},
-}
-function backgroundHintAnimationsOn() {
-    return !!(otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals)
 }
 // A checkbox row's tick (on) and greying (disabled): its state getter, else its otherSettings flag.
 function backgroundHintRowOn(row) {
@@ -209,7 +209,8 @@ function drawBackgroundHints(ctx) {
 // TASK-1470: a click or a touch tap at realPos (world coordinates: the event mapped through the camera transform,
 // getRealEventPos) on a checkbox row of a shown panel (its plate or its label, the panel's width less the plate's
 // inset at each side, the plate's height and BACKGROUND_HINT_CHECK.hitPad above and below) flips the row's setting and
-// saves it as the Settings menu does. The next frame shows it: the panel's canvas key holds the settings' state; the lit
+// saves it as the Settings menu does (a row with toggle(): that, TASK-1523; a disabled row is not hit: the click goes on
+// as one elsewhere). The next frame shows it: the panel's canvas key holds the settings' state; the lit
 // snapshots and the overlay composite (they hold the panel drawn with the sky) and the held still frame are dropped
 // now, once. Returns whether a row was hit (the click is consumed).
 function backgroundHintClick(realPos) {
@@ -218,15 +219,19 @@ function backgroundHintClick(realPos) {
     const rects = backgroundHintRects(), check = BACKGROUND_HINT_CHECK, r = basis.r
     for (const rect of rects) {
         for (const row of rect.panel.checks || []) {
-            if (!row.setting)
+            if (!row.setting && !row.toggle || backgroundHintRowDisabled(row))
                 continue
             const x0 = rect.x + check.x * r, x1 = rect.x + (rect.panel.width - check.x) * r
             const y0 = rect.y + (row.y - check.hitPad) * r, y1 = rect.y + (row.y + check.size + check.hitPad) * r
             if (realPos.x < x0 || realPos.x > x1 || realPos.y < y0 || realPos.y > y1)
                 continue
-            otherSettings[row.setting] = !otherSettings[row.setting]
-            if (typeof saveOtherSettings === 'function')
-                saveOtherSettings()
+            if (row.toggle)
+                row.toggle()
+            else {
+                otherSettings[row.setting] = !otherSettings[row.setting]
+                if (typeof saveOtherSettings === 'function')
+                    saveOtherSettings()
+            }
             ++backgroundHintState.toggles
             if (typeof grid !== 'undefined' && grid) {
                 grid.releaseLitCanvases()
