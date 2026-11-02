@@ -130,7 +130,7 @@ class OtherSettingsTree {
     // Rows form a two-column grid: labels left-aligned at one x, boxes in one column to their right.
     // The rows and the back button below them are scaled to fit between the logo and the screen bottom.
     LABELS = ['always display hp bar', 'always display moves bar', 'move camera to undo target',
-        'use polished sprites', 'autoscout (online fog)', 'Atmospheric visuals', 'Animations', "Replay others' moves"]
+        'use polished sprites', 'autoscout (online fog)', 'atmospheric visuals', 'animations', "replay others' moves"]
     // At the current WIDTH x HEIGHT; layout() reads them (TASK-1484: again on a screen resize).
     get BACK_HEIGHT() {
         return HEIGHT * 0.1
@@ -220,7 +220,7 @@ class OtherSettingsTree {
         otherSettings.usePolishedSprites = this.polishedSpritesCheckBox.mark
         otherSettings.autoscout = this.autoscoutCheckBox.mark
         otherSettings.atmosphericVisuals = this.atmosphericVisualsCheckBox.mark
-        // 'Animations' / 'Replay others' moves': the shared rule (options/otherSettings.js applyAnimationSettings, also
+        // 'animations' / 'replay others' moves': the shared rule (options/otherSettings.js applyAnimationSettings, also
         // the tutorial-20 panel's rows); it saves the settings.
         applyAnimationSettings(this.animationsCheckBox.mark, this.replayCheckBox.mark)
         this.replayCheckBox.disabled = !this.animationsCheckBox.mark

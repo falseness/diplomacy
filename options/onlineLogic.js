@@ -479,7 +479,7 @@ const gameDiffHandler = {
 // order, with their attacks in place (no glide), before anything else when a board arrives (receiveBoard / resyncBoard:
 // the local turn starts, turn change, game end), when the local player acts (unfreezeGame, waitingMode off: a parallel
 // turn), on a reconnect / reopened turn (gameDiffHandler.reset of the same game) and when playback is off. Off (today's
-// behaviour: every diff at once) when otherSettings.replayOthers is false, the 'Animations' row is off (animateMoves /
+// behaviour: every diff at once) when otherSettings.replayOthers is false, the 'animations' row is off (animateMoves /
 // animateAttacks false), in headless runs (gameSettings.testAI, no screen glide) and while enabled is false. UI only:
 // the same diffs are applied by the same gameDiffHandler.apply in the same order, so the board (stateHash) after the
 // queue equals the one of immediate application.

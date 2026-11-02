@@ -194,7 +194,7 @@ class AttackFx {
     enabled() {
         return typeof otherSettings === 'undefined' || otherSettings.animateAttacks !== false
     }
-    // TASK-1430: the camera replay of others' attacks (the 'Replay others' moves' setting); off -> in place, at once.
+    // TASK-1430: the camera replay of others' attacks (the 'replay others' moves' setting); off -> in place, at once.
     replays() {
         return typeof otherSettings === 'undefined' || otherSettings.replayOthers !== false
     }

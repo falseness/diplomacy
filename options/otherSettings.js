@@ -59,9 +59,9 @@ class Settings {
 Settings.VERSION = 1
 let otherSettings = new Settings()
 
-// TASK-1523: the Settings menu's 'Animations' and "Replay others' moves" rows (menu.js OtherSettingsTree) and the
+// TASK-1523: the Settings menu's 'animations' and "replay others' moves" rows (menu.js OtherSettingsTree) and the
 // tutorial-20 background panel's rows (render/draw.js backgroundHintClick) share this rule.
-// 'Animations' is the move slide, the attack effects and the heal effects, all three on (an old save with one of them off
+// 'animations' is the move slide, the attack effects and the heal effects, all three on (an old save with one of them off
 // shows unchecked).
 function animationsSettingOn() {
     return !!(otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals)

@@ -89,7 +89,7 @@ function drawAttackFx() {
 // Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:
 // a 'Camera' panel left of the board and a 'Turn' panel right of it; Tutorial 4 ('High Ground') shows a 'Display'
 // panel left of the board with the 'always display hp bar' and 'always display moves bar' settings as checkboxes
-// (white ticks), on a desktop and on a touch device; Tutorial 8 ('Rotate and Heal') shows an 'Animations' panel the same
+// (white ticks), on a desktop and on a touch device; Tutorial 8 ('Rotate and Heal') shows an 'animations' panel the same
 // way (TASK-1522). The panels are in world space (they pan and zoom
 // with the board). They are part of the background: drawn right after the sky (drawMain and the lit
 // rest snapshot, lit patch and overlay snapshot, which hold the sky), so the board, its shadow and the
@@ -126,15 +126,15 @@ const BACKGROUND_HINT_PANELS = {
             {text: 'always display moves bar', setting: 'alwaysDisplayMovesBar', y: 0.9 + 0.95},
         ]},
     ]},
-    // TASK-1522: Tutorial 8 ('Rotate and Heal'): the Settings menu's 'Animations' row (the move slide, the attack effects
+    // TASK-1522: Tutorial 8 ('Rotate and Heal'): the Settings menu's 'animations' row (the move slide, the attack effects
     // and the heal effects, all three on: OtherSettingsTree.__updateButtonsByOtherSettings) and its "Replay others'
     // moves" row, greyed (disabled) while Animations is off. Rows with a state getter (no setting) toggle by their
     // toggle(): the Settings menu's rule (options/otherSettings.js applyAnimationSettings, TASK-1523).
     'tutorial-20': {touch: true, panels: [
-        {name: 'animations', heading: 'Animations', side: -1, width: 5.75, height: 3.15, keys: [], captions: [], checks: [
-            {text: 'Animations', state: () => animationsSettingOn(), y: 0.9,
+        {name: 'animations', heading: 'animations', side: -1, width: 5.75, height: 3.15, keys: [], captions: [], checks: [
+            {text: 'animations', state: () => animationsSettingOn(), y: 0.9,
                 toggle: () => applyAnimationSettings(!animationsSettingOn(), otherSettings.replayOthers)},
-            {text: "Replay others' moves", state: () => !!otherSettings.replayOthers,
+            {text: "replay others' moves", state: () => !!otherSettings.replayOthers,
                 disabled: () => !animationsSettingOn(), y: 0.9 + 0.95,
                 toggle: () => applyAnimationSettings(animationsSettingOn(), !otherSettings.replayOthers)},
         ]},

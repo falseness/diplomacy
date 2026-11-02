@@ -312,7 +312,7 @@ turnPlayback.install()
 // ends (begin's start callback); the timer is set before and not running during it. A click or a key during the playback
 // skips it (the computed board at once); the camera can still pan and zoom.
 // Off (today's behaviour: the computed board at once, others' attacks replayed after it) when otherSettings.replayOthers
-// is false, when the 'Animations' row is off (animateMoves / animateAttacks false), online, for partial boards, in
+// is false, when the 'animations' row is off (animateMoves / animateAttacks false), online, for partial boards, in
 // headless runs (gameSettings.testAI, no camera glide) and while turnPlayback.enabled is false.
 // Safety (TASK-1496): a save during a playback stores the computed board (withLiveBoard, options/save.js); leaving the
 // game (menu.stopGame) cancels it with nothing left running, and a new game drops it (discard); either settings row
@@ -414,7 +414,7 @@ const turnPlaybackView = {
             this.restoreGlobals(shown, false)
         }
     },
-    // The menu's 'Animations' and 'replay others' rows (and enabled) still allow a playback.
+    // The menu's 'animations' and 'replay others' rows (and enabled) still allow a playback.
     settingsAllow() {
         if (this.enabled === false)
             return false

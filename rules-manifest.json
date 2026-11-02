@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "9b6e70b4b4016254aa1e41d30d70da4c6b4bfe818e3c7a60f968ea49a1eaf162",
+  "rulesVersion": "ab1b68b397f36c156fe059f07d51b59d7891f6ab04b0772709a6845599851105",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -30,7 +30,7 @@
     },
     {
       "path": "options/gamestart.js",
-      "sha256": "d533e6dbffe41e56f4b9e0c79efa7e90953616d774bb185519e96d7f47957833",
+      "sha256": "34ae7bf8e8e038515043610a67dcb0d77f835392faf3b3101493ee098cc3f1f4",
       "bytes": 99997
     },
     {
@@ -70,7 +70,7 @@
     },
     {
       "path": "options/otherSettings.js",
-      "sha256": "e79ba74da5110f0013217e2307126b1ad484a03ae9feb4dab82ea38ca3149b5e",
+      "sha256": "b8ff833db59ca7e86fb7a130b40b00d5f9ca674b1b08a2dca43958e0a15f6580",
       "bytes": 4695
     },
     {
@@ -150,7 +150,7 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "912d3f8a25e85e8a4f6ba681e5e68be1d05d95217d615f983a303e2e2fa0bbd7",
+      "sha256": "84d1b1be2de811dc6e2f407d72dcb8ec7799eb130592ea999916232fd0017a94",
       "bytes": 34388
     },
     {
@@ -300,7 +300,7 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "f94e1417151de13db8d44d5e15bcb9582cb9c5211b4cdc57db0589c1b78ab8fb",
+      "sha256": "0a586798f00f1b1d6001785a7be3bfa9c1e305eacd2865e6a3ec1e1ed6a67387",
       "bytes": 176736
     },
     {

@@ -1796,7 +1796,7 @@ class GameManager {
         gameEvent.screen.zoomBy({x: WIDTH / 2, y: HEIGHT / 2}, 1)
         gameEvent.screen.move(0)
     }
-    // Atmospheric visuals open the board like the concept: the whole slab (top face and sides) fitted and
+    // atmospheric visuals open the board like the concept: the whole slab (top face and sides) fitted and
     // centred with a sky margin (CAMERA_FIT.margin of the shorter screen side), when that leaves hexes
     // no smaller than at the map's zoom-out limit, nor than the minimum readable size: the hex radius at
     // the zoom-out limit of the standard 21-cell board in landscape (5/21 of basis.r = the longer screen
