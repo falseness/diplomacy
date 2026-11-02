@@ -2217,11 +2217,13 @@ class OnlineHubTree {
         let right = WIDTH - side
         if (this.menu.betaTag) {
             this.betaTag ??= new BetaTag()
-            this.betaTag.text.fontSize = 1.5 * u * hubFontScale()
+            // TASK-1527: 1.5x the earlier 1.5 units.
+            this.betaTag.text.fontSize = 2.25 * u * hubFontScale()
             this.betaTag.text.x = WIDTH
             const width = this.betaTag.bounds.width
             this.betaTag.text.x = right - width / 2
             this.betaTag.text.y = logoY
+            this.betaTag.keepInside()
             right -= width + u
         }
         this.nicknameButton.place(right - 1.4 * u, logoY, 1.4 * u)
@@ -2678,8 +2680,21 @@ class BetaTag {
         this.layout()
     }
     // At the current WIDTH x HEIGHT (TASK-1484: again on a screen resize).
+    // TASK-1527: 1.5x the earlier font (min(WIDTH * 0.012, HEIGHT * 0.026)).
     layout() {
-        Object.assign(this.text, {x: WIDTH * 0.935, y: HEIGHT * 0.065, fontSize: Math.min(WIDTH * 0.012, HEIGHT * 0.026)})
+        Object.assign(this.text, {x: WIDTH * 0.935, y: HEIGHT * 0.065, fontSize: Math.min(WIDTH * 0.018, HEIGHT * 0.039)})
+        this.keepInside()
+    }
+    // TASK-1527: the centre moved inwards just enough to keep the rotated tag 0.01 * HEIGHT from the screen's right and
+    // top edges.
+    keepInside() {
+        const margin = HEIGHT * 0.01
+        let bounds
+        try { bounds = this.bounds } catch (error) { return }
+        if (![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite)) return
+        const overRight = bounds.x + bounds.width - (WIDTH - margin), overTop = margin - bounds.y
+        if (overRight > 0) this.text.x -= overRight
+        if (overTop > 0) this.text.y += overTop
     }
     // The tag's size around its centre, before the rotation (measured in its font once the font has loaded).
     get size() {

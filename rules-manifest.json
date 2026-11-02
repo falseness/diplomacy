@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "436d244cacf3f0f9f27366c96202368dcafd77f6d480b13bdad8f168e169d9f5",
+  "rulesVersion": "9b6e70b4b4016254aa1e41d30d70da4c6b4bfe818e3c7a60f968ea49a1eaf162",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "menu/menu.js",
-      "sha256": "bc34d199ae29de6e803fb75a0fde8699f99e31208d511416a0f7d9764fe3a6bc",
-      "bytes": 175965
+      "sha256": "f94e1417151de13db8d44d5e15bcb9582cb9c5211b4cdc57db0589c1b78ab8fb",
+      "bytes": 176736
     },
     {
       "path": "sprites/hexagon.js",
