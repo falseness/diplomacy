@@ -89,7 +89,8 @@ function drawAttackFx() {
 // Tutorial 1 ('Moving Around') shows the keyboard controls on the sky beside the board, on a desktop only:
 // a 'Camera' panel left of the board and a 'Turn' panel right of it; Tutorial 4 ('High Ground') shows a 'Display'
 // panel left of the board with the 'always display hp bar' and 'always display moves bar' settings as checkboxes
-// (white ticks), on a desktop and on a touch device. The panels are in world space (they pan and zoom
+// (white ticks), on a desktop and on a touch device; Tutorial 8 ('Rotate and Heal') shows an 'Animations' panel the same
+// way (TASK-1522). The panels are in world space (they pan and zoom
 // with the board). They are part of the background: drawn right after the sky (drawMain and the lit
 // rest snapshot, lit patch and overlay snapshot, which hold the sky), so the board, its shadow and the
 // units draw over them. Each panel is rendered once per scale step (and per state of its settings) into an
@@ -125,6 +126,26 @@ const BACKGROUND_HINT_PANELS = {
             {text: 'always display moves bar', setting: 'alwaysDisplayMovesBar', y: 0.9 + 0.95},
         ]},
     ]},
+    // TASK-1522: Tutorial 8 ('Rotate and Heal'): the Settings menu's 'Animations' row (the move slide, the attack effects
+    // and the heal effects, all three on: OtherSettingsTree.__updateButtonsByOtherSettings) and its "Replay others'
+    // moves" row, greyed (disabled) while Animations is off. Rows with a state getter (no setting) are not clickable here.
+    'tutorial-20': {touch: true, panels: [
+        {name: 'animations', heading: 'Animations', side: -1, width: 5.75, height: 3.15, keys: [], captions: [], checks: [
+            {text: 'Animations', state: backgroundHintAnimationsOn, y: 0.9},
+            {text: "Replay others' moves", state: () => !!otherSettings.replayOthers,
+                disabled: () => !backgroundHintAnimationsOn(), y: 0.9 + 0.95},
+        ]},
+    ]},
+}
+function backgroundHintAnimationsOn() {
+    return !!(otherSettings.animateMoves && otherSettings.animateAttacks && otherSettings.animateHeals)
+}
+// A checkbox row's tick (on) and greying (disabled): its state getter, else its otherSettings flag.
+function backgroundHintRowOn(row) {
+    return row.state ? row.state() : !!otherSettings[row.setting]
+}
+function backgroundHintRowDisabled(row) {
+    return !!(row.disabled && row.disabled())
 }
 
 // Whether the page is used with a mouse: a hovering fine pointer, and no touch seen in this page
@@ -197,6 +218,8 @@ function backgroundHintClick(realPos) {
     const rects = backgroundHintRects(), check = BACKGROUND_HINT_CHECK, r = basis.r
     for (const rect of rects) {
         for (const row of rect.panel.checks || []) {
+            if (!row.setting)
+                continue
             const x0 = rect.x + check.x * r, x1 = rect.x + (rect.panel.width - check.x) * r
             const y0 = rect.y + (row.y - check.hitPad) * r, y1 = rect.y + (row.y + check.size + check.hitPad) * r
             if (realPos.x < x0 || realPos.x > x1 || realPos.y < y0 || realPos.y > y1)
@@ -222,7 +245,8 @@ const backgroundHintState = {rects: null, renders: 0, toggles: 0, canvases: new 
 // The panel rendered at scale (device pixels a world unit) and its settings' state, kept for the last two keys.
 function backgroundHintCanvas(panel, scale) {
     const cache = backgroundHintState.canvases
-    const key = panel.name + ':' + (panel.checks || []).map(check => otherSettings[check.setting] ? 1 : 0).join('') + scale
+    const key = panel.name + ':' + (panel.checks || []).map(row =>
+        (backgroundHintRowOn(row) ? 1 : 0) + (backgroundHintRowDisabled(row) ? 'd' : '')).join('') + scale
     let image = cache.get(key)
     if (image)
         return image
@@ -251,10 +275,11 @@ function renderBackgroundHintPanel(g, panel, k) {
     const rim = Math.max(1, 0.035 * k), family = Text.defaultFamily
     const plate = (x, y, width, height, radius, style) => {
         roundedRectPath(g, x + rim / 2, y + rim / 2, width - rim, height - rim, radius)
-        g.globalAlpha = style.alpha
+        const alpha = g.globalAlpha
+        g.globalAlpha = alpha * style.alpha
         g.fillStyle = style.fill
         g.fill()
-        g.globalAlpha = 1
+        g.globalAlpha = alpha
         g.strokeStyle = style.rim
         g.lineWidth = rim
         g.stroke()
@@ -291,13 +316,18 @@ function renderBackgroundHintPanel(g, panel, k) {
         g.fillText(word.text, word.x * k, word.y * k)
     for (const caption of panel.captions)
         g.fillText(caption.text, panel.textX * k, caption.y * k)
-    // The checkbox rows: a plain plate, a white tick in it when the setting is on, the label right of it.
+    // The checkbox rows: a plain plate, a white tick in it when the setting is on, the label right of it; a disabled
+    // row's plate, tick and label at 0.4 alpha (as the Settings menu's disabled check box).
     const check = BACKGROUND_HINT_CHECK, size = check.size * k
     g.font = `${MENU_THEME.fontWeight} ${check.font * k}px ${family}`
     for (const row of panel.checks || []) {
-        const x = check.x * k, y = row.y * k
+        const x = check.x * k, y = row.y * k, disabled = backgroundHintRowDisabled(row)
+        if (disabled) {
+            g.save()
+            g.globalAlpha = 0.4
+        }
         plate(x, y, size, size, 0.12 * k, MENU_THEME.plain)
-        if (otherSettings[row.setting]) {
+        if (backgroundHintRowOn(row)) {
             g.beginPath()
             g.moveTo(x + 0.22 * size, y + 0.52 * size)
             g.lineTo(x + 0.42 * size, y + 0.72 * size)
@@ -310,6 +340,8 @@ function renderBackgroundHintPanel(g, panel, k) {
         }
         g.fillStyle = MENU_THEME.text
         g.fillText(row.text, check.labelX * k, y + size / 2)
+        if (disabled)
+            g.restore()
     }
 }
 
