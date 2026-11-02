@@ -132,12 +132,22 @@ class Grid extends SpritesGroup {
         this.zoomSlab = undefined
         // TASK-1517: the last frame's board calls on the main canvas (keepZoomSource: every frame but a move tween's is
         // recorded), whether the frame being drawn is recorded only for that (zoomSourceCandidate), the zoom rasters replayed
-        // from it at once (replayZoomBoard) or copied from the main canvas (copyZoomScreen), the stepped replay under way
+        // from it at once (replayZoomBoard) or from its board snapshot (copyZoomImage), the stepped replay under way
         // (startZoomReplay), its steps, longest step (ms) and finished replays swapped in, and its canvas.
+        // The rasters copied from a recording's board snapshot (zoomBitmapCopies, keepZoomBitmap), the snapshots taken, the
+        // gestures that held the frame on screen until their stepped raster was swapped in (holdZoomFrame: starts, frames
+        // held, given up) and why a recording could not be replayed at once (zoomSourceFor: none, serial, camera, key,
+        // layers, over the sync limit). zoomScreenCopies stays 0: the main canvas (with its interface) is never copied.
         this.zoomSource = undefined
         this.zoomRecording = false
         this.zoomBoardReplays = 0
         this.zoomScreenCopies = 0
+        this.zoomBitmapCopies = 0
+        this.zoomSourceBitmaps = 0
+        this.zoomHoldStarts = 0
+        this.zoomHeldFrames = 0
+        this.zoomHoldDrops = 0
+        this.zoomSourceMisses = {none: 0, serial: 0, camera: 0, key: 0, layers: 0, overSync: 0}
         this.zoomReplayJob = undefined
         this.zoomReplaySteps = 0
         this.zoomReplayMaxStepMs = 0
@@ -5153,9 +5163,13 @@ class Grid extends SpritesGroup {
     // the last frame's kept (keepZoomSource); without a held bitmap the raster is those calls made again on it
     // (replayZoomBoard: the board as the frame on screen shows it, drawn from the same cached images, 12-100 calls on the
     // surface-cache and lit paths), sky cut off as a copy's. A frame of more calls (Grid.ZOOM_REPLAY_SYNC_CALLS: a direct
-    // frame) or whose cached images changed since, or none recorded: the main canvas as it is, cut to the slab (copyZoomScreen:
-    // one drawImage; the last frame's interface in it); the more calls replayed into another canvas in budgeted steps between
-    // frames (startZoomReplay) that replaces it when complete. Grid.zoomReplays false: renderZoomBoard as before.
+    // frame) keeps a snapshot of its board (keepZoomBitmap, before the interface), copied as the held bitmap is; one whose
+    // cached images changed since is copied from that snapshot too. Without a snapshot (not resolved yet, or a stale
+    // recording of few calls) the calls are made again into another canvas in budgeted steps between frames
+    // (startZoomReplay) while the screen keeps the frame it shows (holdZoomFrame: nothing drawn, its interface once), at
+    // most Grid.ZOOM_HOLD_FRAMES frames; then the gesture's frames draw that raster. The main canvas (its interface on it)
+    // is never copied. No recording (none since the last frame, or the camera moved since): no raster, the gesture's frames
+    // drawn as any frame. Grid.zoomReplays false: renderZoomBoard as before.
     captureZoomRaster() {
         if (!Grid.zoomRasters || this !== grid || this.zoomRaster || typeof mainCanvas === 'undefined' || typeof mainCtx === 'undefined' ||
                 !this.zoomRasterSource || zoomRasterTweens())
@@ -5180,26 +5194,82 @@ class Grid extends SpritesGroup {
             ++this.zoomBoardRenders
         }
         else {
-            const source = this.zoomSourceFor(t, cw, ch)
-            if (source && source.calls.length <= Grid.ZOOM_REPLAY_SYNC_CALLS && (box = this.replayZoomBoard(canvas, t, source)))
-                ++this.zoomBoardReplays
-            else if ((box = this.copyZoomScreen(canvas, t)))
-                ++this.zoomScreenCopies
-            else
+            const {source, stale} = this.zoomSourceFor(t, cw, ch)
+            if (!source)
                 return
-            if (source && source.calls.length > Grid.ZOOM_REPLAY_SYNC_CALLS)
+            const over = source.calls.length > Grid.ZOOM_REPLAY_SYNC_CALLS
+            if (over)
+                ++this.zoomSourceMisses.overSync
+            if (!stale && !over && (box = this.replayZoomBoard(canvas, t, source)))
+                ++this.zoomBoardReplays
+            else if (source.bitmap && (box = this.copyZoomImage(canvas, t, source.bitmap)))
+                ++this.zoomBitmapCopies
+            else {
+                // No board-only image of the frame on screen yet: the screen holds that frame (holdZoomFrame) until the
+                // recording made again in steps is swapped in.
+                box = {x: 0, y: 0, w: 0, h: 0}
                 steps = source
+            }
         }
-        this.zoomRaster = {canvas, box, a: t.a, d: t.d, e: t.e, f: t.f}
-        if (steps)
+        this.zoomRaster = {canvas, box, a: t.a, d: t.d, e: t.e, f: t.f, pending: !!steps, held: 0}
+        if (steps) {
+            ++this.zoomHoldStarts
             this.startZoomReplay(steps, t, this.zoomRaster)
+        }
+    }
+    // TASK-1517: whether drawAll draws nothing this frame: the gesture's zoom raster is still made in steps
+    // (startZoomReplay; pending), so the canvas keeps the frame on screen at the input, its interface drawn once, for at
+    // most Grid.ZOOM_HOLD_FRAMES frames; past them (or the gesture over) the raster is given up and the frame drawn as
+    // any frame is.
+    holdZoomFrame() {
+        const raster = this.zoomRaster
+        if (!raster?.pending)
+            return false
+        if (raster.held < Grid.ZOOM_HOLD_FRAMES && Grid.zoomRasters && this === grid && gameEvent.screen.zoomGesture && !zoomRasterTweens() &&
+                this.zoomReplayJob?.raster === raster) {
+            ++raster.held
+            ++this.zoomHeldFrames
+            return true
+        }
+        this.zoomRaster = undefined
+        ++this.zoomHoldDrops
+        return false
     }
     // Keeps a recorded frame's calls on the main canvas (beginLodFrame) as the board on the canvas now (the zoom raster's
     // source, replayZoomBoard): with the context state they started from, the frame's serial, key (lodFrameKey: the camera,
     // the canvas's size, the cached rasters the calls draw) and the layers they draw from (zoomSourceLayers).
     keepZoomSource(recorder) {
+        this.dropZoomSource()
         this.zoomSource = {calls: recorder.calls, labels: recorder.labels, overlayEnd: recorder.overlayEnd, state: recorder.state,
-            serial: this.drawSerial, key: recorder.key, layers: this.zoomSourceLayers()}
+            serial: this.drawSerial, key: recorder.key, layers: this.zoomSourceLayers(), bitmap: null}
+    }
+    // No kept recording (its board snapshot let go of).
+    dropZoomSource() {
+        this.zoomSource?.bitmap?.close?.()
+        this.zoomSource = undefined
+    }
+    // TASK-1517: a kept recording of more calls than a gesture's input replays at once (Grid.ZOOM_REPLAY_SYNC_CALLS: a
+    // direct frame, already that many calls) gets a snapshot of ctx's canvas as its frame left it, before the
+    // interface (as a held frame's, captureHeldFrame): the zoom raster is then that board in one drawImage, the frame on
+    // screen exactly, whatever was rebuilt since.
+    keepZoomBitmap(ctx) {
+        const source = this.zoomSource
+        if (!source || source.serial !== this.drawSerial || source.calls.length <= Grid.ZOOM_REPLAY_SYNC_CALLS ||
+                typeof createImageBitmap !== 'function')
+            return
+        let snapshot
+        try {
+            snapshot = createImageBitmap(ctx.canvas)
+        } catch (e) {
+            return
+        }
+        ++this.zoomSourceBitmaps
+        snapshot.then(bitmap => {
+            if (this.zoomSource === source)
+                source.bitmap = bitmap
+            else
+                bitmap.close?.()
+        }, () => {})
     }
     // The layers a frame draws whose canvases are drawn again in place by a later build (the lit layer's pieces) or that a
     // build replaces: a recording drawing them stands for the board only while they are the same.
@@ -5213,19 +5283,26 @@ class Grid extends SpritesGroup {
         return Grid.zoomReplays && Grid.zoomRasters && this === grid && typeof mainCanvas !== 'undefined' && ctx.canvas === mainCanvas &&
             !zoomRasterTweens()
     }
-    // The kept recording (keepZoomSource) when it is the board on the main canvas at camera t (cw x ch device pixels): the
-    // last frame's, at that camera, with every raster and layer it draws as it was; else undefined.
+    // The kept recording (keepZoomSource) when it is the last frame's on the main canvas at camera t (cw x ch device
+    // pixels): {source, stale}, stale ('key' or 'layers') when a raster or layer it draws changed since (made again, it is
+    // the board as those draw now, not the frame on screen; its snapshot, if any, still is); {} without one (the reason
+    // counted in zoomSourceMisses).
     zoomSourceFor(t, cw, ch) {
-        const source = this.zoomSource
-        if (!source || source.serial !== this.drawSerial || typeof mainCtx === 'undefined')
-            return undefined
-        const key = source.key, now = this.lodFrameKey(mainCtx), layers = this.zoomSourceLayers()
-        if (key[0] !== t.a || key[1] !== t.d || key[2] !== t.e || key[3] !== t.f || key[4] !== cw || key[5] !== ch ||
-                key.length !== now.length || layers.length !== source.layers.length)
-            return undefined
-        for (let k = 0; k < key.length; ++k) if (key[k] !== now[k]) return undefined
-        for (let k = 0; k < layers.length; ++k) if (layers[k] !== source.layers[k]) return undefined
-        return source
+        const source = this.zoomSource, misses = this.zoomSourceMisses
+        if (!source || typeof mainCtx === 'undefined')
+            return ++misses.none, {}
+        if (source.serial !== this.drawSerial)
+            return ++misses.serial, {}
+        const key = source.key
+        if (key[0] !== t.a || key[1] !== t.d || key[2] !== t.e || key[3] !== t.f || key[4] !== cw || key[5] !== ch)
+            return ++misses.camera, {}
+        const now = this.lodFrameKey(mainCtx), layers = this.zoomSourceLayers()
+        let stale = key.length !== now.length || key.some((k, i) => k !== now[i]) ? 'key' : undefined
+        if (!stale && (layers.length !== source.layers.length || layers.some((l, i) => l !== source.layers[i])))
+            stale = 'layers'
+        if (stale)
+            ++misses[stale]
+        return {source, stale}
     }
     // Sets canvas up for a zoom raster of the board at camera t: cleared, clipped to the slab grown by
     // Grid.ZOOM_SLAB_MARGIN where the board's surroundings are not the cleared canvas (see copyZoomBoard), the identity
@@ -5275,17 +5352,15 @@ class Grid extends SpritesGroup {
         }
         return target.box
     }
-    // Draws the main canvas as it is (the last frame: its board, sky and interface) on canvas, set up by zoomRasterTarget
-    // (the sky cut off), when its camera is t. The raster's box, or false.
-    copyZoomScreen(canvas, t) {
-        const s = this.zoomRasterSource
-        if (!s || s.a !== t.a || s.d !== t.d || s.e !== t.e || s.f !== t.f || s.width !== canvas.width || s.height !== canvas.height ||
-                mainCanvas.width !== canvas.width || mainCanvas.height !== canvas.height)
+    // Draws image (a board snapshot of the frame at camera t: no interface) on canvas, set up by zoomRasterTarget (the sky
+    // cut off). The raster's box, or false.
+    copyZoomImage(canvas, t, image) {
+        if (image.width !== canvas.width || image.height !== canvas.height)
             return false
         const target = this.zoomRasterTarget(canvas, t)
         if (!target)
             return false
-        target.g.drawImage(mainCanvas, 0, 0)
+        target.g.drawImage(image, 0, 0)
         target.g.restore()
         return target.box
     }
@@ -5335,6 +5410,7 @@ class Grid extends SpritesGroup {
             this.zoomReplayCanvas = raster.canvas
             this.zoomRasterCanvas = raster.canvas = canvas
             raster.box = job.box
+            raster.pending = false
             ++this.zoomReplaySwaps
         }))
         step()
@@ -5351,12 +5427,7 @@ class Grid extends SpritesGroup {
             return false
         // The slab, grown by Grid.ZOOM_SLAB_MARGIN (the rim and the edge cells' strokes reach past the outline), clips the
         // bitmap (zoomRasterTarget).
-        const target = this.zoomRasterTarget(canvas, t)
-        if (!target)
-            return false
-        target.g.drawImage(bitmap, 0, 0)
-        target.g.restore()
-        return target.box
+        return this.copyZoomImage(canvas, t, bitmap)
     }
     // The slab's footprint in world space grown by margin: its top face (mapDepth's outline), that face moved down by the
     // side depth, the side faces between them and, around the top and bottom outlines and the slab's vertical edges at the
@@ -5462,7 +5533,7 @@ class Grid extends SpritesGroup {
         if (!raster)
             return false
         const t = ctx.getTransform(), cw = ctx.canvas.width, ch = ctx.canvas.height
-        if (!Grid.zoomRasters || this !== grid || !gameEvent.screen.zoomGesture || zoomRasterTweens() ||
+        if (!Grid.zoomRasters || this !== grid || !gameEvent.screen.zoomGesture || zoomRasterTweens() || raster.pending ||
                 raster.canvas.width !== cw || raster.canvas.height !== ch || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) {
             this.zoomRaster = undefined
             return false
@@ -5544,7 +5615,7 @@ class Grid extends SpritesGroup {
         if (typeof Proxy !== 'function' || !this.lodTransform(ctx) && !(this.stillRecording = this.stillFrameCandidate(ctx)) &&
                 !(this.zoomRecording = this.zoomSourceCandidate(ctx))) {
             this.dropHeldFrame()
-            this.zoomSource = undefined
+            this.dropZoomSource()
             return null
         }
         const recorder = this.lodRecorder ||= new CanvasCallRecorder()
@@ -5645,6 +5716,14 @@ class Grid extends SpritesGroup {
     // interface draws over the same pixels in the same state. Until the snapshot is ready (createImageBitmap resolves after
     // the frame) the frames repeating it are made again; they are not new held frames (stillRefreshes).
     endLodFrame(ctx, recorder) {
+        const held = this.makeLodFrame(ctx, recorder)
+        // TASK-1517: a board snapshot for a zoom raster when the frame is not held and has none of its own (captureHeldFrame).
+        if (!held && this.lodFrame?.serial !== this.drawSerial)
+            this.keepZoomBitmap(ctx)
+        return held
+    }
+    // endLodFrame's frame: made on ctx or held; whether held.
+    makeLodFrame(ctx, recorder) {
         const still = this.stillRecording, zoom = this.zoomRecording
         this.stillRecording = false
         this.zoomRecording = false
@@ -6299,11 +6378,13 @@ Grid.zoomRasters = true
 // the edge cells' strokes, half outside the outline.
 Grid.ZOOM_SLAB_MARGIN = 0.12
 // TASK-1517: a zoom gesture's raster without a held frame is the last frame's recorded board calls made again (Grid.replayZoomBoard)
-// at once up to this many calls, else the main canvas copied and the calls made in steps between frames (Grid.startZoomReplay)
-// of about ZOOM_REPLAY_STEP_MS each, checked every ZOOM_REPLAY_CHUNK calls. False zoomReplays: the board rendered at once
+// at once up to this many calls, else its board snapshot copied (Grid.keepZoomBitmap) or the calls made in steps between frames
+// (Grid.startZoomReplay, the frame on screen held meanwhile) of about ZOOM_REPLAY_STEP_MS each, checked every ZOOM_REPLAY_CHUNK calls. False zoomReplays: the board rendered at once
 // (Grid.renderZoomBoard).
 Grid.zoomReplays = true
 Grid.ZOOM_REPLAY_SYNC_CALLS = 600
+// The frames a gesture keeps the frame on screen while its raster is made in steps (Grid.holdZoomFrame).
+Grid.ZOOM_HOLD_FRAMES = 4
 Grid.ZOOM_REPLAY_STEP_MS = 6
 Grid.ZOOM_REPLAY_CHUNK = 8
 // TASK-1375: level-of-detail frames (Grid.lodTransform) below this hexagon radius on screen, in CSS pixels (12 device pixels at

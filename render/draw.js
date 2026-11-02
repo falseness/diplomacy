@@ -618,6 +618,9 @@ function drawInterface() {
 }
 
 function drawAll() {
+    // TASK-1517: a zoom gesture whose raster is still made keeps the frame on screen (Grid.holdZoomFrame).
+    if (typeof grid !== 'undefined' && grid?.holdZoomFrame?.())
+        return
     drawMain()
     drawInterface()
         //mainCtx.clearRect(-basis.offset.x, -basis.offset.y * 2, width, height)
