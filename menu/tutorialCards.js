@@ -9,7 +9,8 @@
 // "Next" tag. More rows than the grid shows scroll by whole rows (wheel, touch drag, arrow keys) with a gold track at
 // the right; while rows follow the shown ones, the next row peeks in, fading, under a "▼ N more" pill (no pill while a
 // dotted "Advanced tutorial" divider, above ADVANCED_FROM's row, is shown). Sizes are in hub units (hubUnit). The medallion shows the lesson's
-// picture (TutorialCardsTree.IMAGES, by tutorial id) from the game's own assets.
+// picture (TutorialCardsTree.IMAGES, by tutorial id) from the game's own assets. The divider sits between Rotate and
+// Heal's row and All as One's (TASK-1541), so it shows above the peek row of the opening frame.
 
 // A lesson card: its whole rect starts the lesson. Menu.touchStart/Move/End hand every touch to every button of the
 // tree, so each card forwards it to the tree, where repeated calls with one position change nothing.
@@ -59,8 +60,9 @@ class TutorialCardsTree {
     // The share of a card's height the next row shows below the shown ones (TutorialCardsTree.layout).
     static PEEK = 0.45
     // The first advanced lesson: the "Advanced tutorial" divider sits above its row (TutorialCardsTree.layout).
-    // Hold the Walls opens the fourth row since Puzzle Rush came in, so the first three rows stay the basic lessons.
-    static ADVANCED_FROM = 'tutorial-5'
+    // All as One (lesson 9) opens the fourth row, right after Rotate and Heal ends the third (TASK-1541), so the first
+    // three rows are the basic lessons and every lesson from 9 on is advanced.
+    static ADVANCED_FROM = 'tutorial-21'
     // Medallion pictures by tutorial id (not the display number): the file and its fit, as in the concept: 'unit'
     // sprites a little larger and lowered, 'low' buildings raised so their art is centred. The menu loads them as its
     // own images from these paths, so the sprite and visuals settings (which switch the shared assets' folders, see
@@ -195,7 +197,7 @@ class TutorialCardsTree {
         const u = hubUnit(), compact = menuCompact(), gap = 1.3 * u
         const headingTop = compact ? 1.0 * u : this.menu.logo.bounds.y + this.menu.logo.bounds.height + 0.2 * u
         Object.assign(this.heading, {x: WIDTH / 2 - 12 * u, y: headingTop, width: 24 * u, height: 3.4 * u})
-        let top, bottom
+        let top, bottom, spare = 0
         if (compact) {
             const backHeight = 3.6 * u
             this.backButton.place?.(3 * u, headingTop - 0.1 * u, 13 * u, backHeight, 2.1 * u)
@@ -204,6 +206,7 @@ class TutorialCardsTree {
             const height = (height0 - 3 * gap) / 1.5 + 3 * gap
             top = top0 + (height0 - height) / 2
             bottom = top + height
+            spare = height0 - height
         } else {
             const backHeight = 4.6 * u, backTop = HEIGHT - 1.4 * u - backHeight
             this.backButton.place?.(WIDTH / 2 - 9 * u, backTop, 18 * u, backHeight, 2.2 * u)
@@ -225,6 +228,13 @@ class TutorialCardsTree {
         const extra = dividerAt === null ? 0 : band - gap
         // The card size the menu opens with (firstRow 0) at every firstRow: no growing at the last row.
         const openPeeking = this.maxFirstRow > 0, openExtra = dividerAtRow(0) === null ? 0 : band - gap
+        // Compact: a divider in the opening frame takes room the centred grid has spare, so the cards keep their
+        // compact size (TASK-1541: the divider sits above the peek row there since All as One opens row 3).
+        if (compact && openExtra > 0) {
+            const grow = Math.min(openExtra, spare)
+            this.grid.y -= grow / 2
+            this.grid.height += grow
+        }
         const height = openPeeking ? (this.grid.height - gap * this.shownRows - openExtra) / (this.shownRows + TutorialCardsTree.PEEK) :
             (this.grid.height - gap * (this.shownRows - 1) - openExtra) / this.shownRows
         this.cardStep = height + gap
