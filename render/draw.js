@@ -459,7 +459,7 @@ function drawTutorialHints(ctx) {
         [['Kill ', 'white'], ['blue', 'rgb(' + players[2].textColor + ')']]]
     const left = backToMenuButton.rect.x + backToMenuButton.rect.width + gap
     const right = iButton.rect.x - gap
-    let font = unit * 0.042
+    let font = unit * 0.063
     ctx.font = 'bold ' + font + 'px Arial'
     const textWidth = () => Math.max(...goal.map(parts =>
         parts.reduce((sum, [text]) => sum + ctx.measureText(text).width, 0)))
@@ -477,7 +477,7 @@ function drawTutorialHints(ctx) {
     drawLine(goal[1], goalX + goalWidth / 2, goalY + font * 1.95)
 
     // A label centred above each button, kept on screen.
-    font = unit * 0.03
+    font = unit * 0.045
     ctx.font = 'bold ' + font + 'px Arial'
     const labels = [['undo', 'Undo move', undoButton.rect], ['nextTurn', 'Next turn', nextTurnButton.rect]]
         .map(([name, text, rect]) => {
@@ -506,7 +506,9 @@ function drawTutorialHints(ctx) {
 // left border, a red glow ring around the button and a red caption box above the arrow's tail.
 // Every arrow part stays left of the button, so it never covers the button's click area. The first
 // angle, tip height and size (largest first) whose arrow and caption are on screen and clear of the
-// other hints and buttons (obstacles) is drawn.
+// other hints and buttons (obstacles) is drawn. When none fits with the caption just above the arrow (a
+// narrow screen whose bottom row of labels leaves no room between them), the search runs again with the
+// caption lifted above whatever it overlaps.
 function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine) {
     const rect = nextTurnButton.rect
     const lineWidth = Math.max(2, unit * 0.006)
@@ -515,7 +517,7 @@ function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine
     const captionHeight = font * 1.5
     const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
     const onScreen = a => a.x >= gap && a.y >= gap && a.x + a.width <= WIDTH - gap && a.y + a.height <= HEIGHT - gap
-    const layOut = (size, angle, tipFraction) => {
+    const layOut = (size, angle, tipFraction, lift) => {
         // The arrow pointing along +x with its tip at the origin, then turned by angle.
         const length = size * 1.6, head = size * 0.5, halfHead = size * 0.33, halfShaft = size * 0.12
         const cos = Math.cos(angle), sin = Math.sin(angle)
@@ -534,6 +536,12 @@ function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine
             y: bounds.y - gap - captionHeight, width: captionWidth, height: captionHeight}
         if (overlaps(caption, label))
             caption.x = Math.max(gap, label.x - gap - captionWidth)
+        for (let i = 0; lift && i < 4; i++) {
+            const hit = obstacles.filter(o => overlaps(caption, o))
+            if (!hit.length)
+                break
+            caption.y = Math.min(...hit.map(o => o.y)) - gap - captionHeight
+        }
         const fits = [bounds, caption].every(part => onScreen(part) && !obstacles.some(o => overlaps(part, o))) &&
             !overlaps(bounds, caption)
         return {tip, tail, points, bounds, caption, size, angle, fits}
@@ -541,13 +549,14 @@ function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine
     const base = Math.max(rect.width, unit * 0.16)
     let arrow = null
     search:
-    for (const scale of [1, 0.85, 0.7, 0.55, 0.4])
-        for (const degrees of [40, 30, 20, 10, 0])
-            for (const tipFraction of [0.35, 0.5, 0.65, 0.8]) {
-                arrow = layOut(base * scale, degrees * Math.PI / 180, tipFraction)
-                if (arrow.fits)
-                    break search
-            }
+    for (const lift of [false, true])
+        for (const scale of [1, 0.85, 0.7, 0.55, 0.4])
+            for (const degrees of [40, 30, 20, 10, 0])
+                for (const tipFraction of [0.35, 0.5, 0.65, 0.8]) {
+                    arrow = layOut(base * scale, degrees * Math.PI / 180, tipFraction, lift)
+                    if (arrow.fits)
+                        break search
+                }
 
     ctx.save()
     // The glow ring.
