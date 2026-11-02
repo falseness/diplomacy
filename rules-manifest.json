@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "ac51574ad8dce2eca6276202aca497970884935e6423e20d6b59233e2ef98201",
+  "rulesVersion": "65b19868cf7ba28598e5879b334e99dbaf2e497ed64ab90e80aac640a0e9f8a1",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "17c000cf2cc3ce0afceb0fbb34784d07b7c2ba9e2b18cf9afa6cf9177a4b15a7",
-      "bytes": 332162
+      "sha256": "d0d7d331c25ede98c0fd85825433805c3f196b487c736ce290c5d4b397810ca7",
+      "bytes": 333591
     },
     {
       "path": "sprites/entities/hpBar.js",
@@ -325,8 +325,8 @@
     },
     {
       "path": "sprites/entities/units/unit/interactionWithUnit.js",
-      "sha256": "84cfb75c9d9ec5a1d4477f7deb71cebbe49cb72248ec8cd014d32d4cbb6e2119",
-      "bytes": 31231
+      "sha256": "7d9dee7d94b650df0f4279a030a847922e92c91227f72c9898c3a646b8974a55",
+      "bytes": 31320
     },
     {
       "path": "sprites/entities/units/unit/unit.js",
@@ -455,8 +455,8 @@
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/production.js",
-      "sha256": "d5012bc9780cefc2672f0812a0deb002fd3a176b45d8afb6f5a39da8f9f3440f",
-      "bytes": 17282
+      "sha256": "cc586c6feadeff0a96224e335cdca461e03de54ce4f6dd39ca29faf0d97ee388",
+      "bytes": 17351
     },
     {
       "path": "sprites/entities/buildings/manufactures/preparingManufacture/preparingManufacture.js",

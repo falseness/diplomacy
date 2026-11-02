@@ -42,12 +42,14 @@ class Cell {
         if (this._logicText == null) {
             this._logicText = new CoordText(this.coord.x, this.coord.y, '')
             this.logicTextCells?.push(this)
+            Grid.logicTextChanged()
         }
         return this._logicText
     }
     set logicText(text) {
         this._logicText = text
         if (text) this.logicTextCells?.push(this)
+        Grid.logicTextChanged()
     }
     // for now for texts of production
     get infoText() {
@@ -252,6 +254,7 @@ class Grid extends SpritesGroup {
         this.arr[coord.x][coord.y].unit = unit
     }
     cleanLogicText() {
+        Grid.logicTextChanged()
         // The cells of fill() list themselves once they have a logic text (each unit search cleans it).
         if (this.logicTextCells) {
             for (const cell of this.logicTextCells) {
@@ -3298,8 +3301,11 @@ class Grid extends SpritesGroup {
     // after a frame that could not use one (queueSceneLayer, as the overlay layer: the rectangle overlayLayerRect, its
     // drawing rasterized there) and used while the surface cache, its cell layer, the board's surface state and the scale
     // are unchanged, no cache job runs, the view is inside it and for at most a second; the next one is queued ahead once
-    // it is 750 ms old or the view is within a tenth of its size of its edge. Frames at rest (held or drawn directly), zoom
-    // gestures (the zoom raster), level-of-detail frames and frames with debug or logic texts never draw it. At the layer's
+    // it is 750 ms old or the view is within a tenth of its size of its edge. Frames at rest (held or drawn directly) and zoom
+    // gestures (the zoom raster) never draw it. TASK-1514: it holds the cell texts (drawCellText: debug's coordinate texts, a
+    // selection's logic texts; their state and revision in its key), and a level-of-detail frame draws a level-of-detail
+    // layer (lod in the build and the layer; no bars, silhouettes or texts), so the farthest zoom with a selection, debug
+    // or nothing selected moves as one image (about 3000 calls with debug, 450 unit bodies a level-of-detail frame). At the layer's
     // own camera its pixels are the direct frame's but for rounding (and a text glyph whose position lies on a sub-pixel
     // bin's edge, which the layer's own offset can put in the next bin).
     // Returns whether it drew the frame's shadow, surface and overlays.
@@ -3307,7 +3313,7 @@ class Grid extends SpritesGroup {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         const t = ctx.getTransform()
         if (!otherSettings.atmosphericVisuals || !Grid.sceneLayers || !screen || !screen.surfaceMoving || screen.zoomGesture ||
-                debug || this.drawLogicText || this.lod || typeof createImageBitmap !== 'function' || typeof mainCanvas === 'undefined' ||
+                typeof createImageBitmap !== 'function' || typeof mainCanvas === 'undefined' ||
                 ctx.canvas !== mainCanvas || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !this.surfaceCacheSteady() ||
                 this.stillUnitsHidden() || !this.canUseSurfaceCache()) {
             this.dropSceneLayer()
@@ -3328,11 +3334,12 @@ class Grid extends SpritesGroup {
         // state as the layer's drawing began in (the interface, drawn on the same canvas, leaves its state to the next frame:
         // a line dash strokes the cell texts' outlines).
         const state = canvasStateOf(ctx)
-        if (!layer || t.a !== layer.a || t.d !== layer.d || !this.sceneLayerKeyHolds(layer) || performance.now() - layer.time > 1000 ||
+        if (!layer || t.a !== layer.a || t.d !== layer.d || layer.lod !== this.lod || !this.sceneLayerKeyHolds(layer) ||
+                performance.now() - layer.time > 1000 ||
                 !sameCanvasState(state, layer.state) ||
                 viewLeft < layer.left || viewTop < layer.top || viewRight > layer.right || viewBottom > layer.bottom ||
                 !this.surfaceStateMatches(ctx) || !this.surfaceCellLayerHolds()) {
-            this.queueSceneLayer(ctx, t, state)
+            this.queueSceneLayer(ctx, t, state, this.lod)
             return false
         }
         const nearX = (viewRight - viewLeft) / 10, nearY = (viewBottom - viewTop) / 10
@@ -3340,7 +3347,7 @@ class Grid extends SpritesGroup {
                 Math.max(viewTop - nearY, b.top - margin) < layer.top ||
                 Math.min(viewRight + nearX, b.left + b.width + margin) > layer.right ||
                 Math.min(viewBottom + nearY, b.top + b.height + margin) > layer.bottom)
-            this.queueSceneLayer(ctx, t, state)
+            this.queueSceneLayer(ctx, t, state, this.lod)
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.drawImage(layer.canvas, 0, 0, layer.width, layer.height,
@@ -3367,11 +3374,12 @@ class Grid extends SpritesGroup {
         return !this.cellLayerOn() || !layer?.cells || layer.raster !== this.surfaceCache || !this.surfaceCache?.cellLayered ||
             this.cellLayerStatesAre(layer.states)
     }
-    // What the scene layer drew from: the cache, its shown raster and revision, the cell layer's, the shadow and bounds.
+    // What the scene layer drew from: the cache, its shown raster and revision, the cell layer's, the shadow and bounds,
+    // and the cell texts (drawCellText: debug's coordinate texts, the logic texts on and their revision).
     sceneLayerKey() {
         const b = this.surfaceCacheBounds
         return [this.surfaceCache, this.surfaceCacheShown, this.surfaceCacheRevision, this.cellLayerRevision, mapDepth.atmosphericShadow,
-            b.left, b.top, b.width, b.height]
+            b.left, b.top, b.width, b.height, debug, this.drawLogicText, Grid.logicTextRevision]
     }
     sceneLayerKeyHolds(layer) {
         const key = this.sceneLayerKey()
@@ -3383,10 +3391,11 @@ class Grid extends SpritesGroup {
             this.sceneLayer = undefined
         }
     }
-    // Queues the scene layer for transform t of ctx, drawn from ctx's state (canvasStateOf) now (one at a time). It is not
+    // Queues the scene layer for transform t of ctx, drawn from ctx's state (canvasStateOf) now (one at a time), as a
+    // level-of-detail frame draws it when lod (TASK-1514: the task runs after Grid.draw reset this.lod). It is not
     // built if the camera came to rest, a zoom gesture began, or the cache is not steady or no longer matches the board
     // when the task runs.
-    queueSceneLayer(ctx, t, state) {
+    queueSceneLayer(ctx, t, state, lod) {
         if (this.sceneLayerQueued)
             return
         this.sceneLayerQueued = true
@@ -3396,14 +3405,14 @@ class Grid extends SpritesGroup {
             const screen = gameEvent.screen
             if (!screen.surfaceMoving || screen.zoomGesture || this !== grid || !this.surfaceCacheSteady() || this.stillUnitsHidden())
                 return
-            const layer = this.drawSceneLayerRaster(cw, ch, t, state)
+            const layer = this.drawSceneLayerRaster(cw, ch, t, state, lod)
             if (!layer)
                 return
             // A one-pixel read rasterizes the drawing now, in this task between frames (as queueOverlayLayer).
             layer.canvas.getContext('2d').getImageData(0, 0, 1, 1)
             this.dropSceneLayer()
             this.sceneLayer = {...layer.bounds, canvas: layer.canvas, a: t.a, d: t.d, e: t.e, f: t.f, x0: layer.x0, y0: layer.y0,
-                width: layer.width, height: layer.height, key: this.sceneLayerKey(), state, time: performance.now()}
+                width: layer.width, height: layer.height, key: this.sceneLayerKey(), lod: !!lod, state, time: performance.now()}
             ++this.sceneLayerBuilds
         }))
     }
@@ -3411,7 +3420,7 @@ class Grid extends SpritesGroup {
     // (drawOverlayLayerRaster's) as a frame on a cw x ch canvas at transform t draws them, within overlayLayerRect and on
     // the same pixel grid, on a canvas of the rectangle's size (no larger: with the sky, the images a frame draws stay
     // within what a Chromium canvas records before it rasterizes). None when the board no longer matches the cache.
-    drawSceneLayerRaster(cw, ch, t, state) {
+    drawSceneLayerRaster(cw, ch, t, state, lod = false) {
         const {x0, y0, width, height} = this.overlayLayerRect(cw, ch, t)
         const canvas = document.createElement('canvas')
         canvas.width = width
@@ -3426,9 +3435,18 @@ class Grid extends SpritesGroup {
         const bounds = {left: (x0 - t.e) / t.a, top: (y0 - t.f) / t.d, right: (x0 + width - t.e) / t.a, bottom: (y0 + height - t.f) / t.d}
         mapDepth.drawAtmosphericShadow(lctx, this)
         this.drawSurfaceCacheRect(lctx, bounds.left, bounds.top, bounds.right, bounds.bottom)
-        this.drawStillUnits(lctx, this.surfaceOverlayCells)
-        this.drawEntityOverlays(lctx, this.surfaceOverlayCells)
-        this.drawInfoTexts(lctx, this.drawRange(lctx))
+        // TASK-1514: a level-of-detail layer draws what a level-of-detail frame draws (unit bodies, buildings under
+        // construction, no bars, silhouettes or texts); the cell texts as the frame draws them (debug's coordinate texts,
+        // a selection's logic texts, production texts).
+        const frameLod = this.lod
+        this.lod = !!lod
+        try {
+            this.drawStillUnits(lctx, this.surfaceOverlayCells)
+            this.drawEntityOverlays(lctx, this.surfaceOverlayCells)
+            this.drawCellText(lctx)
+        } finally {
+            this.lod = frameLod
+        }
         return {canvas, width, height, x0, y0, bounds}
     }
     // Queues the overlay layer for transform t of ctx (one at a time). It is not built if the
@@ -5657,6 +5675,9 @@ Grid.ZOOM_SLAB_MARGIN = 0.12
 // the user's DPR 1.5): the hp and moves bars are then about a pixel high and the cell texts 3-4 pixels, unreadable. False:
 // every frame draws as above it.
 Grid.LOD_RADIUS = 8
+// TASK-1514: bumped by every logic text change (made, set, cleaned, Grid.logicTextChanged): the scene layer's key.
+Grid.logicTextRevision = 0
+Grid.logicTextChanged = () => { ++Grid.logicTextRevision }
 Grid.lodFrames = true
 // TASK-1376: simple visuals' frames walk the cells reaching the canvas only (drawRange); still frames above the
 // level-of-detail threshold are held (Grid.stillFrameCandidate).

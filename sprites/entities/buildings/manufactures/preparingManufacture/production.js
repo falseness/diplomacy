@@ -555,6 +555,7 @@ class SuburbProduction extends BuildingProduction {
             let cell = arr[coord.x][coord.y]
             let cost = this.suburbsCostformula(this.distance[coord.x][coord.y])
             cell.logicText.text = cost
+            if (typeof Grid !== 'undefined') Grid.logicTextChanged()
 
             let posI = this.availableHexagons[i].calcPos()
 

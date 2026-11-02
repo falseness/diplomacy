@@ -405,8 +405,10 @@ class Way {
             else
                 v = enemyEntityQ.shift()
             let distance = this.distanceAt(v)
-            if (changeLogicText && distance)
+            if (changeLogicText && distance) {
                 arr[v.x][v.y].logicText.text = distance
+                if (typeof Grid !== 'undefined') Grid.logicTextChanged()
+            }
             if (distance > moves)
                 continue
             visitedCoords.push(v)
