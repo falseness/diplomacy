@@ -2764,14 +2764,23 @@ function roundedRectPath(ctx, x, y, width, height, radius) {
     ctx.arcTo(x, y, x + width, y, radius)
     ctx.closePath()
 }
+// TASK-1526: phones in landscape (under 520 CSS px tall and wider than tall) get the compact main menu: a smaller
+// logo at the top, Settings (and Replays) in the top-left corner, taller banners with bigger texts.
+function menuCompact() {
+    const ratio = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1
+    return HEIGHT / ratio < 520 && WIDTH > HEIGHT
+}
 // Draws text in one line if it fits maxWidth, else in two lines; returns the
-// box of what it drew.
-function drawFittedLines(ctx, text, x, y, fontSize, maxWidth, lineHeight) {
+// box of what it drew. With splitWide (compact menu) a comma split whose first line is wider than maxWidth splits
+// at the space nearest the middle instead.
+function drawFittedLines(ctx, text, x, y, fontSize, maxWidth, lineHeight, splitWide = false) {
     let lines = [text]
     if (ctx.measureText(text).width > maxWidth && text.includes(' ')) {
         // After a comma if there is one, else at the space nearest the middle.
         const spaces = [...text.matchAll(/ /g)].map(match => match.index)
-        const middle = text.includes(', ') ? text.indexOf(', ') + 1 :
+        const comma = text.includes(', ') &&
+            (!splitWide || ctx.measureText(text.slice(0, text.indexOf(', ') + 1)).width <= maxWidth)
+        const middle = comma ? text.indexOf(', ') + 1 :
             spaces.reduce((best, index) => Math.abs(index - text.length / 2) < Math.abs(best - text.length / 2) ? index : best)
         lines = [text.slice(0, middle), text.slice(middle + 1)]
     }
@@ -2954,7 +2963,7 @@ class MenuBanner extends Button {
     }
     draw(ctx) {
         const {x, y, width: w} = this.rect
-        const key = `${x},${y},${w},${this.emblemKey()}`
+        const key = `${x},${y},${w},${menuCompact()},${this.emblemKey()}`
         if (this.rasterKey !== key) {
             this.rasterKey = key
             this.raster = this.rasterize()
@@ -3106,7 +3115,8 @@ class MenuBanner extends Button {
         ctx.shadowBlur = w * 0.02
         ctx.shadowOffsetY = w * 0.008
         // The name shrinks to fit the banner.
-        let nameSize = w * (this.featured ? 0.13 : 0.12)
+        const compact = menuCompact()
+        let nameSize = w * (compact ? (this.featured ? 0.17 : 0.16) : (this.featured ? 0.13 : 0.12))
         ctx.font = `800 ${nameSize}px ${MENU_TITLE_FONT_FAMILY}`
         const nameWidth = ctx.measureText(this.name).width
         if (nameWidth > inner) {
@@ -3118,12 +3128,12 @@ class MenuBanner extends Button {
         ctx.fillText(this.name, cx, nameY)
         const drawnName = Math.min(nameWidth, inner)
         this.boxes.name = {x: cx - drawnName / 2, y: nameY - nameSize / 2, width: drawnName, height: nameSize}
-        const descriptionSize = w * 0.08
+        const descriptionSize = w * (compact ? 0.105 : 0.08)
         ctx.font = `500 ${descriptionSize}px ${MENU_FONT_FAMILY}`
         if ('wordSpacing' in ctx) ctx.wordSpacing = `${descriptionSize * 0.12}px`
         ctx.fillStyle = 'rgba(255, 244, 224, 0.88)'
         const description = drawFittedLines(ctx, this.description, cx, nameY + nameSize * 0.6 + w * 0.08,
-            descriptionSize, inner, 1.3)
+            descriptionSize, inner, 1.3, compact)
         this.boxes.description = {x: description.x, y: description.y, width: description.width, height: description.height}
         this.descriptionLines = description.lines
         ctx.restore()
@@ -3133,7 +3143,7 @@ class MenuBanner extends Button {
     paintTag(ctx) {
         const {x, y, width: w} = this.rect
         // Never below the menu's smallest readable size (1.6% of HEIGHT).
-        const size = Math.max(w * 0.055, HEIGHT * 0.018)
+        const size = Math.max(w * (menuCompact() ? 0.085 : 0.055), HEIGHT * 0.018)
         ctx.save()
         ctx.font = `700 ${size}px ${MENU_TITLE_FONT_FAMILY}`
         const width = ctx.measureText('Start here').width + size * 1.6, height = size * 1.75
@@ -3167,6 +3177,8 @@ class MenuIconButton extends Button {
         this.pressed = false
         this.center = {x: 0, y: 0}
         this.radius = 0
+        // Icon only (no caption), when the compact main menu has no room for captions (TASK-1526).
+        this.captionless = false
     }
     get captionSize() {
         return this.radius * 0.72
@@ -3182,7 +3194,7 @@ class MenuIconButton extends Button {
         return this.captionSize * this.caption.length * 0.5
     }
     get groupWidth() {
-        return this.radius * 2.35 + this.captionWidth()
+        return this.captionless ? this.radius * 2 : this.radius * 2.35 + this.captionWidth()
     }
     // Places the group (circle and caption) with its left edge at left and the circle centred on centerY.
     place(left, centerY, radius) {
@@ -3227,11 +3239,13 @@ class MenuIconButton extends Button {
         ctx.lineWidth = r * 0.07
         if (this.icon === 'gear') this.drawGear(ctx, x, y, r * 0.4)
         else this.drawPlay(ctx, x, y, r * 0.38)
-        ctx.font = `500 ${this.captionSize}px ${MENU_FONT_FAMILY}`
-        ctx.fillStyle = active ? '#ffffff' : '#e8e2d4'
-        ctx.textAlign = 'left'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(this.caption, this.center.x + this.radius * 1.35, y)
+        if (!this.captionless) {
+            ctx.font = `500 ${this.captionSize}px ${MENU_FONT_FAMILY}`
+            ctx.fillStyle = active ? '#ffffff' : '#e8e2d4'
+            ctx.textAlign = 'left'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(this.caption, this.center.x + this.radius * 1.35, y)
+        }
         ctx.restore()
     }
     drawGear(ctx, x, y, r) {
@@ -3307,13 +3321,16 @@ class Menu {
     // Banner sizes in banner widths: side banners 1 x 1.94, Tutorial 1.16 x 2.18, gaps 0.2, the rod 0.24 past the
     // outer banners. The banner width is the smaller of what the screen width and the height between the logo and
     // the icon buttons allow.
+    // Compact (menuCompact, TASK-1526): the icon buttons sit in the top-left corner and the banners hang down to
+    // 0.975 * HEIGHT.
     layoutMain() {
         const [hotseat, online, settings, tutorial, replays] = this.mainButtons
-        const iconRadius = Math.min(HEIGHT * 0.045, WIDTH * 0.03)
-        const iconY = HEIGHT * 0.965 - iconRadius
+        const compact = menuCompact()
+        const iconRadius = compact ? HEIGHT * 0.06 : Math.min(HEIGHT * 0.045, WIDTH * 0.03)
+        const iconY = compact ? HEIGHT * 0.1 : HEIGHT * 0.965 - iconRadius
         const logo = this.logo.bounds
-        const rodY = logo.y + logo.height + HEIGHT * 0.035
-        const bottom = iconY - iconRadius - HEIGHT * 0.035
+        const rodY = logo.y + logo.height + HEIGHT * (compact ? 0.03 : 0.035)
+        const bottom = compact ? HEIGHT * 0.975 : iconY - iconRadius - HEIGHT * 0.035
         const SIDE_HEIGHT = 1.94, TUTORIAL_WIDTH = 1.16, TUTORIAL_HEIGHT = 2.18, GAP = 0.2, OVERHANG = 0.24, KNOB = 0.05
         const rowWidth = 2 + TUTORIAL_WIDTH + GAP * 2
         const w = Math.min(WIDTH * 0.92 / (rowWidth + (OVERHANG + KNOB) * 2), (bottom - rodY) / TUTORIAL_HEIGHT)
@@ -3332,6 +3349,12 @@ class Menu {
         rod.right = x + w + OVERHANG * w
         // Settings, and Replays next to it when listed, centred under the banners.
         const icons = this.main.buttons.includes(replays) ? [settings, replays] : [settings]
+        for (const icon of this.mainButtons) if (icon instanceof MenuIconButton) icon.captionless = false
+        if (compact) {
+            this.layoutCompactIcons(icons, iconRadius, iconY, [logo, rod.bounds, hotseat.rect, tutorial.rect, online.rect])
+            return
+        }
+        this.main.iconLayout = 'row'
         const spacing = iconRadius * 1.2
         const groups = icons.map(icon => { icon.radius = iconRadius; return icon.groupWidth })
         let left = WIDTH / 2 - (groups.reduce((sum, width) => sum + width, 0) + spacing * (icons.length - 1)) / 2
@@ -3339,6 +3362,36 @@ class Menu {
             icon.place(left, iconY, iconRadius)
             left += groups[index] + spacing
         })
+    }
+    // The compact menu's icon buttons from the top-left corner (left edge 0.05 * HEIGHT, first centre at iconY): side
+    // by side with captions if every box stays clear of the screen edges, the logo, the rod, the banners and the beta
+    // tag, else stacked with captions, else icon only side by side, else icon only stacked (main.iconLayout).
+    layoutCompactIcons(icons, radius, iconY, obstacles) {
+        let beta = null
+        try { beta = this.betaTag.bounds } catch (error) {}
+        if (beta && [beta.x, beta.y, beta.width, beta.height].every(Number.isFinite)) obstacles = obstacles.concat([beta])
+        const left = HEIGHT * 0.05, spacing = radius * 1.2
+        const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        const arrange = (stacked, captionless) => {
+            let x = left, y = iconY
+            for (const icon of icons) {
+                icon.captionless = captionless
+                icon.place(x, y, radius)
+                if (stacked) y += radius * 2 + spacing
+                else x += icon.groupWidth + spacing
+            }
+            const boxes = icons.map(icon => icon.rect)
+            return boxes.every((box, i) => box.x >= 0 && box.y >= 0 && box.x + box.width <= WIDTH &&
+                box.y + box.height <= HEIGHT && !obstacles.some(other => overlaps(box, other)) &&
+                !boxes.some((other, j) => j !== i && overlaps(box, other)))
+        }
+        const layouts = [['row', false, false], ['stack', true, false], ['row-icons', false, true], ['stack-icons', true, true]]
+        for (const [name, stacked, captionless] of layouts) {
+            if (arrange(stacked, captionless) || name === 'stack-icons') {
+                this.main.iconLayout = name
+                return
+            }
+        }
     }
     setTree(tree) {
         if (tree === this.main) this.updateMainButtons()
@@ -3440,7 +3493,13 @@ class Menu {
     }
     // Sized by the width, on screens wider than 16:9 (2560x1080, phones) as on a 16:9 one, so the halo stays on
     // screen and the first row below it stays clear.
+    // Compact (TASK-1526): 0.15 * HEIGHT tall (same aspect) centred at 0.1 * HEIGHT.
     layoutLogo() {
+        if (menuCompact()) {
+            const h = HEIGHT * 0.15
+            Object.assign(this.logo, {pos: {x: WIDTH / 2, y: HEIGHT * 0.1}, w: h * 0.5 / 0.11, h})
+            return
+        }
         const logoScale = Math.min(WIDTH, HEIGHT * 16 / 9)
         Object.assign(this.logo, {pos: {x: WIDTH / 2, y: HEIGHT * 0.15}, w: logoScale * 0.5, h: logoScale * 0.55 * 0.2})
     }
