@@ -259,6 +259,16 @@ class Grid extends SpritesGroup {
         this.standInFollows = 0
         this.surfaceCacheAdopted = null
         this.surfaceCacheAdoptedFrom = undefined
+        // TASK-1519: the board whose surface cache build (or split or patch) under way this board finishes between its frames
+        // and then takes over (stepSurfaceDonor), its tasks queued, steps run, ms spent and caches so taken over.
+        this.surfaceCacheDonor = undefined
+        this.surfaceDonorQueued = false
+        this.surfaceDonorSteps = 0
+        this.surfaceDonorMs = 0
+        this.surfaceDonorAdoptions = 0
+        this.surfaceDonorRestarts = 0
+        // TASK-1519: the turn playback's start hold this board's frames are under (turnPlaybackView.holdFrame), if any.
+        this.playbackHold = undefined
         // The patch under way (patchSurfaceCache, one step a frame) and its buffer.
         this.surfacePatchJob = undefined
         this.surfacePatchBuffer = undefined
@@ -2615,7 +2625,14 @@ class Grid extends SpritesGroup {
     // and the cache is patched there (patchSurfaceCache: only the changed cells), or rebuilt whole when a patch is refused,
     // as for any board change. Nothing moves (false) without atmospheric visuals, for a board of another size, an observed
     // board, from's cache being built, patched, split or its layer job under way, or this board having a cache of its own.
+    // TASK-1519 (Grid.donorBuilds): from's build, split or patch under way (its board unchanged meanwhile: the computed board
+    // aside during a playback) is finished by this board's tasks instead and its cache taken over then (stepSurfaceDonor).
     adoptSurfaceCache(from) {
+        this.surfaceCacheDonor = undefined
+        if (this.canTakeSurfaceDonor(from)) {
+            this.surfaceCacheDonor = from.surfaceCache || from.surfaceCacheBuild ? from : from.surfaceCacheDonor
+            return false
+        }
         if (!Grid.surfaceAdoption || !from || from === this || !otherSettings.atmosphericVisuals || !from.surfaceCache ||
                 !from.surfaceCacheAtmospheric || from.surfaceCacheBuild || from.surfacePatchJob || from.surfaceSplitJob ||
                 from.surfaceLayerJob || this.surfaceCache || this.surfaceCacheBuild || this.surfacePatchJob ||
@@ -2683,6 +2700,97 @@ class Grid extends SpritesGroup {
         // The board bound to the sky and light map before (atmosphericBackground.syncKey keeps the cache for this board).
         this.surfaceCacheAdoptedFrom = from
         ++this.surfaceCacheAdoptions
+        return true
+    }
+    // TASK-1519: whether this board finishes from's surface cache work under way (or that of from's own donor, a board
+    // loaded before it) instead of building its own: atmospheric visuals, boards of one size, none observed, this board
+    // without a cache or work of its own, from with a build, split or patch under way (not its cell layer's job).
+    canTakeSurfaceDonor(from) {
+        if (!Grid.surfaceAdoption || !Grid.donorBuilds || !from || from === this || !otherSettings.atmosphericVisuals ||
+                this.surfaceCache || this.surfaceCacheBuild || this.surfacePatchJob || this.isObserving() || from.isObserving() ||
+                from.arr.length !== this.arr.length || from.arr[0].length !== this.arr[0].length)
+            return false
+        if (!from.surfaceCache && !from.surfaceCacheBuild)
+            return !!from.surfaceCacheDonor && from.surfaceCacheDonor !== this && this.canTakeSurfaceDonor(from.surfaceCacheDonor)
+        return !from.surfaceLayerJob && !!(from.surfaceCacheBuild || from.surfaceSplitJob || from.surfacePatchJob)
+    }
+    // TASK-1519: the donor's work (canTakeSurfaceDonor) run between this board's frames: its build's steps, then its split's,
+    // in a task of up to SURFACE_DONOR_TASK_MS while this board's frames draw the board directly (each such frame is far
+    // longer, and every one of them waits for a cache to stand in) and queued again at once, else a SURFACE_STEP_MS step a
+    // frame; with the global grid set to the donor (its stages read it as when it was shown). The donor's board does not
+    // change meanwhile, so its build is not started over. Finished, its cache is taken over (adoptSurfaceCache: patched
+    // or followed to this board where it differs). Returns whether the donor still stands for this board's cache (nothing
+    // else is prepared then).
+    stepSurfaceDonor() {
+        const donor = this.surfaceCacheDonor
+        if (!donor)
+            return false
+        if (this !== grid || donor === grid || !otherSettings.atmosphericVisuals || this.surfaceCache || this.surfaceCacheBuild ||
+                this.surfacePatchJob || donor.surfaceLayerJob || donor.arr.length !== this.arr.length ||
+                donor.arr[0].length !== this.arr[0].length) {
+            this.surfaceCacheDonor = undefined
+            return false
+        }
+        if (!donor.surfaceCacheBuild && !donor.surfaceSplitJob && !donor.surfacePatchJob) {
+            this.surfaceCacheDonor = undefined
+            if (donor.surfaceCache && this.adoptSurfaceCache(donor))
+                ++this.surfaceDonorAdoptions
+            return !!this.surfaceCache
+        }
+        if (this.surfaceDonorQueued)
+            return true
+        this.surfaceDonorQueued = true
+        // A playback start's held frames (turnPlaybackView.holdFrame: nothing drawn) leave the main thread to the donor:
+        // its tasks of PLAYBACK_HOLD_TASK_MS back to back (a message, not a nested timeout's 4 ms clamp), frames and input
+        // between them.
+        const holding = !!this.playbackHold
+        queueDonorTask(holding, () => {
+            this.surfaceDonorQueued = false
+            if (this !== grid || this.surfaceCacheDonor !== donor)
+                return
+            const holding = !!this.playbackHold
+            const start = performance.now(), budget = holding ? PLAYBACK_HOLD_TASK_MS : this.frameSurface === false ? Grid.donorTaskMs : SURFACE_STEP_MS
+            const stage = donor.surfaceCacheBuild ? donor.surfaceCacheBuild.stage : donor.surfaceSplitJob ? 'split' : 'patch'
+            const shown = grid
+            grid = donor
+            try {
+                // A build whose board changed (the AI turn's) is started over at once, not after its stage under way (steps
+                // drawing the changed board into a build that is dropped when they end: surfaceCacheBuildStep).
+                const build = donor.surfaceCacheBuild
+                if (build?.steps && build.steps !== build.maskSteps && !build.staleChecked) {
+                    build.staleChecked = true
+                    if (!donor.surfaceCacheBuildHolds(build)) {
+                        donor.surfaceCacheBuild = undefined
+                        ++this.surfaceDonorRestarts
+                        donor.surfaceCacheBuildStep(SURFACE_STEP_MS)
+                    }
+                }
+                do {
+                    if (donor.surfacePatchJob)
+                        donor.surfacePatchStep()
+                    else if (donor.surfaceCacheBuild)
+                        donor.surfaceCacheBuildStep(SURFACE_STEP_MS)
+                    else if (donor.surfaceSplitJob)
+                        donor.surfaceSplitStep()
+                    else
+                        break
+                    ++this.surfaceDonorSteps
+                    if (Grid.donorLogSteps) {
+                        const b = donor.surfaceCacheBuild
+                        ;(this.surfaceDonorStepLog ||= []).push([b ? b.stage + (b.steps ? 's' : '') + (b.lamps ? 'L' : '') + (b.masked ? 'M' : '') : donor.surfaceSplitJob ? 'split' + (donor.surfaceSplitJob.prep ? 'P' : '') : 'done', Math.round(performance.now() - start)])
+                    }
+                } while (performance.now() - start < budget - SURFACE_STEP_MS)
+            } finally {
+                grid = shown
+            }
+            this.surfaceDonorMs += performance.now() - start
+            ;(this.surfaceDonorLog ||= []).push([Math.round(start), stage, Math.round(performance.now() - start)])
+            if (holding)
+                this.playbackHold.donorMs += performance.now() - start
+            // Held or direct frames: the next task at once (the frames come between tasks).
+            if (budget > SURFACE_STEP_MS || holding)
+                this.stepSurfaceDonor()
+        })
         return true
     }
     getSurfaceCacheGeometry(bounds = mapDepth.bounds) {
@@ -2813,6 +2921,9 @@ class Grid extends SpritesGroup {
             this.surfacePatchStep()
             return
         }
+        // TASK-1519: another board's cache work this board takes over when finished.
+        if (this.stepSurfaceDonor())
+            return
         // TASK-1519: a cache that the lit view waits for as its stand-in (view.unbuilt: its frames draw the board directly)
         // and differs from the board in a few cells (an adopted one, adoptSurfaceCache, after a turn playback's step) is
         // brought up to it also while the camera moves: its cell layer or a patch (only those: patchOnly, never rebuilt then).
@@ -2894,6 +3005,15 @@ class Grid extends SpritesGroup {
             this.surfaceCacheBuild = undefined
             this.surfaceCacheBuildStep(budget)
             return
+        }
+        // TASK-1519: between frames the cell mask (geometry only, kept by its key: surfaceMaskSteps) is made first, so a build
+        // started over (a board change: the AI turn's) or finished by a turn playback's board (stepSurfaceDonor) finds it.
+        if (budget < Infinity && !build.premasked && Grid.maskFirst) {
+            build.premasked = true
+            if ((build.steps = this.surfaceMaskSteps(build))) {
+                build.maskSteps = build.steps
+                return
+            }
         }
         if (budget < Infinity && build.stage === SURFACE_CACHE_STAGES.length - 1 && !build.lamps) {
             build.lamps = true
@@ -5782,9 +5902,11 @@ class Grid extends SpritesGroup {
     }
     // Whether a frame on ctx is recorded only for its calls (keepZoomSource): a frame of the main canvas but a move tween's
     // (no zoom raster then), when the zoom rasters are replayed.
+    // TASK-1519: none while a turn playback's board has no surface cache (its frames are direct: recording and making again
+    // each one's ~1500 calls took ~400 ms here a frame, time its cache build waits for); a gesture then has no raster.
     zoomSourceCandidate(ctx) {
         return Grid.zoomReplays && Grid.zoomRasters && this === grid && typeof mainCanvas !== 'undefined' && ctx.canvas === mainCanvas &&
-            !zoomRasterTweens()
+            !zoomRasterTweens() && !(Grid.playbackHolds && !this.surfaceCache && typeof turnPlaybackView !== 'undefined' && turnPlaybackView.active)
     }
     // The kept recording (keepZoomSource) when it is the last frame's on the main canvas at camera t (cw x ch device
     // pixels): {source, stale}, stale ('key' or 'layers') when a raster or layer it draws changed since (made again, it is
@@ -6842,6 +6964,11 @@ Grid.surfaceAdoption = true
 Grid.litTileRefresh = true
 // TASK-1519: a surface cache standing in for lit tiles has its cell layer brought up to the board first (Grid.litStandIn).
 Grid.standInFollows = true
+// TASK-1519: a turn playback's loaded board finishes the computed board's surface cache build under way and takes it over
+// (Grid.stepSurfaceDonor) instead of starting its own.
+Grid.donorBuilds = true
+Grid.donorTaskMs = 40
+Grid.donorLogSteps = false
 // TASK-1360: true brings the surface cache's cell layer up to a board change needing new variants in a job, a step a frame
 // (Grid.startSurfaceLayerJob); false draws them all in the frame that found the change (refreshCellLayer).
 Grid.surfaceLayerJobs = true
@@ -6857,6 +6984,30 @@ const CELL_SPLIT_KEYS = 300
 // TASK-1473: the time (ms) a between-frames step of the surface cache's build or a cell split takes at most, but for its
 // last piece (runSteps, Grid.cellSplitStep).
 const SURFACE_STEP_MS = 8
+// TASK-1519: a donor's build task while the frames draw the board directly (Grid.stepSurfaceDonor).
+const SURFACE_DONOR_TASK_MS = 40
+// TASK-1519: a turn playback's start holds its frames (the screen keeps the turn end's frame, the playback's clock waits)
+// while its board has no surface cache and finishes the computed board's (turnPlaybackView.holdFrame, Grid.stepSurfaceDonor),
+// for at most PLAYBACK_HOLD_MS; the donor's tasks then take PLAYBACK_HOLD_TASK_MS each. False: no hold (the playback starts
+// at once, the donor's work between its direct frames).
+Grid.playbackHolds = true
+// TASK-1519: a surface cache build between frames makes its cell mask first (Grid.surfaceCacheBuildStep); false: last.
+Grid.maskFirst = true
+Grid.PLAYBACK_HOLD_MS = 5000
+const PLAYBACK_HOLD_TASK_MS = 48
+// A donor task: queued after the frame (setTimeout), or while frames are held at once after the task before (a message).
+let donorChannel
+function queueDonorTask(now, task) {
+    if (!now || typeof MessageChannel !== 'function')
+        return setTimeout(task)
+    if (!donorChannel) {
+        donorChannel = new MessageChannel()
+        donorChannel.tasks = []
+        donorChannel.port1.onmessage = () => donorChannel.tasks.shift()?.()
+    }
+    donorChannel.tasks.push(task)
+    donorChannel.port2.postMessage(0)
+}
 // Runs steps (a generator) while the time spent and the last piece's fit in budget (ms; at least one piece). Returns whether
 // they are done.
 function runSteps(steps, budget = Infinity) {

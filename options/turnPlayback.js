@@ -338,6 +338,8 @@ const turnPlaybackView = {
     active: null,
     // Evidence and tests: the last playbacks' logs (bounded), drift records.
     logs: [],
+    // TASK-1519: whether the frame drawAll runs now was held (holdFrame; read by the diagnostics, visualsPerf).
+    heldFrame: false,
     drifts: [],
     // Tests: called after each applied step (playback, index) and when a playback ends (log).
     onStep: null,
@@ -476,6 +478,7 @@ const turnPlaybackView = {
             recordings, viewer, start, steps, live: this.captureGlobals(), finalHash: stateHash(),
             liveClasses: players.map(player => Object.getPrototypeOf(player)),
             recordingIndex: 0, stepIndex: -1, phase: 'load', rulesFog: null,
+            hold: undefined, loadTicked: false,
             startReal: this.now(), recordingStart: this.now(), stepReal: 0, stepScaled: 0, frames: 0, dwell: 0,
             home: screen.centre(), moved: false, screen,
             clock: {real0: this.now(), scaled0: 0, speed: 1}, wrapped: [],
@@ -741,11 +744,79 @@ const turnPlaybackView = {
         const healNow = healFx.now()
         return healFx.effects.some(e => e.startTime === null || healNow - e.startTime < e.duration)
     },
+    // TASK-1519: the playback's first load (its loaded board: no surface cache, the computed board's build under way and
+    // finished by it, Grid.stepSurfaceDonor) would draw the board directly for ~30 s of frames (~1.4 fps here) while the
+    // ~4.7 s (here) of cache work left creeps a task a frame. Instead the frames of the game loop are held (drawAll: nothing
+    // drawn, the screen keeps the turn end's frame, which shows the loaded board) while the donor's work runs back to back
+    // (Grid.PLAYBACK_HOLD_TASK_MS tasks, input and frames between them), and the playback's clocks start when the hold ends:
+    // its steps play at today's pace, then from the cache. Given up (the frames drawn as before, the donor's work left
+    // between them) on a camera move or zoom, a drawAll from elsewhere, the settings rows off, the game left, a skip (the
+    // playback ends) or after Grid.PLAYBACK_HOLD_MS. Grid.playbackHolds false: no hold. Returns whether the frame is held.
+    holdFrame() {
+        const p = this.active
+        if (!p || p.hold === null)
+            return false
+        if (p.hold === undefined) {
+            if (p.phase !== 'load' || typeof Grid === 'undefined' || !Grid.playbackHolds || !otherSettings.atmosphericVisuals ||
+                    typeof gameLoopFrame === 'undefined' || !gameLoopFrame || typeof canvas === 'undefined' || !this.settingsAllow()) {
+                p.hold = null
+                return false
+            }
+            // The load is this frame's tick (drawMain's is skipped when the frame is drawn).
+            this.tick()
+            if (this.active !== p)
+                return false
+            p.loadTicked = true
+            if (p.phase !== 'next' || !grid.surfaceCacheDonor || grid.surfaceCache) {
+                p.hold = null
+                return false
+            }
+            p.loadTicked = false
+            p.hold = {board: grid, start: this.now(), frames: 0, donorMs: 0, scale: canvas.scale, x: canvas.offset.x, y: canvas.offset.y}
+            grid.playbackHold = p.hold
+        }
+        const hold = p.hold, screen = p.screen
+        const why = grid !== hold.board ? 'board' : typeof gameExit !== 'undefined' && gameExit ? 'exit' :
+            !this.settingsAllow() ? 'off' : canvas.scale !== hold.scale || canvas.offset.x !== hold.x || canvas.offset.y !== hold.y ||
+            screen.surfaceZooming || screen.zoomGesture || screen.glide ? 'camera' :
+            typeof gameLoopFrame === 'undefined' || !gameLoopFrame ? 'direct' :
+            !grid.surfaceCacheDonor ? (grid.surfaceCache ? 'built' : 'lost') :
+            this.now() - hold.start >= Grid.PLAYBACK_HOLD_MS ? 'time' : null
+        if (why)
+            return this.endHold(p, why)
+        // (queues the donor's tasks if none is)
+        grid.stepSurfaceDonor()
+        ++hold.frames
+        this.heldFrame = true
+        return true
+    },
+    // The hold's end: its time is taken out of the playback's clocks (its pace, cap and step times start now).
+    endHold(p, why) {
+        const hold = p.hold
+        if (!hold)
+            return false
+        p.hold = null
+        if (hold.board.playbackHold === hold)
+            hold.board.playbackHold = undefined
+        const held = this.now() - hold.start
+        p.startReal += held
+        p.recordingStart += held
+        p.clock.real0 += held
+        for (const entry of p.wrapped)
+            entry.real0 += held
+        p.log.hold = {ms: Math.round(held), frames: hold.frames, end: why, donorMs: Math.round(hold.donorMs)}
+        return false
+    },
     // Every frame (drawMain, before the effects' prune): drives the running playback.
     tick() {
         const p = this.active
         if (!p)
             return
+        // (the load ran in this frame's holdFrame)
+        if (p.loadTicked) {
+            p.loadTicked = false
+            return
+        }
         try {
             this.advance(p)
         } catch (error) {
@@ -914,6 +985,7 @@ const turnPlaybackView = {
         if (this.active !== p)
             return
         this.active = null
+        this.endHold(p, result)
         if (p.screen.glide)
             p.screen.stopGlide()
         this.unwrapClocks(p)

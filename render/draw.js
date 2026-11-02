@@ -624,6 +624,9 @@ function drawAll() {
     // TASK-1518: a new board's first frame is held while its lit tiles are built (Grid.holdStartFrame).
     if (typeof grid !== 'undefined' && grid?.holdStartFrame?.())
         return
+    // TASK-1519: a turn playback's start is held while its board's surface cache is finished (turnPlaybackView.holdFrame).
+    if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.holdFrame())
+        return
     drawMain()
     drawInterface()
         //mainCtx.clearRect(-basis.offset.x, -basis.offset.y * 2, width, height)

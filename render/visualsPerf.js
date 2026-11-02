@@ -57,8 +57,13 @@
         if (!frame) return originalDraw.apply(this, args)
         frame.camera = camera() // Camera after the existing update, actually used by this draw.
         const start = performance.now()
+        if (typeof turnPlaybackView !== 'undefined') turnPlaybackView.heldFrame = false
         try { return originalDraw.apply(this, args) }
-        finally { frame.renderMs += performance.now() - start }
+        finally {
+            frame.renderMs += performance.now() - start
+            // TASK-1519: a turn playback's held start frame (turnPlaybackView.holdFrame: nothing drawn).
+            if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.heldFrame && work.renderPath === null) work.renderPath = 'playback-held'
+        }
     }
     const create = document.createElement.bind(document)
     document.createElement = function(name, ...args) {
