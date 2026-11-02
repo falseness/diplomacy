@@ -627,6 +627,9 @@ function drawAll() {
     // TASK-1519: a turn playback's start is held while its board's surface cache is finished (turnPlaybackView.holdFrame).
     if (typeof turnPlaybackView !== 'undefined' && turnPlaybackView.holdFrame())
         return
+    // TASK-1520: a frame drawn directly for want of the surface cache is kept on screen while the cache is built (Grid.holdCacheFrame).
+    if (typeof grid !== 'undefined' && grid?.holdCacheFrame?.())
+        return
     drawMain()
     drawInterface()
         //mainCtx.clearRect(-basis.offset.x, -basis.offset.y * 2, width, height)

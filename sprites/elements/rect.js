@@ -165,7 +165,8 @@ class Rect {
 //   composite of its fill and stroke). While the camera moves, sprites are made at the phase rounded to 1/MOTION_STEPS
 //   of a device pixel (at most 1/16 px off, frames that are replaced by the next one), so a pan reuses them.
 // - Built before the next frame: a missing sprite is drawn directly this frame and queued (at most BUILDS_PER_FRAME a
-//   frame); beginFrame (drawMain) draws the queue before the frame draws anything.
+//   frame); beginFrame (drawMain) draws the queue before the frame draws anything. TASK-1520: 64, not 256 (a frame building
+//   256 sprites was a 0.5 s task on a loaded software canvas; the rest are drawn directly, the same pixels, until built).
 // - One small canvas per sprite, never drawn into again once built: recorded calls (CanvasCallRecorder: level-of-detail,
 //   still and composite frames replay or compare them later) stay valid, and a frame's drawImage calls hold only the
 //   sprites' own bytes (Chromium rasterizes a frame early once the images drawn into it pass ~32 MB: an atlas page
@@ -178,7 +179,7 @@ class SpriteCache {
     static enabled = true
     static MAX_BYTES = 16 * 1024 * 1024
     static MAX_SPRITE = 256
-    static BUILDS_PER_FRAME = 256
+    static BUILDS_PER_FRAME = 64
     static MOTION_STEPS = 8
     static MAX_SHAPES = 20000
     static MAX_SCALES = 8

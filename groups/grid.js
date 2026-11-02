@@ -269,6 +269,15 @@ class Grid extends SpritesGroup {
         this.surfaceDonorRestarts = 0
         // TASK-1519: the turn playback's start hold this board's frames are under (turnPlaybackView.holdFrame), if any.
         this.playbackHold = undefined
+        // TASK-1520: the far-zoom cache hold this board's frames are under (holdCacheFrame), if any; the drawSerial of the last
+        // drawn frame a hold ended at (the next hold waits for a drawn frame); holds made, frames held, their work and ends.
+        this.cacheHold = undefined
+        this.cacheHoldSerial = -1
+        this.cacheHeldFrame = false
+        this.cacheHolds = 0
+        this.cacheHoldFrames = 0
+        this.cacheHoldWorkMs = 0
+        this.cacheHoldEnds = {}
         // The patch under way (patchSurfaceCache, one step a frame) and its buffer.
         this.surfacePatchJob = undefined
         this.surfacePatchBuffer = undefined
@@ -5732,6 +5741,84 @@ class Grid extends SpritesGroup {
         ++this.zoomHoldDrops
         return false
     }
+    // TASK-1520: a board whose frames draw it directly for want of its surface cache (frameSurface false: zoomed out before
+    // the cache was built; a 55x55 board's direct frame is ~0.65 s on a software canvas, ~0.26 s on the user's desktop) built
+    // the cache a step (SURFACE_STEP_MS) a frame (TASK-1518's stepped stages): ~150 s of such frames at the farthest zoom ~10 s
+    // after a game's start. Instead, after such a frame is drawn, the screen keeps it (drawAll: nothing drawn, as the start and
+    // playback holds) while the cache's build, split or patch runs back to back in tasks of CACHE_HOLD_TASK_MS (input and
+    // frames between them); its next frame is drawn from the cache. Only for the frames of the game loop with the camera at
+    // rest, no effect playing and no playback or start hold; given up (the frames drawn as before, the work between them) on
+    // a camera move or zoom, any input (a click, key, wheel or touch), a turn change, a drawAll from elsewhere, the cache's
+    // work done or none to do, or after Grid.CACHE_HOLD_MS (then a frame is drawn before the next hold). Grid.cacheHolds
+    // false: no hold. Returns whether the frame is held.
+    holdCacheFrame() {
+        let hold = this.cacheHold
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (!hold) {
+            if (!Grid.cacheHolds || this !== grid || this.frameSurface !== false || this.drawSerial === this.cacheHoldSerial ||
+                    !otherSettings.atmosphericVisuals || typeof gameLoopFrame === 'undefined' || !gameLoopFrame || !screen ||
+                    typeof canvas === 'undefined' || typeof createImageBitmap !== 'function' || typeof menu !== 'undefined' && menu.visible ||
+                    this.startJob || this.playbackHold || this.zoomRaster || this.surfaceCacheDonor ||
+                    typeof turnPlaybackView !== 'undefined' && turnPlaybackView.active ||
+                    typeof attackFx !== 'undefined' && attackFx.effects.length || typeof healFx !== 'undefined' && healFx.effects.length ||
+                    screen.surfaceMoving || screen.surfaceZooming || screen.zoomGesture || screen.glide || this.litRestUnderWay() ||
+                    !(this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob || !this.surfaceCache))
+                return false
+            watchGridInput()
+            hold = this.cacheHold = {start: performance.now(), frames: 0, workMs: 0, tasks: 0, scale: canvas.scale, x: canvas.offset.x,
+                y: canvas.offset.y, inputs: gridInputs, turn: typeof whooseTurn !== 'undefined' ? whooseTurn : null,
+                round: typeof gameRound !== 'undefined' ? gameRound : null, none: false}
+            ++this.cacheHolds
+            this.cacheHoldTask(hold)
+        }
+        const why = this !== grid ? 'board' : typeof gameExit !== 'undefined' && gameExit ? 'exit' : !otherSettings.atmosphericVisuals ? 'off' :
+            canvas.scale !== hold.scale || canvas.offset.x !== hold.x || canvas.offset.y !== hold.y || screen.surfaceMoving ||
+            screen.surfaceZooming || screen.zoomGesture || screen.glide ? 'camera' : gridInputs !== hold.inputs ? 'input' :
+            typeof whooseTurn !== 'undefined' && whooseTurn !== hold.turn || typeof gameRound !== 'undefined' && gameRound !== hold.round ? 'turn' :
+            typeof gameLoopFrame === 'undefined' || !gameLoopFrame ? 'direct' :
+            typeof turnPlaybackView !== 'undefined' && turnPlaybackView.active ? 'playback' :
+            hold.none ? 'none' : !this.surfaceCacheBuild && !this.surfaceSplitJob && !this.surfacePatchJob && this.surfaceCache ? 'built' :
+            performance.now() - hold.start >= Grid.CACHE_HOLD_MS ? 'time' : null
+        if (why) {
+            this.cacheHold = undefined
+            this.cacheHoldSerial = this.drawSerial
+            this.cacheHoldEnds[why] = (this.cacheHoldEnds[why] || 0) + 1
+            return false
+        }
+        ++hold.frames
+        ++this.cacheHoldFrames
+        this.cacheHeldFrame = true
+        return true
+    }
+    // A task of the cache hold's work (holdCacheFrame), the next queued at once while the hold lasts and work is left.
+    cacheHoldTask(hold) {
+        queueDonorTask(true, gridTask(() => {
+            if (this.cacheHold !== hold || this !== grid)
+                return
+            const start = performance.now()
+            do {
+                if (this.surfacePatchJob)
+                    this.surfacePatchStep()
+                else if (this.surfaceCacheBuild || !this.surfaceCache) {
+                    this.surfaceCacheBuildStep(SURFACE_STEP_MS)
+                    if (!this.surfaceCacheBuild && !this.surfaceCache && !this.surfaceSplitJob) {
+                        hold.none = true
+                        break
+                    }
+                }
+                else if (this.surfaceSplitJob)
+                    this.surfaceSplitStep()
+                else
+                    break
+            } while (performance.now() - start < CACHE_HOLD_TASK_MS - SURFACE_STEP_MS)
+            const ms = performance.now() - start
+            hold.workMs += ms
+            this.cacheHoldWorkMs += ms
+            ++hold.tasks
+            if (this.cacheHold === hold && !hold.none && (this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob))
+                this.cacheHoldTask(hold)
+        }))
+    }
     // TASK-1518: a new game's first frame drew everything its first view needs at once (the owned tiles of its colours, the
     // light map at the camera's scale, the lit view's edges, then the board directly: ~0.8 s on the user's desktop, then
     // ~0.2 s frames while the lit tiles were built). Instead, until the board's first frame (drawSerial 0) can be drawn from
@@ -6994,6 +7081,20 @@ Grid.playbackHolds = true
 // TASK-1519: a surface cache build between frames makes its cell mask first (Grid.surfaceCacheBuildStep); false: last.
 Grid.maskFirst = true
 Grid.PLAYBACK_HOLD_MS = 5000
+// TASK-1520: frames drawn directly for want of the surface cache are held while its work runs back to back
+// (Grid.holdCacheFrame), for at most CACHE_HOLD_MS, in tasks of CACHE_HOLD_TASK_MS. False: no hold.
+Grid.cacheHolds = true
+Grid.CACHE_HOLD_MS = 5000
+const CACHE_HOLD_TASK_MS = 48
+// TASK-1520: user input seen (a click, key, wheel or touch; watched from the first cache hold on): ends a cache hold.
+let gridInputs = 0, gridInputWatched = false
+function watchGridInput() {
+    if (gridInputWatched || typeof document === 'undefined' || typeof document.addEventListener !== 'function')
+        return
+    gridInputWatched = true
+    for (const type of ['mousedown', 'pointerdown', 'keydown', 'wheel', 'touchstart'])
+        document.addEventListener(type, () => { ++gridInputs }, {capture: true, passive: true})
+}
 const PLAYBACK_HOLD_TASK_MS = 48
 // A donor task: queued after the frame (setTimeout), or while frames are held at once after the task before (a message).
 let donorChannel
