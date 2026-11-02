@@ -1909,7 +1909,9 @@ const atmosphericLighting = {
             ctx.setTransform(1, 0, 0, 1, 0, 0)
             ctx.beginPath()
             for (const run of list) ctx.rect(run.x, run.y, run.w, run.h)
-            ctx.setTransform(t)
+            // TASK-1516: six numbers, not the matrix object: a still frame's recorded calls (Grid.stillFrameSteady) compare
+            // arguments by identity, and t is a new DOMMatrix every frame (a held frame was never repeated with edges).
+            ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
             ctx.clip()
         }
         // TASK-1515: the map's part over all the runs at once (their bounds grown as each run's was), clipped to the runs

@@ -5401,7 +5401,9 @@ class Grid extends SpritesGroup {
             b?.left, b?.top, b?.width, b?.height,
             // TASK-1376: a still frame on the lit view's rest snapshot (changed in place by patches, layer jobs and splits).
             this.litView, this.litView?.rest, this.litView?.rest?.canvas, this.litView?.rest?.shown, this.litView?.rest?.cellLayer,
-            this.cellLayerComposites, this.cellLayerRefreshes, this.litPatches, mapDepth.outline, mapDepth.rim]
+            this.cellLayerComposites, this.cellLayerRefreshes, this.litPatches, mapDepth.outline, mapDepth.rim,
+            // TASK-1516: a still frame on the lit tiles (their light and the lit edges' from the light map).
+            atmosphericLighting.rebuilds, atmosphericLighting.mapScale]
     }
     // Whether a frame's calls can stand for the next frame's: drawn from the surface cache (not lit tiles or directly), no
     // camera move or zoom gesture, move tween, surface cache job
@@ -5450,8 +5452,15 @@ class Grid extends SpritesGroup {
     }
     // Whether a recorded still frame (stillFrameCandidate) can stand for the next: the camera still at rest, and drawn from
     // the surface cache as a steady level-of-detail frame is (lodFrameSteady), or from the lit view's finished rest snapshot
-    // drawn whole (no patch's or layer job's cells over it, no split or patch under way: they change it in place), or with
+    // drawn whole (no patch's or layer job's cells over it, no patch under way: it changes it in place), or with
     // simple visuals the board drawn directly (its sprites and hexagon images do not change).
+    // TASK-1516 (Grid.stillLitTiles): also from the lit view's tiles while its rest snapshot is built (its bands, a task
+    // each) when every tile on the canvas is built (no stand-in drawn for one: missing): a drawn tile is never changed in
+    // place (built once under its key, released only off the canvas or with its view; a patch drops the view's tiles and
+    // is no still frame), the snapshot's finishing makes the frame draw it instead (other calls), and the light map's
+    // rebuilds are in the key (lodFrameKey). And while the snapshot's split job runs (view.splitJob): its steps draw only
+    // into the cell layer, the snapshot is drawn uncut until the last step cuts it and the frames draw the composed one
+    // (rest.shown, other calls).
     stillFrameSteady(recorder) {
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         if (!screen || screen.surfaceMoving || screen.zoomGesture || zoomRasterTweens())
@@ -5459,9 +5468,9 @@ class Grid extends SpritesGroup {
         if (this.frameSurface === true)
             return this.lodFrameSteady(recorder)
         if (otherSettings.atmosphericVisuals) {
-            const frame = this.litFrame, view = this.litView
-            if (this.frameSurface !== 'lit' || !frame || !frame.rest || frame.job || frame.view !== view || !view ||
-                    view.patch || view.layerJob || view.splitJob)
+            const frame = this.litFrame, view = this.litView, tiles = Grid.stillLitTiles
+            if (this.frameSurface !== 'lit' || !frame || frame.view !== view || !view || view.patch || view.layerJob ||
+                    (frame.rest ? frame.job : !tiles || frame.missing) || view.splitJob && !tiles)
                 return false
         }
         else if (this.frameSurface !== false)
@@ -6082,6 +6091,8 @@ Grid.lodFrames = true
 // level-of-detail threshold are held (Grid.stillFrameCandidate).
 Grid.simpleCulling = true
 Grid.stillFrames = true
+// TASK-1516: still frames on the lit tiles (while the rest snapshot is built) and during the snapshot's split are held too.
+Grid.stillLitTiles = true
 // TASK-1474: moving frames far out draw from the scene layer (Grid.drawSceneLayer).
 Grid.sceneLayers = true
 // TASK-1515: pan frames on the lit tiles draw the units and cell texts from the lit layer (Grid.drawLitLayer).
