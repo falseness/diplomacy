@@ -11,12 +11,18 @@ function drawProductionPreview(ctx, imageName, pos, coord, turns) {
     ctx.globalAlpha = previousAlpha
     if (!coord)
         return
-    const kAllProductionStrokeWidth = CoordText.defaultFontSize / 5
+    const fontSize = CoordText.defaultFontSize, kAllProductionStrokeWidth = fontSize / 5
     // we set text here and after each draw of cell it sets to empty text
     // a bit stupid, but we dont have destructors in js so...
-    const cell = grid.getCell(coord)
-    grid.setInfoText(coord, new CoordText(coord.x, coord.y, turns,
-        cell.hexColor, CoordText.defaultFontSize, 'white', kAllProductionStrokeWidth))
+    // TASK-1513: the cell's own production text is kept and its turns set every frame (it was a new CoordText every
+    // frame), so its sprite (SpriteCache) is found again.
+    const cell = grid.getCell(coord), color = cell.hexColor
+    let text = cell.productionText
+    if (!text || text.color !== color || text.fontSize !== fontSize || text.strokeWidth !== kAllProductionStrokeWidth ||
+            text.coord.x !== coord.x || text.coord.y !== coord.y)
+        text = cell.productionText = new CoordText(coord.x, coord.y, turns, color, fontSize, 'white', kAllProductionStrokeWidth)
+    text.text = turns
+    grid.setInfoText(coord, text)
 }
 
 function addProductionPreviewInfo(info, name, turns) {

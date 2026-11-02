@@ -27,6 +27,8 @@ class Cell {
         this._coordText = coordText
         this._logicText = logicText
         this._infoText = undefined
+        // The production preview's text (drawProductionPreview), kept across frames.
+        this.productionText = undefined
     }
     // for escape menu. it writes coords of cells
     get coordText() {
@@ -647,10 +649,11 @@ class Grid extends SpritesGroup {
         return range
     }
     // Whether drawStillUnits or drawEntityOverlays can draw anything on the cell: a unit, a
-    // production, a demon portal or a building with bars. Every other cell is skipped by them.
+    // production, a demon portal or a building that shows its bars (TASK-1513: showsBar; Building.hasBar was a method,
+    // so every building counted). Every other cell is skipped by them.
     isOverlayCell(cell) {
         const building = cell.building
-        return cell.unit.notEmpty() || !!building.hasBar || !!building.isPreparingManufacture ||
+        return cell.unit.notEmpty() || !!building.showsBar || !!building.isPreparingManufacture ||
             !!building.isDemonPortal || building.isBuildingProduction()
     }
     // The cell index range whose drawing can reach ctx's canvas: with an axis-aligned transform, the

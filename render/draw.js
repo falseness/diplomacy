@@ -1,4 +1,7 @@
 function drawMain() {
+    // TASK-1513: the sprites queued by the frame before are drawn into their atlas, before this frame reads it.
+    if (typeof SpriteCache !== 'undefined' && typeof mainCtx !== 'undefined')
+        SpriteCache.beginFrame(mainCtx)
     // TASK-1495: a step-by-step playback of AI turns applies its next step before the frame (options/turnPlayback.js).
     if (typeof turnPlaybackView !== 'undefined')
         turnPlaybackView.tick()

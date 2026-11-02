@@ -170,6 +170,13 @@ class Entity extends Sprite {
     get isStandable() {
         return false
     }
+    // Whether drawBars draws an hp bar with boxes (TASK-1513: Grid.isOverlayCell counts a building's cell by it; a bush's
+    // or goldmine's bar has none: no maxHP).
+    get showsBar() {
+        const bar = this.hpBar
+        return !!this.hasBar && !!bar && bar.rects.length > 0 &&
+            (typeof otherSettings !== 'undefined' && otherSettings.alwaysDisplayHPBar || !this.isFullHP)
+    }
     drawBars(ctx) {
         if (otherSettings.alwaysDisplayHPBar || !this.isFullHP) {
             this.syncHPBar()

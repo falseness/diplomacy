@@ -125,9 +125,20 @@ class DemonPortal extends Building {
         if (gameEvent.selected !== this) return
         entityInterface.refreshPortal(this)
     }
+    // A live portal always draws its bar (Grid.isOverlayCell).
+    get showsBar() {
+        return !this.killed
+    }
+    // TASK-1513: the bar is synced (syncHPBar: hpIncrease, paintedHP) only when the portal's hp or hit state changed
+    // since it last was, not every frame.
     drawBars(ctx) {
         if (this.killed) return
-        this.syncHPBar()
-        this.hpBar.draw(ctx)
+        const bar = this.hpBar
+        if (bar.syncedHP !== this.hp || bar.syncedHit !== this.wasHitted) {
+            this.syncHPBar()
+            bar.syncedHP = this.hp
+            bar.syncedHit = this.wasHitted
+        }
+        bar.draw(ctx)
     }
 }

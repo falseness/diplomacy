@@ -45,11 +45,42 @@ class Bar {
         for (let i = healthCount; i < this.rects.length; ++i) {
             this.rects[i].color = this.dmgColor
         }
+        this.shape = undefined
     }
+    // TASK-1513: one sprite of the whole bar (SpriteCache) on the main canvas, its boxes' fills and strokes elsewhere.
     draw(ctx) {
+        const first = this.rects[0]
+        if (first && SpriteCache.draw(ctx, this.spriteShape(), first.x, first.y, this))
+            return
+        this.paintSprite(ctx)
+    }
+    paintSprite(ctx) {
         for (let i = 0; i < this.rects.length; ++i) {
             this.rects[i].draw(ctx)
         }
+    }
+    spriteAnchor() {
+        return this.rects[0]
+    }
+    // What the bar draws around its first box: the boxes' size, stroke and colours (their spacing follows from them).
+    spriteShape() {
+        if (this.shape && !this.shape.dead)
+            return this.shape
+        const rects = this.rects, first = rects[0]
+        if (!first)
+            return null
+        let key = 'M|' + this.width + '|' + this.height + '|' + first.strokeWidth + '|' + basis.r
+        for (const rect of rects)
+            key += '|' + rect.color
+        return this.shape = SpriteCache.shape(key, () => {
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+            for (const rect of rects) {
+                const sw = rect.strokeWidth || 0
+                x0 = Math.min(x0, rect.x - sw); y0 = Math.min(y0, rect.y - sw)
+                x1 = Math.max(x1, rect.x + rect.width + sw); y1 = Math.max(y1, rect.y + rect.height + sw)
+            }
+            return {x0: x0 - first.x, y0: y0 - first.y, x1: x1 - first.x, y1: y1 - first.y}
+        }, true, false)
     }
 }
 // Health is decomposed independently into remaining and missing big (HealthBar.BIG HP, drawn at 2x size) and
@@ -127,18 +158,61 @@ class HealthBar {
     // The layout is redone only when what it reads changed (the rects themselves only change
     // in repaintRects and layout), not on every draw of every bar every frame.
     draw(ctx) {
+        this.ensureLayout()
+        // A bar without boxes (no maxHP: bushes, goldmines) draws nothing.
+        if (!this.rects.length)
+            return
+        // TASK-1513: one sprite of the whole bar (SpriteCache) on the main canvas.
+        if (SpriteCache.draw(ctx, this.spriteShape(), this.pos.x, this.pos.y, this))
+            return
+        this.paint(ctx)
+    }
+    ensureLayout() {
         const pos = this.pos, key = this.laidOut
         if (!key || key.rects !== this.rects || key.x !== pos.x || key.y !== pos.y || key.r !== basis.r ||
                 key.healthColor !== this.healthColor || key.dmgColor !== this.dmgColor ||
-                key.pendingColor !== this.pendingColor) {
+                key.pendingColor !== this.pendingColor || key.pendingMarkColor !== this.pendingMarkColor) {
             this.layout()
-            this.laidOut = {rects: this.rects, x: pos.x, y: pos.y, r: basis.r,
-                healthColor: this.healthColor, dmgColor: this.dmgColor, pendingColor: this.pendingColor}
+            if (!key || key.rects !== this.rects || key.r !== basis.r || key.healthColor !== this.healthColor ||
+                    key.dmgColor !== this.dmgColor || key.pendingColor !== this.pendingColor ||
+                    key.pendingMarkColor !== this.pendingMarkColor)
+                this.shape = undefined
+            this.laidOut = {rects: this.rects, x: pos.x, y: pos.y, r: basis.r, healthColor: this.healthColor,
+                dmgColor: this.dmgColor, pendingColor: this.pendingColor, pendingMarkColor: this.pendingMarkColor}
         }
+    }
+    paint(ctx) {
         for (const rect of this.rects) {
             rect.draw(ctx)
             if (rect.pending) this.drawPendingMark(ctx, rect)
         }
+    }
+    paintSprite(ctx) {
+        this.ensureLayout()
+        this.paint(ctx)
+    }
+    spriteAnchor() {
+        return this.pos
+    }
+    // What the bar draws around its anchor (pos): its boxes in order (big or one-HP; healthy, pending or missing),
+    // colours and basis.r (the layout follows from them).
+    spriteShape() {
+        if (this.shape && !this.shape.dead)
+            return this.shape
+        let key = 'H|' + basis.r + '|' + this.healthColor + '|' + this.dmgColor + '|' + this.pendingColor + '|' +
+            this.pendingMarkColor + '|'
+        for (const rect of this.rects)
+            key += (rect.hpValue === HealthBar.BIG ? 'B' : '1') + (rect.healthy ? 'h' : rect.pending ? 'p' : 'm')
+        const rects = this.rects, pos = this.pos
+        return this.shape = SpriteCache.shape(key, () => {
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+            for (const rect of rects) {
+                const sw = rect.strokeWidth || 0
+                x0 = Math.min(x0, rect.x - sw); y0 = Math.min(y0, rect.y - sw)
+                x1 = Math.max(x1, rect.x + rect.width + sw); y1 = Math.max(y1, rect.y + rect.height + sw)
+            }
+            return x0 <= x1 ? {x0: x0 - pos.x, y0: y0 - pos.y, x1: x1 - pos.x, y1: y1 - pos.y} : {x0: 0, y0: 0, x1: 0, y1: 0}
+        }, true, false)
     }
     // The heart of a pending box (concept Y36: 0.86 of the inner width), clipped to the box inside its rim.
     drawPendingMark(ctx, rect) {

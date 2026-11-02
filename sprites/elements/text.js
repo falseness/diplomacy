@@ -149,21 +149,59 @@ class CoordText extends Sprite {
         this.strokeWidth = strokeWidth
         this.strokeColor = strokeColor
     }
+    // TASK-1513: an outlined text is a sprite (SpriteCache) on the main canvas: one drawImage, where it set the font and
+    // its styles and drew a strokeText and a fillText. A text without an outline stays one fillText (as cheap as a
+    // drawImage or cheaper: software Chromium 4-5 us vs 8-9 us a call, artifacts/TASK-1513/change.md).
     draw(ctx) {
-            let pos = this.pos
-            ctx.font = this.fontSize + 'px Times New Roman'
-            ctx.fillStyle = this.color
-            ctx.textAlign = "center"
-            ctx.textBaseline = "middle"
+        const text = this.text
+        if (this.strokeWidth && text !== '' && text !== undefined && text !== null && SpriteCache.draw(ctx, this.spriteShape(), this.pos.x, this.pos.y, this))
+            return
+        this.paintSprite(ctx)
+    }
+    spriteAnchor() {
+        return this.pos
+    }
+    // The text as drawn now, for a sprite built before the next frame (a cell's info text is emptied once drawn).
+    spriteCopy() {
+        const copy = Object.create(CoordText.prototype)
+        return Object.assign(copy, {pos: {x: this.pos.x, y: this.pos.y}, text: this.text, fontSize: this.fontSize,
+            color: this.color, strokeWidth: this.strokeWidth, strokeColor: this.strokeColor, shapeOf: this.shapeOf})
+    }
+    // What the text draws around its position: the string, font size, colours and outline width.
+    spriteShape() {
+        const s = this.shapeOf
+        if (s && !s.shape.dead && s.text === this.text && s.fontSize === this.fontSize && s.color === this.color &&
+                s.strokeWidth === this.strokeWidth && s.strokeColor === this.strokeColor)
+            return s.shape
+        const text = String(this.text), fontSize = this.fontSize, strokeWidth = this.strokeWidth
+        const key = 'T|' + fontSize + '|' + this.color + '|' + strokeWidth + '|' + (strokeWidth ? this.strokeColor : '') + '|' + text
+        const shape = SpriteCache.shape(key, () => {
+            const g = SpriteCache.measureContext()
+            g.font = fontSize + 'px Times New Roman'
+            g.textAlign = 'center'
+            g.textBaseline = 'middle'
+            const m = g.measureText(text)
+            return {x0: -m.actualBoundingBoxLeft, x1: m.actualBoundingBoxRight, y0: -m.actualBoundingBoxAscent,
+                y1: m.actualBoundingBoxDescent}
+        // The outline reaches half its width out, a miter join up to the miter limit times that (SpriteCache.draw).
+        }, !!strokeWidth, true, strokeWidth ? strokeWidth / 2 : 0)
+        this.shapeOf = {shape, text: this.text, fontSize, color: this.color, strokeWidth, strokeColor: this.strokeColor}
+        return shape
+    }
+    paintSprite(ctx) {
+        let pos = this.pos
+        ctx.font = this.fontSize + 'px Times New Roman'
+        ctx.fillStyle = this.color
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
 
-            if (this.strokeWidth) {
-                ctx.strokeStyle = this.strokeColor
-                ctx.lineWidth = this.strokeWidth
-                ctx.strokeText(this.text, pos.x, pos.y)
-            }
-            ctx.fillText(this.text, pos.x, pos.y)
-            
+        if (this.strokeWidth) {
+            ctx.strokeStyle = this.strokeColor
+            ctx.lineWidth = this.strokeWidth
+            ctx.strokeText(this.text, pos.x, pos.y)
         }
+        ctx.fillText(this.text, pos.x, pos.y)
+    }
         /*createObject(model)
         {
             let pos = this.getPos()

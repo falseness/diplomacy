@@ -4,7 +4,8 @@ class Building extends Entity {
 
         grid.setBuilding(this, this.coord)
     }
-    hasBar() {
+    // TASK-1513: a getter as Entity's (a method here shadowed it: building.hasBar was a function, always truthy).
+    get hasBar() {
         return true
     }
     toUndoJSON() {
