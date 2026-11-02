@@ -621,6 +621,9 @@ function drawAll() {
     // TASK-1517: a zoom gesture whose raster is still made keeps the frame on screen (Grid.holdZoomFrame).
     if (typeof grid !== 'undefined' && grid?.holdZoomFrame?.())
         return
+    // TASK-1518: a new board's first frame is held while its lit tiles are built (Grid.holdStartFrame).
+    if (typeof grid !== 'undefined' && grid?.holdStartFrame?.())
+        return
     drawMain()
     drawInterface()
         //mainCtx.clearRect(-basis.offset.x, -basis.offset.y * 2, width, height)

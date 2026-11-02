@@ -1938,6 +1938,9 @@ class GameManager {
     // A local (hot seat) game; online games start from a lobby (openLobbyGame).
     static start(map, _isFogOfWar, isClassicTimer = false) {
         this.setUpBoard(map, _isFogOfWar, isClassicTimer, false)
+        // TASK-1518: the new game's first frames are held while its first lit view is built (Grid.holdStartFrame).
+        if (typeof grid !== 'undefined' && grid)
+            grid.startHoldWanted = true
         startTurn()
         // A tutorial keeps the camera of its first turn.
         if (!gameSettings.tutorial)
@@ -1966,6 +1969,7 @@ class GameManager {
 }
 let lastGameFrameTime = undefined
 let framesPerSecond = 60
+let gameLoopFrame = false
 function gameLoop(frameTime) {
     const defaultFrameDuration = 1000 / 60
     const actualFrameDuration = lastGameFrameTime == undefined ? defaultFrameDuration :
@@ -1978,7 +1982,13 @@ function gameLoop(frameTime) {
     }
 
     gameEvent.moveScreen(frameDuration, frameTime)
-    drawAll()
+    // TASK-1518: drawAll called by this loop (Grid.holdStartFrame holds only such frames).
+    gameLoopFrame = true
+    try {
+        drawAll()
+    } finally {
+        gameLoopFrame = false
+    }
     if (gameExit) {
         gameExit = false
         lastGameFrameTime = undefined

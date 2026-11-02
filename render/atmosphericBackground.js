@@ -52,7 +52,21 @@ const atmosphericBackground = {
             this.image = ready ? image : null
         }
         const deadline = setTimeout(() => finish(false), 8000)
-        image.onload = () => finish(image.naturalWidth > 0 && image.naturalHeight > 0)
+        // TASK-1518: decoded off the main thread before it is used (createImageBitmap: the same pixels), not in the frame
+        // first drawing it (~30 ms on the user's desktop); paint draws the bitmap.
+        image.onload = () => {
+            if (!(image.naturalWidth > 0 && image.naturalHeight > 0))
+                return finish(false)
+            if (typeof createImageBitmap !== 'function')
+                return finish(true)
+            // Decoded first (decode: off the main thread), so createImageBitmap copies decoded pixels.
+            const decoded = typeof image.decode === 'function' ? image.decode().catch(() => {}) : Promise.resolve()
+            decoded.then(() => createImageBitmap(image)).then(bitmap => {
+                if (this.state === 'loading')
+                    this.bitmap = bitmap
+                finish(true)
+            }, () => finish(true))
+        }
         image.onerror = () => finish(false)
         image.src = this.SRC
     },
@@ -116,7 +130,32 @@ const atmosphericBackground = {
     },
     // decorate's drawing in steps (a generator; each yield ends one): the same calls in the same order, SKY_STEP_BEAMS beams
     // a step, so a raster built over frames (rasterSteps) has a whole build's pixels.
-    SKY_STEP_BEAMS: 4,
+    // TASK-1518: one beam a step (a step of four was ~100 ms on the user's desktop canvas), and a beam with a length is
+    // cleared from and added from its own layer only within its box (beamBox: the band's rectangle through its transform,
+    // grown by SKY_BEAM_BOX_PAD device pixels): the layer is transparent outside it, so the 'lighter' add of the rest of
+    // the layer added nothing; the same pixels.
+    SKY_STEP_BEAMS: 1,
+    SKY_BEAM_BOX_PAD: 2,
+    SKY_BANDS: 4,
+    // The device pixel box ({x, y, w, h}, whole pixels, within the w x h canvas) of the band (0, -half)..(length, half)
+    // drawn at `at` (viewport fractions) turned by angle degrees, as decorateSteps' transform places it; null when empty.
+    beamBox(at, angle, half, length, w, h) {
+        const r = angle * Math.PI / 180, c = Math.cos(r), s = Math.sin(r)
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+        for (const [px, py] of [[0, -half], [length, -half], [length, half], [0, half]]) {
+            const x = at[0] * w + w * (c * px - s * py), y = at[1] * h + h * (s * px + c * py)
+            x0 = Math.min(x0, x)
+            y0 = Math.min(y0, y)
+            x1 = Math.max(x1, x)
+            y1 = Math.max(y1, y)
+        }
+        const pad = this.SKY_BEAM_BOX_PAD
+        x0 = Math.max(0, Math.floor(x0) - pad)
+        y0 = Math.max(0, Math.floor(y0) - pad)
+        x1 = Math.min(w, Math.ceil(x1) + pad)
+        y1 = Math.min(h, Math.ceil(y1) + pad)
+        return x1 > x0 && y1 > y0 ? {x: x0, y: y0, w: x1 - x0, h: y1 - y0} : null
+    },
     *decorateSteps(g, w, h) {
         const sky = this.SKY, px = window.devicePixelRatio || 1
         const random = this.random(sky.seed)
@@ -136,11 +175,21 @@ const atmosphericBackground = {
         }
         let beamsDrawn = 0
         for (const [angle, half, alpha, at = sky.origin, length] of sky.beams) {
-            if (beamsDrawn++ && beamsDrawn % this.SKY_STEP_BEAMS === 1)
+            if (beamsDrawn && beamsDrawn % this.SKY_STEP_BEAMS === 0)
                 yield
+            ++beamsDrawn
             const target = length ? ray.getContext('2d') : b
-            if (length) target.clearRect(0, 0, w, h)
+            // The layer is transparent: cleared after the beam before it (below), within that beam's box.
+            const box = length ? this.beamBox(at, angle, half, length, w, h) : null
+            if (length && !box)
+                continue
             target.save()
+            // destination-in below clears all of the clip outside its rectangle: only the box can hold anything.
+            if (box) {
+                target.beginPath()
+                target.rect(box.x, box.y, box.w, box.h)
+                target.clip()
+            }
             target.translate(at[0] * w, at[1] * h)
             target.scale(w, h)
             target.rotate(angle * Math.PI / 180)
@@ -156,20 +205,41 @@ const atmosphericBackground = {
                 target.fillRect(0, -half, length, 2 * half)
             }
             target.restore()
-            if (length) b.drawImage(ray, 0, 0)
+            if (length) {
+                // The layer's beam in one step, its add in the next.
+                yield
+                b.drawImage(ray, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h)
+                target.clearRect(box.x, box.y, box.w, box.h)
+            }
         }
         if (ray) ray.width = ray.height = 0
         yield
-        b.globalCompositeOperation = 'destination-in'
+        // TASK-1518: the fade and the beams' composite a band of rows a step (SKY_BANDS): the same per-pixel blends.
         const fade = b.createRadialGradient(ox, oy, 0, ox, oy, reach)
         fade.addColorStop(0, 'rgba(0,0,0,1)')
         fade.addColorStop(0.35, 'rgba(0,0,0,0.9)')
         fade.addColorStop(1, 'rgba(0,0,0,0)')
+        b.globalCompositeOperation = 'destination-in'
         b.fillStyle = fade
-        b.fillRect(0, 0, w, h)
+        for (let k = 0; k < this.SKY_BANDS; ++k) {
+            const y0 = Math.floor(k * h / this.SKY_BANDS), y1 = Math.floor((k + 1) * h / this.SKY_BANDS)
+            b.save()
+            b.beginPath()
+            b.rect(0, y0, w, y1 - y0)
+            b.clip()
+            b.fillRect(0, 0, w, h)
+            b.restore()
+            yield
+        }
         g.save()
         g.globalCompositeOperation = 'screen'
-        g.drawImage(beams, 0, 0)
+        for (let k = 0; k < this.SKY_BANDS; ++k) {
+            const y0 = Math.floor(k * h / this.SKY_BANDS), y1 = Math.floor((k + 1) * h / this.SKY_BANDS)
+            if (y1 > y0)
+                g.drawImage(beams, 0, y0, w, y1 - y0, 0, y0, w, y1 - y0)
+            if (k < this.SKY_BANDS - 1)
+                yield
+        }
         beams.width = beams.height = 0
         yield
         // Stars: tiny cool points, about half of them bright.
@@ -270,7 +340,7 @@ const atmosphericBackground = {
     paint(target, w, h) {
         if (this.state === 'ready') {
             const at = this.layout(w, h)
-            target.drawImage(this.image, at.x, at.y, at.width, at.height)
+            target.drawImage(this.bitmap || this.image, at.x, at.y, at.width, at.height)
             this.drawn = at
         }
         else {
@@ -282,8 +352,17 @@ const atmosphericBackground = {
     // decorate it (decorateSteps), the last backs it as draw's whole build does and makes it the raster.
     *rasterSteps(raster, rw, rh) {
         const g = raster.getContext('2d')
-        this.paint(g, rw, rh)
-        yield
+        // TASK-1518: painted a band of rows a step (clipped: the image sampled as one draw samples it).
+        for (let k = 0; k < this.SKY_BANDS; ++k) {
+            const y0 = Math.floor(k * rh / this.SKY_BANDS), y1 = Math.floor((k + 1) * rh / this.SKY_BANDS)
+            g.save()
+            g.beginPath()
+            g.rect(0, y0, rw, y1 - y0)
+            g.clip()
+            this.paint(g, rw, rh)
+            g.restore()
+            yield
+        }
         yield* this.decorateSteps(g, rw, rh)
         g.save()
         g.setTransform(1, 0, 0, 1, 0, 0)
@@ -321,10 +400,19 @@ const atmosphericBackground = {
     draw(ctx) {
         // Bind independently of the optional sprite startup counter.
         this.watch(ctx.canvas)
-        // The viewport sky and the fixed light kernel are camera-scale independent.
-        // Reuse them through wheel/pinch gestures; world layers use the draw transform.
-        // TASK-1454: the sky raster (and a raster job under way) depends only on the key and the view (viewMatches), so a
-        // new board keeps it; the board's light map is released.
+        this.syncKey()
+        if (!otherSettings.atmosphericVisuals) {
+            this.syncPage(false)
+            return
+        }
+        this.drawSky(ctx)
+    },
+    // The viewport sky and the fixed light kernel are camera-scale independent.
+    // Reuse them through wheel/pinch gestures; world layers use the draw transform.
+    // TASK-1454: the sky raster (and a raster job under way) depends only on the key and the view (viewMatches), so a
+    // new board keeps it; the board's light map is released.
+    // TASK-1518: also before a new board's first frame builds its light map (Grid.startBuildSteps), so draw keeps it.
+    syncKey() {
         if (!this.keyMatches() || this.board !== grid) {
             if (this.keyMatches()) atmosphericLighting.release()
             else this.invalidate()
@@ -335,10 +423,8 @@ const atmosphericBackground = {
             this.board = grid
             if (grid) grid.surfaceCacheState = undefined
         }
-        if (!otherSettings.atmosphericVisuals) {
-            this.syncPage(false)
-            return
-        }
+    },
+    drawSky(ctx) {
         this.load()
         const w = ctx.canvas.width, h = ctx.canvas.height
         if (!w || !h) return

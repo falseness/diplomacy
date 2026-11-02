@@ -3,6 +3,10 @@
 // ambient, warm lamps added with 'lighter') is multiplied over the board's terrain
 // and buildings, then a color-dodge gain map lifts it to warm cream marble.
 // Units, overlays and UI are drawn after it, so they are never darkened.
+// TASK-1518: the value a step of a generator yields when its drawing is heavy to rasterize: Chromium rasterizes a task's
+// canvas drawing at the task's end, so the time a step takes to run is only its recording, and a run of steps within a time
+// budget (runSteps, Grid.holdStartFrame) ends after such a step instead of packing more raster into the task.
+const RASTER_STEP = 'raster'
 const atmosphericLighting = {
     // Light map units: 0..255 per channel, 255 = the unchanged surface.
     // A broad key light from the left, falling mostly across the board (DIRECTION, world
@@ -455,6 +459,10 @@ const atmosphericLighting = {
     },
     hexPath(ctx, cells) {
         ctx.beginPath()
+        this.addHexagons(ctx, cells)
+    },
+    // The cells' hexagons added to ctx's path (hexPath).
+    addHexagons(ctx, cells) {
         for (const cell of cells) {
             const points = mapDepth.getVertices(cell.pos)
             ctx.moveTo(points[0].x, points[0].y)
@@ -546,7 +554,8 @@ const atmosphericLighting = {
     // One step of lightMap(board, cap)'s rebuild (Grid.queueLitTiles, a task between frames: the camera's light map after a
     // zoom is built over frames, buildSteps): the first starts it, dropping the map (nothing draws from it meanwhile; a
     // lightMap call finishes it at once); the last makes it the map as lightMap would. Returns whether the map is ready.
-    stepLightMap(board, cap) {
+    // TASK-1518: fine: the build's fine steps (buildSteps, a new game's start: Grid.startBuildSteps), else its coarse ones.
+    stepLightMap(board, cap, fine = false) {
         this.endRegionSteps()
         if (this.lightMapReady(board, cap)) return true
         mapDepth.ensureGeometry(board)
@@ -557,9 +566,12 @@ const atmosphericLighting = {
             this.mapKey = ''
             this.mapState = null
             this.staged = {key, scale, state: this.lightState(board).slice(), owners: this.ownerState(board).slice(),
-                steps: this.buildSteps(this.collect(board), bounds, scale)}
+                steps: this.buildSteps(this.collect(board), bounds, scale, false, fine), fine}
         }
-        if (!this.staged.steps.next().done) return false
+        const step = this.staged.steps.next(), done = step.done
+        // TASK-1518: whether the step was heavy to rasterize (RASTER_STEP).
+        this.stagedRaster = step.value === RASTER_STEP
+        if (!done) return false
         const owners = this.staged.owners
         this.staged = null
         this.finishLightMap(board, key, scale, owners)
@@ -886,20 +898,55 @@ const atmosphericLighting = {
     // a light map built a step a task between frames (stepLightMap) has a whole build's pixels. A step draws at most about
     // two of the map's (at most maxPixels) rasters over it, one of them blended.
     MAP_STEP_PIXELS: 1.25e6,
-    *buildSteps({cells, sources}, bounds, scale, inPlace = false) {
+    // TASK-1518: fine (stepLightMap): more steps of the same calls in the same order (the same pixels): the stone's path traced
+    // MAP_PATH_STEP_CELLS hexagons a step (the context's path, nothing else drawing on these canvases between the steps), its
+    // clip and fill a step, the glows MAP_FINE_STEP_PIXELS a step and the lamps' spill MAP_SPILL_STEP_SOURCES a step: a step
+    // of build was ~25-60 ms on the user's desktop. (A band of rows a step is not the same: a band clip with the stone's
+    // path clip makes Chromium rasterize that path's edges differently.)
+    MAP_PATH_STEP_CELLS: 400,
+    MAP_FINE_STEP_PIXELS: 1.5e5,
+    MAP_SPILL_STEP_SOURCES: 8,
+    *buildSteps({cells, sources}, bounds, scale, inPlace = false, fine = false) {
         const target = inPlace && inPlace !== true ? inPlace : null
+        const stepPixels = fine ? this.MAP_FINE_STEP_PIXELS : this.MAP_STEP_PIXELS
+        // The stone's hexagons as ctx's path (hexPath), in steps when fine.
+        const self = this
+        const tracePath = function* (ctx, list) {
+            if (!fine) {
+                self.hexPath(ctx, list)
+                return
+            }
+            ctx.beginPath()
+            for (let i = 0; i < list.length; i += self.MAP_PATH_STEP_CELLS) {
+                if (i)
+                    yield
+                self.addHexagons(ctx, list.slice(i, i + self.MAP_PATH_STEP_CELLS))
+            }
+            yield
+        }
+        const spill = function* (ctx, part) {
+            if (!fine) {
+                self.drawSpill(ctx, sources, part)
+                return
+            }
+            for (let i = 0; i < sources.length; i += self.MAP_SPILL_STEP_SOURCES) {
+                if (i)
+                    yield RASTER_STEP
+                self.drawSpill(ctx, sources.slice(i, i + self.MAP_SPILL_STEP_SOURCES), part)
+            }
+        }
         // (1) Light map, multiplied over the board: neutral (unchanged) everywhere except
         // the authorized visible cells, which get the cool ambient plus warm lamps.
         const g = inPlace ? this.redrawContext('map', bounds, scale, target) : this.canvasFor('map', bounds, scale)
         g.fillStyle = '#fff'
         g.fillRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         const stone = cells.filter(cell => !cell.owner)
-        this.hexPath(g, this.inClipWindow(stone))
+        yield* tracePath(g, this.inClipWindow(stone))
         g.save()
         g.clip()
         g.fillStyle = this.keyGradient(g, bounds, 'ambient')
         g.fill()
-        yield
+        yield RASTER_STEP
         // Territory glow: each owned tile tints the stone around it with its colour.
         g.globalCompositeOperation = 'multiply'
         // A step ends after MAP_STEP_PIXELS of glow squares.
@@ -911,52 +958,54 @@ const atmosphericLighting = {
             // A cool colour shows far over the warm stone, so it also spills wide (TERRITORY.cool).
             if (this.TERRITORY.cool?.map && this.territoryGlow(g, pos, this.TERRITORY.cool, owner, 'map'))
                 pixels += glowPixels(this.TERRITORY.cool)
-            if (pixels >= this.MAP_STEP_PIXELS) {
-                yield
+            if (pixels >= stepPixels) {
+                yield RASTER_STEP
                 pixels = 0
             }
         }
-        yield
+        yield RASTER_STEP
         // The cool sky fill along the far edges and the shade between the key light's shafts, in one raster (boardLayers).
         const layers = this.boardLayers(bounds)
+        if (fine)
+            yield
         if (layers.shade)
             g.drawImage(layers.shade, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        yield
+        yield RASTER_STEP
         // Lamp spill (multiply part): the blue is held back towards amber.
         g.globalCompositeOperation = 'source-over'
-        this.drawSpill(g, sources, 'map')
+        yield* spill(g, 'map')
         g.restore()
-        yield
+        yield RASTER_STEP
         // (2) Gain map, 'color-dodge' after the multiply: base / (1 - gain) is a
         // multiplicative lift, so lit stone keeps its grain and dark joints. The gain is
         // a low, near-neutral cream-gold so no channel saturates into flat paint.
         const k = inPlace ? this.redrawContext('gain', bounds, scale, target) : this.canvasFor('gain', bounds, scale)
         k.clearRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        this.hexPath(k, this.inClipWindow(stone))
+        yield* tracePath(k, this.inClipWindow(stone))
         k.save()
         k.clip()
         // The key light's lift, then each lamp's spill: the lighter of the two per channel.
         k.fillStyle = this.keyGradient(k, bounds, 'gain')
         k.fill()
-        yield
+        yield RASTER_STEP
         // The key light's shafts and the rim's lift, in one raster (boardLayers), and the cool territories' lift: added.
         k.globalCompositeOperation = 'lighter'
         k.drawImage(layers.lift, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
-        yield
+        yield RASTER_STEP
         if (this.TERRITORY.cool?.gain) {
             pixels = 0
             for (const {pos, owner} of cells) {
                 if (!owner) continue
                 if (this.territoryGlow(k, pos, this.TERRITORY.cool, owner, 'gain') &&
-                        (pixels += glowPixels(this.TERRITORY.cool)) >= this.MAP_STEP_PIXELS) {
-                    yield
+                        (pixels += glowPixels(this.TERRITORY.cool)) >= stepPixels) {
+                    yield RASTER_STEP
                     pixels = 0
                 }
             }
         }
-        yield
+        yield RASTER_STEP
         k.globalCompositeOperation = 'lighten'
-        this.drawSpill(k, sources, 'gain')
+        yield* spill(k, 'gain')
         k.restore()
     },
     // An owned tile's glow on the stone round it, a radial gradient over reach (hex radii) with stops
@@ -1469,6 +1518,14 @@ const atmosphericLighting = {
     // (menuPrebuild), so the game finds them built. A generator: each yield ends a piece (what it built); a fill is kept
     // (ownedTiles) once all its variants are built, and skipped when kept already.
     *prebuildOwnedSteps(colours) {
+        const fills = []
+        for (const colour of colours)
+            for (const suburb of [false, true])
+                fills.push(this.colourFill(colour, suburb))
+        yield* this.ownedFillSteps(fills)
+    },
+    // TASK-1518: prebuildOwnedSteps' pieces for the fills given (tileFill / colourFill keys).
+    *ownedFillSteps(fills) {
         for (let i = 0; i < this.TILE.variants; i++) {
             if (!this.tileVariants || this.tileVariants.radius !== basis.r || !this.tileVariants[i]) {
                 this.tileVariant(i)
@@ -1482,16 +1539,23 @@ const atmosphericLighting = {
                 this.tileDetailArray()[i] ||= step.value
             }
         }
-        for (const colour of colours)
-            for (const suburb of [false, true]) {
-                const fill = this.colourFill(colour, suburb), tiles = []
-                for (let i = 0; i < this.TILE.variants && !this.ownedTileMap().has(fill); i++) {
-                    tiles.push(this.buildOwnedTile(i, fill))
-                    yield 'ownedTile ' + fill + ' ' + i
+        // TASK-1518: each variant's detail parts (ownedDetail: its raised and lowered pixels as paths), which the first owned
+        // tile of the variant built in it, a piece of their own.
+        if (fills.some(fill => !this.ownedTileMap().has(fill)))
+            for (let i = 0; i < this.TILE.variants; i++)
+                if (!this.tileDetail(i).parts) {
+                    this.ownedDetail(i)
+                    yield 'ownedDetail ' + i
                 }
-                if (!this.ownedTileMap().has(fill))
-                    this.ownedTileMap().set(fill, tiles)
+        for (const fill of fills) {
+            const tiles = []
+            for (let i = 0; i < this.TILE.variants && !this.ownedTileMap().has(fill); i++) {
+                tiles.push(this.buildOwnedTile(i, fill))
+                yield 'ownedTile ' + fill + ' ' + i
             }
+            if (!this.ownedTileMap().has(fill))
+                this.ownedTileMap().set(fill, tiles)
+        }
     },
     buildOwnedFill(fill) {
         let tiles = this.ownedTiles.get(fill)
@@ -1503,6 +1567,10 @@ const atmosphericLighting = {
     // board (ownedFills, which can own a cell later) one fill a task after it; false builds them all at the first.
     stagedOwnedTiles: true,
     ownedTilesQueued: false,
+    // TASK-1518: a tile a task (ownedFillSteps' pieces, one at least, more while they fit OWNED_PREWARM_MS), not a fill (7
+    // tiles, ~60 ms on the user's desktop); a fill is kept once all its tiles are built.
+    OWNED_PREWARM_MS: 8,
+    ownedPrewarm: null,
     prewarmOwnedTiles() {
         if (this.ownedTilesQueued) return
         this.ownedTilesQueued = true
@@ -1510,9 +1578,25 @@ const atmosphericLighting = {
             this.ownedTilesQueued = false
             const tiles = this.ownedTiles
             if (!tiles || tiles.radius !== basis.r) return
-            const fill = this.ownedFills().find(f => !tiles.has(f))
-            if (!fill) return
-            this.buildOwnedFill(fill)
+            let job = this.ownedPrewarm
+            if (!job || job.tiles !== tiles || tiles.has(job.fill)) {
+                const fill = this.ownedFills().find(f => !tiles.has(f))
+                if (!fill) {
+                    this.ownedPrewarm = null
+                    return
+                }
+                job = this.ownedPrewarm = {tiles, fill, steps: this.ownedFillSteps([fill])}
+            }
+            const start = performance.now()
+            let piece = 0
+            do {
+                const begin = performance.now()
+                if (job.steps.next().done) {
+                    this.ownedPrewarm = null
+                    break
+                }
+                piece = performance.now() - begin
+            } while (performance.now() - start + piece < this.OWNED_PREWARM_MS)
             this.prewarmOwnedTiles()
         })
     },
@@ -1694,7 +1778,17 @@ const atmosphericLighting = {
     },
     // Board objects (not units or lamps) on authorized visible cells cast their shadows, clipped to
     // the visible cells, under the fog and before any sprite is drawn.
-    drawShadows(ctx, board) {
+    // TASK-1518: fine: its steps (drawShadowSteps' generator, for the surface cache's build between frames) instead.
+    drawShadows(ctx, board, fine = false) {
+        if (fine)
+            return this.drawShadowSteps(ctx, board, true)
+        for (const _ of this.drawShadowSteps(ctx, board));
+    },
+    // TASK-1518: drawShadows' drawing in steps (a generator); fine (the surface cache's build between frames,
+    // SURFACE_CACHE_STAGE_STEPS): the clip's path traced MAP_PATH_STEP_CELLS hexagons a step, then the contact shades and
+    // the cast shadows SHADOW_STEP_CASTERS a step: the same calls in the same order. Without fine, one step.
+    SHADOW_STEP_CASTERS: 24,
+    *drawShadowSteps(ctx, board, fine = false) {
         if (!otherSettings.atmosphericVisuals) return
         // The clip's cells from the canvas rows (onCanvas), the casters from the drawn range; lamps
         // from the whole board, as an off-screen lamp still turns an on-screen shadow.
@@ -1727,11 +1821,22 @@ const atmosphericLighting = {
         }
         if (!casters.length) return
         ctx.save()
-        this.hexPath(ctx, this.inClipWindow(this.onCanvas(ctx, cells)))
+        const clipCells = this.inClipWindow(this.onCanvas(ctx, cells))
+        if (fine) {
+            ctx.beginPath()
+            for (let i = 0; i < clipCells.length; i += this.MAP_PATH_STEP_CELLS) {
+                yield
+                this.addHexagons(ctx, clipCells.slice(i, i + this.MAP_PATH_STEP_CELLS))
+            }
+        }
+        else
+            this.hexPath(ctx, clipCells)
         ctx.clip()
         const log = this.shadowLog = []
         // Contact shade first, under the cast shadows.
         const {radius, flat, alpha, color} = this.SHADOW.contact
+        let drawn = 0
+        const step = () => fine && ++drawn % this.SHADOW_STEP_CASTERS === 0
         if (alpha > 0) for (const {building, image} of casters) {
             const {base} = this.shadowSilhouette(image), rx = radius * basis.r
             ctx.save()
@@ -1746,6 +1851,8 @@ const atmosphericLighting = {
             })
             ctx.fillRect(-rx, -rx, 2 * rx, 2 * rx)
             ctx.restore()
+            if (step())
+                yield RASTER_STEP
         }
         for (const {x, y, building, image, pos} of casters) {
             const {best, strength} = this.strongestLamp(pos, sources, this.SHADOW.reachRadii)
@@ -1765,6 +1872,8 @@ const atmosphericLighting = {
             ctx.transform(-W * dir.y, W * dir.x, -L * dir.x, -L * dir.y, ox, oy)
             ctx.drawImage(surface, -image.width / 2 - pad, -base - pad)
             ctx.restore()
+            if (step())
+                yield RASTER_STEP
         }
         ctx.restore()
     },

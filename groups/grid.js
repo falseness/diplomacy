@@ -153,6 +153,20 @@ class Grid extends SpritesGroup {
         this.zoomReplayMaxStepMs = 0
         this.zoomReplaySwaps = 0
         this.zoomReplayCanvas = undefined
+        // TASK-1518: the board's first frame held while what it draws is built in steps (holdStartFrame): the job (null once
+        // over), and the frames held, steps run, longest step (ms), the frames' work (ms), and how it ended
+        // ('built', 'camera', 'time', 'direct': a drawAll call outside the game loop, 'off').
+        // Set by GameManager.start: a board loaded otherwise (a save, an online board, a turn playback's recordings) is not held.
+        this.startHoldWanted = false
+        this.startRestFirst = false
+        this.startJob = undefined
+        this.startHeldFrames = 0
+        this.startSteps = 0
+        this.startMaxStepMs = 0
+        this.startWorkMs = 0
+        this.startEnd = undefined
+        // By kind of piece (startBuildSteps' yields): [pieces, ms, longest ms].
+        this.startPieces = {}
         this.lodRecorder = undefined
         this.lodFrame = undefined
         this.lodHolds = 0
@@ -595,9 +609,12 @@ class Grid extends SpritesGroup {
     healBarHidden(building) {
         return typeof healFx !== 'undefined' && healFx.hidden.size > 0 && healFx.hidden.has(building)
     }
-    drawEntityBodies(ctx) {
+    // TASK-1518: part {k, n}: only the k-th of n runs of the rows (the calls the whole draw makes there, in its order).
+    drawEntityBodies(ctx, part) {
         const range = this.drawRange(ctx)
-        for (let i = range.i0; i < range.i1; ++i) {
+        const i0 = part ? range.i0 + Math.floor(part.k * (range.i1 - range.i0) / part.n) : range.i0
+        const i1 = part ? range.i0 + Math.floor((part.k + 1) * (range.i1 - range.i0) / part.n) : range.i1
+        for (let i = i0; i < i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
                     if (this.spriteInPatchCells(this.arr[i][j].building))
@@ -818,19 +835,43 @@ class Grid extends SpritesGroup {
             g.setTransform(1, 0, 0, 1, 0, 0)
             g.clearRect(0, 0, W, H)
             g.restore()
-            const mask = layer.mask ||= document.createElement('canvas')
-            mask.width = W
-            mask.height = H
-            const {cells, box, path} = this.cellLayerCells(W, H, place)
-            fillCellMask(mask.getContext('2d'), path)
-            for (const cell of cells)
-                cell.key = this.cellLayerKey(cell.i, cell.j)
-            const far = ({box}) => Math.hypot(box.x + box.w / 2 - centre.x, box.y + box.h / 2 - centre.y)
             Object.assign(layer, {cells: undefined, cellBox: undefined, sprites: new Map(), stale: null, byIndex: undefined, place,
                 states: undefined})
-            return {canvas, layer, place, cells, box, states: this.cellLayerStates(), next: 0, finish,
-                order: cells.map(cell => [far(cell), cell]).sort((a, b) => a[0] - b[0]).map(([, cell]) => cell)}
+            const job = {canvas, layer, place, cells: null, box: null, states: this.cellLayerStates(), next: 0, finish, order: null}
+            // TASK-1518: the rest of the start (the cells and their mask, their sprite keys, their order) in steps, the split
+            // job's first (cellSplitStep, Grid.cellSplitPreps); the keys of the board the states were taken of (a step that
+            // finds the board's states changed ends the job, as before).
+            const prep = this.cellSplitPrep(job, centre, this.cellReachPass)
+            if (Grid.cellSplitPreps)
+                job.prep = prep
+            else
+                while (!prep.next().done);
+            return job
         })
+    }
+    // startCellSplit's preparation of job (a generator, each yield ends a step: the cells and their mask, CELL_SPLIT_KEYS
+    // cells' sprite keys, the order), with the cells' building reach found at the start (reach, withCellReach).
+    *cellSplitPrep(job, centre, reach) {
+        const W = job.canvas.width, H = job.canvas.height
+        const mask = job.layer.mask ||= document.createElement('canvas')
+        mask.width = W
+        mask.height = H
+        const {cells, box, path} = this.cellLayerCells(W, H, job.place)
+        fillCellMask(mask.getContext('2d'), path)
+        yield RASTER_STEP
+        for (let k = 0; k < cells.length; k += CELL_SPLIT_KEYS) {
+            const outer = this.cellReachPass
+            this.cellReachPass = reach
+            try {
+                for (const cell of cells.slice(k, k + CELL_SPLIT_KEYS))
+                    cell.key = this.cellLayerKey(cell.i, cell.j)
+            } finally {
+                this.cellReachPass = outer
+            }
+            yield
+        }
+        const far = ({box}) => Math.hypot(box.x + box.w / 2 - centre.x, box.y + box.h / 2 - centre.y)
+        Object.assign(job, {cells, box, order: cells.map(cell => [far(cell), cell]).sort((a, b) => a[0] - b[0]).map(([, cell]) => cell)})
     }
     // One step of a split job (startCellSplit). Returns whether the split is finished. TASK-1473: a step with a budget (ms,
     // the between-frames tasks: SURFACE_STEP_MS) makes sprites while the time spent and the last sprite's time fit in it (at
@@ -839,6 +880,14 @@ class Grid extends SpritesGroup {
     // without a budget, CELL_SPLIT_CELLS. The sprites' pixels are disjoint and added ('lighter'), so the layer is the same
     // however the cells are split into steps.
     cellSplitStep(job, budget = Infinity) {
+        // TASK-1518: the job's preparation first (startCellSplit), a step of it a step (all of it without a budget).
+        if (job.prep) {
+            const done = runSteps(job.prep, budget)
+            if (done)
+                job.prep = undefined
+            if (!done || budget < Infinity)
+                return false
+        }
         const {layer, canvas, order} = job
         ++this.cellSplitSteps
         const start = performance.now(), first = job.next
@@ -2636,6 +2685,25 @@ class Grid extends SpritesGroup {
         }
         ++this.surfaceCacheRevision
     }
+    // TASK-1518: whether the lit view's rest snapshot is being made (its bands, its cell mask, its split) after a start hold
+    // (holdStartFrame, startRestFirst: until its first rest snapshot is finished): the surface cache's build and split wait
+    // for it (prepareSurfaceCache) as the lit tasks wait for a queued surface cache step (litTaskDefers), so the camera's
+    // lighting is complete first (the cache's stages, now in many smaller steps, came first).
+    litRestUnderWay() {
+        if (!this.startRestFirst)
+            return false
+        // Only while the frames draw that view (a camera moved off it, to the cache's path, waits for nothing).
+        if (this.frameSurface !== 'lit') {
+            this.startRestFirst = false
+            return false
+        }
+        const view = this.litView, rest = view?.rest
+        if (!!rest && view.rest === rest && (rest.done < LIT_REST_BANDS || !!view.splitJob))
+            return true
+        if (rest && rest.done === LIT_REST_BANDS)
+            this.startRestFirst = false
+        return false
+    }
     // With atmospheric visuals no frame builds the surface cache: a frame that finds it missing or
     // not matching the board draws the board directly (full resolution, live light) and the cache
     // is built one SURFACE_CACHE_STAGES stage a task between frames while the camera is idle (no
@@ -2654,7 +2722,8 @@ class Grid extends SpritesGroup {
             this.surfacePatchStep()
             return
         }
-        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceMoving || this.surfaceCacheQueued || this.litView?.unbuilt)
+        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceMoving || this.surfaceCacheQueued || this.litView?.unbuilt ||
+                this.litRestUnderWay())
             return
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
@@ -2716,24 +2785,43 @@ class Grid extends SpritesGroup {
             }
         }
         if (build.stage === SURFACE_CACHE_STAGES.length) {
+            // TASK-1518: after a last stage drawn in steps, the cell mask's steps as after a whole one (below).
+            if (budget < Infinity && !build.masked) {
+                build.masked = true
+                if ((build.steps = this.surfaceMaskSteps(build)))
+                    return
+            }
             this.finishSurfaceCacheStep(build)
             return
         }
         ++this.surfaceCacheStages
+        // TASK-1518: between frames a stage with steps (SURFACE_CACHE_STAGE_STEPS) runs them.
+        const stepped = budget < Infinity && SURFACE_CACHE_STAGE_STEPS[build.stage]
+        if (stepped) {
+            build.stage++
+            build.steps = stepped(this, build)
+            if (runSteps(build.steps, budget))
+                build.steps = undefined
+            return
+        }
         SURFACE_CACHE_STAGES[build.stage++](this, build)
-        // Drawing the canvas has its recorded drawing rasterized now, in this task.
-        // A 1x1 canvas made once (assigning its size again would reallocate and clear it every stage).
+        this.flushSurfaceBuild(build)
+        if (build.stage < SURFACE_CACHE_STAGES.length)
+            return
+        build.masked = true
+        if (budget < Infinity && (build.steps = this.surfaceMaskSteps(build)))
+            return
+        this.finishSurfaceCacheStep(build)
+    }
+    // Drawing the build's canvas has its recorded drawing rasterized now, in this task.
+    // A 1x1 canvas made once (assigning its size again would reallocate and clear it every stage).
+    flushSurfaceBuild(build) {
         let flush = this.surfaceCacheFlush
         if (!flush) {
             flush = this.surfaceCacheFlush = document.createElement('canvas')
             flush.width = flush.height = 1
         }
         flush.getContext('2d').drawImage(build.canvas, 0, 0, 1, 1, 0, 0, 1, 1)
-        if (build.stage < SURFACE_CACHE_STAGES.length)
-            return
-        if (budget < Infinity && (build.steps = this.surfaceMaskSteps(build)))
-            return
-        this.finishSurfaceCacheStep(build)
     }
     finishSurfaceCacheStep(build) {
         this.surfaceCacheBuild = undefined
@@ -4557,13 +4645,22 @@ class Grid extends SpritesGroup {
     // A view at transform t of the camera's canvas main (no tiles yet): the board state now, the
     // light map at the camera's scale and the edge of its lit cells.
     newLitView(t, main) {
+        const steps = this.newLitViewSteps(t, main)
+        let step
+        while (!(step = steps.next()).done);
+        return step.value
+    }
+    // TASK-1518: newLitView's work as a generator returning the view (startBuildSteps): a yield after the board state is
+    // captured and litEdges' steps.
+    *newLitViewSteps(t, main) {
         mapDepth.ensureGeometry(this)
         atmosphericLighting.lightMap(this)
         const view = {a: t.a, d: t.d, e: t.e, f: t.f, cw: main.width, ch: main.height, tiles: new Map(),
             rest: null, state: [], overlayCells: [], rebuilds: atmosphericLighting.rebuilds,
             mapScale: atmosphericLighting.mapScale}
         this.withLitState(view, () => this.captureSurfaceState())
-        Object.assign(view, this.litEdges(view))
+        yield
+        Object.assign(view, yield* this.litEdgesSteps(view))
         return view
     }
     // The edge of the board's lit cells: the hexagon sides with a lit cell on one side only, as
@@ -4575,6 +4672,14 @@ class Grid extends SpritesGroup {
     // TASK-1316: the last result kept for its lit cells, hex radius, transform and margin (litEdgesKept): a lit layer
     // job takes it in a step before its last (planLitLayerJob), whose followedCellLayer then only finds it again.
     litEdges(view) {
+        const steps = this.litEdgesSteps(view)
+        let step
+        while (!(step = steps.next()).done);
+        return step.value
+    }
+    // TASK-1518: litEdges' work as a generator returning its value (a yield after each LIT_EDGE_STEP_CELLS cells' sides and
+    // after each later pass), so a new board's first view is made in steps (startBuildSteps).
+    *litEdgesSteps(view) {
         const cells = atmosphericLighting.collect(this, false).cells
         const margin = (atmosphericLighting.MAP_GROW + 1) * view.a / atmosphericLighting.mapScale + 2
         let key = basis.r + ',' + view.a + ',' + view.d + ',' + view.e + ',' + view.f + ',' + margin + '|'
@@ -4583,7 +4688,10 @@ class Grid extends SpritesGroup {
         if (this.litEdgesKept?.key === key)
             return this.litEdgesKept.edges
         const sides = new Map()
+        let counted = 0
         for (const {pos} of cells) {
+            if (++counted % LIT_EDGE_STEP_CELLS === 0)
+                yield
             const points = mapDepth.getVertices(pos)
             for (let k = 0; k < 6; ++k) {
                 const p = points[k], q = points[(k + 1) % 6]
@@ -4594,6 +4702,7 @@ class Grid extends SpritesGroup {
                 else sides.set(key, {p, q, a, b, n: 1})
             }
         }
+        yield
         // Outlines: the sides chained end to end (even-odd needs only closed loops of them).
         const ends = new Map(), outline = []
         for (const side of sides.values()) {
@@ -4615,6 +4724,7 @@ class Grid extends SpritesGroup {
             }
             outline.push(loop)
         }
+        yield
         const B = LIT_EDGE_BLOCK
         const rows = new Map()
         for (const {p, q, n} of sides.values()) {
@@ -4629,6 +4739,7 @@ class Grid extends SpritesGroup {
                 for (let x = x0; x <= x1; ++x) row.add(x)
             }
         }
+        yield
         const edges = [], open = new Map()
         for (const y of [...rows.keys()].sort((a, b) => a - b)) {
             const spans = []
@@ -4831,7 +4942,7 @@ class Grid extends SpritesGroup {
                     atmosphericLighting.checkedOnce(this, () =>
                         this.buildLitTiles(view, shown, view.unbuilt ? LIT_FIRST_TILE_BUDGET : LIT_TILE_BUDGET, true))
                 }
-                else if (view.rest === rest && rest.done < LIT_REST_BANDS)
+                else if (view.rest === rest && rest.done < LIT_REST_BANDS && !(rest.done === LIT_REST_BANDS - 1 && this.litMaskStep(view, rest)))
                     this.buildLitRestBand(view, rest, rest.done)
                 return
             }
@@ -4845,6 +4956,32 @@ class Grid extends SpritesGroup {
                 return
             atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, budget, !moving || view.unbuilt))
         }))
+    }
+    // TASK-1518: before the rest snapshot's last band (whose finish starts its split, prepareLitCellLayer -> startCellSplit ->
+    // cellLayerCells), a step of the cell mask that split takes (the same key, builder and cache: cellMaskSteps), as the
+    // surface cache's build does before its finish (surfaceMaskSteps); it was ~80 ms in that task on the user's desktop.
+    // Returns whether it ran one (the mask not kept yet).
+    litMaskStep(view, rest) {
+        if (!Grid.cellLayerSplitJobs || !rest.canvas.cellLayered || rest.maskSteps === null)
+            return false
+        let job = rest.maskSteps
+        if (!job) {
+            const W = rest.canvas.width, H = rest.canvas.height
+            const {key, a, d, e, f, reach} = this.cellMaskKey(W, H, g => this.setLitRestTransform(g, view, rest))
+            if (cellMaskCache.has(key)) {
+                rest.maskSteps = null
+                return false
+            }
+            const board = this
+            job = rest.maskSteps = (function* () {
+                const mask = yield* board.cellMaskSteps(W, H, a, d, e, f, reach)
+                if (!cellMaskCache.has(key))
+                    rememberCellMask(key, mask)
+            })()
+        }
+        if (runSteps(job, SURFACE_STEP_MS))
+            rest.maskSteps = null
+        return true
     }
     // TASK-1372: whether view's split job (prepareLitCellLayer) still splits its rest snapshot: else it is dropped, and so is
     // the view when the board's cell states changed (the uncut snapshot shows the cells as the split found them).
@@ -5234,6 +5371,132 @@ class Grid extends SpritesGroup {
         this.zoomRaster = undefined
         ++this.zoomHoldDrops
         return false
+    }
+    // TASK-1518: a new game's first frame drew everything its first view needs at once (the owned tiles of its colours, the
+    // light map at the camera's scale, the lit view's edges, then the board directly: ~0.8 s on the user's desktop, then
+    // ~0.2 s frames while the lit tiles were built). Instead, until the board's first frame (drawSerial 0) can be drawn from
+    // its lit tiles, the screen keeps the frame it shows (the menu's, as before the first frame: nothing drawn, drawAll) while
+    // startBuildSteps builds them, at most START_STEP_MS a frame (but for its last piece: runSteps) and as many pieces heavy
+    // to rasterize as the frames' pace allows (one, doubled while they keep it, START_PACE_MS): then the first frame is a
+    // lit-tiles frame, built from the same builders and keys as before (the same pixels). Only for a game started by
+    // GameManager.start (startHoldWanted), with the atmospheric visuals on the main canvas, for the frames of its loop
+    // (gameLoop: a direct drawAll call draws, as tests' do) and with createImageBitmap (as the held frames: not under
+    // jsdom); given up (the frames drawn as before) when the camera moves or zooms, a drawAll call comes from elsewhere, or
+    // after Grid.START_HOLD_MS.
+    holdStartFrame() {
+        let job = this.startJob
+        if (job === null)
+            return false
+        if (job === undefined) {
+            if (!Grid.startHolds || !this.startHoldWanted || this !== grid || this.drawSerial !== 0 || !otherSettings.atmosphericVisuals ||
+                    typeof gameLoopFrame === 'undefined' || !gameLoopFrame ||
+                    typeof mainCtx === 'undefined' || typeof createImageBitmap !== 'function' ||
+                    typeof menu !== 'undefined' && menu.visible) {
+                this.startJob = null
+                this.startEnd = 'off'
+                return false
+            }
+            const t = mainCtx.getTransform()
+            job = this.startJob = {t: {a: t.a, b: t.b, c: t.c, d: t.d, e: t.e, f: t.f}, steps: this.startBuildSteps(t), frames: 0,
+                start: performance.now(), last: undefined, allow: 1}
+            this.startRestFirst = true
+        }
+        // (The start's moveTo marks the camera as moving, Screen.surfaceMoving, though it does not: its transform is compared.)
+        const t = mainCtx.getTransform(), screen = gameEvent.screen
+        const end = why => {
+            this.startJob = null
+            this.startEnd = why
+            return false
+        }
+        if (t.a !== job.t.a || t.b !== job.t.b || t.c !== job.t.c || t.d !== job.t.d || t.e !== job.t.e || t.f !== job.t.f ||
+                screen.surfaceZooming || screen.zoomGesture)
+            return end('camera')
+        if (typeof gameLoopFrame === 'undefined' || !gameLoopFrame)
+            return end('direct')
+        if (performance.now() - job.start >= Grid.START_HOLD_MS)
+            return end('time')
+        const start = performance.now()
+        // Pieces heavy to rasterize a frame (their raster comes at the task's end, after this time budget): doubled while
+        // the frames keep their pace (START_PACE_MS since the frame before), halved when they fall behind it twice over.
+        if (job.last !== undefined) {
+            const gap = start - job.last
+            job.allow = gap <= START_PACE_MS ? Math.min(START_MAX_RASTER, 2 * job.allow) : gap > 2 * START_PACE_MS ? Math.max(1, job.allow >> 1) : job.allow
+        }
+        job.last = start
+        let done, piece = 0, rasters = 0
+        do {
+            const begin = performance.now(), next = gridTask(() => job.steps.next())()
+            done = next.done
+            piece = performance.now() - begin
+            ++this.startSteps
+            this.startMaxStepMs = Math.max(this.startMaxStepMs, piece)
+            const [name, raster] = done ? ['end', false] : next.value
+            const kind = this.startPieces[name] ||= [0, 0, 0]
+            ++kind[0]
+            kind[1] += piece
+            kind[2] = Math.max(kind[2], piece)
+            if (raster && ++rasters >= job.allow)
+                break
+        } while (!done && performance.now() - start + piece < START_STEP_MS)
+        this.startWorkMs += performance.now() - start
+        if (done) {
+            atmosphericLighting.prewarmOwnedTiles()
+            return end('built')
+        }
+        ++job.frames
+        ++this.startHeldFrames
+        return true
+    }
+    // The board's first lit view at camera t (as planLitView makes it, newLitView) and what it draws, a piece a step (a
+    // generator): the owned tiles of the board's colours (as its first frame built them: prebuildOwnedSteps, the menu's
+    // pieces), the light map at the camera's scale (stepLightMap's steps), the view, then its tiles on the canvas, nearest
+    // the canvas's centre first (as queueLitTiles orders them).
+    *startBuildSteps(t) {
+        // The sky's key and board first: its first draw for a new board releases the light map (atmosphericBackground.syncKey).
+        atmosphericBackground.syncKey()
+        // The owned tiles the cells drawn at t show (drawTile); the other owners' are built a tile a task after the first
+        // frame (prewarmOwnedTiles), as before a fill a task after it.
+        const fills = new Set(), drawn = this.drawRange(mainCtx)
+        for (let i = drawn.i0; i < drawn.i1; ++i)
+            for (let j = drawn.j0; j < drawn.j1; ++j) {
+                const hexagon = this.arr[i][j].hexagon
+                if (hexagon.playerColor !== 0 && hexagon.player?.color)
+                    fills.add(atmosphericLighting.tileFill(hexagon))
+            }
+        // Each piece's kind (startPieces) and whether it is heavy to rasterize (holdStartFrame).
+        for (const piece of atmosphericLighting.ownedFillSteps([...fills])) {
+            const kind = piece.split(' ')[0]
+            yield [kind, kind === 'tileVariant' || kind === 'ownedTile']
+        }
+        for (;;) {
+            const done = atmosphericLighting.stepLightMap(this, undefined, true)
+            if (done)
+                break
+            yield ['lightMap', atmosphericLighting.stagedRaster]
+        }
+        yield ['lightMap', true]
+        const cw = mainCanvas.width, ch = mainCanvas.height
+        if (t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.constructionInView(mainCtx))
+            return
+        const viewSteps = this.newLitViewSteps(t, mainCanvas)
+        let made
+        while (!(made = viewSteps.next()).done)
+            yield ['view', false]
+        const view = this.litView = made.value
+        yield ['view', false]
+        const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
+        const range = this.litTileRange(cw, ch, ox, oy, 0), tiles = []
+        const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
+        for (let v = range.v0; v <= range.v1; ++v)
+            for (let u = range.u0; u <= range.u1; ++u)
+                tiles.push({u, v, far: Math.hypot(u - cu, v - cv)})
+        tiles.sort((a, b) => a.far - b.far)
+        for (const {u, v} of tiles) {
+            if (view !== this.litView)
+                return
+            atmosphericLighting.checkedOnce(this, () => this.litTile(view, u, v))
+            yield ['tile', true]
+        }
     }
     // Keeps a recorded frame's calls on the main canvas (beginLodFrame) as the board on the canvas now (the zoom raster's
     // source, replayZoomBoard): with the context state they started from, the frame's serial, key (lodFrameKey: the camera,
@@ -6244,6 +6507,64 @@ const SURFACE_CACHE_STAGES = [
     (grid, build) => grid.drawEntityBodies(build.ctx),
     (grid, build) => { build.lit = atmosphericLighting.bake(build.ctx, grid, build.geometry.scale) }
 ]
+// TASK-1518: stages of a build between frames (Grid.surfaceCacheBuildStep with a budget) drawn in steps (generators of the
+// same calls in the same order), by stage index: the underlay and the slab's sides a step each; the cells' tiles (the
+// owned tiles of the board's owners not built yet first, a tile a step: ownedFillSteps, as drawTile would build them; the
+// grout a step) in SURFACE_HEX_STEPS runs (drawHexagons' parts, as the lit rest snapshot draws them); the shadows (their
+// clip path traced and their casters in steps: drawShadowSteps), the fog and the rim each a step; the buildings' bodies in
+// SURFACE_BODY_STEPS runs of rows. The bake stays one stage (drawn in steps, frames between them could rebuild the light map
+// at the camera's scale before its draws: the cell layer's renders then found no map of the cache's scale, test-cell-layer).
+// A stage was up to ~350 ms on the user's desktop. Chromium rasterizes a step's drawing in its task; the stage's end has it
+// rasterized as a whole stage does (flushSurfaceBuild).
+const SURFACE_HEX_STEPS = 32
+const SURFACE_BODY_STEPS = 8
+const SURFACE_CACHE_STAGE_STEPS = {
+    0: function* (grid, build) {
+        const cacheCtx = build.ctx, scale = build.geometry.scale
+        cacheCtx.setTransform(1, 0, 0, 1, 0, 0)
+        cacheCtx.clearRect(0, 0, build.canvas.width, build.canvas.height)
+        cacheCtx.scale(scale, scale)
+        cacheCtx.translate(-build.left, -build.top)
+        mapDepth.renderUnderlay(cacheCtx, scale)
+        yield RASTER_STEP
+        mapDepth.renderAtmosphericSides(cacheCtx)
+        grid.flushSurfaceBuild(build)
+    },
+    1: function* (grid, build) {
+        const tiles = atmosphericLighting.ownedTileMap()
+        for (const _ of atmosphericLighting.ownedFillSteps(atmosphericLighting.ownedFills().filter(fill => !tiles.has(fill))))
+            yield
+        grid.drawHexagons(build.ctx, {k: 0, n: 0, grout: true})
+        yield RASTER_STEP
+        for (let k = 0; k < SURFACE_HEX_STEPS; ++k) {
+            grid.drawHexagons(build.ctx, {k, n: SURFACE_HEX_STEPS, grout: false})
+            if (k < SURFACE_HEX_STEPS - 1)
+                yield RASTER_STEP
+        }
+        grid.flushSurfaceBuild(build)
+    },
+    2: function* (grid, build) {
+        // Through drawShadows and bake (which tests replace), their steps when they give them.
+        const shadows = atmosphericLighting.drawShadows(build.ctx, grid, true)
+        if (shadows && typeof shadows.next === 'function')
+            yield* shadows
+        yield RASTER_STEP
+        if (isFogOfWar) {
+            grid.drawFogOfWar(build.ctx)
+            yield RASTER_STEP
+        }
+        mapDepth.renderRim(build.ctx)
+        grid.flushSurfaceBuild(build)
+    },
+    3: function* (grid, build) {
+        for (let k = 0; k < SURFACE_BODY_STEPS; ++k) {
+            grid.drawEntityBodies(build.ctx, {k, n: SURFACE_BODY_STEPS})
+            if (k < SURFACE_BODY_STEPS - 1)
+                yield RASTER_STEP
+        }
+        grid.flushSurfaceBuild(build)
+    },
+}
 // The context whose gradients the lit canvases draw with (gradientContext): the camera canvas's, so a lit tile, the rest
 // snapshot or the lit patch buffer makes none the frames or another lit canvas made (a new tile made one for each).
 function litGradientSource() {
@@ -6282,6 +6603,9 @@ Grid.surfaceLayerJobs = true
 Grid.cellLayerSplitJobs = true
 Grid.litFirstViewSteps = true
 const CELL_SPLIT_CELLS = 400
+// TASK-1518: a split job's preparation in steps (Grid.startCellSplit, cellSplitPrep), CELL_SPLIT_KEYS cells' sprite keys a step.
+Grid.cellSplitPreps = true
+const CELL_SPLIT_KEYS = 300
 // TASK-1473: the time (ms) a between-frames step of the surface cache's build or a cell split takes at most, but for its
 // last piece (runSteps, Grid.cellSplitStep).
 const SURFACE_STEP_MS = 8
@@ -6291,10 +6615,13 @@ function runSteps(steps, budget = Infinity) {
     const start = performance.now()
     let piece = 0
     do {
-        const begin = performance.now()
-        if (steps.next().done)
+        const begin = performance.now(), step = steps.next()
+        if (step.done)
             return true
         piece = performance.now() - begin
+        // TASK-1518: a step heavy to rasterize ends the run (its raster comes at the task's end).
+        if (step.value === RASTER_STEP)
+            return false
     } while (performance.now() - start + piece < budget)
     return false
 }
@@ -6385,6 +6712,15 @@ Grid.zoomReplays = true
 Grid.ZOOM_REPLAY_SYNC_CALLS = 600
 // The frames a gesture keeps the frame on screen while its raster is made in steps (Grid.holdZoomFrame).
 Grid.ZOOM_HOLD_FRAMES = 4
+// TASK-1518: a new board's first frame held while its lit tiles are built (Grid.holdStartFrame), for at most
+// START_HOLD_MS (then the frames are drawn as before), START_STEP_MS of steps a frame.
+Grid.startHolds = true
+Grid.START_HOLD_MS = 5000
+const START_STEP_MS = 8
+// The frame pace the held frames keep (ms from one to the next: 60 Hz with a margin) and the most pieces heavy to rasterize
+// a held frame runs (Grid.holdStartFrame).
+const START_PACE_MS = 21
+const START_MAX_RASTER = 16
 Grid.ZOOM_REPLAY_STEP_MS = 6
 Grid.ZOOM_REPLAY_CHUNK = 8
 // TASK-1375: level-of-detail frames (Grid.lodTransform) below this hexagon radius on screen, in CSS pixels (12 device pixels at
@@ -6426,6 +6762,8 @@ const LIT_FRAME_TILES = 8
 const LIT_FIRST_TILE_BUDGET = 16
 const LIT_TILE_POOL = 16
 const LIT_EDGE_BLOCK = 16
+// TASK-1518: lit cells a step of litEdgesSteps takes the sides of.
+const LIT_EDGE_STEP_CELLS = 400
 const LIT_REST_BANDS = 12
 // Tiles built a task while the camera rests after a patch of the view dropped some (Grid.finishLitPatch).
 const LIT_TILE_PATCHED_BUDGET = 1
