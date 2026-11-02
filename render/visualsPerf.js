@@ -454,7 +454,13 @@
             else Object.assign(entry, {x: event.clientX, y: event.clientY, buttons: event.buttons, edge: edgeOf(event)})
             pointerState = state
         }
-        else entry.points = [...event.touches].map(t => ({x:t.clientX,y:t.clientY}))
+        else {
+            // TASK-1538: ids (event.touches identifiers, same order as points) and changed (changedTouches identifiers)
+            // let a capture tell a finger the browser never ended (a ghost touch) from a new one; diagnostic only.
+            entry.points = [...event.touches].map(t => ({x:t.clientX,y:t.clientY}))
+            entry.ids = [...event.touches].map(t => t.identifier)
+            entry.changed = [...(event.changedTouches || [])].map(t => t.identifier)
+        }
         const cameraInput = type === 'wheel' && !event.ctrlKey || type === 'keydown' || type === 'touchmove' ||
             type.startsWith('mouse') && (event.buttons !== 0 || edgeOf(event) !== '0,0')
         if (cameraInput) { lastInput = now; lastInputType = type === 'keydown' ? 'keyboard' : type === 'wheel' ? 'wheel' : type.startsWith('touch') ? 'touch' : 'mouse' }
