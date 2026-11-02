@@ -58,7 +58,8 @@ function isOnGameButton(pos) {
 }
 // the touches the camera follows: those that did not begin on a button; a lone finger pans wherever it began
 function getGameTouches(event) {
-    const touches = Array.from(event.touches)
+    // only touches seen starting and not yet ended (events/geteventpos.js liveTouches): never an ended ghost
+    const touches = liveTouches(event)
     const game = touches.filter(touch => !buttonTouchIds.has(touch.identifier))
     return game.length || touches.length != 1 ? game : touches
 }
@@ -251,6 +252,8 @@ class Events {
         }
         this.touchStartPoint.x = pos.x
         this.touchStartPoint.y = pos.y
+        // one finger down pans (a 3 -> 2 lift left panning off until a later touchend)
+        this.scalingStopped = true
         this.touchStartTime = new Date()
         
         return
@@ -735,18 +738,22 @@ class EventsMapCreation {
 // compatibility click so Chromium does not activate the same control twice.
 if (mobilePhone) {
     let tapStart = null
+    // touches = the live ones (events/geteventpos.js liveTouches, updated first on window capture): a ghost touch the
+    // browser never ends neither blocks the tap nor counts as a second finger
     document.addEventListener('touchstart', event => {
-        tapStart = event.target.tagName === 'CANVAS' && event.touches.length === 1
-            ? {x: event.touches[0].clientX, y: event.touches[0].clientY} : null
+        const touches = liveTouches(event)
+        tapStart = event.target.tagName === 'CANVAS' && touches.length === 1
+            ? {x: touches[0].clientX, y: touches[0].clientY} : null
     }, {passive: true})
     document.addEventListener('touchmove', event => {
-        if (tapStart && (event.touches.length !== 1 ||
-            Math.hypot(event.touches[0].clientX - tapStart.x,
-                event.touches[0].clientY - tapStart.y) > 10)) tapStart = null
+        const touches = liveTouches(event)
+        if (tapStart && (touches.length !== 1 ||
+            Math.hypot(touches[0].clientX - tapStart.x,
+                touches[0].clientY - tapStart.y) > 10)) tapStart = null
     }, {passive: true})
     document.addEventListener('touchcancel', () => { tapStart = null }, {passive: true})
     document.addEventListener('touchend', event => {
-        const activate = tapStart && event.touches.length === 0
+        const activate = tapStart && liveTouches(event).length === 0
         tapStart = null
         if (!activate || typeof menu === 'undefined' || !menu) return
         event.preventDefault()
