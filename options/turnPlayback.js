@@ -658,6 +658,8 @@ const turnPlaybackView = {
         moveTween.clear()
         // TASK-1511: the snapshot is this client's own board (a co-op tutorial's has no generation metadata).
         unpacker.ownSnapshot = true
+        // TASK-1519: the board shown so far (the computed one, or the AI turn before's), whose surface cache the loaded one takes.
+        const shown = grid
         try {
             loadFromJson(recording.snapshot)
         } finally {
@@ -679,10 +681,19 @@ const turnPlaybackView = {
             grid.fogOfWar = recording.fog.map(column => Array.from(column))
         p.rulesFog = isFogOfWar ? grid.fogOfWar : null
         this.showViewerFog(p)
+        this.adoptCache(shown)
         p.stepIndex = -1
         p.recordingStart = this.now()
         p.log.recordings.push({player: recording.player, round: recording.round, start: Math.round(p.recordingStart - p.startReal),
             steps: recording.actions.length})
+    },
+    // TASK-1519: the board shown now (grid) takes over the surface cache of the one shown before (Grid.adoptSurfaceCache: matched
+    // by cell value, patched where they differ), so a playback's frames draw from a cache instead of the whole board while
+    // a new one is built between frames (a build that every step's change starts over), and so does the computed board
+    // when the playback ends.
+    adoptCache(from) {
+        if (from && from !== grid && typeof grid.adoptSurfaceCache === 'function')
+            grid.adoptSurfaceCache(from)
     },
     // Applies the step at p.stepIndex; false on a drift (ended already).
     apply(p) {
@@ -917,8 +928,12 @@ const turnPlaybackView = {
         healFx.hidden.clear()
         // (discarded: a new game's globals are set already; nothing of the old game stays)
         const left = result === 'exit' || result === 'discarded'
+        const played = grid
         if (result !== 'discarded')
             this.restoreGlobals(p.live)
+        // TASK-1519: the computed board takes the surface cache back (patched to it where the board shown last differs).
+        if (!left)
+            this.adoptCache(played)
         // Shown: the AI turns' effects played (or cut: a skip, the settings turned off); else (a drift) they play as without
         // a playback. The next human's own heals (its turn start) always stay. A left game keeps none.
         const shown = result === 'ok' || result === 'skipped' || result === 'superseded' || result === 'off'

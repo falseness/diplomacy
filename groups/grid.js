@@ -191,6 +191,11 @@ class Grid extends SpritesGroup {
         this.litPatches = 0
         this.lastLitPatch = undefined
         this.litPatchRefusals = {}
+        // TASK-1519: lit views brought up to a board change with the tiles it reaches made stale (refreshLitTiles), those tiles,
+        // and the changes that dropped the view instead, by reason.
+        this.litTileRefreshes = 0
+        this.litTilesStaled = 0
+        this.litRefreshRefusals = {}
         // The cell layers of the surface cache and the lit view's rest snapshot with Grid.liveCellLayer (splitCellLayer),
         // a canvas whose context places their masks, the canvas the frames draw for a cache with its layer, and how many
         // splits, composites, sprites taken (from a split raster or a render), sprites drawn into a layer, refreshes of a
@@ -246,6 +251,14 @@ class Grid extends SpritesGroup {
         this.surfaceCachePatchPixels = 0
         this.lastSurfacePatch = undefined
         this.surfacePatchRefusals = {}
+        // TASK-1519: surface caches taken over from another board (adoptSurfaceCache) and the last one's cells matched/differing.
+        this.surfaceCacheAdoptions = 0
+        // TASK-1519: patches started for a lit view waiting for the cache as its stand-in (prepareSurfaceCache's patchOnly).
+        this.surfaceStandInPatches = 0
+        // TASK-1519: stand-in caches whose cell layer was brought up for the lit view (litStandIn).
+        this.standInFollows = 0
+        this.surfaceCacheAdopted = null
+        this.surfaceCacheAdoptedFrom = undefined
         // The patch under way (patchSurfaceCache, one step a frame) and its buffer.
         this.surfacePatchJob = undefined
         this.surfacePatchBuffer = undefined
@@ -2594,6 +2607,84 @@ class Grid extends SpritesGroup {
         this.surfaceCacheInertBuildings = inertBuildings
         this.surfaceCacheNatureNames = natureNames
     }
+    // TASK-1519: this board takes over from's surface cache (a turn playback's loaded board from the computed one, and back
+    // at the end, options/turnPlayback.js): its raster, cell layer, shown canvas and patch buffer move over (from has none
+    // left), and its captured state is matched by cell value instead of object identity: a captured building or empty unit
+    // whose cell here holds one of the same class drawn with the same image (the captured one) is replaced by this board's
+    // object, so captureSurfaceState's identity checks hold on this board; any other cell keeps from's object and differs,
+    // and the cache is patched there (patchSurfaceCache: only the changed cells), or rebuilt whole when a patch is refused,
+    // as for any board change. Nothing moves (false) without atmospheric visuals, for a board of another size, an observed
+    // board, from's cache being built, patched, split or its layer job under way, or this board having a cache of its own.
+    adoptSurfaceCache(from) {
+        if (!Grid.surfaceAdoption || !from || from === this || !otherSettings.atmosphericVisuals || !from.surfaceCache ||
+                !from.surfaceCacheAtmospheric || from.surfaceCacheBuild || from.surfacePatchJob || from.surfaceSplitJob ||
+                from.surfaceLayerJob || this.surfaceCache || this.surfaceCacheBuild || this.surfacePatchJob ||
+                from.isObserving() || this.isObserving() || !from.surfaceCacheState ||
+                from.arr.length !== this.arr.length || from.arr[0].length !== this.arr[0].length ||
+                from.surfaceCacheState.length !== this.arr.length * this.arr[0].length)
+            return false
+        const h = this.arr[0].length
+        const buildings = from.surfaceCacheBuildings.slice(), buildingImages = from.surfaceCacheBuildingImages
+        const inert = from.surfaceCacheInert, inertUnits = from.surfaceCacheInertUnits.slice()
+        const inertBuildings = from.surfaceCacheInertBuildings.slice(), natureNames = from.surfaceCacheNatureNames
+        const units = from.surfaceCacheUnits.slice(), unitImages = from.surfaceCacheUnitImages
+        // Drawn the same: the same class with the captured image (its body image now).
+        const imageOf = entity => cachedImages[this.getEntityBodyImageName(entity)]
+        let matched = 0, differing = 0
+        for (let i = 0; i < this.arr.length; ++i) {
+            for (let j = 0, index = i * h; j < h; ++j, ++index) {
+                const cell = this.arr[i][j]
+                let same = true
+                const b = buildings[index]
+                if (b !== undefined) {
+                    if (b.constructor === cell.building.constructor && buildingImages[index] === imageOf(cell.building))
+                        buildings[index] = cell.building
+                    else
+                        same = false
+                }
+                const u = units[index]
+                if (u !== undefined) {
+                    if (u.constructor === cell.unit.constructor && unitImages[index] === imageOf(cell.unit))
+                        units[index] = cell.unit
+                    else
+                        same = false
+                }
+                if (inert[index] !== 0) {
+                    const ib = inertBuildings[index], iu = inertUnits[index]
+                    if (ib.constructor === cell.building.constructor && (inert[index] < 3 || natureNames[index] === cell.building.name))
+                        inertBuildings[index] = cell.building
+                    else
+                        same = false
+                    if (iu.constructor === cell.unit.constructor && iu.constructor === Empty)
+                        inertUnits[index] = cell.unit
+                }
+                same ? ++matched : ++differing
+            }
+        }
+        for (const name of SURFACE_STATE_FIELDS)
+            this[name] = from[name]
+        this.surfaceCacheBuildings = buildings
+        this.surfaceCacheUnits = units
+        this.surfaceCacheInertBuildings = inertBuildings
+        this.surfaceCacheInertUnits = inertUnits
+        for (const name of SURFACE_ADOPTED_FIELDS) {
+            this[name] = from[name]
+            from[name] = undefined
+        }
+        for (const name of SURFACE_STATE_FIELDS)
+            from[name] = undefined
+        from.surfaceCacheDirty = true
+        ++from.surfaceCacheRevision
+        ++this.surfaceCacheRevision
+        // The next check between frames compares the whole board and patches the cells that differ.
+        this.surfaceCacheDirty = true
+        this.surfaceCacheChecked = 0
+        this.surfaceCacheAdopted = {matched, differing}
+        // The board bound to the sky and light map before (atmosphericBackground.syncKey keeps the cache for this board).
+        this.surfaceCacheAdoptedFrom = from
+        ++this.surfaceCacheAdoptions
+        return true
+    }
     getSurfaceCacheGeometry(bounds = mapDepth.bounds) {
         const cacheWidth = bounds.right - bounds.left
         const cacheHeight = bounds.bottom - bounds.top
@@ -2722,8 +2813,35 @@ class Grid extends SpritesGroup {
             this.surfacePatchStep()
             return
         }
-        if (!otherSettings.atmosphericVisuals || !screen || screen.surfaceMoving || this.surfaceCacheQueued || this.litView?.unbuilt ||
-                this.litRestUnderWay())
+        // TASK-1519: a cache that the lit view waits for as its stand-in (view.unbuilt: its frames draw the board directly)
+        // and differs from the board in a few cells (an adopted one, adoptSurfaceCache, after a turn playback's step) is
+        // brought up to it also while the camera moves: its cell layer or a patch (only those: patchOnly, never rebuilt then).
+        const patchOnly = Grid.surfaceAdoption && !!this.litView?.unbuilt && !!this.surfaceCache && !this.surfaceCacheBuild &&
+            !this.surfaceSplitJob && !this.surfacePatchJob
+        if (!otherSettings.atmosphericVisuals || !screen || this.surfaceCacheQueued || this.litRestUnderWay())
+            return
+        if (patchOnly && (screen.surfaceMoving || this.litView?.unbuilt)) {
+            if (performance.now() - this.surfaceCacheChecked < SURFACE_PATCH_CHECK_MS)
+                return
+            this.surfaceCacheQueued = true
+            setTimeout(gridTask(() => {
+                this.surfaceCacheQueued = false
+                if (this === grid && otherSettings.atmosphericVisuals && this.surfaceCache && !this.surfaceCacheBuild &&
+                        !this.surfacePatchJob && !gameEvent.screen.surfaceZooming) {
+                    this.surfaceCacheChecked = performance.now()
+                    // Exactly (as litStandIn compares): with the cell layer an owner, suburb or fog change alone is brought up
+                    // by the layer (followCellLayer, in this task), any other by a patch.
+                    if (this.wholeSurfaceMatches(true))
+                        return
+                    if (this.wholeSurfaceMatches())
+                        this.followCellLayer('surface')
+                    else if (this.patchSurfaceCache())
+                        ++this.surfaceStandInPatches
+                }
+            }))
+            return
+        }
+        if (screen.surfaceMoving || this.litView?.unbuilt)
             return
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
@@ -4223,6 +4341,10 @@ class Grid extends SpritesGroup {
             // With its cell layer (splitCellLayer) the snapshot with the layer composed (TASK-1316, prepareLitCellLayer).
             ctx.drawImage(rest.canvas.cellLayered && rest.cellLayer && rest.shown || rest.canvas, 0, 0)
             ctx.restore()
+            // TASK-1519: the snapshot drawn from the board now, stale tiles (refreshLitTiles) are not drawn again (the view's
+            // state may follow later changes without them: followCellLayer, patchLitView).
+            if (view.stale)
+                this.releaseStaleTile(view)
             // job: the frame drew a patch's or layer job's cells over the snapshot (not a still frame, stillFrameSteady).
             this.litFrame = {view, rest: true, job: !!(view.patch || view.layerJob)}
             if (view.patch) {
@@ -4240,11 +4362,19 @@ class Grid extends SpritesGroup {
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         const range = this.litTileRange(cw, ch, ox, oy, 0)
         // A tile not built yet is drawn from the stand-in (the tasks build it, queueLitTiles); without one it is built now.
-        let standIn, missing = null
+        let standIn, missing = null, stale = false
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (let v = range.v0; v <= range.v1; ++v) {
             for (let u = range.u0; u <= range.u1; ++u) {
+                // TASK-1519: a stale tile (refreshLitTiles) drawn as it was until built again, the changes drawn over it below.
+                const old = view.stale && !view.tiles.has(u + ',' + v) ? view.stale.get(u + ',' + v) : undefined
+                if (old) {
+                    ctx.drawImage(old, LIT_TILE_PAD, LIT_TILE_PAD, LIT_TILE, LIT_TILE,
+                        u * LIT_TILE + ox, v * LIT_TILE + oy, LIT_TILE, LIT_TILE)
+                    stale = true
+                    continue
+                }
                 if (!view.tiles.has(u + ',' + v) && (standIn ??= this.litStandIn(ctx))) {
                     (missing ||= new Set()).add(u + ',' + v)
                     continue
@@ -4267,6 +4397,8 @@ class Grid extends SpritesGroup {
             this.drawSurfaceCache(ctx)
             ctx.restore()
         }
+        if (stale)
+            this.drawPatchCells(ctx, view.refresh, 'lit')
         // Tiles more than a tile off the canvas go back to the pool.
         for (const [key, tile] of view.tiles) {
             const [u, v] = key.split(',').map(Number)
@@ -4275,7 +4407,14 @@ class Grid extends SpritesGroup {
                 this.releaseLitTile(tile)
             }
         }
-        this.litFrame = {view, ox, oy, rest: false, missing}
+        if (view.stale) {
+            for (const key of [...view.stale.keys()]) {
+                const [u, v] = key.split(',').map(Number)
+                if (u < range.u0 - 1 || u > range.u1 + 1 || v < range.v0 - 1 || v > range.v1 + 1)
+                    this.releaseStaleTile(view, key)
+            }
+        }
+        this.litFrame = {view, ox, oy, rest: false, missing, stale}
         this.queueLitTiles(view, t, cw, ch)
         return true
     }
@@ -4283,9 +4422,19 @@ class Grid extends SpritesGroup {
     // no build or patch under way), so no frame builds the lit view's light map or tiles (Grid.litStandIns).
     // TASK-1316: exactly (surfaceStateMatches exact): with the cell layer a stand-in cache not drawn since a cell's owner, suburb
     // or fog changed (its layer not brought up, followCellLayer) stands in no more, as without the layer.
+    // TASK-1519 (Grid.standInFollows): a cache that differs only in what its cell layer holds (an owner, suburb or fog change:
+    // a turn playback's capture) has its layer brought up now (followCellLayer: the changed cells' sprites) and stands in,
+    // instead of the frame drawing the whole board directly.
     litStandIn(ctx) {
-        return Grid.litStandIns && !!this.surfaceCache && !!this.surfaceCacheLit && !this.surfaceCacheBuild && !this.surfacePatchJob &&
-            this.surfaceStateMatches(ctx, undefined, true)
+        if (!Grid.litStandIns || !this.surfaceCache || !this.surfaceCacheLit || this.surfaceCacheBuild || this.surfacePatchJob)
+            return false
+        if (this.surfaceStateMatches(ctx, undefined, true))
+            return true
+        if (!Grid.standInFollows || !this.cellLayerOn() || this.surfaceSplitJob || !this.surfaceStateMatches(ctx))
+            return false
+        this.followCellLayer('surface')
+        ++this.standInFollows
+        return !!this.surfaceCache && !this.surfaceLayerJob && this.surfaceStateMatches(ctx, undefined, true)
     }
     // Whether ctx's frame draws lit images, and which: false (the live light), else {t, view, rest}
     // with view the lit view at ctx's transform t (made now if it does not hold) and rest its
@@ -4307,7 +4456,7 @@ class Grid extends SpritesGroup {
         let view = this.litView
         // A view being patched holds while its patch does (patchLitView).
         const holds = !!view && !view.patch && this.litViewHolds(ctx, view, t) ? view : null
-        if (!view || !(holds || this.patchLitView(ctx, view, t))) {
+        if (!view || !(holds || this.patchLitView(ctx, view, t) || this.refreshLitTiles(ctx, view, t))) {
             this.dropLitView()
             // The light map at the camera's scale is built a step a task (queueLitTiles) while the surface cache stands in.
             if (!atmosphericLighting.lightMapReady(this) && this.litStandIn(ctx)) {
@@ -4347,7 +4496,7 @@ class Grid extends SpritesGroup {
         let missing = 0
         for (let v = range.v0; v <= range.v1; ++v)
             for (let u = range.u0; u <= range.u1; ++u)
-                if (!view.tiles.has(u + ',' + v))
+                if (!view.tiles.has(u + ',' + v) && !view.stale?.has(u + ',' + v))
                     ++missing
         return view.unbuilt = missing > LIT_FRAME_TILES && !this.litStandIn(ctx)
     }
@@ -4378,6 +4527,94 @@ class Grid extends SpritesGroup {
             return true
         view.patch = undefined
         return this.startLitPatch(view, view.rest)
+    }
+    // TASK-1519: a board change while the frames draw view's tiles with no finished rest snapshot (a camera that keeps moving,
+    // as a turn playback's glides: a step captures a cell or two, whose territory glow reaches a few hexes) does not drop
+    // the view (every tile on the canvas built again, the frames drawing the whole board directly until they are): the view
+    // takes the board's state and the tiles the changed cells reach (surfaceCacheChangeRects at the view's transform, as a
+    // lit patch's region) become stale (view.stale): built again as missing ones are (queueLitTiles; each drawn whole from
+    // the board as it is), and until then drawn as they were with the changed cells drawn over them in their new state
+    // (drawPatchCells, view.refresh: every change since the oldest stale tile), as a patch's frames draw them. A snapshot
+    // under way is started over. Not for a lamp or portal change (their light reaches far), a change of the light state
+    // (another light map: view.rebuilds), an observed board, another scale, or more than LIT_REFRESH_MAX_CELLS changed cells
+    // (Grid.litTileRefresh false: dropped as before). Returns whether view holds.
+    refreshLitTiles(ctx, view, t) {
+        const L = atmosphericLighting
+        if (!Grid.litTileRefresh || this.isObserving() || view.patch || view.a !== t.a || view.d !== t.d ||
+                view.rebuilds !== L.rebuilds || view.mapScale !== L.mapScale || view.rest && view.rest.done === LIT_REST_BANDS)
+            return false
+        const changes = []
+        const matches = this.withLitState(view, () => {
+            const overlayCells = this.surfaceOverlayCells
+            this.surfaceOverlayCells = []
+            try {
+                return this.surfaceStateMatches(undefined, changes, true)
+            } finally {
+                this.surfaceOverlayCells = overlayCells
+            }
+        })
+        const refuse = reason => {
+            this.litRefreshRefusals[reason] = (this.litRefreshRefusals[reason] || 0) + 1
+            return false
+        }
+        if (!matches)
+            return refuse('board')
+        if (changes.length + (view.refresh ? view.refresh.changed.length : 0) > LIT_REFRESH_MAX_CELLS)
+            return refuse('cells')
+        const found = changes.length ? this.withLitState(view, () => this.surfaceCacheChangeRects(changes)) : {cells: [], light: [], sprites: []}
+        if (!found)
+            return refuse('lamp or portal')
+        if (changes.length) {
+            // The tiles meeting the region (view-relative device pixels, the tiles' squares), grown by the edge runs' reach.
+            const at = (x, y) => ({x: x * view.a + view.e, y: y * view.d + view.f})
+            const r = this.patchRegion(found, L.mapPixel(), at, Infinity, Infinity), grow = 4 * LIT_EDGE_BLOCK
+            const stale = view.stale ||= new Map()
+            let staled = 0
+            for (const [key, tile] of view.tiles) {
+                const [u, v] = key.split(',').map(Number), x = u * LIT_TILE, y = v * LIT_TILE
+                if (x < r.x + r.w + grow && x + LIT_TILE > r.x - grow && y < r.y + r.h + grow && y + LIT_TILE > r.y - grow) {
+                    view.tiles.delete(key)
+                    if (stale.has(key))
+                        this.releaseLitTile(stale.get(key))
+                    stale.set(key, tile)
+                    ++staled
+                }
+            }
+            if (stale.size) {
+                const refresh = view.refresh ||= {changed: [], boxes: [], sprites: [], light: []}
+                refresh.changed.push(...changes)
+                refresh.boxes.push(...found.cells)
+                refresh.sprites.push(...found.sprites)
+                refresh.light.push(...found.light)
+                refresh.regionLight = undefined
+            }
+            else
+                view.stale = view.refresh = undefined
+            this.litTilesStaled += staled
+        }
+        this.withLitState(view, () => this.captureSurfaceState())
+        Object.assign(view, this.litEdges(view))
+        view.rest = undefined
+        ++this.litTileRefreshes
+        return true
+    }
+    // A built tile (litTile) or the view's tiles dropped (released): its stale tile (refreshLitTiles) released; none left,
+    // the changes drawn over them are done.
+    releaseStaleTile(view, key) {
+        const stale = view.stale
+        if (!stale)
+            return
+        if (key === undefined) {
+            for (const tile of stale.values())
+                this.releaseLitTile(tile)
+            stale.clear()
+        }
+        else if (stale.has(key)) {
+            this.releaseLitTile(stale.get(key))
+            stale.delete(key)
+        }
+        if (!stale.size)
+            view.stale = view.refresh = undefined
     }
     // Whether view's finished rest snapshot can be patched at transform t of ctx's canvas (patchLitView; TASK-1316: its cell
     // layer's variants rendered a step a frame, startLitLayerJob): the camera resting on it at its transform, its sky and
@@ -4858,6 +5095,7 @@ class Grid extends SpritesGroup {
             if (tile)
                 litTileCost.add(performance.now() - start)
             view.tiles.set(key, tile)
+            this.releaseStaleTile(view, key)
         }
         return view.tiles.get(key)
     }
@@ -5108,9 +5346,11 @@ class Grid extends SpritesGroup {
             this.litTilePool.push(tile)
     }
     dropLitView() {
-        if (this.litView)
+        if (this.litView) {
             for (const tile of this.litView.tiles.values())
                 this.releaseLitTile(tile)
+            this.releaseStaleTile(this.litView)
+        }
         this.litView = undefined
         this.litEdgeRuns = undefined
     }
@@ -5964,7 +6204,7 @@ class Grid extends SpritesGroup {
         if (otherSettings.atmosphericVisuals) {
             const frame = this.litFrame, view = this.litView, tiles = Grid.stillLitTiles
             if (this.frameSurface !== 'lit' || !frame || frame.view !== view || !view || view.patch || view.layerJob ||
-                    (frame.rest ? frame.job : !tiles || frame.missing) || view.splitJob && !tiles)
+                    (frame.rest ? frame.job : !tiles || frame.missing || frame.stale) || view.splitJob && !tiles)
                 return false
         }
         else if (this.frameSurface !== false)
@@ -6580,6 +6820,8 @@ const SURFACE_PATCH_STEPS = [
     ...SURFACE_CACHE_STAGES.map(stage => (grid, job) => grid.drawSurfacePatchStage(job, stage)),
     (grid, job) => grid.finishSurfacePatch(job)
 ]
+// TASK-1519: how often (ms) a cache the lit view waits for as its stand-in is compared with the board (prepareSurfaceCache).
+const SURFACE_PATCH_CHECK_MS = 100
 // The largest part of the surface cache's pixels a patch redraws (Grid.patchSurfaceCache); more is rebuilt.
 const SURFACE_PATCH_MAX_AREA = 0.25
 // Cache pixels round a patch's region redrawn with it and then put back as they were (Grid.patchSurfaceCache): the clip
@@ -6594,6 +6836,12 @@ Grid.surfacePatching = true
 // (Grid.splitCellLayer, refreshCellLayer). With it the light state holds no owner (TASK-1314,
 // atmosphericLighting.ownerFree): the sprites hold the territory glow.
 Grid.liveCellLayer = true
+// TASK-1519: a turn playback's loaded board takes over the computed board's surface cache (Grid.adoptSurfaceCache).
+Grid.surfaceAdoption = true
+// TASK-1519: a lit view without a finished rest snapshot follows a board change, the tiles it reaches stale (Grid.refreshLitTiles).
+Grid.litTileRefresh = true
+// TASK-1519: a surface cache standing in for lit tiles has its cell layer brought up to the board first (Grid.litStandIn).
+Grid.standInFollows = true
 // TASK-1360: true brings the surface cache's cell layer up to a board change needing new variants in a job, a step a frame
 // (Grid.startSurfaceLayerJob); false draws them all in the frame that found the change (refreshCellLayer).
 Grid.surfaceLayerJobs = true
@@ -6750,6 +6998,10 @@ const SURFACE_CACHE_CHECK_MS = 500
 const SURFACE_STATE_FIELDS = ['surfaceCacheLighting', 'surfaceCacheAtmospheric', 'surfaceCacheLayered', 'surfaceCacheState',
     'surfaceCacheBuildings', 'surfaceCacheUnits', 'surfaceCacheBuildingImages', 'surfaceCacheUnitImages',
     'surfaceCacheInert', 'surfaceCacheInertUnits', 'surfaceCacheInertBuildings', 'surfaceCacheNatureNames']
+// TASK-1519: the surface cache's rasters and their geometry (besides SURFACE_STATE_FIELDS) a board takes over from another
+// (Grid.adoptSurfaceCache).
+const SURFACE_ADOPTED_FIELDS = ['surfaceCache', 'surfaceCacheScale', 'surfaceCacheBounds', 'surfaceCacheLit',
+    'surfaceCellLayer', 'surfaceCacheShown', 'surfacePatchBuffer']
 // Lit tiles (Grid.drawLitView): side in device pixels (and the margin round it), tiles built
 // between two frames, spare canvases kept, the side of the edge blocks the frame lights and the
 // rest snapshot's bands.
@@ -6767,6 +7019,8 @@ const LIT_EDGE_STEP_CELLS = 400
 const LIT_REST_BANDS = 12
 // Tiles built a task while the camera rests after a patch of the view dropped some (Grid.finishLitPatch).
 const LIT_TILE_PATCHED_BUDGET = 1
+// TASK-1519: at most this many changed cells drawn over a lit view's stale tiles (Grid.refreshLitTiles); more drop the view.
+const LIT_REFRESH_MAX_CELLS = 24
 // TASK-1439: the time (ms) a task between frames spends on lit tiles (Grid.buildLitTiles: tiles while the task's time and one
 // tile's estimate fit, LIT_TILE_BUDGET 1 ms tiles), and the most a rest task waits for the browser to be idle.
 const LIT_TASK_MS = 5

@@ -412,16 +412,23 @@ const atmosphericBackground = {
     // TASK-1454: the sky raster (and a raster job under way) depends only on the key and the view (viewMatches), so a
     // new board keeps it; the board's light map is released.
     // TASK-1518: also before a new board's first frame builds its light map (Grid.startBuildSteps), so draw keeps it.
+    // TASK-1519: a board that took over the surface cache of the board bound before (Grid.adoptSurfaceCache: a turn
+    // playback's) keeps it, and the light map (compared with each board by value) is kept for it.
     syncKey() {
         if (!this.keyMatches() || this.board !== grid) {
-            if (this.keyMatches()) atmosphericLighting.release()
+            const adopted = this.keyMatches() && !!grid && !!this.board && grid.surfaceCacheAdoptedFrom === this.board
+            if (grid)
+                grid.surfaceCacheAdoptedFrom = undefined
+            if (this.keyMatches()) {
+                if (!adopted) atmosphericLighting.release()
+            }
             else this.invalidate()
             this.keyOn = otherSettings.atmosphericVisuals
             this.keyPolished = otherSettings.usePolishedSprites
             this.keyDpr = window.devicePixelRatio
             this.key = [this.keyOn, this.keyPolished, this.keyDpr].join(':')
             this.board = grid
-            if (grid) grid.surfaceCacheState = undefined
+            if (grid && !adopted) grid.surfaceCacheState = undefined
         }
     },
     drawSky(ctx) {
