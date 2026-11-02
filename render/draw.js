@@ -206,42 +206,71 @@ function drawBackgroundHints(ctx) {
         ctx.drawImage(image, rect.x - pad, rect.y - pad, image.width / image.hintScale, image.height / image.hintScale)
     }
 }
+// TASK-1536: on-screen minimum of a checkbox row's hit height (CSS px), as the Settings menu's touch targets.
+const BACKGROUND_HINT_MIN_HIT_CSS = 44
+// Canvas pixels a CSS pixel, as getEventPos maps a client point (the canvas's CSS box; no box: devicePixelRatio).
+function backgroundHintCanvasPerCss() {
+    const box = typeof mainCanvas !== 'undefined' && mainCanvas && mainCanvas.getBoundingClientRect?.()
+    if (box && box.width && box.height)
+        return mainCanvas.width / box.width
+    return typeof window !== 'undefined' && window.devicePixelRatio || 1
+}
+// The checkbox rows' hit areas in world coordinates (TASK-1470, TASK-1536): x from the panel's left edge plus the plate's
+// inset to its right edge less it (the label's width); y around the row's centre (the plate's centre) up to the midpoint
+// to the next row on each side (the same half pitch above the first and below the last row; a lone row: its plate's
+// height and BACKGROUND_HINT_CHECK.hitPad), each half grown to at least half of BACKGROUND_HINT_MIN_HIT_CSS on screen at
+// the current camera scale. Grown areas may overlap: backgroundHintClick gives a point to the nearer centre.
+function backgroundHintHitRows() {
+    const rects = backgroundHintRects(), check = BACKGROUND_HINT_CHECK, r = basis.r
+    const minHalf = BACKGROUND_HINT_MIN_HIT_CSS * backgroundHintCanvasPerCss() / canvas.scale / 2
+    const hits = []
+    for (const rect of rects) {
+        const rows = rect.panel.checks || []
+        const centres = rows.map(row => rect.y + (row.y + check.size / 2) * r)
+        const lone = (check.size / 2 + check.hitPad) * r
+        rows.forEach((row, i) => {
+            const up = i > 0 ? (centres[i] - centres[i - 1]) / 2 : i + 1 < rows.length ? (centres[i + 1] - centres[i]) / 2 : lone
+            const down = i + 1 < rows.length ? (centres[i + 1] - centres[i]) / 2 : up
+            hits.push({rect, row, cy: centres[i],
+                x0: rect.x + check.x * r, x1: rect.x + (rect.panel.width - check.x) * r,
+                y0: centres[i] - Math.max(up, minHalf), y1: centres[i] + Math.max(down, minHalf)})
+        })
+    }
+    return hits
+}
 // TASK-1470: a click or a touch tap at realPos (world coordinates: the event mapped through the camera transform,
-// getRealEventPos) on a checkbox row of a shown panel (its plate or its label, the panel's width less the plate's
-// inset at each side, the plate's height and BACKGROUND_HINT_CHECK.hitPad above and below) flips the row's setting and
-// saves it as the Settings menu does (a row with toggle(): that, TASK-1523; a disabled row is not hit: the click goes on
-// as one elsewhere). The next frame shows it: the panel's canvas key holds the settings' state; the lit
-// snapshots and the overlay composite (they hold the panel drawn with the sky) and the held still frame are dropped
-// now, once. Returns whether a row was hit (the click is consumed).
+// getRealEventPos) in a checkbox row's hit area (backgroundHintHitRows; where two areas overlap, the row whose centre is
+// nearer) flips the row's setting and saves it as the Settings menu does (a row with toggle(): that, TASK-1523; a
+// disabled row is not hit: the click goes on as one elsewhere). The next frame shows it: the panel's canvas key holds
+// the settings' state; the lit snapshots and the overlay composite (they hold the panel drawn with the sky) and the held
+// still frame are dropped now, once. Returns whether a row was hit (the click is consumed).
 function backgroundHintClick(realPos) {
     if (!backgroundHintsShown())
         return false
-    const rects = backgroundHintRects(), check = BACKGROUND_HINT_CHECK, r = basis.r
-    for (const rect of rects) {
-        for (const row of rect.panel.checks || []) {
-            if (!row.setting && !row.toggle || backgroundHintRowDisabled(row))
-                continue
-            const x0 = rect.x + check.x * r, x1 = rect.x + (rect.panel.width - check.x) * r
-            const y0 = rect.y + (row.y - check.hitPad) * r, y1 = rect.y + (row.y + check.size + check.hitPad) * r
-            if (realPos.x < x0 || realPos.x > x1 || realPos.y < y0 || realPos.y > y1)
-                continue
-            if (row.toggle)
-                row.toggle()
-            else {
-                otherSettings[row.setting] = !otherSettings[row.setting]
-                if (typeof saveOtherSettings === 'function')
-                    saveOtherSettings()
-            }
-            ++backgroundHintState.toggles
-            if (typeof grid !== 'undefined' && grid) {
-                grid.releaseLitCanvases()
-                grid.overlayComposite = undefined
-                grid.dropHeldFrame()
-            }
-            return true
-        }
+    let hit = null
+    for (const area of backgroundHintHitRows()) {
+        if (realPos.x < area.x0 || realPos.x > area.x1 || realPos.y < area.y0 || realPos.y > area.y1)
+            continue
+        if (!hit || Math.abs(realPos.y - area.cy) < Math.abs(realPos.y - hit.cy))
+            hit = area
     }
-    return false
+    const row = hit && hit.row
+    if (!row || !row.setting && !row.toggle || backgroundHintRowDisabled(row))
+        return false
+    if (row.toggle)
+        row.toggle()
+    else {
+        otherSettings[row.setting] = !otherSettings[row.setting]
+        if (typeof saveOtherSettings === 'function')
+            saveOtherSettings()
+    }
+    ++backgroundHintState.toggles
+    if (typeof grid !== 'undefined' && grid) {
+        grid.releaseLitCanvases()
+        grid.overlayComposite = undefined
+        grid.dropHeldFrame()
+    }
+    return true
 }
 // The rects drawn last (null when none), the panel renders and row toggles (backgroundHintClick) so far and the rendered
 // panels by panel and scale.

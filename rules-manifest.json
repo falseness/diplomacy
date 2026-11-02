@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "4c7757424dc73542d4c4e84919e56435d5521f06c6ee8653d942fe608153f88e",
+  "rulesVersion": "58de9c05f7b79f1d0cf68f88e26869ce38dacb63c6393b28ee6dc51d6683eebf",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -150,8 +150,8 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "84d1b1be2de811dc6e2f407d72dcb8ec7799eb130592ea999916232fd0017a94",
-      "bytes": 34388
+      "sha256": "7094e5365eb041273fb73338cda7e5588dcf05fd3af4b54a834397407568963d",
+      "bytes": 36146
     },
     {
       "path": "interface/entityinterface.js",
