@@ -93,6 +93,19 @@ class TutorialCardsTree {
     // The suburb shape's hexagon radius as a share of the disc's radius, its stroke as a share of the hexagon's radius
     // and its fill, as the town interface's suburb portrait (interface/entityinterface.js: r 0.275 and stroke 0.02 of
     // its panel height, filled with the panel's player colour, here the red player's of the tutorials).
+    // The fit of a picture: on compact screens (menuCompact, TASK-1532) its size 0.1 larger, capped at 1.
+    static imageFit(name) {
+        const fit = TutorialCardsTree.IMAGE_FIT[name]
+        return menuCompact() ? {...fit, size: Math.min(1, fit.size + 0.1)} : fit
+    }
+    // No logo and no BETA tag on compact screens (Menu.draw draws a tree's own logo / betaTag when it has one).
+    static NO_DRAW = {draw() {}}
+    get logo() {
+        return menuCompact() ? TutorialCardsTree.NO_DRAW : undefined
+    }
+    get betaTag() {
+        return menuCompact() ? TutorialCardsTree.NO_DRAW : undefined
+    }
     static SUBURB = {size: 0.6, stroke: 0.02 / 0.275, color: '#ff0000'}
     static images = {}
     // The loaded picture of a tutorial id (created on first use), or null while it loads or without an entry; a shape
@@ -173,14 +186,31 @@ class TutorialCardsTree {
     // band instead (entry.contentY). While the divider row (dividerRow) is shown or peeks, the divider's band takes the
     // gap above it (this.divider) and the rows from it on move down by its extra height; cardStep stays a card and a
     // gap, so scrolling keeps whole rows. No pill is shown with the divider.
+    //
+    // Compact screens (menuCompact: phones in landscape, TASK-1532): no logo or BETA tag (this.logo / this.betaTag),
+    // the heading at the top (1 u), Back at the top-left on the heading's row, the grid from under the heading to
+    // 1.4 u above the bottom, shrunk (its cards 1/1.5 of what that space gives) and centred in it, names at 2.2 u and
+    // the pictures 0.1 larger (compactFit). Other screens keep the layout above.
     layout() {
-        const u = hubUnit(), logo = this.menu.logo.bounds
-        const headingTop = logo.y + logo.height + 0.2 * u
+        const u = hubUnit(), compact = menuCompact(), gap = 1.3 * u
+        const headingTop = compact ? 1.0 * u : this.menu.logo.bounds.y + this.menu.logo.bounds.height + 0.2 * u
         Object.assign(this.heading, {x: WIDTH / 2 - 12 * u, y: headingTop, width: 24 * u, height: 3.4 * u})
-        const backHeight = 4.6 * u, backTop = HEIGHT - 1.4 * u - backHeight
-        this.backButton.place?.(WIDTH / 2 - 9 * u, backTop, 18 * u, backHeight, 2.2 * u)
-        if (this.backButton.rect) this.backButton.rect.cornerRadius = Array(4).fill(backHeight / 2)
-        const gap = 1.3 * u, top = headingTop + this.heading.height + 1.1 * u, bottom = backTop - 1.1 * u
+        let top, bottom
+        if (compact) {
+            const backHeight = 3.6 * u
+            this.backButton.place?.(3 * u, headingTop - 0.1 * u, 13 * u, backHeight, 2.1 * u)
+            if (this.backButton.rect) this.backButton.rect.cornerRadius = Array(4).fill(1.8 * u)
+            const top0 = headingTop + this.heading.height + 0.9 * u, bottom0 = HEIGHT - 1.4 * u, height0 = bottom0 - top0
+            const height = (height0 - 3 * gap) / 1.5 + 3 * gap
+            top = top0 + (height0 - height) / 2
+            bottom = top + height
+        } else {
+            const backHeight = 4.6 * u, backTop = HEIGHT - 1.4 * u - backHeight
+            this.backButton.place?.(WIDTH / 2 - 9 * u, backTop, 18 * u, backHeight, 2.2 * u)
+            if (this.backButton.rect) this.backButton.rect.cornerRadius = Array(4).fill(backHeight / 2)
+            top = headingTop + this.heading.height + 1.1 * u
+            bottom = backTop - 1.1 * u
+        }
         Object.assign(this.grid, {x: 3 * u, y: top, width: WIDTH - 6 * u, height: bottom - top})
         const chosen = TutorialCardsTree.chooseGrid(this.entries.length, this.grid.width, this.grid.height, gap, u)
         this.columns = chosen.columns
@@ -222,7 +252,7 @@ class TutorialCardsTree {
                 if (rect.y + rect.height / 2 + disc / 2 + 0.9 * u > this.peek.bottom && disc + 2.4 * u <= band)
                     entry.contentY = this.peek.top + band / 2
             }
-            entry.button.text.fontSize = 2 * u
+            entry.button.text.fontSize = (compact ? 2.2 : 2) * u
             entry.button.trimText()
             const badge = 2.6 * u
             if (entry.checkMark) Object.assign(entry.checkMark, {width: badge, height: badge,
@@ -441,7 +471,7 @@ class TutorialCardsTree {
         const image = TutorialCardsTree.image(id)
         if (!image) return null
         if (image.shape === 'suburb') return this.drawMedallionSuburb(ctx, x, y, radius)
-        const fit = TutorialCardsTree.IMAGE_FIT[TutorialCardsTree.IMAGES[id].fit ?? 'plain']
+        const fit = TutorialCardsTree.imageFit(TutorialCardsTree.IMAGES[id].fit ?? 'plain')
         const size = fit.size * 2 * radius, scale = Math.min(size / image.naturalWidth, size / image.naturalHeight)
         const width = image.naturalWidth * scale, height = image.naturalHeight * scale
         const box = {x: x - width / 2, y: y + fit.shift * size - height / 2, width, height}
