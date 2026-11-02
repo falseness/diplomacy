@@ -1912,16 +1912,20 @@ const atmosphericLighting = {
             ctx.setTransform(t)
             ctx.clip()
         }
+        // TASK-1515: the map's part over all the runs at once (their bounds grown as each run's was), clipped to the runs
+        // (whole device pixels, none overlapping): two draws a frame, not two a run (about 54 runs on a 55x55 board's edge
+        // at 0.156). Each pixel samples the map at the same world point as before (the same world-to-map mapping), at least
+        // MAP_GROW map pixels inside the part drawn.
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
         for (const run of runs) {
-            ctx.save()
-            clip([run])
-            this.drawMapPart(ctx, map,
-                Math.max(viewLeft, (run.x - t.e) / t.a - grow), Math.max(viewTop, (run.y - t.f) / t.d - grow),
-                Math.min(viewRight, (run.x + run.w - t.e) / t.a + grow), Math.min(viewBottom, (run.y + run.h - t.f) / t.d + grow))
-            ctx.restore()
+            x0 = Math.min(x0, run.x); y0 = Math.min(y0, run.y)
+            x1 = Math.max(x1, run.x + run.w); y1 = Math.max(y1, run.y + run.h)
         }
         ctx.save()
         clip(runs)
+        this.drawMapPart(ctx, map,
+            Math.max(viewLeft, (x0 - t.e) / t.a - grow), Math.max(viewTop, (y0 - t.f) / t.d - grow),
+            Math.min(viewRight, (x1 - t.e) / t.a + grow), Math.min(viewBottom, (y1 - t.f) / t.d + grow))
         this.bloom(ctx, board, {runs})
         ctx.restore()
     },

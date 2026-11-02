@@ -18,7 +18,7 @@
     // Compositor-side work of a frame (and of the tasks since the previous one): blended destination
     // pixels, large canvas uploads and the board's render path. Reset after every sample.
     const freshWork = () => ({blendedMegapixels: 0, blendedDraws: 0, blendedMainMegapixels: 0, blendedByOp: {},
-        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false, sceneLayer: false,
+        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false, sceneLayer: false, litLayer: false,
         drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
@@ -375,6 +375,15 @@
                 }
                 return drawn
             }, 'surface')
+        }
+        // TASK-1515: a pan frame on the lit tiles whose units and cell texts came from the lit layer.
+        if (proto.drawLitLayer) {
+            const litLayer = proto.drawLitLayer
+            proto.drawLitLayer = labelled(function(...args) {
+                const drawn = litLayer.apply(this, args)
+                if (active && drawn) work.litLayer = true
+                return drawn
+            }, 'units')
         }
         // TASK-1375: a level-of-detail frame that repeats the one on the canvas draws nothing.
         if (proto.endLodFrame) {

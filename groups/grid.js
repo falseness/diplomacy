@@ -106,6 +106,12 @@ class Grid extends SpritesGroup {
         this.sceneLayerQueued = false
         this.sceneLayerBuilds = 0
         this.sceneLayerFrames = 0
+        // TASK-1515: raster of the units, bars and cell texts while the camera pans on the lit tiles (drawLitLayer).
+        this.litLayer = undefined
+        this.litLayerQueued = false
+        this.litLayerScratch = undefined
+        this.litLayerBuilds = 0
+        this.litLayerFrames = 0
         // The overlays' composite on rest frames of the surface-cache path (drawOverlayComposite):
         // the last frame's calls and key, the canvas of its snapshot and the frames drawn.
         this.overlayComposite = undefined
@@ -3479,6 +3485,394 @@ class Grid extends SpritesGroup {
         const y1 = Math.ceil(Math.min(ch * 1.25, t.d * (b.top + b.height + margin) + t.f))
         return {x0, y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0)}
     }
+    // TASK-1515: during a pan on the lit-tiles path (Screen.surfaceMoving, no zoom gesture: drawLitView drew lit tiles or the
+    // rest snapshot), the units pass (drawOther's 'units': still units with their bars, production silhouettes and their
+    // texts, building and portal bars, fogged portal previews) and the cell texts (drawCellText: debug's coordinate texts, a
+    // selection's logic texts, production texts) come from one transparent raster of them, the lit layer, kept as its pieces
+    // (the rectangles round the cells that draw, drawLitLayerRaster) and its pixels copied whole at the camera's shift rounded
+    // to whole pixels (under half a pixel off while moving, as the lit tiles under it). Only the pieces in view are drawn: the
+    // lit tiles (about 66 of 296 KB on a 2560x1398 canvas) and a layer of the canvas's size or more would exceed the images a
+    // Chromium canvas records before it rasterizes (about 32 MB: the frame's whole drawing then rasterized inside it).
+    // Drawn directly they are a call or more for each unit, bar and text every frame (the user's 55x55 6-player co-op board:
+    // 323 calls at 0.36, about 2500 with debug at 0.156). The layer is built by a task after a frame that could not use one
+    // (queueLitLayer: drawn at that frame's transform and context state over litLayerRect, the canvas and LIT_LAYER_MARGIN of
+    // it on each side within the board, its pieces rasterized there), and used while its
+    // scale, context state and key (litLayerKey: debug, logic texts and their revision, hex radius, bar settings, fog) are
+    // the frame's, every cell it drew still draws the same (litLayerSignature: each drawn cell's unit and building, their
+    // hp, pending heal, hit, moves, moves bar, image, owner colour and production; the fog), no unit is left out of the unit
+    // passes (stillUnitsHidden) and no online observation runs, the view is inside it and for at most LIT_LAYER_MAX_AGE ms;
+    // the next one is queued ahead once the view is within LIT_LAYER_NEAR of its size of the layer's edge or the layer
+    // LIT_LAYER_AHEAD_AGE ms old. A layer whose cells are fewer than LIT_LAYER_MIN_CELLS (and no debug or logic texts) is not
+    // drawn: the frames draw those few cells directly and queue nothing until the view leaves it. Frames at rest, zoom
+    // gestures, the surface cache's paths and level-of-detail frames never draw it.
+    // Returns whether it drew the units and the cell texts.
+    drawLitLayer(ctx) {
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        const t = ctx.getTransform()
+        if (!Grid.litLayers || !otherSettings.atmosphericVisuals || !screen || !screen.surfaceMoving || screen.zoomGesture ||
+                screen.surfaceZooming || typeof createImageBitmap !== 'function' || typeof mainCanvas === 'undefined' ||
+                ctx.canvas !== mainCanvas || this !== grid ||
+                t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || this.lod || this.stillUnitsHidden() || this.isObserving()) {
+            this.dropLitLayer()
+            return false
+        }
+        const cw = ctx.canvas.width, ch = ctx.canvas.height
+        const rect = this.litLayerRect(cw, ch, t)
+        if (rect.width * rect.height > LIT_LAYER_MAX_PIXELS) {
+            this.dropLitLayer()
+            return false
+        }
+        const layer = this.litLayer, state = canvasStateOf(ctx)
+        // The view in the layer's device pixels (its placement moved by the camera's shift rounded to whole pixels), within
+        // the part of the canvas the layer can cover (litLayerRect's board and margin).
+        const ox = layer ? Math.round(t.e - layer.e) : 0, oy = layer ? Math.round(t.f - layer.f) : 0
+        const cover = this.litLayerRect(cw, ch, t, 0)
+        const vx0 = cover.x0 - ox, vy0 = cover.y0 - oy, vx1 = vx0 + cover.width, vy1 = vy0 + cover.height
+        if (!layer || layer.a !== t.a || layer.d !== t.d || cw !== layer.cw || ch !== layer.ch ||
+                performance.now() - layer.time > LIT_LAYER_MAX_AGE || !sameCanvasState(state, layer.state) ||
+                vx0 < layer.x0 && layer.x0 > layer.left || vy0 < layer.y0 && layer.y0 > layer.top ||
+                vx1 > layer.x0 + layer.width && layer.x0 + layer.width < layer.right ||
+                vy1 > layer.y0 + layer.height && layer.y0 + layer.height < layer.bottom ||
+                !this.litLayerKeyHolds(layer) || !this.litLayerSignature(layer.range, layer.signature)) {
+            this.queueLitLayer(ctx, t, state)
+            return false
+        }
+        if (!layer.pieces)
+            return false
+        const nearX = cover.width * LIT_LAYER_NEAR, nearY = cover.height * LIT_LAYER_NEAR
+        if (performance.now() - layer.time > LIT_LAYER_AHEAD_AGE ||
+                vx0 - nearX < layer.x0 && layer.x0 > layer.left || vy0 - nearY < layer.y0 && layer.y0 > layer.top ||
+                vx1 + nearX > layer.x0 + layer.width && layer.x0 + layer.width < layer.right ||
+                vy1 + nearY > layer.y0 + layer.height && layer.y0 + layer.height < layer.bottom)
+            this.queueLitLayer(ctx, t, state)
+        // The pieces in view, each copied whole at the layer's placement.
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        for (const piece of layer.pieces) {
+            const x = layer.x0 + ox + piece.x, y = layer.y0 + oy + piece.y
+            if (x < cw && y < ch && x + piece.w > 0 && y + piece.h > 0)
+                ctx.drawImage(piece.canvas, x, y)
+        }
+        ctx.restore()
+        // What the skipped units pass does besides drawing: a selected demon portal's panel kept current (drawNextProduction,
+        // refreshCulledPortal).
+        const portal = gameEvent.selected
+        if (portal?.isDemonPortal && !portal.killed && portal.nextProduction && this.arr[portal.coord.x]?.[portal.coord.y]?.building === portal &&
+                (!isFogOfWar || this.fogOfWar[portal.coord.x][portal.coord.y] || fogShowsPortalPreview(portal)))
+            entityInterface.refreshPortal(portal)
+        ++this.litLayerFrames
+        return true
+    }
+    dropLitLayer() {
+        for (const piece of this.litLayer?.pieces || [])
+            piece.canvas.width = piece.canvas.height = 0
+        this.litLayer = undefined
+    }
+    // The lit layer and its scratch canvas released (the frames left the lit tiles).
+    releaseLitLayer() {
+        this.dropLitLayer()
+        if (this.litLayerScratch)
+            this.litLayerScratch.width = this.litLayerScratch.height = 0
+        this.litLayerScratch = undefined
+    }
+    // The device-pixel rectangle of the lit layer for a cw x ch canvas at transform t: the canvas and margin (a fraction of
+    // it) on each side, within the board and the overlays' margin around it (mapDepth.bounds; left, top, right, bottom: that
+    // limit in the same pixels).
+    litLayerRect(cw, ch, t, margin = LIT_LAYER_MARGIN) {
+        mapDepth.ensureGeometry(this)
+        const reach = 4 * basis.r + assets.size, b = mapDepth.bounds
+        const left = Math.floor(t.a * (b.left - reach) + t.e), top = Math.floor(t.d * (b.top - reach) + t.f)
+        const right = Math.ceil(t.a * (b.right + reach) + t.e), bottom = Math.ceil(t.d * (b.bottom + reach) + t.f)
+        const x0 = Math.max(Math.floor(-cw * margin), left), y0 = Math.max(Math.floor(-ch * margin), top)
+        const x1 = Math.min(Math.ceil(cw * (1 + margin)), right), y1 = Math.min(Math.ceil(ch * (1 + margin)), bottom)
+        return {x0, y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0), left, top, right, bottom}
+    }
+    // What the lit layer drew from besides its cells: debug, the logic texts on and their revision, the hex radius, the bar
+    // settings and fog of war.
+    litLayerKey() {
+        return [debug, this.drawLogicText, Grid.logicTextRevision, basis.r, otherSettings.alwaysDisplayHPBar,
+            otherSettings.alwaysDisplayMovesBar, isFogOfWar, this.arr.length, this.arr[0]?.length]
+    }
+    litLayerKeyHolds(layer) {
+        const key = this.litLayerKey()
+        return key.every((v, k) => v === layer.key[k])
+    }
+    // What the units pass and the cell texts draw on the cells of range (a drawRange): for each cell that can draw (an
+    // overlay cell, isOverlayCell; a fogged demon portal) its index, unit and building and what their drawing reads (hp,
+    // pending heal, hit, moves and the moves bar shown, image, owner colour, production and its turns); with debug or logic
+    // texts every cell's fog. ref undefined: returns {values, cells}; else whether the cells draw what ref lists.
+    litLayerSignature(range, ref) {
+        const values = ref ? null : []
+        let k = 0, cells = 0
+        // Object.is: an hp or pending heal read from a building without hp is NaN.
+        const put = ref ? v => Object.is(ref[k++], v) : v => { values.push(v); return true }
+        const texts = debug || this.drawLogicText, h = this.arr[0].length
+        for (let i = range.i0; i < range.i1; ++i) {
+            const row = this.arr[i], fogRow = isFogOfWar ? this.fogOfWar[i] : undefined
+            for (let j = range.j0; j < range.j1; ++j) {
+                const cell = row[j], fogged = !!fogRow && !fogRow[j]
+                if (texts && !put(fogged))
+                    return false
+                const building = cell.building
+                if (fogged) {
+                    if (!building.isDemonPortal)
+                        continue
+                    const next = building.nextProduction
+                    if (!put(i * h + j) || !put(building) || !put(building.killed) || !put(!!next) || !put(next?.type) ||
+                            !put(next?.roundsRemaining) || !put(cell.hexColor))
+                        return false
+                    ++cells
+                    continue
+                }
+                if (!this.isOverlayCell(cell))
+                    continue
+                ++cells
+                const unit = cell.unit
+                if (!put(i * h + j) || !put(unit) || !put(building) || !put(cell.hexColor) || !put(building.showsBar) ||
+                        !put(building.hp) || !put(building.wasHitted) || !put(building.killed))
+                    return false
+                if (building.hasBar && building.hpBar && !put(building.hpIncrease))
+                    return false
+                if (building.isPreparingManufacture) {
+                    const production = building.unitProduction
+                    if (!put(production) || !put(production.name) || !put(production.turns))
+                        return false
+                }
+                else if (building.isDemonPortal) {
+                    // (a new object every read)
+                    const next = building.nextProduction
+                    if (!put(!!next) || !put(next?.type) || !put(next?.roundsRemaining))
+                        return false
+                }
+                if (unit.notEmpty() && (!put(unit.hp) || !put(unit.hpIncrease) || !put(unit.wasHitted) || !put(unit.moves) ||
+                        !put(unit.bodyImageName) || !put(shouldShowMovesBar(unit))))
+                    return false
+            }
+        }
+        return ref ? k === ref.length : {values, cells}
+    }
+    // Queues the lit layer for transform t of ctx, drawn from ctx's state now (one at a time). It is not built if the camera
+    // came to rest, a zoom gesture began, the frames left the lit tiles or a unit is left out of the unit passes.
+    queueLitLayer(ctx, t, state) {
+        if (this.litLayerQueued)
+            return
+        this.litLayerQueued = true
+        const cw = ctx.canvas.width, ch = ctx.canvas.height
+        setTimeout(gridTask(() => {
+            this.litLayerQueued = false
+            const screen = gameEvent.screen
+            if (!screen.surfaceMoving || screen.zoomGesture || this !== grid || this.frameSurface !== 'lit' ||
+                    this.stillUnitsHidden() || this.isObserving())
+                return
+            const layer = this.drawLitLayerRaster(cw, ch, t, state)
+            this.dropLitLayer()
+            this.litLayer = layer
+            ++this.litLayerBuilds
+        }))
+    }
+    // The units pass and the cell texts as a frame on a cw x ch canvas at transform t with context state draws them (drawOther
+    // 'units', drawCellText), within litLayerRect and on the same pixel grid: drawn on a transparent canvas of the
+    // rectangle's size (litLayerScratch, kept), then copied whole-pixel into the pieces (litLayerPieces: disjoint rectangles
+    // round the cells that draw), one canvas each, so a frame draws (and its canvas records) only the pieces in view, not
+    // the empty pixels between the units. Nothing is drawn (no pieces) for fewer than LIT_LAYER_MIN_CELLS cells and no
+    // debug or logic texts.
+    drawLitLayerRaster(cw, ch, t, state) {
+        const rect = this.litLayerRect(cw, ch, t)
+        const {x0, y0, width, height} = rect
+        const transform = {a: t.a, b: 0, c: 0, d: t.d, e: t.e - x0, f: t.f - y0}
+        const range = this.drawRange({getTransform: () => transform, canvas: {width, height}})
+        const {values, cells} = this.litLayerSignature(range)
+        let pieces = null
+        if (cells >= LIT_LAYER_MIN_CELLS || debug || this.drawLogicText) {
+            let canvas = this.litLayerScratch
+            if (!canvas || canvas.width < width || canvas.height < height) {
+                if (canvas)
+                    canvas.width = canvas.height = 0
+                canvas = this.litLayerScratch = document.createElement('canvas')
+                canvas.width = width
+                canvas.height = height
+            }
+            // About LIT_PIECE_VISIBLE pieces in a canvas-sized view: the layer's area over the view's (within the board) times it.
+            const cover = this.litLayerRect(cw, ch, t, 0)
+            const target = Math.max(LIT_PIECE_VISIBLE, Math.round(LIT_PIECE_VISIBLE * width * height / (cover.width * cover.height)))
+            const lctx = canvas.getContext('2d')
+            const parts = this.litLayerPieces(range, transform, width, height, target)
+            // Only the pieces are read: only they are cleared (the whole canvas for the audit).
+            lctx.setTransform(1, 0, 0, 1, 0, 0)
+            if (Grid.litLayerAudit)
+                lctx.clearRect(0, 0, width, height)
+            else
+                for (const piece of parts)
+                    lctx.clearRect(piece.x, piece.y, piece.w, piece.h)
+            applyCanvasState(lctx, {...state, transform})
+            this.drawOther(lctx, 'units')
+            this.drawCellText(lctx)
+            // Each piece copied into its own canvas, rasterized by a one-pixel read in this task between frames (as
+            // queueOverlayLayer); the pieces of the layer before are reused where their size is the same.
+            const pool = new Map()
+            for (const old of this.litLayer?.pieces || [])
+                pool.set(old.w + 'x' + old.h, [...(pool.get(old.w + 'x' + old.h) || []), old.canvas])
+            if (this.litLayer)
+                this.litLayer.pieces = null
+            pieces = parts.map(piece => {
+                let part = pool.get(piece.w + 'x' + piece.h)?.pop()
+                const pctx = (part ||= document.createElement('canvas')).getContext('2d')
+                if (part.width !== piece.w || part.height !== piece.h) {
+                    part.width = piece.w
+                    part.height = piece.h
+                }
+                else
+                    pctx.clearRect(0, 0, piece.w, piece.h)
+                pctx.drawImage(canvas, piece.x, piece.y, piece.w, piece.h, 0, 0, piece.w, piece.h)
+                pctx.getImageData(0, 0, 1, 1)
+                return {...piece, canvas: part}
+            })
+            for (const unused of pool.values())
+                for (const part of unused)
+                    part.width = part.height = 0
+            if (Grid.litLayerAudit)
+                this.auditLitLayer(lctx, width, height, pieces)
+        }
+        // The key after the drawing (a logic text read the first time is made then, Grid.logicTextChanged).
+        return {pieces, a: t.a, d: t.d, e: t.e, f: t.f, cw, ch, x0, y0, width, height, left: rect.left, top: rect.top,
+            right: rect.right, bottom: rect.bottom, range, signature: values, cells, key: this.litLayerKey(), state,
+            time: performance.now()}
+    }
+    // The lit layer's pieces for the cells of range at transform (the layer's own pixels, width x height): the cells that can
+    // draw in the units pass or the cell texts (an overlay cell, a fogged portal's preview, with debug every cell's
+    // coordinate text, with logic texts every cell holding one) each mark the LIT_PIECE_BLOCK px blocks within
+    // LIT_PIECE_REACH of its centre (the reach of its sprites, bars, preview and texts); the marked blocks are covered exactly
+    // by rectangles, merged into fewer (about target) adding the fewest unmarked blocks; none overlap.
+    litLayerPieces(range, transform, width, height, target) {
+        const B = LIT_PIECE_BLOCK, cols = Math.ceil(width / B), rows = Math.ceil(height / B)
+        const marked = new Uint8Array(cols * rows)
+        const [reachLeft, reachUp, reachRight, reachDown] = LIT_PIECE_REACH
+        const left = reachLeft * basis.r * transform.a + LIT_PIECE_PAD, right = reachRight * basis.r * transform.a + LIT_PIECE_PAD
+        const up = reachUp * basis.r * transform.d + LIT_PIECE_PAD, down = reachDown * basis.r * transform.d + LIT_PIECE_PAD
+        const logic = this.drawLogicText && !this.lod
+        for (let i = range.i0; i < range.i1; ++i) {
+            const row = this.arr[i], fogRow = isFogOfWar ? this.fogOfWar[i] : undefined
+            for (let j = range.j0; j < range.j1; ++j) {
+                const cell = row[j]
+                if (cell.building.isMapEdge && !this.isOverlayCell(cell))
+                    continue
+                const fogged = !!fogRow && !fogRow[j]
+                if (!(debug || (fogged ? this.fogPortalPreview(cell) : this.isOverlayCell(cell) || logic && cell.logicText.text != '')))
+                    continue
+                const x = i * basis.offset.x * transform.a + transform.e, y = (2 * j + (i & 1)) * basis.offset.y * transform.d + transform.f
+                const c0 = Math.max(0, Math.floor((x - left) / B)), c1 = Math.min(cols - 1, Math.floor((x + right) / B))
+                const r0 = Math.max(0, Math.floor((y - up) / B)), r1 = Math.min(rows - 1, Math.floor((y + down) / B))
+                for (let r = r0; r <= r1; ++r)
+                    marked.fill(1, r * cols + c0, r * cols + c1 + 1)
+            }
+        }
+        // The marked blocks covered exactly by rectangles (in blocks): each row's runs, a run continuing the same columns of the
+        // row above extending that rectangle.
+        let boxes = [], open = new Map()
+        for (let r = 0; r < rows; ++r) {
+            const next = new Map()
+            for (let c = 0; c < cols; ++c) {
+                if (!marked[r * cols + c])
+                    continue
+                const c0 = c
+                while (c + 1 < cols && marked[r * cols + c + 1])
+                    ++c
+                const key = c0 * 65536 + c
+                let box = open.get(key)
+                if (box)
+                    box.r1 = r
+                else
+                    boxes.push(box = {c0, c1: c, r0: r, r1: r})
+                next.set(key, box)
+            }
+            open = next
+        }
+        // Then pairs merged into their bounds, fewest added blocks first (a pair whose bounds overlap a third rectangle is not
+        // merged: none overlap, and no merge swallows its neighbours): every merge that adds no block, and others while more
+        // than target are left.
+        const area = q => (q.c1 - q.c0 + 1) * (q.r1 - q.r0 + 1)
+        const union = (p, q) => ({c0: Math.min(p.c0, q.c0), c1: Math.max(p.c1, q.c1), r0: Math.min(p.r0, q.r0), r1: Math.max(p.r1, q.r1)})
+        const overlaps = (p, q) => p.c0 <= q.c1 && q.c0 <= p.c1 && p.r0 <= q.r1 && q.r0 <= p.r1
+        if (boxes.length > 1 && boxes.length <= LIT_PIECE_MERGE_LIMIT) {
+            // A binary min-heap of [waste, p, q].
+            const heap = []
+            const push = item => {
+                heap.push(item)
+                for (let k = heap.length - 1; k > 0;) {
+                    const up = (k - 1) >> 1
+                    if (heap[up][0] <= heap[k][0])
+                        break
+                    ;[heap[up], heap[k]] = [heap[k], heap[up]]
+                    k = up
+                }
+            }
+            const pop = () => {
+                const top = heap[0], last = heap.pop()
+                if (heap.length) {
+                    heap[0] = last
+                    for (let k = 0; ;) {
+                        const l = 2 * k + 1, r = l + 1
+                        let m = k
+                        if (l < heap.length && heap[l][0] < heap[m][0]) m = l
+                        if (r < heap.length && heap[r][0] < heap[m][0]) m = r
+                        if (m === k)
+                            break
+                        ;[heap[m], heap[k]] = [heap[k], heap[m]]
+                        k = m
+                    }
+                }
+                return top
+            }
+            const pairWith = (p, list) => {
+                for (const q of list)
+                    if (q !== p && !q.dead)
+                        push([area(union(p, q)) - area(p) - area(q), p, q])
+            }
+            boxes.forEach((p, k) => pairWith(p, boxes.slice(k + 1)))
+            let live = boxes.length
+            while (heap.length && live > 1) {
+                const [waste, p, q] = pop()
+                if (p.dead || q.dead)
+                    continue
+                if (waste > 0 && live <= target)
+                    break
+                const u = union(p, q)
+                if (boxes.some(o => o !== p && o !== q && !o.dead && overlaps(u, o)))
+                    continue
+                p.dead = q.dead = true
+                boxes.push(u)
+                --live
+                pairWith(u, boxes)
+            }
+            boxes = boxes.filter(q => !q.dead)
+        }
+        const pieces = []
+        for (const box of boxes) {
+            const x0 = box.c0 * B, y0 = box.r0 * B, x1 = Math.min(width, (box.c1 + 1) * B), y1 = Math.min(height, (box.r1 + 1) * B)
+            pieces.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+        }
+        return pieces
+    }
+    // Grid.litLayerAudit (tests and measurements only): the drawn layer's pixels outside its pieces (lost; should be none),
+    // counted on Grid.litLayerAudits.
+    auditLitLayer(lctx, width, height, pieces) {
+        const data = lctx.getImageData(0, 0, width, height).data, inside = new Uint8Array(width * height)
+        for (const p of pieces)
+            for (let y = p.y; y < p.y + p.h; ++y)
+                inside.fill(1, y * width + p.x, y * width + p.x + p.w)
+        let lost = 0, maxAlpha = 0, drawn = 0
+        for (let k = 0; k < inside.length; ++k) {
+            const alpha = data[k * 4 + 3]
+            if (alpha)
+                ++drawn
+            if (alpha && !inside[k]) {
+                ++lost
+                maxAlpha = Math.max(maxAlpha, alpha)
+            }
+        }
+        const area = pieces.reduce((sum, p) => sum + p.w * p.h, 0)
+        ;(Grid.litLayerAudits ||= []).push({width, height, pieces: pieces.length, piecePixels: area, drawnPixels: drawn, lost, maxAlpha})
+    }
     // The overlays as the overlay pass draws them on a cw x ch canvas at transform t, within
     // overlayLayerRect and on the same pixel grid; drawn into a reused canvas, its corner of
     // width x height.
@@ -4635,6 +5029,8 @@ class Grid extends SpritesGroup {
         this.frameSurface = surface
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
         const lit = surface === 'lit', cachedScene = surface === true
+        if (!lit && !pass && (this.litLayer || this.litLayerScratch))
+            this.releaseLitLayer()
         // The overlay layer holds the production texts too (drawInfoTexts); so does the scene layer.
         let layered = scene
         // A rest frame's overlays and everything after them, recorded (drawOverlayComposite).
@@ -4659,7 +5055,10 @@ class Grid extends SpritesGroup {
             if (!cachedScene) {
                 if (!pass)
                     this.dropOverlayLayer()
-                this.drawOther(ctx, 'units')
+                // TASK-1515: a pan on the lit tiles draws the units, bars and cell texts from the lit layer.
+                layered = lit && this.drawLitLayer(ctx)
+                if (!layered)
+                    this.drawOther(ctx, 'units')
             }
             else if (!layered) {
                 composite = this.beginOverlayComposite(ctx)
@@ -5685,6 +6084,8 @@ Grid.simpleCulling = true
 Grid.stillFrames = true
 // TASK-1474: moving frames far out draw from the scene layer (Grid.drawSceneLayer).
 Grid.sceneLayers = true
+// TASK-1515: pan frames on the lit tiles draw the units and cell texts from the lit layer (Grid.drawLitLayer).
+Grid.litLayers = true
 // TASK-1377: a lit view holding exactly vouches for the light map (atmosphericLighting.trust) and drawLitEdges keeps its runs
 // (litEdgeRuns). False: every frame compares the whole board's light state and finds the runs again.
 Grid.litTrust = true
@@ -5831,6 +6232,26 @@ const OVERLAY_LAYER_MIN_CELLS = 64
 // with at least SCENE_LAYER_CELLS_PER_MP overlay cells a megapixel of it (their calls then cost more than the layer).
 const SCENE_LAYER_MAX_PIXELS = 4.5 * 1024 * 1024
 const SCENE_LAYER_CELLS_PER_MP = 64
+// TASK-1515: the lit layer (Grid.drawLitLayer): its margin round the canvas (a fraction of the canvas each side), its largest
+// size (device pixels), the fewest cells it is drawn for, its age (ms) at which the next is queued and past which it is not
+// drawn, and the distance from its edge (a fraction of the view) at which the next is queued.
+const LIT_LAYER_MARGIN = 0.25
+const LIT_LAYER_MAX_PIXELS = 9 * 1024 * 1024
+const LIT_LAYER_MIN_CELLS = 16
+const LIT_LAYER_AHEAD_AGE = 1500
+const LIT_LAYER_MAX_AGE = 2000
+const LIT_LAYER_NEAR = 0.1
+// The lit layer's pieces (Grid.litLayerPieces): the side (device pixels) of the blocks a drawing cell marks; its reach left, up,
+// right and down in hex radii from its centre (measured on the user's board, Grid.litLayerAudit: a sprite 0.8 = assets.size / 2
+// each way, a unit's hp bar up to 1.05 up, a portal's preview 0.73; texts inside the hexagon) and in device pixels besides
+// (antialiasing); a piece's largest side (device pixels; a frame's canvas records a whole piece in view).
+const LIT_PIECE_BLOCK = 16
+const LIT_PIECE_REACH = [1, 1.3, 1, 1]
+const LIT_PIECE_PAD = 3
+// About LIT_PIECE_VISIBLE pieces in a canvas-sized view (merged while more; a frame draws one call a piece in view), pairs
+// compared for at most LIT_PIECE_MERGE_LIMIT rectangles.
+const LIT_PIECE_VISIBLE = 6
+const LIT_PIECE_MERGE_LIMIT = 400
 // Width (device pixels) of the rows the overlay snapshot's rectangles are packed in (Grid.renderOverlaySnapshot).
 const OVERLAY_SNAPSHOT_ROW = 1024
 
