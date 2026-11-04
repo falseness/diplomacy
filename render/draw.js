@@ -53,7 +53,7 @@ function drawBoard() {
         const camera = ctx.getTransform()
         ctx.save()
         clipToDeviceRects(ctx, cover.open)
-        atmosphericBackground.draw(ctx)
+        atmosphericBackground.draw(ctx, cover.sky)
         ctx.setTransform(camera.a, camera.b, camera.c, camera.d, camera.e, camera.f)
         drawBackgroundHints(ctx)
         ctx.restore()

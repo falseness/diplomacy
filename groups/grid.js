@@ -4420,10 +4420,18 @@ class Grid extends SpritesGroup {
             }
             boxes = boxes.filter(q => !q.dead)
         }
-        const pieces = []
+        // TASK-1545: a rectangle over LIT_PIECE_MAX_SIDE a side cut into equal pieces within it (a frame draws a piece in view
+        // whole: one reaching past the canvas's side records its pixels off the canvas too).
+        const pieces = [], most = Math.max(1, Math.floor(LIT_PIECE_MAX_SIDE / B))
         for (const box of boxes) {
-            const x0 = box.c0 * B, y0 = box.r0 * B, x1 = Math.min(width, (box.c1 + 1) * B), y1 = Math.min(height, (box.r1 + 1) * B)
-            pieces.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+            const nc = Math.ceil((box.c1 - box.c0 + 1) / most), nr = Math.ceil((box.r1 - box.r0 + 1) / most)
+            for (let a = 0; a < nr; ++a)
+                for (let b = 0; b < nc; ++b) {
+                    const c0 = box.c0 + Math.floor(b * (box.c1 - box.c0 + 1) / nc), c1 = box.c0 + Math.floor((b + 1) * (box.c1 - box.c0 + 1) / nc) - 1
+                    const r0 = box.r0 + Math.floor(a * (box.r1 - box.r0 + 1) / nr), r1 = box.r0 + Math.floor((a + 1) * (box.r1 - box.r0 + 1) / nr) - 1
+                    const x0 = c0 * B, y0 = r0 * B, x1 = Math.min(width, (c1 + 1) * B), y1 = Math.min(height, (r1 + 1) * B)
+                    pieces.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+                }
         }
         return pieces
     }
@@ -4715,8 +4723,7 @@ class Grid extends SpritesGroup {
                 // TASK-1519: a stale tile (refreshLitTiles) drawn as it was until built again, the changes drawn over it below.
                 const old = view.stale && !view.tiles.has(u + ',' + v) ? view.stale.get(u + ',' + v) : undefined
                 if (old) {
-                    ctx.drawImage(old, LIT_TILE_PAD, LIT_TILE_PAD, LIT_TILE, LIT_TILE,
-                        u * LIT_TILE + ox, v * LIT_TILE + oy, LIT_TILE, LIT_TILE)
+                    this.drawLitTileAt(ctx, old, u * LIT_TILE + ox, v * LIT_TILE + oy, cw, ch)
                     stale = true
                     continue
                 }
@@ -4727,8 +4734,7 @@ class Grid extends SpritesGroup {
                 }
                 const tile = this.litTile(view, u, v)
                 if (tile)
-                    ctx.drawImage(tile, LIT_TILE_PAD, LIT_TILE_PAD, LIT_TILE, LIT_TILE,
-                        u * LIT_TILE + ox, v * LIT_TILE + oy, LIT_TILE, LIT_TILE)
+                    this.drawLitTileAt(ctx, tile, u * LIT_TILE + ox, v * LIT_TILE + oy, cw, ch)
             }
         }
         ctx.restore()
@@ -5149,7 +5155,65 @@ class Grid extends SpritesGroup {
                     open.push(run = {x: x0, y: y0, w: x1 - x0, h: y1 - y0})
             }
         }
-        return {open: this.coverOpen = open}
+        return {open: this.coverOpen = open, sky: Grid.skyBlocks ? this.coverSkyBlocks(ctx, open, view, ox, oy) : null}
+    }
+    // TASK-1545: the sky raster's blocks (atmosphericBackground.BLOCK_W x BLOCK_H, from the canvas's corner) the frame
+    // draws: those meeting an open rectangle where it is not covered by the lit tiles' opaque pixels: a piece of a block in
+    // an open rectangle is covered when every tile square it meets has a built tile (drawn this frame) and the piece is
+    // inside the board outline as litSquareOpaque finds it (its margin of two device pixels: the tile is opaque there). A
+    // block the outline crosses is cut into BLOCK_SPLIT wide blocks, found the same way (the sky along the board's edge).
+    // The sky drawn is clipped to the open rectangles as before, so the pixels drawn are the same; those not drawn are
+    // under opaque tile pixels. Null (the whole raster) when the sky cannot draw blocks for this canvas.
+    coverSkyBlocks(ctx, open, view, ox, oy) {
+        const cw = ctx.canvas.width, ch = ctx.canvas.height, B = atmosphericBackground
+        if (!open.length || !B.blocksFor(cw, ch))
+            return null
+        const W = B.BLOCK_W, H = B.BLOCK_H, S = Math.min(W, B.BLOCK_SPLIT || W), blocks = []
+        const covered = (x0, y0, x1, y1) => {
+            for (let v = Math.floor((y0 - oy) / LIT_TILE); v <= Math.floor((y1 - 1 - oy) / LIT_TILE); ++v)
+                for (let u = Math.floor((x0 - ox) / LIT_TILE); u <= Math.floor((x1 - 1 - ox) / LIT_TILE); ++u)
+                    if (view.tiles.get(u + ',' + v)?.litOutline !== mapDepth.outline || !mapDepth.outline)
+                        return false
+            return this.litSquareOpaque(view, x0 - ox, y0 - oy, x1 - ox, y1 - oy)
+        }
+        const needed = (x, y, x1, y1) => {
+            for (const r of open) {
+                const px0 = Math.max(x, r.x), py0 = Math.max(y, r.y), px1 = Math.min(x1, r.x + r.w), py1 = Math.min(y1, r.y + r.h)
+                if (px0 < px1 && py0 < py1 && !covered(px0, py0, px1, py1))
+                    return true
+            }
+            return false
+        }
+        for (let y = 0; y < ch; y += H)
+            for (let x = 0; x < cw; x += W) {
+                const x1 = Math.min(cw, x + W), y1 = Math.min(ch, y + H)
+                if (!needed(x, y, x1, y1))
+                    continue
+                if (S >= W || !this.litOutlineMeets(view, x - ox, y - oy, x1 - ox, y1 - oy))
+                    blocks.push({x, y, w: x1 - x, h: y1 - y})
+                else
+                    for (let sx = x; sx < x1; sx += S)
+                        if (needed(sx, y, Math.min(x1, sx + S), y1))
+                            blocks.push({x: sx, y, w: Math.min(x1, sx + S) - sx, h: y1 - y})
+            }
+        return blocks
+    }
+    // TASK-1545: whether a side of the board outline's loop meets the device rectangle x0..x1 x y0..y1 of view's tile pixels
+    // grown by litSquareOpaque's margin (two device pixels).
+    litOutlineMeets(view, x0, y0, x1, y1) {
+        const loop = mapDepth.outlineLoop
+        if (!loop)
+            return true
+        const m = 2
+        const left = (x0 - m - view.e) / view.a, right = (x1 + m - view.e) / view.a
+        const top = (y0 - m - view.f) / view.d, bottom = (y1 + m - view.f) / view.d
+        for (let k = 0; k < loop.length; ++k) {
+            const p = loop[k], q = loop[(k + 1) % loop.length]
+            if (Math.max(p.x, q.x) >= left && Math.min(p.x, q.x) <= right &&
+                    Math.max(p.y, q.y) >= top && Math.min(p.y, q.y) <= bottom)
+                return true
+        }
+        return false
     }
     // Whether the device rectangle x0..x1 x y0..y1 of view's tile pixels is opaque on a lit tile:
     // inside the board outline's loop (with a margin of two device pixels), where the underlay's
@@ -5610,7 +5674,8 @@ class Grid extends SpritesGroup {
         const right = (x + S - view.e) / view.a, bottom = (y + S - view.f) / view.d
         if (right < b.left || left > b.right || bottom < b.top || top > b.bottom)
             return null
-        const canvas = this.litTilePool.pop() || document.createElement('canvas')
+        // TASK-1545: drawn on the build canvas (litTileScratch), then kept as its quarters (litTileParts).
+        const canvas = this.litTileScratch ||= document.createElement('canvas')
         canvas.gradientSource = litGradientSource()
         if (canvas.width !== S || canvas.height !== S) {
             canvas.width = S
@@ -5643,9 +5708,75 @@ class Grid extends SpritesGroup {
         g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
         atmosphericLighting.lightTile(g, this, view.outline)
         g.restore()
+        const tile = this.litTileParts(canvas, view, x + P, y + P)
+        tile.litOutline = mapDepth.outline
         // The board outline the tile's drawn square is opaque under (frameCover), if any.
-        canvas.litOpaque = this.litSquareOpaque(view, x + P, y + P, x + P + LIT_TILE, y + P + LIT_TILE) ? mapDepth.outline : null
-        return canvas
+        tile.litOpaque = this.litSquareOpaque(view, x + P, y + P, x + P + LIT_TILE, y + P + LIT_TILE) ? mapDepth.outline : null
+        return tile
+    }
+    // TASK-1545: a lit tile is kept as its four LIT_TILE_PART squares, each a canvas of its own (litTilePool), copied
+    // whole-pixel from the build canvas's drawn square (its pad left out): a frame draws (and its canvas records) only the
+    // quarters on the canvas, not whole tiles a quarter of which is in view along the canvas's sides (a Chromium canvas
+    // records about 32 MB of images before it rasterizes inside the frame). A quarter the board's drawing cannot reach
+    // (litPartEmpty) is not kept. {parts: [top left, top right, bottom left, bottom right] (null: empty), litOpaque}.
+    litTileParts(canvas, view, x, y) {
+        const P = LIT_TILE_PAD, Q = LIT_TILE_PART, parts = []
+        for (let k = 0; k < 4; ++k) {
+            const qx = (k & 1) * Q, qy = (k >> 1) * Q
+            if (Grid.litPartSkips && this.litPartEmpty(view, x + qx, y + qy, x + qx + Q, y + qy + Q)) {
+                parts.push(null)
+                continue
+            }
+            const part = this.litTilePool.pop() || document.createElement('canvas')
+            if (part.width !== Q || part.height !== Q) {
+                part.width = Q
+                part.height = Q
+            }
+            const g = part.getContext('2d')
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalAlpha = 1
+            g.globalCompositeOperation = 'copy'
+            g.drawImage(canvas, P + qx, P + qy, Q, Q, 0, 0, Q, Q)
+            g.globalCompositeOperation = 'source-over'
+            parts.push(part)
+        }
+        return {parts, width: LIT_TILE, height: LIT_TILE}
+    }
+    // TASK-1545: whether nothing a lit tile draws (drawLitScene: the slab's underlay and sides below the board's edge, the
+    // surface, shadows, fog, rim and buildings; the light within the outline) can reach the device rectangle x0..x1 x y0..y1
+    // of view's pixels: the rectangle grown by LIT_PART_REACH hex radii and the slab's depth lies wholly outside the board
+    // outline's loop (no side of it meets the grown rectangle, whose centre is outside).
+    litPartEmpty(view, x0, y0, x1, y1) {
+        const loop = mapDepth.outlineLoop
+        if (!loop)
+            return false
+        const m = LIT_PART_REACH * basis.r + (mapDepth.depth || 0)
+        const left = (x0 - view.e) / view.a - m, right = (x1 - view.e) / view.a + m
+        const top = (y0 - view.f) / view.d - m, bottom = (y1 - view.f) / view.d + m
+        const cx = (left + right) / 2, cy = (top + bottom) / 2
+        let inside = false
+        for (let k = 0; k < loop.length; ++k) {
+            const p = loop[k], q = loop[(k + 1) % loop.length]
+            if (Math.max(p.x, q.x) >= left && Math.min(p.x, q.x) <= right &&
+                    Math.max(p.y, q.y) >= top && Math.min(p.y, q.y) <= bottom)
+                return false
+            if ((p.y > cy) !== (q.y > cy) && cx < p.x + (cy - p.y) * (q.x - p.x) / (q.y - p.y))
+                inside = !inside
+        }
+        return !inside
+    }
+    // TASK-1545: tile (litTileParts) drawn with its top left corner at device pixel x, y (identity transform) on a cw x ch
+    // canvas: its quarters on the canvas.
+    drawLitTileAt(ctx, tile, x, y, cw, ch) {
+        const Q = LIT_TILE_PART
+        for (let k = 0; k < 4; ++k) {
+            const part = tile.parts[k]
+            if (!part)
+                continue
+            const px = x + (k & 1) * Q, py = y + (k >> 1) * Q
+            if (px < cw && py < ch && px + Q > 0 && py + Q > 0)
+                ctx.drawImage(part, px, py)
+        }
     }
     // The frame's light where the lit tiles left the board's edge unlit (litEdges), after the
     // tiles and before the units; none over the rest snapshot.
@@ -5691,8 +5822,17 @@ class Grid extends SpritesGroup {
         atmosphericLighting.drawEdges(ctx, this, runs)
     }
     releaseLitTile(tile) {
-        if (tile && this.litTilePool.length < LIT_TILE_POOL)
-            this.litTilePool.push(tile)
+        if (!tile)
+            return
+        for (const part of tile.parts) {
+            if (!part)
+                continue
+            if (this.litTilePool.length < 4 * LIT_TILE_POOL)
+                this.litTilePool.push(part)
+            else
+                part.width = part.height = 0
+        }
+        tile.parts = []
     }
     dropLitView() {
         if (this.litView) {
@@ -5706,7 +5846,12 @@ class Grid extends SpritesGroup {
     // Releases every lit canvas (the surface cache draws the board).
     releaseLitCanvases() {
         this.dropLitView()
+        for (const part of this.litTilePool)
+            part.width = part.height = 0
         this.litTilePool.length = 0
+        if (this.litTileScratch)
+            this.litTileScratch.width = this.litTileScratch.height = 0
+        this.litTileScratch = undefined
         if (this.litRestCanvas)
             this.litRestCanvas.width = this.litRestCanvas.height = 0
         this.litRestCanvas = undefined
@@ -5720,14 +5865,16 @@ class Grid extends SpritesGroup {
             this.litCellShown.width = this.litCellShown.height = 0
         this.litCellShown = undefined
     }
-    // Bytes of the lit canvases: the view's tiles, the pool, the rest snapshot and the lit patch buffer.
+    // Bytes of the lit canvases: the view's tiles' quarters, the pool, the build canvas, the rest snapshot and the lit patch
+    // buffer.
     litTileBytes() {
-        let tiles = this.litTilePool.length
+        let parts = this.litTilePool.length
         if (this.litView)
-            for (const tile of this.litView.tiles.values()) if (tile) ++tiles
+            for (const tile of this.litView.tiles.values()) if (tile) parts += tile.parts.filter(Boolean).length
         const rest = this.litRestCanvas ? this.litRestCanvas.width * this.litRestCanvas.height * 4 : 0
         const buffer = this.litPatchBuffer ? this.litPatchBuffer.width * this.litPatchBuffer.height * 4 : 0
-        return tiles * (LIT_TILE + 2 * LIT_TILE_PAD) ** 2 * 4 + rest + buffer
+        const scratch = this.litTileScratch ? this.litTileScratch.width * this.litTileScratch.height * 4 : 0
+        return parts * LIT_TILE_PART ** 2 * 4 + scratch + rest + buffer
     }
     drawMapSurface(ctx) {
         // TASK-1395: the zoom raster's board (renderZoomBoard) is drawn directly: the surface cache and the lit view's
@@ -7551,6 +7698,10 @@ Grid.litLayers = true
 // TASK-1377: a lit view holding exactly vouches for the light map (atmosphericLighting.trust) and drawLitEdges keeps its runs
 // (litEdgeRuns). False: every frame compares the whole board's light state and finds the runs again.
 Grid.litTrust = true
+// TASK-1545: lit tiles' quarters the board cannot reach are not kept (Grid.litTileParts).
+Grid.litPartSkips = true
+// TASK-1545: a frame on the lit tiles draws only the sky's blocks the board leaves open (Grid.coverSkyBlocks).
+Grid.skyBlocks = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
 const SURFACE_CACHE_CHECK_MS = 500
 // The surface cache's captured state (captureSurfaceState), swapped for a lit view's copy (withLitState).
@@ -7566,6 +7717,10 @@ const SURFACE_ADOPTED_FIELDS = ['surfaceCache', 'surfaceCacheScale', 'surfaceCac
 // rest snapshot's bands.
 const LIT_TILE = 256
 const LIT_TILE_PAD = 8
+// TASK-1545: a lit tile's quarter (Grid.litTileParts) and the reach (hex radii, besides the slab's depth) of a tile's drawing
+// past the board outline (Grid.litPartEmpty: buildings and their shadows on the edge cells, the rim).
+const LIT_TILE_PART = LIT_TILE / 2
+const LIT_PART_REACH = 1.5
 const LIT_TILE_BUDGET = 5
 // TASK-1372: tiles a frame without a stand-in builds itself (drawLitView; more and it draws the board live, planLitView), and
 // tiles a task builds meanwhile (queueLitTiles).
@@ -7720,7 +7875,9 @@ const LIT_PIECE_REACH = [1, 1.3, 1, 1]
 const LIT_PIECE_PAD = 3
 // About LIT_PIECE_VISIBLE pieces in a canvas-sized view (merged while more; a frame draws one call a piece in view), pairs
 // compared for at most LIT_PIECE_MERGE_LIMIT rectangles.
-const LIT_PIECE_VISIBLE = 6
+const LIT_PIECE_VISIBLE = 30
+// TASK-1545: a piece's largest side (device pixels; Grid.litLayerPieces cuts larger ones).
+const LIT_PIECE_MAX_SIDE = 1024
 const LIT_PIECE_MERGE_LIMIT = 400
 // Width (device pixels) of the rows the overlay snapshot's rectangles are packed in (Grid.renderOverlaySnapshot).
 const OVERLAY_SNAPSHOT_ROW = 1024

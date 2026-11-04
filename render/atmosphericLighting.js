@@ -189,6 +189,9 @@ const atmosphericLighting = {
     mapKey: '',
     mapScale: 0,
     rebuilds: 0,
+    // TASK-1545: counts every drawing on (or reset of) the light map's and gain's canvases, so copies of their pixels
+    // (edgeTileSet) know when they are stale (rebuilds alone does not: a quiet owner sync keeps it).
+    mapEdits: 0,
     // TASK-1377: work counters: lightState builds, sameLightState full comparisons and lightMap calls answered by the trust
     // below without either.
     work: {lightStates: 0, stateCompares: 0, trusted: 0},
@@ -228,6 +231,7 @@ const atmosphericLighting = {
         return this.map
     },
     release() {
+        ++this.mapEdits
         if (this.map) this.map.width = this.map.height = 0
         if (this.gain) this.gain.width = this.gain.height = 0
         if (this.beamRaster) this.beamRaster.width = this.beamRaster.height = 0
@@ -532,6 +536,7 @@ const atmosphericLighting = {
         this.mapOwners = owners
         this.mapKey = key
         this.mapScale = scale
+        ++this.mapEdits
         ++this.rebuilds
     },
     // Whether lightMap(board, cap) returns the map it has (no rebuild), outside a zoom gesture.
@@ -632,6 +637,7 @@ const atmosphericLighting = {
         const kept = ['map', 'gain'].map(name =>
             regions.map(({inner, outer}, k) => copyCanvasRing(this[name], outer, inner, this.regionScratch, name + k)))
         yield
+        ++this.mapEdits
         const g = this.map.getContext('2d'), k = this.gain.getContext('2d')
         for (const c of [g, k]) {
             c.save()
@@ -670,6 +676,7 @@ const atmosphericLighting = {
         yield
         for (const ring of kept[0]) restoreCanvasRing(this.map, ring)
         for (const ring of kept[1]) restoreCanvasRing(this.gain, ring)
+        ++this.mapEdits
         ++this.rebuilds
         this.mapState = drawnState
         this.mapOwners = drawnOwners
@@ -752,6 +759,7 @@ const atmosphericLighting = {
         return bounds ? 1 / this.resolution(bounds, cap) : 0
     },
     canvasFor(name, bounds, scale) {
+        ++this.mapEdits
         const surface = this[name] || document.createElement('canvas')
         atmosphericBackground.watch(surface)
         surface.width = Math.max(1, Math.ceil((bounds.right - bounds.left) * scale))
@@ -765,6 +773,7 @@ const atmosphericLighting = {
     // transform canvasFor sets.
     // target (regionLight): its canvases, their origin {left, top} the world point of their first pixel.
     redrawContext(name, bounds, scale, target = null) {
+        if (!target) ++this.mapEdits
         const g = (target ? target[name] : this[name]).getContext('2d')
         g.globalAlpha = 1
         g.globalCompositeOperation = 'source-over'
@@ -2083,12 +2092,98 @@ const atmosphericLighting = {
             x1 = Math.max(x1, run.x + run.w); y1 = Math.max(y1, run.y + run.h)
         }
         ctx.save()
-        clip(runs)
-        this.drawMapPart(ctx, map,
-            Math.max(viewLeft, (x0 - t.e) / t.a - grow), Math.max(viewTop, (y0 - t.f) / t.d - grow),
-            Math.min(viewRight, (x1 - t.e) / t.a + grow), Math.min(viewBottom, (y1 - t.f) / t.d + grow))
+        if (!this.drawEdgeTiles(ctx, map, runs, clip)) {
+            clip(runs)
+            this.drawMapPart(ctx, map,
+                Math.max(viewLeft, (x0 - t.e) / t.a - grow), Math.max(viewTop, (y0 - t.f) / t.d - grow),
+                Math.min(viewRight, (x1 - t.e) / t.a + grow), Math.min(viewBottom, (y1 - t.f) / t.d + grow))
+        }
         this.bloom(ctx, board, {runs})
         ctx.restore()
+    },
+    // TASK-1545: drawEdges' multiply and color-dodge from tiles of the light map and gain (edgeTileSet: EDGE_TILE map pixels a
+    // side and EDGE_TILE_MARGIN more each way, copies of the maps' pixels), not from the whole maps: a frame drawing the two
+    // whole maps (2 x 8.4 MB at the user's 0.156 on a 55x55 board) besides its sky, lit tiles and lit layer passes the images a
+    // Chromium canvas records before it rasterizes (about 32 MB: the frame's drawing then rasterized inside it). Under the
+    // runs' clip (drawEdges'), each tile meeting a run draws its cell: the device pixels between the whole pixels nearest
+    // its edges (the cells abut, no pixel drawn twice or partly), within the canvas and the map's bounds, through the same
+    // world-to-map mapping as the whole map's draw; Chromium's filter reads past a draw's source rectangle, which the
+    // tile's margin holds, so each pixel samples the same map point from the same neighbours. All multiplies first, then
+    // the color-dodges, as drawMapPart. Returns false (nothing drawn) when off (edgeTiles), for a transform that is not a
+    // positive scale, or a cell needing more than the margin; drawEdges then draws from the whole maps.
+    edgeTiles: true,
+    EDGE_TILE: 64,
+    EDGE_TILE_MARGIN: 4,
+    edgeTileSet: null,
+    edgeTileBuilds: 0,
+    drawEdgeTiles(ctx, map, runs, clip) {
+        const t = ctx.getTransform(), bounds = mapDepth.surfaceBounds
+        if (!this.edgeTiles || !this.gain || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return false
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        const sx = map.width / w, sy = map.height / h, T = this.EDGE_TILE, M = this.EDGE_TILE_MARGIN
+        let set = this.edgeTileSet
+        if (!set || set.map !== map || set.gain !== this.gain || set.edits !== this.mapEdits || set.W !== map.width || set.H !== map.height ||
+                set.T !== T || set.M !== M) {
+            if (set) for (const tile of set.tiles.values()) tile.map.width = tile.map.height = tile.gain.width = tile.gain.height = 0
+            set = this.edgeTileSet = {map, gain: this.gain, edits: this.mapEdits, W: map.width, H: map.height, T, M, tiles: new Map()}
+        }
+        const cols = Math.ceil(map.width / T), rows = Math.ceil(map.height / T), cw = ctx.canvas.width, ch = ctx.canvas.height
+        // The cells' device edges: tile column k's left (row l's top) edge rounded to a whole pixel, the map's bounds outside.
+        const bx0 = bounds.left * t.a + t.e, bx1 = bounds.right * t.a + t.e, by0 = bounds.top * t.d + t.f, by1 = bounds.bottom * t.d + t.f
+        const cutX = k => k <= 0 ? bx0 : k >= cols ? bx1 : Math.round((bounds.left + k * T / sx) * t.a + t.e)
+        const cutY = l => l <= 0 ? by0 : l >= rows ? by1 : Math.round((bounds.top + l * T / sy) * t.d + t.f)
+        const colOf = x => Math.max(0, Math.min(cols - 1, Math.floor(((x - t.e) / t.a - bounds.left) * sx / T)))
+        const rowOf = y => Math.max(0, Math.min(rows - 1, Math.floor(((y - t.f) / t.d - bounds.top) * sy / T)))
+        const cells = new Map()
+        for (const run of runs) {
+            const x1 = run.x + run.w, y1 = run.y + run.h
+            for (let k = Math.max(0, colOf(run.x) - 1); k < cols && cutX(k) < x1; ++k) {
+                if (cutX(k + 1) <= run.x) continue
+                for (let l = Math.max(0, rowOf(run.y) - 1); l < rows && cutY(l) < y1; ++l)
+                    if (cutY(l + 1) > run.y) cells.set(k * 65536 + l, [k, l])
+            }
+        }
+        // Every cell's part first (one outside its tile's margin: the whole maps draw instead).
+        const parts = []
+        for (const [key, [k, l]] of cells) {
+            const x0 = Math.max(0, cutX(k)), x1 = Math.min(cw, cutX(k + 1)), y0 = Math.max(0, cutY(l)), y1 = Math.min(ch, cutY(l + 1))
+            if (x0 >= x1 || y0 >= y1) continue
+            const left = (x0 - t.e) / t.a, right = (x1 - t.e) / t.a, top = (y0 - t.f) / t.d, bottom = (y1 - t.f) / t.d
+            const tx0 = Math.max(0, k * T - M), ty0 = Math.max(0, l * T - M)
+            const tx1 = Math.min(map.width, (k + 1) * T + M), ty1 = Math.min(map.height, (l + 1) * T + M)
+            const sx0 = (left - bounds.left) * sx, sy0 = (top - bounds.top) * sy, sx1 = (right - bounds.left) * sx, sy1 = (bottom - bounds.top) * sy
+            // The filter's reach past the part: a map pixel each way, at the map's own edge none.
+            if (sx0 - 1 < tx0 && tx0 > 0 || sy0 - 1 < ty0 && ty0 > 0 || sx1 + 1 > tx1 && tx1 < map.width || sy1 + 1 > ty1 && ty1 < map.height)
+                return false
+            parts.push({key, left, top, right, bottom, tx0, ty0, tx1, ty1, sx0, sy0, sx1, sy1})
+        }
+        clip(runs)
+        const operation = ctx.globalCompositeOperation
+        for (const name of ['map', 'gain']) {
+            ctx.globalCompositeOperation = name === 'map' ? 'multiply' : 'color-dodge'
+            for (const part of parts) {
+                let tile = set.tiles.get(part.key)
+                if (!tile) {
+                    tile = {map: this.edgeTileCopy(map, part), gain: this.edgeTileCopy(this.gain, part)}
+                    set.tiles.set(part.key, tile)
+                    ++this.edgeTileBuilds
+                }
+                ctx.drawImage(tile[name], part.sx0 - part.tx0, part.sy0 - part.ty0, part.sx1 - part.sx0, part.sy1 - part.sy0,
+                    part.left, part.top, part.right - part.left, part.bottom - part.top)
+            }
+        }
+        ctx.globalCompositeOperation = operation
+        return true
+    },
+    // A tile of an edge tile set (drawEdgeTiles): source's pixels tx0..tx1 x ty0..ty1, copied.
+    edgeTileCopy(source, {tx0, ty0, tx1, ty1}) {
+        const canvas = document.createElement('canvas')
+        canvas.width = tx1 - tx0
+        canvas.height = ty1 - ty0
+        const g = canvas.getContext('2d')
+        g.globalCompositeOperation = 'copy'
+        g.drawImage(source, tx0, ty0, tx1 - tx0, ty1 - ty0, 0, 0, tx1 - tx0, ty1 - ty0)
+        return canvas
     },
     // Bloom: a cave is graded per pixel (grade below) to grey-beige stone, darker towards its
     // far side, round one glowing doorway and its flame, its carved arch traced by dark grooves and a lit crest. Other lamp sprites are shaded
@@ -2660,6 +2755,7 @@ const atmosphericLighting = {
                 (pos.y + far) * t.d + t.f >= run.y && (pos.y - far) * t.d + t.f <= run.y + run.h))
         }
         if (!sources.length) return
+        if (runs && this.drawBloomCopies(ctx, board, sources, r)) return
         ctx.save()
         for (const source of sources) {
             const building = this.lampBuilding(board, source)
@@ -2677,6 +2773,99 @@ const atmosphericLighting = {
             ctx.drawImage(glow, building.pos.x - pad, building.pos.y - pad)
         }
         ctx.restore()
+    },
+    // TASK-1545: drawEdges' lamp overlays (bloom with runs, every pan frame on the lit tiles) drawn from copies matched to the
+    // draw (scaledCopy): each overlay drawn at its place under ctx's transform is drawn on a canvas of its device pixels'
+    // size at the same scale and sub-pixel phase (the same samples of the overlay: a pixel's value its own as drawn on ctx,
+    // edge coverage in its alpha), and the frame draws those copies whole at whole device pixels, in bloom's order and
+    // operations: the same pixels (multiply and screen take a partly covered pixel as the coverage's mix, which the copy's
+    // alpha gives), but the frame records 36 and 80 px copies, not 227 and 513 px overlays (sixteen a frame at the user's
+    // 0.156: 10 MB of the images a Chromium canvas records before it rasterizes, drawEdgeTiles). A copy is kept per
+    // overlay and place while its scale and phase hold (a pan changes the phase: drawn again), dropped when not drawn for
+    // SCALED_COPY_AGE of these frames. False (nothing drawn) when off, for a transform that is not a positive scale or an
+    // overlay not at least SCALED_COPY_MIN times larger than its copy; bloom then draws the overlays.
+    scaledCopies: true,
+    SCALED_COPY_MIN: 4,
+    SCALED_COPY_AGE: 120,
+    scaledCopyMap: new Map(),
+    scaledCopyIds: new WeakMap(),
+    scaledCopyNext: 0,
+    scaledCopyClock: 0,
+    scaledCopyBuilds: 0,
+    drawBloomCopies(ctx, board, sources, r) {
+        const t = ctx.getTransform()
+        if (!this.scaledCopies || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0) return false
+        const draws = []
+        for (const source of sources) {
+            const building = this.lampBuilding(board, source)
+            const image = building && cachedImages[board.getEntityBodyImageName(building)]
+            if (!image || !image.width || !building.pos) {
+                const c = this.core(source), copy = this.scaledCopy(ctx, t, this.bloomImage(), c.x - r, c.y - r, 2 * r, 2 * r)
+                if (!copy) return false
+                draws.push(['screen', copy])
+                continue
+            }
+            const {shade, glow, pad} = this.lampOverlay(image, source.name)
+            const a = this.scaledCopy(ctx, t, shade, building.pos.x, building.pos.y, shade.width, shade.height)
+            const b = a && this.scaledCopy(ctx, t, glow, building.pos.x - pad, building.pos.y - pad, glow.width, glow.height)
+            if (!b) return false
+            draws.push(['multiply', a], ['screen', b])
+        }
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        for (const [operation, copy] of draws) {
+            ctx.globalCompositeOperation = operation
+            ctx.drawImage(copy.canvas, copy.X0, copy.Y0)
+        }
+        ctx.restore()
+        this.pruneScaledCopies()
+        return true
+    },
+    // The copy of image drawn at x, y, w x h (world) under transform t of ctx (drawBloomCopies): {canvas, X0, Y0}, its top left
+    // device pixel; null when image is not SCALED_COPY_MIN times the copy's area.
+    scaledCopy(ctx, t, image, x, y, w, h) {
+        if (!image || !image.width || !image.height) return null
+        const X = x * t.a + t.e, Y = y * t.d + t.f, X0 = Math.floor(X), Y0 = Math.floor(Y)
+        const cw = Math.ceil(X + w * t.a) - X0, ch = Math.ceil(Y + h * t.d) - Y0
+        if (cw <= 0 || ch <= 0 || cw * ch * this.SCALED_COPY_MIN > image.width * image.height) return null
+        let id = this.scaledCopyIds.get(image)
+        if (id === undefined) this.scaledCopyIds.set(image, id = ++this.scaledCopyNext)
+        const key = id + ':' + x + ':' + y + ':' + w + ':' + h, fx = X - X0, fy = Y - Y0
+        let copy = this.scaledCopyMap.get(key)
+        if (!copy || copy.image !== image || copy.iw !== image.width || copy.ih !== image.height || copy.a !== t.a || copy.d !== t.d ||
+                copy.fx !== fx || copy.fy !== fy || copy.smoothing !== ctx.imageSmoothingEnabled || copy.quality !== ctx.imageSmoothingQuality) {
+            const canvas = copy ? copy.canvas : document.createElement('canvas')
+            if (canvas.width !== cw || canvas.height !== ch) {
+                canvas.width = cw
+                canvas.height = ch
+            }
+            const g = canvas.getContext('2d')
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.globalCompositeOperation = 'source-over'
+            g.globalAlpha = 1
+            g.clearRect(0, 0, cw, ch)
+            g.imageSmoothingEnabled = ctx.imageSmoothingEnabled
+            g.imageSmoothingQuality = ctx.imageSmoothingQuality
+            g.setTransform(t.a, 0, 0, t.d, fx, fy)
+            g.drawImage(image, 0, 0, w, h)
+            copy = {canvas, image, iw: image.width, ih: image.height, a: t.a, d: t.d, fx, fy, smoothing: ctx.imageSmoothingEnabled,
+                quality: ctx.imageSmoothingQuality}
+            this.scaledCopyMap.set(key, copy)
+            ++this.scaledCopyBuilds
+        }
+        copy.used = this.scaledCopyClock
+        copy.X0 = X0
+        copy.Y0 = Y0
+        return copy
+    },
+    pruneScaledCopies() {
+        const now = ++this.scaledCopyClock
+        if (now % 30) return
+        for (const [key, copy] of this.scaledCopyMap)
+            if (now - copy.used > this.SCALED_COPY_AGE) {
+                copy.canvas.width = copy.canvas.height = 0
+                this.scaledCopyMap.delete(key)
+            }
     }
 }
 

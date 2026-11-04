@@ -233,7 +233,47 @@ class ParchmentIconImage {
         const scale = this.w / this.size
         const margin = ParchmentIconImage.margin(this.size) * scale
         const side = this.canvas.width * scale
-        ctx.drawImage(this.canvas, this.pos.x - this.w / 2 - margin, this.pos.y - this.h / 2 - margin, side, side)
+        const x = this.pos.x - this.w / 2 - margin, y = this.pos.y - this.h / 2 - margin
+        if (!this.drawCropped(ctx, x, y, side))
+            ctx.drawImage(this.canvas, x, y, side, side)
+    }
+    // TASK-1545: an icon drawn partly off the canvas (the screen corners' buttons, their drop shadow's margin) is drawn from
+    // a copy of the part of its raster on the canvas, CROP_MARGIN pixels more each way (the filter's neighbours), at the
+    // same place and scale: the same pixels, but the frame's canvas records the part, not the whole raster (a Chromium
+    // canvas records about 32 MB of images before it rasterizes inside the frame). The copy is kept while the part is the
+    // same. False (not drawn) for a transform that is not a positive scale, one making the raster smaller (a filter reading
+    // more than its neighbours there), or
+    // most of the icon on the canvas.
+    static cropped = true
+    static CROP_MARGIN = 2
+    drawCropped(ctx, x, y, side) {
+        const canvas = this.canvas, t = ctx.getTransform()
+        if (!ParchmentIconImage.cropped || t.b !== 0 || t.c !== 0 || t.a <= 0 || t.d <= 0 || !canvas.width)
+            return false
+        const k = side / canvas.width, ax = t.a * k, ay = t.d * k
+        if (ax < 0.999 || ay < 0.999)
+            return false
+        // The raster's pixels on the canvas (device x = X + px * ax), grown by the margin, whole pixels within the raster.
+        const X = x * t.a + t.e, Y = y * t.d + t.f, m = ParchmentIconImage.CROP_MARGIN
+        const px0 = Math.max(0, Math.floor(-X / ax) - m), py0 = Math.max(0, Math.floor(-Y / ay) - m)
+        const px1 = Math.min(canvas.width, Math.ceil((ctx.canvas.width - X) / ax) + m), py1 = Math.min(canvas.height, Math.ceil((ctx.canvas.height - Y) / ay) + m)
+        if (px0 >= px1 || py0 >= py1)
+            return true
+        if ((px1 - px0) * (py1 - py0) > 0.75 * canvas.width * canvas.height)
+            return false
+        const key = [px0, py0, px1, py1].join()
+        let crop = this.crop
+        if (!crop || crop.source !== canvas || crop.key !== key) {
+            const part = crop?.canvas || document.createElement('canvas')
+            part.width = px1 - px0
+            part.height = py1 - py0
+            const g = part.getContext('2d')
+            g.globalCompositeOperation = 'copy'
+            g.drawImage(canvas, px0, py0, px1 - px0, py1 - py0, 0, 0, px1 - px0, py1 - py0)
+            crop = this.crop = {canvas: part, source: canvas, key}
+        }
+        ctx.drawImage(crop.canvas, x + px0 * k, y + py0 * k, (px1 - px0) * k, (py1 - py0) * k)
+        return true
     }
     // The outline: sides on the touched screen edges straight, the others torn.
     static path(ctx, x, y, k, edgeX, edgeY) {

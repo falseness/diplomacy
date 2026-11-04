@@ -6,6 +6,7 @@ const atmosphericBackground = {
     maxBytes: 33554432, lightBytes: 2 * 2 * 1024 * 1024 * 4, minRasterScale: 0.75, fallbacks: 0,
     releaseRaster() {
         if (this.raster) this.raster.width = this.raster.height = 0
+        this.releaseBlocks()
         this.raster = this.rasterView = null
         this.dropRasterJob()
     },
@@ -397,7 +398,8 @@ const atmosphericBackground = {
         if (this.state === 'ready') ++this.rasterizations
         else ++this.fallbackRasterizations
     },
-    draw(ctx) {
+    // blocks (TASK-1545, Grid.frameCover's sky): the sky raster's blocks to draw, not the whole raster.
+    draw(ctx, blocks = null) {
         // Bind independently of the optional sprite startup counter.
         this.watch(ctx.canvas)
         this.syncKey()
@@ -405,7 +407,70 @@ const atmosphericBackground = {
             this.syncPage(false)
             return
         }
-        this.drawSky(ctx)
+        this.drawSky(ctx, blocks)
+    },
+    // TASK-1545: the sky raster drawn in pieces: a frame on the lit tiles draws only the raster's blocks (BLOCK_W x BLOCK_H of
+    // its pixels from its corner, the last column and row cut to it; BLOCK_SPLIT wide along the board's edge) the board leaves
+    // open (Grid.frameCover's sky), each row's
+    // run of consecutive blocks from one canvas copied whole-pixel from the raster when first drawn (kept while drawn, at
+    // most BLOCK_RUNS of them, until the raster is released), at its own place: the frame's canvas records those pieces,
+    // not the whole canvas-sized raster (a Chromium canvas records about 32 MB of images before it rasterizes inside the
+    // frame), in a call a run.
+    blocks: true,
+    BLOCK_W: 128,
+    BLOCK_H: 64,
+    BLOCK_SPLIT: 32,
+    BLOCK_RUNS: 96,
+    blockSet: null,
+    blockBuilds: 0,
+    releaseBlocks() {
+        if (this.blockSet) for (const run of this.blockSet.runs.values()) run.canvas.width = run.canvas.height = 0
+        this.blockSet = null
+    },
+    // Whether drawSky can draw blocks for a w x h canvas.
+    blocksFor(w, h) {
+        return this.blocks && !!otherSettings.atmosphericVisuals && !!this.raster && this.raster.width === w && this.raster.height === h &&
+            this.viewMatches(this.rasterView, w, h)
+    },
+    drawBlocks(ctx, blocks) {
+        const raster = this.raster
+        if (!this.blockSet || this.blockSet.raster !== raster) {
+            this.releaseBlocks()
+            this.blockSet = {raster, runs: new Map(), clock: 0}
+        }
+        const set = this.blockSet, clock = ++set.clock
+        // The blocks (in row order, each row left to right) joined into runs.
+        const runs = []
+        for (const block of blocks) {
+            const last = runs[runs.length - 1]
+            if (last && last.y === block.y && last.h === block.h && last.x + last.w === block.x)
+                last.w += block.w
+            else
+                runs.push({x: block.x, y: block.y, w: block.w, h: block.h})
+        }
+        for (const {x, y, w, h} of runs) {
+            const key = x + ',' + y + ',' + w + ',' + h
+            let run = set.runs.get(key)
+            if (!run) {
+                const canvas = document.createElement('canvas')
+                canvas.width = w
+                canvas.height = h
+                const g = canvas.getContext('2d')
+                g.globalCompositeOperation = 'copy'
+                g.drawImage(raster, x, y, w, h, 0, 0, w, h)
+                set.runs.set(key, run = {canvas})
+                ++this.blockBuilds
+            }
+            run.used = clock
+            ctx.drawImage(run.canvas, x, y)
+        }
+        if (set.runs.size > this.BLOCK_RUNS)
+            for (const [key, run] of [...set.runs].sort((p, q) => p[1].used - q[1].used).slice(0, set.runs.size - this.BLOCK_RUNS)) {
+                if (run.used === clock)
+                    break
+                run.canvas.width = run.canvas.height = 0
+                set.runs.delete(key)
+            }
     },
     // The viewport sky and the fixed light kernel are camera-scale independent.
     // Reuse them through wheel/pinch gestures; world layers use the draw transform.
@@ -431,7 +496,7 @@ const atmosphericBackground = {
             if (grid && !adopted) grid.surfaceCacheState = undefined
         }
     },
-    drawSky(ctx) {
+    drawSky(ctx, blocks = null) {
         this.load()
         const w = ctx.canvas.width, h = ctx.canvas.height
         if (!w || !h) return
@@ -472,7 +537,8 @@ const atmosphericBackground = {
         }
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        if (this.raster && this.raster.width === w) ctx.drawImage(this.raster, 0, 0)
+        if (blocks && this.blocksFor(w, h)) this.drawBlocks(ctx, blocks)
+        else if (this.raster && this.raster.width === w) ctx.drawImage(this.raster, 0, 0)
         else if (this.raster) ctx.drawImage(this.raster, 0, 0, w, h)
         else {
             // Decoded static image or navy: no per-frame gradient or blur regeneration
