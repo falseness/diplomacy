@@ -112,6 +112,13 @@ class Grid extends SpritesGroup {
         this.litLayerScratch = undefined
         this.litLayerBuilds = 0
         this.litLayerFrames = 0
+        // TASK-1546: the lit layer drawn in steps (Grid.litLayerSteps: litLayerRasterSteps), layers given up, tasks per layer.
+        this.litLayerJob = undefined
+        this.litLayerDrawnSerial = -1
+        this.litLayerRedrawn = undefined
+        this.litLayerRetired = undefined
+        this.litLayerJobsDropped = 0
+        this.litLayerTaskCounts = []
         // The overlays' composite on rest frames of the surface-cache path (drawOverlayComposite):
         // the last frame's calls and key, the canvas of its snapshot and the frames drawn.
         this.overlayComposite = undefined
@@ -144,6 +151,8 @@ class Grid extends SpritesGroup {
         this.zoomScreenCopies = 0
         this.zoomBitmapCopies = 0
         this.zoomSourceBitmaps = 0
+        // TASK-1546: snapshots not taken (keepZoomBitmap: lit-tile frames follow).
+        this.zoomBitmapSkips = 0
         this.zoomHoldStarts = 0
         this.zoomHeldFrames = 0
         this.zoomHoldDrops = 0
@@ -183,6 +192,17 @@ class Grid extends SpritesGroup {
         this.litView = undefined
         this.litRestCanvas = undefined
         this.litTilePool = []
+        // TASK-1546: the lit tile built a step a task (Grid.buildLitTiles: litTileStep), its canvas, tiles started / given up.
+        this.litTileJob = undefined
+        this.litTileJobCanvas = undefined
+        this.litTileJobs = 0
+        this.litTileJobsDropped = 0
+        this.litTileStepsQueued = false
+        this.litTileStepTasks = 0
+        // TASK-1546: the lit view made by tasks (Grid.litViewSteps: stepLitView), views started / given up.
+        this.litViewJob = undefined
+        this.litViewJobs = 0
+        this.litViewJobsDropped = 0
         // TASK-1377: drawLitEdges' last runs and how often they were found.
         this.litEdgeRuns = undefined
         this.litWork = {edgeRuns: 0}
@@ -4118,7 +4138,7 @@ class Grid extends SpritesGroup {
                 vx0 - nearX < layer.x0 && layer.x0 > layer.left || vy0 - nearY < layer.y0 && layer.y0 > layer.top ||
                 vx1 + nearX > layer.x0 + layer.width && layer.x0 + layer.width < layer.right ||
                 vy1 + nearY > layer.y0 + layer.height && layer.y0 + layer.height < layer.bottom)
-            this.queueLitLayer(ctx, t, state)
+            this.queueLitLayer(ctx, t, state, true)
         // The pieces in view, each copied whole at the layer's placement.
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
@@ -4135,16 +4155,26 @@ class Grid extends SpritesGroup {
                 (!isFogOfWar || this.fogOfWar[portal.coord.x][portal.coord.y] || fogShowsPortalPreview(portal)))
             entityInterface.refreshPortal(portal)
         ++this.litLayerFrames
+        this.litLayerDrawnSerial = this.drawSerial
         return true
     }
     dropLitLayer() {
+        // TASK-1546: one a kept recording or a zoom replay under way lists is retired instead (retireLitLayer).
+        if (this.litLayer && this.litLayerListed(this.litLayer)) {
+            this.retireLitLayer()
+            return
+        }
         for (const piece of this.litLayer?.pieces || [])
             piece.canvas.width = piece.canvas.height = 0
         this.litLayer = undefined
     }
     // The lit layer and its scratch canvas released (the frames left the lit tiles).
     releaseLitLayer() {
+        this.dropLitLayerJob()
         this.dropLitLayer()
+        for (const piece of this.litLayerRetired?.pieces || [])
+            piece.canvas.width = piece.canvas.height = 0
+        this.litLayerRetired = undefined
         if (this.litLayerScratch)
             this.litLayerScratch.width = this.litLayerScratch.height = 0
         this.litLayerScratch = undefined
@@ -4227,22 +4257,98 @@ class Grid extends SpritesGroup {
     }
     // Queues the lit layer for transform t of ctx, drawn from ctx's state now (one at a time). It is not built if the camera
     // came to rest, a zoom gesture began, the frames left the lit tiles or a unit is left out of the unit passes.
-    queueLitLayer(ctx, t, state) {
+    queueLitLayer(ctx, t, state, ahead = false) {
         if (this.litLayerQueued)
             return
         this.litLayerQueued = true
         const cw = ctx.canvas.width, ch = ctx.canvas.height
-        setTimeout(gridTask(() => {
-            this.litLayerQueued = false
+        // TASK-1546 (Grid.litLayerSteps): the layer drawn in steps (litLayerRasterSteps), as many a task as fit LIT_LAYER_TASK_MS
+        // (the first always), the next task queued until it is done; given up when the camera rests, a zoom begins, the
+        // frames leave the lit tiles or the camera's scale changes. Only one queued ahead while the last frame drew the layer
+        // (litLayerDrawnSerial: the frames draw it meanwhile) is stepped: without a layer to draw every frame between the steps
+        // draws the units and texts directly, more work than the steps left (a direct pan frame at 0.156 with debug texts ~2500
+        // calls), so such a layer is drawn at once as before (drawLitLayerRaster), and a stepped one the frames stop drawing
+        // meanwhile finishes its steps at once.
+        const steps = Grid.litLayerSteps ? this.litLayerRasterSteps(cw, ch, t, state) : null
+        const job = this.litLayerJob = steps ? {steps, tasks: 0} : undefined
+        const run = gridTask(() => {
             const screen = gameEvent.screen
-            if (!screen.surfaceMoving || screen.zoomGesture || this !== grid || this.frameSurface !== 'lit' ||
-                    this.stillUnitsHidden() || this.isObserving())
+            if (steps && this.litLayerJob !== job)
                 return
-            const layer = this.drawLitLayerRaster(cw, ch, t, state)
-            this.dropLitLayer()
+            if (!screen.surfaceMoving || screen.zoomGesture || this !== grid || this.frameSurface !== 'lit' ||
+                    this.stillUnitsHidden() || this.isObserving() ||
+                    steps && typeof mainCtx !== 'undefined' && (mainCtx.getTransform().a !== t.a || mainCtx.getTransform().d !== t.d)) {
+                this.litLayerQueued = false
+                if (steps)
+                    this.dropLitLayerJob()
+                return
+            }
+            let layer
+            const drawn = this.litLayerDrawnSerial === this.drawSerial
+            if (steps && !job.tasks && !(ahead && drawn)) {
+                this.litLayerJob = undefined
+                steps.return()
+            }
+            else if (steps) {
+                const start = performance.now(), budget = drawn ? LIT_LAYER_TASK_MS : Infinity
+                let last = 0, step
+                ++job.tasks
+                do {
+                    const t0 = performance.now()
+                    step = steps.next()
+                    last = performance.now() - t0
+                } while (!step.done && performance.now() - start + last <= budget)
+                if (!step.done) {
+                    setTimeout(run)
+                    return
+                }
+                this.litLayerJob = undefined
+                this.litLayerQueued = false
+                layer = step.value
+                // Given up (a cell or the key changed while it was drawn): the frames queue another.
+                if (!layer) {
+                    ++this.litLayerJobsDropped
+                    return
+                }
+                this.litLayerTaskCounts.push(job.tasks)
+                if (this.litLayerTaskCounts.length > 32)
+                    this.litLayerTaskCounts.shift()
+            }
+            if (!layer) {
+                this.litLayerQueued = false
+                layer = this.drawLitLayerRaster(cw, ch, t, state)
+                this.dropLitLayer()
+            }
+            else
+                this.retireLitLayer()
             this.litLayer = layer
             ++this.litLayerBuilds
-        }))
+        })
+        setTimeout(run)
+    }
+    // TASK-1546: the lit layer replaced by one drawn in steps is kept (litLayerRetired) until the next is: the last frame's
+    // recording (keepZoomSource) may draw its pieces, and a zoom raster made again from it (startZoomReplay) draws them then;
+    // the one retired before is released unless a kept recording or a replay under way still lists it.
+    retireLitLayer() {
+        const old = this.litLayerRetired
+        if (old && !this.litLayerListed(old))
+            for (const piece of old.pieces || [])
+                piece.canvas.width = piece.canvas.height = 0
+        this.litLayerRetired = this.litLayer
+        this.litLayer = undefined
+    }
+    litLayerListed(layer) {
+        return this.zoomSource?.layers?.[0] === layer || this.zoomReplayJob?.source?.layers?.[0] === layer
+    }
+    // TASK-1546: the lit layer under way given up (the copies it made released).
+    dropLitLayerJob() {
+        const job = this.litLayerJob
+        if (!job)
+            return
+        this.litLayerJob = undefined
+        this.litLayerQueued = false
+        job.steps.return()
+        ++this.litLayerJobsDropped
     }
     // The units pass and the cell texts as a frame on a cw x ch canvas at transform t with context state draws them (drawOther
     // 'units', drawCellText), within litLayerRect and on the same pixel grid: drawn on a transparent canvas of the
@@ -4251,12 +4357,25 @@ class Grid extends SpritesGroup {
     // the empty pixels between the units. Nothing is drawn (no pieces) for fewer than LIT_LAYER_MIN_CELLS cells and no
     // debug or logic texts.
     drawLitLayerRaster(cw, ch, t, state) {
+        const steps = this.litLayerRasterSteps(cw, ch, t, state, true)
+        let step
+        while (!(step = steps.next()).done);
+        return step.value
+    }
+    // TASK-1546: drawLitLayerRaster's work in steps (a generator; its value the layer): the units pass and the cell texts on
+    // the scratch canvas (one step: a frame between them would draw and clear the cells' info texts), then each piece's copy
+    // (rasterized by a one-pixel read). Stepped (once false: all in one task as before), the layer is the scratch's when the
+    // units were drawn: the pieces are new canvases (the layer the frames draw meanwhile keeps its own), its time is the
+    // drawing's, and it is given up (value null) when a cell it drew or its key changed by its end (litLayerSignature,
+    // litLayerKeyHolds).
+    *litLayerRasterSteps(cw, ch, t, state, once = false) {
+        const time = performance.now()
         const rect = this.litLayerRect(cw, ch, t)
         const {x0, y0, width, height} = rect
         const transform = {a: t.a, b: 0, c: 0, d: t.d, e: t.e - x0, f: t.f - y0}
         const range = this.drawRange({getTransform: () => transform, canvas: {width, height}})
         const {values, cells} = this.litLayerSignature(range)
-        let pieces = null
+        let pieces = null, key
         if (cells >= LIT_LAYER_MIN_CELLS || debug || this.drawLogicText) {
             let canvas = this.litLayerScratch
             if (!canvas || canvas.width < width || canvas.height < height) {
@@ -4281,36 +4400,67 @@ class Grid extends SpritesGroup {
             applyCanvasState(lctx, {...state, transform})
             this.drawOther(lctx, 'units')
             this.drawCellText(lctx)
+            // The key after the drawing (a logic text read the first time is made then, Grid.logicTextChanged).
+            key = this.litLayerKey()
+            if (!once)
+                yield
             // Each piece copied into its own canvas, rasterized by a one-pixel read in this task between frames (as
-            // queueOverlayLayer); the pieces of the layer before are reused where their size is the same.
+            // queueOverlayLayer); at once, the pieces of the layer before are reused where their size is the same.
             const pool = new Map()
-            for (const old of this.litLayer?.pieces || [])
-                pool.set(old.w + 'x' + old.h, [...(pool.get(old.w + 'x' + old.h) || []), old.canvas])
-            if (this.litLayer)
-                this.litLayer.pieces = null
-            pieces = parts.map(piece => {
-                let part = pool.get(piece.w + 'x' + piece.h)?.pop()
-                const pctx = (part ||= document.createElement('canvas')).getContext('2d')
-                if (part.width !== piece.w || part.height !== piece.h) {
-                    part.width = piece.w
-                    part.height = piece.h
+            // TASK-1546: the layer whose pieces are drawn again is noted (litLayerRedrawn: a recording listing it is stale,
+            // zoomSourceFor) and, while a kept recording lists it, its unused pieces are not released (a zoom replay of that
+            // recording draws them).
+            const listed = once && !!this.litLayer && this.litLayerListed(this.litLayer)
+            if (once) {
+                for (const old of this.litLayer?.pieces || [])
+                    pool.set(old.w + 'x' + old.h, [...(pool.get(old.w + 'x' + old.h) || []), old.canvas])
+                if (this.litLayer) {
+                    this.litLayerRedrawn = this.litLayer
+                    this.litLayer.pieces = null
                 }
-                else
-                    pctx.clearRect(0, 0, piece.w, piece.h)
-                pctx.drawImage(canvas, piece.x, piece.y, piece.w, piece.h, 0, 0, piece.w, piece.h)
-                pctx.getImageData(0, 0, 1, 1)
-                return {...piece, canvas: part}
-            })
-            for (const unused of pool.values())
-                for (const part of unused)
-                    part.width = part.height = 0
+            }
+            pieces = []
+            try {
+                for (const piece of parts) {
+                    if (pieces.length && !once)
+                        yield
+                    if (canvas !== this.litLayerScratch)
+                        return null
+                    let part = pool.get(piece.w + 'x' + piece.h)?.pop()
+                    const pctx = (part ||= document.createElement('canvas')).getContext('2d')
+                    if (part.width !== piece.w || part.height !== piece.h) {
+                        part.width = piece.w
+                        part.height = piece.h
+                    }
+                    else
+                        pctx.clearRect(0, 0, piece.w, piece.h)
+                    pctx.drawImage(canvas, piece.x, piece.y, piece.w, piece.h, 0, 0, piece.w, piece.h)
+                    pctx.getImageData(0, 0, 1, 1)
+                    pieces.push({...piece, canvas: part})
+                }
+            } finally {
+                // Given up: the copies made released.
+                if (pieces.length < parts.length)
+                    for (const piece of pieces)
+                        piece.canvas.width = piece.canvas.height = 0
+            }
+            if (!listed)
+                for (const unused of pool.values())
+                    for (const part of unused)
+                        part.width = part.height = 0
             if (Grid.litLayerAudit)
                 this.auditLitLayer(lctx, width, height, pieces)
+            if (!once && (!this.litLayerKeyHolds({key}) || !this.litLayerSignature(range, values))) {
+                for (const piece of pieces)
+                    piece.canvas.width = piece.canvas.height = 0
+                return null
+            }
         }
-        // The key after the drawing (a logic text read the first time is made then, Grid.logicTextChanged).
+        else
+            key = this.litLayerKey()
         return {pieces, a: t.a, d: t.d, e: t.e, f: t.f, cw, ch, x0, y0, width, height, left: rect.left, top: rect.top,
-            right: rect.right, bottom: rect.bottom, range, signature: values, cells, key: this.litLayerKey(), state,
-            time: performance.now()}
+            right: rect.right, bottom: rect.bottom, range, signature: values, cells, key, state,
+            time: once ? performance.now() : time}
     }
     // The lit layer's pieces for the cells of range at transform (the layer's own pixels, width x height): the cells that can
     // draw in the units pass or the cell texts (an overlay cell, a fogged portal's preview, with debug every cell's
@@ -4812,13 +4962,25 @@ class Grid extends SpritesGroup {
         // A view being patched holds while its patch does (patchLitView).
         const holds = !!view && !view.patch && this.litViewHolds(ctx, view, t) ? view : null
         if (!view || !(holds || this.patchLitView(ctx, view, t) || this.refreshLitTiles(ctx, view, t))) {
+            // TASK-1546: a view for a new scale (none, or the dropped one another's: a zoom's end) may be made by tasks below.
+            const newScale = !view || view.a !== t.a || view.d !== t.d
             this.dropLitView()
             // The light map at the camera's scale is built a step a task (queueLitTiles) while the surface cache stands in.
             if (!atmosphericLighting.lightMapReady(this) && this.litStandIn(ctx)) {
                 this.queueLitTiles(null, t, cw, ch)
                 return {t, cache: true}
             }
-            view = this.litView = this.newLitView(t, ctx.canvas)
+            // TASK-1546 (Grid.litViewSteps): a view for a new scale with the surface cache to stand in is made a step at a time
+            // by tasks between frames (stepLitView), the frames drawing the stand-in meanwhile; one for the same scale (the board
+            // changed past a patch) at once as before, so the frames keep the lit tiles.
+            if (Grid.litViewSteps && (newScale || this.litViewJob) && this.litStandIn(ctx)) {
+                const made = this.stepLitView(ctx, t)
+                if (!made)
+                    return {t, cache: true}
+                view = this.litView = made
+            }
+            else
+                view = this.litView = this.newLitView(t, ctx.canvas)
         }
         // The rest snapshot's cell layer brought up to the board (TASK-1315); a view dropped for it is made again.
         // TASK-1372: so is one whose snapshot's split is behind the board.
@@ -5292,6 +5454,50 @@ class Grid extends SpritesGroup {
             this.surfaceOverlayCells = overlayCells
         }
     }
+    // TASK-1546: the lit view for transform t's scale on ctx's canvas made by tasks (newLitViewSteps, as many steps a task as
+    // fit LIT_VIEW_TASK_MS, the first always): the view once made (taken: the job ends), else null with the job queued. A job
+    // for another scale or canvas size, or one whose light map changed meanwhile, is given up and started again.
+    stepLitView(ctx, t) {
+        const main = ctx.canvas
+        let job = this.litViewJob
+        if (job && (job.a !== t.a || job.d !== t.d || job.cw !== main.width || job.ch !== main.height ||
+                job.rebuilds !== atmosphericLighting.rebuilds || job.mapScale !== atmosphericLighting.mapScale)) {
+            this.litViewJob = undefined
+            ++this.litViewJobsDropped
+            job = undefined
+        }
+        if (job?.view) {
+            this.litViewJob = undefined
+            // Made from the board as it was: taken only if it holds for the board now, else made again.
+            if (this.litViewHolds(ctx, job.view, t))
+                return job.view
+            ++this.litViewJobsDropped
+            job = undefined
+        }
+        if (job)
+            return null
+        job = this.litViewJob = {a: t.a, d: t.d, cw: main.width, ch: main.height, rebuilds: atmosphericLighting.rebuilds,
+            mapScale: atmosphericLighting.mapScale, steps: this.newLitViewSteps(t, main), view: null, tasks: 0}
+        ++this.litViewJobs
+        const run = gridTask(() => {
+            if (this.litViewJob !== job || this !== grid)
+                return
+            const start = performance.now()
+            let last = 0, step
+            ++job.tasks
+            do {
+                const t0 = performance.now()
+                step = job.steps.next()
+                last = performance.now() - t0
+            } while (!step.done && performance.now() - start + last <= LIT_VIEW_TASK_MS)
+            if (step.done)
+                job.view = step.value
+            else
+                setTimeout(run)
+        })
+        setTimeout(run)
+        return null
+    }
     // A view at transform t of the camera's canvas main (no tiles yet): the board state now, the
     // light map at the camera's scale and the edge of its lit cells.
     newLitView(t, main) {
@@ -5520,14 +5726,113 @@ class Grid extends SpritesGroup {
     buildLitTiles(view, list, cap, atLeastOne) {
         const start = performance.now(), batch = view.unbuilt
         let built = 0
-        for (const {u, v} of list.slice(0, cap)) {
+        // TASK-1546 (Grid.litTileSteps): but for a batch, a tile is built a step at a time (litTileStep, its steps timed:
+        // litTileStepCost) while the task's time and the next step's estimate (the last step's) fit LIT_TASK_MS (at rest
+        // LIT_REST_TASK_MS); the first step of the task even when it does not when atLeastOne. A tile under way (litTileJob) is
+        // carried on in the next task.
+        const stepped = Grid.litTileSteps && !batch
+        // With the camera at rest (atLeastOne: the frames hold or draw the stand-in for the tiles not built yet) the steps fit
+        // LIT_REST_TASK_MS, so the tiles are not drawn from the stand-in for many more frames than when built a tile a task.
+        const budget = atLeastOne && !gameEvent.screen.surfaceMoving ? LIT_REST_TASK_MS : LIT_TASK_MS
+        let steps = 0, last = litTileStepCost.ms
+        const tiles = list.slice(0, cap)
+        // The tile under way first, while it is still one to build.
+        const job = this.litTileJob
+        if (stepped && job && job.view === view && tiles.some(m => m.u === job.u && m.v === job.v)) {
+            const k = tiles.findIndex(m => m.u === job.u && m.v === job.v)
+            tiles.unshift(...tiles.splice(k, 1))
+        }
+        for (const {u, v} of tiles) {
             if (view.tiles.has(u + ',' + v))
                 continue
+            if (stepped) {
+                for (;;) {
+                    if (performance.now() - start + last > budget && !(atLeastOne && !steps)) {
+                        // At rest the tile under way goes on in the next task at once (queueLitTileSteps), not a frame later.
+                        if (budget === LIT_REST_TASK_MS && this.litTileJob)
+                            this.queueLitTileSteps()
+                        return
+                    }
+                    const t0 = performance.now(), done = this.litTileStep(view, u, v)
+                    last = performance.now() - t0
+                    litTileStepCost.add(last)
+                    ++steps
+                    if (done)
+                        break
+                }
+                ++built
+                continue
+            }
             if (!batch && performance.now() - start + litTileCost.ms > LIT_TASK_MS && !(atLeastOne && !built))
                 return
             this.litTile(view, u, v)
             ++built
         }
+    }
+    // TASK-1546: with the camera at rest, the tile under way (litTileJob) built on by the next task (buildLitTiles at rest's
+    // budget, LIT_REST_TASK_MS, and again until it is done), as a tile was in one task before: the frames between are held.
+    // Not while the camera moves or zooms, the view is another, the lit tasks defer (litTaskDefers) or the view's cell layer
+    // is behind the board (litLayerBehind): the frames queue the tiles again then (queueLitTiles).
+    queueLitTileSteps() {
+        if (this.litTileStepsQueued)
+            return
+        this.litTileStepsQueued = true
+        const snapshots = this.overlaySnapshots
+        setTimeout(gridTask(() => {
+            this.litTileStepsQueued = false
+            const job = this.litTileJob, screen = gameEvent.screen
+            if (!job || this !== grid || screen.surfaceMoving || screen.surfaceZooming || job.view !== this.litView ||
+                    this.litTaskDefers(snapshots) || this.litLayerBehind(job.view))
+                return
+            ++this.litTileStepTasks
+            atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(job.view, [{u: job.u, v: job.v}], 1, true))
+        }))
+    }
+    // TASK-1546: a step of tile (u, v) of view's build (litTileSteps on litTileJobCanvas: a canvas of its own, so a tile built
+    // at once meanwhile, litTile, draws on litTileScratch), the tile under way (litTileJob) given up first when it is another
+    // or no longer holds (litTileJobHolds). Returns whether the tile is done (in view.tiles, as litTile leaves it).
+    litTileStep(view, u, v) {
+        const key = u + ',' + v
+        let job = this.litTileJob
+        if (job && (job.view !== view || job.key !== key || !this.litTileJobHolds(job))) {
+            this.dropLitTileJob()
+            job = undefined
+        }
+        if (!job) {
+            const canvas = this.litTileJobCanvas ||= document.createElement('canvas')
+            job = this.litTileJob = {view, key, u, v, steps: this.litTileSteps(view, u, v, canvas), edges: view.edges,
+                outline: view.outline, rebuilds: atmosphericLighting.rebuilds, mapScale: atmosphericLighting.mapScale, ms: 0, count: 0}
+            ++this.litTileJobs
+        }
+        const t0 = performance.now(), step = job.steps.next()
+        job.ms += performance.now() - t0
+        ++job.count
+        if (!step.done)
+            return false
+        this.litTileJob = undefined
+        const tile = step.value
+        if (tile)
+            litTileCost.add(job.ms)
+        view.tiles.set(key, tile)
+        this.releaseStaleTile(view, key)
+        return true
+    }
+    // TASK-1546: whether the tile under way still draws its view as a tile built now would: the view is the board's, the tile
+    // not built meanwhile (litTile), the view's edge runs and outline (found again on every change the view takes: patch,
+    // refresh, light map) and the light map the same.
+    litTileJobHolds(job) {
+        const view = job.view
+        return view === this.litView && !view.tiles.has(job.key) && job.edges === view.edges && job.outline === view.outline &&
+            job.rebuilds === atmosphericLighting.rebuilds && job.mapScale === atmosphericLighting.mapScale
+    }
+    dropLitTileJob() {
+        const job = this.litTileJob
+        if (!job)
+            return
+        this.litTileJob = undefined
+        // Its canvas's state restored (litTileSteps' finally).
+        job.steps.return()
+        ++this.litTileJobsDropped
     }
     // One task between frames: a band of the rest snapshot while the camera is at rest, else up
     // to LIT_TILE_BUDGET of the tiles within a tile of the canvas, nearest its centre first.
@@ -5668,6 +5973,18 @@ class Grid extends SpritesGroup {
     // the frame). Its canvas holds LIT_TILE_PAD more pixels each way, never drawn: rasterized
     // paths and samples next to a canvas's edge are not quite those of the same place inside it.
     buildLitTile(view, u, v) {
+        // TASK-1546: the steps (litTileSteps) run at once on the build canvas.
+        const steps = this.litTileSteps(view, u, v, this.litTileScratch ||= document.createElement('canvas'))
+        let step
+        while (!(step = steps.next()).done);
+        return step.value
+    }
+    // TASK-1546: buildLitTile's drawing on canvas (its build canvas) in steps (a generator; its value the tile, null when the
+    // board does not reach it): the scene's underlay and sides, the grout, the cells' tiles in LIT_TILE_HEX_STEPS runs, the
+    // shadows, fog and rim, the buildings, the light, the quarters. The calls are the same, in the same order, on the same
+    // canvas, whether the steps run in one task or several (Grid.buildLitTiles); the canvas's state restored when it ends or
+    // is given up (return()).
+    *litTileSteps(view, u, v, canvas) {
         const P = LIT_TILE_PAD, S = LIT_TILE + 2 * P, b = mapDepth.bounds
         const x = u * LIT_TILE - P, y = v * LIT_TILE - P
         const left = (x - view.e) / view.a, top = (y - view.f) / view.d
@@ -5675,7 +5992,6 @@ class Grid extends SpritesGroup {
         if (right < b.left || left > b.right || bottom < b.top || top > b.bottom)
             return null
         // TASK-1545: drawn on the build canvas (litTileScratch), then kept as its quarters (litTileParts).
-        const canvas = this.litTileScratch ||= document.createElement('canvas')
         canvas.gradientSource = litGradientSource()
         if (canvas.width !== S || canvas.height !== S) {
             canvas.width = S
@@ -5685,29 +6001,46 @@ class Grid extends SpritesGroup {
             right: Math.max(S, view.cw - x), bottom: Math.max(S, view.ch - y)}
         const g = canvas.getContext('2d')
         g.save()
-        g.setTransform(1, 0, 0, 1, 0, 0)
-        g.clearRect(0, 0, S, S)
-        // As drawMain leaves the main canvas before the board.
-        g.lineJoin = 'round'
-        g.lineCap = 'round'
-        g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
-        // The underlay cache's part grown by two of its pixels, so the tile's edge pixels sample
-        // it as one draw over the canvas does.
-        const cache = mapDepth.underlayCache, grow = cache ? 2 * mapDepth.cacheBounds.width / cache.width : 0
-        this.drawLitScene(g, {left: left - grow, top: top - grow, right: right + grow, bottom: bottom + grow})
-        // The light everywhere on the tile but in the edge runs (even-odd: they do not overlap).
-        g.setTransform(1, 0, 0, 1, 0, 0)
-        g.beginPath()
-        g.rect(0, 0, S, S)
-        for (const run of view.edges) {
-            const x0 = Math.max(run.x - x, 0), y0 = Math.max(run.y - y, 0)
-            const x1 = Math.min(run.x + run.w - x, S), y1 = Math.min(run.y + run.h - y, S)
-            if (x0 < x1 && y0 < y1) g.rect(x0, y0, x1 - x0, y1 - y0)
+        try {
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.clearRect(0, 0, S, S)
+            // As drawMain leaves the main canvas before the board.
+            g.lineJoin = 'round'
+            g.lineCap = 'round'
+            g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
+            // The underlay cache's part grown by two of its pixels, so the tile's edge pixels sample
+            // it as one draw over the canvas does.
+            const cache = mapDepth.underlayCache, grow = cache ? 2 * mapDepth.cacheBounds.width / cache.width : 0
+            const underlay = {left: left - grow, top: top - grow, right: right + grow, bottom: bottom + grow}
+            // drawLitScene's parts, the hexagons' (drawHexagons) as its grout and runs of the cells' tiles.
+            LIT_SCENE_PARTS[0](this, g, underlay)
+            yield
+            this.drawHexagons(g, {grout: true, n: 0})
+            yield
+            for (let k = 0; k < LIT_TILE_HEX_STEPS; ++k) {
+                this.drawHexagons(g, {k, n: LIT_TILE_HEX_STEPS, grout: false})
+                yield
+            }
+            for (const part of LIT_SCENE_PARTS.slice(2)) {
+                part(this, g, underlay)
+                yield
+            }
+            // The light everywhere on the tile but in the edge runs (even-odd: they do not overlap).
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            g.beginPath()
+            g.rect(0, 0, S, S)
+            for (const run of view.edges) {
+                const x0 = Math.max(run.x - x, 0), y0 = Math.max(run.y - y, 0)
+                const x1 = Math.min(run.x + run.w - x, S), y1 = Math.min(run.y + run.h - y, S)
+                if (x0 < x1 && y0 < y1) g.rect(x0, y0, x1 - x0, y1 - y0)
+            }
+            g.clip('evenodd')
+            g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
+            atmosphericLighting.lightTile(g, this, view.outline)
+        } finally {
+            g.restore()
         }
-        g.clip('evenodd')
-        g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
-        atmosphericLighting.lightTile(g, this, view.outline)
-        g.restore()
+        yield
         const tile = this.litTileParts(canvas, view, x + P, y + P)
         tile.litOutline = mapDepth.outline
         // The board outline the tile's drawn square is opaque under (frameCover), if any.
@@ -5852,6 +6185,10 @@ class Grid extends SpritesGroup {
         if (this.litTileScratch)
             this.litTileScratch.width = this.litTileScratch.height = 0
         this.litTileScratch = undefined
+        this.dropLitTileJob()
+        if (this.litTileJobCanvas)
+            this.litTileJobCanvas.width = this.litTileJobCanvas.height = 0
+        this.litTileJobCanvas = undefined
         if (this.litRestCanvas)
             this.litRestCanvas.width = this.litRestCanvas.height = 0
         this.litRestCanvas = undefined
@@ -6345,11 +6682,23 @@ class Grid extends SpritesGroup {
     // direct frame, already that many calls) gets a snapshot of ctx's canvas as its frame left it, before the
     // interface (as a held frame's, captureHeldFrame): the zoom raster is then that board in one drawImage, the frame on
     // screen exactly, whatever was rebuilt since.
+    // TASK-1546 (Grid.zoomBitmapLitSkips): none when the frames that follow are lit-tile frames of this camera (the snapshot
+    // rasterizes the frame inside its task: 40-80 ms of a 115-180 ms frame here, the frame's own raster moved into it plus a
+    // whole-canvas copy): the camera at rest on the lit tiles (its next frames draw the same view while its tiles are built,
+    // then held once steady), or moving on them with the lit layer queued or under way (the next frames draw it: few calls,
+    // replayed at once); or a lit view made by tasks (stepLitView: the frames draw the stand-in until it is, then lit tiles).
+    // A gesture starting from such a frame makes its calls again in steps (startZoomReplay).
     keepZoomBitmap(ctx) {
         const source = this.zoomSource
         if (!source || source.serial !== this.drawSerial || source.calls.length <= Grid.ZOOM_REPLAY_SYNC_CALLS ||
                 typeof createImageBitmap !== 'function')
             return
+        const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
+        if (Grid.zoomBitmapLitSkips && screen && !screen.zoomGesture && !screen.surfaceZooming &&
+                (this.frameSurface === 'lit' && (!screen.surfaceMoving || this.litLayerQueued) || this.litViewJob)) {
+            ++this.zoomBitmapSkips
+            return
+        }
         let snapshot
         try {
             snapshot = createImageBitmap(ctx.canvas)
@@ -6393,7 +6742,12 @@ class Grid extends SpritesGroup {
             return ++misses.camera, {}
         const now = this.lodFrameKey(mainCtx), layers = this.zoomSourceLayers()
         let stale = key.length !== now.length || key.some((k, i) => k !== now[i]) ? 'key' : undefined
-        if (!stale && (layers.length !== source.layers.length || layers.some((l, i) => l !== source.layers[i])))
+        // TASK-1546: a lit layer drawn in steps never draws on its pieces again (new canvases each, Grid.litLayerSteps), and the one
+        // it replaces is kept while a recording lists it (retireLitLayer): its replacement leaves the recording the frame on screen.
+        // (Not one whose pieces a layer drawn at once took and drew again, litLayerRedrawn.)
+        const kept = Grid.litLayerSteps && source.layers[0] !== this.litLayerRedrawn &&
+            (!source.layers[0] || source.layers[0] === this.litLayer || source.layers[0] === this.litLayerRetired)
+        if (!stale && (layers.length !== source.layers.length || layers.some((l, i) => l !== source.layers[i] && !(kept && i < 2))))
             stale = 'layers'
         if (stale)
             ++misses[stale]
@@ -7700,6 +8054,17 @@ Grid.litLayers = true
 Grid.litTrust = true
 // TASK-1545: lit tiles' quarters the board cannot reach are not kept (Grid.litTileParts).
 Grid.litPartSkips = true
+// TASK-1546: lit tiles built by the tasks between frames a step at a time (Grid.buildLitTiles, litTileSteps); false: a tile a
+// task at once as before.
+Grid.litTileSteps = true
+// TASK-1546: the lit layer drawn by tasks of steps (Grid.queueLitLayer: litLayerRasterSteps), at most LIT_LAYER_TASK_MS a task
+// but its first step; false: in one task as before.
+Grid.litLayerSteps = true
+// TASK-1546: no zoom board snapshot of a frame that lit-tile frames of its camera follow (Grid.keepZoomBitmap).
+Grid.zoomBitmapLitSkips = true
+// TASK-1546: a new lit view with the surface cache to stand in made by tasks between frames (Grid.stepLitView); false: in the
+// frame that needs it, as before.
+Grid.litViewSteps = true
 // TASK-1545: a frame on the lit tiles draws only the sky's blocks the board leaves open (Grid.coverSkyBlocks).
 Grid.skyBlocks = true
 // How often (ms) an idle frame compares the surface cache with the whole board (Grid.prepareSurfaceCache).
@@ -7742,6 +8107,21 @@ const LIT_IDLE_TIMEOUT = 100
 // TASK-1439: one lit tile's build time on this device (Grid.litTile): the mean of the last LIT_COST_SAMPLES builds,
 // LIT_TASK_MS before the first.
 const LIT_COST_SAMPLES = 8
+// TASK-1546: a lit tile's cells' tiles drawn in this many steps (Grid.litTileSteps), the time (ms) a task with the camera at
+// rest spends on steps (Grid.buildLitTiles), and one step's build time on this device (the mean of the last LIT_COST_SAMPLES
+// steps, LIT_TASK_MS before the first).
+const LIT_TILE_HEX_STEPS = 3
+const LIT_REST_TASK_MS = 40
+const litTileStepCost = {
+    samples: [],
+    ms: LIT_TASK_MS,
+    add(ms) {
+        this.samples.push(ms)
+        if (this.samples.length > LIT_COST_SAMPLES)
+            this.samples.shift()
+        this.ms = this.samples.reduce((a, b) => a + b, 0) / this.samples.length
+    }
+}
 const litTileCost = {
     samples: [],
     ms: LIT_TASK_MS,
@@ -7866,6 +8246,11 @@ const LIT_LAYER_MIN_CELLS = 16
 const LIT_LAYER_AHEAD_AGE = 1500
 const LIT_LAYER_MAX_AGE = 2000
 const LIT_LAYER_NEAR = 0.1
+// TASK-1546: the time (ms) a task drawing the lit layer in steps (Grid.queueLitLayer) spends: its piece copies while the task's
+// time and the last copy's fit (the units and texts, one step, always).
+const LIT_LAYER_TASK_MS = 40
+// TASK-1546: the time (ms) a task making a lit view in steps (Grid.stepLitView) spends, the first step always.
+const LIT_VIEW_TASK_MS = 16
 // The lit layer's pieces (Grid.litLayerPieces): the side (device pixels) of the blocks a drawing cell marks; its reach left, up,
 // right and down in hex radii from its centre (measured on the user's board, Grid.litLayerAudit: a sprite 0.8 = assets.size / 2
 // each way, a unit's hp bar up to 1.05 up, a portal's preview 0.73; texts inside the hexagon) and in device pixels besides
