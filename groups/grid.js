@@ -284,6 +284,16 @@ class Grid extends SpritesGroup {
         // start rest-first waits ended by Grid.START_REST_FIRST_MS.
         this.surfaceMovingQueues = 0
         this.startRestFirstExpired = 0
+        // TASK-1544: the stand-in preview (a coarse whole-board raster, standInPreviewStep) and its build under way; previews
+        // built from the board's stages, kept from a cache a rebuild drew over, lit after their build; stand-in draws by source.
+        this.standInPreview = undefined
+        this.standInBuild = undefined
+        this.standInQueued = false
+        this.standInDrawnAt = -Infinity
+        this.standInBuilds = 0
+        this.standInKeeps = 0
+        this.standInRelights = 0
+        this.standInDraws = {}
         // The patch under way (patchSurfaceCache, one step a frame) and its buffer.
         this.surfacePatchJob = undefined
         this.surfacePatchBuffer = undefined
@@ -2987,7 +2997,10 @@ class Grid extends SpritesGroup {
         if (moving)
             ++this.surfaceMovingQueues
         const free = () => this === grid && otherSettings.atmosphericVisuals && (Grid.movingCacheBuilds || !gameEvent.screen.surfaceMoving)
-        const budget = moving && this.frameSurface === false ? Grid.donorTaskMs : SURFACE_STEP_MS
+        // TASK-1544: also while the frames draw its stand-in (drawStandIn, drawStandInRect within STANDIN_WAIT_MS: coarse until
+        // the cache is built), moving or not.
+        const waiting = performance.now() - this.standInDrawnAt < STANDIN_WAIT_MS
+        const budget = moving && this.frameSurface === false || waiting ? Grid.donorTaskMs : SURFACE_STEP_MS
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
             this.surfaceCacheQueued = true
@@ -3007,10 +3020,13 @@ class Grid extends SpritesGroup {
             // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
             if (!free())
                 return
+            // TASK-1544: with no cache yet the stand-in preview is built first (a few steps of a coarse raster).
             const start = performance.now()
-            do
-                this.surfaceCacheBuildStep(SURFACE_STEP_MS)
-            while (this.surfaceCacheBuild && performance.now() - start < budget - SURFACE_STEP_MS)
+            do {
+                if (!this.standInPreviewStep(SURFACE_STEP_MS))
+                    this.surfaceCacheBuildStep(SURFACE_STEP_MS)
+            } while ((this.surfaceCacheBuild || this.standInWanted()) && performance.now() - start < budget - SURFACE_STEP_MS)
+            this.queueStandInTask()
         }))
     }
     // A step of the surface cache's build: a stage, or (TASK-1473, with a budget in ms: the between-frames tasks) a step
@@ -3034,7 +3050,8 @@ class Grid extends SpritesGroup {
             build = this.startSurfaceCacheBuild(this.surfaceCache)
             if (!build)
                 return
-            // The stale raster is no longer drawn; its canvas is drawn over.
+            // The stale raster is no longer drawn; its canvas is drawn over. TASK-1544: kept, coarser, as the stand-in.
+            this.keepStandIn()
             this.surfaceCache = undefined
             this.surfaceCacheBuild = build
             this.withLitState(build, () => this.captureSurfaceState())
@@ -3462,6 +3479,176 @@ class Grid extends SpritesGroup {
             (visibleRight - visibleLeft) * sourceScaleX, (visibleBottom - visibleTop) * sourceScaleY,
             visibleLeft, visibleTop, visibleRight - visibleLeft, visibleBottom - visibleTop)
         return true
+    }
+    // TASK-1544: STAND-INS. A frame that found no surface cache to draw at or below its scale (none yet, a rebuild under
+    // way, or one not matching the board while the camera moves), or a lit view's tiles not built with no cache to stand
+    // in for them, drew the whole board directly: on the user's 6-player capture 237-454 ms a frame (5100-7800 calls),
+    // the far zoom at 0-3 fps for 25 s. Instead it draws a stand-in: the board's last complete surface raster at the
+    // camera's transform, coarse (a little blurred) and possibly a little behind the board, until the cache or the lit
+    // view is ready and the exact frame replaces it. Sources, in order (standInSource):
+    // - 'cache': the surface cache there is, as it is (stale: drawSurfaceCacheRect, the whole board);
+    // - 'preview': the stand-in preview, a whole-board raster at Grid.STANDIN_SCALE of the cache's scale: built from the
+    //   cache's own stages (standInPreviewSteps: the underlay and sides, the cells' tiles, fog and rim, the buildings'
+    //   bodies; no shadows) between frames ahead of a board's first cache build, a piece a task in the cache's tasks and
+    //   its own (queueStandInTask), and lit with the light map there is (atmosphericLighting.bakeStandIn, again later if
+    //   there was none), or kept from the cache a rebuild draws over (keepStandIn, one drawImage).
+    // Both hold the whole board, so no part of it shows the sky. Over a stand-in the frame draws what it draws over the
+    // cache (draw: units, bars, overlays, productions, texts, the selection; not the buildings or the light again). The
+    // zoom raster's frames draw the preview where their raster and no cache cover the board (drawZoomUnderlay). Only
+    // with the atmospheric visuals, for the board in play (grid). A board's first frames (no preview yet) draw as before.
+    // A stand-in never shows a board other than the one in play: the preview holds the board state it was drawn from
+    // (as the cache does) and stands in only while that matches the board in view exactly (else it is built again); a
+    // cache that does not match stands in only while the camera moves (at rest it is patched or rebuilt, and the frame
+    // draws the board as before).
+    standInSource() {
+        if (!Grid.standIns || this !== grid || !otherSettings.atmosphericVisuals)
+            return null
+        if (this.surfaceCache && this.surfaceCacheBounds)
+            return typeof gameEvent !== 'undefined' && gameEvent.screen?.surfaceMoving ? 'cache' : null
+        return this.standInPreviewFits() ? 'preview' : null
+    }
+    standInPreviewFits(ctx = typeof mainCtx !== 'undefined' ? mainCtx : undefined) {
+        const p = this.standInPreview
+        return Grid.standIns && this === grid && !!p && this.standInFits(p) && this.standInMatches(p, ctx)
+    }
+    // Whether p's board state is the board's (in ctx's view; undefined: the whole board), exactly.
+    standInMatches(p, ctx) {
+        return !!p.state && this.withLitState(p, () => this.surfaceStateMatches(ctx, undefined, true))
+    }
+    // Whether p (a preview or its build) is at the board's geometry now.
+    standInFits(p) {
+        mapDepth.ensureGeometry(this)
+        const b = mapDepth.bounds
+        return !!b && p.left === b.left && p.top === b.top && p.width === b.right - b.left && p.height === b.bottom - b.top
+    }
+    // Draws the stand-in over the camera's view on ctx (the camera's world transform); its source or false (none).
+    drawStandIn(ctx) {
+        const source = this.standInSource()
+        if (!source)
+            return false
+        const left = canvas.offset.x, top = canvas.offset.y
+        if (source === 'cache')
+            this.drawSurfaceCacheRect(ctx, left, top, left + width, top + height)
+        else
+            this.drawStandInRect(ctx, left, top, left + width, top + height, source)
+        if (source === 'cache')
+            this.standInDraws.cache = (this.standInDraws.cache || 0) + 1
+        this.standInDrawn = source
+        this.standInDrawnAt = performance.now()
+        return source
+    }
+    // The preview over the world rectangle left..right x top..bottom cut to its bounds (as drawSurfaceCacheRect).
+    drawStandInRect(ctx, left, top, right, bottom, why) {
+        const p = this.standInPreview
+        const visibleLeft = Math.max(p.left, left), visibleTop = Math.max(p.top, top)
+        const visibleRight = Math.min(p.left + p.width, right), visibleBottom = Math.min(p.top + p.height, bottom)
+        this.standInDraws[why] = (this.standInDraws[why] || 0) + 1
+        this.standInDrawnAt = performance.now()
+        if (visibleLeft >= visibleRight || visibleTop >= visibleBottom)
+            return false
+        const k = p.scale
+        ctx.drawImage(p.canvas, (visibleLeft - p.left) * k, (visibleTop - p.top) * k, (visibleRight - visibleLeft) * k,
+            (visibleBottom - visibleTop) * k, visibleLeft, visibleTop, visibleRight - visibleLeft, visibleBottom - visibleTop)
+        return true
+    }
+    // Whether the preview is to be built or lit (no cache: the board's first build, or a rebuild without a kept one).
+    // Only ahead of the board's first cache (a rebuild's frames have the one kept from the cache it replaces, while it
+    // matches: keepStandIn).
+    standInWanted() {
+        if (!Grid.standIns || this !== grid || !otherSettings.atmosphericVisuals || this.surfaceCache || this.surfaceCacheRevision > 0)
+            return false
+        const p = this.standInPreview
+        return !p || !this.standInFits(p) || !this.standInMatches(p) || !p.lit && atmosphericLighting.standInLightReady(this)
+    }
+    // The preview's next step in a task of its own, again after it while wanted: its build does not wait for a drawn frame
+    // (a held still frame calls no prepareSurfaceCache), frames and input between its tasks.
+    queueStandInTask() {
+        if (this.standInQueued || !this.standInWanted())
+            return
+        this.standInQueued = true
+        setTimeout(gridTask(() => {
+            this.standInQueued = false
+            if (this === grid && !this.surfaceCache && this.standInPreviewStep(SURFACE_STEP_MS))
+                this.queueStandInTask()
+        }))
+    }
+    // A step of the preview's build (runStandInSteps within budget) or its light; whether there was one (standInWanted).
+    standInPreviewStep(budget) {
+        if (!this.standInWanted())
+            return false
+        const p = this.standInPreview
+        if (p && this.standInFits(p) && this.standInMatches(p)) {
+            const g = p.ctx
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            Grid.surfacePlace(p.scale, p.left, p.top)(g)
+            p.lit = atmosphericLighting.bakeStandIn(g, this)
+            ++this.standInRelights
+            return true
+        }
+        let build = this.standInBuild
+        if (build && !(this.standInFits(build) && this.standInMatches(build)))
+            build = this.standInBuild = undefined
+        if (!build && !(build = this.standInBuild = this.startStandInPreview()))
+            return false
+        const start = performance.now()
+        const done = runStandInSteps(this, build, budget)
+        build.ms += performance.now() - start
+        ++build.tasks
+        if (done) {
+            build.steps = undefined
+            build.doneAt = performance.now()
+            this.standInBuild = undefined
+            this.standInPreview = build
+            ++this.standInBuilds
+        }
+        return true
+    }
+    startStandInPreview() {
+        mapDepth.ensureGeometry(this)
+        const geometry = this.getSurfaceCacheGeometry(), b = mapDepth.bounds
+        if (!b || geometry.cacheWidth <= 0 || geometry.cacheHeight <= 0)
+            return null
+        const scale = geometry.scale * Grid.STANDIN_SCALE
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.ceil(geometry.cacheWidth * scale))
+        canvas.height = Math.max(1, Math.ceil(geometry.cacheHeight * scale))
+        const ctx = canvas.getContext('2d')
+        if (!ctx)
+            return null
+        const p = {canvas, ctx, scale, left: b.left, top: b.top, width: geometry.cacheWidth, height: geometry.cacheHeight, lit: false,
+            source: 'stages', steps: null, startAt: performance.now(), doneAt: null, ms: 0, tasks: 0, state: [], overlayCells: []}
+        this.withLitState(p, () => this.captureSurfaceState())
+        p.steps = standInPreviewSteps(this, p)
+        return p
+    }
+    // The cache a rebuild is about to draw over, kept as the preview at Grid.STANDIN_SCALE of its scale (as it shows).
+    keepStandIn() {
+        const cache = this.surfaceCache, b = this.surfaceCacheBounds
+        if (!Grid.standIns || this !== grid || !cache || !b || !otherSettings.atmosphericVisuals)
+            return
+        const scale = this.surfaceCacheScale * Grid.STANDIN_SCALE
+        const w = Math.max(1, Math.ceil(b.width * scale)), h = Math.max(1, Math.ceil(b.height * scale))
+        const old = this.standInPreview
+        let canvas = old && old.canvas.width === w && old.canvas.height === h ? old.canvas : null
+        if (!canvas) {
+            canvas = document.createElement('canvas')
+            canvas.width = w
+            canvas.height = h
+        }
+        const g = canvas.getContext('2d')
+        if (!g)
+            return
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.globalCompositeOperation = 'source-over'
+        g.globalAlpha = 1
+        g.clearRect(0, 0, w, h)
+        g.drawImage(cache.cellLayered && !this.surfaceSplitJob && this.surfaceCacheShown || cache, 0, 0, cache.width, cache.height,
+            0, 0, b.width * scale, b.height * scale)
+        this.standInBuild = undefined
+        this.standInPreview = {canvas, ctx: g, scale, left: b.left, top: b.top, width: b.width, height: b.height,
+            lit: !!this.surfaceCacheLit, source: 'cache', state: SURFACE_STATE_FIELDS.map(name => this[name]),
+            overlayCells: this.surfaceOverlayCells.slice()}
+        ++this.standInKeeps
     }
     // TASK-1360: the surface layer job's changed cells as drawPatchCells draws them, with their light (the changed light's
     // part, atmosphericLighting.regionLight, found by the job's first frame): the job itself, or, for cells spanning more than
@@ -4533,7 +4720,8 @@ class Grid extends SpritesGroup {
                     stale = true
                     continue
                 }
-                if (!view.tiles.has(u + ',' + v) && (standIn ??= this.litStandIn(ctx))) {
+                // TASK-1544: without the cache to stand in, its stand-in (the stale cache or the preview, drawStandIn).
+                if (!view.tiles.has(u + ',' + v) && (standIn ??= this.litStandIn(ctx) || !!this.standInSource() && 'standin')) {
                     (missing ||= new Set()).add(u + ',' + v)
                     continue
                 }
@@ -4552,7 +4740,10 @@ class Grid extends SpritesGroup {
                 return {x: x0, y: y0, w: Math.min(cw, (u + 1) * LIT_TILE + ox) - x0, h: Math.min(ch, (v + 1) * LIT_TILE + oy) - y0}
             }))
             ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
-            this.drawSurfaceCache(ctx)
+            if (standIn === 'standin')
+                this.drawStandIn(ctx)
+            else
+                this.drawSurfaceCache(ctx)
             ctx.restore()
         }
         if (stale)
@@ -4656,7 +4847,7 @@ class Grid extends SpritesGroup {
             for (let u = range.u0; u <= range.u1; ++u)
                 if (!view.tiles.has(u + ',' + v) && !view.stale?.has(u + ',' + v))
                     ++missing
-        return view.unbuilt = missing > LIT_FRAME_TILES && !this.litStandIn(ctx)
+        return view.unbuilt = missing > LIT_FRAME_TILES && !this.litStandIn(ctx) && !this.standInSource()
     }
     // A board change while the camera rests on the lit view's finished rest snapshot (drawLitView): instead of the view
     // being dropped (a new light map, every visible tile built in the frame, then the snapshot's bands), the snapshot is
@@ -5558,6 +5749,9 @@ class Grid extends SpritesGroup {
                 this.releaseLitCanvases()
             return true
         }
+        // TASK-1544: without a cache to draw at its scale, its stand-in (drawStandIn), not the board drawn directly.
+        if (cached && this.drawStandIn(ctx))
+            return 'standin'
         const lit = !cached && this.drawLitView(ctx)
         if (lit === 'cache')
             return true
@@ -5586,7 +5780,7 @@ class Grid extends SpritesGroup {
         const surface = scene || this.drawMapSurface(ctx)
         this.frameSurface = surface
         // Lit tiles (drawLitView) hold the buildings and the light but for the board's edge.
-        const lit = surface === 'lit', cachedScene = surface === true
+        const lit = surface === 'lit', cachedScene = surface === true, standIn = surface === 'standin'
         if (!lit && !pass && (this.litLayer || this.litLayerScratch))
             this.releaseLitLayer()
         // The overlay layer holds the production texts too (drawInfoTexts); so does the scene layer.
@@ -5599,7 +5793,8 @@ class Grid extends SpritesGroup {
         else if (otherSettings.atmosphericVisuals) {
             // The light map lights terrain and buildings; units, silhouettes and
             // bars come after it, so the multiply never darkens them.
-            if (!cachedScene && !lit)
+            // TASK-1544: a stand-in holds the buildings and the light as the cache does (drawStandIn).
+            if (!cachedScene && !lit && !standIn)
                 this.drawOther(ctx, 'buildings')
             if (lit)
                 this.drawLitEdges(ctx)
@@ -5607,7 +5802,7 @@ class Grid extends SpritesGroup {
             // the lit cells as a lit tile's light is.
             else if (pass)
                 atmosphericLighting.lightTile(ctx, this, pass.outline)
-            else
+            else if (!standIn)
                 atmosphericLighting.draw(ctx, this, cachedScene && this.surfaceCacheLit)
             layered = cachedScene && this.drawOverlayLayer(ctx)
             if (!cachedScene) {
@@ -5615,7 +5810,13 @@ class Grid extends SpritesGroup {
                     this.dropOverlayLayer()
                 // TASK-1515: a pan on the lit tiles draws the units, bars and cell texts from the lit layer.
                 layered = lit && this.drawLitLayer(ctx)
-                if (!layered)
+                // TASK-1544: over a stand-in the cache path's units and overlays (buildings under construction, bars,
+                // productions) of every cell in view.
+                if (!layered && standIn) {
+                    this.drawStillUnits(ctx)
+                    this.drawEntityOverlays(ctx)
+                }
+                else if (!layered)
                     this.drawOther(ctx, 'units')
             }
             else if (!layered) {
@@ -5784,7 +5985,8 @@ class Grid extends SpritesGroup {
         let hold = this.cacheHold
         const screen = typeof gameEvent !== 'undefined' ? gameEvent.screen : undefined
         if (!hold) {
-            if (!Grid.cacheHolds || this !== grid || this.frameSurface !== false || this.drawSerial === this.cacheHoldSerial ||
+            if (!Grid.cacheHolds || this !== grid || this.frameSurface !== false && this.frameSurface !== 'standin' ||
+                    this.drawSerial === this.cacheHoldSerial ||
                     !otherSettings.atmosphericVisuals || typeof gameLoopFrame === 'undefined' || !gameLoopFrame || !screen ||
                     typeof canvas === 'undefined' || typeof createImageBitmap !== 'function' || typeof menu !== 'undefined' && menu.visible ||
                     this.startJob || this.playbackHold || this.zoomRaster || this.surfaceCacheDonor ||
@@ -5826,7 +6028,10 @@ class Grid extends SpritesGroup {
                 return
             const start = performance.now()
             do {
-                if (this.surfacePatchJob)
+                // TASK-1544: the stand-in preview first (standInPreviewStep).
+                if (this.standInWanted())
+                    this.standInPreviewStep(SURFACE_STEP_MS)
+                else if (this.surfacePatchJob)
                     this.surfacePatchStep()
                 else if (this.surfaceCacheBuild || !this.surfaceCache) {
                     this.surfaceCacheBuildStep(SURFACE_STEP_MS)
@@ -5844,7 +6049,8 @@ class Grid extends SpritesGroup {
             hold.workMs += ms
             this.cacheHoldWorkMs += ms
             ++hold.tasks
-            if (this.cacheHold === hold && !hold.none && (this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob))
+            if (this.cacheHold === hold && !hold.none && (this.surfaceCacheBuild || this.surfaceSplitJob || this.surfacePatchJob ||
+                    !this.surfaceCache))
                 this.cacheHoldTask(hold)
         }))
     }
@@ -6307,10 +6513,14 @@ class Grid extends SpritesGroup {
         return true
     }
     // The surface cache's raster (with its cell layer as drawSurfaceCache shows it) where it meets the view, as it is.
+    // TASK-1544: without it (none yet, or its split under way) the stand-in preview, so the board has no hole of sky.
     drawZoomUnderlay(ctx) {
         const cache = this.surfaceCache, b = this.surfaceCacheBounds
-        if (!cache || !b || this.surfaceSplitJob)
+        if (!cache || !b || this.surfaceSplitJob) {
+            if (this.standInPreviewFits())
+                this.drawStandInRect(ctx, canvas.offset.x, canvas.offset.y, canvas.offset.x + width, canvas.offset.y + height, 'zoom')
             return
+        }
         const left = Math.max(b.left, canvas.offset.x), top = Math.max(b.top, canvas.offset.y)
         const right = Math.min(b.left + b.width, canvas.offset.x + width), bottom = Math.min(b.top + b.height, canvas.offset.y + height)
         if (left >= right || top >= bottom)
@@ -7044,6 +7254,63 @@ const SURFACE_CACHE_STAGE_STEPS = {
         grid.flushSurfaceBuild(build)
     },
 }
+// TASK-1544: the stand-in preview's raster (Grid.startStandInPreview), the surface cache's stages' calls at its scale in fewer
+// steps (a quarter of the pixels): the underlay and sides, the grout and the cells' tiles in STANDIN_HEX_STEPS runs (an
+// owner's tiles not built yet drawn flat in its colour: building them was ~950 ms of a 1270 ms preview at a game's
+// start on this host; the cache's build and prewarmOwnedTiles build them), the fog and rim, the buildings' bodies in
+// STANDIN_BODY_STEPS runs; then lit with the light map there is (atmosphericLighting.bakeStandIn; none: lit by a later
+// step, Grid.standInPreviewStep). Not the buildings'
+// shadows: on the 6-player board they were 820 of the preview's 1310 ms on this host (the rest ~490 ms, the cache's own
+// stages 0-4 ~1480 ms: artifacts/TASK-1544 prevcost).
+const STANDIN_HEX_STEPS = 8
+const STANDIN_BODY_STEPS = 2
+// How long after a frame drew a stand-in the surface cache's tasks run Grid.donorTaskMs of steps (prepareSurfaceCache).
+const STANDIN_WAIT_MS = 500
+// The preview's steps within budget ms: unlike runSteps a piece heavy to rasterize (RASTER_STEP) does not end the run: its
+// raster is made at once (the preview's canvas flushed, as flushSurfaceBuild), so the time measured holds it.
+function runStandInSteps(board, p, budget) {
+    const start = performance.now()
+    let piece = 0
+    do {
+        const begin = performance.now(), step = p.steps.next()
+        if (step.done)
+            return true
+        if (step.value === RASTER_STEP)
+            board.flushSurfaceBuild(p)
+        piece = performance.now() - begin
+    } while (performance.now() - start + piece < budget)
+    return false
+}
+function* standInPreviewSteps(grid, p) {
+    const g = p.ctx
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.clearRect(0, 0, p.canvas.width, p.canvas.height)
+    Grid.surfacePlace(p.scale, p.left, p.top)(g)
+    mapDepth.renderUnderlay(g, p.scale)
+    mapDepth.renderAtmosphericSides(g)
+    yield RASTER_STEP
+    grid.drawHexagons(g, {k: 0, n: 0, grout: true})
+    for (let k = 0; k < STANDIN_HEX_STEPS; ++k) {
+        yield RASTER_STEP
+        // The owned tiles not built yet drawn flat in their colour (atmosphericLighting.flatOwnedTiles), not built here.
+        atmosphericLighting.flatOwnedTiles = true
+        try {
+            grid.drawHexagons(g, {k, n: STANDIN_HEX_STEPS, grout: false})
+        } finally {
+            atmosphericLighting.flatOwnedTiles = false
+        }
+    }
+    yield RASTER_STEP
+    if (isFogOfWar)
+        grid.drawFogOfWar(g)
+    mapDepth.renderRim(g)
+    for (let k = 0; k < STANDIN_BODY_STEPS; ++k) {
+        yield RASTER_STEP
+        grid.drawEntityBodies(g, {k, n: STANDIN_BODY_STEPS})
+    }
+    yield RASTER_STEP
+    p.lit = atmosphericLighting.bakeStandIn(g, grid)
+}
 // The context whose gradients the lit canvases draw with (gradientContext): the camera canvas's, so a lit tile, the rest
 // snapshot or the lit patch buffer makes none the frames or another lit canvas made (a new tile made one for each).
 function litGradientSource() {
@@ -7088,6 +7355,10 @@ Grid.donorTaskMs = 40
 // TASK-1543: the surface cache's build (and split) under way goes on while the camera moves or the lit view waits for it
 // (Grid.prepareSurfaceCache); false: only with the camera at rest and the lit view's tiles built, as before.
 Grid.movingCacheBuilds = true
+// TASK-1544: frames with no surface cache to draw (or no lit tiles and no cache to stand in) draw its stand-in instead of the
+// board directly (Grid.standInSource); the preview's scale, a part of the cache's (its raster a quarter of the pixels).
+Grid.standIns = true
+Grid.STANDIN_SCALE = 0.5
 // TASK-1543: how long (ms, from the first frame drawn after the start hold) the surface cache's build waits for the start
 // view's rest snapshot (Grid.litRestUnderWay, TASK-1518).
 Grid.START_REST_FIRST_MS = 1000

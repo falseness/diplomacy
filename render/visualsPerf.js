@@ -18,7 +18,7 @@
     // Compositor-side work of a frame (and of the tasks since the previous one): blended destination
     // pixels, large canvas uploads and the board's render path. Reset after every sample.
     const freshWork = () => ({blendedMegapixels: 0, blendedDraws: 0, blendedMainMegapixels: 0, blendedByOp: {},
-        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, overlayLayer: false, sceneLayer: false, litLayer: false,
+        pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, standIn: null, overlayLayer: false, sceneLayer: false, litLayer: false,
         drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
@@ -359,10 +359,25 @@
         const surface = proto.drawMapSurface, layer = proto.drawOverlayLayer
         proto.drawMapSurface = function(...args) {
             const cached = surface.apply(this, args)
-            if (active) work.renderPath = cached === 'lit' ? 'lit-tiles' : cached ? 'surface-cache' : 'direct'
+            if (active) work.renderPath = cached === 'lit' ? 'lit-tiles' : cached === 'standin' ? 'stand-in' : cached ? 'surface-cache' : 'direct'
             return cached
         }
         proto.drawMapSurface.visualsPerf = true
+        // TASK-1544: the stand-in's source ('cache', 'preview'; 'zoom': the preview under a zoom raster's frame); lit tiles
+        // drawn with it for their missing squares keep the 'lit-tiles' path.
+        if (proto.drawStandInRect) {
+            const standInRect = proto.drawStandInRect
+            proto.drawStandInRect = function(...args) {
+                if (active) work.standIn = args[5]
+                return standInRect.apply(this, args)
+            }
+            const standIn = proto.drawStandIn
+            proto.drawStandIn = function(...args) {
+                const source = standIn.apply(this, args)
+                if (active && source) work.standIn = source
+                return source
+            }
+        }
         // TASK-1374: a zoom gesture's frame drawn from the zoom raster.
         if (proto.drawZoomRaster) {
             const zoomRaster = proto.drawZoomRaster

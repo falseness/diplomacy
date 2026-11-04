@@ -1427,7 +1427,16 @@ const atmosphericLighting = {
             ctx.drawImage(variant, c.x - size / 2, c.y - size / 2, size, size)
             return
         }
-        const marble = this.ownedTile(hexagon.tileHash % this.TILE.variants, this.tileFill(hexagon))
+        const fill = this.tileFill(hexagon)
+        // TASK-1544: a surface cache stand-in preview (Grid.standInPreviewSteps) builds no owned tile: a fill not built yet
+        // is drawn flat in its colour.
+        if (this.flatOwnedTiles && !this.ownedTileMap().has(fill)) {
+            ctx.fillStyle = fill
+            this.hexPath(ctx, [{pos: c}])
+            ctx.fill()
+            return
+        }
+        const marble = this.ownedTile(hexagon.tileHash % this.TILE.variants, fill)
         const size = marble.width / this.TILE.rasterScale
         ctx.drawImage(marble, c.x - size / 2, c.y - size / 2, size, size)
     },
@@ -1909,6 +1918,47 @@ const atmosphericLighting = {
         ctx.globalCompositeOperation = 'color-dodge'
         ctx.drawImage(this.gain, bounds.left, bounds.top, w, h)
         ctx.restore()
+        this.bloom(ctx, board)
+        return true
+    },
+    // TASK-1544: true while a stand-in preview draws its cells' tiles (drawTile).
+    flatOwnedTiles: false,
+    // TASK-1544: whether the light map there is (at any scale) is the board's (its bounds and light state): what
+    // bakeStandIn lights with.
+    standInLightReady(board) {
+        if (!otherSettings.atmosphericVisuals || !this.map || !this.gain || this.staged) return false
+        mapDepth.ensureGeometry(board)
+        const bounds = mapDepth.surfaceBounds
+        return !!bounds && this.mapKey === JSON.stringify(bounds) && this.sameLightState(board, this.mapState)
+    },
+    // TASK-1544: bake's light on a surface cache's stand-in preview (Grid.standInPreviewStep, world transform) from the
+    // light map there is, whatever its scale (no map is built for it); false (unlit) when there is none.
+    bakeStandIn(ctx, board) {
+        if (!this.standInLightReady(board)) return false
+        const bounds = mapDepth.surfaceBounds
+        const w = bounds.right - bounds.left, h = bounds.bottom - bounds.top
+        // Not clipped to the cells' path (bake's, ~3000 hexagons): the light drawn over the whole raster, then cut back to
+        // the preview's own pixels (destination-in its copy from before), as cheap as three whole-raster draws.
+        const canvas = ctx.canvas, copy = this.standInCopy ||= document.createElement('canvas')
+        if (copy.width !== canvas.width || copy.height !== canvas.height) {
+            copy.width = canvas.width
+            copy.height = canvas.height
+        }
+        const k = copy.getContext('2d')
+        k.setTransform(1, 0, 0, 1, 0, 0)
+        k.globalCompositeOperation = 'copy'
+        k.drawImage(canvas, 0, 0)
+        ctx.save()
+        ctx.globalCompositeOperation = 'multiply'
+        ctx.drawImage(this.map, bounds.left, bounds.top, w, h)
+        ctx.globalCompositeOperation = 'color-dodge'
+        ctx.drawImage(this.gain, bounds.left, bounds.top, w, h)
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.globalCompositeOperation = 'destination-in'
+        ctx.drawImage(copy, 0, 0)
+        ctx.restore()
+        copy.width = copy.height = 0
+        this.standInCopy = null
         this.bloom(ctx, board)
         return true
     },
