@@ -159,6 +159,8 @@ class Grid extends SpritesGroup {
         // Set by GameManager.start: a board loaded otherwise (a save, an online board, a turn playback's recordings) is not held.
         this.startHoldWanted = false
         this.startRestFirst = false
+        // TASK-1543: when the frames after the start hold first called litRestUnderWay (its START_REST_FIRST_MS bound).
+        this.startRestFirstAt = undefined
         this.startJob = undefined
         this.startHeldFrames = 0
         this.startSteps = 0
@@ -278,6 +280,10 @@ class Grid extends SpritesGroup {
         this.cacheHoldFrames = 0
         this.cacheHoldWorkMs = 0
         this.cacheHoldEnds = {}
+        // TASK-1543: surface cache tasks queued with the camera moving or the lit view unbuilt (Grid.movingCacheBuilds), and
+        // start rest-first waits ended by Grid.START_REST_FIRST_MS.
+        this.surfaceMovingQueues = 0
+        this.startRestFirstExpired = 0
         // The patch under way (patchSurfaceCache, one step a frame) and its buffer.
         this.surfacePatchJob = undefined
         this.surfacePatchBuffer = undefined
@@ -2905,6 +2911,14 @@ class Grid extends SpritesGroup {
             this.startRestFirst = false
             return false
         }
+        // TASK-1543: for at most Grid.START_REST_FIRST_MS from the first frame drawn after the start hold (then the cache's
+        // build runs beside the snapshot: a camera moving or zooming out soon after a start has the cache to draw from).
+        this.startRestFirstAt ??= performance.now()
+        if (performance.now() - this.startRestFirstAt >= Grid.START_REST_FIRST_MS) {
+            this.startRestFirst = false
+            ++this.startRestFirstExpired
+            return false
+        }
         const view = this.litView, rest = view?.rest
         if (!!rest && view.rest === rest && (rest.done < LIT_REST_BANDS || !!view.splitJob))
             return true
@@ -2961,14 +2975,25 @@ class Grid extends SpritesGroup {
             }))
             return
         }
-        if (screen.surfaceMoving || this.litView?.unbuilt)
+        // TASK-1543 (Grid.movingCacheBuilds): the cache is in world space (the camera does not change what it draws), so with the
+        // camera moving or the lit view waiting for it as its stand-in (litView.unbuilt) a build under way (or none and no
+        // cache: the first one) and its split go on between frames; only the check of a finished cache against the board
+        // (and its patch or rebuild) waits for the camera at rest. While the frames draw the board directly (frameSurface
+        // false: each far longer than a step, every one waiting for the cache) a task runs steps for up to Grid.donorTaskMs
+        // (each step SURFACE_STEP_MS, input and frames between the tasks), else one step.
+        const moving = screen.surfaceMoving || !!this.litView?.unbuilt
+        if (moving && (!Grid.movingCacheBuilds || this.surfaceCache && !this.surfaceCacheBuild && !this.surfaceSplitJob))
             return
+        if (moving)
+            ++this.surfaceMovingQueues
+        const free = () => this === grid && otherSettings.atmosphericVisuals && (Grid.movingCacheBuilds || !gameEvent.screen.surfaceMoving)
+        const budget = moving && this.frameSurface === false ? Grid.donorTaskMs : SURFACE_STEP_MS
         // TASK-1372: the cache's split, a step a task (surfaceSplitStep).
         if (this.surfaceSplitJob) {
             this.surfaceCacheQueued = true
             setTimeout(gridTask(() => {
                 this.surfaceCacheQueued = false
-                if (this === grid && otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
+                if (free())
                     this.surfaceSplitStep()
             }))
             return
@@ -2980,8 +3005,12 @@ class Grid extends SpritesGroup {
         setTimeout(gridTask(() => {
             this.surfaceCacheQueued = false
             // A board replaced meanwhile (another game or tutorial started) builds nothing: its units read the new grid.
-            if (this === grid && otherSettings.atmosphericVisuals && !gameEvent.screen.surfaceMoving)
+            if (!free())
+                return
+            const start = performance.now()
+            do
                 this.surfaceCacheBuildStep(SURFACE_STEP_MS)
+            while (this.surfaceCacheBuild && performance.now() - start < budget - SURFACE_STEP_MS)
         }))
     }
     // A step of the surface cache's build: a stage, or (TASK-1473, with a budget in ms: the between-frames tasks) a step
@@ -5847,6 +5876,7 @@ class Grid extends SpritesGroup {
             job = this.startJob = {t: {a: t.a, b: t.b, c: t.c, d: t.d, e: t.e, f: t.f}, steps: this.startBuildSteps(t), frames: 0,
                 start: performance.now(), last: undefined, allow: 1}
             this.startRestFirst = true
+            this.startRestFirstAt = undefined
         }
         // (The start's moveTo marks the camera as moving, Screen.surfaceMoving, though it does not: its transform is compared.)
         const t = mainCtx.getTransform(), screen = gameEvent.screen
@@ -7055,6 +7085,12 @@ Grid.standInFollows = true
 // (Grid.stepSurfaceDonor) instead of starting its own.
 Grid.donorBuilds = true
 Grid.donorTaskMs = 40
+// TASK-1543: the surface cache's build (and split) under way goes on while the camera moves or the lit view waits for it
+// (Grid.prepareSurfaceCache); false: only with the camera at rest and the lit view's tiles built, as before.
+Grid.movingCacheBuilds = true
+// TASK-1543: how long (ms, from the first frame drawn after the start hold) the surface cache's build waits for the start
+// view's rest snapshot (Grid.litRestUnderWay, TASK-1518).
+Grid.START_REST_FIRST_MS = 1000
 Grid.donorLogSteps = false
 // TASK-1360: true brings the surface cache's cell layer up to a board change needing new variants in a job, a step a frame
 // (Grid.startSurfaceLayerJob); false draws them all in the frame that found the change (refreshCellLayer).
