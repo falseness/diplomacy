@@ -218,7 +218,9 @@ class CanvasPool {
         canvas.canvasPooled = false
         const g = canvas.getContext('2d')
         g.setTransform(1, 0, 0, 1, 0, 0)
-        g.clearRect(0, 0, canvas.width, canvas.height)
+        // TASK-1551: only the w x h corner the caller draws and reads is cleared (a whole large canvas cleared for a small piece
+        // was a megapixel of raster work between two frames).
+        g.clearRect(0, 0, w, h)
         ++this.stats.taken
         return canvas
     }

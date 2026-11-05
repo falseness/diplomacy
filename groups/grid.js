@@ -119,6 +119,12 @@ class Grid extends SpritesGroup {
         this.litLayerRetired = undefined
         this.litLayerJobsDropped = 0
         this.litLayerTaskCounts = []
+        // TASK-1551: the lit layer extended by strips while the camera pans at its scale (queueLitStrips): strip jobs done, strips
+        // drawn, full rebuilds queued by cause, and piece canvases a trim let go of while a kept recording listed the layer.
+        this.litLayerStripJobs = 0
+        this.litLayerStrips = 0
+        this.litLayerRebuilds = {}
+        this.litPiecesHeld = []
         // The overlays' composite on rest frames of the surface-cache path (drawOverlayComposite):
         // the last frame's calls and key, the canvas of its snapshot and the frames drawn.
         this.overlayComposite = undefined
@@ -490,8 +496,8 @@ class Grid extends SpritesGroup {
     }
     // Cell texts are set while their cells are drawn (production previews), within the same
     // drawn range, so the range also holds every text to draw and clear.
-    drawCellText(ctx) {
-        const range = this.drawRange(ctx)
+    // (TASK-1551: range given: a lit layer strip's cells, the same for drawOther before.)
+    drawCellText(ctx, range = this.drawRange(ctx)) {
         // A level-of-detail frame has no logic text to draw (lodTransform).
         if (!debug && (!this.drawLogicText || this.lod)) {
             this.drawInfoTexts(ctx, range)
@@ -602,10 +608,9 @@ class Grid extends SpritesGroup {
     }
     // layer: undefined draws everything in place; atmospheric lighting draws the
     // 'buildings' before its light map and the 'units' (with silhouettes and bars) after.
-    drawOther(ctx, layer) {
+    drawOther(ctx, layer, range = this.drawRange(ctx)) {
         const buildings = layer !== 'units', units = layer !== 'buildings'
         let tmpBuildings = []
-        const range = this.drawRange(ctx)
         for (let i = range.i0; i < range.i1; ++i) {
             for (let j = range.j0; j < range.j1; ++j) {
                 if (isFogOfWar && !this.fogOfWar[i][j]) {
@@ -4106,9 +4111,9 @@ class Grid extends SpritesGroup {
     // scale, context state and key (litLayerKey: debug, logic texts and their revision, hex radius, bar settings, fog) are
     // the frame's, every cell it drew still draws the same (litLayerSignature: each drawn cell's unit and building, their
     // hp, pending heal, hit, moves, moves bar, image, owner colour and production; the fog), no unit is left out of the unit
-    // passes (stillUnitsHidden) and no online observation runs, the view is inside it and for at most LIT_LAYER_MAX_AGE ms;
-    // the next one is queued ahead once the view is within LIT_LAYER_NEAR of its size of the layer's edge or the layer
-    // LIT_LAYER_AHEAD_AGE ms old. A layer whose cells are fewer than LIT_LAYER_MIN_CELLS (and no debug or logic texts) is not
+    // passes (stillUnitsHidden) and no online observation runs and the view is inside it; once the view is within
+    // LIT_STRIP_NEAR of its size of the layer's edge the layer is extended by strips (TASK-1551, queueLitStrips). A layer
+    // whose cells are fewer than LIT_LAYER_MIN_CELLS (and no debug or logic texts) is not
     // drawn: the frames draw those few cells directly and queue nothing until the view leaves it. Frames at rest, zoom
     // gestures, the surface cache's paths and level-of-detail frames never draw it.
     // Returns whether it drew the units and the cell texts.
@@ -4134,30 +4139,34 @@ class Grid extends SpritesGroup {
         const ox = layer ? Math.round(t.e - layer.e) : 0, oy = layer ? Math.round(t.f - layer.f) : 0
         const cover = this.litLayerRect(cw, ch, t, 0)
         const vx0 = cover.x0 - ox, vy0 = cover.y0 - oy, vx1 = vx0 + cover.width, vy1 = vy0 + cover.height
-        if (!layer || layer.a !== t.a || layer.d !== t.d || cw !== layer.cw || ch !== layer.ch ||
-                performance.now() - layer.time > LIT_LAYER_MAX_AGE || !sameCanvasState(state, layer.state) ||
-                vx0 < layer.x0 && layer.x0 > layer.left || vy0 < layer.y0 && layer.y0 > layer.top ||
+        // TASK-1551: no age limit (the layer is kept while its cells, key and state hold): a full rebuild only for a new scale,
+        // canvas or state, a changed cell or key, or a view outside it; one nearing its edge is extended by strips instead.
+        const cause = !layer ? 'none' : layer.a !== t.a || layer.d !== t.d ? 'scale' : cw !== layer.cw || ch !== layer.ch ? 'canvas' :
+            !sameCanvasState(state, layer.state) ? 'state:' + canvasStateDiff(state, layer.state) :
+            vx0 < layer.x0 && layer.x0 > layer.left || vy0 < layer.y0 && layer.y0 > layer.top ||
                 vx1 > layer.x0 + layer.width && layer.x0 + layer.width < layer.right ||
-                vy1 > layer.y0 + layer.height && layer.y0 + layer.height < layer.bottom ||
-                !this.litLayerKeyHolds(layer) || !this.litLayerSignature(layer.range, layer.signature)) {
-            this.queueLitLayer(ctx, t, state)
+                vy1 > layer.y0 + layer.height && layer.y0 + layer.height < layer.bottom ? 'outside' :
+            !this.litLayerKeyHolds(layer) ? 'key' : !this.litLayerSignature(layer.range, layer.signature) ? 'cells' : null
+        if (cause) {
+            this.queueLitLayer(ctx, t, state, false, cause)
             return false
         }
         if (!layer.pieces)
             return false
-        const nearX = cover.width * LIT_LAYER_NEAR, nearY = cover.height * LIT_LAYER_NEAR
-        if (performance.now() - layer.time > LIT_LAYER_AHEAD_AGE ||
-                vx0 - nearX < layer.x0 && layer.x0 > layer.left || vy0 - nearY < layer.y0 && layer.y0 > layer.top ||
+        this.flushHeldPieces()
+        const nearX = cover.width * LIT_STRIP_NEAR, nearY = cover.height * LIT_STRIP_NEAR
+        if (vx0 - nearX < layer.x0 && layer.x0 > layer.left || vy0 - nearY < layer.y0 && layer.y0 > layer.top ||
                 vx1 + nearX > layer.x0 + layer.width && layer.x0 + layer.width < layer.right ||
                 vy1 + nearY > layer.y0 + layer.height && layer.y0 + layer.height < layer.bottom)
-            this.queueLitLayer(ctx, t, state, true)
+            this.queueLitStrips(layer, t, cw, ch, ox, oy)
         // The pieces in view, each copied whole at the layer's placement.
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
+        // (TASK-1551: a piece's x, y in the layer's pixels, its source sx, sy within its canvas: a trimmed piece draws a part.)
         for (const piece of layer.pieces) {
-            const x = layer.x0 + ox + piece.x, y = layer.y0 + oy + piece.y
+            const x = ox + piece.x, y = oy + piece.y
             if (x < cw && y < ch && x + piece.w > 0 && y + piece.h > 0)
-                ctx.drawImage(piece.canvas, 0, 0, piece.w, piece.h, x, y, piece.w, piece.h)
+                ctx.drawImage(piece.canvas, piece.sx, piece.sy, piece.w, piece.h, x, y, piece.w, piece.h)
         }
         ctx.restore()
         // What the skipped units pass does besides drawing: a selected demon portal's panel kept current (drawNextProduction,
@@ -4185,6 +4194,7 @@ class Grid extends SpritesGroup {
         this.dropLitLayer()
         this.givePieces(this.litLayerRetired)
         this.litLayerRetired = undefined
+        this.flushHeldPieces(true)
         if (this.litLayerScratch)
             this.litLayerScratch.width = this.litLayerScratch.height = 0
         this.litLayerScratch = undefined
@@ -4267,10 +4277,11 @@ class Grid extends SpritesGroup {
     }
     // Queues the lit layer for transform t of ctx, drawn from ctx's state now (one at a time). It is not built if the camera
     // came to rest, a zoom gesture began, the frames left the lit tiles or a unit is left out of the unit passes.
-    queueLitLayer(ctx, t, state, ahead = false) {
+    queueLitLayer(ctx, t, state, ahead = false, cause = 'ahead') {
         if (this.litLayerQueued)
             return
         this.litLayerQueued = true
+        this.litLayerRebuilds[cause] = (this.litLayerRebuilds[cause] || 0) + 1
         const cw = ctx.canvas.width, ch = ctx.canvas.height
         // TASK-1546 (Grid.litLayerSteps): the layer drawn in steps (litLayerRasterSteps), as many a task as fit LIT_LAYER_TASK_MS
         // (the first always), the next task queued until it is done; given up when the camera rests, a zoom begins, the
@@ -4360,6 +4371,220 @@ class Grid extends SpritesGroup {
             Grid.canvasPool.give(piece.canvas)
         if (layer)
             layer.pieces = null
+    }
+    // TASK-1551: the lit layer extended while the camera pans at its scale. The view nearing its edge (drawLitLayer), the layer's
+    // new rectangle is litLayerRect at the camera now (in the layer's pixels: shifted by the whole-pixel camera shift ox, oy);
+    // only the strips of it the layer does not cover (at most 4 rectangles; a side moved out by less than LIT_STRIP_MIN of the
+    // canvas, not to the board's limit, keeps its edge) are drawn: the units pass and the cell texts at the layer's transform
+    // over each strip on the scratch, its pieces copied as the layer's (litStripSteps), a chunk of a strip (litStripChunks) by
+    // a task between two frames (the cells within reach of it only, litStripRange). Done, the layer's pieces are cut to the new rectangle and the strips' added (commitLitStrips). The
+    // pieces are drawn on the same pixel grid at the same transform, so a unit or text across a strip's edge draws the same
+    // pixels on both sides. Given up as a full layer job is (dropLitLayerJob), or when the layer is no longer the one drawn.
+    queueLitStrips(layer, t, cw, ch, ox, oy) {
+        if (this.litLayerQueued)
+            return
+        const want = this.litLayerRect(cw, ch, t)
+        const n = {x0: want.x0 - ox, y0: want.y0 - oy, x1: want.x0 - ox + want.width, y1: want.y0 - oy + want.height}
+        const c = {x0: layer.x0, y0: layer.y0, x1: layer.x0 + layer.width, y1: layer.y0 + layer.height}
+        const mx = Math.ceil(cw * LIT_STRIP_MIN), my = Math.ceil(ch * LIT_STRIP_MIN)
+        if (n.x0 < c.x0 && c.x0 - n.x0 < mx && n.x0 > layer.left)
+            n.x0 = c.x0
+        if (n.y0 < c.y0 && c.y0 - n.y0 < my && n.y0 > layer.top)
+            n.y0 = c.y0
+        if (n.x1 > c.x1 && n.x1 - c.x1 < mx && n.x1 < layer.right)
+            n.x1 = c.x1
+        if (n.y1 > c.y1 && n.y1 - c.y1 < my && n.y1 < layer.bottom)
+            n.y1 = c.y1
+        // Not overlapping the layer: a full layer is drawn when the view leaves it.
+        if (n.x0 >= c.x1 || n.x1 <= c.x0 || n.y0 >= c.y1 || n.y1 <= c.y0)
+            return
+        const strips = []
+        if (n.y0 < c.y0)
+            strips.push({x0: n.x0, y0: n.y0, x1: n.x1, y1: c.y0})
+        if (n.y1 > c.y1)
+            strips.push({x0: n.x0, y0: c.y1, x1: n.x1, y1: n.y1})
+        const my0 = Math.max(n.y0, c.y0), my1 = Math.min(n.y1, c.y1)
+        if (n.x0 < c.x0)
+            strips.push({x0: n.x0, y0: my0, x1: c.x0, y1: my1})
+        if (n.x1 > c.x1)
+            strips.push({x0: c.x1, y0: my0, x1: n.x1, y1: my1})
+        if (!strips.length)
+            return
+        this.litLayerQueued = true
+        const steps = this.litStripSteps(layer, strips)
+        const job = this.litLayerJob = {steps, tasks: 0, strips: strips.length}
+        const run = gridTask(() => {
+            if (this.litLayerJob !== job)
+                return
+            const screen = gameEvent.screen
+            if (!screen.surfaceMoving || screen.zoomGesture || screen.surfaceZooming || this !== grid || this.frameSurface !== 'lit' ||
+                    this.litLayer !== layer || !layer.pieces || this.stillUnitsHidden() || this.isObserving() ||
+                    typeof mainCtx !== 'undefined' && (mainCtx.getTransform().a !== layer.a || mainCtx.getTransform().d !== layer.d)) {
+                this.dropLitLayerJob()
+                return
+            }
+            // One chunk between two frames while the frames draw the layer (the next task waits for the next frame), all at once
+            // while they do not.
+            const drawn = this.litLayerDrawnSerial === this.drawSerial
+            if (drawn && job.serial === this.drawSerial) {
+                setTimeout(run, LIT_STRIP_WAIT_MS)
+                return
+            }
+            let step
+            ++job.tasks
+            do
+                step = steps.next()
+            while (!step.done && !drawn)
+            if (!step.done) {
+                job.serial = this.drawSerial
+                setTimeout(run, LIT_STRIP_WAIT_MS)
+                return
+            }
+            this.litLayerJob = undefined
+            this.litLayerQueued = false
+            if (!step.value || !this.commitLitStrips(layer, n, step.value))
+                ++this.litLayerJobsDropped
+        })
+        setTimeout(run)
+    }
+    // TASK-1551: queueLitStrips's work in steps (a generator; its value {pieces, signatures}, null when given up): for each strip
+    // (a rectangle in the layer's pixels) the units pass and the cell texts drawn over it on the scratch (one step), then its
+    // pieces copied (litLayerPieces within the strip, so none overlaps the layer's or another strip's), placed in the layer's
+    // pixels. Given up when the key changed by a strip's drawing or a strip's cells changed by the end; the copies made are
+    // given back then.
+    *litStripSteps(layer, strips) {
+        const pieces = [], signatures = []
+        let done = false
+        try {
+            for (const r of this.litStripChunks(strips)) {
+                const width = r.x1 - r.x0, height = r.y1 - r.y0
+                const transform = {a: layer.a, b: 0, c: 0, d: layer.d, e: layer.e - r.x0, f: layer.f - r.y0}
+                const range = this.litStripRange(transform, width, height)
+                const {values} = this.litLayerSignature(range)
+                signatures.push([range, values])
+                const target = Math.max(1, Math.round(LIT_PIECE_VISIBLE * width * height / (layer.cw * layer.ch)))
+                const parts = this.litLayerPieces(range, transform, width, height, target)
+                if (!parts.length)
+                    continue
+                let canvas = this.litLayerScratch
+                if (!canvas || canvas.width < width || canvas.height < height) {
+                    const w = Math.max(width, canvas?.width || 0), h = Math.max(height, canvas?.height || 0)
+                    if (canvas)
+                        canvas.width = canvas.height = 0
+                    canvas = this.litLayerScratch = document.createElement('canvas')
+                    canvas.width = w
+                    canvas.height = h
+                }
+                const lctx = canvas.getContext('2d')
+                lctx.setTransform(1, 0, 0, 1, 0, 0)
+                for (const piece of parts)
+                    lctx.clearRect(piece.x, piece.y, piece.w, piece.h)
+                applyCanvasState(lctx, {...layer.state, transform})
+                this.drawOther(lctx, 'units', range)
+                this.drawCellText(lctx, range)
+                if (!this.litLayerKeyHolds(layer))
+                    return null
+                for (const piece of parts) {
+                    const part = Grid.canvasPool.take(piece.w, piece.h)
+                    const pctx = part.getContext('2d')
+                    pctx.drawImage(canvas, piece.x, piece.y, piece.w, piece.h, 0, 0, piece.w, piece.h)
+                    pctx.getImageData(0, 0, 1, 1)
+                    pieces.push({x: r.x0 + piece.x, y: r.y0 + piece.y, w: piece.w, h: piece.h, sx: 0, sy: 0, canvas: part, strip: true})
+                }
+                yield
+            }
+            for (const [range, values] of signatures)
+                if (!this.litLayerSignature(range, values))
+                    return null
+            done = true
+            return {pieces, strips: strips.length}
+        } finally {
+            if (!done)
+                for (const piece of pieces)
+                    Grid.canvasPool.give(piece.canvas)
+        }
+    }
+    // TASK-1551: the strips cut along their longer side into chunks of at most LIT_STRIP_CHUNK_PIXELS (whole LIT_PIECE_BLOCK
+    // blocks long), each drawn and copied between two frames.
+    litStripChunks(strips) {
+        const chunks = [], B = LIT_PIECE_BLOCK
+        for (const r of strips) {
+            const w = r.x1 - r.x0, h = r.y1 - r.y0, across = Math.min(w, h)
+            const step = Math.max(B, Math.floor(LIT_STRIP_CHUNK_PIXELS / Math.max(1, across) / B) * B)
+            if (w >= h)
+                for (let x = r.x0; x < r.x1; x += step)
+                    chunks.push({x0: x, y0: r.y0, x1: Math.min(r.x1, x + step), y1: r.y1})
+            else
+                for (let y = r.y0; y < r.y1; y += step)
+                    chunks.push({x0: r.x0, y0: y, x1: r.x1, y1: Math.min(r.y1, y + step)})
+        }
+        return chunks
+    }
+    // TASK-1551: the cells whose drawing can reach a width x height canvas at transform: centres within LIT_STRIP_REACH hex
+    // radii (past the pieces' LIT_PIECE_REACH) and LIT_PIECE_PAD device pixels of it (drawRange's cells within its wide margin
+    // would draw several times the cells a thin strip needs).
+    litStripRange(transform, width, height) {
+        const reach = LIT_STRIP_REACH * basis.r, padX = LIT_PIECE_PAD / transform.a, padY = LIT_PIECE_PAD / transform.d
+        const left = -transform.e / transform.a - reach - padX, right = (width - transform.e) / transform.a + reach + padX
+        const top = -transform.f / transform.d - reach - padY, bottom = (height - transform.f) / transform.d + reach + padY
+        const n = this.arr.length, m = n ? this.arr[0].length : 0
+        return {
+            i0: Math.max(0, Math.floor(left / basis.offset.x)), i1: Math.min(n, Math.ceil(right / basis.offset.x) + 1),
+            j0: Math.max(0, Math.floor((top / basis.offset.y - 1) / 2)), j1: Math.min(m, Math.ceil(bottom / basis.offset.y / 2) + 1)
+        }
+    }
+    // TASK-1551: the strips' pieces added to the layer (still the one drawn, its key and cells as it drew them), its pieces cut to
+    // the new rectangle cover (in its pixels; a piece across its edge keeps the part inside, drawn from its source offset), the
+    // ones outside given to the pool (held while a kept recording lists the layer, flushHeldPieces), its range and signature
+    // those of the new rectangle. Returns whether it was added.
+    commitLitStrips(layer, cover, {pieces, strips}) {
+        if (this.litLayer !== layer || !layer.pieces || !this.litLayerKeyHolds(layer) || !this.litLayerSignature(layer.range, layer.signature)) {
+            for (const piece of pieces)
+                Grid.canvasPool.give(piece.canvas)
+            return false
+        }
+        const kept = [], dropped = []
+        for (const p of layer.pieces) {
+            const x0 = Math.max(p.x, cover.x0), y0 = Math.max(p.y, cover.y0)
+            const x1 = Math.min(p.x + p.w, cover.x1), y1 = Math.min(p.y + p.h, cover.y1)
+            if (x1 <= x0 || y1 <= y0)
+                dropped.push(p.canvas)
+            else if (x0 !== p.x || y0 !== p.y || x1 !== p.x + p.w || y1 !== p.y + p.h)
+                kept.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0, sx: p.sx + x0 - p.x, sy: p.sy + y0 - p.y, canvas: p.canvas, strip: p.strip})
+            else
+                kept.push(p)
+        }
+        if (this.litLayerListed(layer))
+            this.litPiecesHeld.push({layer, canvases: dropped})
+        else
+            for (const canvas of dropped)
+                Grid.canvasPool.give(canvas)
+        layer.pieces = kept.concat(pieces)
+        layer.x0 = cover.x0
+        layer.y0 = cover.y0
+        layer.width = cover.x1 - cover.x0
+        layer.height = cover.y1 - cover.y0
+        const transform = {a: layer.a, b: 0, c: 0, d: layer.d, e: layer.e - cover.x0, f: layer.f - cover.y0}
+        layer.range = this.drawRange({getTransform: () => transform, canvas: {width: layer.width, height: layer.height}})
+        const {values, cells} = this.litLayerSignature(layer.range)
+        layer.signature = values
+        layer.cells = cells
+        layer.strips = (layer.strips || 0) + strips
+        ++this.litLayerStripJobs
+        this.litLayerStrips += strips
+        return true
+    }
+    // TASK-1551: piece canvases a strip trim let go of, given to the pool once no kept recording lists their layer (all at once).
+    flushHeldPieces(all = false) {
+        if (!this.litPiecesHeld.length)
+            return
+        this.litPiecesHeld = this.litPiecesHeld.filter(held => {
+            if (!all && this.litLayerListed(held.layer))
+                return true
+            for (const canvas of held.canvases)
+                Grid.canvasPool.give(canvas)
+            return false
+        })
     }
     litLayerListed(layer) {
         return this.zoomSource?.layers?.[0] === layer || this.zoomReplayJob?.source?.layers?.[0] === layer
@@ -4463,6 +4688,12 @@ class Grid extends SpritesGroup {
             }
             if (Grid.litLayerAudit)
                 this.auditLitLayer(lctx, width, height, pieces)
+            // TASK-1551: the pieces placed in the layer's pixels (x, y; the canvas's at the layer's transform), drawn from sx, sy.
+            for (const piece of pieces) {
+                piece.x += x0
+                piece.y += y0
+                piece.sx = piece.sy = 0
+            }
             if (!once && (!this.litLayerKeyHolds({key}) || !this.litLayerSignature(range, values))) {
                 for (const piece of pieces)
                     Grid.canvasPool.give(piece.canvas)
@@ -7655,6 +7886,13 @@ function sameCanvasState(a, b) {
     const da = a.lineDash || [], db = b.lineDash || []
     return da.length === db.length && da.every((v, k) => v === db[k])
 }
+// TASK-1551: the first state property two canvasStateOf states differ in (counted with the lit layer's rebuilds).
+function canvasStateDiff(a, b) {
+    for (const name of CANVAS_STATE)
+        if (a[name] !== b[name])
+            return name
+    return 'lineDash'
+}
 // Sets ctx's transform and the state properties of state (CanvasCallRecorder.begin's copy of a context's).
 function applyCanvasState(ctx, state) {
     const t = state.transform
@@ -8252,14 +8490,18 @@ const OVERLAY_LAYER_MIN_CELLS = 64
 const SCENE_LAYER_MAX_PIXELS = 4.5 * 1024 * 1024
 const SCENE_LAYER_CELLS_PER_MP = 64
 // TASK-1515: the lit layer (Grid.drawLitLayer): its margin round the canvas (a fraction of the canvas each side), its largest
-// size (device pixels), the fewest cells it is drawn for, its age (ms) at which the next is queued and past which it is not
-// drawn, and the distance from its edge (a fraction of the view) at which the next is queued.
+// size (device pixels) and the fewest cells it is drawn for.
 const LIT_LAYER_MARGIN = 0.25
 const LIT_LAYER_MAX_PIXELS = 9 * 1024 * 1024
 const LIT_LAYER_MIN_CELLS = 16
-const LIT_LAYER_AHEAD_AGE = 1500
-const LIT_LAYER_MAX_AGE = 2000
-const LIT_LAYER_NEAR = 0.1
+// TASK-1551: the lit layer's strips (Grid.queueLitStrips): queued once the view is within LIT_STRIP_NEAR of its size of the
+// layer's edge; the least a side is moved out (a fraction of the canvas); a chunk's largest area (device pixels; one chunk
+// drawn and copied between two frames); the wait (ms) of a task for the next frame; the reach (hex radii) of the cells drawn.
+const LIT_STRIP_NEAR = 0.15
+const LIT_STRIP_MIN = 0.05
+const LIT_STRIP_CHUNK_PIXELS = 192 * 1024
+const LIT_STRIP_WAIT_MS = 4
+const LIT_STRIP_REACH = 2
 // TASK-1546: the time (ms) a task drawing the lit layer in steps (Grid.queueLitLayer) spends: its piece copies while the task's
 // time and the last copy's fit (the units and texts, one step, always).
 const LIT_LAYER_TASK_MS = 40
