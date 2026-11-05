@@ -286,6 +286,9 @@ class Grid extends SpritesGroup {
         this.surfaceStandInPatches = 0
         // TASK-1519: stand-in caches whose cell layer was brought up for the lit view (litStandIn).
         this.standInFollows = 0
+        // TASK-1553: frames whose stand-in squares got no sky (frameCover), and the sky drawn under them after all (coverSkyUnder).
+        this.standInCovers = 0
+        this.coverSkyUnders = 0
         this.surfaceCacheAdopted = null
         this.surfaceCacheAdoptedFrom = undefined
         // TASK-1519: the board whose surface cache build (or split or patch) under way this board finishes between its frames
@@ -5075,6 +5078,12 @@ class Grid extends SpritesGroup {
         if (plan === undefined || plan && (plan.t.a !== t.a || plan.t.d !== t.d || plan.t.e !== t.e || plan.t.f !== t.f ||
                 plan.t.b !== t.b || plan.t.c !== t.c))
             plan = this.planLitView(ctx)
+        // TASK-1553: squares frameCover left without the sky for the stand-in (plan.covered); a plan made again gets them
+        // the sky and the slab shadow first (coverSkyUnder), as frameCover left them.
+        const covered = this.coverStandIn
+        this.coverStandIn = undefined
+        if (covered && plan !== covered.plan)
+            this.coverSkyUnder(ctx, covered.rects)
         if (!plan)
             return false
         if (plan.cache)
@@ -5112,7 +5121,8 @@ class Grid extends SpritesGroup {
         if (Grid.litAhead)
             this.followLitMotion(view, t)
         // A tile not built yet is drawn from the stand-in (the tasks build it, queueLitTiles); without one it is built now.
-        let standIn, missing = null, stale = false
+        // TASK-1553: the stand-in frameCover found (plan.standIn), if it looked.
+        let standIn = plan.standIn, missing = null, stale = false
         ctx.save()
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (let v = range.v0; v <= range.v1; ++v) {
@@ -5143,11 +5153,11 @@ class Grid extends SpritesGroup {
                 return {x: x0, y: y0, w: Math.min(cw, (u + 1) * LIT_TILE + ox) - x0, h: Math.min(ch, (v + 1) * LIT_TILE + oy) - y0}
             }))
             ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
-            if (standIn === 'standin')
-                this.drawStandIn(ctx)
-            else
-                this.drawSurfaceCache(ctx)
+            const drawn = standIn === 'standin' ? this.drawStandIn(ctx) : this.drawSurfaceCache(ctx)
             ctx.restore()
+            // TASK-1553: a stand-in that did not draw leaves frameCover's covered squares the sky and the slab shadow.
+            if (!drawn && plan.covered)
+                this.coverSkyUnder(ctx, plan.covered)
         }
         if (stale)
             this.drawPatchCells(ctx, view.refresh, 'lit')
@@ -5539,6 +5549,8 @@ class Grid extends SpritesGroup {
     frameCover(ctx) {
         this.litPlan = undefined
         this.coverOpen = undefined
+        this.coverSky = undefined
+        this.coverStandIn = undefined
         // The sky's check first: a sky drawn with another key or board invalidates the light first.
         if (!otherSettings.atmosphericVisuals || !atmosphericBackground.opaqueOver(ctx) || this.canUseSurfaceCache())
             return null
@@ -5550,25 +5562,62 @@ class Grid extends SpritesGroup {
         const {t, view} = plan, cw = ctx.canvas.width, ch = ctx.canvas.height
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         const range = this.litTileRange(cw, ch, ox, oy, 0), open = []
+        // TASK-1553 (Grid.standInCover): a tile square not built (drawn from the stand-in, drawLitView) is covered where the
+        // stand-in is opaque: inside the board outline by standInMargin (its underlay magnified, standInCoverMargin).
+        let margin
+        const covered = []
         // Rows of tiles cut to the canvas: the runs of tiles without an opaque square, and the
         // canvas above, below, left and right of the tile range (none: the range covers it).
         for (let v = range.v0; v <= range.v1; ++v) {
             const y0 = Math.max(0, v * LIT_TILE + oy), y1 = Math.min(ch, (v + 1) * LIT_TILE + oy)
             let run = null
             for (let u = range.u0; u <= range.u1; ++u) {
-                const tile = view.tiles.get(u + ',' + v)
+                const key = u + ',' + v
+                const tile = view.tiles.get(key)
                 if (tile && tile.litOpaque === mapDepth.outline && mapDepth.outline) {
                     run = null
                     continue
                 }
                 const x0 = Math.max(0, u * LIT_TILE + ox), x1 = Math.min(cw, (u + 1) * LIT_TILE + ox)
+                if (!tile && Grid.standInCover && !view.stale?.has(key) &&
+                        (margin ??= this.standInCoverMargin(ctx, plan, t)) > 0 &&
+                        this.litSquareOpaque(view, x0 - ox, y0 - oy, x1 - ox, y1 - oy, margin, false)) {
+                    covered.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+                    run = null
+                    continue
+                }
                 if (run)
                     run.w = x1 - run.x
                 else
                     open.push(run = {x: x0, y: y0, w: x1 - x0, h: y1 - y0})
             }
         }
-        return {open: this.coverOpen = open, sky: Grid.skyBlocks ? this.coverSkyBlocks(ctx, open, view, ox, oy) : null}
+        if (covered.length) {
+            plan.covered = covered
+            this.coverStandIn = {plan, rects: covered}
+            ++this.standInCovers
+        }
+        const sky = Grid.skyBlocks ? this.coverSkyBlocks(ctx, open, view, ox, oy, margin || 0) : null
+        this.coverSky = sky
+        return {open: this.coverOpen = open, sky}
+    }
+    // TASK-1553: the device margin inside the board outline past which the stand-in the frame draws for its tiles not built
+    // (drawLitView: litStandIn's surface cache, else standInSource's cache or preview) is opaque: its underlay (an opaque
+    // fill of the outline) magnified from its raster's scale (two source pixels of antialiasing and sampling, two device
+    // pixels besides); 0 when there is no stand-in (the tiles are built in the frame: open as before). The stand-in found
+    // is kept for drawLitView (plan.standIn), which draws it, so it is found once a frame.
+    standInCoverMargin(ctx, plan, t) {
+        const standIn = plan.standIn = this.litStandIn(ctx) || !!this.standInSource() && 'standin'
+        if (!standIn)
+            return 0
+        let k
+        if (standIn === true || this.standInSource() === 'cache')
+            k = this.surfaceCache && this.surfaceCacheBounds ? this.surfaceCache.width / this.surfaceCacheBounds.width : 0
+        else
+            k = this.standInPreview?.scale || 0
+        if (!(k > 0))
+            return 0
+        return Math.ceil(2 + 2 * Math.max(t.a, t.d) / k)
     }
     // TASK-1545: the sky raster's blocks (atmosphericBackground.BLOCK_W x BLOCK_H, from the canvas's corner) the frame
     // draws: those meeting an open rectangle where it is not covered by the lit tiles' opaque pixels: a piece of a block in
@@ -5577,17 +5626,28 @@ class Grid extends SpritesGroup {
     // block the outline crosses is cut into BLOCK_SPLIT wide blocks, found the same way (the sky along the board's edge).
     // The sky drawn is clipped to the open rectangles as before, so the pixels drawn are the same; those not drawn are
     // under opaque tile pixels. Null (the whole raster) when the sky cannot draw blocks for this canvas.
-    coverSkyBlocks(ctx, open, view, ox, oy) {
+    // TASK-1553: standIn > 0 (frameCover's stand-in margin): a piece in a tile square not built (drawn from the stand-in) is
+    // covered where the stand-in is opaque (inside the outline by that margin), as frameCover's squares.
+    coverSkyBlocks(ctx, open, view, ox, oy, standIn = 0) {
         const cw = ctx.canvas.width, ch = ctx.canvas.height, B = atmosphericBackground
         if (!open.length || !B.blocksFor(cw, ch))
             return null
         const W = B.BLOCK_W, H = B.BLOCK_H, S = Math.min(W, B.BLOCK_SPLIT || W), blocks = []
         const covered = (x0, y0, x1, y1) => {
+            let built = false, stood = false
             for (let v = Math.floor((y0 - oy) / LIT_TILE); v <= Math.floor((y1 - 1 - oy) / LIT_TILE); ++v)
-                for (let u = Math.floor((x0 - ox) / LIT_TILE); u <= Math.floor((x1 - 1 - ox) / LIT_TILE); ++u)
-                    if (view.tiles.get(u + ',' + v)?.litOutline !== mapDepth.outline || !mapDepth.outline)
+                for (let u = Math.floor((x0 - ox) / LIT_TILE); u <= Math.floor((x1 - 1 - ox) / LIT_TILE); ++u) {
+                    const key = u + ',' + v, tile = view.tiles.get(key)
+                    if (!mapDepth.outline)
                         return false
-            return this.litSquareOpaque(view, x0 - ox, y0 - oy, x1 - ox, y1 - oy)
+                    if (tile?.litOutline === mapDepth.outline)
+                        built = true
+                    else if (!tile && standIn > 0 && !view.stale?.has(key))
+                        stood = true
+                    else
+                        return false
+                }
+            return this.litSquareOpaque(view, x0 - ox, y0 - oy, x1 - ox, y1 - oy, stood ? Math.max(2, standIn) : 2, built || !stood)
         }
         const needed = (x, y, x1, y1) => {
             for (const r of open) {
@@ -5633,11 +5693,11 @@ class Grid extends SpritesGroup {
     // opaque fill under the surface has full coverage and every later draw on the tile keeps the
     // alpha (source-over, multiply, color-dodge, screen). A loop side whose bounds meet the
     // rectangle counts as crossing it.
-    litSquareOpaque(view, x0, y0, x1, y1) {
+    // TASK-1553: m the margin (device pixels), underlay false: the board's own underlay cache not needed (a stand-in's).
+    litSquareOpaque(view, x0, y0, x1, y1, m = 2, underlay = true) {
         const loop = mapDepth.outlineLoop
-        if (!loop || !mapDepth.underlayCache)
+        if (!loop || underlay && !mapDepth.underlayCache)
             return false
-        const m = 2
         const left = (x0 - m - view.e) / view.a, right = (x1 + m - view.e) / view.a
         const top = (y0 - m - view.f) / view.d, bottom = (y1 + m - view.f) / view.d
         const cx = (left + right) / 2, cy = (top + bottom) / 2
@@ -5655,9 +5715,12 @@ class Grid extends SpritesGroup {
     // The slab's soft drop shadow on the sky (drawn before the surface): skipped when frameCover
     // left no open part of the canvas over it this frame (none over the rest snapshot), else drawn
     // whole, since a clipped scaled draw samples its raster a level apart from the whole one.
+    // TASK-1553 (Grid.shadowClip): drawn whole but clipped to the open part the sky is drawn on (the sky's blocks in it, if
+    // any): the rest of the canvas is under the board's opaque images.
     drawSlabShadow(ctx) {
-        const open = this.coverOpen
+        const open = this.coverOpen, sky = this.coverSky
         this.coverOpen = undefined
+        this.coverSky = undefined
         if (open)
             mapDepth.ensureGeometry(this)
         const shadow = mapDepth.atmosphericShadow
@@ -5665,10 +5728,36 @@ class Grid extends SpritesGroup {
             const t = ctx.getTransform()
             const x0 = t.a * shadow.left + t.e, x1 = x0 + t.a * shadow.width
             const y0 = t.d * shadow.top + t.f, y1 = y0 + t.d * shadow.height
-            if (!open.some(r => r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0))
+            const meets = r => r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0
+            if (!open.some(meets))
                 return
+            if (Grid.shadowClip) {
+                const rects = shadowClipRects(open, sky).filter(meets)
+                if (!rects.length)
+                    return
+                ctx.save()
+                clipToDeviceRects(ctx, rects)
+                ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+                mapDepth.drawAtmosphericShadow(ctx, this)
+                ctx.restore()
+                return
+            }
         }
         mapDepth.drawAtmosphericShadow(ctx, this)
+    }
+    // TASK-1553: the sky and the slab shadow on ctx (the camera's transform) in the device rectangles rects, which
+    // frameCover left without them for a stand-in that is not drawn there after all.
+    coverSkyUnder(ctx, rects) {
+        const t = ctx.getTransform()
+        ctx.save()
+        clipToDeviceRects(ctx, rects)
+        atmosphericBackground.draw(ctx)
+        ctx.setTransform(t.a, t.b, t.c, t.d, t.e, t.f)
+        if (typeof drawBackgroundHints !== 'undefined')
+            drawBackgroundHints(ctx)
+        mapDepth.drawAtmosphericShadow(ctx, this)
+        ctx.restore()
+        ++this.coverSkyUnders
     }
     // Whether view still draws this board at transform t's scale: the same scale, light map
     // raster and board state (its own captured copy, compared as the surface cache's).
@@ -7616,6 +7705,21 @@ function zoomRasterTweens() {
 }
 
 // Clips ctx to rects (whole device pixel rectangles {x, y, w, h}); leaves the identity transform.
+// TASK-1553: the device rectangles the sky is drawn in: the open rectangles, cut to the sky's blocks when it draws blocks
+// (Grid.frameCover's sky; null: the whole open rectangles).
+function shadowClipRects(open, blocks) {
+    if (!blocks)
+        return open
+    const out = []
+    for (const b of blocks)
+        for (const r of open) {
+            const x0 = Math.max(b.x, r.x), y0 = Math.max(b.y, r.y), x1 = Math.min(b.x + b.w, r.x + r.w), y1 = Math.min(b.y + b.h, r.y + r.h)
+            if (x0 < x1 && y0 < y1)
+                out.push({x: x0, y: y0, w: x1 - x0, h: y1 - y0})
+        }
+    return out
+}
+
 function clipToDeviceRects(ctx, rects) {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.beginPath()
@@ -8359,6 +8463,10 @@ const CELL_RENDER_MARGIN = 4
 // costs about three times a cached frame), and over a tile not built yet. False: a frame builds what it draws (the light
 // map and the visible tiles), as a whole rebuild does.
 Grid.litStandIns = true
+// TASK-1553: a lit frame's tile squares drawn from the stand-in inside the board outline get no sky (Grid.frameCover), and
+// the slab shadow is clipped to the part of the canvas the sky is drawn on (Grid.drawSlabShadow).
+Grid.standInCover = true
+Grid.shadowClip = true
 // TASK-1374: true draws a zoom gesture's frames from the zoom raster, the board rebuilt once when it ends (Grid.drawZoomRaster);
 // false draws them as any frame (the board directly above the surface cache's scale on a desktop).
 Grid.zoomRasters = true
