@@ -238,8 +238,7 @@ class Grid extends SpritesGroup {
         this.cellSpriteDraws = 0
         this.cellLayerRefreshes = 0
         this.cellLayerVariantRenders = 0
-        // TASK-1361: sprite canvases the layers let go of, for the next variants (cellSpriteCanvas), and sprites let go of.
-        this.cellSpritePool = []
+        // TASK-1361: sprites let go of (their canvases go to Grid.canvasPool, TASK-1550).
         this.cellSpritesPruned = 0
         // Refreshes that changed a layer (overlayCompositeKey).
         this.cellLayerRevision = 0
@@ -873,6 +872,7 @@ class Grid extends SpritesGroup {
         mask.height = H
         const {cells, box, path} = this.cellLayerCells(W, H, place)
         fillCellMask(mask.getContext('2d'), path)
+        this.releaseCellSprites(layer)
         Object.assign(layer, {cells, cellBox: box, sprites: new Map(), stale: null, byIndex: new Map(cells.map(c => [c.index, c])),
             place, states: this.cellLayerStates()})
         for (const cell of cells)
@@ -903,6 +903,7 @@ class Grid extends SpritesGroup {
             g.setTransform(1, 0, 0, 1, 0, 0)
             g.clearRect(0, 0, W, H)
             g.restore()
+            this.releaseCellSprites(layer)
             Object.assign(layer, {cells: undefined, cellBox: undefined, sprites: new Map(), stale: null, byIndex: undefined, place,
                 states: undefined})
             const job = {canvas, layer, place, cells: null, box: null, states: this.cellLayerStates(), next: 0, finish, order: null}
@@ -968,7 +969,7 @@ class Grid extends SpritesGroup {
             if (job.next > first && performance.now() - start + piece >= budget)
                 break
             const begin = performance.now(), cell = order[job.next]
-            g.drawImage(this.cellSprite(layer, cell, canvas, cell.key), cell.box.x, cell.box.y)
+            g.drawImage(this.cellSprite(layer, cell, canvas, cell.key), 0, 0, cell.box.w, cell.box.h, cell.box.x, cell.box.y, cell.box.w, cell.box.h)
             ++this.cellSpriteDraws
             piece = performance.now() - begin
         }
@@ -1999,9 +2000,11 @@ class Grid extends SpritesGroup {
         const {box} = cell
         const sprite = this.cellSpriteCanvas(box)
         const g = sprite.getContext('2d')
+        g.save()
         fillCellMask(g, cell.path)
         g.globalCompositeOperation = 'source-in'
         g.drawImage(source, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h)
+        g.restore()
         layer.sprites.set(cell.index + '|' + key, sprite)
         cell.key = key
         ++this.cellSpriteRenders
@@ -2014,7 +2017,7 @@ class Grid extends SpritesGroup {
         const {box} = cell, sprite = this.cellSpriteCanvas(box)
         const g = sprite.getContext('2d')
         if (base)
-            g.drawImage(base, 0, 0)
+            g.drawImage(base, 0, 0, box.w, box.h, 0, 0, box.w, box.h)
         const x0 = Math.max(rect.x, box.x) - box.x, y0 = Math.max(rect.y, box.y) - box.y
         const x1 = Math.min(rect.x + rect.w, box.x + box.w) - box.x, y1 = Math.min(rect.y + rect.h, box.y + box.h) - box.y
         if (x0 >= x1 || y0 >= y1)
@@ -2035,18 +2038,27 @@ class Grid extends SpritesGroup {
         g.restore()
         return sprite
     }
-    // TASK-1361: a cleared box.w x box.h canvas for a sprite, one a layer let go of (pruneCellSprites) when there is one, so the
-    // variants rendered move after move make no new canvas once the layers hold their cap.
+    // TASK-1361: a cleared canvas for a sprite, one a layer let go of (pruneCellSprites) when there is one, so the
+    // variants rendered move after move make no new canvas once the layers hold their cap. TASK-1550: from Grid.canvasPool
+    // (at least box.w x box.h, never resized; the sprite is its box.w x box.h corner, drawn with that source rectangle), where
+    // the sprites of a layer split again or let go of go too (releaseCellSprites).
     cellSpriteCanvas(box) {
-        const sprite = this.cellSpritePool.pop() || document.createElement('canvas')
-        // Set even when equal: that clears the canvas and resets its context's state.
-        sprite.width = box.w
-        sprite.height = box.h
-        return sprite
+        return Grid.canvasPool.take(box.w, box.h)
+    }
+    // TASK-1550: the layer's sprites given to Grid.canvasPool (none while a layer job is under way on it: its sprites made
+    // or read are its own), its sprite map emptied.
+    releaseCellSprites(layer) {
+        const sprites = layer?.sprites
+        if (!sprites?.size)
+            return
+        if (this.surfaceLayerJob?.layer !== layer && !(this.litView?.layerJob && layer === this.litCellLayer))
+            for (const sprite of sprites.values())
+                Grid.canvasPool.give(sprite)
+        layer.sprites = new Map()
     }
     // TASK-1361: the layer's sprites cut to CELL_LAYER_VARIANTS a cell, those its cells took last kept (each cell's variant
     // now first, then the one before it, so an undo still draws a kept sprite); the others' canvases go to the pool
-    // (cellSpriteCanvas, at most CELL_SPRITE_POOL). Not while a layer job is under way on the layer (its sprites made
+    // (Grid.canvasPool, TASK-1550). Not while a layer job is under way on the layer (its sprites made
     // before its last step are not yet any cell's variant).
     pruneCellSprites(layer) {
         const sprites = layer.sprites
@@ -2060,13 +2072,12 @@ class Grid extends SpritesGroup {
                 sprites.set(k, sprite)
             }
         }
-        const kept = new Map(), pool = this.cellSpritePool
+        const kept = new Map()
         for (const k of [...sprites.keys()].reverse()) {
             const index = k.slice(0, k.indexOf('|')), n = (kept.get(index) || 0) + 1
             kept.set(index, n)
             if (n > CELL_LAYER_VARIANTS) {
-                if (pool.length < CELL_SPRITE_POOL)
-                    pool.push(sprites.get(k))
+                Grid.canvasPool.give(sprites.get(k))
                 sprites.delete(k)
                 ++this.cellSpritesPruned
             }
@@ -2086,7 +2097,7 @@ class Grid extends SpritesGroup {
         for (const {index, box, key} of layer.cells) {
             if (box.x >= rect.x + rect.w || rect.x >= box.x + box.w || box.y >= rect.y + rect.h || rect.y >= box.y + box.h)
                 continue
-            g.drawImage(layer.sprites.get(index + '|' + key), box.x, box.y)
+            g.drawImage(layer.sprites.get(index + '|' + key), 0, 0, box.w, box.h, box.x, box.y, box.w, box.h)
             ++this.cellSpriteDraws
         }
         g.restore()
@@ -2140,7 +2151,7 @@ class Grid extends SpritesGroup {
         for (const {index, box, key} of layer.cells) {
             if (box.x >= x + w || x >= box.x + box.w || box.y >= y + h || y >= box.y + box.h)
                 continue
-            g.drawImage(layer.sprites.get(index + '|' + key), box.x, box.y)
+            g.drawImage(layer.sprites.get(index + '|' + key), 0, 0, box.w, box.h, box.x, box.y, box.w, box.h)
         }
         g.restore()
         ++this.cellLayerComposites
@@ -2158,6 +2169,7 @@ class Grid extends SpritesGroup {
             if (this.surfaceLayerJob)
                 this.dropSurfaceLayerJob()
             copy?.()
+            this.releaseCellSprites(this.surfaceCellLayer)
             this.surfaceCellLayer = this.surfaceCacheShown = this.surfaceSplitJob = undefined
             return
         }
@@ -4145,7 +4157,7 @@ class Grid extends SpritesGroup {
         for (const piece of layer.pieces) {
             const x = layer.x0 + ox + piece.x, y = layer.y0 + oy + piece.y
             if (x < cw && y < ch && x + piece.w > 0 && y + piece.h > 0)
-                ctx.drawImage(piece.canvas, x, y)
+                ctx.drawImage(piece.canvas, 0, 0, piece.w, piece.h, x, y, piece.w, piece.h)
         }
         ctx.restore()
         // What the skipped units pass does besides drawing: a selected demon portal's panel kept current (drawNextProduction,
@@ -4164,16 +4176,14 @@ class Grid extends SpritesGroup {
             this.retireLitLayer()
             return
         }
-        for (const piece of this.litLayer?.pieces || [])
-            piece.canvas.width = piece.canvas.height = 0
+        this.givePieces(this.litLayer)
         this.litLayer = undefined
     }
     // The lit layer and its scratch canvas released (the frames left the lit tiles).
     releaseLitLayer() {
         this.dropLitLayerJob()
         this.dropLitLayer()
-        for (const piece of this.litLayerRetired?.pieces || [])
-            piece.canvas.width = piece.canvas.height = 0
+        this.givePieces(this.litLayerRetired)
         this.litLayerRetired = undefined
         if (this.litLayerScratch)
             this.litLayerScratch.width = this.litLayerScratch.height = 0
@@ -4323,6 +4333,14 @@ class Grid extends SpritesGroup {
                 this.retireLitLayer()
             this.litLayer = layer
             ++this.litLayerBuilds
+            // TASK-1550: its pieces' sizes, for the spare canvases made at rest (Grid.reserveLitPieces).
+            if (layer.pieces?.length) {
+                const demand = Grid.litPieceDemand = new Map()
+                for (const piece of layer.pieces) {
+                    const key = Grid.canvasPool.size(piece.w) + 'x' + Grid.canvasPool.size(piece.h)
+                    demand.set(key, (demand.get(key) || 0) + 1)
+                }
+            }
         })
         setTimeout(run)
     }
@@ -4332,10 +4350,16 @@ class Grid extends SpritesGroup {
     retireLitLayer() {
         const old = this.litLayerRetired
         if (old && !this.litLayerListed(old))
-            for (const piece of old.pieces || [])
-                piece.canvas.width = piece.canvas.height = 0
+            this.givePieces(old)
         this.litLayerRetired = this.litLayer
         this.litLayer = undefined
+    }
+    // TASK-1550: a layer's piece canvases given to Grid.canvasPool (the layer keeps none).
+    givePieces(layer) {
+        for (const piece of layer?.pieces || [])
+            Grid.canvasPool.give(piece.canvas)
+        if (layer)
+            layer.pieces = null
     }
     litLayerListed(layer) {
         return this.zoomSource?.layers?.[0] === layer || this.zoomReplayJob?.source?.layers?.[0] === layer
@@ -4405,19 +4429,18 @@ class Grid extends SpritesGroup {
             if (!once)
                 yield
             // Each piece copied into its own canvas, rasterized by a one-pixel read in this task between frames (as
-            // queueOverlayLayer); at once, the pieces of the layer before are reused where their size is the same.
-            const pool = new Map()
+            // queueOverlayLayer). TASK-1550: the canvases from Grid.canvasPool (at least the piece's size; the piece is its
+            // corner), at once the pieces of the layer before given to it first, so they are reused.
             // TASK-1546: the layer whose pieces are drawn again is noted (litLayerRedrawn: a recording listing it is stale,
-            // zoomSourceFor) and, while a kept recording lists it, its unused pieces are not released (a zoom replay of that
+            // zoomSourceFor) and, while a kept recording lists it, its pieces are not given back (a zoom replay of that
             // recording draws them).
             const listed = once && !!this.litLayer && this.litLayerListed(this.litLayer)
-            if (once) {
-                for (const old of this.litLayer?.pieces || [])
-                    pool.set(old.w + 'x' + old.h, [...(pool.get(old.w + 'x' + old.h) || []), old.canvas])
-                if (this.litLayer) {
-                    this.litLayerRedrawn = this.litLayer
+            if (once && this.litLayer) {
+                this.litLayerRedrawn = this.litLayer
+                if (listed)
                     this.litLayer.pieces = null
-                }
+                else
+                    this.givePieces(this.litLayer)
             }
             pieces = []
             try {
@@ -4426,33 +4449,23 @@ class Grid extends SpritesGroup {
                         yield
                     if (canvas !== this.litLayerScratch)
                         return null
-                    let part = pool.get(piece.w + 'x' + piece.h)?.pop()
-                    const pctx = (part ||= document.createElement('canvas')).getContext('2d')
-                    if (part.width !== piece.w || part.height !== piece.h) {
-                        part.width = piece.w
-                        part.height = piece.h
-                    }
-                    else
-                        pctx.clearRect(0, 0, piece.w, piece.h)
+                    const part = Grid.canvasPool.take(piece.w, piece.h)
+                    const pctx = part.getContext('2d')
                     pctx.drawImage(canvas, piece.x, piece.y, piece.w, piece.h, 0, 0, piece.w, piece.h)
                     pctx.getImageData(0, 0, 1, 1)
                     pieces.push({...piece, canvas: part})
                 }
             } finally {
-                // Given up: the copies made released.
+                // Given up: the copies made given back.
                 if (pieces.length < parts.length)
                     for (const piece of pieces)
-                        piece.canvas.width = piece.canvas.height = 0
+                        Grid.canvasPool.give(piece.canvas)
             }
-            if (!listed)
-                for (const unused of pool.values())
-                    for (const part of unused)
-                        part.width = part.height = 0
             if (Grid.litLayerAudit)
                 this.auditLitLayer(lctx, width, height, pieces)
             if (!once && (!this.litLayerKeyHolds({key}) || !this.litLayerSignature(range, values))) {
                 for (const piece of pieces)
-                    piece.canvas.width = piece.canvas.height = 0
+                    Grid.canvasPool.give(piece.canvas)
                 return null
             }
         }
@@ -6195,8 +6208,10 @@ class Grid extends SpritesGroup {
         if (this.litPatchBuffer)
             this.litPatchBuffer.width = this.litPatchBuffer.height = 0
         this.litPatchBuffer = undefined
-        if (this.litCellLayer)
+        if (this.litCellLayer) {
+            this.releaseCellSprites(this.litCellLayer)
             this.litCellLayer.width = this.litCellLayer.height = 0
+        }
         this.litCellLayer = undefined
         if (this.litCellShown)
             this.litCellShown.width = this.litCellShown.height = 0
@@ -7936,7 +7951,6 @@ function runSteps(steps, budget = Infinity) {
 // TASK-1361: variants a cell layer keeps a cell (the cell's now and the one before, for an undo; Grid.pruneCellSprites) and
 // sprite canvases kept for reuse (Grid.cellSpriteCanvas).
 const CELL_LAYER_VARIANTS = 2
-const CELL_SPRITE_POOL = 128
 // Variant sprites a surface layer job makes a step (Grid.startSurfaceLayerJob).
 const SURFACE_LAYER_SPRITES = 8
 // Light map owner sync steps (atmosphericLighting.startOwnerSync: the rings kept or put back, a build step) a surface layer
@@ -8256,6 +8270,11 @@ const LIT_VIEW_TASK_MS = 16
 // each way, a unit's hp bar up to 1.05 up, a portal's preview 0.73; texts inside the hexagon) and in device pixels besides
 // (antialiasing); a piece's largest side (device pixels; a frame's canvas records a whole piece in view).
 const LIT_PIECE_BLOCK = 16
+// TASK-1550: canvases reused by size (CanvasPool, sprites/elements/rect.js) for the lit layer's pieces and the cell layers'
+// sprites: at most GRID_POOL_BYTES kept after a rest's trim; at rest, LIT_PIECE_SPARE sets of the last lit layer's pieces
+// kept ready (a layer built while one is drawn and another retired takes them, then the retired one's come back).
+const GRID_POOL_BYTES = 160 * 1024 * 1024
+const LIT_PIECE_SPARE = 2
 const LIT_PIECE_REACH = [1, 1.3, 1, 1]
 const LIT_PIECE_PAD = 3
 // About LIT_PIECE_VISIBLE pieces in a canvas-sized view (merged while more; a frame draws one call a piece in view), pairs
@@ -8277,4 +8296,87 @@ function coordsEqually(coordOne, coordTwo) {
 
 function hexagonsEqually(hexagonOne, hexagonTwo) {
     return coordsEqually(hexagonOne.coord, hexagonTwo.coord)
+}
+// TASK-1550: the shared canvas pool (CanvasPool) and its rest hook: spare canvases for the next lit layer's pieces.
+Grid.canvasPool = new CanvasPool('grid', GRID_POOL_BYTES, 16, 4, true)
+Grid.litPieceDemand = null
+Grid.reserveLitPieces = limit => {
+    let made = 0
+    for (const [key, n] of Grid.litPieceDemand || []) {
+        if (made >= limit)
+            break
+        const [w, h] = key.split('x').map(Number)
+        made += Grid.canvasPool.reserve(w, h, LIT_PIECE_SPARE * n, limit - made)
+    }
+    return made
+}
+CanvasPool.restHooks.push(limit => Grid.reserveLitPieces(limit))
+// TASK-1550: at rest before the board's surface cache is split, a sprite canvas for each cell of its cell layer (the cells
+// of its mask, cellMaskCache, built ahead by the menu's prebuild or a split before): the first split, which runs while the
+// camera moves, takes them instead of making ~one canvas per cell. Not while the cache's layer holds sprites (a split
+// again gives those back, releaseCellSprites).
+Grid.cellSpritePlan = null
+Grid.cellMaskRestJob = null
+const CELL_MASK_REST_MS = 10
+// Sprite canvases made a frame at rest (a split's few thousand within a few frames: the camera may move again soon).
+const CELL_SPRITE_RESERVE_PER_FRAME = 512
+// Spare sprites beyond one a cell: the variants the cells take while the split runs (a cell's state changed).
+const CELL_SPRITE_HEADROOM = 1.25
+Grid.reserveCellSprites = limit => {
+    const g = typeof grid !== 'undefined' ? grid : undefined
+    if (!g?.arr?.length || typeof mapDepth === 'undefined' || !g.cellLayerOn() || g.surfaceCellLayer?.sprites?.size)
+        return 0
+    mapDepth.ensureGeometry(g)
+    const geometry = g.getSurfaceCacheGeometry()
+    if (!(geometry.cacheWidth > 0 && geometry.cacheHeight > 0))
+        return 0
+    const {width: W, height: H} = Grid.surfaceRasterSize(geometry)
+    const {key, a, d, e, f, reach} = g.cellMaskKey(W, H, Grid.surfacePlace(geometry.scale, mapDepth.bounds.left, mapDepth.bounds.top))
+    let plan = Grid.cellSpritePlan
+    if (plan?.key !== key) {
+        const mask = cellMaskCache.get(key)
+        if (!mask) {
+            // Not built yet (the cache build builds it in its steps, surfaceMaskSteps, which then finds it kept): built
+            // here in steps of the rest's frames, CELL_MASK_REST_MS a frame.
+            let job = Grid.cellMaskRestJob
+            if (job?.key !== key || job.board !== g)
+                job = Grid.cellMaskRestJob = {key, board: g, steps: g.cellMaskSteps(W, H, a, d, e, f, reach)}
+            const start = performance.now()
+            let step
+            do
+                step = job.steps.next()
+            while (!step.done && performance.now() - start < CELL_MASK_REST_MS)
+            if (step.done) {
+                Grid.cellMaskRestJob = null
+                if (!cellMaskCache.has(key))
+                    rememberCellMask(key, step.value)
+            }
+            return 0
+        }
+        plan = Grid.cellSpritePlan = {key, buckets: new Map()}
+        for (const {box} of mask.cells) {
+            const bucket = Grid.canvasPool.size(box.w) + 'x' + Grid.canvasPool.size(box.h)
+            plan.buckets.set(bucket, (plan.buckets.get(bucket) || 0) + 1)
+        }
+    }
+    let made = 0
+    for (const [bucket, n] of plan.buckets) {
+        if (made >= limit)
+            break
+        const [w, h] = bucket.split('x').map(Number)
+        made += Grid.canvasPool.reserve(w, h, Math.ceil(n * CELL_SPRITE_HEADROOM), limit - made)
+    }
+    return made
+}
+CanvasPool.restHooks.push(() => Grid.reserveCellSprites(CELL_SPRITE_RESERVE_PER_FRAME))
+// What a rest's trim keeps first: the spare pieces and, until the surface cache's layer is split (its cells set), its sprites.
+Grid.canvasPool.wanted = () => {
+    const want = new Map()
+    for (const [key, n] of Grid.litPieceDemand || [])
+        want.set(key, LIT_PIECE_SPARE * n)
+    const g = typeof grid !== 'undefined' ? grid : undefined
+    if (Grid.cellSpritePlan && !g?.surfaceCellLayer?.cells)
+        for (const [key, n] of Grid.cellSpritePlan.buckets)
+            want.set(key, (want.get(key) || 0) + Math.ceil(n * CELL_SPRITE_HEADROOM))
+    return want
 }

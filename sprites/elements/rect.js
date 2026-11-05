@@ -155,6 +155,187 @@ class Rect {
         }
     }
 }
+// TASK-1550: canvases kept for reuse instead of made anew and dropped while the camera moves (a pan made ~100 canvases a
+// second: the lit layer's pieces, the cell layers' sprites, the sky's block runs, SpriteCache's sprites). Canvases are kept
+// by size, each side rounded up to its bucket (size()); take(w, h) gives the smallest kept canvas of at least w x h (at most
+// `fit` times the bucketed area), transparent, its context in the default state (callers leave it so: save/restore), else
+// a new one of the bucketed size; the caller draws only its w x h corner (drawImage with a source rectangle). A canvas
+// taken is never resized. give(canvas) keeps a canvas let go of (nothing may draw it any more). New canvases are made
+// ahead by the rest hooks (reserve: what the next pans will take) only at rest, and the pools are trimmed (below
+// maxBytes) only at rest (CanvasPool.restTick, from SpriteCache.beginFrame: the camera still for REST_MS); while the camera
+// moves a pool holds at most twice maxBytes (more given is released).
+class CanvasPool {
+    static REST_MS = 400
+    static RESERVE_PER_FRAME = 48
+    static TRIM_SHARE = 0.75
+    static seq = 0
+    static pools = []
+    static restHooks = []
+    static lastMove = 0
+    static resting = false
+    constructor(name, maxBytes, bucket = 16, fit = 2, geometric = false) {
+        this.name = name
+        this.fit = fit
+        this.geometric = geometric
+        this.maxBytes = maxBytes
+        this.bucket = bucket
+        this.free = new Map()
+        this.count = 0
+        this.bytes = 0
+        this.stats = {taken: 0, created: 0, given: 0, released: 0, reserved: 0, trimmed: 0}
+        CanvasPool.pools.push(this)
+    }
+    // A side rounded up to its bucket: a multiple of bucket, or (geometric) the next of bucket x 1, 1.5, 2, 3, 4, 6, ...
+    // (canvases of many sizes, such as the lit layer's pieces, then fit more requests; at most 1.5 times a side).
+    size(n) {
+        if (!this.geometric || n <= this.bucket)
+            return Math.max(this.bucket, Math.ceil(n / this.bucket) * this.bucket)
+        let step = this.bucket
+        while (step < n)
+            step = step % 3 === 0 ? step / 3 * 4 : step * 3 / 2
+        return step
+    }
+    // A kept canvas of at least w x h (none: null).
+    takeKept(w, h) {
+        const bw = this.size(w), bh = this.size(h)
+        let list = this.free.get(bw + 'x' + bh)
+        if (!list?.length) {
+            list = null
+            let area = this.fit * bw * bh + 1
+            for (const l of this.free.values()) {
+                const c = l[l.length - 1]
+                if (c && c.width >= w && c.height >= h && c.width * c.height < area) {
+                    area = c.width * c.height
+                    list = l
+                }
+            }
+        }
+        if (!list)
+            return null
+        const canvas = list.pop()
+        --this.count
+        this.bytes -= canvas.width * canvas.height * 4
+        canvas.canvasPooled = false
+        const g = canvas.getContext('2d')
+        g.setTransform(1, 0, 0, 1, 0, 0)
+        g.clearRect(0, 0, canvas.width, canvas.height)
+        ++this.stats.taken
+        return canvas
+    }
+    take(w, h) {
+        const kept = this.takeKept(w, h)
+        if (kept)
+            return kept
+        const canvas = document.createElement('canvas')
+        canvas.width = this.size(w)
+        canvas.height = this.size(h)
+        ++this.stats.created
+        return canvas
+    }
+    give(canvas) {
+        if (!canvas || canvas.canvasPooled || !canvas.width || !canvas.height)
+            return
+        const bytes = canvas.width * canvas.height * 4
+        if (this.bytes + bytes > 2 * this.maxBytes) {
+            canvas.width = canvas.height = 0
+            ++this.stats.released
+            return
+        }
+        const key = canvas.width + 'x' + canvas.height
+        let list = this.free.get(key)
+        if (!list)
+            this.free.set(key, list = [])
+        canvas.canvasPooled = true
+        canvas.canvasPoolSeq = ++CanvasPool.seq
+        list.push(canvas)
+        ++this.count
+        this.bytes += bytes
+        ++this.stats.given
+    }
+    // Kept canvases of the bucket of w x h (new ones, never drawn) up to n; at most `limit` made. The number made.
+    reserve(w, h, n, limit = Infinity) {
+        const bw = this.size(w), bh = this.size(h), key = bw + 'x' + bh
+        let list = this.free.get(key)
+        if (!list)
+            this.free.set(key, list = [])
+        let made = 0
+        while (list.length < n && made < limit && this.bytes + bw * bh * 4 <= this.maxBytes) {
+            const canvas = document.createElement('canvas')
+            canvas.width = bw
+            canvas.height = bh
+            canvas.canvasPooled = true
+            canvas.canvasPoolSeq = ++CanvasPool.seq
+            list.push(canvas)
+            ++this.count
+            this.bytes += bw * bh * 4
+            ++made
+        }
+        this.stats.reserved += made
+        return made
+    }
+    // Down to TRIM_SHARE of maxBytes: the canvases kept longest unused (given or made earliest) released first, those the
+    // rest hooks want kept (wanted(): bucket key -> count, the newest of each bucket up to its count) last; the rest
+    // hooks then make what the next pans want up to maxBytes.
+    trim() {
+        const target = this.maxBytes * CanvasPool.TRIM_SHARE
+        if (this.bytes <= target)
+            return
+        const wanted = this.wanted?.() || new Map()
+        const spare = [], kept = []
+        for (const [key, list] of this.free) {
+            const sorted = list.slice().sort((p, q) => q.canvasPoolSeq - p.canvasPoolSeq)
+            const n = wanted.get(key) || 0
+            kept.push(...sorted.slice(0, n))
+            spare.push(...sorted.slice(n))
+        }
+        spare.sort((p, q) => p.canvasPoolSeq - q.canvasPoolSeq)
+        kept.sort((p, q) => p.canvasPoolSeq - q.canvasPoolSeq)
+        const released = new Set()
+        for (const canvas of [...spare, ...kept]) {
+            if (this.bytes <= target)
+                break
+            released.add(canvas)
+            --this.count
+            this.bytes -= canvas.width * canvas.height * 4
+            canvas.canvasPooled = false
+            canvas.width = canvas.height = 0
+            ++this.stats.trimmed
+        }
+        for (const [key, list] of this.free) {
+            const left = list.filter(c => !released.has(c))
+            if (left.length)
+                this.free.set(key, left)
+            else
+                this.free.delete(key)
+        }
+    }
+    // Each frame (SpriteCache.beginFrame), moving: whether the main canvas's camera moved since the frame before. After
+    // REST_MS still, the pools are trimmed (once a rest) and the rest hooks run every frame, given how many canvases they
+    // may make (RESERVE_PER_FRAME a hook a frame).
+    static restTick(moving) {
+        const now = performance.now()
+        if (moving) {
+            CanvasPool.lastMove = now
+            CanvasPool.resting = false
+            return
+        }
+        if (now - CanvasPool.lastMove < CanvasPool.REST_MS)
+            return
+        if (!CanvasPool.resting) {
+            CanvasPool.resting = true
+            for (const pool of CanvasPool.pools)
+                pool.trim()
+        }
+        for (const hook of CanvasPool.restHooks)
+            hook(CanvasPool.RESERVE_PER_FRAME)
+    }
+    static summary() {
+        const out = {}
+        for (const pool of CanvasPool.pools)
+            out[pool.name] = {count: pool.count, bytes: pool.bytes, maxBytes: pool.maxBytes, ...pool.stats}
+        return out
+    }
+}
 // TASK-1513: bars (HealthBar, Bar) and outlined CoordTexts drawn on the main canvas from small cached rasters ('sprites')
 // instead of their paths and texts every frame: one drawImage per bar or text, where a bar drew a fill and a stroke per
 // box (and a clipped heart per pending box) and an outlined text a strokeText and a fillText, each with its state set.
@@ -194,6 +375,22 @@ class SpriteCache {
     static moving = true
     static measure = null
     static stats = {hits: 0, built: 0, queued: 0, direct: 0, dropped: 0, evicted: 0}
+    // TASK-1550: new sprites take canvases made ahead at rest (stock: never drawn, so no recorded call holds them), one
+    // per sprite as before; the stock of each size bucket is topped up at rest to the most sprites of that bucket built in
+    // one moving period yet, twice (peak), or to STOCK_PER_SHAPE a shape drawn at the camera's scale now whose sprite falls
+    // in the bucket (plan: the next pan at this scale builds those shapes' sprites at new phases), whichever is more; at
+    // most STOCK_PER_BUCKET a bucket, STOCK_BYTES in all.
+    static STOCK_BYTES = 24 * 1024 * 1024
+    static STOCK_PER_BUCKET = 2048
+    static STOCK_PER_SHAPE = 6
+    // At least STOCK_SMALL of each bucket of sides up to 32 px (texts and bars far out: new ones appear as the camera moves,
+    // shapes never drawn yet).
+    static STOCK_SMALL = 256
+    static plan = null
+    static planKey = null
+    static stock = new CanvasPool('sprites', SpriteCache.STOCK_BYTES, 16)
+    static demand = new Map()
+    static peak = new Map()
     static get memoryBound() {
         return SpriteCache.MAX_BYTES
     }
@@ -216,6 +413,7 @@ class SpriteCache {
         const t = ctx.getTransform(), c = SpriteCache.camera
         SpriteCache.moving = !c || c.a !== t.a || c.d !== t.d || c.e !== t.e || c.f !== t.f || c.b !== t.b || c.c !== t.c
         SpriteCache.camera = {a: t.a, b: t.b, c: t.c, d: t.d, e: t.e, f: t.f}
+        CanvasPool.restTick(SpriteCache.moving)
         const queue = SpriteCache.queue
         if (!queue.length)
             return
@@ -303,7 +501,7 @@ class SpriteCache {
         if (sprite && sprite !== SpriteCache.PENDING) {
             sprite.used = SpriteCache.frame
             ++SpriteCache.stats.hits
-            ctx.drawImage(sprite.canvas, (ix - scale.ox - t.e) / t.a, (iy - scale.oy - t.f) / t.d, scale.w / t.a, scale.h / t.d)
+            ctx.drawImage(sprite.canvas, 0, 0, scale.w, scale.h, (ix - scale.ox - t.e) / t.a, (iy - scale.oy - t.f) / t.d, scale.w / t.a, scale.h / t.d)
             return true
         }
         ++SpriteCache.stats.direct
@@ -335,20 +533,73 @@ class SpriteCache {
         }
         const bytes = scale.w * scale.h * 4
         SpriteCache.makeRoom(bytes)
-        const canvas = document.createElement('canvas')
-        canvas.width = scale.w
-        canvas.height = scale.h
+        // TASK-1550: a stocked canvas of the bucket when there is one (drawn from its scale.w x scale.h corner).
+        const stock = SpriteCache.stock, bucket = stock.size(scale.w) + 'x' + stock.size(scale.h)
+        SpriteCache.demand.set(bucket, (SpriteCache.demand.get(bucket) || 0) + 1)
+        let canvas = stock.takeKept(scale.w, scale.h)
+        if (!canvas) {
+            canvas = document.createElement('canvas')
+            canvas.width = scale.w
+            canvas.height = scale.h
+        }
         const g = canvas.getContext('2d'), anchor = owner.spriteAnchor()
+        g.save()
         g.lineJoin = job.lineJoin
         g.lineCap = job.lineCap
         g.miterLimit = job.miterLimit
         g.setTransform(job.a, 0, 0, job.d, scale.ox + job.px - job.a * anchor.x, scale.oy + job.py - job.d * anchor.y)
         owner.paintSprite(g)
+        g.restore()
         const sprite = {canvas, bytes, used: SpriteCache.frame, map, key}
         map.set(key, sprite)
         SpriteCache.sprites.push(sprite)
         SpriteCache.bytes += bytes
         ++SpriteCache.stats.built
+    }
+    // TASK-1550 (CanvasPool rest hook): the moving period's builds by bucket counted into peak, then the stock topped up
+    // (at most limit canvases made this frame); the number made.
+    static restockAtRest(limit) {
+        for (const [bucket, n] of SpriteCache.demand)
+            SpriteCache.peak.set(bucket, Math.max(SpriteCache.peak.get(bucket) || 0, n))
+        SpriteCache.demand.clear()
+        const c = SpriteCache.camera
+        if (c && c.a > 0 && c.d > 0 && SpriteCache.planKey !== c.a + '|' + c.d + '|' + SpriteCache.shapes.size)
+            SpriteCache.planFor(c.a, c.d)
+        // The camera's scale's plan first, then the small bucket's floor and the peaks.
+        const want = new Map(SpriteCache.plan || [])
+        for (const small of ['16x16', '32x16', '16x32', '32x32'])
+            want.set(small, Math.max(want.get(small) || 0, SpriteCache.STOCK_SMALL))
+        for (const [bucket, n] of SpriteCache.peak)
+            want.set(bucket, Math.max(want.get(bucket) || 0, 2 * n))
+        SpriteCache.want = want
+        let made = 0
+        for (const [bucket, n] of want) {
+            if (made >= limit)
+                break
+            const [w, h] = bucket.split('x').map(Number)
+            made += SpriteCache.stock.reserve(w, h, Math.min(n, SpriteCache.STOCK_PER_BUCKET), limit - made)
+        }
+        return made
+    }
+    // The sprite buckets of the shapes drawn so far at scale (a, d) (draw's size for each line style a shape was drawn
+    // with), STOCK_PER_SHAPE each.
+    static planFor(a, d) {
+        const plan = new Map(), stock = SpriteCache.stock
+        for (const shape of SpriteCache.shapes.values()) {
+            const b = shape.bounds
+            for (const lines of shape.scales.keys()) {
+                const [join, , miter] = lines.split('|')
+                const pad = shape.halfStroke * (join === 'miter' ? Math.max(1, +miter || 0) : 1)
+                const ox = Math.ceil(-a * (b.x0 - pad)) + 2, oy = Math.ceil(-d * (b.y0 - pad)) + 2
+                const w = ox + Math.ceil(a * (b.x1 + pad)) + 3, h = oy + Math.ceil(d * (b.y1 + pad)) + 3
+                if (!(w > 0 && h > 0 && w <= SpriteCache.MAX_SPRITE && h <= SpriteCache.MAX_SPRITE))
+                    continue
+                const bucket = stock.size(w) + 'x' + stock.size(h)
+                plan.set(bucket, (plan.get(bucket) || 0) + SpriteCache.STOCK_PER_SHAPE)
+            }
+        }
+        SpriteCache.plan = plan
+        SpriteCache.planKey = a + '|' + d + '|' + SpriteCache.shapes.size
     }
     // Drops the least recently drawn sprites (a quarter of the bound's worth) when bytes more would exceed MAX_BYTES.
     static makeRoom(bytes) {
@@ -373,3 +624,6 @@ class SpriteCache {
         return SpriteCache.measure
     }
 }
+CanvasPool.restHooks.push(limit => SpriteCache.restockAtRest(limit))
+SpriteCache.want = null
+SpriteCache.stock.wanted = () => SpriteCache.want

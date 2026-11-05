@@ -423,8 +423,12 @@ const atmosphericBackground = {
     BLOCK_RUNS: 96,
     blockSet: null,
     blockBuilds: 0,
+    // TASK-1550: the block runs' canvases (CanvasPool, sprites/elements/rect.js), reused as runs are let go of.
+    runPool() {
+        return this.blockPool ||= new CanvasPool('sky', 32 * 1024 * 1024, 16, 4)
+    },
     releaseBlocks() {
-        if (this.blockSet) for (const run of this.blockSet.runs.values()) run.canvas.width = run.canvas.height = 0
+        if (this.blockSet) for (const run of this.blockSet.runs.values()) this.runPool().give(run.canvas)
         this.blockSet = null
     },
     // Whether drawSky can draw blocks for a w x h canvas.
@@ -452,23 +456,24 @@ const atmosphericBackground = {
             const key = x + ',' + y + ',' + w + ',' + h
             let run = set.runs.get(key)
             if (!run) {
-                const canvas = document.createElement('canvas')
-                canvas.width = w
-                canvas.height = h
+                // TASK-1550: the run's canvas from runPool (at least w x h; the run is its corner), given back when let go of.
+                const canvas = this.runPool().take(w, h)
                 const g = canvas.getContext('2d')
+                g.save()
                 g.globalCompositeOperation = 'copy'
                 g.drawImage(raster, x, y, w, h, 0, 0, w, h)
+                g.restore()
                 set.runs.set(key, run = {canvas})
                 ++this.blockBuilds
             }
             run.used = clock
-            ctx.drawImage(run.canvas, x, y)
+            ctx.drawImage(run.canvas, 0, 0, w, h, x, y, w, h)
         }
         if (set.runs.size > this.BLOCK_RUNS)
             for (const [key, run] of [...set.runs].sort((p, q) => p[1].used - q[1].used).slice(0, set.runs.size - this.BLOCK_RUNS)) {
                 if (run.used === clock)
                     break
-                run.canvas.width = run.canvas.height = 0
+                this.runPool().give(run.canvas)
                 set.runs.delete(key)
             }
     },
