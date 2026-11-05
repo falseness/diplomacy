@@ -6307,7 +6307,8 @@ class Grid extends SpritesGroup {
     // cannot reach left out), each under the camera's transform moved to it: no build canvas copied into quarters, no pad
     // drawn round the tile (a padded build's shown pixels differ by at most a few levels: probes/pad-test.json). A quarter is
     // cleared only when it was drawn before and the board's underlay (an opaque fill of its outline, drawUnderlay) does not
-    // cover it whole (litSquareOpaque). (Not the grout: a quarter's last row is not quite opaque under the grout's fill.)
+    // cover it whole (litSquareOpaque; one that it covers gets the fill as a rectangle). (Not the grout: a quarter's last row
+    // is not quite opaque under the grout's fill.)
     *litTileSteps(view, u, v) {
         const P = LIT_TILE_PAD, b = mapDepth.bounds, X = u * LIT_TILE, Y = v * LIT_TILE
         // Null as for the padded square before TASK-1552 (the tiles the board reaches are the same).
@@ -6325,7 +6326,8 @@ class Grid extends SpritesGroup {
             const px = X + (k & 1) * Q, py = Y + (k >> 1) * Q
             part.gradientSource = gradients
             part.litWindow = {left: Math.min(0, -px), top: Math.min(0, -py), right: Math.max(Q, view.cw - px), bottom: Math.max(Q, view.ch - py)}
-            quarters.push({part, g: part.getContext('2d'), px, py, clear: part.litDrawn && !this.litSquareOpaque(view, px, py, px + Q, py + Q),
+            const inside = this.litSquareOpaque(view, px, py, px + Q, py + Q)
+            quarters.push({part, g: part.getContext('2d'), px, py, inside, clear: part.litDrawn && !inside,
                 underlay: {left: (px - view.e) / view.a, top: (py - view.f) / view.d, right: (px + Q - view.e) / view.a, bottom: (py + Q - view.f) / view.d}})
             part.litDrawn = true
         }
@@ -6362,7 +6364,7 @@ class Grid extends SpritesGroup {
             // drawLitScene's parts, the hexagons' (drawHexagons) as its grout and runs of the cells' tiles.
             each((g, q) => {
                 const r = q.underlay
-                LIT_SCENE_PARTS[0](this, g, {left: r.left - grow, top: r.top - grow, right: r.right + grow, bottom: r.bottom + grow})
+                LIT_SCENE_PARTS[0](this, g, {left: r.left - grow, top: r.top - grow, right: r.right + grow, bottom: r.bottom + grow, inside: q.inside})
             })
             yield
             each(g => this.drawHexagons(g, {grout: true, n: 0}))

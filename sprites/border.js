@@ -482,7 +482,13 @@ class MapDepth {
         // between textured hexagons. Only the expensive shadow/faces use the cache.
         ctx.save()
         ctx.fillStyle = '#4d5150'
-        ctx.fill(this.outline)
+        // TASK-1552: a lit tile's quarter wholly within the outline (view.inside, Grid.litSquareOpaque) is the fill's all over.
+        if (view && view.inside) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0)
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+        }
+        else
+            ctx.fill(this.outline)
         ctx.restore()
 
         for (let region of this.cacheRegions)

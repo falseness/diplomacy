@@ -250,6 +250,17 @@ const atmosphericLighting = {
     },
     // range (board.drawRange) limits the walk to those cells.
     collect(board, includeKey = true, includeCells = true, range = null) {
+        // TASK-1552: while a lit tile's step draws into its quarters (pathMemo), collected once for them all.
+        const memo = this.pathMemo
+        if (memo) {
+            const key = 'collect|' + includeKey + '|' + includeCells + '|' + (range ? [range.i0, range.i1, range.j0, range.j1].join() : '')
+            let kept = memo.get(key)
+            if (!kept || kept.board !== board) memo.set(key, kept = {board, value: this.collectCells(board, includeKey, includeCells, range)})
+            return kept.value
+        }
+        return this.collectCells(board, includeKey, includeCells, range)
+    },
+    collectCells(board, includeKey, includeCells, range) {
         const cells = [], sources = []
         if (!otherSettings.atmosphericVisuals) return {cells, sources, key: ''}
         // The key lists the collected cells and sources by coordinate (positions follow from
@@ -2079,13 +2090,22 @@ const atmosphericLighting = {
         const left = -t.e / t.a, top = -t.f / t.d
         const right = (ctx.canvas.width - t.e) / t.a, bottom = (ctx.canvas.height - t.f) / t.d
         ctx.save()
-        ctx.beginPath()
-        for (const loop of outline) {
-            ctx.moveTo(loop[0].x, loop[0].y)
-            for (let k = 1; k < loop.length; ++k) ctx.lineTo(loop[k].x, loop[k].y)
-            ctx.closePath()
+        const add = g => {
+            for (const loop of outline) {
+                g.moveTo(loop[0].x, loop[0].y)
+                for (let k = 1; k < loop.length; ++k) g.lineTo(loop[k].x, loop[k].y)
+                g.closePath()
+            }
         }
-        ctx.clip('evenodd')
+        // TASK-1552: traced once for a tile's quarters (memoPath).
+        const path = this.memoPath('outline', [outline], add)
+        if (path)
+            ctx.clip(path, 'evenodd')
+        else {
+            ctx.beginPath()
+            add(ctx)
+            ctx.clip('evenodd')
+        }
         this.drawMapPart(ctx, map, left - grow, top - grow, right + grow, bottom + grow)
         ctx.restore()
         this.bloom(ctx, board, {reach: this.BLOOM_TILE_REACH * basis.r})
