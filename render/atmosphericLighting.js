@@ -1364,13 +1364,22 @@ const atmosphericLighting = {
     drawFog(ctx, hexagons) {
         const t = ctx.getTransform(), r = basis.r
         ctx.save()
-        ctx.beginPath()
-        for (const hexagon of this.onCanvas(ctx, hexagons, hexagon => hexagon.calcPos())) {
-            const c = hexagon.calcPos()
-            this.hexagonPath(ctx, c.x, c.y, 1.02 * r)
+        const cells = this.onCanvas(ctx, hexagons, hexagon => hexagon.calcPos())
+        const add = g => {
+            for (const hexagon of cells) {
+                const c = hexagon.calcPos()
+                this.hexagonPath(g, c.x, c.y, 1.02 * r)
+            }
         }
+        const path = this.memoPath('fog', cells, add)
         ctx.fillStyle = this.FOG.grout
-        ctx.fill()
+        if (path)
+            ctx.fill(path)
+        else {
+            ctx.beginPath()
+            add(ctx)
+            ctx.fill()
+        }
         const snap = t.b === 0 && t.c === 0 && t.a > 0 && t.d > 0
         if (snap) ctx.setTransform(1, 0, 0, 1, 0, 0)
         for (const hexagon of hexagons) {
@@ -1418,22 +1427,48 @@ const atmosphericLighting = {
     // The grout: one fill of the drawn, known cells, before their inset tiles.
     drawGrout(ctx, hexagons) {
         ctx.save()
-        ctx.beginPath()
-        for (const hexagon of this.onCanvas(ctx, hexagons, hexagon => hexagon.calcPos())) {
-            if (hexagon.unknown) continue
-            const c = hexagon.calcPos()
-            this.hexagonPath(ctx, c.x, c.y, basis.r)
+        const cells = this.onCanvas(ctx, hexagons, hexagon => hexagon.calcPos())
+        const add = g => {
+            for (const hexagon of cells) {
+                if (hexagon.unknown) continue
+                const c = hexagon.calcPos()
+                this.hexagonPath(g, c.x, c.y, basis.r)
+            }
         }
+        const path = this.memoPath('grout', cells, add)
         ctx.fillStyle = this.TILE.grout
-        ctx.fill()
+        if (path)
+            ctx.fill(path)
+        else {
+            ctx.beginPath()
+            add(ctx)
+            ctx.fill()
+        }
         ctx.restore()
+    },
+    // TASK-1552: while Grid.litTileSteps draws a step into a lit tile's quarters (pathMemo: a Map), a union path of cells
+    // (kind: the grout, the fog's grout, the shadows' clip) is built once, a Path2D in world units, and filled or clipped to
+    // in each quarter its cells are the same for (under that quarter's transform, as its own traced path would be): the path
+    // of a few hundred hexagons is traced once a tile, not once a quarter. Null otherwise (the caller traces ctx's path).
+    pathMemo: null,
+    // same: whether two cells trace the same hexagon (the same cell object by default).
+    memoPath(kind, cells, add, same = (a, b) => a === b) {
+        const memo = this.pathMemo
+        if (!memo) return null
+        const kept = memo.get(kind)
+        if (kept && kept.cells.length === cells.length && kept.cells.every((cell, k) => same(cell, cells[k]))) return kept.path
+        const path = new Path2D()
+        add(path)
+        memo.set(kind, {cells, path})
+        return path
     },
     drawTile(ctx, hexagon) {
         const c = hexagon.calcPos()
         if (hexagon.playerColor === 0) {
             const variant = this.tileVariant(hexagon.tileHash % this.TILE.variants)
             const size = variant.width / this.TILE.rasterScale
-            ctx.drawImage(variant, c.x - size / 2, c.y - size / 2, size, size)
+            // A cell's tile canvas: its inset hexagon (tileBox: the hexagon's box and 2 px).
+            this.drawCropped(ctx, variant, c.x - size / 2, c.y - size / 2, size, this.cropOverlays && this.tileBox(variant.width))
             return
         }
         const fill = this.tileFill(hexagon)
@@ -1447,7 +1482,7 @@ const atmosphericLighting = {
         }
         const marble = this.ownedTile(hexagon.tileHash % this.TILE.variants, fill)
         const size = marble.width / this.TILE.rasterScale
-        ctx.drawImage(marble, c.x - size / 2, c.y - size / 2, size, size)
+        this.drawCropped(ctx, marble, c.x - size / 2, c.y - size / 2, size, this.cropOverlays && this.tileBox(marble.width))
     },
     // Marble detail, built once per hex radius from the variant of the same index: each pixel's luminance
     // minus the tile's mean (alpha weighted), so the pattern adds nothing on average.
@@ -1847,9 +1882,19 @@ const atmosphericLighting = {
                 this.addHexagons(ctx, clipCells.slice(i, i + this.MAP_PATH_STEP_CELLS))
             }
         }
-        else
-            this.hexPath(ctx, clipCells)
-        ctx.clip()
+        else {
+            // collect's cells are new objects each call: the same by their position.
+            const path = this.memoPath('shadow', clipCells, g => this.addHexagons(g, clipCells), (a, b) => a.pos.x === b.pos.x && a.pos.y === b.pos.y)
+            if (path) {
+                ctx.clip(path)
+            }
+            else {
+                this.hexPath(ctx, clipCells)
+                ctx.clip()
+            }
+        }
+        if (fine)
+            ctx.clip()
         const log = this.shadowLog = []
         // Contact shade first, under the cast shadows.
         const {radius, flat, alpha, color} = this.SHADOW.contact
@@ -2768,11 +2813,58 @@ const atmosphericLighting = {
             }
             const {shade, glow, pad} = this.lampOverlay(image, source.name)
             ctx.globalCompositeOperation = 'multiply'
-            ctx.drawImage(shade, building.pos.x, building.pos.y)
+            this.drawCropped(ctx, shade, building.pos.x, building.pos.y)
             ctx.globalCompositeOperation = 'screen'
-            ctx.drawImage(glow, building.pos.x - pad, building.pos.y - pad)
+            this.drawCropped(ctx, glow, building.pos.x - pad, building.pos.y - pad)
         }
         ctx.restore()
+    },
+    // TASK-1552: while a lit tile is built (Grid.litTileSteps: cropOverlays), the lamp overlays (bloom) and the cells' tiles
+    // (drawTile) are drawn from their canvases' box of pixels that are not transparent (grown by CROP_MARGIN, so the samples
+    // next to the box's edge are those of the whole draw): a transparent source pixel leaves the pixel under it as it is in
+    // multiply, screen and source-over, so the same pixels are drawn while the tile's quarters take the glows' wide
+    // transparent margins (the halo is a circle round the doorway in a canvas padded by the halo all round) no more.
+    cropOverlays: false,
+    CROP_MARGIN: 2,
+    cropBoxes: new WeakMap(),
+    // The box (canvas pixels) of image's pixels that are not transparent, grown by CROP_MARGIN; null when it cannot be read
+    // (a tainted canvas) or takes most of the image.
+    cropBox(image) {
+        let box = this.cropBoxes.get(image)
+        if (box !== undefined && box?.w0 === image.width && box?.h0 === image.height) return box?.box || null
+        box = null
+        try {
+            const w = image.width, h = image.height, data = image.getContext('2d').getImageData(0, 0, w, h).data
+            let x0 = w, y0 = h, x1 = -1, y1 = -1
+            for (let y = 0; y < h; ++y) for (let x = 0; x < w; ++x) {
+                if (!data[4 * (y * w + x) + 3]) continue
+                if (x < x0) x0 = x
+                if (x > x1) x1 = x
+                if (y < y0) y0 = y
+                if (y > y1) y1 = y
+            }
+            const m = this.CROP_MARGIN
+            x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(w, x1 + 1 + m); y1 = Math.min(h, y1 + 1 + m)
+            if (x1 > x0 && y1 > y0 && (x1 - x0) * (y1 - y0) < 0.95 * w * h) box = {x: x0, y: y0, w: x1 - x0, h: y1 - y0}
+            else if (x1 <= x0 || y1 <= y0) box = {x: 0, y: 0, w: 0, h: 0}
+        } catch (e) {
+            box = null
+        }
+        this.cropBoxes.set(image, {w0: image.width, h0: image.height, box})
+        return box
+    },
+    // image drawn at x, y (its own size, scale size / image.width) as drawImage(image, x, y, ...) draws it, from its crop box
+    // (given: box, else cropBox) while cropOverlays.
+    drawCropped(ctx, image, x, y, size, box) {
+        const k = size === undefined ? 1 : size / image.width
+        box = this.cropOverlays ? box || this.cropBox(image) : null
+        if (!box) {
+            if (size === undefined) ctx.drawImage(image, x, y)
+            else ctx.drawImage(image, x, y, size, image.height * k)
+            return
+        }
+        if (!box.w) return
+        ctx.drawImage(image, box.x, box.y, box.w, box.h, x + box.x * k, y + box.y * k, box.w * k, box.h * k)
     },
     // TASK-1545: drawEdges' lamp overlays (bloom with runs, every pan frame on the lit tiles) drawn from copies matched to the
     // draw (scaledCopy): each overlay drawn at its place under ctx's transform is drawn on a canvas of its device pixels'

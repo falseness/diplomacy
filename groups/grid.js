@@ -198,9 +198,8 @@ class Grid extends SpritesGroup {
         this.litView = undefined
         this.litRestCanvas = undefined
         this.litTilePool = []
-        // TASK-1546: the lit tile built a step a task (Grid.buildLitTiles: litTileStep), its canvas, tiles started / given up.
+        // TASK-1546: the lit tile built a step a task (Grid.buildLitTiles: litTileStep), tiles started / given up.
         this.litTileJob = undefined
-        this.litTileJobCanvas = undefined
         this.litTileJobs = 0
         this.litTileJobsDropped = 0
         this.litTileStepsQueued = false
@@ -6046,8 +6045,8 @@ class Grid extends SpritesGroup {
             atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(job.view, [{u: job.u, v: job.v}], 1, true))
         }))
     }
-    // TASK-1546: a step of tile (u, v) of view's build (litTileSteps on litTileJobCanvas: a canvas of its own, so a tile built
-    // at once meanwhile, litTile, draws on litTileScratch), the tile under way (litTileJob) given up first when it is another
+    // TASK-1546: a step of tile (u, v) of view's build (litTileSteps: TASK-1552 on quarters of its own, so a tile built at once
+    // meanwhile, litTile, draws on others), the tile under way (litTileJob) given up first when it is another
     // or no longer holds (litTileJobHolds). Returns whether the tile is done (in view.tiles, as litTile leaves it).
     litTileStep(view, u, v) {
         const key = u + ',' + v
@@ -6057,8 +6056,7 @@ class Grid extends SpritesGroup {
             job = undefined
         }
         if (!job) {
-            const canvas = this.litTileJobCanvas ||= document.createElement('canvas')
-            job = this.litTileJob = {view, key, u, v, steps: this.litTileSteps(view, u, v, canvas), edges: view.edges,
+            job = this.litTileJob = {view, key, u, v, steps: this.litTileSteps(view, u, v), edges: view.edges,
                 outline: view.outline, rebuilds: atmosphericLighting.rebuilds, mapScale: atmosphericLighting.mapScale, ms: 0, count: 0}
             ++this.litTileJobs
         }
@@ -6088,7 +6086,7 @@ class Grid extends SpritesGroup {
         if (!job)
             return
         this.litTileJob = undefined
-        // Its canvas's state restored (litTileSteps' finally).
+        // Its canvases' state restored and its quarters given back (litTileSteps' finally).
         job.steps.return()
         ++this.litTileJobsDropped
     }
@@ -6292,90 +6290,124 @@ class Grid extends SpritesGroup {
     }
     // Draws tile (u, v) of view as the direct draw draws the canvas there, without the sky: the
     // surface, the buildings and the light but in view's edge runs (drawLitEdges lights them in
-    // the frame). Its canvas holds LIT_TILE_PAD more pixels each way, never drawn: rasterized
-    // paths and samples next to a canvas's edge are not quite those of the same place inside it.
+    // the frame).
     buildLitTile(view, u, v) {
-        // TASK-1546: the steps (litTileSteps) run at once on the build canvas.
-        const steps = this.litTileSteps(view, u, v, this.litTileScratch ||= document.createElement('canvas'))
+        // TASK-1546: the steps (litTileSteps) run at once.
+        const steps = this.litTileSteps(view, u, v)
         let step
         while (!(step = steps.next()).done);
         return step.value
     }
-    // TASK-1546: buildLitTile's drawing on canvas (its build canvas) in steps (a generator; its value the tile, null when the
-    // board does not reach it): the scene's underlay and sides, the grout, the cells' tiles in LIT_TILE_HEX_STEPS runs, the
-    // shadows, fog and rim, the buildings, the light, the quarters. The calls are the same, in the same order, on the same
-    // canvas, whether the steps run in one task or several (Grid.buildLitTiles); the canvas's state restored when it ends or
-    // is given up (return()).
-    *litTileSteps(view, u, v, canvas) {
-        const P = LIT_TILE_PAD, S = LIT_TILE + 2 * P, b = mapDepth.bounds
-        const x = u * LIT_TILE - P, y = v * LIT_TILE - P
-        const left = (x - view.e) / view.a, top = (y - view.f) / view.d
-        const right = (x + S - view.e) / view.a, bottom = (y + S - view.f) / view.d
+    // TASK-1546: buildLitTile's drawing in steps (a generator; its value the tile, null when the board does not reach it): the
+    // scene's underlay and sides, the grout, the cells' tiles in LIT_TILE_HEX_STEPS runs, the shadows, fog and rim, the
+    // buildings, the light. The calls are the same, in the same order, on the same canvases, whether the steps run in one task
+    // or several (Grid.buildLitTiles); the canvases' state restored and the quarters given back to the pool when it is given up
+    // (return()).
+    // TASK-1552: each step draws straight into the tile's quarters (litTileParts: LIT_TILE_PART canvases, those the board
+    // cannot reach left out), each under the camera's transform moved to it: no build canvas copied into quarters, no pad
+    // drawn round the tile (a padded build's shown pixels differ by at most a few levels: probes/pad-test.json). A quarter is
+    // cleared only when it was drawn before and the board's underlay (an opaque fill of its outline, drawUnderlay) does not
+    // cover it whole (litSquareOpaque). (Not the grout: a quarter's last row is not quite opaque under the grout's fill.)
+    *litTileSteps(view, u, v) {
+        const P = LIT_TILE_PAD, b = mapDepth.bounds, X = u * LIT_TILE, Y = v * LIT_TILE
+        // Null as for the padded square before TASK-1552 (the tiles the board reaches are the same).
+        const left = (X - P - view.e) / view.a, top = (Y - P - view.f) / view.d
+        const right = (X + LIT_TILE + P - view.e) / view.a, bottom = (Y + LIT_TILE + P - view.f) / view.d
         if (right < b.left || left > b.right || bottom < b.top || top > b.bottom)
             return null
-        // TASK-1545: drawn on the build canvas (litTileScratch), then kept as its quarters (litTileParts).
-        canvas.gradientSource = litGradientSource()
-        if (canvas.width !== S || canvas.height !== S) {
-            canvas.width = S
-            canvas.height = S
+        mapDepth.ensureGeometry(this)
+        const tile = this.litTileParts(view, X, Y), Q = LIT_TILE_PART, gradients = litGradientSource()
+        const quarters = []
+        for (let k = 0; k < 4; ++k) {
+            const part = tile.parts[k]
+            if (!part)
+                continue
+            const px = X + (k & 1) * Q, py = Y + (k >> 1) * Q
+            part.gradientSource = gradients
+            part.litWindow = {left: Math.min(0, -px), top: Math.min(0, -py), right: Math.max(Q, view.cw - px), bottom: Math.max(Q, view.ch - py)}
+            quarters.push({part, g: part.getContext('2d'), px, py, clear: part.litDrawn && !this.litSquareOpaque(view, px, py, px + Q, py + Q),
+                underlay: {left: (px - view.e) / view.a, top: (py - view.f) / view.d, right: (px + Q - view.e) / view.a, bottom: (py + Q - view.f) / view.d}})
+            part.litDrawn = true
         }
-        canvas.litWindow = {left: Math.min(0, -x), top: Math.min(0, -y),
-            right: Math.max(S, view.cw - x), bottom: Math.max(S, view.ch - y)}
-        const g = canvas.getContext('2d')
-        g.save()
+        // A step drawn into each quarter, the union paths it traces shared by the quarters (atmosphericLighting.pathMemo), the
+        // lamp overlays and cell tiles drawn from their crop boxes (cropOverlays).
+        const each = draw => {
+            atmosphericLighting.pathMemo = new Map()
+            atmosphericLighting.cropOverlays = true
+            try {
+                for (const q of quarters) {
+                    q.g.setTransform(view.a, 0, 0, view.d, view.e - q.px, view.f - q.py)
+                    draw(q.g, q)
+                }
+            } finally {
+                atmosphericLighting.pathMemo = null
+                atmosphericLighting.cropOverlays = false
+            }
+        }
+        let done = false
+        for (const q of quarters)
+            q.g.save()
         try {
-            g.setTransform(1, 0, 0, 1, 0, 0)
-            g.clearRect(0, 0, S, S)
-            // As drawMain leaves the main canvas before the board.
-            g.lineJoin = 'round'
-            g.lineCap = 'round'
-            g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
-            // The underlay cache's part grown by two of its pixels, so the tile's edge pixels sample
-            // it as one draw over the canvas does.
+            for (const {g, clear} of quarters) {
+                g.setTransform(1, 0, 0, 1, 0, 0)
+                if (clear)
+                    g.clearRect(0, 0, Q, Q)
+                // As drawMain leaves the main canvas before the board.
+                g.lineJoin = 'round'
+                g.lineCap = 'round'
+            }
+            // The underlay cache's part grown by two of its pixels, so the quarter's edge pixels sample it as one draw over
+            // the canvas does.
             const cache = mapDepth.underlayCache, grow = cache ? 2 * mapDepth.cacheBounds.width / cache.width : 0
-            const underlay = {left: left - grow, top: top - grow, right: right + grow, bottom: bottom + grow}
             // drawLitScene's parts, the hexagons' (drawHexagons) as its grout and runs of the cells' tiles.
-            LIT_SCENE_PARTS[0](this, g, underlay)
+            each((g, q) => {
+                const r = q.underlay
+                LIT_SCENE_PARTS[0](this, g, {left: r.left - grow, top: r.top - grow, right: r.right + grow, bottom: r.bottom + grow})
+            })
             yield
-            this.drawHexagons(g, {grout: true, n: 0})
+            each(g => this.drawHexagons(g, {grout: true, n: 0}))
             yield
             for (let k = 0; k < LIT_TILE_HEX_STEPS; ++k) {
-                this.drawHexagons(g, {k, n: LIT_TILE_HEX_STEPS, grout: false})
+                each(g => this.drawHexagons(g, {k, n: LIT_TILE_HEX_STEPS, grout: false}))
                 yield
             }
             for (const part of LIT_SCENE_PARTS.slice(2)) {
-                part(this, g, underlay)
+                each(g => part(this, g))
                 yield
             }
-            // The light everywhere on the tile but in the edge runs (even-odd: they do not overlap).
-            g.setTransform(1, 0, 0, 1, 0, 0)
-            g.beginPath()
-            g.rect(0, 0, S, S)
-            for (const run of view.edges) {
-                const x0 = Math.max(run.x - x, 0), y0 = Math.max(run.y - y, 0)
-                const x1 = Math.min(run.x + run.w - x, S), y1 = Math.min(run.y + run.h - y, S)
-                if (x0 < x1 && y0 < y1) g.rect(x0, y0, x1 - x0, y1 - y0)
+            // The light everywhere on the quarter but in the edge runs (even-odd: they do not overlap).
+            for (const {g, px, py} of quarters) {
+                g.setTransform(1, 0, 0, 1, 0, 0)
+                g.beginPath()
+                g.rect(0, 0, Q, Q)
+                for (const run of view.edges) {
+                    const x0 = Math.max(run.x - px, 0), y0 = Math.max(run.y - py, 0)
+                    const x1 = Math.min(run.x + run.w - px, Q), y1 = Math.min(run.y + run.h - py, Q)
+                    if (x0 < x1 && y0 < y1) g.rect(x0, y0, x1 - x0, y1 - y0)
+                }
+                g.clip('evenodd')
             }
-            g.clip('evenodd')
-            g.setTransform(view.a, 0, 0, view.d, view.e - x, view.f - y)
-            atmosphericLighting.lightTile(g, this, view.outline)
+            each(g => atmosphericLighting.lightTile(g, this, view.outline))
+            done = true
         } finally {
-            g.restore()
+            for (const q of quarters)
+                q.g.restore()
+            if (!done)
+                this.releaseLitTile(tile)
         }
-        yield
-        const tile = this.litTileParts(canvas, view, x + P, y + P)
         tile.litOutline = mapDepth.outline
         // The board outline the tile's drawn square is opaque under (frameCover), if any.
-        tile.litOpaque = this.litSquareOpaque(view, x + P, y + P, x + P + LIT_TILE, y + P + LIT_TILE) ? mapDepth.outline : null
+        tile.litOpaque = this.litSquareOpaque(view, X, Y, X + LIT_TILE, Y + LIT_TILE) ? mapDepth.outline : null
         return tile
     }
-    // TASK-1545: a lit tile is kept as its four LIT_TILE_PART squares, each a canvas of its own (litTilePool), copied
-    // whole-pixel from the build canvas's drawn square (its pad left out): a frame draws (and its canvas records) only the
-    // quarters on the canvas, not whole tiles a quarter of which is in view along the canvas's sides (a Chromium canvas
-    // records about 32 MB of images before it rasterizes inside the frame). A quarter the board's drawing cannot reach
-    // (litPartEmpty) is not kept. {parts: [top left, top right, bottom left, bottom right] (null: empty), litOpaque}.
-    litTileParts(canvas, view, x, y) {
-        const P = LIT_TILE_PAD, Q = LIT_TILE_PART, parts = []
+    // TASK-1545: a lit tile is kept as its four LIT_TILE_PART squares, each a canvas of its own (litTilePool): a frame draws
+    // (and its canvas records) only the quarters on the canvas, not whole tiles a quarter of which is in view along the
+    // canvas's sides (a Chromium canvas records about 32 MB of images before it rasterizes inside the frame). A quarter the
+    // board's drawing cannot reach (litPartEmpty) is not kept. {parts: [top left, top right, bottom left, bottom right]
+    // (null: empty), litOpaque}. TASK-1552: the quarters of tile (u, v) at device pixel x, y of view, taken for its build to
+    // draw into (litTileSteps).
+    litTileParts(view, x, y) {
+        const Q = LIT_TILE_PART, parts = []
         for (let k = 0; k < 4; ++k) {
             const qx = (k & 1) * Q, qy = (k >> 1) * Q
             if (Grid.litPartSkips && this.litPartEmpty(view, x + qx, y + qy, x + qx + Q, y + qy + Q)) {
@@ -6386,13 +6418,8 @@ class Grid extends SpritesGroup {
             if (part.width !== Q || part.height !== Q) {
                 part.width = Q
                 part.height = Q
+                part.litDrawn = false
             }
-            const g = part.getContext('2d')
-            g.setTransform(1, 0, 0, 1, 0, 0)
-            g.globalAlpha = 1
-            g.globalCompositeOperation = 'copy'
-            g.drawImage(canvas, P + qx, P + qy, Q, Q, 0, 0, Q, Q)
-            g.globalCompositeOperation = 'source-over'
             parts.push(part)
         }
         return {parts, width: LIT_TILE, height: LIT_TILE}
@@ -6504,13 +6531,7 @@ class Grid extends SpritesGroup {
         for (const part of this.litTilePool)
             part.width = part.height = 0
         this.litTilePool.length = 0
-        if (this.litTileScratch)
-            this.litTileScratch.width = this.litTileScratch.height = 0
-        this.litTileScratch = undefined
         this.dropLitTileJob()
-        if (this.litTileJobCanvas)
-            this.litTileJobCanvas.width = this.litTileJobCanvas.height = 0
-        this.litTileJobCanvas = undefined
         if (this.litRestCanvas)
             this.litRestCanvas.width = this.litRestCanvas.height = 0
         this.litRestCanvas = undefined
@@ -6534,8 +6555,7 @@ class Grid extends SpritesGroup {
             for (const tile of this.litView.tiles.values()) if (tile) parts += tile.parts.filter(Boolean).length
         const rest = this.litRestCanvas ? this.litRestCanvas.width * this.litRestCanvas.height * 4 : 0
         const buffer = this.litPatchBuffer ? this.litPatchBuffer.width * this.litPatchBuffer.height * 4 : 0
-        const scratch = this.litTileScratch ? this.litTileScratch.width * this.litTileScratch.height * 4 : 0
-        return parts * LIT_TILE_PART ** 2 * 4 + scratch + rest + buffer
+        return parts * LIT_TILE_PART ** 2 * 4 + rest + buffer
     }
     drawMapSurface(ctx) {
         // TASK-1395: the zoom raster's board (renderZoomBoard) is drawn directly: the surface cache and the lit view's
@@ -8420,6 +8440,7 @@ const SURFACE_ADOPTED_FIELDS = ['surfaceCache', 'surfaceCacheScale', 'surfaceCac
 // between two frames, spare canvases kept, the side of the edge blocks the frame lights and the
 // rest snapshot's bands.
 const LIT_TILE = 256
+// TASK-1552: the margin (device pixels) round a tile within which the board must reach for it to be built (Grid.litTileSteps).
 const LIT_TILE_PAD = 8
 // TASK-1545: a lit tile's quarter (Grid.litTileParts) and the reach (hex radii, besides the slab's depth) of a tile's drawing
 // past the board outline (Grid.litPartEmpty: buildings and their shadows on the edge cells, the rim).
