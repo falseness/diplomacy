@@ -626,7 +626,178 @@ function drawTutorialArrow(ctx, unit, gap, font, obstacles, label, box, drawLine
             x: rect.x, y: rect.y, width: rect.width, height: rect.height}}
 }
 
+// TASK-1554: the interface (HUD buttons, timer, panels, hints) is drawn into a cached canvas of the main canvas's size and
+// redrawn only when its content changes; a frame draws only the cache's non-transparent parts, its bounding boxes, onto
+// the main canvas (a few drawImages instead of the interface's 8-19 calls; a panned frame no longer rasterizes its texts
+// and paths again). Every frame still runs the interface's drawing code (the panels' layouts and hit boxes stay current),
+// but on a recording context (InterfaceRecorder, the overlays' CanvasCallRecorder with bounds for texts and shadows): when
+// its calls, arguments and starting state repeat the cached drawing's, nothing is drawn but the boxes. Content is anything
+// the calls draw: a selection, hover, HUD value, panel or resize changes them. Drawn directly as before: a recording the
+// cache cannot hold the same (a blend other than source-over, clearRect, putImageData or a pixel read; a drawing whose
+// bounds are unknown: a Path2D, a filter), and a recording that changes two frames in a row (an animation: no cache
+// redrawn every frame).
+class InterfaceLayer {
+    static enabled = true
+    constructor() {
+        this.recorder = null
+        this.canvas = null
+        this.cached = null       // the recording the cache canvas holds
+        this.previous = null     // the last frame's recording
+        this.rects = null        // the cache's boxes (device px), cleared before it is redrawn
+        this.changedBefore = false
+        this.stats = {frames: 0, hits: 0, redraws: 0, direct: 0, blitMegapixels: 0, changes: {}, directWhy: {}}
+    }
+    // Whether ctx can be recorded and cached (a real 2D context of a canvas; the tests' stand-in contexts are drawn directly).
+    static usable(ctx) {
+        return InterfaceLayer.enabled && typeof Proxy === 'function' && typeof CanvasCallRecorder === 'function' &&
+            typeof CanvasRenderingContext2D === 'function' && ctx instanceof CanvasRenderingContext2D && !!ctx.canvas &&
+            ctx.canvas.width > 0 && ctx.canvas.height > 0
+    }
+    // Draws the interface (draw(ctx): its drawing code) on ctx.
+    draw(ctx, draw) {
+        if (!InterfaceLayer.usable(ctx)) {
+            this.mode = 'off'
+            draw(ctx)
+            return
+        }
+        const recorder = this.recorder ||= new InterfaceRecorder()
+        const W = ctx.canvas.width, H = ctx.canvas.height
+        // Measuring code (Text.width) sets the real context's font while the calls are recorded: kept from the frame's.
+        // The interface draws in device pixels (drawInterfaceTo sets the identity transform): recorded from it, so the
+        // camera's transform does not make every panned frame's recording new.
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        let recording
+        try {
+            recorder.begin(ctx, [W, H])
+            draw(recorder.context)
+        } finally {
+            recording = recorder.take()
+            ctx.restore()
+        }
+        this.stats.frames++
+        const previous = this.previous
+        const same = !!previous && !previous.volatile && InterfaceRecorder.same(previous, recording)
+        const changed = !same
+        if (changed && previous) {
+            // What made the recording new (the first call that differs), counted by kind: informational (stats.changes).
+            const why = InterfaceRecorder.difference(previous, recording), changes = this.stats.changes ||= {}
+            if (why in changes || Object.keys(changes).length < 40) changes[why] = (changes[why] || 0) + 1
+        }
+        this.previous = recording
+        const direct = recording.uncacheable || recording.unbounded || (changed && this.changedBefore)
+        this.changedBefore = changed
+        if (direct) {
+            const why = recording.uncacheable ? 'uncacheable' : recording.unbounded ? 'unbounded' : 'changed twice'
+            this.stats.directWhy[why] = (this.stats.directWhy[why] || 0) + 1
+            this.cached = null
+            this.mode = 'direct'
+            this.stats.direct++
+            recorder.replayOn(ctx, recording)
+            return
+        }
+        if (!(same && this.cached && this.cached.canvasKey === previous.canvasKey && this.canvasAlive())) {
+            this.redraw(recording, W, H)
+            this.mode = 'redraw'
+            this.stats.redraws++
+        }
+        else {
+            // The cached drawing repeats: kept as this frame's (its canvas versions are the same).
+            recording.canvasKey = this.cached.canvasKey
+            this.cached = recording
+            this.mode = 'hit'
+            this.stats.hits++
+        }
+        this.blit(ctx)
+    }
+    canvasAlive() {
+        return !!this.canvas && !(typeof this.context.isContextLost === 'function' && this.context.isContextLost())
+    }
+    // Draws recording into the cache canvas (the old boxes cleared) and keeps its boxes.
+    redraw(recording, W, H) {
+        let canvas = this.canvas
+        if (!canvas || !this.canvasAlive()) {
+            canvas = this.canvas = document.createElement('canvas')
+            this.context = canvas.getContext('2d')
+            this.rects = null
+            if (typeof canvas.addEventListener === 'function')
+                canvas.addEventListener('contextlost', () => { this.cached = null })
+        }
+        const g = this.context
+        // A change in a few drawing calls' arguments (a timer's text) redraws only the calls round their boxes
+        // (InterfaceRecorder.dirtyRects).
+        const dirty = this.cached && canvas.width === W && canvas.height === H && this.rects ?
+            InterfaceRecorder.dirtyRects(this.cached, recording, W, H) : null
+        if (dirty) {
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            for (const r of dirty.rects) g.clearRect(r.x, r.y, r.w, r.h)
+            g.save()
+            applyCanvasState(g, recording.state)
+            g.beginPath()
+            this.recorder.replayOn(g, {calls: dirty.calls, labels: recording.labels})
+            g.restore()
+            this.stats.partial = (this.stats.partial || 0) + 1
+            recording.canvasKey = this.cached.canvasKey + 1
+            this.cached = recording
+            this.rects = recording.rects(W, H)
+            return
+        }
+        if (canvas.width !== W || canvas.height !== H) {
+            canvas.width = W
+            canvas.height = H
+            this.rects = null
+        }
+        else {
+            g.setTransform(1, 0, 0, 1, 0, 0)
+            if (this.rects)
+                for (const r of this.rects) g.clearRect(r.x, r.y, r.w, r.h)
+            else
+                g.clearRect(0, 0, W, H)
+        }
+        g.save()
+        applyCanvasState(g, recording.state)
+        g.beginPath()
+        this.recorder.replayOn(g, recording)
+        g.restore()
+        recording.canvasKey = (this.cached?.canvasKey || 0) + 1
+        this.cached = recording
+        this.rects = recording.rects(W, H)
+    }
+    // The cache's boxes drawn on ctx, at the same device pixels.
+    blit(ctx) {
+        const rects = this.rects
+        if (!rects.length)
+            return
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.globalAlpha = 1
+        ctx.globalCompositeOperation = 'source-over'
+        if ('filter' in ctx) ctx.filter = 'none'
+        ctx.shadowBlur = 0
+        ctx.shadowOffsetX = ctx.shadowOffsetY = 0
+        ctx.shadowColor = 'rgba(0, 0, 0, 0)'
+        for (const r of rects) {
+            ctx.drawImage(this.canvas, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h)
+            this.stats.blitMegapixels += r.w * r.h / 1e6
+        }
+        ctx.restore()
+    }
+}
+const interfaceLayer = new InterfaceLayer()
+
 function drawInterface() {
+    interfaceLayer.draw(interfaceCtx, drawInterfaceTo)
+    // The debug mode's FPS counter, the interface's last drawing, changes every few frames: drawn over the cached
+    // interface directly (none in a replay, as before).
+    if (typeof replayViewer != 'undefined' && replayViewer)
+        return
+    interfaceCtx.save()
+    interfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
+    drawDebugFps(interfaceCtx)
+    interfaceCtx.restore()
+}
+
+function drawInterfaceTo(interfaceCtx) {
     interfaceCtx.save()
     interfaceCtx.setTransform(1, 0, 0, 1, 0, 0)
     // A replay has no turn controls of its own: its controls are DOM, its status is drawn here.
@@ -688,7 +859,6 @@ function drawInterface() {
     }
     onlineResult?.draw(interfaceCtx)
     errorWindow.draw(interfaceCtx)
-    drawDebugFps(interfaceCtx)
     interfaceCtx.restore()
 }
 

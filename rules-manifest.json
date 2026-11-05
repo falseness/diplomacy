@@ -1,7 +1,7 @@
 {
   "format": 1,
   "algorithm": "sha256(path NUL bytes NUL ...)",
-  "rulesVersion": "5cf1b27927e19a8cd60a513a529f25896aaebf6fe9b86e232b8cb5b7eec2f7e6",
+  "rulesVersion": "38156b9d5a129265c29d5fb967909410e313e2f692371e60c89ab350cd210f5a",
   "scripts": [
     {
       "path": "options/assert.js",
@@ -120,8 +120,8 @@
     },
     {
       "path": "render/loadassets.js",
-      "sha256": "2e613ecd23120033762d64e6daccc76e40165a75afddd25bcc2224663664557f",
-      "bytes": 14513
+      "sha256": "af403f7ccbe0942ba1de801dc2e744d25f6893689a988e3ed535410a9a9d3187",
+      "bytes": 14787
     },
     {
       "path": "render/staticons.js",
@@ -150,18 +150,18 @@
     },
     {
       "path": "render/draw.js",
-      "sha256": "8f55d07e82824fdb7ee3dd6af4f3647465230d2650c413fe6785089b53a6dd9d",
-      "bytes": 36157
+      "sha256": "5af18b7c559454d9d2a47528b3959cec44b5bc8bee7a2ff33bd56b2603998173",
+      "bytes": 44285
     },
     {
       "path": "interface/entityinterface.js",
-      "sha256": "23560eceb6be0e1156c0dd4ad2baa51a951f305e7f69a84bbc53c31fd8cba841",
-      "bytes": 34056
+      "sha256": "d843324288bb6559ef799edd06f9be44107fb88d25c0b8fa8d818d506e840309",
+      "bytes": 34217
     },
     {
       "path": "interface/barrackinterface.js",
-      "sha256": "a844a05e2e787ff3047ee7d6106d4d787d2fc8393bdd52e8e6b8b776ce2a3d3b",
-      "bytes": 21135
+      "sha256": "8c45a27f9ce597fb7e59e3a8b200727d4b820cb4381f333fe0c9b22c9d566842",
+      "bytes": 21296
     },
     {
       "path": "interface/towninterface.js",
@@ -200,8 +200,8 @@
     },
     {
       "path": "sprites/elements/rect.js",
-      "sha256": "217dcb54d910fb35c10295f191b2b2a1c72bcf10b8d59b989f65d9434d2a00b4",
-      "bytes": 28379
+      "sha256": "307c1ee670227ddee7d50c04f55b778ef0c76874c8dd302ab1aab527381902d5",
+      "bytes": 28506
     },
     {
       "path": "sprites/elements/button.js",
@@ -225,8 +225,8 @@
     },
     {
       "path": "sprites/elements/image.js",
-      "sha256": "c4e5a4479cfeb0d45e9957bd096d483157bca144982ae25388a2f36e59d75b62",
-      "bytes": 13066
+      "sha256": "1e876c5be09b01b19f2385f1a580e8eb6de0598c031bc3bf7c3890cba5abb0fa",
+      "bytes": 13164
     },
     {
       "path": "sprites/elements/imageButton.js",
@@ -310,8 +310,8 @@
     },
     {
       "path": "groups/grid.js",
-      "sha256": "7cf0b75e90c3cb2b7510372334a2e42a575fc9237fc27e3ae72b728d12c59b78",
-      "bytes": 516042
+      "sha256": "9d0345fc7d15a219a66fbea3b79ed081ee9e06cbd307a7b193931a362277dbd5",
+      "bytes": 533122
     },
     {
       "path": "sprites/entities/hpBar.js",

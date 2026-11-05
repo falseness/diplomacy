@@ -140,11 +140,15 @@ function paintCachedImage(tmpCanvas, image) {
     }
     if (!failedImages.has(image))
         drawImage(tmpCtx, image, pos, width, height)
+    tmpCanvas.contentVersion = (tmpCanvas.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
 }
 // Repaints the existing cached canvases in place, so the grid surface cache image refs
 // stay valid, then makes the next frame rebuild the surface cache.
 function restoreImageCaches() {
     atmosphericBackground.invalidate()
+    // TASK-1554: the interface's cache is drawn again (InterfaceLayer).
+    if (typeof interfaceLayer != 'undefined' && interfaceLayer)
+        interfaceLayer.cached = null
     for (const name in cachedImages) {
         const image = assets[name]
         if (cachedImages[name] && image && image.complete && image.naturalWidth > 0)

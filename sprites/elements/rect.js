@@ -554,6 +554,7 @@ class SpriteCache {
         g.setTransform(job.a, 0, 0, job.d, scale.ox + job.px - job.a * anchor.x, scale.oy + job.py - job.d * anchor.y)
         owner.paintSprite(g)
         g.restore()
+        canvas.contentVersion = (canvas.contentVersion || 0) + 1 // TASK-1554: a reused canvas drawn again (InterfaceRecorder)
         const sprite = {canvas, bytes, used: SpriteCache.frame, map, key}
         map.set(key, sprite)
         SpriteCache.sprites.push(sprite)

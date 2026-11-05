@@ -270,6 +270,7 @@ class ParchmentIconImage {
             const g = part.getContext('2d')
             g.globalCompositeOperation = 'copy'
             g.drawImage(canvas, px0, py0, px1 - px0, py1 - py0, 0, 0, px1 - px0, py1 - py0)
+            part.contentVersion = (part.contentVersion || 0) + 1 // TASK-1554 (InterfaceRecorder)
             crop = this.crop = {canvas: part, source: canvas, key}
         }
         ctx.drawImage(crop.canvas, x + px0 * k, y + py0 * k, (px1 - px0) * k, (py1 - py0) * k)

@@ -8130,6 +8130,313 @@ function replayCanvasCalls(ctx, calls, labels, overlayEnd, overlays, from, to) {
 // Set by render/visualsPerf.js (diagnostics only): {current(), within(label, fn)} for its drawing layers.
 let canvasCallLabels = null
 
+// TASK-1554 (render/draw.js InterfaceLayer):
+// A CanvasCallRecorder for the interface (InterfaceLayer): bounds also for texts (their measured box) and for drawings with
+// a shadow (grown by the blur and moved by the offset); a filter makes the bounds unknown. Each drawImage of a canvas keeps
+// the canvas's size and contentVersion (bumped by the code that draws a kept canvas again: markCanvasDrawn), so a cached
+// drawing of an image that changed is drawn again; an image still loading makes the recording volatile (never repeated).
+// A blend other than source-over cannot be cached on a transparent canvas the same: such a recording is drawn directly.
+class InterfaceRecorder extends CanvasCallRecorder {
+    begin(ctx, key) {
+        super.begin(ctx, key)
+        this.segments = []
+        this.point = this.start = null
+        this.volatile = false
+        this.blended = false
+    }
+    record(entry) {
+        if (entry.set === 'globalCompositeOperation' && entry.value !== 'source-over')
+            this.blended = true
+        super.record(entry)
+    }
+    call(name, args) {
+        const before = this.boxes.length, unbounded = this.unbounded
+        const result = super.call(name, args)
+        if (CANVAS_DRAW_CALLS.has(name)) {
+            // The call's own device boxes (those it added: a stroke's per segment; null when its bounds are unknown), for a
+            // partial redraw (dirtyRects).
+            const entry = this.calls[this.calls.length - 1]
+            entry.boxes = this.unbounded && !unbounded ? null : this.boxes.slice(before)
+        }
+        if (name === 'drawImage') {
+            const source = args[0], entry = this.calls[this.calls.length - 1]
+            if (typeof HTMLImageElement === 'function' && source instanceof HTMLImageElement) {
+                if (!source.complete || !source.naturalWidth)
+                    this.volatile = true
+            }
+            else if (source && typeof source === 'object')
+                entry.source = [source.width, source.height, source.contentVersion || 0]
+        }
+        return result
+    }
+    // This frame's recording (a new one starts with the next begin).
+    take() {
+        const boxes = this.boxes
+        return {calls: this.calls, key: this.key, state: this.state, labels: this.labels,
+            unbounded: this.unbounded, uncacheable: this.uncacheable || this.blended, volatile: this.volatile, boxes,
+            // The boxes as whole device-pixel rectangles cut to W x H, joined where that adds no area (overlayRects), then
+            // cut apart where they overlap (a pixel drawn twice from the cache would blend its translucent pixels twice).
+            rects: (W, H) => InterfaceRecorder.disjoint(
+                CanvasCallRecorder.prototype.overlayRects.call({boxes, unbounded: false, uncacheable: false}, W, H))}
+    }
+    // A partial redraw of the cache from recording a to recording b (cut to W x H): {rects, calls}: the device rectangles to
+    // clear and b's calls to make there (every state and path call, and the drawing calls whose boxes meet the rectangles).
+    // The rectangles hold the boxes of the drawing calls that differ (old and new), grown by all the boxes of every drawing
+    // call meeting them until none does, so the drawing calls made are made whole (not clipped: Chromium rasterizes a
+    // clipped stroke's edges differently) and draw nothing outside the cleared rectangles. Only when the two make the same
+    // calls in the same order and differ only in drawing calls' arguments or drawn canvases (a timer's text); null when b
+    // must be drawn whole (another call differs, a call's bounds are unknown, or the rectangles are most of b's).
+    static dirtyRects(a, b, W, H) {
+        if (!a || a.calls.length !== b.calls.length || a.key.some((v, k) => v !== b.key[k]) || !sameCanvasState(a.state, b.state))
+            return null
+        const ta = a.state.transform, tb = b.state.transform
+        if (ta.a !== tb.a || ta.b !== tb.b || ta.c !== tb.c || ta.d !== tb.d || ta.e !== tb.e || ta.f !== tb.f)
+            return null
+        // Whole device pixels round a box, one more each way (overlayRects' margin).
+        const cell = q => [Math.floor(q[0]) - 1, Math.floor(q[1]) - 1, Math.ceil(q[2]) + 1, Math.ceil(q[3]) + 1]
+        const dirty = [], drawn = new Set()
+        for (let k = 0; k < a.calls.length; ++k) {
+            const x = a.calls[k], y = b.calls[k]
+            if (x.set !== y.set || x.name !== y.name)
+                return null
+            if (x.set !== undefined) {
+                if (x.value !== y.value) return null
+                continue
+            }
+            let same = x.args.length === y.args.length && x.args.every((v, i) => v === y.args[i])
+            const s = x.source, t = y.source
+            if (same && (s || t) && !(s && t && s[0] === t[0] && s[1] === t[1] && s[2] === t[2]))
+                same = false
+            if (same)
+                continue
+            if (!x.draw || !x.boxes || !y.boxes)
+                return null
+            for (const q of x.boxes) dirty.push(cell(q))
+            for (const q of y.boxes) dirty.push(cell(q))
+            drawn.add(k)
+        }
+        const meets = q => dirty.some(d => q[0] < d[2] && d[0] < q[2] && q[1] < d[3] && d[1] < q[3])
+        for (let grown = true; grown;) {
+            grown = false
+            for (let k = 0; k < b.calls.length; ++k) {
+                const c = b.calls[k]
+                if (!c.draw || drawn.has(k))
+                    continue
+                if (!c.boxes)
+                    return null
+                const qs = c.boxes.map(cell)
+                if (qs.some(meets)) {
+                    dirty.push(...qs)
+                    drawn.add(k)
+                    grown = true
+                }
+            }
+        }
+        const rects = InterfaceRecorder.disjoint(dirty.map(q => {
+            const x0 = Math.max(0, q[0]), y0 = Math.max(0, q[1]), x1 = Math.min(W, q[2]), y1 = Math.min(H, q[3])
+            return {x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0)}
+        }).filter(r => r.w > 0 && r.h > 0))
+        const area = rects.reduce((n, r) => n + r.w * r.h, 0), whole = b.rects(W, H).reduce((n, r) => n + r.w * r.h, 0)
+        if (!(area < 0.5 * whole))
+            return null
+        return {rects, calls: b.calls.filter((c, k) => !c.draw || drawn.has(k))}
+    }
+    // Rectangles {x, y, w, h} covering the same pixels as rects, none overlapping another (each the part of a rectangle
+    // outside those before it, in at most four pieces per overlap).
+    static disjoint(rects) {
+        let out = []
+        for (const r of rects) {
+            let pieces = [{x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.h}]
+            for (const o of out) {
+                const next = []
+                for (const p of pieces) {
+                    if (p.x1 <= o.x0 || o.x1 <= p.x0 || p.y1 <= o.y0 || o.y1 <= p.y0) {
+                        next.push(p)
+                        continue
+                    }
+                    if (p.y0 < o.y0) next.push({x0: p.x0, y0: p.y0, x1: p.x1, y1: o.y0})
+                    if (o.y1 < p.y1) next.push({x0: p.x0, y0: o.y1, x1: p.x1, y1: p.y1})
+                    const y0 = Math.max(p.y0, o.y0), y1 = Math.min(p.y1, o.y1)
+                    if (p.x0 < o.x0) next.push({x0: p.x0, y0, x1: o.x0, y1})
+                    if (o.x1 < p.x1) next.push({x0: o.x1, y0, x1: p.x1, y1})
+                }
+                pieces = next
+            }
+            out = out.concat(pieces.map(p => ({x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1, x: p.x0, y: p.y0, w: p.x1 - p.x0, h: p.y1 - p.y0})))
+        }
+        return out.map(p => ({x: p.x, y: p.y, w: p.w, h: p.h}))
+    }
+    // Makes recording's calls on ctx.
+    replayOn(ctx, recording) {
+        replayCanvasCalls(ctx, recording.calls, recording.labels, -1, true, 0, recording.calls.length)
+    }
+    // Whether recordings a and b draw the same: the same key, starting state and calls with the same arguments (canvases
+    // drawn: the same size and contentVersion).
+    static same(a, b) {
+        if (a.calls.length !== b.calls.length || a.key.length !== b.key.length || !a.key.every((v, k) => v === b.key[k]))
+            return false
+        const ta = a.state.transform, tb = b.state.transform
+        if (ta.a !== tb.a || ta.b !== tb.b || ta.c !== tb.c || ta.d !== tb.d || ta.e !== tb.e || ta.f !== tb.f ||
+                !sameCanvasState(a.state, b.state))
+            return false
+        for (let k = 0; k < a.calls.length; ++k) {
+            const x = a.calls[k], y = b.calls[k]
+            if (x.set !== y.set || x.name !== y.name)
+                return false
+            if (x.set !== undefined) {
+                if (x.value !== y.value) return false
+                continue
+            }
+            const p = x.args, q = y.args
+            if (p.length !== q.length) return false
+            for (let i = 0; i < p.length; ++i) if (p[i] !== q[i]) return false
+            const s = x.source, t = y.source
+            if (s || t) {
+                if (!s || !t || s[0] !== t[0] || s[1] !== t[1] || s[2] !== t[2]) return false
+            }
+        }
+        return true
+    }
+    // The current path's segments' device boxes, beside its whole box (trace): a stroke paints only near its segments, so
+    // a stroked outline (a screen-sized frame) is bounded by strips along its sides, not by the whole rectangle.
+    trace(name, a) {
+        super.trace(name, a)
+        if (name === 'beginPath') {
+            this.segments = []
+            this.point = this.start = null
+            return
+        }
+        // this.point: the points the path's current point lies in the hull of (after an arcTo, its tangent point lies
+        // between its corner and its end), this.start: the subpath's first point.
+        const segments = this.segments ||= []
+        const m = this.transform(), at = (x, y) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]
+        const add = (...points) => {
+            if (segments.length > 64) return
+            const xs = points.map(p => p[0]), ys = points.map(p => p[1])
+            segments.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)])
+        }
+        const from = this.point || []
+        switch (name) {
+        case 'moveTo': this.point = [this.start = at(a[0], a[1])]; break
+        case 'lineTo': { const p = at(a[0], a[1]); add(...from, p); if (!this.point) this.start = p; this.point = [p]; break }
+        case 'arcTo': { const c = at(a[0], a[1]), p = at(a[2], a[3]); add(...from, c, p); if (!this.point) this.start = c; this.point = [c, p]; break }
+        case 'quadraticCurveTo': { const p = at(a[2], a[3]); add(...from, at(a[0], a[1]), p); this.point = [p]; break }
+        case 'bezierCurveTo': { const p = at(a[4], a[5]); add(...from, at(a[0], a[1]), at(a[2], a[3]), p); this.point = [p]; break }
+        case 'rect': {
+            const p = at(a[0], a[1]), q = at(a[0] + a[2], a[1]), r = at(a[0] + a[2], a[1] + a[3]), t = at(a[0], a[1] + a[3])
+            add(p, q); add(q, r); add(r, t); add(t, p)
+            this.point = [this.start = p]
+            break
+        }
+        case 'closePath': if (this.point && this.start) { add(...from, this.start); this.point = [this.start] } break
+        case 'save': case 'restore': case 'translate': case 'scale': case 'rotate': case 'transform':
+        case 'setTransform': case 'resetTransform': case 'clip': case 'setLineDash': break
+        default: segments.length = 65 // arc, ellipse, roundRect (corners inside the sides) and calls not followed: the whole box
+        }
+    }
+    // A stroke of the current path: one box a segment (trace), grown by the stroke's reach; else the whole path's box.
+    boundStroke() {
+        const segments = this.segments
+        if (!this.path || !segments || !segments.length || segments.length > 64)
+            return false
+        const reach = this.strokeReach()
+        for (const s of segments) {
+            const box = [s[0] - reach, s[1] - reach, s[2] + reach, s[3] + reach]
+            this.shadowed(box)
+            this.boxes.push(box)
+        }
+        return true
+    }
+    // The first difference between recordings a and b (InterfaceLayer.stats.changes): 'calls' (their number), 'state', or
+    // the first call that differs ('set <property>' or '<method> <argument index>').
+    static difference(a, b) {
+        if (a.volatile) return 'volatile'
+        if (a.calls.length !== b.calls.length) return 'calls'
+        if (a.key.some((v, k) => v !== b.key[k])) return 'key'
+        if (!sameCanvasState(a.state, b.state)) return 'state ' + canvasStateDiff(a.state, b.state)
+        for (let k = 0; k < a.calls.length; ++k) {
+            const x = a.calls[k], y = b.calls[k]
+            if (x.set !== y.set || x.name !== y.name) return 'call ' + (x.set || x.name)
+            if (x.set !== undefined) {
+                if (x.value !== y.value) return 'set ' + x.set
+                continue
+            }
+            for (let i = 0; i < x.args.length; ++i) if (x.args[i] !== y.args[i]) return x.name + ' ' + i + (typeof x.args[i] === 'string' ? ' ' + x.args[i].slice(0, 16) : '')
+            const s = x.source, t = y.source
+            if ((s || t) && !(s && t && s[0] === t[0] && s[1] === t[1] && s[2] === t[2]))
+                return x.name + ' source ' + (s || []).join('x') + (s && t && s[0] === t[0] && s[1] === t[1] ? ' version' : '') +
+                    (x.args[0]?.canvasPooled !== undefined ? ' pooled' : '')
+        }
+        return 'transform'
+    }
+    // A drawing call's device bounds (CanvasCallRecorder.bound), texts and shadows included.
+    bound(name, a) {
+        const g = this.scratch
+        if (g.filter && g.filter !== 'none') {
+            this.unbounded = true
+            return
+        }
+        let box = [Infinity, Infinity, -Infinity, -Infinity], grow = 0
+        if (name === 'fillText' || name === 'strokeText') {
+            const m = g.measureText(String(a[0]))
+            const ascent = m.actualBoundingBoxAscent, descent = m.actualBoundingBoxDescent
+            if (![m.actualBoundingBoxLeft, m.actualBoundingBoxRight, ascent, descent].every(Number.isFinite)) {
+                this.unbounded = true
+                return
+            }
+            // Glyphs may reach a little past their measured box (antialiasing, hinting): a fifth of the text's height.
+            const pad = 0.2 * (ascent + descent) + 1
+            const x0 = a[1] - m.actualBoundingBoxLeft - pad, x1 = a[1] + m.actualBoundingBoxRight + pad
+            const y0 = a[2] - ascent - pad, y1 = a[2] + descent + pad
+            this.grow(box, x0, y0); this.grow(box, x1, y1); this.grow(box, x1, y0); this.grow(box, x0, y1)
+            if (name === 'strokeText') grow = this.strokeReach()
+        }
+        else if (name === 'stroke' && !(a[0] && typeof a[0] === 'object') && !g.shadowBlur && !g.shadowOffsetX &&
+                !g.shadowOffsetY && this.boundStroke())
+            return
+        else if (name === 'strokeRect' && !g.shadowBlur && !g.shadowOffsetX && !g.shadowOffsetY) {
+            // Its four sides, each grown by the stroke's reach.
+            const reach = this.strokeReach(), x0 = a[0], y0 = a[1], x1 = a[0] + a[2], y1 = a[1] + a[3]
+            for (const [p, q, r, t] of [[x0, y0, x1, y0], [x1, y0, x1, y1], [x0, y1, x1, y1], [x0, y0, x0, y1]]) {
+                const side = [Infinity, Infinity, -Infinity, -Infinity]
+                this.grow(side, p, q); this.grow(side, r, t)
+                this.boxes.push([side[0] - reach, side[1] - reach, side[2] + reach, side[3] + reach])
+            }
+            return
+        }
+        else if (name === 'clearRect') {
+            this.grow(box, a[0], a[1]); this.grow(box, a[0] + a[2], a[1] + a[3])
+            this.grow(box, a[0] + a[2], a[1]); this.grow(box, a[0], a[1] + a[3])
+        }
+        else {
+            const shadow = [g.shadowBlur, g.shadowOffsetX, g.shadowOffsetY]
+            const before = this.boxes.length
+            g.shadowBlur = g.shadowOffsetX = g.shadowOffsetY = 0
+            try { super.bound(name, a) }
+            finally { [g.shadowBlur, g.shadowOffsetX, g.shadowOffsetY] = shadow }
+            if (this.boxes.length > before)
+                this.shadowed(this.boxes[this.boxes.length - 1])
+            return
+        }
+        if (!(box[0] <= box[2] && box[1] <= box[3]))
+            return
+        box = [box[0] - grow, box[1] - grow, box[2] + grow, box[3] + grow]
+        this.shadowed(box)
+        this.boxes.push(box)
+    }
+    // box grown by the current shadow (device px: the blur's reach and the offset, not transformed).
+    shadowed(box) {
+        const g = this.scratch, blur = g.shadowBlur, dx = g.shadowOffsetX, dy = g.shadowOffsetY
+        if (!(blur > 0 || dx || dy))
+            return
+        const reach = 2 * blur + 2
+        box[0] = Math.min(box[0], box[0] + dx - reach)
+        box[1] = Math.min(box[1], box[1] + dy - reach)
+        box[2] = Math.max(box[2], box[2] + dx + reach)
+        box[3] = Math.max(box[3], box[3] + dy + reach)
+    }
+}
+
 // How far (hex radii) a cell's state reaches into the surface cache's pixels, beyond its drawn
 // sprite (Grid.checkRange).
 const SURFACE_CHECK_REACH = 8

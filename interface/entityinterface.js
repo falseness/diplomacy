@@ -660,6 +660,8 @@ class EntityInterface {
         cacheCtx.translate(-bounds.left, -bounds.top)
         this.drawContents(cacheCtx)
 
+        // TASK-1554: drawn again: a cached interface drawing of it is stale (InterfaceRecorder).
+        cache.contentVersion = (cache.contentVersion || 0) + 1
         this.renderCache = cache
         this.renderCacheBounds = bounds
         this.renderCacheDirty = false
