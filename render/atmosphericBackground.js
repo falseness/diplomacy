@@ -421,6 +421,8 @@ const atmosphericBackground = {
     BLOCK_H: 64,
     BLOCK_SPLIT: 32,
     BLOCK_RUNS: 96,
+    // TASK-1552: runs drawn from whole rows of the raster kept (drawBlocks); false: each run copied on its own as before.
+    blockRows: true,
     blockSet: null,
     blockBuilds: 0,
     // TASK-1550: the block runs' canvases (CanvasPool, sprites/elements/rect.js), reused as runs are let go of.
@@ -453,6 +455,26 @@ const atmosphericBackground = {
                 runs.push({x: block.x, y: block.y, w: block.w, h: block.h})
         }
         for (const {x, y, w, h} of runs) {
+            // TASK-1552 (blockRows): a run drawn from its row of the raster (the raster's whole width, h high at y), copied once
+            // and kept like a run: the open blocks move with the lit tiles built while the camera pans, and runs keyed by their
+            // own extent were copied anew nearly every frame.
+            if (this.blockRows) {
+                const key = 'row:' + y + ',' + h
+                let row = set.runs.get(key)
+                if (!row) {
+                    const canvas = this.runPool().take(raster.width, h)
+                    const g = canvas.getContext('2d')
+                    g.save()
+                    g.globalCompositeOperation = 'copy'
+                    g.drawImage(raster, 0, y, raster.width, h, 0, 0, raster.width, h)
+                    g.restore()
+                    set.runs.set(key, row = {canvas})
+                    ++this.blockBuilds
+                }
+                row.used = clock
+                ctx.drawImage(row.canvas, x, 0, w, h, x, y, w, h)
+                continue
+            }
             const key = x + ',' + y + ',' + w + ',' + h
             let run = set.runs.get(key)
             if (!run) {

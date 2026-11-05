@@ -205,6 +205,9 @@ class Grid extends SpritesGroup {
         this.litTileJobsDropped = 0
         this.litTileStepsQueued = false
         this.litTileStepTasks = 0
+        // TASK-1552: the camera's motion over the lit view (Grid.followLitMotion) and the ahead tasks since the last frame.
+        this.litMotion = undefined
+        this.litAheadTasks = 0
         // TASK-1546: the lit view made by tasks (Grid.litViewSteps: stepLitView), views started / given up.
         this.litViewJob = undefined
         this.litViewJobs = 0
@@ -5089,6 +5092,8 @@ class Grid extends SpritesGroup {
             // state may follow later changes without them: followCellLayer, patchLitView).
             if (view.stale)
                 this.releaseStaleTile(view)
+            if (Grid.litAhead)
+                this.followLitMotion(view, t)
             // job: the frame drew a patch's or layer job's cells over the snapshot (not a still frame, stillFrameSteady).
             this.litFrame = {view, rest: true, job: !!(view.patch || view.layerJob)}
             if (view.patch) {
@@ -5105,6 +5110,8 @@ class Grid extends SpritesGroup {
         }
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
         const range = this.litTileRange(cw, ch, ox, oy, 0)
+        if (Grid.litAhead)
+            this.followLitMotion(view, t)
         // A tile not built yet is drawn from the stand-in (the tasks build it, queueLitTiles); without one it is built now.
         let standIn, missing = null, stale = false
         ctx.save()
@@ -5146,9 +5153,13 @@ class Grid extends SpritesGroup {
         if (stale)
             this.drawPatchCells(ctx, view.refresh, 'lit')
         // Tiles more than a tile off the canvas go back to the pool.
+        // TASK-1552 (Grid.litAhead): more than a tile off the ring built ahead (litAheadRange), while the camera moves more
+        // than LIT_AHEAD_KEEP tiles off it (a pan back finds them built).
+        const keep = Grid.litAhead ? this.litAheadRange(view, cw, ch, ox, oy).range : range
+        const off = Grid.litAhead && gameEvent.screen.surfaceMoving ? LIT_AHEAD_KEEP : 1
         for (const [key, tile] of view.tiles) {
             const [u, v] = key.split(',').map(Number)
-            if (u < range.u0 - 1 || u > range.u1 + 1 || v < range.v0 - 1 || v > range.v1 + 1) {
+            if (u < keep.u0 - off || u > keep.u1 + off || v < keep.v0 - off || v > keep.v1 + off) {
                 view.tiles.delete(key)
                 this.releaseLitTile(tile)
             }
@@ -5978,7 +5989,13 @@ class Grid extends SpritesGroup {
         let steps = 0, last = litTileStepCost.ms
         const tiles = list.slice(0, cap)
         // The tile under way first, while it is still one to build.
+        // TASK-1552 (Grid.litAhead): anywhere in the list (an order that changes with the camera's motion would give it up).
         const job = this.litTileJob
+        if (Grid.litAhead && stepped && job && job.view === view && !tiles.some(m => m.u === job.u && m.v === job.v)) {
+            const under = list.find(m => m.u === job.u && m.v === job.v)
+            if (under)
+                tiles.unshift(under)
+        }
         if (stepped && job && job.view === view && tiles.some(m => m.u === job.u && m.v === job.v)) {
             const k = tiles.findIndex(m => m.u === job.u && m.v === job.v)
             tiles.unshift(...tiles.splice(k, 1))
@@ -6093,12 +6110,20 @@ class Grid extends SpritesGroup {
             return
         }
         const ox = Math.round(t.e - view.e), oy = Math.round(t.f - view.f)
-        const range = this.litTileRange(cw, ch, ox, oy, 1), missing = []
+        // TASK-1552 (Grid.litAhead): the ring round the canvas (litAheadRange: LIT_AHEAD_RING tiles, more on the sides the camera
+        // moves to): the tiles on the canvas first (nearest its centre), then the others in litAheadWhen's order (while the
+        // camera moves: by when it reaches them).
+        const ahead = Grid.litAhead ? this.litAheadRange(view, cw, ch, ox, oy) : null, moving = gameEvent.screen.surfaceMoving
+        const range = ahead ? ahead.range : this.litTileRange(cw, ch, ox, oy, 1), missing = []
+        const shownRange = this.litTileRange(cw, ch, ox, oy, 0)
         const cu = (cw / 2 - ox) / LIT_TILE - 0.5, cv = (ch / 2 - oy) / LIT_TILE - 0.5
         for (let v = range.v0; v <= range.v1; ++v)
             for (let u = range.u0; u <= range.u1; ++u)
-                if (!view.tiles.has(u + ',' + v)) missing.push({u, v, far: Math.hypot(u - cu, v - cv),
-                    shown: u > range.u0 && u < range.u1 && v > range.v0 && v < range.v1})
+                if (!view.tiles.has(u + ',' + v)) {
+                    const shown = u >= shownRange.u0 && u <= shownRange.u1 && v >= shownRange.v0 && v <= shownRange.v1
+                    missing.push({u, v, shown, far: ahead && !shown ? LIT_AHEAD_LATER + this.litAheadWhen(ahead, u, v, !moving) :
+                        Math.hypot(u - cu, v - cv)})
+                }
         const rest = view.rest
         const banding = rest && rest.done < LIT_REST_BANDS && rest.e === t.e && rest.f === t.f
         // TASK-1372: the snapshot's split, a step a task (cellSplitStep), not during its patch.
@@ -6149,10 +6174,64 @@ class Grid extends SpritesGroup {
                 view.patchedTiles && !moving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
             // TASK-1439: tiles that fit LIT_TASK_MS; while the camera moves none when one tile does not fit (the frames draw
             // the stand-in), at rest and for a view the frames draw live at least one.
-            if (moving && !view.unbuilt && litTileCost.ms > LIT_TASK_MS)
+            // TASK-1552 (Grid.litAhead): while the camera moves too, a step at least (the tile under way carried on by the next
+            // task), and the next task queued at once while ring tiles are missing, at most LIT_AHEAD_TASKS tasks between two
+            // frames (litAheadTasks, reset by the frame), each within LIT_TASK_MS but for its first step.
+            if (moving && !view.unbuilt && litTileCost.ms > LIT_TASK_MS && !Grid.litAhead)
                 return
-            atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, budget, !moving || view.unbuilt))
+            atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, Grid.litAhead && moving ? LIT_AHEAD_CAP : budget,
+                !moving || view.unbuilt || Grid.litAhead))
+            if (Grid.litAhead && moving && ++this.litAheadTasks < LIT_AHEAD_TASKS && missing.some(m => !view.tiles.has(m.u + ',' + m.v)))
+                this.queueLitTiles(view, t, cw, ch)
         }))
+    }
+    // TASK-1552: the lit view's tiles to keep built round the canvas at offset ox, oy: the canvas's tiles grown by LIT_AHEAD_RING,
+    // and on each side the camera moves to (litMotion: its last frames' velocity) by the tiles it crosses in LIT_AHEAD_MS, at
+    // most LIT_AHEAD_MAX. {range, ox, oy, cw, ch, mx, my}: mx, my the canvas's motion over the view (device pixels a ms).
+    litAheadRange(view, cw, ch, ox, oy) {
+        const m = this.litMotion && this.litMotion.view === view ? this.litMotion : null
+        const mx = m ? -m.vx : 0, my = m ? -m.vy : 0
+        const r = this.litTileRange(cw, ch, ox, oy, LIT_AHEAD_RING)
+        const reach = speed => Math.min(LIT_AHEAD_MAX, Math.ceil(Math.abs(speed) * LIT_AHEAD_MS / LIT_TILE))
+        if (mx > 0) r.u1 += reach(mx)
+        else if (mx < 0) r.u0 -= reach(mx)
+        if (my > 0) r.v1 += reach(my)
+        else if (my < 0) r.v0 -= reach(my)
+        return {range: r, ox, oy, cw, ch, mx, my}
+    }
+    // TASK-1552: the order of tile (u, v) of litAheadRange's ahead, not on the canvas, among the ring's tiles to build (lower
+    // first): while the camera moves (rest false) the time the canvas takes to reach it at this motion (LIT_AHEAD_MS units),
+    // else (or never reached) LIT_AHEAD_MAX plus its distance from the canvas (tiles).
+    litAheadWhen(ahead, u, v, rest) {
+        const {ox, oy, cw, ch, mx, my} = ahead
+        const x0 = u * LIT_TILE + ox, y0 = v * LIT_TILE + oy, x1 = x0 + LIT_TILE, y1 = y0 + LIT_TILE
+        const gap = Math.max(0, -x1, x0 - cw, -y1, y0 - ch) / LIT_TILE
+        if (rest)
+            return LIT_AHEAD_MAX + gap
+        // Along one axis: 0 when the tile's square meets the canvas, else the time until it does (Infinity: moving away).
+        const axis = (a0, a1, size, speed) => a1 <= 0 ? (speed < 0 ? a1 / speed : Infinity) : a0 >= size ? (speed > 0 ? (a0 - size) / speed : Infinity) : 0
+        const when = Math.max(axis(x0, x1, cw, mx), axis(y0, y1, ch, my))
+        return when < Infinity ? when / LIT_AHEAD_MS : LIT_AHEAD_MAX + gap
+    }
+    // TASK-1552: the canvas's motion over the lit view (litMotion, device pixels a ms) from a frame at offset t.e, t.f of view.
+    followLitMotion(view, t) {
+        const now = performance.now(), m = this.litMotion
+        this.litAheadTasks = 0
+        if (!m || m.view !== view || now - m.time > LIT_MOTION_GAP_MS) {
+            this.litMotion = {view, e: t.e, f: t.f, time: now, vx: m && m.view === view ? m.vx : 0, vy: m && m.view === view ? m.vy : 0}
+            return
+        }
+        const dt = now - m.time
+        if (dt <= 0)
+            return
+        if (t.e !== m.e || t.f !== m.f) {
+            const k = Math.min(1, dt / LIT_MOTION_SMOOTH_MS)
+            m.vx += ((t.e - m.e) / dt - m.vx) * k
+            m.vy += ((t.f - m.f) / dt - m.vy) * k
+        }
+        m.e = t.e
+        m.f = t.f
+        m.time = now
     }
     // TASK-1518: before the rest snapshot's last band (whose finish starts its split, prepareLitCellLayer -> startCellSplit ->
     // cellLayerCells), a step of the cell mask that split takes (the same key, builder and cache: cellMaskSteps), as the
@@ -6401,7 +6480,7 @@ class Grid extends SpritesGroup {
         for (const part of tile.parts) {
             if (!part)
                 continue
-            if (this.litTilePool.length < 4 * LIT_TILE_POOL)
+            if (this.litTilePool.length < (Grid.litAhead ? LIT_TILE_SPARE_PARTS : 4 * LIT_TILE_POOL))
                 this.litTilePool.push(part)
             else
                 part.width = part.height = 0
@@ -8307,6 +8386,9 @@ Grid.litPartSkips = true
 // TASK-1546: lit tiles built by the tasks between frames a step at a time (Grid.buildLitTiles, litTileSteps); false: a tile a
 // task at once as before.
 Grid.litTileSteps = true
+// TASK-1552: lit tiles built ahead of the camera, at rest and while it moves (Grid.queueLitTiles, litAheadRange); false: only
+// within a tile of the canvas and none while the camera moves when a tile does not fit LIT_TASK_MS, as before.
+Grid.litAhead = true
 // TASK-1546: the lit layer drawn by tasks of steps (Grid.queueLitLayer: litLayerRasterSteps), at most LIT_LAYER_TASK_MS a task
 // but its first step; false: in one task as before.
 Grid.litLayerSteps = true
@@ -8342,6 +8424,22 @@ const LIT_TILE_BUDGET = 5
 const LIT_FRAME_TILES = 8
 const LIT_FIRST_TILE_BUDGET = 16
 const LIT_TILE_POOL = 16
+// TASK-1552 (Grid.litAhead): lit tiles built ahead of the camera (Grid.queueLitTiles, litAheadRange): the ring round the
+// canvas (tiles), the time (ms) of motion whose tiles are added on the sides the camera moves to (at most LIT_AHEAD_MAX),
+// tiles kept past the ring while the camera moves, ring tiles built a task while it moves (the first LIT_AHEAD_CAP in order)
+// and tasks between two frames, the order offset of tiles not on the canvas, and the camera's velocity smoothing (ms) and the
+// frame gap (ms) after which it starts again (Grid.followLitMotion).
+const LIT_AHEAD_RING = 1
+const LIT_AHEAD_MS = 600
+const LIT_AHEAD_MAX = 3
+const LIT_AHEAD_KEEP = 2
+const LIT_AHEAD_CAP = 8
+const LIT_AHEAD_TASKS = 10
+// TASK-1552: lit tile quarters kept spare (Grid.releaseLitTile; topped up at rest, Grid.reserveLitTileParts).
+const LIT_TILE_SPARE_PARTS = 192
+const LIT_AHEAD_LATER = 1000
+const LIT_MOTION_SMOOTH_MS = 100
+const LIT_MOTION_GAP_MS = 400
 const LIT_EDGE_BLOCK = 16
 // TASK-1518: lit cells a step of litEdgesSteps takes the sides of.
 const LIT_EDGE_STEP_CELLS = 400
@@ -8617,6 +8715,20 @@ Grid.reserveLitPieces = limit => {
     return made
 }
 CanvasPool.restHooks.push(limit => Grid.reserveLitPieces(limit))
+// TASK-1552 (Grid.litAhead): at rest, with atmospheric visuals, the board's lit tile pool (litTilePool) topped up to
+// LIT_TILE_SPARE_PARTS quarter canvases, at most limit a frame, so tiles built ahead while the camera moves make none.
+Grid.reserveLitTileParts = limit => {
+    if (!Grid.litAhead || typeof grid === 'undefined' || !grid || !otherSettings.atmosphericVisuals || !grid.litView)
+        return
+    const pool = grid.litTilePool, Q = LIT_TILE_PART
+    for (let k = 0; k < limit && pool.length < LIT_TILE_SPARE_PARTS; ++k) {
+        const part = document.createElement('canvas')
+        part.width = Q
+        part.height = Q
+        pool.push(part)
+    }
+}
+CanvasPool.restHooks.push(limit => Grid.reserveLitTileParts(limit))
 // TASK-1550: at rest before the board's surface cache is split, a sprite canvas for each cell of its cell layer (the cells
 // of its mask, cellMaskCache, built ahead by the menu's prebuild or a split before): the first split, which runs while the
 // camera moves, takes them instead of making ~one canvas per cell. Not while the cache's layer holds sprites (a split
