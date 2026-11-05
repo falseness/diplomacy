@@ -19,7 +19,8 @@
     // pixels, large canvas uploads and the board's render path. Reset after every sample.
     const freshWork = () => ({blendedMegapixels: 0, blendedDraws: 0, blendedMainMegapixels: 0, blendedByOp: {},
         pathBlends: {draws: 0, canvasMegapixels: 0}, uploads: [], uploadMegapixels: 0, renderPath: null, standIn: null, overlayLayer: false, sceneLayer: false, litLayer: false,
-        drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0})
+        drawnMegapixels: 0, drawCalls: 0, drawnMainMegapixels: 0, drawnByLayer: {}, unboundedDraws: 0,
+        canvasSites: {}, bitmapSites: {}, offscreenByTarget: {}, tilesMissingOnScreen: 0, tilesBuiltInFrame: 0, tilesFromStandIn: 0, tilesUnbuilt: 0})
     let work = freshWork()
     const originalLoop = gameLoop, originalDraw = drawAll
     gameLoop = function(timestamp) {
@@ -45,7 +46,15 @@
                 blendedByOp: Object.fromEntries(Object.entries(work.blendedByOp).map(([k, v]) => [k, round(v)])),
                 pathBlends: {draws: work.pathBlends.draws, canvasMegapixels: round(work.pathBlends.canvasMegapixels)}, uploadMegapixels: round(work.uploadMegapixels),
                 drawnMegapixels: round(work.drawnMegapixels), drawnMainMegapixels: round(work.drawnMainMegapixels),
-                drawnByLayer: Object.fromEntries(Object.entries(work.drawnByLayer).map(([k, [mp, calls]]) => [k, [round(mp), calls]]))}
+                drawnByLayer: Object.fromEntries(Object.entries(work.drawnByLayer).map(([k, [mp, calls]]) => [k, [round(mp), calls]])),
+                offscreenByTarget: Object.fromEntries(Object.entries(work.offscreenByTarget).map(([k, [mp, calls]]) => [k, [round(mp), calls]]))}
+            // TASK-1549: heavy = over 500 draw calls or over 1 MP drawn on offscreen layers (the tasks since the previous
+            // frame included); canvases created since the previous frame.
+            const offscreen = Object.entries(frame.work.drawnByLayer).reduce((sum, [k, [mp]]) => k.startsWith('offscreen/') ? sum + mp : sum, 0)
+            frame.work.offscreenMegapixels = round(offscreen)
+            frame.work.canvasesCreated = Object.values(work.canvasSites).reduce((a, b) => a + b, 0)
+            frame.heavy = work.drawCalls > 500 || offscreen > 1
+            frame.tilesMissingOnScreen = work.tilesMissingOnScreen
             work = freshWork()
             if (frame.gapMs > 50) report.longGaps.push({timestamp, gapMs: frame.gapMs})
             report.samples.push(frame)
@@ -68,10 +77,52 @@
             else if (typeof grid !== 'undefined' && grid && grid.cacheHeldFrame && work.renderPath === null) work.renderPath = 'cache-held'
         }
     }
+    // TASK-1549 (diagnostic, only while a capture is active): canvases created and ImageBitmaps made per frame by creation
+    // site ('fn file:line < caller', the first two client frames of the stack; work.canvasSites / work.bitmapSites), and
+    // tiles the frame's lit view needed but did not have (work.tilesMissingOnScreen). diagnostics.calls counts every pass
+    // through this code: 0 without an active capture.
+    const diagnostics = {calls: 0}
+    const pageBase = location.href.slice(0, location.href.lastIndexOf('/') + 1)
+    const creationSite = () => {
+        const limit = Error.stackTraceLimit
+        Error.stackTraceLimit = 40
+        const stack = new Error().stack || ''
+        Error.stackTraceLimit = limit
+        const frames = []
+        for (const line of stack.split('\n').slice(1)) {
+            const m = line.match(/^\s*at (?:(.*?) \()?(.*?):(\d+):\d+\)?$/)
+            if (!m || !m[2].startsWith(pageBase) || m[2].endsWith('render/visualsPerf.js')) continue
+            frames.push({fn: m[1] || '<anonymous>', file: m[2].slice(pageBase.length), line: m[3]})
+            if (frames.length === 2) break
+        }
+        if (!frames.length) return 'unknown'
+        return `${frames[0].fn} ${frames[0].file}:${frames[0].line}` + (frames[1] ? ` < ${frames[1].fn}` : '')
+    }
+    // Each canvas created while capturing keeps its creation site, so drawn work on offscreen canvases is also counted by the
+    // canvas drawn to (work.offscreenByTarget: [MP, calls] per creation site; 'before-capture' for older canvases).
+    const canvasSiteOf = new WeakMap()
+    const countSite = sites => {
+        diagnostics.calls++
+        const site = creationSite()
+        sites[site] = (sites[site] || 0) + 1
+        return site
+    }
     const create = document.createElement.bind(document)
     document.createElement = function(name, ...args) {
-        if (active && name.toLowerCase() === 'canvas') counters.canvasAllocations++
+        if (active && name.toLowerCase() === 'canvas') {
+            counters.canvasAllocations++
+            const element = create(name, ...args)
+            canvasSiteOf.set(element, countSite(work.canvasSites))
+            return element
+        }
         return create(name, ...args)
+    }
+    if (typeof createImageBitmap === 'function') {
+        const bitmap = createImageBitmap
+        createImageBitmap = function(...args) {
+            if (active) countSite(work.bitmapSites)
+            return bitmap.apply(this, args)
+        }
     }
     for (const name of ['createLinearGradient', 'createRadialGradient']) {
         const original = CanvasRenderingContext2D.prototype[name]
@@ -137,9 +188,14 @@
         work.drawnMegapixels += area
         const main = g.canvas === mainCanvas
         if (main) work.drawnMainMegapixels += area
-        const key = main || g.canvas === interfaceCanvasElement() ? layer : 'offscreen/' + layer
+        const onscreen = main || g.canvas === interfaceCanvasElement()
+        const key = onscreen ? layer : 'offscreen/' + layer
         const entry = work.drawnByLayer[key] ||= [0, 0]
         entry[0] += area; entry[1]++
+        if (!onscreen) {
+            const target = work.offscreenByTarget[canvasSiteOf.get(g.canvas) || 'before-capture'] ||= [0, 0]
+            target[0] += area; target[1]++
+        }
     }
     const interfaceCanvasElement = () => typeof interfaceCtx !== 'undefined' ? interfaceCtx.canvas : null
     // Path bounds: device points of the context's current path (beginPath resets), and world points of
@@ -378,6 +434,44 @@
                 return source
             }
         }
+        // TASK-1549: lit tiles the frame needed but did not have: built in the frame (litTile), drawn from the stand-in
+        // (drawLitView's missing set), or the whole view's missing tiles when it is not drawn for them (litTilesUnbuilt).
+        if (proto.drawLitView && proto.litTile && proto.litTilesUnbuilt) {
+            const drawLitView = proto.drawLitView, litTile = proto.litTile, unbuilt = proto.litTilesUnbuilt
+            let inView = false
+            const missingTotal = () => { work.tilesMissingOnScreen = work.tilesBuiltInFrame + work.tilesFromStandIn + work.tilesUnbuilt }
+            proto.drawLitView = function(...args) {
+                if (!active || !frame) return drawLitView.apply(this, args)
+                diagnostics.calls++
+                const before = this.litFrame
+                inView = true
+                try { return drawLitView.apply(this, args) }
+                finally {
+                    inView = false
+                    const after = this.litFrame
+                    if (after && after !== before && after.missing) work.tilesFromStandIn += after.missing.size
+                    missingTotal()
+                }
+            }
+            proto.litTile = function(view, u, v) {
+                if (active && inView && view && view.tiles && !view.tiles.has(u + ',' + v)) { diagnostics.calls++; work.tilesBuiltInFrame++ }
+                return litTile.apply(this, arguments)
+            }
+            proto.litTilesUnbuilt = function(ctx, view, t) {
+                const result = unbuilt.apply(this, arguments)
+                if (active && frame && result) {
+                    diagnostics.calls++
+                    const range = this.litTileRange(ctx.canvas.width, ctx.canvas.height, Math.round(t.e - view.e), Math.round(t.f - view.f), 0)
+                    let missing = 0
+                    for (let v = range.v0; v <= range.v1; ++v)
+                        for (let u = range.u0; u <= range.u1; ++u)
+                            if (!view.tiles.has(u + ',' + v) && !view.stale?.has(u + ',' + v)) ++missing
+                    work.tilesUnbuilt = missing
+                    missingTotal()
+                }
+                return result
+            }
+        }
         // TASK-1374: a zoom gesture's frame drawn from the zoom raster.
         if (proto.drawZoomRaster) {
             const zoomRaster = proto.drawZoomRaster
@@ -565,7 +659,7 @@
         api.lastExport={schemaVersion:1,environment:metadata.environment||'user-browser',runs,pairs,valid:pairs.every(Boolean),cancelled}
         return api.lastExport
     }
-    const api=window.visualsPerf={start,stop,paired,compare,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
+    const api=window.visualsPerf={start,stop,paired,compare,diagnostics,setSegment:value=>{segment=value},cancel:()=>{cancelled=true;stop()},export:()=>api.lastExport||stop()}
     window.addEventListener('load',()=>{
         const panel=create('section');panel.id='visuals-perf-controls'
         panel.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99999;background:#182333;color:white;padding:8px;font:12px sans-serif;max-width:calc(100vw - 32px)'
