@@ -4142,7 +4142,7 @@ class Grid extends SpritesGroup {
         // TASK-1551: no age limit (the layer is kept while its cells, key and state hold): a full rebuild only for a new scale,
         // canvas or state, a changed cell or key, or a view outside it; one nearing its edge is extended by strips instead.
         const cause = !layer ? 'none' : layer.a !== t.a || layer.d !== t.d ? 'scale' : cw !== layer.cw || ch !== layer.ch ? 'canvas' :
-            !sameCanvasState(state, layer.state) ? 'state:' + canvasStateDiff(state, layer.state) :
+            !sameCanvasState(state, layer.state, LIT_LAYER_FREE_STATE) ? 'state:' + canvasStateDiff(state, layer.state, LIT_LAYER_FREE_STATE) :
             vx0 < layer.x0 && layer.x0 > layer.left || vy0 < layer.y0 && layer.y0 > layer.top ||
                 vx1 > layer.x0 + layer.width && layer.x0 + layer.width < layer.right ||
                 vy1 > layer.y0 + layer.height && layer.y0 + layer.height < layer.bottom ? 'outside' :
@@ -4344,6 +4344,8 @@ class Grid extends SpritesGroup {
                 this.retireLitLayer()
             this.litLayer = layer
             ++this.litLayerBuilds
+            // TASK-1551: the strip chunk canvases the layers let go of meanwhile back to their pool.
+            Grid.sweepLitStrips()
             // TASK-1550: its pieces' sizes, for the spare canvases made at rest (Grid.reserveLitPieces).
             if (layer.pieces?.length) {
                 const demand = Grid.litPieceDemand = new Map()
@@ -4368,7 +4370,7 @@ class Grid extends SpritesGroup {
     // TASK-1550: a layer's piece canvases given to Grid.canvasPool (the layer keeps none).
     givePieces(layer) {
         for (const piece of layer?.pieces || [])
-            Grid.canvasPool.give(piece.canvas)
+            Grid.giveLitCanvas(piece.canvas)
         if (layer)
             layer.pieces = null
     }
@@ -4376,8 +4378,9 @@ class Grid extends SpritesGroup {
     // new rectangle is litLayerRect at the camera now (in the layer's pixels: shifted by the whole-pixel camera shift ox, oy);
     // only the strips of it the layer does not cover (at most 4 rectangles; a side moved out by less than LIT_STRIP_MIN of the
     // canvas, not to the board's limit, keeps its edge) are drawn: the units pass and the cell texts at the layer's transform
-    // over each strip on the scratch, its pieces copied as the layer's (litStripSteps), a chunk of a strip (litStripChunks) by
-    // a task between two frames (the cells within reach of it only, litStripRange). Done, the layer's pieces are cut to the new rectangle and the strips' added (commitLitStrips). The
+    // over each strip, cut into chunks (litStripChunks), each drawn on a canvas of its own whose pieces are the layer's
+    // (litStripSteps), at most LIT_STRIP_STEP_CELLS drawing cells by a task between two frames (the cells within reach of a
+    // chunk only, litStripRange). Done, the layer's pieces are cut to the new rectangle and the strips' added (commitLitStrips). The
     // pieces are drawn on the same pixel grid at the same transform, so a unit or text across a strip's edge draws the same
     // pixels on both sides. Given up as a full layer job is (dropLitLayerJob), or when the layer is no longer the one drawn.
     queueLitStrips(layer, t, cw, ch, ox, oy) {
@@ -4423,18 +4426,13 @@ class Grid extends SpritesGroup {
                 this.dropLitLayerJob()
                 return
             }
-            // One chunk between two frames while the frames draw the layer (the next task waits for the next frame), all at once
-            // while they do not.
-            const drawn = this.litLayerDrawnSerial === this.drawSerial
-            if (drawn && job.serial === this.drawSerial) {
+            // One step between two frames: the next task waits for the next frame.
+            if (job.serial === this.drawSerial) {
                 setTimeout(run, LIT_STRIP_WAIT_MS)
                 return
             }
-            let step
             ++job.tasks
-            do
-                step = steps.next()
-            while (!step.done && !drawn)
+            const step = steps.next()
             if (!step.done) {
                 job.serial = this.drawSerial
                 setTimeout(run, LIT_STRIP_WAIT_MS)
@@ -4447,51 +4445,48 @@ class Grid extends SpritesGroup {
         })
         setTimeout(run)
     }
-    // TASK-1551: queueLitStrips's work in steps (a generator; its value {pieces, signatures}, null when given up): for each strip
-    // (a rectangle in the layer's pixels) the units pass and the cell texts drawn over it on the scratch (one step), then its
-    // pieces copied (litLayerPieces within the strip, so none overlaps the layer's or another strip's), placed in the layer's
-    // pixels. Given up when the key changed by a strip's drawing or a strip's cells changed by the end; the copies made are
-    // given back then.
+    // TASK-1551: queueLitStrips's work in steps (a generator; its value {pieces, strips}, null when given up): for each chunk of
+    // the strips (a rectangle in the layer's pixels) the units pass and the cell texts of the cells within its reach drawn on
+    // a canvas of its own (Grid.litStripPool), its pieces (litLayerPieces within the chunk, so none overlaps the layer's or
+    // another chunk's) drawn from that canvas, placed in the layer's pixels; a step yields before a chunk that would take the
+    // step's drawing cells past LIT_STRIP_STEP_CELLS. Given up when the key changed by a chunk's drawing or a chunk's cells
+    // changed by the end; the canvases taken are given back then.
     *litStripSteps(layer, strips) {
-        const pieces = [], signatures = []
-        let done = false
+        const pieces = [], signatures = [], T = LIT_STRIP_TILE
+        let done = false, drawn = 0
         try {
             for (const r of this.litStripChunks(strips)) {
                 const width = r.x1 - r.x0, height = r.y1 - r.y0
                 const transform = {a: layer.a, b: 0, c: 0, d: layer.d, e: layer.e - r.x0, f: layer.f - r.y0}
                 const range = this.litStripRange(transform, width, height)
-                const {values} = this.litLayerSignature(range)
+                const {values, cells} = this.litLayerSignature(range)
                 signatures.push([range, values])
                 const target = Math.max(1, Math.round(LIT_PIECE_VISIBLE * width * height / (layer.cw * layer.ch)))
                 const parts = this.litLayerPieces(range, transform, width, height, target)
                 if (!parts.length)
                     continue
-                let canvas = this.litLayerScratch
-                if (!canvas || canvas.width < width || canvas.height < height) {
-                    const w = Math.max(width, canvas?.width || 0), h = Math.max(height, canvas?.height || 0)
-                    if (canvas)
-                        canvas.width = canvas.height = 0
-                    canvas = this.litLayerScratch = document.createElement('canvas')
-                    canvas.width = w
-                    canvas.height = h
+                // At most LIT_STRIP_STEP_CELLS drawing cells a task between two frames (a chunk with more alone).
+                if (drawn && drawn + cells > LIT_STRIP_STEP_CELLS) {
+                    drawn = 0
+                    yield
                 }
+                drawn += cells
+                // The chunk drawn on its own canvas (LIT_STRIP_TILE square, from Grid.litStripPool, its own: every chunk takes that
+                // one size, so the tiles the pans let go of are the ones they take), its pieces drawn from it.
+                const canvas = Grid.litStripPool.take(T, T, width, height)
+                canvas.litStrip = true
+                Grid.litStripLive.add(canvas)
+                ++Grid.litStripMoving
+                pieces.push(...parts.map(piece => ({x: r.x0 + piece.x, y: r.y0 + piece.y, w: piece.w, h: piece.h, sx: piece.x, sy: piece.y, canvas, strip: true})))
                 const lctx = canvas.getContext('2d')
-                lctx.setTransform(1, 0, 0, 1, 0, 0)
-                for (const piece of parts)
-                    lctx.clearRect(piece.x, piece.y, piece.w, piece.h)
+                lctx.save()
                 applyCanvasState(lctx, {...layer.state, transform})
                 this.drawOther(lctx, 'units', range)
                 this.drawCellText(lctx, range)
+                lctx.restore()
+                lctx.getImageData(0, 0, 1, 1)
                 if (!this.litLayerKeyHolds(layer))
                     return null
-                for (const piece of parts) {
-                    const part = Grid.canvasPool.take(piece.w, piece.h)
-                    const pctx = part.getContext('2d')
-                    pctx.drawImage(canvas, piece.x, piece.y, piece.w, piece.h, 0, 0, piece.w, piece.h)
-                    pctx.getImageData(0, 0, 1, 1)
-                    pieces.push({x: r.x0 + piece.x, y: r.y0 + piece.y, w: piece.w, h: piece.h, sx: 0, sy: 0, canvas: part, strip: true})
-                }
-                yield
             }
             for (const [range, values] of signatures)
                 if (!this.litLayerSignature(range, values))
@@ -4501,22 +4496,18 @@ class Grid extends SpritesGroup {
         } finally {
             if (!done)
                 for (const piece of pieces)
-                    Grid.canvasPool.give(piece.canvas)
+                    Grid.giveLitCanvas(piece.canvas)
         }
     }
-    // TASK-1551: the strips cut along their longer side into chunks of at most LIT_STRIP_CHUNK_PIXELS (whole LIT_PIECE_BLOCK
-    // blocks long), each drawn and copied between two frames.
+    // TASK-1551: each strip cut into equal chunks of at most LIT_STRIP_TILE a side.
     litStripChunks(strips) {
-        const chunks = [], B = LIT_PIECE_BLOCK
+        const chunks = [], T = LIT_STRIP_TILE
         for (const r of strips) {
-            const w = r.x1 - r.x0, h = r.y1 - r.y0, across = Math.min(w, h)
-            const step = Math.max(B, Math.floor(LIT_STRIP_CHUNK_PIXELS / Math.max(1, across) / B) * B)
-            if (w >= h)
-                for (let x = r.x0; x < r.x1; x += step)
-                    chunks.push({x0: x, y0: r.y0, x1: Math.min(r.x1, x + step), y1: r.y1})
-            else
-                for (let y = r.y0; y < r.y1; y += step)
-                    chunks.push({x0: r.x0, y0: y, x1: r.x1, y1: Math.min(r.y1, y + step)})
+            const w = r.x1 - r.x0, h = r.y1 - r.y0, nx = Math.ceil(w / T), ny = Math.ceil(h / T)
+            for (let b = 0; b < ny; ++b)
+                for (let a = 0; a < nx; ++a)
+                    chunks.push({x0: r.x0 + Math.floor(a * w / nx), x1: r.x0 + Math.floor((a + 1) * w / nx),
+                        y0: r.y0 + Math.floor(b * h / ny), y1: r.y0 + Math.floor((b + 1) * h / ny)})
         }
         return chunks
     }
@@ -4540,10 +4531,11 @@ class Grid extends SpritesGroup {
     commitLitStrips(layer, cover, {pieces, strips}) {
         if (this.litLayer !== layer || !layer.pieces || !this.litLayerKeyHolds(layer) || !this.litLayerSignature(layer.range, layer.signature)) {
             for (const piece of pieces)
-                Grid.canvasPool.give(piece.canvas)
+                Grid.giveLitCanvas(piece.canvas)
             return false
         }
-        const kept = [], dropped = []
+        const kept = []
+        let dropped = []
         for (const p of layer.pieces) {
             const x0 = Math.max(p.x, cover.x0), y0 = Math.max(p.y, cover.y0)
             const x1 = Math.min(p.x + p.w, cover.x1), y1 = Math.min(p.y + p.h, cover.y1)
@@ -4554,11 +4546,14 @@ class Grid extends SpritesGroup {
             else
                 kept.push(p)
         }
+        // (A strip chunk's pieces share its canvas: it is let go of with its last piece.)
+        const used = new Set(kept.map(p => p.canvas))
+        dropped = [...new Set(dropped)].filter(canvas => !used.has(canvas))
         if (this.litLayerListed(layer))
-            this.litPiecesHeld.push({layer, canvases: dropped})
+            this.litPiecesHeld.push({layer, serial: this.drawSerial, canvases: dropped})
         else
             for (const canvas of dropped)
-                Grid.canvasPool.give(canvas)
+                Grid.giveLitCanvas(canvas)
         layer.pieces = kept.concat(pieces)
         layer.x0 = cover.x0
         layer.y0 = cover.y0
@@ -4574,15 +4569,17 @@ class Grid extends SpritesGroup {
         this.litLayerStrips += strips
         return true
     }
-    // TASK-1551: piece canvases a strip trim let go of, given to the pool once no kept recording lists their layer (all at once).
+    // TASK-1551: piece canvases a strip trim let go of, given to the pool once a frame was drawn after the trim (the kept
+    // recording, keepZoomSource, is the last frame's: it no longer draws them) and no zoom replay under way lists their layer
+    // (all: at once).
     flushHeldPieces(all = false) {
         if (!this.litPiecesHeld.length)
             return
         this.litPiecesHeld = this.litPiecesHeld.filter(held => {
-            if (!all && this.litLayerListed(held.layer))
+            if (!all && (held.serial === this.drawSerial || this.zoomReplayJob?.source?.layers?.[0] === held.layer))
                 return true
             for (const canvas of held.canvases)
-                Grid.canvasPool.give(canvas)
+                Grid.giveLitCanvas(canvas)
             return false
         })
     }
@@ -7877,19 +7874,20 @@ function canvasStateOf(ctx) {
     return state
 }
 // Whether two canvasStateOf states are the same.
-function sameCanvasState(a, b) {
+// (TASK-1551: the names in free not compared.)
+function sameCanvasState(a, b, free) {
     if (!a || !b)
         return false
     for (const name of CANVAS_STATE)
-        if (a[name] !== b[name])
+        if (a[name] !== b[name] && !free?.includes(name))
             return false
     const da = a.lineDash || [], db = b.lineDash || []
     return da.length === db.length && da.every((v, k) => v === db[k])
 }
 // TASK-1551: the first state property two canvasStateOf states differ in (counted with the lit layer's rebuilds).
-function canvasStateDiff(a, b) {
+function canvasStateDiff(a, b, free) {
     for (const name of CANVAS_STATE)
-        if (a[name] !== b[name])
+        if (a[name] !== b[name] && !free?.includes(name))
             return name
     return 'lineDash'
 }
@@ -8495,13 +8493,25 @@ const LIT_LAYER_MARGIN = 0.25
 const LIT_LAYER_MAX_PIXELS = 9 * 1024 * 1024
 const LIT_LAYER_MIN_CELLS = 16
 // TASK-1551: the lit layer's strips (Grid.queueLitStrips): queued once the view is within LIT_STRIP_NEAR of its size of the
-// layer's edge; the least a side is moved out (a fraction of the canvas); a chunk's largest area (device pixels; one chunk
-// drawn and copied between two frames); the wait (ms) of a task for the next frame; the reach (hex radii) of the cells drawn.
+// layer's edge; the least a side is moved out (a fraction of the canvas); the wait (ms) of a task for the next frame; the reach
+// (hex radii) of the cells drawn.
 const LIT_STRIP_NEAR = 0.15
+// TASK-1551: the drawing cells (litLayerSignature's) a task between two frames draws for the strips: about 9 draw calls each on the
+// user's board at 0.467 (13 at most; TASK-1551 calls-per-cell.js), so a frame stays well under 500 calls.
+const LIT_STRIP_STEP_CELLS = 24
+// TASK-1551: the canvas state a lit layer does not depend on: the units pass and the cell texts set their own fill, stroke, line
+// width, font and text placement (the frame's leftovers, such as the last owner colour drawn before them, change with the
+// view). Each drawn with other values, the whole user's board's units and texts, debug texts too, drew the same pixels; not so
+// lineJoin, lineCap and image smoothing, which stay compared (TASK-1551 fill-invariance.js).
+const LIT_LAYER_FREE_STATE = ['fillStyle', 'strokeStyle', 'lineWidth', 'lineDashOffset', 'font', 'textAlign', 'textBaseline']
 const LIT_STRIP_MIN = 0.05
-const LIT_STRIP_CHUNK_PIXELS = 192 * 1024
 const LIT_STRIP_WAIT_MS = 4
-const LIT_STRIP_REACH = 2
+const LIT_STRIP_REACH = 1.5
+// TASK-1551: a strip chunk's largest side (device pixels): one canvas of that square (Grid.litStripPool) a chunk.
+const LIT_STRIP_TILE = 256
+// TASK-1551: Grid.litStripPool's size (bytes) and the chunk canvases it keeps ready at rest at least.
+const LIT_STRIP_POOL_BYTES = 64 * 1024 * 1024
+const LIT_STRIP_RESERVE = 128
 // TASK-1546: the time (ms) a task drawing the lit layer in steps (Grid.queueLitLayer) spends: its piece copies while the task's
 // time and the last copy's fit (the units and texts, one step, always).
 const LIT_LAYER_TASK_MS = 40
@@ -8516,7 +8526,8 @@ const LIT_PIECE_BLOCK = 16
 // sprites: at most GRID_POOL_BYTES kept after a rest's trim; at rest, LIT_PIECE_SPARE sets of the last lit layer's pieces
 // kept ready (a layer built while one is drawn and another retired takes them, then the retired one's come back).
 const GRID_POOL_BYTES = 160 * 1024 * 1024
-const LIT_PIECE_SPARE = 2
+// (TASK-1551: one set: full layers are rare now, strips extend the one drawn.)
+const LIT_PIECE_SPARE = 1
 const LIT_PIECE_REACH = [1, 1.3, 1, 1]
 const LIT_PIECE_PAD = 3
 // About LIT_PIECE_VISIBLE pieces in a canvas-sized view (merged while more; a frame draws one call a piece in view), pairs
@@ -8542,13 +8553,66 @@ function hexagonsEqually(hexagonOne, hexagonTwo) {
 // TASK-1550: the shared canvas pool (CanvasPool) and its rest hook: spare canvases for the next lit layer's pieces.
 Grid.canvasPool = new CanvasPool('grid', GRID_POOL_BYTES, 16, 4, true)
 Grid.litPieceDemand = null
+// TASK-1551: the lit layer strips' chunk canvases (LIT_STRIP_TILE squares) in a pool of their own (the grid pool's other takers
+// took any canvas up to 4 times their size), kept ready at rest: the most a moving period took (litStripMoving, into
+// litStripPeak at rest), at least LIT_STRIP_RESERVE (about a layer's chunks).
+Grid.litStripPool = new CanvasPool('lit-strips', LIT_STRIP_POOL_BYTES, 16, 1)
+Grid.litStripMoving = 0
+Grid.litStripPeak = LIT_STRIP_RESERVE
+Grid.litStripPool.wanted = () => new Map([[LIT_STRIP_TILE + 'x' + LIT_STRIP_TILE, Grid.litStripPeak]])
+// A lit layer piece's canvas given back to its pool.
+Grid.giveLitCanvas = canvas => {
+    if (canvas?.litStrip)
+        Grid.litStripLive.delete(canvas)
+    ;(canvas?.litStrip ? Grid.litStripPool : Grid.canvasPool).give(canvas)
+}
+// The chunk canvases taken and not given back. At rest (no strip job under way) the ones nothing draws any more (not a piece of
+// the lit layer, the retired one or the one drawn again, not held after a trim, not in a kept recording's or a zoom replay's
+// calls) are given back: a layer let go of while a recording listed it drops its pieces (dropLitLayer, the drawn-at-once path).
+Grid.litStripLive = new Set()
+Grid.litStripSwept = null
+Grid.sweepLitStrips = () => {
+    const g = typeof grid !== 'undefined' ? grid : undefined
+    if (!g || !Grid.litStripLive.size || g.litLayerJob)
+        return
+    const used = new Set()
+    for (const layer of [g.litLayer, g.litLayerRetired, g.litLayerRedrawn])
+        for (const piece of layer?.pieces || [])
+            used.add(piece.canvas)
+    for (const held of g.litPiecesHeld || [])
+        for (const canvas of held.canvases)
+            used.add(canvas)
+    for (const source of [g.zoomSource, g.zoomReplayJob?.source])
+        for (const entry of source?.calls || [])
+            for (const arg of entry.args || [])
+                if (arg?.litStrip)
+                    used.add(arg)
+    for (const canvas of [...Grid.litStripLive])
+        if (!used.has(canvas))
+            Grid.giveLitCanvas(canvas)
+}
+Grid.litPieceWant = () => {
+    const want = new Map()
+    for (const [key, n] of Grid.litPieceDemand || [])
+        want.set(key, LIT_PIECE_SPARE * n)
+    return want
+}
 Grid.reserveLitPieces = limit => {
-    let made = 0
-    for (const [key, n] of Grid.litPieceDemand || []) {
+    Grid.litStripPeak = Math.max(Grid.litStripPeak, Grid.litStripMoving)
+    Grid.litStripMoving = 0
+    // (Once a rest.)
+    if (Grid.litStripSwept !== CanvasPool.lastMove) {
+        Grid.litStripSwept = CanvasPool.lastMove
+        Grid.sweepLitStrips()
+    }
+    // (Only with the lit layer on: atmospheric visuals.)
+    let made = Grid.litLayers && typeof otherSettings !== 'undefined' && otherSettings.atmosphericVisuals ?
+        Grid.litStripPool.reserve(LIT_STRIP_TILE, LIT_STRIP_TILE, Grid.litStripPeak, limit) : 0
+    for (const [key, n] of Grid.litPieceWant()) {
         if (made >= limit)
             break
         const [w, h] = key.split('x').map(Number)
-        made += Grid.canvasPool.reserve(w, h, LIT_PIECE_SPARE * n, limit - made)
+        made += Grid.canvasPool.reserve(w, h, n, limit - made)
     }
     return made
 }
@@ -8613,9 +8677,7 @@ Grid.reserveCellSprites = limit => {
 CanvasPool.restHooks.push(() => Grid.reserveCellSprites(CELL_SPRITE_RESERVE_PER_FRAME))
 // What a rest's trim keeps first: the spare pieces and, until the surface cache's layer is split (its cells set), its sprites.
 Grid.canvasPool.wanted = () => {
-    const want = new Map()
-    for (const [key, n] of Grid.litPieceDemand || [])
-        want.set(key, LIT_PIECE_SPARE * n)
+    const want = Grid.litPieceWant()
     const g = typeof grid !== 'undefined' ? grid : undefined
     if (Grid.cellSpritePlan && !g?.surfaceCellLayer?.cells)
         for (const [key, n] of Grid.cellSpritePlan.buckets)

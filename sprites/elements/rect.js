@@ -196,7 +196,8 @@ class CanvasPool {
         return step
     }
     // A kept canvas of at least w x h (none: null).
-    takeKept(w, h) {
+    // (TASK-1551: clearW x clearH, the corner cleared, default w x h.)
+    takeKept(w, h, clearW = w, clearH = h) {
         const bw = this.size(w), bh = this.size(h)
         let list = this.free.get(bw + 'x' + bh)
         if (!list?.length) {
@@ -220,12 +221,12 @@ class CanvasPool {
         g.setTransform(1, 0, 0, 1, 0, 0)
         // TASK-1551: only the w x h corner the caller draws and reads is cleared (a whole large canvas cleared for a small piece
         // was a megapixel of raster work between two frames).
-        g.clearRect(0, 0, w, h)
+        g.clearRect(0, 0, clearW, clearH)
         ++this.stats.taken
         return canvas
     }
-    take(w, h) {
-        const kept = this.takeKept(w, h)
+    take(w, h, clearW = w, clearH = h) {
+        const kept = this.takeKept(w, h, clearW, clearH)
         if (kept)
             return kept
         const canvas = document.createElement('canvas')
@@ -385,9 +386,10 @@ class SpriteCache {
     static STOCK_BYTES = 24 * 1024 * 1024
     static STOCK_PER_BUCKET = 2048
     static STOCK_PER_SHAPE = 6
-    // At least STOCK_SMALL of each bucket of sides up to 32 px (texts and bars far out: new ones appear as the camera moves,
+    // At least STOCK_SMALL of each bucket of sides up to 32 px, TASK-1551: 48 px (texts and bars far out: new ones appear as the camera moves,
     // shapes never drawn yet).
     static STOCK_SMALL = 256
+    static SMALL_BUCKETS = ['16x16', '32x16', '16x32', '32x32', '48x16', '16x48', '48x32', '32x48', '48x48']
     static plan = null
     static planKey = null
     static stock = new CanvasPool('sprites', SpriteCache.STOCK_BYTES, 16)
@@ -569,7 +571,8 @@ class SpriteCache {
             SpriteCache.planFor(c.a, c.d)
         // The camera's scale's plan first, then the small bucket's floor and the peaks.
         const want = new Map(SpriteCache.plan || [])
-        for (const small of ['16x16', '32x16', '16x32', '32x32'])
+        // (TASK-1551: up to 48 px: a lit layer strip draws the bars and texts of the units a pan brings into view while it moves.)
+        for (const small of SpriteCache.SMALL_BUCKETS)
             want.set(small, Math.max(want.get(small) || 0, SpriteCache.STOCK_SMALL))
         for (const [bucket, n] of SpriteCache.peak)
             want.set(bucket, Math.max(want.get(bucket) || 0, 2 * n))
