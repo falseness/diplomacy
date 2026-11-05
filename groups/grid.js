@@ -6174,14 +6174,16 @@ class Grid extends SpritesGroup {
                 view.patchedTiles && !moving ? LIT_TILE_PATCHED_BUDGET : LIT_TILE_BUDGET
             // TASK-1439: tiles that fit LIT_TASK_MS; while the camera moves none when one tile does not fit (the frames draw
             // the stand-in), at rest and for a view the frames draw live at least one.
-            // TASK-1552 (Grid.litAhead): while the camera moves too, a step at least (the tile under way carried on by the next
+            // TASK-1552 (Grid.litAhead + Grid.litAheadMoving): while the camera moves too, a step at least (the tile under way carried on by the next
             // task), and the next task queued at once while ring tiles are missing, at most LIT_AHEAD_TASKS tasks between two
             // frames (litAheadTasks, reset by the frame), each within LIT_TASK_MS but for its first step.
-            if (moving && !view.unbuilt && litTileCost.ms > LIT_TASK_MS && !Grid.litAhead)
+            // Only with Grid.litAheadMoving (off: TASK-1552 measured the builds' offscreen drawing doubling the heavy pan frames).
+            const ahead = Grid.litAhead && Grid.litAheadMoving
+            if (moving && !view.unbuilt && litTileCost.ms > LIT_TASK_MS && !ahead)
                 return
-            atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, Grid.litAhead && moving ? LIT_AHEAD_CAP : budget,
-                !moving || view.unbuilt || Grid.litAhead))
-            if (Grid.litAhead && moving && ++this.litAheadTasks < LIT_AHEAD_TASKS && missing.some(m => !view.tiles.has(m.u + ',' + m.v)))
+            atmosphericLighting.checkedOnce(this, () => this.buildLitTiles(view, missing, ahead && moving ? LIT_AHEAD_CAP : budget,
+                !moving || view.unbuilt || ahead))
+            if (ahead && moving && ++this.litAheadTasks < LIT_AHEAD_TASKS && missing.some(m => !view.tiles.has(m.u + ',' + m.v)))
                 this.queueLitTiles(view, t, cw, ch)
         }))
     }
@@ -8389,6 +8391,11 @@ Grid.litTileSteps = true
 // TASK-1552: lit tiles built ahead of the camera, at rest and while it moves (Grid.queueLitTiles, litAheadRange); false: only
 // within a tile of the canvas and none while the camera moves when a tile does not fit LIT_TASK_MS, as before.
 Grid.litAhead = true
+// TASK-1552: and while the camera moves, a step at least a task and the tasks chained (LIT_AHEAD_TASKS); false (default): while
+// it moves as before (none when a tile does not fit LIT_TASK_MS). On the user's 6-player capture replayed here (3 reps each) it
+// built ~2.7 tiles a second against ~7.5 a second that the pan shows (318 distinct tiles, ~42 s), so frames still drew ~63 of 66
+// tiles from the stand-in, while its ~0.63 MP of offscreen drawing a tile doubled the heavy pan frames (14 -> 28-36).
+Grid.litAheadMoving = false
 // TASK-1546: the lit layer drawn by tasks of steps (Grid.queueLitLayer: litLayerRasterSteps), at most LIT_LAYER_TASK_MS a task
 // but its first step; false: in one task as before.
 Grid.litLayerSteps = true
